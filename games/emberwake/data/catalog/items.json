@@ -17,6 +17,10 @@
 			"special_note": "",
 			"hand": "main_2h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "gallow_sweep",
+				"grip": "2h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -54,6 +58,10 @@
 			"special_note": "",
 			"hand": "main_2h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "slag_driver",
+				"grip": "2h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -91,6 +99,10 @@
 			"special_note": "",
 			"hand": "main_2h",
 			"scaling_stat": "DEX",
+			"technique": {
+				"skill": "wing_shot",
+				"grip": "2h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -128,6 +140,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "hookbill_draw",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -157,6 +173,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "hookbill_draw",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -181,6 +201,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "rapid_combo",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -205,6 +229,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "DEX",
+			"technique": {
+				"skill": "bodkin_twist",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -291,6 +319,10 @@
 			"special_note": "",
 			"hand": "main_2h",
 			"scaling_stat": "INT",
+			"technique": {
+				"skill": "inferno",
+				"grip": "2h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -535,6 +567,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "hookbill_draw",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -559,6 +595,10 @@
 			"special_note": "",
 			"hand": "main_2h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "gallow_sweep",
+				"grip": "2h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -583,6 +623,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "anoint_flare",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -617,6 +661,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "DEX",
+			"technique": {
+				"skill": "bodkin_twist",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -742,6 +790,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "INT",
+			"technique": {
+				"skill": "flash_nozzle",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -766,6 +818,10 @@
 			"special_note": "",
 			"hand": "main_2h",
 			"scaling_stat": "INT",
+			"technique": {
+				"skill": "inferno",
+				"grip": "2h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -800,6 +856,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "INT",
+			"technique": {
+				"skill": "anoint_flare",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -829,6 +889,10 @@
 			"special_note": "Glass cannon: very high ranged power (30 at range 3, needs INT 14) and no protection at all; best for a mage kept behind a tank.",
 			"hand": "main_1h",
 			"scaling_stat": "INT",
+			"technique": {
+				"skill": "flash_nozzle",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -890,6 +954,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "halberd_sweep",
+				"grip": "1h"
+			},
 			"modifiers": [],
 			"tiers": []
 		},
@@ -908,6 +976,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "halberd_sweep",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -955,6 +1027,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "DEX",
+			"technique": {
+				"skill": "bodkin_twist",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -1007,6 +1083,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "INT",
+			"technique": {
+				"skill": "anoint_flare",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -1106,6 +1186,10 @@
 			"special_note": "",
 			"hand": "main_2h",
 			"scaling_stat": "DEX",
+			"technique": {
+				"skill": "bodkin_punch",
+				"grip": "2h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -1163,6 +1247,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "foundry_drive",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -1228,6 +1316,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "INT",
+			"technique": {
+				"skill": "flash_nozzle",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -1278,6 +1370,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "hookbill_draw",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -1370,6 +1466,10 @@
 			"special_note": "",
 			"hand": "main_2h",
 			"scaling_stat": "DEX",
+			"technique": {
+				"skill": "bodkin_punch",
+				"grip": "2h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -1394,6 +1494,10 @@
 			"special_note": "",
 			"hand": "main_2h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "slag_driver",
+				"grip": "2h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -1418,6 +1522,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "DEX",
+			"technique": {
+				"skill": "penance_bite",
+				"grip": "1h"
+			},
 			"modifiers": [],
 			"tiers": []
 		},
@@ -1436,6 +1544,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "INT",
+			"technique": {
+				"skill": "flash_nozzle",
+				"grip": "1h"
+			},
 			"modifiers": [],
 			"tiers": []
 		},
@@ -1485,6 +1597,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "DEX",
+			"technique": {
+				"skill": "gut_hook",
+				"grip": "1h"
+			},
 			"modifiers": [],
 			"tiers": []
 		},
@@ -1520,6 +1636,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "anoint_flare",
+				"grip": "1h"
+			},
 			"modifiers": [],
 			"tiers": []
 		},
@@ -1538,6 +1658,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "halberd_sweep",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -1568,6 +1692,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "DEX",
+			"technique": {
+				"skill": "vivisect",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -1592,6 +1720,10 @@
 			"special_note": "",
 			"hand": "main_2h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "slag_driver",
+				"grip": "2h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -1616,6 +1748,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "vivisect",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -1641,6 +1777,10 @@
 			"special_note": "",
 			"hand": "main_2h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "gallow_sweep",
+				"grip": "2h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -1874,6 +2014,10 @@
 			"special_note": "One copy per campaign.",
 			"hand": "main_1h",
 			"scaling_stat": "DEX",
+			"technique": {
+				"skill": "vivisect",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -1905,6 +2049,10 @@
 			"special_note": "One copy per campaign.",
 			"hand": "main_2h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "slag_driver",
+				"grip": "2h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -2210,6 +2358,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "halberd_sweep",
+				"grip": "1h"
+			},
 			"modifiers": [],
 			"tiers": []
 		},
@@ -2324,7 +2476,7 @@
 			"rarity": "COMMON",
 			"weight": 0.5,
 			"value": 0,
-			"description": "Amber Tapetum Pin, a Tier I graft: an eye-shine membrane set in at the Slab. Teaches Marrow Lash.",
+			"description": "Amber Tapetum Pin, a Tier I graft: +1 PERC. Teaches Marrow Lash.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -2346,6 +2498,11 @@
 					]
 				},
 				{
+					"type": "stat",
+					"stat": "PERC",
+					"value": 1
+				},
+				{
 					"type": "skill",
 					"skill": "marrow_lash"
 				}
@@ -2358,7 +2515,7 @@
 			"rarity": "UNCOMMON",
 			"weight": 0.5,
 			"value": 0,
-			"description": "Siphon-Valve Pin, a Tier II graft: a brass marrow valve fitted as a pin. Teaches Marrow Bolt.",
+			"description": "Siphon-Valve Pin, a Tier II graft: vents 10 Strain on kill. Teaches Marrow Bolt.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -2380,6 +2537,18 @@
 					]
 				},
 				{
+					"type": "trigger",
+					"on": "kill",
+					"effects": [
+						{
+							"type": "meter",
+							"meter": "strain",
+							"delta": -10,
+							"to": "self"
+						}
+					]
+				},
+				{
 					"type": "skill",
 					"skill": "marrow_bolt"
 				}
@@ -2392,7 +2561,7 @@
 			"rarity": "RARE",
 			"weight": 0.5,
 			"value": 0,
-			"description": "Dreamer's Geode Pin, a Tier III graft: a shard of marrow geode set in as a pin. Teaches Marrow Rend.",
+			"description": "Dreamer's Geode Pin, a Tier III graft (+1 Calcification): +8 status potency, +8% crit. Teaches Marrow Rend.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -2414,6 +2583,14 @@
 					]
 				},
 				{
+					"type": "status_potency",
+					"value": 8
+				},
+				{
+					"type": "crit",
+					"value": 8
+				},
+				{
 					"type": "skill",
 					"skill": "marrow_rend"
 				}
@@ -2426,7 +2603,7 @@
 			"rarity": "COMMON",
 			"weight": 0.5,
 			"value": 0,
-			"description": "A priest's class graft, set in the Cranial. Teaches Marrow Litany.",
+			"description": "A priest's Cranial graft: +5 status potency. Teaches Marrow Litany.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -2448,6 +2625,10 @@
 					]
 				},
 				{
+					"type": "status_potency",
+					"value": 5
+				},
+				{
 					"type": "skill",
 					"skill": "marrow_litany"
 				}
@@ -2460,7 +2641,7 @@
 			"rarity": "RARE",
 			"weight": 0.5,
 			"value": 0,
-			"description": "A priest's Tier III keystone graft, set in the Cranial. Teaches Purge Marrow.",
+			"description": "A priest's Tier III keystone graft (+1 Calcification): +15% heal potency. Teaches Purge Marrow.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -2480,6 +2661,11 @@
 						30,
 						50
 					]
+				},
+				{
+					"type": "skill_potency",
+					"group": "heal",
+					"value": 0.15
 				},
 				{
 					"type": "skill",
@@ -2502,6 +2688,10 @@
 			"special_note": "One copy per campaign.",
 			"hand": "main_1h",
 			"scaling_stat": "DEX",
+			"technique": {
+				"skill": "gut_hook",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -2598,6 +2788,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "rapid_combo",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "adjust",
@@ -2756,6 +2950,10 @@
 			"special_note": "",
 			"hand": "main_1h",
 			"scaling_stat": "STR",
+			"technique": {
+				"skill": "foundry_drive",
+				"grip": "1h"
+			},
 			"modifiers": [
 				{
 					"kind": "requirement",
@@ -2764,6 +2962,562 @@
 				}
 			],
 			"tiers": []
+		},
+		{
+			"id": "sinew_braid",
+			"name": "Black-Sinew Braid",
+			"family": "material",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Elastic calcified sinew braided from aberrant limbs, kept as Slab surgery stock.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "ossified_bellows",
+			"name": "Ossified Bellows",
+			"family": "material",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "A ribbed lung-sac lined with brittle bone rings, kept as Slab surgery stock.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "graft_sinew",
+			"name": "Black-Sinew Pin",
+			"family": "graft",
+			"rarity": "COMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "Black-Sinew Pin, a Tier I graft: +20 root resist. Teaches Sinew Grasp.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 1,
+			"body_role": "monster",
+			"keystone": false,
+			"class_id": "",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "resist",
+					"status": "root",
+					"value": 20
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_snare"
+				}
+			]
+		},
+		{
+			"id": "graft_bellows",
+			"name": "Ossified Bellows Pin",
+			"family": "graft",
+			"rarity": "COMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "Ossified Bellows Pin, a Tier I graft: +10 max poise. Teaches Bellows Shriek.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 1,
+			"body_role": "monster",
+			"keystone": false,
+			"class_id": "",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "stat",
+					"stat": "max_poise",
+					"value": 10
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_shriek"
+				}
+			]
+		},
+		{
+			"id": "graft_bezoar",
+			"name": "Vitriol Bezoar Pin",
+			"family": "graft",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "Vitriol Bezoar Pin, a Tier II graft: +40 poison and burn resist. Teaches Vitriol Gorge.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 2,
+			"body_role": "monster",
+			"keystone": false,
+			"class_id": "",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "resist",
+					"status": "poison",
+					"value": 40
+				},
+				{
+					"type": "resist",
+					"status": "burn",
+					"value": 40
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_spray"
+				}
+			]
+		},
+		{
+			"id": "graft_war_ritual",
+			"name": "Cranial Iron-Vein",
+			"family": "graft",
+			"rarity": "COMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "A warrior's Cranial graft: +10 max poise. Teaches Ossified Wall.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 1,
+			"body_role": "class",
+			"keystone": false,
+			"class_id": "warrior",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "stat",
+					"stat": "max_poise",
+					"value": 10
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_bulwark"
+				}
+			]
+		},
+		{
+			"id": "graft_bra_ritual",
+			"name": "Kiln-Cranial Spur",
+			"family": "graft",
+			"rarity": "COMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "A brawler's Cranial graft: +1 forced-move tile. Teaches Calcified Ram.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 1,
+			"body_role": "class",
+			"keystone": false,
+			"class_id": "brawler",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "forced_move",
+					"bonus_tiles": 1
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_pummel"
+				}
+			]
+		},
+		{
+			"id": "graft_rng_ritual",
+			"name": "Ocular Marrow-Sight",
+			"family": "graft",
+			"rarity": "COMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "A ranger's Cranial graft: +1 PERC. Teaches Tapetum Lance.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 1,
+			"body_role": "class",
+			"keystone": false,
+			"class_id": "ranger",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "stat",
+					"stat": "PERC",
+					"value": 1
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_sight"
+				}
+			]
+		},
+		{
+			"id": "graft_rog_ritual",
+			"name": "Shade-Nerve Loop",
+			"family": "graft",
+			"rarity": "COMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "A rogue's Cranial graft: +5% crit. Teaches Fade-Marrow Cut.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 1,
+			"body_role": "class",
+			"keystone": false,
+			"class_id": "rogue",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "crit",
+					"value": 5
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_step"
+				}
+			]
+		},
+		{
+			"id": "graft_mag_ritual",
+			"name": "Retort Cortex Pin",
+			"family": "graft",
+			"rarity": "COMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "A mage's Cranial graft: +1 INT. Teaches Resonant Bloom.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 1,
+			"body_role": "class",
+			"keystone": false,
+			"class_id": "mage",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "stat",
+					"stat": "INT",
+					"value": 1
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_caustic"
+				}
+			]
+		},
+		{
+			"id": "graft_ks_war",
+			"name": "Stone-Marrow Crown",
+			"family": "graft",
+			"rarity": "RARE",
+			"weight": 0.5,
+			"value": 0,
+			"description": "A warrior's Tier III keystone graft (+1 Calcification): guarded hits retaliate for 18 dmg and 18 stagger. Teaches Marrow Phalanx.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 3,
+			"body_role": "class",
+			"keystone": true,
+			"class_id": "warrior",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "trigger",
+					"on": "guarded_hit",
+					"limit": "round",
+					"effects": [
+						{
+							"type": "damage",
+							"value": 18,
+							"to": "other"
+						},
+						{
+							"type": "stagger",
+							"value": 18,
+							"to": "other"
+						}
+					]
+				},
+				{
+					"type": "skill",
+					"skill": "ks_iron_marrow"
+				}
+			]
+		},
+		{
+			"id": "graft_ks_bra",
+			"name": "Spinal Kiln-Core",
+			"family": "graft",
+			"rarity": "RARE",
+			"weight": 0.5,
+			"value": 0,
+			"description": "A brawler's Tier III keystone graft (+1 Calcification): +15% Channel power. Teaches Ossuary Erupt.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 3,
+			"body_role": "class",
+			"keystone": true,
+			"class_id": "brawler",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "skill_potency",
+					"group": "channel",
+					"value": 0.15
+				},
+				{
+					"type": "skill",
+					"skill": "ks_bone_eruption"
+				}
+			]
+		},
+		{
+			"id": "graft_ks_rng",
+			"name": "Choir-Lens Keystone",
+			"family": "graft",
+			"rarity": "RARE",
+			"weight": 0.5,
+			"value": 0,
+			"description": "A ranger's Tier III keystone graft (+1 Calcification): +1 reach on ranged attacks. Teaches Marrow Needle.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 3,
+			"body_role": "class",
+			"keystone": true,
+			"class_id": "ranger",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "skill_reach",
+					"reach": 1,
+					"kind": "ATTACK",
+					"ranged": true
+				},
+				{
+					"type": "skill",
+					"skill": "ks_marrow_needle"
+				}
+			]
+		},
+		{
+			"id": "graft_ks_rog",
+			"name": "Apex Nerve-Spire",
+			"family": "graft",
+			"rarity": "RARE",
+			"weight": 0.5,
+			"value": 0,
+			"description": "A rogue's Tier III keystone graft (+1 Calcification): +10% crit. Teaches Spinal Excision.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 3,
+			"body_role": "class",
+			"keystone": true,
+			"class_id": "rogue",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "crit",
+					"value": 10
+				},
+				{
+					"type": "skill",
+					"skill": "ks_nerve_sever"
+				}
+			]
+		},
+		{
+			"id": "graft_ks_mag",
+			"name": "Abyssal Crown Pin",
+			"family": "graft",
+			"rarity": "RARE",
+			"weight": 0.5,
+			"value": 0,
+			"description": "A mage's Tier III keystone graft (+1 Calcification): vents 5 Strain once per round on hit. Teaches Siphon Nova.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 3,
+			"body_role": "class",
+			"keystone": true,
+			"class_id": "mage",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "trigger",
+					"on": "hit_dealt",
+					"limit": "round",
+					"effects": [
+						{
+							"type": "meter",
+							"meter": "strain",
+							"delta": -5,
+							"to": "self"
+						}
+					]
+				},
+				{
+					"type": "skill",
+					"skill": "ks_geode_nova"
+				}
+			]
 		}
 	]
 }

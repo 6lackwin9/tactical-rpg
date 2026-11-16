@@ -2002,6 +2002,11 @@
 					"item": "caustic_gall_sac",
 					"chance": 15,
 					"count": 1
+				},
+				{
+					"item": "sinew_braid",
+					"chance": 15,
+					"count": 1
 				}
 			]
 		},
@@ -2064,6 +2069,16 @@
 				{
 					"item": "calcified_bone_shard",
 					"chance": 25,
+					"count": 1
+				},
+				{
+					"item": "sinew_braid",
+					"chance": 15,
+					"count": 1
+				},
+				{
+					"item": "ossified_bellows",
+					"chance": 12,
 					"count": 1
 				}
 			]
@@ -2274,6 +2289,11 @@
 				{
 					"item": "calcified_bone_shard",
 					"chance": 60,
+					"count": 1
+				},
+				{
+					"item": "ossified_bellows",
+					"chance": 35,
 					"count": 1
 				}
 			]

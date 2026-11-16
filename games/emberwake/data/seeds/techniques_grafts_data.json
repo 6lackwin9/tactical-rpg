@@ -1,0 +1,7910 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "sinew_braid",
+    "name": "Black-Sinew Braid",
+    "family": "material",
+    "rarity": "COMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "Elastic calcified sinew braided from aberrant limbs, kept as Slab surgery stock.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "ossified_bellows",
+    "name": "Ossified Bellows",
+    "family": "material",
+    "rarity": "COMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A ribbed lung-sac lined with brittle bone rings, kept as Slab surgery stock.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "hook_drag",
+    "name": "Billhook Drag",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}; pulls target one tile closer. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "polearm"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 2,
+    "power_mult": 1.05,
+    "stagger": 10,
+    "forced_move": {
+     "kind": "pull",
+     "tiles": 1
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "pike_skew",
+    "name": "Skewer Thrust",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger along a line; pierces armor. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "polearm"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.95,
+    "stagger": 8,
+    "area": "LINE",
+    "armor_piercing": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "check_advance",
+    "name": "Halt Advance",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power, {stagger} stagger, sure break at {reach}; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "polearm"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 2,
+    "power_mult": 1.45,
+    "stagger": 18,
+    "status_effect": "root",
+    "status_potency": 85,
+    "status_rounds": 1,
+    "sure_break": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "halberd_sweep",
+    "name": "Crescent Halberd",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger in an arc; pushes foes back one tile. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "polearm"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.3,
+    "stagger": 14,
+    "area": "ARC",
+    "forced_move": {
+     "kind": "push",
+     "tiles": 1
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "polearm_cordon",
+    "name": "Castellan Cordon",
+    "kind": "DEFEND",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name}: -{mitigation} damage for two rounds, {status} for {rounds}; intercepts one melee hit and pulls foe. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "polearm"
+    ],
+    "min_proficiency": 1,
+    "mitigation": 0.4,
+    "guard_rounds": 2,
+    "grant_status": "steadfast",
+    "status_rounds": 1,
+    "triggers": [
+     {
+      "on": "ally_hit",
+      "when": {
+       "range": 2,
+       "melee": true
+      },
+      "limit": "round",
+      "effects": [
+       {
+        "type": "redirect",
+        "pct": 100
+       },
+       {
+        "type": "move",
+        "kind": "pull",
+        "tiles": 1,
+        "to": "other"
+       }
+      ]
+     }
+    ],
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "sunder",
+    "name": "Sunder Chop",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "greatsword"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.3,
+    "stagger": 12,
+    "status_effect": "expose",
+    "status_potency": 75,
+    "status_magnitude": 6,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "wide_cleave",
+    "name": "Broad Cleave",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger in an arc across adjacent foes. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "greatsword"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.15,
+    "stagger": 10,
+    "area": "ARC"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "rending_arc",
+    "name": "Armor-Splitter",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} (-{magnitude}) for {rounds}. Held with poise. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "greatsword"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.7,
+    "stagger": 14,
+    "status_effect": "expose",
+    "status_potency": 85,
+    "status_magnitude": 10,
+    "status_rounds": 3,
+    "windup_poise": 12
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "gallow_sweep",
+    "name": "Gallows Sweep",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 4,
+    "blocks": 3,
+    "description": "{name}: {power} power, {stagger} stagger in an arc; {exploit}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "greatsword"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.5,
+    "stagger": 16,
+    "area": "ARC",
+    "exploit": [
+     {
+      "status": "stagger",
+      "power_mult": 1.35
+     },
+     {
+      "status": "expose",
+      "power_mult": 1.25
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "gsword_sever",
+    "name": "Steel Severance",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 4,
+    "blocks": 4,
+    "description": "{name}: {power} power, {stagger} stagger; unbreakable, pierces armor. Needs {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "greatsword"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 2.3,
+    "stagger": 22,
+    "unbreakable": true,
+    "armor_piercing": true,
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "pommel_check",
+    "name": "Pommel Check",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger, sure break. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "sword"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.7,
+    "stagger": 12,
+    "sure_break": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "rend_armor",
+    "name": "Half-Sword Thrust",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "sword"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.15,
+    "stagger": 8,
+    "status_effect": "expose",
+    "status_potency": 80,
+    "status_magnitude": 8,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "bind_parry",
+    "name": "Bind & Counter",
+    "kind": "DEFEND",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: -{mitigation} damage this round; grants {status} for {rounds} to counter melee hits. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "sword"
+    ],
+    "min_proficiency": 1,
+    "mitigation": 0.3,
+    "guard_rounds": 1,
+    "grant_status": "riposte",
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "hookbill_draw",
+    "name": "Hookbill Draw",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds} and pulls target one tile. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "sword"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.25,
+    "stagger": 8,
+    "status_effect": "bleed",
+    "status_potency": 80,
+    "status_rounds": 2,
+    "forced_move": {
+     "kind": "pull",
+     "tiles": 1
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "sword_duelist",
+    "name": "Master-Cut",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger; ignores guard, ends DEFENSIVE. Needs {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "sword"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.95,
+    "stagger": 16,
+    "ignore_guard": true,
+    "ends_in_stance": "DEFENSIVE",
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "crushing_blow",
+    "name": "Maul Smash",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger, {disrupt}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "hammer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.25,
+    "stagger": 16,
+    "fx": "heavy_blow",
+    "disrupt": "STANCE_BREAK"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "earth_shaker",
+    "name": "Kiln Shockwave",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power, {stagger} stagger along a line; pushes targets back. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "hammer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.15,
+    "stagger": 18,
+    "area": "LINE",
+    "forced_move": {
+     "kind": "push",
+     "tiles": 1
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "skull_ring",
+    "name": "Bell-Ringer",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Held with poise. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "hammer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.75,
+    "stagger": 24,
+    "status_effect": "stun",
+    "status_potency": 65,
+    "status_rounds": 1,
+    "windup_poise": 15
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "slag_driver",
+    "name": "Piston Slam",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 4,
+    "blocks": 3,
+    "description": "{name}: {power} power, {stagger} stagger; drives foe back two tiles with wall slam. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "hammer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.9,
+    "stagger": 20,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 2,
+     "collide_mult": 0.8,
+     "collide_stagger": 12
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "hammer_shatter",
+    "name": "Sledge Judgment",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 4,
+    "blocks": 4,
+    "description": "{name}: {power} power, {stagger} stagger; unbreakable, sure break, pushes two tiles. Needs {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "hammer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 2.2,
+    "stagger": 30,
+    "unbreakable": true,
+    "sure_break": true,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 2
+    },
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "knuckle_jolt",
+    "name": "Shackle Jolt",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger; pushes target back one tile. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "gauntlet"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.85,
+    "stagger": 14,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 1
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "cyclone_kick",
+    "name": "Foundry Spin",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger on every adjacent enemy. Ring around you. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "gauntlet"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.0,
+    "stagger": 14,
+    "fx": "sweep",
+    "clip": "sweep_kick",
+    "area": "RING"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "haymaker",
+    "name": "Haymaker",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Held with poise. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "gauntlet"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.85,
+    "stagger": 20,
+    "fx": "heavy_blow",
+    "clip": "haymaker",
+    "status_effect": "stun",
+    "status_potency": 60,
+    "status_rounds": 1,
+    "windup_poise": 10
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "foundry_drive",
+    "name": "Cestus Throw",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger; drives foe two tiles with breaking wall impact. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "gauntlet"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.3,
+    "stagger": 16,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 2,
+     "collide_mult": 1.0,
+     "collide_break": true
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "gauntlet_breaker",
+    "name": "Anvil-Fist",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 4,
+    "blocks": 3,
+    "description": "{name}: {power} power, {stagger} stagger; unbreakable, ignores guard, pushes two tiles. Needs {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "gauntlet"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 2.1,
+    "stagger": 28,
+    "unbreakable": true,
+    "ignore_guard": true,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 2,
+     "collide_break": true
+    },
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "body_blow",
+    "name": "Rib Shot",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "fist"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.9,
+    "stagger": 14,
+    "status_effect": "weaken",
+    "status_potency": 75,
+    "status_magnitude": 15,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "palm_check",
+    "name": "Palm Thrust",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger, sure break. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "fist"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.05,
+    "stagger": 16,
+    "sure_break": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "liver_hook",
+    "name": "Solar-Plexus Hook",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "fist"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.45,
+    "stagger": 22,
+    "status_effect": "stun",
+    "status_potency": 55,
+    "status_rounds": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "rapid_combo",
+    "name": "Four-Knuckle Combo",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger; {exploit}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "fist"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.55,
+    "stagger": 16,
+    "exploit": [
+     {
+      "status": "stagger",
+      "power_mult": 1.35
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "fist_tempest",
+    "name": "Chain-Breaker",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger, sure break; refunds one AP. Needs {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "fist"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.9,
+    "stagger": 25,
+    "sure_break": true,
+    "riders": [
+     {
+      "when": {},
+      "effects": [
+       {
+        "type": "ap",
+        "value": 1,
+        "to": "self"
+       }
+      ]
+     }
+    ],
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "aimed_shot",
+    "name": "Winch Bolt",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "crossbow"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 1.45,
+    "stagger": 8
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "crippling_shot",
+    "name": "Tendon Bolt",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "crossbow"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 1.05,
+    "stagger": 8,
+    "status_effect": "slow",
+    "status_potency": 85,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "deadeye",
+    "name": "Deadeye Quarrel",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power, {stagger} stagger, sure break at {reach}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "crossbow"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 5,
+    "power_mult": 1.95,
+    "stagger": 14,
+    "sure_break": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "bodkin_punch",
+    "name": "Bodkin Punch",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}; pierces armor, ignores guard. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "crossbow"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 1.55,
+    "stagger": 10,
+    "armor_piercing": true,
+    "ignore_guard": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "crossbow_siege",
+    "name": "Siege-Winch Shot",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 4,
+    "blocks": 4,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}; pierces armor, sure break, pushes two tiles. Needs {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "crossbow"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 6,
+    "power_mult": 2.25,
+    "stagger": 18,
+    "armor_piercing": true,
+    "sure_break": true,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 2
+    },
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "pinning_shot",
+    "name": "Pinning Arrow",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "bow"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 1.0,
+    "stagger": 6,
+    "status_effect": "root",
+    "status_potency": 85,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "barbed_arrow",
+    "name": "Barbed Shaft",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "bow"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 1.1,
+    "stagger": 6,
+    "status_effect": "bleed",
+    "status_potency": 80,
+    "status_rounds": 3
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "volley",
+    "name": "Arrow Volley",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger in a plus area at {reach}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "bow"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 0.95,
+    "stagger": 8,
+    "fx": "arrow_volley",
+    "area": "PLUS"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "wing_shot",
+    "name": "Snapshot Loose",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger, sure break at {reach}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "bow"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 0.9,
+    "stagger": 10,
+    "sure_break": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "bow_rain",
+    "name": "Black-Shaft Hail",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 4,
+    "blocks": 3,
+    "description": "{name}: {power} power, {stagger} stagger in a burst at {reach}; {potency} to {status} for {rounds}. Needs {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "bow"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 5,
+    "power_mult": 1.15,
+    "stagger": 12,
+    "area": "BURST",
+    "status_effect": "bleed",
+    "status_potency": 85,
+    "status_rounds": 2,
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "hamstring_cut",
+    "name": "Hamstring Slash",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.9,
+    "stagger": 6,
+    "status_effect": "root",
+    "status_potency": 85,
+    "status_rounds": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "bleeding_cut",
+    "name": "Slitter's Cut",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.1,
+    "stagger": 6,
+    "status_effect": "bleed",
+    "status_potency": 85,
+    "status_rounds": 3
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "envenom",
+    "name": "Bile-Dipped Edge",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} ({magnitude}) for {rounds}. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 2,
+    "power_mult": 0.85,
+    "stagger": 4,
+    "status_effect": "poison",
+    "status_potency": 85,
+    "status_magnitude": 6,
+    "status_rounds": 3
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "gut_hook",
+    "name": "Flensing Curve",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger; {exploit}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.45,
+    "stagger": 8,
+    "exploit": [
+     {
+      "status": "bleed",
+      "power_mult": 1.4
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "knife_sever",
+    "name": "Tendon Sever",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} for {rounds}, {exploit}. Needs {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 2,
+    "power_mult": 1.8,
+    "stagger": 10,
+    "status_effect": "root",
+    "status_potency": 95,
+    "status_rounds": 2,
+    "exploit": [
+     {
+      "status": "bleed",
+      "power_mult": 1.35
+     },
+     {
+      "status": "slow",
+      "power_mult": 1.25
+     }
+    ],
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "quick_stab",
+    "name": "Curfew Thrust",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "dagger"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.85,
+    "stagger": 6
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "lacerate",
+    "name": "Artery Flurry",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "dagger"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.3,
+    "stagger": 6,
+    "status_effect": "bleed",
+    "status_potency": 95,
+    "status_rounds": 3
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "assassinate",
+    "name": "Marrow-Gap Thrust",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger; pierces armor, {exploit}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "dagger"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.85,
+    "stagger": 10,
+    "armor_piercing": true,
+    "exploit": [
+     {
+      "status": "stagger",
+      "power_mult": 1.35
+     },
+     {
+      "status": "root",
+      "power_mult": 1.35
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "bodkin_twist",
+    "name": "Bodkin Twist",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger; ignores guard, {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "dagger"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.35,
+    "stagger": 6,
+    "ignore_guard": true,
+    "status_effect": "expose",
+    "status_potency": 85,
+    "status_magnitude": 8,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "dagger_shadow",
+    "name": "Shadow-Gap Kill",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 1,
+    "description": "{name}: slips up to {range} tiles {position} for {power} power; pierces armor, {exploit}. Needs {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "dagger"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 0,
+    "reach_max": 3,
+    "power_mult": 2.0,
+    "stagger": 0,
+    "dash_tiles": 0,
+    "position": "behind",
+    "round_intent": "maneuver",
+    "armor_piercing": true,
+    "exploit": [
+     {
+      "hp_below": 35,
+      "power_mult": 1.5
+     }
+    ],
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "smite",
+    "name": "Incense Smite",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "censer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 2,
+    "power_mult": 1.1,
+    "stagger": 8,
+    "fx": "falling_orb"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "chime_swing",
+    "name": "Brimstone Swing",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger in an arc; {potency} to {status} ({magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "censer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.05,
+    "stagger": 10,
+    "area": "ARC",
+    "status_effect": "burn",
+    "status_potency": 75,
+    "status_magnitude": 3,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "judgement",
+    "name": "Rite of Ashes",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "censer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 3,
+    "power_mult": 1.6,
+    "stagger": 14,
+    "fx": "falling_orb",
+    "status_effect": "weaken",
+    "status_potency": 85,
+    "status_magnitude": 20,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "anoint_flare",
+    "name": "Sanctified Flare",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger in a ring; {potency} to {status} ({magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "censer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.1,
+    "stagger": 14,
+    "area": "RING",
+    "status_effect": "burn",
+    "status_potency": 80,
+    "status_magnitude": 4,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "censer_pyre",
+    "name": "Censer Pyre",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name}: burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}, leaves pitch fire. {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "censer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 3,
+    "power_mult": 1.45,
+    "stagger": 14,
+    "area": "BURST",
+    "status_effect": "burn",
+    "status_potency": 90,
+    "status_magnitude": 5,
+    "status_rounds": 3,
+    "hazard": {
+     "id": "pitch_fire",
+     "shape": "SKILL",
+     "at": "target",
+     "rounds": 2
+    },
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "amputate_cut",
+    "name": "Serrated Sweep",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "bone_saw"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.1,
+    "stagger": 6,
+    "status_effect": "bleed",
+    "status_potency": 85,
+    "status_rounds": 3
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "nerve_nick",
+    "name": "Nerve Section",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "bone_saw"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.15,
+    "stagger": 10,
+    "status_effect": "weaken",
+    "status_potency": 85,
+    "status_magnitude": 20,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "rib_spread",
+    "name": "Rib-Spreader",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger; {potency} to {status} (-{magnitude}) for {rounds}, {exploit}. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "bone_saw"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.55,
+    "stagger": 12,
+    "status_effect": "expose",
+    "status_potency": 90,
+    "status_magnitude": 10,
+    "status_rounds": 3,
+    "exploit": [
+     {
+      "status": "bleed",
+      "power_mult": 1.3
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "vivisect",
+    "name": "Prosector Vivisect",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger; pierces armor, {potency} to {status} for {rounds}; vents Strain if active. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "bone_saw"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.65,
+    "stagger": 10,
+    "armor_piercing": true,
+    "status_effect": "bleed",
+    "status_potency": 95,
+    "status_rounds": 3,
+    "riders": [
+     {
+      "when": {
+       "meter": {
+        "id": "strain",
+        "at_least": 1
+       }
+      },
+      "effects": [
+       {
+        "type": "meter",
+        "meter": "strain",
+        "delta": -10,
+        "to": "self"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "saw_dissect",
+    "name": "Anatomical Sever",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 4,
+    "blocks": 3,
+    "description": "{name}: {power} power, {stagger} stagger; pierces armor, sure break, {potency} to {status} for {rounds}. {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "bone_saw"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 2.05,
+    "stagger": 18,
+    "armor_piercing": true,
+    "status_effect": "bleed",
+    "status_potency": 100,
+    "status_rounds": 3,
+    "sure_break": true,
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "snap_lash",
+    "name": "Barbed Lash",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "scourge"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 2,
+    "power_mult": 0.85,
+    "stagger": 6,
+    "status_effect": "bleed",
+    "status_potency": 75,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "hook_snatch",
+    "name": "Wire-Snatch",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}; pulls target one tile closer. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "scourge"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 2,
+    "power_mult": 1.0,
+    "stagger": 12,
+    "forced_move": {
+     "kind": "pull",
+     "tiles": 1
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "flay_arc",
+    "name": "Sweeping Lash",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger in an arc; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "scourge"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.25,
+    "stagger": 10,
+    "area": "ARC",
+    "status_effect": "bleed",
+    "status_potency": 85,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "penance_bite",
+    "name": "Cat-o'-Nine-Iron",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "scourge"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 2,
+    "power_mult": 1.45,
+    "stagger": 14,
+    "status_effect": "expose",
+    "status_potency": 85,
+    "status_magnitude": 8,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "scourge_flay",
+    "name": "Iron Flaying",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power, {stagger} stagger in a line; {potency} to {status} for {rounds}, pulls foes. {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "scourge"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.7,
+    "stagger": 14,
+    "area": "LINE",
+    "status_effect": "bleed",
+    "status_potency": 95,
+    "status_rounds": 3,
+    "forced_move": {
+     "kind": "pull",
+     "tiles": 1
+    },
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "caustic_spritz",
+    "name": "Vitriol Jet",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "sprayer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 3,
+    "power_mult": 1.05,
+    "stagger": 4,
+    "status_effect": "expose",
+    "status_potency": 80,
+    "status_magnitude": 6,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "pitch_cone",
+    "name": "Pyre-Nozzle Cone",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger in a cone; {potency} to {status} ({magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "sprayer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.05,
+    "stagger": 8,
+    "area": "CONE",
+    "status_effect": "burn",
+    "status_potency": 75,
+    "status_magnitude": 4,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "pressure_stream",
+    "name": "Pressure Stream",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger, sure break at {reach}; pushes target back two tiles. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "sprayer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 3,
+    "power_mult": 1.35,
+    "stagger": 16,
+    "sure_break": true,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 2
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "flash_nozzle",
+    "name": "Ignition Mist",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name}: burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}, {exploit}. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "sprayer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 1.05,
+    "stagger": 8,
+    "area": "BURST",
+    "status_effect": "burn",
+    "status_potency": 85,
+    "status_magnitude": 5,
+    "status_rounds": 2,
+    "exploit": [
+     {
+      "status": "expose",
+      "power_mult": 1.3
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "sprayer_deluge",
+    "name": "Vitriol Deluge",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 4,
+    "blocks": 3,
+    "description": "{name}: burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}, leaves pitch fire. {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "sprayer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 3,
+    "power_mult": 1.55,
+    "stagger": 14,
+    "area": "BURST",
+    "status_effect": "burn",
+    "status_potency": 90,
+    "status_magnitude": 6,
+    "status_rounds": 3,
+    "hazard": {
+     "id": "pitch_fire",
+     "shape": "SKILL",
+     "at": "target",
+     "rounds": 2
+    },
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "arcane_bolt",
+    "name": "Marrow-Force Bolt",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger at {reach}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "staff"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 3,
+    "power_mult": 1.25,
+    "stagger": 8,
+    "fx": "arcane_orb"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "arc_lance",
+    "name": "Line Discharge",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger along a line; hits allies too. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "staff"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.1,
+    "stagger": 10,
+    "fx": "beam",
+    "area": "LINE"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "hex",
+    "name": "Warding Hex",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger, sure break at {reach}; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "staff"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 0.85,
+    "stagger": 18,
+    "fx": "curse_orb",
+    "status_effect": "weaken",
+    "status_potency": 90,
+    "status_magnitude": 20,
+    "status_rounds": 2,
+    "sure_break": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "inferno",
+    "name": "Conflagration",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name}: burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "staff"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 1.05,
+    "stagger": 10,
+    "fx": "fire_lob",
+    "area": "BURST",
+    "status_effect": "burn",
+    "status_potency": 85,
+    "status_magnitude": 5,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "staff_cataclysm",
+    "name": "Abyssal Conduit",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 4,
+    "blocks": 4,
+    "description": "{name}: burst at {reach} for {power} power, {stagger} stagger; pierces armor. Needs {weapons} {proficiency}. Once per battle.",
+    "learned_only": true,
+    "weapon_types": [
+     "staff"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 1.65,
+    "stagger": 22,
+    "area": "BURST",
+    "armor_piercing": true,
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "polearm",
+    "name": "Polearm",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "slot_rule": "1h_heavy",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 13,
+      "range": 1,
+      "burden": 1,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 9,
+       "max": 22
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "reach"
+    ],
+    "range_band": {
+     "min": 1,
+     "max": 2
+    },
+    "damage_type": "pierce",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_heavy_impact",
+    "techniques": [
+     {
+      "skill": "hook_drag",
+      "grip": "1h"
+     },
+     {
+      "skill": "pike_skew",
+      "grip": "1h"
+     },
+     {
+      "skill": "check_advance",
+      "grip": "1h"
+     }
+    ],
+    "durability": 40,
+    "art": "",
+    "fx": "slash",
+    "keystone": "polearm_cordon"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "greatsword",
+    "name": "Greatsword",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_2h"
+    ],
+    "default_hand": "main_2h",
+    "slot_rule": "2h_solo",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_2h": {
+      "power": 26,
+      "range": 1,
+      "burden": 2,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_2h": {
+      "power": {
+       "min": 18,
+       "max": 34
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "slash",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_poise_ward",
+    "durability": 40,
+    "art": "",
+    "fx": "cleave",
+    "techniques": [
+     {
+      "skill": "sunder",
+      "grip": "2h"
+     },
+     {
+      "skill": "wide_cleave",
+      "grip": "2h"
+     },
+     {
+      "skill": "rending_arc",
+      "grip": "2h"
+     }
+    ],
+    "keystone": "gsword_sever"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "sword",
+    "name": "Sword",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "slot_rule": "1h_heavy",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 14,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 10,
+       "max": 23
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "slash",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_poise_ward",
+    "durability": 40,
+    "art": "",
+    "fx": "slash",
+    "techniques": [
+     {
+      "skill": "pommel_check",
+      "grip": "1h"
+     },
+     {
+      "skill": "rend_armor",
+      "grip": "1h"
+     },
+     {
+      "skill": "bind_parry",
+      "grip": "1h"
+     }
+    ],
+    "keystone": "sword_duelist"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "hammer",
+    "name": "Hammer",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_2h"
+    ],
+    "default_hand": "main_2h",
+    "slot_rule": "2h_solo",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_2h": {
+      "power": 34,
+      "range": 1,
+      "burden": 3,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_2h": {
+      "power": {
+       "min": 25,
+       "max": 43
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "blunt",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_heavy_impact",
+    "durability": 40,
+    "art": "",
+    "fx": "bludgeon",
+    "techniques": [
+     {
+      "skill": "crushing_blow",
+      "grip": "2h"
+     },
+     {
+      "skill": "earth_shaker",
+      "grip": "2h"
+     },
+     {
+      "skill": "skull_ring",
+      "grip": "2h"
+     }
+    ],
+    "keystone": "hammer_shatter"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "gauntlet",
+    "name": "Gauntlet",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "slot_rule": "1h_heavy",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 13,
+      "range": 1,
+      "burden": 1,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 10,
+       "max": 18
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "blunt",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_heavy_impact",
+    "durability": 40,
+    "art": "gauntlet",
+    "fx": "fists",
+    "attack_clips": [
+     "jab"
+    ],
+    "area_clips": [
+     "sweep_kick",
+     "kick",
+     "jab"
+    ],
+    "techniques": [
+     {
+      "skill": "knuckle_jolt",
+      "grip": "1h"
+     },
+     {
+      "skill": "cyclone_kick",
+      "grip": "1h"
+     },
+     {
+      "skill": "haymaker",
+      "grip": "1h"
+     }
+    ],
+    "keystone": "gauntlet_breaker"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "fist",
+    "name": "Fist",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "slot_rule": "1h_light",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 12,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 9,
+       "max": 15
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "blunt",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_fist",
+    "techniques": [
+     {
+      "skill": "body_blow",
+      "grip": "1h"
+     },
+     {
+      "skill": "palm_check",
+      "grip": "1h"
+     },
+     {
+      "skill": "liver_hook",
+      "grip": "1h"
+     }
+    ],
+    "durability": 40,
+    "art": "",
+    "fx": "fists",
+    "attack_clips": [
+     "jab"
+    ],
+    "area_clips": [
+     "sweep_kick",
+     "kick",
+     "jab"
+    ],
+    "keystone": "fist_tempest"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "crossbow",
+    "name": "Crossbow",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_2h"
+    ],
+    "default_hand": "main_2h",
+    "slot_rule": "2h_rig",
+    "pairs_with": [
+     "ammo",
+     "cloak"
+    ],
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX"
+    ],
+    "base": {
+     "main_2h": {
+      "power": 20,
+      "range": 3,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_2h": {
+      "power": {
+       "min": 15,
+       "max": 25
+      },
+      "range": {
+       "min": 2,
+       "max": 5
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "always_ranged"
+    ],
+    "damage_type": "pierce",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_crossbow",
+    "techniques": [
+     {
+      "skill": "aimed_shot",
+      "grip": "2h"
+     },
+     {
+      "skill": "crippling_shot",
+      "grip": "2h"
+     },
+     {
+      "skill": "deadeye",
+      "grip": "2h"
+     }
+    ],
+    "durability": 40,
+    "art": "",
+    "fx": "bolt",
+    "keystone": "crossbow_siege"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "bow",
+    "name": "Bow",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_2h"
+    ],
+    "default_hand": "main_2h",
+    "slot_rule": "2h_rig",
+    "pairs_with": [
+     "ammo",
+     "cloak"
+    ],
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX"
+    ],
+    "base": {
+     "main_2h": {
+      "power": 20,
+      "range": 3,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_2h": {
+      "power": {
+       "min": 15,
+       "max": 25
+      },
+      "range": {
+       "min": 2,
+       "max": 4
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "always_ranged"
+    ],
+    "damage_type": "pierce",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_bow",
+    "durability": 40,
+    "art": "",
+    "fx": "arrow",
+    "techniques": [
+     {
+      "skill": "pinning_shot",
+      "grip": "2h"
+     },
+     {
+      "skill": "barbed_arrow",
+      "grip": "2h"
+     },
+     {
+      "skill": "volley",
+      "grip": "2h"
+     }
+    ],
+    "keystone": "bow_rain"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "knife",
+    "name": "Knife",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "slot_rule": "1h_light",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 14,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 10,
+       "max": 20
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "reach"
+    ],
+    "range_band": {
+     "min": 1,
+     "max": 2
+    },
+    "damage_type": "pierce",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_agile_step",
+    "durability": 40,
+    "art": "knife",
+    "fx": "stab",
+    "techniques": [
+     {
+      "skill": "hamstring_cut",
+      "grip": "1h"
+     },
+     {
+      "skill": "bleeding_cut",
+      "grip": "1h"
+     },
+     {
+      "skill": "envenom",
+      "grip": "1h"
+     }
+    ],
+    "keystone": "knife_sever"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "dagger",
+    "name": "Dagger",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "slot_rule": "1h_light",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 15,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 11,
+       "max": 20
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "pierce",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_agile_step",
+    "techniques": [
+     {
+      "skill": "quick_stab",
+      "grip": "1h"
+     },
+     {
+      "skill": "lacerate",
+      "grip": "1h"
+     },
+     {
+      "skill": "assassinate",
+      "grip": "1h"
+     }
+    ],
+    "durability": 40,
+    "art": "",
+    "fx": "stab",
+    "keystone": "dagger_shadow"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "censer",
+    "name": "Censer",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "slot_rule": "1h_heavy",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "INT",
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 11,
+      "range": 1,
+      "burden": 1,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 8,
+       "max": 18
+      },
+      "range": {
+       "min": 1,
+       "max": 1
+      },
+      "burden": {
+       "min": 0,
+       "max": 3
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "blunt",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_sacred_censer",
+    "techniques": [
+     {
+      "skill": "smite",
+      "grip": "1h"
+     },
+     {
+      "skill": "chime_swing",
+      "grip": "1h"
+     },
+     {
+      "skill": "judgement",
+      "grip": "1h"
+     }
+    ],
+    "durability": 40,
+    "art": "censer",
+    "fx": "slash",
+    "keystone": "censer_pyre"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "bone_saw",
+    "name": "Bone-Saw",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "slot_rule": "1h_heavy",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX",
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 14,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 10,
+       "max": 20
+      },
+      "range": {
+       "min": 1,
+       "max": 1
+      },
+      "burden": {
+       "min": 0,
+       "max": 2
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "slash",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_bleed_edge",
+    "durability": 40,
+    "art": "bone_saw",
+    "fx": "slash",
+    "techniques": [
+     {
+      "skill": "amputate_cut",
+      "grip": "1h"
+     },
+     {
+      "skill": "nerve_nick",
+      "grip": "1h"
+     },
+     {
+      "skill": "rib_spread",
+      "grip": "1h"
+     }
+    ],
+    "keystone": "saw_dissect"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "scourge",
+    "name": "Scourge",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "slot_rule": "1h_heavy",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX",
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 12,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 8,
+       "max": 18
+      },
+      "range": {
+       "min": 1,
+       "max": 1
+      },
+      "burden": {
+       "min": 0,
+       "max": 2
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "reach"
+    ],
+    "range_band": {
+     "min": 1,
+     "max": 2
+    },
+    "damage_type": "slash",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_bleed_edge",
+    "durability": 40,
+    "art": "scourge",
+    "fx": "slash",
+    "techniques": [
+     {
+      "skill": "snap_lash",
+      "grip": "1h"
+     },
+     {
+      "skill": "hook_snatch",
+      "grip": "1h"
+     },
+     {
+      "skill": "flay_arc",
+      "grip": "1h"
+     }
+    ],
+    "keystone": "scourge_flay"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "sprayer",
+    "name": "Chemical Sprayer",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "slot_rule": "1h_heavy",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "INT"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 12,
+      "range": 3,
+      "burden": 1,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 10,
+       "max": 24
+      },
+      "range": {
+       "min": 2,
+       "max": 4
+      },
+      "burden": {
+       "min": 0,
+       "max": 3
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "always_ranged",
+     "spell_source"
+    ],
+    "damage_type": "fire",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_bleed_edge",
+    "techniques": [
+     {
+      "skill": "caustic_spritz",
+      "grip": "1h"
+     },
+     {
+      "skill": "pitch_cone",
+      "grip": "1h"
+     },
+     {
+      "skill": "pressure_stream",
+      "grip": "1h"
+     }
+    ],
+    "durability": 40,
+    "art": "sprayer",
+    "fx": "arrow",
+    "keystone": "sprayer_deluge"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "staff",
+    "name": "Staff",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_2h"
+    ],
+    "default_hand": "main_2h",
+    "slot_rule": "2h_solo",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "INT"
+    ],
+    "base": {
+     "main_2h": {
+      "power": 24,
+      "range": 2,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_2h": {
+      "power": {
+       "min": 16,
+       "max": 32
+      },
+      "range": {
+       "min": 1,
+       "max": 3
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "spell_source"
+    ],
+    "damage_type": "magic",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_arcane_focus",
+    "durability": 40,
+    "art": "",
+    "fx": "bludgeon",
+    "fx_far": "arcane_orb",
+    "techniques": [
+     {
+      "skill": "arcane_bolt",
+      "grip": "2h"
+     },
+     {
+      "skill": "arc_lance",
+      "grip": "2h"
+     },
+     {
+      "skill": "hex",
+      "grip": "2h"
+     }
+    ],
+    "keystone": "staff_cataclysm"
+   }
+  },
+  {
+   "op": "remove",
+   "kind": "skills",
+   "id": "tq_polearm_hook",
+   "if_exists": true
+  },
+  {
+   "op": "remove",
+   "kind": "skills",
+   "id": "tq_crossbow_volley",
+   "if_exists": true
+  },
+  {
+   "op": "remove",
+   "kind": "skills",
+   "id": "tq_fist_breaker",
+   "if_exists": true
+  },
+  {
+   "op": "remove",
+   "kind": "skills",
+   "id": "tq_dagger_flurry",
+   "if_exists": true
+  },
+  {
+   "op": "remove",
+   "kind": "skills",
+   "id": "tq_censer_swing",
+   "if_exists": true
+  },
+  {
+   "op": "remove",
+   "kind": "skills",
+   "id": "tq_sprayer_jet",
+   "if_exists": true
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_claymore",
+    "name": "Iron Claymore",
+    "family": "greatsword",
+    "rarity": "UNCOMMON",
+    "weight": 4.5,
+    "value": 65,
+    "description": "A heavy double-edged greatsword. Gains +{tier1.power} Power when wielded with {tier1.value}+ STR.",
+    "damage_type": "slash",
+    "icon_id": "greatsword",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 14
+     }
+    ],
+    "tiers": [
+     {
+      "label": "Sunder Guard",
+      "when": {
+       "type": "stat_at_least",
+       "stat": "STR",
+       "value": 18
+      },
+      "bonus": {
+       "power": 4
+      },
+      "desc": ""
+     }
+    ],
+    "technique": {
+     "skill": "gallow_sweep",
+     "grip": "2h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_warhammer",
+    "name": "Titan Warhammer",
+    "family": "hammer",
+    "rarity": "RARE",
+    "weight": 7.0,
+    "value": 120,
+    "description": "Colossal warhammer requiring {req:STR} STR. Inflicts severe deficit penalty if under-statted.",
+    "damage_type": "blunt",
+    "icon_id": "titan_warhammer",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 22
+     }
+    ],
+    "tiers": [
+     {
+      "label": "Crushing Impact",
+      "when": {
+       "type": "stat_at_least",
+       "stat": "STR",
+       "value": 26
+      },
+      "bonus": {
+       "power": 6
+      },
+      "desc": ""
+     }
+    ],
+    "technique": {
+     "skill": "slag_driver",
+     "grip": "2h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_shortbow",
+    "name": "Oak Shortbow",
+    "family": "bow",
+    "rarity": "UNCOMMON",
+    "weight": 2.0,
+    "value": 55,
+    "description": "Supple curved bow capable of ranged volleys up to 3 tiles.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 13
+     }
+    ],
+    "tiers": [
+     {
+      "label": "True Flight",
+      "when": {
+       "type": "stat_at_least",
+       "stat": "DEX",
+       "value": 16
+      },
+      "bonus": {
+       "power": 3
+      },
+      "desc": ""
+     }
+    ],
+    "technique": {
+     "skill": "wing_shot",
+     "grip": "2h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_broadsword",
+    "name": "Steel Broadsword",
+    "family": "sword",
+    "rarity": "COMMON",
+    "weight": 2.8,
+    "value": 35,
+    "description": "Reliable military broadsword with modest strength requirements.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 4
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "hookbill_draw",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_shortsword",
+    "name": "Iron Shortsword",
+    "family": "sword",
+    "rarity": "COMMON",
+    "weight": 1.8,
+    "value": 25,
+    "description": "Agile 1-handed short blade wieldable in main or off-hand (STR scaling).",
+    "damage_type": "slash",
+    "icon_id": "shortsword",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "hookbill_draw",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_knuckles",
+    "name": "Spiked Knuckles",
+    "family": "fist",
+    "rarity": "COMMON",
+    "weight": 1.2,
+    "value": 20,
+    "description": "Iron knuckle dusters for ruthless close-quarters off-hand strikes (STR scaling).",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "rapid_combo",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_dagger",
+    "name": "Shadow Dagger",
+    "family": "dagger",
+    "rarity": "UNCOMMON",
+    "weight": 1.0,
+    "value": 50,
+    "description": "Featherweight stiletto primed for rapid off-hand strikes (DEX scaling).",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 1
+     },
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 12
+     }
+    ],
+    "tiers": [
+     {
+      "label": "Puncture",
+      "when": {
+       "type": "stat_at_least",
+       "stat": "DEX",
+       "value": 15
+      },
+      "bonus": {
+       "power": 4
+      },
+      "desc": ""
+     }
+    ],
+    "technique": {
+     "skill": "bodkin_twist",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_staff",
+    "name": "Runed Staff",
+    "family": "staff",
+    "rarity": "RARE",
+    "weight": 2.2,
+    "value": 75,
+    "description": "Carved ash stave engraved with mystic glyphs. Scales with intelligence.",
+    "damage_type": "magic",
+    "icon_id": "runed_staff",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 14
+     }
+    ],
+    "tiers": [
+     {
+      "label": "Arcane Surge",
+      "when": {
+       "type": "stat_at_least",
+       "stat": "INT",
+       "value": 18
+      },
+      "bonus": {
+       "power": 5
+      },
+      "desc": ""
+     }
+    ],
+    "technique": {
+     "skill": "inferno",
+     "grip": "2h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_hand_axe",
+    "name": "Hatchet",
+    "family": "sword",
+    "rarity": "COMMON",
+    "weight": 2.0,
+    "value": 46,
+    "description": "A balanced one-handed axe.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "hookbill_draw",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_battle_axe",
+    "name": "Battle Axe",
+    "family": "greatsword",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 57,
+    "description": "Two-handed axe that bites deep. Heavy.",
+    "damage_type": "slash",
+    "icon_id": "battle_axe",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 15
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "gallow_sweep",
+     "grip": "2h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_flanged_mace",
+    "name": "Flanged Mace",
+    "family": "censer",
+    "rarity": "COMMON",
+    "weight": 3.0,
+    "value": 47,
+    "description": "A one-handed mace for cracking guards.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 4
+     },
+     {
+      "kind": "adjust",
+      "field": "burden",
+      "delta": 1
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 11
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "anoint_flare",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_stiletto",
+    "name": "Stiletto",
+    "family": "dagger",
+    "rarity": "COMMON",
+    "weight": 2.0,
+    "value": 45,
+    "description": "A slim main-hand blade made for quick thrusts.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 11
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "bodkin_twist",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_wand",
+    "name": "Ash Wand",
+    "family": "sprayer",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 45,
+    "description": "A slender one-handed wand that bolts arcane energy up to 3 tiles.",
+    "damage_type": "magic",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 11
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "flash_nozzle",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_mage_staff",
+    "name": "Mage Staff",
+    "family": "staff",
+    "rarity": "UNCOMMON",
+    "weight": 3.0,
+    "value": 85,
+    "description": "A two-handed war staff. More power than a plain staff, at the price of weight.",
+    "damage_type": "magic",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 3
+     },
+     {
+      "kind": "adjust",
+      "field": "burden",
+      "delta": 2
+     },
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 15
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "inferno",
+     "grip": "2h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_cleric_mace",
+    "name": "Cleric Mace",
+    "family": "censer",
+    "rarity": "COMMON",
+    "weight": 2.5,
+    "value": 50,
+    "description": "A consecrated mace for those who fight to protect. Grants a touch of insight.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 10
+     },
+     {
+      "kind": "stat_bonus",
+      "stat": "KNOW",
+      "value": 1
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "anoint_flare",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_glass_wand",
+    "name": "Glass Wand",
+    "family": "sprayer",
+    "rarity": "RARE",
+    "weight": 0.3,
+    "value": 140,
+    "description": "A brittle crystal wand that hums with raw power.",
+    "damage_type": "magic",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Glass cannon: very high ranged power (30 at range 3, needs INT 14) and no protection at all; best for a mage kept behind a tank.",
+    "hand": "main_1h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 15
+     },
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 14
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "flash_nozzle",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "tl_billhook",
+    "name": "Notched Billhook (test)",
+    "family": "polearm",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 40,
+    "description": "A hooked polearm for the timeline test kit.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [],
+    "tiers": [],
+    "technique": {
+     "skill": "halberd_sweep",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "notched_billhook",
+    "name": "Notched Billhook",
+    "family": "polearm",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 40,
+    "description": "A garrison billhook, its hook notched by use: a two-handed pole-arm for holding a narrow corridor.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 12
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "halberd_sweep",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "curfew_bodkin",
+    "name": "Curfew Bodkin",
+    "family": "dagger",
+    "rarity": "COMMON",
+    "weight": 0.8,
+    "value": 35,
+    "description": "A thin curfew-runner's dagger, made to be drawn and gone before the Watch arrives.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 1
+     },
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 11
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "bodkin_twist",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "bronze_censer",
+    "name": "Bronze Censer",
+    "family": "censer",
+    "rarity": "COMMON",
+    "weight": 2.5,
+    "value": 40,
+    "description": "A bronze censer on a chain: an embalmer's bowl for hot coals and burning resin.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 10
+     },
+     {
+      "kind": "stat_bonus",
+      "stat": "KNOW",
+      "value": 1
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "anoint_flare",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "winch_arbalest",
+    "name": "Winch Arbalest",
+    "family": "crossbow",
+    "rarity": "COMMON",
+    "weight": 4.5,
+    "value": 55,
+    "description": "A crag arbalest with a winch crank: slow to span, hard to answer at range.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "range",
+      "delta": 1
+     },
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 12
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "bodkin_punch",
+     "grip": "2h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "penal_shackles",
+    "name": "Penal Shackles",
+    "family": "gauntlet",
+    "rarity": "COMMON",
+    "weight": 1.5,
+    "value": 20,
+    "description": "Riveted penal shackles worn as cestuses: the chain cut away, the iron kept for the knuckles.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 2
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "foundry_drive",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "brass_vitriol_sprayer",
+    "name": "Brass Sprayer",
+    "family": "sprayer",
+    "rarity": "COMMON",
+    "weight": 3.5,
+    "value": 50,
+    "description": "A brass pressure tank and hose with a pole nozzle, charged with caustic vitriol.",
+    "damage_type": "fire",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 12
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "flash_nozzle",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "watch_hookbill",
+    "name": "Watch Hookbill",
+    "family": "sword",
+    "rarity": "COMMON",
+    "weight": 2.0,
+    "value": 30,
+    "description": "A Watch hookbill: a long-hafted axe-hook for pulling men off walls.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "hookbill_draw",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "stirrup_arbalest",
+    "name": "Stirrup Arbalest",
+    "family": "crossbow",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 40,
+    "description": "A stirrup arbalest, spanned with a foot in the iron loop and a heave of the back.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 11
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "bodkin_punch",
+     "grip": "2h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "bailiff_maul",
+    "name": "Bailiff's Maul",
+    "family": "hammer",
+    "rarity": "COMMON",
+    "weight": 6.5,
+    "value": 60,
+    "description": "A bailiff's maul: a short iron-headed hammer for gates and kneecaps.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 13
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "slag_driver",
+     "grip": "2h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "penitent_scourge",
+    "name": "Penitent Scourge",
+    "family": "scourge",
+    "rarity": "COMMON",
+    "weight": 1.5,
+    "value": 20,
+    "description": "A penitent's scourge of barbed wire tails on a handle wrapped in vestment cloth.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [],
+    "tiers": [],
+    "technique": {
+     "skill": "penance_bite",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "pyre_nozzle",
+    "name": "Pyre Nozzle",
+    "family": "sprayer",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 45,
+    "description": "A pole nozzle that sprays burning oil in a long stream.",
+    "damage_type": "fire",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "INT",
+    "modifiers": [],
+    "tiers": [],
+    "technique": {
+     "skill": "flash_nozzle",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "boning_knife",
+    "name": "Boning Knife",
+    "family": "knife",
+    "rarity": "COMMON",
+    "weight": 0.8,
+    "value": 20,
+    "description": "A narrow boning knife from a rendering floor.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [],
+    "tiers": [],
+    "technique": {
+     "skill": "gut_hook",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "bone_club",
+    "name": "Bone Club",
+    "family": "censer",
+    "rarity": "COMMON",
+    "weight": 3.0,
+    "value": 0,
+    "description": "A calcified bone gripped at the narrow end and swung wide.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [],
+    "tiers": [],
+    "technique": {
+     "skill": "anoint_flare",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "vanes_bill",
+    "name": "Executioner Bill",
+    "family": "polearm",
+    "rarity": "UNCOMMON",
+    "weight": 5.0,
+    "value": 90,
+    "description": "Captain Vane's executioner's bill: a long billhook with a gilded haft.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 3
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 14
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "halberd_sweep",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "quells_bone_saws",
+    "name": "Twin Bone-Saws",
+    "family": "bone_saw",
+    "rarity": "UNCOMMON",
+    "theme": "inquisitor",
+    "weight": 1.5,
+    "value": 70,
+    "description": "Proctor Quell's twin bone-saws, their teeth clogged with old marrow.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 2
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "vivisect",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "foundry_sledge",
+    "name": "Foundry Sledge",
+    "family": "hammer",
+    "rarity": "COMMON",
+    "weight": 7.0,
+    "value": 70,
+    "description": "A foundry sledge, its head scored by slag.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 15
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "slag_driver",
+     "grip": "2h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "flensing_hooks",
+    "name": "Flensing Hooks",
+    "family": "bone_saw",
+    "rarity": "COMMON",
+    "weight": 3.0,
+    "value": 60,
+    "description": "A pair of flensing hooks from a rendering floor, swung on short hafts.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 2
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "vivisect",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "prelates_blade",
+    "name": "Prelate's Blade",
+    "family": "greatsword",
+    "rarity": "RARE",
+    "theme": "inquisitor",
+    "weight": 4.5,
+    "value": 120,
+    "description": "A prelate's sword, narrow and plain, kept clean for ceremony.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 4
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 14
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "gallow_sweep",
+     "grip": "2h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "quells_marrow_scalpel",
+    "name": "Marrow Scalpel",
+    "family": "bone_saw",
+    "rarity": "RARE",
+    "weight": 1.5,
+    "value": 0,
+    "description": "Proctor Quell's marrow scalpel, its blade stained black-green.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "One copy per campaign.",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 3
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "status_potency",
+       "value": 10
+      }
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "vivisect",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "grendels_slag_hammer",
+    "name": "Slag-Hammer",
+    "family": "hammer",
+    "rarity": "RARE",
+    "weight": 7.0,
+    "value": 0,
+    "description": "Overseer Grendel's Slag-Hammer.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "One copy per campaign.",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 4
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 15
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "slag_driver",
+     "grip": "2h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_iron_billhook",
+    "name": "Iron Billhook",
+    "family": "polearm",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 40,
+    "description": "A plain hooked polearm: reach and a steady pierce.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [],
+    "tiers": [],
+    "technique": {
+     "skill": "halberd_sweep",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "orlovs_flensing_talon",
+    "name": "Flensing Talon",
+    "family": "knife",
+    "rarity": "RARE",
+    "weight": 0.9,
+    "value": 0,
+    "description": "Guild-Master Orlov's flensing talon: a curved rendering blade, hooked to open what it catches.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "One copy per campaign.",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 3
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "skill_potency",
+       "family": "throat_carver",
+       "value": 0.2
+      }
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "skill_potency",
+       "family": "orlovs_retribution",
+       "value": 0.2
+      }
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "gut_hook",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "barbed_bone_cestus",
+    "name": "Barbed Bone Cestus",
+    "family": "fist",
+    "rarity": "UNCOMMON",
+    "weight": 1.5,
+    "value": 65,
+    "description": "A Skerrit cestus of calcified shard, barbed across the knuckles so every blow leaves a ragged cut.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 3
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 11
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "status_potency",
+       "value": 5
+      }
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "rapid_combo",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "riveted_gauntlets",
+    "name": "Riveted Gauntlets",
+    "family": "gauntlet",
+    "rarity": "COMMON",
+    "weight": 2.5,
+    "value": 40,
+    "description": "Iron-riveted leather and plate gauntlets built to break a shield wall.",
+    "damage_type": "blunt",
+    "icon_id": "riveted_gauntlets",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": [],
+    "technique": {
+     "skill": "foundry_drive",
+     "grip": "1h"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_lash",
+    "name": "Marrow Lash",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 2,
+    "description": "{name} (Channel): {power} power, {stagger} stagger at {reach}; pierces armor.",
+    "learned_only": true,
+    "reach_min": 1,
+    "reach_max": 2,
+    "power_mult": 1.45,
+    "stagger": 10,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 15
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_snare",
+    "name": "Sinew Grasp",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name} (Channel): {power} power, {stagger} stagger at {reach}; pulls target one tile, {potency} to {status} for {rounds}; pierces armor.",
+    "learned_only": true,
+    "reach_min": 1,
+    "reach_max": 3,
+    "power_mult": 1.2,
+    "stagger": 10,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 15
+    },
+    "forced_move": {
+     "kind": "pull",
+     "tiles": 1
+    },
+    "status_effect": "root",
+    "status_potency": 85,
+    "status_rounds": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_shriek",
+    "name": "Bellows Shriek",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name} (Channel): {power} power, {stagger} stagger in a ring; pushes adjacent foes back and pierces armor.",
+    "learned_only": true,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.05,
+    "stagger": 16,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 20
+    },
+    "area": "RING",
+    "forced_move": {
+     "kind": "push",
+     "tiles": 1
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_spray",
+    "name": "Vitriol Gorge",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name} (Channel): burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}, leaves choke-gas.",
+    "learned_only": true,
+    "reach_min": 2,
+    "reach_max": 2,
+    "power_mult": 1.15,
+    "stagger": 8,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 25
+    },
+    "area": "BURST",
+    "status_effect": "poison",
+    "status_potency": 90,
+    "status_magnitude": 6,
+    "status_rounds": 3,
+    "hazard": {
+     "id": "choke_gas",
+     "shape": "SKILL",
+     "at": "target",
+     "rounds": 2
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_bolt",
+    "name": "Marrow Bolt",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name} (Channel): {power} power, {stagger} stagger at {reach}; pierces armor.",
+    "learned_only": true,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 1.55,
+    "stagger": 12,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 25
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_rend",
+    "name": "Marrow Rend",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name} (Channel): {power} power, {stagger} stagger at {reach}; pierces armor and ignores guard.",
+    "learned_only": true,
+    "reach_min": 1,
+    "reach_max": 2,
+    "power_mult": 2.05,
+    "stagger": 22,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 35
+    },
+    "ignore_guard": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_bulwark",
+    "name": "Ossified Wall",
+    "kind": "DEFEND",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name} (Channel): -{mitigation} damage this round; grants {status} (+{magnitude}) for {rounds}.",
+    "learned_only": true,
+    "mitigation": 0.5,
+    "guard_rounds": 1,
+    "grant_status": "fortify",
+    "status_magnitude": 8,
+    "status_rounds": 2,
+    "channel": {
+     "only": true,
+     "cost": 20
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_pummel",
+    "name": "Calcified Ram",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name} (Channel): {power} power, {stagger} stagger; pushes two tiles with breaking wall impact; pierces armor.",
+    "learned_only": true,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.5,
+    "stagger": 24,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 20
+    },
+    "forced_move": {
+     "kind": "push",
+     "tiles": 2,
+     "collide_break": true
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_sight",
+    "name": "Tapetum Lance",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name} (Channel): {power} power, {stagger} stagger at {reach}; pierces armor, ignores guard, {potency} to {status} (-{magnitude}) for {rounds}.",
+    "learned_only": true,
+    "reach_min": 2,
+    "reach_max": 6,
+    "power_mult": 1.6,
+    "stagger": 10,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 20
+    },
+    "ignore_guard": true,
+    "status_effect": "expose",
+    "status_potency": 95,
+    "status_magnitude": 10,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_step",
+    "name": "Fade-Marrow Cut",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "{name} (Channel): slips up to {range} tiles {position} for {power} power, {stagger} stagger, {potency} to {status} for {rounds}; pierces armor.",
+    "learned_only": true,
+    "reach_min": 0,
+    "reach_max": 3,
+    "power_mult": 1.45,
+    "stagger": 8,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 20
+    },
+    "dash_tiles": 0,
+    "position": "behind",
+    "round_intent": "maneuver",
+    "status_effect": "bleed",
+    "status_potency": 95,
+    "status_rounds": 3
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_litany",
+    "name": "Marrow Litany",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name} (Channel): {power} power, {stagger} stagger at {reach}; {potency} to {status} (-{magnitude}) for {rounds}; pierces armor.",
+    "learned_only": true,
+    "reach_min": 1,
+    "reach_max": 2,
+    "power_mult": 1.4,
+    "stagger": 10,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 20
+    },
+    "status_effect": "weaken",
+    "status_potency": 85,
+    "status_magnitude": 20,
+    "status_rounds": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_caustic",
+    "name": "Resonant Bloom",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name} (Channel): burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}, leaves pitch fire.",
+    "learned_only": true,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 1.1,
+    "stagger": 10,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 25
+    },
+    "area": "BURST",
+    "status_effect": "burn",
+    "status_potency": 90,
+    "status_magnitude": 5,
+    "status_rounds": 2,
+    "hazard": {
+     "id": "pitch_fire",
+     "shape": "SKILL",
+     "at": "target",
+     "rounds": 2
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "ks_iron_marrow",
+    "name": "Marrow Phalanx",
+    "kind": "DEFEND",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name} (Channel, once per battle): -{mitigation} damage for two rounds; grants {status} (+{magnitude}) for {rounds} and {extra}.",
+    "learned_only": true,
+    "mitigation": 0.6,
+    "guard_rounds": 2,
+    "grant_status": "fortify",
+    "status_magnitude": 10,
+    "status_rounds": 2,
+    "channel": {
+     "only": true,
+     "cost": 30
+    },
+    "extra_grants": [
+     {
+      "status": "steadfast",
+      "rounds": 1,
+      "magnitude": 0
+     }
+    ],
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "ks_bone_eruption",
+    "name": "Ossuary Erupt",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name} (Channel, once per battle): {power} power, {stagger} stagger in a ring; sure break, pushes two tiles, pierces armor.",
+    "learned_only": true,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 2.0,
+    "stagger": 30,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 35
+    },
+    "area": "RING",
+    "sure_break": true,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 2
+    },
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "ks_marrow_needle",
+    "name": "Marrow Needle",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "{name} (Channel, once per battle): {power} power, {stagger} stagger at {reach}; pierces armor, ignores guard, sure break.",
+    "learned_only": true,
+    "reach_min": 2,
+    "reach_max": 6,
+    "power_mult": 2.25,
+    "stagger": 18,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 35
+    },
+    "ignore_guard": true,
+    "sure_break": true,
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "ks_nerve_sever",
+    "name": "Spinal Excision",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "{name} (Channel, once per battle): {power} power; pierces armor, ignores guard, {exploit}.",
+    "learned_only": true,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 2.35,
+    "stagger": 0,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 30
+    },
+    "ignore_guard": true,
+    "exploit": [
+     {
+      "status": "bleed",
+      "power_mult": 1.4
+     },
+     {
+      "status": "stagger",
+      "power_mult": 1.4
+     }
+    ],
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "purge_marrow",
+    "name": "Purge Marrow",
+    "kind": "SUPPORT",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 1,
+    "description": "{name} (once per battle): undoes one Calcification mark within {reach} and cleanses {cleanse}; calms a Stage V ally.",
+    "learned_only": true,
+    "reach_min": 0,
+    "reach_max": 2,
+    "unmark": {
+     "mark": "calcify"
+    },
+    "cleanse_statuses": [
+     "stun",
+     "weaken"
+    ],
+    "channel": {
+     "none": true
+    },
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "ks_geode_nova",
+    "name": "Siphon Nova",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name} (Channel, once per battle): burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}, leaves phosphorus fire.",
+    "learned_only": true,
+    "reach_min": 2,
+    "reach_max": 4,
+    "power_mult": 1.85,
+    "stagger": 20,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 35
+    },
+    "area": "BURST",
+    "status_effect": "burn",
+    "status_potency": 95,
+    "status_magnitude": 6,
+    "status_rounds": 3,
+    "hazard": {
+     "id": "phosphorus_fire",
+     "shape": "SKILL",
+     "at": "target",
+     "rounds": 2
+    },
+    "uses_per_battle": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_optic",
+    "name": "Amber Tapetum Pin",
+    "family": "graft",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "Amber Tapetum Pin, a Tier I graft: +1 PERC. Teaches Marrow Lash.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 1,
+    "body_role": "monster",
+    "keystone": false,
+    "class_id": "",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "stat",
+      "stat": "PERC",
+      "value": 1
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_lash"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_sinew",
+    "name": "Black-Sinew Pin",
+    "family": "graft",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "Black-Sinew Pin, a Tier I graft: +20 root resist. Teaches Sinew Grasp.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 1,
+    "body_role": "monster",
+    "keystone": false,
+    "class_id": "",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "resist",
+      "status": "root",
+      "value": 20
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_snare"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_bellows",
+    "name": "Ossified Bellows Pin",
+    "family": "graft",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "Ossified Bellows Pin, a Tier I graft: +10 max poise. Teaches Bellows Shriek.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 1,
+    "body_role": "monster",
+    "keystone": false,
+    "class_id": "",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "stat",
+      "stat": "max_poise",
+      "value": 10
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_shriek"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_bezoar",
+    "name": "Vitriol Bezoar Pin",
+    "family": "graft",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "Vitriol Bezoar Pin, a Tier II graft: +40 poison and burn resist. Teaches Vitriol Gorge.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 2,
+    "body_role": "monster",
+    "keystone": false,
+    "class_id": "",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "resist",
+      "status": "poison",
+      "value": 40
+     },
+     {
+      "type": "resist",
+      "status": "burn",
+      "value": 40
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_spray"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_valve",
+    "name": "Siphon-Valve Pin",
+    "family": "graft",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "Siphon-Valve Pin, a Tier II graft: vents 10 Strain on kill. Teaches Marrow Bolt.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 2,
+    "body_role": "monster",
+    "keystone": false,
+    "class_id": "",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "trigger",
+      "on": "kill",
+      "effects": [
+       {
+        "type": "meter",
+        "meter": "strain",
+        "delta": -10,
+        "to": "self"
+       }
+      ]
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_bolt"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_core",
+    "name": "Dreamer's Geode Pin",
+    "family": "graft",
+    "rarity": "RARE",
+    "weight": 0.5,
+    "value": 0,
+    "description": "Dreamer's Geode Pin, a Tier III graft (+1 Calcification): +8 status potency, +8% crit. Teaches Marrow Rend.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 3,
+    "body_role": "monster",
+    "keystone": false,
+    "class_id": "",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "status_potency",
+      "value": 8
+     },
+     {
+      "type": "crit",
+      "value": 8
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_rend"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_war_ritual",
+    "name": "Cranial Iron-Vein",
+    "family": "graft",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A warrior's Cranial graft: +10 max poise. Teaches Ossified Wall.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 1,
+    "body_role": "class",
+    "keystone": false,
+    "class_id": "warrior",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "stat",
+      "stat": "max_poise",
+      "value": 10
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_bulwark"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_bra_ritual",
+    "name": "Kiln-Cranial Spur",
+    "family": "graft",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A brawler's Cranial graft: +1 forced-move tile. Teaches Calcified Ram.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 1,
+    "body_role": "class",
+    "keystone": false,
+    "class_id": "brawler",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "forced_move",
+      "bonus_tiles": 1
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_pummel"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_rng_ritual",
+    "name": "Ocular Marrow-Sight",
+    "family": "graft",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A ranger's Cranial graft: +1 PERC. Teaches Tapetum Lance.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 1,
+    "body_role": "class",
+    "keystone": false,
+    "class_id": "ranger",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "stat",
+      "stat": "PERC",
+      "value": 1
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_sight"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_rog_ritual",
+    "name": "Shade-Nerve Loop",
+    "family": "graft",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A rogue's Cranial graft: +5% crit. Teaches Fade-Marrow Cut.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 1,
+    "body_role": "class",
+    "keystone": false,
+    "class_id": "rogue",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "crit",
+      "value": 5
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_step"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_litany",
+    "name": "Litany Graft",
+    "family": "graft",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A priest's Cranial graft: +5 status potency. Teaches Marrow Litany.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 1,
+    "body_role": "class",
+    "keystone": false,
+    "class_id": "priest",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "status_potency",
+      "value": 5
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_litany"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_mag_ritual",
+    "name": "Retort Cortex Pin",
+    "family": "graft",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A mage's Cranial graft: +1 INT. Teaches Resonant Bloom.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 1,
+    "body_role": "class",
+    "keystone": false,
+    "class_id": "mage",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "stat",
+      "stat": "INT",
+      "value": 1
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_caustic"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_ks_war",
+    "name": "Stone-Marrow Crown",
+    "family": "graft",
+    "rarity": "RARE",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A warrior's Tier III keystone graft (+1 Calcification): guarded hits retaliate for 18 dmg and 18 stagger. Teaches Marrow Phalanx.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 3,
+    "body_role": "class",
+    "keystone": true,
+    "class_id": "warrior",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "trigger",
+      "on": "guarded_hit",
+      "limit": "round",
+      "effects": [
+       {
+        "type": "damage",
+        "value": 18,
+        "to": "other"
+       },
+       {
+        "type": "stagger",
+        "value": 18,
+        "to": "other"
+       }
+      ]
+     },
+     {
+      "type": "skill",
+      "skill": "ks_iron_marrow"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_ks_bra",
+    "name": "Spinal Kiln-Core",
+    "family": "graft",
+    "rarity": "RARE",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A brawler's Tier III keystone graft (+1 Calcification): +15% Channel power. Teaches Ossuary Erupt.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 3,
+    "body_role": "class",
+    "keystone": true,
+    "class_id": "brawler",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "skill_potency",
+      "group": "channel",
+      "value": 0.15
+     },
+     {
+      "type": "skill",
+      "skill": "ks_bone_eruption"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_ks_rng",
+    "name": "Choir-Lens Keystone",
+    "family": "graft",
+    "rarity": "RARE",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A ranger's Tier III keystone graft (+1 Calcification): +1 reach on ranged attacks. Teaches Marrow Needle.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 3,
+    "body_role": "class",
+    "keystone": true,
+    "class_id": "ranger",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "skill_reach",
+      "reach": 1,
+      "kind": "ATTACK",
+      "ranged": true
+     },
+     {
+      "type": "skill",
+      "skill": "ks_marrow_needle"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_ks_rog",
+    "name": "Apex Nerve-Spire",
+    "family": "graft",
+    "rarity": "RARE",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A rogue's Tier III keystone graft (+1 Calcification): +10% crit. Teaches Spinal Excision.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 3,
+    "body_role": "class",
+    "keystone": true,
+    "class_id": "rogue",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "crit",
+      "value": 10
+     },
+     {
+      "type": "skill",
+      "skill": "ks_nerve_sever"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_purge",
+    "name": "Inoculated Keystone (priest)",
+    "family": "graft",
+    "rarity": "RARE",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A priest's Tier III keystone graft (+1 Calcification): +15% heal potency. Teaches Purge Marrow.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 3,
+    "body_role": "class",
+    "keystone": true,
+    "class_id": "priest",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "skill_potency",
+      "group": "heal",
+      "value": 0.15
+     },
+     {
+      "type": "skill",
+      "skill": "purge_marrow"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_ks_mag",
+    "name": "Abyssal Crown Pin",
+    "family": "graft",
+    "rarity": "RARE",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A mage's Tier III keystone graft (+1 Calcification): vents 5 Strain once per round on hit. Teaches Siphon Nova.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 3,
+    "body_role": "class",
+    "keystone": true,
+    "class_id": "mage",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "trigger",
+      "on": "hit_dealt",
+      "limit": "round",
+      "effects": [
+       {
+        "type": "meter",
+        "meter": "strain",
+        "delta": -5,
+        "to": "self"
+       }
+      ]
+     },
+     {
+      "type": "skill",
+      "skill": "ks_geode_nova"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_optic_forearms",
+    "name": "Amber Tapetum Pin into Forearms",
+    "description": "Graft surgery: the Amber Tapetum Pin into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "stalker_optic_nerve": 1,
+      "slot_bone_spur": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_optic",
+      "slot": "forearms"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_optic_thoracic",
+    "name": "Amber Tapetum Pin into Thoracic",
+    "description": "Graft surgery: the Amber Tapetum Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "stalker_optic_nerve": 1,
+      "slot_chitin_plate": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_optic",
+      "slot": "thoracic"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_optic_visceral",
+    "name": "Amber Tapetum Pin into Visceral",
+    "description": "Graft surgery: the Amber Tapetum Pin into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "stalker_optic_nerve": 1,
+      "slot_blood_sac": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_optic",
+      "slot": "visceral"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_sinew_forearms",
+    "name": "Black-Sinew Pin into Forearms",
+    "description": "Graft surgery: the Black-Sinew Pin into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "sinew_braid": 1,
+      "slot_bone_spur": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_sinew",
+      "slot": "forearms"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_sinew_thoracic",
+    "name": "Black-Sinew Pin into Thoracic",
+    "description": "Graft surgery: the Black-Sinew Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "sinew_braid": 1,
+      "slot_chitin_plate": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_sinew",
+      "slot": "thoracic"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_sinew_visceral",
+    "name": "Black-Sinew Pin into Visceral",
+    "description": "Graft surgery: the Black-Sinew Pin into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "sinew_braid": 1,
+      "slot_blood_sac": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_sinew",
+      "slot": "visceral"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_bellows_forearms",
+    "name": "Ossified Bellows Pin into Forearms",
+    "description": "Graft surgery: the Ossified Bellows Pin into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "ossified_bellows": 1,
+      "slot_bone_spur": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_bellows",
+      "slot": "forearms"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_bellows_thoracic",
+    "name": "Ossified Bellows Pin into Thoracic",
+    "description": "Graft surgery: the Ossified Bellows Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "ossified_bellows": 1,
+      "slot_chitin_plate": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_bellows",
+      "slot": "thoracic"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_bellows_visceral",
+    "name": "Ossified Bellows Pin into Visceral",
+    "description": "Graft surgery: the Ossified Bellows Pin into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "ossified_bellows": 1,
+      "slot_blood_sac": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_bellows",
+      "slot": "visceral"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_bezoar_forearms",
+    "name": "Vitriol Bezoar Pin into Forearms",
+    "description": "Graft surgery: the Vitriol Bezoar Pin into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 80,
+     "items": {
+      "caustic_gall_sac": 1,
+      "slot_bone_spur": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_bezoar",
+      "slot": "forearms"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_bezoar_thoracic",
+    "name": "Vitriol Bezoar Pin into Thoracic",
+    "description": "Graft surgery: the Vitriol Bezoar Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 80,
+     "items": {
+      "caustic_gall_sac": 1,
+      "slot_chitin_plate": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_bezoar",
+      "slot": "thoracic"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_bezoar_visceral",
+    "name": "Vitriol Bezoar Pin into Visceral",
+    "description": "Graft surgery: the Vitriol Bezoar Pin into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 80,
+     "items": {
+      "caustic_gall_sac": 1,
+      "slot_blood_sac": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_bezoar",
+      "slot": "visceral"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_valve_forearms",
+    "name": "Siphon-Valve Pin into Forearms",
+    "description": "Graft surgery: the Siphon-Valve Pin into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 80,
+     "items": {
+      "inquisitor_marrow_valve": 1,
+      "slot_bone_spur": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_valve",
+      "slot": "forearms"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_valve_thoracic",
+    "name": "Siphon-Valve Pin into Thoracic",
+    "description": "Graft surgery: the Siphon-Valve Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 80,
+     "items": {
+      "inquisitor_marrow_valve": 1,
+      "slot_chitin_plate": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_valve",
+      "slot": "thoracic"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_valve_visceral",
+    "name": "Siphon-Valve Pin into Visceral",
+    "description": "Graft surgery: the Siphon-Valve Pin into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 80,
+     "items": {
+      "inquisitor_marrow_valve": 1,
+      "slot_blood_sac": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_valve",
+      "slot": "visceral"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_core_forearms",
+    "name": "Dreamer's Geode Pin into Forearms",
+    "description": "Graft surgery: the Dreamer's Geode Pin into the Forearms (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.apex_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 150,
+     "items": {
+      "titan_marrow_core": 1,
+      "slot_bone_spur": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_core",
+      "slot": "forearms"
+     },
+     {
+      "effect": "track",
+      "track": "calcification",
+      "delta": 1
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_core_thoracic",
+    "name": "Dreamer's Geode Pin into Thoracic",
+    "description": "Graft surgery: the Dreamer's Geode Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.apex_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 150,
+     "items": {
+      "titan_marrow_core": 1,
+      "slot_chitin_plate": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_core",
+      "slot": "thoracic"
+     },
+     {
+      "effect": "track",
+      "track": "calcification",
+      "delta": 1
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_core_visceral",
+    "name": "Dreamer's Geode Pin into Visceral",
+    "description": "Graft surgery: the Dreamer's Geode Pin into the Visceral (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.apex_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 150,
+     "items": {
+      "titan_marrow_core": 1,
+      "slot_blood_sac": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_core",
+      "slot": "visceral"
+     },
+     {
+      "effect": "track",
+      "track": "calcification",
+      "delta": 1
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_war_ritual_cranial",
+    "name": "Cranial Iron-Vein into Cranial",
+    "description": "Class piece surgery (warrior): needs the class rite.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.rite_warrior",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "stalker_optic_nerve": 1,
+      "slot_eye_tissue": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_war_ritual",
+      "slot": "cranial"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_bra_ritual_cranial",
+    "name": "Kiln-Cranial Spur into Cranial",
+    "description": "Class piece surgery (brawler): needs the class rite.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.rite_brawler",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "stalker_optic_nerve": 1,
+      "slot_eye_tissue": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_bra_ritual",
+      "slot": "cranial"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_rng_ritual_cranial",
+    "name": "Ocular Marrow-Sight into Cranial",
+    "description": "Class piece surgery (ranger): needs the class rite.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.rite_ranger",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "stalker_optic_nerve": 1,
+      "slot_eye_tissue": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_rng_ritual",
+      "slot": "cranial"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_rog_ritual_cranial",
+    "name": "Shade-Nerve Loop into Cranial",
+    "description": "Class piece surgery (rogue): needs the class rite.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.rite_rogue",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "stalker_optic_nerve": 1,
+      "slot_eye_tissue": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_rog_ritual",
+      "slot": "cranial"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_litany_cranial",
+    "name": "Litany into Cranial",
+    "description": "Class piece surgery (priest): needs the class rite.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.rite_priest",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "stalker_optic_nerve": 1,
+      "slot_eye_tissue": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_litany",
+      "slot": "cranial"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_mag_ritual_cranial",
+    "name": "Retort Cortex Pin into Cranial",
+    "description": "Class piece surgery (mage): needs the class rite.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.rite_mage",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 40,
+     "items": {
+      "stalker_optic_nerve": 1,
+      "slot_eye_tissue": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_mag_ritual",
+      "slot": "cranial"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_ks_war_cranial",
+    "name": "Stone-Marrow Crown into Cranial",
+    "description": "Tier III keystone surgery (warrior): needs the class rite and 3 grafts; +1 Calcification.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.apex_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.rite_warrior",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 150,
+     "items": {
+      "titan_marrow_core": 1,
+      "slot_eye_tissue": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_ks_war",
+      "slot": "cranial"
+     },
+     {
+      "effect": "track",
+      "track": "calcification",
+      "delta": 1
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_ks_bra_cranial",
+    "name": "Spinal Kiln-Core into Cranial",
+    "description": "Tier III keystone surgery (brawler): needs the class rite and 3 grafts; +1 Calcification.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.apex_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.rite_brawler",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 150,
+     "items": {
+      "titan_marrow_core": 1,
+      "slot_eye_tissue": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_ks_bra",
+      "slot": "cranial"
+     },
+     {
+      "effect": "track",
+      "track": "calcification",
+      "delta": 1
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_ks_rng_cranial",
+    "name": "Choir-Lens Keystone into Cranial",
+    "description": "Tier III keystone surgery (ranger): needs the class rite and 3 grafts; +1 Calcification.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.apex_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.rite_ranger",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 150,
+     "items": {
+      "titan_marrow_core": 1,
+      "slot_eye_tissue": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_ks_rng",
+      "slot": "cranial"
+     },
+     {
+      "effect": "track",
+      "track": "calcification",
+      "delta": 1
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_ks_rog_cranial",
+    "name": "Apex Nerve-Spire into Cranial",
+    "description": "Tier III keystone surgery (rogue): needs the class rite and 3 grafts; +1 Calcification.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.apex_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.rite_rogue",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 150,
+     "items": {
+      "titan_marrow_core": 1,
+      "slot_eye_tissue": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_ks_rog",
+      "slot": "cranial"
+     },
+     {
+      "effect": "track",
+      "track": "calcification",
+      "delta": 1
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_purge_cranial",
+    "name": "Inoculated Keystone (priest)",
+    "description": "Tier III keystone surgery (priest): needs the class rite and 3 grafts; +1 Calcification.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.apex_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.rite_priest",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 150,
+     "items": {
+      "titan_marrow_core": 1,
+      "slot_eye_tissue": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_purge",
+      "slot": "cranial"
+     },
+     {
+      "effect": "track",
+      "track": "calcification",
+      "delta": 1
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "sg_ks_mag_cranial",
+    "name": "Abyssal Crown Pin into Cranial",
+    "description": "Tier III keystone surgery (mage): needs the class rite and 3 grafts; +1 Calcification.",
+    "npc": "sabina_kress",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.slab_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.apex_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.rite_mage",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 150,
+     "items": {
+      "titan_marrow_core": 1,
+      "slot_eye_tissue": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "install",
+      "item": "graft_ks_mag",
+      "slot": "cranial"
+     },
+     {
+      "effect": "track",
+      "track": "calcification",
+      "delta": 1
+     },
+     {
+      "effect": "doctrine",
+      "axis": "flesh_broker",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "calcified_husk",
+    "name": "Calcified Husk",
+    "side": "enemy",
+    "description": "Calcified Husk.",
+    "class_id": "warrior",
+    "level": 3,
+    "tier": "standard",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": 35,
+    "poise": -1,
+    "art": "brawler/base",
+    "palette": "calcified",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "bone_club_slam"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "bone_club_slam"
+     ],
+     "order": {
+      "assault": [
+       "bone_club_slam",
+       "strike"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "AGGRESSOR",
+    "target_pref": "NEAREST",
+    "flee_ratio": 0.0,
+    "defend_below": 0.0,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": true,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "bone_club",
+    "off_hand": "none",
+    "head": "",
+    "body": "none",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "none"
+    ],
+    "passives": [
+     "censer_drill"
+    ],
+    "loot": [
+     {
+      "item": "calcified_bone_shard",
+      "chance": 25,
+      "count": 1
+     },
+     {
+      "item": "sinew_braid",
+      "chance": 15,
+      "count": 1
+     },
+     {
+      "item": "ossified_bellows",
+      "chance": 12,
+      "count": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "ash_crawler",
+    "name": "Ash-Crawler",
+    "side": "enemy",
+    "description": "Ash-Crawler.",
+    "class_id": "rogue",
+    "level": 2,
+    "tier": "minion",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "crawler/ash_crawler",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "burrow_ambush",
+     "caustic_vomit"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "burrow_ambush",
+      "caustic_vomit"
+     ],
+     "order": {
+      "maneuver": [
+       "burrow_ambush"
+      ],
+      "assault": [
+       "caustic_vomit",
+       "strike"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "SKIRMISHER",
+    "target_pref": "NEAREST",
+    "flee_ratio": 0.0,
+    "defend_below": 0.0,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": true,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "none",
+    "off_hand": "none",
+    "head": "",
+    "body": "none",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "none"
+    ],
+    "loot": [
+     {
+      "item": "caustic_gall_sac",
+      "chance": 15,
+      "count": 1
+     },
+     {
+      "item": "sinew_braid",
+      "chance": 15,
+      "count": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "calcified_amalgam",
+    "name": "The Amalgam",
+    "side": "enemy",
+    "description": "The Calcified Amalgam.",
+    "class_id": "mage",
+    "level": 5,
+    "tier": "boss",
+    "template": "class",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 40,
+    "armor": 50,
+    "poise": 90,
+    "art": "brawler/base",
+    "palette": "amalgam",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "ossified_spine_volley",
+     "tendril_flail",
+     "ossification_bloom"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "ossified_spine_volley",
+      "tendril_flail"
+     ],
+     "order": {
+      "assault": [
+       "ossified_spine_volley"
+      ],
+      "guard": [
+       "tendril_flail"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "AGGRESSOR",
+    "target_pref": "NEAREST",
+    "flee_ratio": 0.0,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": true,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "none",
+    "off_hand": "none",
+    "head": "",
+    "body": "none",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "none"
+    ],
+    "loot": [
+     {
+      "item": "calcified_bone_shard",
+      "chance": 60,
+      "count": 1
+     },
+     {
+      "item": "ossified_bellows",
+      "chance": 35,
+      "count": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "mastery_crossbow",
+    "name": "Sniper's Mastery",
+    "description": "Sighted along the prod: +1 PERC.",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "PERC",
+      "value": 1
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "mastery_bow",
+    "name": "Keen Draw",
+    "description": "Steady draw: +1 PERC.",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "PERC",
+      "value": 1
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "mastery_fist",
+    "name": "Brawler's Mastery",
+    "description": "Hardened knuckles: +1 STR.",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "STR",
+      "value": 1
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "dirty_tricks",
+    "name": "Dirty Tricks",
+    "description": "Street-taught: +5% critical chance.",
+    "effects": [
+     {
+      "type": "crit",
+      "value": 5
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "hearth_rite",
+    "name": "Forge Rite",
+    "description": "Temper a mastered weapon discipline at Berek's Hearth, opening the wielded family's Cold Steel keystone at full mastery.",
+    "npc": "berek_dorn",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.hearth_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.masterwork_quest",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 150,
+     "items": {
+      "black_iron_ingot": 1
+     }
+    },
+    "target": "member",
+    "effects": [
+     {
+      "effect": "forge_rite"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "preservationist",
+      "delta": 1
+     }
+    ]
+   }
+  }
+ ]
+}

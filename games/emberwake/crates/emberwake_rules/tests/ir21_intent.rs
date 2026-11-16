@@ -71,7 +71,7 @@ fn shipped_dual_intent_breakdown_by_rule() {
     }
     assert_eq!(support_stand.len(), 10, "READY row 16: 8 Support,Stand + tend_wounds (CLASS-BASICS) + purge_marrow (PR5-19 PK2-S6)");
     assert!(field_assault.iter().all(|f| ["LINE", "PLUS", "BURST", "ARC", "CONE"].contains(&area(rows.iter().find(|r| id(r) == *f).unwrap()))));
-    assert_eq!(field_assault.len(), 18, "14 Field,Assault + the 4 ARC rows of the SWEEP split (FB-101, W2-4) + cinder_spark (CLASS-BASICS) - firebomb (CLASSPASS1-DATA pitch_fire hazard)");
+    assert_eq!(field_assault.len(), 30, "18 PR5-62b Field,Assault + 12 shaped non-hazard PR5-62c technique/graft skills (pike_skew, halberd_sweep, wide_cleave, gallow_sweep, earth_shaker, bow_rain, chime_swing, flay_arc, scourge_flay, pitch_cone, flash_nozzle, staff_cataclysm)");
 }
 
 /// FB-101 Option A: the former SWEEP rows, now ARC and RING (`INTENT2_SKILLS.md`, migrated in W2-4).
@@ -104,7 +104,7 @@ fn the_fb101_split_ships_with_its_shapes_and_no_sweep_remains() {
 #[test]
 fn shipped_data_gives_28_dual_and_the_intent_totals() {
     let rows = rows();
-    assert_eq!(rows.len(), 161, "IR21 covers all 161 skills (153 pre-CLASSPASS1 + 8 new PR5-62b class/off-hand skills: hold_line, intercept_guard, brawler_clinch, slag_charge, mark_quarry, snare_wire, soot_feint, choke_cloud)");
+    assert_eq!(rows.len(), 220, "IR21 covers all 220 skills (161 PR5-62b - 6 retired tq_* stubs + 65 net new PR5-62c technique and graft skills)");
     let brace = rows.iter().find(|r| id(r) == "brace").expect("brace shipped");
     assert_eq!(derive(brace), [STAND], "brace (DEFEND, guard) is single-intent Stand: the dual counts stay");
     // CLASS-BASICS (FB-133): each new class basic derives by its shape, one per intent list
@@ -118,12 +118,16 @@ fn shipped_data_gives_28_dual_and_the_intent_totals() {
         let r = rows.iter().find(|r| id(r) == i).unwrap_or_else(|| panic!("{i} shipped"));
         assert_eq!(derive(r), [want], "{i}: IR21 by its row");
     }
-    // PR5-19 (PK2-S6): the self-targetable SUPPORT purge_marrow is Support,Stand; the two graft attacks and the six
-    // technique test attacks (single target, no shape) are Assault
+    // PR5-19 (PK2-S6) -> PR5-62c (TECHNIQUES-GRAFTS-DATA): the self-targetable SUPPORT purge_marrow is Support,Stand;
+    // the 6 retired tq_* stubs gave way to 75 weapon techniques + 18 graft skills.
     assert_eq!(derive(rows.iter().find(|r| id(r) == "purge_marrow").expect("purge_marrow shipped")), [SUPPORT, STAND], "purge_marrow: IR21 by its row");
-    for i in ["marrow_rend", "marrow_litany", "tq_polearm_hook", "tq_crossbow_volley", "tq_fist_breaker", "tq_dagger_flurry", "tq_censer_swing", "tq_sprayer_jet"] {
+    for i in ["marrow_rend", "marrow_litany", "hook_drag", "bodkin_punch", "knuckle_jolt", "quick_stab", "caustic_spritz", "ks_marrow_needle", "ks_nerve_sever"] {
         let r = rows.iter().find(|r| id(r) == i).unwrap_or_else(|| panic!("{i} shipped"));
         assert_eq!(derive(r), [ASSAULT], "{i}: IR21 by its row");
+    }
+    for (i, want) in [("ks_iron_marrow", &[STAND][..]), ("ks_bone_eruption", &[STAND][..]), ("ks_geode_nova", &[FIELD][..]), ("dagger_shadow", &[MANEUVER][..]), ("pike_skew", &[FIELD, ASSAULT][..])] {
+        let r = rows.iter().find(|r| id(r) == i).unwrap_or_else(|| panic!("{i} shipped"));
+        assert_eq!(derive(r), want, "{i}: IR21 by its row");
     }
     // PR5-34 (SUNKWARD-FIX1): the censer attack thurible_smite (single target, no shape, round_intent assault) is
     // Assault; the dual counts stay
@@ -144,12 +148,12 @@ fn shipped_data_gives_28_dual_and_the_intent_totals() {
     let ss = ids_with(&rows, &[SUPPORT, STAND]).len();
     let fa = ids_with(&rows, &[FIELD, ASSAULT]).len();
     let dual = rows.iter().filter(|r| derive(r).len() == 2).count();
-    assert_eq!((dual, ss, fa), (28, 10, 18), "28 = 10 Support,Stand + 18 Field,Assault");
+    assert_eq!((dual, ss, fa), (40, 10, 30), "40 = 10 Support,Stand + 30 Field,Assault");
     let totals: Vec<usize> = [ASSAULT, FIELD, STAND, SUPPORT, MANEUVER, NEUTRAL].iter().map(|i| primary(&rows, i)).collect();
-    assert_eq!(totals, [74, 26, 23, 15, 18, 5], "FB-101 totals by primary intent (+ brace in Stand, + 3 class basics, + 5 PK1-S3, + 9 PK2-S6, + PR5-34 thurible_smite, + 4 PR5-51b, + PR5-57/62b catalyst_pulse moved Assault -> Stand, + 8 PR5-62b skills: 2 Assault, 2 Field, 2 Stand, 2 Maneuver): Assault, Field, Stand, Support, Maneuver, Neutral");
+    assert_eq!(totals, [107, 43, 30, 15, 20, 5], "IR21 totals by primary intent through PR5-62c (220 skills): Assault, Field, Stand, Support, Maneuver, Neutral");
     assert_eq!(totals.iter().sum::<usize>(), rows.len(), "every skill has exactly one primary");
     let listed: Vec<usize> = [ASSAULT, FIELD, STAND, SUPPORT, MANEUVER, NEUTRAL].iter().map(|i| listing(&rows, i)).collect();
-    assert_eq!(listed, [92, 26, 33, 15, 18, 5], "a dual row lists under both intents: 18 Field,Assault add to Assault, 10 Support,Stand to Stand");
+    assert_eq!(listed, [137, 43, 40, 15, 20, 5], "a dual row lists under both intents: 30 Field,Assault add to Assault, 10 Support,Stand to Stand");
     assert_eq!(listed.iter().sum::<usize>(), rows.len() + dual, "each dual row counts twice");
 }
 

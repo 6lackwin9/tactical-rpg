@@ -67,6 +67,21 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_poise_ward",
+			"techniques": [
+				{
+					"skill": "pommel_check",
+					"grip": "1h"
+				},
+				{
+					"skill": "rend_armor",
+					"grip": "1h"
+				},
+				{
+					"skill": "bind_parry",
+					"grip": "1h"
+				}
+			],
+			"keystone": "sword_duelist",
 			"durability": 40,
 			"art": "",
 			"fx": "slash"
@@ -136,6 +151,21 @@
 				"burden": 1
 			},
 			"level3_passive": "mastery_heavy_impact",
+			"techniques": [
+				{
+					"skill": "crushing_blow",
+					"grip": "2h"
+				},
+				{
+					"skill": "earth_shaker",
+					"grip": "2h"
+				},
+				{
+					"skill": "skull_ring",
+					"grip": "2h"
+				}
+			],
+			"keystone": "hammer_shatter",
 			"durability": 40,
 			"art": "",
 			"fx": "bludgeon"
@@ -207,10 +237,19 @@
 			"level3_passive": "mastery_fist",
 			"techniques": [
 				{
-					"skill": "tq_fist_breaker",
-					"grip": ""
+					"skill": "body_blow",
+					"grip": "1h"
+				},
+				{
+					"skill": "palm_check",
+					"grip": "1h"
+				},
+				{
+					"skill": "liver_hook",
+					"grip": "1h"
 				}
 			],
+			"keystone": "fist_tempest",
 			"durability": 40,
 			"art": "",
 			"fx": "fists",
@@ -290,10 +329,19 @@
 			"level3_passive": "mastery_agile_step",
 			"techniques": [
 				{
-					"skill": "tq_dagger_flurry",
-					"grip": ""
+					"skill": "quick_stab",
+					"grip": "1h"
+				},
+				{
+					"skill": "lacerate",
+					"grip": "1h"
+				},
+				{
+					"skill": "assassinate",
+					"grip": "1h"
 				}
 			],
+			"keystone": "dagger_shadow",
 			"durability": 40,
 			"art": "",
 			"fx": "stab"
@@ -369,6 +417,21 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_bow",
+			"techniques": [
+				{
+					"skill": "pinning_shot",
+					"grip": "2h"
+				},
+				{
+					"skill": "barbed_arrow",
+					"grip": "2h"
+				},
+				{
+					"skill": "volley",
+					"grip": "2h"
+				}
+			],
+			"keystone": "bow_rain",
 			"durability": 40,
 			"art": "",
 			"fx": "arrow"
@@ -440,6 +503,21 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_arcane_focus",
+			"techniques": [
+				{
+					"skill": "arcane_bolt",
+					"grip": "2h"
+				},
+				{
+					"skill": "arc_lance",
+					"grip": "2h"
+				},
+				{
+					"skill": "hex",
+					"grip": "2h"
+				}
+			],
+			"keystone": "staff_cataclysm",
 			"durability": 40,
 			"art": "",
 			"fx": "bludgeon",
@@ -721,10 +799,19 @@
 			"level3_passive": "mastery_crossbow",
 			"techniques": [
 				{
-					"skill": "tq_crossbow_volley",
-					"grip": ""
+					"skill": "aimed_shot",
+					"grip": "2h"
+				},
+				{
+					"skill": "crippling_shot",
+					"grip": "2h"
+				},
+				{
+					"skill": "deadeye",
+					"grip": "2h"
 				}
 			],
+			"keystone": "crossbow_siege",
 			"durability": 40,
 			"art": "",
 			"fx": "bolt"
@@ -898,10 +985,19 @@
 			"level3_passive": "mastery_heavy_impact",
 			"techniques": [
 				{
-					"skill": "tq_polearm_hook",
-					"grip": ""
+					"skill": "hook_drag",
+					"grip": "1h"
+				},
+				{
+					"skill": "pike_skew",
+					"grip": "1h"
+				},
+				{
+					"skill": "check_advance",
+					"grip": "1h"
 				}
 			],
+			"keystone": "polearm_cordon",
 			"durability": 40,
 			"art": "",
 			"fx": "slash"
@@ -977,6 +1073,21 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_bleed_edge",
+			"techniques": [
+				{
+					"skill": "snap_lash",
+					"grip": "1h"
+				},
+				{
+					"skill": "hook_snatch",
+					"grip": "1h"
+				},
+				{
+					"skill": "flay_arc",
+					"grip": "1h"
+				}
+			],
+			"keystone": "scourge_flay",
 			"durability": 40,
 			"art": "scourge",
 			"fx": "slash"
@@ -1048,10 +1159,19 @@
 			"level3_passive": "mastery_sacred_censer",
 			"techniques": [
 				{
-					"skill": "tq_censer_swing",
-					"grip": ""
+					"skill": "smite",
+					"grip": "1h"
+				},
+				{
+					"skill": "chime_swing",
+					"grip": "1h"
+				},
+				{
+					"skill": "judgement",
+					"grip": "1h"
 				}
 			],
+			"keystone": "censer_pyre",
 			"durability": 40,
 			"art": "censer",
 			"fx": "slash"
@@ -1121,6 +1241,21 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_bleed_edge",
+			"techniques": [
+				{
+					"skill": "amputate_cut",
+					"grip": "1h"
+				},
+				{
+					"skill": "nerve_nick",
+					"grip": "1h"
+				},
+				{
+					"skill": "rib_spread",
+					"grip": "1h"
+				}
+			],
+			"keystone": "saw_dissect",
 			"durability": 40,
 			"art": "bone_saw",
 			"fx": "slash"
@@ -1195,10 +1330,19 @@
 			"level3_passive": "mastery_bleed_edge",
 			"techniques": [
 				{
-					"skill": "tq_sprayer_jet",
-					"grip": ""
+					"skill": "caustic_spritz",
+					"grip": "1h"
+				},
+				{
+					"skill": "pitch_cone",
+					"grip": "1h"
+				},
+				{
+					"skill": "pressure_stream",
+					"grip": "1h"
 				}
 			],
+			"keystone": "sprayer_deluge",
 			"durability": 40,
 			"art": "sprayer",
 			"fx": "arrow"
@@ -1284,6 +1428,21 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_poise_ward",
+			"techniques": [
+				{
+					"skill": "sunder",
+					"grip": "2h"
+				},
+				{
+					"skill": "wide_cleave",
+					"grip": "2h"
+				},
+				{
+					"skill": "rending_arc",
+					"grip": "2h"
+				}
+			],
+			"keystone": "gsword_sever",
 			"durability": 40,
 			"art": "",
 			"fx": "cleave"
@@ -1353,6 +1512,21 @@
 				"burden": 1
 			},
 			"level3_passive": "mastery_heavy_impact",
+			"techniques": [
+				{
+					"skill": "knuckle_jolt",
+					"grip": "1h"
+				},
+				{
+					"skill": "cyclone_kick",
+					"grip": "1h"
+				},
+				{
+					"skill": "haymaker",
+					"grip": "1h"
+				}
+			],
+			"keystone": "gauntlet_breaker",
 			"durability": 40,
 			"art": "gauntlet",
 			"fx": "fists",
@@ -1436,6 +1610,21 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_agile_step",
+			"techniques": [
+				{
+					"skill": "hamstring_cut",
+					"grip": "1h"
+				},
+				{
+					"skill": "bleeding_cut",
+					"grip": "1h"
+				},
+				{
+					"skill": "envenom",
+					"grip": "1h"
+				}
+			],
+			"keystone": "knife_sever",
 			"durability": 40,
 			"art": "knife",
 			"fx": "stab"

@@ -911,6 +911,804 @@
 					"count": 1
 				}
 			]
+		},
+		{
+			"id": "sg_sinew_forearms",
+			"name": "Black-Sinew Pin into Forearms",
+			"description": "Graft surgery: the Black-Sinew Pin into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"sinew_braid": 1,
+					"slot_bone_spur": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_sinew",
+					"slot": "forearms"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_sinew_thoracic",
+			"name": "Black-Sinew Pin into Thoracic",
+			"description": "Graft surgery: the Black-Sinew Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"sinew_braid": 1,
+					"slot_chitin_plate": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_sinew",
+					"slot": "thoracic"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_sinew_visceral",
+			"name": "Black-Sinew Pin into Visceral",
+			"description": "Graft surgery: the Black-Sinew Pin into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"sinew_braid": 1,
+					"slot_blood_sac": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_sinew",
+					"slot": "visceral"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_bellows_forearms",
+			"name": "Ossified Bellows Pin into Forearms",
+			"description": "Graft surgery: the Ossified Bellows Pin into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"ossified_bellows": 1,
+					"slot_bone_spur": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_bellows",
+					"slot": "forearms"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_bellows_thoracic",
+			"name": "Ossified Bellows Pin into Thoracic",
+			"description": "Graft surgery: the Ossified Bellows Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"ossified_bellows": 1,
+					"slot_chitin_plate": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_bellows",
+					"slot": "thoracic"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_bellows_visceral",
+			"name": "Ossified Bellows Pin into Visceral",
+			"description": "Graft surgery: the Ossified Bellows Pin into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"ossified_bellows": 1,
+					"slot_blood_sac": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_bellows",
+					"slot": "visceral"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_bezoar_forearms",
+			"name": "Vitriol Bezoar Pin into Forearms",
+			"description": "Graft surgery: the Vitriol Bezoar Pin into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 80,
+				"items": {
+					"caustic_gall_sac": 1,
+					"slot_bone_spur": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_bezoar",
+					"slot": "forearms"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_bezoar_thoracic",
+			"name": "Vitriol Bezoar Pin into Thoracic",
+			"description": "Graft surgery: the Vitriol Bezoar Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 80,
+				"items": {
+					"caustic_gall_sac": 1,
+					"slot_chitin_plate": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_bezoar",
+					"slot": "thoracic"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_bezoar_visceral",
+			"name": "Vitriol Bezoar Pin into Visceral",
+			"description": "Graft surgery: the Vitriol Bezoar Pin into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 80,
+				"items": {
+					"caustic_gall_sac": 1,
+					"slot_blood_sac": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_bezoar",
+					"slot": "visceral"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_war_ritual_cranial",
+			"name": "Cranial Iron-Vein into Cranial",
+			"description": "Class piece surgery (warrior): needs the class rite.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.rite_warrior",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"stalker_optic_nerve": 1,
+					"slot_eye_tissue": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_war_ritual",
+					"slot": "cranial"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_bra_ritual_cranial",
+			"name": "Kiln-Cranial Spur into Cranial",
+			"description": "Class piece surgery (brawler): needs the class rite.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.rite_brawler",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"stalker_optic_nerve": 1,
+					"slot_eye_tissue": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_bra_ritual",
+					"slot": "cranial"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_rng_ritual_cranial",
+			"name": "Ocular Marrow-Sight into Cranial",
+			"description": "Class piece surgery (ranger): needs the class rite.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.rite_ranger",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"stalker_optic_nerve": 1,
+					"slot_eye_tissue": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_rng_ritual",
+					"slot": "cranial"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_rog_ritual_cranial",
+			"name": "Shade-Nerve Loop into Cranial",
+			"description": "Class piece surgery (rogue): needs the class rite.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.rite_rogue",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"stalker_optic_nerve": 1,
+					"slot_eye_tissue": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_rog_ritual",
+					"slot": "cranial"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_mag_ritual_cranial",
+			"name": "Retort Cortex Pin into Cranial",
+			"description": "Class piece surgery (mage): needs the class rite.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.rite_mage",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"stalker_optic_nerve": 1,
+					"slot_eye_tissue": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_mag_ritual",
+					"slot": "cranial"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_ks_war_cranial",
+			"name": "Stone-Marrow Crown into Cranial",
+			"description": "Tier III keystone surgery (warrior): needs the class rite and 3 grafts; +1 Calcification.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.apex_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.rite_warrior",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 150,
+				"items": {
+					"titan_marrow_core": 1,
+					"slot_eye_tissue": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_ks_war",
+					"slot": "cranial"
+				},
+				{
+					"effect": "track",
+					"track": "calcification",
+					"delta": 1
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_ks_bra_cranial",
+			"name": "Spinal Kiln-Core into Cranial",
+			"description": "Tier III keystone surgery (brawler): needs the class rite and 3 grafts; +1 Calcification.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.apex_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.rite_brawler",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 150,
+				"items": {
+					"titan_marrow_core": 1,
+					"slot_eye_tissue": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_ks_bra",
+					"slot": "cranial"
+				},
+				{
+					"effect": "track",
+					"track": "calcification",
+					"delta": 1
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_ks_rng_cranial",
+			"name": "Choir-Lens Keystone into Cranial",
+			"description": "Tier III keystone surgery (ranger): needs the class rite and 3 grafts; +1 Calcification.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.apex_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.rite_ranger",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 150,
+				"items": {
+					"titan_marrow_core": 1,
+					"slot_eye_tissue": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_ks_rng",
+					"slot": "cranial"
+				},
+				{
+					"effect": "track",
+					"track": "calcification",
+					"delta": 1
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_ks_rog_cranial",
+			"name": "Apex Nerve-Spire into Cranial",
+			"description": "Tier III keystone surgery (rogue): needs the class rite and 3 grafts; +1 Calcification.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.apex_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.rite_rogue",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 150,
+				"items": {
+					"titan_marrow_core": 1,
+					"slot_eye_tissue": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_ks_rog",
+					"slot": "cranial"
+				},
+				{
+					"effect": "track",
+					"track": "calcification",
+					"delta": 1
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_ks_mag_cranial",
+			"name": "Abyssal Crown Pin into Cranial",
+			"description": "Tier III keystone surgery (mage): needs the class rite and 3 grafts; +1 Calcification.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.apex_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.rite_mage",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 150,
+				"items": {
+					"titan_marrow_core": 1,
+					"slot_eye_tissue": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_ks_mag",
+					"slot": "cranial"
+				},
+				{
+					"effect": "track",
+					"track": "calcification",
+					"delta": 1
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "hearth_rite",
+			"name": "Forge Rite",
+			"description": "Temper a mastered weapon discipline at Berek's Hearth, opening the wielded family's Cold Steel keystone at full mastery.",
+			"npc": "berek_dorn",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.hearth_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.masterwork_quest",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 150,
+				"items": {
+					"black_iron_ingot": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "forge_rite"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "preservationist",
+					"delta": 1
+				}
+			]
 		}
 	]
 }

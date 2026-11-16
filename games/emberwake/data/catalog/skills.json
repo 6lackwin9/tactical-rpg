@@ -70,20 +70,22 @@
 		},
 		{
 			"id": "volley",
-			"name": "Volley",
+			"name": "Arrow Volley",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 3,
 			"blocks": 2,
-			"description": "{name}: {power} power. Plus area, hits allies too. Needs {weapons} training {proficiency}.",
+			"description": "{name}: {power} power, {stagger} stagger in a plus area at {reach}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
 			"weapon_types": [
-				"bow",
-				"crossbow"
+				"bow"
 			],
 			"min_proficiency": 1,
 			"reach_min": 2,
-			"reach_max": 3,
+			"reach_max": 4,
 			"area": "PLUS",
-			"power_mult": 0.7,
+			"power_mult": 0.95,
+			"stagger": 8,
 			"fx": "arrow_volley"
 		},
 		{
@@ -181,21 +183,25 @@
 		},
 		{
 			"id": "sunder",
-			"name": "Sunder",
+			"name": "Sunder Chop",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power, {potency} to Stagger for {rounds}. Needs {weapons} training {proficiency}. Armor-breaking chop.",
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
 			"weapon_types": [
-				"greatsword",
-				"sword",
-				"censer",
-				"hammer"
+				"greatsword"
 			],
-			"min_proficiency": 2,
-			"power_mult": 1.2,
-			"status_effect": "stagger",
-			"status_potency": 50
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.3,
+			"status_effect": "expose",
+			"status_potency": 75,
+			"status_magnitude": 6,
+			"status_rounds": 2,
+			"stagger": 12
 		},
 		{
 			"id": "reckless_swing",
@@ -214,120 +220,147 @@
 		},
 		{
 			"id": "aimed_shot",
-			"name": "Aimed Shot",
+			"name": "Winch Bolt",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power. Needs {weapons} training {proficiency}. A patient shot.",
+			"description": "{name}: {power} power, {stagger} stagger at {reach}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
 			"weapon_types": [
-				"bow",
 				"crossbow"
 			],
-			"min_proficiency": 2,
-			"power_mult": 1.4
+			"min_proficiency": 1,
+			"reach_min": 2,
+			"reach_max": 4,
+			"power_mult": 1.45,
+			"stagger": 8
 		},
 		{
 			"id": "pinning_shot",
-			"name": "Pinning Shot",
+			"name": "Pinning Arrow",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power, {potency} to Root for {rounds}. Needs {weapons} training {proficiency}.",
+			"description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
 			"weapon_types": [
-				"bow",
-				"crossbow"
+				"bow"
 			],
 			"min_proficiency": 1,
-			"power_mult": 0.8,
+			"reach_min": 2,
+			"reach_max": 4,
 			"status_effect": "root",
-			"status_potency": 80
+			"status_potency": 85,
+			"status_rounds": 2,
+			"stagger": 6
 		},
 		{
 			"id": "arcane_bolt",
-			"name": "Arcane Bolt",
+			"name": "Marrow-Force Bolt",
 			"kind": "ATTACK",
 			"level": 1,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power. Needs {weapons} training {proficiency}. A bolt of raw force.",
+			"description": "{name}: {power} power, {stagger} stagger at {reach}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
 			"weapon_types": [
-				"staff",
-				"sprayer"
+				"staff"
 			],
 			"min_proficiency": 1,
-			"power_mult": 1.1,
+			"reach_min": 2,
+			"reach_max": 3,
+			"power_mult": 1.25,
+			"stagger": 8,
 			"fx": "arcane_orb"
 		},
 		{
 			"id": "hex",
-			"name": "Hex",
+			"name": "Warding Hex",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power, {potency} to Stagger for {rounds}. Needs {weapons} training {proficiency}.",
+			"description": "{name}: {power} power, {stagger} stagger, sure break at {reach}; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} {proficiency}.",
+			"learned_only": true,
 			"weapon_types": [
-				"censer",
-				"staff",
-				"sprayer"
+				"staff"
 			],
-			"min_proficiency": 2,
+			"min_proficiency": 1,
 			"reach_min": 2,
-			"reach_max": 3,
-			"power_mult": 0.6,
-			"status_effect": "stagger",
+			"reach_max": 4,
+			"power_mult": 0.85,
+			"status_effect": "weaken",
 			"status_potency": 90,
+			"status_magnitude": 20,
+			"status_rounds": 2,
+			"stagger": 18,
+			"sure_break": true,
 			"fx": "curse_orb"
 		},
 		{
 			"id": "haymaker",
 			"name": "Haymaker",
 			"kind": "ATTACK",
-			"level": 3,
+			"level": 1,
+			"ap_cost": 3,
 			"blocks": 3,
-			"description": "{name}: {power} power, {potency} to Stun for {rounds}. Needs {weapons} training {proficiency}.",
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Held with poise. Needs {weapons} {proficiency}.",
+			"learned_only": true,
 			"weapon_types": [
-				"fist",
-				"gauntlet",
-				"censer",
-				"hammer",
-				"unarmed"
+				"gauntlet"
 			],
-			"min_proficiency": 2,
-			"power_mult": 2.0,
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.85,
 			"status_effect": "stun",
-			"status_potency": 50,
+			"status_potency": 60,
+			"stagger": 20,
+			"windup_poise": 10,
 			"fx": "heavy_blow",
 			"clip": "haymaker"
 		},
 		{
 			"id": "body_blow",
-			"name": "Body Blow",
+			"name": "Rib Shot",
 			"kind": "ATTACK",
-			"level": 2,
-			"blocks": 2,
-			"description": "{name}: {power} power, {potency} to Stagger for {rounds}. Needs {weapons} training {proficiency}.",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 1,
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
 			"weapon_types": [
-				"fist",
-				"gauntlet",
-				"censer",
-				"unarmed"
+				"fist"
 			],
 			"min_proficiency": 1,
-			"status_effect": "stagger",
-			"status_potency": 50
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 0.9,
+			"status_effect": "weaken",
+			"status_potency": 75,
+			"status_magnitude": 15,
+			"status_rounds": 2,
+			"stagger": 14
 		},
 		{
 			"id": "quick_stab",
-			"name": "Quick Stab",
+			"name": "Curfew Thrust",
 			"kind": "ATTACK",
 			"level": 1,
+			"ap_cost": 1,
 			"blocks": 1,
-			"description": "{name}: {power} power. Needs {weapons} training {proficiency}. A fast thrust.",
+			"description": "{name}: {power} power, {stagger} stagger. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
 			"weapon_types": [
-				"dagger",
-				"knife"
+				"dagger"
 			],
 			"min_proficiency": 1,
-			"power_mult": 0.6
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 0.85,
+			"stagger": 6
 		},
 		{
 			"id": "mend",
@@ -406,16 +439,24 @@
 		},
 		{
 			"id": "bleeding_cut",
-			"name": "Bleeding Cut",
+			"name": "Slitter's Cut",
 			"kind": "ATTACK",
-			"level": 2,
-			"blocks": 2,
-			"description": "{name}: {power} power, {potency} to Bleed for {rounds}.",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 1,
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
 			"learned_only": true,
-			"power_mult": 0.8,
+			"weapon_types": [
+				"knife"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.1,
 			"status_effect": "bleed",
-			"status_potency": 70,
-			"status_rounds": 2
+			"status_potency": 85,
+			"status_rounds": 3,
+			"stagger": 6
 		},
 		{
 			"id": "riposte",
@@ -480,21 +521,24 @@
 		},
 		{
 			"id": "barbed_arrow",
-			"name": "Barbed Arrow",
+			"name": "Barbed Shaft",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power, {potency} to Bleed for {rounds}. Needs {weapons} training {proficiency}.",
+			"description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
 			"learned_only": true,
 			"weapon_types": [
-				"bow",
-				"crossbow"
+				"bow"
 			],
-			"min_proficiency": 2,
-			"power_mult": 0.7,
+			"min_proficiency": 1,
+			"reach_min": 2,
+			"reach_max": 4,
+			"power_mult": 1.1,
 			"status_effect": "bleed",
-			"status_potency": 60,
-			"status_rounds": 2
+			"status_potency": 80,
+			"status_rounds": 3,
+			"stagger": 6
 		},
 		{
 			"id": "pounce",
@@ -516,65 +560,63 @@
 		},
 		{
 			"id": "smite",
-			"name": "Smite",
+			"name": "Incense Smite",
 			"kind": "ATTACK",
 			"level": 1,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power. Needs {weapons} training {proficiency}. Holy force from a distance.",
+			"description": "{name}: {power} power, {stagger} stagger at {reach}. Needs {weapons} training {proficiency}.",
 			"learned_only": true,
 			"weapon_types": [
-				"censer",
-				"staff"
+				"censer"
 			],
 			"min_proficiency": 1,
-			"reach_min": 2,
-			"reach_max": 3,
-			"power_mult": 0.8,
+			"reach_min": 1,
+			"reach_max": 2,
+			"power_mult": 1.1,
+			"stagger": 8,
 			"fx": "falling_orb"
 		},
 		{
 			"id": "deadeye",
-			"name": "Deadeye",
+			"name": "Deadeye Quarrel",
 			"kind": "ATTACK",
-			"level": 3,
+			"level": 1,
+			"ap_cost": 3,
 			"blocks": 3,
-			"description": "{name}: {power} power, {potency} to Stagger for {rounds}. Needs {weapons} training {proficiency}.",
+			"description": "{name}: {power} power, {stagger} stagger, sure break at {reach}. Needs {weapons} training {proficiency}.",
 			"learned_only": true,
-			"grade": "advanced",
-			"requires": [
-				"aimed_shot"
-			],
 			"weapon_types": [
-				"bow",
 				"crossbow"
 			],
-			"min_proficiency": 3,
-			"power_mult": 2.0,
-			"status_effect": "stagger",
-			"status_potency": 50
+			"min_proficiency": 1,
+			"reach_min": 2,
+			"reach_max": 5,
+			"power_mult": 1.95,
+			"stagger": 14,
+			"sure_break": true
 		},
 		{
 			"id": "judgement",
-			"name": "Judgement",
+			"name": "Rite of Ashes",
 			"kind": "ATTACK",
-			"level": 3,
+			"level": 1,
+			"ap_cost": 3,
 			"blocks": 3,
-			"description": "{name}: {power} power, {potency} to Stagger for {rounds}. Needs {weapons} training {proficiency}.",
+			"description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} {proficiency}.",
 			"learned_only": true,
-			"grade": "advanced",
-			"requires": [
-				"smite"
-			],
 			"weapon_types": [
-				"censer",
-				"staff"
+				"censer"
 			],
-			"min_proficiency": 2,
-			"reach_min": 2,
+			"min_proficiency": 1,
+			"reach_min": 1,
 			"reach_max": 3,
-			"power_mult": 1.2,
-			"status_effect": "stagger",
-			"status_potency": 40,
+			"power_mult": 1.6,
+			"status_effect": "weaken",
+			"status_potency": 85,
+			"status_magnitude": 20,
+			"status_rounds": 2,
+			"stagger": 14,
 			"fx": "falling_orb"
 		},
 		{
@@ -598,44 +640,53 @@
 		},
 		{
 			"id": "lacerate",
-			"name": "Lacerate",
+			"name": "Artery Flurry",
 			"kind": "ATTACK",
-			"level": 3,
-			"blocks": 2,
-			"description": "{name}: {power} power, {potency} to Bleed for {rounds}. Needs {weapons} training {proficiency}.",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 1,
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
 			"learned_only": true,
-			"grade": "advanced",
-			"requires": [
-				"bleeding_cut"
-			],
 			"weapon_types": [
-				"dagger",
-				"knife"
+				"dagger"
 			],
-			"min_proficiency": 2,
-			"power_mult": 1.2,
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.3,
 			"status_effect": "bleed",
-			"status_potency": 90,
-			"status_rounds": 2
+			"status_potency": 95,
+			"status_rounds": 3,
+			"stagger": 6
 		},
 		{
 			"id": "assassinate",
-			"name": "Assassinate",
+			"name": "Marrow-Gap Thrust",
 			"kind": "ATTACK",
-			"level": 3,
-			"blocks": 3,
-			"description": "{name}: {power} power. Needs {weapons} training {proficiency}.",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger; pierces armor, {exploit}. Needs {weapons} training {proficiency}.",
 			"learned_only": true,
-			"grade": "advanced",
-			"requires": [
-				"quick_stab"
-			],
 			"weapon_types": [
-				"dagger",
-				"knife"
+				"dagger"
 			],
-			"min_proficiency": 3,
-			"power_mult": 2.0
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.85,
+			"exploit": [
+				{
+					"status": "stagger",
+					"power_mult": 1.35
+				},
+				{
+					"status": "root",
+					"power_mult": 1.35
+				}
+			],
+			"stagger": 10,
+			"armor_piercing": true
 		},
 		{
 			"id": "greater_mend",
@@ -683,19 +734,22 @@
 		},
 		{
 			"id": "arc_lance",
-			"name": "Arc Lance",
+			"name": "Line Discharge",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power. Line area, hits allies too. Needs {weapons} training {proficiency}. Aim at an adjacent tile; hits the 3 tiles in a line.",
+			"description": "{name}: {power} power, {stagger} stagger along a line; hits allies too. Needs {weapons} training {proficiency}.",
 			"learned_only": true,
 			"weapon_types": [
-				"staff",
-				"sprayer"
+				"staff"
 			],
 			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
 			"area": "LINE",
-			"power_mult": 0.9,
+			"power_mult": 1.1,
+			"stagger": 10,
 			"fx": "beam"
 		},
 		{
@@ -718,41 +772,46 @@
 		},
 		{
 			"id": "cyclone_kick",
-			"name": "Cyclone Kick",
+			"name": "Foundry Spin",
 			"kind": "ATTACK",
-			"level": 3,
-			"blocks": 3,
-			"description": "{name}: {power} power, {potency} to Stagger for {rounds} on every enemy hit. Ring area around you. Bare hands or feet.",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger on every adjacent enemy. Ring around you. Needs {weapons} training {proficiency}.",
 			"learned_only": true,
-			"grade": "advanced",
+			"weapon_types": [
+				"gauntlet"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
 			"area": "RING",
-			"power_mult": 0.9,
-			"status_effect": "stagger",
-			"status_potency": 50,
+			"stagger": 14,
 			"fx": "sweep",
 			"clip": "sweep_kick"
 		},
 		{
 			"id": "inferno",
-			"name": "Inferno",
+			"name": "Conflagration",
 			"kind": "ATTACK",
-			"level": 4,
+			"level": 1,
+			"ap_cost": 3,
 			"blocks": 3,
-			"description": "{name}: {power} power, {potency} to Bleed for {rounds} on every enemy hit. Burst area, hits allies too. Needs {weapons} training {proficiency}.",
+			"description": "{name}: burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
 			"learned_only": true,
-			"grade": "advanced",
 			"weapon_types": [
-				"staff",
-				"sprayer"
+				"staff"
 			],
-			"min_proficiency": 2,
+			"min_proficiency": 1,
 			"reach_min": 2,
-			"reach_max": 3,
+			"reach_max": 4,
 			"area": "BURST",
-			"power_mult": 0.8,
-			"status_effect": "bleed",
-			"status_potency": 50,
+			"power_mult": 1.05,
+			"status_effect": "burn",
+			"status_potency": 85,
+			"status_magnitude": 5,
 			"status_rounds": 2,
+			"stagger": 10,
 			"fx": "fire_lob"
 		},
 		{
@@ -794,61 +853,68 @@
 		},
 		{
 			"id": "crippling_shot",
-			"name": "Crippling Shot",
+			"name": "Tendon Bolt",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power, {potency} to Slow for {rounds}. Needs {weapons} training {proficiency}.",
+			"description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
 			"learned_only": true,
 			"weapon_types": [
-				"bow",
 				"crossbow"
 			],
 			"min_proficiency": 1,
-			"power_mult": 0.7,
+			"reach_min": 2,
+			"reach_max": 4,
+			"power_mult": 1.05,
 			"status_effect": "slow",
-			"status_potency": 75,
-			"status_rounds": 2
+			"status_potency": 85,
+			"status_rounds": 2,
+			"stagger": 8
 		},
 		{
 			"id": "rend_armor",
-			"name": "Rend Armor",
+			"name": "Half-Sword Thrust",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power, {potency} to Expose (-{magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
 			"learned_only": true,
 			"weapon_types": [
-				"sword",
-				"greatsword",
-				"censer",
-				"hammer"
+				"sword"
 			],
 			"min_proficiency": 1,
-			"power_mult": 0.8,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.15,
 			"status_effect": "expose",
-			"status_potency": 70,
-			"status_magnitude": 6,
-			"status_rounds": 2
+			"status_potency": 80,
+			"status_magnitude": 8,
+			"status_rounds": 2,
+			"stagger": 8
 		},
 		{
 			"id": "envenom",
-			"name": "Envenom",
+			"name": "Bile-Dipped Edge",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 2,
 			"blocks": 1,
-			"description": "{name}: {power} power, {potency} to Poison ({magnitude} per round, stacks) for {rounds}. Needs {weapons} training {proficiency}.",
+			"description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} ({magnitude}) for {rounds}. Needs {weapons} {proficiency}.",
 			"learned_only": true,
 			"weapon_types": [
-				"dagger",
 				"knife"
 			],
 			"min_proficiency": 1,
-			"power_mult": 0.6,
+			"reach_min": 1,
+			"reach_max": 2,
+			"power_mult": 0.85,
 			"status_effect": "poison",
-			"status_potency": 80,
-			"status_magnitude": 4,
-			"status_rounds": 3
+			"status_potency": 85,
+			"status_magnitude": 6,
+			"status_rounds": 3,
+			"stagger": 4
 		},
 		{
 			"id": "aegis",
@@ -903,19 +969,22 @@
 		},
 		{
 			"id": "crushing_blow",
-			"name": "Crushing Blow",
+			"name": "Maul Smash",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power, {disrupt}. Needs {weapons} training {proficiency}.",
+			"description": "{name}: {power} power, {stagger} stagger, {disrupt}. Needs {weapons} training {proficiency}.",
 			"learned_only": true,
 			"weapon_types": [
-				"unarmed",
-				"fist",
-				"gauntlet"
+				"hammer"
 			],
 			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.25,
 			"disrupt": "STANCE_BREAK",
+			"stagger": 16,
 			"fx": "heavy_blow"
 		},
 		{
@@ -2448,9 +2517,12 @@
 			"level": 1,
 			"ap_cost": 1,
 			"blocks": 2,
-			"description": "Test skill (Channel only): a piercing marrow strike. Costs 15 Strain.",
+			"description": "{name} (Channel): {power} power, {stagger} stagger at {reach}; pierces armor.",
 			"learned_only": true,
-			"power_mult": 1.5,
+			"reach_min": 1,
+			"reach_max": 2,
+			"power_mult": 1.45,
+			"stagger": 10,
 			"armor_piercing": true,
 			"channel": {
 				"only": true,
@@ -2464,11 +2536,12 @@
 			"level": 1,
 			"ap_cost": 2,
 			"blocks": 2,
-			"description": "Test skill (Channel only): a ranged piercing marrow bolt. Costs 25 Strain.",
+			"description": "{name} (Channel): {power} power, {stagger} stagger at {reach}; pierces armor.",
 			"learned_only": true,
 			"reach_min": 2,
-			"reach_max": 3,
-			"power_mult": 1.4,
+			"reach_max": 4,
+			"power_mult": 1.55,
+			"stagger": 12,
 			"armor_piercing": true,
 			"channel": {
 				"only": true,
@@ -2505,14 +2578,18 @@
 			"level": 1,
 			"ap_cost": 2,
 			"blocks": 2,
-			"description": "Test skill (Channel only, Tier III budget): a tearing marrow strike. Costs 35 Strain.",
+			"description": "{name} (Channel): {power} power, {stagger} stagger at {reach}; pierces armor and ignores guard.",
 			"learned_only": true,
-			"power_mult": 2.0,
+			"reach_min": 1,
+			"reach_max": 2,
+			"power_mult": 2.05,
+			"stagger": 22,
 			"armor_piercing": true,
 			"channel": {
 				"only": true,
 				"cost": 35
-			}
+			},
+			"ignore_guard": true
 		},
 		{
 			"id": "marrow_litany",
@@ -2521,9 +2598,16 @@
 			"level": 1,
 			"ap_cost": 2,
 			"blocks": 2,
-			"description": "Test skill (Channel only, priest class piece): a marrow-fed strike. Costs 20 Strain.",
+			"description": "{name} (Channel): {power} power, {stagger} stagger at {reach}; {potency} to {status} (-{magnitude}) for {rounds}; pierces armor.",
 			"learned_only": true,
-			"power_mult": 1.3,
+			"reach_min": 1,
+			"reach_max": 2,
+			"power_mult": 1.4,
+			"status_effect": "weaken",
+			"status_potency": 85,
+			"status_magnitude": 20,
+			"status_rounds": 2,
+			"stagger": 10,
 			"armor_piercing": true,
 			"channel": {
 				"only": true,
@@ -2537,99 +2621,20 @@
 			"level": 1,
 			"ap_cost": 1,
 			"blocks": 1,
-			"description": "Test skill (priest Inoculated keystone): undoes the latest Calcification mark of this battle on a unit. Once a battle.",
+			"description": "{name} (once per battle): undoes one Calcification mark within {reach} and cleanses {cleanse}; calms a Stage V ally.",
 			"learned_only": true,
-			"reach_max": 1,
+			"reach_max": 2,
 			"unmark": {
 				"mark": "calcify"
 			},
-			"uses_per_battle": 1
-		},
-		{
-			"id": "tq_polearm_hook",
-			"name": "Hook Rend (test)",
-			"kind": "ATTACK",
-			"level": 1,
-			"ap_cost": 2,
-			"blocks": 2,
-			"recovery_blocks": 1,
-			"description": "Test technique (polearm family, Cold Steel rounds only): a heavy single-intent strike.",
-			"learned_only": true,
-			"round_intent": "assault",
-			"reach_max": 2,
-			"power_mult": 1.6,
-			"stagger": 8
-		},
-		{
-			"id": "tq_crossbow_volley",
-			"name": "Bolt Volley (test)",
-			"kind": "ATTACK",
-			"level": 1,
-			"ap_cost": 2,
-			"blocks": 2,
-			"recovery_blocks": 1,
-			"description": "Test technique (crossbow family, Cold Steel rounds only): a heavy single-intent strike.",
-			"learned_only": true,
-			"round_intent": "assault",
-			"reach_min": 2,
-			"reach_max": 3,
-			"power_mult": 1.6
-		},
-		{
-			"id": "tq_fist_breaker",
-			"name": "Rib Breaker (test)",
-			"kind": "ATTACK",
-			"level": 1,
-			"ap_cost": 2,
-			"blocks": 2,
-			"recovery_blocks": 1,
-			"description": "Test technique (fist family, Cold Steel rounds only): a heavy single-intent strike.",
-			"learned_only": true,
-			"round_intent": "assault",
-			"power_mult": 1.6,
-			"stagger": 8
-		},
-		{
-			"id": "tq_dagger_flurry",
-			"name": "Flurry Cut (test)",
-			"kind": "ATTACK",
-			"level": 1,
-			"ap_cost": 2,
-			"blocks": 2,
-			"recovery_blocks": 1,
-			"description": "Test technique (dagger family, Cold Steel rounds only): a heavy single-intent strike.",
-			"learned_only": true,
-			"round_intent": "assault",
-			"power_mult": 1.6
-		},
-		{
-			"id": "tq_censer_swing",
-			"name": "Censer Swing (test)",
-			"kind": "ATTACK",
-			"level": 1,
-			"ap_cost": 2,
-			"blocks": 2,
-			"recovery_blocks": 1,
-			"description": "Test technique (censer family, Cold Steel rounds only): a heavy single-intent strike.",
-			"learned_only": true,
-			"round_intent": "assault",
-			"power_mult": 1.6,
-			"stagger": 6
-		},
-		{
-			"id": "tq_sprayer_jet",
-			"name": "Pressure Jet (test)",
-			"kind": "ATTACK",
-			"level": 1,
-			"ap_cost": 2,
-			"blocks": 2,
-			"recovery_blocks": 1,
-			"description": "Test technique (sprayer family, Cold Steel rounds only): a heavy single-intent strike.",
-			"learned_only": true,
-			"round_intent": "assault",
-			"reach_min": 2,
-			"reach_max": 3,
-			"power_mult": 1.6
+			"cleanse_statuses": [
+				"stun",
+				"weaken"
+			],
+			"uses_per_battle": 1,
+			"channel": {
+				"none": true
+			}
 		},
 		{
 			"id": "thurible_smite",
@@ -2907,6 +2912,1584 @@
 				"rounds": 2
 			},
 			"fx": "curse_orb"
+		},
+		{
+			"id": "hook_drag",
+			"name": "Billhook Drag",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger at {reach}; pulls target one tile closer. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"polearm"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 2,
+			"power_mult": 1.05,
+			"stagger": 10,
+			"forced_move": {
+				"kind": "pull",
+				"tiles": 1
+			}
+		},
+		{
+			"id": "pike_skew",
+			"name": "Skewer Thrust",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger along a line; pierces armor. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"polearm"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"area": "LINE",
+			"power_mult": 0.95,
+			"stagger": 8,
+			"armor_piercing": true
+		},
+		{
+			"id": "check_advance",
+			"name": "Halt Advance",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 3,
+			"description": "{name}: {power} power, {stagger} stagger, sure break at {reach}; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"polearm"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 2,
+			"power_mult": 1.45,
+			"status_effect": "root",
+			"status_potency": 85,
+			"stagger": 18,
+			"sure_break": true
+		},
+		{
+			"id": "halberd_sweep",
+			"name": "Crescent Halberd",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger in an arc; pushes foes back one tile. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"polearm"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"area": "ARC",
+			"power_mult": 1.3,
+			"stagger": 14,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 1
+			}
+		},
+		{
+			"id": "polearm_cordon",
+			"name": "Castellan Cordon",
+			"kind": "DEFEND",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 3,
+			"description": "{name}: -{mitigation} damage for two rounds, {status} for {rounds}; intercepts one melee hit and pulls foe. Needs {weapons} {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"polearm"
+			],
+			"min_proficiency": 1,
+			"grant_status": "steadfast",
+			"mitigation": 0.4,
+			"guard_rounds": 2,
+			"triggers": [
+				{
+					"on": "ally_hit",
+					"when": {
+						"range": 2,
+						"melee": true
+					},
+					"limit": "round",
+					"effects": [
+						{
+							"type": "redirect",
+							"pct": 100
+						},
+						{
+							"type": "move",
+							"kind": "pull",
+							"tiles": 1,
+							"to": "other"
+						}
+					]
+				}
+			],
+			"uses_per_battle": 1
+		},
+		{
+			"id": "wide_cleave",
+			"name": "Broad Cleave",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger in an arc across adjacent foes. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"greatsword"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"area": "ARC",
+			"power_mult": 1.15,
+			"stagger": 10
+		},
+		{
+			"id": "rending_arc",
+			"name": "Armor-Splitter",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 3,
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} (-{magnitude}) for {rounds}. Held with poise. Needs {weapons} {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"greatsword"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.7,
+			"status_effect": "expose",
+			"status_potency": 85,
+			"status_magnitude": 10,
+			"status_rounds": 3,
+			"stagger": 14,
+			"windup_poise": 12
+		},
+		{
+			"id": "gallow_sweep",
+			"name": "Gallows Sweep",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 4,
+			"blocks": 3,
+			"description": "{name}: {power} power, {stagger} stagger in an arc; {exploit}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"greatsword"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"area": "ARC",
+			"power_mult": 1.5,
+			"exploit": [
+				{
+					"status": "stagger",
+					"power_mult": 1.35
+				},
+				{
+					"status": "expose",
+					"power_mult": 1.25
+				}
+			],
+			"stagger": 16
+		},
+		{
+			"id": "gsword_sever",
+			"name": "Steel Severance",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 4,
+			"blocks": 4,
+			"description": "{name}: {power} power, {stagger} stagger; unbreakable, pierces armor. Needs {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"weapon_types": [
+				"greatsword"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 2.3,
+			"stagger": 22,
+			"unbreakable": true,
+			"armor_piercing": true,
+			"uses_per_battle": 1
+		},
+		{
+			"id": "pommel_check",
+			"name": "Pommel Check",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 1,
+			"description": "{name}: {power} power, {stagger} stagger, sure break. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"sword"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 0.7,
+			"stagger": 12,
+			"sure_break": true
+		},
+		{
+			"id": "bind_parry",
+			"name": "Bind & Counter",
+			"kind": "DEFEND",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: -{mitigation} damage this round; grants {status} for {rounds} to counter melee hits. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"sword"
+			],
+			"min_proficiency": 1,
+			"status_rounds": 2,
+			"grant_status": "riposte",
+			"mitigation": 0.3
+		},
+		{
+			"id": "hookbill_draw",
+			"name": "Hookbill Draw",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds} and pulls target one tile. Needs {weapons} {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"sword"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.25,
+			"status_effect": "bleed",
+			"status_potency": 80,
+			"status_rounds": 2,
+			"stagger": 8,
+			"forced_move": {
+				"kind": "pull",
+				"tiles": 1
+			}
+		},
+		{
+			"id": "sword_duelist",
+			"name": "Master-Cut",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger; ignores guard, ends DEFENSIVE. Needs {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"weapon_types": [
+				"sword"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.95,
+			"ends_in_stance": "DEFENSIVE",
+			"stagger": 16,
+			"uses_per_battle": 1,
+			"ignore_guard": true
+		},
+		{
+			"id": "earth_shaker",
+			"name": "Kiln Shockwave",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 3,
+			"description": "{name}: {power} power, {stagger} stagger along a line; pushes targets back. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"hammer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"area": "LINE",
+			"power_mult": 1.15,
+			"stagger": 18,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 1
+			}
+		},
+		{
+			"id": "skull_ring",
+			"name": "Bell-Ringer",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 3,
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Held with poise. Needs {weapons} {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"hammer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.75,
+			"status_effect": "stun",
+			"status_potency": 65,
+			"stagger": 24,
+			"windup_poise": 15
+		},
+		{
+			"id": "slag_driver",
+			"name": "Piston Slam",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 4,
+			"blocks": 3,
+			"description": "{name}: {power} power, {stagger} stagger; drives foe back two tiles with wall slam. Needs {weapons} {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"hammer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.9,
+			"stagger": 20,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 2,
+				"collide_mult": 0.8,
+				"collide_stagger": 12
+			}
+		},
+		{
+			"id": "hammer_shatter",
+			"name": "Sledge Judgment",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 4,
+			"blocks": 4,
+			"description": "{name}: {power} power, {stagger} stagger; unbreakable, sure break, pushes two tiles. Needs {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"weapon_types": [
+				"hammer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 2.2,
+			"stagger": 30,
+			"unbreakable": true,
+			"sure_break": true,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 2
+			},
+			"uses_per_battle": 1
+		},
+		{
+			"id": "knuckle_jolt",
+			"name": "Shackle Jolt",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 1,
+			"description": "{name}: {power} power, {stagger} stagger; pushes target back one tile. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"gauntlet"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 0.85,
+			"stagger": 14,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 1
+			}
+		},
+		{
+			"id": "foundry_drive",
+			"name": "Cestus Throw",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger; drives foe two tiles with breaking wall impact. Needs {weapons} {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"gauntlet"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.3,
+			"stagger": 16,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 2,
+				"collide_mult": 1,
+				"collide_break": true
+			}
+		},
+		{
+			"id": "gauntlet_breaker",
+			"name": "Anvil-Fist",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 4,
+			"blocks": 3,
+			"description": "{name}: {power} power, {stagger} stagger; unbreakable, ignores guard, pushes two tiles. Needs {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"weapon_types": [
+				"gauntlet"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 2.1,
+			"stagger": 28,
+			"unbreakable": true,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 2,
+				"collide_break": true
+			},
+			"uses_per_battle": 1,
+			"ignore_guard": true
+		},
+		{
+			"id": "palm_check",
+			"name": "Palm Thrust",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 1,
+			"description": "{name}: {power} power, {stagger} stagger, sure break. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"fist"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.05,
+			"stagger": 16,
+			"sure_break": true
+		},
+		{
+			"id": "liver_hook",
+			"name": "Solar-Plexus Hook",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"fist"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.45,
+			"status_effect": "stun",
+			"status_potency": 55,
+			"stagger": 22
+		},
+		{
+			"id": "rapid_combo",
+			"name": "Four-Knuckle Combo",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 1,
+			"description": "{name}: {power} power, {stagger} stagger; {exploit}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"fist"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.55,
+			"exploit": [
+				{
+					"status": "stagger",
+					"power_mult": 1.35
+				}
+			],
+			"stagger": 16
+		},
+		{
+			"id": "fist_tempest",
+			"name": "Chain-Breaker",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger, sure break; refunds one AP. Needs {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"weapon_types": [
+				"fist"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.9,
+			"stagger": 25,
+			"sure_break": true,
+			"riders": [
+				{
+					"when": {},
+					"effects": [
+						{
+							"type": "ap",
+							"value": 1,
+							"to": "self"
+						}
+					]
+				}
+			],
+			"uses_per_battle": 1
+		},
+		{
+			"id": "bodkin_punch",
+			"name": "Bodkin Punch",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger at {reach}; pierces armor, ignores guard. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"crossbow"
+			],
+			"min_proficiency": 1,
+			"reach_min": 2,
+			"reach_max": 4,
+			"power_mult": 1.55,
+			"stagger": 10,
+			"armor_piercing": true,
+			"ignore_guard": true
+		},
+		{
+			"id": "crossbow_siege",
+			"name": "Siege-Winch Shot",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 4,
+			"blocks": 4,
+			"description": "{name}: {power} power, {stagger} stagger at {reach}; pierces armor, sure break, pushes two tiles. Needs {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"weapon_types": [
+				"crossbow"
+			],
+			"min_proficiency": 1,
+			"reach_min": 2,
+			"reach_max": 6,
+			"power_mult": 2.25,
+			"stagger": 18,
+			"sure_break": true,
+			"armor_piercing": true,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 2
+			},
+			"uses_per_battle": 1
+		},
+		{
+			"id": "wing_shot",
+			"name": "Snapshot Loose",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 1,
+			"description": "{name}: {power} power, {stagger} stagger, sure break at {reach}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"bow"
+			],
+			"min_proficiency": 1,
+			"reach_min": 2,
+			"reach_max": 4,
+			"power_mult": 0.9,
+			"stagger": 10,
+			"sure_break": true
+		},
+		{
+			"id": "bow_rain",
+			"name": "Black-Shaft Hail",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 4,
+			"blocks": 3,
+			"description": "{name}: {power} power, {stagger} stagger in a burst at {reach}; {potency} to {status} for {rounds}. Needs {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"weapon_types": [
+				"bow"
+			],
+			"min_proficiency": 1,
+			"reach_min": 2,
+			"reach_max": 5,
+			"area": "BURST",
+			"power_mult": 1.15,
+			"status_effect": "bleed",
+			"status_potency": 85,
+			"status_rounds": 2,
+			"stagger": 12,
+			"uses_per_battle": 1
+		},
+		{
+			"id": "hamstring_cut",
+			"name": "Hamstring Slash",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 1,
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"knife"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 0.9,
+			"status_effect": "root",
+			"status_potency": 85,
+			"stagger": 6
+		},
+		{
+			"id": "gut_hook",
+			"name": "Flensing Curve",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger; {exploit}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"knife"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.45,
+			"exploit": [
+				{
+					"status": "bleed",
+					"power_mult": 1.4
+				}
+			],
+			"stagger": 8
+		},
+		{
+			"id": "knife_sever",
+			"name": "Tendon Sever",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} for {rounds}, {exploit}. Needs {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"weapon_types": [
+				"knife"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 2,
+			"power_mult": 1.8,
+			"status_effect": "root",
+			"status_potency": 95,
+			"status_rounds": 2,
+			"exploit": [
+				{
+					"status": "bleed",
+					"power_mult": 1.35
+				},
+				{
+					"status": "slow",
+					"power_mult": 1.25
+				}
+			],
+			"stagger": 10,
+			"uses_per_battle": 1
+		},
+		{
+			"id": "bodkin_twist",
+			"name": "Bodkin Twist",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 1,
+			"description": "{name}: {power} power, {stagger} stagger; ignores guard, {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"dagger"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.35,
+			"status_effect": "expose",
+			"status_potency": 85,
+			"status_magnitude": 8,
+			"status_rounds": 2,
+			"stagger": 6,
+			"ignore_guard": true
+		},
+		{
+			"id": "dagger_shadow",
+			"name": "Shadow-Gap Kill",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 1,
+			"description": "{name}: slips up to {range} tiles {position} for {power} power; pierces armor, {exploit}. Needs {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"round_intent": "maneuver",
+			"weapon_types": [
+				"dagger"
+			],
+			"min_proficiency": 1,
+			"reach_max": 3,
+			"position": "behind",
+			"power_mult": 2.0,
+			"exploit": [
+				{
+					"hp_below": 35,
+					"power_mult": 1.5
+				}
+			],
+			"armor_piercing": true,
+			"uses_per_battle": 1
+		},
+		{
+			"id": "chime_swing",
+			"name": "Brimstone Swing",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger in an arc; {potency} to {status} ({magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"censer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"area": "ARC",
+			"power_mult": 1.05,
+			"status_effect": "burn",
+			"status_potency": 75,
+			"status_magnitude": 3,
+			"status_rounds": 2,
+			"stagger": 10
+		},
+		{
+			"id": "anoint_flare",
+			"name": "Sanctified Flare",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger in a ring; {potency} to {status} ({magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"censer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"area": "RING",
+			"power_mult": 1.1,
+			"status_effect": "burn",
+			"status_potency": 80,
+			"status_magnitude": 4,
+			"status_rounds": 2,
+			"stagger": 14
+		},
+		{
+			"id": "censer_pyre",
+			"name": "Censer Pyre",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 3,
+			"description": "{name}: burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}, leaves pitch fire. {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"weapon_types": [
+				"censer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 3,
+			"area": "BURST",
+			"power_mult": 1.45,
+			"status_effect": "burn",
+			"status_potency": 90,
+			"status_magnitude": 5,
+			"status_rounds": 3,
+			"stagger": 14,
+			"hazard": {
+				"id": "pitch_fire",
+				"shape": "SKILL",
+				"at": "target",
+				"rounds": 2
+			},
+			"uses_per_battle": 1
+		},
+		{
+			"id": "amputate_cut",
+			"name": "Serrated Sweep",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 1,
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"bone_saw"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.1,
+			"status_effect": "bleed",
+			"status_potency": 85,
+			"status_rounds": 3,
+			"stagger": 6
+		},
+		{
+			"id": "nerve_nick",
+			"name": "Nerve Section",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"bone_saw"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.15,
+			"status_effect": "weaken",
+			"status_potency": 85,
+			"status_magnitude": 20,
+			"status_rounds": 2,
+			"stagger": 10
+		},
+		{
+			"id": "rib_spread",
+			"name": "Rib-Spreader",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger; {potency} to {status} (-{magnitude}) for {rounds}, {exploit}. Needs {weapons} {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"bone_saw"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.55,
+			"status_effect": "expose",
+			"status_potency": 90,
+			"status_magnitude": 10,
+			"status_rounds": 3,
+			"exploit": [
+				{
+					"status": "bleed",
+					"power_mult": 1.3
+				}
+			],
+			"stagger": 12
+		},
+		{
+			"id": "vivisect",
+			"name": "Prosector Vivisect",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger; pierces armor, {potency} to {status} for {rounds}; vents Strain if active. Needs {weapons} {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"bone_saw"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.65,
+			"status_effect": "bleed",
+			"status_potency": 95,
+			"status_rounds": 3,
+			"stagger": 10,
+			"armor_piercing": true,
+			"riders": [
+				{
+					"when": {
+						"meter": {
+							"id": "strain",
+							"at_least": 1
+						}
+					},
+					"effects": [
+						{
+							"type": "meter",
+							"meter": "strain",
+							"delta": -10,
+							"to": "self"
+						}
+					]
+				}
+			]
+		},
+		{
+			"id": "saw_dissect",
+			"name": "Anatomical Sever",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 4,
+			"blocks": 3,
+			"description": "{name}: {power} power, {stagger} stagger; pierces armor, sure break, {potency} to {status} for {rounds}. {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"weapon_types": [
+				"bone_saw"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 2.05,
+			"status_effect": "bleed",
+			"status_potency": 100,
+			"status_rounds": 3,
+			"stagger": 18,
+			"sure_break": true,
+			"armor_piercing": true,
+			"uses_per_battle": 1
+		},
+		{
+			"id": "snap_lash",
+			"name": "Barbed Lash",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 1,
+			"description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"scourge"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 2,
+			"power_mult": 0.85,
+			"status_effect": "bleed",
+			"status_potency": 75,
+			"status_rounds": 2,
+			"stagger": 6
+		},
+		{
+			"id": "hook_snatch",
+			"name": "Wire-Snatch",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger at {reach}; pulls target one tile closer. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"scourge"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 2,
+			"stagger": 12,
+			"forced_move": {
+				"kind": "pull",
+				"tiles": 1
+			}
+		},
+		{
+			"id": "flay_arc",
+			"name": "Sweeping Lash",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger in an arc; {potency} to {status} for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"scourge"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"area": "ARC",
+			"power_mult": 1.25,
+			"status_effect": "bleed",
+			"status_potency": 85,
+			"status_rounds": 2,
+			"stagger": 10
+		},
+		{
+			"id": "penance_bite",
+			"name": "Cat-o'-Nine-Iron",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"scourge"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 2,
+			"power_mult": 1.45,
+			"status_effect": "expose",
+			"status_potency": 85,
+			"status_magnitude": 8,
+			"status_rounds": 2,
+			"stagger": 14
+		},
+		{
+			"id": "scourge_flay",
+			"name": "Iron Flaying",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 3,
+			"description": "{name}: {power} power, {stagger} stagger in a line; {potency} to {status} for {rounds}, pulls foes. {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"weapon_types": [
+				"scourge"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"area": "LINE",
+			"power_mult": 1.7,
+			"status_effect": "bleed",
+			"status_potency": 95,
+			"status_rounds": 3,
+			"stagger": 14,
+			"forced_move": {
+				"kind": "pull",
+				"tiles": 1
+			},
+			"uses_per_battle": 1
+		},
+		{
+			"id": "caustic_spritz",
+			"name": "Vitriol Jet",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 1,
+			"description": "{name}: {power} power, {stagger} stagger at {reach}; {potency} to {status} (-{magnitude}) for {rounds}. Needs {weapons} {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"sprayer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 2,
+			"reach_max": 3,
+			"power_mult": 1.05,
+			"status_effect": "expose",
+			"status_potency": 80,
+			"status_magnitude": 6,
+			"status_rounds": 2,
+			"stagger": 4
+		},
+		{
+			"id": "pitch_cone",
+			"name": "Pyre-Nozzle Cone",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger in a cone; {potency} to {status} ({magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"sprayer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"area": "CONE",
+			"power_mult": 1.05,
+			"status_effect": "burn",
+			"status_potency": 75,
+			"status_magnitude": 4,
+			"status_rounds": 2,
+			"stagger": 8
+		},
+		{
+			"id": "pressure_stream",
+			"name": "Pressure Stream",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger, sure break at {reach}; pushes target back two tiles. Needs {weapons} {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"sprayer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 2,
+			"reach_max": 3,
+			"power_mult": 1.35,
+			"stagger": 16,
+			"sure_break": true,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 2
+			}
+		},
+		{
+			"id": "flash_nozzle",
+			"name": "Ignition Mist",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}, {exploit}. Needs {weapons} {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"sprayer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 2,
+			"reach_max": 4,
+			"area": "BURST",
+			"power_mult": 1.05,
+			"status_effect": "burn",
+			"status_potency": 85,
+			"status_magnitude": 5,
+			"status_rounds": 2,
+			"exploit": [
+				{
+					"status": "expose",
+					"power_mult": 1.3
+				}
+			],
+			"stagger": 8
+		},
+		{
+			"id": "sprayer_deluge",
+			"name": "Vitriol Deluge",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 4,
+			"blocks": 3,
+			"description": "{name}: burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}, leaves pitch fire. {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"weapon_types": [
+				"sprayer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 2,
+			"reach_max": 3,
+			"area": "BURST",
+			"power_mult": 1.55,
+			"status_effect": "burn",
+			"status_potency": 90,
+			"status_magnitude": 6,
+			"status_rounds": 3,
+			"stagger": 14,
+			"hazard": {
+				"id": "pitch_fire",
+				"shape": "SKILL",
+				"at": "target",
+				"rounds": 2
+			},
+			"uses_per_battle": 1
+		},
+		{
+			"id": "staff_cataclysm",
+			"name": "Abyssal Conduit",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 4,
+			"blocks": 4,
+			"description": "{name}: burst at {reach} for {power} power, {stagger} stagger; pierces armor. Needs {weapons} {proficiency}. Once per battle.",
+			"learned_only": true,
+			"weapon_types": [
+				"staff"
+			],
+			"min_proficiency": 1,
+			"reach_min": 2,
+			"reach_max": 4,
+			"area": "BURST",
+			"power_mult": 1.65,
+			"stagger": 22,
+			"armor_piercing": true,
+			"uses_per_battle": 1
+		},
+		{
+			"id": "marrow_snare",
+			"name": "Sinew Grasp",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name} (Channel): {power} power, {stagger} stagger at {reach}; pulls target one tile, {potency} to {status} for {rounds}; pierces armor.",
+			"learned_only": true,
+			"reach_min": 1,
+			"reach_max": 3,
+			"power_mult": 1.2,
+			"status_effect": "root",
+			"status_potency": 85,
+			"stagger": 10,
+			"armor_piercing": true,
+			"forced_move": {
+				"kind": "pull",
+				"tiles": 1
+			},
+			"channel": {
+				"only": true,
+				"cost": 15
+			}
+		},
+		{
+			"id": "marrow_shriek",
+			"name": "Bellows Shriek",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name} (Channel): {power} power, {stagger} stagger in a ring; pushes adjacent foes back and pierces armor.",
+			"learned_only": true,
+			"reach_min": 1,
+			"reach_max": 1,
+			"area": "RING",
+			"power_mult": 1.05,
+			"stagger": 16,
+			"armor_piercing": true,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 1
+			},
+			"channel": {
+				"only": true,
+				"cost": 20
+			}
+		},
+		{
+			"id": "marrow_spray",
+			"name": "Vitriol Gorge",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name} (Channel): burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}, leaves choke-gas.",
+			"learned_only": true,
+			"reach_min": 2,
+			"reach_max": 2,
+			"area": "BURST",
+			"power_mult": 1.15,
+			"status_effect": "poison",
+			"status_potency": 90,
+			"status_magnitude": 6,
+			"status_rounds": 3,
+			"stagger": 8,
+			"armor_piercing": true,
+			"hazard": {
+				"id": "choke_gas",
+				"shape": "SKILL",
+				"at": "target",
+				"rounds": 2
+			},
+			"channel": {
+				"only": true,
+				"cost": 25
+			}
+		},
+		{
+			"id": "marrow_bulwark",
+			"name": "Ossified Wall",
+			"kind": "DEFEND",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name} (Channel): -{mitigation} damage this round; grants {status} (+{magnitude}) for {rounds}.",
+			"learned_only": true,
+			"status_magnitude": 8,
+			"status_rounds": 2,
+			"grant_status": "fortify",
+			"mitigation": 0.5,
+			"channel": {
+				"only": true,
+				"cost": 20
+			}
+		},
+		{
+			"id": "marrow_pummel",
+			"name": "Calcified Ram",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name} (Channel): {power} power, {stagger} stagger; pushes two tiles with breaking wall impact; pierces armor.",
+			"learned_only": true,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.5,
+			"stagger": 24,
+			"armor_piercing": true,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 2,
+				"collide_break": true
+			},
+			"channel": {
+				"only": true,
+				"cost": 20
+			}
+		},
+		{
+			"id": "marrow_sight",
+			"name": "Tapetum Lance",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name} (Channel): {power} power, {stagger} stagger at {reach}; pierces armor, ignores guard, {potency} to {status} (-{magnitude}) for {rounds}.",
+			"learned_only": true,
+			"reach_min": 2,
+			"reach_max": 6,
+			"power_mult": 1.6,
+			"status_effect": "expose",
+			"status_potency": 95,
+			"status_magnitude": 10,
+			"status_rounds": 2,
+			"stagger": 10,
+			"armor_piercing": true,
+			"channel": {
+				"only": true,
+				"cost": 20
+			},
+			"ignore_guard": true
+		},
+		{
+			"id": "marrow_step",
+			"name": "Fade-Marrow Cut",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 1,
+			"description": "{name} (Channel): slips up to {range} tiles {position} for {power} power, {stagger} stagger, {potency} to {status} for {rounds}; pierces armor.",
+			"learned_only": true,
+			"round_intent": "maneuver",
+			"reach_max": 3,
+			"position": "behind",
+			"power_mult": 1.45,
+			"status_effect": "bleed",
+			"status_potency": 95,
+			"status_rounds": 3,
+			"stagger": 8,
+			"armor_piercing": true,
+			"channel": {
+				"only": true,
+				"cost": 20
+			}
+		},
+		{
+			"id": "marrow_caustic",
+			"name": "Resonant Bloom",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name} (Channel): burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}, leaves pitch fire.",
+			"learned_only": true,
+			"reach_min": 2,
+			"reach_max": 4,
+			"area": "BURST",
+			"power_mult": 1.1,
+			"status_effect": "burn",
+			"status_potency": 90,
+			"status_magnitude": 5,
+			"status_rounds": 2,
+			"stagger": 10,
+			"armor_piercing": true,
+			"hazard": {
+				"id": "pitch_fire",
+				"shape": "SKILL",
+				"at": "target",
+				"rounds": 2
+			},
+			"channel": {
+				"only": true,
+				"cost": 25
+			}
+		},
+		{
+			"id": "ks_iron_marrow",
+			"name": "Marrow Phalanx",
+			"kind": "DEFEND",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name} (Channel, once per battle): -{mitigation} damage for two rounds; grants {status} (+{magnitude}) for {rounds} and {extra}.",
+			"learned_only": true,
+			"status_magnitude": 10,
+			"status_rounds": 2,
+			"grant_status": "fortify",
+			"extra_grants": [
+				{
+					"status": "steadfast",
+					"rounds": 1,
+					"magnitude": 0
+				}
+			],
+			"mitigation": 0.6,
+			"guard_rounds": 2,
+			"uses_per_battle": 1,
+			"channel": {
+				"only": true,
+				"cost": 30
+			}
+		},
+		{
+			"id": "ks_bone_eruption",
+			"name": "Ossuary Erupt",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name} (Channel, once per battle): {power} power, {stagger} stagger in a ring; sure break, pushes two tiles, pierces armor.",
+			"learned_only": true,
+			"reach_min": 1,
+			"reach_max": 1,
+			"area": "RING",
+			"power_mult": 2.0,
+			"stagger": 30,
+			"sure_break": true,
+			"armor_piercing": true,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 2
+			},
+			"uses_per_battle": 1,
+			"channel": {
+				"only": true,
+				"cost": 35
+			}
+		},
+		{
+			"id": "ks_marrow_needle",
+			"name": "Marrow Needle",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name} (Channel, once per battle): {power} power, {stagger} stagger at {reach}; pierces armor, ignores guard, sure break.",
+			"learned_only": true,
+			"reach_min": 2,
+			"reach_max": 6,
+			"power_mult": 2.25,
+			"stagger": 18,
+			"sure_break": true,
+			"armor_piercing": true,
+			"uses_per_battle": 1,
+			"channel": {
+				"only": true,
+				"cost": 35
+			},
+			"ignore_guard": true
+		},
+		{
+			"id": "ks_nerve_sever",
+			"name": "Spinal Excision",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 1,
+			"description": "{name} (Channel, once per battle): {power} power; pierces armor, ignores guard, {exploit}.",
+			"learned_only": true,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 2.35,
+			"exploit": [
+				{
+					"status": "bleed",
+					"power_mult": 1.4
+				},
+				{
+					"status": "stagger",
+					"power_mult": 1.4
+				}
+			],
+			"armor_piercing": true,
+			"uses_per_battle": 1,
+			"channel": {
+				"only": true,
+				"cost": 30
+			},
+			"ignore_guard": true
+		},
+		{
+			"id": "ks_geode_nova",
+			"name": "Siphon Nova",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 3,
+			"blocks": 3,
+			"description": "{name} (Channel, once per battle): burst at {reach} for {power} power, {stagger} stagger; {potency} to {status} ({magnitude}) for {rounds}, leaves phosphorus fire.",
+			"learned_only": true,
+			"reach_min": 2,
+			"reach_max": 4,
+			"area": "BURST",
+			"power_mult": 1.85,
+			"status_effect": "burn",
+			"status_potency": 95,
+			"status_magnitude": 6,
+			"status_rounds": 3,
+			"stagger": 20,
+			"armor_piercing": true,
+			"hazard": {
+				"id": "phosphorus_fire",
+				"shape": "SKILL",
+				"at": "target",
+				"rounds": 2
+			},
+			"uses_per_battle": 1,
+			"channel": {
+				"only": true,
+				"cost": 35
+			}
 		}
 	]
 }

@@ -103,11 +103,11 @@
 		{
 			"id": "dirty_tricks",
 			"name": "Dirty Tricks",
-			"description": "Street-taught: knows Quick Stab.",
+			"description": "Street-taught: +5% critical chance.",
 			"effects": [
 				{
-					"type": "skill",
-					"skill": "quick_stab"
+					"type": "crit",
+					"value": 5
 				}
 			],
 			"slot": ""
@@ -1041,12 +1041,13 @@
 		},
 		{
 			"id": "mastery_bow",
-			"name": "Pinning Mastery",
-			"description": "Unlocks Pinning Shot.",
+			"name": "Keen Draw",
+			"description": "Steady draw: +1 PERC.",
 			"effects": [
 				{
-					"type": "skill",
-					"skill": "pinning_shot"
+					"type": "stat",
+					"stat": "PERC",
+					"value": 1
 				}
 			],
 			"slot": ""
@@ -1054,11 +1055,12 @@
 		{
 			"id": "mastery_crossbow",
 			"name": "Sniper's Mastery",
-			"description": "Unlocks Aimed Shot.",
+			"description": "Sighted along the prod: +1 PERC.",
 			"effects": [
 				{
-					"type": "skill",
-					"skill": "aimed_shot"
+					"type": "stat",
+					"stat": "PERC",
+					"value": 1
 				}
 			],
 			"slot": ""
@@ -1066,11 +1068,12 @@
 		{
 			"id": "mastery_fist",
 			"name": "Brawler's Mastery",
-			"description": "Unlocks Body Blow.",
+			"description": "Hardened knuckles: +1 STR.",
 			"effects": [
 				{
-					"type": "skill",
-					"skill": "body_blow"
+					"type": "stat",
+					"stat": "STR",
+					"value": 1
 				}
 			],
 			"slot": ""
