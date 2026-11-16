@@ -1,0 +1,91 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "calcify_2",
+    "name": "Calloused Chitin",
+    "description": "Calcification II: +2 Armor Rating, -1 Move Rate (minimum 1).",
+    "slot": "",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "armor",
+      "value": 2
+     },
+     {
+      "type": "stat",
+      "stat": "move_rate",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "calcify_3",
+    "name": "Sensory Rot",
+    "description": "Calcification III: immune to Weaken and Stun; -15% damage on ranged attacks beyond 3 tiles.",
+    "slot": "",
+    "effects": [
+     {
+      "type": "resist",
+      "status": "weaken",
+      "value": 100
+     },
+     {
+      "type": "resist",
+      "status": "stun",
+      "value": 100
+     },
+     {
+      "type": "skill_potency",
+      "group": "ranged",
+      "min_distance": 4,
+      "value": -0.15
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "unit_tracks",
+   "entry": {
+    "id": "calcification",
+    "name": "Calcification",
+    "mark": "calcify",
+    "cause": "calcified",
+    "stages": [
+     {
+      "name": "Vein-Blackening",
+      "passive": "calcify_1",
+      "departure": ""
+     },
+     {
+      "name": "Calloused Chitin",
+      "passive": "calcify_2",
+      "departure": ""
+     },
+     {
+      "name": "Sensory Rot",
+      "passive": "calcify_3",
+      "departure": ""
+     },
+     {
+      "name": "The Shakes",
+      "passive": "calcify_4",
+      "departure": ""
+     },
+     {
+      "name": "Terminal Drift",
+      "passive": "",
+      "departure": "lost"
+     }
+    ]
+   }
+  }
+ ]
+}

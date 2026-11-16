@@ -10,7 +10,7 @@ use serde_json::Value;
 
 pub const BASE_AP: i32 = 10;
 pub const GEAR_REACH_CAP: i32 = 1;
-pub const GROUPS: [&str; 3] = ["spell", "heal", "channel"];
+pub const GROUPS: [&str; 4] = ["spell", "heal", "channel", "ranged"];
 /// RULESET1 V4 (tasks 1.4): the widest foresight reveal range in tiles.
 pub const FORESIGHT_RANGE_MAX: i32 = 8;
 /// RULESET1 tasks 1.4: the largest `stagger_taken` multiplier.
@@ -70,11 +70,23 @@ pub struct ConditionalGrant {
     pub grants: Vec<Grant>,
 }
 
+/// PK2-STAGE-PASSIVES (`PR6-2`): a distance-gated `skill_potency` entry (`min_distance > 0`; applies when attack
+/// distance `>= min_distance`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct DistancePotency {
+    pub set: SkillSet,
+    pub min_distance: i32,
+    pub value: f64,
+}
+
 /// CLASSPASS1 (`PR5-62a`): active conditional accumulators rebuilt on every `refresh_conditional_grants`.
 #[derive(Debug, Clone, Default)]
 pub struct CondGrants {
     pub potency_family: IndexMap<String, f64>,
     pub potency_group: IndexMap<String, f64>,
+    pub distance_potency: Vec<DistancePotency>,
+    pub armor: i32,
+    pub move_rate: i32,
     pub status_resist: IndexMap<String, i32>,
     pub ap_regen_bonus: i32,
     pub status_potency: i32,
@@ -159,6 +171,9 @@ pub struct BandApplied {
     pub resist_new: Vec<String>,
     pub potency_family: Vec<(String, f64)>,
     pub potency_group: Vec<(String, f64)>,
+    pub distance_potency: Vec<DistancePotency>,
+    pub armor: i32,
+    pub move_rate: i32,
     pub status_potency: i32,
     pub stagger: Vec<StaggerTaken>,
     pub crit: f64,
@@ -295,6 +310,12 @@ pub struct Unit {
     pub potency_group: IndexMap<String, f64>,
     pub gear_potency_family: IndexMap<String, f64>,
     pub gear_potency_group: IndexMap<String, f64>,
+    pub distance_potency: Vec<DistancePotency>,
+    pub gear_distance_potency: Vec<DistancePotency>,
+    pub passive_armor: i32,
+    pub gear_armor: i32,
+    pub passive_move_rate: i32,
+    pub gear_move_rate: i32,
     pub gear_status_resist: IndexMap<String, i32>,
     pub gear_status_potency: i32,
     /// PR5-50 (FB-204): the worn `skill_reach` bonuses (rebuilt on every sync) and the passive ones, in apply order
@@ -462,6 +483,12 @@ impl Unit {
             potency_group: IndexMap::new(),
             gear_potency_family: IndexMap::new(),
             gear_potency_group: IndexMap::new(),
+            distance_potency: Vec::new(),
+            gear_distance_potency: Vec::new(),
+            passive_armor: 0,
+            gear_armor: 0,
+            passive_move_rate: 0,
+            gear_move_rate: 0,
             gear_status_resist: IndexMap::new(),
             gear_status_potency: 0,
             gear_skill_reach: Vec::new(),
@@ -631,7 +658,7 @@ impl Unit {
         }
         let hasted = self.has_status_where(|s| crate::status::raises_rating(s, crate::status::Rating::MoveRate)) as i32;
         let slowed = self.has_status_where(|s| crate::status::lowers_rating(s, crate::status::Rating::MoveRate)) as i32;
-        (self.move_rate + hasted - slowed).max(1)
+        (self.move_rate + self.passive_move_rate + self.gear_move_rate + self.cond.move_rate + hasted - slowed).max(1)
     }
 
     /// The worn gear's burden after the training reduction; U3.2-S3 (FB-33): plus the wield terms'
@@ -702,6 +729,9 @@ impl Unit {
     fn rebuild_gear_effects(&mut self, cat: &Catalog) {
         self.gear_potency_family.clear();
         self.gear_potency_group.clear();
+        self.gear_distance_potency.clear();
+        self.gear_armor = 0;
+        self.gear_move_rate = 0;
         self.gear_status_resist.clear();
         self.gear_status_potency = 0;
         self.gear_skill_reach.clear();
@@ -972,7 +1002,7 @@ impl Unit {
     fn apply_cond_modifier(&mut self, cat: &Catalog, m: &Modifier, id: &str, gear: bool, cg_idx: usize) {
         let c: Combine = m.target.combine();
         let src_name = if gear { id.to_string() } else { format!("passive:{id}") };
-        if matches!(m.target, Target::SkillPotency(_) | Target::StaggerTaken { .. } | Target::ForcedTiles) {
+        if matches!(m.target, Target::SkillPotency { .. } | Target::StaggerTaken { .. } | Target::ForcedTiles) {
             self.cond.hit_sources.push(HitSource { source: src_name.clone(), target: m.target.clone(), value: m.value });
         }
         let int = m.value as i32;
@@ -984,12 +1014,17 @@ impl Unit {
                 }
                 self.stats.modifiers.push(sm);
             }
+            Target::Armor => self.cond.armor = c.fold_i(self.cond.armor, int),
+            Target::MoveRate => self.cond.move_rate = c.fold_i(self.cond.move_rate, int),
             Target::Resist { status } => {
                 let cur = self.cond.status_resist.get(status).copied().unwrap_or(0);
                 self.cond.status_resist.insert(status.clone(), c.fold_i(cur, int));
             }
             Target::ApRegen => self.cond.ap_regen_bonus = c.fold_i(self.cond.ap_regen_bonus, int),
-            Target::SkillPotency(set) => {
+            Target::SkillPotency { set, min_distance } if *min_distance > 0 => {
+                self.cond.distance_potency.push(DistancePotency { set: set.clone(), min_distance: *min_distance, value: m.value });
+            }
+            Target::SkillPotency { set, .. } => {
                 let (held, key) = match set {
                     SkillSet::Group(g) => (&mut self.cond.potency_group, g),
                     SkillSet::Family(f) => (&mut self.cond.potency_family, f),
@@ -1064,7 +1099,7 @@ impl Unit {
     fn apply_modifier(&mut self, cat: &Catalog, m: &Modifier, id: &str, gear: bool) {
         let c: Combine = m.target.combine();
         // U4.2-S4 (FB-30): a hit-time target keeps its source (a passive's or band's as its stat modifiers name it)
-        if matches!(m.target, Target::SkillPotency(_) | Target::StaggerTaken { .. } | Target::ForcedTiles) {
+        if matches!(m.target, Target::SkillPotency { .. } | Target::StaggerTaken { .. } | Target::ForcedTiles) {
             let held = HitSource { source: if gear { id.to_string() } else { format!("passive:{id}") }, target: m.target.clone(), value: m.value };
             if gear {
                 self.gear_hit_sources.push(held);
@@ -1085,13 +1120,25 @@ impl Unit {
                 }
                 self.stats.modifiers.push(sm);
             }
+            Target::Armor => {
+                let held = if gear { &mut self.gear_armor } else { &mut self.passive_armor };
+                *held = c.fold_i(*held, int);
+            }
+            Target::MoveRate => {
+                let held = if gear { &mut self.gear_move_rate } else { &mut self.passive_move_rate };
+                *held = c.fold_i(*held, int);
+            }
             Target::Resist { status } => {
                 let held = if gear { &mut self.gear_status_resist } else { &mut self.status_resist };
                 let cur = held.get(status).copied().unwrap_or(0);
                 held.insert(status.clone(), c.fold_i(cur, int));
             }
             Target::ApRegen => self.ap_regen_bonus = c.fold_i(self.ap_regen_bonus, int),
-            Target::SkillPotency(set) => {
+            Target::SkillPotency { set, min_distance } if *min_distance > 0 => {
+                let held = if gear { &mut self.gear_distance_potency } else { &mut self.distance_potency };
+                held.push(DistancePotency { set: set.clone(), min_distance: *min_distance, value: m.value });
+            }
+            Target::SkillPotency { set, .. } => {
                 let (held, key) = match set {
                     SkillSet::Group(g) => (if gear { &mut self.gear_potency_group } else { &mut self.potency_group }, g),
                     SkillSet::Family(f) => (if gear { &mut self.gear_potency_family } else { &mut self.potency_bonus }, f),
@@ -1139,6 +1186,7 @@ impl Unit {
     pub fn apply_band(&mut self, cat: &Catalog, effects: &[Value], source: &str) -> BandApplied {
         let resist = self.status_resist.clone();
         let (fam, group) = (self.potency_bonus.clone(), self.potency_group.clone());
+        let (armor, move_rate, dist_n) = (self.passive_armor, self.passive_move_rate, self.distance_potency.len());
         let (potency, stagger) = (self.passive_status_potency, self.stagger_taken.len());
         let view = grants::read(effects);
         let passive: Vec<Grant> = view.iter().filter(|g| g.band_ok()).cloned().collect();
@@ -1159,6 +1207,9 @@ impl Unit {
             resist_new: self.status_resist.keys().filter(|k| !resist.contains_key(*k)).cloned().collect(),
             potency_family: diff_f(&self.potency_bonus, &fam),
             potency_group: diff_f(&self.potency_group, &group),
+            distance_potency: self.distance_potency[dist_n..].to_vec(),
+            armor: self.passive_armor - armor,
+            move_rate: self.passive_move_rate - move_rate,
             status_potency: self.passive_status_potency - potency,
             stagger: self.stagger_taken[stagger..].to_vec(),
             crit,
@@ -1188,6 +1239,13 @@ impl Unit {
                 }
             }
         }
+        for dp in &a.distance_potency {
+            if let Some(i) = self.distance_potency.iter().rposition(|x| x == dp) {
+                self.distance_potency.remove(i);
+            }
+        }
+        self.passive_armor -= a.armor;
+        self.passive_move_rate -= a.move_rate;
         self.passive_status_potency -= a.status_potency;
         for st in &a.stagger {
             if let Some(i) = self.stagger_taken.iter().rposition(|x| x == st) {
@@ -1534,12 +1592,14 @@ pub fn rank_numeral(rank: i32) -> &'static str {
 
 /// SkillDef.in_group for the passive groups: "spell" = an attack that needs a spell-source weapon (U3.2-S2: a family
 /// with the engine rule `spell_source`, `SkillDef::spell_source`); "heal" = a support heal (HEALPCT1: `heal_pct` too);
-/// "channel" = a channel-only skill (`SkillDef::channel.only`, CLASSPASS1 `PR5-62a`).
+/// "channel" = a channel-only skill (`SkillDef::channel.only`, CLASSPASS1 `PR5-62a`); "ranged" = `skill_is_ranged`
+/// (`PK2-STAGE-PASSIVES`, `PR6-2`).
 pub fn skill_in_group(s: &rpgkit_data::SkillDef, group: &str) -> bool {
     match group {
         "spell" => s.kind == "ATTACK" && s.spell_source,
         "heal" => s.kind == "SUPPORT" && (s.heal_base > 0 || s.heal_mult > 0.0 || s.heal_pct > 0),
         "channel" => s.channel.only,
+        "ranged" => skill_is_ranged(s),
         _ => false,
     }
 }
@@ -2244,15 +2304,81 @@ impl Unit {
         total
     }
 
+    /// PK2-STAGE-PASSIVES (`PR6-2`): skill potency for `skill` at attack distance `distance` (`0` = distance-0 baseline;
+    /// `> 0` adds matching `min_distance > 0` entries with `distance >= min_distance` in family-then-group sum order).
+    pub fn potency_for_skill_at(&self, skill: &rpgkit_data::SkillDef, distance: i32) -> f64 {
+        let mut total = self.potency_for_skill(skill);
+        if distance <= 0 {
+            return total;
+        }
+        let fam = skill.family_id();
+        let sum_set = |pred: &dyn Fn(&SkillSet) -> bool| -> f64 {
+            self.distance_potency
+                .iter()
+                .chain(&self.gear_distance_potency)
+                .chain(&self.cond.distance_potency)
+                .filter(|d| distance >= d.min_distance && pred(&d.set))
+                .map(|d| d.value)
+                .sum::<f64>()
+        };
+        total += sum_set(&|set| matches!(set, SkillSet::Family(f) if f == fam));
+        for g in GROUPS {
+            if skill_in_group(skill, g) {
+                total += sum_set(&|set| matches!(set, SkillSet::Group(y) if y == g));
+            }
+        }
+        total
+    }
+
+    /// PK2-STAGE-PASSIVES (`PR6-2`): sum of `min_distance > 0` potency grants matching `distance >= min_distance` when
+    /// only `ranged` (not a `SkillDef`) is known by `damage::compute`.
+    pub fn distance_potency_delta(&self, ranged: bool, distance: i32) -> f64 {
+        if distance <= 0 {
+            return 0.0;
+        }
+        self.distance_potency
+            .iter()
+            .chain(&self.gear_distance_potency)
+            .chain(&self.cond.distance_potency)
+            .filter(|d| distance >= d.min_distance && matches!(&d.set, SkillSet::Group(g) if g == "ranged" && ranged))
+            .map(|d| d.value)
+            .sum()
+    }
+
+    /// PK2-STAGE-PASSIVES (`PR6-2`): trace parts corresponding to `distance_potency_delta`.
+    pub fn distance_potency_parts(&self, ranged: bool, distance: i32) -> Vec<crate::pipeline::Part> {
+        if distance <= 0 {
+            return Vec::new();
+        }
+        self.hit_sources
+            .iter()
+            .chain(&self.gear_hit_sources)
+            .chain(&self.cond.hit_sources)
+            .filter(|h| {
+                h.value != 0.0
+                    && matches!(&h.target, Target::SkillPotency { set: SkillSet::Group(g), min_distance } if *min_distance > 0 && distance >= *min_distance && g == "ranged" && ranged)
+            })
+            .map(|h| crate::pipeline::Part { source: h.source.clone().into(), value: h.value })
+            .collect()
+    }
+
     /// U4.2-S4 (FB-30): the sources of `potency_for_skill`, in its sum order (the family's passive adds, its worn ones,
     /// then per group of the skill the passive adds and the worn ones); each part is one grant's add (a 0 add, which
     /// changes nothing, names no part).
     pub fn potency_parts(&self, skill: &rpgkit_data::SkillDef) -> Vec<crate::pipeline::Part> {
+        self.potency_parts_at(skill, 0)
+    }
+
+    /// PK2-STAGE-PASSIVES (`PR6-2`): `potency_parts` including active `min_distance > 0` grants when `distance > 0`.
+    pub fn potency_parts_at(&self, skill: &rpgkit_data::SkillDef, distance: i32) -> Vec<crate::pipeline::Part> {
         let fam = skill.family_id();
         let groups: Vec<&str> = GROUPS.iter().copied().filter(|g| skill_in_group(skill, g)).collect();
         let of = |list: &[HitSource], set: &dyn Fn(&SkillSet) -> bool| -> Vec<crate::pipeline::Part> {
             list.iter()
-                .filter(|h| h.value != 0.0 && matches!(&h.target, Target::SkillPotency(x) if set(x)))
+                .filter(|h| {
+                    h.value != 0.0
+                        && matches!(&h.target, Target::SkillPotency { set: x, min_distance } if (*min_distance <= 0 || (distance > 0 && distance >= *min_distance)) && set(x))
+                })
                 .map(|h| crate::pipeline::Part { source: h.source.clone().into(), value: h.value })
                 .collect()
         };
@@ -2320,6 +2446,14 @@ impl Unit {
 
     pub fn power_for(&self, skill: &rpgkit_data::SkillDef) -> f64 {
         skill.power_mult * self.potency_for_skill(skill) * self.weaken_factor() * self.empower_factor()
+    }
+
+    /// PK2-STAGE-PASSIVES (`PR6-2`): `power_for` at attack distance `distance` (`0` = `power_for`).
+    pub fn power_for_at(&self, skill: &rpgkit_data::SkillDef, distance: i32) -> f64 {
+        if distance <= 0 {
+            return self.power_for(skill);
+        }
+        skill.power_mult * self.potency_for_skill_at(skill, distance).max(0.0) * self.weaken_factor() * self.empower_factor()
     }
 
     pub fn status_potency_bonus(&self) -> i32 {

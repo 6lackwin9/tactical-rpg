@@ -56,7 +56,9 @@ fn units(cat: &Catalog) -> Vec<Unit> {
 /// + (its worn sum), then per group (passive sum + worn sum); each sum from 0 in apply order.
 fn potency_from_records(u: &Unit, s: &SkillDef) -> f64 {
     let sum = |list: &[HitSource], set: &dyn Fn(&SkillSet) -> bool| -> f64 {
-        list.iter().filter(|h| matches!(&h.target, Target::SkillPotency(x) if set(x))).fold(0.0, |a, h| a + h.value)
+        list.iter()
+            .filter(|h| matches!(&h.target, Target::SkillPotency { set: x, min_distance } if *min_distance <= 0 && set(x)))
+            .fold(0.0, |a, h| a + h.value)
     };
     let fam = s.family_id();
     let family = |x: &SkillSet| matches!(x, SkillSet::Family(f) if f == fam);

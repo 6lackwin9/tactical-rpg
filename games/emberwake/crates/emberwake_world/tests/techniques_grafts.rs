@@ -15,8 +15,10 @@ use emberwake_battle::mark;
 use emberwake_battle::round_intent::{Pick as RoundPick, RoundTarget};
 use emberwake_battle::round_intent_plan;
 use emberwake_battle::session::Phase;
-use emberwake_battle::{channel, meter};
+use emberwake_battle::{channel, meter, plan};
 use emberwake_data::mastery::MASTERY_LEVEL_XP;
+use emberwake_rules::damage::{self, base_armor_rating, HitInput};
+use emberwake_rules::unit::skill_is_ranged;
 use emberwake_rules::Unit;
 use emberwake_world::{battle, mastery, new_game, recipe, roster, weapons, Data, GameState};
 use recipe::Pick;
@@ -291,4 +293,62 @@ fn legacy_mastery_passives_no_longer_leak_weapon_techniques() {
             p.effects
         );
     }
+}
+
+#[test]
+fn calcification_stage_ii_and_iii_passives_apply_in_crucible() {
+    let d = data();
+    let track = d.cat.unit_tracks.get("calcification").expect("calcification track");
+    assert_eq!(track.stages[1].passive, "calcify_2");
+    assert_eq!(track.stages[2].passive, "calcify_3");
+    assert_eq!(d.cat.passives["calcify_2"].slot, "");
+    assert_eq!(d.cat.passives["calcify_3"].slot, "");
+
+    let mut gs = act2_game(&d);
+    let base = built(&d, &gs, "hollis");
+    let (base_armor, base_move) = (base_armor_rating(&base), base.move_per_block());
+
+    // Stage II (`calcify_2`): +2 Armor Rating, -1 Move Rate (min 1).
+    gs.party.member_mut("hollis").unwrap().tracks.insert("calcification".into(), 2);
+    let stage2 = built(&d, &gs, "hollis");
+    assert!(stage2.passives.contains(&"calcify_1".into()) && stage2.passives.contains(&"calcify_2".into()));
+    assert_eq!(base_armor_rating(&stage2), base_armor + 2);
+    assert_eq!(stage2.move_per_block(), (base_move - 1).max(1));
+
+    // Stage III (`calcify_3`): cumulative Stage II bonuses + weaken/stun resist 100 + -15% ranged beyond 3 tiles.
+    gs.party.member_mut("hollis").unwrap().tracks.insert("calcification".into(), 3);
+    let stage3 = built(&d, &gs, "hollis");
+    assert_eq!(base_armor_rating(&stage3), base_armor + 2);
+    assert_eq!(stage3.move_per_block(), (base_move - 1).max(1));
+    assert_eq!(stage3.status_resist.get("weaken").copied(), Some(100));
+    assert_eq!(stage3.status_resist.get("stun").copied(), Some(100));
+
+    let fight: Dict = json::dict(&json!({"source": "story", "encounter": CRUCIBLE})).clone();
+    let mut f = battle::begin_world(&d, &mut gs, &fight).expect("Crucible starts");
+    let hollis_u = f.members.iter().position(|(id, _)| id == "hollis").expect("Hollis fielded");
+    let foe_u = f.session.w.enemies[0];
+    assert_eq!(base_armor_rating(&f.session.w.units[hollis_u]), base_armor + 2);
+    assert_eq!(f.session.w.units[hollis_u].move_per_block(), (base_move - 1).max(1));
+    assert_eq!(f.session.w.units[hollis_u].status_resist.get("weaken").copied(), Some(100));
+    assert_eq!(f.session.w.units[hollis_u].status_resist.get("stun").copied(), Some(100));
+
+    let ranged_sid = (0..f.session.w.cat.skills.len())
+        .find(|&sid| {
+            let s = &f.session.w.cat.skills[sid];
+            s.kind == "ATTACK" && s.power_mult > 0.0 && skill_is_ranged(s)
+        })
+        .expect("a damaging ranged skill");
+
+    // Distance 3 stays full damage; distance 4 triggers `min_distance: 4` (-15%) on both `damage::compute` and `plan::expected_with`.
+    f.session.w.grid.positions[hollis_u] = Some(emberwake_battle::grid::V2::new(2, 4));
+    f.session.w.grid.positions[foe_u] = Some(emberwake_battle::grid::V2::new(5, 4)); // dist = 3
+    let est_d3 = plan::expected_with(&f.session.w, hollis_u, foe_u, ranged_sid, None, 0.0, 1.0, false);
+    let raw_d3 = damage::compute(&f.session.w.units[hollis_u], &f.session.w.units[foe_u], HitInput { ranged: true, distance: 3, ..HitInput::default() }).final_dmg;
+
+    f.session.w.grid.positions[foe_u] = Some(emberwake_battle::grid::V2::new(6, 4)); // dist = 4
+    let est_d4 = plan::expected_with(&f.session.w, hollis_u, foe_u, ranged_sid, None, 0.0, 1.0, false);
+    let raw_d4 = damage::compute(&f.session.w.units[hollis_u], &f.session.w.units[foe_u], HitInput { ranged: true, distance: 4, ..HitInput::default() }).final_dmg;
+
+    assert!(est_d4 < est_d3, "expected damage at dist 4 ({est_d4}) < dist 3 ({est_d3})");
+    assert!(raw_d4 < raw_d3, "raw ranged hit at dist 4 ({raw_d4}) < dist 3 ({raw_d3})");
 }

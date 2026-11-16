@@ -1051,8 +1051,21 @@ impl Command {
     /// draw, then the damage. Returns the unit the hit lands on (`f`, or the holder of an intercept), the hit and the
     /// damage dealt to that unit.
     #[allow(clippy::too_many_arguments)]
-    fn land(&mut self, w: &mut World, rng: &mut GodotRng, src: UnitId, f: UnitId, ranged: bool, offhand: bool, mult: f64, cover: f64, skip: &[UnitId]) -> (UnitId, Hit, i32) {
+    fn land(&mut self, w: &mut World, rng: &mut GodotRng, src: UnitId, f: UnitId, ranged: bool, offhand: bool, mut mult: f64, cover: f64, skip: &[UnitId]) -> (UnitId, Hit, i32) {
         self.orb_override |= damage::attack_power(&w.units[src], ranged, offhand).stat_override;
+        let dist = if w.has(src) && w.has(f) { w.pos(src).dist(w.pos(f)) } else { 0 };
+        let mut input_dist = 0;
+        if dist > 0 {
+            if let Some(s) = w.cat.skill(&self.skill) {
+                let base_pot = w.units[src].potency_for_skill(s);
+                let at_pot = w.units[src].potency_for_skill_at(s, dist);
+                if (at_pot - base_pot).abs() > 1e-12 && base_pot.abs() > 1e-12 {
+                    mult *= at_pot.max(0.0) / base_pot;
+                }
+            } else {
+                input_dist = dist;
+            }
+        }
         // PK2-S1: a member grant `pierce_melee` pierces with every melee hit
         let pierce = self.pierces_by_skill(w) || pierces_melee(w, src, ranged);
         let claim = match self.ally.as_mut() {
@@ -1064,12 +1077,12 @@ impl Command {
         let Some(r) = claim else {
             self.guard_bypassed |= self.ignore_guard && w.units[f].guard > 0.0;
             // one crit draw, then the damage (roll_hit_with's order)
-            let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, ..HitInput::default() };
+            let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, distance: input_dist, ..HitInput::default() };
             let hit = damage::compute(&w.units[src], &w.units[f], input);
             let taken = w.damage(f, hit.final_dmg, true);
             return (f, hit, taken);
         };
-        let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, ..HitInput::default() };
+        let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, distance: input_dist, ..HitInput::default() };
         let own = damage::compute(&w.units[src], &w.units[f], input);
         let h = r.holder;
         self.guard_bypassed |= self.ignore_guard && (w.units[f].guard > 0.0 || w.units[h].guard > 0.0);

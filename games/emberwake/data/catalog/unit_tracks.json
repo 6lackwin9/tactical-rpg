@@ -15,12 +15,12 @@
 				},
 				{
 					"name": "Calloused Chitin",
-					"passive": "",
+					"passive": "calcify_2",
 					"departure": ""
 				},
 				{
 					"name": "Sensory Rot",
-					"passive": "",
+					"passive": "calcify_3",
 					"departure": ""
 				},
 				{

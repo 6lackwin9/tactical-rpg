@@ -132,8 +132,9 @@ pub(crate) const ITEM_TYPES: [&str; 8] = ["skill_potency", "status_potency", rpg
 /// its `intent` filter values (the round intents IR21 derives; `rpgkit_rules::unit::skill_reach_matches`).
 pub const SKILL_REACH_KINDS: [&str; 6] = ["ATTACK", "DEFEND", "FOCUS", "SUPPORT", "DISENGAGE", rpgkit_data::SKILL_REACH_SPELL];
 pub const SKILL_REACH_INTENTS: [&str; 5] = [intent::ASSAULT, intent::STAND, intent::SUPPORT, intent::MANEUVER, intent::FIELD];
-const GROUPS: [&str; 3] = ["spell", "heal", "channel"];
+const GROUPS: [&str; 4] = ["spell", "heal", "channel", "ranged"];
 const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
+const RATING_STATS: [&str; 2] = ["armor", "move_rate"];
 
 /// A whole number in `lo..=hi` (JSON numbers parse as floats).
 fn whole_in(v: &Value, lo: i64, hi: i64) -> bool {
@@ -184,8 +185,9 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
         match t.as_str() {
             "stat" => {
                 let stat = json::s(e, "stat");
+                let is_rating = RATING_STATS.contains(&stat.as_str());
                 let is_derived = derived.contains(&stat);
-                if !STATS.contains(&stat.as_str()) && !is_derived {
+                if !STATS.contains(&stat.as_str()) && !is_rating && !is_derived {
                     errors.push(format!("{at}: unknown stat '{stat}'."));
                 }
                 let mut percent = 0.0;
@@ -202,7 +204,9 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
                     errors.push(format!("{at}: the stat bonus needs a non-zero value."));
                 }
                 let ctx = e.get("context").cloned().unwrap_or(Value::Object(Default::default()));
-                if !ctx.as_object().is_some_and(|c| c.len() <= 1) {
+                if is_rating && ctx.as_object().is_some_and(|c| !c.is_empty()) {
+                    errors.push(format!("{at}: context is not supported for '{stat}'."));
+                } else if !ctx.as_object().is_some_and(|c| c.len() <= 1) {
                     errors.push(format!("{at}: context is one {{key: value}} pair (or empty)."));
                 }
             }
@@ -237,6 +241,11 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
                 let pv = json::f(e, "value", 0.0);
                 if pv.abs() < 0.00001 || !(-0.9..=2.0).contains(&pv) {
                     errors.push(format!("{at}: potency bonus must be non-zero, {} to {} (0.25 = +25%).", fixed(-0.9, 1), fixed(2.0, 1)));
+                }
+                if let Some(d) = e.get("min_distance") {
+                    if !whole_in(d, 0, 12) {
+                        errors.push(format!("{at}: min_distance must be a whole number 0-12."));
+                    }
                 }
             }
             "unlock" => {
