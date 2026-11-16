@@ -22,17 +22,24 @@ pub const PRIORITY_ROUND: i32 = 5;
 pub type Roster = &'static [(&'static str, &'static str)];
 
 /// 5: a generated encounter's roster (KITIDS1: the game's, SimClasses.generated): [class, tier] per unit; "@elite" /
-/// "@boss" follow elite= / boss=; the wave arrives at WAVE_ROUND / WAVE_BLOCK.
+/// "@boss" follow elite= / boss=; the wave arrives at WAVE_ROUND / WAVE_BLOCK; `enemy_mastery` maps enemy `class_id`
+/// (or `"*"`) -> main-hand mastery level opened for spawned enemies (`&[]` = none).
 #[derive(Debug, Clone, Copy)]
 pub struct Generated {
     pub id: &'static str,
     pub enemies: Roster,
     pub wave: Roster,
+    pub enemy_mastery: &'static [(&'static str, i32)],
 }
 
 /// The roster and wave of generated encounter `id` (None: the game gives it none).
 pub fn generated(c: &SimClasses, id: &str) -> Option<(Roster, Roster)> {
     c.generated.iter().find(|g| g.id == id).map(|g| (g.enemies, g.wave))
+}
+
+/// Per-class enemy main-hand mastery levels of generated encounter `id` (`&[]` = none).
+pub fn generated_mastery(c: &SimClasses, id: &str) -> &'static [(&'static str, i32)] {
+    c.generated.iter().find(|g| g.id == id).map_or(&[], |g| g.enemy_mastery)
 }
 
 /// 6.4: one limit test (KITIDS1: the game's, SimClasses.scenarios). `allies`: reference classes after the test unit;
@@ -92,6 +99,8 @@ pub struct Enc {
     pub extra: bool,
     /// RULESET1: the ruleset of the world that resolves a world encounter (None: catalog or generated).
     pub ruleset: Option<rpgkit_rules::ruleset::Ruleset>,
+    /// PR6-1: per-class main-hand weapon mastery levels applied to generated enemies (`&[]` = none).
+    pub enemy_mastery: &'static [(&'static str, i32)],
 }
 
 /// Party units simp_<class>_<i> (i = slot, 1-based) with the loadout / spend arguments.
@@ -142,7 +151,8 @@ pub fn encounter(r: &mut Runner, id: &str, level: i32, elevel: i32, elevel_set: 
         if !phases.is_empty() {
             base.insert("phases".into(), Value::Array(phases));
         }
-        return Enc { enemies: foes, base, label: id.into(), ..Enc::default() };
+        let enemy_mastery = generated_mastery(&r.args.game.classes, id);
+        return Enc { enemies: foes, base, label: id.into(), enemy_mastery, ..Enc::default() };
     }
     let entry = r.d.entry("encounters", id).clone();
     let mut base = Map::new();

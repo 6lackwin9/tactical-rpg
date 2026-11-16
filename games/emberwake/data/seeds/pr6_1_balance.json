@@ -1,0 +1,279 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "gauntlet",
+    "name": "Gauntlet",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "slot_rule": "1h_heavy",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 15,
+      "range": 1,
+      "burden": 1,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 10,
+       "max": 18
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "blunt",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_heavy_impact",
+    "techniques": [
+     {
+      "skill": "knuckle_jolt",
+      "grip": "1h"
+     },
+     {
+      "skill": "cyclone_kick",
+      "grip": "1h"
+     },
+     {
+      "skill": "haymaker",
+      "grip": "1h"
+     }
+    ],
+    "keystone": "gauntlet_breaker",
+    "durability": 40,
+    "art": "gauntlet",
+    "fx": "fists",
+    "attack_clips": [
+     "jab"
+    ],
+    "area_clips": [
+     "sweep_kick",
+     "kick",
+     "jab"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "forearm_braces",
+    "name": "Forearm Braces",
+    "family": "braces",
+    "rarity": "COMMON",
+    "weight": 1.5,
+    "value": 30,
+    "description": "Riveted forearm guards that take the recoil off a brawler's blows.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "off",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "mitigation",
+      "delta": 1
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "brawler_clinch",
+    "name": "Collar Clinch",
+    "kind": "ATTACK",
+    "level": 2,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger, sure break; {potency} to Slow for {rounds}.",
+    "learned_only": true,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.95,
+    "status_effect": "slow",
+    "status_potency": 80,
+    "status_rounds": 2,
+    "stagger": 16,
+    "sure_break": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "slag_charge",
+    "name": "Ramming Charge",
+    "kind": "ATTACK",
+    "level": 4,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name}: dashes up to {dash} for {power} power, {stagger} stagger, and pushes the target back.",
+    "learned_only": true,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.6,
+    "dash_tiles": 4,
+    "stagger": 18,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 1,
+     "collide_mult": 0.6,
+     "collide_stagger": 12
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "cinder_spark",
+    "name": "Cinder Spark",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {stagger} stagger in a cross at {range}.",
+    "learned_only": true,
+    "reach_min": 2,
+    "reach_max": 3,
+    "area": "PLUS",
+    "power_mult": 0.32,
+    "stagger": 4,
+    "fx": "fire_lob"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "firebomb",
+    "name": "Pitch Firebomb",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: burst at {range} for {power} power, {potency} to Burn ({magnitude}) for {rounds}, and leaves pitch fire.",
+    "learned_only": true,
+    "reach_min": 2,
+    "reach_max": 4,
+    "area": "BURST",
+    "power_mult": 0.3,
+    "status_effect": "burn",
+    "status_potency": 70,
+    "status_magnitude": 2,
+    "status_rounds": 2,
+    "hazard": {
+     "id": "pitch_fire",
+     "shape": "SKILL",
+     "at": "target",
+     "rounds": 2
+    },
+    "fx": "fire_lob"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "glacial_burst",
+    "name": "Alum Frost-Pot",
+    "kind": "ATTACK",
+    "level": 2,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "{name}: burst at {range} for {power} power, {stagger} stagger, and {potency} to Root for {rounds}.",
+    "learned_only": true,
+    "reach_min": 2,
+    "reach_max": 3,
+    "area": "BURST",
+    "power_mult": 0.32,
+    "status_effect": "root",
+    "status_potency": 75,
+    "stagger": 8,
+    "fx": "frost_lob"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "choke_cloud",
+    "name": "Choke-Vapor Bomb",
+    "kind": "ATTACK",
+    "level": 4,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "{name}: burst at {range} for {power} power, {potency} to Poison ({magnitude}) for {rounds}, and leaves choke-gas.",
+    "learned_only": true,
+    "reach_min": 2,
+    "reach_max": 4,
+    "area": "BURST",
+    "power_mult": 0.25,
+    "status_effect": "poison",
+    "status_potency": 80,
+    "status_magnitude": 3,
+    "status_rounds": 2,
+    "hazard": {
+     "id": "choke_gas",
+     "shape": "SKILL",
+     "at": "target",
+     "rounds": 2
+    },
+    "fx": "curse_orb"
+   }
+  }
+ ]
+}
