@@ -1,23 +1,22 @@
 # `PK3_ROSTER_LIFECYCLE` — `[PROVISIONAL]` Stage II–III Passives, Bleed-Out/Revive, Recruits & Keepsakes (`PR6-2..PR6-4`)
 
-- **Status**: **`[PROVISIONAL]`** — Wave 2 `.1` spec extending `ROSTER1` (`docs/archive/specs/ROSTER1.md`) and `PK2_GRAFTS.md` (§2) for ready-to-build slices `PR6-2`, `PR6-3`, and `PR6-4`.
+- **Status**: **`[PROVISIONAL]`** — `PR6-2` (`51dd62b2`) & `PR6-3` (`872df55c`) landed cleanly; `PR6-4` queued #1 in `READY.md` §1 (`ROSTER1` + `PK2_GRAFTS.md` §2).
 - **Parent Plan**: [WAVE2_PLAN.md](WAVE2_PLAN.md) | **Canon Authority**: [CANON.md](../../games/emberwake/docs/lore/CANON.md) (§2.2, §3.2, §4.2, `CL-07`).
 
 ---
 
-## 1. `PK2-STAGE-PASSIVES`: `calcify_2` & `calcify_3` (`PR6-2`)
+## 1. `PK2-STAGE-PASSIVES`: `calcify_2` & `calcify_3` (`PR6-2` — **DONE `51dd62b2`**)
 
-In `games/emberwake/data/catalog/unit_tracks.json`, `calcification` stages `1` (`calcify_1`) and `4` (`calcify_4`) carry passives, while stages `2` (*Calloused Chitin*) and `3` (*Sensory Rot*) are blank (`FB-221(a)`). Both stages become live before Act 2 Calcification builds ship (`PR6-2`).
+In `games/emberwake/data/catalog/unit_tracks.json`, `calcification` stages `1` (`calcify_1`) and `4` (`calcify_4`) carry passives, while stages `2` (*Calloused Chitin*) and `3` (*Sensory Rot*) were blank (`FB-221(a)`). Both landed cleanly in `PR6-2` (`pr6_2_stage_passives.json`, `0` golden diffs).
 
-### 1.1 Story-Free Kit Hooks (`kits/rpg/`, `0` Lore Words)
+### 1.1 Story-Free Kit Hooks (`kits/rpg/`, `0` Lore Words, landed `51dd62b2`)
 
-- **`Target::Armor` (`stat: "armor"` or effect `{"type": "armor", "value": N}` -> prefer extending `simple::TYPES` / `STATS` cleanly with `"armor"` / `"move_rate"` as flat `Stat` or dedicated `Target::Armor` + `Target::MoveRate`)**:
+- **`Target::Armor` & `Target::MoveRate` (`rpgkit_rules::grants` `stat: "armor"` / `"move_rate"`)**:
   - `Target::Armor`: summed in `rpgkit_rules::damage::base_armor_rating(u)` alongside `gear` and `mitigation_rating`, clamped `>= 0`.
-  - `Target::MoveRate`: summed in `rpgkit_rules::unit::Unit::move_per_block(&self)` as `(self.move_rate + self.passive_move_rate + hasted - slowed).max(1)`.
+  - `Target::MoveRate`: summed in `rpgkit_rules::unit::Unit::move_per_block(&self)` (`+ passive + gear + cond + hasted - slowed`, clamped `>= 1`, keeping `rating_set(MoveRate)` override).
 - **`"ranged"` Group + Optional `min_distance` Filter on `skill_potency`**:
-  - Add `"ranged"` to `rpgkit_content::check::simple::GROUPS` (`["spell", "heal", "channel", "ranged"]`).
-  - `rpgkit_rules::unit::skill_in_group(skill, "ranged")` matches `skill_is_ranged` (already factored in `PR5-62a`).
-  - Add optional whole key `min_distance` (`0..12`, default `0`) on `skill_potency`; when `min_distance > 0`, `damage::compute` applies the `skill_potency` value only when hit tile Manhattan/Chebyshev range `>= min_distance` (`min_distance: 4` = `"beyond 3 tiles"`).
+  - `rpgkit_rules::unit::GROUPS` & `rpgkit_content::check::simple::GROUPS` include `"ranged"` (`skill_in_group(s, "ranged") => skill_is_ranged(s)` — note basic `Strike` with a bow has `skill_is_ranged == false`).
+  - Optional whole key `min_distance` (`0..=12`, default `0`) on `skill_potency` evaluated via `potency_for_skill_at` / `power_for_at` / `HitInput.distance` (`min_distance: 4` = distance `>= 4`, bit-identical when `0`).
 
 ### 1.2 Catalog Passive Data (`passives.json` + `unit_tracks.json`)
 
@@ -28,25 +27,25 @@ In `games/emberwake/data/catalog/unit_tracks.json`, `calcification` stages `1` (
 
 ---
 
-## 2. `PR5-11` (`PR6-3`): Bleed-Out & Revive in Battle (`Act 2+`)
+## 2. `PR5-11` (`PR6-3` — **DONE `872df55c`**): Bleed-Out & Revive in Battle (`Act 2+`)
 
-Existing schema `RosterRule::bleed_out_rounds` (`rpgkit_data/src/lib.rs:1672`, checked `0..6` in `check/world.rs:843`) is parsed on `sunk_ward` Acts `2..3` (`roster.rules`) but not yet wired in `rpgkit_battle`.
+Existing schema `RosterRule::bleed_out_rounds` (`rpgkit_data/src/lib.rs:1672`, checked `0..6` in `check/world.rs:843`) now passes into `EncounterDef.bleed_out_rounds` -> `Session` (`872df55c`, `pr6_3_bleedout_revive.json`, `0` golden diffs).
 
-### 2.1 Rules & Edge Cases (`[kit hook]` `rpgkit_battle`, `emberwake_gui`)
+### 2.1 Rules & Edge Cases (`[kit hook]` `rpgkit_battle`, `emberwake_gui`, landed `872df55c`)
 
-- **Battle Init (`Session::bleed_out_rounds`)**: World battle launcher (`rpgkit_world::battle`) passes active rule row's `bleed_out_rounds`; `Dojo`, `sim`, and `ashlands`/`iron_reaches`/`tidewrack` default to `0` (`0` golden diffs).
-- **Downed Bleed Timer**: When `bleed_out_rounds > 0`, any deployed party `member` (never guests, never enemies) dropping to `0 HP` enters `downed` with `bleed_remaining = bleed_out_rounds` instead of immediate non-lethal stasis. At each `round_end` after status ticks, `bleed_remaining` decrements by `1`; reaching `0` transitions fate to `"dead"` (permanently non-revivable in this battle, battle log `"{name} bleeds out."`, departed `cause: "bled_out"` on settle).
+- **Battle Init (`Session::bleed_out_rounds`)**: World battle launcher (`rpgkit_world::battle::encounter_def_in`) passes active rule row's `bleed_out_rounds`; `Dojo`, `sim`, and `ashlands`/`iron_reaches`/`tidewrack` default to `0` (`0` golden diffs).
+- **Downed Bleed Timer (`PartyFate::Dead`)**: When `bleed_out_rounds > 0`, any deployed party `member` (never guests, never enemies) dropping to `0 HP` enters `downed` with `bleed_remaining = bleed_out_rounds` instead of immediate non-lethal stasis. At each `round_end` (`resolver::apply_round_end_effects`) after status/hazard ticks, `bleed_remaining` decrements by `1`; reaching `0` sets `PartyFate::Dead` (permanently non-revivable in this battle, battle log `"{name} bleeds out."`, departed `cause: "bled_out"` on settle).
 - **Occupied Cell Resolution on Revive (`FB-167` Q9 Fix)**:
   - A `SUPPORT` heal skill (`rally` `revive: true`) or healing consumable (`smelling_salts` `revive: true`) may target a `downed` (`bleed_remaining > 0`) ally cell even if another living unit currently stands on that tile.
-  - On resolve: if the downed ally's tile is free, revive in place; if occupied, search Chebyshev radius `1..=2` around the downed cell (nearest passable unoccupied floor tile sorted by deterministic distance -> `(y, x)` tie-break) and place the revived ally there. If all cells within radius `2` are blocked/impassable, planner/execution refuses cleanly with `"Space is blocked"`.
-  - Revived unit clears `bleed_remaining`, gains `max(heal_amount, 1)` HP (`clamp(1, max_hp)`), resumes normal turns from the next block (`AP` preserved from round start less already spent; prior cancelled plan stays cleared).
-- **Inspect & Tell UI (`emberwake_gui/src/battle/`)**: Downed party unit tooltip/banner shows `"Bleeds out in {n} round(s)"` cleanly (`dim`/`danger` tone when `n == 1`).
+  - On resolve: if the downed ally's tile is free, revive in place; if occupied, search Chebyshev radius `1..=2` around the downed cell (nearest passable unoccupied non-exit walkable tile sorted `(distance, y, x)`) and place the revived ally there. If all cells within radius `2` are blocked/impassable, planner/execution refuses cleanly with `"Space is blocked"`.
+  - Revived unit clears `bleed_remaining`, gains `max(heal_amount, 1)` HP (`clamp(1, max_hp)`), resumes normal turns preserving round `AP` less already spent while keeping prior cancelled plans cleared.
+- **Inspect & Tell UI (`emberwake_gui/src/battle/`)**: Downed cards, tokens & tooltips show `"Bleeds out in {n} round(s)"` (`th().foe` when `n == 1`, `th().dim` otherwise), `"Dead"`, or `"Down"`; clicking a downed bleeding card/token while planning targets it without switching selection.
 
-### 2.2 Act 2 Game Data (`[data]` via `aegis content`, `[PROVISIONAL]`)
+### 2.2 Act 2 Game Data (`[data]` via `aegis content`, landed `872df55c`)
 
-- `sunk_ward/world.json`: keep Act `0..1` row `bleed_out_rounds: 0`; set Act `2..3` row `bleed_out_rounds: 3`, `downed_won: "wounded"`, `downed_left: "captured"`, `downed_lost: "dead"`, `standing_lost: "wounded"`, `keepsakes_on: ["captured", "dead"]`.
-- `skills.json`: add `"revive": true` to Priest `L2` skill `rally` (*Urgent Triage*, `SUPPORT ALLY`, `2 AP / 2 blk`, `1–3`) — Act 1 behaviour unchanged (`0` diffs), Act 2 gives Priest vital rescue agency (`P-COMBAT-04`).
-- `items.json` / `shops.json`: add **`smelling_salts`** (*Brimstone Smelling Salts*, `COMMON` pouch `consumable`, `ap_cost: 1, blocks: 1, reach: 1`, `heal: 15, revive: true`, `15 Scrap`), stocked at `sabina_slab` and `varka_trade` from Act 2 (`pk2.slab_open`).
+- `sunk_ward/world.json`: keeps Act `0..1` row `bleed_out_rounds: 0`; sets Act `2..3` row `bleed_out_rounds: 3`, `downed_won: "wounded"`, `downed_left: "captured"`, `downed_lost: "dead"`, `standing_lost: "wounded"`, `keepsakes_on: ["captured", "dead"]`.
+- `skills.json`: adds `"revive": true` to Priest `L2` skill `rally` (*Urgent Triage*, `SUPPORT ALLY`, `2 AP / 2 blk`, `1–3`) — Act 1 behaviour unchanged (`0` diffs), Act 2 gives Priest vital rescue agency (`P-COMBAT-04`).
+- `items.json` / `shops.json`: adds **`smelling_salts`** (*Brimstone Smelling Salts*, `COMMON` `HEALTH_POTION`, `use_blocks: 1, use_reach: 1`, `1` `item_ap`, `heal: 15, revive: true, value: 15`), stocked at `sabina_slab` and `varka_trade` from Act 2 (`pk2.slab_open`).
 
 ---
 
@@ -67,7 +66,7 @@ Existing schema `RosterRule::bleed_out_rounds` (`rpgkit_data/src/lib.rs:1672`, c
 
 ### 3.2 Act 2 Sunk Ward Cohort Templates (`[PROVISIONAL]`, `CANON.md` §3.2 & `CL-07`)
 
-All Act 2 procedural recruits are **`18–24`** static Unsealed operatives wearing visors/cowls/scarves/goggles (never cloning barefaced Founders):
+All Act 2 procedural recruits are **`18–24`** static Unsealed operatives wearing visors/cowls/scarves/goggles (never cloning barefaced Founders; `AI-15` `7ddae3fd` already shipped `6` `portraits/common/<class>_cohort_<id>.png` portraits — wire valid `base_units` sprite bodies + portraits so `asset_checks` stays `0` errors):
 
 | Recruit Template ID | Cohort Archetype (`CANON.md` §3.2) | Class / Base Unit | Origin Passive (`slot: ""`, `~+1` stat flavor) | Shared Temperament Pool |
 | --- | --- | --- | --- | --- |

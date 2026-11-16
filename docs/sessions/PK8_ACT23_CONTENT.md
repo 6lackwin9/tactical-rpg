@@ -1,20 +1,20 @@
 # `PK8_ACT23_CONTENT` — `[PROVISIONAL]` Act 2–3 Content Wiring, Sample World Boundary & `WAVE2-BALANCE` (`PR6-1`, `PR6-5..`)
 
-- **Status**: **`[PROVISIONAL]`** — Wave 2 `.1` content, drop-hook, legacy-world parity, and balance tuning spec.
+- **Status**: **`[PROVISIONAL]`** — `PR6-1` (`29dfc241`) & `PR6-5` (`f132eabc`) **DONE**; `PR6-12` (`PK8-ACT2-CONTENT`) & `PR6-13` (`PK8-ACT3-CONTENT`) queued in `READY.md` §1 (`8`–`9`).
 - **Parent Plan**: [WAVE2_PLAN.md](WAVE2_PLAN.md) | **Canon**: [CANON.md](../../games/emberwake/docs/lore/CANON.md) (§4.1, §5.1–5.3, `CL-01..11`).
 
 ---
 
-## 1. Deferred Act 2 Drops, `MASTERY_BOOK`s & `pk2.*` Quest Setters (`PR6-5`, closing `FB-277`)
+## 1. Act 2 Drops, `MASTERY_BOOK`s & `pk2.*` Flags (`PR6-5` — **DONE `f132eabc`**, closing `FB-281`)
 
-`PR5-62c` (`48f24342`) authored the `15` weapon trees, `18` `gp_*` grafts, `30` `sg_*` surgeries, and `hearth_rite`, leaving Act 2 drops/books/`pk2.*` quest flags deferred to Wave 2:
+`PR5-62c` (`48f24342`) authored the `15` weapon trees, `18` `gp_*` grafts, `30` `sg_*` surgeries, and `hearth_rite`; **`PR6-5` (`f132eabc`, `26`-step `pr6_5_act2_drops_flags.json`, `0`-diff idempotent)** seeded the drops, manuals, shops, and `Act 1` base flags while reserving High Bastion `08-15` setters for `PR6-12`:
 
-| Hook Group (`FB-277`) | Target Files (`aegis content` seed) | Exact Provisional Wiring (`0` `ashlands`/`iron_reaches`/`tidewrack` edits) |
+| Hook Group (`FB-277` / `FB-281`) | Landed in `PR6-5` (`f132eabc`, `0` `ashlands`/`iron_reaches`/`tidewrack` edits) | Remaining `PR6-12` (`PK8-ACT2-CONTENT`) Work |
 | --- | --- | --- |
-| **`slot_*` Organ & Tissue Drops** | `catalog/encounters.json`, `worlds/sunk_ward/loot.json` | Add weighted/guaranteed drops on Act 1–2 `sunk_ward` foes: `calcified_husk` (`sinew_braid` / `ossified_bellows` + `slot_bone_spur` / `slot_chitin_plate`), `ash_crawler` (`sinew_braid` + `slot_blood_sac` + `caustic_gall_sac`), `tallow_dredger` (`caustic_gall_sac` + `slot_blood_sac`), `render_beast` (`stalker_optic_nerve` + `slot_eye_tissue` + `render_beast_tendon`), `mortuary_flagellant` / `purifier` (`slot_eye_tissue` / `Rock Salt`), `calcified_amalgam` (`titan_marrow_core`). |
-| **`black_iron_ingot`** (*Black-Iron Bar*) | `worlds/sunk_ward/{shops,loot}.json` | Stock `2` limited bars at `berek_hearth` gated on `pk2.masterwork_quest` (`80 Scrap` each), plus deterministic chest/clear rewards in `2.2` Fourth Kiln Stockades & `dunstan`/`berek` Foundry raid so Hearth `forge_rite` (`hearth_rite`), `train_third`, and `train_minor` stay bounded without infinite farm loops (`P-PROG-04`). |
-| **`15` `MASTERY_BOOK` Items** | `catalog/items.json`, `sunk_ward/{shops,loot}.json` | Author `15` `item_type: "MASTERY_BOOK"` manuals (`book_<family>`, `+150` base XP -> `+225` at `Prof 3`, `65 Scrap`, `stock: 1` per act at `berek_hearth` / `varka_trade` + Act 2 quest/cache drops) covering all `15` main-hand weapon families (`polearm`..`staff`). |
-| **`pk2.*` Flag Progression** | `worlds/sunk_ward/{sequences,quests,dialogues}.json` | Keep `seq_after_m5` setting `pk2.slab_open` + `pk2.hearth_open`; set `pk2.masterwork_quest` on `Berek`'s Act 2 *"Cold Slag, Black Iron"* clear (`post-2.2 Lucan`); set `pk2.minor_quest` on mid-Act 2 Foundry blueprint turn-in; set `pk2.apex_open` + `pk2.bone_scraping` on `2.4 Embalming Cloisters` (`Lazar` defeat); set `pk2.rite_<class>` on each Founder Loyalty node (OR **Survivor Inheritance** mentor quest when `roster.departed.<founder>` is true, `CL-09`). |
+| **`slot_*`, `rock_salt` & `titan_marrow_core` Drops** | `catalog/units.json`: additive loot (`sum(chance) <= 100`) on `calcified_husk` (`+slot_bone_spur 18%`, `+slot_chitin_plate 15%`), `ash_crawler`/`tallow_dredger` (`+slot_blood_sac 15%`), `render_beast` (`+slot_eye_tissue 15%`), `inquisitorial_purifier`/`mortuary_flagellant` (`+slot_eye_tissue 12%`, `+rock_salt 20%/18%` accepted in Act 1 too), `calcified_amalgam` (`+titan_marrow_core 5%`). | Tune Act 2 `high_bastion` foe loot tables & regional drop pacing as nodes `08-15` land. |
+| **`black_iron_ingot`** (*Black-Iron Bar*) | `sunk_ward/shops.json`: `loot_hearth_ingot_cache` (`count: 1`, `80` Scrap, `pk2.hearth_open`) + `black_iron_ingot` (`count: 2`, `80` Scrap, `pk2.masterwork_quest`) at `berek_hearth`. | Place bounded deterministic `black_iron_ingot` chest/clear rewards in `2.2` Fourth Kiln Stockades & Foundry raid (`P-PROG-04`). |
+| **`15` `MASTERY_BOOK` Items** | `catalog/items.json` + `item_families.json` (`manual`): `15` `book_<family>` items (`150` base XP, `65` Scrap, `price: -1`), stocked `count: 1` (`8` martial at `berek_hearth` `pk2.hearth_open`, `7` knave/occult at `varka_trade` `pk2.slab_open`). | Add bounded Act 2 exploration cache drops alongside `book_*` shop stock. |
+| **`pk2.*` Flag Progression** | `seq_after_m5` preserves `pk2.slab_open` + `pk2.hearth_open`. | Seed `high_bastion` (`08-15`) setters: `pk2.masterwork_quest` (post-`2.2` `Berek`), `pk2.minor_quest` (Foundry blueprint), `pk2.apex_open` + `pk2.bone_scraping` (`2.4` `Lazar` defeat), `pk2.rite_<class>` (Loyalty or Survivor Inheritance, `CL-09`). |
 
 ---
 
@@ -36,13 +36,13 @@
 
 ---
 
-## 3. `WAVE2-BALANCE` Scope & Tuning Plan (`PR6-1`, `FB-276` & `FB-277`)
+## 3. `WAVE2-BALANCE` Scope & Ratified Results (`PR6-1` — **DONE `29dfc241`**, closing `FB-278`)
 
-Wave 1 landed cleanly (`0 METRIC FAIL`, `0 PLAN FAIL`), flagging `4` targeted balance items for `PR6-1` immediately before Act 2 roster/boss tuning:
+Wave 1 landed cleanly (`0 METRIC FAIL`, `0 PLAN FAIL`), and **`PR6-1` (`29dfc241`, `pr6_1_balance.json`)** resolved all `4` targeted items cleanly (`sim sweep 5 30`: `mob 100%, line 88%, wave 60%, elite 78% X, boss 32%`; `sim party 5 30`: `mob 100%, line 83%, wave 67%, elite 80% X, boss 40%`; Crucible `0%`):
 
-| Observed Wave 1 Signal (`FB-276` / `FB-277`) | Root-Cause Audit | Exact `PR6-1` Candidate Knobs & Target Band |
+| Observed Wave 1 Signal (`FB-276` / `FB-277`) | Root-Cause Audit | Landed & Ratified `PR6-1` Solution (`29dfc241`, `FB-278`) |
 | --- | --- | --- |
-| **`brawler` `swap_delta: -9.4`, `top5_count: 1` (min `2`)** | `riveted_gauntlets` (`power 13`) + `forearm_braces` (`mit 3`, vs Warrior `13 + 6 mit shield` & `0.75x shield_bash`) paired with low `AP`-to-damage multipliers on `brawler_clinch` (`0.70x / 2 AP`) and `slag_charge` (`1.35x / 3 AP`). | **Data-only knobs**: raise `gauntlet` `base.main_1h.power` (`13 -> 15`) OR bump `brawler_clinch` (`0.70x -> 0.90x`) + `slag_charge` (`1.35x -> 1.50x`) and `forearm_braces` `mit 3 -> 4`. Target: `swap_delta` inside **`[-5.0, +5.0]`**, `top5_count >= 2`. |
-| **`sim sweep 5 10`: `line 92–95%` (target `70–90%`)** | `FB-276` left generated `line` `standard` enemy `warrior` without post-`PR5-62c` weapon skills (`hook_drag`). | Equip generated `line` `standard` enemies in `sim.json` / generator cleanly with `M1` family strikes (`hook_drag` on `warrior`, etc.) -> bring `line` cleanly to **`75–85%`**. |
-| **`sim party 5 10` `boss 20%` vs `sim party 5 30` `33–37%` / `sim sweep 34%`** | Small-sample (`10`-seed) variance plus `warrior`/`brawler` melee output dip dragging default `4`-hero squad (`warrior, ranger, priest, mage`). | Run `sim party 5 30` AND `sim sweep 5 30` after `brawler` & `line` fixes; tune `@boss` `+40% hp_pct` (`35%..40%`) only if 30-seed boss drifts out of **`30–50%`**, keeping Crucible `enc_evt_06` at **`0%`** win! |
-| **`[PROVISIONAL]` Mage AoE (`0.28 / 0.28 / 0.28 / 0.22`)** | Emergency flatten from `0.50x` prevented boss burst spikes, but risks making `cinder_spark` / `glacial_burst` feel flat vs `1H` single-target. | Compare `0.28/0.28/0.28/0.22` vs `0.32/0.30/0.32/0.25` in `aoe_swarm` & `sim party 5 30` (`counts=on`); ratify whichever keeps `mage` `swap_delta` in `[-3, +3]` & `boss` in `30–50%`. |
+| **`brawler` `swap_delta: -9.4`, `top5_count: 1` (min `2`)** | `riveted_gauntlets` (`power 13`) + `forearm_braces` (`mit 3`) paired with low `brawler_clinch` (`0.70x`) and `slag_charge` (`1.35x`). | **Ratified**: `gauntlet` `13 -> 15`, `forearm_braces +1 mit` (`3 -> 4`), `brawler_clinch` `0.70x -> 0.95x`, `slag_charge` `1.35x -> 1.60x` -> **`brawler -2.6 (top5 3)`**. |
+| **`sim sweep 5 10`: `line 92–95%` (target `70–90%`)** | Generated `line` `standard` foes lacked post-`PR5-62c` weapon skills. | **Ratified**: Added `Generated.enemy_mastery` (`rpgkit_sim`) and set `sim.json` `line.enemy_mastery: {"warrior": 1, "rogue": 1}` (`hook_drag` + `quick_stab`) -> **`line 88%` sweep / `83%` party**. |
+| **`sim party 5 10` `boss 20%` vs `sim party 5 30` `33–37%` / `sim sweep 34%`** | Small-sample (`10`-seed) variance plus `warrior`/`brawler` melee output dip. | **Ratified**: `@boss` `+40% hp_pct` needed no change; `30`-seed sweeps cleanly hit **`boss 32%` sweep / `40%` party** and Crucible `0%` (`elite 78–80%` kept `3-5%` above `50-75%` unless tuned in `PR6-13`). |
+| **`[PROVISIONAL]` Mage AoE (`0.28 / 0.28 / 0.28 / 0.22`)** | Emergency flatten kept boss spikes down but risked flat AoE feel vs `1H`. | **Ratified**: Raised to **`cinder_spark 0.32 / firebomb 0.30 / glacial_burst 0.32 / choke_cloud 0.25`** (`mage -0.6 (top5 3)`, `5.89` rnds clear in `aoe_swarm`). |
