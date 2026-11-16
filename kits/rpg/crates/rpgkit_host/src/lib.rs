@@ -543,6 +543,11 @@ fn pk_state(s: &Session, i: UnitId, v: &mut Value) {
     if u.pierce_melee {
         v["pierce_melee"] = json!(true);
     }
+    if s.w.is_dead(i) {
+        v["dead"] = json!(true);
+    } else if let Some(rem) = s.w.bleed_left(i) {
+        v["bleed_remaining"] = json!(rem);
+    }
 }
 
 fn scheduled(s: &Session) -> Vec<Value> {
@@ -627,6 +632,9 @@ fn items_of(s: &Session, u: UnitId, target: Option<UnitId>) -> Vec<Value> {
         if con.armor_piercing {
             row["armor_piercing"] = json!(true);
         }
+        if con.revive {
+            row["revive"] = json!(true);
+        }
         out.push(row);
     }
     out
@@ -666,6 +674,9 @@ fn skills_of(cat: &Catalog, s: &Session, u: UnitId) -> Vec<Value> {
             }
             if let Some(v) = rpgkit_battle::channel::version(w, u, sk).filter(|_| !rpgkit_battle::channel::only(sk)) {
                 row["channeled"] = json!({"cost": v.cost, "power": v.power, "pierce": v.pierce});
+            }
+            if sk.revive {
+                row["revive"] = json!(true);
             }
             out.push(row);
         }

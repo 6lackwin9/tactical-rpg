@@ -6,7 +6,8 @@
 //! downed on a loss or a flight departs dead while downed on a win stays wounded.
 
 use emberwake_battle::encounter::PartyFate;
-use emberwake_world::roster::{self, FightEnd, HeroEnd, DEAD, WOUNDED};
+use emberwake_world::battle;
+use emberwake_world::roster::{self, FightEnd, HeroEnd, CAPTURED, DEAD, WOUNDED};
 use emberwake_world::state::PartyState;
 use emberwake_world::{new_game, Data, GameState};
 use std::path::Path;
@@ -104,10 +105,54 @@ fn act_1_wounds_every_downed_or_beaten_member_and_departs_none() {
 }
 
 #[test]
-fn act_2_is_lethal_for_the_downed_on_a_loss_or_a_flight_and_wounds_the_downed_on_a_win() {
+fn act_2_is_lethal_for_the_downed_on_a_loss_captures_on_flight_and_wounds_on_win() {
     let d = data();
     let got: Vec<(&str, String)> = settle_all(&d, 2).into_iter().map(|(label, _, got)| (label, got)).collect();
     let of = |label: &str| got.iter().find(|(l, _)| *l == label).map(|(_, g)| g.clone()).unwrap_or_default();
-    assert_eq!((of("downed, lost"), of("downed, left")), (DEAD.to_string(), DEAD.to_string()), "act 2: downed and beaten or fled departs dead");
+    assert_eq!(of("downed, lost"), DEAD, "act 2: downed on a loss departs dead");
+    assert_eq!(of("downed, left"), CAPTURED, "act 2: downed left behind on flight is captured (PK3)");
     assert_eq!(of("downed, won"), WOUNDED, "act 2: downed on a win stays wounded");
+}
+
+#[test]
+fn pr6_3_bleedout_rules_revive_skill_salts_and_act_2_shops_match_spec() {
+    let d = data();
+    let act1 = roster::rule(&d, &game(&d, 1)).expect("act 1 roster rule");
+    let act2 = roster::rule(&d, &game(&d, 2)).expect("act 2 roster rule");
+    let act3 = roster::rule(&d, &game(&d, 3)).expect("act 3 roster rule");
+    assert_eq!(act1.bleed_out_rounds, 0, "act 1 uses classic non-bleeding stasis");
+    assert_eq!(act2.bleed_out_rounds, 3, "act 2 sets 3-round bleed-out");
+    assert_eq!(act3.bleed_out_rounds, 3, "act 3 sets 3-round bleed-out");
+    assert_eq!(act2.keepsakes_on.as_deref(), Some(&["captured".to_string(), "dead".to_string()][..]));
+
+    let enc_row = d
+        .catalogs
+        .own_entries(WORLD, "encounters")
+        .iter()
+        .find(|e| !aegis_core::json::s(e, "id").is_empty())
+        .expect("an encounter in sunk_ward");
+    assert_eq!(battle::encounter_def_in(&d, &game(&d, 1), WORLD, enc_row).bleed_out_rounds, 0);
+    assert_eq!(battle::encounter_def_in(&d, &game(&d, 2), WORLD, enc_row).bleed_out_rounds, 3);
+
+    let rally = d.cat.skill("rally").expect("rally skill");
+    assert!(rally.revive, "rally grants revive in PR6-3");
+
+    let salts = d.cat.items.get("smelling_salts").expect("smelling_salts item");
+    assert!(salts.revive && salts.heal == 15 && salts.use_blocks == 1 && salts.use_reach == 1);
+    let salts_row = d.entry("items", "smelling_salts");
+    assert_eq!(aegis_core::json::i(salts_row, "value", 0), 15);
+    assert_eq!(aegis_core::json::s(salts_row, "icon_id"), "smelling_salts");
+
+    for shop_id in ["sabina_slab", "varka_trade"] {
+        let shop = d.catalogs.resolve(WORLD, "shops", shop_id);
+        let row = aegis_core::json::aget(shop, "stock")
+            .iter()
+            .find(|r| r.get("item").and_then(|v| v.as_str()) == Some("smelling_salts"))
+            .unwrap_or_else(|| panic!("{shop_id} stocks smelling_salts"));
+        let flags = row["requires_flags"].as_array().expect("requires_flags");
+        assert!(
+            flags.iter().any(|f| f["key"] == "pk2.slab_open" && f["value"] == true),
+            "{shop_id} gates smelling_salts behind pk2.slab_open"
+        );
+    }
 }

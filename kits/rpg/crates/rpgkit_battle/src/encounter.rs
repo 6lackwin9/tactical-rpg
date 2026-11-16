@@ -278,6 +278,8 @@ pub enum PartyFate {
     Stood,
     /// At 0 HP.
     Downed,
+    /// PK3: bled out to 0 rounds during battle (permanently dead, departs regardless of outcome).
+    Dead,
     /// Still on the field.
     Standing,
 }
@@ -289,6 +291,7 @@ impl PartyFate {
             PartyFate::Stayed => "stayed",
             PartyFate::Stood => "stood",
             PartyFate::Downed => "downed",
+            PartyFate::Dead => "dead",
             PartyFate::Standing => "standing",
         }
     }

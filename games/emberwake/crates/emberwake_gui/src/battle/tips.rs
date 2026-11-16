@@ -702,10 +702,27 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
             t.push((format!("{} deals about {} with a Strike, takes about {}", w.units[h].name, expected(w, h, i, strike, None, 0.0, 1.0), expected(w, i, h, strike, None, 0.0, 1.0)), ALLY));
         }
     }
-    if !u.is_alive() {
-        t.push(("Down".into(), th().dim));
+    if let Some(banner) = downed_banner(w, i) {
+        t.push(banner);
     } else if u.is_withdrawn {
         t.push(("Left the battle".into(), th().dim));
     }
     t
+}
+
+/// PK3: downed status banner and tone (`Dead`, `Bleeds out in {n} round(s)`, or classic `Down`).
+pub(super) fn downed_banner(w: &emberwake_battle::world::World, i: usize) -> Option<(String, Rgba)> {
+    let u = w.units.get(i)?;
+    if u.is_alive() {
+        return None;
+    }
+    if w.is_dead(i) {
+        Some(("Dead".into(), th().foe))
+    } else if let Some(n) = w.bleed_left(i) {
+        let col = if n == 1 { th().foe } else { th().dim };
+        let unit = if n == 1 { "round" } else { "rounds" };
+        Some((format!("Bleeds out in {n} {unit}"), col))
+    } else {
+        Some(("Down".into(), th().dim))
+    }
 }

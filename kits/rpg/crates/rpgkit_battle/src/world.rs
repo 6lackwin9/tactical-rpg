@@ -300,6 +300,14 @@ pub struct World {
     /// weapon is locked too (`wear::problem`). False (the default dulled penalty alone) in every battle the sims do not switch;
     /// only the sim key `dulled=lock` sets it.
     pub dulled_lock: bool,
+    /// PK3: rounds a downed deployed party member has before bleeding out permanently (0 = classic non-bleeding stasis).
+    pub bleed_out_rounds: i32,
+    /// PK3: deployed party members eligible for bleed-out (never guests, never enemies).
+    pub bleed_heroes: Vec<UnitId>,
+    /// PK3: downed party member -> rounds remaining before bleeding out permanently in this battle.
+    pub bleed_remaining: IndexMap<UnitId, i32>,
+    /// PK3: deployed party members that bled out to 0 rounds this battle (non-revivable).
+    pub dead: Vec<UnitId>,
 }
 
 /// PHASEFX1 (ACTS23 PK6 hook l, engine-only): who fights whom once a phase `side` turned units `hostile_all`. A rogue
@@ -407,6 +415,7 @@ impl World {
     }
 
     fn damage_as(&mut self, c: UnitId, amount: i32, mitigated: bool, past_unkillable: bool) -> i32 {
+        let was_alive = self.units[c].is_alive();
         let dealt = self.units[c].take_damage(amount, mitigated);
         if self.units[c].hp == 0 && !past_unkillable && self.unkillable.contains(&c) {
             self.units[c].hp = 1;
@@ -414,8 +423,84 @@ impl World {
                 self.spared.push(c);
             }
         }
+        if was_alive
+            && self.units[c].hp == 0
+            && self.bleed_out_rounds > 0
+            && self.bleed_heroes.contains(&c)
+            && !self.dead.contains(&c)
+            && !self.units[c].is_withdrawn
+        {
+            self.bleed_remaining.insert(c, self.bleed_out_rounds);
+        }
         self.journal(c);
         dealt
+    }
+
+    /// PK3: remaining bleed-out rounds for downed bleeding party member `c` (None if alive, dead, withdrawn, or classic).
+    pub fn bleed_left(&self, c: UnitId) -> Option<i32> {
+        let u = self.units.get(c)?;
+        if u.is_alive() || u.is_withdrawn || self.dead.contains(&c) {
+            return None;
+        }
+        self.bleed_remaining.get(&c).copied().filter(|&n| n > 0)
+    }
+
+    /// PK3: whether `c` has bled out permanently in this battle.
+    pub fn is_dead(&self, c: UnitId) -> bool {
+        self.dead.contains(&c)
+    }
+
+    /// PK3: whether `c` is a downed bleeding party member eligible to be revived.
+    pub fn can_revive(&self, c: UnitId) -> bool {
+        self.bleed_left(c).is_some()
+    }
+
+    /// PK3: cell where downed unit `c` will stand upon revive: in place if unoccupied, else nearest passable
+    /// unoccupied non-exit floor tile within Chebyshev radius `1..=2`, sorted by `(distance, y, x)`.
+    pub fn revive_cell(&self, c: UnitId) -> Option<V2> {
+        let at = self.grid.positions.get(c).copied().flatten()?;
+        if self.occupant(at).is_none() {
+            return Some(at);
+        }
+        for r in 1..=2 {
+            let mut found: Option<V2> = None;
+            for y in (at.y - r)..=(at.y + r) {
+                for x in (at.x - r)..=(at.x + r) {
+                    if (x - at.x).abs().max((y - at.y).abs()) != r {
+                        continue;
+                    }
+                    let cell = V2::new(x, y);
+                    if self.grid.is_valid(cell)
+                        && self.grid.is_walkable(cell)
+                        && !self.grid.is_exit(cell)
+                        && self.occupant(cell).is_none()
+                        && found.is_none_or(|b| (cell.y, cell.x) < (b.y, b.x))
+                    {
+                        found = Some(cell);
+                    }
+                }
+            }
+            if found.is_some() {
+                return found;
+            }
+        }
+        None
+    }
+
+    /// PK3: revives downed bleeding party member `c` at `revive_cell(c)` with `max(amount, 1)` clamped to `1..=max_hp`,
+    /// clearing `bleed_remaining` and journaling HP; refuses with `"Space is blocked"` if no radius `1..=2` cell is free.
+    pub fn revive(&mut self, c: UnitId, amount: i32) -> Result<(V2, i32), &'static str> {
+        if !self.can_revive(c) {
+            return Err("Target cannot be revived.");
+        }
+        let dest = self.revive_cell(c).ok_or("Space is blocked")?;
+        self.grid.positions[c] = Some(dest);
+        let max = self.units[c].max_hp.max(1);
+        let hp = heal_taken(amount, self.units[c].band_heal_taken).clamp(1, max);
+        self.units[c].hp = hp;
+        self.bleed_remaining.shift_remove(&c);
+        self.journal(c);
+        Ok((dest, hp))
     }
 
     /// Combatant.heal on unit `c` (journaled; a downed unit is not healed and nothing is recorded). PK1-S1 (3.1): every

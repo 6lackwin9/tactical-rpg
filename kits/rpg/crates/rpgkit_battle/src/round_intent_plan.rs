@@ -637,6 +637,7 @@ impl<'a> Builder<'a> {
             return Err(format!("{} has no {} skill.", self.w.units[self.c].name, self.intent.label(&self.w.cat)));
         }
         let mut first: Option<String> = None;
+        let mut blocked = false;
         for &sid in &self.order {
             // MV8: a DISENGAGE skill (a jump) belongs to Disengage rounds, and there goes last while a Maneuver attack
             // can open
@@ -646,9 +647,15 @@ impl<'a> Builder<'a> {
             match self.try_opener(plan, &Opener::Skill(sid)) {
                 Ok(()) => return Ok(Opener::Skill(sid)),
                 Err(e) => {
+                    if e == "Space is blocked" {
+                        blocked = true;
+                    }
                     first.get_or_insert(e);
                 }
             }
+        }
+        if blocked {
+            return Err("Space is blocked".into());
         }
         Err(match self.target {
             // INPUT1 MR5: every Engage that could open found the target's flank protected
@@ -699,6 +706,14 @@ impl<'a> Builder<'a> {
                     RoundTarget::Unit(t) if t != self.c => {
                         if self_only {
                             return Err(format!("{} acts only on its user.", s.name));
+                        }
+                        if !w.units[t].is_active() {
+                            if !(s.revive && w.can_revive(t)) {
+                                return Err("Target is down.".into());
+                            }
+                            if w.revive_cell(t).is_none() {
+                                return Err("Space is blocked".into());
+                            }
                         }
                         let step = PlanStep::ally(sid, t);
                         let band = skill::support_reach(s, u);
@@ -824,6 +839,14 @@ impl<'a> Builder<'a> {
             return Ok(steps);
         }
         let Some(t) = self.target_unit() else { return Err(format!("{} needs a unit to aim at.", item.name)) };
+        if !w.units[t].is_active() {
+            if !(item.revive && item.battle_reach() > 0 && w.can_revive(t) && !w.foes_of(self.c).contains(&t)) {
+                return Err("Target is down.".into());
+            }
+            if w.revive_cell(t).is_none() {
+                return Err("Space is blocked".into());
+            }
+        }
         let reach = item.battle_reach();
         if t != self.c && st.pos.dist(w.pos(t)) > reach {
             let tile = self.approach_tile(plan, st.pos, w.pos(t), 1, reach.max(1)).ok_or("No path to get within reach.")?;

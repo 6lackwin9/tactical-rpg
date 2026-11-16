@@ -389,6 +389,7 @@
 			"heal_stat": "KNOW",
 			"heal_base": 14,
 			"heal_mult": 1.4,
+			"revive": true,
 			"grant_status": "haste",
 			"riders": [
 				{

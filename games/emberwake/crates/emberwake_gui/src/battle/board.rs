@@ -354,7 +354,12 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
         let a = tokens.anims.get(i).unwrap_or(&still);
         let facing = if tokens.anims.get(i).is_some() { a.faces(anim_now, if instant { 0 } else { tuning.walk_ms }) } else { Facing::side(!ally) };
         if !alive && !still_dying(&mut cx.art, a, body.as_deref(), anim_now, instant, tuning.death_hold_ms) {
-            ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, "x", BODY, th().dim);
+            let col = if w.is_dead(i) || w.bleed_left(i) == Some(1) { th().foe } else { th().dim };
+            ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, "x", BODY, col);
+            if w.occupant(pos).is_none() && (w.can_revive(i) || w.is_dead(i)) {
+                let tip = unit_tip(s, i, sel, tells, rounds, classes);
+                ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), r, true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
+            }
             continue;
         }
         let (flash, shake) = flash_of(flashes, i, now, tuning, reduce || instant);
@@ -411,6 +416,10 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
             }
         }
         if !alive {
+            if w.occupant(pos).is_none() && (w.can_revive(i) || w.is_dead(i)) {
+                let tip = unit_tip(s, i, sel, tells, rounds, classes);
+                ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), r, true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
+            }
             continue;
         }
         // VISCLAR1 VC2, VC3: under the round intent the bars of the focus set (Alt or `all_bars`: every unit's)
@@ -814,7 +823,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     let u = &w.units[t.i];
                     let (fx, fy) = t.foot;
                     if !t.standing {
-                        ui.p.text_center(fx as f32, fy as f32 - ui.p.line_h(BODY) / 2.0, "x", BODY, th().dim);
+                        let col = if w.is_dead(t.i) || w.bleed_left(t.i) == Some(1) { th().foe } else { th().dim };
+                        ui.p.text_center(fx as f32, fy as f32 - ui.p.line_h(BODY) / 2.0, "x", BODY, col);
                     } else if t.alive && bars_shown(overlay.is_some(), &layers, alt, &focus, t.i) {
                         // VISCLAR1 VC2, VC3: under the round intent the focus set's bars (Alt or `all_bars`: all)
                         hp_bar(&mut ui.p, Rect::new(fx - 12, fy + 3, 24, 2), t.hp, u.max_hp, if t.ally { th().good } else { th().foe });
@@ -888,6 +898,13 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
             tip.extend(marks.tile_tip(c));
             tip.extend(hold.map(|h| h.tile_tip(w, c)).unwrap_or_default());
             ui.push(format!("tile.{gx}.{gy}"), "tile", w.grid.terrain_id(c), geo.cell_rect(c), planning, false, if w.occupant(c).is_none() { Some(Action::TileClick(c)) } else { None }, tip);
+        }
+    }
+    for t in &units {
+        if !t.alive && w.occupant(t.pos).is_none() && (w.can_revive(t.i) || w.is_dead(t.i)) {
+            let u = &w.units[t.i];
+            let tip = unit_tip(s, t.i, sel, tells, rounds, classes);
+            ui.push(format!("unit.{}", t.i), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), geo.cell_rect(t.pos), true, Some(t.i) == sel, Some(Action::UnitClick(t.i)), tip);
         }
     }
     for p in &order {

@@ -227,7 +227,20 @@ impl BattleScreen {
     pub(super) fn run(&mut self, cx: &mut Cx, a: Action) {
         match a {
             Action::Select(u) => {
-                // INPUT1 SL4, SL6 (round intent): a party card always selects; the selected hero's card selects nothing
+                // INPUT1 SL4, SL6 (round intent): a party card always selects; the selected hero's card selects nothing.
+                // PK3: a living hero selecting a downed bleeding party card targets it for revive instead of switching selection.
+                if let Some(s) = self.host.session.as_ref() {
+                    if !s.w.units[u].is_active() {
+                        let can_target = self.planning() && s.w.can_revive(u) && self.selected.is_some_and(|h| h != u && s.w.units[h].is_active());
+                        if can_target {
+                            self.unit_click(cx, u);
+                        } else if self.selected == Some(u) {
+                            self.selected = None;
+                            self.popup = None;
+                        }
+                        return;
+                    }
+                }
                 let again = self.selected == Some(u) && self.host.session.as_ref().is_some_and(|s| ri::on(&s.w));
                 self.selected = if again { None } else { Some(u) };
                 self.popup = None;

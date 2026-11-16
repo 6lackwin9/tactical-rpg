@@ -78,6 +78,8 @@ pub struct EncounterDef {
     /// ENCOUNTER2-C4: the players' tactics a scripted round drafts its auto heroes with (`script::Tactics`); set by its
     /// caller (the game's battle screen, the host's `new` key `tactics`); never read from the row (none = balanced).
     pub tactics: crate::script::Tactics,
+    /// PK3: rounds a downed deployed party member has to be revived before bleeding out (0 = classic non-bleeding stasis).
+    pub bleed_out_rounds: i32,
     /// The whole entry (objective and morale fields are read from it).
     pub raw: Obj,
 }
@@ -122,6 +124,7 @@ impl EncounterDef {
             ruleset,
             plan_reveal: false,
             tactics: Default::default(),
+            bleed_out_rounds: 0,
             raw: o.clone(),
         }
     }
@@ -309,6 +312,8 @@ pub struct Session {
     pub kill_past_unkillable: bool,
     /// S1: how many of `w.spared` have their log cell.
     spared_logged: usize,
+    /// PK3: how many of `w.dead` have their log cell.
+    dead_logged: usize,
     /// ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the encounter's own lines for the combat log, each with the
     /// length of the resolver log when it was said: a phase's `line` ("[Phase] <phase>: <line>") and a phase kill
     /// ("[Kill] <who> fall."). The resolver log itself is untouched (host replies and parity read it); `log_lines`
@@ -492,7 +497,8 @@ impl Session {
             fallback_any: sb.fallback_any,
             heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
         });
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen, sides: Default::default(), marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()), skill_uses: IndexMap::new(), weapon_attacks: IndexMap::new(), dulled_lock: false };
+        let bleed_heroes: Vec<UnitId> = (0..n_allies).filter(|c| !guests.contains(c)).collect();
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen, sides: Default::default(), marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()), skill_uses: IndexMap::new(), weapon_attacks: IndexMap::new(), dulled_lock: false, bleed_out_rounds: def.bleed_out_rounds.max(0), bleed_heroes, bleed_remaining: IndexMap::new(), dead: Vec::new() };
         // PK2-S5b: without the rule `durability` no unit tracks weapon wear
         crate::wear::clear_without_rule(&mut w);
         w.add_item_skills();
@@ -579,6 +585,7 @@ impl Session {
             timeout_outcome,
             kill_past_unkillable: encounter::KILL_OVERRIDES_UNKILLABLE,
             spared_logged: 0,
+            dead_logged: 0,
             encounter_lines: Vec::new(),
             log_marks: Vec::new(),
             talks: Vec::new(),
@@ -1721,6 +1728,7 @@ impl Session {
             if end_of_round {
                 self.mark_log(self.current_round, LOG_ROUND_END);
                 self.resolver.apply_round_end_effects(&mut self.w);
+                self.log_bled_out(self.current_round);
                 self.log_triggers(self.current_round, block);
                 self.log_ground(self.current_round, block);
             }
@@ -2048,6 +2056,8 @@ impl Session {
                 let u = &self.w.units[c];
                 let fate = if self.objective.stayed.contains(&c) {
                     PartyFate::Stayed
+                } else if self.w.is_dead(c) {
+                    PartyFate::Dead
                 } else if !u.is_alive() {
                     PartyFate::Downed
                 } else if u.is_withdrawn {
@@ -2119,6 +2129,19 @@ impl Session {
             let line = format!("{name} will not fall here.");
             let ally = self.w.allies.contains(&c);
             self.append(crate::log::Entry::event(round, block, &name, ally, "Unkillable", "Unkillable", "SPARED", &line, ""));
+            self.events.push(line);
+        }
+    }
+
+    /// PK3: one EVENT cell (and event line) for each party member that bled out at round end.
+    fn log_bled_out(&mut self, round: i32) {
+        while self.dead_logged < self.w.dead.len() {
+            let c = self.w.dead[self.dead_logged];
+            self.dead_logged += 1;
+            let name = self.w.units[c].name.clone();
+            let line = format!("{name} bleeds out.");
+            let ally = self.w.allies.contains(&c);
+            self.append(crate::log::Entry::event(round, LOG_ROUND_END, &name, ally, "Bleed Out", "Bleed Out", "DEAD", &line, ""));
             self.events.push(line);
         }
     }

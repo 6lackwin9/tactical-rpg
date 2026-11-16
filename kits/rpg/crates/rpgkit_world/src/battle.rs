@@ -51,10 +51,11 @@ pub fn plan_reveal(d: &Data, gs: &GameState, world: &str) -> bool {
     !flag.is_empty() && quest::condition_met(gs, json::dict(&serde_json::json!({"key": flag})))
 }
 
-/// `encounter_def` with the game state's reveal (V3): the battle the world runner starts.
+/// `encounter_def` with the game state's reveal (V3) and active bleed-out rounds (PK3): the battle the world runner starts.
 pub fn encounter_def_in(d: &Data, gs: &GameState, world: &str, entry: &Dict) -> EncounterDef {
     let mut def = encounter_def(d, world, entry);
     def.plan_reveal = plan_reveal(d, gs, world);
+    def.bleed_out_rounds = crate::roster::rule(d, gs).map_or(0, |r| r.bleed_out_rounds.max(0));
     def
 }
 
