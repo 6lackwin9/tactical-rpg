@@ -1,43 +1,44 @@
 # `WAVE2_PLAN` — `[PROVISIONAL]` Wave 2 Master Plan (`PK2-STAGE-PASSIVES`, `WAVE2-BALANCE`, `PK3..PK8`)
 
-- **Status**: **`[PROVISIONAL]`** — Ready for Wave 2 Build execution & interactive user review (`docs/PRINCIPLES.md` §0, `ACTS23.md` §4).
-- **Baseline**: `origin/main` / `origin/develop` (`43a6cbd8`: `PR5-57..62c` + `CTX-CLEANUP1-FINAL` Wave 1 release).
+- **Status**: **`[PROVISIONAL]`** — Active Wave 2 roadmap (`PR6-1`..`PR6-3`, `PR6-5`, `AI-15` landed; `ACTS23-R6`/`R7` `[PROVISIONAL]` `B1..B7` integrated; `PR6-4`, `PR6-6..PR6-13` queued in `READY.md` §1 for review & Build).
+- **Baseline**: `origin/develop` (`f132eabc`: `PR5-57..62c` + Wave 2 `PR6-1`, `PR6-2`, `PR6-3`, `PR6-5` & `AI-15` `7ddae3fd`).
 - **Locked Foundation**: [CANON.md](../../games/emberwake/docs/lore/CANON.md) (§1–§6 `[LOCKED]`), [ACTS23.md](../specs/ACTS23.md) (Q-A1..Q-A10, Channel §5.1, Techniques §5.2), [PK1_CORRUPTION.md](PK1_CORRUPTION.md), [PK2_GRAFTS.md](PK2_GRAFTS.md), [PRINCIPLES.md](../PRINCIPLES.md).
 
 ---
 
 ## 1. Wave 2 `.1` Session Index (`<= 300 L / <= 25 KB` per file)
 
-| Domain Spec | Release Wave | Covered Systems & Held Items | Target Queue |
+| Domain Spec | Release Wave | Covered Systems & Landed / Queued Items | Target Queue |
 | --- | --- | --- | --- |
-| [PK3_ROSTER_LIFECYCLE.md](PK3_ROSTER_LIFECYCLE.md) | `R5-Finish` | `PK2-STAGE-PASSIVES` (`calcify_2`/`calcify_3`), `PR5-11` Bleed-out & Revive (`rally` + `smelling_salts`), `PR5-14` Recruit Generator (`18-24` Act 2 Cohorts, `pool`, `Isolation Crypts`, `Living Martyrs`), `PR5-15` Procedural Keepsakes (`by_class`) | `PR6-2..PR6-4` (`§1`) |
-| [PK4_PK5_CAMPAIGN_HUB.md](PK4_PK5_CAMPAIGN_HUB.md) | `R6` | `PK4` Campaign Pressure (`Doctrine` `-100..+100` + play-input triggers, Act 2–3 Checkpoints, `2.4` Great Tithing Reveal, Act 3 Hard Clock + Tallow scarcity); `PK5` Hub Facilities (`5 × 3` tiers) + Connected-Room Alert Sieges (`Ruthven` `25%` retreat) | `§2` Feasibility -> `§1` (`PR6-6..PR6-9`) |
-| [PK6_PK7_BOSSES_ENDINGS.md](PK6_PK7_BOSSES_ENDINGS.md) | `R7` | `PK6` Boss & Act 3 Tech (Bell/Mantle Resonance hazard meters, `3.5->3.6` Altar-lip `camp_prep`, Dream-Echo retries w/ day cost, `Node 20` Saint-Weapon `swap`/`side`, `3.5/3.6` multi-phase); `PK7` Endings `A / B / C`, Epilogue & Extinguished screens | `§2` Feasibility -> `§1` (`PR6-10..PR6-13`) |
-| [PK8_ACT23_CONTENT.md](PK8_ACT23_CONTENT.md) | `R5-Finish` -> `R7` | Deferred Act 2 drop & `pk2.*` quest hooks (`slot_*`, `black_iron_ingot`, `15` `MASTERY_BOOK`s), `sunk_ward` Act 2 `high_bastion` (`08-15`) & Act 3 `mantle_fissure` (`16-22`) content map, legacy sample world parity (`iron_reaches`, `tidewrack`, `ashlands`), & `WAVE2-BALANCE` (`brawler -9.4`, `sim party`, `line 92-95%`, Mage AoE) | `PR6-1`, `PR6-5` (`§1`) + Act 2/3 waves |
+| [PK3_ROSTER_LIFECYCLE.md](PK3_ROSTER_LIFECYCLE.md) | `R5-Finish` | `PR6-2` `PK2-STAGE-PASSIVES` (**done `51dd62b2`**), `PR6-3` Bleed-out & Revive (**done `872df55c`**), `PR6-4` Recruit Generator (`18-24` Act 2 Cohorts, `pool`, `Isolation Crypts`, `Living Martyrs`) & Procedural Keepsakes (`by_class` + `AI-15` `7ddae3fd` assets) | `PR6-4` (`§1` #1) |
+| [PK4_PK5_CAMPAIGN_HUB.md](PK4_PK5_CAMPAIGN_HUB.md) | `R6` | `ACTS23-R6` **audited (`B2..B6` `[PROVISIONAL]`)**: `PK4` (`FX_DOCTRINE`, `signed` lean tracks, strain telemetry, `after_flag`+`offset_days` Checkpoints, `clock_set.keep_longer`, Act 3 Hard Clock + `supply_price_mult_by_act` `2.0x` Tallow); `PK5` (`facilities` `5 × 3` + `sieges.json` w/ `Ruthven` `25%` `"rout"` + `hp_floor: 25`) | `PR6-6`, `PR6-8`, `PR6-9` (`§1`) |
+| [PK6_PK7_BOSSES_ENDINGS.md](PK6_PK7_BOSSES_ENDINGS.md) | `R7` | `ACTS23-R7` **audited (`B1` Option B, `B7` `[PROVISIONAL]`)**: `PK6` (Regional `start_meter`, `when_meter`+`every_rounds`+`ground.rs:408`, `"$captive_unit"`, `Step::CampPrep`, `retry_day_cost`, `echo_fallen`, `1x1` cell + `2x2` oversize art); `PK7` (`END_KINDS::ending`, `endings.json` `A / B / C`, `EpilogueScreen`) | `PR6-7`, `PR6-10`, `PR6-11` (`§1`) |
+| [PK8_ACT23_CONTENT.md](PK8_ACT23_CONTENT.md) | `R5-Finish` -> `R7` | `PR6-1` `WAVE2-BALANCE` (**done `29dfc241`**), `PR6-5` Act 2 drops/books (**done `f132eabc`**), `sunk_ward` Act 2 `high_bastion` (`08-15` + deferred `pk2.*`) & Act 3 `mantle_fissure` (`16-22` + `A/B/C`), plus legacy parity (`iron_reaches`, `tidewrack`, `ashlands`) | `PR6-12`, `PR6-13` (`§1`) |
 
 ---
 
 ## 2. Wave 2 Execution Order & Release Gates
 
 ```text
-43a6cbd8 (Wave 1 Release)
-  ├─► PR6-1  [WAVE2-BALANCE]          (brawler -9.4, line 70-90%, Mage AoE review, sim party 5 30 + sweep)
-  └─► PR6-2  [PK2-STAGE-PASSIVES]     (armor / move_rate / ranged min_distance kit grants -> calcify_2, calcify_3)
-        └─► PR6-3  [PK3-BLEEDOUT-REVIVE]     (bleed_out_rounds, revive cell-resolve, rally + smelling_salts, HUD tell)
-              └─► PR6-4  [PK3-RECRUITS-KEEPSAKES] (pool, Cohorts generator, crypts, Martyrs fuse, by_class keepsakes)
-                    └─► PR6-5  [ACT2-DROPS-PK2-FLAGS] (15 MASTERY_BOOK, slot_* drops, black_iron_ingot stock, pk2.* hooks)
-                          ├─► R6: PK4 (Doctrine, Checkpoints, Act 3 Clock/Tallow) + PK5 (Facilities x3, Connected Sieges) + Act 2 PK8 (high_bastion 08-15)
-                          └─► R7: PK6 (Resonance, Node 20, Altar Camp Prep, Dream-Echoes) + PK7 (Endings A/B/C) + Act 3 PK8 (mantle_fissure 16-22)
+43a6cbd8 (Wave 1 Release) -> f132eabc (PR6-1/2/3/5 + AI-15 DONE)
+  ├─► PR6-4  [PK3-RECRUITS-KEEPSAKES]   (pool, Cohorts, crypts, Martyrs fuse, by_class keepsakes)
+  ├─► PR6-6  [PK4-CAMPAIGN-HOOKS1]      (FX_DOCTRINE, signed lean, strain telemetry, keep_longer, after_flag)
+  │     ├──► PR6-8  [PK5-HUB-FACILITIES1] (5x3 facilities, supply_price_mult_by_act 2.0x, UI)
+  │     └──► PR6-9  [PK5-SIEGES1]         (sieges.json carry-over, Ruthven 25% "rout" + hp_floor: 25)
+  ├─► PR6-7  [PK6-BATTLE-HOOKS1]        (start_meter, when_meter/every_rounds, "$captive_unit")
+  │     └──► PR6-10 [PK6-STORY-PREP1]     (Step::CampPrep, retry_day_cost, echo_fallen)
+  └─► PR6-11 [PK7-ENDINGS1]             (END_KINDS::ending, endings.json, EpilogueScreen)
+        └──► PR6-12 [PK8-ACT2-CONTENT] -> PR6-13 [PK8-ACT3-CONTENT] (sunk_ward 08-22, 2x2 art, sim parity)
 ```
 
 - **Strict Parity Invariant (`P-ARCH-02`, `P-CAMP-01`)**: `ashlands`, `iron_reaches`, and `tidewrack` stay `classic` ruleset fixtures (`0` Act 2–3 bleed-out, Strain, durability, or Martyr mechanics leak into classic fights; `journey_golden`, `phasefold_golden`, and `rules_contract_golden` change ONLY when a slice explicitly names a golden update in [READY.md](../READY.md)).
-- **Dual Layer Split (`P-ARCH-01`, `fc.sh layers`)**: Every new rule/hook added in `PK2-STAGE-PASSIVES` and `PK3..PK7` under `kits/rpg/` and `engine/` uses strictly generic RPG terminology (`unit_tracks`, `bleed_out_rounds`, `revive`, `recruits`, `keepsakes`, `facilities`, `siege`, `ending`, `doctrine` -> numeric faction/alignment gauge) with zero `games/emberwake/lore_words.txt` words.
+- **Dual Layer Split (`P-ARCH-01`, `fc.sh layers`)**: Every new rule/hook added under `kits/rpg/` and `engine/` uses strictly generic RPG terminology (`unit_tracks.signed`, `FX_DOCTRINE`, `supply_price_mult_by_act`, `bleed_out_rounds`, `revive`, `recruits`, `keepsakes`, `facilities`, `siege`, `"rout"`, `ending`, `"$captive_unit"`) with zero `games/emberwake/lore_words.txt` words.
 
 ---
 
 ## 3. `[PROVISIONAL]` Decisions Requiring User Playtest / Review Sign-Off
 
-1. **`WAVE2-BALANCE` Targets (`PR6-1`)**: Accept tuning `brawler_clinch` (`0.70x -> 0.90x`), `slag_charge` (`1.35x -> 1.50x`), and `riveted_gauntlets` (`13 -> 15` probe), re-tuning `sim.json` generated `line` (`92–95% -> 70–90%` w/ `hook_drag`), and deciding whether `[PROVISIONAL]` Mage AoE (`0.28/0.28/0.28/0.22`) stays or bumps to `0.32–0.35`.
-2. **Revive Design (`PR6-3`)**: Put `revive: true` on Priest `L2` `rally` (*Urgent Triage*, `SUPPORT ALLY 1–3`) + consumable `smelling_salts` (`COMMON` Snap pouch item), relocating revived allies onto nearest open adjacent tile if their downed cell is occupied (`FB-167` Q9).
-3. **Campaign & Siege Cadence (`PK4` / `PK5`)**: `2–3` connected room encounters per Hub Breach Siege; Alert breach in Acts 2–3 downgrades damaged facility levels by `1` (floor `1`) rather than ending the campaign; `Warded Tallow` cost doubles (`2x`) in Act 3.
+1. **`WAVE2-BALANCE` Ratified (`PR6-1`, `29dfc241`)**: Brawler (`gauntlet 15`, `forearm_braces +1 mit`, `brawler_clinch 0.95x`, `slag_charge 1.60x` -> `brawler -2.6`), `sim.json` `line.enemy_mastery: {"warrior": 1, "rogue": 1}` (`line 88%` sweep / `83%` party), and Mage AoE `0.32/0.30/0.32/0.25` (`mage -0.6`, `boss 32%` sweep / `40%` party, Crucible `0%`); verify `elite 78–80%` stays comfortable during Act 2/3 tuning.
+2. **Revive & Bleed-Out (`PR6-3`, `872df55c`)**: Priest `L2` `rally.revive = true` + `smelling_salts` (`1 AP / 1 blk / 1 reach`, `heal: 15`, `15 Scrap` at `sabina_slab`/`varka_trade` behind `pk2.slab_open`), `3`-round Act 2–3 bleed timer, and Chebyshev `1..=2` `(y, x)` nearest-cell revive.
+3. **`ACTS23-R6` / `ACTS23-R7` Feasibility Rulings (`B1..B7`)**: Keep `1x1` cell occupancy + oversized `2x2` boss sprite art (`B1` Option B, multi-cell `BIGUNIT1` parked in `READY.md` §3); `2–3` connected Siege rooms per Alert Breach (`Ruthven` `25%` `"rout"` + `hp_floor: 25`, damaged facilities `-1` level floor `1`); Act 3 Warded Tallow `2.0x` (`8g -> 16g`).
 4. **Endings & Legacy Sample Worlds (`PK7` / `PK8`)**: Lock `iron_reaches`, `tidewrack`, and `ashlands` as classic parity/route fixtures (`[KEEP-PARITY]`) while placing `High Bastion` (`08-15`) and `Mantle Fissure` (`16-22`) inside `sunk_ward` (`ACTS23` Q-A2(a)).
