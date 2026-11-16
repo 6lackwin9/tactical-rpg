@@ -1543,6 +1543,48 @@
 				}
 			],
 			"slot": ""
+		},
+		{
+			"id": "calcify_2",
+			"name": "Calloused Chitin",
+			"description": "Calcification II: +2 Armor Rating, -1 Move Rate (minimum 1).",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "armor",
+					"value": 2
+				},
+				{
+					"type": "stat",
+					"stat": "move_rate",
+					"value": -1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "calcify_3",
+			"name": "Sensory Rot",
+			"description": "Calcification III: immune to Weaken and Stun; -15% damage on ranged attacks beyond 3 tiles.",
+			"effects": [
+				{
+					"type": "resist",
+					"status": "weaken",
+					"value": 100
+				},
+				{
+					"type": "resist",
+					"status": "stun",
+					"value": 100
+				},
+				{
+					"type": "skill_potency",
+					"group": "ranged",
+					"min_distance": 4,
+					"value": -0.15
+				}
+			],
+			"slot": ""
 		}
 	]
 }

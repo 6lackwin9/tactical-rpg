@@ -204,7 +204,7 @@ pub fn base_armor_rating(u: &Unit) -> i32 {
         return u.armor_override;
     }
     let gear = u.inventory.total_flat_mitigation(Some(&u.stats));
-    u.stats.mitigation_rating(gear, u.weapon_context().as_deref())
+    (u.stats.mitigation_rating(gear, u.weapon_context().as_deref()) + u.passive_armor + u.gear_armor + u.cond.armor).max(0)
 }
 
 /// Base rating + the active Armor buffs' magnitudes (fortify) - the active Armor debuffs' (expose), floor 0; W2-5
@@ -264,11 +264,14 @@ pub struct HitInput {
     pub cover: f64,
     /// RULESET1 A2 (rule pierce, skill flag `armor_piercing`): the armour term is 1.0 (guard and cover still apply).
     pub ignore_armor: bool,
+    /// PK2-STAGE-PASSIVES (`PR6-2`): attack distance in tiles (`0` = omitted / no distance check; `>= min_distance`
+    /// activates `skill_potency` grants with `min_distance > 0`).
+    pub distance: i32,
 }
 
 impl Default for HitInput {
     fn default() -> Self {
-        Self { ranged: false, offhand: false, skill_mult: 1.0, force_crit: false, crit_roll: None, attacker_stance: None, include_guard: true, cover: 0.0, ignore_armor: false }
+        Self { ranged: false, offhand: false, skill_mult: 1.0, force_crit: false, crit_roll: None, attacker_stance: None, include_guard: true, cover: 0.0, ignore_armor: false, distance: 0 }
     }
 }
 
@@ -462,6 +465,11 @@ fn hit(attacker: &Unit, target: &Unit, h: HitInput, traced: bool, skill_parts: V
     let guard_term = GUARD_CAP.min(guard + h.cover.max(0.0));
     let rating = armor_rating(target);
     let armor_ratio = if h.ignore_armor { 0.0 } else { armor_reduction(rating) };
+    let dist_delta = if h.distance > 0 { attacker.distance_potency_delta(h.ranged, h.distance) } else { 0.0 };
+    let dist_mod = (dist_delta != 0.0).then(|| {
+        let m = Modifier::new("distance_potency", Stage::Mult, Op::Mul((1.0 + dist_delta).max(0.0)));
+        if traced { m.with_parts(attacker.distance_potency_parts(h.ranged, h.distance)) } else { m }
+    });
     // today's order: power, Focus, skill, stance, crit, guard and cover, armour (f64 products are not associative)
     let rest = [
         Modifier::new("focus", Stage::Mult, Op::Mul(buff)),
@@ -475,8 +483,13 @@ fn hit(attacker: &Unit, target: &Unit, h: HitInput, traced: bool, skill_parts: V
         // every base term, so the trace shows them
         let (base, n) = explained.base_modifiers();
         let [r0, r1, r2, r3, r4, r5] = rest;
-        let mods: Vec<Modifier> = base.into_iter().take(n).chain([r0, r1.with_parts(skill_parts), r2, r3, r4, r5]).collect();
+        let mut mods: Vec<Modifier> = base.into_iter().take(n).chain([r0, r1.with_parts(skill_parts)]).collect();
+        mods.extend(dist_mod);
+        mods.extend([r2, r3, r4, r5]);
         pipeline::DAMAGE.run_traced(&mods)
+    } else if let Some(dm) = dist_mod {
+        let [r0, r1, r2, r3, r4, r5] = rest;
+        (pipeline::DAMAGE.run(&[Modifier::new("attack_power", Stage::Base, Op::Add(power as f64)), r0, r1, dm, r2, r3, r4, r5]), Trace::default())
     } else {
         // the base stage already ran in `attack_power`: its rounded result (an integer, so rounding point one keeps it)
         let [r0, r1, r2, r3, r4, r5] = rest;

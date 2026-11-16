@@ -361,3 +361,56 @@ fn a_command_failing_unpaid_keeps_its_use() {
     assert_eq!(mark::uses_of(&w, ALLY, "t_inoculate"), 1, "only the paid start counts");
     assert_eq!(w.marks.of(HERO).len(), 1, "the paid start took one mark back");
 }
+
+/// PK2-STAGE-PASSIVES (`PR6-2`) in battle: `min_distance` potency changes both `plan::expected_with` (`est_damage`)
+/// and resolved `command::execute` damage when shooting from `distance >= min_distance` vs `< min_distance`.
+#[test]
+fn ranged_min_distance_potency_governs_forecast_and_battle_hit() {
+    let mut cat = catalog();
+    let extra = Catalog::from_value(&json!({
+        "skills": [
+            {"id": "t_shot", "name": "Shot", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 1.0, "reach_min": 2, "reach_max": 6, "target_mode": "ENEMY"}
+        ],
+        "passives": [
+            {"id": "t_far_pen", "name": "Far Penalty", "slot": "", "effects": [
+                {"type": "skill_potency", "group": "ranged", "min_distance": 4, "value": -0.15}
+            ]}
+        ]
+    }));
+    cat.skills.extend(extra.skills);
+    cat.passives.extend(extra.passives);
+    let shot_id = cat.skills.iter().position(|s| s.id == "t_shot").unwrap();
+    let arc_cat = Arc::new(cat);
+
+    let row = json!({"id": "t_dist", "name": "Dist", "party": ["p_hero"], "enemies": ["p_foe"],
+        "total_blocks": BLOCKS, "unit_ap": 10, "ap_regen": 0, "max_rounds": 8, "rng_seed": 77});
+    let mut def = EncounterDef::from_obj(row.as_object().unwrap());
+    def.ruleset = Ruleset::from_row(json!({"id": TIMELINE, "name": "Timeline", "rules": [TRIGGERS]}).as_object().unwrap());
+
+    let run_at = |dist: i32| -> (i32, i32) {
+        let mut s = Session::start(arc_cat.clone(), def.clone(), &Plain);
+        s.w.units[HERO].attack_range = 6;
+        let far_pas = s.w.cat.passives["t_far_pen"].clone();
+        s.w.units[HERO].apply_passive(&s.w.cat, &far_pas);
+        s.w.units[1].armor_override = 0; // p_foe is index 1 when ALLY isn't fielded
+        s.w.grid.positions[HERO] = Some(V2::new(2, 4));
+        s.w.grid.positions[1] = Some(V2::new(2 + dist, 4));
+
+        let mut plan = Plan::new();
+        assert_eq!(plan.add_step(&s.w, HERO, PlanStep::engage(shot_id, 1), true), "");
+        let entry = plan.entries_for(&s.w, HERO).into_iter().find(|e| e.skill == shot_id).unwrap();
+        let cmd = entry.build_command(&s.w, HERO);
+        let before = s.w.units[1].hp;
+        let mut res = Resolver::new(BLOCKS, 1);
+        assert!(res.schedule(HERO, cmd, 1));
+        run(&mut s.w, &mut res);
+        (entry.est_damage, before - s.w.units[1].hp)
+    };
+
+    let (est3, dmg3) = run_at(3);
+    let (est4, dmg4) = run_at(4);
+    assert_eq!(est3, 100, "distance 3 stays unpenalized");
+    assert_eq!(dmg3, 100);
+    assert_eq!(est4, 85, "distance 4 forecast applies -15%");
+    assert_eq!(dmg4, 85, "distance 4 hit applies -15%");
+}

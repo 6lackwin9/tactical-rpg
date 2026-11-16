@@ -1669,7 +1669,7 @@ impl Plan {
         let exploit_mult = skill::exploit_match_by(&s.exploit, &w.units[foe], consumed, false, &w.ruleset).1;
         // PK1-S2b: a channeled version's armour piercing counts in the estimate (the AI's Channel row compares them)
         let version = crate::channel::version(w, c, s);
-        let hit = expected_with(w, c, foe, sid, Some(stance), self.estimate_cover(w, c, sid, foe, from), exploit_mult, version.as_ref().is_some_and(|v| v.pierce));
+        let hit = expected_from(w, c, foe, sid, Some(stance), from, self.estimate_cover(w, c, sid, foe, from), exploit_mult, version.as_ref().is_some_and(|v| v.pierce));
         // PK1-S2a: a channeled version's power factor (none outside a Channel round)
         match version.map(|v| v.power).filter(|p| *p != 1.0) {
             Some(p) => (hit as f64 * p).round() as i32,
@@ -1900,16 +1900,25 @@ pub fn expected(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<
 /// skill's own; either counts only under the rule pierce, as the resolver reads it.
 #[allow(clippy::too_many_arguments)]
 pub fn expected_with(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<Stance>, cover: f64, power_scale: f64, pierce: bool) -> i32 {
+    expected_from(w, c, foe, sid, stance, w.grid.pos(c).unwrap_or(NO_CELL), cover, power_scale, pierce)
+}
+
+/// PK2-STAGE-PASSIVES (`PR6-2`): `expected_with` evaluated with `c` standing on `from` (so planner forecasts after a
+/// move step evaluate `min_distance` potency grants accurately).
+#[allow(clippy::too_many_arguments)]
+pub fn expected_from(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<Stance>, from: V2, cover: f64, power_scale: f64, pierce: bool) -> i32 {
     let s = &w.cat.skills[sid];
     let u = &w.units[c];
     let ranged = expected_is_ranged(w, c, sid);
+    let dist = if from != NO_CELL && w.has(foe) { from.dist(w.pos(foe)) } else { 0 };
+    let skill_mult = if dist > 0 { u.power_for_at(s, dist) } else { u.power_for(s) } * power_scale;
     damage::compute(
         u,
         &w.units[foe],
         HitInput {
             ranged,
             offhand: skill::is_off_hand(s),
-            skill_mult: u.power_for(s) * power_scale,
+            skill_mult,
             attacker_stance: stance,
             include_guard: false,
             cover,
