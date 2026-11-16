@@ -1463,7 +1463,7 @@
 			],
 			"base": {
 				"main_1h": {
-					"power": 13,
+					"power": 15,
 					"range": 1,
 					"burden": 1,
 					"mitigation": 0

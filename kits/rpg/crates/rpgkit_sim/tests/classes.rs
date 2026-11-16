@@ -31,9 +31,9 @@ const CLASSES: SimClasses = SimClasses {
     support_baseline: "slinger",
     roles: &ROLES,
     generated: &[
-        Generated { id: "mob", enemies: &[("lancer", "minion")], wave: &[] },
-        Generated { id: "elite", enemies: &[("@elite", "elite")], wave: &[] },
-        Generated { id: "boss", enemies: &[("seer", "standard")], wave: &[("@boss", "boss")] },
+        Generated { id: "mob", enemies: &[("lancer", "minion")], wave: &[], enemy_mastery: &[] },
+        Generated { id: "elite", enemies: &[("@elite", "elite")], wave: &[], enemy_mastery: &[] },
+        Generated { id: "boss", enemies: &[("seer", "standard")], wave: &[("@boss", "boss")], enemy_mastery: &[] },
     ],
     scenarios: &[Scenario { id: "tank_hold", role: "tank", allies: &[], enemies: &[("seer", "standard")], priority: false, block: (0, 0), tier_until: None }],
     s2_enemies: &[],

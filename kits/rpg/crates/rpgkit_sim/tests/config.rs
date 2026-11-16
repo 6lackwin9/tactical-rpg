@@ -23,7 +23,7 @@ fn full() -> serde_json::Value {
                  "l7_swaps": [{"role": "tank", "skill": "wall", "with": "fortress"}]},
                 {"class": "archer", "primary": "ranged", "secondary": [], "loadouts": [{"role": "ranged", "skills": ["shot"]}], "l7_swaps": []}
             ],
-            "generated": [{"id": "mob", "enemies": [["knight", "minion"], ["archer", "minion"]], "wave": [["@boss", "boss"]]}],
+            "generated": [{"id": "mob", "enemies": [["knight", "minion"], ["archer", "minion"]], "wave": [["@boss", "boss"]], "enemy_mastery": {"knight": 1}}],
             "scenarios": [
                 {"id": "tank_hold", "role": "tank", "allies": ["archer"], "enemies": [["knight", "standard"]], "priority": false, "block": [2, 3], "tier_until": null},
                 {"id": "striker_priority", "role": "striker", "allies": [], "enemies": [["archer", "elite"]], "priority": true, "block": [0, 0],
@@ -49,6 +49,7 @@ fn every_key_reads_as_given() {
     assert_eq!(c.roles[0].loadouts, [("tank", &["bash", "wall"][..]), ("support", &["shout"][..])]);
     assert_eq!(c.roles[0].l7_swaps, [("tank", "wall", "fortress")]);
     assert_eq!(scenarios::generated(&c, "mob"), Some((&[("knight", "minion"), ("archer", "minion")][..], &[("@boss", "boss")][..])));
+    assert_eq!(scenarios::generated_mastery(&c, "mob"), &[("knight", 1)]);
     let hold = scenarios::scenario_def(&c, "tank_hold").unwrap();
     assert_eq!((hold.allies, hold.enemies, hold.priority, hold.block, hold.tier_until), (&["archer"][..], &[("knight", "standard")][..], false, (2, 3), None));
     assert_eq!(scenarios::scenario_def(&c, "striker_priority").unwrap().tier_until, Some((3, 0, "standard")));

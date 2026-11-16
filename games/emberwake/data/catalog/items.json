@@ -2928,6 +2928,11 @@
 			"hand": "off",
 			"modifiers": [
 				{
+					"kind": "adjust",
+					"field": "mitigation",
+					"delta": 1
+				},
+				{
 					"kind": "requirement",
 					"stat": "STR",
 					"value": 10

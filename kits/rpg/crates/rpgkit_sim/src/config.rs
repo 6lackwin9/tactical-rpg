@@ -7,7 +7,7 @@
 //!  "classes": {"ids": [], "default_comp": [], "trio_lead", "elite", "boss", "support_baseline",
 //!   "roles": [{"class", "primary", "secondary": [], "loadouts": [{"role", "skills": []}],
 //!              "l7_swaps": [{"role", "skill", "with"}]}],
-//!   "generated": [{"id", "enemies": [["<class>", "<tier>"]], "wave": [...]}],
+//!   "generated": [{"id", "enemies": [["<class>", "<tier>"]], "wave": [...], "enemy_mastery": {"<class>": 1}}],
 //!   "scenarios": [{"id", "role", "allies": [], "enemies": [...], "priority", "block": [x, y],
 //!                  "tier_until": {"level", "slot", "tier"} | null}],
 //!   "s2_enemies": [["<class>", "<tier>"]]}}
@@ -67,7 +67,10 @@ fn classes(v: &Value) -> Result<SimClasses, String> {
     let roles: Vec<ClassRoles> = list(v, "roles")?.iter().map(class_roles).collect::<Result<_, _>>()?;
     let generated: Vec<Generated> = list(v, "generated")?
         .iter()
-        .map(|g| Ok(Generated { id: leak(text(g, "id")?), enemies: roster(g, "enemies")?, wave: roster(g, "wave")? }))
+        .map(|g| {
+            let enemy_mastery = class_ints(g, "enemy_mastery")?;
+            Ok(Generated { id: leak(text(g, "id")?), enemies: roster(g, "enemies")?, wave: roster(g, "wave")?, enemy_mastery })
+        })
         .collect::<Result<_, String>>()?;
     let scenarios: Vec<Scenario> = list(v, "scenarios")?.iter().map(scenario).collect::<Result<_, _>>()?;
     Ok(SimClasses {
@@ -167,4 +170,15 @@ fn roster(v: &Value, key: &str) -> Result<Roster, String> {
 
 fn int(v: &Value) -> Result<i32, String> {
     v.as_i64().map(|n| n as i32).ok_or_else(|| format!("sim config: {v} is not a whole number"))
+}
+
+/// Optional `{class_id: mastery_level}` table on a generated encounter (`&[]` when absent/null).
+fn class_ints(v: &Value, key: &str) -> Result<&'static [(&'static str, i32)], String> {
+    let Some(raw) = v.get(key).filter(|val| !val.is_null()) else { return Ok(&[]) };
+    let obj = raw.as_object().ok_or_else(|| format!("sim config: `{key}` is not an object: {raw}"))?;
+    let mut entries = Vec::with_capacity(obj.len());
+    for (k, val) in obj {
+        entries.push((leak(k), int(val)?));
+    }
+    Ok(Box::leak(entries.into_boxed_slice()))
 }
