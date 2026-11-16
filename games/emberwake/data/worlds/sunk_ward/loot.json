@@ -133,6 +133,22 @@
 			"rarity": "common",
 			"requires_flags": [],
 			"tags": []
+		},
+		{
+			"id": "loot_hearth_ingot_cache",
+			"name": "Hearth Slag-Bar Cache",
+			"description": "Reserved black-iron ingot set aside after the Drowned Sluice.",
+			"reward_kind": "item",
+			"ref": "black_iron_ingot",
+			"count": 1,
+			"rarity": "rare",
+			"requires_flags": [
+				{
+					"key": "pk2.hearth_open",
+					"value": true
+				}
+			],
+			"tags": []
 		}
 	]
 }

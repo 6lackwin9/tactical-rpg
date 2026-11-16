@@ -856,7 +856,6 @@ fn m2_rewards_the_captives_that_lived() {
     let mut paid: Vec<i64> = Vec::new();
     for alive in 0..=guests {
         let (mut gs, _) = after_prologue(&d);
-        let salt_before = gs.party.stash.get("rock_salt").copied().unwrap_or(0);
         run_quest_with_guests(&d, &mut gs, "q_a1_m2", alive);
         assert_eq!(gs.flag(&key).and_then(Value::as_i64), Some(alive as i64), "{alive} captives lived");
         let item = campaign::pending_head(&gs).cloned().expect("Maren's scene is queued");
@@ -879,6 +878,8 @@ fn m2_rewards_the_captives_that_lived() {
             .find(|c| json::s(c, "text") == json::s(&chosen, "text"))
             .map(|c| json::aget(c, "effects").iter().map(json::dict).filter(|fx| json::s(fx, "effect") == "give").map(|fx| json::i(json::dget(fx, "items"), "rock_salt", 0)).sum())
             .unwrap_or(0);
+        // PR6-5 added `rock_salt` enemy drops on M2 foes, so snapshot right before the reply executes.
+        let salt_before = gs.party.stash.get("rock_salt").copied().unwrap_or(0);
         assert!(ok(&r.choose(&d, &mut gs, open[0] as i64)), "the reply is taken");
         assert_eq!(gs.party.stash.get("rock_salt").copied().unwrap_or(0) - salt_before, give, "{alive} lived: the reply's Rock Salt");
         paid.push(give);

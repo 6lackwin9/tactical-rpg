@@ -1870,6 +1870,11 @@
 					"item": "boning_knife",
 					"chance": 4,
 					"count": 1
+				},
+				{
+					"item": "slot_blood_sac",
+					"chance": 15,
+					"count": 1
 				}
 			]
 		},
@@ -1936,6 +1941,11 @@
 				{
 					"item": "stalker_optic_nerve",
 					"chance": 10,
+					"count": 1
+				},
+				{
+					"item": "slot_eye_tissue",
+					"chance": 15,
 					"count": 1
 				}
 			]
@@ -2005,6 +2015,11 @@
 				},
 				{
 					"item": "sinew_braid",
+					"chance": 15,
+					"count": 1
+				},
+				{
+					"item": "slot_blood_sac",
 					"chance": 15,
 					"count": 1
 				}
@@ -2079,6 +2094,16 @@
 				{
 					"item": "ossified_bellows",
 					"chance": 12,
+					"count": 1
+				},
+				{
+					"item": "slot_bone_spur",
+					"chance": 18,
+					"count": 1
+				},
+				{
+					"item": "slot_chitin_plate",
+					"chance": 15,
 					"count": 1
 				}
 			]
@@ -2294,6 +2319,11 @@
 				{
 					"item": "ossified_bellows",
 					"chance": 35,
+					"count": 1
+				},
+				{
+					"item": "titan_marrow_core",
+					"chance": 5,
 					"count": 1
 				}
 			]
@@ -2706,6 +2736,16 @@
 					"item": "sulfur_poultice",
 					"chance": 5,
 					"count": 1
+				},
+				{
+					"item": "slot_eye_tissue",
+					"chance": 12,
+					"count": 1
+				},
+				{
+					"item": "rock_salt",
+					"chance": 18,
+					"count": 1
 				}
 			]
 		},
@@ -2780,6 +2820,16 @@
 				{
 					"item": "brimstone_draught",
 					"chance": 6,
+					"count": 1
+				},
+				{
+					"item": "slot_eye_tissue",
+					"chance": 12,
+					"count": 1
+				},
+				{
+					"item": "rock_salt",
+					"chance": 20,
 					"count": 1
 				}
 			]

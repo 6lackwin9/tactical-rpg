@@ -105,9 +105,113 @@
 					"count": 2,
 					"price": -1,
 					"requires_flags": []
+				},
+				{
+					"item": "book_polearm",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.hearth_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_greatsword",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.hearth_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_sword",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.hearth_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_hammer",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.hearth_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_gauntlet",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.hearth_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_fist",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.hearth_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_crossbow",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.hearth_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_bow",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.hearth_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "black_iron_ingot",
+					"count": 2,
+					"price": 80,
+					"requires_flags": [
+						{
+							"key": "pk2.masterwork_quest",
+							"value": true
+						}
+					]
 				}
 			],
-			"loot": [],
+			"loot": [
+				{
+					"loot": "loot_hearth_ingot_cache",
+					"price": 80
+				}
+			],
 			"buy_mult": 1.0,
 			"supply_price": 0,
 			"sell_mult": 0.5,
@@ -170,6 +274,83 @@
 				{
 					"item": "smelling_salts",
 					"count": 2,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.slab_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_knife",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.slab_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_dagger",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.slab_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_censer",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.slab_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_bone_saw",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.slab_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_scourge",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.slab_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_sprayer",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.slab_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "book_staff",
+					"count": 1,
 					"price": -1,
 					"requires_flags": [
 						{
