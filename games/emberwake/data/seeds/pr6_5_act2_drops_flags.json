@@ -1,0 +1,1243 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "manual",
+    "name": "Field Manual",
+    "description": "Weapon-mastery manual studied out of battle to drill techniques.",
+    "item_type": "MASTERY_BOOK",
+    "off_hand_category": "",
+    "base": {},
+    "bands": {},
+    "adjustable": [],
+    "modifier_kinds": [],
+    "max_modifiers": 0,
+    "max_tiers": 0,
+    "engine_rules": [],
+    "damage_type": "",
+    "art": "manual"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_polearm",
+    "name": "Polearm Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering polearm forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_polearm",
+    "starter_stash": false,
+    "mastery_family": "polearm",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_greatsword",
+    "name": "Greatsword Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering greatsword forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_greatsword",
+    "starter_stash": false,
+    "mastery_family": "greatsword",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_sword",
+    "name": "Sword Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering sword forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_sword",
+    "starter_stash": false,
+    "mastery_family": "sword",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_hammer",
+    "name": "Hammer Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering hammer forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_hammer",
+    "starter_stash": false,
+    "mastery_family": "hammer",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_gauntlet",
+    "name": "Gauntlet Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering gauntlet forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_gauntlet",
+    "starter_stash": false,
+    "mastery_family": "gauntlet",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_fist",
+    "name": "Fist Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering fist-weapon forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_fist",
+    "starter_stash": false,
+    "mastery_family": "fist",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_crossbow",
+    "name": "Crossbow Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering crossbow forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_crossbow",
+    "starter_stash": false,
+    "mastery_family": "crossbow",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_bow",
+    "name": "Bow Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering bow forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_bow",
+    "starter_stash": false,
+    "mastery_family": "bow",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_knife",
+    "name": "Knife Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering knife forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_knife",
+    "starter_stash": false,
+    "mastery_family": "knife",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_dagger",
+    "name": "Dagger Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering dagger forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_dagger",
+    "starter_stash": false,
+    "mastery_family": "dagger",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_censer",
+    "name": "Censer Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering censer forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_censer",
+    "starter_stash": false,
+    "mastery_family": "censer",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_bone_saw",
+    "name": "Bone-Saw Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering bone-saw forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_bone_saw",
+    "starter_stash": false,
+    "mastery_family": "bone_saw",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_scourge",
+    "name": "Scourge Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering scourge forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_scourge",
+    "starter_stash": false,
+    "mastery_family": "scourge",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_sprayer",
+    "name": "Sprayer Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering chemical sprayer forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_sprayer",
+    "starter_stash": false,
+    "mastery_family": "sprayer",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "book_staff",
+    "name": "Staff Manual",
+    "family": "manual",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 65,
+    "description": "Illustrated field manual covering staff forms (+150 mastery XP, scaled by proficiency).",
+    "damage_type": "",
+    "icon_id": "book_staff",
+    "starter_stash": false,
+    "mastery_family": "staff",
+    "mastery_xp": 150,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "calcified_husk",
+    "name": "Calcified Husk",
+    "side": "enemy",
+    "description": "Calcified Husk.",
+    "class_id": "warrior",
+    "level": 3,
+    "tier": "standard",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": 35,
+    "poise": -1,
+    "art": "brawler/base",
+    "palette": "calcified",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "bone_club_slam"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "bone_club_slam"
+     ],
+     "order": {
+      "assault": [
+       "bone_club_slam",
+       "strike"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "AGGRESSOR",
+    "target_pref": "NEAREST",
+    "flee_ratio": 0.0,
+    "defend_below": 0.0,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": true,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "bone_club",
+    "off_hand": "none",
+    "head": "",
+    "body": "none",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "none"
+    ],
+    "passives": [
+     "censer_drill"
+    ],
+    "loot": [
+     {
+      "item": "calcified_bone_shard",
+      "chance": 25,
+      "count": 1
+     },
+     {
+      "item": "sinew_braid",
+      "chance": 15,
+      "count": 1
+     },
+     {
+      "item": "ossified_bellows",
+      "chance": 12,
+      "count": 1
+     },
+     {
+      "item": "slot_bone_spur",
+      "chance": 18,
+      "count": 1
+     },
+     {
+      "item": "slot_chitin_plate",
+      "chance": 15,
+      "count": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "ash_crawler",
+    "name": "Ash-Crawler",
+    "side": "enemy",
+    "description": "Ash-Crawler.",
+    "class_id": "rogue",
+    "level": 2,
+    "tier": "minion",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "crawler/ash_crawler",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "burrow_ambush",
+     "caustic_vomit"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "burrow_ambush",
+      "caustic_vomit"
+     ],
+     "order": {
+      "maneuver": [
+       "burrow_ambush"
+      ],
+      "assault": [
+       "caustic_vomit",
+       "strike"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "SKIRMISHER",
+    "target_pref": "NEAREST",
+    "flee_ratio": 0.0,
+    "defend_below": 0.0,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": true,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "none",
+    "off_hand": "none",
+    "head": "",
+    "body": "none",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "none"
+    ],
+    "loot": [
+     {
+      "item": "caustic_gall_sac",
+      "chance": 15,
+      "count": 1
+     },
+     {
+      "item": "sinew_braid",
+      "chance": 15,
+      "count": 1
+     },
+     {
+      "item": "slot_blood_sac",
+      "chance": 15,
+      "count": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "tallow_dredger",
+    "name": "Tallow Dredger",
+    "side": "enemy",
+    "description": "Tallow Dredger.",
+    "class_id": "rogue",
+    "level": 2,
+    "tier": "standard",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "ranger/wenn_tallow",
+    "palette": "tallow_guild",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "scalding_grease_pot",
+     "boning_knife_flurry"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "scalding_grease_pot",
+      "boning_knife_flurry"
+     ],
+     "order": {
+      "assault": [],
+      "maneuver": [
+       "boning_knife_flurry",
+       "flank_cut"
+      ],
+      "guard": [
+       "active_guard"
+      ],
+      "field": [
+       "scalding_grease_pot"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "SKIRMISHER",
+    "target_pref": "WEAKEST",
+    "flee_ratio": 0.3,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "boning_knife",
+    "off_hand": "none",
+    "head": "",
+    "body": "skinners_apron",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "none"
+    ],
+    "loot": [
+     {
+      "item": "caustic_gall_sac",
+      "chance": 15,
+      "count": 1
+     },
+     {
+      "item": "boning_knife",
+      "chance": 4,
+      "count": 1
+     },
+     {
+      "item": "slot_blood_sac",
+      "chance": 15,
+      "count": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "render_beast",
+    "name": "Render-Beast",
+    "side": "enemy",
+    "description": "Render-Beast.",
+    "class_id": "rogue",
+    "level": 2,
+    "tier": "minion",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "beast/render_beast",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "throat_clamp_pounce"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "throat_clamp_pounce"
+     ],
+     "order": {
+      "maneuver": [
+       "throat_clamp_pounce"
+      ],
+      "assault": [
+       "strike"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "SKIRMISHER",
+    "target_pref": "WEAKEST",
+    "flee_ratio": 0.0,
+    "defend_below": 0.0,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": true,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "none",
+    "off_hand": "none",
+    "head": "",
+    "body": "none",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "none"
+    ],
+    "loot": [
+     {
+      "item": "render_beast_tendon",
+      "chance": 20,
+      "count": 1
+     },
+     {
+      "item": "stalker_optic_nerve",
+      "chance": 10,
+      "count": 1
+     },
+     {
+      "item": "slot_eye_tissue",
+      "chance": 15,
+      "count": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "inquisitorial_purifier",
+    "name": "Purifier",
+    "side": "enemy",
+    "description": "Inquisitorial Purifier.",
+    "class_id": "mage",
+    "level": 3,
+    "tier": "elite",
+    "template": "class",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": 25,
+    "poise": -1,
+    "art": "priest/base",
+    "palette": "purifier",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "pyre_nozzle_sweep",
+     "brand_of_the_heretic"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "pyre_nozzle_sweep",
+      "brand_of_the_heretic"
+     ],
+     "order": {
+      "assault": [
+       "brand_of_the_heretic"
+      ],
+      "guard": [
+       "active_guard"
+      ],
+      "field": [
+       "pyre_nozzle_sweep"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "SNIPER",
+    "target_pref": "NEAREST",
+    "flee_ratio": 0.2,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [
+     "flush_cover"
+    ],
+    "main_hand": "pyre_nozzle",
+    "off_hand": "none",
+    "head": "",
+    "body": "warded_apron",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "none"
+    ],
+    "loot": [
+     {
+      "item": "pyre_nozzle",
+      "chance": 4,
+      "count": 1
+     },
+     {
+      "item": "brimstone_draught",
+      "chance": 6,
+      "count": 1
+     },
+     {
+      "item": "slot_eye_tissue",
+      "chance": 12,
+      "count": 1
+     },
+     {
+      "item": "rock_salt",
+      "chance": 20,
+      "count": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "mortuary_flagellant",
+    "name": "Mortuary Flagellant",
+    "side": "enemy",
+    "description": "Mortuary Flagellant.",
+    "class_id": "rogue",
+    "level": 1,
+    "tier": "minion",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "brawler/base",
+    "palette": "flagellant",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "scourge_lash",
+     "martyrs_rush"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "scourge_lash",
+      "martyrs_rush"
+     ],
+     "order": {
+      "assault": [
+       "scourge_lash"
+      ],
+      "maneuver": [
+       "martyrs_rush",
+       "flank_cut"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "SKIRMISHER",
+    "target_pref": "SOFTEST",
+    "flee_ratio": 0.0,
+    "defend_below": 0.0,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": true,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "penitent_scourge",
+    "off_hand": "none",
+    "head": "",
+    "body": "none",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "none"
+    ],
+    "passives": [
+     "scourge_drill"
+    ],
+    "loot": [
+     {
+      "item": "sulfur_poultice",
+      "chance": 5,
+      "count": 1
+     },
+     {
+      "item": "slot_eye_tissue",
+      "chance": 12,
+      "count": 1
+     },
+     {
+      "item": "rock_salt",
+      "chance": 18,
+      "count": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "calcified_amalgam",
+    "name": "The Amalgam",
+    "side": "enemy",
+    "description": "The Calcified Amalgam.",
+    "class_id": "mage",
+    "level": 5,
+    "tier": "boss",
+    "template": "class",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 40,
+    "armor": 50,
+    "poise": 90,
+    "art": "brawler/base",
+    "palette": "amalgam",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "ossified_spine_volley",
+     "tendril_flail",
+     "ossification_bloom"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "ossified_spine_volley",
+      "tendril_flail"
+     ],
+     "order": {
+      "assault": [
+       "ossified_spine_volley"
+      ],
+      "guard": [
+       "tendril_flail"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "AGGRESSOR",
+    "target_pref": "NEAREST",
+    "flee_ratio": 0.0,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": true,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "none",
+    "off_hand": "none",
+    "head": "",
+    "body": "none",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "none"
+    ],
+    "loot": [
+     {
+      "item": "calcified_bone_shard",
+      "chance": 60,
+      "count": 1
+     },
+     {
+      "item": "ossified_bellows",
+      "chance": 35,
+      "count": 1
+     },
+     {
+      "item": "titan_marrow_core",
+      "chance": 5,
+      "count": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "loot",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "loot_hearth_ingot_cache",
+    "name": "Hearth Slag-Bar Cache",
+    "description": "Reserved black-iron ingot set aside after the Drowned Sluice.",
+    "reward_kind": "item",
+    "ref": "black_iron_ingot",
+    "count": 1,
+    "rarity": "rare",
+    "requires_flags": [
+     {
+      "key": "pk2.hearth_open",
+      "value": true
+     }
+    ],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "shops",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "berek_hearth",
+    "name": "The Tinker's Hearth",
+    "keeper": "berek_dorn",
+    "stock": [
+     {
+      "item": "notched_billhook",
+      "count": 2,
+      "price": -1,
+      "requires_flags": []
+     },
+     {
+      "item": "watch_hookbill",
+      "count": 2,
+      "price": -1,
+      "requires_flags": []
+     },
+     {
+      "item": "curfew_bodkin",
+      "count": 2,
+      "price": -1,
+      "requires_flags": []
+     },
+     {
+      "item": "stirrup_arbalest",
+      "count": 2,
+      "price": -1,
+      "requires_flags": []
+     },
+     {
+      "item": "watch_heater",
+      "count": 2,
+      "price": -1,
+      "requires_flags": []
+     },
+     {
+      "item": "watch_cuirass",
+      "count": 1,
+      "price": -1,
+      "requires_flags": []
+     },
+     {
+      "item": "watch_gambeson",
+      "count": 2,
+      "price": -1,
+      "requires_flags": []
+     },
+     {
+      "item": "soot_leathers",
+      "count": 2,
+      "price": -1,
+      "requires_flags": []
+     },
+     {
+      "item": "book_polearm",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.hearth_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_greatsword",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.hearth_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_sword",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.hearth_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_hammer",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.hearth_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_gauntlet",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.hearth_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_fist",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.hearth_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_crossbow",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.hearth_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_bow",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.hearth_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "black_iron_ingot",
+      "count": 2,
+      "price": 80,
+      "requires_flags": [
+       {
+        "key": "pk2.masterwork_quest",
+        "value": true
+       }
+      ]
+     }
+    ],
+    "loot": [
+     {
+      "loot": "loot_hearth_ingot_cache",
+      "price": 80
+     }
+    ],
+    "buy_mult": 1.0,
+    "supply_price": 0,
+    "sell_mult": 0.5,
+    "discount": {
+     "requires_flags": [
+      {
+       "key": "sunk_ward.bellows_done",
+       "value": true
+      }
+     ],
+     "mult": 0.8
+    },
+    "buys": [
+     "WEAPON",
+     "SHIELD",
+     "ARMOR"
+    ],
+    "requires_flags": [
+     {
+      "key": "sunk_ward.debate1_seen",
+      "value": true
+     }
+    ],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "shops",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "varka_trade",
+    "name": "The Leaking Vat",
+    "keeper": "widow_varka",
+    "stock": [
+     {
+      "item": "rock_salt",
+      "count": -1,
+      "price": 25,
+      "requires_flags": []
+     },
+     {
+      "item": "sulfur_poultice",
+      "count": -1,
+      "price": -1,
+      "requires_flags": []
+     },
+     {
+      "item": "calcified_bone_shard",
+      "count": -1,
+      "price": 20,
+      "requires_flags": []
+     },
+     {
+      "item": "con_quenched_salt",
+      "count": 2,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "smelling_salts",
+      "count": 2,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_knife",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_dagger",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_censer",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_bone_saw",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_scourge",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_sprayer",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_staff",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     }
+    ],
+    "loot": [],
+    "buy_mult": 1.0,
+    "supply_price": 8,
+    "sell_mult": 0.5,
+    "buys": [
+     "WEAPON",
+     "SHIELD",
+     "ARMOR",
+     "ACCESSORY",
+     "CONSUMABLE",
+     "MATERIAL"
+    ],
+    "requires_flags": [
+     {
+      "key": "sunk_ward.ivo_rescued",
+      "value": true
+     }
+    ],
+    "tags": []
+   }
+  }
+ ]
+}

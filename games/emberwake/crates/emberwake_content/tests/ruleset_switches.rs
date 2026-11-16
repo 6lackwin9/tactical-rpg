@@ -94,6 +94,10 @@ const CLASSPASS1_SEED: &str = "classpass1_data.json";
 /// onto the 3 aberrant Sunk Ward enemy units (after the CLASSPASS1-DATA seed; no ruleset row changes).
 const TECHNIQUES_GRAFTS_SEED: &str = "techniques_grafts_data.json";
 
+/// PR6-5 (ACT2-DROPS-PK2-FLAGS): the seed that added `slot_*` organ drops, `rock_salt`, and `titan_marrow_core`
+/// onto 7 Sunk Ward catalog enemies (after the TECHNIQUES-GRAFTS-DATA seed; no ruleset row changes).
+const PR6_5_SEED: &str = "pr6_5_act2_drops_flags.json";
+
 /// What the class-basics seed dropped from the `timeline` basics (now the Rogue's class basic).
 const CLASS_BASICS_DROPPED: &str = "flank_cut";
 
@@ -336,6 +340,13 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("TECHNIQUES-GRAFTS unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the TECHNIQUES-GRAFTS-DATA units steps leave the shipped ruleset rows");
+    // PR6-5 (ACT2-DROPS-PK2-FLAGS): the seed's units steps over TECHNIQUES-GRAFTS-DATA's
+    let pr6_5 = seed_rows(PR6_5_SEED, "units");
+    assert!(seed_entries(PR6_5_SEED).is_empty(), "the PR6-5 seed changes no ruleset row");
+    for e in &pr6_5 {
+        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("PR6-5 unit '{}': {err:?}", json::s(e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the PR6-5 units steps leave the shipped ruleset rows");
     // PR5-52 (RULESET-MODES1): the seed removes the classic row and re-saves timeline under modes: the shipped rows
     let text = std::fs::read_to_string(data_dir().join("seeds").join(RULESETMODES1_SEED)).expect("the RULESET-MODES1 seed");
     let seed: Value = serde_json::from_str(&text).expect("seed JSON");
@@ -358,7 +369,8 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         .chain(act1fix1.iter().map(|e| json::s(e, "id")))
         .chain(gear)
         .chain(classpass1.iter().map(|e| json::s(e, "id")))
-        .chain(techniques_grafts.iter().map(|e| json::s(e, "id")));
+        .chain(techniques_grafts.iter().map(|e| json::s(e, "id")))
+        .chain(pr6_5.iter().map(|e| json::s(e, "id")));
     for id in units {
         assert_eq!(seeded.get("units", &id), shipped_units.get("units", &id), "unit '{id}' as shipped");
     }
