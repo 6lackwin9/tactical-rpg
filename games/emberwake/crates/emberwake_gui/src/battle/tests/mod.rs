@@ -28,6 +28,7 @@ mod channel_tests;
 mod music_tests;
 mod cue_tests;
 mod offhand_tests;
+mod pk3_bleedout_tests;
 
 use crate::battle::flow::{boss_fight, sound_of};
 use crate::battle::{Action, BattleScreen};

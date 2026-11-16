@@ -405,15 +405,28 @@ fn try_item(w: &World, plan: &mut Plan, actor: UnitId) -> bool {
     let pos = w.pos(actor);
     let mut potion: Option<&rpgkit_data::ItemDef> = None;
     let mut bomb: Option<&rpgkit_data::ItemDef> = None;
+    let mut revive: Option<&rpgkit_data::ItemDef> = None;
     for id in command::pouch_ids(w, actor) {
         let con = command::pouch_item(w, actor, &id).unwrap();
         if !con.offered_in_battle() || plan.items_left(w, actor, &id, -1) <= 0 {
             continue;
         }
-        if potion.is_none() && con.heal > 0 && !con.aims_at_foes() {
+        if revive.is_none() && con.revive && !con.aims_at_foes() && con.battle_reach() > 0 {
+            revive = Some(con);
+        }
+        if potion.is_none() && con.heal > 0 && !con.revive && !con.aims_at_foes() {
             potion = Some(con);
         } else if bomb.is_none() && con.aims_at_foes() {
             bomb = Some(con);
+        }
+    }
+    if let Some(rv) = revive {
+        let mut downed: Vec<UnitId> = w.friends_of(actor).iter().copied().filter(|&f| w.can_revive(f) && w.grid.positions[f].is_some()).collect();
+        downed.sort_by_key(|&f| (w.bleed_left(f), f));
+        for f in downed {
+            if pos.dist(w.pos(f)) <= rv.battle_reach() && plan.add_step(w, actor, PlanStep::use_item(&rv.id, f), false).is_empty() {
+                return true;
+            }
         }
     }
     let u = &w.units[actor];
@@ -510,8 +523,20 @@ fn try_heal(w: &World, plan: &mut Plan, actor: UnitId, profile: &AiProfile, cap:
         return None;
     }
     skills.reverse();
-    let mut wounded: Vec<UnitId> = w.friends_of(actor).iter().copied().filter(|f| !already.contains(f) && w.units[*f].is_active() && w.has(*f) && (needs_heal(w, *f, profile) || locked_down(w, *f))).collect();
+    let mut wounded: Vec<UnitId> = w
+        .friends_of(actor)
+        .iter()
+        .copied()
+        .filter(|f| !already.contains(f) && (w.can_revive(*f) || (w.units[*f].is_active() && w.has(*f) && (needs_heal(w, *f, profile) || locked_down(w, *f)))))
+        .collect();
     godot_sort(&mut wounded, |a, b| {
+        let (ca, cb) = (w.can_revive(*a), w.can_revive(*b));
+        if ca != cb {
+            return ca;
+        }
+        if ca {
+            return w.bleed_left(*a) < w.bleed_left(*b);
+        }
         let (ra, rb) = (hp_ratio(w, *a), hp_ratio(w, *b));
         if !approx_eq(ra, rb) {
             ra < rb
@@ -520,9 +545,13 @@ fn try_heal(w: &World, plan: &mut Plan, actor: UnitId, profile: &AiProfile, cap:
         }
     });
     for ally in wounded {
-        let hurt = needs_heal(w, ally, profile);
+        let reviving = w.can_revive(ally);
+        let hurt = reviving || needs_heal(w, ally, profile);
         for &sid in &skills {
             let s = &w.cat.skills[sid];
+            if reviving && !s.revive {
+                continue;
+            }
             if !hurt && !frees_lock(w, ally, sid) {
                 continue;
             }
@@ -2225,10 +2254,16 @@ fn support_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile) 
         .copied()
         .filter(|&f| {
             let u = &w.units[f];
-            u.is_active() && w.has(f) && u.hp < u.max_hp && (support_role || hp_ratio(w, f) <= profile.heal_below)
+            w.can_revive(f) || (u.is_active() && w.has(f) && u.hp < u.max_hp && (support_role || hp_ratio(w, f) <= profile.heal_below))
         })
         .collect();
-    cands.sort_by(|&a, &b| hp_ratio(w, a).partial_cmp(&hp_ratio(w, b)).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
+    cands.sort_by(|&a, &b| {
+        (!w.can_revive(a))
+            .cmp(&(!w.can_revive(b)))
+            .then_with(|| w.bleed_left(a).cmp(&w.bleed_left(b)))
+            .then_with(|| hp_ratio(w, a).partial_cmp(&hp_ratio(w, b)).unwrap_or(std::cmp::Ordering::Equal))
+            .then(a.cmp(&b))
+    });
     let items: Vec<String> = if profile.use_items {
         w.units[c].inventory.pouch.iter().map(|p| p.id.clone()).filter(|id| command::pouch_item(w, c, id).is_some_and(|it| round_intent::item_rows(w, it).contains(&"support"))).collect()
     } else {
@@ -2236,7 +2271,7 @@ fn support_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile) 
     };
     // A1.2-K3: the pouch heals usable on itself in a Stand round (under `field_intent`)
     let self_heals: Vec<String> = if profile.use_items {
-        w.units[c].inventory.pouch.iter().map(|p| p.id.clone()).filter(|id| command::pouch_item(w, c, id).is_some_and(|it| it.heal > 0 && round_intent::item_rows(w, it).contains(&RoundIntent::Guard.id()))).collect()
+        w.units[c].inventory.pouch.iter().map(|p| p.id.clone()).filter(|id| command::pouch_item(w, c, id).is_some_and(|it| it.heal > 0 && !it.revive && round_intent::item_rows(w, it).contains(&RoundIntent::Guard.id()))).collect()
     } else {
         Vec::new()
     };
@@ -2264,11 +2299,15 @@ fn support_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile) 
             }
             continue;
         }
+        let reviving = w.can_revive(f);
         let mut p = IntentPick::new(RoundIntent::Support, round_intent::normalize(c, RoundTarget::Unit(f)));
         if trial(w, plan, c, &p) {
             return Some(p);
         }
         for id in &items {
+            if command::pouch_item(w, c, id).is_some_and(|it| it.revive != reviving) {
+                continue;
+            }
             p.opener = Some(Opener::Item(id.clone()));
             if trial(w, plan, c, &p) {
                 return Some(p);

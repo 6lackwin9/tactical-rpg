@@ -98,6 +98,7 @@
 					0,
 					1
 				],
+				"bleed_out_rounds": 0,
 				"downed_won": "wounded",
 				"downed_left": "wounded",
 				"downed_lost": "wounded",
@@ -105,11 +106,19 @@
 				"wounded_max_hp_pct": 20
 			},
 			{
-				"acts": [],
+				"acts": [
+					2,
+					3
+				],
+				"bleed_out_rounds": 3,
 				"downed_won": "wounded",
-				"downed_left": "dead",
+				"downed_left": "captured",
 				"downed_lost": "dead",
 				"standing_lost": "wounded",
+				"keepsakes_on": [
+					"captured",
+					"dead"
+				],
 				"wounded_max_hp_pct": 20
 			}
 		]

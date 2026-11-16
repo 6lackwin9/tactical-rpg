@@ -496,6 +496,8 @@ pub struct SkillDef {
     /// PK2-S1 (PK1 3.7, FB-174 (6)): a SUPPORT skill's `unmark` `{mark}`, the consumable's effect as a skill: the mark id
     /// whose latest entry on the target this battle it removes ("" = none).
     pub unmark: String,
+    /// PK3: a SUPPORT heal skill that revives a downed bleeding ally on resolve (false = living allies only).
+    pub revive: bool,
     /// PK2-S1: how many times a unit may use the skill in one battle (0 = no limit).
     pub uses_per_battle: i32,
     /// PR5-33: the look key the game shows when the skill is used (`looks::FX_KEY`; "" = by kind and weapon).
@@ -589,6 +591,7 @@ impl SkillDef {
             requires_meter: obj(o, "requires_meter").and_then(MeterGate::from_obj),
             channel: obj(o, "channel").map(ChannelSpec::from_obj).unwrap_or_default(),
             unmark: obj(o, "unmark").map(|u| string(u, "mark", "")).unwrap_or_default(),
+            revive: boolean(o, "revive", false),
             uses_per_battle: int(o, "uses_per_battle", 0),
             fx: string(o, looks::FX_KEY, ""),
             clip: string(o, looks::CLIP_KEY, ""),
@@ -709,6 +712,8 @@ pub struct ItemDef {
     /// GEAR-REWORK1 (U3.3 4): the stat its family's item, worn in the off hand, lends a main-hand weapon's attack power
     /// when higher than the weapon's own scaling stat (`ITEM_FAMILY_POWER_STAT`; "" = none).
     pub power_stat_override: String,
+    /// PK3: a healing consumable that revives a downed bleeding ally on use (false = living targets only).
+    pub revive: bool,
     pub raw: Obj,
 }
 
@@ -969,6 +974,7 @@ impl ItemDef {
             off_hand_skill: string(o, ITEM_FAMILY_OFF_HAND_SKILL, ""),
             empower_next: obj(o, ITEM_FAMILY_EMPOWER_NEXT).and_then(EmpowerNext::from_obj),
             power_stat_override: string(o, ITEM_FAMILY_POWER_STAT, ""),
+            revive: boolean(o, "revive", false),
             raw: o.clone(),
         }
     }

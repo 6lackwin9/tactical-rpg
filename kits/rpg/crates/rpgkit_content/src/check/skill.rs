@@ -29,7 +29,7 @@ const SECTION_FIELDS: [(&str, &[&str]); 22] = [
     ("reach", &["reach_min", "reach_max", "position"]),
     // A3.2-K2: `affects` (IR9) beside the shape it filters
     ("area", &["area", "affects"]),
-    ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "heal_pct", "unmark", "cleanse_statuses"]),
+    ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "heal_pct", "revive", "unmark", "cleanse_statuses"]),
     ("grant", &["grant_status", "status_magnitude", "status_rounds", "extra_grants"]),
     // AUDIT-07: `guard_rounds` (S1.2-S4) beside the fraction it holds
     ("guard", &["mitigation", "guard_rounds"]),
@@ -819,6 +819,14 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
         }
         if grant == "taunt" && json::s(e, "target_mode") != "SELF" {
             out.push("Taunt is cast on the taunter itself: set Targets to SELF.".into());
+        }
+        if json::b(e, "revive", false) {
+            if heal_base <= 0 && heal_mult <= 0.0 && heal_pct <= 0 {
+                out.push("Revive: needs a heal (base, per-stat or heal_pct).".into());
+            }
+            if json::s(e, "target_mode") == "SELF" {
+                out.push("Revive cannot target SELF (set Targets to ALLY or ALLY_OR_SELF).".into());
+            }
         }
     } else if kind == "DEFEND" {
         let mut options = status::defend_buffs();

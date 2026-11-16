@@ -338,13 +338,20 @@ impl BattleScreen {
                     self.popup = None;
                 }
                 // INPUT2 (decision "Playtest 2026-11-02"): while the hero's round is its ghost (no pick holds a target)
-                // a click on another ally selects that ally; Ctrl+click targets it (SL6: the hero's support menu)
-                Some(h) if self.planning() && is_ally && !cx.held.ctrl && !rip::picks_of(&s.w, h).iter().any(|p| p.holds_target()) => {
+                // a click on another ally selects that ally; Ctrl+click targets it (SL6: the hero's support menu).
+                // PK3: a click on a downed bleeding ally while planning with a living hero targets it for revive without Ctrl.
+                Some(h) if self.planning() && is_ally && !s.w.units[h].is_active() => {
+                    self.selected = None;
+                    self.popup = None;
+                }
+                Some(h) if self.planning() && is_ally && s.w.can_revive(u) => self.target_click(cx, h, RoundTarget::Unit(u)),
+                Some(h) if self.planning() && is_ally && !cx.held.ctrl && s.w.units[u].is_active() && !rip::picks_of(&s.w, h).iter().any(|p| p.holds_target()) => {
                     self.selected = Some(u);
                     self.popup = None;
                 }
-                Some(h) if self.planning() => self.target_click(cx, h, RoundTarget::Unit(u)),
-                _ if is_ally => {
+                Some(h) if self.planning() && (!is_ally || s.w.units[u].is_active() || s.w.can_revive(u)) => self.target_click(cx, h, RoundTarget::Unit(u)),
+                Some(_) if self.planning() => {}
+                _ if is_ally && s.w.units[u].is_active() => {
                     self.selected = Some(u);
                     self.popup = None;
                 }
@@ -353,13 +360,20 @@ impl BattleScreen {
             return;
         }
         if !self.planning() || self.selected.is_none() {
-            if is_ally {
+            if is_ally && s.w.units[u].is_active() {
                 self.selected = Some(u);
             }
             return;
         }
         let h = self.selected.unwrap();
         if is_ally && u != h {
+            if !s.w.units[u].is_active() {
+                if s.w.can_revive(u) {
+                    let rows = self.options_for(h, "ally", Some(u), None);
+                    self.open_popup(format!("{} -> {}", names[h], names[u]), rows);
+                }
+                return;
+            }
             let rows = self.options_for(h, "ally", Some(u), None);
             if rows.iter().any(|r| r.valid) {
                 self.open_popup(format!("{} -> {}", names[h], names[u]), rows);
@@ -556,7 +570,7 @@ impl BattleScreen {
         let w = &self.session().w;
         match ri::normalize(h, at) {
             RoundTarget::Cell(p) => Some(p),
-            RoundTarget::Unit(u) => w.has(u).then(|| w.pos(u)),
+            RoundTarget::Unit(u) => (w.has(u) || w.can_revive(u)).then(|| w.pos(u)),
             RoundTarget::Myself => w.has(h).then(|| w.pos(h)),
         }
     }
@@ -600,7 +614,7 @@ impl BattleScreen {
         let held = rip::picks_of(w, h).iter().any(|p| p.holds_target());
         let round = w.round_states.get(&h).and_then(|r| r.target);
         if let RoundTarget::Unit(u) = at {
-            if u != h && w.allies.contains(&u) {
+            if u != h && w.allies.contains(&u) && w.units[u].is_active() {
                 rows.push(Row { label: format!("Select {}", w.units[u].name), detail: String::new(), valid: true, act: RowAct::SelectAlly(u), tip: vec![(format!("Select {}", w.units[u].name), th().gold), ("Plan this hero's round instead.".into(), th().text)], warn: false, ap_short: None, slot: Some(Slot::Neutral("Select")), icon: Vec::new(), at: None, count: None });
             }
         }
@@ -620,7 +634,7 @@ impl BattleScreen {
     fn open_menu(&mut self, h: usize, at: RoundTarget, anchor: Option<V2>, after_pick: bool) {
         let (title, rows) = self.menu_rows(h, at);
         let ally = match at {
-            RoundTarget::Unit(u) if u != h && self.session().w.allies.contains(&u) => Some(u),
+            RoundTarget::Unit(u) if u != h && self.session().w.allies.contains(&u) && self.session().w.units[u].is_active() => Some(u),
             _ => None,
         };
         let usable = rows.iter().any(|r| r.valid && matches!(r.act, RowAct::Pick(_)));

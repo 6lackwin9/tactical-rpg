@@ -3523,6 +3523,28 @@
 					"skill": "ks_geode_nova"
 				}
 			]
+		},
+		{
+			"id": "smelling_salts",
+			"name": "Brimstone Smelling Salts",
+			"family": "consumable",
+			"rarity": "COMMON",
+			"weight": 0.3,
+			"value": 15,
+			"description": "Sharp brimstone-and-vinegar ampoule that shocks a downed ally upright (+15 HP; revives the bleeding).",
+			"damage_type": "",
+			"icon_id": "smelling_salts",
+			"starter_stash": false,
+			"consumable_type": "HEALTH_POTION",
+			"heal": 15,
+			"revive": true,
+			"damage": 0,
+			"buff_pct": 0.0,
+			"duration": 0,
+			"use_blocks": 1,
+			"use_reach": 1,
+			"hazard": {},
+			"max_stack": 2
 		}
 	]
 }

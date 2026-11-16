@@ -224,8 +224,13 @@ impl Resolver {
             }
             let c = a.unit;
             // RULESET1_INTENT TG4: a unit holding an intent whose target is gone before a command on it starts rests
-            // through that command and every later one this round (no AP)
-            if round_intent::intent_of(w, c).is_some() && a.command.acted_on(w).is_some_and(|t| !w.units[t].is_active()) {
+            // through that command and every later one this round (no AP); PK3: revive skills/items still target downed bleeding allies.
+            let revives_target = match &a.command.kind {
+                CmdKind::Support { skill, target, .. } => w.cat.skills[*skill].revive && w.can_revive(*target),
+                CmdKind::Item { item, target, .. } => item.revive && item.battle_reach() > 0 && w.can_revive(*target) && !w.foes_of(c).contains(target),
+                _ => false,
+            };
+            if !revives_target && round_intent::intent_of(w, c).is_some() && a.command.acted_on(w).is_some_and(|t| !w.units[t].is_active()) {
                 let gone = w.units[a.command.acted_on(w).unwrap()].name.clone();
                 for later in self.scheduled.iter_mut().filter(|x| x.unit == c && !x.cancelled && x.start >= block) {
                     later.command.into_rest();
@@ -451,6 +456,20 @@ impl Resolver {
             w.units[c].held_guard = None;
         }
         crate::ground::settle(self, w);
+        // PK3: decrement bleed-out timer on downed bleeding party members; at 0 they bleed out permanently.
+        for &c in &self.registered.clone() {
+            let Some(rem) = w.bleed_remaining.get_mut(&c) else { continue };
+            if !w.units[c].is_alive() && !w.units[c].is_withdrawn && !w.dead.contains(&c) {
+                *rem -= 1;
+                if *rem <= 0 {
+                    w.bleed_remaining.shift_remove(&c);
+                    if !w.dead.contains(&c) {
+                        w.dead.push(c);
+                    }
+                    self.log.push(format!("{} bleeds out.", w.units[c].name));
+                }
+            }
+        }
     }
 
     /// _record_round_end: the step row with the status's recorded source.

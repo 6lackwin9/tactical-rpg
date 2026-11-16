@@ -24,6 +24,17 @@
 					"count": 3,
 					"price": 25,
 					"requires_flags": []
+				},
+				{
+					"item": "smelling_salts",
+					"count": 2,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.slab_open",
+							"value": true
+						}
+					]
 				}
 			],
 			"loot": [],
@@ -147,6 +158,17 @@
 				},
 				{
 					"item": "con_quenched_salt",
+					"count": 2,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.slab_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "smelling_salts",
 					"count": 2,
 					"price": -1,
 					"requires_flags": [

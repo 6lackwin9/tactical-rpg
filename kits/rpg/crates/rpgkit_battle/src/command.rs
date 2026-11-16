@@ -449,7 +449,8 @@ impl Command {
             // INPUT1 MR16: a Support command on an ally chases it into its reach as an attack does
             CmdKind::Support { target, skill, .. } if self.follow > 0 => {
                 let (t, sk) = (*target, *skill);
-                if t == src || !w.units[t].is_active() || !w.units[src].is_active() || !w.has(t) || round_intent::hidden(w, t) || support_in_reach(w, src, t, sk) {
+                let alive_or_revive = w.units[t].is_active() || (w.cat.skills[sk].revive && w.can_revive(t));
+                if t == src || !alive_or_revive || !w.units[src].is_active() || w.grid.positions[t].is_none() || round_intent::hidden(w, t) || support_in_reach(w, src, t, sk) {
                     return String::new();
                 }
                 let (lo, hi) = skill::support_reach(&w.cat.skills[sk], &w.units[src]);
@@ -751,10 +752,19 @@ impl Command {
                     return;
                 }
                 if !w.units[target].is_active() {
-                    self.failed = true;
-                    self.cue = None;
-                    self.log = format!("[Support Failed] {src_name}'s {} has no target left.", self.name);
-                    return;
+                    let revivable = w.cat.skills[skill].revive && w.can_revive(target);
+                    if !revivable {
+                        self.failed = true;
+                        self.cue = None;
+                        self.log = format!("[Support Failed] {src_name}'s {} has no target left.", self.name);
+                        return;
+                    }
+                    if w.revive_cell(target).is_none() {
+                        self.failed = true;
+                        self.cue = None;
+                        self.log = format!("[Support Failed] {src_name}'s {}: Space is blocked.", self.name);
+                        return;
+                    }
                 }
                 if !support_in_reach(w, src, target, skill) {
                     self.failed = true;
@@ -846,11 +856,20 @@ impl Command {
                 let (mut heal, mut dmg, mut boost) = (0, 0, 0.0);
                 if item.heal > 0 {
                     // A1.2-K3 (A1 section 1): the heal pipeline (the item's flat heal), capped at the missing HP
-                    let before = w.units[target].hp;
-                    w.heal(target, damage::item_heal(item.heal));
-                    let t = &w.units[target];
-                    heal = t.hp - before;
-                    parts.push(format!("healed {heal} (HP {}/{})", t.hp, t.max_hp));
+                    let amount = damage::item_heal(item.heal);
+                    if !w.units[target].is_alive() {
+                        if let Ok((_, hp)) = w.revive(target, amount) {
+                            heal = hp;
+                            let t = &w.units[target];
+                            parts.push(format!("revived (HP {}/{})", t.hp, t.max_hp));
+                        }
+                    } else {
+                        let before = w.units[target].hp;
+                        w.heal(target, amount);
+                        let t = &w.units[target];
+                        heal = t.hp - before;
+                        parts.push(format!("healed {heal} (HP {}/{})", t.hp, t.max_hp));
+                    }
                 }
                 if item.damage > 0 {
                     // A1.2-K3 (A1 section 1, FB-55(2)): the damage pipeline (flat base, mitigation by the ruleset)
@@ -1755,6 +1774,11 @@ pub fn effective_heal(target: &Unit, amount: i32) -> i32 {
     crate::world::heal_taken(amount, target.band_heal_taken).clamp(0, target.max_hp - target.hp)
 }
 
+/// PK3: the HP restored when reviving a downed bleeding unit (`max(amount, 1)` after `heal_taken`, clamped to `1..=max_hp`).
+pub fn revive_heal(target: &Unit, amount: i32) -> i32 {
+    crate::world::heal_taken(amount, target.band_heal_taken).clamp(1, target.max_hp.max(1))
+}
+
 pub fn cleansable(target: &Unit, s: &rpgkit_data::SkillDef) -> Vec<&'static str> {
     skill::cleanse_list(s).into_iter().filter(|st| target.st.has_any(st)).collect()
 }
@@ -1803,7 +1827,14 @@ pub fn pierces_melee(w: &World, src: UnitId, ranged: bool) -> bool {
 /// "" when `target` is legal for `skill` cast by `caster` (distance aside).
 pub fn target_problem(w: &World, caster: UnitId, skill_id: SkillId, target: Option<UnitId>) -> String {
     let s = &w.cat.skills[skill_id];
-    let Some(t) = target.filter(|t| w.units[*t].is_active()) else { return "Choose a friendly unit.".into() };
+    let Some(t) = target else { return "Choose a friendly unit.".into() };
+    if !w.units[t].is_active() {
+        let revivable = s.revive && s.target_mode != "SELF" && w.can_revive(t) && w.friends_of(caster).contains(&t);
+        if !revivable {
+            return "Choose a friendly unit.".into();
+        }
+        return String::new();
+    }
     if t == caster {
         return if s.target_mode == "ALLY" { "only on another ally".into() } else { String::new() };
     }
@@ -1944,9 +1975,14 @@ fn item_problem(w: &World, src: UnitId, target: UnitId, item: &ItemDef) -> Strin
         return format!("{} can't act", w.units[src].name);
     }
     if !w.units[target].is_active() {
-        return format!("{} is down", w.units[target].name);
+        if !(item.revive && item.battle_reach() > 0 && w.can_revive(target) && !w.foes_of(src).contains(&target)) {
+            return format!("{} is down", w.units[target].name);
+        }
+        if w.revive_cell(target).is_none() {
+            return "Space is blocked".into();
+        }
     }
-    let in_reach = target == src || (w.has(src) && w.has(target) && w.dist(src, target) <= item.battle_reach());
+    let in_reach = target == src || (w.has(src) && w.grid.positions[target].is_some() && w.pos(src).dist(w.pos(target)) <= item.battle_reach());
     if !in_reach {
         return format!("{} is out of reach", w.units[target].name);
     }
@@ -1960,11 +1996,11 @@ fn support_in_reach(w: &World, src: UnitId, target: UnitId, skill_id: SkillId) -
     if target == src {
         return true;
     }
-    if !w.has(src) || !w.has(target) {
+    if !w.has(src) || w.grid.positions[target].is_none() {
         return false;
     }
     let (lo, hi) = skill::support_reach(&w.cat.skills[skill_id], &w.units[src]);
-    let d = w.dist(src, target);
+    let d = w.pos(src).dist(w.pos(target));
     d >= lo && d <= hi
 }
 
@@ -1990,9 +2026,15 @@ fn support_apply(w: &mut World, caster: UnitId, target: UnitId, skill_id: SkillI
     let mut healed = 0;
     if skill::heals(&s) {
         let amount = heal_amount_on(w, caster, target, skill_id);
-        let before = w.units[target].hp;
-        w.heal(target, amount);
-        healed = w.units[target].hp - before;
+        if !w.units[target].is_alive() {
+            if let Ok((_, hp)) = w.revive(target, amount) {
+                healed = hp;
+            }
+        } else {
+            let before = w.units[target].hp;
+            w.heal(target, amount);
+            healed = w.units[target].hp - before;
+        }
     }
     let name = w.units[caster].name.clone();
     if !s.grant_status.is_empty() {

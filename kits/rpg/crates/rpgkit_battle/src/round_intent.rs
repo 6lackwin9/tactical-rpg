@@ -225,9 +225,27 @@ pub fn item_allows(w: &World, item: &ItemDef, intent: RoundIntent) -> bool {
     item_rows(w, item).contains(&intent.id())
 }
 
+/// PK3 (rule round_intent): whether a Support round of `c` may target downed bleeding ally `t`: `c` knows a
+/// revive SUPPORT skill (not SELF) or carries an offered revive pouch item with reach > 0.
+pub fn revive_round_target(w: &World, c: UnitId, t: UnitId) -> bool {
+    if !w.allies.contains(&c) || t == c || !w.friends_of(c).contains(&t) || !w.can_revive(t) || w.grid.positions[t].is_none() {
+        return false;
+    }
+    let cap = w.skill_cap_of(c);
+    let has_skill = w.book().available(crate::skill::Kind::Support, cap, Some(&w.units[c])).iter().any(|&sid| {
+        let s = &w.cat.skills[sid];
+        s.revive && s.target_mode != "SELF"
+    });
+    let has_item = w.units[c].inventory.pouch.iter().any(|i| i.revive && i.battle_reach() > 0 && i.offered_in_battle());
+    has_skill || has_item
+}
+
 /// RULESET1_INTENT PL2 (the intent table of section 2): "" when `target` fits `intent` for unit `c`, else the reason.
 pub fn target_problem(w: &World, c: UnitId, intent: RoundIntent, target: RoundTarget) -> String {
-    let unit_ok = |t: UnitId| w.units.get(t).is_some_and(|u| u.is_active()) && w.has(t);
+    let unit_ok = |t: UnitId| {
+        (w.units.get(t).is_some_and(|u| u.is_active()) && w.has(t))
+            || (intent == RoundIntent::Support && revive_round_target(w, c, t))
+    };
     let foe = |t: UnitId| w.foes_of(c).contains(&t);
     let friend = |t: UnitId| t == c || w.friends_of(c).contains(&t);
     match target {
@@ -247,7 +265,8 @@ pub fn target_problem(w: &World, c: UnitId, intent: RoundIntent, target: RoundTa
         // Stand round); without it a self item stays Support
         (RoundIntent::Support, RoundTarget::Myself) => !field_rows(w),
         // PR5-25: a turned ally is a Support target while an `unmark` (skill or item) of the unit reaches it
-        (RoundIntent::Support, RoundTarget::Unit(t)) => friend(t) || crate::mark::unmark_round_target(w, c, t),
+        // PK3: a downed bleeding ally is a Support target while a revive (skill or item) of the unit reaches it
+        (RoundIntent::Support, RoundTarget::Unit(t)) => friend(t) || crate::mark::unmark_round_target(w, c, t) || revive_round_target(w, c, t),
         (RoundIntent::Support, RoundTarget::Cell(_)) => false,
         (RoundIntent::Channel, _) => true,
         // INTENT2 IR2, IR5: Field aims at a tile (the source); a click on a unit means the unit

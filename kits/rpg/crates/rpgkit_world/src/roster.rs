@@ -322,6 +322,7 @@ fn then_departs(f: &FightEnd, e: &HeroEnd) -> Option<(&'static str, &'static str
 fn settle_value(r: &RosterRule, f: &FightEnd, e: &HeroEnd) -> (String, &'static str) {
     let fate = e.fate.unwrap_or(if e.alive { PartyFate::Standing } else { PartyFate::Downed });
     let downed = match fate {
+        PartyFate::Dead => return (DEAD.to_string(), "bled_out"),
         PartyFate::Downed => true,
         PartyFate::Stayed | PartyFate::Stood => !e.alive || e.hp <= 0,
         PartyFate::Escaped | PartyFate::Standing => false,
@@ -474,6 +475,14 @@ fn settle_fates(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) ->
             if depart(d, gs, &e.member, life, cause, &f.encounter).is_ok() {
                 out.departed.push((e.member.clone(), life.to_string()));
                 fallen_remains(d, gs, f, &e.member, life, &mut out);
+                continue;
+            }
+        }
+        // PK3: a party member who bled out during battle departs permanently dead with cause "bled_out" on every outcome.
+        if e.fate == Some(PartyFate::Dead) {
+            if depart(d, gs, &e.member, DEAD, "bled_out", &f.encounter).is_ok() {
+                out.departed.push((e.member.clone(), DEAD.to_string()));
+                fallen_remains(d, gs, f, &e.member, DEAD, &mut out);
                 continue;
             }
         }

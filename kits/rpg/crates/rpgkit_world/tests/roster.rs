@@ -923,3 +923,24 @@ fn party_min_reads_the_fight_worlds_entry() {
     assert_eq!(battle::fight_world(&d, &gs, "ow:fight"), "ow", "another world's encounter: that world");
     assert_eq!(battle::fight_world(&d, &gs, "nothing"), "w", "unknown: the played world");
 }
+
+#[test]
+fn bled_out_party_fate_departs_dead_and_battle_init_passes_bleed_out_rounds() {
+    let d = data_with(|_, worlds| {
+        worlds["cw"]["manifest"]["roster"]["rules"][1]["bleed_out_rounds"] = json!(3);
+    });
+    let entry = d.resolve("cw", "encounters", "fight");
+    let gs1 = cell(&d, "cw", 1);
+    assert_eq!(battle::encounter_def_in(&d, &gs1, "cw", entry).bleed_out_rounds, 0);
+
+    let mut gs2 = cell(&d, "cw", 2);
+    assert_eq!(battle::encounter_def_in(&d, &gs2, "cw", entry).bleed_out_rounds, 3);
+    let max = max_of(&d, &gs2, "founder");
+    let end = fated("founder", 0, max, PartyFate::Dead);
+    // Even if the party wins, PartyFate::Dead always settles as "dead" with cause "bled_out".
+    let res = dialogue_fight(&d, &mut gs2, "cw:fight", "won", &party_tally("cw", vec![end]));
+    assert_eq!(res["departed"], json!([{"member": "founder", "life": "dead"}]));
+    let rec = gs2.party.departed_of("founder").expect("bled out member recorded in departed");
+    assert_eq!((rec.life.as_str(), rec.cause.as_str()), ("dead", "bled_out"));
+    assert!(gs2.party.member("founder").is_none());
+}

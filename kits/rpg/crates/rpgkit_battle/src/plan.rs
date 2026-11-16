@@ -817,8 +817,12 @@ impl Plan {
         if !side.is_empty() {
             return side;
         }
-        if !w.units[target].is_active() || w.grid.positions[target].is_none() {
+        let reviving = !w.units[target].is_alive() && !w.units[target].is_withdrawn && con.revive && con.battle_reach() > 0 && w.can_revive(target);
+        if (!w.units[target].is_active() && !reviving) || w.grid.positions[target].is_none() {
             return format!("{} is not on the field.", w.units[target].name);
+        }
+        if reviving && w.revive_cell(target).is_none() {
+            return "Space is blocked".into();
         }
         if target != c && st.pos.dist(w.pos(target)) > con.battle_reach() {
             return format!("Out of reach for {item_name}.");
@@ -846,7 +850,11 @@ impl Plan {
         let tu = &w.units[target];
         if con.heal > 0 {
             // PK1-KITFIX (d): the item's heal after the target's `heal_taken`, as `World::heal` applies it
-            st.entries[last].est_heal = crate::world::heal_taken(con.heal, tu.band_heal_taken).min((tu.max_hp - tu.hp).max(0));
+            st.entries[last].est_heal = if reviving {
+                command::revive_heal(tu, damage::item_heal(con.heal))
+            } else {
+                crate::world::heal_taken(con.heal, tu.band_heal_taken).min((tu.max_hp - tu.hp).max(0))
+            };
         }
         if con.damage > 0 {
             // A1.2-K3: the item damage pipeline's value (the flat damage unless the ruleset mitigates item damage)
@@ -1396,8 +1404,12 @@ impl Plan {
             return p;
         }
         let ally = ally.unwrap();
-        if !w.has(ally) {
+        let reviving = !w.units[ally].is_alive() && !w.units[ally].is_withdrawn && s.revive && w.can_revive(ally);
+        if w.grid.positions[ally].is_none() || (!w.units[ally].is_active() && !reviving) {
             return "Not on the field.".into();
+        }
+        if reviving && w.revive_cell(ally).is_none() {
+            return "Space is blocked".into();
         }
         let band = skill::support_reach(s, &w.units[c]);
         let near = band.0.max(1);
@@ -1439,7 +1451,8 @@ impl Plan {
         }
         let p = self.add_entry(w, c, st, sid, index, Some(ally), &[], 0, &[]);
         if p.is_empty() {
-            let heal = command::effective_heal(&w.units[ally], command::heal_amount_on(w, c, ally, sid));
+            let raw = command::heal_amount_on(w, c, ally, sid);
+            let heal = if reviving { command::revive_heal(&w.units[ally], raw) } else { command::effective_heal(&w.units[ally], raw) };
             let e = st.entries.last_mut().unwrap();
             e.est_heal = heal;
             // INPUT1 MR16, CLN-45: a Support skill on an ally chases it up to 1 tile with `chase` every_skill
