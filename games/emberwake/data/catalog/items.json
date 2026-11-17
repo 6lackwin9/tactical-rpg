@@ -3770,6 +3770,192 @@
 			"max_stack": 5,
 			"mastery_family": "staff",
 			"mastery_xp": 150
+		},
+		{
+			"id": "keepsake_tpl_warrior",
+			"name": "Shield Strap",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.1,
+			"value": 0,
+			"description": "A worn Watch shield strap. A recruit's keepsake.",
+			"damage_type": "",
+			"icon_id": "keepsake_tpl_warrior",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "CONS",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "stun",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_tpl_ranger",
+			"name": "Fletching Charm",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.1,
+			"value": 0,
+			"description": "A charm of bound fletching. A recruit's keepsake.",
+			"damage_type": "",
+			"icon_id": "keepsake_tpl_ranger",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "PERC",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "root",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_tpl_rogue",
+			"name": "Lockpick Ring",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.1,
+			"value": 0,
+			"description": "A ring set with a bent pick. A recruit's keepsake.",
+			"damage_type": "",
+			"icon_id": "keepsake_tpl_rogue",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "DEX",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "slow",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_tpl_priest",
+			"name": "Prayer Cord",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.1,
+			"value": 0,
+			"description": "A knotted prayer cord. A recruit's keepsake.",
+			"damage_type": "",
+			"icon_id": "keepsake_tpl_priest",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "KNOW",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "poison",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_tpl_brawler",
+			"name": "Knuckle Wrap",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.1,
+			"value": 0,
+			"description": "A blackened knuckle wrap. A recruit's keepsake.",
+			"damage_type": "",
+			"icon_id": "keepsake_tpl_brawler",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "STR",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "stagger",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_tpl_mage",
+			"name": "Ash Vial",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.1,
+			"value": 0,
+			"description": "A stoppered vial of ash. A recruit's keepsake.",
+			"damage_type": "",
+			"icon_id": "keepsake_tpl_mage",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "INT",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "burn",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
 		}
 	]
 }
