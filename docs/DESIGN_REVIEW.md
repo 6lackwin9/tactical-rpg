@@ -10,6 +10,7 @@ Previously reviewed & landed batches (`PR5-49..59`, `U3_GEAR_REWORK`, `PK1..PK2`
 
 | Date | Item | What was asked | Applied (recommended option) | Where | Undo cost |
 | --- | --- | --- | --- | --- | --- |
+| 2026-11-17 | Project review step A-C defaults | Review steps A-C asked Design to define the shippable milestone, the backlog order and the guardrail rows; three reversible calls were needed | (1) Playable Release 1 = Acts 1-3 to an ending on Windows and web plus 6 gate conditions (`MILESTONES.md`); (2) backlog order fixes, Acts 2-3, engine track, art batches, parked (READY section 3); (3) `N2` follows the spec (Cold Steel keystone needs a masterwork of that family, rite per family, `PR7-2`); (4) balance bands duel `40-60%`, line `80-95%`, elite `70-85%`, boss `30-50%` (`PR7-6`) | `MILESTONES.md`, `READY.md`, [AUTOPILOT1.md](specs/AUTOPILOT1.md) | low (docs and tuning values) |
 
 ## Playtest Review Target (Provisional Data, Copy & Feel)
 

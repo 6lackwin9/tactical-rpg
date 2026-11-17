@@ -19,7 +19,7 @@ Scope:
 - If the brief contradicts the spec or the decisions files (per CLAUDE.md), say so in the first line of your report and put the contested part in a second seed file (`games/emberwake/data/seeds/<task>_alt.json`) so the planner can choose which one to apply.
 - Checkpoint (runs can be cut off by usage limits or API errors): keep `.agent/progress.md` in the worktree (gitignored) with done steps, next step and the last check result; on start, if it exists, continue from it.
 
-Work on the branch/worktree you were given (verify with `git branch --show-current` and `pwd`); never commit, push or merge (the planner does; in the cloud, the area thread).
+Work on the branch/worktree you were given (verify with `git branch --show-current` and `pwd`); never commit, push or merge (the planner does; in the cloud, the Build thread).
 
 Report (concise): assets added/changed (ids), `content check` output, test results, any schema gaps or spec ambiguities, and tests that need a rule-derived update by the logic-builder.
 

@@ -11,6 +11,8 @@ field tables `schema.json`, since KIT1-M/N; the kit names no game; plus kit asse
 `game.json` and its design docs in `docs/`). Every task row has a Layer (engine, kit, game) and its change lands in that
 layer; the engine never names a game.
 
+**Mode in force: interactive** (2026-11-17; decision "Interactive mode"; this line is the single record of the mode and every skill defers to it): threads act only on the user's direct requests, one at a time; Build builds one READY row per "Build: next row"; releases only on "release now". The proposed autopilot mode is a draft awaiting the user's approval (`docs/specs/AUTOPILOT1.md`).
+
 Environment: `$CLAUDE_CODE_REMOTE` empty = **desktop** (read `docs/workflow/desktop.md`), `true` = **cloud** (read `docs/workflow/cloud.md`). Both share everything in this file; what differs (sessions, branches, commits, merges, gate time, IDE rule) and how to switch: `docs/workflow/README.md`.
 
 ## Two-session split: Design vs Build (since 2026-11-07)

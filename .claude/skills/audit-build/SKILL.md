@@ -10,7 +10,8 @@ Use this skill in the **Design Session** (`C:\dev\tactical-rpg-dev` or cloud) af
 ## Workflow
 
 1. **Identify Commit Range**:
-   - Run `git fetch origin` and `git log --oneline origin/develop -n 25` to identify the landed Build commits since the last audit.
+   - Run `git fetch origin`; the range is `<last-audited-sha>..origin/develop`, where the last audited commit is the `Last audited` line of `docs/audits/README.md` (review 2026-11-17; before it, `git log --oneline origin/develop -n 25` was read by eye).
+   - After presenting the result, update that `Last audited` line to the audited `origin/develop` sha in the same commit as the queued `AUDIT-nn` rows. The Merge & Release thread checks before each release that `Last audited` covers every task commit in `origin/main..origin/develop`, and asks for an audit when it does not.
 2. **Dispatch `build-auditor`**:
    - Spawn the `build-auditor` subagent with the commit range, the corresponding `docs/READY.md` rows, the governing session/feature specs (`docs/sessions/*.md`, `docs/specs/*.md`), the guiding principles (`docs/PRINCIPLES.md`), and the canon blueprint (`games/emberwake/docs/lore/CANON.md`).
    - Require `build-auditor` to inspect the actual Rust/JSON/doc diffs (`git show`, `read_file`, `grep_search`) and return:
