@@ -50,7 +50,9 @@ After a re-cut, copy `target/review/propcut/games/emberwake/assets/props/sunk_wa
 ## Open, in order
 
 Process for every map, the hub included (Tushar, 2026-11-17): first a layout reference image of the whole map, then
-rebuild that look with terrain tiles and props, shown side by side with the reference (ART_UI_STUDIO 3.3).
+rebuild that look with terrain tiles and props, shown side by side with the reference (ART_UI_STUDIO 3.3). The
+reference comes from the design, never from a render: Drive `image_pipeline/flow/out/Region Maps` already holds the
+hub's (`Underground_vault_*`, two takes) and the Grate's (`Flooded_underground_drainage_*`, three takes).
 
 1. The hub's gate arch and bunks were drawn for a taller wall and look cramped in a one-tile face: redraw them for
    that height (a full sluice gate arch 4 wide; a single-tier bunk niche 2 wide), or make walls two tiles tall.
