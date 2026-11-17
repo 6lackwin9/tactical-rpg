@@ -14,7 +14,7 @@ use aegis_ui::panes::{self, MenuItem, MenuStyle};
 use emberwake_battle::portrait::Look;
 use aegis_ui::ui::{tip, Gfx, Glyph, Ui, Widget, BODY, H, W};
 use crate::screens::WINDOW_SIZES;
-use aegis_ui::screen::{Settings, WindowShow, FPS_CAPS, TEXT_SIZES, TEXT_SPEEDS};
+use aegis_ui::screen::{display_keys, Settings, WindowShow, FPS_CAPS, ON_WEB, TEXT_SIZES, TEXT_SPEEDS};
 use aegis_ui::vignette::{TextSpeed, REDUCE_MOTION, TEXT_SPEED};
 use aegis_ui::portrait_overlays;
 use aegis_ui::widget_plumbing;
@@ -905,28 +905,41 @@ impl Screen<GameCx> for SettingsScreen {
                 }
             }
             1 => {
+                // DISPLAY1: the platform's rows (`display_keys`); the web has Fullscreen (the browser's, for the
+                // session) and Text size, as the page owns the canvas size and the browser the frame rate.
+                let shown = |k: &str| display_keys(ON_WEB).contains(&k);
                 let show = WindowShow::of(&d);
                 ui.checkbox("settings.fullscreen", x + 3, y, "Fullscreen", show == WindowShow::Fullscreen, SetAct::Toggle("fullscreen"), true);
                 y += 18;
-                ui.checkbox("settings.borderless", x + 3, y, "Borderless", d["borderless"].as_bool().unwrap_or(false), SetAct::Toggle("borderless"), true);
-                y += 20;
-                ui.p.text(x as f32, y as f32 + 3.0, "Resolution", BODY, th().text);
-                choice(&mut ui, "window_size", Rect::new(x + 125, y, 150, 16), d["window_size"].as_str().unwrap_or(""), show != WindowShow::Fullscreen);
-                y += 22;
-                ui.p.text(x as f32, y as f32, "In use", BODY, th().text);
-                let size = d["window_size"].as_str().unwrap_or("");
-                let in_use = match show {
-                    WindowShow::Fullscreen => "Fullscreen".to_string(),
-                    WindowShow::Borderless => format!("Borderless {size}"),
-                    WindowShow::Windowed => format!("Windowed {size}"),
-                };
-                ui.p.text(x as f32 + 125.0, y as f32, &in_use, BODY, th().dim);
-                y += 18;
-                ui.checkbox("settings.vsync", x + 3, y, "Vertical sync", d["vsync"].as_bool().unwrap_or(true), SetAct::Toggle("vsync"), true);
-                y += 20;
-                ui.p.text(x as f32, y as f32 + 3.0, "Frame rate cap", BODY, th().text);
-                choice(&mut ui, "fps_cap", Rect::new(x + 125, y, 150, 16), d["fps_cap"].as_str().unwrap_or(""), true);
-                y += 24;
+                if shown("borderless") {
+                    ui.checkbox("settings.borderless", x + 3, y, "Borderless", d["borderless"].as_bool().unwrap_or(false), SetAct::Toggle("borderless"), true);
+                    y += 20;
+                }
+                if shown("window_size") {
+                    ui.p.text(x as f32, y as f32 + 3.0, "Resolution", BODY, th().text);
+                    choice(&mut ui, "window_size", Rect::new(x + 125, y, 150, 16), d["window_size"].as_str().unwrap_or(""), show != WindowShow::Fullscreen);
+                    y += 22;
+                    ui.p.text(x as f32, y as f32, "In use", BODY, th().text);
+                    let size = d["window_size"].as_str().unwrap_or("");
+                    let in_use = match show {
+                        WindowShow::Fullscreen => "Fullscreen".to_string(),
+                        WindowShow::Borderless => format!("Borderless {size}"),
+                        WindowShow::Windowed => format!("Windowed {size}"),
+                    };
+                    ui.p.text(x as f32 + 125.0, y as f32, &in_use, BODY, th().dim);
+                    y += 18;
+                }
+                if shown("vsync") {
+                    ui.checkbox("settings.vsync", x + 3, y, "Vertical sync", d["vsync"].as_bool().unwrap_or(true), SetAct::Toggle("vsync"), true);
+                    y += 20;
+                }
+                if shown("fps_cap") {
+                    ui.p.text(x as f32, y as f32 + 3.0, "Frame rate cap", BODY, th().text);
+                    choice(&mut ui, "fps_cap", Rect::new(x + 125, y, 150, 16), d["fps_cap"].as_str().unwrap_or(""), true);
+                    y += 24;
+                } else {
+                    y += 4;
+                }
                 ui.p.text(x as f32, y as f32 + 3.0, "Text size", BODY, th().text);
                 // The engine's four levels (Godot TEXT_LEVELS); a saved value off the levels shows the nearest one.
                 let ts = pct("text_scale");
