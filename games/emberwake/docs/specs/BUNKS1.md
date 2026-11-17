@@ -40,6 +40,8 @@ and the region leader (`GameState::explore_leader`, MAPNAV1-U).
 - BK10. Passing the lead (Q as in the regions, or "Take the lead" on a member's click card): the two trade places. The
   new lead stands up from their spot and is controlled from there; the old lead walks to the freed spot and takes its
   idle pose. No other member moves, and the camera follows the new lead.
+- BK12. Entering the hub: the lead arrives standing at the hub's entry point, as today, never seated; the others are
+  already at their idle spots.
 - BK11. Talks are unaffected by the lead: markers stay on their members, and a talk involving the lead plays when the
   lead interacts with the other member.
 
