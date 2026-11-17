@@ -192,7 +192,7 @@ def sluice_undercroft():
     L.rect(18, 1, 19, 5, ".", "f")
     L.rect(16, 0, 21, 0, "#")
     L.prop("sluice_gate", "portcullis", 17, 0, 4, 1)              # one barred arch in the north wall, over the causeway
-    L.prop("post_w", "mooring_bollard", 17, 6); L.prop("post_e", "mooring_bollard", 20, 6)   # hub prop sheet 1 (2026-11-17)
+    L.prop("post_e", "mooring_bollard", 20, 6)   # one bollard, by the skiff; the west one went (Tushar 2026-11-17: "too cluttered" by the board)
     L.prop("skiff", "varka_skiff", 21, 4, 2, 1, layer="ground")
     L.prop("board", "mission_board", 14, 6, 2, 1)
     # --- the Apothecary's Slab
@@ -222,12 +222,15 @@ def sluice_undercroft():
         L.prop(f"bunk_{i + 1}", "niche_bunk", x, 15, 2, 2)
     for i, x in enumerate((12, 15, 22, 25)):
         L.prop(f"nightstand_{i + 1}", "nightstand", x, 16)
-    L.prop("table", "table_stools", 18, 20, 2, 1)
     L.prop("stove", "hearth_stove", 27, 20)
-    # the west end was bare floor (Tushar 2026-11-17): the founders' gear and stores, kept to the wall side
-    L.prop("gear_rack", "weapon_rack", 10, 19, 2, 1)
-    L.prop("stores", "barrel_stack", 10, 22, 2, 1); L.prop("footlocker", "strongbox", 12, 22)
-    L.prop("linen", "rag_pile", 14, 20, 2, 2, layer="ground")
+    # two halves (Tushar 2026-11-17: one small table was too small for six bunks): sleeping along the bunk wall
+    # (rows 16-18: gear rack, footlocker, linen), social below (rows 20-22: one long table of three, the stove, stores)
+    L.prop("gear_rack", "weapon_rack", 10, 18, 2, 1)
+    L.prop("footlocker", "strongbox", 14, 18)
+    L.prop("linen", "rag_pile", 12, 18, 2, 1, layer="ground")
+    for i, x in enumerate((14, 17, 20)):
+        L.prop("table" if i == 1 else f"table_{i + 1}", "table_stools", x, 21, 3, 1)
+    L.prop("stores", "barrel_stack", 10, 22, 2, 1)
     # --- the Isolation Crypts: bars beside the door, two stasis slabs
     # the whole north wall is a bar wall either side of the door (design reference ..._ce4b19f9, 2026-11-17)
     L.prop("crypt_bars", "bar_run", 29, 15, 3, 1); L.prop("crypt_bars_2", "bar_run", 34, 15, 3, 1)
