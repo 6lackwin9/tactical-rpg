@@ -1924,7 +1924,7 @@ pub fn expected_from(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Op
     let u = &w.units[c];
     let ranged = expected_is_ranged(w, c, sid);
     let dist = if from != NO_CELL && w.has(foe) { from.dist(w.pos(foe)) } else { 0 };
-    let skill_mult = if dist > 0 { u.power_for_at(s, dist) } else { u.power_for(s) } * power_scale;
+    let skill_mult = if dist > 0 { u.power_for_at(s, ranged, dist) } else { u.power_for(s) } * power_scale;
     damage::compute(
         u,
         &w.units[foe],

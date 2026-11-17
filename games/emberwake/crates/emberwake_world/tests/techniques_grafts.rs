@@ -188,6 +188,9 @@ fn sabina_grafts_channel_rounds_and_keystone_exclusion_work_in_sunk_ward() {
     // Give Kaelen Mastery 3 + Forge Rite too so we prove Inoculated Keystone preempts Cold Steel Keystone.
     mastery::gain(&d, &mut gs, "kaelen", "polearm", MASTERY_LEVEL_XP[2]).unwrap();
     run_ok(&d, &mut gs, BEREK, "hearth_rite", &kaelen);
+    // PR7-2 (N2): the keystone is forged into a masterwork of the family, so it works only while one is in the main hand
+    assert!(built(&d, &gs, "kaelen").mastery_keystone.is_empty(), "no Cold Steel keystone without a masterwork main hand");
+    gs.party.member_mut("kaelen").unwrap().weapons.get_mut(weapons::MAIN_HAND).expect("an instance in the main hand").masterwork = true;
     assert_eq!(built(&d, &gs, "kaelen").mastery_keystone, "polearm_cordon", "Cold Steel keystone active before cranial keystone");
 
     run_ok(&d, &mut gs, SABINA, "sg_ks_war_cranial", &kaelen);

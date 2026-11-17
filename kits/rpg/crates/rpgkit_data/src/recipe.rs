@@ -44,7 +44,8 @@ pub const PROF_ROLES: [&str; 4] = ["main", "secondary", "third", "minor"];
 /// missing durability's fraction (`repair_share`); the salvage item the weapon's theme names in `themes`, else the one
 /// its rarity names in `tiers`, else none: a basic weapon costs purse alone), `reforge` (a weapon instance back to full
 /// durability; `masterwork` also makes it masterwork, so a row with it needs `requires`), `forge_rite` (the member's
-/// forge rite, with mastery 3 in a family: its keystone opens). PR5-45: `craft` (adds `count` of catalog `item` to the
+/// forge rite of one family at mastery 3, the picked one or its only open one; with a masterwork main hand of that
+/// family its keystone opens, `PR7-2`). PR5-45: `craft` (adds `count` of catalog `item` to the
 /// party stash, default `CRAFT_COUNT_DEFAULT`; a weapon becomes a fresh instance while instances are active).
 pub const RECIPE_EFFECTS: [(&str, &[&str], &str); 13] = [
     (FX_INSTALL, &["item", "slot"], TARGET_MEMBER),

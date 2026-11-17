@@ -2489,7 +2489,7 @@ mod tests {
             m.equipment.insert("main_hand".into(), "mw_blade".into());
             m.equipment.insert("off_hand".into(), NO_ITEM.into());
             m.mastery_xp.insert("sword".into(), *MASTERY_LEVEL_XP.last().unwrap());
-            m.forge_rite = true;
+            m.set_forge_rite("sword", true);
             gs.party.stash.insert("blade".into(), 1);
             gs.party.stash.shift_remove("mw_blade");
         }

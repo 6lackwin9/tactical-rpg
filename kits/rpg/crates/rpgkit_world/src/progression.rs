@@ -241,7 +241,7 @@ pub(crate) fn build_unchecked(d: &Data, state: &UnitState, world: &str, auto_spe
         // main-hand instance opens the weapon's own technique
         mastery: work.mastery_xp.iter().map(|(k, v)| (k.clone(), rpgkit_data::mastery::level_of(*v))).filter(|(_, l)| *l > 0).collect(),
         masterwork: crate::weapons::masterwork_main(&work),
-        forge_rite: work.forge_rite,
+        forge_rites: work.forge_rites.clone(),
         // PK2-S5b: the durability of its wielded instances that wear (none without the rule durability)
         wear: crate::weapons::wear_of(d, &work, world),
     };

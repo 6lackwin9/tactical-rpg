@@ -4,7 +4,8 @@
 //! effect's price (`repair_share`: the full-repair price times the missing durability's fraction, rounded up): purse
 //! alone for a basic weapon, plus salvage of its tier (`tiers` by rarity) or, for a themed weapon, of its theme
 //! (`themes`); `reforge` brings it back to full and, behind the recipe's `requires`, makes it masterwork (its own
-//! technique opens in the build); `forge_rite` gives a member with mastery 3 its forge rite (the family keystone opens).
+//! technique opens in the build); `forge_rite` records a member's forge rite for one family at mastery 3 (the picked one, else its only open one;
+//! `PR7-2` N2: one rite per family, so a second family needs its own).
 //! A refusal changes nothing. Expectations derive from the rows below and the kit's rules, not from printed numbers.
 
 use aegis_core::json;
@@ -248,14 +249,30 @@ fn a_damaged_masterwork_is_refused_by_the_masterwork_reforge() {
 }
 
 #[test]
-fn the_forge_rite_needs_mastery_3_and_is_taken_once() {
+fn the_forge_rite_needs_mastery_3_and_is_taken_once_per_family() {
     let d = data();
     let mut gs = game(&d, FROM_ACT);
     let hero = Pick { member: gs.party.members[0].id.clone(), ..Pick::default() };
+    let family = |f: &str| Pick { family: f.into(), ..hero.clone() };
+    let rite = d.cat.recipes.get("rite").expect("the rite row").clone();
     assert!(refused(&d, &mut gs, "rite", &hero).contains("needs mastery 3"));
     gs.party.members[0].mastery_xp.insert("sword".into(), mastery::xp_cap());
+    assert!(recipe::families(&d, &gs, &rite, &hero).is_empty(), "one open family: no pick");
     ok(&d, &mut gs, "rite", &hero);
-    assert!(gs.party.members[0].forge_rite);
-    assert!(gs.party.members[0].to_value().get(rpgkit_world::state::FORGE_RITE_KEY).is_some(), "saved");
+    assert_eq!(gs.party.members[0].forge_rites, ["sword"], "the rite is the sword's");
+    assert_eq!(gs.party.members[0].to_value()[rpgkit_world::state::FORGE_RITES_KEY], json!(["sword"]), "saved");
     assert!(refused(&d, &mut gs, "rite", &hero).contains("already"));
+    assert!(refused(&d, &mut gs, "rite", &family("sword")).contains("already"));
+    // a second family at mastery 3 needs its own rite; with two open the run asks for the pick
+    for f in ["axe", "spear"] {
+        gs.party.members[0].mastery_xp.insert(f.into(), mastery::xp_cap());
+    }
+    assert_eq!(recipe::families(&d, &gs, &rite, &hero), ["axe", "spear"], "the open rite families, not the sword");
+    assert!(refused(&d, &mut gs, "rite", &hero).contains("Pick a weapon family"));
+    assert!(refused(&d, &mut gs, "rite", &family("mace")).contains("needs mastery 3 in mace"));
+    ok(&d, &mut gs, "rite", &family("spear"));
+    assert_eq!(gs.party.members[0].forge_rites, ["sword", "spear"], "per family, in rite order");
+    ok(&d, &mut gs, "rite", &hero);
+    assert_eq!(gs.party.members[0].forge_rites, ["sword", "spear", "axe"], "the last open family needs no pick");
+    assert!(refused(&d, &mut gs, "rite", &hero).contains("every family"));
 }

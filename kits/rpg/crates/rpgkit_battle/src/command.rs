@@ -1077,7 +1077,8 @@ impl Command {
         if dist > 0 {
             if let Some(s) = w.cat.skill(&self.skill) {
                 let base_pot = w.units[src].potency_for_skill(s);
-                let at_pot = w.units[src].potency_for_skill_at(s, dist);
+                // PR7-2 (N1): the hit's ranged flag lets a distance-gated `ranged` grant reach the basic attack too
+                let at_pot = w.units[src].potency_for_skill_at(s, ranged, dist);
                 if (at_pot - base_pot).abs() > 1e-12 && base_pot.abs() > 1e-12 {
                     mult *= at_pot.max(0.0) / base_pot;
                 }

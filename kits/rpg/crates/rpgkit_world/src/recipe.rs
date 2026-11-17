@@ -11,8 +11,8 @@
 //! its proficiency rate; `mastery::gain`, from `durability.from_act`). PK2-FOLLOWUP (PR5-36, `PK2_GRAFTS.md` 5, 7): the
 //! weapon effects `repair` (the picked instance back to `ItemDef::max_durability` for its scaled cost, `repair_cost`)
 //! and `reforge` (back to full; `masterwork` makes it masterwork), on a `weapon` recipe while instances are active
-//! (`weapons::active`; the run syncs them first), and the member effect `forge_rite` (`UnitState::forge_rite`, for a
-//! member with mastery 3 in a family). PR5-45: a `stash` recipe needs no pick; its effect `craft` adds `count` of its
+//! (`weapons::active`; the run syncs them first), and the member effect `forge_rite` (`UnitState::forge_rites`: the rite of
+//! one family at mastery 3, the picked one or the only open one, `PR7-2` N2). PR5-45: a `stash` recipe needs no pick; its effect `craft` adds `count` of its
 //! item to the party stash (a weapon gets a fresh full instance while instances are active, `weapons::sync`).
 
 use crate::data::Data;
@@ -286,20 +286,46 @@ fn member_effect(d: &Data, gs: &mut GameState, name: &str, fx: &Dict, pick: &Pic
             notes.push(crate::mastery::note(d, gs, &g));
         }
         r::FX_FORGE_RITE => {
-            // PK2-FOLLOWUP (FB-214 (d)): the forge rite, for a member with mastery 3 in a family (its keystone opens)
-            if m.forge_rite {
-                return Err(format!("{who} has taken the forge rite already."));
-            }
-            let top = rpgkit_data::mastery::MASTERY_MAX;
-            if !m.mastery_xp.values().any(|xp| rpgkit_data::mastery::level_of(*xp) >= top) {
-                return Err(format!("{who} needs mastery {top} in a weapon family first."));
-            }
-            m.set_forge_rite(true);
-            notes.push(format!("{who} takes the forge rite."));
+            // PK2-FOLLOWUP (FB-214 (d)), `PR7-2` (N2): the forge rite of one family the member has at mastery 3 (the
+            // picked one, else its only one without a rite); with a masterwork main hand of that family its keystone opens
+            let family = rite_family(d, m, &pick.family)?;
+            m.set_forge_rite(&family, true);
+            notes.push(format!("{who} takes the forge rite of {family}."));
         }
         other => return Err(format!("Unknown recipe effect '{other}'.")),
     }
     Ok(())
+}
+
+/// `PR7-2` (N2): the families member `m` may take a forge rite in: those at mastery 3 without a rite yet, in its
+/// mastery order.
+pub fn rite_families(m: &UnitState) -> Vec<String> {
+    let top = rpgkit_data::mastery::MASTERY_MAX;
+    m.mastery_xp.iter().filter(|(f, xp)| rpgkit_data::mastery::level_of(**xp) >= top && !m.has_forge_rite(f)).map(|(f, _)| f.clone()).collect()
+}
+
+/// `PR7-2` (N2): the family a `forge_rite` run records for member `m`: `picked` when it may take that rite, else its
+/// only rite family; refused without a family at mastery 3, once every such family has its rite, or with more than one
+/// open and none picked.
+fn rite_family(d: &Data, m: &UnitState, picked: &str) -> Result<String, String> {
+    let who = progression::display_name(d, m);
+    let top = rpgkit_data::mastery::MASTERY_MAX;
+    let open = rite_families(m);
+    if !picked.is_empty() {
+        if open.iter().any(|f| f == picked) {
+            return Ok(picked.to_string());
+        }
+        if m.has_forge_rite(picked) {
+            return Err(format!("{who} has taken the forge rite of {picked} already."));
+        }
+        return Err(format!("{who} needs mastery {top} in {picked} first."));
+    }
+    match open.len() {
+        1 => Ok(open[0].clone()),
+        0 if m.forge_rites.is_empty() => Err(format!("{who} needs mastery {top} in a weapon family first.")),
+        0 => Err(format!("{who} has taken the forge rite of every family at mastery {top} already.")),
+        _ => Err(format!("Pick a weapon family ({}).", open.join(", "))),
+    }
 }
 
 /// `max_hp_pct`: `pct` percent of `max`, rounded half away from zero, at least 1 either way.
@@ -462,8 +488,9 @@ fn salvage(d: &Data, gs: &mut GameState, fx: &Dict, item: &str, notes: &mut Vec<
 }
 
 /// PK2-FOLLOWUP (FB-212 (d)): the families row `rc` lets the pick name for its member `pick.member`, in order and
-/// each once: a `train_proficiency`'s class role families and a `drill`'s masterable families, each only when it has
-/// more than one (with one, the run takes it unnamed). Empty: the row needs no family pick.
+/// each once: a `train_proficiency`'s class role families, a `drill`'s masterable families and a `forge_rite`'s open
+/// rite families (`PR7-2`, `rite_families`), each only when it has more than one (with one, the run takes it unnamed).
+/// Empty: the row needs no family pick.
 pub fn families(d: &Data, gs: &GameState, rc: &RecipeDef, pick: &Pick) -> Vec<String> {
     let Some(m) = gs.party.member(&pick.member).filter(|_| rc.target == TARGET_MEMBER) else { return Vec::new() };
     let mut out: Vec<String> = Vec::new();
@@ -471,6 +498,7 @@ pub fn families(d: &Data, gs: &GameState, rc: &RecipeDef, pick: &Pick) -> Vec<St
         let fams = match json::s(fx, "effect").as_str() {
             r::FX_TRAIN => role_families(d, m, &json::s(fx, "role")),
             r::FX_DRILL => crate::mastery::masterable_families(d, m),
+            r::FX_FORGE_RITE => rite_families(m),
             _ => continue,
         };
         if fams.len() > 1 {
