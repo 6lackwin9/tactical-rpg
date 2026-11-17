@@ -40,6 +40,7 @@ To let Tushar iterate on **Artwork, Character Sprite Animations, VN Stage Choreo
 
 - **Choreography (`StoryStage`)**: Moving party units enter from the **LEFT** and exit **RIGHT** in both `Scroll BG` and `Pan Camera`; encountered NPCs lock static to backdrop `worldX` off-frame **RIGHT** and scroll into stopping distance.
 - **Flow Characters (`3.7`)**: Register per-character portrait + 3-view turnaround (`@Character`, `@Vesper` style guide for muted grime/palette), name image-left/image-right explicitly, and enforce `"no text, no caption, no rain"` in CG prompts.
+- **Flow is the character source (Tushar 2026-11-17)**: final portraits, sprites, animations and story CGs come from Flow characters; every current character asset is a placeholder. Gemini web-queue character images are experiments and Flow reference images (STYLE_BIBLE 2).
 
 ### 3.3 Region Maps, Props & Terrain Tiles Contract (`art_src/region_maps/README.md`)
 

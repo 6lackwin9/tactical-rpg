@@ -8,19 +8,19 @@ game and kit layers, plus the assets canon or a spec needs that have no file yet
 | Category | Final | Rework | Placeholder | Missing |
 | --- | --- | --- | --- | --- |
 | background | 17 | 0 | 21 | 0 |
-| face sheet | 64 | 0 | 12 | 0 |
+| face sheet | 0 | 0 | 76 | 0 |
 | item icon | 49 | 1 | 54 | 0 |
 | map | 19 | 0 | 0 | 0 |
 | music | 14 | 0 | 8 | 0 |
-| portrait | 68 | 6 | 19 | 10 |
+| portrait | 0 | 0 | 93 | 10 |
 | prop | 148 | 0 | 0 | 8 |
 | sfx | 10 | 0 | 0 | 0 |
 | skill icon | 71 | 38 | 89 | 0 |
-| sprite sheet | 0 | 35 | 0 | 0 |
+| sprite sheet | 0 | 0 | 35 | 0 |
 | status icon | 16 | 0 | 0 | 0 |
 | tile | 46 | 0 | 0 | 0 |
 | ui | 66 | 0 | 0 | 0 |
-| **all** | **588** | **80** | **203** | **18** |
+| **all** | **456** | **39** | **376** | **18** |
 
 Every row, final files included: [ASSET_STATUS.csv](ASSET_STATUS.csv) (path, category, state, act, why, last
 commit). Below: what still needs work, rework and placeholders grouped by folder and reason.
@@ -48,52 +48,16 @@ commit). Below: what still needs work, rework and placeholders grouped by folder
 | `game:props/{tidewrack,ashlands,common}/forge/v0.png` | prop | legacy | content check (falls back); legacy world tidewrack |
 | `game:props/{tidewrack,ashlands,common}/storehouse/v0.png` | prop | legacy | content check (falls back); legacy world tidewrack |
 
-## Rework (80)
+## Rework (39)
 
 | Folder | Category | Files | Why |
 | --- | --- | --- | --- |
 | `game:items/braces/` | item icon | 1 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
-| `game:portraits/heroes/` | portrait | 6 | AI-04: off canon (Day 1 must be clean); re-render in the locked style |
 | `game:skills/` | skill icon | 29 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
-| `game:units/beast/render_beast/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `game:units/brawler/ash_warchief/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `game:units/brawler/braces/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `game:units/brawler/gauntlet/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `game:units/crawler/ash_crawler/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `game:units/mage/1h_sprayer/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `game:units/ranger/wenn_tallow/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `game:units/rogue/1h_knife/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `game:units/warrior/2h_greatsword/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `game:units/warrior/brask_toller/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `game:units/warrior/grakka_ashmaw/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `game:units/warrior/hest_the_quartermaster/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `game:units/warrior/orsa_tallow/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
 | `kit:skills/kinds/` | skill icon | 6 | I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4) |
 | `kit:skills/kinds/` | skill icon | 3 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
-| `kit:units/beast/base/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/brawler/base/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/brawler/goblin/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/brawler/goblin_berserker/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/crawler/base/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/dummy/base/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/mage/base/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/mage/orb/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/priest/base/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/priest/goblin/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/ranger/base/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/ranger/goblin/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/rogue/base/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/rogue/goblin/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/rogue/goblin_scout/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/warrior/1h_buckler/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/warrior/1h_polearm/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/warrior/2h_axe/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/warrior/2h_hammer/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/warrior/2h_polearm/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/warrior/2h_sword/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
-| `kit:units/warrior/base/` | sprite sheet | 1 | S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3) |
 
-## Placeholder (203)
+## Placeholder (376)
 
 | Folder | Category | Files | Why |
 | --- | --- | --- | --- |
@@ -111,20 +75,65 @@ commit). Below: what still needs work, rework and placeholders grouped by folder
 | `game:items/manual/` | item icon | 16 | Wave 2 placeholder pack (AI-15) |
 | `game:items/material/` | item icon | 2 | Phase 4 U2 placeholder icons (AI-14) |
 | `game:items/medium/` | item icon | 1 | byte copy of kit:items/leather/base.png |
-| `game:portraits/bosses/` | portrait | 2 | web-queue portrait placeholders (AI-05, AI-06, AI-08) |
-| `game:portraits/common/` | portrait | 6 | Wave 2 placeholder pack (AI-15) |
-| `game:portraits/common/` | portrait | 1 | byte copy of game:portraits/npcs/wenn_tallow.png |
-| `game:portraits/elites/` | portrait | 1 | web-queue portrait placeholders (AI-05, AI-06, AI-08) |
-| `game:portraits/full_body/` | portrait | 1 | PR5-39 placeholder NPC portraits |
-| `game:portraits/npcs/` | portrait | 3 | PR5-39 placeholder NPC portraits |
-| `game:portraits/npcs/` | portrait | 1 | byte copy of game:portraits/common/ranger_wenn_tallow.png |
-| `game:portraits/npcs/` | portrait | 4 | web-queue portrait placeholders (AI-05, AI-06, AI-08) |
-| `game:portraits/npcs/faces/berek_dorn/` | face sheet | 4 | PR5-39 placeholder NPC portraits |
-| `game:portraits/npcs/faces/sabina_kress/` | face sheet | 4 | PR5-39 placeholder NPC portraits |
-| `game:portraits/npcs/faces/talia_rusk/` | face sheet | 4 | PR5-39 placeholder NPC portraits |
+| `game:portraits/bosses/` | portrait | 7 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/bosses/faces/captain_vane/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/bosses/faces/guild_master_orlov/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/bosses/faces/inquisitor_prelate_nemeth/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/bosses/faces/proctor_quell/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/common/` | portrait | 10 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/elites/` | portrait | 9 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/full_body/` | portrait | 14 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/heroes/` | portrait | 8 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/heroes/` | portrait | 6 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2); AI-04: off canon (Day 1 must be clean); re-render in the locked style |
+| `game:portraits/heroes/faces/dunstan/` | face sheet | 8 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/heroes/faces/elyse/` | face sheet | 8 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/heroes/faces/hollis/` | face sheet | 8 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/heroes/faces/kaelen/` | face sheet | 8 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/heroes/faces/maren/` | face sheet | 8 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/heroes/faces/vesper/` | face sheet | 8 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/npcs/` | portrait | 26 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/npcs/faces/berek_dorn/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/npcs/faces/sabina_kress/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/npcs/faces/talia_rusk/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:skills/` | skill icon | 89 | Phase 4 U2 placeholder icons (AI-14) |
+| `game:units/beast/render_beast/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/brawler/ash_warchief/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/brawler/braces/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/brawler/gauntlet/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/crawler/ash_crawler/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/mage/1h_sprayer/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/ranger/wenn_tallow/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/rogue/1h_knife/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/2h_greatsword/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/brask_toller/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/grakka_ashmaw/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/hest_the_quartermaster/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/orsa_tallow/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `kit:items/axe/` | item icon | 1 | byte copy of game:items/greatsword/battle_axe.png |
 | `kit:items/cloth/` | item icon | 1 | byte copy of game:items/light/base.png |
 | `kit:items/leather/` | item icon | 1 | byte copy of game:items/medium/base.png |
 | `kit:items/plate/` | item icon | 1 | byte copy of game:items/heavy/base.png |
 | `kit:items/sword/` | item icon | 1 | byte copy of game:items/greatsword/greatsword.png |
+| `kit:portraits/common/` | portrait | 13 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/beast/base/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/brawler/base/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/brawler/goblin/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/brawler/goblin_berserker/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/crawler/base/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/dummy/base/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/mage/base/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/mage/orb/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/priest/base/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/priest/goblin/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/ranger/base/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/ranger/goblin/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/rogue/base/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/rogue/goblin/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/rogue/goblin_scout/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/warrior/1h_buckler/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/warrior/1h_polearm/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/warrior/2h_axe/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/warrior/2h_hammer/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/warrior/2h_polearm/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/warrior/2h_sword/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `kit:units/warrior/base/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |

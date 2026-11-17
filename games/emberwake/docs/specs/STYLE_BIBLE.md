@@ -20,12 +20,15 @@ reds, royal blues or white robes. Light comes from fire and tallow (amber), neve
   drawn by the UI, not painted into the picture; portraits keep a dark, plain background.
 - **Content**: bust, three-quarter view, one hand of the same painter (the founder set is the reference for framing and
   light). Day 1 founders are clean mortals (CANON 3.1, 3.3): no spurs, beast eyes, grafts or veins.
-- **Named characters**: the final set comes from Flow characters (portrait, three-view body, CGs, one person across all).
-  Web-queue portraits are readable stand-ins at the final path.
+- **Characters come from Flow** (Tushar 2026-11-17): Flow sets up each character, then makes its detailed sprites,
+  animations and story CGs (one person across all). Every current portrait, face sheet and sprite sheet is a
+  placeholder (ASSET_STATUS). The Gemini web queue keeps making character images as experiments and as the reference
+  images that set up each character in the Flow project; one may sit at the final path as a stand-in, graded P3.
 
 ## 3. Battle sprites (S2, muted three-tone)
 
-- The procedural rig (`tools/sprites`) stays: bodies, clips and animations are kept.
+- Final sprites and animations come from Flow (section 2). Until then the procedural rig (`tools/sprites`) stays as
+  the placeholder, and the S2 rules below apply to it.
 - **Paint**: every palette slot ships a full ramp (base, `_lo`, `_hi`), not only its base colour. Shadow: value x 0.62,
   saturation x 1.1, hue stepped up to 3.5 % toward blue-violet; light: value x 1.22, saturation x 0.85, hue toward amber
   (`palette.json` `sprite_ramp`; `art_src/style/sprites.py` `ramp()`). Today the engine swaps only base colours, so the

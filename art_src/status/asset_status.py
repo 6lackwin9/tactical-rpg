@@ -14,6 +14,9 @@ State rules, in order:
                stand-in packs), it is a byte copy of another asset, it is in PROCEDURAL (gen_art.py scenes the
                review called two generations older), or its README row says `PROVISIONAL synth placeholder`
   rework       final art the lock or canon sends back (REWORK)
+  (characters) every portrait, face sheet and sprite sheet is a placeholder until its Flow character exists
+               (Tushar 2026-11-17: Flow sets up each character, then makes the detailed sprites, animations and
+               story CGs; web-queue character images are experiments and Flow reference images, not finals)
   final        everything else
 """
 import argparse
@@ -52,6 +55,8 @@ MISSING = [
 # Final art that the style lock or canon sends back (state `rework`).
 REWORK = {f"portraits/heroes/{n}.png": "AI-04: off canon (Day 1 must be clean); re-render in the locked style"
           for n in ("kaelen", "vesper", "maren", "hollis", "dunstan", "elyse")}
+CHARACTER = ("portrait", "face sheet", "sprite sheet")
+FLOW = "Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)"
 ACT1 = ("sunk_ward", "ashlands", "undercroft", "tallow")
 
 
@@ -125,10 +130,10 @@ def rows(check_file=None):
         stem = rel.rsplit("/", 1)[-1][:-4]
         twins = [t for t in digest[hashlib.sha1(f.read_bytes()).hexdigest()] if t != f"{layer}:{rel}"
                  and f"/faces/{stem}/" not in t and "/full_body/" not in t and "/faces/" not in rel]   # a neutral face is the portrait itself
-        if rel in REWORK:
+        if category(rel) in CHARACTER:
+            state, why = "placeholder", FLOW + ("; " + REWORK[rel] if rel in REWORK else "")
+        elif rel in REWORK:
             state, why = "rework", REWORK[rel]
-        elif rel.startswith("units/") and rel.endswith("sheet.png"):
-            state, why = "rework", "S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3)"
         elif category(rel) in ("skill icon", "item icon") and red_tile(f):
             state, why = "rework", "I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)"
         elif rel.startswith("skills/kinds/"):

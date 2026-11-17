@@ -136,162 +136,162 @@ game:map/landmarks/fourth_kiln.png,map,final,all,,
 game:map/landmarks/slag_gate.png,map,final,all,,
 game:map/landmarks/sluice_undercroft.png,map,final,Act 1,,
 game:map/landmarks/tallow_vats.png,map,final,Act 1,,
-game:portraits/bosses/calcified_amalgam.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
-game:portraits/bosses/captain_vane.png,portrait,final,all,,0f688ea
-game:portraits/bosses/faces/captain_vane/afraid.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/captain_vane/angry.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/captain_vane/hurt.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/captain_vane/neutral.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/guild_master_orlov/afraid.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/guild_master_orlov/angry.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/guild_master_orlov/hurt.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/guild_master_orlov/neutral.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/inquisitor_prelate_nemeth/afraid.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/inquisitor_prelate_nemeth/angry.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/inquisitor_prelate_nemeth/hurt.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/inquisitor_prelate_nemeth/neutral.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/proctor_quell/afraid.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/proctor_quell/angry.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/proctor_quell/hurt.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/faces/proctor_quell/neutral.png,face sheet,final,all,,0f688ea
-game:portraits/bosses/grakka_ashmaw.png,portrait,final,all,,0f688ea
-game:portraits/bosses/guild_master_orlov.png,portrait,final,all,,0f688ea
-game:portraits/bosses/inquisitor_prelate_nemeth.png,portrait,final,all,,0f688ea
-game:portraits/bosses/overseer_grendel.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
-game:portraits/bosses/proctor_quell.png,portrait,final,all,,0f688ea
-game:portraits/common/beast_render_beast.png,portrait,final,all,,0f688ea
-game:portraits/common/brawler_cohort_breaker.png,portrait,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
-game:portraits/common/crawler_ash_crawler.png,portrait,final,all,,0f688ea
-game:portraits/common/mage_cohort_vat.png,portrait,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
-game:portraits/common/priest_cohort_novice.png,portrait,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
-game:portraits/common/ranger_cohort_bolt.png,portrait,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
-game:portraits/common/ranger_wenn_tallow.png,portrait,placeholder,Act 1,byte copy of game:portraits/npcs/wenn_tallow.png,4bd93cf
-game:portraits/common/rogue_cohort_flue.png,portrait,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
-game:portraits/common/warrior_1h_buckler.png,portrait,final,all,,4bd93cf
-game:portraits/common/warrior_cohort_levy.png,portrait,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
-game:portraits/elites/ash_warchief.png,portrait,final,all,,0f688ea
-game:portraits/elites/bailiff_enforcer.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
-game:portraits/elites/bolg_redhand.png,portrait,final,all,,0f688ea
-game:portraits/elites/calcified_husk.png,portrait,final,all,,0f688ea
-game:portraits/elites/gruk_smokecaller.png,portrait,final,all,,0f688ea
-game:portraits/elites/inquisitorial_purifier.png,portrait,final,all,,0f688ea
-game:portraits/elites/nok_flamebow.png,portrait,final,all,,0f688ea
-game:portraits/elites/skarn_ironjaw.png,portrait,final,all,,0f688ea
-game:portraits/elites/vex_cutpurse.png,portrait,final,all,,0f688ea
-game:portraits/full_body/kaelen.png,portrait,final,all,,0f688ea
-game:portraits/full_body/kaelen_3views.png,portrait,final,all,,0f688ea
-game:portraits/full_body/kaelen_back.png,portrait,final,all,,0f688ea
-game:portraits/full_body/kaelen_front.png,portrait,final,all,,0f688ea
-game:portraits/full_body/kaelen_parts_atlas.png,portrait,final,all,,0f688ea
-game:portraits/full_body/kaelen_pose_drawn.png,portrait,final,all,,0f688ea
-game:portraits/full_body/kaelen_pose_relaxed.png,portrait,final,all,,0f688ea
-game:portraits/full_body/kaelen_pose_sneaking.png,portrait,final,all,,0f688ea
-game:portraits/full_body/kaelen_side.png,portrait,final,all,,0f688ea
-game:portraits/full_body/maren.png,portrait,final,all,,0f688ea
-game:portraits/full_body/sabina_kress.png,portrait,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/full_body/vane.png,portrait,final,all,,0f688ea
-game:portraits/full_body/vesper.png,portrait,final,all,,0f688ea
-game:portraits/full_body/watchman.png,portrait,final,all,,0f688ea
-game:portraits/heroes/alda_wren.png,portrait,final,all,,0f688ea
-game:portraits/heroes/bryn_hale.png,portrait,final,all,,0f688ea
-game:portraits/heroes/dagny_coal.png,portrait,final,all,,0f688ea
-game:portraits/heroes/dunstan.png,portrait,rework,all,AI-04: off canon (Day 1 must be clean); re-render in the locked style,0f688ea
-game:portraits/heroes/elyse.png,portrait,rework,all,AI-04: off canon (Day 1 must be clean); re-render in the locked style,0f688ea
-game:portraits/heroes/faces/dunstan/afraid.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/dunstan/angry.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/dunstan/determined.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/dunstan/happy.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/dunstan/hurt.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/dunstan/neutral.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/dunstan/sad.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/dunstan/surprised.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/elyse/afraid.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/elyse/angry.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/elyse/determined.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/elyse/happy.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/elyse/hurt.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/elyse/neutral.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/elyse/sad.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/elyse/surprised.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/hollis/afraid.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/hollis/angry.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/hollis/determined.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/hollis/happy.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/hollis/hurt.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/hollis/neutral.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/hollis/sad.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/hollis/surprised.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/kaelen/afraid.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/kaelen/angry.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/kaelen/determined.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/kaelen/happy.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/kaelen/hurt.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/kaelen/neutral.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/kaelen/sad.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/kaelen/surprised.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/maren/afraid.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/maren/angry.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/maren/determined.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/maren/happy.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/maren/hurt.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/maren/neutral.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/maren/sad.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/maren/surprised.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/vesper/afraid.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/vesper/angry.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/vesper/determined.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/vesper/happy.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/vesper/hurt.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/vesper/neutral.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/vesper/sad.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/faces/vesper/surprised.png,face sheet,final,all,,0f688ea
-game:portraits/heroes/hollis.png,portrait,rework,all,AI-04: off canon (Day 1 must be clean); re-render in the locked style,0f688ea
-game:portraits/heroes/kaelen.png,portrait,rework,all,AI-04: off canon (Day 1 must be clean); re-render in the locked style,0f688ea
-game:portraits/heroes/kit_vane.png,portrait,final,all,,0f688ea
-game:portraits/heroes/mara_voss.png,portrait,final,all,,0f688ea
-game:portraits/heroes/maren.png,portrait,rework,all,AI-04: off canon (Day 1 must be clean); re-render in the locked style,0f688ea
-game:portraits/heroes/oren_dusk.png,portrait,final,all,,0f688ea
-game:portraits/heroes/sella_marsh.png,portrait,final,all,,0f688ea
-game:portraits/heroes/tev_quill.png,portrait,final,all,,0f688ea
-game:portraits/heroes/vesper.png,portrait,rework,all,AI-04: off canon (Day 1 must be clean); re-render in the locked style,0f688ea
-game:portraits/npcs/bailiff_corvo.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
-game:portraits/npcs/berek_dorn.png,portrait,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/brask_toller.png,portrait,final,all,,0f688ea
-game:portraits/npcs/cit_ash_shrine.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/cit_bone_chandler.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/cit_chandler.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/cit_cipher_den.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/cit_condemned_shrine.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/cit_dredgers_bunkhouse.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/cit_guardroom.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/cit_haulers_lodging.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/cit_lodging.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/cit_pawnbroker.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/cit_spent_shrine.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/cit_tallow_chandler.png,portrait,final,Act 1,,bd7be7e
-game:portraits/npcs/cit_vats_shrine.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/cit_wayside_shrine.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/faces/berek_dorn/afraid.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/faces/berek_dorn/angry.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/faces/berek_dorn/hurt.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/faces/berek_dorn/neutral.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/faces/sabina_kress/afraid.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/faces/sabina_kress/angry.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/faces/sabina_kress/hurt.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/faces/sabina_kress/neutral.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/faces/talia_rusk/afraid.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/faces/talia_rusk/angry.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/faces/talia_rusk/hurt.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/faces/talia_rusk/neutral.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/hest_the_quartermaster.png,portrait,final,all,,0f688ea
-game:portraits/npcs/ivo.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
-game:portraits/npcs/sabina_kress.png,portrait,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/skerrit_bone_wright.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
-game:portraits/npcs/talia_rusk.png,portrait,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
-game:portraits/npcs/tithe_captive_a.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/tithe_captive_b.png,portrait,final,all,,bd7be7e
-game:portraits/npcs/wenn_tallow.png,portrait,placeholder,Act 1,byte copy of game:portraits/common/ranger_wenn_tallow.png,0f688ea
-game:portraits/npcs/widow_varka.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
+game:portraits/bosses/calcified_amalgam.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7e185b0
+game:portraits/bosses/captain_vane.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/captain_vane/afraid.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/captain_vane/angry.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/captain_vane/hurt.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/captain_vane/neutral.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/guild_master_orlov/afraid.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/guild_master_orlov/angry.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/guild_master_orlov/hurt.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/guild_master_orlov/neutral.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/inquisitor_prelate_nemeth/afraid.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/inquisitor_prelate_nemeth/angry.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/inquisitor_prelate_nemeth/hurt.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/inquisitor_prelate_nemeth/neutral.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/proctor_quell/afraid.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/proctor_quell/angry.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/proctor_quell/hurt.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/faces/proctor_quell/neutral.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/grakka_ashmaw.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/guild_master_orlov.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/inquisitor_prelate_nemeth.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/bosses/overseer_grendel.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7e185b0
+game:portraits/bosses/proctor_quell.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/common/beast_render_beast.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/common/brawler_cohort_breaker.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7ddae3f
+game:portraits/common/crawler_ash_crawler.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/common/mage_cohort_vat.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7ddae3f
+game:portraits/common/priest_cohort_novice.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7ddae3f
+game:portraits/common/ranger_cohort_bolt.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7ddae3f
+game:portraits/common/ranger_wenn_tallow.png,portrait,placeholder,Act 1,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",4bd93cf
+game:portraits/common/rogue_cohort_flue.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7ddae3f
+game:portraits/common/warrior_1h_buckler.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",4bd93cf
+game:portraits/common/warrior_cohort_levy.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7ddae3f
+game:portraits/elites/ash_warchief.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/elites/bailiff_enforcer.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7e185b0
+game:portraits/elites/bolg_redhand.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/elites/calcified_husk.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/elites/gruk_smokecaller.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/elites/inquisitorial_purifier.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/elites/nok_flamebow.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/elites/skarn_ironjaw.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/elites/vex_cutpurse.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/full_body/kaelen.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/full_body/kaelen_3views.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/full_body/kaelen_back.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/full_body/kaelen_front.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/full_body/kaelen_parts_atlas.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/full_body/kaelen_pose_drawn.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/full_body/kaelen_pose_relaxed.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/full_body/kaelen_pose_sneaking.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/full_body/kaelen_side.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/full_body/maren.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/full_body/sabina_kress.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/full_body/vane.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/full_body/vesper.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/full_body/watchman.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/alda_wren.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/bryn_hale.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/dagny_coal.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/dunstan.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2); AI-04: off canon (Day 1 must be clean); re-render in the locked style",0f688ea
+game:portraits/heroes/elyse.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2); AI-04: off canon (Day 1 must be clean); re-render in the locked style",0f688ea
+game:portraits/heroes/faces/dunstan/afraid.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/dunstan/angry.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/dunstan/determined.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/dunstan/happy.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/dunstan/hurt.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/dunstan/neutral.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/dunstan/sad.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/dunstan/surprised.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/elyse/afraid.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/elyse/angry.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/elyse/determined.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/elyse/happy.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/elyse/hurt.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/elyse/neutral.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/elyse/sad.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/elyse/surprised.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/hollis/afraid.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/hollis/angry.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/hollis/determined.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/hollis/happy.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/hollis/hurt.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/hollis/neutral.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/hollis/sad.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/hollis/surprised.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/kaelen/afraid.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/kaelen/angry.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/kaelen/determined.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/kaelen/happy.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/kaelen/hurt.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/kaelen/neutral.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/kaelen/sad.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/kaelen/surprised.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/maren/afraid.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/maren/angry.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/maren/determined.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/maren/happy.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/maren/hurt.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/maren/neutral.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/maren/sad.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/maren/surprised.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/vesper/afraid.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/vesper/angry.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/vesper/determined.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/vesper/happy.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/vesper/hurt.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/vesper/neutral.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/vesper/sad.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/faces/vesper/surprised.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/hollis.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2); AI-04: off canon (Day 1 must be clean); re-render in the locked style",0f688ea
+game:portraits/heroes/kaelen.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2); AI-04: off canon (Day 1 must be clean); re-render in the locked style",0f688ea
+game:portraits/heroes/kit_vane.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/mara_voss.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/maren.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2); AI-04: off canon (Day 1 must be clean); re-render in the locked style",0f688ea
+game:portraits/heroes/oren_dusk.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/sella_marsh.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/tev_quill.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/heroes/vesper.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2); AI-04: off canon (Day 1 must be clean); re-render in the locked style",0f688ea
+game:portraits/npcs/bailiff_corvo.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7e185b0
+game:portraits/npcs/berek_dorn.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/brask_toller.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/npcs/cit_ash_shrine.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/cit_bone_chandler.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/cit_chandler.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/cit_cipher_den.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/cit_condemned_shrine.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/cit_dredgers_bunkhouse.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/cit_guardroom.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/cit_haulers_lodging.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/cit_lodging.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/cit_pawnbroker.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/cit_spent_shrine.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/cit_tallow_chandler.png,portrait,placeholder,Act 1,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/cit_vats_shrine.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/cit_wayside_shrine.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/faces/berek_dorn/afraid.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/faces/berek_dorn/angry.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/faces/berek_dorn/hurt.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/faces/berek_dorn/neutral.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/faces/sabina_kress/afraid.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/faces/sabina_kress/angry.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/faces/sabina_kress/hurt.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/faces/sabina_kress/neutral.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/faces/talia_rusk/afraid.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/faces/talia_rusk/angry.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/faces/talia_rusk/hurt.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/faces/talia_rusk/neutral.png,face sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/hest_the_quartermaster.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/npcs/ivo.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7e185b0
+game:portraits/npcs/sabina_kress.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/skerrit_bone_wright.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7e185b0
+game:portraits/npcs/talia_rusk.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",3ded9b4
+game:portraits/npcs/tithe_captive_a.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/tithe_captive_b.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",bd7be7e
+game:portraits/npcs/wenn_tallow.png,portrait,placeholder,Act 1,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:portraits/npcs/widow_varka.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7e185b0
 game:props/ashlands/cistern/v0.png,prop,final,Act 1,,0f688ea
 game:props/ashlands/toll_arch/v0.png,prop,final,Act 1,,0f688ea
 game:props/ashlands/war_tent/v0.png,prop,final,Act 1,,0f688ea
@@ -654,19 +654,19 @@ game:ui/hud/scrap.png,ui,final,all,,ac96ee3
 game:ui/hud/tallow.png,ui,final,Act 1,,ac96ee3
 game:ui/logo_crest.png,ui,final,all,,0f688ea
 game:ui/logo_title.png,ui,final,all,,0f688ea
-game:units/beast/render_beast/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-game:units/brawler/ash_warchief/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-game:units/brawler/braces/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),a47d404
-game:units/brawler/gauntlet/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),a47d404
-game:units/crawler/ash_crawler/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-game:units/mage/1h_sprayer/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),a47d404
-game:units/ranger/wenn_tallow/sheet.png,sprite sheet,rework,Act 1,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-game:units/rogue/1h_knife/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),a47d404
-game:units/warrior/2h_greatsword/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),22e6ce6
-game:units/warrior/brask_toller/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-game:units/warrior/grakka_ashmaw/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-game:units/warrior/hest_the_quartermaster/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-game:units/warrior/orsa_tallow/sheet.png,sprite sheet,rework,Act 1,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+game:units/beast/render_beast/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:units/brawler/ash_warchief/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:units/brawler/braces/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",a47d404
+game:units/brawler/gauntlet/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",a47d404
+game:units/crawler/ash_crawler/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:units/mage/1h_sprayer/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",a47d404
+game:units/ranger/wenn_tallow/sheet.png,sprite sheet,placeholder,Act 1,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:units/rogue/1h_knife/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",a47d404
+game:units/warrior/2h_greatsword/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",22e6ce6
+game:units/warrior/brask_toller/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:units/warrior/grakka_ashmaw/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:units/warrior/hest_the_quartermaster/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+game:units/warrior/orsa_tallow/sheet.png,sprite sheet,placeholder,Act 1,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
 kit:audio/music/boss.ogg,music,final,all,,0f688ea
 kit:audio/music/combat.ogg,music,final,all,,0f688ea
 kit:audio/music/danger.ogg,music,final,all,,0f688ea
@@ -723,19 +723,19 @@ kit:map/markers/npc.png,map,final,all,,0f688ea
 kit:map/markers/objective.png,map,final,all,,0f688ea
 kit:map/markers/poi.png,map,final,all,,0f688ea
 kit:map/markers/roamer.png,map,final,all,,0f688ea
-kit:portraits/common/brawler_base.png,portrait,final,all,,0f688ea
-kit:portraits/common/brawler_goblin.png,portrait,final,all,,0f688ea
-kit:portraits/common/brawler_goblin_berserker.png,portrait,final,all,,0f688ea
-kit:portraits/common/dummy_base.png,portrait,final,all,,0f688ea
-kit:portraits/common/mage_base.png,portrait,final,all,,0f688ea
-kit:portraits/common/priest_base.png,portrait,final,all,,0f688ea
-kit:portraits/common/priest_goblin.png,portrait,final,all,,0f688ea
-kit:portraits/common/ranger_base.png,portrait,final,all,,0f688ea
-kit:portraits/common/ranger_goblin.png,portrait,final,all,,0f688ea
-kit:portraits/common/rogue_base.png,portrait,final,all,,0f688ea
-kit:portraits/common/rogue_goblin.png,portrait,final,all,,0f688ea
-kit:portraits/common/rogue_goblin_scout.png,portrait,final,all,,0f688ea
-kit:portraits/common/warrior_base.png,portrait,final,all,,0f688ea
+kit:portraits/common/brawler_base.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:portraits/common/brawler_goblin.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:portraits/common/brawler_goblin_berserker.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:portraits/common/dummy_base.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:portraits/common/mage_base.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:portraits/common/priest_base.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:portraits/common/priest_goblin.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:portraits/common/ranger_base.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:portraits/common/ranger_goblin.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:portraits/common/rogue_base.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:portraits/common/rogue_goblin.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:portraits/common/rogue_goblin_scout.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:portraits/common/warrior_base.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
 kit:props/common/banner_pole/v0.png,prop,final,all,,0f688ea
 kit:props/common/boulder/v0.png,prop,final,all,,0f688ea
 kit:props/common/boulder/v1.png,prop,final,all,,0f688ea
@@ -848,28 +848,28 @@ kit:ui/pins/wild.png,ui,final,all,,0f688ea
 kit:ui/services/recipe.png,ui,final,all,,08501d3
 kit:ui/services/recruit.png,ui,final,all,,0f688ea
 kit:ui/services/shop.png,ui,final,all,,0f688ea
-kit:units/beast/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/brawler/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/brawler/goblin/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/brawler/goblin_berserker/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/crawler/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/dummy/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/mage/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/mage/orb/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),22e6ce6
-kit:units/priest/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/priest/goblin/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/ranger/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/ranger/goblin/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/rogue/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/rogue/goblin/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/rogue/goblin_scout/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/warrior/1h_buckler/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/warrior/1h_polearm/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),22e6ce6
-kit:units/warrior/2h_axe/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/warrior/2h_hammer/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/warrior/2h_polearm/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),22e6ce6
-kit:units/warrior/2h_sword/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
-kit:units/warrior/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/beast/base/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/brawler/base/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/brawler/goblin/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/brawler/goblin_berserker/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/crawler/base/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/dummy/base/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/mage/base/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/mage/orb/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",22e6ce6
+kit:units/priest/base/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/priest/goblin/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/ranger/base/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/ranger/goblin/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/rogue/base/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/rogue/goblin/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/rogue/goblin_scout/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/warrior/1h_buckler/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/warrior/1h_polearm/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",22e6ce6
+kit:units/warrior/2h_axe/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/warrior/2h_hammer/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/warrior/2h_polearm/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",22e6ce6
+kit:units/warrior/2h_sword/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
+kit:units/warrior/base/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
 game:portraits/bosses/foundry_master_jessop.png,portrait,missing,Act 2,AI-06; CANON 3.2,
 game:portraits/bosses/inquisitor_general_ruthven.png,portrait,missing,Act 2,AI-06; CANON 3.2,
 game:portraits/bosses/chief_anatomist_lazar.png,portrait,missing,Act 2,AI-06; CANON 3.2,
