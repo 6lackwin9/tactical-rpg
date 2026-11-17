@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
-#   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test, the layer check,
-#                                docs --all, tooltests, plannertests
+#   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test (the UI bot's
+#                                3 seeds per start among them), the repro replays, the layer check, docs --all, tooltests, plannertests
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
 #                                engine and kit crates (src, tests), schema.json and kit.json name no lore word, any case
@@ -19,6 +19,10 @@
 #                                the game's rows); --contract: tunable and locked, one line each
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)
 #   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: session=, until=, json, variant=, write=, seeds=, fallback=)
+#   tools/fc.sh repro            replay every recording in games/emberwake/playtests/repro/ (REPLAY-CI1): a divergence, a refused
+#                                request or a panic fails; no recordings passes (part of the gate)
+#   tools/fc.sh bot [seeds=1,2,3] [steps=40]   the seeded UI bot on every start the game names (emberwake_gui tests/ui_bot.rs;
+#                                part of the gate's tests with 3 seeds): presses valid widgets, no step may panic
 #   tools/fc.sh scenario check [<file>|all]   parse games/<id>/scenarios/*.json; no game starts (engine/docs/authoring/scenarios.md)
 #   tools/fc.sh scenario <id|all|file.json> [size=1280x720] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>]   run
 #                                them with no window, or in real muted windows that do not take the focus where the file or window=1 asks
@@ -176,6 +180,41 @@ tooltests() {  # the tools/tiles tests, with a time limit (FC_TOOLTESTS_LIMIT se
   rm -f "$log"
 }
 
+# REPLAY-CI1: every repro recording replays to its end with every checkpoint matching (`aegis replay` exit 0); the
+# recordings live in the game's repo folder (playtests/repro/<id>.json, or <id>/<id>.json beside note images).
+repro() {
+  local dir=games/emberwake/playtests/repro f out n=0 bad=0
+  local files=()
+  [ -d "$dir" ] && while IFS= read -r f; do files+=("$f"); done < <(find "$dir" -name '*.json' ! -name '*.tmp' | sort)
+  if [ ${#files[@]} -eq 0 ]; then echo "[repro] ok: no recordings in $dir"; return; fi
+  cargo build -q -p emberwake_host || { echo "[repro] FAIL: the build"; status=1; return; }
+  for f in "${files[@]}"; do
+    n=$((n + 1))
+    if ! out=$(cargo run -q -p emberwake_host -- replay "$f" 2>&1); then
+      bad=$((bad + 1))
+      echo "[repro] FAIL $f"
+      echo "$out" | grep -E "diverge|broken|differs|load error|panicked" | head -8 | sed 's/^/    /'
+    fi
+  done
+  if [ $bad -eq 0 ]; then echo "[repro] ok: $n recording(s) replay with every checkpoint matching"; else echo "[repro] FAIL: $bad of $n recording(s) diverge, break or panic (re-record an intended change: aegis record <file> out=$dir id=<id>)"; status=1; fi
+}
+
+# REPLAY-CI1: the UI bot (emberwake_gui tests/ui_bot.rs) with other seeds or steps; its output lines.
+bot() {
+  local a seeds="" steps=""
+  for a in "$@"; do
+    case "$a" in
+      seeds=*) seeds=${a#seeds=} ;;
+      steps=*) steps=${a#steps=} ;;
+      *) echo "usage: tools/fc.sh bot [seeds=1,2,3 or 1..20] [steps=N]"; status=2; return ;;
+    esac
+  done
+  local out
+  out=$(AEGIS_BOT_SEEDS=${seeds:-1,2,3} AEGIS_BOT_STEPS=${steps:-40} cargo test -q -p emberwake_gui --test ui_bot -- --nocapture 2>&1)
+  echo "$out" | grep -E '^\[bot\]|panicked|test result|^error' | grep -v ' 0 passed; 0 failed'
+  echo "$out" | grep -qE "test result: FAILED|^error" && status=1
+}
+
 plannertests() {  # the tools/planner script tests (SKILLS1-FB): plain Python, no Pillow; no Python at all is a visible SKIP
   local py out
   if ! py=$(python_with "pass"); then echo "[plannertests] SKIP: no Python 3 found, tools/planner tests did not run"; return 0; fi
@@ -257,6 +296,7 @@ layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crat
 gate() {
   build; [ $status -ne 0 ] && return
   cargo_test; [ $status -ne 0 ] && return
+  repro; [ $status -ne 0 ] && return
   layers_check; [ $status -ne 0 ] && return
   # the whole docs check; the size warnings, which are many, as one count (tools/fc.sh docs --all lists them)
   local out
@@ -377,6 +417,8 @@ case "$1" in
   rules) aegis rules "${@:2}" || status=1 ;;
   sim) aegis sim "${@:2}" || status=1 ;;
   replay) aegis replay "${@:2}" || status=1 ;;
+  repro) repro ;;
+  bot) bot "${@:2}" ;;
   scenario) scenario "${@:2}" ;;
   web) web "${@:2}" ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)

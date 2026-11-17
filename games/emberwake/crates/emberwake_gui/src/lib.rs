@@ -250,6 +250,34 @@ pub fn run_native() -> Result<()> {
     aegis_ui::shell::run(cx, stack, options)
 }
 
+/// UIBOT (REPLAY-CI1): where the engine's UI bot (`aegis_ui::shell::bot`) starts, by name, with the launch keys of each
+/// (`screen=`, `ruleset=`); the bot walks on from there by pressing widgets.
+#[cfg(feature = "dev_tools")]
+pub const BOT_STARTS: &[(&str, &[(&str, &str)])] =
+    &[("menu", &[]), ("arena", &[("screen", "arena")]), ("arena_timeline", &[("screen", "arena"), ("ruleset", "timeline")]), ("runner", &[("screen", "runner")])];
+#[cfg(not(feature = "dev_tools"))]
+pub const BOT_STARTS: &[(&str, &[(&str, &str)])] = &[("menu", &[])];
+
+/// UIBOT: widgets the bot never presses: they write into the repo (Copy to repo), open an OS window (Open folder) or
+/// reach the OS clipboard, and the main menu's Quit (it ends the program, so the run would stop at its first steps; a key
+/// that quits still ends a run cleanly).
+pub const BOT_SKIP: &[&str] = &["recordings.copy", "recordings.open_folder", "recordings.note_view.copy", "menu.quit"];
+
+/// UIBOT: one bot run from the start `start` (a `BOT_STARTS` name) on the data folder `data` (a scratch copy: the dev
+/// tools write into it), saves under `scratch`. The user folder is wherever `APPDATA` points (the caller points it at a
+/// scratch folder first). `Err` when the game cannot start; a panic is in the run's report.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn bot_run(start: &str, data: &Path, scratch: &Path, bot: &aegis_ui::shell::bot::Bot) -> Result<aegis_ui::shell::bot::Run> {
+    let keys = BOT_STARTS.iter().find(|(name, _)| *name == start).map(|(_, k)| *k).with_context(|| format!("no bot start '{start}'"))?;
+    let mut args: Vec<(String, String)> = keys.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    args.push(("data".into(), data.display().to_string()));
+    args.push(("saves".into(), scratch.join("saves").display().to_string()));
+    let headless = Headless { size: bot.size, fps: aegis_ui::shell::headless::DEFAULT_FPS, dpr: 1.0, idle: aegis_core::clock::Duration::from_secs(aegis_ui::shell::headless::IDLE_EXIT_S) };
+    let ruleset = arena_ruleset(&args)?;
+    let (cx, stack, options) = launch(&args, native_roots()?, ruleset, Some(headless))?;
+    Ok(aegis_ui::shell::bot::run(cx, stack, &options, bot))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
