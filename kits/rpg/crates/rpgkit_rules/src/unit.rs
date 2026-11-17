@@ -1604,6 +1604,14 @@ pub fn skill_in_group(s: &rpgkit_data::SkillDef, group: &str) -> bool {
     }
 }
 
+/// `PR7-2` (N1, `PK2_GRAFTS.md` 5.2): whether a distance-gated (`min_distance > 0`) `skill_potency` entry of group `g`
+/// applies to a hit of skill `s`: the skill is in the group, or the group is `ranged` and the hit itself is ranged (a
+/// basic attack with a ranged weapon, whose skill is not inherently ranged). Distance-0 group entries keep
+/// `skill_in_group` alone.
+pub fn distance_group_matches(s: &rpgkit_data::SkillDef, g: &str, ranged: bool) -> bool {
+    skill_in_group(s, g) || (g == "ranged" && ranged)
+}
+
 /// CLASSPASS1 (`PR5-62a`): whether skill `s` is inherently ranged (neither a single-target positioned dash-attack
 /// nor a user-centred area shape like LINE/RING/ARC/CONE, and either its own `reach_max > 1` or `reach_max == 0` with
 /// every `weapon_types` entry an `always_ranged` weapon family).
@@ -1749,8 +1757,9 @@ pub struct Growth {
     pub mastery: IndexMap<String, i32>,
     /// PK2-S4: the member's main-hand weapon is a masterwork instance (`Unit::masterwork`; weapon instances, PR5-13a).
     pub masterwork: bool,
-    /// PK2-S4: the member's forge rite is done (with mastery 3 the wielded family's keystone opens, `Unit::mastery_keystone`).
-    pub forge_rite: bool,
+    /// PK2-S4, `PR7-2` (N2): the weapon families whose forge rite the member has taken (with mastery 3 and a masterwork
+    /// main hand of the family, that family's keystone opens, `Unit::mastery_keystone`).
+    pub forge_rites: Vec<String>,
     /// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): slot -> the durability of the weapon instance the member wields there,
     /// for instances that wear (`Unit::wear`; a slot holding no weapon is skipped). Empty = none (weapon instances off,
     /// or a ruleset without the rule `durability`).
@@ -1930,16 +1939,18 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
 }
 
 /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5, the standard-path keystone): the keystone member `g` holds ("" = none): the
-/// main-hand weapon family's keystone (the member's saved main hand, else its row's) at mastery 3 once its forge rite is
-/// done, and only while no keystone graft holds the keystone (a unit holds one keystone, of either path).
+/// main-hand weapon family's keystone (the member's saved main hand, else its row's) at mastery 3 once that family's
+/// forge rite is done (`PR7-2` N2: the rite is per family, and the smith forges the keystone into a masterwork weapon of
+/// the family, so it works only while the main hand is a masterwork instance), and only while no keystone graft holds
+/// the keystone (a unit holds one keystone, of either path).
 fn mastery_keystone(u: &Unit, g: &Growth) -> String {
-    if !g.forge_rite || !u.keystone_skills.is_empty() {
+    if g.forge_rites.is_empty() || !g.masterwork || !u.keystone_skills.is_empty() {
         return String::new();
     }
     let saved = g.equipment.iter().find(|(s, _)| *s == Slot::MainHand).map(|(_, i)| i);
     let Some(main) = saved.or_else(|| u.inventory.get(Slot::MainHand).map(|e| &e.item)) else { return String::new() };
     let level = g.mastery.get(&main.weapon_type).copied().unwrap_or(0);
-    if main.item_type != "WEAPON" || level < rpgkit_data::mastery::MASTERY_MAX {
+    if main.item_type != "WEAPON" || level < rpgkit_data::mastery::MASTERY_MAX || !g.forge_rites.contains(&main.weapon_type) {
         return String::new();
     }
     main.family_keystone.clone()
@@ -2306,7 +2317,9 @@ impl Unit {
 
     /// PK2-STAGE-PASSIVES (`PR6-2`): skill potency for `skill` at attack distance `distance` (`0` = distance-0 baseline;
     /// `> 0` adds matching `min_distance > 0` entries with `distance >= min_distance` in family-then-group sum order).
-    pub fn potency_for_skill_at(&self, skill: &rpgkit_data::SkillDef, distance: i32) -> f64 {
+    /// `ranged`: the hit's own ranged flag (`PR7-2` N1): a distance-gated `ranged` group entry also matches a ranged hit
+    /// of a skill that is not itself ranged (the basic Strike with a bow), see `distance_group_matches`.
+    pub fn potency_for_skill_at(&self, skill: &rpgkit_data::SkillDef, ranged: bool, distance: i32) -> f64 {
         let mut total = self.potency_for_skill(skill);
         if distance <= 0 {
             return total;
@@ -2323,7 +2336,7 @@ impl Unit {
         };
         total += sum_set(&|set| matches!(set, SkillSet::Family(f) if f == fam));
         for g in GROUPS {
-            if skill_in_group(skill, g) {
+            if distance_group_matches(skill, g, ranged) {
                 total += sum_set(&|set| matches!(set, SkillSet::Group(y) if y == g));
             }
         }
@@ -2366,18 +2379,22 @@ impl Unit {
     /// then per group of the skill the passive adds and the worn ones); each part is one grant's add (a 0 add, which
     /// changes nothing, names no part).
     pub fn potency_parts(&self, skill: &rpgkit_data::SkillDef) -> Vec<crate::pipeline::Part> {
-        self.potency_parts_at(skill, 0)
+        self.potency_parts_at(skill, false, 0)
     }
 
-    /// PK2-STAGE-PASSIVES (`PR6-2`): `potency_parts` including active `min_distance > 0` grants when `distance > 0`.
-    pub fn potency_parts_at(&self, skill: &rpgkit_data::SkillDef, distance: i32) -> Vec<crate::pipeline::Part> {
+    /// PK2-STAGE-PASSIVES (`PR6-2`): `potency_parts` including active `min_distance > 0` grants when `distance > 0`
+    /// (`ranged`: the hit's ranged flag, as `potency_for_skill_at`).
+    pub fn potency_parts_at(&self, skill: &rpgkit_data::SkillDef, ranged: bool, distance: i32) -> Vec<crate::pipeline::Part> {
         let fam = skill.family_id();
-        let groups: Vec<&str> = GROUPS.iter().copied().filter(|g| skill_in_group(skill, g)).collect();
+        let groups: Vec<&str> = GROUPS.iter().copied().filter(|g| skill_in_group(skill, g) || (distance > 0 && distance_group_matches(skill, g, ranged))).collect();
+        let in_group = |g: &str| skill_in_group(skill, g);
         let of = |list: &[HitSource], set: &dyn Fn(&SkillSet) -> bool| -> Vec<crate::pipeline::Part> {
             list.iter()
                 .filter(|h| {
                     h.value != 0.0
-                        && matches!(&h.target, Target::SkillPotency { set: x, min_distance } if (*min_distance <= 0 || (distance > 0 && distance >= *min_distance)) && set(x))
+                        && matches!(&h.target, Target::SkillPotency { set: x, min_distance }
+                            if (if *min_distance <= 0 { !matches!(x, SkillSet::Group(g) if !in_group(g)) } else { distance > 0 && distance >= *min_distance })
+                                && set(x))
                 })
                 .map(|h| crate::pipeline::Part { source: h.source.clone().into(), value: h.value })
                 .collect()
@@ -2448,12 +2465,13 @@ impl Unit {
         skill.power_mult * self.potency_for_skill(skill) * self.weaken_factor() * self.empower_factor()
     }
 
-    /// PK2-STAGE-PASSIVES (`PR6-2`): `power_for` at attack distance `distance` (`0` = `power_for`).
-    pub fn power_for_at(&self, skill: &rpgkit_data::SkillDef, distance: i32) -> f64 {
+    /// PK2-STAGE-PASSIVES (`PR6-2`): `power_for` at attack distance `distance` (`0` = `power_for`; `ranged`: the hit's
+    /// ranged flag, as `potency_for_skill_at`).
+    pub fn power_for_at(&self, skill: &rpgkit_data::SkillDef, ranged: bool, distance: i32) -> f64 {
         if distance <= 0 {
             return self.power_for(skill);
         }
-        skill.power_mult * self.potency_for_skill_at(skill, distance).max(0.0) * self.weaken_factor() * self.empower_factor()
+        skill.power_mult * self.potency_for_skill_at(skill, ranged, distance).max(0.0) * self.weaken_factor() * self.empower_factor()
     }
 
     pub fn status_potency_bonus(&self) -> i32 {

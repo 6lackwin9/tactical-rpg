@@ -4,15 +4,18 @@
 //! `durability.from_act` (no key = never); only a main-hand weapon family at proficiency 2 or more gains it (never a
 //! shield, an off-hand focus or a proficiency 1 family), up to the top level's total; the sources are the settle's use
 //! (each family the member attacked with), a `MASTERY_BOOK` read from the stash and a `drill` recipe (the picked family
-//! when the member may master more than one). `mastery_xp` and `forge_rite` are saved only when set. The build opens
-//! the wielded family's first n techniques at mastery n, and its keystone at mastery 3 once the forge rite is done.
+//! when the member may master more than one). `mastery_xp` and `forge_rites` are saved only when set (a pre-`PR7-2`
+//! save's single `forge_rite: true` loads as a rite for every family at mastery 3). The build opens the wielded
+//! family's first n techniques at mastery n, and its keystone at mastery 3 once that family's forge rite is done and
+//! only while the main hand is a masterwork instance (`PR7-2` N2).
 
 use aegis_core::json;
 use rpgkit_data::mastery::{level_of, scaled, MASTERY_LEVEL_XP, MASTERY_MAX, USE_XP};
 use rpgkit_world::mastery::{self, NOT_YET_TEXT};
 use rpgkit_world::recipe::{self, Pick};
 use rpgkit_world::roster::{self, FightEnd, HeroEnd};
-use rpgkit_world::state::{PartyState, UnitState, FORGE_RITE_KEY, MASTERY_XP_KEY};
+use rpgkit_world::state::{PartyState, UnitState, FORGE_RITES_KEY, FORGE_RITE_LEGACY_KEY, MASTERY_XP_KEY};
+use rpgkit_world::weapons::{Weapon, MAIN_HAND};
 use rpgkit_world::{new_game, progression, Data, GameState};
 use serde_json::{json, Value};
 
@@ -219,16 +222,56 @@ fn mastery_and_the_forge_rite_save_only_when_set() {
     let mut gs = game(&d, FROM_ACT);
     let id = hero_id(&gs);
     let v = hero(&gs).to_value();
-    assert!(v.get(MASTERY_XP_KEY).is_none() && v.get(FORGE_RITE_KEY).is_none(), "a member without mastery saves as before");
+    assert!(v.get(MASTERY_XP_KEY).is_none() && v.get(FORGE_RITES_KEY).is_none(), "a member without mastery saves as before");
     mastery::gain(&d, &mut gs, &id, "axe", USE_XP).unwrap();
-    gs.party.members[0].set_forge_rite(true);
+    gs.party.members[0].set_forge_rite("sword", true);
+    gs.party.members[0].set_forge_rite("sword", true);
     let v = hero(&gs).to_value();
-    assert_eq!((&v[MASTERY_XP_KEY], &v[FORGE_RITE_KEY]), (&json!({"axe": USE_XP}), &json!(true)));
+    assert_eq!((&v[MASTERY_XP_KEY], &v[FORGE_RITES_KEY]), (&json!({"axe": USE_XP}), &json!(["sword"])), "one rite per family");
+    assert!(v.get(FORGE_RITE_LEGACY_KEY).is_none(), "the old key is never written");
     let back = UnitState::from_dict(json::dict(&v));
     assert_eq!(&back, hero(&gs), "the keys load back");
+    gs.party.members[0].set_forge_rite("sword", false);
+    assert!(hero(&gs).to_value().get(FORGE_RITES_KEY).is_none(), "cleared: not saved");
     let mut bad = back.clone();
     bad.mastery_xp.insert("axe".into(), -1);
     assert!(bad.validate(&d).iter().any(|e| e.ends_with("mastery_xp axe must be 0 or more.")));
+}
+
+/// `PR7-2` (N2) save back-compat: a pre-`PR7-2` member's single `forge_rite: true` (one rite then opened the keystone
+/// of any family at mastery 3) loads as a rite for each family its `mastery_xp` holds at mastery 3, in key order, and
+/// saves back as `forge_rites`; `forge_rite: false` or a member without a family at mastery 3 loads none.
+#[test]
+fn a_legacy_forge_rite_loads_as_a_rite_per_family_at_mastery_3() {
+    let d = data();
+    let gs = game(&d, FROM_ACT);
+    let top = xp_for(MASTERY_MAX as usize);
+    let legacy = |rite: bool, xp: Value| {
+        let mut v = hero(&gs).to_value();
+        v[FORGE_RITE_LEGACY_KEY] = json!(rite);
+        v[MASTERY_XP_KEY] = xp;
+        UnitState::from_dict(json::dict(&v))
+    };
+    let m = legacy(true, json!({"axe": top, "sword": xp_for(1), "mace": top}));
+    assert_eq!(m.forge_rites, ["axe", "mace"], "each family at mastery 3, in key order");
+    assert!(m.has_forge_rite("axe") && !m.has_forge_rite("sword"));
+    let v = m.to_value();
+    assert_eq!(v[FORGE_RITES_KEY], json!(["axe", "mace"]));
+    assert!(v.get(FORGE_RITE_LEGACY_KEY).is_none(), "resaved in the new form");
+    assert_eq!(UnitState::from_dict(json::dict(&v)), m, "and loads back the same");
+    assert!(legacy(false, json!({"axe": top})).forge_rites.is_empty(), "no rite taken");
+    assert!(legacy(true, json!({"axe": xp_for(2)})).forge_rites.is_empty(), "no family at mastery 3");
+    let mut both = hero(&gs).to_value();
+    both[FORGE_RITE_LEGACY_KEY] = json!(true);
+    both[MASTERY_XP_KEY] = json!({"axe": top, "sword": top});
+    both[FORGE_RITES_KEY] = json!(["sword"]);
+    assert_eq!(UnitState::from_dict(json::dict(&both)).forge_rites, ["sword"], "the new key wins over the old");
+}
+
+/// Wields the blade in member `m`'s main hand as an instance, masterwork or not.
+fn wield_blade(d: &Data, m: &mut UnitState, masterwork: bool) {
+    m.equipment.insert(MAIN_HAND.into(), "blade".into());
+    m.weapons.insert(MAIN_HAND.into(), Weapon { uid: "w1".into(), masterwork, ..Weapon::fresh(d, "blade") });
 }
 
 /// The XP for mastery `level` in a family (0 = none).
@@ -253,15 +296,23 @@ fn the_build_opens_the_wielded_familys_techniques_and_its_keystone() {
         assert!(u.mastery_keystone.is_empty(), "no keystone without the forge rite");
     }
     let m = &mut gs.party.members[0];
-    m.set_forge_rite(true);
+    wield_blade(&d, m, true);
+    m.set_forge_rite("axe", true);
+    assert!(progression::build(&d, m).unwrap().unit.mastery_keystone.is_empty(), "another family's rite opens no sword keystone");
+    m.set_forge_rite("sword", true);
+    wield_blade(&d, m, false);
+    let plain = progression::build(&d, m).unwrap().unit;
+    assert!(plain.mastery_keystone.is_empty() && !plain.keystone_skills.contains(&"k_sword".to_string()), "off without a masterwork sword");
+    wield_blade(&d, m, true);
     let u = progression::build(&d, m).unwrap().unit;
-    assert_eq!(u.mastery_keystone, "k_sword", "mastery 3 and the forge rite");
+    assert_eq!(u.mastery_keystone, "k_sword", "mastery 3, the sword's forge rite and a masterwork sword in the main hand");
     assert!(u.keystone_skills.contains(&"k_sword".to_string()) && u.always_active(&d.cat, "k_sword"), "it sits in the keystone slot");
     m.mastery_xp.insert("sword".into(), xp_for(MASTERY_MAX as usize - 1));
     assert!(progression::build(&d, m).unwrap().unit.mastery_keystone.is_empty(), "below mastery 3");
     m.mastery_xp.insert("sword".into(), xp_for(MASTERY_MAX as usize));
     m.mastery_xp.insert("axe".into(), xp_for(1));
     m.equipment.shift_remove("main_hand");
+    m.weapons.shift_remove(MAIN_HAND);
     let bare = progression::build(&d, m).unwrap().unit;
     assert!(bare.techniques.is_empty() && bare.mastery_keystone.is_empty(), "nothing without a sword in the main hand");
 }

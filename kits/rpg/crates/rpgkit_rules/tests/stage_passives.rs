@@ -6,7 +6,8 @@
 //! - `"ranged"` group in `unit::GROUPS` and `skill_in_group(s, "ranged") == skill_is_ranged(s)`.
 //! - `skill_potency` optional `min_distance` (`0..=12`, default `0`): ignored when distance `< min_distance` or `0`,
 //!   applied when distance `>= min_distance` across `Unit::potency_for_skill_at` / `power_for_at` and
-//!   `damage::compute` / `compute_traced`.
+//!   `damage::compute` / `compute_traced`; a distance-gated `ranged` entry also takes a ranged hit of a skill that is
+//!   not itself ranged (the basic Strike with a bow, `PR7-2` N1).
 
 use rpgkit_data::Catalog;
 use rpgkit_rules::damage::{self, base_armor_rating, compute, compute_traced, compute_traced_skill, HitInput};
@@ -167,11 +168,18 @@ fn ranged_group_and_min_distance_evaluate_cleanly() {
     u.apply_passive(&cat, &cat.passives["p_ranged_far"]);
     // Distance 0 / 3 do not trigger `min_distance: 4`.
     assert!((u.potency_for_skill(shot) - 1.0).abs() < 1e-9);
-    assert!((u.potency_for_skill_at(shot, 3) - 1.0).abs() < 1e-9);
-    assert!((u.potency_for_skill_at(shot, 4) - 0.85).abs() < 1e-9);
-    assert!((u.potency_for_skill_at(shot, 6) - 0.85).abs() < 1e-9);
-    // Melee skill does not match `group: "ranged"` even at distance 4+.
-    assert!((u.potency_for_skill_at(strike, 4) - 1.0).abs() < 1e-9);
+    assert!((u.potency_for_skill_at(shot, true, 3) - 1.0).abs() < 1e-9);
+    assert!((u.potency_for_skill_at(shot, true, 4) - 0.85).abs() < 1e-9);
+    assert!((u.potency_for_skill_at(shot, true, 6) - 0.85).abs() < 1e-9);
+    // PR7-2 (N1): the basic Strike is not itself a ranged skill, but a ranged hit of it (Strike with the bow) takes the
+    // distance-gated `group: "ranged"` grant beyond 3 tiles, by the hit's ranged flag; not at <= 3, never a melee hit.
+    assert!(!skill_is_ranged(strike));
+    assert!((u.potency_for_skill_at(strike, true, 3) - 1.0).abs() < 1e-9);
+    assert!((u.potency_for_skill_at(strike, true, 4) - 0.85).abs() < 1e-9);
+    assert!((u.power_for_at(strike, true, 4) - 0.85 * u.power_for(strike)).abs() < 1e-9);
+    assert_eq!(u.potency_parts_at(strike, true, 4).len(), 1);
+    assert!((u.potency_for_skill_at(strike, false, 4) - 1.0).abs() < 1e-9);
+    assert!(u.potency_parts_at(strike, false, 4).is_empty());
 
     let base_dmg = compute(&u, &target, HitInput { ranged: true, distance: 3, ..HitInput::default() }).final_dmg;
     let close_dmg = compute(&u, &target, HitInput { ranged: true, distance: 0, ..HitInput::default() }).final_dmg;
@@ -191,15 +199,18 @@ fn ranged_group_and_min_distance_evaluate_cleanly() {
 
     // Distance-gated potency adds linearly alongside distance-0 ranged potency, and `when` updates cleanly on gear swap.
     u.apply_passive(&cat, &cat.passives["p_ranged_flat"]);
-    assert!((u.potency_for_skill_at(shot, 3) - 1.25).abs() < 1e-9);
-    assert!((u.potency_for_skill_at(shot, 4) - 1.10).abs() < 1e-9);
-    assert_eq!(u.potency_parts_at(shot, 3).len(), 1);
-    assert_eq!(u.potency_parts_at(shot, 4).len(), 2);
+    assert!((u.potency_for_skill_at(shot, true, 3) - 1.25).abs() < 1e-9);
+    assert!((u.potency_for_skill_at(shot, true, 4) - 1.10).abs() < 1e-9);
+    assert_eq!(u.potency_parts_at(shot, true, 3).len(), 1);
+    assert_eq!(u.potency_parts_at(shot, true, 4).len(), 2);
+    // N1 reaches only the distance-gated entries: the distance-0 ranged boost stays with inherently ranged skills.
+    assert!((u.potency_for_skill_at(strike, true, 4) - 0.85).abs() < 1e-9);
+    assert_eq!(u.potency_parts_at(strike, true, 4).len(), 1);
 
     u.apply_passive(&cat, &cat.passives["p_cond_far"]);
     // Hero currently wields `w_bow` (`attack_range > 1`), so `when: {"ranged": true}` holds.
-    assert!((u.potency_for_skill_at(shot, 4) - 1.00).abs() < 1e-9);
+    assert!((u.potency_for_skill_at(shot, true, 4) - 1.00).abs() < 1e-9);
     u.inventory.equip(Equipment::new(&cat.items["w_sword"]), Slot::MainHand);
     u.sync_from_stats_and_gear(&cat);
-    assert!((u.potency_for_skill_at(shot, 4) - 1.10).abs() < 1e-9);
+    assert!((u.potency_for_skill_at(shot, true, 4) - 1.10).abs() < 1e-9);
 }

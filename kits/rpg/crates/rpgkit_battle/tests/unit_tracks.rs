@@ -380,6 +380,7 @@ fn ranged_min_distance_potency_governs_forecast_and_battle_hit() {
     cat.skills.extend(extra.skills);
     cat.passives.extend(extra.passives);
     let shot_id = cat.skills.iter().position(|s| s.id == "t_shot").unwrap();
+    let strike_id = cat.skills.iter().position(|s| s.id == "strike").unwrap();
     let arc_cat = Arc::new(cat);
 
     let row = json!({"id": "t_dist", "name": "Dist", "party": ["p_hero"], "enemies": ["p_foe"],
@@ -387,7 +388,7 @@ fn ranged_min_distance_potency_governs_forecast_and_battle_hit() {
     let mut def = EncounterDef::from_obj(row.as_object().unwrap());
     def.ruleset = Ruleset::from_row(json!({"id": TIMELINE, "name": "Timeline", "rules": [TRIGGERS]}).as_object().unwrap());
 
-    let run_at = |dist: i32| -> (i32, i32) {
+    let run_at = |sid: usize, dist: i32| -> (i32, i32) {
         let mut s = Session::start(arc_cat.clone(), def.clone(), &Plain);
         s.w.units[HERO].attack_range = 6;
         let far_pas = s.w.cat.passives["t_far_pen"].clone();
@@ -397,8 +398,8 @@ fn ranged_min_distance_potency_governs_forecast_and_battle_hit() {
         s.w.grid.positions[1] = Some(V2::new(2 + dist, 4));
 
         let mut plan = Plan::new();
-        assert_eq!(plan.add_step(&s.w, HERO, PlanStep::engage(shot_id, 1), true), "");
-        let entry = plan.entries_for(&s.w, HERO).into_iter().find(|e| e.skill == shot_id).unwrap();
+        assert_eq!(plan.add_step(&s.w, HERO, PlanStep::engage(sid, 1), true), "");
+        let entry = plan.entries_for(&s.w, HERO).into_iter().find(|e| e.skill == sid).unwrap();
         let cmd = entry.build_command(&s.w, HERO);
         let before = s.w.units[1].hp;
         let mut res = Resolver::new(BLOCKS, 1);
@@ -407,10 +408,18 @@ fn ranged_min_distance_potency_governs_forecast_and_battle_hit() {
         (entry.est_damage, before - s.w.units[1].hp)
     };
 
-    let (est3, dmg3) = run_at(3);
-    let (est4, dmg4) = run_at(4);
+    let (est3, dmg3) = run_at(shot_id, 3);
+    let (est4, dmg4) = run_at(shot_id, 4);
     assert_eq!(est3, 100, "distance 3 stays unpenalized");
     assert_eq!(dmg3, 100);
     assert_eq!(est4, 85, "distance 4 forecast applies -15%");
     assert_eq!(dmg4, 85, "distance 4 hit applies -15%");
+
+    // PR7-2 (N1): the basic Strike from a ranged unit (attack range 6, its hit ranged) takes the same penalty
+    let (sest3, sdmg3) = run_at(strike_id, 3);
+    let (sest4, sdmg4) = run_at(strike_id, 4);
+    assert!(sdmg3 > 0, "the basic ranged Strike lands at 3");
+    assert_eq!(sest3, sdmg3, "the Strike forecast matches its hit at 3");
+    assert_eq!(sdmg4, (sdmg3 as f64 * 0.85).round() as i32, "distance 4 basic ranged Strike applies -15%");
+    assert_eq!(sest4, sdmg4, "the Strike forecast applies it too");
 }

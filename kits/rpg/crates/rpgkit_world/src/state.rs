@@ -50,9 +50,13 @@ pub const FLOOR_OFFSET_KEY: &str = "floor_offset";
 /// PK2-S3: the member key of the trained proficiency levels (`UnitState::trained`).
 pub const TRAINED_KEY: &str = "trained";
 /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): the member keys of its weapon mastery XP (`UnitState::mastery_xp`) and its
-/// forge rite (`UnitState::forge_rite`); each written only when set (no save VERSION bump).
+/// forge rites (`UnitState::forge_rites`, one per family since `PR7-2` N2); each written only when set (no save VERSION
+/// bump).
 pub const MASTERY_XP_KEY: &str = "mastery_xp";
-pub const FORGE_RITE_KEY: &str = "forge_rite";
+pub const FORGE_RITES_KEY: &str = "forge_rites";
+/// The pre-`PR7-2` member key: one rite for every family (`true`). Read only: a save holding it loads it as a rite for
+/// each family the member has at mastery 3 (`UnitState::from_dict`), and is written back as `forge_rites`.
+pub const FORGE_RITE_LEGACY_KEY: &str = "forge_rite";
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
 
 pub fn is_tactic(id: &str) -> bool {
@@ -115,9 +119,10 @@ pub struct UnitState {
     /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> the member's weapon mastery XP in that family (a bar toward
     /// levels 1-3, `rpgkit_data::mastery::level_of`). Saved as `mastery_xp` only when not empty.
     pub mastery_xp: IndexMap<String, i64>,
-    /// PK2-S4: the member's forge rite is done (with mastery 3 it opens the wielded family's keystone). Saved as
-    /// `forge_rite` only when true (`set_forge_rite`).
-    pub forge_rite: bool,
+    /// PK2-S4, `PR7-2` (N2): the weapon families whose forge rite the member has taken, in rite order (with mastery 3
+    /// and a masterwork main hand of the family it opens that family's keystone). Saved as `forge_rites` only when not
+    /// empty (`set_forge_rite`).
+    pub forge_rites: Vec<String>,
     /// PK2-S5a (`docs/sessions/PK2_GRAFTS.md` 6): weapon slot -> the weapon instance it wields (`crate::weapons`; the
     /// slot's `equipment` id is the instance's item). Saved as `weapons` only when not empty.
     pub weapons: IndexMap<String, crate::weapons::Weapon>,
@@ -555,8 +560,8 @@ impl UnitState {
         if !self.mastery_xp.is_empty() {
             out.insert(MASTERY_XP_KEY.into(), Value::Object(self.mastery_xp.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
         }
-        if self.forge_rite {
-            out.insert(FORGE_RITE_KEY.into(), Value::Bool(true));
+        if !self.forge_rites.is_empty() {
+            out.insert(FORGE_RITES_KEY.into(), json::strs(&self.forge_rites));
         }
         // PK2-S5a: only a member wielding a weapon instance saves `weapons`
         if !self.weapons.is_empty() {
@@ -657,7 +662,7 @@ impl UnitState {
             floor_offset: json::i(d, FLOOR_OFFSET_KEY, 0),
             trained: d.get(TRAINED_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
             mastery_xp: d.get(MASTERY_XP_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
-            forge_rite: json::b(d, FORGE_RITE_KEY, false),
+            forge_rites: Self::forge_rites_of(d),
             weapons: crate::weapons::member_from(d),
             name: json::s(d, "name"),
             housing: json::s(d, "housing"),
@@ -674,10 +679,41 @@ impl UnitState {
         rpgkit_data::mastery::level_of(self.mastery_xp.get(family).copied().unwrap_or(0))
     }
 
-    /// PK2-S4: sets the forge rite (with mastery 3 it opens the wielded family's keystone); the rite's source (a quest, a
-    /// recipe) is the game's.
-    pub fn set_forge_rite(&mut self, done: bool) {
-        self.forge_rite = done;
+    /// PK2-S4, `PR7-2` (N2): sets (or clears) the forge rite of weapon family `family` (with mastery 3 and a masterwork
+    /// main hand of that family it opens the family's keystone); the rite's source (a quest, a recipe) is the game's.
+    pub fn set_forge_rite(&mut self, family: &str, done: bool) {
+        let has = self.has_forge_rite(family);
+        if done && !has && !family.is_empty() {
+            self.forge_rites.push(family.to_string());
+        } else if !done && has {
+            self.forge_rites.retain(|f| f != family);
+        }
+    }
+
+    /// `PR7-2` (N2): the member has taken the forge rite of weapon family `family`.
+    pub fn has_forge_rite(&self, family: &str) -> bool {
+        self.forge_rites.iter().any(|f| f == family)
+    }
+
+    /// `PR7-2` (N2): the saved forge rites of member dict `d`: its `forge_rites` list, else (a pre-`PR7-2` save) its
+    /// single `forge_rite: true` read as a rite for every family its `mastery_xp` holds at mastery 3, in that key order
+    /// (the old rite needed mastery 3 in a family and opened the keystone of any family at mastery 3, so this keeps every
+    /// keystone the save could open; mastery never falls, so no family it could reach is lost).
+    fn forge_rites_of(d: &Dict) -> Vec<String> {
+        if d.contains_key(FORGE_RITES_KEY) {
+            let mut out: Vec<String> = Vec::new();
+            for f in json::sget(d, FORGE_RITES_KEY) {
+                if !f.is_empty() && !out.contains(&f) {
+                    out.push(f);
+                }
+            }
+            return out;
+        }
+        if !json::b(d, FORGE_RITE_LEGACY_KEY, false) {
+            return Vec::new();
+        }
+        let xp: IndexMap<String, i64> = d.get(MASTERY_XP_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default();
+        xp.into_iter().filter(|(_, v)| rpgkit_data::mastery::level_of(*v) >= rpgkit_data::mastery::MASTERY_MAX).map(|(k, _)| k).collect()
     }
 
     /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the graft count, the body slots in use.
