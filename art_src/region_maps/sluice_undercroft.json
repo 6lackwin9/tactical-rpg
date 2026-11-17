@@ -4,10 +4,10 @@
  "rows": [
   "######################################",
   "#.###...##..#~~~~~..~~~~~#.##.###....#",
-  "#...........#~~~~~..~~~~~#....###....#",
-  "##...###....#~~~~~..~~~~~#...........#",
-  "##...###..#.#~~~~~..~~~~~#...#.......#",
-  "##..........#~~~~~..~~~~~#........##.#",
+  "#...........#~~~~~..~~~~~#....###...##",
+  "##...###....#~~~~~..~~~~~##.........##",
+  "##...###..#.#~~~~~..~~~~~##..#......##",
+  "##..........#~~~~~..~~~~~##.......##.#",
   "#...........#....#..#....#.##.....##.#",
   "#...........#............#...........#",
   "#####..###########..##########..######",
@@ -20,11 +20,11 @@
   "####..############..############..####",
   "#.#......#########..#########........#",
   "#........#..................#........#",
-  "#........#..................#.##..##.#",
-  "#........#..................#........#",
-  "#........#....###....###...##........#",
-  "###......#..................##.......#",
-  "#........###................#........#",
+  "#........#..................#.##..####",
+  "#.......##..................#.......##",
+  "#.......###....#......#....##.......##",
+  "###.....###.................##.......#",
+  "#........##.................#........#",
   "######################################"
  ],
  "zones": [
@@ -84,6 +84,66 @@
   }
  },
  "anchors": [
+  {
+   "id": "spot_seat_1",
+   "x": 14,
+   "y": 20
+  },
+  {
+   "id": "spot_seat_2",
+   "x": 16,
+   "y": 20
+  },
+  {
+   "id": "spot_seat_3",
+   "x": 21,
+   "y": 20
+  },
+  {
+   "id": "spot_seat_4",
+   "x": 23,
+   "y": 20
+  },
+  {
+   "id": "spot_seat_5",
+   "x": 15,
+   "y": 21
+  },
+  {
+   "id": "spot_seat_6",
+   "x": 22,
+   "y": 21
+  },
+  {
+   "id": "spot_bunk_1",
+   "x": 10,
+   "y": 17
+  },
+  {
+   "id": "spot_bunk_2",
+   "x": 13,
+   "y": 17
+  },
+  {
+   "id": "spot_bunk_3",
+   "x": 16,
+   "y": 17
+  },
+  {
+   "id": "spot_bunk_4",
+   "x": 20,
+   "y": 17
+  },
+  {
+   "id": "spot_bunk_5",
+   "x": 23,
+   "y": 17
+  },
+  {
+   "id": "spot_bunk_6",
+   "x": 26,
+   "y": 17
+  },
   {
    "id": "spawn",
    "x": 6,
@@ -313,6 +373,28 @@
    "flip": false
   },
   {
+   "id": "weapon_rack",
+   "art": "weapon_rack_tall",
+   "x": 36,
+   "y": 2,
+   "w": 1,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tool_rack",
+   "art": "tool_rack_tall",
+   "x": 26,
+   "y": 3,
+   "w": 1,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
    "id": "brazier",
    "art": "brazier",
    "x": 22,
@@ -374,6 +456,17 @@
    "y": 21,
    "w": 2,
    "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "entry_stack",
+   "art": "crates_tall",
+   "x": 8,
+   "y": 19,
+   "w": 1,
+   "h": 3,
    "layer": "sort",
    "variant": -1,
    "flip": false
@@ -524,9 +617,9 @@
   {
    "id": "table",
    "art": "table_stools",
-   "x": 14,
+   "x": 15,
    "y": 20,
-   "w": 3,
+   "w": 1,
    "h": 1,
    "layer": "sort",
    "variant": -1,
@@ -535,9 +628,9 @@
   {
    "id": "table_2",
    "art": "table_stools",
-   "x": 21,
+   "x": 22,
    "y": 20,
-   "w": 3,
+   "w": 1,
    "h": 1,
    "layer": "sort",
    "variant": -1,
@@ -545,11 +638,11 @@
   },
   {
    "id": "stores",
-   "art": "barrel_stack",
+   "art": "barrels_tall",
    "x": 10,
-   "y": 22,
-   "w": 2,
-   "h": 1,
+   "y": 20,
+   "w": 1,
+   "h": 3,
    "layer": "sort",
    "variant": -1,
    "flip": false
@@ -608,6 +701,17 @@
    "layer": "sort",
    "variant": -1,
    "flip": false
+  },
+  {
+   "id": "crypt_chains",
+   "art": "chains_tall",
+   "x": 36,
+   "y": 18,
+   "w": 1,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
   }
  ],
  "ground": [
@@ -647,6 +751,18 @@
   "sunk_ward"
  ],
  "draft_markers": {
+  "spot_seat_1": "idle seat 1 at the social tables (BUNKS1 BK9, active member)",
+  "spot_seat_2": "idle seat 2 at the social tables (BUNKS1 BK9, active member)",
+  "spot_seat_3": "idle seat 3 at the social tables (BUNKS1 BK9, active member)",
+  "spot_seat_4": "idle seat 4 at the social tables (BUNKS1 BK9, active member)",
+  "spot_seat_5": "idle seat 5 at the social tables (BUNKS1 BK9, active member)",
+  "spot_seat_6": "idle seat 6 at the social tables (BUNKS1 BK9, active member)",
+  "spot_bunk_1": "bunk 1: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
+  "spot_bunk_2": "bunk 2: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
+  "spot_bunk_3": "bunk 3: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
+  "spot_bunk_4": "bunk 4: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
+  "spot_bunk_5": "bunk 5: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
+  "spot_bunk_6": "bunk 6: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
   "spawn": "arrival from the world map (the ladder foot)",
   "road": "exit `road`: up the ladder, World map: the Sunk Ward",
   "gate": "exit `gate`: through the sluice gate to drowned_runoff_grate (to_anchor `sluice_in`)",

@@ -65,6 +65,11 @@ Reference picks (2026-11-17, checked against the layout JSON and `draft_markers`
   `art-ui/region_refs/grate_ref_edit_take2.png`) has both stairs, the north tunnel arch, two rubble heaps and the
   silt banks. Leave out when mirroring: the black slab east of the pool (no design meaning) and the footbridge's
   water wheel (the design has a winch drum).
+- Hub prop sheet 2 (2026-11-17, `props_hub_vertical_1` take 2, project files `art-ui/props_hub_vertical_1/`): tall
+  side-wall pieces `tool_rack_tall`, `weapon_rack_tall`, `crates_tall`, `barrels_tall`, `bookcase_tall`, `chains_tall`
+  (take 1 was three-quarter isometric, off the front-on view). The bookcase is not placed yet.
+- BUNKS1 idle spots (AI-17): the hub layout's anchors `spot_seat_1..6` (the social tables' stools, then their near
+  side) and `spot_bunk_1..6` (each bunk's foot, in roster order), open and reachable so a new lead can stand up there.
 - Hub prop sheet 1 (2026-11-17, take 1, project files `art-ui/props_hub_mirror_1/`): `niche_bunk`, `nightstand`,
   `wall_lantern`, `mooring_bollard`, `bar_run`, `cell_door` cut into `art_src/sunk_ward/props_cut/<name>/v0.png`.
   The cuts and the sheet (`art_src/sunk_ward/sheets/props_hub_mirror_1_take1.png`) landed from the desktop 2026-11-18;

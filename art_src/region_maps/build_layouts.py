@@ -209,8 +209,10 @@ def sluice_undercroft():
     L.prop("anvil", "anvil", 29, 4)
     L.prop("scrap", "scrap_heap", 34, 5, 2, 2)
     L.prop("crates", "crate_stack", 27, 6, 2, 1)
-    # the east wall takes a side-view weapon rack from sheet props_hub_vertical_1 when it lands (Tushar 2026-11-17:
-    # flasks were out of place in the Hearth)
+    # tall pieces on the side walls (sheet props_hub_vertical_1, 2026-11-17): the weapon rack on the east wall (Tushar:
+    # flasks were out of place here), the smith's tool rack on the west wall
+    L.prop("weapon_rack", "weapon_rack_tall", 36, 2, 1, 3)
+    L.prop("tool_rack", "tool_rack_tall", 26, 3, 1, 3)
     # --- the hall: the brazier everyone passes, vault piers by the doors
     L.prop("brazier", "brazier", 22, 11)
     # the mission board stands in the hall, where everyone gathers (Tushar 2026-11-17: the basin rim was crowded)
@@ -219,6 +221,7 @@ def sluice_undercroft():
     # --- the entry shaft: the ladder up to the streets
     L.prop("ladder", "iron_ladder", 7, 15, 1, 1)        # on the room's north wall, so it is seen from the front
     L.prop("entry_crates", "crate_stack", 1, 21, 2, 1)
+    L.prop("entry_stack", "crates_tall", 8, 19, 1, 3)           # crates stacked up the east wall
     L.prop("ladder_lamp", "wall_lantern", 6, 15)                     # the lamp by the ladder in the reference
     L.prop("entry_lamp", "lantern_pole", 2, 16)
     # --- the Dry Hollows: six kiln bunks along the north wall, three either side of the door, a table
@@ -232,13 +235,20 @@ def sluice_undercroft():
     # two halves (Tushar 2026-11-17): sleeping along the bunk wall, social below. Each prop has a reason to be where
     # it is (v12 comment: too cluttered): two tables either side of the aisle from the door, the stove on the east
     # wall, the stores in the south-west corner; nothing else on the floor
-    L.prop("table", "table_stools", 14, 20, 3, 1); L.prop("table_2", "table_stools", 21, 20, 3, 1)
-    L.prop("stores", "barrel_stack", 10, 22, 2, 1)
+    L.prop("table", "table_stools", 15, 20); L.prop("table_2", "table_stools", 22, 20)   # the table blocks, its stools stay seats
+    L.prop("stores", "barrels_tall", 10, 20, 1, 3)              # a row of barrels down the west wall
     # --- the Isolation Crypts: bars beside the door, two stasis slabs
     # the whole north wall is a bar wall either side of the door (design reference ..._ce4b19f9, 2026-11-17)
     L.prop("crypt_bars", "bar_run", 29, 15, 3, 1); L.prop("crypt_bars_2", "bar_run", 34, 15, 3, 1)
     L.prop("stasis_1", "stasis_slab", 30, 18, 2, 1); L.prop("stasis_2", "stasis_slab", 34, 18, 2, 1)
-    L.prop("crypt_candles", "candle_stand", 29, 21)   # floor corner, clear of the bar wall (reference)
+    L.prop("crypt_candles", "candle_stand", 29, 21)
+    L.prop("crypt_chains", "chains_tall", 36, 18, 1, 3)        # chains and a pulley down the east wall   # floor corner, clear of the bar wall (reference)
+    # BUNKS1 BK9 idle spots (AI-17), in the order they fill: one seat per active member at the social tables (the two
+    # stools and the near side of each table), one resting spot on each bunk, in bunk (roster) order
+    for i, (x, y) in enumerate(((14, 20), (16, 20), (21, 20), (23, 20), (15, 21), (22, 21))):   # stools, then near side
+        L.anchor(f"spot_seat_{i + 1}", x, y, f"idle seat {i + 1} at the social tables (BUNKS1 BK9, active member)")
+    for i, x in enumerate((10, 13, 16, 20, 23, 26)):
+        L.anchor(f"spot_bunk_{i + 1}", x, 17, f"bunk {i + 1}: resting spot at the bed's foot (BUNKS1 BK9, benched member)")
     # anchors: the location's markers keep their anchor ids
     L.anchor("spawn", 6, 17, "arrival from the world map (the ladder foot)")
     L.anchor("road", 7, 16, "exit `road`: up the ladder, World map: the Sunk Ward")
