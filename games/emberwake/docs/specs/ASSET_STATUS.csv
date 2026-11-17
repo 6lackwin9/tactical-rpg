@@ -1,0 +1,890 @@
+path,category,state,act,why,last_commit
+game:audio/music/ashlands.ogg,music,final,Act 1,,0f688ea
+game:audio/music/iron_reaches.ogg,music,final,all,,0f688ea
+game:audio/music/menu_theme.ogg,music,final,all,,0f688ea
+game:audio/music/prologue_tension.ogg,music,placeholder,all,synth music placeholder,bd7be7e
+game:audio/music/story_escape.ogg,music,placeholder,all,synth music placeholder,bd7be7e
+game:audio/music/story_goodbye.ogg,music,placeholder,all,synth music placeholder,bd7be7e
+game:audio/music/story_opening.ogg,music,placeholder,all,synth music placeholder,bd7be7e
+game:audio/music/sunk_ward_boss.ogg,music,placeholder,Act 1,synth music placeholder,bd7be7e
+game:audio/music/sunk_ward_combat.ogg,music,final,Act 1,,0f688ea
+game:audio/music/sunk_ward_combat_2.ogg,music,final,Act 1,,0f688ea
+game:audio/music/sunk_ward_combat_3.ogg,music,final,Act 1,,0f688ea
+game:audio/music/sunk_ward_danger.ogg,music,placeholder,Act 1,synth music placeholder,bd7be7e
+game:audio/music/sunk_ward_shop.ogg,music,placeholder,Act 1,synth music placeholder,bd7be7e
+game:audio/music/sunk_ward_town.ogg,music,final,Act 1,,0f688ea
+game:audio/music/sunk_ward_travel.ogg,music,placeholder,Act 1,synth music placeholder,bd7be7e
+game:audio/music/tidewrack.ogg,music,final,all,,0f688ea
+game:backgrounds/battle/alley.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/canal.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/desert_outpost.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/forest_clearing.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/foundry.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/frozen_pass.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/lava_cavern.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/river_crossing.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/rooftops.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/ruined_courtyard.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/stone_arena.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/swamp_bog.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/tallow_vats.png,background,placeholder,Act 1,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/undercroft.png,background,placeholder,Act 1,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/battle/watchpost.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
+game:backgrounds/location/ashmaw_camp.png,background,final,all,,0f688ea
+game:backgrounds/location/cinder_gate.png,background,final,all,,0f688ea
+game:backgrounds/location/ruined_courtyard.png,background,final,all,,0f688ea
+game:backgrounds/location/warden_keep.png,background,final,all,,0f688ea
+game:backgrounds/menu/main_menu.png,background,final,all,,0f688ea
+game:backgrounds/menu/title.png,background,final,all,,0f688ea
+game:backgrounds/story/hearth.png,background,placeholder,all,procedural story card (gen_art.py),0f688ea
+game:backgrounds/story/intro_1.png,background,placeholder,all,procedural story card (gen_art.py),0f688ea
+game:backgrounds/story/intro_2.png,background,placeholder,all,procedural story card (gen_art.py),0f688ea
+game:backgrounds/story/intro_3.png,background,placeholder,all,procedural story card (gen_art.py),0f688ea
+game:backgrounds/story/intro_4.png,background,placeholder,all,procedural story card (gen_art.py),0f688ea
+game:backgrounds/story/meat_market.png,background,placeholder,all,procedural story card (gen_art.py),0f688ea
+game:backgrounds/story/vg_m5_gate.png,background,final,all,,bd7be7e
+game:backgrounds/story/vn_alley_stage.png,background,final,all,,0f688ea
+game:backgrounds/story/vn_bridge_stage.png,background,final,all,,0f688ea
+game:backgrounds/story/vn_hearth_stage.png,background,final,all,,0f688ea
+game:backgrounds/story/vn_rooftop_stage.png,background,final,all,,0f688ea
+game:backgrounds/title/ashlands.png,background,final,Act 1,,0f688ea
+game:backgrounds/title/sunk_ward.png,background,final,Act 1,,0f688ea
+game:backgrounds/world_map/ashlands.png,background,final,Act 1,,0f688ea
+game:backgrounds/world_map/high_bastion.png,background,final,all,,87ac468
+game:backgrounds/world_map/mantle_fissure.png,background,final,all,,87ac468
+game:backgrounds/world_map/sunk_ward_quarter.png,background,final,Act 1,,dd13d27
+game:items/accessory/keepsake_dunstan.png,item icon,final,all,,08501d3
+game:items/accessory/keepsake_elyse.png,item icon,final,all,,08501d3
+game:items/accessory/keepsake_hollis.png,item icon,final,all,,08501d3
+game:items/accessory/keepsake_kaelen.png,item icon,final,all,,08501d3
+game:items/accessory/keepsake_maren.png,item icon,final,all,,08501d3
+game:items/accessory/keepsake_tpl_brawler.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/accessory/keepsake_tpl_mage.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/accessory/keepsake_tpl_priest.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/accessory/keepsake_tpl_ranger.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/accessory/keepsake_tpl_rogue.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/accessory/keepsake_tpl_warrior.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/accessory/keepsake_vesper.png,item icon,final,all,,08501d3
+game:items/ammo/base.png,item icon,final,all,,ac96ee3
+game:items/bone_saw/base.png,item icon,final,all,,08501d3
+game:items/braces/base.png,item icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",ac96ee3
+game:items/buckler/base.png,item icon,final,all,,ac96ee3
+game:items/censer/base.png,item icon,final,all,,08501d3
+game:items/cloak/base.png,item icon,final,all,,ac96ee3
+game:items/consumable/smelling_salts.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/gauntlet/base.png,item icon,final,all,,ac96ee3
+game:items/gauntlet/riveted_gauntlets.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/base.png,item icon,final,all,,ac96ee3
+game:items/graft/graft_bellows.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_bezoar.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_bra_ritual.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_core.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_ks_bra.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_ks_mag.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_ks_rng.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_ks_rog.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_ks_war.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_litany.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_mag_ritual.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_optic.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_purge.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_rng_ritual.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_rog_ritual.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_sinew.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_valve.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/graft/graft_war_ritual.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/greatsword/base.png,item icon,final,all,,ac96ee3
+game:items/greatsword/battle_axe.png,item icon,placeholder,all,byte copy of kit:items/axe/battle_axe.png,30415b9
+game:items/greatsword/greatsword.png,item icon,placeholder,all,byte copy of kit:items/sword/greatsword.png,30415b9
+game:items/hammer/titan_warhammer.png,item icon,final,all,,0f688ea
+game:items/heavy/base.png,item icon,placeholder,all,byte copy of kit:items/plate/base.png,30415b9
+game:items/heavy/helm.png,item icon,final,all,,bd7be7e
+game:items/knife/base.png,item icon,final,all,,ac96ee3
+game:items/leather/ember_brigandine.png,item icon,final,all,,0f688ea
+game:items/light/base.png,item icon,placeholder,all,byte copy of kit:items/cloth/base.png,30415b9
+game:items/light/helm.png,item icon,final,all,,bd7be7e
+game:items/manual/base.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_bone_saw.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_bow.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_censer.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_crossbow.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_dagger.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_fist.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_gauntlet.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_greatsword.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_hammer.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_knife.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_polearm.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_scourge.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_sprayer.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_staff.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/manual/book_sword.png,item icon,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:items/material/ossified_bellows.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/material/sinew_braid.png,item icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:items/medium/base.png,item icon,placeholder,all,byte copy of kit:items/leather/base.png,30415b9
+game:items/medium/helm.png,item icon,final,all,,bd7be7e
+game:items/polearm/base.png,item icon,final,all,,08501d3
+game:items/scourge/base.png,item icon,final,all,,0f688ea
+game:items/sprayer/base.png,item icon,final,all,,0f688ea
+game:items/staff/runed_staff.png,item icon,final,all,,0f688ea
+game:map/landmarks/alleyway_junction_7.png,map,final,all,,
+game:map/landmarks/ash_crawl_crossroads.png,map,final,all,,
+game:map/landmarks/corvos_gate.png,map,final,all,,
+game:map/landmarks/crucible_watchpost.png,map,final,all,,
+game:map/landmarks/drowned_runoff_grate.png,map,final,all,,
+game:map/landmarks/fourth_kiln.png,map,final,all,,
+game:map/landmarks/slag_gate.png,map,final,all,,
+game:map/landmarks/sluice_undercroft.png,map,final,Act 1,,
+game:map/landmarks/tallow_vats.png,map,final,Act 1,,
+game:portraits/bosses/calcified_amalgam.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
+game:portraits/bosses/captain_vane.png,portrait,final,all,,0f688ea
+game:portraits/bosses/faces/captain_vane/afraid.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/captain_vane/angry.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/captain_vane/hurt.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/captain_vane/neutral.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/guild_master_orlov/afraid.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/guild_master_orlov/angry.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/guild_master_orlov/hurt.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/guild_master_orlov/neutral.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/inquisitor_prelate_nemeth/afraid.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/inquisitor_prelate_nemeth/angry.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/inquisitor_prelate_nemeth/hurt.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/inquisitor_prelate_nemeth/neutral.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/proctor_quell/afraid.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/proctor_quell/angry.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/proctor_quell/hurt.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/faces/proctor_quell/neutral.png,face sheet,final,all,,0f688ea
+game:portraits/bosses/grakka_ashmaw.png,portrait,final,all,,0f688ea
+game:portraits/bosses/guild_master_orlov.png,portrait,final,all,,0f688ea
+game:portraits/bosses/inquisitor_prelate_nemeth.png,portrait,final,all,,0f688ea
+game:portraits/bosses/overseer_grendel.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
+game:portraits/bosses/proctor_quell.png,portrait,final,all,,0f688ea
+game:portraits/common/beast_render_beast.png,portrait,final,all,,0f688ea
+game:portraits/common/brawler_cohort_breaker.png,portrait,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:portraits/common/crawler_ash_crawler.png,portrait,final,all,,0f688ea
+game:portraits/common/mage_cohort_vat.png,portrait,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:portraits/common/priest_cohort_novice.png,portrait,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:portraits/common/ranger_cohort_bolt.png,portrait,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:portraits/common/ranger_wenn_tallow.png,portrait,placeholder,Act 1,byte copy of game:portraits/npcs/wenn_tallow.png,4bd93cf
+game:portraits/common/rogue_cohort_flue.png,portrait,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:portraits/common/warrior_1h_buckler.png,portrait,final,all,,4bd93cf
+game:portraits/common/warrior_cohort_levy.png,portrait,placeholder,all,Wave 2 placeholder pack (AI-15),7ddae3f
+game:portraits/elites/ash_warchief.png,portrait,final,all,,0f688ea
+game:portraits/elites/bailiff_enforcer.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
+game:portraits/elites/bolg_redhand.png,portrait,final,all,,0f688ea
+game:portraits/elites/calcified_husk.png,portrait,final,all,,0f688ea
+game:portraits/elites/gruk_smokecaller.png,portrait,final,all,,0f688ea
+game:portraits/elites/inquisitorial_purifier.png,portrait,final,all,,0f688ea
+game:portraits/elites/nok_flamebow.png,portrait,final,all,,0f688ea
+game:portraits/elites/skarn_ironjaw.png,portrait,final,all,,0f688ea
+game:portraits/elites/vex_cutpurse.png,portrait,final,all,,0f688ea
+game:portraits/full_body/kaelen.png,portrait,final,all,,0f688ea
+game:portraits/full_body/kaelen_3views.png,portrait,final,all,,0f688ea
+game:portraits/full_body/kaelen_back.png,portrait,final,all,,0f688ea
+game:portraits/full_body/kaelen_front.png,portrait,final,all,,0f688ea
+game:portraits/full_body/kaelen_parts_atlas.png,portrait,final,all,,0f688ea
+game:portraits/full_body/kaelen_pose_drawn.png,portrait,final,all,,0f688ea
+game:portraits/full_body/kaelen_pose_relaxed.png,portrait,final,all,,0f688ea
+game:portraits/full_body/kaelen_pose_sneaking.png,portrait,final,all,,0f688ea
+game:portraits/full_body/kaelen_side.png,portrait,final,all,,0f688ea
+game:portraits/full_body/maren.png,portrait,final,all,,0f688ea
+game:portraits/full_body/sabina_kress.png,portrait,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/full_body/vane.png,portrait,final,all,,0f688ea
+game:portraits/full_body/vesper.png,portrait,final,all,,0f688ea
+game:portraits/full_body/watchman.png,portrait,final,all,,0f688ea
+game:portraits/heroes/alda_wren.png,portrait,final,all,,0f688ea
+game:portraits/heroes/bryn_hale.png,portrait,final,all,,0f688ea
+game:portraits/heroes/dagny_coal.png,portrait,final,all,,0f688ea
+game:portraits/heroes/dunstan.png,portrait,rework,all,AI-04: off canon (Day 1 must be clean); re-render in the locked style,0f688ea
+game:portraits/heroes/elyse.png,portrait,rework,all,AI-04: off canon (Day 1 must be clean); re-render in the locked style,0f688ea
+game:portraits/heroes/faces/dunstan/afraid.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/dunstan/angry.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/dunstan/determined.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/dunstan/happy.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/dunstan/hurt.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/dunstan/neutral.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/dunstan/sad.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/dunstan/surprised.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/elyse/afraid.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/elyse/angry.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/elyse/determined.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/elyse/happy.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/elyse/hurt.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/elyse/neutral.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/elyse/sad.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/elyse/surprised.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/hollis/afraid.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/hollis/angry.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/hollis/determined.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/hollis/happy.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/hollis/hurt.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/hollis/neutral.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/hollis/sad.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/hollis/surprised.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/kaelen/afraid.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/kaelen/angry.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/kaelen/determined.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/kaelen/happy.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/kaelen/hurt.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/kaelen/neutral.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/kaelen/sad.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/kaelen/surprised.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/maren/afraid.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/maren/angry.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/maren/determined.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/maren/happy.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/maren/hurt.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/maren/neutral.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/maren/sad.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/maren/surprised.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/vesper/afraid.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/vesper/angry.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/vesper/determined.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/vesper/happy.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/vesper/hurt.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/vesper/neutral.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/vesper/sad.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/faces/vesper/surprised.png,face sheet,final,all,,0f688ea
+game:portraits/heroes/hollis.png,portrait,rework,all,AI-04: off canon (Day 1 must be clean); re-render in the locked style,0f688ea
+game:portraits/heroes/kaelen.png,portrait,rework,all,AI-04: off canon (Day 1 must be clean); re-render in the locked style,0f688ea
+game:portraits/heroes/kit_vane.png,portrait,final,all,,0f688ea
+game:portraits/heroes/mara_voss.png,portrait,final,all,,0f688ea
+game:portraits/heroes/maren.png,portrait,rework,all,AI-04: off canon (Day 1 must be clean); re-render in the locked style,0f688ea
+game:portraits/heroes/oren_dusk.png,portrait,final,all,,0f688ea
+game:portraits/heroes/sella_marsh.png,portrait,final,all,,0f688ea
+game:portraits/heroes/tev_quill.png,portrait,final,all,,0f688ea
+game:portraits/heroes/vesper.png,portrait,rework,all,AI-04: off canon (Day 1 must be clean); re-render in the locked style,0f688ea
+game:portraits/npcs/bailiff_corvo.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
+game:portraits/npcs/berek_dorn.png,portrait,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/brask_toller.png,portrait,final,all,,0f688ea
+game:portraits/npcs/cit_ash_shrine.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/cit_bone_chandler.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/cit_chandler.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/cit_cipher_den.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/cit_condemned_shrine.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/cit_dredgers_bunkhouse.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/cit_guardroom.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/cit_haulers_lodging.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/cit_lodging.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/cit_pawnbroker.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/cit_spent_shrine.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/cit_tallow_chandler.png,portrait,final,Act 1,,bd7be7e
+game:portraits/npcs/cit_vats_shrine.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/cit_wayside_shrine.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/faces/berek_dorn/afraid.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/faces/berek_dorn/angry.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/faces/berek_dorn/hurt.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/faces/berek_dorn/neutral.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/faces/sabina_kress/afraid.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/faces/sabina_kress/angry.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/faces/sabina_kress/hurt.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/faces/sabina_kress/neutral.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/faces/talia_rusk/afraid.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/faces/talia_rusk/angry.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/faces/talia_rusk/hurt.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/faces/talia_rusk/neutral.png,face sheet,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/hest_the_quartermaster.png,portrait,final,all,,0f688ea
+game:portraits/npcs/ivo.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
+game:portraits/npcs/sabina_kress.png,portrait,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/skerrit_bone_wright.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
+game:portraits/npcs/talia_rusk.png,portrait,placeholder,all,PR5-39 placeholder NPC portraits,3ded9b4
+game:portraits/npcs/tithe_captive_a.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/tithe_captive_b.png,portrait,final,all,,bd7be7e
+game:portraits/npcs/wenn_tallow.png,portrait,placeholder,Act 1,byte copy of game:portraits/common/ranger_wenn_tallow.png,0f688ea
+game:portraits/npcs/widow_varka.png,portrait,placeholder,all,"web-queue portrait placeholders (AI-05, AI-06, AI-08)",7e185b0
+game:props/ashlands/cistern/v0.png,prop,final,Act 1,,0f688ea
+game:props/ashlands/toll_arch/v0.png,prop,final,Act 1,,0f688ea
+game:props/ashlands/war_tent/v0.png,prop,final,Act 1,,0f688ea
+game:props/sunk_ward/anvil/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/apothecary_slab/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/ash_drift/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/ash_shack/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/barred_gate_side/v0.png,prop,final,Act 1,,4bd93cf
+game:props/sunk_ward/barrel_stack/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/bone_meal_heap/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/bone_rack/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/bonewright_shop/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/brass_tank/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/brazier/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/brick_breach/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/brick_wall_run/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/cage_platform/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/candle_stand/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/catwalk_stair/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/cliff_bastion/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/conveyor_chute/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/copper_still/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/cot/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/cot_side/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/crane_arm/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/crypt_bars/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/crypt_bars_side/v0.png,prop,final,Act 1,,4bd93cf
+game:props/sunk_ward/culvert_gate/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/culvert_gate_side/v0.png,prop,final,Act 1,,4bd93cf
+game:props/sunk_ward/door_side/v0.png,prop,final,Act 1,,4bd93cf
+game:props/sunk_ward/doss_house/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/drain_arch/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/drain_grate/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/fourth_kiln/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/furnace_mouth/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/goods_shelf/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/goods_shelf_side/v0.png,prop,final,Act 1,,4bd93cf
+game:props/sunk_ward/guardroom/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/guild_store/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/hearth_stove/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/herb_rack/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/iron_ladder/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/iron_ladder_side/v0.png,prop,final,Act 1,,4bd93cf
+game:props/sunk_ward/kiln_bunk/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/kiln_bunk_side/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/lantern_pole/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/lock_tablet/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/mission_board/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/mission_board_side/v0.png,prop,final,Act 1,,4bd93cf
+game:props/sunk_ward/pen_fence/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/pen_fence_side/v0.png,prop,final,Act 1,,4bd93cf
+game:props/sunk_ward/pipe_run/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/portcullis/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/rag_hovel/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/rag_pile/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/retort_shelf/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/retort_shelf_side/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/ring_post/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/rust_pennant/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/scrap_heap/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/sentry_hut/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/shop_counter/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/shop_counter_side/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/shrine_altar/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/silt_bank/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/slag_channel/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/slit_window_tower/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/sluice_arch/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/sluice_tunnel/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/spiked_barricade/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/stasis_slab/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/still_room/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/stone_steps/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/stone_steps_side/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/street_grate/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/striped_barrier/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/striped_barrier_side/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/strongbox/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/table_stools/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/tallow_spill/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/tallow_vat/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/tenement_block/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/tenement_row/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/tinker_hearth/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/toll_booth/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/toll_drum/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/toll_pen_gate/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/varka_skiff/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/vault_pillar/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/violet_lamp_post/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/violet_pool/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/ward_house/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/ward_house/v1.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/ward_shop/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/ward_shop/v1.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/ward_shrine/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/watch_armory/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/watch_torch/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/watch_wall/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/weapon_rack/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/weapon_rack_side/v0.png,prop,final,Act 1,,4bd93cf
+game:props/sunk_ward/wedge_pile/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/winch_drum/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/workbench/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/workbench_side/v0.png,prop,final,Act 1,,bd7be7e
+game:skills/aegis.png,skill icon,final,all,,0f688ea
+game:skills/aimed_bolt.png,skill icon,final,all,,4bd93cf
+game:skills/aimed_shot.png,skill icon,final,all,,0f688ea
+game:skills/amputate_cut.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/anoint_flare.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/arc_lance.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/arcane_bolt.png,skill icon,final,all,,0f688ea
+game:skills/ash_cloud_fade.png,skill icon,final,all,,4bd93cf
+game:skills/assassinate.png,skill icon,final,all,,0f688ea
+game:skills/backflip.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/barbed_arrow.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/billhook_hook.png,skill icon,final,all,,4bd93cf
+game:skills/billhook_sunder.png,skill icon,final,all,,4bd93cf
+game:skills/bind_parry.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/bleeding_cut.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/bodkin_punch.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/bodkin_twist.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/body_blow.png,skill icon,final,all,,0f688ea
+game:skills/bone_club_slam.png,skill icon,final,all,,4bd93cf
+game:skills/bone_mill_pulverizer.png,skill icon,final,all,,4bd93cf
+game:skills/boning_knife_flurry.png,skill icon,final,all,,4bd93cf
+game:skills/bow_rain.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/brace.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/brand_of_the_heretic.png,skill icon,final,all,,4bd93cf
+game:skills/brawler_clinch.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/brimstone_cauterize.png,skill icon,final,all,,4bd93cf
+game:skills/burrow_ambush.png,skill icon,final,all,,4bd93cf
+game:skills/catalyst_pulse.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/caustic_spritz.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/caustic_vomit.png,skill icon,final,all,,4bd93cf
+game:skills/censer_pyre.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/charge_in.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/check_advance.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/chime_swing.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/choke_cloud.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/choke_gas.png,skill icon,final,all,,4bd93cf
+game:skills/cinder_spark.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/cite_passage.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/coal_shovel_jab.png,skill icon,final,all,,4bd93cf
+game:skills/crippling_shot.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/crossbow_siege.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/crushing_blow.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/crushing_judgment.png,skill icon,final,all,,4bd93cf
+game:skills/cyclone_kick.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/dagger_shadow.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/deadeye.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/disengage_step.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/earth_shaker.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/envenom.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/execution_wall.png,skill icon,final,all,,4bd93cf
+game:skills/fade_step.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/feint.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/firebomb.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/fist_tempest.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/flank_cut.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/flash_nozzle.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/flay_arc.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/flensing_hook_drag.png,skill icon,final,all,,4bd93cf
+game:skills/focus.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/foundry_drive.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/foundry_shatter.png,skill icon,final,all,,4bd93cf
+game:skills/gallow_sweep.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/gauntlet_breaker.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/gilded_billhook_sunder.png,skill icon,final,all,,4bd93cf
+game:skills/glacial_burst.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/greater_mend.png,skill icon,final,all,,0f688ea
+game:skills/gsword_sever.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/gut_hook.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/halberd_sweep.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/hammer_shatter.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/hamstring.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/hamstring_cut.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/hamstring_sever.png,skill icon,final,all,,4bd93cf
+game:skills/haymaker.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/heavy_bill_thrust.png,skill icon,final,all,,4bd93cf
+game:skills/heavy_winch_sunder.png,skill icon,final,all,,4bd93cf
+game:skills/hex.png,skill icon,final,all,,0f688ea
+game:skills/hold_line.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/hook_drag.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/hook_snatch.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/hookbill_draw.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/inferno.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/inquisitorial_parry.png,skill icon,final,all,,4bd93cf
+game:skills/intercept_guard.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/intercepting_hook.png,skill icon,final,all,,4bd93cf
+game:skills/intimidate.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/iron_shackle_drag.png,skill icon,final,all,,4bd93cf
+game:skills/judgement.png,skill icon,final,all,,0f688ea
+game:skills/knife_sever.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/knuckle_jolt.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/ks_bone_eruption.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/ks_geode_nova.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/ks_iron_marrow.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/ks_marrow_needle.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/ks_nerve_sever.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/lacerate.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/leap_back.png,skill icon,final,all,,0f688ea
+game:skills/liver_hook.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/lunge.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/magnesium_flash_bomb.png,skill icon,final,all,,4bd93cf
+game:skills/mark_quarry.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/marrow_bolt.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/marrow_bulwark.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/marrow_caustic.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/marrow_lash.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/marrow_litany.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/marrow_pummel.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/marrow_rend.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/marrow_shriek.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/marrow_sight.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/marrow_snare.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/marrow_spray.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/marrow_step.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/martyrs_rush.png,skill icon,final,all,,4bd93cf
+game:skills/nerve_nick.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/offhand_jab.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/opportunist.png,skill icon,final,all,,0f688ea
+game:skills/orlovs_retribution.png,skill icon,final,all,,4bd93cf
+game:skills/ossification_bloom.png,skill icon,final,all,,4bd93cf
+game:skills/ossified_spine_volley.png,skill icon,final,all,,4bd93cf
+game:skills/palm_check.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/penance_bite.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/phosphorus_pot.png,skill icon,final,all,,4bd93cf
+game:skills/pike_skew.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/pinning_shot.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/pitch_cone.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/pneumatic_hammer_strike.png,skill icon,final,all,,4bd93cf
+game:skills/poachers_quarrel.png,skill icon,final,all,,4bd93cf
+game:skills/polearm_cordon.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/pommel_check.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/pommel_strike.png,skill icon,final,all,,4bd93cf
+game:skills/pounce.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/prelates_censure.png,skill icon,final,all,,4bd93cf
+game:skills/pressure_stream.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/pressurized_lard_spray.png,skill icon,final,all,,4bd93cf
+game:skills/purge_marrow.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/purify.png,skill icon,final,all,,0f688ea
+game:skills/pyre_nozzle_sweep.png,skill icon,final,all,,4bd93cf
+game:skills/quick_stab.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/rally.png,skill icon,final,all,,0f688ea
+game:skills/rapid_combo.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/reckless_swing.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/rejuvenate.png,skill icon,final,all,,0f688ea
+game:skills/reload.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/rend_armor.png,skill icon,final,all,,0f688ea
+game:skills/rending_arc.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/renewal.png,skill icon,final,all,,0f688ea
+game:skills/resilience_ward.png,skill icon,final,all,,4bd93cf
+game:skills/rib_spread.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/riposte.png,skill icon,final,all,,0f688ea
+game:skills/sanctified_decapitation.png,skill icon,final,all,,4bd93cf
+game:skills/sanctified_vivisection.png,skill icon,final,all,,4bd93cf
+game:skills/saw_dissect.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/scalding_cataclysm.png,skill icon,final,all,,4bd93cf
+game:skills/scalding_grease_pot.png,skill icon,final,all,,4bd93cf
+game:skills/scourge_flay.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/scourge_lash.png,skill icon,final,all,,4bd93cf
+game:skills/seventh_ward_bulwark.png,skill icon,final,all,,4bd93cf
+game:skills/shackle_pummel_slam.png,skill icon,final,all,,4bd93cf
+game:skills/shield_bash.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/shield_wall.png,skill icon,final,all,,0f688ea
+game:skills/shockwave.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/skull_ring.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/slag_charge.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/slag_driver.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/slag_slam_throw.png,skill icon,final,all,,4bd93cf
+game:skills/smite.png,skill icon,final,all,,0f688ea
+game:skills/snap_lash.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/snare_wire.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/soot_feint.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/sprayer_deluge.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/staff_cataclysm.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/stunned.png,skill icon,final,all,,0f688ea
+game:skills/sunder.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/sweep_kick.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/sword_duelist.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/taunt_shout.png,skill icon,final,all,,0f688ea
+game:skills/tend_wounds.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/tendril_flail.png,skill icon,final,all,,4bd93cf
+game:skills/throat_carver.png,skill icon,final,all,,4bd93cf
+game:skills/throat_clamp_pounce.png,skill icon,final,all,,4bd93cf
+game:skills/tourniquet_tonic.png,skill icon,final,all,,4bd93cf
+game:skills/traitors_parry.png,skill icon,final,all,,4bd93cf
+game:skills/transfusion_pulse.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",4bd93cf
+game:skills/tripwire_snare.png,skill icon,final,all,,4bd93cf
+game:skills/vivisect.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/volley.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+game:skills/wide_cleave.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:skills/wing_shot.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
+game:tilesets/ashlands/door/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/floor/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/floor/v1.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/floor/v2.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/ground/ash/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/ground/dirt_road/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/ground/flagstone/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/ground/mud/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/ground/packed_dirt/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/ground/paved_road/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/ground/scorched/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/ground/scrub/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/ground/water/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/lava/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/lava/v1.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/road/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/road/v1.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/rubble/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/rubble/v1.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/scrub/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/scrub/v1.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/shallow_water/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/shallow_water/v1.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/shallow_water/v2.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/wall/v0.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/wall/v1.png,tile,final,Act 1,,0f688ea
+game:tilesets/ashlands/wall/v2.png,tile,final,Act 1,,0f688ea
+game:tilesets/interior_plaster/wall/v0.png,tile,final,all,,4bd93cf
+game:tilesets/interior_plaster/wall_face/v0.png,tile,final,all,,4bd93cf
+game:tilesets/interior_stone/wall/v0.png,tile,final,all,,4bd93cf
+game:tilesets/interior_stone/wall_face/v0.png,tile,final,all,,4bd93cf
+game:tilesets/sunk_ward/boundary/blind_tenements/wall/v0.png,tile,final,Act 1,,bd7be7e
+game:tilesets/sunk_ward/boundary/blind_tenements/wall_face/v0.png,tile,final,Act 1,,bd7be7e
+game:tilesets/sunk_ward/boundary/drain_brick/wall/v0.png,tile,final,Act 1,,bd7be7e
+game:tilesets/sunk_ward/boundary/drain_brick/wall_face/v0.png,tile,final,Act 1,,bd7be7e
+game:tilesets/sunk_ward/boundary/gorge_rock/wall/v0.png,tile,final,Act 1,,bd7be7e
+game:tilesets/sunk_ward/boundary/gorge_rock/wall_face/v0.png,tile,final,Act 1,,bd7be7e
+game:tilesets/sunk_ward/ground/cobble_road/v0.png,tile,final,Act 1,,bd7be7e
+game:tilesets/sunk_ward/ground/flagstone/v0.png,tile,final,Act 1,,bd7be7e
+game:tilesets/sunk_ward/ground/iron_catwalk/v0.png,tile,final,Act 1,,bd7be7e
+game:tilesets/sunk_ward/ground/moss/v0.png,tile,final,Act 1,,bd7be7e
+game:tilesets/sunk_ward/ground/mud/v0.png,tile,final,Act 1,,bd7be7e
+game:tilesets/sunk_ward/ground/soot_yard/v0.png,tile,final,Act 1,,bd7be7e
+game:tilesets/sunk_ward/ground/tallow/v0.png,tile,final,Act 1,,bd7be7e
+game:tilesets/sunk_ward/ground/water/v0.png,tile,final,Act 1,,bd7be7e
+game:ui/banner_bar.png,ui,final,all,,0f688ea
+game:ui/banner_full.png,ui,final,all,,0f688ea
+game:ui/frames/button.png,ui,final,all,,0f688ea
+game:ui/frames/button_down.png,ui,final,all,,0f688ea
+game:ui/frames/button_hot.png,ui,final,all,,0f688ea
+game:ui/frames/button_off.png,ui,final,all,,0f688ea
+game:ui/frames/card.png,ui,final,all,,0f688ea
+game:ui/frames/card_hot.png,ui,final,all,,0f688ea
+game:ui/frames/card_on.png,ui,final,all,,0f688ea
+game:ui/frames/inset.png,ui,final,all,,0f688ea
+game:ui/frames/ornate.png,ui,final,all,,0f688ea
+game:ui/frames/ornate_full.png,ui,final,all,,0f688ea
+game:ui/frames/panel.png,ui,final,all,,0f688ea
+game:ui/frames/parchment.png,ui,final,all,,0f688ea
+game:ui/frames/tab.png,ui,final,all,,0f688ea
+game:ui/frames/tab_on.png,ui,final,all,,0f688ea
+game:ui/frames/tip.png,ui,final,all,,0f688ea
+game:ui/hud/alert.png,ui,final,all,,ac96ee3
+game:ui/hud/doom_clock.png,ui,final,all,,ac96ee3
+game:ui/hud/scrap.png,ui,final,all,,ac96ee3
+game:ui/hud/tallow.png,ui,final,Act 1,,ac96ee3
+game:ui/logo_crest.png,ui,final,all,,0f688ea
+game:ui/logo_title.png,ui,final,all,,0f688ea
+game:units/beast/render_beast/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+game:units/brawler/ash_warchief/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+game:units/brawler/braces/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),a47d404
+game:units/brawler/gauntlet/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),a47d404
+game:units/crawler/ash_crawler/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+game:units/mage/1h_sprayer/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),a47d404
+game:units/ranger/wenn_tallow/sheet.png,sprite sheet,rework,Act 1,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+game:units/rogue/1h_knife/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),a47d404
+game:units/warrior/2h_greatsword/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),22e6ce6
+game:units/warrior/brask_toller/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+game:units/warrior/grakka_ashmaw/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+game:units/warrior/hest_the_quartermaster/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+game:units/warrior/orsa_tallow/sheet.png,sprite sheet,rework,Act 1,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:audio/music/boss.ogg,music,final,all,,0f688ea
+kit:audio/music/combat.ogg,music,final,all,,0f688ea
+kit:audio/music/danger.ogg,music,final,all,,0f688ea
+kit:audio/music/shop.ogg,music,final,all,,0f688ea
+kit:audio/music/town.ogg,music,final,all,,0f688ea
+kit:audio/music/travel.ogg,music,final,all,,0f688ea
+kit:audio/sfx/buff.wav,sfx,final,all,,0f688ea
+kit:audio/sfx/crit.wav,sfx,final,all,,0f688ea
+kit:audio/sfx/debuff.wav,sfx,final,all,,0f688ea
+kit:audio/sfx/defeat.wav,sfx,final,all,,0f688ea
+kit:audio/sfx/defend.wav,sfx,final,all,,0f688ea
+kit:audio/sfx/heal.wav,sfx,final,all,,0f688ea
+kit:audio/sfx/hit.wav,sfx,final,all,,0f688ea
+kit:audio/sfx/miss.wav,sfx,final,all,,0f688ea
+kit:audio/sfx/mitigated.wav,sfx,final,all,,0f688ea
+kit:audio/sfx/move_step.wav,sfx,final,all,,0f688ea
+kit:items/accessory/amulet.png,item icon,final,all,,0f688ea
+kit:items/accessory/base.png,item icon,final,all,,0f688ea
+kit:items/any/base.png,item icon,final,all,,0f688ea
+kit:items/any/weapon.png,item icon,final,all,,0f688ea
+kit:items/axe/base.png,item icon,final,all,,0f688ea
+kit:items/axe/battle_axe.png,item icon,placeholder,all,byte copy of game:items/greatsword/battle_axe.png,0f688ea
+kit:items/bow/base.png,item icon,final,all,,0f688ea
+kit:items/cloth/base.png,item icon,placeholder,all,byte copy of game:items/light/base.png,0f688ea
+kit:items/cloth/robe.png,item icon,final,all,,0f688ea
+kit:items/consumable/base.png,item icon,final,all,,0f688ea
+kit:items/consumable/bomb.png,item icon,final,all,,0f688ea
+kit:items/consumable/elixir.png,item icon,final,all,,0f688ea
+kit:items/crossbow/base.png,item icon,final,all,,0f688ea
+kit:items/dagger/base.png,item icon,final,all,,0f688ea
+kit:items/fist/base.png,item icon,final,all,,0f688ea
+kit:items/fist/knuckles.png,item icon,final,all,,0f688ea
+kit:items/hammer/base.png,item icon,final,all,,0f688ea
+kit:items/leather/base.png,item icon,placeholder,all,byte copy of game:items/medium/base.png,0f688ea
+kit:items/mace/base.png,item icon,final,all,,0f688ea
+kit:items/material/base.png,item icon,final,all,,0f688ea
+kit:items/orb/base.png,item icon,final,all,,0f688ea
+kit:items/plate/base.png,item icon,placeholder,all,byte copy of game:items/heavy/base.png,0f688ea
+kit:items/quest/base.png,item icon,final,all,,0f688ea
+kit:items/shield/base.png,item icon,final,all,,0f688ea
+kit:items/staff/base.png,item icon,final,all,,0f688ea
+kit:items/sword/base.png,item icon,final,all,,0f688ea
+kit:items/sword/greatsword.png,item icon,placeholder,all,byte copy of game:items/greatsword/greatsword.png,0f688ea
+kit:items/sword/shortsword.png,item icon,final,all,,0f688ea
+kit:items/tome/base.png,item icon,final,all,,0f688ea
+kit:items/wand/base.png,item icon,final,all,,0f688ea
+kit:map/markers/chest.png,map,final,all,,0f688ea
+kit:map/markers/chest_open.png,map,final,all,,0f688ea
+kit:map/markers/encounter.png,map,final,all,,0f688ea
+kit:map/markers/exit.png,map,final,all,,0f688ea
+kit:map/markers/exit_locked.png,map,final,all,,0f688ea
+kit:map/markers/lore.png,map,final,all,,0f688ea
+kit:map/markers/npc.png,map,final,all,,0f688ea
+kit:map/markers/objective.png,map,final,all,,0f688ea
+kit:map/markers/poi.png,map,final,all,,0f688ea
+kit:map/markers/roamer.png,map,final,all,,0f688ea
+kit:portraits/common/brawler_base.png,portrait,final,all,,0f688ea
+kit:portraits/common/brawler_goblin.png,portrait,final,all,,0f688ea
+kit:portraits/common/brawler_goblin_berserker.png,portrait,final,all,,0f688ea
+kit:portraits/common/dummy_base.png,portrait,final,all,,0f688ea
+kit:portraits/common/mage_base.png,portrait,final,all,,0f688ea
+kit:portraits/common/priest_base.png,portrait,final,all,,0f688ea
+kit:portraits/common/priest_goblin.png,portrait,final,all,,0f688ea
+kit:portraits/common/ranger_base.png,portrait,final,all,,0f688ea
+kit:portraits/common/ranger_goblin.png,portrait,final,all,,0f688ea
+kit:portraits/common/rogue_base.png,portrait,final,all,,0f688ea
+kit:portraits/common/rogue_goblin.png,portrait,final,all,,0f688ea
+kit:portraits/common/rogue_goblin_scout.png,portrait,final,all,,0f688ea
+kit:portraits/common/warrior_base.png,portrait,final,all,,0f688ea
+kit:props/common/banner_pole/v0.png,prop,final,all,,0f688ea
+kit:props/common/boulder/v0.png,prop,final,all,,0f688ea
+kit:props/common/boulder/v1.png,prop,final,all,,0f688ea
+kit:props/common/broken_pillar/v0.png,prop,final,all,,0f688ea
+kit:props/common/broken_pillar/v1.png,prop,final,all,,0f688ea
+kit:props/common/broken_pillar/v2.png,prop,final,all,,0f688ea
+kit:props/common/cliff_face/v0.png,prop,final,all,,0f688ea
+kit:props/common/cliff_face/v1.png,prop,final,all,,0f688ea
+kit:props/common/cobbles/v0.png,prop,final,all,,0f688ea
+kit:props/common/cobbles/v1.png,prop,final,all,,0f688ea
+kit:props/common/crate_stack/v0.png,prop,final,all,,0f688ea
+kit:props/common/fallen_column/v0.png,prop,final,all,,0f688ea
+kit:props/common/fire_pit/v0.png,prop,final,all,,0f688ea
+kit:props/common/gatepost/v0.png,prop,final,all,,0f688ea
+kit:props/common/rock_spire/v0.png,prop,final,all,,0f688ea
+kit:props/common/rubble_wall/v0.png,prop,final,all,,0f688ea
+kit:props/common/scorch_mark/v0.png,prop,final,all,,0f688ea
+kit:props/common/scorch_mark/v1.png,prop,final,all,,0f688ea
+kit:props/common/signpost/v0.png,prop,final,all,,0f688ea
+kit:props/common/stones/v0.png,prop,final,all,,0f688ea
+kit:props/common/stones/v1.png,prop,final,all,,0f688ea
+kit:props/common/tent/v0.png,prop,final,all,,0f688ea
+kit:props/common/tent/v1.png,prop,final,all,,0f688ea
+kit:props/common/tree/v0.png,prop,final,all,,0f688ea
+kit:props/common/tree/v1.png,prop,final,all,,0f688ea
+kit:props/common/tree/v2.png,prop,final,all,,0f688ea
+kit:props/common/tree/v3.png,prop,final,all,,0f688ea
+kit:props/sample_camp_black/cistern/v0.png,prop,final,all,,0f688ea
+kit:props/sample_camp_black/cobbles/v0.png,prop,final,all,,0f688ea
+kit:props/sample_camp_black/cobbles/v1.png,prop,final,all,,0f688ea
+kit:props/sample_camp_black/fire_pit/v0.png,prop,final,all,,0f688ea
+kit:props/sample_camp_black/scorch_mark/v0.png,prop,final,all,,0f688ea
+kit:props/sample_camp_black/scorch_mark/v1.png,prop,final,all,,0f688ea
+kit:props/sample_camp_black/toll_arch/v0.png,prop,final,all,,0f688ea
+kit:props/sample_camp_black/war_tent/v0.png,prop,final,all,,0f688ea
+kit:props/sample_camp_tan/cistern/v0.png,prop,final,all,,0f688ea
+kit:props/sample_camp_tan/cobbles/v0.png,prop,final,all,,0f688ea
+kit:props/sample_camp_tan/cobbles/v1.png,prop,final,all,,0f688ea
+kit:props/sample_camp_tan/fire_pit/v0.png,prop,final,all,,0f688ea
+kit:props/sample_camp_tan/scorch_mark/v0.png,prop,final,all,,0f688ea
+kit:props/sample_camp_tan/scorch_mark/v1.png,prop,final,all,,0f688ea
+kit:props/sample_camp_tan/toll_arch/v0.png,prop,final,all,,0f688ea
+kit:props/sample_camp_tan/war_tent/v0.png,prop,final,all,,0f688ea
+kit:skills/kinds/attack.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+kit:skills/kinds/defend.png,skill icon,rework,all,"I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4)",0f688ea
+kit:skills/kinds/disengage.png,skill icon,rework,all,"I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4)",0f688ea
+kit:skills/kinds/focus.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+kit:skills/kinds/move.png,skill icon,rework,all,"I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4)",0f688ea
+kit:skills/kinds/rest.png,skill icon,rework,all,"I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4)",0f688ea
+kit:skills/kinds/status.png,skill icon,rework,all,"I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4)",0f688ea
+kit:skills/kinds/support.png,skill icon,rework,all,"I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4)",0f688ea
+kit:skills/kinds/target.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",0f688ea
+kit:statuses/bleed.png,status icon,final,all,,0f688ea
+kit:statuses/burn.png,status icon,final,all,,0f688ea
+kit:statuses/expose.png,status icon,final,all,,0f688ea
+kit:statuses/fortify.png,status icon,final,all,,0f688ea
+kit:statuses/haste.png,status icon,final,all,,0f688ea
+kit:statuses/poison.png,status icon,final,all,,0f688ea
+kit:statuses/regen.png,status icon,final,all,,0f688ea
+kit:statuses/riposte.png,status icon,final,all,,0f688ea
+kit:statuses/root.png,status icon,final,all,,0f688ea
+kit:statuses/slow.png,status icon,final,all,,0f688ea
+kit:statuses/stagger.png,status icon,final,all,,0f688ea
+kit:statuses/steadfast.png,status icon,final,all,,a14c9d8
+kit:statuses/stealth.png,status icon,final,all,,a14c9d8
+kit:statuses/stun.png,status icon,final,all,,0f688ea
+kit:statuses/taunt.png,status icon,final,all,,0f688ea
+kit:statuses/weaken.png,status icon,final,all,,0f688ea
+kit:tilesets/common/ground/floorboards/v0.png,tile,final,all,,bd7be7e
+kit:ui/badges/foresight.png,ui,final,all,,0f688ea
+kit:ui/badges/quest.png,ui,final,all,,0f688ea
+kit:ui/badges/ready.png,ui,final,all,,0f688ea
+kit:ui/chips/guest.png,ui,final,all,,0f688ea
+kit:ui/chips/slay.png,ui,final,all,,0f688ea
+kit:ui/hud/gold.png,ui,final,all,,0f688ea
+kit:ui/hud/journal.png,ui,final,all,,0f688ea
+kit:ui/hud/menu.png,ui,final,all,,0f688ea
+kit:ui/hud/party.png,ui,final,all,,0f688ea
+kit:ui/hud/stash.png,ui,final,all,,0f688ea
+kit:ui/hud/supplies.png,ui,final,all,,0f688ea
+kit:ui/intents/act.png,ui,final,all,,0f688ea
+kit:ui/intents/area.png,ui,final,all,,0f688ea
+kit:ui/intents/arriving.png,ui,final,all,,0f688ea
+kit:ui/intents/attack.png,ui,final,all,,0f688ea
+kit:ui/intents/flee.png,ui,final,all,,0f688ea
+kit:ui/intents/focus.png,ui,final,all,,0f688ea
+kit:ui/intents/guard.png,ui,final,all,,0f688ea
+kit:ui/intents/move.png,ui,final,all,,0f688ea
+kit:ui/intents/rest.png,ui,final,all,,0f688ea
+kit:ui/intents/retreat.png,ui,final,all,,0f688ea
+kit:ui/intents/stunned.png,ui,final,all,,0f688ea
+kit:ui/intents/support.png,ui,final,all,,0f688ea
+kit:ui/intents/switch.png,ui,final,all,,0f688ea
+kit:ui/markers/chest.png,ui,final,all,,0f688ea
+kit:ui/markers/chest_open.png,ui,final,all,,0f688ea
+kit:ui/markers/encounter.png,ui,final,all,,0f688ea
+kit:ui/markers/exit.png,ui,final,all,,0f688ea
+kit:ui/markers/lore.png,ui,final,all,,0f688ea
+kit:ui/markers/npc.png,ui,final,all,,0f688ea
+kit:ui/markers/point.png,ui,final,all,,0f688ea
+kit:ui/markers/roamer.png,ui,final,all,,0f688ea
+kit:ui/markers/world_map.png,ui,final,all,,0f688ea
+kit:ui/pins/camp.png,ui,final,all,,0f688ea
+kit:ui/pins/fortress.png,ui,final,all,,0f688ea
+kit:ui/pins/gate.png,ui,final,all,,0f688ea
+kit:ui/pins/here.png,ui,final,all,,0f688ea
+kit:ui/pins/ruin.png,ui,final,all,,0f688ea
+kit:ui/pins/town.png,ui,final,all,,0f688ea
+kit:ui/pins/wild.png,ui,final,all,,0f688ea
+kit:ui/services/recipe.png,ui,final,all,,08501d3
+kit:ui/services/recruit.png,ui,final,all,,0f688ea
+kit:ui/services/shop.png,ui,final,all,,0f688ea
+kit:units/beast/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/brawler/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/brawler/goblin/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/brawler/goblin_berserker/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/crawler/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/dummy/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/mage/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/mage/orb/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),22e6ce6
+kit:units/priest/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/priest/goblin/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/ranger/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/ranger/goblin/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/rogue/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/rogue/goblin/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/rogue/goblin_scout/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/warrior/1h_buckler/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/warrior/1h_polearm/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),22e6ce6
+kit:units/warrior/2h_axe/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/warrior/2h_hammer/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/warrior/2h_polearm/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),22e6ce6
+kit:units/warrior/2h_sword/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+kit:units/warrior/base/sheet.png,sprite sheet,rework,all,S2 lock: grim slot colours with a 3-tone ramp per slot (STYLE_BIBLE 3),0f688ea
+game:portraits/bosses/foundry_master_jessop.png,portrait,missing,Act 2,AI-06; CANON 3.2,
+game:portraits/bosses/inquisitor_general_ruthven.png,portrait,missing,Act 2,AI-06; CANON 3.2,
+game:portraits/bosses/chief_anatomist_lazar.png,portrait,missing,Act 2,AI-06; CANON 3.2,
+game:portraits/bosses/warden_inquisitor_ulric.png,portrait,missing,Act 3,AI-06; CANON 3.2,
+game:portraits/bosses/cantor_ysolde.png,portrait,missing,Act 3,AI-06; CANON 3.2,
+game:portraits/bosses/arch_prelate_othemar.png,portrait,missing,Act 3,AI-06; CANON 3.2,
+game:portraits/bosses/goblin_warlord.png,portrait,missing,?,content check (falls back),
+"game:props/{ashlands,common}/keep_hall/v0.png",prop,missing,legacy,content check (falls back); legacy world ashlands,
+"game:props/{ashlands,common}/barracks/v0.png",prop,missing,legacy,content check (falls back); legacy world ashlands,
+"game:props/{ashlands,common}/forge/v0.png",prop,missing,legacy,content check (falls back); legacy world ashlands,
+"game:props/{ashlands,common}/storehouse/v0.png",prop,missing,legacy,content check (falls back); legacy world ashlands,
+game:portraits/npcs/orsa_tallow.png,portrait,missing,legacy,content check (falls back); legacy world iron_reaches,
+game:portraits/heroes/ilse_marrow.png,portrait,missing,legacy,content check (falls back); legacy world tidewrack,
+game:portraits/heroes/pell_driftwood.png,portrait,missing,legacy,content check (falls back); legacy world tidewrack,
+"game:props/{tidewrack,ashlands,common}/keep_hall/v0.png",prop,missing,legacy,content check (falls back); legacy world tidewrack,
+"game:props/{tidewrack,ashlands,common}/barracks/v0.png",prop,missing,legacy,content check (falls back); legacy world tidewrack,
+"game:props/{tidewrack,ashlands,common}/forge/v0.png",prop,missing,legacy,content check (falls back); legacy world tidewrack,
+"game:props/{tidewrack,ashlands,common}/storehouse/v0.png",prop,missing,legacy,content check (falls back); legacy world tidewrack,

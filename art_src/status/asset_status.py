@@ -174,13 +174,23 @@ def write(table, out):
         lines.append(f"| {c} | {by[(c, 'final')]} | {by[(c, 'rework')]} | {by[(c, 'placeholder')]} | {by[(c, 'missing')]} |")
     t = collections.Counter(r["state"] for r in table)
     lines += [f"| **all** | **{t['final']}** | **{t['rework']}** | **{t['placeholder']}** | **{t['missing']}** |", ""]
-    for state in ("missing", "rework", "placeholder", "final"):
+    lines += ["Every row, final files included: [ASSET_STATUS.csv](ASSET_STATUS.csv) (path, category, state, act, why, last",
+              "commit). Below: what still needs work, rework and placeholders grouped by folder and reason.", ""]
+    import csv, io
+    buf = io.StringIO(); wr = csv.writer(buf, lineterminator="\n")
+    wr.writerow(["path", "category", "state", "act", "why", "last_commit"])
+    for r in table:
+        wr.writerow([r["path"], r["category"], r["state"], r["act"], r["why"], r["source"]])
+    pathlib.Path(out).with_suffix(".csv").write_text(buf.getvalue(), encoding="utf-8")
+    sel = [r for r in table if r["state"] == "missing"]
+    lines += [f"## Missing ({len(sel)})", "", "| Path | Category | Act | Why |", "| --- | --- | --- | --- |"]
+    lines += [f"| `{r['path']}` | {r['category']} | {r['act']} | {r['why']} |" for r in sel] + [""]
+    for state in ("rework", "placeholder"):
         sel = [r for r in table if r["state"] == state]
-        lines += [f"## {state.capitalize()} ({len(sel)})", "", "| Path | Category | Act | Why / source |", "| --- | --- | --- | --- |"]
-        for r in sel:
-            lines.append(f"| `{r['path']}` | {r['category']} | {r['act']} | {r['why'] or r['source']} |")
-        lines.append("")
-    pathlib.Path(out).write_text("\n".join(lines), encoding="utf-8")
+        grp = collections.Counter((r["path"].rsplit("/", 1)[0] + "/", r["category"], r["why"]) for r in sel)
+        lines += [f"## {state.capitalize()} ({len(sel)})", "", "| Folder | Category | Files | Why |", "| --- | --- | --- | --- |"]
+        lines += [f"| `{f}` | {c} | {n} | {w} |" for (f, c, w), n in sorted(grp.items())] + [""]
+    pathlib.Path(out).write_text("\n".join(lines).rstrip("\n") + "\n", encoding="utf-8")
     return t
 
 
