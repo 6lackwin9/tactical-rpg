@@ -192,7 +192,7 @@ def sluice_undercroft():
     L.rect(18, 1, 19, 5, ".", "f")
     L.rect(16, 0, 21, 0, "#")
     L.prop("sluice_gate", "portcullis", 17, 0, 4, 1)              # one barred arch in the north wall, over the causeway
-    L.prop("post_e", "mooring_bollard", 20, 6)   # one bollard, by the skiff; the west one went (Tushar 2026-11-17: "too cluttered" by the board)
+    L.prop("post_w", "mooring_bollard", 17, 6); L.prop("post_e", "mooring_bollard", 20, 6)   # a pair either side of the causeway (Tushar 2026-11-17, after the board moved to the hall)
     L.prop("skiff", "varka_skiff", 20, 3, 4, 2, layer="ground")   # big enough to carry a unit or two
     # --- the Apothecary's Slab
     L.prop("retorts", "retort_shelf", 2, 1, 3, 1)
