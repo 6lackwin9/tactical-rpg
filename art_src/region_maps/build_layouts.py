@@ -212,6 +212,7 @@ def sluice_undercroft():
     # tall pieces on the side walls (sheet props_hub_vertical_1, 2026-11-17): the weapon rack on the east wall (Tushar:
     # flasks were out of place here), the smith's tool rack on the back wall
     L.prop("weapon_rack", "weapon_rack_tall", 36, 2, 1, 3)
+    L.prop("hearth_lamp", "wall_lantern", 35, 0)                  # lights the weapon rack (Tushar: it blended into the dark)
     L.prop("tool_rack", "tool_rack_tall", 34, 1)                 # on the back wall beside the forge (Tushar 2026-11-17)
     # --- the hall: the brazier everyone passes, vault piers by the doors
     L.prop("brazier", "brazier", 22, 11)

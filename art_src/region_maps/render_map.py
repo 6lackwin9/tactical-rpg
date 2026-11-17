@@ -51,6 +51,7 @@ UNDER = "flagstone"                           # what shows between the patches
 STRETCH = {"bar_run": (96, 32), "iron_ladder": (28, 64)}   # the ladder climbs the face and the top: the way out   # (w, h) px a wall-mounted frame is stretched to: exactly the one-tile face
 IN_WALL = {"iron_ladder", "wall_lantern"}   # pieces fixed to a wall face (Tushar 2026-11-17: the ladder looked apart from its wall)
 TRIM = {"apothecary_slab": [(0, 0, 96, 42), (88, 42, 96, 84)]}   # boxes cut from an art: the slab's own lamp on a pole (Tushar 2026-11-17: "the lamp on the slab seems weird"; the room's wall lamp lights it)
+LIFT = {"weapon_rack_tall": 1.6, "tool_rack_tall": 1.3}   # dark wood and iron pieces lifted to read on a dark floor
 FIT = {"portcullis": (72, 84), "kiln_bunk": (64, 56), "iron_ladder": (40, 56), "crypt_bars": (48, 52), "wall_lantern": (18, 38)}   # (w, h) px a wall-mounted art is scaled into
 BRIGHT = 1.9   # the catalog colours are near black; the preview lifts everything by this, like the grid preview
 
@@ -305,6 +306,17 @@ def render(loc, tiles_dir, props_root, out, inside=""):
                 a = Image.open(f).convert("RGBA")
                 for box in TRIM.get(p["art"], ()):
                     a.paste((0, 0, 0, 0), box)
+                if p["art"].endswith("_tall"):
+                    # the magenta key leaves a pink-violet fringe on thin spears and chains: pull it to iron grey
+                    px = a.load()
+                    for yy in range(a.height):
+                        for xx in range(a.width):
+                            r, g, bb, al = px[xx, yy]
+                            if al and r - g > 18 and bb - g > 18:
+                                v = (g + min(r, bb)) // 2
+                                px[xx, yy] = (v, v, v + 4, al)
+                if p["art"] in LIFT:
+                    al = a.split()[3]; a = ImageEnhance.Brightness(a.convert("RGB")).enhance(LIFT[p["art"]]).convert("RGBA"); a.putalpha(al)
                 return a.transpose(Image.FLIP_LEFT_RIGHT) if p.get("flip") else a
         return None
 
