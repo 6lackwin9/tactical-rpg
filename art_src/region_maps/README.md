@@ -53,8 +53,10 @@ After a re-cut, copy `target/review/propcut/games/emberwake/assets/props/sunk_wa
    that height (a full sluice gate arch 4 wide; a single-tier bunk niche 2 wide), or make walls two tiles tall.
 2. Wall-mounted props on side walls: no art yet (the model draws them front-on). Try single-prop prompts that
    describe the top-down strip, or draw the openings in code.
-3. Per-room wall styles: `interior_plaster` and `interior_stone` are picked but the render uses the boundary brick
-   for every wall. Wire `draft_room_styles` into `render_map.py`.
+3. Per-room wall styles: done 2026-11-17. `render_map.py` `ROOM_WALLS` gives the Slab whitewashed plaster and the
+   Crypts cold stone (from `draft_room_styles`); every other room keeps the drain brick. A wall cell takes the set of
+   the room it faces. The new preview is in the project files (`art-ui/hub_room_walls.png`; Git LFS uploads are
+   blocked from the cloud), so `previews/sluice_undercroft.png` is still the 11-15 render until a desktop re-run.
 4. The Grate next, then the five mission maps, each broken into rooms like the hub.
 5. Place the cut props, tiles and picked textures in the game once the look is signed off (`PR5-54`, `PR5-55` import
    the layouts on placeholders first). The 11 single building images (S10) are not queued yet.

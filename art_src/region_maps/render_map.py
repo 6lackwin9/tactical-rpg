@@ -9,7 +9,8 @@ art_src/region_maps/previews/<location>.png.
 A look-and-feel preview, not the game's renderer: it draws art_src/region_maps/<location>.json at 32 px a tile, the
 props' art scale. Grounds are the web-queue tile textures (TILES names the picked take), toned in code toward each
 ground's catalog colour, as REGIONGROUND1 does at the cut; a ground with no texture yet draws its flat colour. Wall
-tiles draw the boundary set's top, and its face where open ground lies south of them. Standing props stand
+tiles draw a wall set's top, and its face where open ground lies south of them: each wall cell takes the set of the
+room it faces (ROOM_WALLS, from the layout's draft_room_styles), and walls outside every room the boundary set. Standing props stand
 bottom-centred on their footprint and sort by their feet; ground props lie under them; roofs draw last unless
 --inside names their zone.
 """
@@ -32,6 +33,10 @@ BOUNDARY = {"sluice_undercroft": "drain_brick", "drowned_runoff_grate": "drain_b
 WALL_TAKES = {"drain_brick": (1, 2), "blind_tenements": (2, 1), "gorge_rock": (1, 2),
               "interior_plaster": (2, 1), "interior_stone": (1, 2)}   # (top take, face take)
 CELLS = {"flagstone": 4, "cobble_road": 6, "floorboards": 6}   # tiles a texture spans (default 8): sets the size of its stones
+# Per-room wall sets (art_src/region_maps/README.md open item 3): a room's draft_room_styles text names its walls.
+# Only the sets the text asks for are listed; every other room keeps its location's boundary set.
+ROOM_WALLS = {"sluice_undercroft": {"slab": "interior_plaster", "crypts": "interior_stone"}}
+WALL_TONES = {"interior_plaster": ((50, 47, 44), (96, 90, 82)), "interior_stone": ((34, 37, 42), (66, 70, 80))}  # (top, face); default below
 GREY = {"cobble_road": 0.75, "flagstone": 0.5}                # how far a texture's own hue is pulled to grey before toning
 PATCHY = {"soot_yard": 0.52, "moss": 0.46}   # share of a cell these grounds cover: ash and moss lie in patches on the floor
 UNDER = "flagstone"                           # what shows between the patches
@@ -89,11 +94,40 @@ def render(loc, tiles_dir, props_root, out, inside=""):
         src = find(tiles_dir, *TILES[gid]) if gid in TILES else None
         tex[gid] = tone(src, lift(cat[gid]), cells=CELLS.get(gid, 8), grey=GREY.get(gid, 0.0)) if src else Image.new("RGB", (8 * T, 8 * T), lift(cat[gid]))
     bset = BOUNDARY.get(e.get("location", loc), "blind_tenements")
-    top_take, face_take = WALL_TAKES[bset]
-    top = find(tiles_dir, f"boundary_{bset}_wall", top_take)
-    face = find(tiles_dir, f"boundary_{bset}_wall_face", face_take)
-    top = tone(top, (40, 40, 46), 0.3) if top else Image.new("RGB", (8 * T, 8 * T), (40, 40, 46))
-    face = tone(face, (60, 58, 64), 0.5, cells=4) if face else Image.new("RGB", (4 * T, 4 * T), (60, 58, 64))
+
+    def wall_set(name):
+        """(top, face, face_dark) textures of one wall set, toned dark like the boundary."""
+        kind = "boundary" if name in BOUNDARY.values() or name == "blind_tenements" else "walls"
+        top_take, face_take = WALL_TAKES[name]
+        tc, fc = WALL_TONES.get(name, ((40, 40, 46), (60, 58, 64)))
+        t_ = find(tiles_dir, f"{kind}_{name}_wall", top_take)
+        f_ = find(tiles_dir, f"{kind}_{name}_wall_face", face_take)
+        t_ = tone(t_, tc, 0.3) if t_ else Image.new("RGB", (8 * T, 8 * T), tc)
+        f_ = tone(f_, fc, 0.5, cells=4) if f_ else Image.new("RGB", (4 * T, 4 * T), fc)
+        return t_, f_, ImageEnhance.Brightness(f_).enhance(0.72)
+
+    top, face, _ = wall_set(bset)
+    sets = {bset: wall_set(bset)}
+    room_walls = ROOM_WALLS.get(e.get("location", loc), {})
+    for name in set(room_walls.values()):
+        sets[name] = wall_set(name)
+    zone_id = {k: v["id"] for k, v in e.get("zone_legend", {}).items()}
+    zrows = e.get("zones", [])
+
+    def room_at(x, y):
+        return zone_id.get(zrows[y][x]) if 0 <= y < len(zrows) and 0 <= x < len(zrows[y]) else None
+
+    def wall_of(x, y):
+        """The wall set of wall cell (x, y): the room whose floor it faces (the open cell south of it), else the nearest
+        room within two cells (south first, then west, east, north), else the boundary set."""
+        if not room_walls:
+            return sets[bset]
+        for k in (1, 2):
+            for dx, dy in ((0, k), (-k, 0), (k, 0), (0, -k)):
+                r = room_at(x + dx, y + dy)
+                if r:
+                    return sets[room_walls.get(r, bset)]
+        return sets[bset]
     im = Image.new("RGBA", ((W + 2 * M) * T, (H + 2 * M) * T))
     # Ground: one picture composed from the textures, with soft irregular borders between land grounds (REGIONGROUND1
     # EN 2: an edge wanders up to about 0.3 cell). The lookup position of every pixel is pushed by smooth noise, so a
@@ -175,7 +209,6 @@ def render(loc, tiles_dir, props_root, out, inside=""):
     def _is_face(x, y):
         return _depth(x, y) > 0
 
-    face_dark = ImageEnhance.Brightness(face).enhance(0.72)
     for y in range(-M, H + M):
         for x in range(-M, W + M):
             if open_at(x, y):
@@ -184,6 +217,7 @@ def render(loc, tiles_dir, props_root, out, inside=""):
             if depth == 2 and open_at(x, y - 1):
                 depth = 0        # a wall two tiles thick: its far row shows its top, its near row its face
             X0, Y0 = (x + M) * T, (y + M) * T
+            top, face, face_dark = wall_of(x, y)
             if depth:
                 # the near row of a face is a little darker (it is lower, further from the light); the row that meets
                 # the wall's top carries a pale cap line
@@ -193,6 +227,7 @@ def render(loc, tiles_dir, props_root, out, inside=""):
                     ImageDraw.Draw(im).rectangle([X0, Y0, X0 + T - 1, Y0 + 2], fill=(132, 130, 140, 255))
             else:
                 im.paste(tiled(top, x, y), (X0, Y0))
+    top, face, face_dark = sets[bset]
     edge = ImageDraw.Draw(im)
     for y in range(-1, H + 1):
         for x in range(-1, W + 1):
