@@ -43,6 +43,8 @@ use winit::monitor::MonitorHandle;
 use winit::window::Fullscreen;
 use winit::window::{Window, WindowAttributes, WindowId};
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod bot;
 pub mod headless;
 
 /// What the shell opens.
