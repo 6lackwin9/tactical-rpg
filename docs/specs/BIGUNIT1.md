@@ -39,8 +39,12 @@ and game data (three units). Numbers and choices marked BU are `[PROVISIONAL]` d
 - BU12. Swap (`PHASEFX1` `swap`): when the new unit is bigger than the old one, it is placed with the old cell as one of
   its four cells, trying the four squares in a fixed order (old cell as top-left, top-right, bottom-left, bottom-right);
   if none fits, the nearest fitting anchor on the board by distance then reading order. If no 2 x 2 space is free
-  anywhere (rare, it depends on where units stand), the unit enters at the old cell with footprint `1` for that battle
-  and the log says so. The new unit's footprint comes from the swap target's unit row (`to`), so a boss built from a
+  anywhere (rare, it depends on where units stand), the unit makes room (user 2026-11-17: "it should just push back all
+  units on board to free up space"): it takes the first of the four squares around the old cell whose terrain is
+  walkable (else the nearest such square on the board), and every other unit on those cells is pushed out to the nearest
+  free walkable cell outside the square (distance, then reading order), pushing further units back in turn if needed.
+  These pushes are not attacks: no collision damage, hazards roll as a forced move does, and the log names each moved
+  unit. The new unit's footprint comes from the swap target's unit row (`to`), so a boss built from a
   1-cell `"$captive_unit"` snapshot still gets `footprint: 2`.
 - BU13. AI: pathing and target choice for and against big units use BU5 and BU6. AI picks attack cells next to any cell.
 
