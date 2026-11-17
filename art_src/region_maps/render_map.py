@@ -341,6 +341,11 @@ def render(loc, tiles_dir, props_root, out, inside=""):
 
     def place(p, a):
         mounted = wall_mounted(p)
+        if p["layer"] == "ground" and a.width * 2 <= p["w"] * T:
+            # a low-res ground prop (a boat) grows to its footprint in whole pixel steps, so a unit could ride in it
+            # (Tushar 2026-11-17: the skiff was too small for a unit)
+            k = (p["w"] * T) // a.width
+            a = a.resize((a.width * k, a.height * k), Image.NEAREST)
         if mounted:
             a = into_wall(a, p)
             p = dict(p, no_shadow=True)

@@ -193,8 +193,7 @@ def sluice_undercroft():
     L.rect(16, 0, 21, 0, "#")
     L.prop("sluice_gate", "portcullis", 17, 0, 4, 1)              # one barred arch in the north wall, over the causeway
     L.prop("post_e", "mooring_bollard", 20, 6)   # one bollard, by the skiff; the west one went (Tushar 2026-11-17: "too cluttered" by the board)
-    L.prop("skiff", "varka_skiff", 21, 4, 2, 1, layer="ground")
-    L.prop("board", "mission_board", 14, 6, 2, 1)
+    L.prop("skiff", "varka_skiff", 20, 3, 4, 2, layer="ground")   # big enough to carry a unit or two
     # --- the Apothecary's Slab
     L.prop("retorts", "retort_shelf", 2, 1, 3, 1)
     L.prop("shelf", "goods_shelf", 8, 1, 2, 1)
@@ -209,6 +208,8 @@ def sluice_undercroft():
     L.prop("crates", "crate_stack", 27, 6, 2, 1)
     # --- the hall: the brazier everyone passes, vault piers by the doors
     L.prop("brazier", "brazier", 22, 11)
+    # the mission board stands in the hall, where everyone gathers (Tushar 2026-11-17: the basin rim was crowded)
+    L.prop("board", "mission_board", 13, 10, 2, 1)
     L.prop("pier_w", "vault_pillar", 9, 10, 2, 2); L.prop("pier_e", "vault_pillar", 27, 10, 2, 2)
     # --- the entry shaft: the ladder up to the streets
     L.prop("ladder", "iron_ladder", 7, 15, 1, 1)        # on the room's north wall, so it is seen from the front
@@ -223,13 +224,10 @@ def sluice_undercroft():
     for i, x in enumerate((12, 15, 22, 25)):
         L.prop(f"nightstand_{i + 1}", "nightstand", x, 16)
     L.prop("stove", "hearth_stove", 27, 20)
-    # two halves (Tushar 2026-11-17: one small table was too small for six bunks): sleeping along the bunk wall
-    # (rows 16-18: gear rack, footlocker, linen), social below (rows 20-22: one long table of three, the stove, stores)
-    L.prop("gear_rack", "weapon_rack", 10, 18, 2, 1)
-    L.prop("footlocker", "strongbox", 14, 18)
-    L.prop("linen", "rag_pile", 12, 18, 2, 1, layer="ground")
-    for i, x in enumerate((14, 17, 20)):
-        L.prop("table" if i == 1 else f"table_{i + 1}", "table_stools", x, 21, 3, 1)
+    # two halves (Tushar 2026-11-17): sleeping along the bunk wall, social below. Each prop has a reason to be where
+    # it is (v12 comment: too cluttered): two tables either side of the aisle from the door, the stove on the east
+    # wall, the stores in the south-west corner; nothing else on the floor
+    L.prop("table", "table_stools", 14, 20, 3, 1); L.prop("table_2", "table_stools", 21, 20, 3, 1)
     L.prop("stores", "barrel_stack", 10, 22, 2, 1)
     # --- the Isolation Crypts: bars beside the door, two stasis slabs
     # the whole north wall is a bar wall either side of the door (design reference ..._ce4b19f9, 2026-11-17)
@@ -243,9 +241,9 @@ def sluice_undercroft():
     L.anchor("gate_in", 19, 2, "arrival from the Grate (the Grate's `sluice` exit to_anchor)")
     L.anchor("npc_a", 6, 5, "Sabina at the Apothecary's Slab")
     L.anchor("npc_b", 31, 3, "Berek at the Tinker's Hearth")
-    L.anchor("npc_c", 16, 7, "Talia at the mission board")
+    L.anchor("npc_c", 15, 11, "Talia at the mission board")
     L.anchor("npc_d", 22, 6, "Widow Varka at her moored skiff")
-    L.anchor("lore_a", 14, 7, "Ivo beside Talia (after the Toll-Pen rescue)")
+    L.anchor("lore_a", 12, 11, "Ivo beside Talia (after the Toll-Pen rescue)")
     L.anchor("chest_a", 10, 6, "the stash (the Slab room's corner)")
     L.anchor("rest", 22, 12, "the brazier: rest and the bunk roster")
     L.anchor("crypts", 32, 15, "the Isolation Crypts' door (Stage IV operatives, stasis slots)")
