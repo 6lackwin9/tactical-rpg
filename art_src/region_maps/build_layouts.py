@@ -44,12 +44,12 @@ class Layout:
         self.rect(0, 0, self.w - 1, 0, "#"); self.rect(0, self.h - 1, self.w - 1, self.h - 1, "#")
         self.rect(0, 0, 0, self.h - 1, "#"); self.rect(self.w - 1, 0, self.w - 1, self.h - 1, "#")
 
-    def prop(self, pid, art, x, y, w=1, h=1, layer="sort", wall=True):
+    def prop(self, pid, art, x, y, w=1, h=1, layer="sort", wall=True, flip=False):
         """A standing prop turns its footprint into wall (`#`), as the schema asks; a ground prop leaves tiles alone."""
         if layer == "sort" and wall:
             self.rect(x, y, x + w - 1, y + h - 1, "#")
         self.props.append({"id": pid, "art": art, "x": x, "y": y, "w": w, "h": h, "layer": layer, "variant": -1,
-                           "flip": False})
+                           "flip": flip})
 
     def indoor(self, zone_char, x0, y0, x1, y1, door, ground, art, roof_h=None):
         """An enterable building (REVEAL1 draft): a wall ring round an open floor, one doorway, the floor its own
@@ -196,9 +196,12 @@ def sluice_undercroft():
     L.prop("skiff", "varka_skiff", 20, 3, 4, 2, layer="ground")   # big enough to carry a unit or two
     # --- the Apothecary's Slab
     L.prop("retorts", "retort_shelf", 2, 1, 3, 1)
-    L.prop("shelf", "goods_shelf", 8, 1, 2, 1)
+    # vertical pieces as in the reference (Tushar 2026-11-17): a tall shelf of flasks along the west wall, seen from
+    # the side, the herb rack and a hanging lamp on the north wall
+    L.prop("side_shelf", "retort_shelf_side", 1, 3, 1, 3)
+    L.prop("herb_rack", "herb_rack", 8, 1, 2, 1)
+    L.prop("slab_lamp", "wall_lantern", 6, 0)
     L.prop("slab", "apothecary_slab", 5, 3, 3, 2)
-    L.prop("herb_rack", "herb_rack", 1, 5, 1, 2)
     L.prop("candles", "candle_stand", 10, 4)
     # --- the Tinker's Hearth
     L.prop("hearth", "tinker_hearth", 30, 1, 3, 2)
@@ -206,6 +209,7 @@ def sluice_undercroft():
     L.prop("anvil", "anvil", 29, 4)
     L.prop("scrap", "scrap_heap", 34, 5, 2, 2)
     L.prop("crates", "crate_stack", 27, 6, 2, 1)
+    L.prop("tool_rack", "retort_shelf_side", 36, 3, 1, 3, flip=True)   # the east wall's tall rack, seen from the side
     # --- the hall: the brazier everyone passes, vault piers by the doors
     L.prop("brazier", "brazier", 22, 11)
     # the mission board stands in the hall, where everyone gathers (Tushar 2026-11-17: the basin rim was crowded)

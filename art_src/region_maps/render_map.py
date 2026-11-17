@@ -48,7 +48,8 @@ REF_LOOK = {"sluice_undercroft": {   # reference: flow/out/Region Maps/Undergrou
 GREY = {"cobble_road": 0.75, "flagstone": 0.5}                # how far a texture's own hue is pulled to grey before toning
 PATCHY = {"soot_yard": 0.52, "moss": 0.46}   # share of a cell these grounds cover: ash and moss lie in patches on the floor
 UNDER = "flagstone"                           # what shows between the patches
-STRETCH = {"bar_run": (96, 32)}   # (w, h) px a wall-mounted frame is stretched to: exactly the one-tile face
+STRETCH = {"bar_run": (96, 32), "iron_ladder": (28, 64)}   # the ladder climbs the face and the top: the way out   # (w, h) px a wall-mounted frame is stretched to: exactly the one-tile face
+IN_WALL = {"iron_ladder", "wall_lantern"}   # pieces fixed to a wall face (Tushar 2026-11-17: the ladder looked apart from its wall)
 FIT = {"portcullis": (72, 84), "kiln_bunk": (64, 56), "iron_ladder": (40, 56), "crypt_bars": (48, 52), "wall_lantern": (18, 38)}   # (w, h) px a wall-mounted art is scaled into
 BRIGHT = 1.9   # the catalog colours are near black; the preview lifts everything by this, like the grid preview
 
@@ -101,8 +102,8 @@ def render(loc, tiles_dir, props_root, out, inside=""):
         if p["layer"] != "sort":
             continue
         cells = [(x, y) for y in range(p["y"], p["y"] + p["h"]) for x in range(p["x"], p["x"] + p["w"])]
-        if p["art"] in STRETCH:
-            continue    # a frame set into a real wall stays wall, so it sits in the face, not out on the floor
+        if p["art"] in STRETCH or p["art"] in IN_WALL:
+            continue    # set into a real wall: it stays wall, so it sits in the face, not out on the floor
         ring = [(x + dx, y + dy) for x, y in cells for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))]
         if any(0 <= x < W and 0 <= y < H and e["rows"][y][x] != "#" for x, y in ring) and not any(x in (0, W - 1) or y in (0, H - 1) for x, y in cells):
             for x, y in cells:
@@ -350,7 +351,14 @@ def render(loc, tiles_dir, props_root, out, inside=""):
             a = into_wall(a, p)
             p = dict(p, no_shadow=True)
         x = (p["x"] + M) * T + (p["w"] * T - a.width) // 2
-        if not mounted and p["layer"] == "sort":
+        if p["art"].endswith("_side"):
+            # a side-view piece against a west or east wall: its brick back overlaps the wall's edge, so it stands
+            # flush to the wall like the reference's tall shelf
+            body = Image.new("RGBA", a.size, (0, 0, 0, 0))   # the brick back is the wall itself: drop it, keep the body
+            keep = (a.width - T, 0, a.width, a.height) if not p.get("flip") else (0, 0, T, a.height)
+            body.paste(a.crop(keep), keep[:2]); a = body
+            x = (p["x"] + M) * T - (a.width - T) if not p.get("flip") else (p["x"] + M) * T
+        elif not mounted and p["layer"] == "sort":
             # art wider than its footprint stays inside the room: it never hangs over a wall beside it
             # (Tushar 2026-11-17: the herb rack on the Slab's west wall was "out of bounds")
             fy = p["y"] + p["h"] - 1
