@@ -61,6 +61,15 @@ Reference picks (2026-11-17, checked against the layout JSON and `draft_markers`
   and the barrel in the west hall. `REF_LOOK` in `render_map.py` holds the colours measured from it.
 - Grate: every take lacks the two street stairs (one ladder instead), the sluice tunnel north to the hub, the rubble
   and the silt bank. Take `..._709b8751` is the base; an edit adding them is queued (`grate_layout_ref`).
+  The edit came back 2026-11-17: take 2 (`grate_layout_ref_q1794947468_2`, project files
+  `art-ui/region_refs/grate_ref_edit_take2.png`) has both stairs, the north tunnel arch, two rubble heaps and the
+  silt banks. Leave out when mirroring: the black slab east of the pool (no design meaning) and the footbridge's
+  water wheel (the design has a winch drum).
+- Hub prop sheet 1 (2026-11-17, take 1, project files `art-ui/props_hub_mirror_1/`): `niche_bunk`, `nightstand`,
+  `wall_lantern`, `mooring_bollard`, `bar_run`, `cell_door` cut into `art_src/sunk_ward/props_cut/<name>/v0.png`.
+  Cloud cannot push LFS art: the cuts land from the desktop; until then the hub render shows magenta boxes for them.
+  The cell door is not placed (it would sit in the Crypts' doorway); the niche bunk draws the bed across, where the
+  reference has it head-to-wall.
 
 1. The hub's gate arch and bunks were drawn for a taller wall and look cramped in a one-tile face: redraw them for
    that height (a full sluice gate arch 4 wide; a single-tier bunk niche 2 wide), or make walls two tiles tall.

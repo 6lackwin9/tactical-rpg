@@ -48,7 +48,7 @@ REF_LOOK = {"sluice_undercroft": {   # reference: flow/out/Region Maps/Undergrou
 GREY = {"cobble_road": 0.75, "flagstone": 0.5}                # how far a texture's own hue is pulled to grey before toning
 PATCHY = {"soot_yard": 0.52, "moss": 0.46}   # share of a cell these grounds cover: ash and moss lie in patches on the floor
 UNDER = "flagstone"                           # what shows between the patches
-FIT = {"portcullis": (72, 84), "kiln_bunk": (64, 56), "iron_ladder": (40, 56), "crypt_bars": (48, 52)}   # (w, h) px a wall-mounted art is scaled into
+FIT = {"portcullis": (72, 84), "kiln_bunk": (64, 56), "iron_ladder": (40, 56), "crypt_bars": (48, 52), "bar_run": (96, 60), "wall_lantern": (18, 38)}   # (w, h) px a wall-mounted art is scaled into
 BRIGHT = 1.9   # the catalog colours are near black; the preview lifts everything by this, like the grid preview
 
 
@@ -365,7 +365,8 @@ def render(loc, tiles_dir, props_root, out, inside=""):
     LIGHTS = {"brazier": (150, (255, 170, 80)), "tinker_hearth": (140, (255, 140, 60)), "furnace_mouth": (170, (255, 120, 40)),
               "lantern_pole": (95, (255, 190, 110)), "watch_torch": (95, (255, 130, 60)), "violet_lamp_post": (100, (150, 130, 255)),
               "apothecary_slab": (85, (255, 200, 130)), "retort_shelf": (60, (255, 200, 130)), "kiln_bunk": (45, (255, 190, 120)),
-              "hearth_stove": (70, (255, 150, 80)), "candle_stand": (70, (255, 200, 120)), "shrine_altar": (80, (255, 200, 120))}
+              "hearth_stove": (70, (255, 150, 80)), "candle_stand": (70, (255, 200, 120)), "shrine_altar": (80, (255, 200, 120)), "wall_lantern": (75, (255, 190, 110)),
+              "nightstand": (40, (255, 200, 120))}
     dark = Image.new("L", im.size, 96)                      # how much darkness lies over the map (0 none, 255 black)
     glow = Image.new("RGBA", im.size, (0, 0, 0, 0))
     dd, dg = ImageDraw.Draw(dark), ImageDraw.Draw(glow)

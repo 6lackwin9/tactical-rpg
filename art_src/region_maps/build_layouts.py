@@ -192,7 +192,7 @@ def sluice_undercroft():
     L.rect(18, 1, 19, 5, ".", "f")
     L.rect(16, 0, 21, 0, "#")
     L.prop("sluice_gate", "portcullis", 17, 0, 4, 1)              # one barred arch in the north wall, over the causeway
-    L.prop("post_w", "ring_post", 17, 6); L.prop("post_e", "ring_post", 20, 6)
+    L.prop("post_w", "mooring_bollard", 17, 6); L.prop("post_e", "mooring_bollard", 20, 6)   # hub prop sheet 1 (2026-11-17)
     L.prop("skiff", "varka_skiff", 21, 4, 2, 1, layer="ground")
     L.prop("board", "mission_board", 14, 6, 2, 1)
     # --- the Apothecary's Slab
@@ -213,16 +213,20 @@ def sluice_undercroft():
     # --- the entry shaft: the ladder up to the streets
     L.prop("ladder", "iron_ladder", 7, 15, 1, 1)        # on the room's north wall, so it is seen from the front
     L.prop("entry_crates", "crate_stack", 1, 21, 2, 1)
+    L.prop("ladder_lamp", "wall_lantern", 6, 15)                     # the lamp by the ladder in the reference
     L.prop("entry_lamp", "lantern_pole", 2, 16)
     # --- the Dry Hollows: six kiln bunks along the north wall, three either side of the door, a table
+    # each bunk is a bed in an arched niche, the bed reaching onto the floor, a candle nightstand between pairs
+    # (design reference ..._ce4b19f9; hub prop sheet 1, 2026-11-17)
     for i, x in enumerate((10, 13, 16, 20, 23, 26)):
-        L.prop(f"bunk_{i + 1}", "kiln_bunk", x, 15, 2, 1)   # niches in the wall's face, not furniture on the floor
+        L.prop(f"bunk_{i + 1}", "niche_bunk", x, 15, 2, 2)
+    for i, x in enumerate((12, 15, 22, 25)):
+        L.prop(f"nightstand_{i + 1}", "nightstand", x, 16, wall=False)   # keeps the wall face above it
     L.prop("table", "table_stools", 18, 20, 2, 1)
     L.prop("stove", "hearth_stove", 27, 20)
     # --- the Isolation Crypts: bars beside the door, two stasis slabs
     # the whole north wall is a bar wall either side of the door (design reference ..._ce4b19f9, 2026-11-17)
-    for i, x in enumerate((29, 30, 31, 34, 35, 36)):
-        L.prop("crypt_bars" if i == 1 else f"crypt_bars_{i + 1}", "crypt_bars", x, 15, 1, 1)
+    L.prop("crypt_bars", "bar_run", 29, 15, 3, 1); L.prop("crypt_bars_2", "bar_run", 34, 15, 3, 1)
     L.prop("stasis_1", "stasis_slab", 30, 18, 2, 1); L.prop("stasis_2", "stasis_slab", 34, 18, 2, 1)
     L.prop("crypt_candles", "candle_stand", 36, 16)
     # anchors: the location's markers keep their anchor ids
