@@ -2,6 +2,12 @@
 
 Archived 2026-11-15 (with `PR5-50..PR5-59` settled items added 2026-11-17), closed/landed Design Review items from `2026-11-10 .. 2026-11-15`. Active `[PROVISIONAL]` calls and Playtest Review Targets stay in [DESIGN_REVIEW.md](../DESIGN_REVIEW.md).
 
+## User-Accepted Items (Archived `2026-11-17`)
+
+| Date | Item | What was asked | Applied (recommended option) | Where | Undo cost |
+| --- | --- | --- | --- | --- | --- |
+| 2026-11-17 | `ACTS23-R6` & `ACTS23-R7` Feasibility Rulings (`B1..B7`, queued `PR6-6..PR6-13`, `BIGUNIT1` parked) | Resolve kit/data gaps surfaced during `PK4`–`PK7` audit: (`B1`) `2x2` grid occupancy vs `PHASEFX1` for Node 20 `saint_aberration_<class>` & Node 22 `Dreaming Core`; (`B2`) Act 3 Tallow `2.0x` shop pricing; (`B3`) relative post-flag Checkpoints; (`B4`) `clock_set` non-shrinking budget; (`B5`) `UnitTrackDef.signed`, lore-free Doctrine recipes & strain telemetry; (`B6`) `Ruthven` `25%` siege retreat; (`B7`) lore-free captive swap, `ground.rs:408` meter-only outcome & `every_rounds` | **Accepted by user 2026-11-17 ("all recs B1-B7")**: applied lowest-undo reversible calls (`P-ARCH-01..04`, `0` golden churn): (`B1`) **Option B** — keep `1x1` cell occupancy in `rpgkit_battle` over `PHASEFX1` and render oversized `2x2` sprite art, parking multi-cell `BIGUNIT1` in `READY.md` §3; (`B2`) `Shop.supply_price_mult_by_act` (`round(base * mult)` in both `offers` & purchase); (`B3`) optional `CheckpointDef.after_flag` + `offset_days` (`Campaign.checkpoint_armed_at`); (`B4`) `clock_set.keep_longer`; (`B5`) `UnitTrackDef.signed`, data `FX_DOCTRINE`, `#[serde(default)]` `strain_peak`/`strain_end`/`channel_actions`; (`B6`) `"rout"` / retreat-clears-room + `hp_floor: 25` + `withdrawn` distinct from `killed`; (`B7`) lore-free `"$captive_unit"` from `GameState.captive` snapshot w/ static fallback + `ground.rs:408` + `when_meter` + `every_rounds` | [PK4_PK5_CAMPAIGN_HUB.md](../sessions/PK4_PK5_CAMPAIGN_HUB.md), [PK6_PK7_BOSSES_ENDINGS.md](../sessions/PK6_PK7_BOSSES_ENDINGS.md), `READY.md` §§1,3 | low–medium (reversible kit hooks; `BIGUNIT1` parked cleanly) |
+
 ## Settled Open Items (`PR5-50..PR5-59` Landed / Closed, Archived `2026-11-17`)
 
 | Date | Item | What was asked | Applied (recommended option) | Where | Undo cost |

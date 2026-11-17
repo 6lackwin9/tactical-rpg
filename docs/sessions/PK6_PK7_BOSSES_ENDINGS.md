@@ -1,6 +1,6 @@
 # `PK6_PK7_BOSSES_ENDINGS` — `[PROVISIONAL]` Boss Tech, Resonance, Dream Retries & Endings A/B/C (`R7`)
 
-- **Status**: **`[PROVISIONAL]`** — `ACTS23-R7` feasibility audited and `[PROVISIONAL]` rulings **`B1` Option B** + **`B7`** integrated; queued in `READY.md` §1 as `PR6-7`, `PR6-10`, `PR6-11`.
+- **Status**: **`[PROVISIONAL]`** — `ACTS23-R7` feasibility audited and rulings **`B1` Option B** + **`B7`** integrated and **accepted by the user 2026-11-17** (decision "Act 2-3 feasibility rulings B1-B7"); queued in `READY.md` §1 as `PR6-7`, `PR6-10`, `PR6-11`.
 - **Parent Plan**: [WAVE2_PLAN.md](WAVE2_PLAN.md) | **Canon & Decisions**: [CANON.md](../../games/emberwake/docs/lore/CANON.md) (§3.2–3.3, §4.1, `CL-05`, `CL-09..11`), [ACTS23.md](../specs/ACTS23.md) (§2 #19–24, `FB-170`, `FB-171`).
 
 ---

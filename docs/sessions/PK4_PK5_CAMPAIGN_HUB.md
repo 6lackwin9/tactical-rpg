@@ -1,6 +1,6 @@
 # `PK4_PK5_CAMPAIGN_HUB` — `[PROVISIONAL]` Doctrine, Checkpoints, Hub Facilities & Connected-Room Sieges (`R6`)
 
-- **Status**: **`[PROVISIONAL]`** — `ACTS23-R6` feasibility audited and `[PROVISIONAL]` rulings **`B2..B6`** integrated; queued in `READY.md` §1 as `PR6-6`, `PR6-8`, `PR6-9`.
+- **Status**: **`[PROVISIONAL]`** — `ACTS23-R6` feasibility audited and rulings **`B2..B6`** integrated and **accepted by the user 2026-11-17** (decision "Act 2-3 feasibility rulings B1-B7"); queued in `READY.md` §1 as `PR6-6`, `PR6-8`, `PR6-9`.
 - **Parent Plan**: [WAVE2_PLAN.md](WAVE2_PLAN.md) | **Canon & Decisions**: [CANON.md](../../games/emberwake/docs/lore/CANON.md) (§2.2, §4.1–4.2, `CL-04`, `CL-10`), [ACTS23.md](../specs/ACTS23.md) (§2 #13–18, Q-A5, Q-A7, Q-A8).
 
 ---
