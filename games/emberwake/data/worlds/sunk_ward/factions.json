@@ -6,7 +6,7 @@
 			"id": "iron_inquisition",
 			"name": "Iron Inquisition",
 			"motto": "",
-			"description": "PLACEHOLDER motto. The church's hunters; the Castellan Watch is its city arm.",
+			"description": "The church's hunters: bell sweeps, stockades and vivisection slabs; the Castellan Watch is its city arm.",
 			"home": "",
 			"relations": {
 				"castellan_watch": "ally",
@@ -19,7 +19,7 @@
 			"id": "castellan_watch",
 			"name": "Castellan Watch",
 			"motto": "",
-			"description": "PLACEHOLDER motto. The city watch: Footmen and Watch Crossbowmen.",
+			"description": "The city watch: curfews, ward gates and Tithing sweeps under Inquisition writ.",
 			"home": "",
 			"relations": {
 				"iron_inquisition": "ally"
@@ -31,7 +31,7 @@
 			"id": "tallow_guild",
 			"name": "Tallow Guild",
 			"motto": "",
-			"description": "PLACEHOLDER motto. Renders the district's tallow; its mercenaries scour the cellars.",
+			"description": "Renders the district's Spent dead into Warded Tallow; its mercenaries scour the cellars.",
 			"home": "",
 			"relations": {
 				"iron_inquisition": "ally"
@@ -43,7 +43,7 @@
 			"id": "fourth_kiln_syndicate",
 			"name": "Fourth Kiln Syndicate",
 			"motto": "",
-			"description": "PLACEHOLDER motto. The Guild's foundry arm; runs the bone-mill.",
+			"description": "The Guild's foundry arm: casts brass conduits and runs the bone-mill.",
 			"home": "",
 			"relations": {
 				"tallow_guild": "ally"

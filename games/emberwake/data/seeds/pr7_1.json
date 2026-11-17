@@ -1,0 +1,585 @@
+{
+	"steps": [
+		{
+			"op": "upsert",
+			"kind": "meters",
+			"world": "sunk_ward",
+			"entry": {
+				"id": "alert",
+				"name": "Inquisition Alert",
+				"description": "How closely the Iron Inquisition watches the Sunk Ward.",
+				"kind": "gauge",
+				"min": 0,
+				"max": 100,
+				"start": 0,
+				"unit": "%",
+				"visible": true,
+				"scope": "campaign",
+				"bands": [
+					{
+						"id": "guarded",
+						"name": "Guarded",
+						"from": 0,
+						"tone": "calm"
+					},
+					{
+						"id": "suspicious",
+						"name": "Suspicious",
+						"from": 31,
+						"tone": "warn"
+					},
+					{
+						"id": "lockdown",
+						"name": "Lockdown",
+						"from": 71,
+						"tone": "danger"
+					},
+					{
+						"id": "breach",
+						"name": "Breach",
+						"from": 100,
+						"tone": "fatal"
+					}
+				],
+				"rules": [
+					{
+						"id": "a_suspicious",
+						"at": "suspicious",
+						"warn": "The Inquisition is Suspicious: the ward gates are watched. Quiet jobs and bribes at Talia lower Alert."
+					},
+					{
+						"id": "a_lockdown",
+						"at": "lockdown",
+						"warn": "Lockdown: Inquisition hunter packs and Castellan Watch sweeps hold the main roads."
+					},
+					{
+						"id": "a_last",
+						"at": 90,
+						"acts": [
+							1
+						],
+						"warn": "One more loud job and the Inquisition finds the grate. The run would end."
+					},
+					{
+						"id": "a_breach_1",
+						"at": "breach",
+						"acts": [
+							1
+						],
+						"effects": [
+							{
+								"effect": "end",
+								"kind": "fail",
+								"card": "extinguished_breach"
+							}
+						]
+					}
+				],
+				"inputs": [
+					{
+						"on": "battle",
+						"tags": [
+							"loud"
+						],
+						"outcomes": [
+							"won"
+						],
+						"delta": 8
+					},
+					{
+						"on": "battle",
+						"tags": [
+							"loud"
+						],
+						"outcomes": [
+							"lost",
+							"fled"
+						],
+						"delta": 4
+					},
+					{
+						"on": "battle",
+						"tags": [
+							"quiet"
+						],
+						"outcomes": [
+							"won"
+						],
+						"delta": 2
+					}
+				],
+				"modifiers": [
+					{
+						"bands": [
+							"lockdown"
+						],
+						"road_pct": 150
+					}
+				],
+				"floors": [
+					{
+						"from_act": 2,
+						"min": 30
+					}
+				],
+				"hud": {
+					"short": "Alert",
+					"icon": "ui/hud/alert.png",
+					"order": 2
+				},
+				"tags": []
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "meters",
+			"world": "sunk_ward",
+			"entry": {
+				"id": "doom_clock",
+				"name": "The Red Tithing",
+				"description": "Days until the Inquisition's next tithing rite.",
+				"kind": "countdown",
+				"min": 0,
+				"max": 42,
+				"start": 42,
+				"unit": "days",
+				"visible": true,
+				"scope": "campaign",
+				"bands": [
+					{
+						"id": "due",
+						"name": "Due",
+						"from": 0,
+						"tone": "danger"
+					},
+					{
+						"id": "near",
+						"name": "Near",
+						"from": 1,
+						"tone": "warn"
+					},
+					{
+						"id": "far",
+						"name": "Far",
+						"from": 8,
+						"tone": "calm"
+					}
+				],
+				"rules": [
+					{
+						"id": "d_week",
+						"at": 7,
+						"warn": "Seven days to the Red Tithing."
+					},
+					{
+						"id": "d_zero",
+						"at": 0,
+						"acts": [
+							1,
+							2
+						],
+						"effects": [
+							{
+								"effect": "meter_add",
+								"meter": "alert",
+								"delta": 10
+							},
+							{
+								"effect": "add_flag",
+								"key": "lesser_tithings",
+								"delta": 1
+							},
+							{
+								"effect": "set_flag",
+								"key": "sunk_ward.ivo_lost",
+								"value": true,
+								"when": [
+									{
+										"key": "sunk_ward.ivo_rescued",
+										"op": "!=",
+										"value": true
+									},
+									{
+										"key": "sunk_ward.ivo_lost",
+										"op": "!=",
+										"value": true
+									}
+								]
+							},
+							{
+								"effect": "set_flag",
+								"key": "sunk_ward.ida_lost",
+								"value": true,
+								"else": true,
+								"when": [
+									{
+										"key": "sunk_ward.corvo_bribed",
+										"op": "!=",
+										"value": true
+									},
+									{
+										"key": "sunk_ward.ida_lost",
+										"op": "!=",
+										"value": true
+									}
+								]
+							},
+							{
+								"effect": "add_flag",
+								"key": "sunk_ward.saved_youths",
+								"delta": -2,
+								"min": 0,
+								"else": true
+							}
+						],
+						"restart_days": 14,
+						"warn": "The Red Tithing falls early: a lesser tithing, and the Inquisition's Alert rises by 10."
+					}
+				],
+				"inputs": [],
+				"modifiers": [],
+				"floors": [],
+				"hud": {
+					"short": "Tithing",
+					"icon": "ui/hud/doom_clock.png",
+					"order": 1
+				},
+				"tags": []
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "factions",
+			"world": "sunk_ward",
+			"entry": {
+				"id": "iron_inquisition",
+				"name": "Iron Inquisition",
+				"motto": "",
+				"description": "The church's hunters: bell sweeps, stockades and vivisection slabs; the Castellan Watch is its city arm.",
+				"home": "",
+				"relations": {
+					"castellan_watch": "ally",
+					"tallow_guild": "ally"
+				},
+				"grants": [],
+				"tags": []
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "factions",
+			"world": "sunk_ward",
+			"entry": {
+				"id": "castellan_watch",
+				"name": "Castellan Watch",
+				"motto": "",
+				"description": "The city watch: curfews, ward gates and Tithing sweeps under Inquisition writ.",
+				"home": "",
+				"relations": {
+					"iron_inquisition": "ally"
+				},
+				"grants": [],
+				"tags": []
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "factions",
+			"world": "sunk_ward",
+			"entry": {
+				"id": "tallow_guild",
+				"name": "Tallow Guild",
+				"motto": "",
+				"description": "Renders the district's Spent dead into Warded Tallow; its mercenaries scour the cellars.",
+				"home": "",
+				"relations": {
+					"iron_inquisition": "ally"
+				},
+				"grants": [],
+				"tags": []
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "factions",
+			"world": "sunk_ward",
+			"entry": {
+				"id": "fourth_kiln_syndicate",
+				"name": "Fourth Kiln Syndicate",
+				"motto": "",
+				"description": "The Guild's foundry arm: casts brass conduits and runs the bone-mill.",
+				"home": "",
+				"relations": {
+					"tallow_guild": "ally"
+				},
+				"grants": [],
+				"tags": []
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "quests",
+			"world": "sunk_ward",
+			"entry": {
+				"id": "q_a1_m5",
+				"name": "The Crucible",
+				"description": "Inquisitor-Prelate Nemeth holds the Crucible Watchpost and the Slag Gate behind it. Open the gate. One of you holds the winch.",
+				"giver": "",
+				"faction": "",
+				"region": "sunk_ward_quarter",
+				"requires": [],
+				"steps": [
+					{
+						"text": "Hold the Crucible and open the Slag Gate",
+						"location": "crucible_watchpost",
+						"encounter": "enc_evt_06"
+					}
+				],
+				"reward": "Talia's thanks. The Bastion waits beyond the gate.",
+				"template": "a1_main_raid",
+				"turn_in": "talia_rusk",
+				"requires_flags": [
+					{
+						"key": "sunk_ward.interlude_done",
+						"value": true
+					}
+				],
+				"complete_flags": [],
+				"auto_start": false,
+				"links": {},
+				"variants": [
+					{
+						"id": "hollis_overlook",
+						"when_flags": [
+							{
+								"key": "sunk_ward.hollis_overlook",
+								"value": true
+							}
+						],
+						"unless_flags": [],
+						"set": {
+							"description": "Hollis dropped the Crucible's outer counterweight and the gate's reinforcements will arrive a round late. Open the Slag Gate. One of you holds the winch.",
+							"steps": {
+								"0": {
+									"encounter": "enc_evt_06_overlook"
+								}
+							}
+						}
+					}
+				],
+				"loot_pool": [],
+				"loot_picks": 1,
+				"reputation": {},
+				"tags": [],
+				"board": "talia_board",
+				"track": "main",
+				"show_locked": true,
+				"closed_text": "Something under the Undercroft must be answered first."
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "quests",
+			"world": "sunk_ward",
+			"entry": {
+				"id": "q_hook_bellows",
+				"name": "The Seventh Ward Bellows",
+				"description": "Kaelen's old Watch armory cache lies beneath Alleyway Junction 7, with a bellows nobody was told to burn. Take it, and a plate Berek can rework.",
+				"giver": "",
+				"faction": "",
+				"region": "sunk_ward_quarter",
+				"requires": [],
+				"steps": [
+					{
+						"text": "Raid the old Watch armory cache at Alleyway Junction 7",
+						"flag": "sunk_ward.bellows_cache",
+						"value": true
+					}
+				],
+				"reward": "Slag Plating, 60 xp and 10 Scrap, and cheaper coals at Berek's Hearth (-20%).",
+				"template": "a1_flag_job_plating",
+				"turn_in": "talia_rusk",
+				"requires_flags": [
+					{
+						"key": "sunk_ward.m1_done",
+						"value": true
+					}
+				],
+				"complete_flags": [
+					{
+						"key": "sunk_ward.bellows_done",
+						"value": true
+					}
+				],
+				"auto_start": false,
+				"links": {},
+				"variants": [],
+				"loot_pool": [],
+				"loot_picks": 1,
+				"reputation": {},
+				"tags": [],
+				"board": "talia_board",
+				"track": "side",
+				"show_locked": true,
+				"closed_text": "Break the Sweep first."
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "quests",
+			"world": "sunk_ward",
+			"entry": {
+				"id": "q_hook_rubbings",
+				"name": "Liturgical Cipher Rubbings",
+				"description": "Maren will decode the cage-seal rubbings from the Crossroads. Take them to St. Lyra's hidden reliquary flue.",
+				"giver": "",
+				"faction": "",
+				"region": "sunk_ward_quarter",
+				"requires": [],
+				"steps": [
+					{
+						"text": "Take the cage-seal rubbings at the Ash-Crawl Crossroads",
+						"flag": "sunk_ward.rubbings_taken",
+						"value": true
+					}
+				],
+				"reward": "60 xp, 20 Scrap, and Maren's clue to St. Lyra's flue, for Act 2.",
+				"template": "a1_flag_job",
+				"turn_in": "talia_rusk",
+				"requires_flags": [
+					{
+						"key": "sunk_ward.m2_done",
+						"value": true
+					}
+				],
+				"complete_flags": [
+					{
+						"key": "sunk_ward.rubbings_done",
+						"value": true
+					}
+				],
+				"auto_start": false,
+				"links": {},
+				"variants": [],
+				"loot_pool": [],
+				"loot_picks": 1,
+				"reputation": {},
+				"tags": [],
+				"board": "talia_board",
+				"track": "side",
+				"show_locked": true,
+				"closed_text": "Free the Crossroads cages first."
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "quests",
+			"world": "sunk_ward",
+			"entry": {
+				"id": "q_hook_overlook",
+				"name": "The Crag-Sight Overlook",
+				"description": "Hollis wants the chimney sightlines above the Crucible and the outer counterweight cut. The Prelate's reinforcements arrive a round late.",
+				"giver": "",
+				"faction": "",
+				"region": "sunk_ward_quarter",
+				"requires": [],
+				"steps": [
+					{
+						"text": "Secure the Crag-Sight Overlook above the Crucible",
+						"flag": "sunk_ward.hollis_overlook",
+						"value": true
+					}
+				],
+				"reward": "Hollis's Lever-Winch (Heavy Winch Sunder costs 1 block less), 60 xp and 20 Scrap, and a gate wave that arrives a round late.",
+				"template": "a1_flag_job_winch",
+				"turn_in": "talia_rusk",
+				"requires_flags": [
+					{
+						"key": "sunk_ward.interlude_done",
+						"value": true
+					}
+				],
+				"complete_flags": [],
+				"auto_start": false,
+				"links": {},
+				"variants": [],
+				"loot_pool": [],
+				"loot_picks": 1,
+				"reputation": {},
+				"tags": [],
+				"board": "talia_board",
+				"track": "side",
+				"show_locked": true,
+				"closed_text": "Something under the Undercroft must be answered first."
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "quests",
+			"world": "sunk_ward",
+			"entry": {
+				"id": "q_hook_counter_still",
+				"name": "The Tenement Counter-Still",
+				"description": "Elyse will check her awakened mother's tenement block and distil tallow. The Vats' leftover stills are hot.",
+				"giver": "",
+				"faction": "",
+				"region": "sunk_ward_quarter",
+				"requires": [],
+				"steps": [
+					{
+						"text": "Check the counter-still at the Tallow Vats",
+						"flag": "sunk_ward.still_checked",
+						"value": true
+					}
+				],
+				"reward": "Five days of Warded Tallow, 60 xp and 20 Scrap, and a Snapped Alum Inhaler.",
+				"template": "a1_flag_job_tallow",
+				"turn_in": "talia_rusk",
+				"requires_flags": [
+					{
+						"key": "sunk_ward.elyse_joined",
+						"value": true
+					}
+				],
+				"complete_flags": [
+					{
+						"key": "sunk_ward.still_done",
+						"value": true
+					}
+				],
+				"auto_start": false,
+				"links": {},
+				"variants": [],
+				"loot_pool": [],
+				"loot_picks": 1,
+				"reputation": {},
+				"tags": [],
+				"board": "talia_board",
+				"track": "side",
+				"show_locked": true,
+				"closed_text": "Cut through the Tallow Vats first."
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "loot",
+			"world": "sunk_ward",
+			"entry": {
+				"id": "loot_hearth_ingot_cache",
+				"name": "Hearth Slag-Bar Cache",
+				"description": "Reserved black-iron ingot set aside after the Crucible.",
+				"reward_kind": "item",
+				"ref": "black_iron_ingot",
+				"count": 1,
+				"rarity": "rare",
+				"requires_flags": [
+					{
+						"key": "pk2.hearth_open",
+						"value": true
+					}
+				],
+				"tags": []
+			}
+		}
+	]
+}
