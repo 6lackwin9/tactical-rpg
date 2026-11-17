@@ -221,14 +221,18 @@ def sluice_undercroft():
     for i, x in enumerate((10, 13, 16, 20, 23, 26)):
         L.prop(f"bunk_{i + 1}", "niche_bunk", x, 15, 2, 2)
     for i, x in enumerate((12, 15, 22, 25)):
-        L.prop(f"nightstand_{i + 1}", "nightstand", x, 16, wall=False)   # keeps the wall face above it
+        L.prop(f"nightstand_{i + 1}", "nightstand", x, 16)
     L.prop("table", "table_stools", 18, 20, 2, 1)
     L.prop("stove", "hearth_stove", 27, 20)
+    # the west end was bare floor (Tushar 2026-11-17): the founders' gear and stores, kept to the wall side
+    L.prop("gear_rack", "weapon_rack", 10, 19, 2, 1)
+    L.prop("stores", "barrel_stack", 10, 22, 2, 1); L.prop("footlocker", "strongbox", 12, 22)
+    L.prop("linen", "rag_pile", 14, 20, 2, 2, layer="ground")
     # --- the Isolation Crypts: bars beside the door, two stasis slabs
     # the whole north wall is a bar wall either side of the door (design reference ..._ce4b19f9, 2026-11-17)
     L.prop("crypt_bars", "bar_run", 29, 15, 3, 1); L.prop("crypt_bars_2", "bar_run", 34, 15, 3, 1)
     L.prop("stasis_1", "stasis_slab", 30, 18, 2, 1); L.prop("stasis_2", "stasis_slab", 34, 18, 2, 1)
-    L.prop("crypt_candles", "candle_stand", 36, 16)
+    L.prop("crypt_candles", "candle_stand", 29, 21)   # floor corner, clear of the bar wall (reference)
     # anchors: the location's markers keep their anchor ids
     L.anchor("spawn", 6, 17, "arrival from the world map (the ladder foot)")
     L.anchor("road", 7, 16, "exit `road`: up the ladder, World map: the Sunk Ward")

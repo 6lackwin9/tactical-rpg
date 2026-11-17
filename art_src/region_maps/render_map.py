@@ -48,7 +48,8 @@ REF_LOOK = {"sluice_undercroft": {   # reference: flow/out/Region Maps/Undergrou
 GREY = {"cobble_road": 0.75, "flagstone": 0.5}                # how far a texture's own hue is pulled to grey before toning
 PATCHY = {"soot_yard": 0.52, "moss": 0.46}   # share of a cell these grounds cover: ash and moss lie in patches on the floor
 UNDER = "flagstone"                           # what shows between the patches
-FIT = {"portcullis": (72, 84), "kiln_bunk": (64, 56), "iron_ladder": (40, 56), "crypt_bars": (48, 52), "bar_run": (96, 60), "wall_lantern": (18, 38)}   # (w, h) px a wall-mounted art is scaled into
+STRETCH = {"bar_run": (96, 32)}   # (w, h) px a wall-mounted frame is stretched to: exactly the one-tile face
+FIT = {"portcullis": (72, 84), "kiln_bunk": (64, 56), "iron_ladder": (40, 56), "crypt_bars": (48, 52), "wall_lantern": (18, 38)}   # (w, h) px a wall-mounted art is scaled into
 BRIGHT = 1.9   # the catalog colours are near black; the preview lifts everything by this, like the grid preview
 
 
@@ -100,6 +101,8 @@ def render(loc, tiles_dir, props_root, out, inside=""):
         if p["layer"] != "sort":
             continue
         cells = [(x, y) for y in range(p["y"], p["y"] + p["h"]) for x in range(p["x"], p["x"] + p["w"])]
+        if p["art"] in STRETCH:
+            continue    # a frame set into a real wall stays wall, so it sits in the face, not out on the floor
         ring = [(x + dx, y + dy) for x, y in cells for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))]
         if any(0 <= x < W and 0 <= y < H and e["rows"][y][x] != "#" for x, y in ring) and not any(x in (0, W - 1) or y in (0, H - 1) for x, y in cells):
             for x, y in cells:
@@ -310,10 +313,15 @@ def render(loc, tiles_dir, props_root, out, inside=""):
 
     def into_wall(a, p):
         """The prop's stone and brick pulled to the wall's colour, and a tall arch scaled to sit in a low wall."""
+        if p["art"] in STRETCH:                         # a frame that must fill the face exactly, never rise above it
+            return _masonry(a.resize(STRETCH[p["art"]], Image.LANCZOS))
         limit = FIT.get(p["art"])
         if limit and (a.width > limit[0] or a.height > limit[1]):
             k = min(limit[0] / a.width, limit[1] / a.height)
             a = a.resize((round(a.width * k), round(a.height * k)), Image.LANCZOS)
+        return _masonry(a)
+
+    def _masonry(a):
         px = a.load()
         opaque = [px[x, y] for y in range(0, a.height, 2) for x in range(0, a.width, 2) if px[x, y][3] > 128]
         if not opaque:
@@ -326,12 +334,32 @@ def render(loc, tiles_dir, props_root, out, inside=""):
                     px[x, y] = tuple(max(0, min(255, round(c + (face_mean[k] - mean[k]) * 0.75))) for k, c in enumerate((r, g, b))) + (al,)
         return a
 
+    def _prop_at(cx, cy):
+        """A wall cell made by a standing prop's footprint (furniture), not a real wall."""
+        return any(q["layer"] == "sort" and q["x"] <= cx < q["x"] + q["w"] and q["y"] <= cy < q["y"] + q["h"]
+                   for q in e["props"])
+
     def place(p, a):
         mounted = wall_mounted(p)
         if mounted:
             a = into_wall(a, p)
             p = dict(p, no_shadow=True)
         x = (p["x"] + M) * T + (p["w"] * T - a.width) // 2
+        if not mounted and p["layer"] == "sort":
+            # art wider than its footprint stays inside the room: it never hangs over a wall beside it
+            # (Tushar 2026-11-17: the herb rack on the Slab's west wall was "out of bounds")
+            fy = p["y"] + p["h"] - 1
+            lo = (p["x"] + M) * T if p["x"] > 0 and e["rows"][fy][p["x"] - 1] == "#" and not _prop_at(p["x"] - 1, fy) else None
+            xr = p["x"] + p["w"]
+            hi = (xr + M) * T if xr < len(e["rows"][0]) and e["rows"][fy][xr] == "#" and not _prop_at(xr, fy) else None
+            if lo is not None and hi is not None and a.width > hi - lo:
+                k = (hi - lo) / a.width
+                a = a.resize((hi - lo, max(1, round(a.height * k))), Image.LANCZOS)
+                x = lo
+            elif lo is not None and x < lo:
+                x = lo
+            elif hi is not None and x + a.width > hi:
+                x = hi - a.width
         # the art's solid pixels only: generated props carry faint baked shadow pixels (alpha > 0) below their feet,
         # and measuring from those sat every prop a few pixels above its contact line (Tushar 2026-11-17: "props
         # seeming not on the ground")
