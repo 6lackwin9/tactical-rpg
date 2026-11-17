@@ -23,3 +23,4 @@ Placeholders (decision "Placeholder-first assets"): when Build lands a feature w
 
 | Id | Request | Files | Status |
 | --- | --- | --- | --- |
+| AO-11 | Style lock (Tushar 2026-11-17, `STYLE_BIBLE.md`) needs three Build changes: (1) **S2 sprite ramps**: a palette file may name a slot's `_lo` and `_hi` shades as well as its base, and the swap (`aegis_ui::canvas::swap_colours` via `art.rs`) applies them; today only base colours swap and the class's bright shades show through; (2) **F2 portrait frame**: portraits draw inside a 2 px iron `#4b5563` line with a 2 px oxblood `#991b1b` top line (theme roles `edge` / `frame_line`), replacing any other portrait border; (3) no code needed for P3 or I2 (applied when art is made). | `art_src/style/palette.json`, `games/emberwake/docs/specs/STYLE_BIBLE.md` 2-3, `games/emberwake/assets/units/**/palettes/*.json` | open |

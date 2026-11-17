@@ -1,0 +1,30 @@
+{
+  "_doc": "Locked style palette (Tushar 2026-11-17 picks P3, F2, S2, I2). games/emberwake/docs/specs/STYLE_BIBLE.md explains each block. Every batch is checked against it.",
+  "theme": {
+    "void": "#0a0b10", "basalt": "#14171f", "slate": "#1e232d", "iron": "#4b5563", "iron_light": "#9ca3af",
+    "blood": "#991b1b", "rust": "#92400e", "amber": "#d97706", "gold": "#fbbf24", "parchment": "#d9cbb4", "ink": "#2c221e"
+  },
+  "portrait_grade": {
+    "saturation": 0.75,
+    "colorize": {"black": "#120c0c", "mid": "#78604e", "white": "#ece0c8"},
+    "blend": 0.28
+  },
+  "portrait_frame": {"line": "#4b5563", "line_px": 2, "top_line": "#991b1b", "top_px": 2, "pad_px": 8},
+  "sprite_ramp": {
+    "shadow": {"value": 0.62, "saturation": 1.10, "hue_toward": 0.68, "hue_step": 0.035},
+    "light": {"value": 1.22, "saturation": 0.85, "hue_toward": 0.09, "hue_step": 0.035},
+    "outline": "#14110f"
+  },
+  "sprite_reference": {
+    "kaelen": {"metal": "#7d8592", "fore": "#b8a98e", "sleeve": "#b8a98e", "main": "#7a2a22", "accent": "#7a2a22", "leg": "#454a54",
+               "leather": "#5e3d26", "glove": "#5e3d26", "boot": "#4a3222", "skin": "#c09070", "hair": "#c9a24e", "wood": "#6e5034",
+               "shield": "#4d5560", "emblem": "#b8a98e", "trim": "#a08850"},
+    "castellan_watch": {"metal": "#6e7580", "fore": "#6e7580", "sleeve": "#6a4430", "main": "#6e2420", "accent": "#6e2420", "leg": "#3c4049",
+                        "leather": "#6a4430", "glove": "#4a3222", "boot": "#4a3222", "skin": "#b08566", "hair": "#3a2c24", "wood": "#6e5034",
+                        "shield": "#3c4049", "emblem": "#8a7a60", "trim": "#8a7a60"},
+    "limits": {"max_saturation": 0.55, "value_range": [0.18, 0.80], "note": "no slot brighter than parchment; reds stay oxblood, never heraldic"}
+  },
+  "icon_tile": {"skill_px": 64, "item_px": 96, "fill": "#303a46", "fill_light": "#37474f", "rim": "#4c606b", "corner_radius_px": 8,
+                "glyph": "one painted object, at most four main colours, readable at 32 px"},
+  "ground": {"mean_brightness": [24, 40], "spread_max": 14}
+}
