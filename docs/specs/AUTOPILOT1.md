@@ -46,7 +46,7 @@ Build goes automatic in three steps; each needs the user's typed yes and is reco
 
 | Step | What runs without a "Build: next row" | Starts | Ready when |
 | --- | --- | --- | --- |
-| B0, queue runs | One message "Build: run queue" builds READY section 1 rows in order, one at a time, up to `3` rows, each with review, gate and its own landing, then one summary | now | today: needs only the stop rules below |
+| B0, queue runs (**approved**: user typed "Build: run queue" 2026-11-17 after this section was proposed) | One message "Build: run queue" builds READY section 1 rows in order, one at a time, up to `3` rows, each with review, gate and its own landing, then one summary | now | today: needs only the stop rules below |
 | B1, nightly | A routine sends "Build: run queue" to the Build thread once a night (cap `3` rows); Design keeps the queue filled | after `PR7-4`..`PR7-7` land (image goldens, replays, balance bands, CI on `develop`) | the guardrails catch what review cannot |
 | B2, chained | Design, Build and `audit-build` chain as section 1; releases stay on "release now" until stage 2 | after one clean B1 week | section 5 stage 1 |
 
