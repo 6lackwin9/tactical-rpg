@@ -84,6 +84,15 @@ Playtest notes are the user's main input, so each one has one route and one owne
 4. **Recordings**: a recording stays in `playtests/inbox/` until its row lands; Build moves it to `playtests/repro/` in that landing commit (a regression replay) or deletes it when it has no repro value.
 5. **Out**: the next reply to the user lists what happened to each `PT-nn`. The `DESIGN_REVIEW.md` playtest rows and `games/emberwake/docs/NEEDS_YOUR_EYES.md` are the user's playtest checklist, owned by Design since the split.
 
+## Missing-asset intake (user 2026-11-17)
+
+Build never waits on art: a row that needs a missing asset lands with a placeholder at the final path (decision
+"Placeholder-first assets") and logs it in `FEEDBACK.md` as an `asset-request` item (path, use, size, which row), then
+messages the Design thread. Design picks it up without asking the user: it writes the request into the
+`ART_UI_REQUESTS.md` Inbox as an `AI-nn` row (canon and style-bible notes, prompt hints, the final path) and messages the
+Art/UI thread. Art/UI queues image generation on the Drive `image_pipeline` where needed and replaces the placeholder in
+place; paid runs and the style lock still go to the user.
+
 ## Context hygiene (token use)
 
 Cost grows with the thread's context size times its turns (user dashboard 2026-10-17: ~98% of tokens were cache reads), so keep the thread's own context small:
