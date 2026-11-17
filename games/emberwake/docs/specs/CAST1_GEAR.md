@@ -19,10 +19,10 @@ block_cost, burden] (sprayer adds range), `modifier_kinds` [adjust, stat_bonus, 
 | `scourge` | Scourge | main_1h | DEX, STR | slash | 12 | 1 (1-1) | 0 (0-2) | 8-18 | [reach] | 1-2 |
 | `censer` | Censer | main_1h | INT, STR | blunt | 11 | 1 (1-1) | 1 (0-3) | 8-18 | [] | 1 |
 | `bone_saw` | Bone-Saw | main_1h | DEX, STR | slash | 14 | 1 (1-1) | 0 (0-2) | 10-20 | [] | 1 |
-| `sprayer` | Chemical Sprayer | main_2h | INT | fire | 18 | 3 (2-4) | 1 (0-3) | 14-24 | [always_ranged] | ranged band 2-3 |
+| `sprayer` | Chemical Sprayer | main_1h | INT | fire | 18 | 3 (2-4) | 1 (0-3) | 14-24 | [always_ranged] | ranged band 2-3 |
 
 Notes: the censer stays reach 1 (only polearm and scourge carry the reach rule, Q-70, TQ8). The sprayer's fire type
-is cosmetic in Act 1 (no damage-type resist exists, G11). Billhook = polearm (one family, Q-71's "billhook/polearm").
+is cosmetic in Act 1 (no damage-type resist exists, G11). Billhook = polearm (one family, Q-71's "billhook/polearm"). One-handed: CANON 5.2 and the data make the billhook and the sprayers 1H (ruling F3, 2026-11-17).
 
 ## 2. Items (`items.json`, CAST1-A1)
 
@@ -31,7 +31,7 @@ modifiers as listed; `slot` BODY for armour):
 
 | Id | Name | Family, hand | Weight | Value | Modifiers | Effects | Used by |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `notched_billhook` | Notched Billhook | polearm main_2h | 4.0 | 40 | req STR 12 | - | Kaelen |
+| `notched_billhook` | Notched Billhook | polearm main_1h | 4.0 | 40 | req STR 12 | - | Kaelen |
 | `castellan_breastplate` | Dented Cuirass | plate | 8.0 | 60 | req CONS 12 | - | Kaelen |
 | `curfew_bodkin` | Curfew Bodkin | dagger main_1h | 0.8 | 35 | power +1; req DEX 11 | - | Vesper |
 | `soot_leathers` | Soot Leathers | leather | 2.5 | 30 | req DEX 10 | - | Vesper |
@@ -42,7 +42,7 @@ modifiers as listed; `slot` BODY for armour):
 | `poachers_brigandine` | Poacher's Coat | leather | 3.0 | 40 | mitigation +1; req DEX 10 | - | Hollis |
 | `penal_shackles` | Penal Shackles | fist main_1h | 1.5 | 20 | power +2; req STR 10 | - | Dunstan |
 | `penal_foundry_apron` | Foundry Apron | leather | 4.0 | 35 | mitigation +2; burden +1 | resist burn 25 | Dunstan |
-| `brass_vitriol_sprayer` | Brass Sprayer | sprayer main_2h | 3.5 | 50 | req INT 12 | - | Elyse |
+| `brass_vitriol_sprayer` | Brass Sprayer | sprayer main_1h | 3.5 | 50 | req INT 12 | - | Elyse |
 | `tanners_rubbered_coat` | Rubbered Coat | cloth | 1.5 | 30 | - | resist poison 25 | Elyse |
 | `watch_hookbill` | Watch Hookbill | axe main_1h | 2.0 | 30 | req STR 10 | - | Footmen |
 | `watch_heater` | Heater Shield | shield off | 3.5 | 35 | mitigation -1; req STR 11 | - | Footmen |
@@ -51,7 +51,7 @@ modifiers as listed; `slot` BODY for armour):
 | `stirrup_arbalest` | Stirrup Arbalest | crossbow main_2h | 4.0 | 40 | req DEX 11 | - | Crossbowmen |
 | `bailiff_maul` | Bailiff's Maul | hammer main_2h | 6.5 | 60 | req STR 13 | - | Bailiff Enforcer |
 | `penitent_scourge` | Penitent Scourge | scourge main_1h | 1.5 | 20 | - | - | Flagellants |
-| `pyre_nozzle` | Pyre Nozzle | sprayer main_2h | 4.0 | 45 | - | - | Purifiers |
+| `pyre_nozzle` | Pyre Nozzle | sprayer main_1h | 4.0 | 45 | - | - | Purifiers |
 | `warded_apron` | Warded Apron | leather | 4.0 | 40 | mitigation +2 | resist burn 25 | Purifiers |
 | `boning_knife` | Boning Knife | dagger main_1h | 0.8 | 20 | - | - | Dredgers |
 | `skinners_apron` | Skinner's Apron | leather | 2.5 | 20 | - | - | Dredgers |

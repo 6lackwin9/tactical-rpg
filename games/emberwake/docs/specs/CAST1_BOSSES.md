@@ -4,7 +4,7 @@ Status: locked for Act 1 authoring (`2026-11-11`; updated for `CL-01`, `CL-08`, 
 Lore: [CANON.md](../lore/CANON.md) 3.2, [STORY_GUIDE.md](../lore/STORY_GUIDE.md) (a boss = a template, an innate trait, an altered maneuver and a capstone a phase
 unlocks). Rules as CAST1_BESTIARY 1 (no AP, recovery blocks, the AI table, one world character per unit). Phases use
 shipped `rpgkit_battle` effects (`line`, `talk`, `wave`, `status`, `ai`, `enrage`, `deck`, `kill`), `ENCOUNTER2`'s `unkillable` and
-`timeout_outcome`, and `BIGUNIT1`'s `footprint: 2` (`calcified_amalgam`). `HOOKS1-Q`'s unbuilt `spare_once`/`spared` is retired
+`timeout_outcome`, and an oversized 1 x 1 sprite for `calcified_amalgam` (ruling F6, 2026-11-17; superseded the same day: the Amalgam gets `BIGUNIT1`'s real `footprint: 2` in `PR7-12`). `HOOKS1-Q`'s unbuilt `spare_once`/`spared` is retired
 in favour of `hp_below: 35` + `regen` on Proctor Quell so M2 avoids immortality/burst-heal stalls (`P-COMBAT-03`). Hook notation as CAST1_FOUNDERS 1. All numbers FP.
 
 Capstones (G19 through HOOKS1 10.1): each capstone is in the boss unit's `extra_skills` from the start but not in its
