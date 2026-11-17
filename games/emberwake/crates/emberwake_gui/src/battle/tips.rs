@@ -657,6 +657,10 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     if let Some(g) = held_guard(s, i) {
         t.push((format!("Held guard {:.0}% through B{}", g.mitigation * 100.0, g.last_block), HELD));
     }
+    // PR7-3 (review N3): a dulled weapon and its penalty (rule durability)
+    for weapon in dulled_weapons(u) {
+        t.push((dulled_line(&weapon), th().foe));
+    }
     // RULESET1-U slice 3 (GD5): a stealthed unit that moved this round is lost to attacks locked on it
     if ri::hidden(w, i) {
         // good news on a hero, a warning on an enemy
@@ -708,6 +712,21 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
         t.push(("Left the battle".into(), th().dim));
     }
     t
+}
+
+/// PR7-3 (review N3): the party card's badge text while a weapon is dulled.
+pub(super) const DULLED_BADGE: &str = "Dulled";
+
+/// PR7-3 (review N3): the names of unit `u`'s dulled weapons (a tracked weapon at 0 durability, `Unit::dulled`), main
+/// hand first; empty without the rule durability or tracked wear.
+pub(super) fn dulled_weapons(u: &emberwake_rules::unit::Unit) -> Vec<String> {
+    use emberwake_rules::gear::Slot;
+    [Slot::MainHand, Slot::OffHand].into_iter().filter(|s| u.dulled(*s)).map(|s| u.inventory.get(s).map_or_else(|| "Weapon".to_string(), |e| e.item.name.clone())).collect()
+}
+
+/// PR7-3 (review N3): the tip line of a dulled weapon ("Iron Sword dulled: -50% weapon power until repaired.").
+pub(super) fn dulled_line(weapon: &str) -> String {
+    format!("{weapon} dulled: {} until repaired.", crate::hub::dulled_penalty())
 }
 
 /// PK3: downed status banner and tone (`Dead`, `Bleeds out in {n} round(s)`, or classic `Down`).

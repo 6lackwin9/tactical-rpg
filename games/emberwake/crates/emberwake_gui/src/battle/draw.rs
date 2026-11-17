@@ -8,7 +8,7 @@ use super::overlays::{overlay_of, reach_text, Layers};
 use super::playback::PlaySpeed;
 use super::{Action, BattleScreen, ALLY, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, POISE, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
 use super::skill_menu::CHANNEL_TINT;
-use super::tips::{action_channel_note, ap_blocks, ap_gauge_of, ap_held_text, channel_action, channel_block, channel_fill, downed_banner, planned_channel_note, class_names, committed, committed_icon_chains, derived_line, derived_rows, draw_ap_pips, draw_badge_row, draw_block_label, inspect_tip, intent_glyph, kind_color, kind_icon, next_action, short_name, stance_name, unit_tip, ApAnim, ApPips, BlockLook, AP_PIP, REST_BLOCK};
+use super::tips::{action_channel_note, ap_blocks, ap_gauge_of, ap_held_text, channel_action, channel_block, channel_fill, downed_banner, planned_channel_note, class_names, committed, committed_icon_chains, derived_line, derived_rows, draw_ap_pips, draw_badge_row, draw_block_label, dulled_line, dulled_weapons, inspect_tip, intent_glyph, kind_color, kind_icon, next_action, short_name, stance_name, unit_tip, ApAnim, ApPips, BlockLook, AP_PIP, DULLED_BADGE, REST_BLOCK};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::intent_text;
 use crate::portraits::{Faces, Who};
@@ -478,7 +478,20 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         if let Some(i) = glyph {
             intent_glyph(&mut ui.p, &w.cat, i, Rect::new(r.x + r.w - 13, r.y + 1, 10, 10));
         }
-        ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 1.5, &u.name, BODY, if glyph.is_some() { 94.0 } else { 108.0 }, if u.is_active() { ALLY } else { th().dim });
+        // PR7-3 (review N3): a dulled weapon's badge left of the glyph (the name gives way), its tip the penalty
+        let dulled = dulled_weapons(u);
+        let badge_w = if dulled.is_empty() {
+            0
+        } else {
+            let bw = (ui.p.text_w(DULLED_BADGE, SMALL) + 6.0).ceil() as i32;
+            let br = Rect::new(r.x + r.w - if glyph.is_some() { 15 } else { 2 } - bw, r.y + 2, bw, 10);
+            ui.p.panel(br, with_alpha(th().foe, 60), th().foe, 2.0);
+            ui.p.text(br.x as f32 + 3.0, br.y as f32 + (br.h as f32 - ui.p.line_h(SMALL)) / 2.0, DULLED_BADGE, SMALL, th().foe);
+            let tip: Vec<(String, Rgba)> = std::iter::once(("Weapon dulled".to_string(), th().foe)).chain(dulled.iter().map(|x| (dulled_line(x), th().text))).collect();
+            ui.push(format!("party.{a}.dulled"), "badge", dulled.iter().map(|x| dulled_line(x)).collect::<Vec<_>>().join("; "), br, true, false, None, tip);
+            bw + 2
+        };
+        ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 1.5, &u.name, BODY, if glyph.is_some() { 94.0 } else { 108.0 } - badge_w as f32, if u.is_active() { ALLY } else { th().dim });
         // VISCLAR1-D (mock `party_ap`): HP, poise and AP each a row, its number beside it at the card's right edge
         let number = |ui: &mut Ui<Action>, row: Rect, text: &str, col: Rgba| {
             let (right, shown) = (rows.right as f32, ui.p.fit(text, SMALL, (r.x + r.w - 2 - rows.right + rows.number_w) as f32));

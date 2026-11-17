@@ -10,7 +10,7 @@ use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_world::state::{GameState, UnitState};
-use emberwake_world::{progression, quest, roster, save};
+use emberwake_world::{mastery, progression, quest, roster, save};
 use serde_json::{json, Value};
 use crate::portraits::{Faces, Who};
 use emberwake_battle::portrait::Look;
@@ -434,6 +434,12 @@ pub struct Results {
     /// PR5-26 review F2 (`battle::apply`'s `cleared`): the slots left empty because their default is refused (member,
     /// slot).
     cleared: Vec<(String, String)>,
+    /// PR7-3 (review N3; `battle::apply`'s `remains`, `mastery` and `wear`): what fallen members left in the stash
+    /// (member, item), the weapon mastery gained by use, and the battle's wear on the weapon instances (the rows as the
+    /// kit wrote them: member, slot, uid, item, worn, durability, dulled).
+    remains: Vec<(String, String)>,
+    mastery: Vec<mastery::Gain>,
+    wear: Vec<Dict>,
     w: Vec<Widget<ResAct>>,
 }
 
@@ -520,6 +526,41 @@ pub fn settle_lines(d: &emberwake_world::Data, gs: &GameState, tracks: &[(String
     out
 }
 
+/// How a graft-era line of the results reads (its colour).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GraftLine {
+    Remains,
+    Mastery,
+    Wear,
+    Dulled,
+}
+
+/// The text of the dulled penalty: the weapon power a dulled weapon loses (`DULLED_POWER_MULT`), "-50% weapon power".
+pub fn dulled_penalty() -> String {
+    format!("-{:.0}% weapon power", (1.0 - emberwake_rules::gear::DULLED_POWER_MULT) * 100.0)
+}
+
+/// PR7-3 (review N3): the results' graft-era lines after the settle lines: each remains a fallen member left ("Remains:
+/// Bone Graft from Ash, to the stash."), each mastery gain by use (the kit's `mastery::note`: "Ash: sword mastery +10
+/// (level 1)."), then each worn weapon ("Ash's Iron Sword wore 3: 7 left.") and, when it ended at 0, its dulled line
+/// ("Ash's Iron Sword is dulled: -50% weapon power until repaired."). Nothing for a result without the keys.
+pub fn graft_lines(d: &emberwake_world::Data, gs: &GameState, remains: &[(String, String)], gains: &[mastery::Gain], wear: &[Dict]) -> Vec<(String, GraftLine)> {
+    let name = |member: &str| {
+        let departed = || gs.party.departed.iter().rev().find(|x| x.member.id == member).map(|x| progression::display_name(d, &x.member));
+        gs.party.member(member).map(|m| progression::display_name(d, m)).or_else(departed).unwrap_or_else(|| member.to_string())
+    };
+    let mut out: Vec<(String, GraftLine)> = remains.iter().map(|(member, item)| (format!("Remains: {} from {}, to the stash.", d.item_name(item), name(member)), GraftLine::Remains)).collect();
+    out.extend(gains.iter().map(|g| (mastery::note(d, gs, g), GraftLine::Mastery)));
+    for x in wear {
+        let (who, item) = (name(&s(x, "member")), d.item_name(&s(x, "item")));
+        out.push((format!("{who}'s {item} wore {}: {} left.", json::i(x, "worn", 0), json::i(x, "durability", 0)), GraftLine::Wear));
+        if json::b(x, "dulled", false) {
+            out.push((format!("{who}'s {item} is dulled: {} until repaired.", dulled_penalty()), GraftLine::Dulled));
+        }
+    }
+    out
+}
+
 /// REWARD1 section 7: the tally line ("Foes defeated: 3 of 5 (2 slain, 1 surrendered)."), the outcome's note, and the
 /// reward lines (share gold, objective bonus, drops merged by item, key loot, missed key loot); `name(kind, id)` gives
 /// an item's, a loot entry's or a character's name; `currency` is the currency's short form in the battle's world
@@ -600,6 +641,9 @@ impl Results {
             tracks: json::aget(res, "tracks").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "track"), json::i(x, "from", 0), json::i(x, "to", 0))).collect(),
             stashed: json::aget(res, "stashed").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "item"))).collect(),
             cleared: json::aget(res, "cleared").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "slot"))).collect(),
+            remains: json::aget(res, "remains").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "item"))).collect(),
+            mastery: json::aget(res, "mastery").iter().filter_map(Value::as_object).map(|x| mastery::Gain { member: s(x, "member"), family: s(x, "family"), from: json::i(x, "from", 0), to: json::i(x, "to", 0) }).collect(),
+            wear: json::aget(res, "wear").iter().filter_map(Value::as_object).cloned().collect(),
             w: Vec::new(),
         }
     }
@@ -678,6 +722,17 @@ impl Screen<GameCx> for Results {
             ui.p.text(24.0, y as f32, &text, BODY + 1.0, th().foe);
             y += line;
         }
+        // PR7-3 (review N3): the remains, the weapon mastery gained and the weapons' wear (a dulled one in the foe ink)
+        for (text, kind) in graft_lines(&d, &gs, &self.remains, &self.mastery, &self.wear) {
+            let col = match kind {
+                GraftLine::Remains => th().gold,
+                GraftLine::Mastery => th().good,
+                GraftLine::Wear => th().dim,
+                GraftLine::Dulled => th().foe,
+            };
+            ui.p.text(24.0, y as f32, &text, BODY + 1.0, col);
+            y += line;
+        }
         let mut prompt = false;
         for m in &gs.party.members {
             let Some(a) = self.award.get(&m.id).and_then(Value::as_object) else { continue };
@@ -738,6 +793,16 @@ impl Screen<GameCx> for Results {
         }
         if !self.cleared.is_empty() {
             out["cleared"] = json!(self.cleared.iter().map(|(m, slot)| json!({"member": m, "slot": slot})).collect::<Vec<_>>());
+        }
+        // PR7-3 (review N3): only when the settle left remains, gained mastery or wore a weapon
+        if !self.remains.is_empty() {
+            out["remains"] = json!(self.remains.iter().map(|(m, i)| json!({"member": m, "item": i})).collect::<Vec<_>>());
+        }
+        if !self.mastery.is_empty() {
+            out["mastery"] = json!(self.mastery.iter().map(|g| json!({"member": g.member, "family": g.family, "from": g.from, "to": g.to, "level": g.level()})).collect::<Vec<_>>());
+        }
+        if !self.wear.is_empty() {
+            out["wear"] = json!(self.wear);
         }
         out
     }
@@ -873,6 +938,48 @@ mod tests {
         assert_clean(&mut r, &mut cx, "results with track moves");
         let none = Results::new(&json::obj([("ok", json!(true))]), "won", &Dict::new());
         assert!(none.state(&cx).get("tracks").is_none() && none.state(&cx).get("stashed").is_none() && none.state(&cx).get("cleared").is_none());
+    }
+
+    /// PR7-3 (review N3): the results draw the settle's remains, mastery gains and weapon wear (`battle::apply`'s
+    /// `remains`, `mastery` and `wear`) after the track lines, a dulled weapon with its penalty line, and the state
+    /// lists them; a worn weapon that is not dulled has no dulled line; no keys, no lines and no state keys. The mastery
+    /// line is the kit's own note; the penalty comes from `DULLED_POWER_MULT` (test-only family and uids).
+    #[test]
+    fn the_results_draw_remains_mastery_and_wear() {
+        let mut cx = game_cx();
+        let member = cx.gs().party.members[0].id.clone();
+        let name = progression::display_name(&cx.data, &cx.gs().party.members[0]);
+        let mut items = cx.data.cat.items.keys().cloned();
+        let (bone, blade, club) = (items.next().expect("an item"), items.next().expect("a second item"), items.next().expect("a third item"));
+        let (bone_name, blade_name, club_name) = (cx.data.item_name(&bone), cx.data.item_name(&blade), cx.data.item_name(&club));
+        let tracks = json!([{"member": member, "track": "t_track", "from": 1, "to": 2}]);
+        let remains = json!([{"member": member, "item": bone}]);
+        let gain = mastery::Gain { member: member.clone(), family: "t_family".into(), from: 0, to: 10 };
+        let mastery_rows = json!([{"member": member, "family": "t_family", "from": 0, "to": 10, "level": gain.level()}]);
+        let wear = json!([
+            {"member": member, "slot": "main_hand", "uid": "t_w1", "item": blade, "worn": 3, "durability": 0, "dulled": true},
+            {"member": member, "slot": "off_hand", "uid": "t_w2", "item": club, "worn": 2, "durability": 5, "dulled": false}
+        ]);
+        let res = json::obj([("ok", json!(true)), ("tracks", tracks), ("remains", remains.clone()), ("mastery", mastery_rows.clone()), ("wear", wear.clone())]);
+        let mut r = Results::new(&res, "won", &Dict::new());
+        let t = texts(&frame(&mut r, &mut cx, &mut gfx(), 1.0));
+        let at = |s: &str| t.iter().position(|x| x == s).unwrap_or_else(|| panic!("{s} in {t:?}"));
+        let track = format!("{name}'s t_track rises to stage 2.");
+        let rem = format!("Remains: {bone_name} from {name}, to the stash.");
+        let mast = mastery::note(&cx.data, cx.gs(), &gain);
+        let worn = format!("{name}'s {blade_name} wore 3: 0 left.");
+        let penalty = format!("-{:.0}% weapon power", (1.0 - emberwake_rules::gear::DULLED_POWER_MULT) * 100.0);
+        let dulled = format!("{name}'s {blade_name} is dulled: {penalty} until repaired.");
+        let other = format!("{name}'s {club_name} wore 2: 5 left.");
+        assert!(at(&track) < at(&rem) && at(&rem) < at(&mast) && at(&mast) < at(&worn) && at(&worn) < at(&dulled) && at(&dulled) < at(&other), "{t:?}");
+        assert!(!t.iter().any(|x| x.contains(&club_name) && x.contains("dulled")), "a weapon with durability left is not dulled: {t:?}");
+        let st = r.state(&cx);
+        assert_eq!((st["remains"].clone(), st["mastery"].clone(), st["wear"].clone()), (remains, mastery_rows, wear));
+        assert_clean(&mut r, &mut cx, "results with remains, mastery and wear");
+        let mut none = Results::new(&json::obj([("ok", json!(true))]), "won", &Dict::new());
+        let t = texts(&frame(&mut none, &mut cx, &mut gfx(), 1.0));
+        assert!(!t.iter().any(|x| x.starts_with("Remains:") || x.contains(" mastery +") || x.contains(" wore ") || x.contains("dulled")), "{t:?}");
+        assert!(["remains", "mastery", "wear"].iter().all(|k| none.state(&cx).get(*k).is_none()));
     }
 
     /// A game whose party has at least `n` members (copies of the first under new ids, test-only members).
