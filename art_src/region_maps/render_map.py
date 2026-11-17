@@ -71,6 +71,13 @@ def tone(im, colour, spread=0.38, cells=8, grey=0.0):
     return im
 
 
+FOOT = 2   # px a standing prop's lowest solid row sits below its footprint edge, so it overlaps the floor it stands on
+
+
+def _fade(img, k):
+    out = img.copy(); out.putalpha(img.split()[3].point(lambda v: round(v * k))); return out
+
+
 def find(folder, stem, take):
     f = glob.glob(str(pathlib.Path(folder) / f"{stem}_q*_{take}.png"))
     return Image.open(sorted(f)[-1]) if f else None   # the latest request of that name (a re-run wins)
@@ -325,20 +332,30 @@ def render(loc, tiles_dir, props_root, out, inside=""):
             a = into_wall(a, p)
             p = dict(p, no_shadow=True)
         x = (p["x"] + M) * T + (p["w"] * T - a.width) // 2
+        # the art's solid pixels only: generated props carry faint baked shadow pixels (alpha > 0) below their feet,
+        # and measuring from those sat every prop a few pixels above its contact line (Tushar 2026-11-17: "props
+        # seeming not on the ground")
+        solid = a.split()[3].point(lambda v: 255 if v > 128 else 0)
+        box = solid.getbbox() or (0, 0, a.width, a.height)
+        a = Image.composite(a, Image.new("RGBA", a.size, (0, 0, 0, 0)), solid)
+        if p["layer"] == "sort":
+            y = (p["y"] + p["h"] + M) * T - box[3] + (0 if mounted else FOOT)       # the lowest solid pixel lands on the footprint's foot line
         if p["layer"] == "sort" and not p.get("no_shadow"):
-            # a contact shadow under the base, so the prop sits on the floor
-            box = a.getbbox() or (0, 0, a.width, a.height)
-            by = (p["y"] + p["h"] + M) * T - (a.height - box[3])
+            # contact, not a cast shadow (Tushar 2026-11-15: an oval under a front-view prop makes it float): the
+            # prop's own silhouette, nudged down a few pixels and blurred, darkens the floor right where each foot,
+            # leg or base meets it, so legs touch the floor and a block sits in a pool the shape of its base
+            sil = Image.new("L", a.size, 0)
+            sil.paste(solid.crop((0, 0, a.width, box[3])).point(lambda v: 210 if v else 0), (0, 0))
+            low = Image.new("L", a.size, 0)                     # only the base's lowest rows cast contact
+            band = max(4, (box[3] - box[1]) // 6)
+            low.paste(sil.crop((0, box[3] - band, a.width, box[3])), (0, box[3] - band))
             sh2 = Image.new("RGBA", im.size, (0, 0, 0, 0))
-            # no cast shadow (Tushar 2026-11-15: an oval under a front-view prop makes it float): only a thin dark
-            # line where the base meets the floor
-            ImageDraw.Draw(sh2).rectangle([x + box[0] + 1, by - 2, x + box[2] - 1, by + 1], fill=(0, 0, 0, 120))
-            sh2 = sh2.filter(ImageFilter.GaussianBlur(1))
-            im.alpha_composite(sh2)
+            dark = Image.new("RGBA", a.size, (8, 6, 10, 255)); dark.putalpha(low)
+            for dy, k in ((1, 1.0), (3, 0.7), (5, 0.4)):
+                sh2.alpha_composite(_fade(dark, k), (x, y + dy))
+            im.alpha_composite(sh2.filter(ImageFilter.GaussianBlur(1.6)))
         if p["layer"] == "ground":
             y = (p["y"] + M) * T + (p["h"] * T - a.height) // 2
-        else:
-            y = (p["y"] + p["h"] + M) * T - a.height
         im.alpha_composite(a, (x, max(0, y)))
 
     missing = []
