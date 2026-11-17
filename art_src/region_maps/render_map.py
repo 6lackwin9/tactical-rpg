@@ -264,6 +264,16 @@ def render(loc, tiles_dir, props_root, out, inside=""):
                     ImageDraw.Draw(im).rectangle([X0, Y0, X0 + T - 1, Y0 + 2], fill=(132, 130, 140, 255))
             else:
                 im.paste(tiled(top, x, y), (X0, Y0))
+    # the back (north) walls of the top rooms stand two tiles tall, as in the design reference (Tushar 2026-11-17:
+    # "increase the wall length"): the outer border has margin above it, so its face also covers the row above; the
+    # map's walkable rows do not change
+    for x in range(W):
+        if rows[0][x] == "#" and open_at(x, 1):
+            top_, face_, face_dark_ = wall_of(x, 0)
+            X0 = (x + M) * T
+            im.paste(tiled(face_, x, 3), (X0, (M - 1) * T))
+            im.paste(tiled(face_dark_, x, 4), (X0, M * T))
+            ImageDraw.Draw(im).rectangle([X0, (M - 1) * T, X0 + T - 1, (M - 1) * T + 2], fill=(132, 130, 140, 255))
     top, face, face_dark = sets[bset]
     edge = ImageDraw.Draw(im)
     for y in range(-1, H + 1):
