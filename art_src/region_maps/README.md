@@ -49,6 +49,9 @@ After a re-cut, copy `target/review/propcut/games/emberwake/assets/props/sunk_wa
 
 ## Open, in order
 
+Process for every map, the hub included (Tushar, 2026-11-17): first a layout reference image of the whole map, then
+rebuild that look with terrain tiles and props, shown side by side with the reference (ART_UI_STUDIO 3.3).
+
 1. The hub's gate arch and bunks were drawn for a taller wall and look cramped in a one-tile face: redraw them for
    that height (a full sluice gate arch 4 wide; a single-tier bunk niche 2 wide), or make walls two tiles tall.
 2. Wall-mounted props on side walls: no art yet (the model draws them front-on). Try single-prop prompts that
