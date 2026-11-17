@@ -1,0 +1,564 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "orig_watch_shield",
+    "name": "Watch Levy's Shield",
+    "description": "Drilled behind a Watch shield: +6 Max Poise.",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "max_poise",
+      "value": 6
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "orig_crag_eye",
+    "name": "Crag Eye",
+    "description": "Outwall bolt-man's eye: +1 PERC.",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "PERC",
+      "value": 1
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "orig_soot_step",
+    "name": "Soot Step",
+    "description": "Flue-runner's footing: 20% resistance to Slow.",
+    "effects": [
+     {
+      "type": "resist",
+      "status": "slow",
+      "value": 20
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "orig_mortuary_calm",
+    "name": "Mortuary Calm",
+    "description": "Charnel-novice's composure: +1 KNOW.",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "KNOW",
+      "value": 1
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "orig_slag_grip",
+    "name": "Slag Grip",
+    "description": "Kiln chain-breaker's grip: +1 STR.",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "STR",
+      "value": 1
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "orig_alum_nose",
+    "name": "Alum Nose",
+    "description": "Vat-still saboteur's nose: +1 INT.",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "INT",
+      "value": 1
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_tpl_warrior",
+    "name": "Shield Strap",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.1,
+    "value": 0,
+    "description": "A worn Watch shield strap. A recruit's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_tpl_warrior",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "CONS",
+      "value": 1
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "stun",
+       "value": 10
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_tpl_ranger",
+    "name": "Fletching Charm",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.1,
+    "value": 0,
+    "description": "A charm of bound fletching. A recruit's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_tpl_ranger",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "PERC",
+      "value": 1
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "root",
+       "value": 10
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_tpl_rogue",
+    "name": "Lockpick Ring",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.1,
+    "value": 0,
+    "description": "A ring set with a bent pick. A recruit's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_tpl_rogue",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "DEX",
+      "value": 1
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "slow",
+       "value": 10
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_tpl_priest",
+    "name": "Prayer Cord",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.1,
+    "value": 0,
+    "description": "A knotted prayer cord. A recruit's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_tpl_priest",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "KNOW",
+      "value": 1
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "poison",
+       "value": 10
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_tpl_brawler",
+    "name": "Knuckle Wrap",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.1,
+    "value": 0,
+    "description": "A blackened knuckle wrap. A recruit's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_tpl_brawler",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "STR",
+      "value": 1
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "stagger",
+       "value": 10
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_tpl_mage",
+    "name": "Ash Vial",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.1,
+    "value": 0,
+    "description": "A stoppered vial of ash. A recruit's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_tpl_mage",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "INT",
+      "value": 1
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "burn",
+       "value": 10
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recruits",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "cohort_levy",
+    "name": "Turncoat Watch Levy",
+    "class_id": "warrior",
+    "base_units": [
+     "warrior"
+    ],
+    "names": [
+     "Tobin",
+     "Rennick",
+     "Aldous",
+     "Garrow",
+     "Hesk",
+     "Wend",
+     "Cade"
+    ],
+    "age_band": [
+     18,
+     24
+    ],
+    "art": "portraits/common/warrior_cohort_levy.png",
+    "origins": [
+     "orig_watch_shield"
+    ],
+    "temperaments": [],
+    "level": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recruits",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "cohort_bolt",
+    "name": "Outwall Bolt-Man",
+    "class_id": "ranger",
+    "base_units": [
+     "ranger"
+    ],
+    "names": [
+     "Fenn",
+     "Orrin",
+     "Sela",
+     "Brannoch",
+     "Tamsin",
+     "Jory",
+     "Lisk"
+    ],
+    "age_band": [
+     18,
+     24
+    ],
+    "art": "portraits/common/ranger_cohort_bolt.png",
+    "origins": [
+     "orig_crag_eye"
+    ],
+    "temperaments": [],
+    "level": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recruits",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "cohort_flue",
+    "name": "Ash-Crawl Flue-Runner",
+    "class_id": "rogue",
+    "base_units": [
+     "rogue"
+    ],
+    "names": [
+     "Pip",
+     "Nettle",
+     "Sootie",
+     "Kestrel",
+     "Ravi",
+     "Dree",
+     "Mott"
+    ],
+    "age_band": [
+     18,
+     24
+    ],
+    "art": "portraits/common/rogue_cohort_flue.png",
+    "origins": [
+     "orig_soot_step"
+    ],
+    "temperaments": [],
+    "level": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recruits",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "cohort_novice",
+    "name": "Apostate Charnel-Novice",
+    "class_id": "priest",
+    "base_units": [
+     "priest"
+    ],
+    "names": [
+     "Anselm",
+     "Ysolde",
+     "Merrow",
+     "Cato",
+     "Wren",
+     "Linnet",
+     "Osric"
+    ],
+    "age_band": [
+     18,
+     24
+    ],
+    "art": "portraits/common/priest_cohort_novice.png",
+    "origins": [
+     "orig_mortuary_calm"
+    ],
+    "temperaments": [],
+    "level": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recruits",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "cohort_breaker",
+    "name": "Kiln Chain-Breaker",
+    "class_id": "brawler",
+    "base_units": [
+     "brawler"
+    ],
+    "names": [
+     "Brack",
+     "Odell",
+     "Grisk",
+     "Harl",
+     "Dagna",
+     "Torv",
+     "Mace"
+    ],
+    "age_band": [
+     18,
+     24
+    ],
+    "art": "portraits/common/brawler_cohort_breaker.png",
+    "origins": [
+     "orig_slag_grip"
+    ],
+    "temperaments": [],
+    "level": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recruits",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "cohort_vat",
+    "name": "Vat-Still Saboteur",
+    "class_id": "mage",
+    "base_units": [
+     "mage"
+    ],
+    "names": [
+     "Quillon",
+     "Settra",
+     "Ilya",
+     "Corwin",
+     "Pell",
+     "Vesna",
+     "Thane"
+    ],
+    "age_band": [
+     18,
+     24
+    ],
+    "art": "portraits/common/mage_cohort_vat.png",
+    "origins": [
+     "orig_alum_nose"
+    ],
+    "temperaments": [],
+    "level": ""
+   }
+  },
+  {
+   "op": "world",
+   "id": "sunk_ward",
+   "fields": {
+    "roster": {
+     "bunks": 6,
+     "bunks_max": 8,
+     "keepsakes": {
+      "on": [
+       "captured",
+       "dead",
+       "lost"
+      ],
+      "by_class": {
+       "warrior": "keepsake_tpl_warrior",
+       "ranger": "keepsake_tpl_ranger",
+       "rogue": "keepsake_tpl_rogue",
+       "priest": "keepsake_tpl_priest",
+       "brawler": "keepsake_tpl_brawler",
+       "mage": "keepsake_tpl_mage"
+      }
+     },
+     "rules": [
+      {
+       "acts": [
+        0,
+        1
+       ],
+       "bleed_out_rounds": 0,
+       "downed_won": "wounded",
+       "downed_left": "wounded",
+       "downed_lost": "wounded",
+       "standing_lost": "wounded",
+       "wounded_max_hp_pct": 20
+      },
+      {
+       "acts": [
+        2,
+        3
+       ],
+       "bleed_out_rounds": 3,
+       "downed_won": "wounded",
+       "downed_left": "captured",
+       "downed_lost": "dead",
+       "standing_lost": "wounded",
+       "keepsakes_on": [
+        "captured",
+        "dead"
+       ],
+       "wounded_max_hp_pct": 20
+      }
+     ],
+     "crypts": 2
+    }
+   }
+  }
+ ]
+}

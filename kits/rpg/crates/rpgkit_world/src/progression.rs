@@ -129,8 +129,12 @@ pub fn character_of<'a>(d: &'a Data, state: &UnitState) -> &'a Dict {
     }
 }
 
-/// The member's name: its character's, else the base unit's, else its id.
+/// The member's name: its own (`name`, a procedural recruit's, ROSTER1 PG2), else its character's, else the base
+/// unit's, else its id.
 pub fn display_name(d: &Data, state: &UnitState) -> String {
+    if !state.name.is_empty() {
+        return state.name.clone();
+    }
     let c = character_of(d, state);
     let name = json::s(c, "name");
     if !c.is_empty() && !name.is_empty() {
@@ -219,7 +223,8 @@ pub(crate) fn build_unchecked(d: &Data, state: &UnitState, world: &str, auto_spe
     let growth = Growth {
         deck: work.deck.clone(),
         learned_skills: work.learned_skills.clone(),
-        equipment: work.equipment.iter().filter_map(|(slot, id)| Some((Slot::parse(slot)?, cat.items.get(id)?.clone()))).collect(),
+        // KS3: a worn keepsake instance builds as its template row renamed (`UnitState::item_def`)
+        equipment: work.equipment.iter().filter_map(|(slot, id)| Some((Slot::parse(slot)?, cat.items.get(id).cloned().or_else(|| work.keepsake(id).and_then(|k| k.item_def(d)))?))).collect(),
         pouch: work.pouch.iter().filter_map(|id| cat.items.get(id).cloned()).collect(),
         loadout: (!work.loadout_class.is_empty() || !work.loadout_extra.is_empty()).then(|| (work.loadout_class.clone(), work.loadout_extra.clone())),
         ranks: work.loadout_ranks.iter().map(|(k, v)| (k.clone(), *v as i32)).collect(),
@@ -256,7 +261,10 @@ pub(crate) fn build_unchecked(d: &Data, state: &UnitState, world: &str, auto_spe
 pub fn member_passives(d: &Data, state: &UnitState) -> Vec<String> {
     let world = aegis_content::split_qid(&state.lore_ref).map(|(w, _)| w).unwrap_or_default();
     let mut out = d.character_passives(character_of(d, state), &world);
-    for id in state.passives.iter().chain(&track_passives(d, state)) {
+    // PK3 3.1 (ROSTER1 TP2, FZ3, FZ4): a procedural member's saved temperament and origin (slotless), then its fuse's
+    // tier passives (cumulative) and, on a last stand, the last passive
+    let own: Vec<String> = [&state.temperament, &state.origin].into_iter().filter(|p| !p.is_empty()).cloned().chain(crate::roster::fuse_passives(d, state)).collect();
+    for id in own.iter().chain(&state.passives).chain(&track_passives(d, state)) {
         if !out.contains(id) {
             out.push(id.clone());
         }
