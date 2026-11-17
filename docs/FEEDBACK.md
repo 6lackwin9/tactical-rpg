@@ -11,6 +11,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | --- | --- | --- | --- |
 | R1 to PR6-3, PR6-5 (excl. PR6-4; `FB-01`..`FB-281`, `UN-01`..`UN-12`) | released or done | `main` / `develop` (`f132eabc`) | Archived in `docs/archive/FEEDBACK_CLOSED.md` (moved 2026-11-17) |
 | `PR6-4` (`PK3-RECRUITS-KEEPSAKES`) | done with parked clauses (`FB-282`, `FB-283`, `FB-284`) | `develop` (squash `PR6-4`) | Kit recruits/pool/crypts/fuse/keepsakes + `sunk_ward` seed `pr6_4.json`; temperaments, Martyr fuse data and the Retire/Last Stand prompt parked |
+| `PR7-1` (`FIX-TEXT1`) | done | `develop` (squash `PR7-1`) | `sunk_ward` text fixes, seed `pr7_1.json`; new copy `[PROVISIONAL]` in `FB-286` |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -49,6 +50,15 @@ FB-01 to FB-281 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Status**: open
 - **Finding**: Kit: world kind `recruits` (`recruits.json`, `WORLD_KINDS` 20); effects `rescue {template|character, base_unit?, count 1..4}` (seeded `recruit` roll stream, no name collisions) and `recruit {pool: id|first, level?}`; `roster::{rescue, swear_in, retire, dismiss}`; `UnitState` `name`/`housing`/`fuse`/`origin` plus `temperament`, `template` (needed for fuse and portrait lookup), `party.pool`, `party.keepsakes` (all skip-if-empty); procedural keepsakes `keepsake@<member>` named "{name}'s {item}", wear-legal accessory, one per template per unit. Data (`seeds/pr6_4.json`): six `orig_*` passives, six `keepsake_tpl_*` items, six `cohort_*` recruit rows with provisional given names (7 each), `sunk_ward` roster `crypts: 2` and `keepsakes.by_class`. Retire, dismiss and last-stand departures use cause `roster`. `units/mage` has no `base` body (only `1h_sprayer`); the mage cohort uses the class-derived `mage` party unit and asset checks pass. Tests: kit roster/campaign/temperament/roster_schema + `sunk_ward_roster` (6 pass, 1 parked by `FB-282`); 0 golden diffs; `campaign_schema` and `story_checks` pinned effect-list text gained `rescue`.
 - **Recommendation**: `GAME_BRIEF.md` roster section: add the recruits/pool/crypts/fuse/keepsake line above. `HISTORY.md`: none (no golden moved). `STRUCTURE.md`: `worlds/<id>/recruits.json` beside the other world kinds. Art/UI: cohort names are provisional placeholders for a lore pass.
+
+
+### FB-286: PR7-1 provisional copy for Design review
+
+- **Spec**: `READY.md` §1 `PR7-1`, [2026-11-17 review](audits/2026-11-17_11d320a_consistency_audit.md) "Lore and data" (@squash `PR7-1`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: `PLACEHOLDER` copy replaced (`[PROVISIONAL]`, from `CANON.md`). Meters: `alert/a_suspicious` "The Inquisition is Suspicious: the ward gates are watched. Quiet jobs and bribes at Talia lower Alert."; `alert/a_lockdown` "Lockdown: Inquisition hunter packs and Castellan Watch sweeps hold the main roads."; `alert/a_last` "One more loud job and the Inquisition finds the grate. The run would end."; `doom_clock/d_week` "Seven days to the Red Tithing.". Faction descriptions: `iron_inquisition` "The church's hunters: bell sweeps, stockades and vivisection slabs; the Castellan Watch is its city arm."; `castellan_watch` "The city watch: curfews, ward gates and Tithing sweeps under Inquisition writ."; `tallow_guild` "Renders the district's Spent dead into Warded Tallow; its mercenaries scour the cellars."; `fourth_kiln_syndicate` "The Guild's foundry arm: casts brass conduits and runs the bone-mill.". The four `q_hook_*` rewards now say Scrap; `q_a1_m5` and `loot_hearth_ingot_cache` say "The Crucible". Faction `motto` fields stay empty. Test `emberwake_world/tests/sunk_ward_text.rs` (3 tests); 0 golden diffs.
+- **Recommendation**: Design reviews the copy above and, if wanted, writes faction mottos (still empty) as a data row. `HISTORY.md`: quest `q_a1_m5` "The Drowned Sluice" renamed "The Crucible" (PR7-1). Note: older seeds (`act1fix1.json`, `act1story.json`, `pr6_5_act2_drops_flags.json`) still carry the old text; harmless while `pr7_1.json` applies after them.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
