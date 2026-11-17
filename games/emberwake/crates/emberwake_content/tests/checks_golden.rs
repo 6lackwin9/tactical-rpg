@@ -186,13 +186,14 @@ fn checks_report_their_golden() {
 const WORLD_KINDS_IN_GOLDEN: [&str; 13] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops", "routes"];
 
 /// World kinds whose checks live in the kit's tests (`kits/rpg/crates/rpgkit_content/tests/`), not in this golden.
-const WORLD_KINDS_ELSEWHERE: [(&str, &str); 6] = [
+const WORLD_KINDS_ELSEWHERE: [(&str, &str); 7] = [
     ("meters", "campaign_schema.rs"),
     ("checkpoints", "campaign_schema.rs"),
     ("triggers", "campaign_schema.rs"),
     ("vignettes", "story_checks.rs"),
     ("sequences", "story_checks.rs"),
     ("boards", "story_checks.rs"),
+    ("recruits", "roster_schema.rs"),
 ];
 
 /// Every check family is exercised: each catalog kind the checks cover and each old world kind has cases, at least one

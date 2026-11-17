@@ -13,6 +13,9 @@ pub const TRAVEL: &str = "travel";
 pub const LOOT: &str = "loot";
 /// T1.2-S2 (FB-54b): one draw 1..dialogue_roll_die per dialogue `roll` effect, at choice time only (never on a redraw).
 pub const DIALOGUE: &str = "dialogue";
+/// ROSTER1 PG2 (PK3 3.1): a `rescue` from a recruit template draws its base unit, name, origin and temperament here, in
+/// that order (one draw per list with more than one choice).
+pub const RECRUIT: &str = "recruit";
 
 pub fn roll(gs: &mut GameState, stream: &str) -> i64 {
     let n = gs.rolls.get(stream).map(json::to_int).unwrap_or(0);

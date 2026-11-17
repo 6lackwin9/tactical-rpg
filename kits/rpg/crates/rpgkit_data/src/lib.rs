@@ -1767,6 +1767,135 @@ impl RosterManifest {
         let base = if self.bunks == 0 { party_max } else { self.bunks };
         (base + flag_value.max(0)).min(self.bunks_max.max(base))
     }
+
+    /// KS3: the procedural keepsake's display name: `keepsake_name` with `{name}` the member's name and `{item}` the
+    /// template item's name.
+    pub fn keepsake_display(&self, member: &str, item: &str) -> String {
+        self.keepsake_name.replace(KEEPSAKE_NAME_TOKENS[0], member).replace(KEEPSAKE_NAME_TOKENS[1], item)
+    }
+}
+
+// ---- Recruits, the pool, Living Martyrs (ROSTER1-P/-M, PK3 3, kit hook; engine-only, no Godot original) ----------
+
+/// PG1, 11.3: the world kind of procedural recruit templates (`recruits.json`).
+pub const RECRUITS_KIND: &str = "recruits";
+/// PO1, 11.3: the most pool entries one `rescue` adds (`count` 1..).
+pub const RESCUE_COUNT_MAX: i64 = 4;
+/// PO1, 11.3: the keys of the `rescue` effect besides `effect`.
+pub const RESCUE_KEYS: [&str; 4] = ["template", "character", "base_unit", "count"];
+/// PO2, PO4: the `recruit` effect's `pool` value that swears in the first waiting entry.
+pub const POOL_FIRST: &str = "first";
+/// PG2: the id prefix of a procedural member (`recruit_<n>`, n = 1 + the highest used).
+pub const RECRUIT_ID_PREFIX: &str = "recruit_";
+/// KS3: the id prefix of a procedural keepsake instance (`keepsake@<member>`).
+pub const KEEPSAKE_INSTANCE_PREFIX: &str = "keepsake@";
+/// PO1 (under-18 rescues are no pool entries): the lowest and highest age a template's `age_band` may name.
+pub const RECRUIT_AGE_MIN: i32 = 18;
+pub const RECRUIT_AGE_MAX: i32 = 99;
+/// FZ1: the keys of a template's `fuse` and of one of its tiers.
+pub const FUSE_KEYS: [&str; 5] = ["per_deploy", "stasis_days", "max", "tiers", "last_passive"];
+pub const FUSE_TIER_KEYS: [&str; 2] = ["at", "passive"];
+/// FZ1: the top of a fuse's `per_deploy`, `stasis_days` and `max`.
+pub const FUSE_NUMBER_MAX: i32 = 99;
+
+/// FZ3: one tier of a fuse: at `at` or more its passive applies (PK3 3.1: tiers are cumulative).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FuseTier {
+    pub at: i32,
+    pub passive: String,
+}
+
+/// FZ1 (`fuse`): a recruit template's Living Martyr fuse.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FuseDef {
+    /// FZ2: added per deployment.
+    pub per_deploy: i32,
+    /// FZ2: one more per this many days since the join (0 = no stasis ticking).
+    pub stasis_days: i32,
+    /// FZ4: at this value the member's next deployment is a retire or a last stand.
+    pub max: i32,
+    pub tiers: Vec<FuseTier>,
+    /// FZ4: the passive a last stand deploys with ("" = none).
+    pub last_passive: String,
+}
+
+impl FuseDef {
+    pub fn from_obj(o: &Obj) -> Self {
+        let tiers = objs(o, "tiers").iter().map(|t| FuseTier { at: int(t, "at", 0), passive: string(t, "passive", "") }).collect();
+        Self { per_deploy: int(o, "per_deploy", 0), stasis_days: int(o, "stasis_days", 0), max: int(o, "max", 0), tiers, last_passive: string(o, "last_passive", "") }
+    }
+
+    /// FZ2: `deploys x per_deploy + floor(days / stasis_days)` (`days` since the join, at least 0).
+    pub fn value(&self, deploys: i64, days: i64) -> i64 {
+        let stasis = if self.stasis_days > 0 { days.max(0) / i64::from(self.stasis_days) } else { 0 };
+        deploys.max(0) * i64::from(self.per_deploy) + stasis
+    }
+
+    /// FZ3, PK3 3.1: the passives of every tier at or below `value`, tier order (cumulative).
+    pub fn passives_at(&self, value: i64) -> Vec<String> {
+        self.tiers.iter().filter(|t| i64::from(t.at) <= value && !t.passive.is_empty()).map(|t| t.passive.clone()).collect()
+    }
+
+    /// FZ4: the fuse is spent (`value >= max`; a `max` of 0 never is).
+    pub fn spent(&self, value: i64) -> bool {
+        self.max > 0 && value >= i64::from(self.max)
+    }
+}
+
+/// PG1: a template's `level` text as the `recruit` effect's `level` value: "" (or absent) = Null (the default
+/// `highest`), a whole number "1".."20" = that int, any other text as it is.
+fn recruit_level(raw: Option<&Value>) -> Value {
+    let Some(raw) = raw.filter(|l| !l.is_null()) else { return Value::Null };
+    let text = to_str(raw);
+    match text.parse::<i64>() {
+        _ if text.is_empty() => Value::Null,
+        Ok(n) => Value::from(n),
+        Err(_) => Value::String(text),
+    }
+}
+
+/// PG1, PK3 3.1: one `world.recruits` template row, read with its defaults.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecruitDef {
+    pub id: String,
+    pub name: String,
+    /// The class every base unit of the template has.
+    pub class_id: String,
+    /// The party base units a recruit is drawn from (the `rescue` effect's `base_unit` picks one).
+    pub base_units: Vec<String>,
+    /// The display names drawn from (never one a member, pool entry or departed member holds).
+    pub names: Vec<String>,
+    /// The ages of its recruits `[lo, hi]` (flavour; empty = unstated).
+    pub age_band: Vec<i32>,
+    /// The recruits' portrait: a file under the game's assets ("" = the body's common portrait).
+    pub art: String,
+    /// Slotless origin passive ids, one drawn per recruit.
+    pub origins: Vec<String>,
+    /// Slotless temperament passive ids, one drawn per recruit.
+    pub temperaments: Vec<String>,
+    /// The join level (BK5's `level`: "highest", "average" or 1..20, stored as text; Null = the default `highest`).
+    pub level: Value,
+    /// FZ1: the Living Martyr fuse (None = an ordinary recruit, housed in a bunk).
+    pub fuse: Option<FuseDef>,
+}
+
+impl RecruitDef {
+    pub fn from_obj(o: &Obj) -> Self {
+        let fuse = obj(o, "fuse").filter(|f| !f.is_empty()).map(FuseDef::from_obj);
+        Self {
+            id: string(o, "id", ""),
+            name: string(o, "name", ""),
+            class_id: string(o, "class_id", ""),
+            base_units: strings(o, "base_units"),
+            names: strings(o, "names"),
+            age_band: array(o, "age_band").iter().map(|a| to_int(a, 0)).collect(),
+            art: string(o, "art", ""),
+            origins: strings(o, "origins"),
+            temperaments: strings(o, "temperaments"),
+            level: recruit_level(o.get("level")),
+            fuse,
+        }
+    }
 }
 
 // ---- Story (STORYUI1 4.1-4.8, kit hook; engine-only, no Godot original) ---------------------------------------------

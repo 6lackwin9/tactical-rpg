@@ -243,10 +243,11 @@ pub const BODY_SLOTS_KIND: &str = crate::check::body_slot::KIND;
 /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 4): the recipe rows, loaded into the catalog beside CATALOG_KINDS after the body
 /// slots (they name items, body slots and unit tracks; Godot had no such kind).
 pub const RECIPES_KIND: &str = crate::check::recipe::KIND;
-/// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2) and STORYUI1's `vignettes`,
-/// `sequences` and `boards` (4.1-4.4; Godot had no such kinds).
-pub const WORLD_KINDS: [&str; 19] = [
+/// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2), STORYUI1's `vignettes`,
+/// `sequences` and `boards` (4.1-4.4) and ROSTER1-P's `recruits` (PK3 3.1; Godot had no such kinds).
+pub const WORLD_KINDS: [&str; 20] = [
     "regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops", "routes", "meters", "checkpoints", "triggers", "vignettes", "sequences", "boards",
+    rpgkit_data::RECRUITS_KIND,
 ];
 
 const SCHEMA_TEXT: &str = include_str!("../../../schema.json");

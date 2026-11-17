@@ -99,3 +99,21 @@ fn a_heroes_ai_role_and_default_intent_reach_its_build_definition() {
     let plain = data(json!([character("hero", "party", json!({}))]));
     assert_eq!(build_with(&plain, &hero, "w", true).unwrap().def.ai_role, "SNIPER", "the base unit's without one");
 }
+
+#[test]
+fn a_procedural_members_temperament_and_origin_are_saved_and_gathered() {
+    // ROSTER1 TP2 (PK3 3.1): a recruit drawn from a template has no character: its temperament (and origin) are saved
+    // on the member and gathered at every build right after its character's sources; a character's stays unsaved
+    let d = data(json!([character("hero", "party", json!({"temperament": "bold"}))]));
+    let mut m = rpgkit_world::state::UnitState::create("recruit_1", "plain");
+    m.temperament = "bold".into();
+    m.origin = "own_trait".into();
+    let saved = m.to_value();
+    assert_eq!((saved["temperament"].clone(), saved["origin"].clone()), (json!("bold"), json!("own_trait")));
+    let back = rpgkit_world::state::UnitState::from_dict(saved.as_object().unwrap());
+    assert_eq!(member_passives(&d, &back), ["bold", "own_trait"]);
+    let built = build_with(&d, &back, "w", true).expect("builds");
+    assert!(built.unit.passives.iter().any(|p| p == "bold"), "{:?}", built.unit.passives);
+    let hero = hero_from_character(&d, "w", "hero").expect("a hero");
+    assert!(hero.to_value().get("temperament").is_none(), "a character's temperament is not saved");
+}

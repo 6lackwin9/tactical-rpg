@@ -477,6 +477,8 @@ fn tick_all(d: &Data, gs: &mut GameState, causes: Vec<Cause>) -> Vec<Value> {
             queue.push_back(Cause::Act(c.act));
         }
     }
+    // ROSTER1 FZ2 (PK3 3.1): a Living Martyr's fuse ticks in stasis on the campaign's days (members without one: no-op)
+    crate::roster::refresh_fuses(d, gs);
     events
 }
 
