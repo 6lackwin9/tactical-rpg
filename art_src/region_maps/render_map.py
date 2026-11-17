@@ -36,7 +36,15 @@ CELLS = {"flagstone": 4, "cobble_road": 6, "floorboards": 6}   # tiles a texture
 # Per-room wall sets (art_src/region_maps/README.md open item 3): a room's draft_room_styles text names its walls.
 # Only the sets the text asks for are listed; every other room keeps its location's boundary set.
 ROOM_WALLS = {"sluice_undercroft": {"slab": "interior_plaster", "crypts": "interior_stone"}}
-WALL_TONES = {"interior_plaster": ((50, 47, 44), (96, 90, 82)), "interior_stone": ((34, 37, 42), (66, 70, 80))}  # (top, face); default below
+WALL_TONES = {"interior_plaster": ((50, 47, 44), (128, 123, 114)), "interior_stone": ((34, 37, 42), (48, 52, 56))}  # (top, face); default below
+# Mirroring a design reference (Tushar 2026-11-17: the map mirrors its reference image with tiles and props): target
+# colours measured from the picked reference (art_src/region_maps/README.md), per location. ground: a ground's mean
+# colour; room_grade: per-room multipliers on the floor; void: wall tops and the outside; the wall faces use WALL_TONES.
+REF_LOOK = {"sluice_undercroft": {   # reference: flow/out/Region Maps/Underground_vault_RPG_exploratio..._ce4b19f9.jpg
+    "ground": {"flagstone": (54, 59, 63), "water": (32, 46, 54), "floorboards": (70, 51, 39), "soot_yard": (34, 33, 35),
+               "moss": (52, 66, 46)},
+    "room_grade": {"slab": (1.95, 1.95, 1.9), "hearth": (1.2, 1.05, 0.98), "crypts": (0.95, 1.02, 0.95)},
+    "void": (4, 4, 6), "face": (30, 28, 34), "patchy": {"soot_yard": 0.3, "moss": 0.4}}}
 GREY = {"cobble_road": 0.75, "flagstone": 0.5}                # how far a texture's own hue is pulled to grey before toning
 PATCHY = {"soot_yard": 0.52, "moss": 0.46}   # share of a cell these grounds cover: ash and moss lie in patches on the floor
 UNDER = "flagstone"                           # what shows between the patches
@@ -92,14 +100,18 @@ def render(loc, tiles_dir, props_root, out, inside=""):
     tex = {}
     for gid in set(e["ground_legend"].values()) | {UNDER}:
         src = find(tiles_dir, *TILES[gid]) if gid in TILES else None
-        tex[gid] = tone(src, lift(cat[gid]), cells=CELLS.get(gid, 8), grey=GREY.get(gid, 0.0)) if src else Image.new("RGB", (8 * T, 8 * T), lift(cat[gid]))
+        target = REF_LOOK.get(loc, {}).get("ground", {}).get(gid) or lift(cat[gid])
+        tex[gid] = tone(src, target, cells=CELLS.get(gid, 8), grey=GREY.get(gid, 0.0)) if src else Image.new("RGB", (8 * T, 8 * T), target)
     bset = BOUNDARY.get(e.get("location", loc), "blind_tenements")
 
     def wall_set(name):
         """(top, face, face_dark) textures of one wall set, toned dark like the boundary."""
         kind = "boundary" if name in BOUNDARY.values() or name == "blind_tenements" else "walls"
         top_take, face_take = WALL_TAKES[name]
-        tc, fc = WALL_TONES.get(name, ((40, 40, 46), (60, 58, 64)))
+        look = REF_LOOK.get(loc, {})
+        tc, fc = WALL_TONES.get(name, ((40, 40, 46), look.get("face", (60, 58, 64))))
+        if "void" in look:
+            tc = look["void"]
         t_ = find(tiles_dir, f"{kind}_{name}_wall", top_take)
         f_ = find(tiles_dir, f"{kind}_{name}_wall_face", face_take)
         t_ = tone(t_, tc, 0.3) if t_ else Image.new("RGB", (8 * T, 8 * T), tc)
@@ -166,8 +178,9 @@ def render(loc, tiles_dir, props_root, out, inside=""):
     for k, g in enumerate(ids):
         full = full_of(g)
         sel = pick == k
-        if g in PATCHY:
-            cut = float(np.quantile(blobs, 1 - PATCHY[g]))
+        patchy = dict(PATCHY, **REF_LOOK.get(loc, {}).get("patchy", {}))
+        if g in patchy:
+            cut = float(np.quantile(blobs, 1 - patchy[g]))
             thick = sel & (blobs >= cut)
             thin = sel & (blobs < cut) & (blobs >= cut - 0.08)        # a soft edge: half ash, half floor
             canvas[sel] = under[sel]
@@ -175,6 +188,16 @@ def render(loc, tiles_dir, props_root, out, inside=""):
             canvas[thick] = full[thick]
         else:
             canvas[sel] = full[sel]
+    grade = REF_LOOK.get(loc, {}).get("room_grade", {})
+    if grade:   # per-room light and colour, measured from the design reference (a lit slab room, a forge-warm hearth)
+        zone_id_ = {k: v["id"] for k, v in e.get("zone_legend", {}).items()}
+        zr = e.get("zones", [])
+        zgrid = np.array([[zone_id_.get(c, "") for c in r] for r in zr]) if zr else None
+        if zgrid is not None:
+            zpix = zgrid[ov, ou]
+            for room, mul in grade.items():
+                m = zpix == room
+                canvas[m] = np.clip(canvas[m].astype("float32") * np.array(mul, dtype="float32"), 0, 255).astype("uint8")
     im.paste(Image.fromarray(canvas), (0, 0))
     # a stone rim where land meets water: a dark line on the land side, a pale lip on the water side
     rim = Image.new("RGBA", im.size, (0, 0, 0, 0)); dr = ImageDraw.Draw(rim)

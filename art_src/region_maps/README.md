@@ -54,6 +54,14 @@ rebuild that look with terrain tiles and props, shown side by side with the refe
 reference comes from the design, never from a render: Drive `image_pipeline/flow/out/Region Maps` already holds the
 hub's (`Underground_vault_*`, two takes) and the Grate's (`Flooded_underground_drainage_*`, three takes).
 
+Reference picks (2026-11-17, checked against the layout JSON and `draft_markers`):
+
+- Hub: take `..._ce4b19f9` (has the two vault piers and a mooring post either side of the causeway). Leave out its
+  extras when mirroring: the bedroll on the dormitory floor (the design has six bunks), the stove in the east hall
+  and the barrel in the west hall. `REF_LOOK` in `render_map.py` holds the colours measured from it.
+- Grate: every take lacks the two street stairs (one ladder instead), the sluice tunnel north to the hub, the rubble
+  and the silt bank. Take `..._709b8751` is the base; an edit adding them is queued (`grate_layout_ref`).
+
 1. The hub's gate arch and bunks were drawn for a taller wall and look cramped in a one-tile face: redraw them for
    that height (a full sluice gate arch 4 wide; a single-tier bunk niche 2 wide), or make walls two tiles tall.
 2. Wall-mounted props on side walls: no art yet (the model draws them front-on). Try single-prop prompts that
