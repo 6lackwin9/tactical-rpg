@@ -22,7 +22,7 @@ The project runs the two-session split (decision "Two-session split: Design and 
 - **New threads need the user's approval.** The coordinator opens a session thread when its first ask arrives, and asks before opening any other thread.
 - Decision requests go to the user in the thread (a decision card when offered): question, options with one-line consequences, one recommendation. Work continues on the recommended option unless the step cannot be undone. Repo-recorded decisions cite a typed user message.
 - Failure alerts: a thread reply that leads with what is blocked and what the thread is doing about it.
-- **Mode in force**: the single record is the `CLAUDE.md` "Mode in force" line (interactive as of 2026-11-17; earlier switches are recorded in planner-ops "Dispatch modes"; autopilot drafted in `docs/specs/AUTOPILOT1.md`, not approved). Dispatch mode: the user types `mode <name>` in the project chat. In interactive mode (planner-ops "Interactive rules") threads act only on the user's direct requests, one at a time, and scheduled routines stay paused.
+- **Mode in force**: the single record is the `CLAUDE.md` "Mode in force" line (interactive as of 2026-11-17, with Build queue runs on "Build: run queue" (B0) since the same day; earlier switches are recorded in planner-ops "Dispatch modes"; autopilot drafted in `docs/specs/AUTOPILOT1.md`, not approved). Dispatch mode: the user types `mode <name>` in the project chat. In interactive mode (planner-ops "Interactive rules") threads act only on the user's direct requests, one at a time, and scheduled routines stay paused.
 
 ## One task at a time, one branch per task (Build)
 
