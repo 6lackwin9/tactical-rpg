@@ -44,7 +44,7 @@ REF_LOOK = {"sluice_undercroft": {   # reference: flow/out/Region Maps/Undergrou
     "ground": {"flagstone": (54, 59, 63), "water": (32, 46, 54), "floorboards": (70, 51, 39), "soot_yard": (34, 33, 35),
                "moss": (52, 66, 46)},
     "room_grade": {"slab": (1.95, 1.95, 1.9), "hearth": (1.2, 1.05, 0.98), "crypts": (0.95, 1.02, 0.95)},
-    "void": (4, 4, 6), "face": (30, 28, 34), "patchy": {"soot_yard": 0.3, "moss": 0.4}}}
+    "void": (4, 4, 6), "face": (30, 28, 34), "patchy": {"soot_yard": 0.2, "moss": 0.42}, "patch_scale": 0.45}}
 GREY = {"cobble_road": 0.75, "flagstone": 0.5}                # how far a texture's own hue is pulled to grey before toning
 PATCHY = {"soot_yard": 0.52, "moss": 0.46}   # share of a cell these grounds cover: ash and moss lie in patches on the floor
 UNDER = "flagstone"                           # what shows between the patches
@@ -171,7 +171,8 @@ def render(loc, tiles_dir, props_root, out, inside=""):
         tx = np.asarray(tex[g]); th, tw = tx.shape[:2]
         return tx[(yy % th), (xx % tw)]
 
-    blobs = noise(1.6) + 0.6 * noise(0.7) + 0.25 * noise(0.3)       # where a patchy ground lies thick
+    ps = REF_LOOK.get(loc, {}).get("patch_scale", 1.0)               # < 1: smaller, more scattered patches
+    blobs = noise(1.6 * ps) + 0.6 * noise(0.7 * ps) + 0.25 * noise(0.3 * ps)   # where a patchy ground lies thick
     lo, hi = float(blobs.min()), float(blobs.max())
     blobs = (blobs - lo) / (hi - lo)
     under = full_of(UNDER)

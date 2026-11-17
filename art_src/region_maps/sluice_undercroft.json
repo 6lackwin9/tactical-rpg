@@ -117,7 +117,7 @@
   {
    "id": "npc_c",
    "x": 16,
-   "y": 6
+   "y": 7
   },
   {
    "id": "npc_d",
@@ -467,9 +467,64 @@
    "flip": false
   },
   {
+   "id": "crypt_bars_1",
+   "art": "crypt_bars",
+   "x": 29,
+   "y": 15,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
    "id": "crypt_bars",
    "art": "crypt_bars",
    "x": 30,
+   "y": 15,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "crypt_bars_3",
+   "art": "crypt_bars",
+   "x": 31,
+   "y": 15,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "crypt_bars_4",
+   "art": "crypt_bars",
+   "x": 34,
+   "y": 15,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "crypt_bars_5",
+   "art": "crypt_bars",
+   "x": 35,
+   "y": 15,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "crypt_bars_6",
+   "art": "crypt_bars",
+   "x": 36,
    "y": 15,
    "w": 1,
    "h": 1,

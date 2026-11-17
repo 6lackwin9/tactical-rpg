@@ -220,7 +220,9 @@ def sluice_undercroft():
     L.prop("table", "table_stools", 18, 20, 2, 1)
     L.prop("stove", "hearth_stove", 27, 20)
     # --- the Isolation Crypts: bars beside the door, two stasis slabs
-    L.prop("crypt_bars", "crypt_bars", 30, 15, 1, 1)
+    # the whole north wall is a bar wall either side of the door (design reference ..._ce4b19f9, 2026-11-17)
+    for i, x in enumerate((29, 30, 31, 34, 35, 36)):
+        L.prop("crypt_bars" if i == 1 else f"crypt_bars_{i + 1}", "crypt_bars", x, 15, 1, 1)
     L.prop("stasis_1", "stasis_slab", 30, 18, 2, 1); L.prop("stasis_2", "stasis_slab", 34, 18, 2, 1)
     L.prop("crypt_candles", "candle_stand", 36, 16)
     # anchors: the location's markers keep their anchor ids
