@@ -30,6 +30,8 @@
 5. The user has played each act once and every `PT-nn` note from those playtests is triaged.
 6. Saves from the release load in the next build (migration step in place).
 
+Scope: Playable Release 1 is the `sunk_ward` campaign. `ashlands` stays the kit's sample world; `iron_reaches` and `tidewrack` are parked dev and test worlds outside the release (ruling F7, 2026-11-17).
+
 ## Historical Slice Milestones (Reference Mapping)
 
 The table below preserves the pre-masterplan task prefix mapping used by legacy milestone scripts:
