@@ -6,7 +6,7 @@ description: Task completion per milestone (M0, M1, M2, M2b) with a breakdown by
 # Milestone status
 
 1. Run the counter from the repo root of an up-to-date checkout (desktop: the planner checkout after
-   `git fetch` and a detached checkout of `origin/develop`; cloud: the area thread's checkout after a pull):
+   `git fetch` and a detached checkout of `origin/develop`; cloud: the session thread's checkout after a pull):
    `python .claude/skills/milestone-status/progress.py` (desktop: the Python 3.12 full path,
    `$LOCALAPPDATA/Programs/Python/Python312/python.exe`). Options: `--milestone M1` for one milestone, `--all` to add
    the tasks outside the slice milestones, `--json` for raw rows.

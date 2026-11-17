@@ -4,13 +4,13 @@ How game content (skills, items, classes, units, passives, encounters, world dat
 
 ## Flow
 
-1. **Ask in plain words**, in the project chat or the matching area thread: "the archer hits too hard at range", "add a fire sword for act 1", "make the skirmisher flee earlier". The project chat routes it to the area thread (Balance for numbers, Assets & Audio for data rows, Gameplay for behaviour, Design for new ideas).
+1. **Ask in plain words**, in the project chat or the Design thread: "the archer hits too hard at range", "add a fire sword for act 1", "make the skirmisher flee earlier". The project chat routes it to the Design thread, which queues a READY row that the Build thread builds (the October area threads are retired, review 2026-11-17).
 2. **The thread sorts it** as a small tweak or new content (rules below).
 3. **Small tweak**: the asset-builder edits the data through `aegis content` (an upsert or a JSON seed, never raw JSON), the writer's validation and the gate catch bad values, and the change lands on `develop` like any task. The thread's reply carries a before/after table of the changed fields, plus sim numbers when the sim rule below applies.
 4. **New content**: the design-brainstorm agent writes a short spec (what it is, numbers, where it appears), the thread posts it as one approval card, and building starts on approval. Data-only additions go to the asset-builder; anything needing new engine behaviour adds a logic task first.
 5. **Review in the game**: the user checks results in the read-only viewers (Scene Runner) or the itch.io build after the next release, not in the files.
 6. **Undo**: "undo that" means the thread reverts that task's squash commit on `develop` (`git revert`, never a force push) and says which commit it reverted; if the change already reached `main`, the revert ships with the next release.
-7. **Playtest notes**: tweaks jotted in chat while playing are batched per area: the project chat forwards them to each area thread as one list, and the thread lands them as one task with one table.
+7. **Playtest notes**: follow `docs/workflow/cloud.md` "Playtest intake" (review 2026-11-17): the project chat forwards them to Design, which turns them into READY rows (`PT-nn`) that Build lands; the October per-area batching is retired.
 
 ## Small tweak or new content
 

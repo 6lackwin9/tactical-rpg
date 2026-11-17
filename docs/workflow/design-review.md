@@ -1,5 +1,7 @@
 # Design review cycle (Design area thread)
 
+> **Superseded 2026-11-17 (review)**: the October area threads and the 11:52 / 17:52 releases are retired, so this cycle no longer runs. Design now reviews through `docs/DESIGN_REVIEW.md`, `docs/workflow/cloud.md` "Playtest intake" and the audit skills (`audit-build`, `consistency-audit`). Kept as history.
+
 Set up 2026-10-18 at the user's ask (decision "Design review cycle (user 2026-10-18)" in `docs/decisions/workflow.md`). The Design area thread reviews the whole game once a batch of playable changes has landed on `develop`, reports what works and what needs improvement, and builds up to three playable option branches the user can try and mix. Shared rules: `cloud.md`; this file adds only what the cycle needs.
 
 ## When a review is due

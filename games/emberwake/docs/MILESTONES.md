@@ -10,6 +10,26 @@
 | **`R4`** | **Final Shells & Ship Gate** (`X1-X8`) | Engine foundation & mechanics finalized across all 9 Masterplan blocks (`U, S, A, F, P, I, E, W, T`); content checks, saves, sim/tools, and full backend scenario gate. |
 | **`Post-R4`** | **Interactive Story, Game UI Polish & Web/itch.io Release** (user 2026-11-08) | Interactive user + design sessions to flesh out the story, transform the engine debug UI into the polished player-facing game interface (`preferences/ui.md`: subtractive layouts & visual-first encoding, `UN-02`), and publish the Web/WASM deployment to itch.io (replacing the legacy Godot web build). First track (user 2026-11-09): the web release, `docs/specs/WEBREL1.md` (restricted itch.io page, CI build + manual deploy, base game target with the Scene Runner in test builds); backend queue `PR4-1`, `PR4-2` in `docs/READY.md`. |
 
+## R5-R7 and Playable Release 1 (review 2026-11-17, `[PROVISIONAL]`)
+
+`R1`-`R4` and Wave 1 are released on `main`. The later releases follow `ACTS23.md` (packages `PK1`-`PK8`); this table is the single definition (`ROADMAP.md` points here):
+
+| Release | Packages | Rows (`docs/READY.md`) | Ship gate |
+| --- | --- | --- | --- |
+| **`R5`** | `PK1` + `PK2` + `PK3`: corruption, grafts, roster lifecycle | done: `PR5-*` corruption and graft slices, `PR6-1`..`PR6-3`, `PR6-5`; open: `PR6-4`, `PR6-14` | rows landed, full gate, audit-build clean |
+| **`R6`** | `PK4` + `PK5`: Act 2 campaign hooks, hub facilities, sieges | `PR6-6`, `PR6-8`, `PR6-9`, `PR6-12` | Act 2 playable from Act 1's end; journey test through Act 2 |
+| **`R7`** | `PK6` + `PK7` (+ `PK8` Act 3): bosses, camp prep, endings, Act 3 content | `PR6-7`, `PR6-10`, `PR6-11`, `PR6-13` | an ending (A, B or C) reachable; sim parity sign-off |
+| **`PR1`** | **Playable Release 1**: the first shippable game | everything above plus the review guardrails `PR7-*` and the art style lock | the definition below |
+
+**Shippable means (Playable Release 1)**, all of:
+
+1. Acts 1-3 play from a fresh save to an ending on Windows and the web build, with no debug-only step.
+2. The full gate is green on `develop` and `main`, including every scenario with image goldens (`PR7-4`), replay regressions (`PR7-5`) and balance bands (`PR7-6`).
+3. No player-visible placeholder text; every asset is final or in the locked art style (asset status table: `0` missing).
+4. `audit-build` since the last audited commit and a consistency audit show `0` open high findings.
+5. The user has played each act once and every `PT-nn` note from those playtests is triaged.
+6. Saves from the release load in the next build (migration step in place).
+
 ## Historical Slice Milestones (Reference Mapping)
 
 The table below preserves the pre-masterplan task prefix mapping used by legacy milestone scripts:

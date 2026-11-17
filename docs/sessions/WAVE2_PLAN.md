@@ -1,6 +1,6 @@
 # `WAVE2_PLAN` — `[PROVISIONAL]` Wave 2 Master Plan (`PK2-STAGE-PASSIVES`, `WAVE2-BALANCE`, `PK3..PK8`)
 
-- **Status**: **`[PROVISIONAL]`** — Active Wave 2 roadmap (`PR6-1`..`PR6-3`, `PR6-5`, `AI-15` landed; `ACTS23-R6`/`R7` `[PROVISIONAL]` `B1..B7` integrated; `PR6-4`, `PR6-6..PR6-13` queued in `READY.md` §1 for review & Build).
+- **Status**: **`[PROVISIONAL]`** — Active Wave 2 roadmap (`PR6-1`..`PR6-3`, `PR6-5`, `AI-15` landed; `ACTS23-R6`/`R7` `B1..B7` integrated and accepted by the user 2026-11-17; `PR6-4`, `PR6-6..PR6-13` queued in `READY.md` §1 for review & Build).
 - **Baseline**: `origin/develop` (`f132eabc`: `PR5-57..62c` + Wave 2 `PR6-1`, `PR6-2`, `PR6-3`, `PR6-5` & `AI-15` `7ddae3fd`).
 - **Locked Foundation**: [CANON.md](../../games/emberwake/docs/lore/CANON.md) (§1–§6 `[LOCKED]`), [ACTS23.md](../specs/ACTS23.md) (Q-A1..Q-A10, Channel §5.1, Techniques §5.2), [PK1_CORRUPTION.md](PK1_CORRUPTION.md), [PK2_GRAFTS.md](PK2_GRAFTS.md), [PRINCIPLES.md](../PRINCIPLES.md).
 
@@ -11,8 +11,8 @@
 | Domain Spec | Release Wave | Covered Systems & Landed / Queued Items | Target Queue |
 | --- | --- | --- | --- |
 | [PK3_ROSTER_LIFECYCLE.md](PK3_ROSTER_LIFECYCLE.md) | `R5-Finish` | `PR6-2` `PK2-STAGE-PASSIVES` (**done `51dd62b2`**), `PR6-3` Bleed-out & Revive (**done `872df55c`**), `PR6-4` Recruit Generator (`18-24` Act 2 Cohorts, `pool`, `Isolation Crypts`, `Living Martyrs`) & Procedural Keepsakes (`by_class` + `AI-15` `7ddae3fd` assets) | `PR6-4` (`§1` #1) |
-| [PK4_PK5_CAMPAIGN_HUB.md](PK4_PK5_CAMPAIGN_HUB.md) | `R6` | `ACTS23-R6` **audited (`B2..B6` `[PROVISIONAL]`)**: `PK4` (`FX_DOCTRINE`, `signed` lean tracks, strain telemetry, `after_flag`+`offset_days` Checkpoints, `clock_set.keep_longer`, Act 3 Hard Clock + `supply_price_mult_by_act` `2.0x` Tallow); `PK5` (`facilities` `5 × 3` + `sieges.json` w/ `Ruthven` `25%` `"rout"` + `hp_floor: 25`) | `PR6-6`, `PR6-8`, `PR6-9` (`§1`) |
-| [PK6_PK7_BOSSES_ENDINGS.md](PK6_PK7_BOSSES_ENDINGS.md) | `R7` | `ACTS23-R7` **audited (`B1` Option B, `B7` `[PROVISIONAL]`)**: `PK6` (Regional `start_meter`, `when_meter`+`every_rounds`+`ground.rs:408`, `"$captive_unit"`, `Step::CampPrep`, `retry_day_cost`, `echo_fallen`, `1x1` cell + `2x2` oversize art); `PK7` (`END_KINDS::ending`, `endings.json` `A / B / C`, `EpilogueScreen`) | `PR6-7`, `PR6-10`, `PR6-11` (`§1`) |
+| [PK4_PK5_CAMPAIGN_HUB.md](PK4_PK5_CAMPAIGN_HUB.md) | `R6` | `ACTS23-R6` **audited (`B2..B6` accepted by the user 2026-11-17)**: `PK4` (`FX_DOCTRINE`, `signed` lean tracks, strain telemetry, `after_flag`+`offset_days` Checkpoints, `clock_set.keep_longer`, Act 3 Hard Clock + `supply_price_mult_by_act` `2.0x` Tallow); `PK5` (`facilities` `5 × 3` + `sieges.json` w/ `Ruthven` `25%` `"rout"` + `hp_floor: 25`) | `PR6-6`, `PR6-8`, `PR6-9` (`§1`) |
+| [PK6_PK7_BOSSES_ENDINGS.md](PK6_PK7_BOSSES_ENDINGS.md) | `R7` | `ACTS23-R7` **audited (`B1` Option B, `B7` accepted by the user 2026-11-17)**: `PK6` (Regional `start_meter`, `when_meter`+`every_rounds`+`ground.rs:408`, `"$captive_unit"`, `Step::CampPrep`, `retry_day_cost`, `echo_fallen`, `1x1` cell + `2x2` oversize art); `PK7` (`END_KINDS::ending`, `endings.json` `A / B / C`, `EpilogueScreen`) | `PR6-7`, `PR6-10`, `PR6-11` (`§1`) |
 | [PK8_ACT23_CONTENT.md](PK8_ACT23_CONTENT.md) | `R5-Finish` -> `R7` | `PR6-1` `WAVE2-BALANCE` (**done `29dfc241`**), `PR6-5` Act 2 drops/books (**done `f132eabc`**), `sunk_ward` Act 2 `high_bastion` (`08-15` + deferred `pk2.*`) & Act 3 `mantle_fissure` (`16-22` + `A/B/C`), plus legacy parity (`iron_reaches`, `tidewrack`, `ashlands`) | `PR6-12`, `PR6-13` (`§1`) |
 
 ---
