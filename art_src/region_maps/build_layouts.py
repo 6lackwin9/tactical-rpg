@@ -209,7 +209,8 @@ def sluice_undercroft():
     L.prop("anvil", "anvil", 29, 4)
     L.prop("scrap", "scrap_heap", 34, 5, 2, 2)
     L.prop("crates", "crate_stack", 27, 6, 2, 1)
-    L.prop("tool_rack", "retort_shelf_side", 36, 3, 1, 3, flip=True)   # the east wall's tall rack, seen from the side
+    # the east wall takes a side-view weapon rack from sheet props_hub_vertical_1 when it lands (Tushar 2026-11-17:
+    # flasks were out of place in the Hearth)
     # --- the hall: the brazier everyone passes, vault piers by the doors
     L.prop("brazier", "brazier", 22, 11)
     # the mission board stands in the hall, where everyone gathers (Tushar 2026-11-17: the basin rim was crowded)
