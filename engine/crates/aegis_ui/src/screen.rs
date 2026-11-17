@@ -144,6 +144,45 @@ impl WindowShow {
     }
 }
 
+/// The web's Fullscreen checkbox (DISPLAY1 rule 8): what the shell does about the browser's fullscreen, from the
+/// setting (`want`), the value it last acted on (`asked`, None before the first) and the canvas's real state (`real`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WebFullscreen {
+    /// Ask the browser to enter (true) or leave (false) fullscreen: the setting changed and the page is not there yet.
+    Ask(bool),
+    /// The browser changed it by itself (Esc, its own controls, a refused ask): the setting follows the page.
+    Follow(bool),
+    /// Nothing to do.
+    Keep,
+}
+
+impl WebFullscreen {
+    /// A changed setting asks (only when the page differs, so no needless request); an unchanged one follows the page.
+    /// The shell asks when the settings change (a click on Apply, the user gesture browsers require) and follows only
+    /// when the canvas resized, so an ask still on its way is not undone.
+    pub fn step(want: bool, asked: Option<bool>, real: bool) -> Self {
+        match (asked == Some(want), real == want) {
+            (false, false) => Self::Ask(want),
+            (true, false) => Self::Follow(real),
+            (_, true) => Self::Keep,
+        }
+    }
+}
+
+/// This build runs in a browser (the web build, WEBREL1).
+pub const ON_WEB: bool = cfg!(target_arch = "wasm32");
+
+/// The display settings keys a Settings screen offers (DISPLAY1), in row order. The desktop: window show, size, sync,
+/// frame-rate cap and text size. The web (rule 8): Fullscreen (session only, the browser's) and text size; the page
+/// owns the canvas size and the browser the frame rate, so the other rows would do nothing there.
+pub fn display_keys(web: bool) -> &'static [&'static str] {
+    if web {
+        &["fullscreen", "text_scale"]
+    } else {
+        &["fullscreen", "borderless", "window_size", "vsync", "fps_cap", "text_scale"]
+    }
+}
+
 /// The largest side a `window_size` value may name: past it the value is no size, so a bad file cannot ask the OS for
 /// an absurd window on a platform that reports no monitor to cap it by.
 pub const WINDOW_SIDE_MAX: u32 = 16384;
