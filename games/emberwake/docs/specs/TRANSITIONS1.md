@@ -1,6 +1,6 @@
 # TRANSITIONS1: story to battle and battle to hub (draft)
 
-Status: **draft, awaiting the user's approval** (proposed 2026-11-17 after the web-build playtest note "the progression
+Status: **active** (user 2026-11-17: "all recs T and lore"; the ★ options; READY `PR7-14`, Art/UI `AI-18`) (proposed 2026-11-17 after the web-build playtest note "the progression
 from story vignette to battle seems abrupt and then from battle to hub"). Layer: game UI (`emberwake_gui`) with engine
 fades already present; art and audio through an Art/UI request once approved. Recommended options are marked ★.
 
