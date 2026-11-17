@@ -12,7 +12,7 @@ game and kit layers, plus the assets canon or a spec needs that have no file yet
 | item icon | 49 | 1 | 54 | 0 |
 | map | 19 | 0 | 0 | 0 |
 | music | 14 | 0 | 8 | 0 |
-| portrait | 0 | 0 | 93 | 10 |
+| portrait | 0 | 0 | 99 | 4 |
 | prop | 148 | 0 | 0 | 8 |
 | sfx | 10 | 0 | 0 | 0 |
 | skill icon | 71 | 38 | 89 | 0 |
@@ -20,21 +20,15 @@ game and kit layers, plus the assets canon or a spec needs that have no file yet
 | status icon | 16 | 0 | 0 | 0 |
 | tile | 46 | 0 | 0 | 0 |
 | ui | 66 | 0 | 0 | 0 |
-| **all** | **456** | **39** | **376** | **18** |
+| **all** | **456** | **39** | **382** | **12** |
 
 Every row, final files included: [ASSET_STATUS.csv](ASSET_STATUS.csv) (path, category, state, act, why, last
 commit). Below: what still needs work, rework and placeholders grouped by folder and reason.
 
-## Missing (18)
+## Missing (12)
 
 | Path | Category | Act | Why |
 | --- | --- | --- | --- |
-| `game:portraits/bosses/foundry_master_jessop.png` | portrait | Act 2 | AI-06; CANON 3.2 |
-| `game:portraits/bosses/inquisitor_general_ruthven.png` | portrait | Act 2 | AI-06; CANON 3.2 |
-| `game:portraits/bosses/chief_anatomist_lazar.png` | portrait | Act 2 | AI-06; CANON 3.2 |
-| `game:portraits/bosses/warden_inquisitor_ulric.png` | portrait | Act 3 | AI-06; CANON 3.2 |
-| `game:portraits/bosses/cantor_ysolde.png` | portrait | Act 3 | AI-06; CANON 3.2 |
-| `game:portraits/bosses/arch_prelate_othemar.png` | portrait | Act 3 | AI-06; CANON 3.2 |
 | `game:portraits/bosses/goblin_warlord.png` | portrait | ? | content check (falls back) |
 | `game:props/{ashlands,common}/keep_hall/v0.png` | prop | legacy | content check (falls back); legacy world ashlands |
 | `game:props/{ashlands,common}/barracks/v0.png` | prop | legacy | content check (falls back); legacy world ashlands |
@@ -57,7 +51,7 @@ commit). Below: what still needs work, rework and placeholders grouped by folder
 | `kit:skills/kinds/` | skill icon | 6 | I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4) |
 | `kit:skills/kinds/` | skill icon | 3 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
 
-## Placeholder (376)
+## Placeholder (382)
 
 | Folder | Category | Files | Why |
 | --- | --- | --- | --- |
@@ -75,7 +69,7 @@ commit). Below: what still needs work, rework and placeholders grouped by folder
 | `game:items/manual/` | item icon | 16 | Wave 2 placeholder pack (AI-15) |
 | `game:items/material/` | item icon | 2 | Phase 4 U2 placeholder icons (AI-14) |
 | `game:items/medium/` | item icon | 1 | byte copy of kit:items/leather/base.png |
-| `game:portraits/bosses/` | portrait | 7 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/bosses/` | portrait | 13 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:portraits/bosses/faces/captain_vane/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:portraits/bosses/faces/guild_master_orlov/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:portraits/bosses/faces/inquisitor_prelate_nemeth/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
