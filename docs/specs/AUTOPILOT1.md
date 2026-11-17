@@ -40,6 +40,20 @@ New systems or features and anything that changes the game's goal; changes to `[
 2. **Stage 1, supervised (one week)**: routines bound to the Design and Build threads chain Design -> Build -> audit, capped at about `3` slices a night; releases stay on "release now"; the user reads the digest and playtests.
 3. **Stage 2, full autopilot**: releases become automatic on green; the user's inputs are playtest notes and section 3.
 
-## 6. Question for the user
+## 6. Build transition (draft, user asked 2026-11-17 "how to transition to the auto mode for build")
+
+Build goes automatic in three steps; each needs the user's typed yes and is recorded on the `CLAUDE.md` mode line.
+
+| Step | What runs without a "Build: next row" | Starts | Ready when |
+| --- | --- | --- | --- |
+| B0, queue runs | One message "Build: run queue" builds READY section 1 rows in order, one at a time, up to `3` rows, each with review, gate and its own landing, then one summary | now | today: needs only the stop rules below |
+| B1, nightly | A routine sends "Build: run queue" to the Build thread once a night (cap `3` rows); Design keeps the queue filled | after `PR7-4`..`PR7-7` land (image goldens, replays, balance bands, CI on `develop`) | the guardrails catch what review cannot |
+| B2, chained | Design, Build and `audit-build` chain as section 1; releases stay on "release now" until stage 2 | after one clean B1 week | section 5 stage 1 |
+
+**Build stops, parks the row and reports** (the run moves on only where noted): an `FB` limit-blocker or spec question (moves on); two failed targeted fixes; a golden move the row does not name; a gate failure after one fix (pauses the run); a row that needs the user's eyes (UI feel, art sign-off, image-golden baseline) or a paid run; anything in section 3; the build lease held elsewhere; the word "pause" in the project chat.
+
+**Build never**, in any step: edits specs or shared docs, picks a row from section 3, merges to `main`, or changes agents, skills or routines.
+
+## 7. Question for the user
 
 Approve stage 1 as written (yes / change / not yet)? Stage 2 needs a second typed approval after the supervised week.
