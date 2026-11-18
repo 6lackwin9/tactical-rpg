@@ -236,6 +236,7 @@ FB-01 to FB-281 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 
 ### FB-307: playtest 2026-11-18 18:20: four UI bugs for a fix row
 
+- **Status**: open
 - **Source**: the user's playtest notes 1-4 (relayed by the coordinator); notes 5-7 went to Design.
 - **Bugs**: (1) the story screen shows a hover hint near the pointer telling the player to click to proceed, which is redundant; (2) the battle screen has no way to open Settings (Esc only closes panels; `battle.rs` header lists the keys, none opens the in-game settings popup); (3) the party screen at a full party spills over and pushes elements out of its frame (`party.rs` layout does not shrink or scroll past the frame); (4) portrait motion stretches faces and the light flickers (`portraits.rs` PORTRAITFX2 breath and tint, `region.rs` D1/D5 rim flicker).
 - **Recommendation**: queue one fix row (UI + test, game layer, `emberwake_gui`): (1) drop the hint; (2) a settings button on the battle HUD plus a key, opening the same in-game popup `PR7-21` declutters (so it lands after `PR7-21`); (3) the party screen fits a full party at normal and XL text, with a GUI audit test that every element stays inside the frame; (4) breath as a uniform scale or vertical bob that keeps the face's aspect, and the rim light eased instead of stepping, with a test that the portrait's aspect ratio never changes. Screenshots for the user's eyes on (3) and (4).
