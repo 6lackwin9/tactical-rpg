@@ -16,6 +16,26 @@ pub const WON: &str = "won";
 pub const LOST: &str = "lost";
 pub const FLED: &str = "fled";
 
+/// PR6-9 (`PK4_PK5_CAMPAIGN_HUB.md` 5, B6): the objective `retreat`: the battle is won once the `objective_unit` is out
+/// of the fight or down to its `hp_floor` percent of max HP, at which it withdraws (fate `withdrawn`); damage never takes
+/// it below that floor (the phase guard: no one-turn kill), and defeating every enemy still wins.
+pub const RETREAT: &str = "retreat";
+/// The objective ids (OBJ1's four, then PR6-9's `retreat`); another id reads as `rout`.
+pub const OBJECTIVES: [&str; 5] = ["rout", "hold", "escape", "slay", RETREAT];
+/// PR6-9: an encounter's `hp_floor` (percent of max HP) default and range.
+pub const HP_FLOOR_DEFAULT: i32 = 25;
+pub const HP_FLOOR_RANGE: (i32, i32) = (1, 99);
+
+/// PR6-9: encounter `o`'s `hp_floor` (the default when absent, held in range).
+pub fn hp_floor_of(o: &Obj) -> i32 {
+    value::int(o, "hp_floor", HP_FLOOR_DEFAULT).clamp(HP_FLOOR_RANGE.0, HP_FLOOR_RANGE.1)
+}
+
+/// PR6-9: the HP at which a retreat unit of max HP `max_hp` withdraws: max_hp x pct / 100 rounded down, at least 1.
+pub fn floor_hp(max_hp: i32, pct: i32) -> i32 {
+    (max_hp.max(1) * pct / 100).max(1)
+}
+
 // ---- Objectives ----------------------------------------------------------------------------------------------
 
 pub const RING: [V2; 2] = [V2 { x: 5, y: 4 }, V2 { x: 6, y: 4 }];
@@ -34,12 +54,14 @@ pub struct Objectives {
     pub note: String,
     /// ENCOUNTER2 H4: the heroes holding a hold tile when a hold escape was won (empty otherwise).
     pub stayed: Vec<UnitId>,
+    /// PR6-9: the retreat's floor in percent of max HP (`hp_floor`, read for `retreat` only).
+    pub hp_floor: i32,
 }
 
 impl Objectives {
     pub fn create(o: &Obj) -> Self {
         let raw = value::string(o, "objective", "rout");
-        let objective = if ["rout", "hold", "escape", "slay"].contains(&raw.as_str()) { raw } else { "rout".into() };
+        let objective = if OBJECTIVES.contains(&raw.as_str()) { raw } else { "rout".into() };
         let mut tiles: Vec<V2> = value::array(o, "objective_tiles")
             .iter()
             .filter_map(|p| p.as_array().filter(|p| p.len() == 2).map(|p| V2::new(value::to_int(&p[0], 0), value::to_int(&p[1], 0))))
@@ -56,7 +78,14 @@ impl Objectives {
             held: 0,
             note: String::new(),
             stayed: Vec::new(),
+            hp_floor: hp_floor_of(o),
         }
+    }
+
+    /// PR6-9: the retreat unit `t` is to withdraw now: alive and at or below its floor.
+    pub fn retreat_due(&self, w: &World, t: UnitId) -> bool {
+        let u = &w.units[t];
+        self.objective == RETREAT && u.is_alive() && !u.is_withdrawn && u.hp <= floor_hp(u.max_hp, self.hp_floor)
     }
 
     /// Rule 3: "", won, lost or fled after a block (first match wins). Hold counting happens at a round end.
@@ -113,6 +142,18 @@ impl Objectives {
                     }
                 }
             }
+            // PR6-9: the retreat clears the room once its unit is out of the fight or down to its floor
+            RETREAT => {
+                if let Some(t) = target {
+                    if self.retreat_due(w, t) {
+                        self.note = format!("{} withdraws.", u(t).name);
+                        return WON.into();
+                    }
+                    if !u(t).is_active() {
+                        return WON.into();
+                    }
+                }
+            }
             _ => {}
         }
         if !hero_active && withdrew > 0 {
@@ -131,6 +172,11 @@ impl Objectives {
             "hold" => format!("Hold the ring for {} rounds, or defeat every enemy.", value::int(o, "objective_rounds", 3)),
             "escape" => format!("Get {} out by the exit, or defeat every enemy.", value::int(o, "objective_count", 1)),
             "slay" => format!("Defeat {}.", name_of(&value::string(o, "objective_unit", ""))),
+            RETREAT => format!(
+                "Drive {} back to {}% HP, or defeat every enemy.",
+                name_of(&value::string(o, "objective_unit", "")),
+                hp_floor_of(o)
+            ),
             _ => "Defeat every enemy.".to_string(),
         };
         let names: Vec<String> = value::strings(o, "protect").iter().map(|r| name_of(r)).collect();

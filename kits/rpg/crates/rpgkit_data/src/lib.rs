@@ -22,6 +22,7 @@ pub mod facility;
 pub mod looks;
 pub mod mastery;
 pub mod recipe;
+pub mod siege;
 pub mod talk;
 pub mod terms;
 pub mod unit_budget;

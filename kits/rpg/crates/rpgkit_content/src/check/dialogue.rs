@@ -80,7 +80,7 @@ pub enum EffectList {
 /// Every effect kind with its keys besides `effect`: the dialogue effects, the story effects (STORYUI1 4.7), then the
 /// campaign effects (CAMPAIGN1 11.3).
 fn all_effects() -> impl Iterator<Item = &'static (&'static str, &'static [&'static str])> {
-    EFFECTS.iter().chain(rpgkit_data::STORY_EFFECTS.iter()).chain(rpgkit_data::CAMPAIGN_EFFECTS.iter())
+    EFFECTS.iter().chain(rpgkit_data::STORY_EFFECTS.iter()).chain(rpgkit_data::CAMPAIGN_EFFECTS.iter()).chain(rpgkit_data::siege::SIEGE_EFFECTS.iter())
 }
 
 /// An effect kind's keys besides `effect`.
@@ -557,6 +557,8 @@ fn effect_errors(v: &View, w: &str, effect: &str, fx: &Dict, el: &str) -> Vec<St
         "vignette" => errors.extend(ref_value_errors(v, w, fx.get("vignette").unwrap_or(&Value::from("")), "vignettes", &format!("{el} vignette"))),
         "sequence" => errors.extend(ref_value_errors(v, w, fx.get("sequence").unwrap_or(&Value::from("")), "sequences", &format!("{el} sequence"))),
         "open_board" => errors.extend(ref_value_errors(v, w, fx.get("board").unwrap_or(&Value::from("")), "boards", &format!("{el} board"))),
+        // PR6-9
+        rpgkit_data::siege::START_SIEGE => errors.extend(ref_value_errors(v, w, fx.get("siege").unwrap_or(&Value::from("")), rpgkit_data::siege::SIEGES_KIND, &format!("{el} siege"))),
         "recruit" => {
             // ROSTER1 PO2 (PK3 3.1): `pool` (an entry id or `first`) swears in a pooled recruit, never with `character`
             let pool = fx.get("pool").map(gstr).unwrap_or_default();

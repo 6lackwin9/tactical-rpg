@@ -26,6 +26,7 @@ pub mod quest;
 pub mod reward;
 pub mod ruleset;
 pub mod shop;
+pub mod sieges;
 pub mod simple;
 pub mod skill;
 pub mod story;

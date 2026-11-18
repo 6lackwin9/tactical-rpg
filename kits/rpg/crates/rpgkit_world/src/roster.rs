@@ -423,7 +423,8 @@ pub fn auto_fill(d: &Data, gs: &mut GameState, world: &str, members: &[String]) 
 /// A1.2-K3 (INTENT2-K3): combat start: each active member's pouch slots without a packed target take their current
 /// count as one (so the fight's spent copies are refilled after it), then `auto_fill` for the active members.
 pub fn auto_fill_at_start(d: &Data, gs: &mut GameState, world: &str) -> Vec<String> {
-    if !d.ruleset(world).numbers.pouch_stacks {
+    // PR6-9: a siege room after the first starts with the pouches as the last room left them (`carry_pouch`)
+    if !d.ruleset(world).numbers.pouch_stacks || crate::siege::holds_pouch(d, gs, false) {
         return Vec::new();
     }
     let ids: Vec<String> = gs.party.active_members().into_iter().map(|m| m.id.clone()).collect();
@@ -466,7 +467,10 @@ pub fn settle_party(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]
     // A1.2-K3 (INTENT2-K3): after every departure, the members who came home top their pouches up from the stash (the
     // fight's world), so a departing member takes nothing and only survivors are named short
     let home: Vec<String> = ends.iter().map(|e| e.member.clone()).filter(|m| !out.departed.iter().any(|(x, _)| x == m) && gs.party.member(m).is_some()).collect();
-    out.stash_short = auto_fill(d, gs, &f.world, &home);
+    // PR6-9: not between a siege's rooms (`carry_pouch`; the siege's `restock` tops up instead)
+    if !crate::siege::holds_pouch(d, gs, true) {
+        out.stash_short = auto_fill(d, gs, &f.world, &home);
+    }
     // PK2-S4: the members who came home gain mastery in the families they attacked with (from `durability.from_act`)
     let came_home: Vec<&HeroEnd> = ends.iter().filter(|e| home.contains(&e.member)).collect();
     out.mastery = crate::mastery::settle(d, gs, &came_home);
