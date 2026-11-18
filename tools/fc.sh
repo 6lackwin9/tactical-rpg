@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
 #   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test (the UI bot's
-#                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), the layer check, docs --all, tooltests, plannertests
+#                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), the layer check, docs --all, tooltests, plannertests, assetlib
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
 #                                engine and kit crates (src, tests), schema.json and kit.json name no lore word, any case
@@ -14,6 +14,8 @@
 #                                with origin/develop, staged or untracked; --all (the gate and the flush): every file
 #   tools/fc.sh tooltests        the tools/tiles tests, time limit FC_TOOLTESTS_LIMIT (180 s); a visible SKIP when no Python has Pillow;
 #                                then the tools/planner tests (plain Python, no Pillow)
+#   tools/fc.sh assetlib         the kit asset library kits/*/library/<style>/<kind>/ and its .meta.json sidecars (ASSETLIB1: fields, enums,
+#                                PNG size, unique ids, no game lore word) plus the check's tests; part of the gate
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
 #   tools/fc.sh rules [--contract]   the ruleset tweak report (aegis rules: register metadata, fields, bundles, tested sets, locked,
 #                                the game's rows); --contract: tunable and locked, one line each
@@ -239,6 +241,17 @@ plannertests() {  # the tools/planner script tests (SKILLS1-FB): plain Python, n
   fi
 }
 
+assetlib() {  # PR7-35 (ASSETLIB1): the kit asset library check (tools/assetlib/check_library.py) and its tests; plain Python
+  local py out
+  if ! py=$(python_with "pass"); then echo "[assetlib] SKIP: no Python 3 found"; return 0; fi
+  "$py" tools/assetlib/check_library.py || status=1
+  if out=$(cd tools/assetlib && "$py" -m unittest -q 2>&1); then
+    echo "[assetlib] tests ok: $(echo "$out" | grep -E '^Ran [0-9]+ test')"
+  else
+    echo "$out" | tail -n 40; echo "[assetlib] FAIL: tools/assetlib tests"; status=1
+  fi
+}
+
 layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crates name no game and have no path into games/
   local id ids=() hits bad=0
   for id in games/*/; do [ -d "$id" ] && ids+=("$(basename "$id")"); done
@@ -321,6 +334,7 @@ gate() {
   [ $status -ne 0 ] && return
   tooltests; [ $status -ne 0 ] && return
   plannertests; [ $status -ne 0 ] && return
+  assetlib; [ $status -ne 0 ] && return
   echo "[gate] ALL CHECKS PASSED"
 }
 
@@ -481,6 +495,7 @@ case "$1" in
   bot) bot "${@:2}" ;;
   scenario) scenario "${@:2}" ;;
   playtest) playtest "${@:2}" ;;
+  assetlib) assetlib ;;
   web) web "${@:2}" ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;

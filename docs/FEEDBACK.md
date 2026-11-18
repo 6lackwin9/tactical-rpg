@@ -28,6 +28,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-14` (`TRANSITIONS1`) | done (UI feel to review) | `develop` (squash `PR7-14`) | T1 battle beat, T2 victory beat, results over the field, hub arrival card; six AI-18 placeholders; scenario `story_battle_hub`; `FB-305` |
 | `PR7-21` (`SETTINGS-MOCK1`) | done (UI to review) | `develop` (squash `PR7-21`) | Settings ported to the approved mock: tab rail, instant apply, staged Display Mode (Windowed, Borderless, Fullscreen) and Resolution with a 15 s keep-or-revert, close guard, decluttered in-game popup; review shots `/mnt/project-files/pr7-21/` beside the mock; `FB-308` |
 | `PR7-22` (`AGENT-PLAYTEST1`) | done (tools lane) | `develop` (squash `PR7-22`) | `aegis playtest` start / do / run / stop / status (`tools/fc.sh playtest`), no-window by default; smoke script `games/emberwake/playtests/agent/smoke.play` plays a fresh save to the hub in the gate (~20 s); `FB-309` |
+| `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -262,6 +263,14 @@ FB-01 to FB-281 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Gate**: `tools/fc.sh gate` now runs the smoke playtest after the repro replays (the first gate step that launches the real game). `check_project.ps1` (desktop) has no matching step yet; the desktop gate skips it until someone adds it there.
 - **For the Fable playtest**: start with `tools/fc.sh playtest`, then `target/debug/aegis playtest do screen` and so on; the guide is `engine/docs/authoring/agent_playtest.md`.
 - **Docs delta**: `docs/STRUCTURE.md` tools row: "`aegis playtest` (agent playtest harness, `engine/crates/aegis_cli/src/agentplay.rs`; guide `engine/docs/authoring/agent_playtest.md`; run folders `playtests/agent/`, git-ignored)". `engine/README.md` CLI list: add the `aegis playtest` line. `cloud.md` "No interactive play" bullet: replace the Xvfb recipe with `tools/fc.sh playtest` (no display needed). `HISTORY.md`: none.
+
+### FB-311: PR7-35 kit asset library check landed; one guess on sounds
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-35`, `docs/specs/ASSETLIB1.md` (@squash `PR7-35`)
+- **Built**: `kits/rpg/library/README.md` (the layout and fields; no assets yet, Art/UI fills it) and `tools/assetlib/check_library.py` (plain Python, no Pillow): AL6 (every sidecar parses, required fields, no unknown keys, `kind`/`status`/`source` enums, `kind` and `style` match the folders, `size` matches the PNG header, unique ids, every asset has a sidecar, no orphan sidecar, `style.meta.json` per style folder) and AL7 (file names, ids, tags and the style id/label refuse any game id, world id or `games/*/lore_words.txt` entry, whole word, `_` as a break). 14 fixture tests. `tools/fc.sh assetlib` runs both; the gate runs it last.
+- **Guess** `[PROVISIONAL]`: AL5 says `size` is pixels; a sound under `audio/` has none, so it takes `"size": null` (any other value is refused). Asset files are `.png`, `.ogg`, `.wav`, `.mp3`.
+- **Docs delta**: `docs/STRUCTURE.md` kit section: "`kits/rpg/library/<style>/<kind>/`: the kit asset library (ASSETLIB1), outside the shipped asset root; checked by `tools/assetlib/check_library.py` (`tools/fc.sh assetlib`, in the gate)". `HISTORY.md`: none.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
