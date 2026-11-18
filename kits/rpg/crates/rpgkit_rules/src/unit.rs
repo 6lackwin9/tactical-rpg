@@ -333,6 +333,9 @@ pub struct Unit {
     /// RULESET1 P2 (rule poise): the unit row's `poise`: -1 = the ruleset's derived Max Poise, 0 = no poise bar (never
     /// breaks), above 0 = a fixed Max Poise. Units built from member state keep -1.
     pub poise: i32,
+    /// BIGUNIT1 BU1: the cells the unit fills on the battle grid (1, or 2 for a 2 x 2 square anchored at its position);
+    /// the unit row's `footprint` (1 for units built from member state).
+    pub footprint: i32,
     /// RULESET1 P6: the unit's passive `stagger_taken` effects in apply order (read only under the rule poise).
     pub stagger_taken: Vec<StaggerTaken>,
     /// HOOKS1 FM5: the passives' `forced_move` effects, and the worn items' (rebuilt on every gear sync); read only under
@@ -456,6 +459,13 @@ pub struct Unit {
 }
 
 impl Unit {
+    /// BIGUNIT1 BU3: a bare unit for a placement check (no class, no gear): its name, attack range and footprint only.
+    pub fn stand_in(name: &str, attack_range: i32, footprint: i32) -> Self {
+        let mut u = Self::blank(name, 1, 1, attack_range, CharacterStats::new(&ClassDef::from_obj(&Default::default()), 1, &IndexMap::new()));
+        u.footprint = if footprint == 2 { 2 } else { 1 };
+        u
+    }
+
     /// U1.2-S3c: `initiative` is a fixed-stat row's `speed`; its move rate is the move curve on it (as before the split).
     fn blank(name: &str, hp: i32, initiative: i32, range: i32, stats: CharacterStats) -> Self {
         Self {
@@ -507,6 +517,7 @@ impl Unit {
             foresight_source: String::new(),
             foresight_range: 0,
             poise: -1,
+            footprint: 1,
             stagger_taken: Vec::new(),
             passive_forced: ForcedTraits::default(),
             gear_forced: ForcedTraits::default(),
@@ -2152,6 +2163,7 @@ fn build_catalog_unit(
     u.power_override = e.power;
     u.armor_override = e.armor;
     u.poise = e.poise;
+    u.footprint = e.footprint;
     for (k, v) in &e.status_resist {
         u.status_resist.insert(k.clone(), *v);
     }

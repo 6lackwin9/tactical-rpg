@@ -285,6 +285,9 @@ pub struct UnitDef {
     pub deck: Deck,
     /// RULESET1 5 P2 (rule poise): -1 = the derived Max Poise, 0 = no poise bar, above 0 = a fixed Max Poise.
     pub poise: i32,
+    /// BIGUNIT1 BU1: the cells the unit fills on the battle grid (1 = one cell, 2 = a 2 x 2 square anchored at its
+    /// top-left cell); any other written value reads as 1 (the content check reports it).
+    pub footprint: i32,
     /// RULESET1 TQ23 (a) (rule round_intent): the round intent the unit starts a battle in ("" = none).
     pub default_intent: String,
     /// HOOKS1 AT2 (rule ai_tactics): the unit's AI tactics (TACTICS ids, in order).
@@ -387,6 +390,7 @@ impl UnitDef {
             pouch: strings(o, "pouch"),
             deck: Deck::from_value(o.get("deck").unwrap_or(&Value::Null)),
             poise: int(o, "poise", -1),
+            footprint: if int(o, "footprint", 1) == 2 { 2 } else { 1 },
             default_intent: string(o, "default_intent", ""),
             tactics: strings(o, "tactics"),
             passives: strings(o, "passives"),

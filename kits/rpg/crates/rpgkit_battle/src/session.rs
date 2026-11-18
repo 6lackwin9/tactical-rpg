@@ -1235,6 +1235,8 @@ impl Session {
             u.hp = encounter::swap_hp(hp, max, u.max_hp, &mode);
             u.ap = ap.min(u.max_ap);
             self.w.swap_unit(c, u);
+            // BIGUNIT1 BU12: a bigger new unit takes a square holding its old cell, pushing units back if it must
+            let growth = self.w.grow_into_place(c);
             self.w.profiles.insert(c, form.profile.clone());
             if self.authored_profiles.contains_key(&c) {
                 self.authored_profiles.insert(c, form.profile.clone());
@@ -1266,6 +1268,22 @@ impl Session {
             self.events.push(entry.detail.clone());
             self.encounter_lines.push((self.resolver.log.len(), format!("[Swap] {}", entry.detail)));
             self.append(entry);
+            // BU12: each pushed unit is named; its entered cells roll their hazards as a forced move's do (no collision)
+            if growth.cramped {
+                let line = format!("[Push] {} finds no room to fill 2 x 2 cells and stays on one cell", self.w.units[c].name);
+                self.events.push(line.clone());
+                self.encounter_lines.push((self.resolver.log.len(), line));
+            }
+            for (o, from, to) in growth.pushes {
+                let cells = self.w.cells_of(o);
+                let notes = crate::command::hazard_on_enter(&mut self.w, &mut self.resolver.rng, o, &cells);
+                let mut line = format!("[Push] {} is pushed back from {from} to {to} to make room for {}", self.w.units[o].name, self.w.units[c].name);
+                for note in notes {
+                    line += &format!(" {note}");
+                }
+                self.events.push(line.clone());
+                self.encounter_lines.push((self.resolver.log.len(), line));
+            }
         }
         if !swapped.is_empty() {
             // the new rows' pouch items and the hazard switch, as at the start

@@ -818,7 +818,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let r = Rect::new(right.x + 4, y, 116, 22 + extra_lines * ui.p.line_h(SMALL).ceil() as i32 + row_h + meter_h);
         let on_board = match view {
             View::Stage => board_hover == Some(e),
-            View::Flat => w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p))),
+            View::Flat => w.cells_of(e).into_iter().any(|p| ui.hover(cell_rect(p))),
         };
         let hover = ui.hover(r) || on_board;
         if hover {
@@ -870,7 +870,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     } else {
         hovered_ally.or(match view {
             View::Stage => board_hover.filter(|u| w.allies.contains(u)),
-            View::Flat => w.allies.iter().copied().find(|&a| w.units[a].is_active() && w.grid.pos(a).is_some_and(|p| ui.hover(cell_rect(p)))),
+            View::Flat => w.allies.iter().copied().find(|&a| w.units[a].is_active() && w.cells_of(a).into_iter().any(|p| ui.hover(cell_rect(p)))),
         })
     };
     // INPUT1 IS1: an inspected unit pins the panel (until another inspect, Esc or the round's end)

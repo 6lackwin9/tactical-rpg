@@ -95,6 +95,36 @@ impl Geom {
         }
     }
 
+    /// BIGUNIT1 BU14: the rect of the `n` x `n` square anchored at `c` (`cell_rect` for one cell).
+    pub fn square_rect(&self, c: V2, n: i32) -> Rect {
+        let (a, n) = (self.cell_rect(c), n.max(1));
+        Rect::new(a.x, a.y, a.w * n, a.h * n)
+    }
+
+    /// BIGUNIT1 BU14: `foot` of a unit filling the `n` x `n` square at `c`: centred on the square across, `foot_inset`
+    /// above its bottom edge (Stage); the square's centre (Flat).
+    pub fn foot_n(&self, c: V2, n: i32) -> (i32, i32) {
+        let r = self.square_rect(c, n);
+        match self.view {
+            View::Stage => (r.x + r.w / 2, r.y + r.h - self.foot_inset),
+            View::Flat => (r.x + r.w / 2, r.y + r.h / 2),
+        }
+    }
+
+    /// BIGUNIT1 BU14: `token_rect` of a unit filling the `n` x `n` square at `c`: its sprite scaled `n` times (the
+    /// existing sheet until a 2 x 2 sheet lands), on the square's foot point (Stage) or centred on it (Flat).
+    pub fn token_rect_n(&self, c: V2, n: i32, dx: i32, dy: i32) -> Rect {
+        if n <= 1 {
+            return self.token_rect(c, dx, dy);
+        }
+        let tp = self.token_px * n;
+        let (fx, fy) = self.foot_n(c, n);
+        match self.view {
+            View::Stage => Rect::new(fx - tp / 2 + dx, fy + 1 - tp + dy, tp, tp),
+            View::Flat => Rect::new(fx - tp / 2 + dx, fy - tp / 2 + dy, tp, tp),
+        }
+    }
+
     /// The cell under logical (mx, my) (None: off the board; the backdrop and the front face hold no cell).
     pub fn cell_at(&self, mx: i32, my: i32) -> Option<V2> {
         let (ch, top) = match self.view {

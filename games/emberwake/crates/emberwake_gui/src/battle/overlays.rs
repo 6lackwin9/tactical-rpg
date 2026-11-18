@@ -55,6 +55,10 @@ impl MoveKind {
 pub(super) struct Overlay {
     /// The selected hero's round target tile (a unit's or the target tile; None for self or none). Planning only.
     pub(super) target: Option<V2>,
+    /// BIGUNIT1 BU15: the other cells of a 2 x 2 round target (ringed like `target`; empty for a one-cell target).
+    pub(super) target_more: Vec<V2>,
+    /// BIGUNIT1 BU15: the footprint of the selected hero (its move plates cover that square; 0 or 1 = one cell).
+    pub(super) mover_size: i32,
     /// The tiles of the units a board click would make the hero's round target (the intent table, PL2; UI1 "valid
     /// cells lit"), the current target left out. Planning only.
     pub(super) valid: Vec<V2>,
@@ -227,6 +231,8 @@ impl Overlay {
         let keep = |on: bool, v: &Vec<V2>| if on { v.clone() } else { Vec::new() };
         Overlay {
             target: self.target.filter(|_| l.target),
+            target_more: keep(l.target, &self.target_more),
+            mover_size: self.mover_size,
             valid: keep(l.valid, &self.valid),
             band: keep(l.band, &self.band),
             front: keep(l.front, &self.front),
@@ -259,6 +265,11 @@ pub(super) fn overlay_of(s: &Session, sel: Option<usize>, planning: bool) -> Opt
         Some(RoundTarget::Cell(p)) => Some(p),
         _ => None,
     };
+    // BIGUNIT1 BU15: a 2 x 2 target is ringed on all four cells; a 2 x 2 hero's move plates cover its square
+    if let Some(RoundTarget::Unit(t)) = target.filter(|_| o.target.is_some()) {
+        o.target_more = w.cells_of(t).into_iter().skip(1).collect();
+    }
+    o.mover_size = w.size_of(h);
     let st = s.plan.compile(w, h);
     // the planned moves: a carried move rides in its skill's entry (Engage, a chase), a retreat or a move after the
     // round's first command is an after-move
@@ -302,7 +313,7 @@ pub(super) fn overlay_of(s: &Session, sel: Option<usize>, planning: bool) -> Opt
     o.valid = (0..w.units.len())
         .filter(|&u| on_field(u) && Some(ri::normalize(h, RoundTarget::Unit(u))) != target)
         .filter(|&u| ri::target_problem(w, h, intent, RoundTarget::Unit(u)).is_empty())
-        .map(|u| w.pos(u))
+        .flat_map(|u| w.cells_of(u))
         .collect();
     let all_cells = || (0..GRID_H).flat_map(|y| (0..GRID_W).map(move |x| V2::new(x, y))).filter(|c| w.grid.is_valid(*c));
     if matches!(intent, RoundIntent::Assault | RoundIntent::Maneuver) {
@@ -388,11 +399,13 @@ pub(super) fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
     for (tiles, how) in &o.moves {
         let col = if *how == MoveKind::Carried { AMBER } else { th().gold };
         if let Some(end) = tiles.last() {
-            let r = match geo.view {
-                View::Stage => inset2(geo.cell_rect(*end), 3, 2),
-                View::Flat => geo.cell_rect(*end).inset(3),
-            };
-            p.panel(r, with_alpha(col, 40), col, 2.0);
+            for c in emberwake_battle::grid::square_cells(*end, o.mover_size) {
+                let r = match geo.view {
+                    View::Stage => inset2(geo.cell_rect(c), 3, 2),
+                    View::Flat => geo.cell_rect(c).inset(3),
+                };
+                p.panel(r, with_alpha(col, 40), col, 2.0);
+            }
         }
     }
     // A4.2-K1b: the planned areas' impact tiles in their row's colour; the Assault row's lighter (it follows its target)
@@ -408,8 +421,8 @@ pub(super) fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
         let col = if *preferred { th().gold } else { th().dim };
         plate(p, plate_of(*c), with_alpha(col, 36), col);
     }
-    if let Some(c) = o.target {
-        let (x, y) = ground_pt(geo, c);
+    for c in o.target.iter().chain(&o.target_more) {
+        let (x, y) = ground_pt(geo, *c);
         p.ellipse_ring(x, y, rx + 2.5, ry + 1.6, th().gold);
         p.ellipse_ring(x, y, rx + 3.5, ry + 2.2, with_alpha(th().gold, 150));
     }
