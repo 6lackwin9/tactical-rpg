@@ -159,7 +159,8 @@ fn unit_start(w: &mut World, c: UnitId) {
     for (meter, start, floor) in held.chain(ammo).chain(pools.iter().map(|m| (m.clone(), -1, None))) {
         let Some(def) = cat.unit_meters.get(&meter) else { continue };
         let max = max_of(w, c, def);
-        let floor = floor.unwrap_or(def.min).clamp(def.min, max);
+        // PR7-8 (RELIC-SIG1): a `meter_floor` effect the unit holds raises a held gauge's floor (it gives none)
+        let floor = floor.unwrap_or(def.min).max(w.units[c].meter_floor(&meter).unwrap_or(def.min)).clamp(def.min, max);
         if let Some(i) = find(w, c, &meter) {
             let g = &mut w.meters.gauges[i];
             g.floor = g.floor.max(floor);

@@ -170,6 +170,9 @@ pub enum Grant {
     /// ACT1-HOOKS2 (FB-244 (4)): skill `skill` takes `delta` more blocks for its holder (`rpgkit_data::SKILL_BLOCK_COST`;
     /// worn items and passives; the deltas on one skill add up, `Unit::skill_blocks` clamps the sum to 1 block at least).
     SkillBlockCost { skill: String, delta: i32 },
+    /// `PR7-8` (`RELIC-SIG1`): the holder's gauge of unit meter `meter`, when it holds one, never goes below `floor`
+    /// (`rpgkit_data::METER_FLOOR`; worn items and passives; the largest floor counts; it gives no meter).
+    MeterFloor { meter: String, floor: i32 },
 }
 
 impl Grant {
@@ -296,6 +299,7 @@ pub fn read_one(e: &Obj) -> Vec<Grant> {
         rpgkit_data::FORBID_HANDS => vec![Grant::ForbidHands { hands: value::int(e, "hands", 2) }],
         rpgkit_data::PIERCE_MELEE => vec![Grant::PierceMelee],
         rpgkit_data::SKILL_BLOCK_COST => vec![Grant::SkillBlockCost { skill: value::string(e, "skill", ""), delta: value::int(e, "delta", 0) }],
+        rpgkit_data::METER_FLOOR => vec![Grant::MeterFloor { meter: value::string(e, "meter", ""), floor: value::int(e, "floor", 0) }],
         _ => Vec::new(),
     }
 }

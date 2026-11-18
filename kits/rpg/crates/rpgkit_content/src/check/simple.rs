@@ -132,7 +132,8 @@ pub(crate) const ITEM_TYPES: [&str; 8] = ["skill_potency", "status_potency", rpg
 /// its `intent` filter values (the round intents IR21 derives; `rpgkit_rules::unit::skill_reach_matches`).
 pub const SKILL_REACH_KINDS: [&str; 6] = ["ATTACK", "DEFEND", "FOCUS", "SUPPORT", "DISENGAGE", rpgkit_data::SKILL_REACH_SPELL];
 pub const SKILL_REACH_INTENTS: [&str; 5] = [intent::ASSAULT, intent::STAND, intent::SUPPORT, intent::MANEUVER, intent::FIELD];
-const GROUPS: [&str; 4] = ["spell", "heal", "channel", "ranged"];
+/// PR7-8 (RELIC-SIG1): `attack` (every ATTACK skill) joins (`rpgkit_rules::unit::skill_in_group`).
+const GROUPS: [&str; 5] = ["spell", "heal", "channel", "ranged", "attack"];
 const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 const RATING_STATS: [&str; 2] = ["armor", "move_rate"];
 
@@ -165,7 +166,7 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
             continue;
         }
         if !matches!(t.as_str(), "trigger" | "meter")
-            && (TYPES.contains(&t.as_str()) || t == rpgkit_data::SKILL_BLOCK_COST || t == rpgkit_data::SPELL_REACH_ALIAS)
+            && (TYPES.contains(&t.as_str()) || t == rpgkit_data::SKILL_BLOCK_COST || t == rpgkit_data::SPELL_REACH_ALIAS || t == rpgkit_data::METER_FLOOR)
         {
             if let Some(w) = e.get("when") {
                 errors.extend(super::hooks::when_errors(w, hooks, &at, None));
@@ -332,6 +333,22 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
                 let valid = e.get("value").and_then(Value::as_f64).is_some_and(|cv| cv.abs() >= 0.00001 && (-100.0..=100.0).contains(&cv));
                 if !valid {
                     errors.push(format!("{at}: crit bonus must be non-zero, {} to {} (percentage points).", fixed(-100.0, 1), fixed(100.0, 1)));
+                }
+            }
+            // PR7-8 (RELIC-SIG1): `meter_floor` {meter, floor} on gear and passives (the unknown-type message keeps its
+            // list, checks_golden): a held gauge's floor, never a meter of its own
+            rpgkit_data::METER_FLOOR => {
+                let meter = json::s(e, "meter");
+                match hooks.meter_range(&meter) {
+                    None => errors.push(format!("{at}: meter_floor: unknown unit meter '{meter}'.")),
+                    Some((lo, hi)) => {
+                        if !e.get("floor").is_some_and(|f| whole_in(f, lo, hi)) {
+                            errors.push(format!("{at}: meter_floor floor must be a whole number {lo}-{hi} (the meter's range)."));
+                        }
+                    }
+                }
+                for k in e.keys().filter(|k| *k != "when" && !rpgkit_data::METER_FLOOR_KEYS.contains(&k.as_str())) {
+                    errors.push(format!("{at}: meter_floor takes only meter and floor (not '{k}')."));
                 }
             }
             _ => errors.push(format!("{at}: unknown effect type '{t}' (use {}).", if items_only { ITEM_TYPES.join(", ") } else { TYPES.join(", ") })),

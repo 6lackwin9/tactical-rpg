@@ -10,7 +10,8 @@ use serde_json::Value;
 
 pub const BASE_AP: i32 = 10;
 pub const GEAR_REACH_CAP: i32 = 1;
-pub const GROUPS: [&str; 4] = ["spell", "heal", "channel", "ranged"];
+/// PR7-8 (RELIC-SIG1): `attack` joins (`skill_in_group`).
+pub const GROUPS: [&str; 5] = ["spell", "heal", "channel", "ranged", "attack"];
 /// RULESET1 V4 (tasks 1.4): the widest foresight reveal range in tiles.
 pub const FORESIGHT_RANGE_MAX: i32 = 8;
 /// RULESET1 tasks 1.4: the largest `stagger_taken` multiplier.
@@ -101,6 +102,8 @@ pub struct CondGrants {
     pub hit_sources: Vec<HitSource>,
     pub block_cost: IndexMap<String, i32>,
     pub crit: f64,
+    /// `PR7-8`: the active conditional `meter_floor` effects (meter id, floor).
+    pub meter_floors: Vec<(String, i32)>,
 }
 
 /// HOOKS1 FM5 (rule `forced_move`; engine-only): what a unit's passive and worn-item `forced_move` effects add up to:
@@ -352,6 +355,13 @@ pub struct Unit {
     /// items' (rebuilt on every gear sync); `skill_blocks` reads both.
     pub block_cost: IndexMap<String, i32>,
     pub gear_block_cost: IndexMap<String, i32>,
+    /// `PR7-8` (`RELIC-SIG1`): the passives' and the worn items' (rebuilt on every gear sync) `meter_floor` effects
+    /// (meter id, floor); `meter_floor` reads them with the active conditional ones.
+    pub meter_floors: Vec<(String, i32)>,
+    pub gear_meter_floors: Vec<(String, i32)>,
+    /// `PR7-8`: the campaign act the unit fights in (a `when` key `from_act` reads it): set by the world when it fields
+    /// a party member (`set_campaign_act`); 0 for every other unit and outside a campaign. Never saved.
+    pub campaign_act: i32,
     /// U3.2-S4 (U3 Level 2): crit chance points the worn gear's families give at proficiency 2 or more (their
     /// `level2_bonus` crit, each family once), rebuilt on every sync.
     pub gear_crit: f64,
@@ -506,6 +516,9 @@ impl Unit {
             battle_skills: Vec::new(),
             block_cost: IndexMap::new(),
             gear_block_cost: IndexMap::new(),
+            meter_floors: Vec::new(),
+            gear_meter_floors: Vec::new(),
+            campaign_act: 0,
             gear_crit: 0.0,
             passive_crit: 0.0,
             class_passives: Vec::new(),
@@ -740,6 +753,7 @@ impl Unit {
         self.gear_hit_sources.clear();
         self.gear_skills.clear();
         self.gear_block_cost.clear();
+        self.gear_meter_floors.clear();
         self.gear_crit = 0.0;
         self.conditional_grants.retain(|c| !c.gear);
         let item_fx: Vec<(String, Vec<Value>)> = self.inventory.gear().map(|e| (format!("gear:{}", e.id()), e.item.effects.clone())).collect();
@@ -903,6 +917,29 @@ impl Unit {
         floors.get(n.min(floors.len()).checked_sub(1)?).map(|f| f + self.floor_offset)
     }
 
+    /// `PR7-8` (`RELIC-SIG1`): whether a passive's `meter` effect gives the unit meter `id` (the `when` key
+    /// `holds_meter` on an effect row; the battle's own trigger check reads the gauges instead).
+    pub fn holds_meter(&self, id: &str) -> bool {
+        self.passive_meters.iter().any(|m| m.meter == id)
+    }
+
+    /// `PR7-8`: the largest `meter_floor` the unit's passives, worn items and active conditional effects hold for
+    /// meter `id` (None = none; the battle raises a held gauge's floor to it, `rpgkit_battle::meter`).
+    pub fn meter_floor(&self, id: &str) -> Option<i32> {
+        self.meter_floors.iter().chain(&self.gear_meter_floors).chain(&self.cond.meter_floors).filter(|(m, _)| m == id).map(|(_, f)| *f).max()
+    }
+
+    /// `PR7-8`: the campaign act the unit fights in (`campaign_act`); the `from_act` conditional effects re-read it.
+    pub fn set_campaign_act(&mut self, cat: &Catalog, act: i32) {
+        if self.campaign_act == act {
+            return;
+        }
+        self.campaign_act = act;
+        if !self.conditional_grants.is_empty() {
+            self.refresh_conditional_grants(cat);
+        }
+    }
+
     /// PK2-S2: how many deck actives the unit may mark channeled: one per graft for a unit with a body (its deck's
     /// actives bound it), else the ruleset's `channeled_actives` (`ruleset`).
     pub fn channeled_limit(&self, ruleset: i32) -> i32 {
@@ -953,6 +990,17 @@ impl Unit {
                         return false;
                     }
                 }
+                // PR7-8 (RELIC-SIG1): the campaign act reached, and a meter a passive gives the unit
+                rpgkit_data::WHEN_FROM_ACT_KEY => {
+                    if i64::from(self.campaign_act) < v.as_f64().map_or(i64::MAX, |a| a as i64) {
+                        return false;
+                    }
+                }
+                rpgkit_data::WHEN_HOLDS_METER => {
+                    if !v.as_str().is_some_and(|id| self.holds_meter(id)) {
+                        return false;
+                    }
+                }
                 _ => return false,
             }
         }
@@ -990,6 +1038,7 @@ impl Unit {
                     Grant::SkillBlockCost { skill, delta } => {
                         *self.cond.block_cost.entry(skill.clone()).or_insert(0) += *delta;
                     }
+                    Grant::MeterFloor { meter, floor } => self.cond.meter_floors.push((meter.clone(), *floor)),
                     Grant::Proficiency { .. } | Grant::GrantPool { .. } | Grant::Trigger(_) | Grant::ForbidHands { .. } | Grant::PierceMelee => {}
                 }
             }
@@ -1082,6 +1131,10 @@ impl Unit {
                 Grant::GrantPool { meter, start, floor, floors } => {
                     let floor = self.table_floor(floors).or(*floor);
                     self.passive_meters.push(HeldMeter { meter: meter.clone(), start: *start, floor });
+                    // PR7-8 (RELIC-SIG1): the meter may open a stored `holds_meter` effect (a worn item's)
+                    if self.conditional_grants.iter().any(|c| c.when.contains_key(rpgkit_data::WHEN_HOLDS_METER)) {
+                        self.refresh_conditional_grants(cat);
+                    }
                 }
                 // PK2-S1: member grants, passives only (`Grant::gear_ok`)
                 Grant::ForbidHands { hands } => self.forbid_hands = self.forbid_hands.max(*hands),
@@ -1090,6 +1143,11 @@ impl Unit {
                 Grant::SkillBlockCost { skill, delta } => {
                     let held = if gear { &mut self.gear_block_cost } else { &mut self.block_cost };
                     *held.entry(skill.clone()).or_insert(0) += *delta;
+                }
+                // PR7-8 (RELIC-SIG1): a held gauge's floor (the gear list is cleared on every sync)
+                Grant::MeterFloor { meter, floor } => {
+                    let held = if gear { &mut self.gear_meter_floors } else { &mut self.meter_floors };
+                    held.push((meter.clone(), *floor));
                 }
             }
         }
@@ -1593,13 +1651,15 @@ pub fn rank_numeral(rank: i32) -> &'static str {
 /// SkillDef.in_group for the passive groups: "spell" = an attack that needs a spell-source weapon (U3.2-S2: a family
 /// with the engine rule `spell_source`, `SkillDef::spell_source`); "heal" = a support heal (HEALPCT1: `heal_pct` too);
 /// "channel" = a channel-only skill (`SkillDef::channel.only`, CLASSPASS1 `PR5-62a`); "ranged" = `skill_is_ranged`
-/// (`PK2-STAGE-PASSIVES`, `PR6-2`).
+/// (`PK2-STAGE-PASSIVES`, `PR6-2`); "attack" = any ATTACK skill (`PR7-8`, `RELIC-SIG1`: a bonus to every hit the unit
+/// strikes with a skill or its basic attack).
 pub fn skill_in_group(s: &rpgkit_data::SkillDef, group: &str) -> bool {
     match group {
         "spell" => s.kind == "ATTACK" && s.spell_source,
         "heal" => s.kind == "SUPPORT" && (s.heal_base > 0 || s.heal_mult > 0.0 || s.heal_pct > 0),
         "channel" => s.channel.only,
         "ranged" => skill_is_ranged(s),
+        "attack" => s.kind == "ATTACK",
         _ => false,
     }
 }

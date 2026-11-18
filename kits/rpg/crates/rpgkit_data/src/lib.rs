@@ -2339,8 +2339,10 @@ pub const TRIGGER_LIMITS: [&str; 3] = ["round", "battle", "none"];
 /// 1.3: the keys of a trigger row (a passive or item effect adds `type`; a rider takes `when` and `effects` only).
 pub const TRIGGER_KEYS: [&str; 4] = ["on", "when", "effects", "limit"];
 pub const RIDER_KEYS: [&str; 2] = ["when", "effects"];
-/// 8.2: the condition keys of a trigger's or rider's `when`.
-pub const WHEN_KEYS: [&str; 11] = [
+/// 8.2: the condition keys of a trigger's or rider's `when` (also a passive's or worn item's effect row `when`).
+/// `PR7-8` (`RELIC-SIG1`): `from_act` (the holder's campaign act is at least this, `WHEN_FROM_ACT`; a unit outside a
+/// campaign is act 0) and `holds_meter` (the holder holds that unit meter through a passive's `meter` effect) join.
+pub const WHEN_KEYS: [&str; 13] = [
     "pct",
     "range",
     "ranged",
@@ -2352,12 +2354,19 @@ pub const WHEN_KEYS: [&str; 11] = [
     "intent",
     "meter",
     "dual_wield",
+    WHEN_FROM_ACT_KEY,
+    WHEN_HOLDS_METER,
 ];
+/// `PR7-8`: the `when` key gating on the holder's campaign act, and its range (a whole number).
+pub const WHEN_FROM_ACT_KEY: &str = "from_act";
+pub const WHEN_FROM_ACT: (i64, i64) = (1, 9);
+/// `PR7-8`: the `when` key gating on a unit meter the holder holds (a passive's `meter` effect gives it).
+pub const WHEN_HOLDS_METER: &str = "holds_meter";
 /// 8.2: the trigger effects and their keys besides `type` (`to`: self or other, where the effect takes it). ROLLTABLE1:
 /// `roll_table` picks one of its `rows` by weight on the battle RNG and runs that row's effects. PK1-S1: `ap` takes
 /// `set` (with `rounds`) instead of `value`, `damage` takes `pct_of_hit` instead of `value`, and `strike_nearest` and
 /// `mark` join.
-pub const TRIGGER_EFFECTS: [(&str, &[&str]); 18] = [
+pub const TRIGGER_EFFECTS: [(&str, &[&str]); 19] = [
     ("ap", &["value", "set", "rounds", "to"]),
     ("grant", &["status", "rounds", "magnitude", "until", "to"]),
     ("inflict", &["status", "potency", "rounds", "magnitude", "to"]),
@@ -2376,7 +2385,20 @@ pub const TRIGGER_EFFECTS: [(&str, &[&str]); 18] = [
     (STRIKE_NEAREST, &["power", "then_status", "then_rounds"]),
     (MARK, &["mark", "value", "to"]),
     (RATING_SET, &["rating", "value", "rounds", "to"]),
+    (SHOCKWAVE, &["tiles", "pct_of_hit"]),
 ];
+/// `PR7-8` (`RELIC-SIG1`): a hit carried on in a line `{tiles, pct_of_hit}` (a hit event only: `hit_dealt`, `kill`):
+/// each foe of the holder standing on the `tiles` tiles past the struck unit, along the holder-to-target direction
+/// (snapped to the 8 directions), takes `pct_of_hit` percent of the hit (at least 1 HP, unmitigated, raising no event:
+/// depth 1). Its ranges.
+pub const SHOCKWAVE: &str = "shockwave";
+pub const SHOCKWAVE_TILES: (i64, i64) = (1, 3);
+pub const SHOCKWAVE_PCT: (i64, i64) = (1, 100);
+/// `PR7-8` (`RELIC-SIG1`): the effect `{type: meter_floor, meter, floor}` (worn items and passives): while held, the
+/// holder's gauge of unit meter `meter`, when it holds one, never goes below `floor` (the largest such floor and the
+/// meter's own count; clamped to the row's min..max); it gives no meter. Its keys besides `when`.
+pub const METER_FLOOR: &str = "meter_floor";
+pub const METER_FLOOR_KEYS: [&str; 3] = ["type", "meter", "floor"];
 /// PK1-KITFIX (b, FB-184 A): a rating held at a value `{rating, value, rounds}` (rounds 1-5 or -1 the rest of the
 /// battle): while it holds, the rating is the value whatever the statuses raising or lowering it add (a later set of
 /// the same rating replaces it).
