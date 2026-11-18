@@ -44,6 +44,7 @@ The `web (advisory)` job in `.github/workflows/gate.yml` runs on every PR into `
 | Area | Behaviour in the browser |
 | --- | --- |
 | Quit | Hidden on the main menu (a page cannot close its own tab) |
+| Display | The canvas fills the page and the screen in fullscreen (itch.io's button or Settings > Display > Fullscreen, session only); the Display tab shows Fullscreen and Text size only (`WEBFIX1`; Map zoom joins it in `PR7-15`) |
 | Saves and settings | In the browser's `localStorage` for the page's origin (keys under `aegis/`); clearing site data wipes them. itch.io serves every game from the shared `itch.zone` origin, so the storage quota may be shared |
 | Playtest recordings and F12 screenshots | Off on the web |
 | Dev keys (F6, F7, F9) | Need a debug build with the dev tools, so neither web build has them (`FB-162`) |
