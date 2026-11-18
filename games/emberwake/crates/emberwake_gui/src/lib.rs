@@ -20,6 +20,7 @@
 
 mod battle;
 mod board;
+mod bunks;
 #[cfg(feature = "dev_tools")]
 mod dojo;
 mod epilogue;

@@ -470,6 +470,7 @@ pub fn settle_party(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]
     // PK2-S4: the members who came home gain mastery in the families they attacked with (from `durability.from_act`)
     let came_home: Vec<&HeroEnd> = ends.iter().filter(|e| home.contains(&e.member)).collect();
     out.mastery = crate::mastery::settle(d, gs, &came_home);
+    crate::talks::count_together(gs, &f.outcome, &home);
     out
 }
 

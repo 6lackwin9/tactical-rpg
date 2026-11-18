@@ -9,7 +9,7 @@ use aegis_core::json::{self, gstr, Dict};
 use serde_json::Value;
 
 /// WorldSchema.KINDS, then CAMPAIGN1's and STORYUI1's kinds (the loader's list).
-pub const KINDS: [&str; 22] = crate::source::WORLD_KINDS;
+pub const KINDS: [&str; 23] = crate::source::WORLD_KINDS;
 const TUNING_KEYS: [&str; 5] = ["hp_pct", "power", "armor", "speed", "ap"];
 const ITEM_TUNING_KEYS: [&str; 3] = ["power", "mitigation", "burden"];
 const STANCES: [&str; 4] = ["ally", "rival", "enemy", "neutral"];
@@ -118,7 +118,14 @@ pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &
         }
         "encounters" => errors.extend(encounter_errors(v, w, &e)),
         "loot" => errors.extend(quest::loot_entry_errors(v, &e)),
-        "dialogues" => errors.extend(dialogue::tree_errors(v, w, &e)),
+        "dialogues" => {
+            // BUNKS1 BK7: a template talk's dialogue may name the two members ({a}, {b})
+            let mut tree = dialogue::tree_errors(v, w, &e);
+            if super::talks::template_dialogue(v, w, &id) {
+                tree.retain(|x| !super::talks::name_token_error(x));
+            }
+            errors.extend(tree);
+        }
         "shops" => errors.extend(shop::shop_errors(v, w, &e)),
         "routes" => errors.extend(travel::route_errors(v, w, &e)),
         "meters" => errors.extend(campaign::meter_errors(v, w, &e)),
@@ -130,6 +137,7 @@ pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &
         rpgkit_data::RECRUITS_KIND => errors.extend(recruit_errors(v, &e)),
         rpgkit_data::facility::FACILITIES_KIND => errors.extend(super::facility::facility_errors(v, &e)),
         rpgkit_data::ending::ENDINGS_KIND => errors.extend(super::endings::ending_errors(v, w, &e)),
+        rpgkit_data::talk::TALKS_KIND => errors.extend(super::talks::talk_errors(v, w, &e)),
         _ => {}
     }
     // CAMPAIGN1 11.4: reserved flag keys in the entry's conditions and flag lists
@@ -230,6 +238,8 @@ fn shape_errors(kind: &str, e: &Dict) -> Vec<String> {
         rpgkit_data::facility::FACILITIES_KIND => list_errors(&mut errors, &["levels"]),
         // PR6-11: the json fields of the endings
         rpgkit_data::ending::ENDINGS_KIND => list_errors(&mut errors, &["requires_flags", "requires_meter", "epilogue_paragraphs", "world_outcomes"]),
+        // BUNKS1 BK5: the json field of the talks
+        rpgkit_data::talk::TALKS_KIND => list_errors(&mut errors, &["requires_flags"]),
         // PK3 3.1: the json fields of the recruit templates
         rpgkit_data::RECRUITS_KIND => {
             list_errors(&mut errors, &["age_band"]);

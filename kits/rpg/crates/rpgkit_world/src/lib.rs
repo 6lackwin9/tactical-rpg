@@ -5,6 +5,7 @@
 
 pub mod battle;
 pub mod board;
+pub mod bunks;
 pub mod campaign;
 pub mod data;
 pub mod dialogue;
@@ -24,6 +25,7 @@ pub mod shop;
 pub mod skill_text;
 pub mod state;
 pub mod story;
+pub mod talks;
 pub mod terms;
 pub mod travel;
 pub mod weapons;

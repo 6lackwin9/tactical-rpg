@@ -1,0 +1,537 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_bunk_kaelen_vesper",
+    "name": "Bunks: the jaw and the whistle",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "They still tell it on the roofs, you know. The Watch recruit who broke Fitch's jaw.",
+      "speaker": "vesper",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "text": "Fitch was selling the cages off the ledger. I'd break it again.",
+      "speaker": "kaelen",
+      "next": "n2"
+     },
+     {
+      "id": "n2",
+      "text": "Good. Then I'll keep running ahead of you, and you keep hitting whoever follows me.",
+      "speaker": "vesper",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk",
+     "bunk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_bunk_kaelen_maren",
+    "name": "Bunks: what the ledgers keep",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "You read your tithe papers twice tonight, Kaelen.",
+      "speaker": "maren",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "text": "The Lullaby House kept a ledger on all of us. I want to know what it said.",
+      "speaker": "kaelen",
+      "next": "n2"
+     },
+     {
+      "id": "n2",
+      "text": "Ledgers lie by leaving things out. When we find it, I'll read the margins with you.",
+      "speaker": "maren",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk",
+     "bunk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_bunk_kaelen_hollis",
+    "name": "Bunks: the bolt and the shield",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "You stand like a wall, Watchman. Makes a good blind for a crossbow.",
+      "speaker": "hollis",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "text": "Then stay behind it and stop sighting down my ear.",
+      "speaker": "kaelen",
+      "next": "n2"
+     },
+     {
+      "id": "n2",
+      "text": "Only when they're worth it. Ruthven's eye was worth it.",
+      "speaker": "hollis",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk",
+     "bunk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_bunk_vesper_maren",
+    "name": "Bunks: smoke and censers",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "Your censer smells like the chapel roofs. I used to sleep up there.",
+      "speaker": "vesper",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "text": "Then you breathed the same prayers I copied. Neither of us believed them, in the end.",
+      "speaker": "maren",
+      "next": "n2"
+     },
+     {
+      "id": "n2",
+      "text": "Burn something sweeter tomorrow. For the runners who don't come down.",
+      "speaker": "vesper",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk",
+     "bunk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_bunk_vesper_hollis",
+    "name": "Bunks: who sees farther",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "Roof-runner. How far can you see from the chimneys?",
+      "speaker": "hollis",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "text": "Far enough to spot a crag-poacher squinting at me.",
+      "speaker": "vesper",
+      "next": "n2"
+     },
+     {
+      "id": "n2",
+      "text": "Wren used to say that. My sister. She'd have liked you.",
+      "speaker": "hollis",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk",
+     "bunk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_bunk_maren_hollis",
+    "name": "Bunks: stitches",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "Hold still. That quarrel cut deeper than you let on.",
+      "speaker": "maren",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "text": "It's nothing. I've stitched worse on the crags with fishing gut.",
+      "speaker": "hollis",
+      "next": "n2"
+     },
+     {
+      "id": "n2",
+      "text": "I can tell. That's why I'm doing it again, properly.",
+      "speaker": "maren",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk",
+     "bunk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_bunk_tpl_temper_steady",
+    "name": "Bunks: steady hands",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "{b} is checking the straps on {a}'s gear without being asked.",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "text": "{a} nods once. Some people make a cell feel bigger. {b} is one of them.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk",
+     "bunk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_bunk_tpl_temper_wary",
+    "name": "Bunks: one eye open",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "{b} sleeps with a boot on and one eye on the door.",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "text": "{a} takes the next watch, and {b} finally shuts both eyes.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk",
+     "bunk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_bunk_tpl_temper_quiet",
+    "name": "Bunks: the quiet one",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "{b} has said nothing all evening, but has learned every name in the cell.",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "text": "{a} sits down beside {b} anyway. The silence is easy.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk",
+     "bunk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_bunk_tpl_temper_reckless",
+    "name": "Bunks: too close",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "{b} is laughing about the blade that missed by a finger.",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "text": "{a} doesn't laugh. \"Next time, wait for me.\" {b} promises, mostly.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk",
+     "bunk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_bunk_tpl_orig_mortuary_calm",
+    "name": "Bunks: the charnel novice",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "{b} folds the dead's linen the old way, corners tucked, without thinking.",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "text": "{a} watches the careful hands and asks nothing. {b} seems grateful for that.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk",
+     "bunk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "talks",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "bunk_kaelen_vesper",
+    "name": "Bunks: the jaw and the whistle",
+    "pair": [
+     "kaelen",
+     "vesper"
+    ],
+    "min_together": 1,
+    "dialogue": "dlg_bunk_kaelen_vesper",
+    "tags": [
+     "provisional"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "talks",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "bunk_kaelen_maren",
+    "name": "Bunks: what the ledgers keep",
+    "pair": [
+     "kaelen",
+     "maren"
+    ],
+    "min_together": 1,
+    "dialogue": "dlg_bunk_kaelen_maren",
+    "tags": [
+     "provisional"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "talks",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "bunk_kaelen_hollis",
+    "name": "Bunks: the bolt and the shield",
+    "pair": [
+     "kaelen",
+     "hollis"
+    ],
+    "min_together": 1,
+    "dialogue": "dlg_bunk_kaelen_hollis",
+    "tags": [
+     "provisional"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "talks",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "bunk_vesper_maren",
+    "name": "Bunks: smoke and censers",
+    "pair": [
+     "vesper",
+     "maren"
+    ],
+    "min_together": 1,
+    "dialogue": "dlg_bunk_vesper_maren",
+    "tags": [
+     "provisional"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "talks",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "bunk_vesper_hollis",
+    "name": "Bunks: who sees farther",
+    "pair": [
+     "vesper",
+     "hollis"
+    ],
+    "min_together": 1,
+    "dialogue": "dlg_bunk_vesper_hollis",
+    "tags": [
+     "provisional"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "talks",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "bunk_maren_hollis",
+    "name": "Bunks: stitches",
+    "pair": [
+     "maren",
+     "hollis"
+    ],
+    "min_together": 1,
+    "dialogue": "dlg_bunk_maren_hollis",
+    "tags": [
+     "provisional"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "talks",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "bunk_tpl_temper_steady",
+    "name": "Bunks: steady hands",
+    "template": true,
+    "temperament": "temper_steady",
+    "min_together": 1,
+    "dialogue": "dlg_bunk_tpl_temper_steady",
+    "tags": [
+     "provisional"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "talks",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "bunk_tpl_temper_wary",
+    "name": "Bunks: one eye open",
+    "template": true,
+    "temperament": "temper_wary",
+    "min_together": 1,
+    "dialogue": "dlg_bunk_tpl_temper_wary",
+    "tags": [
+     "provisional"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "talks",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "bunk_tpl_temper_quiet",
+    "name": "Bunks: the quiet one",
+    "template": true,
+    "temperament": "temper_quiet",
+    "min_together": 1,
+    "dialogue": "dlg_bunk_tpl_temper_quiet",
+    "tags": [
+     "provisional"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "talks",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "bunk_tpl_temper_reckless",
+    "name": "Bunks: too close",
+    "template": true,
+    "temperament": "temper_reckless",
+    "min_together": 1,
+    "dialogue": "dlg_bunk_tpl_temper_reckless",
+    "tags": [
+     "provisional"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "talks",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "bunk_tpl_orig_mortuary_calm",
+    "name": "Bunks: the charnel novice",
+    "template": true,
+    "origin": "orig_mortuary_calm",
+    "min_together": 1,
+    "dialogue": "dlg_bunk_tpl_orig_mortuary_calm",
+    "tags": [
+     "provisional"
+    ]
+   }
+  }
+ ]
+}
