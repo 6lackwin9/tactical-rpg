@@ -169,14 +169,14 @@ def panel_menu(shot):
     return img
 
 
-def panel_foe_blocks(shot, labelled=True):
+def panel_foe_blocks(shot, labelled=True, rows=None, brk="BREAK in 5"):
     img = Image.new("RGB", (320, 300), B.VOID)
     d = ImageDraw.Draw(img)
     foe_p = shot.crop((1044, 220, 1108, 284))
     kae, ves = face("kaelen", 18), face("vesper", 18)
     cx, cy = 8, 8
-    rows = [(2, [kae], 8, 5, (("bleed", "debuff", 3),)), (3, [kae, ves], 22, 30, ()), (4, [kae], 11, 13, ()),
-            (5, [ves], 17, 26, ())]
+    rows = rows(kae, ves) if rows else [(2, [kae], 8, 5, (("bleed", "debuff", 3),)), (3, [kae, ves], 22, 30, ()),
+                                        (4, [kae], 11, 13, ()), (5, [ves], 17, 26, ())]
     H = 76 + len(rows) * 30 + 40
     B.frame_a(d, (cx, cy, cx + 300, cy + H), fill=(16, 18, 25))
     img.paste(foe_p.resize((48, 48)), (cx + 14, cy + 14))
@@ -202,9 +202,10 @@ def panel_foe_blocks(shot, labelled=True):
         for j in range(5):
             c = B.POISE if j < left - pp else (B.AMBER if j < left else B.AP_OFF)
             d.rectangle((cx + 176 + j * 10, y + 8, cx + 176 + j * 10 + 7, y + 14), fill=c)
+        broke = left > 0 >= left - pp
         left -= pp
         tot += hp
-        if left <= 0:
+        if broke:
             d.text((cx + 230, y + 3), "BREAK", font=B.SMALL, fill=B.AMBER)
         sx = cx + 230 if left > 0 else cx + 270
         for st, kind, n in sts:
@@ -215,7 +216,7 @@ def panel_foe_blocks(shot, labelled=True):
     B.heart(d, cx + 84, y + 13, 12)
     d.text((cx + 100, y + 10), f"-{tot}", font=B.MONO_L, fill=B.GOLD)
     B.poise_glyph(d, cx + 138, y + 11, 13)
-    d.text((cx + 156, y + 10), "BREAK in 5", font=B.SMALL, fill=B.AMBER)
+    d.text((cx + 156, y + 10), brk, font=B.SMALL, fill=B.AMBER)
     return B.label(img, "3. Foe card: one row per block, every ally summed") if labelled else img
 
 
