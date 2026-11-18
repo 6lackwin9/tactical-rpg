@@ -8,7 +8,7 @@ screen that says where the game starts, the engine's interface sounds and a scen
 | `game.json` | the manifest: id, title, kit (none), worlds |
 | `crates/__ID___game/` | the game: `src/lib.rs` (context and launch), `src/screens.rs` (the screens), `src/main.rs` (the program `__ID__`), `src/bin/__ID___cli.rs` (the engine's command line for it, `__ID___cli`) |
 | `data/` | the data folder the engine's command line edits |
-| `assets/` | the game's asset layer, over the engine's (`ui/theme.json`, `sprites/`, `audio/`, ...) |
+| `assets/` | the game's asset layer, over the engine's (`ui/theme.json`, `strings/en.json`, `sprites/`, `audio/`, ...) |
 | `scenarios/` | scenario files the gate runs with no window (`__ID___cli scenario run all`) |
 
 Run it: `cargo run -p __ID___game --bin __ID__`. Walk its screens with no window: `cargo build -p __ID___game` then

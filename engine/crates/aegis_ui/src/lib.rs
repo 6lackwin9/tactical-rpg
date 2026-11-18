@@ -23,6 +23,9 @@
 pub mod art;
 pub mod audio;
 pub mod autotile;
+pub mod controls;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod crashlog;
 pub mod bridge;
 pub mod canvas;
 pub mod depth;
@@ -53,6 +56,7 @@ pub mod screen_layout;
 pub mod shell;
 pub mod shot_diff;
 pub mod specimens;
+pub mod strings;
 pub mod text_audit;
 pub mod theme;
 pub mod timeline;

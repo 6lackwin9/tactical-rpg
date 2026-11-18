@@ -61,7 +61,7 @@ An unknown key or step is a problem, not a thing ignored.
 | `step` | Keys | Does |
 | --- | --- | --- |
 | `click`, `hover` | `id` | The link request; a reply with `ok` false fails the step |
-| `key` | `key`, `times` = 1 | Key presses, the frames waited after each |
+| `key` | `key`, `times` = 1 | Key presses, the frames waited after each; through the player's control map (`controls` in the settings) as a real key is |
 | `type` | `text` | Into the field being edited |
 | `drag` | `id`, `to` | Press, move, release; `to` is a widget id or `[x, y]` |
 | `back` | - | Back |

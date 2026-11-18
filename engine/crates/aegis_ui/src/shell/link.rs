@@ -273,13 +273,22 @@ impl<G: Context> Shell<G> {
                                 self.gfx.kit.edit = None;
                                 self.key(k);
                             }
-                            _ => self.key(k),
+                            _ => self.press(k),
                         }
                         json!({"ok": true})
                     }
                     (None, None) => json!({"ok": false, "error": "key needs one of up, down, left, right, enter, space, esc, tab, backtab, pageup, pagedown or a character; while a text field edits also home, end, backspace, delete, ctrl+a / c / x / v / z / y with ctrl+ and shift+"}),
                 }
             }
+            // INPUT-MAP1: a pad button through the control map (no pad needed), and the map in force
+            "pad" => match body.get("button").and_then(Value::as_str).and_then(crate::controls::Pad::parse) {
+                Some(p) => {
+                    self.pad(p);
+                    json!({"ok": true, "key": self.controls().pad(p).name()})
+                }
+                None => json!({"ok": false, "error": format!("pad needs button: one of {}", crate::controls::PADS.iter().map(|(_, n)| *n).collect::<Vec<_>>().join(", "))}),
+            },
+            "controls" => json!({"ok": true, "controls": self.controls().to_json()}),
             "back" => {
                 self.back();
                 json!({"ok": true})

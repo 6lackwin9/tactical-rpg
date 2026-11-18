@@ -277,6 +277,11 @@ impl Settings {
 
     /// The shared reduce-motion setting (STORYUI1-E's key `vignette::REDUCE_MOTION`; false when missing): no camera or
     /// token shakes (FX1), no drifting ash; effects and hit-stop still show.
+    /// The file the settings are saved to (the game's user folder; its `logs/` holds the run's log, ROBUST1).
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
     pub fn reduce_motion(&self) -> bool {
         self.v[crate::vignette::REDUCE_MOTION].as_bool().unwrap_or(false)
     }
