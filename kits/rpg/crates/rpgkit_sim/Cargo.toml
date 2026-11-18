@@ -12,3 +12,6 @@ rpgkit_world = { path = "../rpgkit_world" }
 rpgkit_content = { path = "../rpgkit_content" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
+
+[lints]
+workspace = true

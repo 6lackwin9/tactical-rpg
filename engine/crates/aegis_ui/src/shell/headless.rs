@@ -17,7 +17,7 @@ use aegis_core::clock::Duration;
 use anyhow::{bail, Context as _, Result};
 #[cfg(not(target_arch = "wasm32"))]
 use {
-    super::{blank_reason, save_png, text_scale_of, Shell},
+    super::{blank_reason, save_png, settings::text_scale_of, Shell},
     crate::bridge,
     crate::pacing::{Pace, Pacer},
     crate::screen::window_size_of,
@@ -49,6 +49,9 @@ pub const CLIP_EVERY_MS: (u64, u64) = (10, 2000);
 pub const CLIP_MS_MAX: u64 = 15_000;
 pub const CLIP_WALL_MS_MAX: u64 = 30_000;
 pub const CLIP_BYTES_MAX: u64 = 256 << 20;
+/// A `perf` request's bounds (ENGINE-2): the frames timed and the frames drawn first, untimed.
+pub const PERF_FRAMES_MAX: u64 = 2000;
+pub const PERF_WARM_MAX: u64 = 600;
 #[cfg(not(target_arch = "wasm32"))]
 const CLIP_MAX_W: u64 = 1280;
 
@@ -142,6 +145,7 @@ impl<G: Context> Loop<G> {
         let reply = match req.body["cmd"].as_str() {
             Some("frames") => self.frames(&req.body),
             Some("clip") => self.clip(&req.body),
+            Some("perf") => self.perf(&req.body),
             _ => self.shell.bridge(&req.body),
         };
         let _ = req.reply.send(reply);
@@ -163,6 +167,37 @@ impl<G: Context> Loop<G> {
             self.draw();
         }
         json!({"ok": true, "frame": self.shell.frames})
+    }
+
+    /// ENGINE-2 (PERF-STEP1): `{"cmd": "perf", "frames": n, "warm": w}`, defaults 300 and 60: draws `warm` frames untimed,
+    /// then times `frames` whole frames (`Shell::frame`, all a frame costs with no window: nothing is presented) one after
+    /// another, with the calibration workload (`perf::calib`) before and after. Replies with the frame numbers
+    /// (`perf::Stats`, ms), both calibrations, `steady` (`perf::steady`) and the canvas. Back to back, not at the pace:
+    /// the numbers are the frame's cost, not the frame rate.
+    fn perf(&mut self, body: &Value) -> Value {
+        let whole = |key: &str, default: u64, (low, high): (u64, u64)| match body.get(key) {
+            None => Ok(default),
+            Some(n) => n.as_u64().filter(|n| (low..=high).contains(n)).ok_or(format!("{key} is a whole number from {low} to {high}")),
+        };
+        let (frames, warm) = match (whole("frames", 300, (1, PERF_FRAMES_MAX)), whole("warm", 60, (0, PERF_WARM_MAX))) {
+            (Ok(f), Ok(w)) => (f, w),
+            (Err(e), _) | (_, Err(e)) => return json!({"ok": false, "error": e}),
+        };
+        for _ in 0..warm {
+            self.draw();
+        }
+        let calib_before = crate::perf::calib();
+        let mut ms = Vec::with_capacity(frames as usize);
+        for _ in 0..frames {
+            let t = Instant::now();
+            self.draw();
+            ms.push(crate::perf::ms_since(t));
+        }
+        let calib_after = crate::perf::calib();
+        let r = |x: f64| (x * 1000.0).round() / 1000.0;
+        let canvas = [self.shell.gfx.canvas.w, self.shell.gfx.canvas.h];
+        json!({"ok": true, "stats": crate::perf::Stats::of(&ms).to_json(), "calib_before": r(calib_before), "calib_after": r(calib_after),
+            "steady": crate::perf::steady(calib_before, calib_after), "canvas": canvas, "build": if cfg!(debug_assertions) { "dev" } else { "release" }, "frame": self.shell.frames})
     }
 
     /// `{"cmd": "clip", "dir": ..., "frames": n, "every_ms": m, "max_w": w}`: a numbered sequence (`frame_0001.png` on) of

@@ -100,13 +100,13 @@ fn up_and_down_move_by_visual_line_and_keep_the_column() {
 
 #[test]
 fn selection_is_replaced_by_typing_and_collapses_without_shift() {
-    let mut e = Edit::new("t", "hello world", false);
+    let mut e = Edit::new("t", "salve world", false);
     let l = lay(&e.text, 100.0, false);
     e.move_to(0, false);
     for _ in 0..5 {
         key(&mut e, "shift+right", &l);
     }
-    assert_eq!((e.selection(), e.selected().as_str()), (Some((0, 5)), "hello"));
+    assert_eq!((e.selection(), e.selected().as_str()), (Some((0, 5)), "salve"));
     e.insert("bye");
     assert_eq!((e.text.as_str(), e.caret, e.selection()), ("bye world", 3, None), "typing replaces the selection");
     e.select_word(6);
@@ -121,7 +121,7 @@ fn selection_is_replaced_by_typing_and_collapses_without_shift() {
 
 #[test]
 fn ctrl_moves_and_deletes_by_word() {
-    let text = "Hello, world  foo";
+    let text = "Salve, world  foo";
     let ch: Vec<char> = text.chars().collect();
     let rights: Vec<usize> = std::iter::successors(Some(0), |p| (*p < ch.len()).then(|| word_end(&ch, *p))).collect();
     assert_eq!(rights, [0, 5, 7, 14, 17], "a word, then its punctuation, each with the spaces after it");
@@ -130,7 +130,7 @@ fn ctrl_moves_and_deletes_by_word() {
     let mut e = Edit::new("t", text, false);
     let l = lay(text, 100.0, false);
     key(&mut e, "ctrl+backspace", &l);
-    assert_eq!(e.text, "Hello, world  ", "Ctrl+Backspace takes the word before the caret");
+    assert_eq!(e.text, "Salve, world  ", "Ctrl+Backspace takes the word before the caret");
     e.move_to(0, false);
     key(&mut e, "ctrl+delete", &l);
     assert_eq!(e.text, ", world  ", "Ctrl+Delete takes the word after it");

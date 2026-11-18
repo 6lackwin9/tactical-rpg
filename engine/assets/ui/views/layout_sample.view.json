@@ -1,0 +1,23 @@
+{
+  "screen": "layout_sample",
+  "fields": {
+    "title": {"text": "Trading post"},
+    "purse": {"text": "Purse: 120 coins"},
+    "tabs": {"tabs": {"labels": ["Buy", "Sell", "Repair"], "open": 0}},
+    "goods": {"rows": [
+      {"id": "rope", "label": "Rope", "detail": "4", "enabled": true},
+      {"id": "lamp", "label": "Lamp", "detail": "12", "enabled": true},
+      {"id": "map", "label": "Old map", "detail": "40", "enabled": false}
+    ]},
+    "picked": {"picture": "ui/help.png"},
+    "about": {"text": "A sample screen of the engine's layout files: a view (this fixture) drawn through ui/layouts/layout_sample.json."},
+    "stats": {"stats": [["Weight", "3"], ["Worth", "12"]]},
+    "load": {"meter": [7, 20]}
+  },
+  "actions": [
+    {"id": "buy", "label": "Buy", "enabled": true},
+    {"id": "pick", "label": "Pick", "enabled": true},
+    {"id": "tab", "label": "Tab", "enabled": true},
+    {"id": "leave", "label": "Leave", "enabled": true}
+  ]
+}

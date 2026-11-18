@@ -70,6 +70,7 @@ An unknown key or step is a problem, not a thing ignored.
 | `assert` | `until` | True now or fail |
 | `shot` | `name`, `max_w` = 1920, `golden` | Screenshot into the bundle, once the frames after the last change are drawn. A blank frame fails the step. `golden`: compared with its baseline (below) |
 | `clip` | `name`, `frames` = 30, `every_ms` = 66, `max_w` = 1280 | No window only. A numbered sequence, `<name>/frame_0001.png` on: at most 120 frames, 10 to 2000 ms apart, 15 s in all |
+| `perf` | `name`, `frames` = 300, `warm` = 60, `budget` | No window only. Frame times (ENGINE-2): see "Frame times" |
 | `pause` | `ms` | Time passes, for a picture at a moment of an animation, with a look at the game each second. To wait for a result, use `wait` |
 | `audit` | `scales`, `fail` = all of `cut`, `edge`, `overlap`, `spill` | The text audit per text size; a kind in `fail` found fails the step |
 | `repeat` | `times`, `steps`, `until` | A bounded loop. `until` is read before each turn and ends it; turns running out with `until` still false fails |
@@ -117,6 +118,25 @@ largest difference and their box, and keeps `<name>.diff.png`. A missing baselin
 has passed, and lists them in `result.json` under `recorded`. A new or changed baseline needs the user's approval: it lands as a named re-record in the
 commit and a `docs/HISTORY.md` row, like an engine golden. Shoot screens at rest with `reduce_motion` on; idle sprite clips
 still move under it, so a screen with walking or idle bodies takes a `pixels` allowance (a few thousand at 1280x720).
+
+## Frame times
+
+A `perf` step (no window only) draws `warm` frames untimed, then times `frames` whole frames back to back (1 to 2000; `warm`
+0 to 600), with a fixed CPU workload (the calibration) timed before and after. Its numbers go to `perf_<name>.json` in the
+bundle and under `perf` in `result.json`: `stats` (`p10`, `p50`, `p95`, `max`, `mean` in ms, `count`), `calib_before`,
+`calib_after`, `steady`, `canvas`, `build` and `verdict`.
+
+| `verdict` | When |
+| --- | --- |
+| `recorded` | No `budget` |
+| `within` | Every number named in `budget` (`p50_ms`, `p95_ms`, `max_ms`) is at or under it |
+| `over` | One is over it on a steady machine: the step fails, naming it |
+| `no verdict` | The two calibrations differ by more than 20 %: the machine's load changed, so the numbers judge nothing and the step passes |
+
+A frame with no window is the whole frame's cost (nothing is presented), not the frame rate. A dev build is several times
+slower than a release one, so a budget in a scenario the gate runs is a loose ceiling that catches a gross regression; a tight
+one belongs in a release run (`tools/fc.sh scenario <id> profile=release`). The painter's own costs (fill, panels, text) are
+`tools/fc.sh bench`.
 
 ## The bundle
 

@@ -1060,6 +1060,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "hello_game"
+version = "0.1.0"
+dependencies = [
+ "aegis_cli",
+ "aegis_content",
+ "aegis_core",
+ "aegis_host",
+ "aegis_save",
+ "aegis_ui",
+ "anyhow",
+ "serde_json",
+]
+
+[[package]]
 name = "hermit-abi"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

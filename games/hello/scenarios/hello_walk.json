@@ -1,0 +1,30 @@
+{
+  "id": "hello_walk",
+  "title": "The sample game: a new walk, steps and bumps, a save, back to the menu, continue",
+  "steps": [
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
+    {"step": "assert", "until": {"path": "state.can_continue", "eq": false}},
+    {"step": "shot", "name": "menu"},
+    {"step": "perf", "name": "menu", "frames": 120, "warm": 10, "budget": {"p50_ms": 50, "p95_ms": 100}},
+    {"step": "click", "id": "menu.new"},
+    {"step": "wait", "until": {"path": "screen", "eq": "field"}},
+    {"step": "key", "key": "left"},
+    {"step": "key", "key": "left"},
+    {"step": "assert", "until": {"path": "sound", "source": "game", "eq": "sfx/ui_error.wav"}},
+    {"step": "key", "key": "right", "times": 4},
+    {"step": "key", "key": "d"},
+    {"step": "key", "key": "down", "times": 2},
+    {"step": "wait", "until": {"path": "state.sliding", "eq": false}},
+    {"step": "assert", "until": {"all": [{"path": "state.walk.x", "eq": 5}, {"path": "state.walk.y", "eq": 7}, {"path": "state.walk.steps", "eq": 7}]}},
+    {"step": "shot", "name": "field"},
+    {"step": "perf", "name": "field", "frames": 120, "warm": 10, "budget": {"p50_ms": 50, "p95_ms": 100}},
+    {"step": "click", "id": "field.save"},
+    {"step": "assert", "until": {"all": [{"path": "saved", "source": "game", "eq": true}, {"path": "sound", "source": "game", "eq": "sfx/ui_confirm.wav"}]}},
+    {"step": "click", "id": "field.menu"},
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
+    {"step": "assert", "until": {"path": "state.can_continue", "eq": true}},
+    {"step": "click", "id": "menu.continue"},
+    {"step": "wait", "until": {"path": "screen", "eq": "field"}},
+    {"step": "assert", "until": {"all": [{"path": "state.walk.x", "eq": 5}, {"path": "state.walk.y", "eq": 7}, {"path": "state.walk.steps", "eq": 7}]}}
+  ]
+}

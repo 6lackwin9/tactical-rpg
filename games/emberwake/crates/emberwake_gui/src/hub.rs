@@ -238,7 +238,7 @@ impl Screen<GameCx> for Hub {
         let hp_y = if compact { step } else { step * 2.0 };
         let bh = 4 + per_col as i32 * row_h;
         let bx = Rect::new(320 - cols as i32 * col_w / 2, 80, cols as i32 * col_w, bh);
-        ui.p.panel(bx, th().card, th().edge, 2.0);
+        crate::hud::hud_panel(&mut ui, bx, th().card, th().edge, 2.0);
         for (i, (m, (class_line, (hp, max, wounded)))) in rows.iter().zip(&lines).enumerate() {
             let x = (bx.x + (i / per_col) as i32 * col_w) as f32 + 3.0;
             let y = bx.y as f32 + 3.0 + (i % per_col) as f32 * row_h as f32;

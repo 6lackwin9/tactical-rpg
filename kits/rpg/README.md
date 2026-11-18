@@ -54,7 +54,7 @@ To check a regeneration, write it into an empty folder (`--root DIR`) and compar
 (`tools/gen_art.py --compare DIR`). `tools/sprites/export_units.py` always rewrites the bodies it owns (no keep rule).
 
 HOOKS1-S: the combat hook schema (9 rule ids; skill, item, passive, unit, encounter and manifest fields; kinds `hazards`, `unit_meters`, `zones`). Behaviour lands per hook.
-Authoring guide for every hook (fields, rules, examples): `engine/docs/authoring/combat_hooks.md`.
+Authoring guide for every hook (fields, rules, examples): `kits/rpg/docs/authoring/combat_hooks.md` (the rule library and fixed-vs-tunable contract: `kits/rpg/docs/authoring/rule_library.md`).
 HOOKS1-C: class names and paths per world: a world manifest's `classes` overlay (`rpgkit_world` `data.rs` `class_name`, `cat_in`); since HOOKS1-UI slice 2 a member's path follows the world being played.
 HOOKS1-GF: with the rule `ground_hazards` off a battle's catalog drops skill hazards at the start (`World::ignore_hazards_when_off`).
 HOOKS1-Z: zones as data: the 8 code zones plus `zones` rows (encounter and road-fight `zone` options, `Grid::apply_board(zone, rows, &cat.zones)`, `grid::data_zone`, `art::zone_backdrop`).

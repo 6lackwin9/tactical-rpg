@@ -67,6 +67,21 @@ pub fn hud_open(cx: &mut Cx, h: Hud, help: &[&str]) {
     }
 }
 
+/// The theme's frame role of a heads-up panel (WEBFIX2 (a): the style bible's F2, the thin iron frame with the
+/// oxblood top line).
+pub const HUD_FRAME: &str = "hud";
+
+/// WEBFIX2 (a): a heads-up panel over `r` (a battle's bars and sides, a map's legend and log, the hub's bar and
+/// party box): the theme's `HUD_FRAME` art, else, with no frame file (frames off), the vector panel `fill` / `edge` /
+/// `radius` it drew before.
+pub fn hud_panel<A: Clone>(ui: &mut Ui<A>, r: Rect, fill: Rgba, edge: Rgba, radius: f32) {
+    if th().frame(HUD_FRAME).is_some() {
+        ui.frame_body(HUD_FRAME, r);
+    } else {
+        ui.p.panel(r, fill, edge, radius);
+    }
+}
+
 /// Draws the HUD bar: `name` (gold) from `left`, then at the right gold, supplies and the icon buttons Party, Journal,
 /// Stash, Help and Menu (icons from the asset layers, drawn shapes while a file is missing). `menu` is the Menu
 /// button's widget id and key; `why` (when not empty) disables every button but Help and says why on its hover card;
@@ -74,6 +89,7 @@ pub fn hud_open(cx: &mut Cx, h: Hud, help: &[&str]) {
 #[allow(clippy::too_many_arguments)]
 pub fn hud_bar<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, left: i32, name: &str, menu: (&str, &str), why: &str, help: &[&str], wrap: impl Fn(Hud) -> A) {
     ui.p.fill(Rect::new(0, 0, W, HUD_H), th().game("hud_bar", rgba(10, 14, 22, 255)));
+    hud_panel(ui, Rect::new(0, 0, W, HUD_H), rgba(0, 0, 0, 0), th().game("hud_bar", rgba(10, 14, 22, 255)), 0.0);
     let journal = crate::hub::has_quests(cx);
     let px = ui.icon_px(Rect::new(0, 0, HUD_BOX, HUD_BOX));
     let start = W - 3 - HUD_BUTTONS.len() as i32 * (HUD_BOX + 2) + 2;

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
 #   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test (the UI bot's
-#                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), every scenario of the game with no window (PR7-4),
-#                                the layer check, docs --all, tooltests, plannertests, assetlib
+#                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), every scenario of each game with no window (PR7-4; the sample game games/hello too, ENGINE-1), a new game from the templates (ENGINE-6),
+#                                the layer check, the screen layout check, the lints, docs --all, tooltests, plannertests, assetlib
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
 #                                engine and kit crates (src, tests), schema.json and kit.json name no lore word, any case
@@ -17,6 +17,14 @@
 #                                then the tools/planner tests (plain Python, no Pillow)
 #   tools/fc.sh assetlib         the kit asset library kits/*/library/<style>/<kind>/ and its .meta.json sidecars (ASSETLIB1: fields, enums,
 #                                PNG size, unique ids, no game lore word) plus the check's tests; part of the gate
+#   tools/fc.sh layouts          every game's screen layouts ui/layouts/*.json against their view fixtures ui/views/*.view.json
+#                                (UISPLIT1 US5: parse, components, binds, fields and actions); part of the gate
+#   tools/fc.sh lints            the deny set (CI-HARDEN1: [workspace.lints] in Cargo.toml) under clippy with clippy's other lints
+#                                off, and no unused dependency (tools/deps/unused_deps.py, its tests); part of the gate
+#   tools/fc.sh newgame          `aegis new game` still makes a game that builds, tests and plays its scenario (made and removed
+#                                again in games/scaffold_check, about 10 s warm); part of the gate
+#   tools/fc.sh bench [sizes=1280x720,1920x1080] [runs=50]   the painter's benchmarks (ENGINE-2: fill, panels, text; ms per run,
+#                                p10/p50/p95/max, a calibration before and after) in a release build; one JSON line per size; never in the gate
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
 #   tools/fc.sh rules [--contract]   the ruleset tweak report (aegis rules: register metadata, fields, bundles, tested sets, locked,
 #                                the game's rows); --contract: tunable and locked, one line each
@@ -242,6 +250,50 @@ plannertests() {  # the tools/planner script tests (SKILLS1-FB): plain Python, n
   fi
 }
 
+layouts() {  # PR7-38 (UISPLIT1 US5): aegis_ui's ui_layout check over every game folder's asset layers
+  cargo build -q -p aegis_ui --bin ui_layout || { status=1; return; }
+  local games=() d
+  for d in games/*/; do [ -f "$d/game.json" ] && games+=("${d%/}"); done
+  "${CARGO_TARGET_DIR:-$PWD/target}/debug/ui_layout" check "${games[@]}" || status=1
+}
+
+lints() {  # ENGINE-4 (CI-HARDEN1): the workspace deny set under clippy, then the unused-dependency check and its tests
+  local out py
+  if out=$(cargo clippy -q --workspace --all-targets -- -A clippy::all 2>&1) && ! echo "$out" | grep -q '^\(warning\|error\)'; then
+    echo "[lints] deny set clean"
+  else
+    echo "$out" | grep -E '^(warning|error)' -A8 | head -n 60; echo "[lints] FAIL: the deny set ([workspace.lints] in Cargo.toml)"; status=1
+  fi
+  if ! py=$(python_with "import tomllib"); then echo "[lints] SKIP: no Python 3.11+ for tools/deps"; return 0; fi
+  "$py" tools/deps/unused_deps.py || status=1
+  if out=$(cd tools/deps && "$py" -m unittest -q 2>&1); then
+    echo "[lints] deps tests ok: $(echo "$out" | grep -E '^Ran [0-9]+ test')"
+  else
+    echo "$out" | tail -n 30; echo "[lints] FAIL: tools/deps tests"; status=1
+  fi
+}
+
+newgame() {  # ENGINE-6 (NEW-GAME1): the new-game templates still make a game that builds with no warning, passes its tests
+  # and its scenario: `aegis new game scaffold_check` into games/, built, tested, its scenario run, then removed
+  local id=scaffold_check bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" out
+  [ -e "games/$id" ] && { echo "[newgame] FAIL: games/$id exists; remove it first"; status=1; return; }
+  cargo build -q -p emberwake_host || { status=1; return; }
+  "$bin/aegis" new game "$id" > /dev/null || { status=1; return; }
+  if out=$(cargo build -p "${id}_game" --all-targets 2>&1) && ! echo "$out" | grep -qE '^warning' \
+    && out=$(cargo test -q -p "${id}_game" 2>&1) && out=$(cd "games/$id" && "$bin/${id}_cli" scenario run all out="$(mktemp -d)" 2>&1); then
+    echo "[newgame] ok: a new game builds, passes its tests and its scenario"
+  else
+    echo "$out" | grep -E '^(warning|error)|FAIL|panicked' -A6 | head -n 40; echo "[newgame] FAIL: the templates in engine/crates/aegis_cli/templates/new_game/"; status=1
+  fi
+  rm -rf "games/$id"
+  cargo metadata -q --format-version 1 > /dev/null   # the lock file forgets the removed crate
+}
+
+bench() {  # ENGINE-2 (PERF-STEP1): aegis_ui's ui_bench in a release build; timings only mean something on a quiet machine
+  cargo build -q --release -p aegis_ui --bin ui_bench || { status=1; return; }
+  "${CARGO_TARGET_DIR:-$PWD/target}/release/ui_bench" "$@" || status=1
+}
+
 assetlib() {  # PR7-35 (ASSETLIB1): the kit asset library check (tools/assetlib/check_library.py) and its tests; plain Python
   local py out
   if ! py=$(python_with "pass"); then echo "[assetlib] SKIP: no Python 3 found"; return 0; fi
@@ -327,7 +379,10 @@ gate() {
   repro; [ $status -ne 0 ] && return
   playtest_smoke; [ $status -ne 0 ] && return
   scenarios_all; [ $status -ne 0 ] && return
+  newgame; [ $status -ne 0 ] && return
   layers_check; [ $status -ne 0 ] && return
+  layouts; [ $status -ne 0 ] && return
+  lints; [ $status -ne 0 ] && return
   # the whole docs check; the size warnings, which are many, as one count (tools/fc.sh docs --all lists them)
   local out
   out=$(docs_check --all) || status=1
@@ -352,16 +407,22 @@ playtest_smoke() {  # PR7-22: the agent playtest harness plays a fresh save to t
   rm -rf "$out"
 }
 
-scenarios_all() {  # PR7-4: every scenario of the registered game (games/emberwake/scenarios/), no window, dev build; golden shots compare against their baselines
-  local cli="${CARGO_TARGET_DIR:-$PWD/target}/debug/aegis" out log
-  [ -x "$cli" ] || [ -x "$cli.exe" ] || { echo "[scenarios] FAIL: no dev build of the CLI at $cli"; status=1; return; }
-  out=$(mktemp -d); log="$out/run.txt"
-  if "$cli" scenario run all out="$out" > "$log" 2>&1; then
-    echo "[scenarios] $(tail -n 1 "$log" | sed 's/^§ scenario run: //')"
-    rm -rf "$out"
-  else
-    grep -vE "PASS;" "$log" | head -n 20; echo "[scenarios] FAIL: a scenario failed (bundles, diff images among them, under $out)"; status=1
-  fi
+scenarios_all() {  # PR7-4: every scenario of each game, no window, dev build; golden shots compare against their baselines
+  # every games/<id>/ with a scenarios/ folder, through its CLI: Emberwake's is `aegis`, any other game's `<id>_cli`
+  # (the sample game, ENGINE-1; a game made by `aegis new game`, ENGINE-6), beside its game program `<id>`
+  local bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" cli name out log d
+  for d in games/*/; do
+    name=$(basename "$d"); [ -f "$d/game.json" ] && [ -d "$d/scenarios" ] || continue
+    cli="$bin/${name}_cli"; [ "$name" = emberwake ] && cli="$bin/aegis"
+    [ -x "$cli" ] || [ -x "$cli.exe" ] || { echo "[scenarios] FAIL: no dev build of $cli"; status=1; continue; }
+    out=$(mktemp -d); log="$out/run.txt"
+    if "$cli" scenario run all out="$out" > "$log" 2>&1; then
+      echo "[scenarios] $name: $(tail -n 1 "$log" | sed 's/^§ scenario run: //')"
+      rm -rf "$out"
+    else
+      grep -vE "PASS;" "$log" | head -n 20; echo "[scenarios] FAIL: a scenario of $name failed (bundles, diff images among them, under $out)"; status=1
+    fi
+  done
 }
 
 aegis() {  # the CLI, built on demand
@@ -510,9 +571,13 @@ case "$1" in
   scenario) scenario "${@:2}" ;;
   playtest) playtest "${@:2}" ;;
   assetlib) assetlib ;;
+  bench) bench "${@:2}" ;;
+  layouts) layouts ;;
+  lints) lints ;;
+  newgame) newgame ;;
   web) web "${@:2}" ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;
-  *) sed -n '2,20p' "$0"; status=1 ;;
+  *) sed -n '2,27p' "$0"; status=1 ;;
 esac
 exit $status

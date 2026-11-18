@@ -9,6 +9,7 @@ from re-deriving the method each time.
 
 | Page | Use it to |
 | --- | --- |
+| [../API.md](../API.md) | Start a new game (`aegis new game <id>`) and learn the engine API: crates, context, screens, launch, host, command line |
 | [layer_rule.md](layer_rule.md) | Decide whether a feature is engine, kit hook, data or game code |
 | [kit_layout.md](kit_layout.md) | Lay out a kit's folders and crates, and extract a kit from a game |
 | [design_library.md](design_library.md) | Set up a game's design library (canon sheet, registry, numbers, glossary, truth, gaps) |
@@ -17,11 +18,12 @@ from re-deriving the method each time.
 | [lore_modules.md](lore_modules.md) | Write lore and events as independent modules that can be decided alone and connected later |
 | [campaign_structure.md](campaign_structure.md) | Give the player forks and optional missions while checkpoints with deadlines keep the story on time |
 | [consistency_pass.md](consistency_pass.md) | Turn a brainstormed design library into canon and collect the gaps |
-| [combat_hooks.md](combat_hooks.md) | Use the RPG kit's combat hooks as data: forced moves, hazards, triggers, meters, phase effects, AI tactics |
+| [RPG kit: combat_hooks.md](../../../kits/rpg/docs/authoring/combat_hooks.md) | Use the RPG kit's combat hooks as data: forced moves, hazards, triggers, meters, phase effects, AI tactics |
 | [art_bible.md](art_bible.md) | Fix canvas, board, sprite, palette and pipelines before any art is made |
 | [reactive_layout.md](reactive_layout.md) | Write a screen whose positions and sizes are calculated from the selected layout; canvas, units and rounding; sort existing screens |
 | [scenarios.md](scenarios.md) | Scenario files that drive real windows, for agents |
 | [agent_playtest.md](agent_playtest.md) | Play the real game as an agent, one command at a time, with a log line and a shot per step |
+| [screen_layouts.md](screen_layouts.md) | Split a screen into a view, a layout file and the theme; the components, the check and the preview |
 | [theme_and_tiles.md](theme_and_tiles.md) | Add a runtime theme and frames; lay out a set's tiles, faces and transition pieces; the corner mask convention |
 | [region_grounds.md](region_grounds.md) | Give a walkable map several ground types, its walls a height in storeys and its outer edge its own art |
 | [motion_profiles.md](motion_profiles.md) | Give each portrait face its own motion (breath, lean, bob, entry, rest, shiver, blink, flush) as data |

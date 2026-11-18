@@ -1,14 +1,16 @@
 //! The hub's bunks on the region map (BUNKS1 BK1-BK4, BK8-BK12; engine-only, no Godot original): the bunk states'
 //! art, the members idling at the tables and their bunks, the candles and speech marks of waiting talks, and the click
 //! card of a member (portrait, name, condition, a waiting talk; Take into the squad or Stand down, Take the lead,
-//! Talk). The rules are the kit's (`emberwake_world::bunks`, `emberwake_world::talks`); this file draws and asks.
+//! Talk) in the dialogue box, and each occupied bunk's name plate (HUB-POLISH1). The rules are the kit's (`emberwake_world::bunks`, `emberwake_world::talks`); this file draws and asks.
 
 use aegis_core::json::{self, Dict};
 use aegis_ui::canvas::{rgb, rgba, Rect};
+use aegis_ui::painter::Painter;
 use aegis_ui::theme::th;
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, H, SMALL, W};
 use aegis_ui::widget_plumbing;
-use crate::screens::{Cx, GameCx, Nav, Screen};
+use crate::screens::{Cx, GameCx, Key, Nav, Screen};
+use crate::talk::{box_layout, draw_box, TalkAct};
 use emberwake_world::bunks::{self as kit, Bunk, Spots};
 use emberwake_world::explore;
 use emberwake_world::state::{GameState, UnitState};
@@ -23,6 +25,8 @@ pub const TALK_ANSWER: &str = "bunk.talk.";
 /// The candle over a bunk and the speech mark over a member with a waiting talk (placeholders until Art/UI AI-17).
 pub const CANDLE_ICON: &str = "ui/markers/bunk_candle.png";
 pub const TALK_ICON: &str = "ui/markers/bunk_talk.png";
+/// The bunk card's frame widget (the dialogue box's frame, HUB-POLISH1).
+pub const CARD_ID: &str = "bunk.card";
 
 /// The region map's hub state: the location it was placed for, what the places depend on, the lead and where each
 /// member idles (BK9). Never saved: entering the hub places everyone again (BK12).
@@ -138,6 +142,42 @@ pub fn draw_mark(ui: &mut Ui<impl Clone>, cx: &mut Cx, icon: &str, r: Rect) {
     }
 }
 
+// ---- The name plate (BK2, HUB-POLISH1 (1)) --------------------------------------------------------------------------
+
+/// The bunk art's measure (AI-17 `kiln_bunk_<state>`, in art px of its square): the art's side, the bed's width
+/// (centred) and the bed head's top (the arched niche is above it).
+pub const ART_SIDE: i32 = 80;
+pub const BED_W: i32 = 42;
+pub const BED_HEAD_Y: i32 = 28;
+/// The plate's widest (art px, centred on the bed): the bunks' pitch (three cells, 96 art px) less a gap, so two
+/// neighbours' plates never meet.
+pub const PLATE_MAX_W: i32 = 92;
+
+/// The name plate of an occupied bunk drawn in `r` (the bunk's drawn art rect): centred on the bed, its top on the
+/// bed's head (under the niche, clear of the candle in the art's top corner), as wide as the class sigil and the name
+/// need, at least the bed and at most `PLATE_MAX_W`; the name shortened to fit.
+pub fn plate_rect(p: &mut Painter, r: Rect, name: &str) -> Rect {
+    let lh = p.line_h(SMALL).ceil() as i32;
+    let h = lh + 2;
+    let side = h - 2;
+    let want = 2 + side + 3 + p.text_w(name, SMALL).ceil() as i32 + 4;
+    let w = want.clamp(BED_W * r.w / ART_SIDE, PLATE_MAX_W * r.w / ART_SIDE);
+    let mid = r.x + r.w / 2;
+    let head = r.y + BED_HEAD_Y * r.h / ART_SIDE;
+    Rect::new(mid - w / 2, head, w, h)
+}
+
+/// Draws the plate `pr` (`plate_rect`): a brass-edged plate, the class sigil (the class name's first letter in a
+/// ring, drawn: no art) at the left and the member's name (shortened to fit, the audit keeping it whole).
+pub fn draw_plate(p: &mut Painter, pr: Rect, name: &str, class: &str) {
+    p.panel(pr, th().card, th().gold, 1.0);
+    let side = pr.h - 2;
+    let letter = class.chars().next().map_or('?', |c| c.to_ascii_uppercase());
+    aegis_ui::ui::draw_glyph(p, aegis_ui::ui::Glyph::Letter(letter), Rect::new(pr.x + 2, pr.y + 1, side, side), th().gold);
+    let tx = pr.x + 2 + side + 3;
+    p.text_fit(tx as f32, pr.y as f32 + 1.0, name, SMALL, (pr.x + pr.w - 3 - tx) as f32, th().text);
+}
+
 // ---- The click card (BK4) ------------------------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
@@ -151,21 +191,36 @@ pub enum CardAct {
     Close,
 }
 
-/// BK4: the small card a click on an occupied bunk or an idling member opens.
+/// BK4: the card a click on an occupied bunk or an idling member opens. HUB-POLISH1 (2): it is the dialogue box
+/// (`talk::box_layout`, `talk::draw_box`): the member's portrait at the left with the name and the class and condition
+/// line under it, what the member has to say at the right (a refusal, a waiting talk, the fuse; else where they
+/// stand) and the card's buttons as numbered choices (1-9 pick them).
 pub struct BunkCard {
     member: String,
     /// The last refusal (the squad's).
     message: String,
     faces: crate::portraits::Faces,
+    /// The choices drawn last frame (their action and whether they are on), for the keys.
+    acts: Vec<(TalkAct, bool)>,
     w: Vec<Widget<CardAct>>,
 }
 
-const CARD_BOX: (i32, i32) = (300, 136);
-const CARD_PORTRAIT: i32 = 64;
+/// The card's choices as the talk box's actions (`TalkAct::Choose(code)`, the code fixed per choice).
+fn card_act(a: TalkAct) -> CardAct {
+    match a {
+        TalkAct::Choose(0) => CardAct::Squad,
+        TalkAct::Choose(1) => CardAct::Lead,
+        TalkAct::Choose(2) => CardAct::Talk,
+        _ => CardAct::Close,
+    }
+}
+
+/// The card's last choice: it closes the card.
+pub const FAREWELL: &str = "Farewell.";
 
 impl BunkCard {
     pub fn new(member: &str) -> Self {
-        Self { member: member.to_string(), message: String::new(), faces: Default::default(), w: Vec::new() }
+        Self { member: member.to_string(), message: String::new(), faces: Default::default(), acts: Vec::new(), w: Vec::new() }
     }
 
     /// Whether the member is in the squad (an active member).
@@ -235,56 +290,64 @@ impl Screen<GameCx> for BunkCard {
         let gs = cx.gs().clone();
         let mut ui: Ui<CardAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), th().scrim);
-        let r = Rect::new((W - CARD_BOX.0) / 2, (H - CARD_BOX.1) / 2, CARD_BOX.0, CARD_BOX.1);
+        let farewell = ("bunk.close".to_string(), FAREWELL.to_string(), false, TalkAct::Choose(3));
         let Some(m) = gs.party.member(&self.member) else {
-            ui.frame(r, "Bunk", false);
-            ui.button("bunk.close", Rect::new(r.x + r.w - 70, r.y + r.h - 26, 60, 18), "Close", CardAct::Close, true);
+            let b = box_layout(&mut ui.p, "Empty bunk", "", "", vec![farewell]);
+            draw_box(&mut ui, &b, CARD_ID, "Empty bunk", false, card_act, |_, _| {});
+            self.acts = b.acts();
             self.w = ui.widgets;
             return;
         };
         let name = progression::display_name(&d, m);
-        ui.frame(r, &name, false);
-        self.faces.begin();
-        let pr = Rect::new(r.x + 10, r.y + 24, CARD_PORTRAIT, CARD_PORTRAIT);
-        ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
-        let (who, look) = crate::hub::member_portrait(&d, &gs, m);
-        self.faces.draw(&mut ui.p, cx, &who, &look, "roster", pr);
-        ui.push("bunk.portrait", "portrait", name.clone(), pr, true, false, None, Vec::new());
-        let tx = (pr.x + pr.w + 10) as f32;
-        let tw = (r.x + r.w - 10) as f32 - tx;
         let word = kit::condition(&d, &gs, m);
-        ui.p.text_fit(tx, (r.y + 28) as f32, &format!("{} - {word}", crate::hub::class_name(cx, m)), SMALL, tw, th().dim);
-        let mut y = (r.y + 44) as f32;
+        let band = format!("{} - {word}", crate::hub::class_name(cx, m));
+        // what the member says: the last refusal, a waiting talk, a spent fuse (FZ4); else where they stand
+        let active = Self::active(&gs, &self.member);
         let waiting = talks::waiting_for(&d, &gs, &self.member);
+        let mut said: Vec<String> = Vec::new();
+        if !self.message.is_empty() {
+            said.push(self.message.clone());
+        }
         if let Some(w) = &waiting {
             let other = gs.party.member(w.other(&self.member)).map(|o| progression::display_name(&d, o)).unwrap_or_default();
-            ui.p.text_fit(tx, y, &format!("A talk waits with {other}."), SMALL, tw, th().gold);
-            y += 14.0;
+            said.push(format!("A talk waits with {other}."));
         }
-        // FZ4 (as today): a Martyr whose fuse is spent says so; the choice comes at the fight
         if roster::fuse_choices(&d, &gs).contains(&self.member) {
-            for line in ui.p.wrap(&roster::fuse_refusal(&d, &gs), SMALL, tw) {
-                ui.p.text(tx, y, &line, SMALL, th().dim);
-                y += 12.0;
-            }
+            said.push(roster::fuse_refusal(&d, &gs));
         }
-        if !self.message.is_empty() {
-            ui.p.text_fit(tx, (r.y + r.h - 44) as f32, &self.message, SMALL, tw, th().foe);
+        if said.is_empty() {
+            said.push(if active { "In the squad.".into() } else { "Out of the squad.".into() });
         }
-        let by = r.y + r.h - 26;
-        let active = Self::active(&gs, &self.member);
         let (label, help) = if active { ("Stand down", "Out of the squad: rests at the bunk.") } else { ("Take into the squad", "Into the squad for the next fight.") };
-        ui.button_tip("bunk.squad", Rect::new(r.x + 10, by, 112, 18), label, CardAct::Squad, true, tip(label, help));
         let lead_why = self.lead_refusal(cx);
-        let mut lead_tip = tip("Take the lead", "They lead on the map; the two trade places.");
-        if !lead_why.is_empty() {
-            lead_tip.push((lead_why.clone(), th().dim));
+        let lead_on = active && lead_why.is_empty();
+        let lead_shown = if lead_on { "Take the lead".to_string() } else { format!("Take the lead  ({lead_why})") };
+        let mut rows = vec![("bunk.squad".to_string(), label.to_string(), false, TalkAct::Choose(0)), ("bunk.lead".to_string(), lead_shown, !lead_on, TalkAct::Choose(1))];
+        if waiting.is_some() {
+            rows.push(("bunk.talk".to_string(), "Talk".to_string(), false, TalkAct::Choose(2)));
         }
-        ui.button_tip("bunk.lead", Rect::new(r.x + 128, by, 80, 18), "Take the lead", CardAct::Lead, active && lead_why.is_empty(), lead_tip);
-        ui.button_tip("bunk.talk", Rect::new(r.x + 214, by, 36, 18), "Talk", CardAct::Talk, waiting.is_some(), tip("Talk", "Play the waiting talk."));
-        ui.button("bunk.close", Rect::new(r.x + r.w - 46, r.y + 4, 40, 14), "Close", CardAct::Close, true);
+        rows.push(farewell);
+        let mut b = box_layout(&mut ui.p, &name, &band, &said.join(" "), rows);
+        b.set_tip("bunk.squad", tip(label, help));
+        b.set_tip("bunk.lead", tip("Take the lead", "They lead on the map; the two trade places."));
+        b.set_tip("bunk.talk", tip("Talk", "Play the waiting talk."));
+        self.faces.begin();
+        let (who, look) = crate::hub::member_portrait(&d, &gs, m);
+        let faces = &mut self.faces;
+        draw_box(&mut ui, &b, CARD_ID, &name, false, card_act, |p, pr| {
+            faces.draw(p, cx, &who, &look, "dialogue", pr);
+        });
+        ui.push("bunk.portrait", "portrait", name.clone(), b.portrait_rect(), true, false, None, Vec::new());
         self.faces.tick();
+        self.acts = b.acts();
         self.w = ui.widgets;
+    }
+    /// 1-9 pick that choice (as the dialogue box).
+    fn key(&mut self, cx: &mut Cx, k: Key) {
+        let Key::Char(c @ '1'..='9') = k else { return };
+        if let Some((a, true)) = self.acts.get(c as usize - '1' as usize).copied() {
+            self.act(cx, card_act(a));
+        }
     }
     fn back(&mut self, cx: &mut Cx) {
         cx.nav.push(Nav::Pop);
@@ -444,6 +507,95 @@ mod tests {
         assert!(c2.click_id(&mut cx, "bunk.lead").is_err() || c2.state(&cx)["message"] != json!(""), "a benched member can't take the lead");
         frame(&mut c0, &mut cx, &mut g, 1.0);
         shot(&g, "bunk_card");
+    }
+
+    /// HUB-POLISH1 (1): every occupied bunk state (active, benched, crypt) wears a plate with its member's name and
+    /// class, centred on the bed and its top on the bed's head (`plate_rect` over the AI-17 measure), at every text size;
+    /// an empty bunk wears none.
+    #[test]
+    fn hub_polish1_each_occupied_bunk_wears_its_members_name_plate() {
+        let (mut cx, _) = hub_cx(false);
+        let mut g = gfx();
+        let mut map = RegionMap::new(&mut cx);
+        for (size, scale) in aegis_ui::screen::TEXT_SIZES {
+            frame(&mut map, &mut cx, &mut g, scale as f32);
+            let widgets = map.widgets();
+            let bunks = map.state(&cx)["bunks"].as_array().cloned().expect("the hub's bunks");
+            let mut states: Vec<String> = Vec::new();
+            for b in &bunks {
+                let member = b["member"].as_str().unwrap();
+                if member.is_empty() {
+                    assert!(b.get("plate").is_none(), "{size}: an empty bunk has no plate: {b}");
+                    continue;
+                }
+                states.push(b["state"].as_str().unwrap().to_string());
+                let m = cx.gs().party.member(member).unwrap().clone();
+                let plate = &b["plate"];
+                assert_eq!(plate["name"], json!(progression::display_name(&cx.data, &m)), "{size}: {b}");
+                assert_eq!(plate["class"], json!(crate::hub::class_name(&cx, &m)), "{size}: {b}");
+                let w = widgets.iter().find(|w| w["id"] == format!("{BUNK_PREFIX}{}", b["prop"].as_str().unwrap())).expect("the bunk's click area");
+                let (bx, by, bw, bh) = crate::hud::hud_tests::rect(w);
+                let n = |i: usize| plate["rect"][i].as_i64().unwrap();
+                let (px, py, pw, ph) = (n(0), n(1), n(2), n(3));
+                assert!(((px + pw / 2) - (bx + bw / 2)).abs() <= 1, "{size}: centred on the bed: {plate} on {w}");
+                assert!(pw >= BED_W as i64 * bw / ART_SIDE as i64 && pw <= PLATE_MAX_W as i64 * bw / ART_SIDE as i64 + 1, "{size}: between the bed and the niche: {plate}");
+                assert_eq!(py, by + BED_HEAD_Y as i64 * bh / ART_SIDE as i64, "{size}: on the bed's head: {plate} on {w}");
+                assert!(ph > 0 && py + ph <= by + bh, "{size}: on the bunk: {plate} on {w}");
+            }
+            states.sort();
+            states.dedup();
+            assert_eq!(states, vec!["active", "benched", "crypt"], "{size}: every occupied state");
+            match size {
+                "Normal" => shot(&g, "hub_plates"),
+                "Extra large" => shot(&g, "hub_plates_xl"),
+                _ => {}
+            }
+        }
+    }
+
+    /// HUB-POLISH1 (2): the card is the dialogue box: the talk box's frame and place (`TALK_W` wide times the text
+    /// size, centred, `TALK_GAP` over the bottom), the portrait in its left column, the buttons as numbered choices
+    /// (the keys pick them) with the Farewell last; a refused lead reads its reason in the row.
+    #[test]
+    fn hub_polish1_the_card_reads_as_a_conversation_in_the_talk_box() {
+        use crate::talk::{TALK_GAP, TALK_LEFT, TALK_W};
+        let (mut cx, ids) = hub_cx(false);
+        let mut g = gfx();
+        let mut map = RegionMap::new(&mut cx);
+        for (size, scale) in [("Normal", 1.0f32), ("Extra large", 1.3)] {
+            // the card over the hub it opens on (as the region map's overlay)
+            frame(&mut map, &mut cx, &mut g, scale);
+            let mut card = BunkCard::new(&ids[2]);
+            frame(&mut card, &mut cx, &mut g, scale);
+            let widgets = card.widgets();
+            let get = |id: &str| widgets.iter().find(|w| w["id"] == id).unwrap_or_else(|| panic!("{size}: {id}")).clone();
+            let (x, y, w, h) = crate::hud::hud_tests::rect(&get(CARD_ID));
+            assert_eq!(w, ((W - 40) as f32).min((TALK_W as f32 * scale).round()) as i64, "{size}: the talk box's width");
+            assert_eq!((x, y + h), (((W as i64) - w) / 2, (H - TALK_GAP) as i64), "{size}: the talk box's place");
+            let (px, _, pw, _) = crate::hud::hud_tests::rect(&get("bunk.portrait"));
+            assert!(px >= x && px + pw <= x + (TALK_LEFT as f32 * scale).round() as i64, "{size}: the portrait in the left column");
+            let choices: Vec<(String, String, bool)> = widgets.iter().filter(|w| w["kind"] == "choice").map(|w| (w["id"].as_str().unwrap().to_string(), w["text"].as_str().unwrap_or("").to_string(), w["enabled"].as_bool().unwrap_or(false))).collect();
+            let ids_shown: Vec<&str> = choices.iter().map(|c| c.0.as_str()).collect();
+            assert_eq!(ids_shown, vec!["bunk.squad", "bunk.lead", "bunk.close"], "{size}: no talk waits: {choices:?}");
+            assert!(choices[0].1.starts_with("1  Take into the squad") && choices[0].2, "{size}: {choices:?}");
+            assert!(!choices[1].2 && choices[1].1.contains("(Only a member of the squad"), "{size}: a benched member's lead is refused in its row: {choices:?}");
+            assert!(choices[2].1.contains(FAREWELL) && choices[2].2, "{size}: {choices:?}");
+            if size == "Normal" {
+                shot(&g, "bunk_card_talkbox");
+            } else {
+                shot(&g, "bunk_card_talkbox_xl");
+            }
+        }
+        // key 1 takes the benched member into the squad, as the click
+        let mut card = BunkCard::new(&ids[2]);
+        frame(&mut card, &mut cx, &mut g, 1.0);
+        card.key(&mut cx, Key::Char('1'));
+        assert!(cx.gs().party.active_members().iter().any(|m| m.id == ids[2]), "1 picks the first choice");
+        // the waiting talk is a choice of its own
+        let (mut cx, ids) = hub_cx(true);
+        let mut card = BunkCard::new(&ids[1]);
+        frame(&mut card, &mut cx, &mut g, 1.0);
+        assert!(card.widgets().iter().any(|w| w["id"] == "bunk.talk" && w["kind"] == "choice" && w["enabled"] == json!(true)), "the Talk choice");
     }
 
     #[test]

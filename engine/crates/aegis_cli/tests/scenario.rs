@@ -105,7 +105,14 @@ fn a_bad_file_is_named_and_refused_in_every_field() {
         (minimal(json!([{"step": "wait", "until": {"nope": 1}}])), "has 'path', 'widget' or 'all'"),
         (minimal(json!([{"step": "wait", "until": {"widget": "a"}, "timeout_ms": 0}])), "'timeout_ms' must be"),
         (minimal(json!([{"step": "wait"}])), "needs 'until'"),
-        (minimal(json!([{"step": "perf", "name": "a"}])), "not built yet"),
+        (minimal(json!([{"step": "perf"}])), "needs 'name'"),
+        (minimal(json!([{"step": "perf", "name": "a/b"}])), "becomes a file name"),
+        (minimal(json!([{"step": "perf", "name": "a", "frames": 0}])), "'frames' must be"),
+        (minimal(json!([{"step": "perf", "name": "a", "warm": 601}])), "'warm' must be"),
+        (minimal(json!([{"step": "perf", "name": "a", "budget": 5}])), "'budget' is an object"),
+        (minimal(json!([{"step": "perf", "name": "a", "budget": {}}])), "name at least one"),
+        (minimal(json!([{"step": "perf", "name": "a", "budget": {"p99_ms": 5}}])), "unknown key 'p99_ms'"),
+        (minimal(json!([{"step": "perf", "name": "a", "budget": {"p95_ms": 0}}])), "'p95_ms' is a number"),
     ];
     for (file, wanted) in cases {
         let got = problems_of(file.clone());
@@ -162,7 +169,7 @@ fn each_op_holds_as_it_says() {
     assert!(op_holds(v(json!(["a", "b"])).as_ref(), &Op::Has(json!("b"))));
     assert!(!op_holds(v(json!(["a"])).as_ref(), &Op::Has(json!("b"))));
     assert!(op_holds(v(json!({"k": 1})).as_ref(), &Op::Has(json!("k"))));
-    assert!(op_holds(v(json!("hello")).as_ref(), &Op::Has(json!("ell"))));
+    assert!(op_holds(v(json!("salve")).as_ref(), &Op::Has(json!("alv"))));
     assert!(op_holds(None, &Op::Absent));
     assert!(!op_holds(v(json!(0)).as_ref(), &Op::Absent));
     // a mistyped path passes nothing but `absent`
@@ -246,6 +253,8 @@ struct Script {
     leaves: Vec<Duration>,
     /// PR7-4: what a screenshot writes (a real PNG), in place of the stand-in bytes.
     shot: Option<Vec<u8>>,
+    /// ENGINE-2: the `perf` reply, in place of an empty `ok`.
+    perf: Option<Value>,
 }
 
 struct FakeLink(Rc<RefCell<Script>>);
@@ -285,6 +294,7 @@ impl Link for FakeLink {
                 json!({"ok": true})
             }
             "text_audit" => json!({"ok": true, "screen": "menu", "counts": s.audit_counts}),
+            "perf" if s.perf.is_some() => s.perf.clone().unwrap(),
             _ => json!({"ok": true}),
         })
     }
@@ -1299,4 +1309,57 @@ fn a_launch_save_names_a_fixture_folder_copied_into_the_scratch_saves() {
     assert!(l.plans[0].args.iter().any(|a| a.starts_with("saves=")), "{:?}", l.plans[0].args);
     std::fs::remove_dir_all(&out).unwrap();
     std::fs::remove_dir_all(&saves).unwrap();
+}
+
+/// A `perf` reply: frame numbers in ms, and whether the game found the machine steady (its two calibrations close).
+fn perf_reply(p50: f64, p95: f64, max: f64, steady: bool) -> Value {
+    json!({"ok": true, "stats": {"count": 30, "p10": p50 / 2.0, "p50": p50, "p95": p95, "max": max, "mean": p50}, "calib_before": 3.0, "calib_after": if steady { 3.1 } else { 4.0 },
+        "steady": steady, "canvas": [1280, 720], "build": "dev", "frame": 99})
+}
+
+#[test]
+fn a_perf_step_asks_with_no_window_keeps_its_numbers_and_judges_a_budget() {
+    let out = temp("perf");
+    let run_perf = |budget: Value, reply: Value| {
+        let mut l = launcher();
+        l.script.borrow_mut().perf = Some(reply);
+        let mut step = json!({"step": "perf", "name": "menu", "frames": 30, "warm": 5});
+        if !budget.is_null() {
+            step["budget"] = budget;
+        }
+        let o = scenario::run_size(&scenario_of(json!([step])), (1280, 720), &no_window(&out), &mut l);
+        let asked = l.script.borrow().asked.iter().find(|a| a["cmd"] == "perf").cloned().unwrap();
+        assert_eq!((asked["frames"].clone(), asked["warm"].clone()), (json!(30), json!(5)));
+        let kept: Value = serde_json::from_str(&std::fs::read_to_string(o.bundle.join("perf_menu.json")).unwrap()).unwrap();
+        (o, kept)
+    };
+    // No budget: recorded, and in result.json.
+    let (o, kept) = run_perf(Value::Null, perf_reply(4.0, 6.0, 9.0, true));
+    assert_eq!(o.code, 0, "{}", o.message);
+    assert_eq!((kept["verdict"].as_str(), kept["stats"]["p95"].as_f64()), (Some("recorded"), Some(6.0)));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(o.bundle.join("result.json")).unwrap()).unwrap();
+    assert_eq!(result["perf"][0]["name"], json!("menu"));
+    // Within the budget.
+    let (o, kept) = run_perf(json!({"p50_ms": 5, "p95_ms": 8}), perf_reply(4.0, 6.0, 9.0, true));
+    assert_eq!((o.code, kept["verdict"].as_str()), (0, Some("within")), "{}", o.message);
+    // Over it on a steady machine: the step fails, naming the number.
+    let (o, kept) = run_perf(json!({"p95_ms": 5, "max_ms": 20}), perf_reply(4.0, 6.0, 9.0, true));
+    assert_eq!((o.code, kept["verdict"].as_str()), (1, Some("over")));
+    assert!(o.message.contains("p95 6 ms over 5 ms") && !o.message.contains("max 9 ms over") && o.message.contains("canvas 1280x720"), "{}", o.message);
+    // Over it while the machine's load changed: no verdict, and the step passes.
+    let (o, kept) = run_perf(json!({"p95_ms": 5}), perf_reply(4.0, 6.0, 9.0, false));
+    assert_eq!((o.code, kept["verdict"].as_str()), (0, Some("no verdict")), "{}", o.message);
+    // A real window has no perf step, at the start of the run or in the file.
+    let mut l = launcher();
+    let o = run(json!([{"step": "perf", "name": "menu"}]), &mut l, &out);
+    assert_eq!(o.code, 1);
+    assert!(o.message.contains("no window"), "{}", o.message);
+    let mut v = minimal(json!([{"step": "repeat", "times": 2, "steps": [{"step": "perf", "name": "p"}]}]));
+    v["window"] = json!(true);
+    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("'perf'")), "perf needs no window, even inside a repeat");
+    // A refused request fails the step.
+    let mut l = launcher();
+    l.script.borrow_mut().perf = Some(json!({"ok": false, "error": "frames is a whole number from 1 to 2000"}));
+    let o = scenario::run_size(&scenario_of(json!([{"step": "perf", "name": "menu"}])), (1280, 720), &no_window(&out), &mut l);
+    assert!(o.code == 1 && o.message.contains("frames is a whole number"), "{}", o.message);
 }

@@ -13,6 +13,16 @@ name = "shot_compare"
 path = "src/bin/shot_compare.rs"
 test = false
 
+[[bin]]
+name = "ui_bench"
+path = "src/bin/ui_bench.rs"
+test = false
+
+[[bin]]
+name = "ui_layout"
+path = "src/bin/ui_layout.rs"
+test = false
+
 [features]
 # WEBREL1-G1: `shell`'s page probe for browser tests (`aegisProbe()`, the web build only; no effect on the desktop). A
 # game turns it on in its test build.
@@ -49,3 +59,6 @@ web-sys = { version = "0.3.106", features = ["console", "Document", "Element", "
 # DISPLAY2: the monitor's work area (GetMonitorInfoW); winit reports only the whole monitor. The version winit uses.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52.0", features = ["Win32_Foundation", "Win32_Graphics_Gdi"] }
+
+[lints]
+workspace = true

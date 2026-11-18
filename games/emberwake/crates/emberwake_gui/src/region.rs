@@ -1279,6 +1279,15 @@ impl Screen<GameCx> for RegionMap {
                         let p = &props[i];
                         let (fit, mounted) = prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles);
                         draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
+                        // HUB-POLISH1 (1): an occupied bunk wears its member's name plate (with the bunk, in depth)
+                        if let Some(m) = hub_bunks.iter().find(|b| b.prop == p.id && !b.member.is_empty()).and_then(|b| gs.party.member(&b.member)) {
+                            let (name, class) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m));
+                            let plate = crate::bunks::plate_rect(&mut ui.p, fit.unwrap_or(p.rect), &name);
+                            crate::bunks::draw_plate(&mut ui.p, plate, &name, &class);
+                            if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
+                                e["plate"] = json!({"name": name, "class": class, "rect": [plate.x, plate.y, plate.w, plate.h]});
+                            }
+                        }
                     }
                     Item::Block(i) => {
                         let b = &blocks[i];
@@ -1660,7 +1669,8 @@ impl RegionMap {
         let pane = Rect::new(x, top, w, content.min(H - 4 - top));
         let whole = Rect::new(x, head.y, w, pane.y + pane.h - head.y);
         ui.p.fill(pane, th().game("map_pane", PANE));
-        ui.p.panel(pane, rgba(0, 0, 0, 0), th().edge, 3.0);
+        // WEBFIX2 (a): the legend's rows in the HUD frame (the head is its section button)
+        crate::hud::hud_panel(ui, pane, rgba(0, 0, 0, 0), th().edge, 3.0);
         let off = ui.scroll_begin("legend.rows", pane, content);
         let px = ui.icon_px(Rect::new(0, 0, ICON + 4, ICON + 4));
         let spx = ui.icon_px(Rect::new(0, 0, SERVICE + 4, SERVICE + 4));
@@ -1726,7 +1736,10 @@ impl RegionMap {
         let r = Rect::new(4, H - 4 - h, w, h);
         let hover = !modal && ui.hover(r);
         ui.p.fill(r, th().game("map_pane", PANE));
-        ui.p.panel(r, rgba(0, 0, 0, 0), if hover { th().gold } else { th().edge }, 3.0);
+        crate::hud::hud_panel(ui, r, rgba(0, 0, 0, 0), if hover { th().gold } else { th().edge }, 3.0);
+        if hover && th().frame(crate::hud::HUD_FRAME).is_some() {
+            ui.p.panel(r, rgba(0, 0, 0, 0), th().gold, 3.0);
+        }
         let last_y = r.y + 3 + (lines.len() as i32 - 1) * lh;
         draw_glyph(&mut ui.p, if self.log_open { Glyph::ChevronDown } else { Glyph::ChevronRight }, Rect::new(r.x + 4, last_y + (lh - 8) / 2, 8, 8), if hover { th().gold } else { th().dim });
         for (i, l) in lines.iter().enumerate() {
@@ -3021,6 +3034,9 @@ mod tests {
             ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
             // LOOK1-G1: the theme file and its nine-slice frames (`<role>.png` with a `<role>.json` sidecar)
             ["ui", "theme.json"] => true,
+            // UISPLIT1: screen layout files and their view fixtures
+            ["ui", "layouts", f] => f.ends_with(".json"),
+            ["ui", "views", f] => f.ends_with(".view.json"),
             ["ui", "frames", f] => png(f) || f.ends_with(".json"),
             ["ui", "pins" | "badges" | "chips" | "intents" | "hud" | "markers" | "services", f] | ["ui", f] => png(f),
             ["tilesets", _, _, f] | ["props", _, _, f] => v(f),
