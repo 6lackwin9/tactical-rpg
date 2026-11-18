@@ -89,3 +89,10 @@ Reference picks (2026-11-17, checked against the layout JSON and `draft_markers`
 5. Place the cut props, tiles and picked textures in the game once the look is signed off (`PR5-54`, `PR5-55` import
    the layouts on placeholders first). The 11 single building images (S10) are not queued yet.
 6. Waiting on Design: Outbox `AO-07` to `AO-10`.
+
+Eight bunks (PR7-19 `HUBMAP-BUNKS1`, Design 2026-11-18): the Dry Hollows north wall holds `bunk_1`..`bunk_8`, four
+either side of the door with no gaps (the nightstands are gone, since the kiln bunk has its own candle). Bunks 1-6 are
+today's six, in the middle; `bunk_7` (west end, x 10) and `bunk_8` (east end, x 26) are the Timber Frames bunks, drawn
+empty until the cap rises. Idle anchors, renamed from `spot_*`: `idle_seat_1`..`idle_seat_8` at the two tables
+(stools, then the near side, then the far side) and `idle_bunk_1`..`idle_bunk_8` at each bunk's foot (y 17). Marked
+preview: `/mnt/project-files/art-ui/region_refs/hub_bunks8_v22.png`.

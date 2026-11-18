@@ -225,13 +225,15 @@ def sluice_undercroft():
     L.prop("entry_stack", "crates_tall", 8, 19, 1, 3)           # crates stacked up the east wall
     L.prop("ladder_lamp", "wall_lantern", 6, 15)                     # the lamp by the ladder in the reference
     L.prop("entry_lamp", "lantern_pole", 2, 16)
-    # --- the Dry Hollows: six kiln bunks along the north wall, three either side of the door, a table
+    # --- the Dry Hollows: eight kiln bunks along the north wall, four either side of the door, two tables
     # each bunk is a bed in an arched niche, the bed reaching onto the floor, a candle nightstand between pairs
     # (design reference ..._ce4b19f9; hub prop sheet 1, 2026-11-17)
-    for i, x in enumerate((10, 13, 16, 20, 23, 26)):
+    # eight bunks (PR7-19 HUBMAP-BUNKS1, Design 2026-11-18): four either side of the door, shoulder to shoulder, so the
+    # nightstands went (the kiln bunk carries its own candle). Bunks 1-6 are the six of today, inside; 7 (west end)
+    # and 8 (east end) are the two that Timber Frames unlocks, drawn empty until the cap rises
+    BUNK_X = (12, 14, 16, 20, 22, 24, 10, 26)
+    for i, x in enumerate(BUNK_X):
         L.prop(f"bunk_{i + 1}", "niche_bunk", x, 15, 2, 2)
-    for i, x in enumerate((12, 15, 22, 25)):
-        L.prop(f"nightstand_{i + 1}", "nightstand", x, 16)
     L.prop("stove", "hearth_stove", 27, 20)
     # two halves (Tushar 2026-11-17): sleeping along the bunk wall, social below. Each prop has a reason to be where
     # it is (v12 comment: too cluttered): two tables either side of the aisle from the door, the stove on the east
@@ -244,12 +246,14 @@ def sluice_undercroft():
     L.prop("stasis_1", "stasis_slab", 30, 18, 2, 1); L.prop("stasis_2", "stasis_slab", 34, 18, 2, 1)
     L.prop("crypt_candles", "candle_stand", 29, 21)
     L.prop("crypt_chains", "chains_tall", 36, 18, 1, 3)        # chains and a pulley down the east wall   # floor corner, clear of the bar wall (reference)
-    # BUNKS1 BK9 idle spots (AI-17), in the order they fill: one seat per active member at the social tables (the two
-    # stools and the near side of each table), one resting spot on each bunk, in bunk (roster) order
-    for i, (x, y) in enumerate(((14, 20), (16, 20), (21, 20), (23, 20), (15, 21), (22, 21))):   # stools, then near side
-        L.anchor(f"spot_seat_{i + 1}", x, y, f"idle seat {i + 1} at the social tables (BUNKS1 BK9, active member)")
-    for i, x in enumerate((10, 13, 16, 20, 23, 26)):
-        L.anchor(f"spot_bunk_{i + 1}", x, 17, f"bunk {i + 1}: resting spot at the bed's foot (BUNKS1 BK9, benched member)")
+    # idle spots (BUNKS1 BK9, AI-17; ids idle_* for PR7-19), in the order they fill: eight seats at the social
+    # tables (the two stools of each table, then its near side, then its far side), one resting spot at each bunk's
+    # foot, in bunk order. (Were spot_seat_1..6 and spot_bunk_1..6 in v18-v21; renamed before any data used them.)
+    SEATS = ((14, 20), (16, 20), (21, 20), (23, 20), (15, 21), (22, 21), (15, 19), (22, 19))
+    for i, (x, y) in enumerate(SEATS):
+        L.anchor(f"idle_seat_{i + 1}", x, y, f"idle seat {i + 1} at the social tables (BUNKS1 BK9, active member)")
+    for i, x in enumerate(BUNK_X):
+        L.anchor(f"idle_bunk_{i + 1}", x, 17, f"bunk {i + 1}: resting spot at the bed's foot (BUNKS1 BK9, benched member)")
     # anchors: the location's markers keep their anchor ids
     L.anchor("spawn", 6, 17, "arrival from the world map (the ladder foot)")
     L.anchor("road", 7, 16, "exit `road`: up the ladder, World map: the Sunk Ward")

@@ -85,62 +85,82 @@
  },
  "anchors": [
   {
-   "id": "spot_seat_1",
+   "id": "idle_seat_1",
    "x": 14,
    "y": 20
   },
   {
-   "id": "spot_seat_2",
+   "id": "idle_seat_2",
    "x": 16,
    "y": 20
   },
   {
-   "id": "spot_seat_3",
+   "id": "idle_seat_3",
    "x": 21,
    "y": 20
   },
   {
-   "id": "spot_seat_4",
+   "id": "idle_seat_4",
    "x": 23,
    "y": 20
   },
   {
-   "id": "spot_seat_5",
+   "id": "idle_seat_5",
    "x": 15,
    "y": 21
   },
   {
-   "id": "spot_seat_6",
+   "id": "idle_seat_6",
    "x": 22,
    "y": 21
   },
   {
-   "id": "spot_bunk_1",
-   "x": 10,
+   "id": "idle_seat_7",
+   "x": 15,
+   "y": 19
+  },
+  {
+   "id": "idle_seat_8",
+   "x": 22,
+   "y": 19
+  },
+  {
+   "id": "idle_bunk_1",
+   "x": 12,
    "y": 17
   },
   {
-   "id": "spot_bunk_2",
-   "x": 13,
+   "id": "idle_bunk_2",
+   "x": 14,
    "y": 17
   },
   {
-   "id": "spot_bunk_3",
+   "id": "idle_bunk_3",
    "x": 16,
    "y": 17
   },
   {
-   "id": "spot_bunk_4",
+   "id": "idle_bunk_4",
    "x": 20,
    "y": 17
   },
   {
-   "id": "spot_bunk_5",
-   "x": 23,
+   "id": "idle_bunk_5",
+   "x": 22,
    "y": 17
   },
   {
-   "id": "spot_bunk_6",
+   "id": "idle_bunk_6",
+   "x": 24,
+   "y": 17
+  },
+  {
+   "id": "idle_bunk_7",
+   "x": 10,
+   "y": 17
+  },
+  {
+   "id": "idle_bunk_8",
    "x": 26,
    "y": 17
   },
@@ -507,7 +527,7 @@
   {
    "id": "bunk_1",
    "art": "niche_bunk",
-   "x": 10,
+   "x": 12,
    "y": 15,
    "w": 2,
    "h": 2,
@@ -518,7 +538,7 @@
   {
    "id": "bunk_2",
    "art": "niche_bunk",
-   "x": 13,
+   "x": 14,
    "y": 15,
    "w": 2,
    "h": 2,
@@ -551,7 +571,7 @@
   {
    "id": "bunk_5",
    "art": "niche_bunk",
-   "x": 23,
+   "x": 22,
    "y": 15,
    "w": 2,
    "h": 2,
@@ -562,7 +582,7 @@
   {
    "id": "bunk_6",
    "art": "niche_bunk",
-   "x": 26,
+   "x": 24,
    "y": 15,
    "w": 2,
    "h": 2,
@@ -571,45 +591,23 @@
    "flip": false
   },
   {
-   "id": "nightstand_1",
-   "art": "nightstand",
-   "x": 12,
-   "y": 16,
-   "w": 1,
-   "h": 1,
+   "id": "bunk_7",
+   "art": "niche_bunk",
+   "x": 10,
+   "y": 15,
+   "w": 2,
+   "h": 2,
    "layer": "sort",
    "variant": -1,
    "flip": false
   },
   {
-   "id": "nightstand_2",
-   "art": "nightstand",
-   "x": 15,
-   "y": 16,
-   "w": 1,
-   "h": 1,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "nightstand_3",
-   "art": "nightstand",
-   "x": 22,
-   "y": 16,
-   "w": 1,
-   "h": 1,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "nightstand_4",
-   "art": "nightstand",
-   "x": 25,
-   "y": 16,
-   "w": 1,
-   "h": 1,
+   "id": "bunk_8",
+   "art": "niche_bunk",
+   "x": 26,
+   "y": 15,
+   "w": 2,
+   "h": 2,
    "layer": "sort",
    "variant": -1,
    "flip": false
@@ -762,18 +760,22 @@
   "sunk_ward"
  ],
  "draft_markers": {
-  "spot_seat_1": "idle seat 1 at the social tables (BUNKS1 BK9, active member)",
-  "spot_seat_2": "idle seat 2 at the social tables (BUNKS1 BK9, active member)",
-  "spot_seat_3": "idle seat 3 at the social tables (BUNKS1 BK9, active member)",
-  "spot_seat_4": "idle seat 4 at the social tables (BUNKS1 BK9, active member)",
-  "spot_seat_5": "idle seat 5 at the social tables (BUNKS1 BK9, active member)",
-  "spot_seat_6": "idle seat 6 at the social tables (BUNKS1 BK9, active member)",
-  "spot_bunk_1": "bunk 1: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
-  "spot_bunk_2": "bunk 2: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
-  "spot_bunk_3": "bunk 3: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
-  "spot_bunk_4": "bunk 4: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
-  "spot_bunk_5": "bunk 5: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
-  "spot_bunk_6": "bunk 6: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
+  "idle_seat_1": "idle seat 1 at the social tables (BUNKS1 BK9, active member)",
+  "idle_seat_2": "idle seat 2 at the social tables (BUNKS1 BK9, active member)",
+  "idle_seat_3": "idle seat 3 at the social tables (BUNKS1 BK9, active member)",
+  "idle_seat_4": "idle seat 4 at the social tables (BUNKS1 BK9, active member)",
+  "idle_seat_5": "idle seat 5 at the social tables (BUNKS1 BK9, active member)",
+  "idle_seat_6": "idle seat 6 at the social tables (BUNKS1 BK9, active member)",
+  "idle_seat_7": "idle seat 7 at the social tables (BUNKS1 BK9, active member)",
+  "idle_seat_8": "idle seat 8 at the social tables (BUNKS1 BK9, active member)",
+  "idle_bunk_1": "bunk 1: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
+  "idle_bunk_2": "bunk 2: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
+  "idle_bunk_3": "bunk 3: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
+  "idle_bunk_4": "bunk 4: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
+  "idle_bunk_5": "bunk 5: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
+  "idle_bunk_6": "bunk 6: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
+  "idle_bunk_7": "bunk 7: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
+  "idle_bunk_8": "bunk 8: resting spot at the bed's foot (BUNKS1 BK9, benched member)",
   "spawn": "arrival from the world map (the ladder foot)",
   "road": "exit `road`: up the ladder, World map: the Sunk Ward",
   "gate": "exit `gate`: through the sluice gate to drowned_runoff_grate (to_anchor `sluice_in`)",
