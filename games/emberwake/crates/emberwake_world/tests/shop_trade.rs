@@ -317,3 +317,43 @@ fn a_gain_past_the_gold_cap_is_noted() {
     }
     panic!("no open shop buys anything worth 2 gold or more");
 }
+
+/// PR6-8 (B2): a shop's `supply_price_mult_by_act`, set in memory on every open shop that sells supplies: in the act it
+/// names the supply offer is round(supply price x mult) and `buy` and a one-line `trade` charge that price; in an act
+/// it does not name the supply price is the row's own. Derived from each row's own supply price, not content numbers.
+#[test]
+fn the_supply_price_follows_the_act_multiplier() {
+    const MULT: f64 = 2.0;
+    let base_data = data();
+    let mut checked = 0;
+    for (start, q) in open_shops(&base_data) {
+        let row = base_data.resolve(&start.world_id, "shops", &q).clone();
+        let base = json::i(&row, "supply_price", 0);
+        if base < 1 {
+            continue;
+        }
+        let act = i64::from(emberwake_world::roster::act(&start));
+        let mut d = base_data.clone();
+        let home = json::s(&row, "_world");
+        let rows = d.catalogs.worlds.get_mut(&home).expect("the shop's world").own.get_mut("shops").expect("its shops");
+        let at = rows.iter().position(|r| json::s(r, "_qid") == q).expect("the row");
+        rows[at].insert(emberwake_data::facility::SUPPLY_MULT_KEY.into(), serde_json::json!({act.to_string(): MULT, (act + 1).to_string(): MULT * 2.0}));
+        let mut gs = start.clone();
+        gs.party.gold = 100_000;
+        gs.party.supplies = 0;
+        let supply = |d: &Data, gs: &GameState| shop::offers(d, gs, &q).into_iter().find(|o| json::s(o, "kind") == shop::SUPPLIES).map(|o| json::i(&o, "price", -1));
+        let want = json::roundi(base as f64 * MULT);
+        assert_eq!(supply(&d, &gs), Some(want), "{q}: act {act}");
+        let (mut a, mut b) = (gs.clone(), gs.clone());
+        let old = shop::buy(&d, &mut a, &q, shop::SUPPLIES, shop::SUPPLIES, 1);
+        let new = shop::trade(&d, &mut b, &q, &[(shop::SUPPLIES.into(), shop::SUPPLIES.into(), 1)], &[]);
+        assert_eq!((json::i(&old, "price", 0), json::i(&new, "spent", 0)), (want, want), "{q}: {old:?} / {new:?}");
+        assert_eq!(a, b);
+        assert_eq!(supply(&base_data, &gs), Some(base), "{q}: without the key, the row's own price");
+        let rows = d.catalogs.worlds.get_mut(&home).unwrap().own.get_mut("shops").unwrap();
+        rows[at].insert(emberwake_data::facility::SUPPLY_MULT_KEY.into(), serde_json::json!({(act + 1).to_string(): MULT}));
+        assert_eq!(supply(&d, &gs), Some(base), "{q}: an act it does not name keeps the row's price");
+        checked += 1;
+    }
+    assert!(checked > 0, "no open shop sells supplies");
+}
