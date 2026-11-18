@@ -121,7 +121,8 @@ screen at 1280x720, 1:1.
 
 ## 9. Open items (not yet mocked)
 
-- Victory and defeat report (UX-19), the full timeline view (T) and playback controls.
+- Victory and defeat report (UX-19; provisional mock in `screens_ai21_mock.py`). The full timeline view (T) and
+  playback controls: mocked as take 23 (`battle_take23_timeline_mock.py`, `[PROVISIONAL]`), awaiting his review.
 - Boss fight variant (Tushar 2026-11-18 23:19, low priority, current layout stays for now): a boss bar across the top
   of the board (full name and title, a long HP bar with phase marks, poise, statuses, the next phase or enrage cue);
   the boss leaves the foe panel, mobs keep their plates. Mocked as take 22 (`battle_take22_boss_mock.py`), awaiting
