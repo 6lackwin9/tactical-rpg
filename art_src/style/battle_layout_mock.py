@@ -816,6 +816,7 @@ def pip_tag(d, x, y, t):
 
 def mock10(shot: Image.Image) -> Image.Image:
     img = mock8(shot)
+    img.paste(strip9(shot, PLAN7), (0, 0))      # the approved take 9 AP line: "AP 10/12 -10"
     d = ImageDraw.Draw(img)
     stage = shot.crop((291, 112, 899, 492)).resize((912, 570), Image.NEAREST)
     kae = shot.crop((20, 166, 84, 230))
