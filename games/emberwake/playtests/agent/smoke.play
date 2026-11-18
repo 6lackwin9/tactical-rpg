@@ -1,0 +1,48 @@
+# PR7-22 acceptance: a fresh save through the opening vignette into the first fight and back to the hub, with the log
+# and a shot per step. Run: tools/fc.sh playtest run games/emberwake/playtests/agent/smoke.play
+# The same walk as scenarios/story_battle_hub.json, in the agent playtest language (engine/docs/authoring/agent_playtest.md).
+wait screen=main_menu ms=20000
+screen
+click menu.new_game
+wait widget=world.sunk_ward
+click world.sunk_ward
+click new_game.start
+wait screen=vignette ms=20000
+note the opening vignette is up
+repeat 40 until screen!=vignette : key space
+wait screen=battle ms=20000
+assert state.beat.kind=intro
+wait state.beat? ms=10000
+shot first_fight
+screen
+link {"cmd": "autoplay"}
+wait state.outcome!="" ms=60000
+assert state.outcome=won
+wait screen=battle_results ms=20000
+click results.continue
+wait screen=vignette ms=20000
+save after_first_fight
+# The prologue's later beats: story, the second and third fights (autoplayed), then the hub (the region map).
+repeat 80 until {"all": [{"path": "screen", "ne": "vignette"}, {"path": "screen", "ne": "story_stage"}]} : key space
+wait screen=battle ms=20000
+wait state.beat? ms=10000
+link {"cmd": "autoplay"}
+repeat 15 until screen=battle_results : key enter
+repeat 3 until screen!=battle_results : click results.continue
+repeat 80 until {"all": [{"path": "screen", "ne": "vignette"}, {"path": "screen", "ne": "story_stage"}]} : key space
+wait screen=battle ms=20000
+wait state.beat? ms=10000
+link {"cmd": "autoplay"}
+repeat 15 until screen=battle_results : key enter
+repeat 3 until screen!=battle_results : click results.continue
+repeat 80 until {"all": [{"path": "screen", "ne": "vignette"}, {"path": "screen", "ne": "story_stage"}]} : key space
+wait screen=region_map ms=30000
+wait widget=bunk.bunk_1
+shot hub
+screen
+# Back to the save made after the first fight: the game starts again on it and Continue picks it up.
+load after_first_fight
+wait screen=main_menu ms=20000
+click menu.continue
+wait screen=vignette ms=20000
+quit
