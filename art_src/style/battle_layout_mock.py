@@ -309,6 +309,102 @@ def mock2(shot: Image.Image) -> Image.Image:
     return img
 
 
+# take 3 (Tushar 2026-11-18 21:05): icons centred, two 2-block moves, room for 4 AP pips per slot, the 10-pip AP row
+# grouped into one pill per move, round as text
+SK = ROOT / "games/emberwake/assets/skills"
+
+
+def slot_icon(name: str, px: int) -> Image.Image:
+    """A skill icon (I2 slate tile) or a kit intent glyph centred on a drawn slate tile, px square."""
+    if name == "arrow":
+        tile = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        td = ImageDraw.Draw(tile)
+        td.rounded_rectangle((0, 0, 63, 63), radius=8, fill=(48, 58, 70), outline=(76, 96, 107), width=2)
+        td.line((14, 32, 42, 32), fill=PARCH, width=6)
+        td.polygon([(52, 32), (38, 20), (38, 44)], fill=PARCH)
+        return tile.resize((px, px), Image.LANCZOS)
+    if name.startswith("intent:"):
+        g = Image.open(ROOT / "kits/rpg/assets/ui/intents" / (name[7:] + ".png")).convert("RGBA")
+        tile = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        ImageDraw.Draw(tile).rounded_rectangle((0, 0, 63, 63), radius=8, fill=(48, 58, 70), outline=(76, 96, 107), width=2)
+        g = g.resize((40, 40), Image.NEAREST)
+        tile.paste(g, (12, 12), g)
+    else:
+        tile = Image.open(SK / (name + ".png")).convert("RGBA")
+    return tile.resize((px, px), Image.LANCZOS)
+
+
+def tactic_badge(d, x, y):
+    """Small gold pennant: marks a button as a tactic (stance), not a unit pick."""
+    d.line((x, y, x, y + 14), fill=IRON_L, width=2)
+    d.polygon([(x + 1, y), (x + 12, y + 3), (x + 1, y + 7)], fill=GOLD)
+
+
+def control_group(img, d, gx=896):
+    party = Image.open(ROOT / "kits/rpg/assets/ui/hud/party.png").convert("RGBA")
+    hero = party.crop((9, 4, 23, 28)).resize((17, 29), Image.NEAREST)
+    party = party.resize((30, 30), Image.NEAREST)
+    d.rectangle((gx - 4, 0, 1100, 63), fill=BASALT)
+    btns = [("party", True), ("hero", True), ("auto", False), ("clear", False)]
+    for i, (k, tactic) in enumerate(btns):
+        bx = gx + i * 50
+        d.rectangle((bx, 10, bx + 44, 54), fill=SLATE, outline=IRON)
+        if k == "party":
+            img.paste(party, (bx + 5, 17), party)
+        elif k == "hero":
+            img.paste(hero, (bx + 11, 15), hero)
+        elif k == "auto":                      # play: the planner fills the round for you
+            d.polygon([(bx + 15, 20), (bx + 15, 44), (bx + 33, 32)], fill=PARCH)
+        else:
+            glyph(d, "clear", bx + 12, 22, 20, PARCH)
+        if tactic:
+            tactic_badge(d, bx + 30, 13)
+            d.polygon([(bx + 32, 46), (bx + 40, 46), (bx + 36, 51)], fill=IRON_L)
+
+
+def mock3(shot: Image.Image) -> Image.Image:
+    img = mock2(shot)
+    d = ImageDraw.Draw(img)
+    stage = shot.crop((291, 112, 899, 492)).resize((912, 570), Image.NEAREST)
+    d.rectangle((184, 65, 1095, 71), fill=VOID)
+    img.paste(stage.crop((0, 0, 912, 40)), (184, 72))       # remove take 2's tooltip
+    d.rectangle((184, 72, 1095, 641), outline=IRON, width=1)
+    d.rectangle((60, 0, 896, 63), fill=BASALT)
+    d.line((0, 64, 1280, 64), fill=IRON)
+    d.text((70, 12), "Round 1 of 8", font=TITLE_S, fill=GOLD)
+    d.text((70, 36), "Planning", font=SMALL, fill=IRON_L)
+    # plan: (icon, blocks, AP, colour of its pill)
+    plan = [("arrow", 1, 2, (90, 120, 150)), ("pneumatic_hammer_strike", 2, 4, (160, 80, 60)),
+            ("pommel_strike", 1, 2, (160, 80, 60)), ("shield_wall", 2, 2, (110, 120, 90))]
+    W, G = 54, 6
+    x = 196
+    sel = 1
+    for i, (ic, blocks, ap, col) in enumerate(plan):
+        w = blocks * W + (blocks - 1) * G
+        on = i == sel
+        d.rectangle((x, 4, x + w, 60), fill=SLATE, outline=GOLD if on else IRON, width=2 if on else 1)
+        if blocks > 1:                       # faint seam marks the block boundary inside a long move
+            for b in range(1, blocks):
+                sx = x + b * (W + G) - G // 2
+                for yy in range(8, 56, 4):
+                    d.point((sx, yy), fill=IRON)
+        t = slot_icon(ic, 36)
+        img.paste(t, (x + (w - 36) // 2, 7), t)
+        pw = 4 * 10 - 2                       # room for 4 pips, cost lit from the left, centred
+        ap_pips(d, x + (w - pw) // 2, 48, 4, ap, size=8, gap=2) if ap else None
+        x += w + G
+    # AP row: one pill per planned move, so each move is visible as a block of pips
+    ax, ay = x + 18, 24
+    d.text((ax, 6), "AP", font=MONO, fill=IRON_L)
+    for i, (ic, blocks, ap, col) in enumerate(plan):
+        pw = ap * 12 - 2
+        d.rounded_rectangle((ax - 3, ay - 3, ax + pw + 2, ay + 12), radius=6, outline=GOLD if i == sel else col, width=1)
+        ap_pips(d, ax, ay, ap, ap, size=10, gap=2)
+        ax += pw + 10
+    control_group(img, d)
+    return img
+
+
 def label(img, text):
     out = Image.new("RGB", (img.width, img.height + 34), BASALT)
     out.paste(img, (0, 34))
@@ -334,6 +430,13 @@ def main():
     sheet.paste(a, (0, 0))
     sheet.paste(b, (0, a.height + 12))
     sheet.save(out / "battle_layout_take1_vs_take2.png")
+    m3 = mock3(shot)
+    m3.save(out / "battle_layout_take3.png")
+    a, b = label(m2, "Take 2"), label(m3, "Take 3: centred icons, 2-block moves, 4 pip slots, AP pills per move, round as text")
+    sheet = Image.new("RGB", (a.width, a.height * 2 + 12), VOID)
+    sheet.paste(a, (0, 0))
+    sheet.paste(b, (0, a.height + 12))
+    sheet.save(out / "battle_layout_take2_vs_take3.png")
 
 
 if __name__ == "__main__":
