@@ -26,7 +26,10 @@
 			"origins": [
 				"orig_watch_shield"
 			],
-			"temperaments": [],
+			"temperaments": [
+				"temper_steady",
+				"temper_wary"
+			],
 			"level": "",
 			"fuse": {},
 			"tags": []
@@ -55,7 +58,11 @@
 			"origins": [
 				"orig_crag_eye"
 			],
-			"temperaments": [],
+			"temperaments": [
+				"temper_wary",
+				"temper_steady",
+				"temper_quiet"
+			],
 			"level": "",
 			"fuse": {},
 			"tags": []
@@ -84,7 +91,11 @@
 			"origins": [
 				"orig_soot_step"
 			],
-			"temperaments": [],
+			"temperaments": [
+				"temper_reckless",
+				"temper_quiet",
+				"temper_wary"
+			],
 			"level": "",
 			"fuse": {},
 			"tags": []
@@ -113,7 +124,10 @@
 			"origins": [
 				"orig_mortuary_calm"
 			],
-			"temperaments": [],
+			"temperaments": [
+				"temper_steady",
+				"temper_wary"
+			],
 			"level": "",
 			"fuse": {},
 			"tags": []
@@ -142,7 +156,10 @@
 			"origins": [
 				"orig_slag_grip"
 			],
-			"temperaments": [],
+			"temperaments": [
+				"temper_reckless",
+				"temper_steady"
+			],
 			"level": "",
 			"fuse": {},
 			"tags": []
@@ -171,7 +188,11 @@
 			"origins": [
 				"orig_alum_nose"
 			],
-			"temperaments": [],
+			"temperaments": [
+				"temper_quiet",
+				"temper_reckless",
+				"temper_steady"
+			],
 			"level": "",
 			"fuse": {},
 			"tags": []

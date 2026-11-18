@@ -211,15 +211,43 @@ fn sunk_ward_seeds_six_cohort_templates_with_bodies_portraits_and_origins() {
     assert!(problems.is_empty(), "{problems:?}");
 }
 
-// PK3 §3.2 names a shared temperament pool (`steady`, `wary`, `grim`, `quiet`, `reckless`) but no temperament
-// passive ids exist yet; parked as FB-282 until Design names them.
+// PK3 §3.2's shared temperament pool is seeded as the slotless `temper_*` passives (PR7-10): `temper_steady`,
+// `temper_wary`, `temper_quiet` and `temper_reckless`. `temper_grim` is held back (a limit blocker): its effect needs a
+// Shaken status or resist the kit does not have yet, so no template names it.
 #[test]
-#[ignore = "FB-282: temperament passive ids pending Design"]
 fn sunk_ward_cohort_templates_draw_from_slotless_temperament_passives() {
     let d = data();
     for (id, _, _) in COHORTS {
         let t = emberwake_data::RecruitDef::from_obj(d.resolve(WORLD, emberwake_data::RECRUITS_KIND, id));
         assert!(!t.temperaments.is_empty() && t.temperaments.iter().all(|p| slotless(&d, p)), "{id}: slotless temperament passives {:?}", t.temperaments);
+    }
+}
+
+/// PR7-10: one recruit rescued from each cohort template (a fresh act 2 game each) and sworn in carries exactly one
+/// temperament, drawn from its own template's `temperaments` pool (`roster::rescue` draws it; `swear_in` keeps it).
+#[test]
+fn each_rescued_cohort_recruit_carries_one_temperament_from_its_pool() {
+    let d = data();
+    for (id, _, _) in COHORTS {
+        let pool = emberwake_data::RecruitDef::from_obj(d.resolve(WORLD, emberwake_data::RECRUITS_KIND, id)).temperaments;
+        let mut gs = game(&d, 2);
+        gs.rng_seed = 11;
+        let open = roster::manifest(&d, WORLD).open_flag;
+        if !open.is_empty() {
+            gs.flags.insert(open, serde_json::json!(true));
+        }
+        let fx = serde_json::json!({"effect": "rescue", "template": id});
+        let (added, notes) = roster::rescue(&d, &mut gs, fx.as_object().unwrap());
+        assert_eq!(added.len(), 1, "{id}: {notes:?}");
+        let member = roster::swear_in(&d, &mut gs, "first", &serde_json::Value::Null).expect("a bunk is free");
+        let m = gs.party.member(&member).unwrap();
+        assert!(m.template.ends_with(&format!(":{id}")), "{id}: {m:?}");
+        assert!(pool.contains(&m.temperament), "{id}: temperament '{}' is from {pool:?}", m.temperament);
+        // the passives it fights with hold one temperament of the world's whole pool
+        let every: Vec<String> = COHORTS.iter().flat_map(|(t, _, _)| emberwake_data::RecruitDef::from_obj(d.resolve(WORLD, emberwake_data::RECRUITS_KIND, t)).temperaments).collect();
+        let held: Vec<String> = emberwake_world::progression::member_passives(&d, m).into_iter().filter(|p| every.contains(p)).collect();
+        assert_eq!(held, [m.temperament.clone()], "{id}: exactly one temperament");
+        assert!(slotless(&d, &m.temperament), "{id}: {} is a slotless catalog passive", m.temperament);
     }
 }
 

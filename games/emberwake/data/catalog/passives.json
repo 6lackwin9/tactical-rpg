@@ -1663,6 +1663,62 @@
 				}
 			],
 			"slot": ""
+		},
+		{
+			"id": "temper_steady",
+			"name": "Steady",
+			"description": "Unshaken nerve: +6 Max Poise.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "max_poise",
+					"value": 6
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "temper_wary",
+			"name": "Wary",
+			"description": "Eyes up, always: +1 PERC.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "PERC",
+					"value": 1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "temper_quiet",
+			"name": "Quiet",
+			"description": "Watches and learns: +1 KNOW.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "KNOW",
+					"value": 1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "temper_reckless",
+			"name": "Reckless",
+			"description": "Takes the opening, ignores the cost: +5% critical chance, -1 Armor.",
+			"effects": [
+				{
+					"type": "crit",
+					"value": 5
+				},
+				{
+					"type": "stat",
+					"stat": "armor",
+					"value": -1
+				}
+			],
+			"slot": ""
 		}
 	]
 }
