@@ -244,6 +244,8 @@ struct Script {
     /// What the game wrote to stderr, and how long each stop gave it to leave.
     stderr: String,
     leaves: Vec<Duration>,
+    /// PR7-4: what a screenshot writes (a real PNG), in place of the stand-in bytes.
+    shot: Option<Vec<u8>>,
 }
 
 struct FakeLink(Rc<RefCell<Script>>);
@@ -278,7 +280,7 @@ impl Link for FakeLink {
             "game" => json!({"gold": 7}),
             "screenshot" => {
                 if let Some(path) = body["path"].as_str() {
-                    std::fs::write(path, b"png").unwrap();
+                    std::fs::write(path, s.shot.clone().unwrap_or_else(|| b"png".to_vec())).unwrap();
                 }
                 json!({"ok": true})
             }
@@ -359,7 +361,7 @@ fn launcher() -> FakeLauncher {
 
 /// A real window: the frames are polled for. `no_window` is the run with none.
 fn options(out: &Path) -> Options {
-    Options { game_id: "somegame".into(), exe: PathBuf::from("no_such_exe"), data: None, out: out.to_path_buf(), slow: 1, size: None, sized_ms: 0, window: true, fps: None, dpr: None }
+    Options { game_id: "somegame".into(), exe: PathBuf::from("no_such_exe"), data: None, out: out.to_path_buf(), slow: 1, size: None, sized_ms: 0, window: true, fps: None, dpr: None, baselines: None, record: false, saves: None }
 }
 
 fn no_window(out: &Path) -> Options {
@@ -1185,4 +1187,116 @@ fn proof_shots_turn_a_short_list_into_steps() {
         assert!(scenario::shots_scenario("x", &keys(&bad)).is_err(), "{bad:?}");
     }
     assert!(scenario::shots_scenario("a/b", &keys(&[])).is_err(), "the name becomes a folder");
+}
+
+// ---- PR7-4: golden shots ----
+
+/// A 4 x 3 PNG of one colour, with pixel (1, 1) set to `odd`.
+fn png_bytes(odd: [u8; 4]) -> Vec<u8> {
+    let dir = temp("png");
+    let mut px = [[20u8, 30, 40, 255]; 12].concat();
+    px[(4 + 1) * 4..(4 + 1) * 4 + 4].copy_from_slice(&odd);
+    let path = dir.join("p.png");
+    aegis_cli::golden::write(&path, &aegis_cli::golden::Rgba { w: 4, h: 3, px }).unwrap();
+    let bytes = std::fs::read(&path).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    bytes
+}
+
+fn golden_run(steps: Value, l: &mut FakeLauncher, out: &Path, baselines: &Path, record: bool) -> Outcome {
+    let o = Options { baselines: Some(baselines.to_path_buf()), record, ..no_window(out) };
+    scenario::run_size(&scenario_of(steps), (1280, 720), &o, l)
+}
+
+#[test]
+fn a_golden_shot_parses_exact_or_with_a_tolerance_and_refuses_bad_keys() {
+    let s = scenario_of(json!([{"step": "shot", "name": "a", "golden": true}, {"step": "shot", "name": "b", "golden": {"tolerance": 3, "pixels": 10}}, {"step": "shot", "name": "c"}]));
+    use aegis_cli::golden::Tolerance;
+    assert!(matches!(&s.steps[0], Step::Shot { golden: Some(Tolerance { channel: 0, pixels: 0 }), .. }));
+    assert!(matches!(&s.steps[1], Step::Shot { golden: Some(Tolerance { channel: 3, pixels: 10 }), .. }));
+    assert!(matches!(&s.steps[2], Step::Shot { golden: None, .. }));
+    assert!(problems_of(minimal(json!([{"step": "shot", "name": "a", "golden": "yes"}]))).contains("'golden' is true"));
+    assert!(problems_of(minimal(json!([{"step": "shot", "name": "a", "golden": {"tolerance": 300}}]))).contains("tolerance"));
+    assert!(problems_of(minimal(json!([{"step": "shot", "name": "a", "golden": {"fuzz": 1}}]))).contains("fuzz"));
+}
+
+#[test]
+fn a_golden_shot_matching_its_baseline_passes_and_a_one_pixel_change_fails() {
+    let out = temp("golden");
+    let base = temp("golden_base");
+    let steps = json!([{"step": "shot", "name": "menu", "golden": true}]);
+    // Recording writes the baseline at <baselines>/<id>/<WxH>/<name>.png and passes.
+    let mut l = launcher();
+    l.script.borrow_mut().shot = Some(png_bytes([20, 30, 40, 255]));
+    let o = golden_run(steps.clone(), &mut l, &out, &base, true);
+    assert_eq!(o.code, 0, "{}", o.message);
+    let baseline = base.join("x").join("1280x720").join("menu.png");
+    assert!(baseline.is_file());
+    assert_eq!(result_of(&o)["recorded"], json!([baseline.display().to_string()]));
+    // The same frame passes.
+    let mut l = launcher();
+    l.script.borrow_mut().shot = Some(png_bytes([20, 30, 40, 255]));
+    let o = golden_run(steps.clone(), &mut l, &out, &base, false);
+    assert_eq!(o.code, 0, "{}", o.message);
+    // One pixel changed by one step fails, names the count and keeps the diff.
+    let mut l = launcher();
+    l.script.borrow_mut().shot = Some(png_bytes([21, 30, 40, 255]));
+    let o = golden_run(steps.clone(), &mut l, &out, &base, false);
+    assert_eq!(o.code, 1);
+    assert!(o.message.contains("1 px differ from the baseline by more than 0 (largest 1), within x 1 y 1 w 1 h 1"), "{}", o.message);
+    assert!(o.bundle.join("menu.diff.png").is_file());
+    // A recording run whose later step fails writes no baseline.
+    let base2 = temp("golden_base_fail");
+    let mut l = launcher();
+    l.script.borrow_mut().shot = Some(png_bytes([20, 30, 40, 255]));
+    let o = golden_run(json!([{"step": "shot", "name": "menu", "golden": true}, {"step": "assert", "until": {"path": "screen", "eq": "nope"}}]), &mut l, &out, &base2, true);
+    assert_eq!(o.code, 1);
+    assert!(!base2.join("x").join("1280x720").join("menu.png").exists());
+    std::fs::remove_dir_all(&base2).unwrap();
+    // Within a tolerance it passes: by channel, or by a pixel count.
+    for tol in [json!({"tolerance": 1}), json!({"pixels": 1})] {
+        let mut l = launcher();
+        l.script.borrow_mut().shot = Some(png_bytes([21, 30, 40, 255]));
+        let o = golden_run(json!([{"step": "shot", "name": "menu", "golden": tol}]), &mut l, &out, &base, false);
+        assert_eq!(o.code, 0, "{tol}: {}", o.message);
+    }
+    std::fs::remove_dir_all(&out).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+#[test]
+fn a_golden_shot_with_no_baseline_fails_and_says_how_to_record_it() {
+    let out = temp("golden_none");
+    let base = temp("golden_none_base");
+    let mut l = launcher();
+    l.script.borrow_mut().shot = Some(png_bytes([0, 0, 0, 255]));
+    let o = golden_run(json!([{"step": "shot", "name": "menu", "golden": true}]), &mut l, &out, &base, false);
+    assert_eq!(o.code, 1);
+    assert!(o.message.contains("no baseline at") && o.message.contains("record=1") && o.message.contains("approval"), "{}", o.message);
+    std::fs::remove_dir_all(&out).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+#[test]
+fn a_launch_save_names_a_fixture_folder_copied_into_the_scratch_saves() {
+    let s = parse("x", &json!({"id": "x", "launch": {"save": "hub_start"}, "steps": [{"step": "back"}]})).unwrap();
+    assert_eq!(s.launch.save.as_deref(), Some("hub_start"));
+    assert!(problems_of(json!({"id": "x", "launch": {"save": "../up"}, "steps": [{"step": "back"}]})).contains("'save' names a folder"));
+    let out = temp("save_none");
+    let saves = temp("save_fixtures");
+    let mut l = launcher();
+    let o = Options { saves: Some(saves.to_path_buf()), ..no_window(&out) };
+    let r = scenario::run_size(&s, (1280, 720), &o, &mut l);
+    assert_eq!(r.code, 2);
+    assert!(r.message.contains("no folder scenarios/saves/hub_start/"), "{}", r.message);
+    std::fs::create_dir_all(saves.join("hub_start")).unwrap();
+    std::fs::write(saves.join("hub_start").join("slot_0.json"), "{}").unwrap();
+    let mut l = launcher();
+    let r = scenario::run_size(&s, (1280, 720), &o, &mut l);
+    assert_eq!(r.code, 0, "{}", r.message);
+    assert_eq!(l.plans.len(), 1);
+    // The fixture reached the scratch saves before the start (the scratch folder is gone after the run).
+    assert!(l.plans[0].args.iter().any(|a| a.starts_with("saves=")), "{:?}", l.plans[0].args);
+    std::fs::remove_dir_all(&out).unwrap();
+    std::fs::remove_dir_all(&saves).unwrap();
 }

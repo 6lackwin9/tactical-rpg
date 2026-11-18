@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
 #   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test (the UI bot's
-#                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), the layer check, docs --all, tooltests, plannertests, assetlib
+#                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), every scenario of the game with no window (PR7-4),
+#                                the layer check, docs --all, tooltests, plannertests, assetlib
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
 #                                engine and kit crates (src, tests), schema.json and kit.json name no lore word, any case
@@ -30,7 +31,7 @@
 #   tools/fc.sh scenario check [<file>|all]   parse games/<id>/scenarios/*.json; no game starts (engine/docs/authoring/scenarios.md)
 #   tools/fc.sh scenario <id|all|file.json> [size=1280x720] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>]   run
 #                                them with no window, or in real muted windows that do not take the focus where the file or window=1 asks
-#                                (0 pass, 1 a step failed, 2 could not start); never in the gate
+#                                (0 pass, 1 a step failed, 2 could not start); the gate runs them all; record=1 writes golden baselines
 #   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [ruleset=<id>] [seed=<n>] [do=<a>,<b>,...] [the keys above]
 #                                proof shots of a named fight or screen, into .agent/shots/<name>/<WxH>/, no window, no script to write
 #   tools/fc.sh playtest [start] [save=<dir|file>] [out=playtests/agent] [size=WxH] [shots=each|off] [window=1] [profile=dev|release]
@@ -325,6 +326,7 @@ gate() {
   cargo_test; [ $status -ne 0 ] && return
   repro; [ $status -ne 0 ] && return
   playtest_smoke; [ $status -ne 0 ] && return
+  scenarios_all; [ $status -ne 0 ] && return
   layers_check; [ $status -ne 0 ] && return
   # the whole docs check; the size warnings, which are many, as one count (tools/fc.sh docs --all lists them)
   local out
@@ -340,7 +342,7 @@ gate() {
 
 playtest_smoke() {  # PR7-22: the agent playtest harness plays a fresh save to the hub (games/emberwake/playtests/agent/smoke.play)
   local cli="${CARGO_TARGET_DIR:-$PWD/target}/debug/aegis" out log
-  [ -x "$cli" ] || [ -x "$cli.exe" ] || { echo "[playtest] SKIP: no dev build of the CLI"; return; }
+  [ -x "$cli" ] || [ -x "$cli.exe" ] || { echo "[playtest] FAIL: no dev build of the CLI at $cli"; status=1; return; }
   out=$(mktemp -d); log="$out/run.txt"
   if "$cli" playtest run games/emberwake/playtests/agent/smoke.play out="$out" > "$log" 2>&1; then
     echo "[playtest] smoke: $(tail -n 1 "$log")"
@@ -348,6 +350,18 @@ playtest_smoke() {  # PR7-22: the agent playtest harness plays a fresh save to t
     grep -E "FAIL|could not|panicked|line [0-9]+:" "$log" | head -n 20; echo "[playtest] FAIL: the smoke playtest (log under $out)"; status=1; return
   fi
   rm -rf "$out"
+}
+
+scenarios_all() {  # PR7-4: every scenario of the registered game (games/emberwake/scenarios/), no window, dev build; golden shots compare against their baselines
+  local cli="${CARGO_TARGET_DIR:-$PWD/target}/debug/aegis" out log
+  [ -x "$cli" ] || [ -x "$cli.exe" ] || { echo "[scenarios] FAIL: no dev build of the CLI at $cli"; status=1; return; }
+  out=$(mktemp -d); log="$out/run.txt"
+  if "$cli" scenario run all out="$out" > "$log" 2>&1; then
+    echo "[scenarios] $(tail -n 1 "$log" | sed 's/^§ scenario run: //')"
+    rm -rf "$out"
+  else
+    grep -vE "PASS;" "$log" | head -n 20; echo "[scenarios] FAIL: a scenario failed (bundles, diff images among them, under $out)"; status=1
+  fi
 }
 
 aegis() {  # the CLI, built on demand

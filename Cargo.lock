@@ -34,6 +34,7 @@ dependencies = [
  "aegis_save",
  "anyhow",
  "indexmap",
+ "png",
  "serde_json",
 ]
 
