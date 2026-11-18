@@ -801,6 +801,103 @@ def strip9(shot: Image.Image, plan, start=10, cap=12) -> Image.Image:
 
 
 
+# take 10 (Tushar 2026-11-18 21:33): HP shows current/max everywhere; on the foe card the poise pips sit right under
+# the HP bar; the per-pip threshold is shown as a tag. Rule (rpgkit_battle::poise, S2.2): T = max(1, round(max_poise / 5));
+# a hit removes min(3, floor(D / T)) pips and the remainder is lost (no partial pips), so a tag beats a partial fill.
+FOE_MAXP, FOE_T = 63, 13                      # Castellan Footman: poise 63 -> 13 per pip
+PLAN10_POISE = {1: 40, 2: 15, 3: 15}          # poise damage D per planned move on the target (40 -> 3 pips, 15 -> 1)
+
+
+def pip_tag(d, x, y, t):
+    d.rounded_rectangle((x, y, x + 40, y + 14), radius=3, fill=SLATE, outline=IRON)
+    poise_glyph(d, x + 3, y + 2, 10)
+    d.text((x + 16, y), str(t), font=MONO, fill=POISE)
+
+
+def mock10(shot: Image.Image) -> Image.Image:
+    img = mock8(shot)
+    d = ImageDraw.Draw(img)
+    stage = shot.crop((291, 112, 899, 492)).resize((912, 570), Image.NEAREST)
+    kae = shot.crop((20, 166, 84, 230))
+    foe_p = shot.crop((1044, 220, 1108, 284))
+    # party plate
+    d.rectangle((12, 80, 172, 200), fill=BASALT)
+    y = 84
+    d.rectangle((16, y, 168, y + 84), fill=SLATE, outline=GOLD)
+    img.paste(kae.resize((48, 48)), (22, y + 6))
+    intent_tile(d, 140, y + 6)
+    d.text((76, y + 6), "Kaelen", font=BODY, fill=PARCH)
+    bar(d, 76, y + 30, 86, 6, 1.0, HP)
+    loss = round(86 * 22 / 242)
+    d.rectangle((162 - loss, y + 30, 162, y + 36), fill=IMPACT)
+    d.text((76, y + 39), "242/242", font=MONO, fill=PARCH)
+    d.text((136, y + 39), "-22", font=MONO, fill=IMPACT)
+    ap_pips(d, 76, y + 56, 10, 10, size=6, gap=2, spent=10)
+    poise(d, 22, y + 72, 5, 5, w=26, h=4)
+    # foe plates
+    d.rectangle((1108, 80, 1268, 260), fill=BASALT)
+    for k, blk in enumerate((1, 3)):
+        y = 84 + k * 92
+        sel = k == 0
+        d.rectangle((1112, y, 1264, y + 84), fill=SLATE, outline=(170, 60, 50) if sel else IRON)
+        img.paste(foe_p.resize((48, 48)), (1118, y + 6))
+        d.text((1172, y + 4), "Footman", font=BODY, fill=PARCH)
+        bar(d, 1172, y + 26, 86, 6, 1.0, (150, 50, 45))
+        d.text((1172, y + 34), "144/144", font=MONO, fill=PARCH)
+        glyph(d, "sword", 1172, y + 52, 14, (200, 160, 120))
+        img.paste(kae.resize((16, 16)), (1190, y + 51))
+        for b in range(6):
+            d.rectangle((1212 + b * 8, y + 57, 1212 + b * 8 + 5, y + 61), fill=IMPACT if b == blk else AP_OFF)
+        poise(d, 1118, y + 72, 5, 5, w=26, h=4)
+    # foe card
+    img.paste(stage.crop((612, 18, 904, 300)), (796, 90))
+    cx, cy = 796, 96
+    rows = [(i, p) for i, p in enumerate(PLAN7) if p[3]]
+    H = 80 + len(rows) * 30 + 40
+    frame_a(d, (cx, cy, cx + 288, cy + H), fill=(16, 18, 25))
+    img.paste(foe_p.resize((48, 48)), (cx + 14, cy + 14))
+    d.text((cx + 72, cy + 10), "Castellan Footman", font=TITLE_S, fill=GOLD)
+    heart(d, cx + 72, cy + 33, 11)
+    bar(d, cx + 88, cy + 36, 130, 6, 1.0, (150, 50, 45))
+    d.text((cx + 224, cy + 30), "144/144", font=MONO, fill=PARCH)
+    poise_glyph(d, cx + 71, cy + 47, 13)
+    poise(d, cx + 88, cy + 51, 5, 5, w=24, h=6, gap=2)
+    pip_tag(d, cx + 224, cy + 47, FOE_T)
+    starts, b0 = [], 0
+    for p in PLAN7:
+        starts.append(b0)
+        b0 += p[1]
+    left, tot, ptot = 5, 0, 0
+    y = cy + 76
+    for i, (ic, blocks, ap, (hp, pp)) in rows:
+        dmg = PLAN10_POISE[i]
+        pp = min(3, dmg // FOE_T)
+        t = slot_icon(ic, 24)
+        img.paste(t, (cx + 14, y), t)
+        for b in range(6):
+            c = GOLD if starts[i] <= b < starts[i] + blocks else AP_OFF
+            d.rectangle((cx + 44 + b * 8, y + 10, cx + 44 + b * 8 + 5, y + 14), fill=c)
+        heart(d, cx + 98, y + 6, 12)
+        d.text((cx + 114, y + 3), f"-{hp}", font=MONO_L, fill=PARCH)
+        poise_glyph(d, cx + 150, y + 4, 13)
+        d.text((cx + 166, y + 3), f"{dmg}", font=MONO, fill=POISE)
+        for j in range(5):
+            c = POISE if j < left - pp else (AMBER if j < left else AP_OFF)
+            d.rectangle((cx + 188 + j * 10, y + 8, cx + 188 + j * 10 + 7, y + 14), fill=c)
+        left -= pp
+        tot += hp
+        if left <= 0:
+            d.text((cx + 240, y + 3), "BREAK", font=SMALL, fill=AMBER)
+        y += 30
+    d.line((cx + 14, y + 2, cx + 274, y + 2), fill=IRON)
+    d.text((cx + 14, y + 10), "Total", font=SMALL, fill=IRON_L)
+    heart(d, cx + 98, y + 13, 12)
+    d.text((cx + 114, y + 10), f"-{tot}", font=MONO_L, fill=GOLD)
+    poise_glyph(d, cx + 150, y + 11, 13)
+    d.text((cx + 168, y + 10), "BREAK in 6", font=SMALL, fill=AMBER)
+    return img
+
+
 def label(img, text):
     out = Image.new("RGB", (img.width, img.height + 34), BASALT)
     out.paste(img, (0, 34))
@@ -881,6 +978,17 @@ def main():
     sh.paste(full, (0, 0))
     sh.paste(light, (0, full.height + 12))
     sh.save(out / "battle_layout_take9_ap.png")
+    m10 = mock10(shot)
+    m10.save(out / "battle_layout_take10.png")
+    card = m10.crop((790, 90, 1090, 340)).resize((900, 750), Image.NEAREST)
+    side = m10.crop((8, 72, 176, 180)).resize((504, 324), Image.NEAREST)
+    foes = m10.crop((1104, 72, 1272, 270)).resize((504, 594), Image.NEAREST)
+    sh = Image.new("RGB", (2560, 1440 + 20 + 750), VOID)
+    sh.paste(m10.resize((2560, 1440), Image.NEAREST), (0, 0))
+    sh.paste(card, (0, 1460))
+    sh.paste(side, (940, 1460))
+    sh.paste(foes, (1480, 1460))
+    sh.save(out / "battle_layout_take10_sheet.png")
 
 
 if __name__ == "__main__":
