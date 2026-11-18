@@ -23,6 +23,7 @@
 pub mod art;
 pub mod audio;
 pub mod autotile;
+pub mod controls;
 pub mod bridge;
 pub mod canvas;
 pub mod depth;

@@ -64,6 +64,15 @@ A second program (`<id>_cli`) implements `aegis_cli::Game` (`USAGE`, `run` for t
 `manifest_path`, `content` (the `store::Hooks` of its data kinds), `host`, `driver`) and calls `aegis_cli::run`. Keep it
 apart from the game program: the file and clock lints exempt only the CLI crate.
 
+### Controls
+
+Screens read `Key`s. Every key, and every gamepad button, passes through the control map first (`aegis_ui::controls`,
+settings key `controls`: `{"keys": {"i": "up"}, "pad": {"south": "enter"}}`), so a player can rebind keys and a pad
+drives the same screens; bad entries are shown and keep their defaults. Pad defaults: south Enter, east Esc (Back), west
+Space, north Tab, the bumpers Page Up / Down, Select Shift+Tab, Start Esc, the d-pad and left stick the arrows (held, they
+repeat after 350 ms every 110 ms and set `Held::dir`). The pad is read on Windows; anywhere, and with no window, the link
+requests `{"cmd": "pad", "button": "south"}` and `{"cmd": "controls"}` press a button and show the map.
+
 ## Checks and tools
 
 - `tools/fc.sh gate`: builds every crate (a warning fails), runs every test, every game's scenarios with no window,

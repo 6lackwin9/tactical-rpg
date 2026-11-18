@@ -236,14 +236,30 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
     /// FPSCAP1: asked after every wake. A flood of events only asks again: the cap's deadline counts from the last frame.
     /// Unlimited draws as fast as presenting allows (vsync waits for the screen); the redraw itself wakes the loop.
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        // INPUT-MAP1: a connected pad is read here; the loop wakes for it at least every 16 ms (gilrs does not wake it)
+        #[cfg(windows)]
+        let pad_wake = match (self.gamepad.as_mut(), self.shell.as_mut()) {
+            (Some(g), Some(s)) => {
+                if g.poll(s) {
+                    self.pacer.touch(Instant::now());
+                }
+                g.connected().then(|| g.due().unwrap_or_else(Instant::now).min(Instant::now() + Duration::from_millis(16)))
+            }
+            _ => None,
+        };
+        #[cfg(not(windows))]
+        let pad_wake: Option<Instant> = None;
         match self.pacer.decide(Instant::now(), self.frame_every) {
             Pace::Redraw => {
-                el.set_control_flow(ControlFlow::Wait);
+                el.set_control_flow(match pad_wake {
+                    Some(at) => ControlFlow::WaitUntil(at),
+                    None => ControlFlow::Wait,
+                });
                 if let Some(w) = &self.window {
                     w.request_redraw();
                 }
             }
-            Pace::WaitUntil(at) => el.set_control_flow(ControlFlow::WaitUntil(at)),
+            Pace::WaitUntil(at) => el.set_control_flow(ControlFlow::WaitUntil(pad_wake.map_or(at, |p| p.min(at)))),
         }
     }
 
@@ -312,9 +328,9 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
                 }
             }
             WindowEvent::KeyboardInput { event: KeyEvent { logical_key, state: ElementState::Released, .. }, .. } => {
-                if let Some(k) = walk_key(&logical_key) {
-                    self.walk_keys.retain(|w| *w != k);
-                    if let Some(s) = self.shell.as_mut() {
+                if let Some(s) = self.shell.as_mut() {
+                    if let Some(k) = s.walk_key(&logical_key) {
+                        self.walk_keys.retain(|w| *w != k);
                         s.cx.held.dir = self.walk_keys.last().and_then(|k| k.dir());
                     }
                 }
@@ -350,7 +366,7 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
             WindowEvent::KeyboardInput { event: KeyEvent { logical_key, physical_key, text, state: ElementState::Pressed, repeat, .. }, .. } => {
                 let Some(s) = self.shell.as_mut() else { return };
                 if s.gfx.kit.edit.is_none() {
-                    if let Some(k) = walk_key(&logical_key) {
+                    if let Some(k) = s.walk_key(&logical_key) {
                         if !self.walk_keys.contains(&k) {
                             self.walk_keys.push(k);
                         }
@@ -445,7 +461,7 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
                     _ => None,
                 };
                 if let Some(k) = k {
-                    s.key(k);
+                    s.press(k);
                 }
             }
             _ => {}

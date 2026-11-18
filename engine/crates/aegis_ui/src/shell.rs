@@ -53,7 +53,9 @@ mod input;
 mod link;
 mod settings;
 mod window;
-use input::{drop_key_at, info_at, info_rect, is_gesture, screen_ctl, shift_digit, trail_ctl, walk_key, Press};
+#[cfg(windows)]
+mod gamepad;
+use input::{drop_key_at, info_at, info_rect, is_gesture, screen_ctl, shift_digit, trail_ctl, Press};
 pub use settings::read_window_options;
 use settings::hold_declared_sizes;
 pub use window::{capped_buffer, web_attributes_of};
@@ -119,6 +121,8 @@ struct Shell<G> {
     frames: u64,
     /// How native screens' canvas relates to the window (the game's `Options::canvas`).
     policy: CanvasPolicy,
+    /// INPUT-MAP1: the control map, and the settings value it was read from (None: not read yet; re-read on a change).
+    controls: (crate::controls::Controls, Option<Option<Value>>),
 }
 
 impl<G: Context> Shell<G> {
@@ -129,7 +133,7 @@ impl<G: Context> Shell<G> {
         let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         gfx.kit.device.dpr = dpr;
         let (policy, offered, window_notices) = read_window_options(&options.canvas, &options.window_sizes);
-        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
+        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default() };
         shell.cx.notice.extend(icon_notice);
         shell.cx.notice.extend(window_notices);
         hold_declared_sizes(&mut shell.cx.settings, &options.window_sizes, &offered);
@@ -409,6 +413,9 @@ struct App<G> {
     /// buffer's px per window px (below 1 only while `capped_buffer` shrinks it), which pointer positions are scaled by.
     texture_max: u32,
     buffer_k: f32,
+    /// INPUT-MAP1: the gamepad (None: the system offers none).
+    #[cfg(windows)]
+    gamepad: Option<gamepad::Gamepad>,
 }
 
 impl<G: Context> App<G> {
@@ -433,6 +440,8 @@ impl<G: Context> App<G> {
             alt: false,
             texture_max: 0,
             buffer_k: 1.0,
+            #[cfg(windows)]
+            gamepad: gamepad::Gamepad::open(),
         }
     }
 
@@ -862,7 +871,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
+        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default() };
         s.frame();
         s
     }
@@ -2900,5 +2909,60 @@ mod tests {
             let diff = crate::shot_diff::shot_diff(&old, &native, View::fit(pw, ph).for_grid(Grid::Native).s).unwrap();
             assert!(diff.passed(), "{pw}x{ph}: {diff}");
         }
+    }
+
+    /// A screen that logs the keys it gets.
+    #[derive(Default)]
+    struct KeyLog {
+        w: Vec<Widget<&'static str>>,
+    }
+
+    impl KeyLog {
+        fn act(&mut self, _cx: &mut Cx, _a: &'static str) {}
+    }
+
+    impl Screen<App> for KeyLog {
+        fn id(&self) -> &'static str {
+            "keylog"
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let ui: Ui<&'static str> = Ui::new(g, mouse, live);
+            self.w = ui.widgets;
+        }
+        fn key(&mut self, cx: &mut Cx, k: Key) {
+            cx.app.log.push(k.name());
+        }
+        fn back(&mut self, cx: &mut Cx) {
+            cx.app.log.push("back".into());
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    /// INPUT-MAP1: keys and pad buttons reach the screen through the control map in the settings; a change to the
+    /// settings takes effect on the next key, and a bad entry is reported and keeps its default.
+    #[test]
+    fn keys_and_pad_buttons_go_through_the_control_map() {
+        let mut s = shell();
+        s.stack = vec![Box::new(KeyLog::default())];
+        s.frame();
+        for (cmd, arg) in [("key", "left"), ("key", "i"), ("pad", "south"), ("pad", "east"), ("pad", "dpad_up"), ("pad", "right_bumper")] {
+            let k = if cmd == "key" { "key" } else { "button" };
+            assert_eq!(s.bridge(&json!({"cmd": cmd, k: arg}))["ok"], json!(true), "{cmd} {arg}");
+        }
+        assert_eq!(s.cx.app.log, ["left", "i", "enter", "back", "up", "pagedown"], "Esc is Back");
+        s.cx.app.log.clear();
+        s.cx.settings.v["controls"] = json!({"keys": {"i": "up", "left": "a"}, "pad": {"south": "space"}});
+        s.bridge(&json!({"cmd": "key", "key": "i"}));
+        s.bridge(&json!({"cmd": "key", "key": "left"}));
+        s.bridge(&json!({"cmd": "pad", "button": "south"}));
+        assert_eq!(s.cx.app.log, ["up", "a", "space"]);
+        let map = s.bridge(&json!({"cmd": "controls"}));
+        assert_eq!(map["controls"]["keys"]["i"], json!("up"));
+        assert_eq!(map["controls"]["pad"]["east"], json!("esc"));
+        assert_eq!(s.bridge(&json!({"cmd": "pad", "button": "x"}))["ok"], json!(false));
+        // A bad entry is shown to the player as the theme's problems are, and keeps its default.
+        s.cx.settings.v["controls"] = json!({"pad": {"nowhere": "up"}});
+        assert_eq!(s.bridge(&json!({"cmd": "pad", "button": "south"}))["key"], json!("enter"));
+        assert!(s.cx.notice.iter().any(|n| n.contains("'nowhere' is not a button")) || s.stack.len() > 1, "{:?}", s.cx.notice);
     }
 }
