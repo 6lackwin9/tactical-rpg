@@ -383,7 +383,7 @@ fn reduce_motion_hides_the_particles() {
 #[test]
 fn the_agent_view_and_the_widgets() {
     let (mut cx, mut g) = (cx(), gfx());
-    let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![card("Hello."), card("Again.")]), TextSpeed::Normal, |_, _| {});
+    let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![card("Salve."), card("Again.")]), TextSpeed::Normal, |_, _| {});
     s.draw(&mut cx, &mut g, (-1, -1), true);
     let st = s.state(&cx);
     for k in ["reel", "card", "cards", "phase", "shown", "total", "done"] {
@@ -837,7 +837,7 @@ fn x3_a_line_cards_expression_and_its_frames_base_sidecar() {
 #[test]
 fn the_advance_area_shows_no_hover_card_next_to_the_pointer() {
     let (mut cx, mut g) = (cx(), gfx());
-    let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![card("Hello."), card("Again.")]), TextSpeed::Normal, |_, _| {});
+    let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![card("Salve."), card("Again.")]), TextSpeed::Normal, |_, _| {});
     s.draw(&mut cx, &mut g, (W / 2, H / 2), true);
     let (_, next_tip) = s.widget_rect("vignette.next").expect("the advance area");
     assert!(next_tip.is_empty(), "no hover card on the stage: {next_tip:?}");

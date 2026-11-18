@@ -667,6 +667,9 @@ fn kill(pid: u32) {
     let _ = std::process::Command::new("kill").args(["-9", &pid.to_string()]).status();
     #[cfg(windows)]
     let _ = std::process::Command::new("taskkill").args(["/F", "/PID", &pid.to_string()]).status();
+    // No process to kill on another target (the web build compiles this crate too).
+    #[cfg(not(any(unix, windows)))]
+    let _ = pid;
 }
 
 /// Asks the game to leave over the link, then kills it if it has not.
