@@ -5,11 +5,11 @@ Tushar asked for a pass over the opening CGs (2026-11-18). Vignette `vg_open` (T
 code-drawn cards (flat vector shapes, not pixel art, brighter than the locked look; STYLE_BIBLE 6 lists them as
 placeholders). Targets stay `1120 x 472` at the same paths (generate 16:9, crop the middle band).
 
-Route (Tushar 2026-11-18: "for opening CGs we will be using the flow mode and not pipeline for the final version but
-we can finalize those immediately if they dont have any character requirements"): `intro_1..4` show no cast member
-(only nameless priests and tithes), so their image_pipeline takes are finals once reviewed: one request each, the M5
-gate CG (`vg_m5_gate.png`, the approved painted look) attached as the style reference (`refs/cg_style_ref_m5_gate.png`).
-`meat_market` has Kaelen, so it is made in Flow (prompt below, `@Kaelen`); its pipeline request was withdrawn.
+Route (Tushar 2026-11-18, STYLE_BIBLE 6): all five, `meat_market` included, go through image_pipeline (Gemini web
+queue) for now, one request each, with the M5 gate CG (`vg_m5_gate.png`, the approved painted look) as the style
+reference (`refs/cg_style_ref_m5_gate.png`). They are placeholders: final opening CGs are made in Flow. An earlier
+note in this file made intro 1-4 finals and moved `meat_market` to Flow; superseded the same day ("lets use gemini
+webapp for now, but note that these will be placeholder"). The Flow version of `meat_market` is kept below.
 Slide briefs: `lore/narrative/new_game_onboarding_and_intro.md` 2. Tone rule: the rite and the chains, never violence
 to a child.
 
