@@ -149,22 +149,56 @@ pub fn draw_mark(ui: &mut Ui<impl Clone>, cx: &mut Cx, icon: &str, r: Rect) {
 pub const ART_SIDE: i32 = 80;
 pub const BED_W: i32 = 42;
 pub const BED_HEAD_Y: i32 = 28;
-/// The plate's widest (art px, centred on the bed): the bunks' pitch (three cells, 96 art px) less a gap, so two
-/// neighbours' plates never meet.
-pub const PLATE_MAX_W: i32 = 92;
+/// The plate's widest (art px, centred on the bed): the art's side and a little over (PR7-23: 104, up from 92, so the
+/// shipped party names read whole up to Extra large text; the staggered heights leave the room, `plate_slot`).
+pub const PLATE_MAX_W: i32 = 104;
+/// The least gap (screen px) between two plates at the same height.
+pub const PLATE_GAP: i32 = 4;
+
+/// PR7-23: where a bunk's plate goes among its neighbours. The bunks whose rows overlap (a row of the hub's
+/// bunks), taken left to right, alternate between two heights (`level` 0: on the bed's head; 1: one plate lower), so
+/// a plate only shares its height with every second bunk; `room` is the least horizontal distance (screen px) from
+/// this bunk's centre to the centre of another bunk of the row at its height (`i32::MAX` when none). Plates are
+/// centred on their bunks, so two same-height plates at most `room` less `PLATE_GAP` wide never meet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlateSlot {
+    pub level: i32,
+    pub room: i32,
+}
+
+/// `PlateSlot` of the bunk drawn in `r` among the hub's bunks `all` (their drawn art rects, `r` among them).
+pub fn plate_slot(r: Rect, all: &[Rect]) -> PlateSlot {
+    let mid = |o: &Rect| 2 * o.x + o.w;
+    let mut row: Vec<Rect> = all.iter().copied().filter(|o| o.y < r.y + r.h && r.y < o.y + o.h).collect();
+    if !row.contains(&r) {
+        row.push(r);
+    }
+    row.sort_by_key(|o| (mid(o), o.y));
+    row.dedup();
+    let at = row.iter().position(|o| *o == r).unwrap_or(0);
+    let room = row.iter().enumerate().filter(|(i, _)| *i != at && i % 2 == at % 2).map(|(_, o)| (mid(o) - mid(&r)).abs() / 2).min().unwrap_or(i32::MAX);
+    PlateSlot { level: (at % 2) as i32, room }
+}
+
+/// The width (screen px) a plate needs to show `name` whole: the class sigil and the name with their margins.
+pub fn plate_need(p: &mut Painter, name: &str) -> i32 {
+    let side = p.line_h(SMALL).ceil() as i32;
+    2 + side + 3 + p.text_w(name, SMALL).ceil() as i32 + 4
+}
 
 /// The name plate of an occupied bunk drawn in `r` (the bunk's drawn art rect): centred on the bed, its top on the
-/// bed's head (under the niche, clear of the candle in the art's top corner), as wide as the class sigil and the name
-/// need, at least the bed and at most `PLATE_MAX_W`; the name shortened to fit.
-pub fn plate_rect(p: &mut Painter, r: Rect, name: &str) -> Rect {
-    let lh = p.line_h(SMALL).ceil() as i32;
-    let h = lh + 2;
-    let side = h - 2;
-    let want = 2 + side + 3 + p.text_w(name, SMALL).ceil() as i32 + 4;
-    let w = want.clamp(BED_W * r.w / ART_SIDE, PLATE_MAX_W * r.w / ART_SIDE);
+/// bed's head (under the niche, clear of the candle in the art's top corner) or, at `slot.level` 1, one plate lower
+/// (and a px); as wide as the class sigil and the name need (`plate_need`), at least the bed and at most
+/// `PLATE_MAX_W`, and never wider than `slot.room` less `PLATE_GAP` so same-height plates never overlap (that bound
+/// wins over the bed's width); the name shortened to fit.
+pub fn plate_rect(p: &mut Painter, r: Rect, name: &str, slot: PlateSlot) -> Rect {
+    let h = p.line_h(SMALL).ceil() as i32 + 2;
+    let want = plate_need(p, name);
+    let most = (PLATE_MAX_W * r.w / ART_SIDE).min(slot.room.saturating_sub(PLATE_GAP)).max(1);
+    let w = want.max(BED_W * r.w / ART_SIDE).min(most);
     let mid = r.x + r.w / 2;
     let head = r.y + BED_HEAD_Y * r.h / ART_SIDE;
-    Rect::new(mid - w / 2, head, w, h)
+    Rect::new(mid - w / 2, head + slot.level * (h + 1), w, h)
 }
 
 /// Draws the plate `pr` (`plate_rect`): a brass-edged plate, the class sigil (the class name's first letter in a
@@ -431,13 +465,17 @@ mod tests {
         let mut map = RegionMap::new(&mut cx);
         frame(&mut map, &mut cx, &mut g, 1.0);
         let bunks = map.state(&cx)["bunks"].as_array().cloned().expect("the hub's bunks");
+        // PR7-19 / PR7-23: a bunk prop for every bunk the cap can reach (`bunks_max`, the Timber Frames bunks too),
+        // all in view; the ones past today's cap draw empty
         let cap = roster::bunk_cap(cx.gs()) as usize;
-        assert_eq!(bunks.len(), cap, "a bunk prop per bunk, all in view: {bunks:?}");
+        let max = cx.gs().party.roster.manifest.bunks_max as usize;
+        assert!(cap <= max);
+        assert_eq!(bunks.len(), max, "a bunk prop per reachable bunk, all in view: {bunks:?}");
         let states: Vec<(String, String)> = bunks.iter().map(|b| (b["member"].as_str().unwrap().to_string(), b["state"].as_str().unwrap().to_string())).collect();
         let want: Vec<(String, String)> = [(ids[0].as_str(), "active"), (ids[1].as_str(), "active"), (ids[2].as_str(), "benched"), (ids[3].as_str(), "crypt")]
             .iter()
             .map(|(m, s)| (m.to_string(), s.to_string()))
-            .chain(std::iter::repeat_n(("".to_string(), "empty".to_string()), cap - 4))
+            .chain(std::iter::repeat_n(("".to_string(), "empty".to_string()), max - 4))
             .collect();
         assert_eq!(states, want);
         for b in &bunks {
@@ -511,7 +549,9 @@ mod tests {
 
     /// HUB-POLISH1 (1): every occupied bunk state (active, benched, crypt) wears a plate with its member's name and
     /// class, centred on the bed and its top on the bed's head (`plate_rect` over the AI-17 measure), at every text size;
-    /// an empty bunk wears none.
+    /// an empty bunk wears none; PR7-23: on the shipped eight-bunk hub (neighbours two cells apart) neighbour plates
+    /// alternate heights and no two plates overlap, at every text size; at Normal and Extra large every shipped party
+    /// character's name reads whole on every occupied bunk.
     #[test]
     fn hub_polish1_each_occupied_bunk_wears_its_members_name_plate() {
         let (mut cx, _) = hub_cx(false);
@@ -522,6 +562,7 @@ mod tests {
             let widgets = map.widgets();
             let bunks = map.state(&cx)["bunks"].as_array().cloned().expect("the hub's bunks");
             let mut states: Vec<String> = Vec::new();
+            let mut plates: Vec<(String, (i64, i64, i64, i64))> = Vec::new();
             for b in &bunks {
                 let member = b["member"].as_str().unwrap();
                 if member.is_empty() {
@@ -539,12 +580,43 @@ mod tests {
                 let (px, py, pw, ph) = (n(0), n(1), n(2), n(3));
                 assert!(((px + pw / 2) - (bx + bw / 2)).abs() <= 1, "{size}: centred on the bed: {plate} on {w}");
                 assert!(pw >= BED_W as i64 * bw / ART_SIDE as i64 && pw <= PLATE_MAX_W as i64 * bw / ART_SIDE as i64 + 1, "{size}: between the bed and the niche: {plate}");
-                assert_eq!(py, by + BED_HEAD_Y as i64 * bh / ART_SIDE as i64, "{size}: on the bed's head: {plate} on {w}");
+                let level = plate["level"].as_i64().unwrap();
+                assert!(level == 0 || level == 1, "{size}: one of two heights: {plate}");
+                assert_eq!(py, by + BED_HEAD_Y as i64 * bh / ART_SIDE as i64 + level * (ph + 1), "{size}: on the bed's head or one plate lower: {plate} on {w}");
                 assert!(ph > 0 && py + ph <= by + bh, "{size}: on the bunk: {plate} on {w}");
+                plates.push((b["prop"].as_str().unwrap().to_string(), (px, py, pw, ph)));
             }
+            assert!(plates.len() >= 2, "{size}: neighbour plates to compare: {plates:?}");
+            for (i, (a, (ax, ay, aw, ah))) in plates.iter().enumerate() {
+                for (b, (bx, by, bw, bh)) in &plates[i + 1..] {
+                    let apart = ax + aw <= *bx || bx + bw <= *ax || ay + ah <= *by || by + bh <= *ay;
+                    assert!(apart, "{size}: the plates of {a} and {b} overlap: {plates:?}");
+                }
+            }
+            // neighbour occupied bunks (the bunks of a row, left to right) take the two heights in turn
+            let mut row: Vec<(i64, i64)> = bunks.iter().filter_map(|b| b.get("plate")).map(|p| (p["rect"][0].as_i64().unwrap() + p["rect"][2].as_i64().unwrap() / 2, p["level"].as_i64().unwrap())).collect();
+            row.sort();
+            assert!(row.iter().map(|(_, l)| *l).collect::<std::collections::HashSet<_>>().len() == 2, "{size}: both heights in use: {row:?}");
             states.sort();
             states.dedup();
             assert_eq!(states, vec!["active", "benched", "crypt"], "{size}: every occupied state");
+            if size == "Normal" || size == "Extra large" {
+                let names: Vec<String> = cx.data.catalogs.own_entries(WORLD, "characters").iter().filter(|c| json::s(c, "role") == "party").map(|c| json::s(c, "name")).collect();
+                assert!(!names.is_empty());
+                let keep: Vec<String> = cx.gs().party.members.iter().map(|m| m.name.clone()).collect();
+                for name in &names {
+                    for m in cx.gs_mut().party.members.iter_mut() {
+                        m.name = name.clone();
+                    }
+                    frame(&mut map, &mut cx, &mut g, scale as f32);
+                    for b in map.state(&cx)["bunks"].as_array().unwrap().iter().filter(|b| b.get("plate").is_some()) {
+                        assert_eq!(b["plate"]["full"], json!(true), "{size}: '{name}' reads whole: {b}");
+                    }
+                }
+                for (m, n) in cx.gs_mut().party.members.iter_mut().zip(keep) {
+                    m.name = n;
+                }
+            }
             match size {
                 "Normal" => shot(&g, "hub_plates"),
                 "Extra large" => shot(&g, "hub_plates_xl"),
@@ -580,11 +652,7 @@ mod tests {
             assert!(choices[0].1.starts_with("1  Take into the squad") && choices[0].2, "{size}: {choices:?}");
             assert!(!choices[1].2 && choices[1].1.contains("(Only a member of the squad"), "{size}: a benched member's lead is refused in its row: {choices:?}");
             assert!(choices[2].1.contains(FAREWELL) && choices[2].2, "{size}: {choices:?}");
-            if size == "Normal" {
-                shot(&g, "bunk_card_talkbox");
-            } else {
-                shot(&g, "bunk_card_talkbox_xl");
-            }
+            shot(&g, if size == "Normal" { "bunk_card_talkbox" } else { "bunk_card_talkbox_xl" });
         }
         // key 1 takes the benched member into the squad, as the click
         let mut card = BunkCard::new(&ids[2]);
