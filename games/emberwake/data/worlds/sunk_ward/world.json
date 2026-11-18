@@ -53,7 +53,7 @@
 	"classes": {
 		"warrior": {
 			"name": "Vanguard",
-			"description": "Former garrison infantry in dented plate: billhook and halberd men who hold narrow corridors and break poise with two-handed polearms.",
+			"description": "Former garrison infantry in dented plate: billhook and halberd men who hold narrow corridors and break poise with one-handed polearms.",
 			"skill_path": {}
 		},
 		"rogue": {
