@@ -15,12 +15,12 @@ game and kit layers, plus the assets canon or a spec needs that have no file yet
 | portrait | 0 | 0 | 99 | 0 |
 | prop | 152 | 0 | 0 | 0 |
 | sfx | 12 | 0 | 0 | 0 |
-| skill icon | 71 | 38 | 89 | 0 |
+| skill icon | 97 | 12 | 89 | 0 |
 | sprite sheet | 0 | 0 | 35 | 0 |
 | status icon | 16 | 0 | 0 | 0 |
-| tile | 46 | 0 | 0 | 0 |
-| ui | 73 | 0 | 0 | 0 |
-| **all** | **469** | **39** | **382** | **0** |
+| tile | 82 | 0 | 0 | 0 |
+| ui | 74 | 0 | 0 | 0 |
+| **all** | **532** | **13** | **382** | **0** |
 
 Every row, final files included: [ASSET_STATUS.csv](ASSET_STATUS.csv) (path, category, state, act, why, last
 commit). Below: what still needs work, rework and placeholders grouped by folder and reason.
@@ -30,12 +30,12 @@ commit). Below: what still needs work, rework and placeholders grouped by folder
 | Path | Category | Act | Why |
 | --- | --- | --- | --- |
 
-## Rework (39)
+## Rework (13)
 
 | Folder | Category | Files | Why |
 | --- | --- | --- | --- |
 | `game:items/braces/` | item icon | 1 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
-| `game:skills/` | skill icon | 29 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
+| `game:skills/` | skill icon | 3 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
 | `kit:skills/kinds/` | skill icon | 6 | I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4) |
 | `kit:skills/kinds/` | skill icon | 3 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
 
