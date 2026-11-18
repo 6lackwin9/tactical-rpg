@@ -3,7 +3,7 @@
 Usage: python3 art_src/style/battle_take14_mock.py <playtest_dir> <out_dir>
 The two foe cards again, with: a fixed-width poise area (3 pip slots, the per-hit cap) where a hit that empties the bar
 shows a broken-poise icon in place, and an already broken foe a dim one; status chips right after the damage, at most 3
-then +N; hits after the forecast KO kept valid with a soft "likely overkill" hint (the forecast ignores crits, moves and
+then +N; hits after the forecast KO kept valid with a soft "after KO" hint (the forecast ignores crits, moves and
 enemy reactions); crits: base damage stays the number, a star marks a hero whose crit chance is high, the hover gives
 the crit damage (x1.5, rpgkit_rules::damage::CRIT_MULT) and the header says when a crit would kill a block sooner.
 """
@@ -117,8 +117,8 @@ def header(img, d, shot, cx, cy, me):
 
 
 def hint_overkill(d, x, y):
-    d.rounded_rectangle((x, y, x + 86, y + 16), radius=3, outline=OVERKILL)
-    d.text((x + 5, y + 1), "likely overkill", font=B.SMALL, fill=OVERKILL)
+    d.rounded_rectangle((x, y, x + 58, y + 16), radius=3, outline=OVERKILL)
+    d.text((x + 5, y + 1), "after KO", font=B.SMALL, fill=OVERKILL)
 
 
 def row_hp(d, x, y, hp, who):
@@ -231,7 +231,7 @@ def legend():
     star(d, 14, 86, 11)
     d.text((48, 84), "high crit chance (20%+)", font=B.SMALL, fill=B.PARCH)
     hint_overkill(d, 8, 110)
-    d.text((100, 110), "still valid, a hint", font=B.SMALL, fill=B.PARCH)
+    d.text((76, 110), "still valid, a hint", font=B.SMALL, fill=B.PARCH)
     return img
 
 
