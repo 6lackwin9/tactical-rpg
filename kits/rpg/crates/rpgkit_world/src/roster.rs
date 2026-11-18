@@ -115,6 +115,13 @@ pub struct HeroEnd {
     /// (slot save key, amount; slot order, spent slots only; `rpgkit_battle::wear::spent`): the settle takes it from the
     /// wielded instances, each held at 0 or more (`weapons::wear`).
     pub worn: Vec<(String, i64)>,
+    /// PR6-6 (`docs/sessions/PK4_PK5_CAMPAIGN_HUB.md` 1, B5): the highest and the last value it held on the ruleset's
+    /// channel meter (`rpgkit_battle::channel::meter_id`, data-configured; 0 without one or a hero that holds none), and
+    /// the commands it started in a Channel round (`World::channel_actions`). A settle without a battle reads 0 for all
+    /// three; the campaign tick reads them (`campaign::HeroTally`: meter inputs and triggers with a `hero` filter).
+    pub strain_peak: i64,
+    pub strain_end: i64,
+    pub channel_actions: i64,
 }
 
 /// The ends of session `s`'s fielded members: `members` (member id, unloaded pouch ids) in the order they were fielded,
@@ -140,9 +147,22 @@ pub fn hero_ends(s: &Session, members: &[(String, Vec<String>)]) -> Vec<HeroEnd>
                 hostile: rpgkit_battle::mark::hostile_at_end(&s.w, a),
                 attacked: s.w.weapon_attacks.get(&a).cloned().unwrap_or_default(),
                 worn: rpgkit_battle::wear::spent(&s.w, a),
+                strain_peak: channel_meter_read(s, a, rpgkit_battle::meter::peak),
+                strain_end: channel_meter_read(s, a, rpgkit_battle::meter::value),
+                channel_actions: i64::from(s.w.channel_actions.get(&a).copied().unwrap_or(0)),
             }
         })
         .collect()
+}
+
+/// PR6-6 (B5): what `read` gives for unit `a` on the session's channel meter (0 without the rule, a channel meter, or
+/// a gauge of it on `a`).
+fn channel_meter_read(s: &Session, a: usize, read: fn(&rpgkit_battle::world::World, usize, &str) -> Option<i32>) -> i64 {
+    let id = rpgkit_battle::channel::meter_id(&s.w);
+    if id.is_empty() {
+        return 0;
+    }
+    read(&s.w, a, id).map_or(0, i64::from)
 }
 
 /// The battle a settle closes (3.2's battle-level inputs).
@@ -556,6 +576,9 @@ pub fn default_ends(d: &Data, gs: &GameState, world: &str, outcome: &str) -> Vec
                 hostile: String::new(),
                 attacked: Vec::new(),
                 worn: Vec::new(),
+                strain_peak: 0,
+                strain_end: 0,
+                channel_actions: 0,
             })
         })
         .collect()

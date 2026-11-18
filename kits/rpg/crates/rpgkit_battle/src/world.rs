@@ -304,6 +304,9 @@ pub struct World {
     /// this battle, each once (only heroes built from member state, `Unit::rank_choice`): the settle's mastery use
     /// (`rpgkit_world::roster::HeroEnd::attacked`).
     pub weapon_attacks: IndexMap<UnitId, Vec<String>>,
+    /// PR6-6 (`PK4_PK5_CAMPAIGN_HUB.md` 1, B5): unit -> the commands (not moves) it started in a Channel round this
+    /// battle (`channel::is_channel`; empty without the rule): the world settle's `HeroEnd::channel_actions`.
+    pub channel_actions: IndexMap<UnitId, i32>,
     /// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): the sims' alternative dulled mode: a technique that swings a dulled
     /// weapon is locked too (`wear::problem`). False (the default dulled penalty alone) in every battle the sims do not switch;
     /// only the sim key `dulled=lock` sets it.
@@ -381,6 +384,7 @@ impl World {
             marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()),
             skill_uses: IndexMap::new(),
             weapon_attacks: IndexMap::new(),
+            channel_actions: IndexMap::new(),
             dulled_lock: false,
             bleed_out_rounds: 0,
             bleed_heroes: Vec::new(),

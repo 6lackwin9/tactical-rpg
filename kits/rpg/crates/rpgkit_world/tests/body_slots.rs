@@ -237,7 +237,7 @@ fn a_member_fights_with_its_body() {
 }
 
 fn end(member: &str, fate: PartyFate) -> HeroEnd {
-    HeroEnd { member: member.into(), hp: 0, max_hp: 10, alive: false, pouch: Vec::new(), unloaded: Vec::new(), fate: Some(fate), marks: Vec::new(), hostile: String::new(), attacked: Vec::new(), worn: Vec::new() }
+    HeroEnd { member: member.into(), hp: 0, max_hp: 10, alive: false, pouch: Vec::new(), unloaded: Vec::new(), fate: Some(fate), marks: Vec::new(), hostile: String::new(), attacked: Vec::new(), worn: Vec::new(), strain_peak: 0, strain_end: 0, channel_actions: 0 }
 }
 
 /// A stayer the encounter's `then` kills departs `dead`: with the field held its character's `remains` (else its
@@ -272,7 +272,7 @@ fn the_settle_clears_the_floor_offset() {
     let mut bench = member(&d, "recruit");
     bench.floor_offset = OFFSET;
     let mut gs = game(&d, vec![m, bench]);
-    let alive = HeroEnd { member: "named".into(), hp: 10, max_hp: 10, alive: true, pouch: Vec::new(), unloaded: Vec::new(), fate: None, marks: Vec::new(), hostile: String::new(), attacked: Vec::new(), worn: Vec::new() };
+    let alive = HeroEnd { member: "named".into(), hp: 10, max_hp: 10, alive: true, pouch: Vec::new(), unloaded: Vec::new(), fate: None, marks: Vec::new(), hostile: String::new(), attacked: Vec::new(), worn: Vec::new(), strain_peak: 0, strain_end: 0, channel_actions: 0 };
     let tally = Tally { party: vec![alive], world: "w".into(), ..Tally::default() };
     let res = battle::settle(&d, &mut gs, "w:fight", "won", Some(&tally));
     assert!(res.get("remains").is_none());

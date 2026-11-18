@@ -5,7 +5,8 @@
 //! occupied slot is overwritten and its graft destroyed), `remove` (the slot emptied, its graft destroyed), `track`
 //! (the member's stage on a unit track, never into a departure stage), `max_hp_pct` (a permanent offset, a percent of
 //! the member's max HP now), `floor_offset` (for the member's next battle; a member with a graft), `train_proficiency`
-//! (one level in a family of the class role, from `to - 1` to `to`), `doctrine` (reserved: nothing yet); the item
+//! (one level in a family of the class role, from `to - 1` to `to`), `doctrine` (PR6-6: `delta` on the campaign gauge
+//! `axis` names, data-configured; a run then takes the campaign's recipe step, `campaign::recipe_tick`); the item
 //! effect `salvage` (the picked stash item broken down into the effect's gold plus the salvage item its rarity and its
 //! theme name). PK2-S4: `drill` {xp} (mastery XP in the picked family, or the member's only masterable one, scaled by
 //! its proficiency rate; `mastery::gain`, from `durability.from_act`). PK2-FOLLOWUP (PR5-36, `PK2_GRAFTS.md` 5, 7): the
@@ -15,6 +16,7 @@
 //! one family at mastery 3, the picked one or the only open one, `PR7-2` N2). PR5-45: a `stash` recipe needs no pick; its effect `craft` adds `count` of its
 //! item to the party stash (a weapon gets a fresh full instance while instances are active, `weapons::sync`).
 
+use crate::campaign;
 use crate::data::Data;
 use crate::dialogue;
 use crate::progression;
@@ -158,14 +160,22 @@ pub fn refusal(d: &Data, gs: &GameState, npc_qid: &str, id: &str, pick: &Pick) -
 }
 
 /// Runs recipe `id` of character `npc_qid` on `pick`: {ok, errors, notes}. Everything is checked first; a refusal
-/// changes nothing.
+/// changes nothing. PR6-6 (B5): a run then takes the campaign's recipe step with cause `recipe` (its id, tags and
+/// doctrine sum; `campaign::recipe_tick`: recipe inputs and recipe triggers only, the rules when something moved; no
+/// full tick); its events as `campaign` (only when there are some; none outside a campaign world).
 pub fn run(d: &Data, gs: &mut GameState, npc_qid: &str, id: &str, pick: &Pick) -> Dict {
     let mut work = gs.clone();
     match plan(d, &mut work, npc_qid, id, pick) {
         Ok(notes) => {
+            let moved = gauges(gs) != gauges(&work);
             *gs = work;
             let mut out = json::ok_result(true, &[]);
             out.insert("notes".into(), json::strs(&notes));
+            if let Some(rc) = d.cat.recipes.get(id) {
+                let cause = campaign::Cause::Recipe { recipe: rc.id.clone(), tags: rc.tags.clone(), doctrine: rc.doctrine() };
+                let events = campaign::recipe_tick(d, gs, &cause, moved);
+                campaign::merge_events(&mut out, events);
+            }
             out
         }
         Err(why) => json::fail(&why),
@@ -209,13 +219,32 @@ fn plan(d: &Data, gs: &mut GameState, npc_qid: &str, id: &str, pick: &Pick) -> R
             r::FX_REPAIR => repair(d, gs, fx, &pick.weapon, &mut notes)?,
             r::FX_REFORGE => reforge(d, gs, fx, &pick.weapon, &mut notes)?,
             r::FX_CRAFT => craft(d, gs, fx, &mut notes)?,
-            // reserved for a later system (PK4): nothing to apply yet, on any target
-            r::FX_DOCTRINE => {}
+            // PR6-6 (B5): the delta on the campaign gauge the effect's `axis` names, on any target
+            r::FX_DOCTRINE => doctrine(gs, fx),
             _ => member_effect(d, gs, &name, fx, pick, &mut notes)?,
         }
     }
     notes.insert(0, format!("Done: {}.", rc.name));
     Ok(notes)
+}
+
+/// PR6-6: the campaign meters' saved values (empty outside a campaign world): whether a run's `doctrine` moved one.
+fn gauges(gs: &GameState) -> Vec<i64> {
+    gs.campaign.as_ref().map(|c| c.meters.values().map(|st| st.value).collect()).unwrap_or_default()
+}
+
+/// PR6-6 (`PK4_PK5_CAMPAIGN_HUB.md` 1, B5): `doctrine` {axis, delta}: the played world's campaign gauge whose id is
+/// `axis` moves by `delta` (held in its range and act floor, as a meter input moves it; the rules it crosses fire at
+/// the run's tick). Nothing outside a campaign world, for a countdown or when no meter has that id (no refusal: the
+/// data configures which gauge, if any, a doctrine moves).
+fn doctrine(gs: &mut GameState, fx: &Dict) {
+    let (axis, delta) = (json::s(fx, "axis"), json::i(fx, "delta", 0));
+    let Some(c) = gs.campaign.as_mut() else { return };
+    let Some(def) = c.defs.get(&axis).filter(|m| !m.countdown).cloned() else { return };
+    let act = c.act;
+    if let Some(st) = c.meters.get_mut(&axis) {
+        st.value = def.clamp(st.value + delta, act);
+    }
 }
 
 /// Pays the cost (refused when the party can't: the purse, the stash items, the picked item counted on top).
@@ -345,14 +374,15 @@ fn track(d: &Data, m: &mut UnitState, who: &str, fx: &Dict, notes: &mut Vec<Stri
     let id = json::s(fx, "track");
     let row = d.cat.unit_tracks.get(&id).ok_or_else(|| format!("Unknown unit track '{id}'."))?;
     let (stage, delta) = (m.track_stage(&id), json::i(fx, "delta", 0));
-    let top = i64::from(row.top());
-    if delta < 0 && stage == 0 {
-        return Err(format!("{who} has no {} to lower.", row.name));
+    let (bottom, top) = (i64::from(row.bottom()), i64::from(row.top()));
+    if delta < 0 && stage <= bottom {
+        // PR6-6 (B5): a signed row lowers down to its bottom
+        return Err(if row.signed { format!("{who} is at the lowest stage of {}.", row.name) } else { format!("{who} has no {} to lower.", row.name) });
     }
     if delta > 0 && stage >= top {
         return Err(format!("{who} is at the last stage of {}.", row.name));
     }
-    let next = (stage + delta).clamp(0, top);
+    let next = (stage + delta).clamp(bottom, top);
     if !row.departure_at(row.clamp(next)).is_empty() {
         return Err(format!("{who} would reach the last stage of {}.", row.name));
     }
@@ -362,7 +392,12 @@ fn track(d: &Data, m: &mut UnitState, who: &str, fx: &Dict, notes: &mut Vec<Stri
         m.tracks.insert(id.clone(), next);
     }
     let stage_name = row.stage(row.clamp(next)).map(|s| s.name.clone()).unwrap_or_default();
-    notes.push(if next == 0 { format!("{who} is free of {}.", row.name) } else { format!("{who}: {} stage {next} ({stage_name}).", row.name) });
+    notes.push(match (next == 0, row.signed) {
+        (true, _) => format!("{who} is free of {}.", row.name),
+        // PR6-6 (B5): a signed row has no stage names
+        (false, true) => format!("{who}: {} {next:+}.", row.name),
+        (false, false) => format!("{who}: {} stage {next} ({stage_name}).", row.name),
+    });
     Ok(())
 }
 

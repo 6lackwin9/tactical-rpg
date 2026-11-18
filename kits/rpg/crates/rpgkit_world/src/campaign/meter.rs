@@ -41,7 +41,7 @@ pub struct Rule {
 pub struct Input {
     /// One of `rpgkit_data::INPUT_ON`.
     pub on: String,
-    /// Battle: the encounter carries one of these tags (empty = every battle).
+    /// Battle: the encounter carries one of these tags (empty = every battle); recipe (PR6-6): the recipe does.
     pub tags: Vec<String>,
     /// Battle: one of these outcomes (empty = every outcome).
     pub outcomes: Vec<String>,
@@ -52,6 +52,8 @@ pub struct Input {
     pub delta: i64,
     /// Empty = every act.
     pub acts: Vec<i64>,
+    /// Battle (PR6-6, B5): empty = the delta once; else the delta once per fielded hero whose battle end meets it.
+    pub hero: super::HeroFilter,
 }
 
 /// A meter row (world kind `meters`, 11.2) read with the schema's defaults, so rows that skipped the loader's
@@ -124,6 +126,7 @@ impl MeterDef {
                 modes: json::sget(x, "modes"),
                 delta: json::i(x, "delta", 0),
                 acts: ints(json::get(x, "acts")),
+                hero: super::HeroFilter::from_value(json::get(x, "hero")),
             })
             .collect();
         let floors = json::aget(e, "floors").iter().filter_map(Value::as_object).map(|f| (json::i(f, "from_act", 0), json::i(f, "min", 0))).collect();
@@ -182,10 +185,16 @@ impl MeterDef {
 
     /// M3: the summed delta of this gauge's inputs of `on` that match (`acts`, and `pick` for the cause's own filter).
     pub fn input_delta(&self, on: &str, act: i64, pick: impl Fn(&Input) -> bool) -> i64 {
+        self.input_sum(on, act, |x| i64::from(pick(x)))
+    }
+
+    /// PR6-6 (B5): `input_delta` with a weight: each input of `on` in act `act` moves by its delta times `times(input)`
+    /// (0 = not at all).
+    pub fn input_sum(&self, on: &str, act: i64, times: impl Fn(&Input) -> i64) -> i64 {
         if self.countdown {
             return 0;
         }
-        self.inputs.iter().filter(|x| x.on == on && (x.acts.is_empty() || x.acts.contains(&act)) && pick(x)).map(|x| x.delta).sum()
+        self.inputs.iter().filter(|x| x.on == on && (x.acts.is_empty() || x.acts.contains(&act))).map(|x| x.delta * times(x)).sum()
     }
 }
 

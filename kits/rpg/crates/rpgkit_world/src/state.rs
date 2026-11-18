@@ -97,9 +97,9 @@ pub struct UnitState {
     /// max_stack)`; a pouch id without an entry reads its current count). A key with no copy left keeps its slot. Saved
     /// as `pouch_packed` only when not empty (no save bump: a save without it reads the current pouch).
     pub pouch_packed: IndexMap<String, i64>,
-    /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): unit track id -> the member's stage on it (1..the row's stages; a track
-    /// without an entry reads 0). Saved as `tracks` only when a stage is above 0 (no save bump: a save without it reads
-    /// every track at 0).
+    /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): unit track id -> the member's stage on it (1..the row's stages; PR6-6:
+    /// -3..3 but 0 on a signed row; a track without an entry reads 0). Saved as `tracks` only when a stage is not 0 (no
+    /// save bump: a save without it reads every track at 0).
     pub tracks: IndexMap<String, i64>,
     /// PK2-S1: the permanent max HP offset (bone-scraping, excision; negative lowers it), added to the built max HP
     /// (at least 1). Saved as `max_hp_offset` only when not 0.
@@ -851,6 +851,12 @@ impl UnitState {
                     warnings.push(format!("Unit '{name}': unit track '{track}' stage {stage} is held at its top stage {top}."));
                     *stage = top;
                 }
+                // PR6-6 (B5): a signed row's lean below its bottom is held there too
+                let bottom = i64::from(row.bottom());
+                if row.signed && *stage < bottom {
+                    warnings.push(format!("Unit '{name}': unit track '{track}' stage {stage} is held at its bottom stage {bottom}."));
+                    *stage = bottom;
+                }
                 true
             }
         });
@@ -896,10 +902,11 @@ impl UnitState {
             errors.push(format!("{at}: hp_lost must be 0 or more."));
         }
         // PK2-S1: a stage is never below 0 (an unknown track or a stage past the row's top is dropped or held at load,
-        // `sanitize_tracks`)
+        // `sanitize_tracks`); PR6-6 (B5): a signed row's down to its bottom (-3)
         for (track, stage) in &self.tracks {
-            if *stage < 0 {
-                errors.push(format!("{at}: track '{track}' stage must be 0 or more."));
+            let bottom = d.cat.unit_tracks.get(track).map_or(0, |t| i64::from(t.bottom()));
+            if *stage < bottom {
+                errors.push(format!("{at}: track '{track}' stage must be {bottom} or more."));
             }
         }
         // PK2-S3: a trained entry is 1..the top proficiency level

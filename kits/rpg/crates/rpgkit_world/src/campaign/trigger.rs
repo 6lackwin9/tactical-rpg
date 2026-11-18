@@ -1,5 +1,6 @@
 //! Campaign triggers (CAMPAIGN1 T1-T3, F2; kit hook, engine-only, no Godot original): the world kind `triggers` read
-//! with its defaults, the tick's trigger step (after the checkpoints, X4) and the pieces the game uses to play a queued
+//! with its defaults (PR6-6, B5: the cause `recipe` with its `recipe` / `recipe_tags` filters, a battle's `hero`
+//! filter), the tick's trigger step (after the checkpoints, X4) and the pieces the game uses to play a queued
 //! `{battle}` item (`fight`, `after_fight`; a `{dialogue}` item opens `DialogueRunner::open_scene`, a `{vignette}` item
 //! moves to the story queue through `story::pull_pending`). Effects run through the shared effect body
 //! (`dialogue::apply_effects`), so a trigger, a meter rule, a checkpoint, a sequence step and a dialogue choice apply
@@ -20,7 +21,7 @@ pub const FIGHT_SOURCE: &str = "trigger";
 pub struct TriggerDef {
     pub id: String,
     pub name: String,
-    /// One of any, day, battle, enter, act.
+    /// One of any, day, battle, enter, act, recipe (PR6-6).
     pub on: String,
     /// On battle: the encounter's qid ("" = any).
     pub encounter: String,
@@ -29,6 +30,12 @@ pub struct TriggerDef {
     /// On enter: the location's qid ("" = any); ACT1-HOOKS2 (FB-246 (a)): on any, the location the party must be at
     /// when the tick runs ("" = anywhere).
     pub location: String,
+    /// On battle (PR6-6, B5): a fielded hero's battle end must meet it (empty = no filter).
+    pub hero: super::HeroFilter,
+    /// On recipe (PR6-6, B5): just this recipe id ("" = any).
+    pub recipe: String,
+    /// On recipe (PR6-6, B5): the recipe carries one of these tags (empty = any recipe).
+    pub recipe_tags: Vec<String>,
     pub when: Value,
     pub once: bool,
     pub effects: Vec<Dict>,
@@ -54,6 +61,9 @@ impl TriggerDef {
             encounter: qid_of(d, &home, "encounters", &json::s(e, "encounter")),
             outcome: json::s_or(e, "outcome", "any"),
             location: qid_of(d, &home, "locations", &json::s(e, "location")),
+            hero: super::HeroFilter::from_value(json::get(e, "hero")),
+            recipe: json::s(e, "recipe"),
+            recipe_tags: json::sget(e, "recipe_tags"),
             when: Value::Array(json::aget(e, "when").to_vec()),
             once: json::b(e, "once", true),
             effects: dicts("effects"),
@@ -61,13 +71,19 @@ impl TriggerDef {
         }
     }
 
-    /// T1: whether the trigger is checked after `cause` (`any` after every cause; `battle` and `enter` through their
-    /// filters).
+    /// T1: whether the trigger is checked after `cause` (`any` after every cause but a recipe run; `battle`, `enter`
+    /// and (PR6-6) `recipe` through their filters: a battle's `hero` filter holds when one fielded hero meets it; a
+    /// recipe run checks only the `recipe` triggers).
     pub fn matches(&self, cause: &Cause) -> bool {
         match (self.on.as_str(), cause) {
+            // PR6-6 (review): a recipe run checks the recipe triggers only (not `any`)
+            ("recipe", Cause::Recipe { recipe, tags, .. }) => (self.recipe.is_empty() || &self.recipe == recipe) && super::meter::tags_match(&self.recipe_tags, tags),
+            (_, Cause::Recipe { .. }) => false,
             ("any", _) | ("day", Cause::Days { .. }) | ("act", Cause::Act(_)) => true,
-            ("battle", Cause::Battle { encounter, outcome, .. }) => {
-                (self.encounter.is_empty() || &self.encounter == encounter) && (self.outcome == "any" || self.outcome.is_empty() || &self.outcome == outcome)
+            ("battle", Cause::Battle { encounter, outcome, heroes, .. }) => {
+                (self.encounter.is_empty() || &self.encounter == encounter)
+                    && (self.outcome == "any" || self.outcome.is_empty() || &self.outcome == outcome)
+                    && (self.hero.is_empty() || heroes.iter().any(|h| self.hero.meets(h)))
             }
             ("enter", Cause::Enter { location }) => self.location.is_empty() || &self.location == location,
             _ => false,
@@ -108,7 +124,10 @@ pub fn step(d: &Data, gs: &mut GameState, cause: &Cause, events: &mut Vec<Value>
     let rows = defs(d, &gs.world_id);
     let holding: Vec<String> = rows.iter().filter(|t| !t.once && t.holds(gs)).map(|t| t.id.clone()).collect();
     let Some(c) = gs.campaign.as_mut() else { return false };
-    c.armed.retain(|id| holding.contains(id));
+    // PR6-6 (review): a recipe run re-arms nothing (the next tick does, as before recipe runs ticked)
+    if !matches!(cause, Cause::Recipe { .. }) {
+        c.armed.retain(|id| holding.contains(id));
+    }
     let mut fired = false;
     for t in rows.iter().filter(|t| t.matches(cause)) {
         if !t.at_location(gs) {

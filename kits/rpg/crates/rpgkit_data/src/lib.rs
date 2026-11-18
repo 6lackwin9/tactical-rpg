@@ -32,7 +32,7 @@ pub use dojo_preset::{DojoPresetDef, DOJO_PASSIVES_MAX, DOJO_POUCH_MAX, DOJO_PRE
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
 pub use unit_budget::ClassShares;
 pub use unit_template::{UnitTemplate, TEMPLATE_CLASS, TEMPLATE_FIELD, UNIT_TEMPLATES_KIND};
-pub use unit_track::{TrackStage, UnitTrackDef, TRACK_DEPARTURES, TRACK_STAGES_MAX, TRACK_STAGE_KEYS, UNIT_TRACKS_KIND};
+pub use unit_track::{TrackStage, UnitTrackDef, TRACK_DEPARTURES, TRACK_SIGNED_MAX, TRACK_STAGES_MAX, TRACK_STAGE_KEYS, UNIT_TRACKS_KIND};
 
 pub const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
@@ -1381,12 +1381,16 @@ pub const METER_KINDS: [&str; 2] = ["gauge", "countdown"];
 pub const METER_TONES: [&str; 4] = ["calm", "warn", "danger", "fatal"];
 /// M5: the crossing direction of a meter rule (`up` the gauge default, `down` the countdown default).
 pub const RULE_DIRS: [&str; 2] = ["up", "down"];
-/// M3: what moves a gauge.
-pub const INPUT_ON: [&str; 3] = ["battle", "day", "leg"];
+/// M3: what moves a gauge (PR6-6, B5: `recipe`, a recipe run, by the recipe's tags).
+pub const INPUT_ON: [&str; 4] = ["battle", "day", "leg", "recipe"];
 /// A settled battle's outcomes (meter inputs, triggers).
 pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
-/// T1: the cause a trigger is checked after.
-pub const TRIGGER_ON: [&str; 5] = ["any", "day", "battle", "enter", "act"];
+/// T1: the cause a trigger is checked after (PR6-6, `PK4_PK5_CAMPAIGN_HUB.md` 1, B5: `recipe`, a recipe run).
+pub const TRIGGER_ON: [&str; 6] = ["any", "day", "battle", "enter", "act", "recipe"];
+/// PR6-6 (B5): the keys of a `hero` filter (a battle meter input's or a battle trigger's): each a minimum a fielded
+/// hero's battle end reaches (`rpgkit_world::roster::HeroEnd`: the channel meter's peak and last value, the commands
+/// started in a Channel round).
+pub const HERO_FILTER_KEYS: [&str; 3] = ["strain_peak", "strain_end", "channel_actions"];
 /// F1: what an `end` effect ends the run as.
 pub const END_KINDS: [&str; 2] = ["fail", "bad_end"];
 /// R1: where the party may rest.
@@ -1400,7 +1404,7 @@ pub const CAMPAIGN_EFFECTS: [(&str, &[&str]); 9] = [
     ("meter_set", &["meter", "value"]),
     ("meter_show", &["meter", "visible"]),
     ("clock_start", &["meter", "days"]),
-    ("clock_set", &["meter", "days", "label"]),
+    ("clock_set", &["meter", "days", "label", "keep_longer"]),
     ("clock_stop", &["meter"]),
     ("set_act", &["act"]),
     ("rest", &[]),

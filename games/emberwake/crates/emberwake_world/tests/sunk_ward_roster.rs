@@ -51,6 +51,9 @@ fn end_of(d: &Data, gs: &GameState, fate: PartyFate) -> HeroEnd {
         hostile: String::new(),
         attacked: Vec::new(),
         worn: Vec::new(),
+        strain_peak: 0,
+        strain_end: 0,
+        channel_actions: 0,
     }
 }
 
