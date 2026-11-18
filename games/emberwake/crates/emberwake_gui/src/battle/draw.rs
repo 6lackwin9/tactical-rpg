@@ -916,13 +916,14 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     ui.p.panel(Rect::new(2, 322, W - 4, 36), th().game("battle_panel", PANEL), th().edge, RADIUS);
     ui.button_full("bar.restart", Rect::new(6, 325, 40, 14), "Restart", Action::Restart, !g.world_mode(), false, BODY, vec![("Restart the battle (R)".into(), th().text)]);
     ui.button_full("bar.step", Rect::new(48, 325, 34, 14), "Step", Action::Step, !planning || s.plan_confirmed, false, BODY, vec![("Resolve one action (Space)".into(), th().text)]);
-    // Test Arena only: leave at any time (Esc does the same); a world battle is left only through its end.
-    let ox = if g.world_mode() {
-        0
+    // Test Arena only: leave at any time (Esc does the same); a world battle is left only through its end, and its Menu
+    // (PR7-26; Esc with nothing open does the same) opens the in-game Settings popup in the same place.
+    if g.world_mode() {
+        ui.button_full("bar.menu", Rect::new(84, 325, 30, 14), "Menu", Action::Settings, true, false, BODY, vec![("Menu (Esc)".into(), th().gold), ("Settings, and Return to title once the fight is over.".into(), th().text)]);
     } else {
         ui.button_full("bar.exit", Rect::new(84, 325, 30, 14), "Exit", Action::Leave, true, false, BODY, vec![("Back to the screen you came from (Esc)".into(), th().text)]);
-        32
-    };
+    }
+    let ox = 32;
     let phase = match s.phase {
         Phase::Planning => "Planning",
         Phase::Resolving => "Resolving",

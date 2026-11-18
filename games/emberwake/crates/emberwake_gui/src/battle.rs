@@ -171,6 +171,8 @@ pub enum Action {
     Continue,
     /// Leave the Test Arena.
     Leave,
+    /// PR7-26: a world battle's Menu button (and Esc with nothing open): the in-game Settings popup.
+    Settings,
     /// INPUT1 SL4 (round intent): the hero panel's Self button and key S: the selected hero targets itself (the self
     /// menu).
     SelfTarget,
@@ -1052,6 +1054,10 @@ impl Screen<GameCx> for BattleScreen {
             self.selected = None;
         } else if !self.world_mode() {
             cx.nav.push(Nav::Pop);
+        } else {
+            // PR7-26: nothing open in a world battle: the in-game Settings popup (its Return to title keeps the hub's
+            // busy and unsaved checks)
+            self.act(cx, Action::Settings);
         }
     }
 

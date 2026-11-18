@@ -260,7 +260,8 @@ impl Settings {
     /// switch of the portrait overlay layer a game mounts, `portrait_overlays::SETTING`; on).
     pub fn engine_defaults() -> Value {
         json!({"mute": false, "master": 100, "music": 80, "effects": 80, "interface": 80, "fullscreen": false, "borderless": false, "window_size": "1280x720",
-            "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0, "record_playtests": cfg!(debug_assertions), "text_speed": "normal", "reduce_motion": false, "portrait_overlays": true})
+            "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0, "record_playtests": cfg!(debug_assertions), "text_speed": "normal", "reduce_motion": false, "portrait_overlays": true,
+            crate::audio::MUTE_IN_BACKGROUND: true})
     }
 
     /// Every default: the engine's keys, then the game's own (`game_defaults`).

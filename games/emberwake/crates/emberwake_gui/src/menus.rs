@@ -3,7 +3,7 @@
 
 use aegis_layout::{frac, resolve, Anchor, Insets, Stack};
 use aegis_ui::theme::th;
-use aegis_ui::audio::Bus;
+use aegis_ui::audio::{Bus, MUTE_IN_BACKGROUND};
 use aegis_ui::canvas::{rgba, Rect};
 use crate::music;
 use crate::portraits::{Faces, Who};
@@ -863,6 +863,8 @@ enum Row {
     /// The battle overlay groups (and the debug row in a debug build).
     Overlays,
     Controls,
+    /// A section header over the rows after it (FB-308: the Battle tab's "Advanced").
+    Heading(&'static str),
 }
 
 /// The row help lines' text size.
@@ -1100,9 +1102,10 @@ impl SettingsScreen {
                 }
             }
             SetAct::Defaults => {
-                // Every row at once, but the display: its defaults are staged for Apply like any display change.
+                // Every row at once, but the display: its defaults are staged for Apply like any display change. The web
+                // stages nothing (PR7-26): its Fullscreen is the browser's, so the display keys stay as they are.
                 let mut d = Settings::defaults(default_settings());
-                self.pending = staged_of(&d);
+                self.pending = staged_of(if self.web { &cx.settings.v } else { &d });
                 for k in STAGED {
                     d[k] = cx.settings.v[k].clone();
                 }
@@ -1169,6 +1172,8 @@ impl SettingsScreen {
                 Row::Toggle(crate::battle::AUTO_CONFIRM, "Auto-Confirm Next Round", "Go on to the next round's planning by itself"),
                 Row::Toggle("show_tells", "Show Enemy Tells", "Enemy intent arcs and targets"),
                 Row::Toggle("warn_missing", "Warn Missing Actions", "Ask before confirming with actions unspent"),
+                // FB-308 (Design, READY section 4): the rows past the mock's six sit under an Advanced header
+                Row::Heading("Advanced"),
                 Row::Choice("see_through", "Units Behind", "When units hidden behind others are outlined"),
                 Row::Overlays,
             ],
@@ -1196,6 +1201,7 @@ impl SettingsScreen {
                 head + groups + if cfg!(debug_assertions) { OVERLAY_PITCH + 4 } else { 0 }
             }
             Row::Controls => controls(ui, Rect::new(0, 0, w, 0), false),
+            Row::Heading(_) => ui.p.line_h(HEAD).ceil() as i32 + 8,
             _ => rh,
         }
     }
@@ -1317,6 +1323,13 @@ impl SettingsScreen {
                 let x = r.x + r.w - cw - sw - 10;
                 self.choice(ui, cx, "anim_speed", Rect::new(x, cy, cw, ch), !skip, Vec::new());
                 Self::toggle(ui, "settings.skip_anim", Rect::new(x + cw + 4, cy, sw, ch), if skip { "Skip: On" } else { "Skip: Off" }, skip, SetAct::Toggle("skip_anim"), Vec::new());
+            }
+            Row::Heading(label) => {
+                let t = th();
+                let lh = ui.p.line_h(HEAD).ceil() as i32;
+                ui.p.text((r.x + 2) as f32, (r.y + 3) as f32, label, HEAD, t.gold);
+                ui.p.fill(Rect::new(r.x + 2, r.y + 3 + lh + 2, r.w - 4, 1), t.edge);
+                ui.push(format!("settings.heading.{}", label.to_lowercase()), "label", label, Rect::new(r.x, r.y, r.w, r.h), true, false, None, Vec::new());
             }
             Row::Overlays => {
                 // RULESET1-U slice 6 (preference "Battle overlays and the clarity pass", user 2026-10-30): every overlay
@@ -1565,10 +1578,16 @@ impl Screen<GameCx> for SettingsScreen {
             ui.p.text((br.x + 5) as f32, br.y as f32 + 1.5, &badge, HELP, t.text);
         }
         if self.tab == 1 {
+            // the mock's header pair: Mute in Background (PR7-26; the engine's key, on by default) left of Mute all
             let mute = d["mute"].as_bool().unwrap_or(false);
             let label = if mute { "Mute all: On" } else { "Mute all: Off" };
             let bw = ui.p.text_w("Mute all: Off", BODY).ceil() as i32 + 14;
             Self::toggle(&mut ui, "settings.mute", Rect::new(body.x + body.w - bw, body.y, bw, 14), label, mute, SetAct::Toggle("mute"), Vec::new());
+            let away = d[MUTE_IN_BACKGROUND].as_bool().unwrap_or(true);
+            let label = if away { "Mute in Background: On" } else { "Mute in Background: Off" };
+            let aw = ui.p.text_w("Mute in Background: Off", BODY).ceil() as i32 + 14;
+            let help = tip("Mute in Background", "Silences every sound while the game's window is not in focus; the volumes stay as set.");
+            Self::toggle(&mut ui, "settings.mute_in_background", Rect::new(body.x + body.w - bw - 6 - aw, body.y, aw, 14), label, away, SetAct::Toggle(MUTE_IN_BACKGROUND), help);
         }
         let view = Rect::new(body.x, body.y + hh + 3, body.w, body.h - hh - 3);
         let rows = self.rows(cx);
@@ -2865,6 +2884,72 @@ mod settings_tests {
         assert_eq!(WindowShow::of(&cx.settings.v), WindowShow::Fullscreen, "the display waits");
         assert_eq!(WindowShow::of(&s.state(&cx)["pending"]), WindowShow::of(&d), "staged");
         assert!(s.display_dirty(&cx));
+    }
+
+    /// PR7-26 (5): the Sound tab's Mute in Background is on by default and toggles the engine's key; with it on a
+    /// lost focus silences the audio and a regained one restores it; off, the focus changes nothing; the saved
+    /// volumes never change.
+    #[test]
+    fn mute_in_background_is_on_by_default_and_follows_the_focus() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        assert_eq!(Settings::defaults(default_settings())[MUTE_IN_BACKGROUND], json!(true), "on by default");
+        let mut s = SettingsScreen::in_game(&cx);
+        redraw(&mut s, &mut cx, &mut g);
+        s.click_id(&mut cx, "settings.tab.sound").expect("sound");
+        let w = redraw(&mut s, &mut cx, &mut g);
+        assert!(has(&w, "settings.mute_in_background") && has(&w, "settings.mute"), "the header pair");
+        assert_eq!(cx.settings.v[MUTE_IN_BACKGROUND], json!(true));
+        let volumes = |cx: &Cx| ["master", "music", "effects", "interface"].map(|k| cx.settings.v[k].clone());
+        let before = volumes(&cx);
+        cx.audio.set_levels(&cx.settings.v);
+        let full = cx.audio.level(Bus::Music);
+        assert!(full > 0.0);
+        cx.audio.set_focused(false, &cx.settings.v);
+        assert_eq!(cx.audio.level(Bus::Music), 0.0, "on: a lost focus mutes");
+        cx.audio.set_focused(true, &cx.settings.v);
+        assert_eq!(cx.audio.level(Bus::Music), full, "the focus back: restored");
+        s.click_id(&mut cx, "settings.mute_in_background").expect("the toggle");
+        assert_eq!(cx.settings.v[MUTE_IN_BACKGROUND], json!(false), "toggled off");
+        cx.audio.set_focused(false, &cx.settings.v);
+        assert_eq!(cx.audio.level(Bus::Music), full, "off: a lost focus keeps the sound");
+        cx.audio.set_focused(true, &cx.settings.v);
+        assert_eq!(volumes(&cx), before, "the saved volumes never change");
+    }
+
+    /// FB-308 (PR7-26 row): the Battle tab's rows past the mock's six (Units Behind, the overlay groups, the debug row)
+    /// sit under an "Advanced" header, below Warn Missing Actions and above Units Behind, full screen and popup.
+    #[test]
+    fn the_battle_tab_puts_units_behind_and_the_overlays_under_advanced() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        for popup in [false, true] {
+            let mut s = if popup { SettingsScreen::in_game(&cx) } else { SettingsScreen::new(&cx) };
+            redraw(&mut s, &mut cx, &mut g);
+            s.click_id(&mut cx, "settings.tab.battle").expect("battle");
+            let w = redraw(&mut s, &mut cx, &mut g);
+            let y = |id: &str| w.iter().find(|x| x["id"] == id).and_then(|x| x["rect"][1].as_i64()).unwrap_or_else(|| panic!("{id} drawn (popup {popup})"));
+            let head = y("settings.heading.advanced");
+            assert!(y("settings.warn_missing") < head && head < y("settings.see_through"), "popup {popup}: Advanced sits between the mock's rows and Units Behind");
+            let first_overlay = w.iter().find(|x| x["id"].as_str().is_some_and(|i| i.starts_with("settings.overlay."))).and_then(|x| x["rect"][1].as_i64()).expect("an overlay group");
+            assert!(head < first_overlay, "popup {popup}: the overlay groups are under it");
+        }
+    }
+
+    /// PR7-26: on the web Restore defaults leaves the display keys as they are: nothing staged, no close guard.
+    #[test]
+    fn restore_defaults_on_the_web_stages_no_display_change() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let d = Settings::defaults(default_settings());
+        let other = !d["fullscreen"].as_bool().unwrap_or(false);
+        cx.settings.v["fullscreen"] = json!(other);
+        cx.settings.v["show_tells"] = json!(false);
+        let mut s = SettingsScreen::in_game(&cx).as_web();
+        redraw(&mut s, &mut cx, &mut g);
+        s.click_id(&mut cx, "settings.defaults").expect("defaults");
+        assert_eq!(cx.settings.v["show_tells"], d["show_tells"], "the other rows reset at once");
+        assert_eq!(cx.settings.v["fullscreen"], json!(other), "the display keys are untouched");
+        assert!(!s.display_dirty(&cx), "nothing staged");
+        s.click_id(&mut cx, "settings.close").expect("close");
+        assert!(matches!(cx.nav.last(), Some(Nav::Pop)) && s.state(&cx)["guard"].is_null(), "closes with no guard: {}", s.state(&cx));
     }
 
     /// Every tab, the confirm and the guard fit at the four text sizes, full screen and popup: no text spills out of

@@ -190,9 +190,11 @@ fn e4_breath_lifts_the_inner_rect_from_its_bottom_edge_only_at_full_tier() {
     let out = rig.compose(&mut fx, &src, None, n, half, mounted());
     let (b, amp) = (Face::plain(n).border, breath_amp(n));
     assert_eq!((b, amp), (8, 3), "round(240 / 30), max(1, round(0.012 x 240))");
+    // PR7-26: the scale is even on both axes (from the bottom centre), so the columns move too: the rows are told
+    // apart by their red channel
     for x in [b, n / 2, n - b - 1] {
-        assert_eq!(at(&out, x, b), at(&src, x, b + amp), "the inner top row shows the row {amp} px below it");
-        assert_eq!(at(&out, x, n - b - 1), at(&src, x, n - b - 1), "the inner bottom row stays");
+        assert_eq!(at(&out, x, b)[0], at(&src, x, b + amp)[0], "the inner top row shows the row {amp} px below it");
+        assert_eq!(at(&out, x, n - b - 1)[0], at(&src, x, n - b - 1)[0], "the inner bottom row stays");
     }
     for y in 0..n {
         for x in 0..n {
@@ -1366,4 +1368,57 @@ fn only_the_canonical_overlay_names_parse() {
     fx.hold(&[Cue::parse("point_glow", "").unwrap()], 0);
     assert!(fx.level("point_glow", EASE_MS).is_some());
     assert!(fx.level("sparks", EASE_MS).is_none(), "no name reads as another");
+}
+
+/// PR7-26 (`PLAYTEST-UI1` 4): the breath scales the inner rect the same on both axes from its bottom centre, so a
+/// face never changes its aspect: a 100 x 60 block keeps w / h = 100 / 60 to within a pixel's rounding at every
+/// moment of a cycle, while its height still moves (the portrait keeps its life).
+#[test]
+fn pr7_26_the_breath_keeps_the_faces_aspect() {
+    let mut rig = Rig::new();
+    let n = 240;
+    let (bw, bh) = (100, 60);
+    let (x0, y0) = ((n - bw) / 2, n - 30 - bh);
+    let src = framed(n, |x, y| if (x0..x0 + bw).contains(&x) && (y0..y0 + bh).contains(&y) { SKIN } else { GREY });
+    let mut fx = PortraitFx::new("aspect");
+    let period = breath_period(fx.seed) as u64;
+    let mut heights = std::collections::BTreeSet::new();
+    for now in (0..period).step_by(40) {
+        let out = rig.compose(&mut fx, &src, None, n, now, mounted());
+        let skin: Vec<(i32, i32)> = (0..n).flat_map(|y| (0..n).map(move |x| (x, y))).filter(|&(x, y)| at(&out, x, y) == SKIN).collect();
+        let (xs, ys): (Vec<i32>, Vec<i32>) = skin.iter().copied().unzip();
+        let w = xs.iter().max().unwrap() - xs.iter().min().unwrap() + 1;
+        let h = ys.iter().max().unwrap() - ys.iter().min().unwrap() + 1;
+        let (sw, sh) = (w as f32 / bw as f32, h as f32 / bh as f32);
+        assert!((sw - sh).abs() <= 1.5 / bh as f32, "t {now}: {w} x {h} is not {bw} x {bh} scaled evenly ({sw} vs {sh})");
+        heights.insert(h);
+    }
+    assert!(heights.len() > 1, "the breath still moves: {heights:?}");
+}
+
+/// PR7-26 (`PLAYTEST-UI1` 4): the rim light eases: frame to frame (16 ms at 60 fps) its factor moves by far less than
+/// the old 90 ms hashed step (up to 0.096, about 21 levels of a 217 channel), and a rim-coloured pixel changes by at
+/// most 4 levels a composed step; it still flickers slowly within 1 +- 0.12.
+#[test]
+fn pr7_26_the_rim_light_has_no_step_between_frames() {
+    let seed = seed_of("rim_ease");
+    let fs: Vec<f32> = (0..20_000u64).step_by(16).map(|t| rim_factor(seed, t)).collect();
+    let worst = fs.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0f32, f32::max);
+    assert!(worst < 0.01, "the largest frame-to-frame change is {worst}");
+    assert!(fs.iter().all(|f| (0.88 - 1e-6..=1.12 + 1e-6).contains(f)));
+    let (lo, hi) = fs.iter().fold((f32::MAX, f32::MIN), |(a, b), f| (a.min(*f), b.max(*f)));
+    assert!(hi - lo > 0.05, "it still lives: {lo}..{hi}");
+    let mut rig = Rig::new();
+    let n = 96;
+    let src = image(n, |x, y| if in_border(n, 3, x, y) || x < 48 { AMBER } else { GREY });
+    let face = Face { rim: Some([217, 119, 6]), ..Face::plain(n) };
+    let mut fx = PortraitFx::new("rim_ease");
+    let mut last: Option<u8> = None;
+    for now in (0..6000).step_by(16) {
+        let c = at(&rig.compose(&mut fx, &src, Some(&face), n, now, mounted()), 20, 40)[0];
+        if let Some(p) = last {
+            assert!((c as i32 - p as i32).abs() <= 4, "t {now}: the rim pixel jumps {p} -> {c}");
+        }
+        last = Some(c);
+    }
 }

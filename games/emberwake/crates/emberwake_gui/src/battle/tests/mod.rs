@@ -31,6 +31,7 @@ mod offhand_tests;
 mod pk3_bleedout_tests;
 mod dulled_tests;
 mod transitions_tests;
+mod settings_popup_tests;
 
 use crate::battle::flow::{boss_fight, sound_of};
 use crate::battle::{Action, BattleScreen};
