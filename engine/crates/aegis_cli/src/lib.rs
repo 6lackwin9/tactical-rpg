@@ -6,8 +6,10 @@
 //!   aegis record <requests.json | recording.json> [out=<dir>] [id=<id>]        record requests as a playtest recording (see `record`)
 //!   aegis content check | upsert | remove | world | apply | manifest | <sidecar op>  edit the data folder (see `content`)
 //!   aegis scenario check | run                                                 walk real screens from JSON files (see `scenario`)
-//!   aegis bundle <manifest.json> [out=<dir>]                                   pack a web build's bundle parts (see `bundle`)
+//!   aegis playtest start | do | run | stop | status                          an agent plays the real game (see `agentplay`)
+//!   aegis bundle <manifest.json> [out=<dir>]                                 pack a web build's bundle parts (see `bundle`)
 
+pub mod agentplay;
 pub mod bundle;
 pub mod scenario;
 
@@ -75,6 +77,7 @@ aegis record <requests.json | recording.json> [out=<dir>] [id=<id>]   (play requ
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
 aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>]
 aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]
+aegis playtest start [save=] [out=] [size=] [shots=each|off] [window=1] | do <command ...> | run <script | -> | stop | status   (an agent plays the real game, logged and screenshot per command)
 aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)";
 
 /// Runs the command line of the process: the game's commands first, then the shell's.
@@ -91,6 +94,13 @@ pub fn run<G: Game>(game: &G) -> Result<()> {
         (Some("record"), Some(_)) => record(game, &args),
         (Some("content"), Some(_)) => content(game, &args),
         (Some("bundle"), Some(manifest)) => bundle::command(manifest, &args.key("out", ".")),
+        (Some("playtest"), _) => {
+            let code = agentplay::command(game, &args, &raw).unwrap_or_else(|e| {
+                println!("§ could not start: {e:#}");
+                2
+            });
+            std::process::exit(code)
+        }
         (Some("scenario"), _) => {
             let code = scenario::command(game, &args).unwrap_or_else(|e| {
                 println!("§ could not start: {e:#}");

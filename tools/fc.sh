@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
 #   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test (the UI bot's
-#                                3 seeds per start among them), the repro replays, the layer check, docs --all, tooltests, plannertests
+#                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), the layer check, docs --all, tooltests, plannertests, assetlib
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
 #                                engine and kit crates (src, tests), schema.json and kit.json name no lore word, any case
@@ -14,6 +14,8 @@
 #                                with origin/develop, staged or untracked; --all (the gate and the flush): every file
 #   tools/fc.sh tooltests        the tools/tiles tests, time limit FC_TOOLTESTS_LIMIT (180 s); a visible SKIP when no Python has Pillow;
 #                                then the tools/planner tests (plain Python, no Pillow)
+#   tools/fc.sh assetlib         the kit asset library kits/*/library/<style>/<kind>/ and its .meta.json sidecars (ASSETLIB1: fields, enums,
+#                                PNG size, unique ids, no game lore word) plus the check's tests; part of the gate
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
 #   tools/fc.sh rules [--contract]   the ruleset tweak report (aegis rules: register metadata, fields, bundles, tested sets, locked,
 #                                the game's rows); --contract: tunable and locked, one line each
@@ -31,6 +33,10 @@
 #                                (0 pass, 1 a step failed, 2 could not start); never in the gate
 #   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [ruleset=<id>] [seed=<n>] [do=<a>,<b>,...] [the keys above]
 #                                proof shots of a named fight or screen, into .agent/shots/<name>/<WxH>/, no window, no script to write
+#   tools/fc.sh playtest [start] [save=<dir|file>] [out=playtests/agent] [size=WxH] [shots=each|off] [window=1] [profile=dev|release]
+#                                start the game with no window for an agent to play (PR7-22); then playtest do <command ...> (one
+#                                command: a log line and a shot in the run folder), playtest run <script|->, playtest stop | status;
+#                                the commands: engine/docs/authoring/agent_playtest.md; never in the gate
 #   tools/fc.sh web [test|release]   the web build (WEBREL1-G1) into out/web/: emberwake_gui as wasm (test: dev tools and the page
 #                                probe; release: neither), wasm-bindgen 0.2.129, wasm-opt when installed, the bundle parts
 #                                (games/emberwake/web_bundle.json, aegis bundle), index.html; prints the sizes raw and gzipped
@@ -235,6 +241,17 @@ plannertests() {  # the tools/planner script tests (SKILLS1-FB): plain Python, n
   fi
 }
 
+assetlib() {  # PR7-35 (ASSETLIB1): the kit asset library check (tools/assetlib/check_library.py) and its tests; plain Python
+  local py out
+  if ! py=$(python_with "pass"); then echo "[assetlib] SKIP: no Python 3 found"; return 0; fi
+  "$py" tools/assetlib/check_library.py || status=1
+  if out=$(cd tools/assetlib && "$py" -m unittest -q 2>&1); then
+    echo "[assetlib] tests ok: $(echo "$out" | grep -E '^Ran [0-9]+ test')"
+  else
+    echo "$out" | tail -n 40; echo "[assetlib] FAIL: tools/assetlib tests"; status=1
+  fi
+}
+
 layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crates name no game and have no path into games/
   local id ids=() hits bad=0
   for id in games/*/; do [ -d "$id" ] && ids+=("$(basename "$id")"); done
@@ -307,6 +324,7 @@ gate() {
   build; [ $status -ne 0 ] && return
   cargo_test; [ $status -ne 0 ] && return
   repro; [ $status -ne 0 ] && return
+  playtest_smoke; [ $status -ne 0 ] && return
   layers_check; [ $status -ne 0 ] && return
   # the whole docs check; the size warnings, which are many, as one count (tools/fc.sh docs --all lists them)
   local out
@@ -316,7 +334,20 @@ gate() {
   [ $status -ne 0 ] && return
   tooltests; [ $status -ne 0 ] && return
   plannertests; [ $status -ne 0 ] && return
+  assetlib; [ $status -ne 0 ] && return
   echo "[gate] ALL CHECKS PASSED"
+}
+
+playtest_smoke() {  # PR7-22: the agent playtest harness plays a fresh save to the hub (games/emberwake/playtests/agent/smoke.play)
+  local cli="${CARGO_TARGET_DIR:-$PWD/target}/debug/aegis" out log
+  [ -x "$cli" ] || [ -x "$cli.exe" ] || { echo "[playtest] SKIP: no dev build of the CLI"; return; }
+  out=$(mktemp -d); log="$out/run.txt"
+  if "$cli" playtest run games/emberwake/playtests/agent/smoke.play out="$out" > "$log" 2>&1; then
+    echo "[playtest] smoke: $(tail -n 1 "$log")"
+  else
+    grep -E "FAIL|could not|panicked|line [0-9]+:" "$log" | head -n 20; echo "[playtest] FAIL: the smoke playtest (log under $out)"; status=1; return
+  fi
+  rm -rf "$out"
 }
 
 aegis() {  # the CLI, built on demand
@@ -352,6 +383,28 @@ scenario() {  # the driver lies beside the game's program, so both are built fir
   done
   cargo build -q -p emberwake_gui -p emberwake_host "${rel[@]}" || { echo "[scenario] FAIL: the build"; status=2; return; }
   cargo run -q -p emberwake_host "${rel[@]}" -- scenario "$verb" "${rest[@]}" || status=$?
+}
+
+# PR7-22 (AGENT-PLAYTEST1): an agent plays the real game (aegis playtest; engine/docs/authoring/agent_playtest.md). `start`
+# and `run` build the game and the CLI first (dev, or profile=release); `do`, `stop` and `status` only talk to the running
+# game, through whichever CLI build is there. No verb is `start`.
+playtest() {
+  local verb=${1:-start} rel=() prof=debug rest=() a cli
+  case "$verb" in start|run|do|stop|status) shift || true ;; *=*) verb=start ;; *) echo "usage: tools/fc.sh playtest [start] [save=] [out=] [size=] [shots=each|off] [window=1] [profile=dev|release] | do <command ...> | run <script|-> | stop | status"; status=2; return ;; esac
+  for a in "$@"; do
+    case "$a" in
+      profile=release) rel=(--release); prof=release ;;
+      profile=dev) ;;
+      *) rest+=("$a") ;;
+    esac
+  done
+  if [ "$verb" = start ] || [ "$verb" = run ]; then
+    cargo build -q -p emberwake_gui -p emberwake_host "${rel[@]}" || { echo "[playtest] FAIL: the build"; status=2; return; }
+  elif [ ! -e "${CARGO_TARGET_DIR:-$PWD/target}/$prof/aegis" ] && [ ! -e "${CARGO_TARGET_DIR:-$PWD/target}/$prof/aegis.exe" ]; then
+    prof=release
+  fi
+  cli="${CARGO_TARGET_DIR:-$PWD/target}/$prof/aegis"
+  "$cli" playtest "$verb" "${rest[@]}" || status=$?
 }
 
 # WEBREL1-G1: the web build. The wasm build has its own target folder (target-wasm/, gitignored), so it never evicts the
@@ -441,6 +494,8 @@ case "$1" in
   repro) repro ;;
   bot) bot "${@:2}" ;;
   scenario) scenario "${@:2}" ;;
+  playtest) playtest "${@:2}" ;;
+  assetlib) assetlib ;;
   web) web "${@:2}" ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;

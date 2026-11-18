@@ -27,6 +27,8 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-13` (`BUNKS1`) | done (UI feel to review) | `develop` (squash `PR7-13`) | Hub bunks, bunk talks (`talks` kind, pair counter, templates), idle spots and passing the lead; seed `pr7_13.json`; six placeholders (AI-17); `FB-304` |
 | `PR7-14` (`TRANSITIONS1`) | done (UI feel to review) | `develop` (squash `PR7-14`) | T1 battle beat, T2 victory beat, results over the field, hub arrival card; six AI-18 placeholders; scenario `story_battle_hub`; `FB-305` |
 | `PR7-21` (`SETTINGS-MOCK1`) | done (UI to review) | `develop` (squash `PR7-21`) | Settings ported to the approved mock: tab rail, instant apply, staged Display Mode (Windowed, Borderless, Fullscreen) and Resolution with a 15 s keep-or-revert, close guard, decluttered in-game popup; review shots `/mnt/project-files/pr7-21/` beside the mock; `FB-308` |
+| `PR7-22` (`AGENT-PLAYTEST1`) | done (tools lane) | `develop` (squash `PR7-22`) | `aegis playtest` start / do / run / stop / status (`tools/fc.sh playtest`), no-window by default; smoke script `games/emberwake/playtests/agent/smoke.play` plays a fresh save to the hub in the gate (~20 s); `FB-309` |
+| `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -251,6 +253,24 @@ FB-01 to FB-281 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Known nit (fix rides with `PR7-26`)**: on web, Restore defaults stages the default `fullscreen` value, so if the browser is fullscreen the close guard can appear with no Apply on the tab; web should leave the display keys alone there.
 - **Questions**: add an ambience audio bus and Ward Ambience volume (engine audio work)? Keep the overlay groups on the Battle tab?
 - **Docs delta**: `docs/workflow/web.md` "What differs in the browser", Display row: "the Display tab shows Fullscreen (applied at once) and Text size of the display rows, plus Reduce Motion and Portrait Effects." `GAME_BRIEF.md` settings line: "Settings (SETTINGS-MOCK1): tab rail Display, Sound, Gameplay, Battle, Controls; every change saves at once except desktop Display Mode (Windowed / Borderless / Fullscreen) and Resolution, which need Apply and a 15 s keep-or-revert confirm; closing with a staged display change asks first; the hub opens the decluttered popup with Return to title." `HISTORY.md`: "Settings Apply-for-everything (draft until Apply) and the Fullscreen and Borderless checkboxes were replaced by instant apply plus a staged Display Mode choice (PR7-21, approved mock 04_settings.js)."
+
+### FB-309: PR7-22 agent playtest harness landed; Xvfb replaced by the no-window mode
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-22`, `PLAYTEST_BRIEF1.md` (@squash `PR7-22`)
+- **Built**: `aegis playtest` in `aegis_cli` (engine, game-agnostic; `agentplay.rs`) on the scenario plumbing (port, scratch profile, `frames` settle, conditions). `tools/fc.sh playtest [start] [save=] [out=] [size=] [shots=each|off] [window=1]`, then `playtest do <command>` once per tool call, `playtest run <script|->`, `stop`, `status`. Commands: screen, tree, click, hover, key, type, back, drag, link, wait, assert, get, shot, pause, frames, save, load, note, repeat, quit. Each command writes a row to `<run>/log.md` and `log.jsonl` and, by default, a numbered shot `309_<command>.png`; a failure keeps `309_fail.png` and its UI tree. Run folders `playtests/agent/<date>[-n]/` are git-ignored (copy one to the project files to hand it off).
+- **Deviation**: the row says "under Xvfb"; the harness uses the engine's existing no-window mode (HEADLESS1), which needs no display and is the same screens and link. `window=1` still runs a real muted window where a display (or a user-started Xvfb) exists. `[PROVISIONAL]`.
+- **Gate**: `tools/fc.sh gate` now runs the smoke playtest after the repro replays (the first gate step that launches the real game). `check_project.ps1` (desktop) has no matching step yet; the desktop gate skips it until someone adds it there.
+- **For the Fable playtest**: start with `tools/fc.sh playtest`, then `target/debug/aegis playtest do screen` and so on; the guide is `engine/docs/authoring/agent_playtest.md`.
+- **Docs delta**: `docs/STRUCTURE.md` tools row: "`aegis playtest` (agent playtest harness, `engine/crates/aegis_cli/src/agentplay.rs`; guide `engine/docs/authoring/agent_playtest.md`; run folders `playtests/agent/`, git-ignored)". `engine/README.md` CLI list: add the `aegis playtest` line. `cloud.md` "No interactive play" bullet: replace the Xvfb recipe with `tools/fc.sh playtest` (no display needed). `HISTORY.md`: none.
+
+### FB-311: PR7-35 kit asset library check landed; one guess on sounds
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-35`, `docs/specs/ASSETLIB1.md` (@squash `PR7-35`)
+- **Built**: `kits/rpg/library/README.md` (the layout and fields; no assets yet, Art/UI fills it) and `tools/assetlib/check_library.py` (plain Python, no Pillow): AL6 (every sidecar parses, required fields, no unknown keys, `kind`/`status`/`source` enums, `kind` and `style` match the folders, `size` matches the PNG header, unique ids, every asset has a sidecar, no orphan sidecar, `style.meta.json` per style folder) and AL7 (file names, ids, tags and the style id/label refuse any game id, world id or `games/*/lore_words.txt` entry, whole word, `_` as a break). 14 fixture tests. `tools/fc.sh assetlib` runs both; the gate runs it last.
+- **Guess** `[PROVISIONAL]`: AL5 says `size` is pixels; a sound under `audio/` has none, so it takes `"size": null` (any other value is refused). Asset files are `.png`, `.ogg`, `.wav`, `.mp3`.
+- **Docs delta**: `docs/STRUCTURE.md` kit section: "`kits/rpg/library/<style>/<kind>/`: the kit asset library (ASSETLIB1), outside the shipped asset root; checked by `tools/assetlib/check_library.py` (`tools/fc.sh assetlib`, in the gate)". `HISTORY.md`: none.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
