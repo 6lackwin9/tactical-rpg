@@ -285,7 +285,7 @@ fn each_bad_sequence_or_step_field_is_one_error() {
         ("41 steps", p.clone(), with(&p, &["steps"], json!(steps41)), "A sequence holds 1-40 steps (has 41)."),
         ("steps an object", p.clone(), with(&p, &["steps"], json!({})), "Steps must be a list."),
         ("a step not an object", p.clone(), with(&p, &["steps", "0"], json!("reel_a")), "Step 1 must be an object"),
-        ("an unknown step kind", p.clone(), with(&p, &["steps", "0", "kind"], json!("dialogue")), "Step 1: kind 'dialogue' is not one of vignette, fight, effects, enter, end."),
+        ("an unknown step kind", p.clone(), with(&p, &["steps", "0", "kind"], json!("dialogue")), "Step 1: kind 'dialogue' is not one of vignette, fight, effects, enter, end, camp_prep."),
         ("an unknown step key", p.clone(), with(&p, &["steps", "0", "encounter"], json!("raid")), "Step 1 (vignette): unknown key 'encounter'."),
         ("a vignette step without a vignette", p.clone(), without(&p, &["steps", "0", "vignette"]), "Step 1 (vignette): choose a vignette."),
         ("an unknown vignette", p.clone(), with(&p, &["steps", "0", "vignette"], json!("v_ghost")), "unknown vignette 'v_ghost'"),
@@ -424,7 +424,7 @@ fn missing_images_cues_and_music_are_warnings() {
 #[test]
 fn the_step_reader_fills_its_defaults() {
     let step = |v: Value| Step::from_obj(v.as_object().unwrap());
-    assert_eq!(step(json!({"kind": "fight", "encounter": "raid"})), Some(Step::Fight { encounter: "raid".into(), on_lost: "abort".into(), on_fled: "abort".into() }));
+    assert_eq!(step(json!({"kind": "fight", "encounter": "raid"})), Some(Step::Fight { encounter: "raid".into(), on_lost: "abort".into(), on_fled: "abort".into(), retry_day_cost: 0, echo_fallen: false }));
     assert_eq!(step(json!({"kind": "end"})), Some(Step::End { to: "map".into() }));
     assert_eq!(step(json!({"kind": "enter", "location": "hub"})), Some(Step::Enter { location: "hub".into(), anchor: String::new() }));
     assert_eq!(step(json!({"kind": "vignette", "vignette": "reel_a"})), Some(Step::Vignette { vignette: "reel_a".into() }));
@@ -554,5 +554,59 @@ fn a_music_key_names_a_game_music_key_or_a_shipped_track() {
     let found: Vec<String> = check::story::warnings(&view(), W).into_iter().filter(|w| w.contains("step")).collect();
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(found[0].contains("step 2: music 'music/gone.ogg' is in no asset folder's audio/"), "{found:?}");
+    drop_scratch(&data);
+}
+
+/// PR6-10 (`PK6_PK7_BOSSES_ENDINGS.md` 3): a sequence with a `camp_prep` step (its warning and keeper) before a fight
+/// that retries at a day cost with echoes checks clean.
+fn seq_prep() -> Value {
+    json!({"id": "seq_prep", "name": "Sequence Prep", "steps": [
+        {"kind": "vignette", "vignette": "reel_a"},
+        {"kind": "camp_prep", "text": "No way back.", "keeper": "keeper_a"},
+        {"kind": "fight", "encounter": "raid", "on_lost": "retry", "retry_day_cost": 2, "echo_fallen": true},
+        {"kind": "end"}
+    ]})
+}
+
+/// PR6-10: each bad `camp_prep` field or retry field is one error; a prep step needs a step after it; the retry fields
+/// need a fight that retries (on a loss or a flight); the step reads its defaults when the fields are left out.
+#[test]
+fn each_bad_camp_prep_or_retry_field_is_one_error() {
+    let data = story_world("prep");
+    let v = store::view(&data);
+    let p = seq_prep();
+    assert!(errors_of(&v, "sequences", &p).is_empty(), "{:?}", errors_of(&v, "sequences", &p));
+    let short = json!({"id": "seq_prep", "name": "Sequence Prep", "steps": [{"kind": "vignette", "vignette": "reel_a"}, {"kind": "camp_prep"}, {"kind": "end"}]});
+    let cases: Vec<(&str, Value, Value, &str)> = vec![
+        ("a prep step with a foreign key", p.clone(), with(&p, &["steps", "1", "encounter"], json!("raid")), "Step 2 (camp_prep): unknown key 'encounter'."),
+        ("an unknown keeper", p.clone(), with(&p, &["steps", "1", "keeper"], json!("ghost")), "'ghost'"),
+        ("a keeper not text", p.clone(), with(&p, &["steps", "1", "keeper"], json!(3)), "Step 2 (camp_prep): keeper must be text."),
+        ("a warning too long", p.clone(), with(&p, &["steps", "1", "text"], json!("x".repeat(rpgkit_data::CARD_TEXT_MAX + 1))), "text is longer than 360 characters."),
+        ("a prep step last", short.clone(), with(&short, &["steps"], json!([{"kind": "vignette", "vignette": "reel_a"}, {"kind": "camp_prep"}])), "Step 2 (camp_prep): a camp prep step needs a step after it."),
+        ("a negative day cost", p.clone(), with(&p, &["steps", "2", "retry_day_cost"], json!(-1)), "Step 3 (fight): retry_day_cost must be a whole number 0-30."),
+        ("a day cost too high", p.clone(), with(&p, &["steps", "2", "retry_day_cost"], json!(rpgkit_data::RETRY_DAY_COST_MAX + 1)), "retry_day_cost must be a whole number 0-30."),
+        ("a day cost as text", p.clone(), with(&p, &["steps", "2", "retry_day_cost"], json!("2")), "retry_day_cost must be a whole number 0-30."),
+        ("echo_fallen not a bool", p.clone(), with(&p, &["steps", "2", "echo_fallen"], json!("yes")), "Step 3 (fight): echo_fallen must be true or false."),
+        ("retry fields on a fight that never retries", p.clone(), with(&p, &["steps", "2", "on_lost"], json!("abort")), "Step 3 (fight): retry_day_cost and echo_fallen need on_lost or on_fled retry."),
+    ];
+    for (tag, good, bad, needle) in cases {
+        assert_one(&v, "sequences", &good, &bad, needle, tag);
+    }
+    // a fight that retries only on a flight takes the fields; zero and false need no retry
+    let fled = with(&with(&p, &["steps", "2", "on_lost"], json!("abort")), &["steps", "2", "on_fled"], json!("retry"));
+    assert!(added(&v, "sequences", &p, &fled).is_empty());
+    let off = with(&with(&with(&p, &["steps", "2", "on_lost"], json!("abort")), &["steps", "2", "retry_day_cost"], json!(0)), &["steps", "2", "echo_fallen"], json!(false));
+    assert!(added(&v, "sequences", &p, &off).is_empty());
+    assert!(errors_of(&v, "sequences", &short).is_empty(), "a prep step with no fields");
+    // the step's defaults (the fields left out) and the fields as written
+    let step = |v: Value| Step::from_obj(v.as_object().unwrap());
+    assert_eq!(step(json!({"kind": "camp_prep"})), Some(Step::CampPrep { text: String::new(), keeper: String::new() }));
+    assert_eq!(
+        step(p["steps"][2].clone()),
+        Some(Step::Fight { encounter: "raid".into(), on_lost: "retry".into(), on_fled: "abort".into(), retry_day_cost: 2, echo_fallen: true })
+    );
+    for kind in rpgkit_data::STEP_KINDS {
+        assert!(rpgkit_data::step_keys(kind).contains(&"music"), "every step kind takes music: {kind}");
+    }
     drop_scratch(&data);
 }
