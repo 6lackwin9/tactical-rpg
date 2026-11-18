@@ -20,6 +20,7 @@
 
 mod battle;
 mod board;
+mod bunks;
 #[cfg(feature = "dev_tools")]
 mod dojo;
 mod epilogue;
@@ -50,6 +51,7 @@ mod stage;
 mod story;
 mod talk;
 mod timeline_view;
+mod transitions;
 mod tuning;
 mod viewkeys;
 #[cfg(target_arch = "wasm32")]

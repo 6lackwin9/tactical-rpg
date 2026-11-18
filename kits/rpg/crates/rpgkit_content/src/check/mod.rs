@@ -29,6 +29,7 @@ pub mod shop;
 pub mod simple;
 pub mod skill;
 pub mod story;
+pub mod talks;
 pub mod terms;
 pub mod travel;
 pub mod unit;

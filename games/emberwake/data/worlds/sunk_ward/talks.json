@@ -1,0 +1,155 @@
+{
+	"kind": "talks",
+	"version": 1,
+	"entries": [
+		{
+			"id": "bunk_kaelen_vesper",
+			"name": "Bunks: the jaw and the whistle",
+			"pair": [
+				"kaelen",
+				"vesper"
+			],
+			"requires_flags": [],
+			"min_together": 1,
+			"dialogue": "dlg_bunk_kaelen_vesper",
+			"tags": [
+				"provisional"
+			]
+		},
+		{
+			"id": "bunk_kaelen_maren",
+			"name": "Bunks: what the ledgers keep",
+			"pair": [
+				"kaelen",
+				"maren"
+			],
+			"requires_flags": [],
+			"min_together": 1,
+			"dialogue": "dlg_bunk_kaelen_maren",
+			"tags": [
+				"provisional"
+			]
+		},
+		{
+			"id": "bunk_kaelen_hollis",
+			"name": "Bunks: the bolt and the shield",
+			"pair": [
+				"kaelen",
+				"hollis"
+			],
+			"requires_flags": [],
+			"min_together": 1,
+			"dialogue": "dlg_bunk_kaelen_hollis",
+			"tags": [
+				"provisional"
+			]
+		},
+		{
+			"id": "bunk_vesper_maren",
+			"name": "Bunks: smoke and censers",
+			"pair": [
+				"vesper",
+				"maren"
+			],
+			"requires_flags": [],
+			"min_together": 1,
+			"dialogue": "dlg_bunk_vesper_maren",
+			"tags": [
+				"provisional"
+			]
+		},
+		{
+			"id": "bunk_vesper_hollis",
+			"name": "Bunks: who sees farther",
+			"pair": [
+				"vesper",
+				"hollis"
+			],
+			"requires_flags": [],
+			"min_together": 1,
+			"dialogue": "dlg_bunk_vesper_hollis",
+			"tags": [
+				"provisional"
+			]
+		},
+		{
+			"id": "bunk_maren_hollis",
+			"name": "Bunks: stitches",
+			"pair": [
+				"maren",
+				"hollis"
+			],
+			"requires_flags": [],
+			"min_together": 1,
+			"dialogue": "dlg_bunk_maren_hollis",
+			"tags": [
+				"provisional"
+			]
+		},
+		{
+			"id": "bunk_tpl_temper_steady",
+			"name": "Bunks: steady hands",
+			"pair": [],
+			"template": true,
+			"requires_flags": [],
+			"min_together": 1,
+			"temperament": "temper_steady",
+			"dialogue": "dlg_bunk_tpl_temper_steady",
+			"tags": [
+				"provisional"
+			]
+		},
+		{
+			"id": "bunk_tpl_temper_wary",
+			"name": "Bunks: one eye open",
+			"pair": [],
+			"template": true,
+			"requires_flags": [],
+			"min_together": 1,
+			"temperament": "temper_wary",
+			"dialogue": "dlg_bunk_tpl_temper_wary",
+			"tags": [
+				"provisional"
+			]
+		},
+		{
+			"id": "bunk_tpl_temper_quiet",
+			"name": "Bunks: the quiet one",
+			"pair": [],
+			"template": true,
+			"requires_flags": [],
+			"min_together": 1,
+			"temperament": "temper_quiet",
+			"dialogue": "dlg_bunk_tpl_temper_quiet",
+			"tags": [
+				"provisional"
+			]
+		},
+		{
+			"id": "bunk_tpl_temper_reckless",
+			"name": "Bunks: too close",
+			"pair": [],
+			"template": true,
+			"requires_flags": [],
+			"min_together": 1,
+			"temperament": "temper_reckless",
+			"dialogue": "dlg_bunk_tpl_temper_reckless",
+			"tags": [
+				"provisional"
+			]
+		},
+		{
+			"id": "bunk_tpl_orig_mortuary_calm",
+			"name": "Bunks: the charnel novice",
+			"pair": [],
+			"template": true,
+			"requires_flags": [],
+			"min_together": 1,
+			"origin": "orig_mortuary_calm",
+			"dialogue": "dlg_bunk_tpl_orig_mortuary_calm",
+			"tags": [
+				"provisional"
+			]
+		}
+	]
+}

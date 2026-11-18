@@ -1,0 +1,46 @@
+{
+  "id": "story_battle_hub",
+  "title": "A new game plays the opening vignette, the battle beat into the first fight, the victory beat and results over the field, and goes on through the prologue to the hub (TRANSITIONS1)",
+  "timeout_s": 900,
+  "steps": [
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
+    {"step": "click", "id": "menu.new_game"},
+    {"step": "wait", "until": {"widget": "world.sunk_ward"}},
+    {"step": "click", "id": "world.sunk_ward"},
+    {"step": "click", "id": "new_game.start"},
+    {"step": "wait", "until": {"path": "screen", "eq": "vignette"}, "timeout_ms": 20000},
+    {"step": "shot", "name": "vignette_open"},
+    {"step": "repeat", "times": 40, "until": {"path": "screen", "ne": "vignette"}, "steps": [{"step": "key", "key": "space"}]},
+    {"step": "wait", "until": {"path": "screen", "eq": "battle"}, "timeout_ms": 20000},
+    {"step": "assert", "until": {"path": "state.beat.kind", "eq": "intro"}},
+    {"step": "shot", "name": "t1_battle_beat"},
+    {"step": "wait", "until": {"path": "state.beat", "absent": true}, "timeout_ms": 10000},
+    {"step": "shot", "name": "t1_control"},
+    {"step": "link", "body": {"cmd": "autoplay"}},
+    {"step": "wait", "until": {"path": "state.outcome", "ne": ""}, "timeout_ms": 60000},
+    {"step": "assert", "until": {"path": "state.outcome", "eq": "won"}},
+    {"step": "wait", "until": {"path": "state.beat.kind", "eq": "victory"}, "timeout_ms": 10000},
+    {"step": "shot", "name": "t2_victory_beat"},
+    {"step": "wait", "until": {"path": "screen", "eq": "battle_results"}, "timeout_ms": 10000},
+    {"step": "assert", "until": {"path": "stack", "has": "battle"}},
+    {"step": "shot", "name": "t2_results_over_field"},
+    {"step": "click", "id": "results.continue"},
+    {"step": "wait", "until": {"path": "screen", "eq": "vignette"}, "timeout_ms": 20000},
+    {"step": "shot", "name": "t2_next_vignette"},
+    {"step": "repeat", "times": 3, "until": {"path": "screen", "eq": "region_map"}, "steps": [
+      {"step": "wait", "until": {"all": [{"path": "screen", "ne": "story_stage"}, {"path": "screen", "ne": "battle_results"}]}, "timeout_ms": 20000},
+      {"step": "repeat", "times": 50, "until": {"path": "screen", "ne": "vignette"}, "steps": [{"step": "key", "key": "space"}]},
+      {"step": "wait", "until": {"path": "screen", "ne": "story_stage"}, "timeout_ms": 20000},
+      {"step": "repeat", "times": 1, "until": {"path": "screen", "ne": "battle"}, "steps": [
+        {"step": "wait", "until": {"path": "state.beat", "absent": true}, "timeout_ms": 10000},
+        {"step": "link", "body": {"cmd": "autoplay"}},
+        {"step": "repeat", "times": 15, "until": {"path": "screen", "eq": "battle_results"}, "steps": [{"step": "pause", "ms": 400}, {"step": "key", "key": "enter"}]},
+        {"step": "click", "id": "results.continue"},
+        {"step": "wait", "until": {"path": "screen", "ne": "battle_results"}, "timeout_ms": 10000}
+      ]}
+    ]},
+    {"step": "wait", "until": {"path": "screen", "eq": "region_map"}, "timeout_ms": 20000},
+    {"step": "assert", "until": {"path": "state.arrival", "absent": true}},
+    {"step": "shot", "name": "hub"}
+  ]
+}

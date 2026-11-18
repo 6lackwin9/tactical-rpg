@@ -80,6 +80,8 @@ pub enum RAct {
     Pan(String),
     /// MAPNAV1-U: the next standing active member leads (Q, or a click on the leader).
     Lead,
+    /// BUNKS1 BK4: a click on a member idling in the hub, or on an occupied bunk: the member's card.
+    Member(String),
 }
 
 impl From<SvcAct> for RAct {
@@ -144,6 +146,14 @@ pub struct RegionMap {
     opened_at: Instant,
     /// REVEAL1 1.3: each indoor zone's roof opacity over frames.
     roofs: crate::props::RoofFade,
+    /// BUNKS1 BK9-BK12: in a hub, where each member idles (re-placed on entry, traded on a lead pass).
+    hub: crate::bunks::HubState,
+    /// BUNKS1 BK2, BK8: the bunks drawn last frame (agent link `state.bunks`, tests).
+    bunks_drawn: Vec<Value>,
+    /// TRANSITIONS1 T2 step 4: the arrival card showing since when, and whether it opened the ticker for its change
+    /// lines (closed again when the card goes).
+    arrival: Option<(crate::transitions::Arrival, Instant)>,
+    ticker_forced: bool,
 }
 
 /// One frame's camera as the agent link reports it.
@@ -442,7 +452,60 @@ impl RegionMap {
             cam_trail: VecDeque::new(),
             opened_at: Instant::now(),
             roofs: crate::props::RoofFade::default(),
+            hub: crate::bunks::HubState::default(),
+            bunks_drawn: Vec::new(),
+            arrival: None,
+            ticker_forced: false,
         }
+    }
+
+    /// TRANSITIONS1 T2 step 4: a won fight's arrival (left by its results) shows its card; its change lines join the
+    /// log and open the ticker while the card shows. Once the card's time is up it goes (and the ticker it opened
+    /// closes).
+    fn follow_arrival(&mut self, cx: &mut Cx, now: Instant) {
+        if let Some(mut a) = cx.game.as_mut().and_then(|g| g.arrival.take()) {
+            // the card reads the hub as it opens (a story's `enter` step moves the party after the results closed)
+            a.card = crate::transitions::card(&cx.data, cx.gs());
+            for line in &a.changes {
+                cx.log(line.clone());
+            }
+            if !a.changes.is_empty() && !self.log_open {
+                self.log_open = true;
+                self.ticker_forced = true;
+            }
+            self.arrival = Some((a, now));
+        }
+        if self.arrival.as_ref().is_some_and(|(_, t)| now.saturating_duration_since(*t).as_millis() as u64 >= crate::transitions::ARRIVAL_MS) {
+            self.arrival = None;
+            if std::mem::take(&mut self.ticker_forced) {
+                self.log_open = false;
+            }
+        }
+    }
+
+    /// BUNKS1 BK8: plays member `id`'s waiting talk as a scene (`talks::play`: the seen flag, the reward); false when
+    /// none waits.
+    fn play_talk(&mut self, cx: &mut Cx, id: &str) -> bool {
+        let d = cx.data.clone();
+        let Some(w) = emberwake_world::talks::waiting_for(&d, cx.gs(), id) else { return false };
+        self.walk.clear();
+        let (r, reward) = emberwake_world::talks::play(&d, cx.gs_mut(), &w);
+        if r.closed {
+            show_errors(cx, r.errors.clone());
+            return true;
+        }
+        if !reward.is_empty() {
+            cx.log(format!("Received {}.", d.item_name(&reward)));
+        }
+        self.svc.open_runner(cx, r);
+        true
+    }
+
+    /// BUNKS1 BK8: the card's Talk answer (`bunks::TALK_ANSWER`), the member it names.
+    fn take_talk_answer(cx: &mut Cx) -> Option<String> {
+        let at = cx.answers.iter().position(|a| a.starts_with(crate::bunks::TALK_ANSWER))?;
+        let a = cx.answers.remove(at);
+        Some(a[crate::bunks::TALK_ANSWER.len()..].to_string())
     }
 
     /// The scheduled time of a step due at `now`: `next_walk` while on schedule, so the steps average `step` whatever
@@ -559,6 +622,13 @@ impl RegionMap {
             }
             return;
         }
+        // BUNKS1 BK8: the card's Talk plays the member's waiting talk
+        if let Some(id) = Self::take_talk_answer(cx) {
+            if !self.modal() {
+                self.play_talk(cx, &id);
+            }
+            return;
+        }
         // STORYUI1 W2, 5.3: with nothing open, a running sequence takes over and queued vignettes play; CAMPAIGN1 W1,
         // F3: campaign notices first, then the run-over screen once the run is over; T2: the campaign queue's head
         // plays (vignettes and battles through `story::map_tick`, a dialogue scene here)
@@ -609,6 +679,15 @@ impl RegionMap {
 
     fn interact(&mut self, cx: &mut Cx, dir: Pos) {
         self.turn(dir);
+        // BUNKS1 BK8, BK11: a member idling ahead plays its waiting talk (the lead's too), else opens its card
+        let ahead = (cx.gs().position.0 + dir.0, cx.gs().position.1 + dir.1);
+        let member = self.hub.member_at(ahead);
+        if !member.is_empty() {
+            if !self.play_talk(cx, &member) {
+                cx.nav.push(Nav::Push(Box::new(crate::bunks::BunkCard::new(&member))));
+            }
+            return;
+        }
         let d = cx.data.clone();
         let res = explore::interact(&d, cx.gs_mut(), dir);
         if !json::b(&res, "ok", false) {
@@ -763,6 +842,10 @@ impl RegionMap {
                 }
             }
             RAct::Menu => cx.nav.push(Nav::Push(Box::new(crate::hub::Hub::default()))),
+            RAct::Member(id) => {
+                self.walk.clear();
+                cx.nav.push(Nav::Push(Box::new(crate::bunks::BunkCard::new(&id))));
+            }
             RAct::Hud(h) => {
                 self.walk.clear();
                 hud_open(cx, h, &REGION_HELP);
@@ -793,7 +876,7 @@ impl RegionMap {
             ("lore", _) => (rgb(150, 110, 220), "L"),
             ("encounter", _) => (rgb(220, 70, 60), "!"),
             ("roamer", _) => (rgb(230, 110, 60), "R"),
-            ("npc", _) => (rgb(230, 190, 80), ""),
+            ("npc", _) | ("member", _) => (rgb(230, 190, 80), ""),
             _ => (rgb(230, 220, 120), "?"),
         }
     }
@@ -823,6 +906,10 @@ impl Screen<GameCx> for RegionMap {
             self.walk.clear();
         }
         let d = cx.data.clone();
+        // BUNKS1 BK9-BK12: in a hub, the members' idle places (a lead change trades two of them)
+        let lead_now = leader_id(cx);
+        self.hub.sync(&d, cx.gs_mut(), &lead_now);
+        self.bunks_drawn.clear();
         let gs = cx.gs().clone();
         // the open conversation; a new node starts its line and its replies scrolled to the top; PORTRAITFX1-D: a
         // portrait left out of the last frame (the conversation ended or hid) is dropped
@@ -998,7 +1085,14 @@ impl Screen<GameCx> for RegionMap {
             }
             // PROPS1 4.2-4.6: the ground props over the tiles; the standing props go into the sorted pass below. Props
             // are art only: no widget, and walking still comes from `rows`
-            let props = crate::props::layout(t, &lineage, (geo.ox, geo.oy), geo.cell_size(), paint_area, |dirs, variant, x, y| {
+            // BUNKS1 BK2: in a hub each bunk prop draws its state's art (`<art>_<state>`, where that art exists)
+            let hub_bunks = if self.hub.on() { emberwake_world::bunks::bunks(&gs, t) } else { Vec::new() };
+            let state_t = crate::bunks::state_props(t, &hub_bunks, |art, x, y| {
+                let dirs = emberwake_content::art::prop_dirs(&lineage, art);
+                let dirs: Vec<&str> = dirs.iter().map(String::as_str).collect();
+                cx.art.pick(&dirs, None, x as i32, y as i32).is_some()
+            });
+            let props = crate::props::layout(state_t.as_ref().unwrap_or(t), &lineage, (geo.ox, geo.oy), geo.cell_size(), paint_area, |dirs, variant, x, y| {
                 let rel = cx.art.pick(dirs, variant, x, y)?;
                 let size = cx.art.size_of(&rel)?;
                 Some((rel, size))
@@ -1009,6 +1103,25 @@ impl Screen<GameCx> for RegionMap {
             let map_rect = Rect::new(geo.ox, geo.oy, map_w as i32 * geo.cell_size().0, map_h as i32 * geo.cell_size().1);
             for p in props.iter().filter(|p| p.ground) {
                 draw_prop(&mut ui, cx, p, None, false, map_rect, q);
+            }
+            // BUNKS1 BK3, BK4, BK8: each bunk's click area (its drawn art; under the markers and the party), its hover
+            // name and condition, and whether a talk waits on its member (a candle, drawn over the scene below)
+            let waiting = if self.hub.on() { emberwake_world::talks::waiting(&d, &gs) } else { Vec::new() };
+            let mut candles: Vec<Rect> = Vec::new();
+            for b in &hub_bunks {
+                let Some(p) = props.iter().find(|p| p.id == b.prop) else { continue };
+                let candle = !b.member.is_empty() && waiting.iter().any(|w| w.has(&b.member));
+                self.bunks_drawn.push(json!({"prop": b.prop, "member": b.member, "state": b.state.name(), "candle": candle, "file": p.file}));
+                if candle {
+                    candles.push(p.rect);
+                }
+                if modal {
+                    continue;
+                }
+                let hit = p.rect.intersect(map_area);
+                let (name, word) = if ui.hover(hit) { crate::bunks::bunk_tip(&d, &gs, b) } else { (String::new(), String::new()) };
+                let act = (!b.member.is_empty()).then(|| RAct::Member(b.member.clone()));
+                ui.push(format!("{}{}", crate::bunks::BUNK_PREFIX, b.prop), "bunk", b.member.clone(), hit, true, false, act, if name.is_empty() { Vec::new() } else { tip(&name, &word) });
             }
             let steps = gs.explore_int("loc_steps");
             // PLAYUI1-R: the people in the conversation turn to the party; the clock the sprites play at
@@ -1081,6 +1194,32 @@ impl Screen<GameCx> for RegionMap {
                     t.push((services_text(&services), th().info));
                 }
                 hits.push(MarkHit { id, label, hit, foot: r.y + r.h, tip: t, named, name_rect, badge: !services.is_empty() });
+            }
+            // BUNKS1 BK9: the members idling in the hub, drawn and clicked like the people (their card on a click)
+            let mut talk_marks: Vec<(Rect, i32)> = Vec::new();
+            for (id, at) in self.hub.spots.clone() {
+                let Some(m) = gs.party.member(&id) else { continue };
+                let r = geo.cell_of(at);
+                let seen = r.intersect(map_area);
+                if seen.w <= 0 || seen.h <= 0 {
+                    continue;
+                }
+                let (body, palette) = crate::bunks::member_art(&d, &gs, m);
+                let sprite = cx.art.first_body(&emberwake_content::art::body_chain(&body));
+                let top = if sprite.is_some() { mapview::sprite_rect(r) } else { mapview::icon_rect(r) };
+                let name = crate::hub::member_name(cx, m);
+                let key = format!("{}{id}", crate::bunks::MEMBER_PREFIX);
+                if waiting.iter().any(|w| w.has(&id)) {
+                    talk_marks.push((r, top.y));
+                }
+                marks.push(MarkDraw { id: key.clone(), r, top: top.y, kind: "member".into(), state: String::new(), npc: Some(NpcDraw { body, sprite, palette, initial: name.chars().next().unwrap_or('?').to_string(), face: Facing::default(), offset: idle_offset(&id) }), badge: None });
+                let name_rect = Rect::new(r.x, top.y, r.w, r.h);
+                let named = !names_always && !modal && !tilted && ui.hover(r);
+                if named || names_always {
+                    labels.push((name_rect, name.clone(), false));
+                }
+                let word = if ui.hover(r) { emberwake_world::bunks::condition(&d, &gs, m) } else { "" };
+                hits.push(MarkHit { id: key, label: name.clone(), hit: r, foot: r.y + r.h, tip: tip(&name, word), named: named || names_always, name_rect, badge: false });
             }
             // tilted: the front-most click area under the pointer names its marker (click areas overlap)
             if tilted && !names_always && !modal {
@@ -1220,6 +1359,18 @@ impl Screen<GameCx> for RegionMap {
                     None => service_glyph(&mut ui, first, br),
                 }
             }
+            // BUNKS1 BK8, BK11: a candle on each bunk whose member has a waiting talk, a speech mark over each member
+            // (the lead too) it waits on
+            let side = 12 * q / 4;
+            for r in &candles {
+                crate::bunks::draw_mark(&mut ui, cx, crate::bunks::CANDLE_ICON, Rect::new(r.x + r.w - side, r.y, side, side));
+            }
+            if self.hub.on() && waiting.iter().any(|w| w.has(&lead_now)) {
+                talk_marks.push((pr, drawn_party.y));
+            }
+            for (r, top) in &talk_marks {
+                crate::bunks::draw_mark(&mut ui, cx, crate::bunks::TALK_ICON, Rect::new(r.x + r.w / 2 - side / 2, top - side, side, side));
+            }
             // MAPNAV1-U: a click on the leader (or Q) passes the lead to the next standing active member
             let lead = leader_id(cx);
             let lead_name = gs.party.member(&lead).map(|m| crate::hub::member_name(cx, m)).unwrap_or_default();
@@ -1271,6 +1422,11 @@ impl Screen<GameCx> for RegionMap {
         if !talking {
             panes.extend(self.draw_ticker(&mut ui, cx, modal));
         }
+        // TRANSITIONS1 T2 step 4: the arrival card under the HUD bar
+        if let Some((a, at)) = self.arrival.as_ref() {
+            let ms = Instant::now().saturating_duration_since(*at).as_millis() as u64;
+            crate::transitions::draw_arrival(&mut ui.p, &a.card, crate::transitions::arrival_alpha(ms, cx.settings.reduce_motion()));
+        }
         panes.extend(name_boxes);
         // -- MAPNAV1-U (DR2 6 A): an arrow at the map's edge toward each legend entry out of view (off in a talk, as
         // the legend), moved along the edge off the legend and the ticker; a click looks there
@@ -1313,6 +1469,7 @@ impl Screen<GameCx> for RegionMap {
     }
 
     fn tick(&mut self, cx: &mut Cx) {
+        self.follow_arrival(cx, Instant::now());
         self.tick_at(cx, Instant::now());
     }
 
@@ -1392,6 +1549,7 @@ impl Screen<GameCx> for RegionMap {
             "walking": !self.walk.is_empty(), "log": cx.log.iter().rev().take(8).rev().collect::<Vec<_>>(),
             "dialogue": svc["dialogue"], "turn_in": svc["turn_in"],
             "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
+            "arrival": self.arrival.as_ref().map(|(a, _)| json!({"card": a.card, "changes": a.changes})),
             "shop": svc["shop"], "board": svc["board"], "board_pane": svc["board_pane"], "sprites": self.sprites,
             // MAPNAV1-U: who leads, the edge arrows of the last frame and the tile the camera looks at (null: the party)
             // REGIONVIEW1: the camera (physical px of cell (0, 0)), the party's physical px, and the last frames of both
@@ -1401,7 +1559,9 @@ impl Screen<GameCx> for RegionMap {
             // PORTRAITFX1 4.11: the speaker's portrait while the talk box shows (the shop or the board hides it)
             "portraits": svc["portraits"],
             // REVEAL1 1.3: each roofed indoor zone's roof opacity (0 gone, 1 opaque)
-            "roofs": self.roofs.state()})
+            "roofs": self.roofs.state(),
+            // BUNKS1: in a hub, where each member idles and each bunk's member, state and candle (null elsewhere)
+            "hub": self.hub.state(), "bunks": (!self.bunks_drawn.is_empty()).then(|| self.bunks_drawn.clone())})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
@@ -1621,6 +1781,12 @@ fn front_hit(hits: &[MarkHit], over: impl Fn(Rect) -> bool) -> Option<&MarkHit> 
 /// The markers' click areas, in the order given.
 fn push_hits(ui: &mut Ui<RAct>, hits: Vec<MarkHit>) {
     for h in hits {
+        // BUNKS1 BK4: an idling member opens its card
+        if let Some(id) = h.id.strip_prefix(crate::bunks::MEMBER_PREFIX) {
+            let act = RAct::Member(id.to_string());
+            ui.push(h.id.clone(), "member", h.label, h.hit, true, false, Some(act), h.tip);
+            continue;
+        }
         ui.push(format!("marker.{}", h.id), "marker", h.label, h.hit, true, false, Some(RAct::Marker(h.id)), h.tip);
     }
 }
@@ -2867,6 +3033,9 @@ mod tests {
             ["backgrounds", "menu" | "title" | "location" | "battle" | "story", f] => png(f),
             ["audio", "sfx", f] => f.ends_with(".wav"),
             ["audio", "music", f] => f.ends_with(".ogg"),
+            // TRANSITIONS1 (AI-18): the battle beats' wipe and banners, and their one-shot stings
+            ["ui", "transitions", f] => png(f),
+            ["audio", "stings", f] => f.ends_with(".ogg"),
             _ => false,
         }
     }
