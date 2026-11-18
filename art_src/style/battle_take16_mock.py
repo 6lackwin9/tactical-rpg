@@ -42,7 +42,12 @@ def tab(img, d, x, y, st, n, inc):
         d.rectangle((x, y, x + 24, y + 19), outline=col)
     ic = icon16(st)
     img.paste(ic, (x + 2, y + 2), ic)
-    T13.round_pips(d, x + 20, y + 3, n, col, h=4)
+    if n < 0:
+        d.rectangle((x + 19, y + 2, x + 23, y + 17), fill=col)
+    else:
+        for k in range(3):                       # 5x5 round pips, bottom up (take 16 legibility fix)
+            yy = y + 2 + (2 - k) * 6
+            d.rectangle((x + 19, yy, x + 23, yy + 4), fill=col if k < n else B.AP_OFF)
 
 
 def status_col(img, d, x, y, h, sts):
