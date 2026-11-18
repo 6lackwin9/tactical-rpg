@@ -46,3 +46,11 @@ distance, only his dull dark-grey scarred breastplate, no shoulder plates, halbe
 ```text
 Use the attached image only as the reference for style, palette and rendering, not for its subject. The Lower Meat Market at night, a crowded covered market hall of black brick and iron hooks: huge boiling rendering cauldrons glowing orange in the middle, steam rising, carcasses on hooks along the beams. Long silent queues of hollow-eyed grey-skinned adults with grey veins on their faces, in drab wool, holding wooden bowls, waiting at a counter where communion draughts and grey salt are handed out; none of them looks up. In the middle distance, one small young man in a dented dark breastplate over a cream gambeson, a halberd in hand, seen from behind, running through the crowd toward the right. Steam, amber cauldron light, deep shadows. Pixel art story illustration for a gothic dark fantasy tactical RPG, detailed 16-bit SNES/GBA-era style, 16:9 wide image; the picture is cropped to a wide band, so keep everything that matters in the middle three-fifths of the height, away from the top and bottom. Match the attached image exactly in rendering: painted pixel clusters, low-key soot-gothic palette of basalt black, slate, iron grey, oxblood and rust, amber firelight and tallow glow as the only warm light; light comes from fire, never from the sky. Clear dark outlines, limited palette, light dithering. No text, no caption, no UI, no border, no logo, no rain unless asked.
 ```
+
+## Placed (2026-11-18, placeholders)
+
+Takes `story_*_q1795029565` from image_pipeline/output, each cropped to a 1376 x 580 band (rows from the top: intro_1
+110, intro_2 8, intro_3 110, intro_4 96 (its own letterbox bars dropped), meat_market 100), resized to 1120 x 472.
+`meat_market`: Gemini painted a "communiee draughts" label on the counter; painted out (filled along the wood grain).
+Known drift, left for Flow: a few star-like ash specks in intro_1's sky (CANON: no stars), daylight-white windows in
+intro_3, Kaelen with shoulder plates in meat_market.

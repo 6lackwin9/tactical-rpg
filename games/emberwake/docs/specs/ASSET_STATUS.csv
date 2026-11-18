@@ -15,6 +15,8 @@ game:audio/music/sunk_ward_shop.ogg,music,placeholder,Act 1,synth music placehol
 game:audio/music/sunk_ward_town.ogg,music,final,Act 1,,0f688ea
 game:audio/music/sunk_ward_travel.ogg,music,placeholder,Act 1,synth music placeholder,bd7be7e
 game:audio/music/tidewrack.ogg,music,final,all,,0f688ea
+game:audio/stings/combat_sting.ogg,sfx,final,all,,d9f6838
+game:audio/stings/victory_stinger.ogg,sfx,final,all,,d9f6838
 game:backgrounds/battle/alley.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
 game:backgrounds/battle/canal.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
 game:backgrounds/battle/desert_outpost.png,background,placeholder,all,procedural backdrop (gen_art.py),0f688ea
@@ -37,11 +39,11 @@ game:backgrounds/location/warden_keep.png,background,final,all,,0f688ea
 game:backgrounds/menu/main_menu.png,background,final,all,,0f688ea
 game:backgrounds/menu/title.png,background,final,all,,0f688ea
 game:backgrounds/story/hearth.png,background,placeholder,all,procedural story card (gen_art.py),0f688ea
-game:backgrounds/story/intro_1.png,background,placeholder,all,procedural story card (gen_art.py),0f688ea
-game:backgrounds/story/intro_2.png,background,placeholder,all,procedural story card (gen_art.py),0f688ea
-game:backgrounds/story/intro_3.png,background,placeholder,all,procedural story card (gen_art.py),0f688ea
-game:backgrounds/story/intro_4.png,background,placeholder,all,procedural story card (gen_art.py),0f688ea
-game:backgrounds/story/meat_market.png,background,placeholder,all,procedural story card (gen_art.py),0f688ea
+game:backgrounds/story/intro_1.png,background,placeholder,all,Gemini web-queue opening CG; final from Flow (STYLE_BIBLE 6),0f688ea
+game:backgrounds/story/intro_2.png,background,placeholder,all,Gemini web-queue opening CG; final from Flow (STYLE_BIBLE 6),0f688ea
+game:backgrounds/story/intro_3.png,background,placeholder,all,Gemini web-queue opening CG; final from Flow (STYLE_BIBLE 6),0f688ea
+game:backgrounds/story/intro_4.png,background,placeholder,all,Gemini web-queue opening CG; final from Flow (STYLE_BIBLE 6),0f688ea
+game:backgrounds/story/meat_market.png,background,placeholder,all,Gemini web-queue CG; final from Flow (STYLE_BIBLE 6),0f688ea
 game:backgrounds/story/vg_m5_gate.png,background,final,all,,bd7be7e
 game:backgrounds/story/vn_alley_stage.png,background,final,all,,0f688ea
 game:backgrounds/story/vn_bridge_stage.png,background,final,all,,0f688ea
@@ -342,6 +344,10 @@ game:props/sunk_ward/herb_rack/v0.png,prop,final,Act 1,,bd7be7e
 game:props/sunk_ward/iron_ladder/v0.png,prop,final,Act 1,,bd7be7e
 game:props/sunk_ward/iron_ladder_side/v0.png,prop,final,Act 1,,4bd93cf
 game:props/sunk_ward/kiln_bunk/v0.png,prop,final,Act 1,,bd7be7e
+game:props/sunk_ward/kiln_bunk_active/v0.png,prop,final,Act 1,,d4c24c7
+game:props/sunk_ward/kiln_bunk_benched/v0.png,prop,final,Act 1,,d4c24c7
+game:props/sunk_ward/kiln_bunk_crypt/v0.png,prop,final,Act 1,,d4c24c7
+game:props/sunk_ward/kiln_bunk_empty/v0.png,prop,final,Act 1,,d4c24c7
 game:props/sunk_ward/kiln_bunk_side/v0.png,prop,final,Act 1,,bd7be7e
 game:props/sunk_ward/lantern_pole/v0.png,prop,final,Act 1,,bd7be7e
 game:props/sunk_ward/lock_tablet/v0.png,prop,final,Act 1,,bd7be7e
@@ -660,6 +666,12 @@ game:ui/hud/scrap.png,ui,final,all,,ac96ee3
 game:ui/hud/tallow.png,ui,final,Act 1,,ac96ee3
 game:ui/logo_crest.png,ui,final,all,,0f688ea
 game:ui/logo_title.png,ui,final,all,,0f688ea
+game:ui/markers/bunk_candle.png,ui,final,all,,d4c24c7
+game:ui/markers/bunk_talk.png,ui,final,all,,d4c24c7
+game:ui/transitions/ash_flecks.png,ui,final,all,,d9f6838
+game:ui/transitions/ash_wipe_mask.png,ui,final,all,,d9f6838
+game:ui/transitions/objective_banner.png,ui,final,all,,d9f6838
+game:ui/transitions/victory_banner.png,ui,final,all,,d9f6838
 game:units/beast/render_beast/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
 game:units/brawler/ash_warchief/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
 game:units/brawler/braces/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",a47d404
@@ -851,6 +863,7 @@ kit:ui/pins/here.png,ui,final,all,,0f688ea
 kit:ui/pins/ruin.png,ui,final,all,,0f688ea
 kit:ui/pins/town.png,ui,final,all,,0f688ea
 kit:ui/pins/wild.png,ui,final,all,,0f688ea
+kit:ui/services/facility.png,ui,final,all,,d4c24c7
 kit:ui/services/recipe.png,ui,final,all,,08501d3
 kit:ui/services/recruit.png,ui,final,all,,0f688ea
 kit:ui/services/shop.png,ui,final,all,,0f688ea
@@ -876,15 +889,3 @@ kit:units/warrior/2h_hammer/sheet.png,sprite sheet,placeholder,all,"Flow charact
 kit:units/warrior/2h_polearm/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",22e6ce6
 kit:units/warrior/2h_sword/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
 kit:units/warrior/base/sheet.png,sprite sheet,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",0f688ea
-game:portraits/bosses/goblin_warlord.png,portrait,missing,?,content check (falls back),
-"game:props/{ashlands,common}/keep_hall/v0.png",prop,missing,legacy,content check (falls back); legacy world ashlands,
-"game:props/{ashlands,common}/barracks/v0.png",prop,missing,legacy,content check (falls back); legacy world ashlands,
-"game:props/{ashlands,common}/forge/v0.png",prop,missing,legacy,content check (falls back); legacy world ashlands,
-"game:props/{ashlands,common}/storehouse/v0.png",prop,missing,legacy,content check (falls back); legacy world ashlands,
-game:portraits/npcs/orsa_tallow.png,portrait,missing,legacy,content check (falls back); legacy world iron_reaches,
-game:portraits/heroes/ilse_marrow.png,portrait,missing,legacy,content check (falls back); legacy world tidewrack,
-game:portraits/heroes/pell_driftwood.png,portrait,missing,legacy,content check (falls back); legacy world tidewrack,
-"game:props/{tidewrack,ashlands,common}/keep_hall/v0.png",prop,missing,legacy,content check (falls back); legacy world tidewrack,
-"game:props/{tidewrack,ashlands,common}/barracks/v0.png",prop,missing,legacy,content check (falls back); legacy world tidewrack,
-"game:props/{tidewrack,ashlands,common}/forge/v0.png",prop,missing,legacy,content check (falls back); legacy world tidewrack,
-"game:props/{tidewrack,ashlands,common}/storehouse/v0.png",prop,missing,legacy,content check (falls back); legacy world tidewrack,
