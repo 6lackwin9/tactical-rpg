@@ -5,9 +5,11 @@ Tushar asked for a pass over the opening CGs (2026-11-18). Vignette `vg_open` (T
 code-drawn cards (flat vector shapes, not pixel art, brighter than the locked look; STYLE_BIBLE 6 lists them as
 placeholders). Targets stay `1120 x 472` at the same paths (generate 16:9, crop the middle band).
 
-Route: image_pipeline (Gemini web queue), one request each, the M5 gate CG (`vg_m5_gate.png`, the approved painted
-look) attached as the style reference (`refs/cg_style_ref_m5_gate.png`). No founder face is shown, so these are not
-Flow character CGs; `meat_market` has Kaelen small, from behind, and can move to Flow (`@Kaelen`) if he drifts.
+Route (Tushar 2026-11-18: "for opening CGs we will be using the flow mode and not pipeline for the final version but
+we can finalize those immediately if they dont have any character requirements"): `intro_1..4` show no cast member
+(only nameless priests and tithes), so their image_pipeline takes are finals once reviewed: one request each, the M5
+gate CG (`vg_m5_gate.png`, the approved painted look) attached as the style reference (`refs/cg_style_ref_m5_gate.png`).
+`meat_market` has Kaelen, so it is made in Flow (prompt below, `@Kaelen`); its pipeline request was withdrawn.
 Slide briefs: `lore/narrative/new_game_onboarding_and_intro.md` 2. Tone rule: the rite and the chains, never violence
 to a child.
 
@@ -35,7 +37,11 @@ Use the attached image only as the reference for style, palette and rendering, n
 Use the attached image only as the reference for style, palette and rendering, not for its subject. A close, low view of a cobbled gutter at night in light rain: a shattered city-watch insignia lies in the black mud, a cracked iron shield-badge of the Castellan Watch (a kettle helm over crossed billhooks on a rust-crimson field), broken in two pieces, washed with streaks of fresh dark blood that run into the rain water between the cobbles. Behind it, out of focus, the foot of a row of iron cage doors standing open and a single dropped ring of keys. One sputtering tallow lantern off frame gives amber light; everything else is wet slate and shadow. No people. Pixel art story illustration for a gothic dark fantasy tactical RPG, detailed 16-bit SNES/GBA-era style, 16:9 wide image; the picture is cropped to a wide band, so keep everything that matters in the middle three-fifths of the height, away from the top and bottom. Match the attached image exactly in rendering: painted pixel clusters, low-key soot-gothic palette of basalt black, slate, iron grey, oxblood and rust, amber firelight and tallow glow as the only warm light; light comes from fire, never from the sky. Clear dark outlines, limited palette, light dithering. No text, no caption, no UI, no border, no logo, no rain unless asked.
 ```
 
-## story_meat_market
+## story_meat_market (Flow)
+
+Flow project "Emberwake", main prompt box, `@Kaelen` chip for him, the M5 gate CG uploaded as the style guide, 16:9.
+The text below, with "one small young man ... halberd in hand" replaced by "`@Kaelen`, small in the middle
+distance, only his dull dark-grey scarred breastplate, no shoulder plates, halberd in hand". Crop to 1120 x 472.
 
 ```text
 Use the attached image only as the reference for style, palette and rendering, not for its subject. The Lower Meat Market at night, a crowded covered market hall of black brick and iron hooks: huge boiling rendering cauldrons glowing orange in the middle, steam rising, carcasses on hooks along the beams. Long silent queues of hollow-eyed grey-skinned adults with grey veins on their faces, in drab wool, holding wooden bowls, waiting at a counter where communion draughts and grey salt are handed out; none of them looks up. In the middle distance, one small young man in a dented dark breastplate over a cream gambeson, a halberd in hand, seen from behind, running through the crowd toward the right. Steam, amber cauldron light, deep shadows. Pixel art story illustration for a gothic dark fantasy tactical RPG, detailed 16-bit SNES/GBA-era style, 16:9 wide image; the picture is cropped to a wide band, so keep everything that matters in the middle three-fifths of the height, away from the top and bottom. Match the attached image exactly in rendering: painted pixel clusters, low-key soot-gothic palette of basalt black, slate, iron grey, oxblood and rust, amber firelight and tallow glow as the only warm light; light comes from fire, never from the sky. Clear dark outlines, limited palette, light dithering. No text, no caption, no UI, no border, no logo, no rain unless asked.
