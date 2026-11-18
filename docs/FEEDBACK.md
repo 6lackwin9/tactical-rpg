@@ -37,6 +37,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-2` (`PERF-STEP1`) | done (tools lane) | `develop` (squash `ENGINE-2`) | Scenario `perf` step (no window: frame times, calibration, `budget` with a `no verdict` on a changing load); link request `perf`; `aegis_ui::perf` and `tools/fc.sh bench` (fill, panels, text); perf steps in both games' scenarios; `FB-317` |
 | `PR7-38` (`UISPLIT1-E`) | done (tools lane) | `develop` (squash `PR7-38`) | `aegis_ui::screen_layout`: views and fixtures (`ui/views/<screen>.view.json`), layout files (`ui/layouts/<screen>.json`), 13 components, the default, the run-time loader with fallback and debug reload; `ui_layout check` in the gate (`tools/fc.sh layouts`) and `ui_layout shot`; UI Gallery entry Screen layouts; engine sample `layout_sample`; authoring page `engine/docs/authoring/screen_layouts.md`. FB-319 |
 | `ENGINE-3` (`SHELL-SPLIT1`) | done (tools lane) | `develop` (squash `ENGINE-3`) | `aegis_ui/src/shell.rs` 4,423 to 2,904 lines (1,160 of code, the rest its tests): new modules `shell/input.rs`, `link.rs`, `settings.rs`, `window.rs`; code moved line for line, behaviour identical; native and wasm builds clean. FB-321 |
+| `ENGINE-4` (`CI-HARDEN1`) | done in part (tools lane); web smoke as a required check waits for Design | `develop` (squash `ENGINE-4`) | Workspace deny set (`unsafe_code`, clippy `dbg_macro`, `todo`, `unimplemented`) in every crate; gate step `tools/fc.sh lints` (the deny set under clippy, `tools/deps/unused_deps.py` and its tests); advisory Windows job in `gate.yml` (build and test, MSVC). FB-323 |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -359,6 +360,16 @@ FB-01 to FB-281 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Built**: `aegis_ui::shell` keeps the shell and app state, the frame, redraw, the web start, the drawing helpers, shots and `run`, plus its tests. New child modules: `input` (pointer, keys, edited field, clicks, drags, drops, Back; 665 lines), `link` (agent link commands, text and layout audits, shots, `ui_tree`; 364), `settings` (declared window options, applying settings; 79), `window` (monitors, size and place, pixel buffer, full screen, the winit event handler; 453). Proof of no change: the moved lines, sorted, equal the old file's apart from `pub(super)` on moved items and the module glue; `cargo check --target wasm32-unknown-unknown` for `aegis_ui` (also `web_probe`) and `emberwake_gui` is clean (the wasm32 target is now installed in this container, which also verifies the ENGINE-1 `agentplay` pid fix). Public paths unchanged (`shell::read_window_options`, `capped_buffer`, `web_attributes_of` re-exported).
 - **Not done**: the tests stay in `shell.rs` (2,100 lines); moving them per module is a later trim if wanted.
 - **Docs delta**: `docs/STRUCTURE.md` (aegis_ui src row): `shell.rs` + `shell/{headless,bot,input,link,settings,window}.rs`. `HISTORY.md`: none.
+
+### FB-323: ENGINE-4 CI hardening landed in part; two questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-4` (CI-HARDEN1), review "Engine track" `#6` (@squash `ENGINE-4`)
+- **Built**: (1) a deny set in the root `Cargo.toml` `[workspace.lints]`, taken by all 23 crates (`[lints] workspace = true`): `unsafe_code` (the one Win32 call in `shell/window.rs` opts out where it stands), clippy `dbg_macro`, `todo`, `unimplemented`; (2) gate step `tools/fc.sh lints`: clippy with only that set (about 30 s warm), then `tools/deps/unused_deps.py` (every dependency a crate names appears in its code outside comments; a KEEP list with reasons, today `aegis_ui`'s wasm-only `cpal`, named to turn on a feature) and its 2 tests; (3) a `windows (advisory)` job in `.github/workflows/gate.yml` on the same triggers: `tools/fc.sh build` and `tools/fc.sh test` on `windows-latest` with the MSVC stable toolchain. It is outside the needs of `gate`, so it never blocks a push.
+- **Found**: no unused dependency in any crate; no `dbg!`, `todo!` or `unimplemented!` anywhere.
+- **Not built, Design's call**: making the web smoke a required check. WEBREL1 section 5 records that the user decides after two green releases whether main requires the web job, so this lane left `web (advisory)` as it is.
+- **Questions**: (1) make `windows` required (in the needs of `gate`) once it has been green, or keep it advisory? It costs about twice the Linux minutes per push; (2) the web smoke: ask the user now, or wait for the two green releases WEBREL1 names?
+- **Docs delta**: `CLAUDE.md` and `docs/workflow/cloud.md` gate step lists: add the lints step (and the layout check, FB-319). `docs/STRUCTURE.md` tools: `tools/deps/` (unused-dependency check). `check_project.ps1` (desktop) has no lints step yet; a Build row could add it. `HISTORY.md`: none.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

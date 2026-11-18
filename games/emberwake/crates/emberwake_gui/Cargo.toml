@@ -46,3 +46,6 @@ web-sys = { version = "0.3.106", features = ["console", "CssStyleDeclaration", "
 
 [dev-dependencies]
 png = "0.17.13"
+
+[lints]
+workspace = true

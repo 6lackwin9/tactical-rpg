@@ -52,6 +52,38 @@ jobs:
       - name: Build and test
         run: bash tools/fc.sh gate
 
+  # CI-HARDEN1 (ENGINE-4): the shipping target. Every crate built (a warning fails) and every test run on Windows, with
+  # the MSVC stable toolchain (the desktop's gnullvm pin needs llvm-mingw, which the runner lacks). ADVISORY for now: not
+  # in the needs of `gate` below, so a red Windows run never blocks a push; it becomes required once it has been green
+  # (docs/FEEDBACK.md FB-323 asks Design).
+  windows:
+    name: windows (advisory)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: stable-x86_64-pc-windows-msvc
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target   # .cargo/config.toml points at the desktop's own folder
+      CARGO_TERM_COLOR: never
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: rustup toolchain install stable-x86_64-pc-windows-msvc --profile minimal && rustc --version
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Build every crate
+        run: bash tools/fc.sh build
+
+      - name: Every test
+        run: bash tools/fc.sh test
+
   # WEBREL1-P1: the web TEST build on PRs into main (the release PR), uploaded as the artifact web-build. ADVISORY: not in
   # the needs of `gate` below and not a required check, so a red web job never blocks a release (WEBREL1 section 5: the
   # user decides after two green releases whether main requires it). The browser smoke runs after the upload and may fail

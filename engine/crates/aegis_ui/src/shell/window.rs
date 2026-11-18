@@ -14,6 +14,7 @@ pub(super) fn usable_area(monitor: &MonitorHandle) -> ScreenRect {
         use winit::platform::windows::MonitorHandleExtWindows;
         // SAFETY: MONITORINFO is plain integers, so all zeroes is valid; `cbSize` is set as the call requires, and the
         // call only writes through the pointer, which lives for the call. A stale handle returns 0 and writes nothing.
+        #[allow(unsafe_code)] // CI-HARDEN1: the engine's one unsafe block
         let (ok, work) = unsafe {
             let mut info: MONITORINFO = std::mem::zeroed();
             info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;

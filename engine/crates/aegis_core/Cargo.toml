@@ -10,3 +10,6 @@ indexmap = { workspace = true }
 # WEBREL1-E1a: the web clock behind `clock` (std's Instant::now panics on wasm32-unknown-unknown); the version winit locks.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-time = "1.1.0"
+
+[lints]
+workspace = true

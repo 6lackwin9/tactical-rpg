@@ -22,3 +22,6 @@ aegis_ui = { path = "../../../../engine/crates/aegis_ui" }
 aegis_cli = { path = "../../../../engine/crates/aegis_cli" }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
+
+[lints]
+workspace = true

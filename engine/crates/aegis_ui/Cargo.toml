@@ -59,3 +59,6 @@ web-sys = { version = "0.3.106", features = ["console", "Document", "Element", "
 # DISPLAY2: the monitor's work area (GetMonitorInfoW); winit reports only the whole monitor. The version winit uses.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52.0", features = ["Win32_Foundation", "Win32_Graphics_Gdi"] }
+
+[lints]
+workspace = true

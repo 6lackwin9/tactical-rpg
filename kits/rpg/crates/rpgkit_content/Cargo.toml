@@ -11,3 +11,6 @@ rpgkit_data = { path = "../rpgkit_data" }
 serde_json = { workspace = true }
 indexmap = { workspace = true }
 rpgkit_battle = { path = "../rpgkit_battle" }
+
+[lints]
+workspace = true
