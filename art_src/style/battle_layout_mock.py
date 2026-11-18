@@ -461,6 +461,72 @@ def mock4(shot: Image.Image) -> Image.Image:
     return img
 
 
+# take 5 (Tushar 2026-11-18 21:14): AP tracker without the max outlines and with an AP label; the foe card split
+# into the foe's own move and what your plan does to its poise
+def poise_glyph(d, x, y, s=16, col=POISE):
+    """Poise: a shield outline with a crack."""
+    d.polygon([(x, y), (x + s, y), (x + s, y + s * 0.55), (x + s / 2, y + s), (x, y + s * 0.55)], outline=col, width=2)
+    d.line((x + s * 0.55, y + 2, x + s * 0.4, y + s * 0.45, x + s * 0.6, y + s * 0.7), fill=col, width=1)
+
+
+def mock5(shot: Image.Image) -> Image.Image:
+    img = mock4(shot)
+    d = ImageDraw.Draw(img)
+    stage = shot.crop((291, 112, 899, 492)).resize((912, 570), Image.NEAREST)
+    # AP tracker: label, the start-of-round AP as pips, the plan's share in amber, numbers
+    d.rectangle((560, 0, 890, 63), fill=BASALT)
+    ax, ay = 576, 14
+    d.text((ax, ay - 2), "AP", font=TITLE_S, fill=GOLD)
+    START, USED = 10, 9
+    for i in range(START):
+        px = ax + 34 + i * 15
+        d.rectangle((px, ay, px + 11, ay + 11), fill=PLANNED if i < USED else AP_ON)
+    d.text((ax + 34, ay + 20), "9 planned", font=SMALL, fill=PLANNED)
+    d.text((ax + 120, ay + 20), "1 left", font=SMALL, fill=AP_ON)
+    # foe card: restore the board under the old card, then draw the new one
+    img.paste(stage.crop((612, 18, 900, 262)), (796, 90))
+    kae = shot.crop((20, 166, 84, 230))
+    foe_p = shot.crop((1044, 220, 1108, 284))
+    cx, cy = 796, 96
+    frame_a(d, (cx, cy, cx + 288, cy + 214), fill=(16, 18, 25))
+    img.paste(foe_p.resize((40, 40)), (cx + 14, cy + 14))
+    d.text((cx + 62, cy + 12), "Castellan Footman", font=TITLE_S, fill=GOLD)
+    bar(d, cx + 62, cy + 36, 120, 6, 1.0, (150, 50, 45))
+    poise_glyph(d, cx + 192, cy + 31, 14)
+    poise(d, cx + 212, cy + 36, 5, 5, w=12, h=6)
+    # section 1: its own move (red rule)
+    y = cy + 64
+    d.rectangle((cx + 12, y, cx + 15, y + 26), fill=(170, 60, 50))
+    img.paste(foe_p.resize((22, 22)), (cx + 24, y + 2))
+    glyph(d, "arrow", cx + 52, y + 3, 20, (200, 160, 120))
+    img.paste(kae.resize((22, 22)), (cx + 78, y + 2))
+    d.ellipse((cx + 108, y + 6, cx + 122, y + 20), fill=SLATE, outline=GOLD)
+    d.text((cx + 112, y + 5), "1", font=MONO, fill=GOLD)
+    d.text((cx + 132, y + 6), "moves on you", font=SMALL, fill=IRON_L)
+    # section 2: your plan against it (gold rule): your face, your move, the poise it strips
+    y = cy + 104
+    d.line((cx + 12, y - 8, cx + 276, y - 8), fill=IRON)
+    d.rectangle((cx + 12, y, cx + 15, y + 74), fill=GOLD)
+    img.paste(kae.resize((22, 22)), (cx + 24, y + 2))
+    glyph(d, "arrow", cx + 52, y + 3, 20, GOLD)
+    img.paste(foe_p.resize((22, 22)), (cx + 78, y + 2))
+    d.text((cx + 108, y + 5), "your plan on it", font=SMALL, fill=GOLD)
+    y += 32
+    t = slot_icon("pneumatic_hammer_strike", 26)
+    img.paste(t, (cx + 24, y), t)
+    d.text((cx + 56, y + 5), "2-4", font=MONO_L, fill=PARCH)
+    poise_glyph(d, cx + 92, y + 5, 14)
+    for j in range(5):                      # all five poise pips stripped: amber = what this move takes
+        d.rectangle((cx + 112 + j * 16, y + 9, cx + 112 + j * 16 + 13, y + 15), fill=AMBER)
+    d.text((cx + 196, y + 4), "BREAK", font=MONO_L, fill=AMBER)
+    yy = cy + 186
+    glyph(d, "sword", cx + 24, yy - 2, 16, AMBER)
+    d.text((cx + 46, yy - 2), "34 to it", font=SMALL, fill=PARCH)
+    glyph(d, "shield", cx + 130, yy - 2, 16, (200, 90, 80))
+    d.text((cx + 152, yy - 2), "22 to you", font=SMALL, fill=PARCH)
+    return img
+
+
 def label(img, text):
     out = Image.new("RGB", (img.width, img.height + 34), BASALT)
     out.paste(img, (0, 34))
@@ -500,6 +566,8 @@ def main():
     sheet.paste(a, (0, 0))
     sheet.paste(b, (0, a.height + 12))
     sheet.save(out / "battle_layout_take3_vs_take4.png")
+    m5 = mock5(shot)
+    m5.save(out / "battle_layout_take5.png")
 
 
 if __name__ == "__main__":
