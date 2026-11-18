@@ -1414,6 +1414,20 @@ pub fn web_attributes_of(mut attrs: WindowAttributes) -> WindowAttributes {
     attrs
 }
 
+/// WEBFIX2 (d): the drawing buffer for a canvas of `w` x `h` px when the GPU's textures are at most `max` px a side: the
+/// canvas's own size when it fits, else that size scaled down evenly until its longer side is `max` (each side at least
+/// 1 px), so a very large screen at a high pixel ratio still gets a renderer; the page stretches the smaller buffer over
+/// the canvas's CSS size. A `max` of 0 is no limit known.
+pub fn capped_buffer(w: u32, h: u32, max: u32) -> (u32, u32) {
+    let (w, h) = (w.max(1), h.max(1));
+    if max == 0 || (w <= max && h <= max) {
+        return (w, h);
+    }
+    let long = w.max(h) as u64;
+    let side = |s: u32| ((s as u64 * max as u64 / long) as u32).clamp(1, max);
+    (side(w), side(h))
+}
+
 /// The settings' text size.
 fn text_scale_of(v: &Value) -> f32 {
     v["text_scale"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0) as f32
@@ -1463,6 +1477,10 @@ struct App<G> {
     ctrl: bool,
     /// Alt is held (AltGr reports Ctrl+Alt: the character it types is text, not a Ctrl key).
     alt: bool,
+    /// WEBFIX2 (d): the GPU's largest texture side (0 until the renderer is up: no limit known), and the drawing
+    /// buffer's px per window px (below 1 only while `capped_buffer` shrinks it), which pointer positions are scaled by.
+    texture_max: u32,
+    buffer_k: f32,
 }
 
 impl<G: Context> App<G> {
@@ -1485,6 +1503,23 @@ impl<G: Context> App<G> {
             shift: false,
             ctrl: false,
             alt: false,
+            texture_max: 0,
+            buffer_k: 1.0,
+        }
+    }
+
+    /// Resizes the renderer and the shell's canvas to a window of `w` x `h` px, the buffer capped at the GPU's largest
+    /// texture (`capped_buffer`; WEBFIX2 (d)); `always`: the canvas is made again also at the size it has.
+    fn fit_buffer(&mut self, w: u32, h: u32, always: bool) {
+        let (w, h) = (w.max(1), h.max(1));
+        let (bw, bh) = capped_buffer(w, h, self.texture_max);
+        self.buffer_k = bw as f32 / w as f32;
+        if let Some(p) = self.pixels.as_mut() {
+            let _ = p.resize_surface(bw, bh);
+            let _ = p.resize_buffer(bw, bh);
+        }
+        if let Some(s) = self.shell.as_mut().filter(|s| always || (s.gfx.canvas.w, s.gfx.canvas.h) != (bw as i32, bh as i32)) {
+            s.resize_canvas(bw, bh);
         }
     }
 
@@ -1519,19 +1554,14 @@ impl<G: Context> App<G> {
     /// init ran), vsync as the settings say.
     #[cfg(target_arch = "wasm32")]
     fn surface_ready(&mut self, mut p: Pixels<'static>) {
-        if let Some(w) = &self.window {
-            let size = w.inner_size();
-            let (pw, ph) = (size.width.max(1), size.height.max(1));
-            let _ = p.resize_surface(pw, ph);
-            let _ = p.resize_buffer(pw, ph);
-            if let Some(s) = self.shell.as_mut().filter(|s| (s.gfx.canvas.w, s.gfx.canvas.h) != (pw as i32, ph as i32)) {
-                s.resize_canvas(pw, ph);
-            }
-        }
+        self.texture_max = p.device().limits().max_texture_dimension_2d;
         if let Some(s) = &self.shell {
             p.enable_vsync(s.cx.settings.v["vsync"].as_bool().unwrap_or(true));
         }
         self.pixels = Some(p);
+        if let Some(size) = self.window.as_ref().map(|w| w.inner_size()) {
+            self.fit_buffer(size.width, size.height, false);
+        }
     }
 
     fn redraw(&mut self) {
@@ -1649,6 +1679,9 @@ mod web {
     /// reports it at the device pixel ratio (`Resized`), so the drawing buffer is always the CSS size times the ratio and
     /// the screens scale to it as a resized desktop window does.
     pub const CANVAS_CSS: (f64, f64) = (1280.0, 720.0);
+
+    /// The largest texture side every WebGL2 device allows (the spec's minimum `MAX_TEXTURE_SIZE`).
+    pub const WEBGL2_TEXTURE_MIN: u32 = 2048;
 
     /// The page's canvas with the element id `id`.
     pub fn canvas(id: &str) -> Result<web_sys::HtmlCanvasElement> {
@@ -1845,7 +1878,10 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
         }
         #[cfg(target_arch = "wasm32")]
         {
-            web::open_pixels(pw, ph, window.clone(), self.proxy.clone());
+            // WEBFIX2 (d): the GPU's limit is known only once the renderer is up (`surface_ready` refits the buffer to
+            // it), so the renderer starts within the side every WebGL2 device allows
+            let (bw, bh) = capped_buffer(pw, ph, web::WEBGL2_TEXTURE_MIN);
+            web::open_pixels(bw, bh, window.clone(), self.proxy.clone());
             web::focus(&window);
             web::watch_visibility(self.proxy.clone());
         }
@@ -1922,14 +1958,7 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
                 el.exit()
             }
             WindowEvent::Resized(size) => {
-                let (w, h) = (size.width.max(1), size.height.max(1));
-                if let Some(p) = self.pixels.as_mut() {
-                    let _ = p.resize_surface(w, h);
-                    let _ = p.resize_buffer(w, h);
-                }
-                if let Some(s) = self.shell.as_mut() {
-                    s.resize_canvas(w, h);
-                }
+                self.fit_buffer(size.width, size.height, true);
                 #[cfg(target_arch = "wasm32")]
                 self.follow_fullscreen();
                 // The new surface shows nothing until a frame: at once, also inside the system's own resize loop.
@@ -1985,7 +2014,8 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(s) = self.shell.as_mut() {
-                    s.pointer_moved(position.x as f32, position.y as f32);
+                    // WEBFIX2 (d): a capped buffer is smaller than the window: its px, not the window's
+                    s.pointer_moved(position.x as f32 * self.buffer_k, position.y as f32 * self.buffer_k);
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {

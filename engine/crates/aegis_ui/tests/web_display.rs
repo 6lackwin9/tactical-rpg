@@ -69,3 +69,24 @@ fn web_fullscreen_asks_on_a_change_and_follows_the_page() {
 fn fullscreen_defaults_off() {
     assert_eq!(Settings::engine_defaults()["fullscreen"], json!(false));
 }
+
+/// WEBFIX2 (d): the drawing buffer is the canvas's size while it fits the GPU's largest texture; past it the buffer
+/// shrinks evenly (the aspect kept to a px) until its longer side is that limit; no limit known (0) keeps the size.
+#[test]
+fn the_buffer_is_capped_at_the_gpus_largest_texture() {
+    use aegis_ui::shell::capped_buffer;
+    for (w, h) in [(1280, 720), (2560, 1440), (8192, 8192), (1, 1)] {
+        assert_eq!(capped_buffer(w, h, 8192), (w, h), "{w} x {h} fits");
+        assert_eq!(capped_buffer(w, h, 0), (w, h), "{w} x {h} with no limit known");
+    }
+    assert_eq!(capped_buffer(0, 0, 8192), (1, 1), "never an empty buffer");
+    // a 2560 x 1440 CSS page at a pixel ratio of 4, and a tall one
+    for (w, h, max) in [(10240, 5760, 8192), (5760, 10240, 8192), (16384, 9216, 4096), (20000, 30, 2048)] {
+        let (bw, bh) = capped_buffer(w, h, max);
+        assert_eq!(bw.max(bh), max, "{w} x {h} under {max}: the longer side is the limit");
+        assert!(bw <= max && bh <= max && bw >= 1 && bh >= 1);
+        let (aspect, kept) = (w as f64 / h as f64, bw as f64 / bh as f64);
+        let short = bw.min(bh) as f64;
+        assert!((aspect - kept).abs() / aspect <= 1.0 / short + 1e-9, "{w} x {h} -> {bw} x {bh}: the aspect is kept");
+    }
+}
