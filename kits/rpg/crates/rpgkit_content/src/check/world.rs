@@ -42,6 +42,11 @@ pub fn ref_errors(v: &View, w: &str, label: &str, ref_kind: &str, r: &str) -> Ve
 /// qualified id of an ancestor or connected world) that resolves and passes the field's filter.
 fn check_ref(v: &View, w: &str, f: &Dict, ref_kind: &str, r: &str) -> Vec<String> {
     let label = json::s(f, "label");
+    // PR6-7: the captive unit ref stands for an enemy in an encounter's enemies and phase waves (its fallback is
+    // checked by `captive_problems`)
+    if r == rpgkit_data::CAPTIVE_UNIT && ref_kind == "characters" && matches!(json::s(f, "key").as_str(), "enemies" | "wave_units") {
+        return Vec::new();
+    }
     if let Some(base_kind) = ref_kind.strip_prefix("base:") {
         let target = v.get(base_kind, r);
         return if target.is_empty() {
@@ -310,6 +315,8 @@ fn override_errors(v: &View, w: &str, kind: &str, e: &Dict) -> Vec<String> {
 }
 
 fn region_errors(v: &View, w: &str, e: &Dict, id: &str) -> Vec<String> {
+    // PR6-7: the battle-start meters of the region's battles
+    let mut errors = super::hooks::start_meter_errors(e, &v.ids(rpgkit_data::UNIT_METERS_KIND), &v.ids(rpgkit_data::UNIT_TRACKS_KIND));
     let mut seen = vec![id.to_string()];
     let mut cursor = json::s(e, "parent");
     while !cursor.is_empty() {
@@ -319,12 +326,13 @@ fn region_errors(v: &View, w: &str, e: &Dict, id: &str) -> Vec<String> {
         }
         let hit_id = json::s(hit, "id");
         if seen.contains(&hit_id) {
-            return vec!["The region hierarchy is circular.".into()];
+            errors.push("The region hierarchy is circular.".into());
+            break;
         }
         seen.push(hit_id);
         cursor = json::s(hit, "parent");
     }
-    Vec::new()
+    errors
 }
 
 fn location_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
@@ -514,6 +522,22 @@ fn quest_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
 
 /// PHASEFX1: the battle side of world character `r` (Data.character_unit_entry: its role when `party` or `enemy`, else its
 /// base unit's side); None when it does not resolve or has no base unit.
+/// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 2): an encounter naming the captive unit (`rpgkit_data::CAPTIVE_UNIT`, in its
+/// enemies or a phase wave) needs a `captive_fallback` character (the entry ref check resolves it), and lists it once.
+fn captive_problems(e: &Dict) -> Vec<String> {
+    let token = rpgkit_data::CAPTIVE_UNIT;
+    let uses = json::sget(e, "enemies").iter().chain(encounter::reserved_refs(e).iter()).filter(|r| *r == token).count();
+    let fallback = json::s(e, rpgkit_data::CAPTIVE_FALLBACK);
+    let mut errors = Vec::new();
+    if uses > 1 {
+        errors.push(format!("The captive unit {token} is listed {uses} times (once at most)."));
+    }
+    if uses > 0 && fallback.is_empty() {
+        errors.push(format!("The captive unit {token} needs a Captive fallback character (it plays when no member was captured)."));
+    }
+    errors
+}
+
 fn character_side(v: &View, w: &str, r: &str) -> Option<String> {
     let c = v.worlds.resolve(w, "characters", r);
     if c.is_empty() {
@@ -547,6 +571,9 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     }
     errors.extend(encounter::arrival_errors(e));
     errors.extend(encounter::phase_problems(e, &|r: &str| check_ref(v, w, encounter::wave_field(true), "characters", r).is_empty(), &|r: &str| character_side(v, w, r)));
+    // PR6-7: the captive unit's fallback, and the battle-start meters
+    errors.extend(captive_problems(e));
+    errors.extend(super::hooks::start_meter_errors(e, &v.ids(rpgkit_data::UNIT_METERS_KIND), &v.ids(rpgkit_data::UNIT_TRACKS_KIND)));
     // ENCOUNTER2-C 5.2: the talks' trees and speakers, and the broken trigger's poise rule
     errors.extend(encounter::world_talk_problems(v, w, e));
     errors.extend(encounter::objective_problems(v, e, &|r: &str| guest_ok(v, w, r)));

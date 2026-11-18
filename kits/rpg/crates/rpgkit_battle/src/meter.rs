@@ -18,7 +18,7 @@ use crate::resolver::Resolver;
 use crate::trigger::{self, Event, Fired, Holder};
 use crate::world::{UnitId, World};
 use aegis_core::value::{self, Obj};
-use rpgkit_data::{MeterDelta, TriggerRow, UnitMeterDef};
+use rpgkit_data::{MeterDelta, StartMeter, TriggerRow, UnitMeterDef};
 use rpgkit_rules::bands;
 use rpgkit_rules::derived;
 use rpgkit_rules::pool::PoolView;
@@ -143,14 +143,44 @@ fn band_statuses(b: &Obj) -> Vec<(String, i32)> {
 /// the same meter can only raise the floor), the rows' meter skills open to their holders (UM6), and each gauge enters
 /// the band of its start value (its statuses wait for the round start). Nothing in classic.
 pub fn battle_start(w: &mut World) {
+    battle_start_with(w, &[]);
+}
+
+/// `battle_start` with the battle's `start_meter` grants (PR6-7, `PK6_PK7_BOSSES_ENDINGS.md` 1; the world bridge's
+/// region and encounter rows): after every unit's own start and floor, each grant adds its value to every holder of its
+/// meter that meets its `requires_track` (the unit's track value; a unit with no tracks reads 0), clamped to the
+/// gauge's floor..max; then the bands settle. No grant: as `battle_start` was. Nothing in classic.
+pub fn battle_start_with(w: &mut World, grants: &[StartMeter]) {
     if !on(w) {
         return;
     }
     for c in 0..w.units.len() {
         unit_start(w, c);
     }
+    for g in grants {
+        start_grant(w, g);
+    }
     for i in 0..w.meters.gauges.len() {
         settle_band(w, i, false);
+    }
+}
+
+/// PR6-7: one `start_meter` grant on the holders that meet its track gate.
+fn start_grant(w: &mut World, grant: &StartMeter) {
+    for i in 0..w.meters.gauges.len() {
+        let (c, meter) = (w.meters.gauges[i].unit, &w.meters.gauges[i].meter);
+        if *meter != grant.meter {
+            continue;
+        }
+        if let Some(t) = &grant.requires_track {
+            let held = w.units[c].tracks.as_ref().and_then(|s| s.get(&t.id).copied()).unwrap_or(0);
+            if !t.met(Some(held)) {
+                continue;
+            }
+        }
+        let g = &mut w.meters.gauges[i];
+        g.value = (g.value + grant.value).clamp(g.floor, g.max);
+        g.peak = g.peak.max(g.value);
     }
 }
 

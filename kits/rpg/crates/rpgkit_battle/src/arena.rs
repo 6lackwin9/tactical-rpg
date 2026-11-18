@@ -46,6 +46,9 @@ pub struct Effect {
     pub push: Option<Push>,
     /// PK1-S1 (3.6): a unit meter change on each struck holder (None = none).
     pub meter: Option<rpgkit_data::MeterDelta>,
+    /// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 1): it strikes only units holding this unit meter at its `at_least` or more
+    /// (rule unit_meters; None = every unit on its cells).
+    pub when_meter: Option<rpgkit_data::Threshold>,
 }
 
 /// AH1: one scheduled arena hazard of the encounter.
@@ -77,6 +80,20 @@ fn dir_of(s: &str) -> Option<V2> {
 
 fn ints(o: &Obj, key: &str) -> Vec<i32> {
     value::array(o, key).iter().map(|v| value::to_int(v, -1)).collect()
+}
+
+/// AH1 `rounds`, PR6-7 `every_rounds` N (1 or more): rounds N, 2N, ... up to `EVERY_ROUNDS_HORIZON` added to the listed
+/// rounds (sorted, each once). Without `every_rounds` the list as stored (empty = every round).
+fn rounds_of(o: &Obj) -> Vec<i32> {
+    let mut rounds = ints(o, "rounds");
+    let every = value::int(o, rpgkit_data::EVERY_ROUNDS, 0);
+    if every < 1 {
+        return rounds;
+    }
+    rounds.extend((1..=rpgkit_data::EVERY_ROUNDS_HORIZON / every).map(|k| k * every));
+    rounds.sort_unstable();
+    rounds.dedup();
+    rounds
 }
 
 impl Hazard {
@@ -115,8 +132,14 @@ impl Hazard {
             status_rounds: value::int(&e, "status_rounds", 1),
             push,
             meter: rpgkit_data::MeterDelta::of_hazard(&e),
+            when_meter: rpgkit_data::Threshold::of(&e, rpgkit_data::WHEN_METER),
         };
-        Self { id: value::string(o, "id", ""), name: value::string(o, "name", ""), cells, rounds: ints(o, "rounds"), blocks: ints(o, "blocks"), effect, line: value::string(o, "line", "") }
+        Self { id: value::string(o, "id", ""), name: value::string(o, "name", ""), cells, rounds: rounds_of(o), blocks: ints(o, "blocks"), effect, line: value::string(o, "line", "") }
+    }
+
+    /// PR6-7: whether unit `u` passes the effect's meter gate (`when_meter`; no gate = every unit).
+    pub fn gate_passes(&self, w: &World, u: UnitId) -> bool {
+        self.effect.when_meter.as_ref().is_none_or(|g| g.met(crate::meter::value(w, u, &g.id)))
     }
 
     /// AH1: it strikes in `round` (`rounds` [] = every round).
@@ -203,7 +226,7 @@ pub fn block_end(res: &mut Resolver, w: &mut World, round: i32, block: i32, rese
         if !hz.strikes(round, block) {
             continue;
         }
-        let victims: Vec<UnitId> = res.registered.iter().copied().filter(|&u| w.has(u) && !reserved.contains(&u) && hz.cells.contains(&w.pos(u))).collect();
+        let victims: Vec<UnitId> = res.registered.iter().copied().filter(|&u| w.has(u) && !reserved.contains(&u) && hz.cells.contains(&w.pos(u)) && hz.gate_passes(w, u)).collect();
         let line = if hz.line.is_empty() { format!("{} strikes.", hz.name) } else { hz.line.clone() };
         res.log.push(format!("[Arena] {line}"));
         let mut hits = Vec::new();
