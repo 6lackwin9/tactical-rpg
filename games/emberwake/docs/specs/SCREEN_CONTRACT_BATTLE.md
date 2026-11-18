@@ -122,6 +122,9 @@ screen at 1280x720, 1:1.
 ## 9. Open items (not yet mocked)
 
 - Victory and defeat report (UX-19), the full timeline view (T) and playback controls.
+- Boss fight variant (Tushar 2026-11-18 23:19, low priority, current layout stays for now): a boss bar across the top
+  of the board (full name and title, a long HP bar with phase marks, poise, statuses, the next phase or enrage cue);
+  the boss leaves the foe panel, mobs keep their plates.
 - Not expressed yet: collision stagger from push or pull on the card row, hazard damage in the HP preview and the
   block ruler, reactions (riposte, counters) as a "returns -n" note, flank, guard, cover and windup modifiers in the
   skill hover, channel rounds, unit meters, weapon wear.
