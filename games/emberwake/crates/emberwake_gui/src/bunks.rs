@@ -652,11 +652,7 @@ mod tests {
             assert!(choices[0].1.starts_with("1  Take into the squad") && choices[0].2, "{size}: {choices:?}");
             assert!(!choices[1].2 && choices[1].1.contains("(Only a member of the squad"), "{size}: a benched member's lead is refused in its row: {choices:?}");
             assert!(choices[2].1.contains(FAREWELL) && choices[2].2, "{size}: {choices:?}");
-            if size == "Normal" || size == "Extra large" {
-                shot(&g, "bunk_card_talkbox");
-            } else {
-                shot(&g, "bunk_card_talkbox_xl");
-            }
+            shot(&g, if size == "Normal" { "bunk_card_talkbox" } else { "bunk_card_talkbox_xl" });
         }
         // key 1 takes the benched member into the squad, as the click
         let mut card = BunkCard::new(&ids[2]);
