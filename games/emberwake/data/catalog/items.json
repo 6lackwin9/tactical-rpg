@@ -968,7 +968,7 @@
 			"rarity": "COMMON",
 			"weight": 4.0,
 			"value": 40,
-			"description": "A garrison billhook, its hook notched by use: a two-handed pole-arm for holding a narrow corridor.",
+			"description": "A garrison billhook, its hook notched by use: a one-handed pole-arm for holding a narrow corridor.",
 			"damage_type": "pierce",
 			"icon_id": "",
 			"starter_stash": false,
