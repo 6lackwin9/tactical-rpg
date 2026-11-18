@@ -65,6 +65,31 @@ def plain_card(shot: Path) -> Image.Image:
     return img
 
 
+def popup_border(shot: Path, style: str) -> Image.Image:
+    """Tier 2 take 2 (Tushar 2026-11-18: plain line too weak): a proper border, no ornate corners."""
+    img = Image.open(shot).convert("RGB")
+    L, T, R, B = 341, 225, 939, 495
+    d = ImageDraw.Draw(img)
+    fill = img.getpixel((L + 20, T + 200))
+    for k in range(0, 8):
+        d.rectangle((L + k, T + k, R - k, B - k), outline=fill)
+    if style == "double":      # bronze outer line, dark gap, iron inner line
+        d.rectangle((L, T, R, B), outline=BRONZE, width=2)
+        d.rectangle((L + 4, T + 4, R - 4, B - 4), outline=IRON, width=1)
+    elif style == "bevel":     # 4 px bronze band, lit top-left, shaded bottom-right
+        lit, mid, dk = (150, 112, 80), BRONZE, (62, 45, 34)
+        d.rectangle((L, T, R, B), outline=mid, width=4)
+        d.line((L, T, R, T), fill=lit); d.line((L, T, L, B), fill=lit)
+        d.line((L, B, R, B), fill=dk); d.line((R, T, R, B), fill=dk)
+        d.rectangle((L + 4, T + 4, R - 4, B - 4), outline=(14, 12, 12), width=1)
+    elif style == "band":      # 3 px iron band between two dark bronze hairlines
+        d.rectangle((L, T, R, B), outline=BRONZE_DK, width=1)
+        d.rectangle((L + 1, T + 1, R - 1, B - 1), outline=IRON, width=3)
+        d.rectangle((L + 4, T + 4, R - 4, B - 4), outline=BRONZE, width=1)
+    d.rectangle((L, T, R, T + 1), fill=BLOOD)
+    return img
+
+
 def label(img: Image.Image, text: str) -> Image.Image:
     out = Image.new("RGB", (img.width, img.height + 34), (20, 23, 31))
     out.paste(img, (0, 34))
@@ -80,6 +105,17 @@ def main() -> None:
     card_cur = Image.open(pt / "249_click_bunk_bunk_1.png").convert("RGB")
     card_new = plain_card(pt / "249_click_bunk_bunk_1.png")
     card_new.save(out / "bunk_card_plain.png")
+    crop = (300, 190, 980, 530)
+    takes = [label(card_cur.crop(crop), "Now")] + [
+        label(popup_border(pt / "249_click_bunk_bunk_1.png", st).crop(crop), f"{k}: {txt}")
+        for k, st, txt in (("A", "double", "double line, bronze outside, iron inside"),
+                           ("B", "bevel", "4 px bevelled bronze edge"),
+                           ("C", "band", "3 px iron band in bronze hairlines"))]
+    w, h = takes[0].size
+    sheet = Image.new("RGB", (w * 2 + 12, h * 2 + 12), (10, 11, 16))
+    for i, t in enumerate(takes):
+        sheet.paste(t, ((i % 2) * (w + 12), (i // 2) * (h + 12)))
+    sheet.save(out / "frame_popup_take2.png")
     for name, a, b, la, lb in (
         ("frame_settings_side_by_side.png", cur, new, "Now: bright double gold line, stars past the edge",
          "UX-36: one dim bronze line, small corners inside, oxblood top line"),
