@@ -282,6 +282,13 @@ pub mod dev {
         std::fs::write(path, bytes)
     }
 
+    /// `bytes` added to the end of `path` (made when missing).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn append(path: impl AsRef<Path>, bytes: impl AsRef<[u8]>) -> io::Result<()> {
+        use std::io::Write;
+        std::fs::OpenOptions::new().create(true).append(true).open(path)?.write_all(bytes.as_ref())
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     pub fn rename(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
         std::fs::rename(from, to)
@@ -325,6 +332,11 @@ pub mod dev {
 
     #[cfg(target_arch = "wasm32")]
     pub fn read_to_string(_: impl AsRef<Path>) -> io::Result<String> {
+        off()
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn append(_: impl AsRef<Path>, _: impl AsRef<[u8]>) -> io::Result<()> {
         off()
     }
 

@@ -1,11 +1,13 @@
 //! The screens: the main menu and the play screen. Both draw on the native grid (1280 x 720 units, `Grid::Native`)
-//! with the engine's widgets and the theme in the asset layers. Replace `Play` with the game.
+//! with the engine's widgets and the theme in the asset layers; their words are in `assets/strings/en.json` (`tr`).
+//! Replace `Play` with the game.
 
 use crate::{play, sound, __TYPE__};
 use aegis_layout::{Anchor, Insets};
 use aegis_ui::painter::Grid;
 use aegis_ui::pacing::FrameNeed;
 use aegis_ui::screen::{Cx, Nav, Screen};
+use aegis_ui::strings::tr;
 use aegis_ui::ui::{Gfx, Ui, Widget};
 use aegis_ui::widget_plumbing;
 use serde_json::{json, Value};
@@ -64,8 +66,8 @@ impl Screen<__TYPE__> for Menu {
         let start = col.cut_top(m.u(12));
         col.cut_top(m.u(3));
         let quit = col.cut_top(m.u(12));
-        ui.button("menu.start", start, "Start", MenuAct::Start, true);
-        ui.button("menu.quit", quit, "Quit", MenuAct::Quit, true);
+        ui.button("menu.start", start, &tr("menu.start"), MenuAct::Start, true);
+        ui.button("menu.quit", quit, &tr("menu.quit"), MenuAct::Quit, true);
         self.w = ui.widgets;
     }
     fn state(&self, cx: &GCx) -> Value {
@@ -115,8 +117,8 @@ impl Screen<__TYPE__> for Play {
         let panel = area.place(Anchor::Center, m.u(240), m.u(90));
         let mut body = ui.frame_body("panel", panel).pad(Insets::all(m.u(4)));
         let back = body.cut_bottom(m.u(12));
-        ui.para(body.x, body.y, body.w, "The game starts here: replace this screen (crates/__ID___game/src/screens.rs).", m.body, text);
-        ui.button("play.back", back.place(Anchor::Right, m.u(40), back.h), "Back", PlayAct::Back, true);
+        ui.para(body.x, body.y, body.w, &tr("play.body"), m.body, text);
+        ui.button("play.back", back.place(Anchor::Right, m.u(40), back.h), &tr("play.back"), PlayAct::Back, true);
         self.w = ui.widgets;
     }
     fn state(&self, cx: &GCx) -> Value {

@@ -169,6 +169,7 @@ impl<G: Context> Shell<G> {
                         // Playtest trail: an overlay opens as a modal, any other screen is a screen change.
                         let event = if s.overlay() { json!({"type": "modal", "ctl": screen_ctl(s.id()), "open": true}) } else { json!({"type": "screen", "path": s.id(), "leaked": 0}) };
                         self.cx.playtest.trail(event);
+                        log(&format!("screen {} (pushed)", s.id()));
                         self.stack.push(s);
                         self.pointer_pending = true;
                     }
@@ -176,6 +177,7 @@ impl<G: Context> Shell<G> {
                         if self.stack.len() > 1 {
                             if let Some(mut gone) = self.stack.pop() {
                                 gone.leave(&mut self.cx);
+                                log(&format!("screen {} (closed)", gone.id()));
                                 let event = if gone.overlay() { json!({"type": "modal", "ctl": screen_ctl(gone.id()), "open": false}) } else { json!({"type": "screen", "path": self.stack.last().map(|t| t.id()).unwrap_or(""), "leaked": 0}) };
                                 self.cx.playtest.trail(event);
                             }
@@ -190,12 +192,16 @@ impl<G: Context> Shell<G> {
                             gone.leave(&mut self.cx);
                         }
                         self.cx.playtest.trail(json!({"type": "screen", "path": s.id(), "leaked": 0}));
+                        log(&format!("screen {} (new stack)", s.id()));
                         self.stack.push(s);
                     }
                 }
             }
             if !self.cx.notice.is_empty() {
                 let lines: Vec<String> = self.cx.notice.drain(..).collect();
+                for l in &lines {
+                    log(&format!("notice: {l}"));
+                }
                 self.cx.playtest.trail(json!({"type": "modal", "ctl": screen_ctl("notice"), "open": true}));
                 self.stack.push(Box::new(Notice::new(lines)));
             }
@@ -757,8 +763,17 @@ pub fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
 /// first screen).
 pub fn run<G: Context>(mut cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: Options) -> Result<()> {
     crate::theme::reload(&mut cx);
+    crate::strings::load_into(&mut cx);
     if let Some(h) = options.headless {
         return headless::run(cx, stack, &options, h);
+    }
+    // ROBUST1: a windowed run keeps a log and writes a crash report beside the player's settings
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(dir) = cx.settings.path().parent().map(|d| d.join("logs")) {
+        match crate::crashlog::install(&dir, &options.title) {
+            Ok(_) => crate::crashlog::line(&format!("start: {}, {} screen(s), first {}", options.title, stack.len(), stack.last().map(|s| s.id()).unwrap_or("?"))),
+            Err(e) => cx.notice.push(format!("No log file in {}: {e}", dir.display())),
+        }
     }
     let el: EventLoop<Wake> = EventLoop::with_user_event().build()?;
     let mut app = App::new(cx, stack, options, el.create_proxy());
@@ -767,6 +782,14 @@ pub fn run<G: Context>(mut cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: O
         Some(e) => Err(e),
         None => Ok(()),
     }
+}
+
+/// A line for the run's log (ROBUST1, `crashlog`); nothing on the web or before a log is open.
+fn log(text: &str) {
+    #[cfg(not(target_arch = "wasm32"))]
+    crate::crashlog::line(text);
+    #[cfg(target_arch = "wasm32")]
+    let _ = text;
 }
 
 /// The web start (WEBREL1-E2): `run` on the page's canvas with the element id `canvas_id`, shown at 1280 x 720 CSS px
@@ -781,6 +804,7 @@ pub fn start_web<G: Context>(mut cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, opti
     anyhow::ensure!(options.headless.is_none(), "the web has no headless run");
     web::canvas(canvas_id)?;
     crate::theme::reload(&mut cx);
+    crate::strings::load_into(&mut cx);
     let el: EventLoop<Wake> = EventLoop::with_user_event().build()?;
     #[cfg(feature = "web_probe")]
     probe::PROXY.with(|p| *p.borrow_mut() = Some(el.create_proxy()));

@@ -73,6 +73,21 @@ Space, north Tab, the bumpers Page Up / Down, Select Shift+Tab, Start Esc, the d
 repeat after 350 ms every 110 ms and set `Held::dir`). The pad is read on Windows; anywhere, and with no window, the link
 requests `{"cmd": "pad", "button": "south"}` and `{"cmd": "controls"}` press a button and show the map.
 
+### Words on screen
+
+Put a screen's words in `assets/strings/<language>.json` (a flat object, `"menu.start": "Start"`, `{name}` filled by
+`tr_with`) and draw `aegis_ui::strings::tr("menu.start")`. Tables layer like every asset (engine, kit, game; each sets
+only the keys it names). The language is the settings key `language` (default `en`); a key missing in it falls back to
+`en`, then shows as the key. The gate (`tools/fc.sh layouts`) wants every language to hold the keys of `en`, with the
+same `{name}`s, and no more. The scaffold's menu already reads its words this way.
+
+### Log and crash report
+
+A windowed native run writes `game.log` (the run before kept as `game.1.log`) in `logs/` beside the player's settings,
+with every screen change and notice; `aegis_ui::crashlog::line` adds to it. A panic writes `crash-<unix seconds>.txt`
+there (message, place, backtrace, the last 200 log lines; the newest 5 are kept) and then goes on as before. The web and
+a run with no window write none.
+
 ## Checks and tools
 
 - `tools/fc.sh gate`: builds every crate (a warning fails), runs every test, every game's scenarios with no window,
