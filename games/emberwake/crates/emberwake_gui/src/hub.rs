@@ -54,9 +54,15 @@ pub fn wounded_tip(cx: &Cx, m: &UnitState) -> String {
 /// PORTRAITFX1-R (6.2 row 2, surface `roster`): party member `m`'s portrait and the look its state rows read (the HP
 /// its save carries, its ROSTER1 conditions: a wounded member desaturates). Keyed `member:<id>` (two members never
 /// share a portrait's holds, whichever character they play); the chain and the initial are the member's
-/// (`Who::of_member`).
+/// (`Who::of_member`). PK3 3.2 (PR7-11): a procedural member whose recruit template names `art` shows that file
+/// (`roster::portrait_of`) before the chain, under the member's name.
 pub fn member_portrait(d: &emberwake_world::Data, gs: &GameState, m: &UnitState) -> (Who, Look) {
     let mut who = Who::of_member(d, m);
+    let art = emberwake_world::roster::portrait_of(d, m);
+    if !art.is_empty() {
+        let name = std::mem::take(&mut who.name);
+        who = Who { name, ..Who::file(&art) };
+    }
     who.key = format!("member:{}", m.id);
     (who, crate::portraits::look_of_member(d, gs, m))
 }

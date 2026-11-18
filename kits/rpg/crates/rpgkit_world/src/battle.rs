@@ -649,9 +649,26 @@ fn settle_party_side(d: &Data, gs: &mut GameState, played_enc: &Dict, encounter_
     (out, notes)
 }
 
+/// PR7-11: why world fight `encounter_ref` can't start with the saved party, the fuse aside ("" = it can): an unknown
+/// encounter, no active member, or the fight world's entry's `party_min` above the active members (BK6), with the
+/// texts `begin_world_with` and `begin_fight` refuse with. A screen reads it before it asks the Living Martyr choice
+/// (`roster::fuse_refusal`, which `begin_fight` refuses with after these), so no choice is made for a refused fight.
+pub fn start_refusal(d: &Data, gs: &GameState, encounter_ref: &str) -> String {
+    let local = d.resolve(&gs.world_id, "encounters", encounter_ref);
+    if local.is_empty() {
+        return format!("Unknown encounter '{encounter_ref}'.");
+    }
+    if gs.party.active_members().is_empty() {
+        return "No active party member to fight.".into();
+    }
+    let world = fight_world(d, gs, encounter_ref);
+    roster::party_min_refusal(gs, d.resolve(&world, "encounters", &json::s(local, "id")))
+}
+
 /// A world fight's start with the saved party (BattleBridge.encounter_for; `begin_world` builds the fight after it):
 /// the world that resolves `encounter_ref` (`fight_world`), refused when the fight world's entry's `party_min`
-/// is above the active members (ROSTER1 BK6, `roster::party_min_refusal`); then A1.2-K3 (INTENT2-K3) the combat-start
+/// is above the active members (ROSTER1 BK6, `roster::party_min_refusal`) or an active member's Living Martyr fuse is
+/// spent with no choice made (FZ4, `roster::fuse_refusal`, PR7-11); then A1.2-K3 (INTENT2-K3) the combat-start
 /// auto-fill of the active members' pouches (`roster::auto_fill_at_start`, under the world's `pouch_stacks`). Returns
 /// the fight world and the auto-fill's "Stash short" lines.
 pub fn begin_fight(d: &Data, gs: &mut GameState, encounter_ref: &str) -> Result<(String, Vec<String>), String> {
@@ -661,6 +678,12 @@ pub fn begin_fight(d: &Data, gs: &mut GameState, encounter_ref: &str) -> Result<
     let short = roster::party_min_refusal(gs, entry);
     if !short.is_empty() {
         return Err(short);
+    }
+    // FZ4 (PK3 3.1, PR7-11): an active member whose fuse is spent needs the retire / last stand choice first (the
+    // screen asks it before it starts the fight; a headless runner gets the reason)
+    let spent = roster::fuse_refusal(d, gs);
+    if !spent.is_empty() {
+        return Err(spent);
     }
     let lines = roster::auto_fill_at_start(d, gs, &world);
     // PK2-S5a: the fielded members wield their gear's instances (a masterwork main hand opens its technique)

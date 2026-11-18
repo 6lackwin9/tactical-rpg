@@ -208,11 +208,14 @@ impl StoryStage {
             Some(Step::Fight { .. }) => {
                 let Some(fight) = story::fight(&d, cx.gs()) else { return };
                 let name = s_or(d.resolve(&cx.gs().world_id, "encounters", &s(&fight, "encounter")), "name", "Enemies");
-                match crate::region::try_fight(cx, &fight, story::FIGHT_SOURCE) {
-                    Ok(()) => {
+                match crate::region::try_story_fight(cx, &fight, story::FIGHT_SOURCE) {
+                    Ok(crate::region::FightStart::Battle) => {
                         cx.log(format!("Fight: {name}!"));
                         self.waiting = true;
                     }
+                    // PR7-11: the Retire / Last Stand prompt; when it closes the step runs again (the battle or the
+                    // reason it is refused)
+                    Ok(crate::region::FightStart::FusePrompt) => self.waiting = true,
                     Err(e) => self.error = vec![e],
                 }
             }
@@ -775,6 +778,55 @@ pub(crate) mod tests {
         assert_eq!(crate::music::reel_music(&cx, "prologue_tension"), "");
         assert_eq!(crate::music::reel_music(&cx, "story_opening"), opening);
         assert_eq!(crate::music::reel_music(&cx, "none"), "none");
+        let _ = std::fs::remove_dir_all(&cx.shot_dir);
+    }
+
+    /// PR7-11 (FZ4): the story fight with a spent Living Martyr (the hero made one of a scratch `tale` template, max 1,
+    /// one deployment made): the stage opens the Retire / Last Stand prompt, waits without logging the fight, and a
+    /// Retire that would leave no one to fight is refused on the prompt; Last Stand closes the prompt only, and the
+    /// stage runs its fight step again: the fight starts (runner `story`) with its log line, nothing left waiting.
+    #[test]
+    fn a_spent_fuse_on_a_story_fight_prompts_then_the_step_runs_again() {
+        let mut d = data();
+        let row = json!({"id": "zz_martyr", "name": "Martyr", "names": ["Zed"], "fuse": {"per_deploy": 1, "stasis_days": 7, "max": 1, "tiers": [], "last_passive": ""}});
+        let row = json::arr(&with_ids("tale", json!([row])))[0].clone();
+        d.catalogs.worlds.get_mut("tale").unwrap().own.entry("recruits".into()).or_default().push(json::dict(&row).clone());
+        let mut cx = story_cx(d);
+        let mut g = gfx();
+        let gs = new_game::create_for_world(&cx.data.clone(), "tale", 1).expect("a new game");
+        enter_game(&mut cx, gs, -1, Vec::new());
+        let (_, mut stage) = take(&mut cx);
+        stage.tick(&mut cx);
+        let (_, mut v) = take(&mut cx);
+        play_out(&mut cx, &mut v);
+        stage.resume(&mut cx);
+        let gs = cx.gs_mut();
+        let (time, hero) = (gs.time, gs.party.members[0].id.clone());
+        let m = gs.party.member_mut(&hero).unwrap();
+        m.template = "tale:zz_martyr".into();
+        m.fuse = Some(emberwake_world::state::MartyrFuse { deploys: 1, since: time, ..Default::default() });
+        let fight_line = "Fight: Fight A!";
+
+        stage.tick(&mut cx);
+        let (_, mut prompt) = take(&mut cx);
+        assert_eq!((prompt.id(), prompt.state(&cx)["encounter"].clone()), ("fuse_prompt", json!("tale:fight_a")));
+        assert_eq!(stage.state(&cx)["waiting"], json!(true));
+        assert!(!cx.log.iter().any(|l| l == fight_line), "no fight log while only the prompt opened");
+        stage.tick(&mut cx);
+        assert!(cx.nav.is_empty(), "the stage waits on the prompt");
+        prompt.draw(&mut cx, &mut g, (-500, -500), true);
+        // the only member: a Retire leaves no one to fight, refused on the prompt
+        prompt.click_id(&mut cx, "fuse.retire").expect("Retire");
+        assert!(cx.nav.is_empty() && cx.gs().party.member(&hero).is_some(), "the prompt stays");
+        assert!(!prompt.state(&cx)["message"].as_str().unwrap_or("").is_empty());
+        prompt.click_id(&mut cx, "fuse.last_stand").expect("Last Stand");
+        assert!(matches!(cx.nav.as_slice(), [Nav::Pop]), "the prompt only closes (the stage starts the fight)");
+        cx.nav.clear();
+        stage.resume(&mut cx);
+        stage.tick(&mut cx);
+        let (_, fight) = take(&mut cx);
+        assert_eq!((fight.id(), fight.state(&cx)["source"].clone()), ("debug_fight", json!(story::FIGHT_SOURCE)));
+        assert!(cx.log.iter().any(|l| l == fight_line) && stage.state(&cx)["error"] == json!([]));
         let _ = std::fs::remove_dir_all(&cx.shot_dir);
     }
 }

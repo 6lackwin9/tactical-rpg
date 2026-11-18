@@ -164,23 +164,191 @@ pub fn begin_fight(cx: &mut Cx, fight: &Dict, runner: &str) {
     }
 }
 
-/// `begin_fight` that hands the reason back when the battle cannot start (the story stage shows it itself).
-pub fn try_fight(cx: &mut Cx, fight: &Dict, runner: &str) -> Result<(), String> {
+/// What `try_fight` opened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FightStart {
+    /// The battle (or the debug game's fight popup).
+    Battle,
+    /// PR7-11: the Retire / Last Stand prompt (`FusePrompt`); the fight comes after the choice.
+    FusePrompt,
+}
+
+/// `begin_fight` that hands the reason back when the battle cannot start (the story stage shows it itself); the prompt
+/// starts the fight itself once the choice is made.
+pub fn try_fight(cx: &mut Cx, fight: &Dict, runner: &str) -> Result<FightStart, String> {
+    open_fight(cx, fight, runner, true)
+}
+
+/// PR7-11: `try_fight` for the story stage: a prompt the start opens only closes after the choice, and the stage runs
+/// its fight step again (the battle, or the reason on the stage's error card, never a wait on nothing).
+pub fn try_story_fight(cx: &mut Cx, fight: &Dict, runner: &str) -> Result<FightStart, String> {
+    open_fight(cx, fight, runner, false)
+}
+
+fn open_fight(cx: &mut Cx, fight: &Dict, runner: &str, prompt_starts: bool) -> Result<FightStart, String> {
+    // FZ4 (PK3 3.1, PR7-11): an active Living Martyr whose fuse is spent: the Retire / Last Stand prompt first, but
+    // only for a fight that would start (the other refusals come first, so no choice is made for nothing; the kit's
+    // battle start refuses until the choice, `roster::fuse_refusal`)
+    if let Some(member) = emberwake_world::roster::fuse_choices(&cx.data, cx.gs()).first().cloned() {
+        let why = emberwake_world::battle::start_refusal(&cx.data, cx.gs(), &s(fight, "encounter"));
+        if !why.is_empty() {
+            return Err(why);
+        }
+        cx.nav.push(Nav::Push(Box::new(FusePrompt::new(fight, runner, &member, prompt_starts))));
+        return Ok(FightStart::FusePrompt);
+    }
     // a debug game starts from the Scene Runner, so only a build with the dev tools has one
     #[cfg(feature = "dev_tools")]
     if cx.debug {
         cx.nav.push(Nav::Push(Box::new(crate::runner::DebugFight::new(fight, runner))));
-        return Ok(());
+        return Ok(FightStart::Battle);
     }
     let b = crate::battle::BattleScreen::world(cx, fight, runner)?;
     cx.nav.push(Nav::Push(Box::new(b)));
-    Ok(())
+    Ok(FightStart::Battle)
 }
 
-/// Logs "Fight: <name>!" and starts world fight `fight` (`begin_fight`).
+/// FZ4 (PK3 3.1, PR7-11): the choice a Living Martyr with a spent fuse needs before its next deployment.
+#[derive(Debug, Clone)]
+pub enum FuseAct {
+    /// `roster::retire`: the member departs `retired` (gear to the stash); the fight then starts without it.
+    Retire,
+    /// `roster::last_stand`: the member deploys with its template's `last_passive` and dies at the battle's settle.
+    LastStand,
+}
+
+/// FZ4 (PK3 3.1, PR7-11): the Retire / Last Stand prompt `try_fight` opens beside BK6's `party_min` refusal when
+/// `roster::fuse_refusal` fires: the Martyr's portrait (`roster::portrait_of` through `hub::member_portrait`), the
+/// refusal text and its fuse, and the two choices; either one goes on to the fight (`fight_now`, which asks again for
+/// the next spent Martyr; the story stage runs its step again instead). It opens only for a fight that would start
+/// (`battle::start_refusal` first), and refuses a Retire that fight would then refuse. No way back: the deployment
+/// waits on the choice.
+pub struct FusePrompt {
+    fight: Dict,
+    runner: String,
+    member: String,
+    /// The prompt starts the fight after the choice (`begin_fight`); false for the story stage, which runs its fight
+    /// step again when the prompt closes (`try_story_fight`).
+    starts: bool,
+    /// A refused choice's reason (a closed roster refuses Retire, and so does a Retire the fight's `party_min` refuses).
+    message: String,
+    faces: crate::portraits::Faces,
+    w: Vec<Widget<FuseAct>>,
+}
+
+/// The prompt's frame and its portrait side.
+const FUSE_BOX: (i32, i32) = (320, 132);
+const FUSE_PORTRAIT: i32 = 72;
+
+impl FusePrompt {
+    pub fn new(fight: &Dict, runner: &str, member: &str, starts: bool) -> Self {
+        Self { fight: fight.clone(), runner: runner.to_string(), member: member.to_string(), starts, message: String::new(), faces: Default::default(), w: Vec::new() }
+    }
+
+    /// Why member `self.member` can't retire for this fight ("" = it can): the roster's refusal, or the fight's start
+    /// refusal without it (BK6's `party_min`, no active member left), tried on a copy of the game.
+    fn retire_refusal(&self, cx: &Cx) -> String {
+        let d = &cx.data;
+        let mut trial = cx.gs().clone();
+        if let Err(e) = emberwake_world::roster::retire(d, &mut trial, &self.member) {
+            return e;
+        }
+        let why = emberwake_world::battle::start_refusal(d, &trial, &s(&self.fight, "encounter"));
+        if why.is_empty() {
+            return why;
+        }
+        let name = cx.gs().party.member(&self.member).map(|m| emberwake_world::progression::display_name(d, m)).unwrap_or_default();
+        format!("{name} can't retire before this fight: {why}")
+    }
+
+    fn act(&mut self, cx: &mut Cx, a: FuseAct) {
+        let d = cx.data.clone();
+        let name = cx.gs().party.member(&self.member).map(|m| emberwake_world::progression::display_name(&d, m)).unwrap_or_default();
+        let done = match a {
+            FuseAct::Retire => match self.retire_refusal(cx) {
+                why if !why.is_empty() => Err(why),
+                _ => emberwake_world::roster::retire(&d, cx.gs_mut(), &self.member).map(|_| format!("{name} retires; the fuse is spent.")),
+            },
+            FuseAct::LastStand => emberwake_world::roster::last_stand(&d, cx.gs_mut(), &self.member).map(|()| format!("{name} goes on a last stand.")),
+        };
+        match done {
+            Err(e) => self.message = e,
+            Ok(line) => {
+                cx.log(line);
+                cx.nav.push(Nav::Pop);
+                if self.starts {
+                    fight_now(cx, &self.fight, &self.runner);
+                }
+            }
+        }
+    }
+}
+
+impl Screen<GameCx> for FusePrompt {
+    fn id(&self) -> &'static str {
+        "fuse_prompt"
+    }
+    fn overlay(&self) -> bool {
+        true
+    }
+    fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        let d = cx.data.clone();
+        let gs = cx.gs().clone();
+        let mut ui: Ui<FuseAct> = Ui::new(g, mouse, live);
+        ui.p.fill(Rect::new(0, 0, W, H), th().scrim);
+        let r = Rect::new((W - FUSE_BOX.0) / 2, (H - FUSE_BOX.1) / 2, FUSE_BOX.0, FUSE_BOX.1);
+        ui.frame(r, "The fuse is spent", false);
+        let Some(m) = gs.party.member(&self.member) else {
+            self.w = ui.widgets;
+            return;
+        };
+        self.faces.begin();
+        let pr = Rect::new(r.x + 10, r.y + 24, FUSE_PORTRAIT, FUSE_PORTRAIT);
+        ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
+        let (who, look) = crate::hub::member_portrait(&d, &gs, m);
+        self.faces.draw(&mut ui.p, cx, &who, &look, "roster", pr);
+        let name = emberwake_world::progression::display_name(&d, m);
+        ui.push("fuse.portrait", "portrait", name.clone(), pr, true, false, None, Vec::new());
+        let tx = (pr.x + pr.w + 10) as f32;
+        let tw = (r.x + r.w - 10) as f32 - tx;
+        ui.p.text_fit(tx, (r.y + 30) as f32, &name, BODY, tw, th().text);
+        let why = emberwake_world::roster::fuse_refusal(&d, &gs);
+        let mut y = (r.y + 46) as f32;
+        for line in ui.p.wrap(&why, SMALL, tw) {
+            ui.p.text(tx, y, &line, SMALL, th().dim);
+            y += 12.0;
+        }
+        if let Some(def) = emberwake_world::roster::fuse_def(&d, m) {
+            ui.p.text(tx, y + 4.0, &format!("Fuse {} of {}", emberwake_world::roster::fuse_value(&d, m, gs.time), def.max), SMALL, th().text);
+        }
+        if !self.message.is_empty() {
+            ui.p.text_fit(tx, (r.y + r.h - 40) as f32, &self.message, SMALL, tw, th().foe);
+        }
+        let by = r.y + r.h - 26;
+        ui.button_tip("fuse.retire", Rect::new(r.x + r.w - 190, by, 86, 18), "Retire", FuseAct::Retire, true, tip("Retire", "They leave the cell alive; their gear goes to the stash."));
+        ui.button_tip("fuse.last_stand", Rect::new(r.x + r.w - 96, by, 86, 18), "Last Stand", FuseAct::LastStand, true, tip("Last Stand", "They fight once more, hardened, and die when the battle ends."));
+        self.faces.tick();
+        self.w = ui.widgets;
+    }
+    fn back(&mut self, _cx: &mut Cx) {}
+    fn state(&self, cx: &Cx) -> Value {
+        let d = &cx.data;
+        let m = cx.gs().party.member(&self.member);
+        let portrait = m.map(|m| emberwake_world::roster::portrait_of(d, m)).unwrap_or_default();
+        json!({"member": self.member, "portrait": portrait, "refusal": emberwake_world::roster::fuse_refusal(d, cx.gs()), "message": self.message,
+               "encounter": s(&self.fight, "encounter")})
+    }
+    widget_plumbing!();
+}
+
+/// Logs "Fight: <name>!" and starts world fight `fight` (`begin_fight`; PR7-11: the log waits while a spent fuse's
+/// prompt opens first).
 pub fn fight_now(cx: &mut Cx, fight: &Dict, runner: &str) {
     let name = s_or(cx.data.resolve(&cx.gs().world_id, "encounters", &s(fight, "encounter")), "name", "Enemies");
-    cx.log(format!("Fight: {name}!"));
+    // PR7-11: not while a spent fuse's prompt comes first (it logs this when the choice starts the fight)
+    if emberwake_world::roster::fuse_choices(&cx.data, cx.gs()).is_empty() {
+        cx.log(format!("Fight: {name}!"));
+    }
     begin_fight(cx, fight, runner);
 }
 
@@ -6891,5 +7059,188 @@ mod ground_tests {
             assert!(has_badge_near(&map, &g, (26, 26)), "indoor NPC badge visible when roof is faded");
             let _ = std::fs::remove_dir_all(&root);
         }
+    }
+}
+
+/// PR7-11 (FZ4, PK3 3.1): the Retire / Last Stand prompt on a scratch Martyr (a test-only recruit template in the
+/// played world; no shipped id is written).
+#[cfg(test)]
+mod fuse_prompt_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+    use emberwake_world::roster;
+
+    const TEMPLATE: &str = "zz_martyr";
+    const ART: &str = "portraits/common/zz_martyr.png";
+
+    /// A debug game whose first active member is a Living Martyr of `TEMPLATE` (a fuse of max 1, one deployment
+    /// made, so it is spent; its last passive the catalog's first passive), a second active member beside it, the
+    /// roster open: (cx, member, last passive, a fight of the world's first encounter).
+    fn martyr_cx() -> (Cx, String, String, Dict) {
+        let mut cx = game_cx();
+        let world = cx.gs().world_id.clone();
+        let last = cx.data.cat.passives.keys().next().cloned().expect("a catalog passive");
+        let encounter = cx.data.catalogs.own_entries(&world, "encounters").first().map(|e| s(e, "id")).expect("an encounter");
+        let row = json!({"id": TEMPLATE, "name": "Martyr", "class_id": "", "base_units": [], "names": ["Zed"], "art": ART,
+                         "fuse": {"per_deploy": 1, "stasis_days": 7, "max": 1, "tiers": [], "last_passive": last},
+                         "_world": world, "_qid": format!("{world}:{TEMPLATE}")});
+        let data = std::sync::Arc::get_mut(&mut cx.app.data).expect("this test's own data");
+        data.catalogs.worlds.get_mut(&world).expect("the world").own.entry("recruits".into()).or_default().push(json::dict(&row).clone());
+        cx.gs_mut().party.roster.manifest.open_flag = String::new();
+        let member = cx.gs().party.active_members().first().map(|m| m.id.clone()).expect("an active member");
+        // a second active member (a copy of the first under a test id), so a Retire leaves someone to fight
+        let party = &mut cx.gs_mut().party;
+        let mut extra = party.member(&member).unwrap().clone();
+        extra.id = "zz_second".into();
+        party.members.push(extra);
+        party.active_ids = vec![member.clone(), "zz_second".into()];
+        party.max_active = party.max_active.max(2);
+        make_martyr(&mut cx, &member);
+        let fight = json::dict(&json!({"encounter": encounter, "source": "test"})).clone();
+        (cx, member, last, fight)
+    }
+
+    /// Member `id` becomes a Martyr of `TEMPLATE` with its fuse spent (one deployment of max 1).
+    fn make_martyr(cx: &mut Cx, id: &str) {
+        let world = cx.gs().world_id.clone();
+        let time = cx.gs().time;
+        let m = cx.gs_mut().party.member_mut(id).expect("a member");
+        m.template = format!("{world}:{TEMPLATE}");
+        m.fuse = Some(emberwake_world::state::MartyrFuse { deploys: 1, since: time, ..Default::default() });
+    }
+
+    /// Sets the `party_min` of `fight`'s encounter (the played world's own row) to `n`.
+    fn set_party_min(cx: &mut Cx, fight: &Dict, n: usize) {
+        let world = cx.gs().world_id.clone();
+        let id = s(fight, "encounter");
+        let data = std::sync::Arc::get_mut(&mut cx.app.data).expect("this test's own data");
+        let rows = data.catalogs.worlds.get_mut(&world).unwrap().own.get_mut("encounters").unwrap();
+        rows.iter_mut().find(|e| s(e, "id") == id).expect("the encounter").insert("party_min".into(), json!(n));
+    }
+
+    fn actives(cx: &Cx) -> usize {
+        cx.gs().party.active_members().len()
+    }
+
+    /// The screen the last navigation pushed (its id; "" for none).
+    fn pushed(cx: &Cx) -> String {
+        cx.nav.iter().rev().find_map(|n| match n {
+            Nav::Push(s) => Some(s.id().to_string()),
+            _ => None,
+        }).unwrap_or_default()
+    }
+
+    /// Opens the prompt as a fight start does and draws it once: (the prompt, the texts drawn).
+    fn opened(cx: &mut Cx, fight: &Dict) -> (Box<dyn Screen<GameCx>>, Vec<String>) {
+        try_fight(cx, fight, "map").expect("the start opens the prompt");
+        let Some(Nav::Push(mut prompt)) = cx.nav.pop() else { panic!("the prompt is pushed") };
+        cx.nav.clear();
+        let mut g = gfx();
+        let texts = frame(prompt.as_mut(), cx, &mut g, 1.0).into_iter().map(|t| t.text).collect();
+        (prompt, texts)
+    }
+
+    #[test]
+    fn a_spent_fuse_opens_the_prompt_with_the_martyr_portrait_and_both_choices() {
+        let (mut cx, member, _, fight) = martyr_cx();
+        let why = roster::fuse_refusal(&cx.data, cx.gs());
+        assert!(!why.is_empty(), "the scratch Martyr's fuse is spent");
+        // the kit's battle start refuses with the same reason (a headless runner), the screen asks instead
+        let d = cx.data.clone();
+        assert_eq!(emberwake_world::battle::begin_fight(&d, &mut cx.gs().clone(), &s(&fight, "encounter")).err(), Some(why.clone()));
+        let (prompt, texts) = opened(&mut cx, &fight);
+        assert_eq!(prompt.id(), "fuse_prompt");
+        let state = prompt.state(&cx);
+        assert_eq!((state["member"].as_str(), state["portrait"].as_str(), state["refusal"].as_str()), (Some(member.as_str()), Some(ART), Some(why.as_str())));
+        let ids: Vec<String> = prompt.widgets().iter().map(|w| s(json::dict(w), "id")).collect();
+        for id in ["fuse.portrait", "fuse.retire", "fuse.last_stand"] {
+            assert!(ids.iter().any(|w| w == id), "{id} in {ids:?}");
+        }
+        let first_word = why.split_whitespace().next().unwrap();
+        assert!(texts.iter().any(|t| t.contains(first_word)) && texts.iter().any(|t| t == "Retire") && texts.iter().any(|t| t == "Last Stand"), "{texts:?}");
+        // the portrait is the template's art under the member's name
+        let m = cx.gs().party.member(&member).unwrap().clone();
+        let (who, _) = crate::hub::member_portrait(&cx.data, cx.gs(), &m);
+        assert_eq!((who.file.as_str(), who.key.clone()), (ART, format!("member:{member}")));
+    }
+
+    #[test]
+    fn last_stand_deploys_with_the_last_passive_and_the_fight_goes_on() {
+        let (mut cx, member, last, fight) = martyr_cx();
+        let (mut prompt, _) = opened(&mut cx, &fight);
+        prompt.click_id(&mut cx, "fuse.last_stand").expect("the button");
+        let m = cx.gs().party.member(&member).expect("still a member until the settle");
+        assert!(m.fuse.as_ref().is_some_and(|f| f.last_stand));
+        assert!(roster::fuse_passives(&cx.data, m).contains(&last), "the last passive applies");
+        assert!(roster::fuse_refusal(&cx.data, cx.gs()).is_empty());
+        assert!(matches!(cx.nav.first(), Some(Nav::Pop)), "the prompt closes");
+        assert_ne!(pushed(&cx), "fuse_prompt", "the fight starts, no second prompt");
+    }
+
+    #[test]
+    fn retire_departs_the_martyr_and_a_closed_roster_keeps_the_prompt() {
+        let (mut cx, member, _, fight) = martyr_cx();
+        let (mut prompt, _) = opened(&mut cx, &fight);
+        // a closed roster refuses Retire: the reason shows, the prompt stays
+        let open = cx.gs().party.roster.manifest.open_flag.clone();
+        cx.gs_mut().party.roster.manifest.open_flag = "zz_closed".into();
+        prompt.click_id(&mut cx, "fuse.retire").expect("the button");
+        assert_eq!(prompt.state(&cx)["message"].as_str(), Some(roster::CLOSED_TEXT));
+        assert!(cx.nav.is_empty() && cx.gs().party.member(&member).is_some());
+        cx.gs_mut().party.roster.manifest.open_flag = open;
+        prompt.click_id(&mut cx, "fuse.retire").expect("the button");
+        assert!(cx.gs().party.member(&member).is_none());
+        assert_eq!(cx.gs().party.departed_of(&member).map(|r| r.life.as_str()), Some(roster::RETIRED));
+        assert!(matches!(cx.nav.first(), Some(Nav::Pop)));
+    }
+
+    #[test]
+    fn a_fight_refused_anyway_asks_nothing() {
+        // the start's other refusals come first: party_min above the active members refuses before any choice
+        let (mut cx, member, _, fight) = martyr_cx();
+        let n = actives(&cx);
+        set_party_min(&mut cx, &fight, n + 1);
+        let why = emberwake_world::battle::start_refusal(&cx.data, cx.gs(), &s(&fight, "encounter"));
+        assert!(!why.is_empty());
+        assert_eq!(try_fight(&mut cx, &fight, "map").err(), Some(why));
+        assert!(cx.nav.is_empty(), "no prompt for a refused fight");
+        assert!(cx.gs().party.member(&member).is_some_and(|m| m.fuse.as_ref().is_some_and(|f| !f.last_stand)));
+    }
+
+    #[test]
+    fn retire_is_refused_when_the_fight_would_then_be_short_of_heroes() {
+        // party_min equal to the active members: retiring one would refuse the fight, so the prompt refuses Retire
+        let (mut cx, member, _, fight) = martyr_cx();
+        let n = actives(&cx);
+        set_party_min(&mut cx, &fight, n);
+        let (mut prompt, _) = opened(&mut cx, &fight);
+        prompt.click_id(&mut cx, "fuse.retire").expect("the button");
+        let msg = prompt.state(&cx)["message"].as_str().unwrap_or("").to_string();
+        assert!(msg.contains("can't retire"), "{msg}");
+        assert!(cx.nav.is_empty() && cx.gs().party.member(&member).is_some(), "the prompt stays, nobody leaves");
+        // Last Stand still goes on
+        prompt.click_id(&mut cx, "fuse.last_stand").expect("the button");
+        assert!(matches!(cx.nav.first(), Some(Nav::Pop)));
+        assert_ne!(pushed(&cx), "fuse_prompt");
+    }
+
+    #[test]
+    fn two_spent_martyrs_prompt_one_after_another() {
+        let (mut cx, first, _, fight) = martyr_cx();
+        let second = cx.gs().party.active_members().get(1).map(|m| m.id.clone()).expect("the test's second active member");
+        make_martyr(&mut cx, &second);
+        let (mut prompt, _) = opened(&mut cx, &fight);
+        assert_eq!(prompt.state(&cx)["member"].as_str(), Some(first.as_str()));
+        prompt.click_id(&mut cx, "fuse.last_stand").expect("the button");
+        let Some(Nav::Push(mut next)) = cx.nav.pop() else { panic!("the next prompt is pushed") };
+        assert!(matches!(cx.nav.as_slice(), [Nav::Pop]));
+        cx.nav.clear();
+        assert_eq!((next.id(), next.state(&cx)["member"].as_str()), ("fuse_prompt", Some(second.as_str())));
+        assert!(!cx.log.iter().any(|l| l.starts_with("Fight: ")), "no fight log while a prompt is still open");
+        frame(next.as_mut(), &mut cx, &mut gfx(), 1.0);
+        next.click_id(&mut cx, "fuse.retire").expect("the button");
+        assert!(cx.gs().party.member(&second).is_none());
+        assert_ne!(pushed(&cx), "fuse_prompt", "both chosen: the fight starts");
+        assert!(cx.log.iter().any(|l| l.starts_with("Fight: ")));
     }
 }

@@ -15,6 +15,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `WEBFIX1` (playtest, user 2026-11-17) | done | `develop` (squash `WEBFIX1`) | Web canvas fills page/fullscreen, web Fullscreen setting works; `FB-287` |
 | `PR7-2` (`SPEC-FIX-N1N2`) | done | `develop` (squash `PR7-2`) | Sensory Rot on ranged hits; Cold Steel per-family rite + masterwork; `FB-288` |
 | `PR7-9` (`LORE-DATA1`) | done | `develop` (squash `PR7-9`) | Seed `pr7_9.json`: Vanguard blurb and `notched_billhook` say one-handed polearm; `enc_evt_05` (the only `flag_skills` in `sunk_ward`) no longer grants `marrow_lash`; `dlg_int_dose` flags kept; test `sunk_ward_act1_marrow.rs`; PR5-44 Interlude grant test in `act1_story.rs` rewritten to assert no grant; 0 golden diffs |
+| `PR7-11` (`MARTYR-FUSE1`) | done | `develop` (squash `PR7-11`) | Seed `pr7_11.json` (`martyr_last_stand`); `begin_fight` refuses on a spent fuse; Retire / Last Stand prompt `region::FusePrompt`; closes `FB-283`; `FB-295` |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -125,6 +126,14 @@ FB-01 to FB-281 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Status**: open
 - **Finding**: Seeded `temper_steady` (+6 max Poise), `temper_wary` (+1 PERC), `temper_quiet` (+1 KNOW), `temper_reckless` (crit +5, armor -1) via `seeds/pr7_10.json` and filled the cohort pools without Grim (levy: steady, wary; bolt: wary, steady, quiet; flue: reckless, quiet, wary; novice: steady, wary; breaker: reckless, steady; vat: quiet, reckless, steady). Un-ignored `sunk_ward_cohort_templates_draw_from_slotless_temperament_passives`; new `each_rescued_cohort_recruit_carries_one_temperament_from_its_pool` (8/8 pass). `temper_grim` "20% resistance to Shaken" cannot be written: Shaken is a Composure meter band (`unit_meters.json` band `shaken`, MORALE1), not a status, and `resist` takes a status id.
 - **Recommendation**: Option A (recommended, smallest): Grim resists a real status (e.g. `weaken` 20%). Option B: a kit hook that slows Composure loss or resists the `shaken` band (a small logic row). Then Build seeds `temper_grim` and adds it to the levy, novice and breaker pools.
+
+### FB-295: PR7-11 Martyr fuse landed; four guesses and docs delta
+
+- **Spec**: `READY.md` §1 `PR7-11`, `PK3_ROSTER_LIFECYCLE.md` §3.1, answers `FB-283` (@squash `PR7-11`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: The kit fuse already matched the row (`per_deploy 1`, `stasis_days 7`, `max 6`, cumulative tiers). No new hook: Last Stand is `skill_potency` group `attack` `0.25`, `stat` armor `4`, `resist` weaken and stun `100`; death at battle end is the existing `roster::last_stand` + `settle_fuses`. The one gap fixed: `battle::begin_fight` now refuses with `roster::fuse_refusal` while an active member's fuse is spent and no choice was made. Guesses: (1) headless fight starts now get that refusal (no shipped template has a fuse until `PR6-12`); (2) the prompt has no cancel/Esc, Last Stand is always offered; (3) `hub::member_portrait` shows the template art for every generated member on every portrait screen, per the `portrait_of` doc; (4) "+25% damage" is potency on every ATTACK skill incl. the basic attack.
+- **Recommendation**: Confirm the four guesses. Docs delta: `kits/rpg/README.md` rpgkit_world roster: "`battle::begin_fight` refuses with `roster::fuse_refusal` while an active Living Martyr's fuse is spent and no choice has been made; the game asks Retire / Last Stand first." `GAME_BRIEF.md` roster: "Living Martyr fuse: per deploy 1, stasis 7 days, max 6, cumulative tiers `calcify_2` at 2 and `calcify_3` at 4; at max the next deployment opens the Retire / Last Stand prompt; Last Stand deploys with `martyr_last_stand` (+25% attack potency, +4 Armor, immune to Weaken and Stun) and the member dies at the settle." `kits/rpg/README.md` also: "`battle::start_refusal(d, gs, encounter_ref)`: the start's refusals without the fuse (unknown encounter, no active member, `party_min`); screens read it before the Living Martyr choice." GUI note: `region::try_fight` returns `FightStart` (`Battle` / `FusePrompt`); the story stage uses `try_story_fight`, whose prompt closes and lets the stage run its fight step again; Retire is refused on the prompt when the fight would then be refused. Note for `PR6-12`: headless walkthroughs that recruit a fused Martyr must call `roster::last_stand` or `roster::retire` once the fuse is spent, or `begin_fight` refuses. Mark `FB-283` answered by this row.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
