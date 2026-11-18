@@ -62,6 +62,8 @@
     "dojo_idle": "#1e232dc8",
     "dojo_pick": "#2c221ec8",
     "editor_pane": "#0e1016",
+    "epilogue_card": "#161820",
+    "epilogue_fill": "#0c0e14",
     "foe_chip": "#2c1418e6",
     "foe_hot": "#2c1418",
     "gallery_stage": "#0e1016",

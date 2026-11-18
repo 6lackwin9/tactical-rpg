@@ -22,6 +22,7 @@ mod battle;
 mod board;
 #[cfg(feature = "dev_tools")]
 mod dojo;
+mod epilogue;
 mod facility;
 #[cfg(feature = "dev_tools")]
 mod forge;

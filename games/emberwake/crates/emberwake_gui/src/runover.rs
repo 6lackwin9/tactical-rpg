@@ -32,6 +32,11 @@ pub const ASK_REST: &str = "campaign.rest";
 /// The answer tag of the ask before a dialogue choice whose `rest` would end the run (the region map takes it back).
 pub const ASK_TALK_REST: &str = "campaign.talk_rest";
 
+/// PR6-11: whether the game in play's run is over because the campaign was completed (an end of kind `ending`).
+pub fn completed(cx: &Cx) -> bool {
+    cx.game.as_ref().and_then(|g| g.gs.campaign.as_ref()).and_then(|c| c.over.as_ref()).is_some_and(|o| o.completed())
+}
+
 /// Whether the game in play's run is over (F1).
 pub fn is_over(cx: &Cx) -> bool {
     cx.game.as_ref().is_some_and(|g| !campaign::save_refusal(&g.gs).is_empty())
@@ -148,8 +153,9 @@ fn act_save(cx: &mut Cx, key: &str) {
 }
 
 /// A map screen's tick with nothing of its own open (as `story::map_tick`): once the run is over the run-over screen
-/// replaces every screen (F3; warnings still waiting are dropped, their lines are in the log); else the oldest waiting
-/// notice shows (W1). True when it showed something.
+/// replaces every screen (F3; warnings still waiting are dropped, their lines are in the log), or the epilogue when the
+/// campaign was completed (PR6-11, an end of kind `ending`); else the oldest waiting notice shows (W1). True when it
+/// showed something.
 pub fn map_tick(cx: &mut Cx) -> bool {
     if !cx.has_game() || cx.busy() || !cx.nav.is_empty() {
         return false;
@@ -158,8 +164,8 @@ pub fn map_tick(cx: &mut Cx) -> bool {
         if let Some(g) = cx.game.as_mut() {
             g.notices.clear();
         }
-        let screen = RunOverScreen::new(cx);
-        cx.nav.push(Nav::Reset(Box::new(screen)));
+        let screen: Box<dyn Screen<GameCx>> = if completed(cx) { Box::new(crate::epilogue::EpilogueScreen::new(cx)) } else { Box::new(RunOverScreen::new(cx)) };
+        cx.nav.push(Nav::Reset(screen));
         return true;
     }
     let next = cx.game.as_mut().and_then(|g| (!g.notices.is_empty()).then(|| g.notices.remove(0)));
@@ -296,7 +302,7 @@ fn trip_ask_of(ends: Vec<Value>) -> Option<String> {
 }
 
 /// The wrapped lines of `text` in `w` logical px at `size` (none for "").
-fn lines(ui: &mut Ui<impl Clone>, text: &str, size: f32, w: f32) -> Vec<String> {
+pub(crate) fn lines(ui: &mut Ui<impl Clone>, text: &str, size: f32, w: f32) -> Vec<String> {
     if text.is_empty() {
         Vec::new()
     } else {
@@ -305,7 +311,7 @@ fn lines(ui: &mut Ui<impl Clone>, text: &str, size: f32, w: f32) -> Vec<String> 
 }
 
 /// A button's width for `label` at the text size now (at least 50 px).
-fn button_w(ui: &mut Ui<impl Clone>, label: &str) -> i32 {
+pub(crate) fn button_w(ui: &mut Ui<impl Clone>, label: &str) -> i32 {
     ((ui.p.text_w(label, BODY) + 16.0).ceil() as i32).max(50)
 }
 
@@ -454,18 +460,24 @@ impl RunOverScreen {
     /// Plays the end card's vignette over the screen once (nothing when it has no card to show).
     fn play_card(&mut self, cx: &mut Cx) {
         self.played = true;
-        if self.card.is_empty() || !cx.has_game() || !cx.nav.is_empty() {
-            return;
-        }
-        let d = cx.data.clone();
-        let scene = emberwake_world::story::scene(&d, cx.gs(), &self.card);
-        if json::aget(&scene, "cards").is_empty() {
-            return;
-        }
-        let reel = crate::story::reel_of(&d, &cx.gs().world_id, &scene);
-        let screen = crate::story::vignette_screen(cx, reel, |cx: &mut Cx, _| cx.nav.push(Nav::Pop));
-        cx.nav.push(Nav::Push(Box::new(screen)));
+        play_card(cx, &self.card);
     }
+}
+
+/// Plays vignette `card` over the screen on top (nothing when it is "", has no cards, no game is on or something is
+/// opening; the run-over and epilogue screens' card).
+pub(crate) fn play_card(cx: &mut Cx, card: &str) {
+    if card.is_empty() || !cx.has_game() || !cx.nav.is_empty() {
+        return;
+    }
+    let d = cx.data.clone();
+    let scene = emberwake_world::story::scene(&d, cx.gs(), card);
+    if json::aget(&scene, "cards").is_empty() {
+        return;
+    }
+    let reel = crate::story::reel_of(&d, &cx.gs().world_id, &scene);
+    let screen = crate::story::vignette_screen(cx, reel, |cx: &mut Cx, _| cx.nav.push(Nav::Pop));
+    cx.nav.push(Nav::Push(Box::new(screen)));
 }
 
 /// The run-over card's title.
@@ -562,6 +574,7 @@ impl Screen<GameCx> for RunOverScreen {
 pub(crate) mod tests {
     use super::*;
     use crate::hud::hud_tests::{frame, gfx, rect};
+    use crate::epilogue::FATES_PER_PAGE;
     use crate::screens::Game;
     use crate::story::tests::story_cx;
     use aegis_ui::painter::TextRec;
@@ -1223,5 +1236,143 @@ pub(crate) mod tests {
         assert_eq!(s.w.units.iter().map(|u| u.ap).collect::<Vec<_>>(), want);
         assert_eq!(cx.log.iter().filter(|l| **l == mods.note).count(), 1, "logged once");
         assert!(starved.message.ends_with(&format!("{}.", mods.note)), "{}", starved.message);
+    }
+
+    // ---- PR6-11: the epilogue (the finale branch) ----
+
+    /// The camp world with two endings (`gated`, needing a flag; `fallback` last, with an art vignette, paragraphs,
+    /// outcome lines and a fate template) and `departed` departed members besides the hero.
+    fn ending_cx(paragraph: &str, outcome: &str, fate: &str, departed: usize) -> Cx {
+        let (p, o, f) = (paragraph.to_string(), outcome.to_string(), fate.to_string());
+        let d = data_edit(Value::Null, move |worlds, _| {
+            let own = &mut worlds["camp"]["own"];
+            own["vignettes"].as_array_mut().unwrap().extend(json::arr(&with_ids("camp", json!([{"id": "finale", "name": "Finale", "cards": [{"style": "title", "title": "Finale"}]}]))).iter().cloned());
+            own["endings"] = with_ids("camp", json!([
+                {"id": "gated", "name": "Gated", "requires_flags": [{"key": "camp.never", "value": true}], "epilogue_paragraphs": ["Never."]},
+                {"id": "fallback", "name": "Fallback", "title": "The Long Watch", "tone": "warn", "art": "finale", "epilogue_paragraphs": [p.clone(), p],
+                 "world_outcomes": [{"flag": "took_job", "text_if_true": o.clone(), "text_if_false": o}],
+                 "member_fates_template": {"member": f.clone(), "departed": f, "causes": {}}}
+            ]));
+        });
+        let mut cx = camp_cx_in(d, 0, 30);
+        let hero = cx.gs().party.members[0].clone();
+        for i in 0..departed {
+            let mut m = hero.clone();
+            m.id = format!("gone_{i}");
+            cx.gs_mut().party.departed.push(emberwake_world::state::Departed { member: m, life: "dead".into(), cause: "story".into(), encounter: String::new(), day: 1, keepsake: String::new() });
+        }
+        cx
+    }
+
+    fn finish(cx: &mut Cx) {
+        let d = cx.data.clone();
+        campaign::apply_effects(&d, cx.gs_mut(), &[json::dict(&json!({"effect": "end", "kind": "ending"})).clone()], &mut Vec::new());
+    }
+
+    /// PR6-11 (section 4): a completed campaign opens the epilogue instead of the run-over screen: the ending's art plays
+    /// once, then its pages (each paragraph, the outcomes, the fate cards four to a page) with Back and Next; the last
+    /// page offers Load a save and Main menu; Esc does nothing and the save menu refuses every slot (F3 still holds).
+    /// A lost run still opens the run-over screen. With `AEGIS_REVIEW_DIR` set it writes the paragraph and the fates
+    /// pages at 1280 x 720 as `epilogue_paragraph.png` and `epilogue_fates.png` there.
+    #[test]
+    fn a_completed_campaign_opens_the_epilogue_and_keeps_the_save_refusal() {
+        let mut cx = ending_cx("The watch goes on.", "The job was done.", "{name} keeps watch.", 4);
+        finish(&mut cx);
+        assert!(is_over(&cx) && completed(&cx));
+        assert!(map_tick(&mut cx));
+        let (how, mut ep) = take_nav(&mut cx);
+        assert_eq!((how, ep.id()), ("reset", "epilogue"));
+        let st = ep.state(&cx);
+        let fates: usize = 5;
+        let pages = 2 + 1 + fates.div_ceil(FATES_PER_PAGE);
+        assert_eq!((st["ending"].clone(), st["title"].clone(), st["card"].clone(), st["pages"].clone()), (json!("fallback"), json!("The Long Watch"), json!("finale"), json!(pages)));
+        assert_eq!(st["outcomes"], json!(["The job was done."]));
+        assert_eq!(json::arr(&st["fates"]).len(), fates);
+        ep.tick(&mut cx);
+        let (how, card) = take_nav(&mut cx);
+        assert_eq!((how, card.id(), card.state(&cx)["reel"].clone()), ("push", "vignette", json!("camp:finale")), "the art plays first");
+        ep.tick(&mut cx);
+        assert!(cx.nav.is_empty(), "once");
+        let mut g = gfx();
+        let ids = |ep: &mut Box<dyn Screen<GameCx>>, cx: &mut Cx, g: &mut Gfx| -> Vec<(String, bool)> {
+            frame(ep.as_mut(), cx, g, 1.0);
+            ep.widgets().iter().map(|w| (s(json::dict(w), "id"), json::b(json::dict(w), "enabled", false))).collect()
+        };
+        assert_eq!(ids(&mut ep, &mut cx, &mut g), [("epilogue.back".to_string(), false), ("epilogue.next".to_string(), true)]);
+        let review = std::env::var("AEGIS_REVIEW_DIR").ok();
+        let shot = |ep: &mut Box<dyn Screen<GameCx>>, cx: &mut Cx, name: &str| {
+            if let Some(out) = &review {
+                let mut big = gfx();
+                big.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+                big.view = aegis_ui::painter::View::fit(1280, 720);
+                ep.draw(cx, &mut big, (-500, -500), true);
+                let file = std::fs::File::create(std::path::Path::new(out).join(name)).unwrap();
+                let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
+                enc.set_color(png::ColorType::Rgba);
+                enc.set_depth(png::BitDepth::Eight);
+                enc.write_header().unwrap().write_image_data(&big.canvas.px).unwrap();
+            }
+        };
+        shot(&mut ep, &mut cx, "epilogue_paragraph.png");
+        let kinds: Vec<Value> = (0..pages)
+            .map(|i| {
+                let k = ep.state(&cx)["page_kind"].clone();
+                if i == 3 {
+                    shot(&mut ep, &mut cx, "epilogue_fates.png");
+                }
+                if i + 1 < pages {
+                    ids(&mut ep, &mut cx, &mut g);
+                    ep.click_id(&mut cx, "epilogue.next").expect("next");
+                }
+                k
+            })
+            .collect();
+        assert_eq!(kinds, [json!("paragraph"), json!("paragraph"), json!("outcomes"), json!("fates"), json!("fates")]);
+        assert_eq!(ids(&mut ep, &mut cx, &mut g), [("epilogue.back".to_string(), true), ("epilogue.load_save".to_string(), true), ("epilogue.main_menu".to_string(), true)]);
+        ep.key(&mut cx, Key::Left);
+        assert_eq!(ep.state(&cx)["page"], json!(pages - 2), "Left goes back a page");
+        ep.key(&mut cx, Key::Right);
+        ep.back(&mut cx);
+        assert!(cx.nav.is_empty(), "F3: no way back into the run");
+        assert_eq!(campaign::save_refusal(cx.gs()), campaign::RUN_OVER_TEXT);
+        let mut slots = crate::menus::Slots::new(true);
+        frame(&mut slots, &mut cx, &mut g, 1.0);
+        assert!(slots.widgets().iter().filter(|w| s(json::dict(w), "id").starts_with("slot.") && s(json::dict(w), "kind") == "card").all(|w| !json::b(json::dict(w), "enabled", true)), "F3: no slot takes a save");
+        ids(&mut ep, &mut cx, &mut g);
+        ep.click_id(&mut cx, "epilogue.load_save").expect("load a save");
+        assert_eq!(take_nav(&mut cx).1.id(), "load_slots");
+        ep.click_id(&mut cx, "epilogue.main_menu").expect("main menu");
+        assert_eq!(take_nav(&mut cx).1.id(), "main_menu");
+        assert!(!cx.has_game());
+        // a lost run: the run-over screen
+        let mut cx = ending_cx("x", "y", "z", 0);
+        let d = cx.data.clone();
+        campaign::apply_effects(&d, cx.gs_mut(), &[json::dict(&json!({"effect": "end", "kind": "fail", "text": END_TEXT})).clone()], &mut Vec::new());
+        assert!(is_over(&cx) && !completed(&cx));
+        assert!(map_tick(&mut cx));
+        assert_eq!(take_nav(&mut cx).1.id(), "run_over");
+    }
+
+    /// PR6-11, TEXTFIT1: every epilogue page reads clean at every text size with the longest texts the checks allow
+    /// (a 600-character paragraph, a 200-character outcome line and fate line, four cards a page).
+    #[test]
+    fn every_epilogue_page_reads_clean_at_every_text_size() {
+        let word = |n: usize| "Ash and iron hold the low roads ".repeat(n / 32 + 1)[..n].trim_end().to_string();
+        let mut cx = ending_cx(&word(600), &word(200), &word(200), 4);
+        finish(&mut cx);
+        let mut ep = crate::epilogue::EpilogueScreen::new(&cx);
+        let pages = json::to_int(&ep.state(&cx)["pages"]) as usize;
+        for _ in 0..pages {
+            audit_clean(&mut ep, &mut cx);
+            frame(&mut ep, &mut cx, &mut gfx(), 1.0);
+            let _ = ep.click_id(&mut cx, "epilogue.next");
+        }
+        // the end with no ending row: the end's text on one page
+        let mut cx = camp_cx(0, 30);
+        let d = cx.data.clone();
+        campaign::apply_effects(&d, cx.gs_mut(), &[json::dict(&json!({"effect": "end", "kind": "ending", "text": END_TEXT})).clone()], &mut Vec::new());
+        let mut ep = crate::epilogue::EpilogueScreen::new(&cx);
+        assert_eq!((ep.state(&cx)["title"].clone(), ep.state(&cx)["pages"].clone()), (json!(crate::epilogue::DONE_TITLE), json!(1)));
+        audit_clean(&mut ep, &mut cx);
     }
 }
