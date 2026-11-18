@@ -2,6 +2,18 @@
 
 What only you can judge, with what to do. The planner keeps this current: new items go in when they land, and an item leaves when you've answered. Say "open the build" and the planner launches the latest one.
 
+## For the next session (Design keeps this list; updated 2026-11-18 23:45)
+
+Nothing major is parked yet. Provisional calls Design made while you were away, to confirm or change:
+
+- [ ] Enemy short names for the foe plates (`PR7-40`): Brawler, Berserker, Footman, Enforcer, Husk, Archer,
+  Crossbowman, Purifier, Shaman, Skirmisher (also the Tallow Dredger), Scout, Flagellant, Render-Beast, Ash-Crawler;
+  bosses by name.
+- [ ] Pacing (`PR7-42`): patrols every 40-60 steps, at most 2 per visit, no respawn until the next day; Cages offered
+  before The Sweep; Warded Tallow at the Candle-Maker for 5 Scrap; Make camp needs Tallow.
+- [ ] Bunks (`PR7-43`): the hall's plank floor under the bunks with low timber screens and a step; the class blanket
+  colours.
+
 ## Battle view: closes M1
 
 Scene Runner > Arena > `tl_flank`, with **Ruleset set to Timeline** on the Arena card (otherwise it may run on Classic, with no capsules or coloured strip). Plan a round, then confirm it.
