@@ -1,0 +1,14 @@
+{
+  "id": "__ID___start",
+  "title": "The new game: the menu, Start, the play screen, Esc back to the menu",
+  "steps": [
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
+    {"step": "shot", "name": "menu"},
+    {"step": "click", "id": "menu.start"},
+    {"step": "wait", "until": {"path": "screen", "eq": "play"}},
+    {"step": "assert", "until": {"path": "state.started", "eq": true}},
+    {"step": "shot", "name": "play"},
+    {"step": "key", "key": "esc"},
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}}
+  ]
+}

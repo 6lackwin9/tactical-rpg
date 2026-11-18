@@ -1,0 +1,28 @@
+[package]
+name = "__ID___game"
+version = "0.1.0"
+edition = "2021"
+
+# Made by `aegis new game __ID__`. Two programs: the game (`__ID__`) and the engine's command line for it
+# (`__ID___cli scenario run all`, `__ID___cli playtest start`), so the game program links no CLI code.
+[[bin]]
+name = "__ID__"
+path = "src/main.rs"
+
+[[bin]]
+name = "__ID___cli"
+path = "src/bin/__ID___cli.rs"
+
+[dependencies]
+aegis_core = { path = "../../../../engine/crates/aegis_core" }
+aegis_host = { path = "../../../../engine/crates/aegis_host" }
+aegis_content = { path = "../../../../engine/crates/aegis_content" }
+aegis_save = { path = "../../../../engine/crates/aegis_save" }
+aegis_layout = { path = "../../../../engine/crates/aegis_layout" }
+aegis_ui = { path = "../../../../engine/crates/aegis_ui" }
+aegis_cli = { path = "../../../../engine/crates/aegis_cli" }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

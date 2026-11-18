@@ -1,0 +1,11 @@
+{
+	"id": "__ID__",
+	"title": "__TITLE__",
+	"subtitle": "A new game on Aegis",
+	"version": "0.1.0",
+	"kit": "",
+	"engine": ">=0.1",
+	"worlds": [],
+	"start_worlds": [],
+	"references": []
+}
