@@ -4,7 +4,7 @@ What only you can judge, with what to do. The planner keeps this current: new it
 
 ## For the next session (Design keeps this list; updated 2026-11-18 23:45)
 
-Nothing major is parked yet. Provisional calls Design made while you were away, to confirm or change:
+Nothing major is parked yet. Mocks waiting for you, then provisional calls Design made while you were away, to confirm or change:
 
 - [ ] Enemy short names for the foe plates (`PR7-40`): Brawler, Berserker, Footman, Enforcer, Husk, Archer,
   Crossbowman, Purifier, Shaman, Skirmisher (also the Tallow Dredger), Scout, Flagellant, Render-Beast, Ash-Crawler;
@@ -13,6 +13,12 @@ Nothing major is parked yet. Provisional calls Design made while you were away, 
   before The Sweep; Warded Tallow at the Candle-Maker for 5 Scrap; Make camp needs Tallow.
 - [ ] Bunks (`PR7-43`): the hall's plank floor under the bunks with low timber screens and a step; the class blanket
   colours.
+- [ ] Mocks to sign off (images in the project files `art-ui/`; scripts on PR #67):
+  battle take 22, the boss fight (`battle_ux14/`, contract section 9); battle take 23, the full timeline view (T)
+  and playback controls; the screens for the victory report, story, character, shop, notice board and saves
+  (`screens_ai21/`). Build rows follow sign-off.
+- [ ] Gamepad on the PC (`FB-327`): repeat timing, dead zone, which button is Back (south Enter, east Back, west
+  Space, north Tab, bumpers page, Start Esc).
 
 ## Battle view: closes M1
 

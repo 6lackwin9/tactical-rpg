@@ -34,7 +34,7 @@ style rows `PR7-25` and `PR7-36`. A first step toward `ENGINE-8` (`KIT-UI1`).
 
 - US6. Each view-model ships a fixture (`<screen>.view.json`, sample values) so a layout can be previewed with no
   game running: a UI Gallery page draws any layout against its fixture; in a native debug build, layout files reload on
-  save. `aegis gallery shot <screen>` writes the PNG for review beside the HTML mock.
+  save. `ui_layout shot <game dir> <screen>` writes the PNG for review beside the HTML mock. Fixtures live in `ui/views/<screen>.view.json` over the asset layers (Build); layouts in `ui/layouts/` (Art/UI) (`FB-319`).
 - US7. HTML mocks in `tools/mock_ui/` stay the place to explore; a signed-off mock is turned into a layout file by
   Art/UI. Build does not port mocks once a screen is split.
 
