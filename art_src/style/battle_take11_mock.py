@@ -14,7 +14,7 @@ import battle_layout_mock as B  # noqa: E402
 
 ROOT = B.ROOT
 ST = ROOT / "kits/rpg/assets/statuses"
-HEAL = (110, 170, 90)
+HEAL = (128, 156, 86)   # light moss (theme moss HP token family, saturation <= 0.55; PR7-36 item 1)
 BUFF, DEBUFF = B.GOLD, (190, 70, 60)
 W, G = 54, 6
 
@@ -73,7 +73,7 @@ def tile(img, d, x, icon, blocks, ap, ghost=False, on=False, chips=()):
             d.rectangle((bx + W, 57, bx + W + G, 58), fill=c)
     cx = x + 3
     for st, kind in chips:
-        if st == "heal":                     # a heal: small green heart with a plus
+        if st == "heal":                     # a heal: small moss heart with a plus
             d.rectangle((cx, 5, cx + 15, 20), fill=B.SLATE, outline=HEAL)
             B.heart(d, cx + 2, 8, 11, HEAL)
             cx += 17
@@ -227,7 +227,7 @@ def plate(img, d, x, y, fc, name, hp, mx, gain=0, loss=0, chips=()):
     if gain:
         g = round(86 * gain / mx)
         e = x + 60 + round(86 * hp / mx)
-        d.rectangle((e, y + 30, e + g, y + 36), fill=(170, 220, 140))
+        d.rectangle((e, y + 30, e + g, y + 36), fill=(158, 178, 118))   # pale moss gain preview
         d.text((x + 120, y + 39), f"+{gain}", font=B.MONO, fill=HEAL)
     if loss:
         l = round(86 * loss / mx)
@@ -246,15 +246,15 @@ def panel_effects():
     s = strip([("arrow", 1, 1, False), ("bleeding_cut", 1, 2, False, False, (("bleed", "debuff"),)),
                ("shield_wall", 2, 2, False, True, (("fortify", "buff"),)), ("greater_mend", 1, 3, False, False, (("heal", "buff"),)),
                ("rally", 1, 1, False, False, (("haste", "buff"),))],
-              "Timeline: a tile carries a chip for each effect: green heart = heal, gold rim = buff, oxblood = debuff")
+              "Timeline: a tile carries a chip for each effect: moss heart = heal, gold rim = buff, oxblood = debuff")
     img.paste(s, (0, 0))
     y = s.height + 16
-    d.text((8, y), "Plates: a heal previews green on the HP bar; statuses as chips with turns; dashed = coming from a planned move",
+    d.text((8, y), "Plates: a heal previews light moss on the HP bar; statuses as chips with turns; dashed = coming from a planned move",
            font=B.SMALL, fill=B.PARCH)
     plate(img, d, 8, y + 22, face("kaelen", 48), "Kaelen", 180, 242, gain=36, chips=(("fortify", "buff", 2, True), ("haste", "buff", 1, False)))
     plate(img, d, 176, y + 22, face("vesper", 48), "Vesper", 150, 190, loss=22,
           chips=(("bleed", "debuff", 2, True), ("weaken", "debuff", 1, False)))
-    d.text((360, y + 30), "Kaelen: Mend in block 5 heals +36 (light green),", font=B.SMALL, fill=B.IRON_L)
+    d.text((360, y + 30), "Kaelen: Mend in block 5 heals +36 (light moss),", font=B.SMALL, fill=B.IRON_L)
     d.text((360, y + 48), "Shield Wall will give Fortify 2 (dashed: planned).", font=B.SMALL, fill=B.IRON_L)
     d.text((360, y + 72), "Vesper: a foe's bleed lands this round (dashed),", font=B.SMALL, fill=B.IRON_L)
     d.text((360, y + 90), "Weaken 1 is already on her (solid).", font=B.SMALL, fill=B.IRON_L)
