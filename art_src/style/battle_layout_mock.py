@@ -593,6 +593,118 @@ def mock6(shot: Image.Image) -> Image.Image:
     return img
 
 
+# take 7 (Tushar 2026-11-18 21:23): foe card = every planned move on the selected target with HP and poise damage,
+# then a total; incoming damage lives on the party plate and as impact marks on the timeline ruler, summed over all
+# foes; the foe list marks only the block where its hit lands
+IMPACT = (210, 70, 60)
+PLAN7 = [("arrow", 1, 1, None), ("pneumatic_hammer_strike", 3, 5, (34, 3)), ("pommel_strike", 1, 2, (12, 1)),
+         ("pommel_strike", 1, 2, (12, 1))]          # icon, blocks, AP, (HP dmg, poise pips) on the target
+HITS = {1: 14, 3: 8}                                 # foe impacts on Kaelen: block index -> HP
+
+
+def impact_mark(d, x, y, col=IMPACT):
+    """A small downward burst: a hit lands on you in this block."""
+    d.polygon([(x, y), (x + 8, y), (x + 4, y + 6)], fill=col)
+
+
+def mock7(shot: Image.Image) -> Image.Image:
+    img = mock3(shot)
+    d = ImageDraw.Draw(img)
+    stage = shot.crop((291, 112, 899, 492)).resize((912, 570), Image.NEAREST)
+    kae = shot.crop((20, 166, 84, 230))
+    foe_p = shot.crop((1044, 220, 1108, 284))
+    # timeline strip: the plan, the block ruler, impact marks over the blocks where you get hit
+    d.rectangle((196, 0, 890, 63), fill=BASALT)
+    W, G, x, sel = 54, 6, 196, 1
+    for i, (ic, blocks, ap, _) in enumerate(PLAN7):
+        w = blocks * W + (blocks - 1) * G
+        on = i == sel
+        d.rectangle((x, 3, x + w, 48), fill=SLATE, outline=GOLD if on else IRON, width=2 if on else 1)
+        t = slot_icon(ic, 30)
+        img.paste(t, (x + (w - 30) // 2, 6), t)
+        move_pips(d, x, w, 38, ap)
+        for b in range(blocks):
+            bx = x + b * (W + G)
+            d.rectangle((bx, 55, bx + W, 60), fill=GOLD if on else IRON_L)
+            if b < blocks - 1:
+                d.rectangle((bx + W, 57, bx + W + G, 58), fill=GOLD if on else IRON_L)
+        x += w + G
+    for blk in HITS:
+        impact_mark(d, 196 + blk * (W + G) + W // 2 - 4, 49)
+    ax, ay = 576, 14
+    d.text((ax, ay - 2), "AP", font=TITLE_S, fill=GOLD)
+    for i in range(10):
+        px = ax + 34 + i * 15
+        d.rectangle((px, ay, px + 11, ay + 11), fill=PLANNED)
+    d.text((ax + 34, ay + 20), "10 planned", font=SMALL, fill=PLANNED)
+    d.text((ax + 120, ay + 20), "0 left", font=SMALL, fill=IRON_L)
+    # party plate: incoming HP from every foe this round, with the blocks it lands in
+    y = 84
+    d.rectangle((16, y + 70, 168, y + 104), fill=SLATE, outline=IRON)
+    impact_mark(d, 22, y + 78)
+    heart(d, 34, y + 76, 12)
+    d.text((50, y + 73), "-22", font=MONO_L, fill=PARCH)
+    for b in range(6):
+        d.rectangle((90 + b * 12, y + 78, 90 + b * 12 + 9, y + 82), fill=IMPACT if b in HITS else AP_OFF)
+    d.text((22, y + 88), "incoming, all foes", font=SMALL, fill=IRON_L)
+    # foe list: target face, then only the block where its hit lands (none for a move or setup)
+    for k, blk in enumerate((1, 3)):
+        y = 84 + k * 80
+        d.rectangle((1170, y + 36, 1262, y + 58), fill=SLATE)
+        glyph(d, "sword", 1172, y + 37, 16, (200, 160, 120))
+        img.paste(kae.resize((18, 18)), (1192, y + 36))
+        for b in range(6):
+            d.rectangle((1216 + b * 8, y + 43, 1216 + b * 8 + 5, y + 47), fill=IMPACT if b == blk else AP_OFF)
+    # foe card: header, one row per planned move that touches this target, then the total
+    img.paste(stage.crop((612, 18, 904, 262)), (796, 90))
+    cx, cy = 796, 96
+    rows = [(i, p) for i, p in enumerate(PLAN7) if p[3]]
+    H = 70 + len(rows) * 30 + 40
+    frame_a(d, (cx, cy, cx + 288, cy + H), fill=(16, 18, 25))
+    img.paste(foe_p.resize((40, 40)), (cx + 14, cy + 14))
+    d.text((cx + 62, cy + 12), "Castellan Footman", font=TITLE_S, fill=GOLD)
+    heart(d, cx + 62, cy + 33, 11)
+    bar(d, cx + 78, cy + 36, 100, 6, 1.0, (150, 50, 45))
+    poise_glyph(d, cx + 192, cy + 31, 14)
+    poise(d, cx + 212, cy + 36, 5, 5, w=12, h=6)
+    # block start of each move
+    starts, b0 = [], 0
+    for p in PLAN7:
+        starts.append(b0)
+        b0 += p[1]
+    left, tot = 5, 0
+    y = cy + 66
+    for i, (ic, blocks, ap, (hp, pp)) in rows:
+        t = slot_icon(ic, 24)
+        img.paste(t, (cx + 14, y), t)
+        for b in range(6):
+            c = GOLD if starts[i] <= b < starts[i] + blocks else AP_OFF
+            d.rectangle((cx + 44 + b * 8, y + 10, cx + 44 + b * 8 + 5, y + 14), fill=c)
+        heart(d, cx + 98, y + 6, 12)
+        d.text((cx + 114, y + 3), f"-{hp}", font=MONO_L, fill=PARCH)
+        poise_glyph(d, cx + 152, y + 4, 14)
+        for j in range(5):
+            if j < left - pp:
+                c = POISE
+            elif j < left:
+                c = AMBER
+            else:
+                c = AP_OFF
+            d.rectangle((cx + 172 + j * 13, y + 8, cx + 172 + j * 13 + 10, y + 14), fill=c)
+        left -= pp
+        tot += hp
+        if left <= 0:
+            d.text((cx + 238, y + 3), "BREAK", font=SMALL, fill=AMBER)
+        y += 30
+    d.line((cx + 14, y + 2, cx + 274, y + 2), fill=IRON)
+    d.text((cx + 14, y + 10), "Total", font=SMALL, fill=IRON_L)
+    heart(d, cx + 98, y + 13, 12)
+    d.text((cx + 114, y + 10), f"-{tot}", font=MONO_L, fill=GOLD)
+    poise_glyph(d, cx + 152, y + 11, 14)
+    d.text((cx + 172, y + 10), "BREAK in 6", font=SMALL, fill=AMBER)
+    return img
+
+
 def label(img, text):
     out = Image.new("RGB", (img.width, img.height + 34), BASALT)
     out.paste(img, (0, 34))
@@ -645,6 +757,19 @@ def main():
     sh.paste(card, (0, 1612))
     sh.paste(foes, (940, 1612))
     sh.save(out / "battle_layout_take6_sheet.png")
+    m7 = mock7(shot)
+    m7.save(out / "battle_layout_take7.png")
+    strip = m7.crop((0, 0, 1280, 66)).resize((2560, 132), Image.NEAREST)
+    card = m7.crop((790, 90, 1090, 330)).resize((900, 720), Image.NEAREST)
+    side = m7.crop((8, 72, 176, 200)).resize((504, 384), Image.NEAREST)
+    foes = m7.crop((1104, 72, 1272, 250)).resize((504, 534), Image.NEAREST)
+    sh = Image.new("RGB", (2560, 1440 + 20 + 132 + 20 + 720), VOID)
+    sh.paste(m7.resize((2560, 1440), Image.NEAREST), (0, 0))
+    sh.paste(strip, (0, 1460))
+    sh.paste(card, (0, 1612))
+    sh.paste(side, (940, 1612))
+    sh.paste(foes, (1480, 1612))
+    sh.save(out / "battle_layout_take7_sheet.png")
 
 
 if __name__ == "__main__":
