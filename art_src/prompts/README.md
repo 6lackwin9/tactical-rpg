@@ -137,6 +137,11 @@ The image queue (`tools/portraits/artqueue.py request`, Drive `image_pipeline/qu
 the Gemini web app runs instead of the API; attach the reference each section names (`art_src/mara_voss.png` for
 portraits, the picked portrait for sheets).
 
+Active refs (Tushar 2026-11-18, "keep all refs for the queue in active folder so it's easy to find"): for each queue
+run, copy every reference that run's requests name into Drive `image_pipeline/refs/active/` (only that run's refs;
+clear it before the next run) and tell Tushar to attach everything in `refs/active`. The originals stay in `refs/`,
+so the request paths do not change. The older `refs/_active/` folder is not used.
+
 ## Not prompts in this batch
 
 - **Story and VN stage sprites (user 2026-11-12)**: no full-body or keyframe-animation generation for now. A story
