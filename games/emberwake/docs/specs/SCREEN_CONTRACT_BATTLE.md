@@ -1,12 +1,13 @@
 # SCREEN_CONTRACT_BATTLE: the battle screen layout contract (AI-21, UX-14..17)
 
 Status: signed off by Tushar 2026-11-18 (battle mock takes 1-16 in the Art/UI thread, take 17 his last fixes); he passed take 16 ("rest all seem
-fine") and take 17 applies his last fixes. Owner: Art/UI. Design turns it
+fine") and take 17 applies his last fixes. Sections 3-5 updated for takes 18-21 (plate re-layout, panels 184 px, AP
+bar, short names on plates), signed off 23:14. Owner: Art/UI. Design turns it
 into READY rows; Build implements it; after UISPLIT1 lands (PR7-38, PR7-39) the layout part moves into
 `games/emberwake/assets/ui/layouts/battle.json`.
 
 Mocks (scripts in `art_src/style/`, outputs in the project files `art-ui/battle_ux14/`): `battle_layout_mock.py`
-(takes 1-10), `battle_take11_mock.py` .. `battle_take17_mock.py`. Take 17 (`battle_take17_720p.png`) is the combined
+(takes 1-10), `battle_take11_mock.py` .. `battle_take21_mock.py`. Take 17 (`battle_take17_720p.png`) is the combined
 screen at 1280x720, 1:1.
 
 ## 1. Frames
@@ -38,9 +39,17 @@ screen at 1280x720, 1:1.
 
 ## 3. Party panel (left)
 
-- One full plate per hero (up to 4): portrait, name with the round intent tile at the end of the name row (take 17),
-  HP bar with current/max ("180/242") and incoming damage as a red loss at the bar's end, AP pips, poise pips along
-  the bottom.
+- Both side panels are 184 px wide (plates 176 px; Tushar, take 20, 2026-11-18 23:14: "for the enemies, I think we
+  should go for 184 ... both of them are aligned"); the board view between them is 888 px at 1280x720.
+- One full plate per hero (up to 4), 84 px tall: portrait 48 px; the name with the round intent tile (18 px) at the end
+  of the same row; the HP bar with current/max ("180/242") and incoming damage as a red loss at the bar's end; the AP
+  bar; poise pips along the bottom (takes 18 A, 20).
+- Names: body font, the small font when the name does not fit beside the intent tile (Mara Voss), then cut with "…"
+  (only test units). Every story hero in the data fits.
+- AP (take 21; Tushar 23:11 and 23:14, "The amber looks better. It aligns with the timeline pips as well"): a
+  continuous bar like HP, the cap (12) as its full width, the start AP lit in AP blue and the planned part in amber
+  (`PLANNED`, the strip's planned pip colour); beside it the balance after the plan as "4/12" (10 AP, plan 6). At 0 the
+  number turns grey. The plate shows the balance, the strip's AP line shows how it is spent; no team AP gauge.
 - A status column inside the plate on its right edge (26 px), never outside the frame: 4 slots, so up to 4 tabs, or 3
   tabs and "+N" (Tushar, take 17).
 - Guests (AI allies): under a teal "Guests" divider, compact 52 px plates with a teal rim, an "AI" tag, HP, intent, and
@@ -52,15 +61,25 @@ screen at 1280x720, 1:1.
 - Up to 6 foes: a full plate each. From 7: the current target keeps the full plate, the rest go compact (52 px: name,
   HP, poise, up to 2 status tabs). From 11: identical foes group into one row ("Ash Crawler x4", stacked portraits, one
   HP bar each; a click expands the group). The shipped data fields at most 7 foes at once (plus up to 4 from phases).
-- Foe plates keep the "when it lands" row (take 17, restored): the blow's kind glyph, its target's face and a 6-block
-  ruler with its impact block in red. The status column sits inside the plate on its left edge.
+- Foe plates (176 px, take 20): the round intent as a 16 px badge on the portrait's lower right corner (not on the
+  name row); the unit's short name on the name row; HP bar and current/max; the "when it lands" row (take 17): the
+  blow's kind glyph, its target's face and a 6-block ruler with its impact block in red; poise pips along the bottom.
+  The status column sits inside the plate on its left edge.
+- A boss plate: a gold crown on the portrait's top left, the name in gold and a gold outer rim around the plate.
+- Plate names are the short name; the full name and title live in the foe card (5). Tushar 23:14: "in the hostile tab
+  or like the enemy tab, it just shows you the shortened version of the name". The name room is 93 px (small font);
+  six shipped unit names are longer (Goblin Skirmisher, Goblin Berserker, Castellan Footman, Watch Crossbowman,
+  Overseer Grendel, Mortuary Flagellant), so units need a short plate name that fits (e.g. "Crossbowman", "Grendel",
+  "Flagellant"; bosses already have one, `CAST1_BOSSES.md` section 1); anything still too long is cut with "…".
 
 ## 5. Foe card (docked, not a hover popup)
 
 - Docked at the top right of the board. While a hero is planning, it shows the hero's current target and stays
   there; with no hero selected, a click on a foe pins it (hover previews it).
-- Header: portrait, name, HP bar with current/max, poise bar (5 pips) with the per-pip tag (the pip threshold T, e.g.
-  13), then the tags "KO in block 5" (oxblood) and "BREAK in block 4" (amber).
+- Header: portrait, the full name in Alegreya SC gold (the character's `name`, e.g. "Inquisitor-Prelate Nemeth") and,
+  when it has one, the title on its own line under it in the small font (the character's `title`, e.g. "Chieftain of
+  the Horde"; take 20); a boss gets the crown on its portrait. Then the HP bar with current/max, poise bar (5 pips)
+  with the per-pip tag (the pip threshold T, e.g. 13), then the tags "KO in block 5" (oxblood) and "BREAK in block 4" (amber).
 - Hero selected: one row per move of that hero on this foe: skill icon, a 6-block mini ruler with the move's blocks lit,
   HP damage, the poise area, status chips. The HP and poise bars in the header preview the whole party's plan: this
   hero's share bright, the other allies' dark. Footer: the hero's total and the party's total with the KO block.
