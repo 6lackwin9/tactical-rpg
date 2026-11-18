@@ -75,6 +75,10 @@
 				"vanguard_poise",
 				"iron_counter"
 			],
+			"keystone": {
+				"id": "unbroken_phalanx",
+				"level": 6
+			},
 			"main_hand": "wpn_iron_billhook",
 			"off_hand": "shd_kite",
 			"head": "",
@@ -157,6 +161,10 @@
 				"keen_elevation",
 				"patient_sight"
 			],
+			"keystone": {
+				"id": "dead_eye_discipline",
+				"level": 6
+			},
 			"main_hand": "stirrup_arbalest",
 			"off_hand": "hip_quiver",
 			"head": "",
@@ -238,6 +246,10 @@
 				"iron_shoulders",
 				"kiln_poise"
 			],
+			"keystone": {
+				"id": "unbroken_iron",
+				"level": 6
+			},
 			"main_hand": "riveted_gauntlets",
 			"off_hand": "forearm_braces",
 			"head": "",
@@ -320,6 +332,10 @@
 				"triage_discipline",
 				"surgical_precision"
 			],
+			"keystone": {
+				"id": "pure_hippocratic_oath",
+				"level": 6
+			},
 			"main_hand": "bronze_censer",
 			"off_hand": "wpn_tome",
 			"head": "",
@@ -402,6 +418,10 @@
 				"twin_light_tempo",
 				"gutter_reflex"
 			],
+			"keystone": {
+				"id": "ghost_of_the_undercroft",
+				"level": 6
+			},
 			"main_hand": "wpn_stiletto",
 			"off_hand": "ash_cloak",
 			"head": "",
@@ -484,6 +504,10 @@
 				"reactive_reagents",
 				"catalytic_reserve"
 			],
+			"keystone": {
+				"id": "master_alchemist",
+				"level": 6
+			},
 			"main_hand": "brass_vitriol_sprayer",
 			"off_hand": "wpn_orb",
 			"head": "",

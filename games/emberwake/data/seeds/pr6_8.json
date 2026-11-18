@@ -1,0 +1,155 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "shops",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "varka_trade",
+    "name": "The Leaking Vat",
+    "keeper": "widow_varka",
+    "stock": [
+     {
+      "item": "rock_salt",
+      "count": -1,
+      "price": 25,
+      "requires_flags": []
+     },
+     {
+      "item": "sulfur_poultice",
+      "count": -1,
+      "price": -1,
+      "requires_flags": []
+     },
+     {
+      "item": "calcified_bone_shard",
+      "count": -1,
+      "price": 20,
+      "requires_flags": []
+     },
+     {
+      "item": "con_quenched_salt",
+      "count": 2,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "smelling_salts",
+      "count": 2,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_knife",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_dagger",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_censer",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_bone_saw",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_scourge",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_sprayer",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "item": "book_staff",
+      "count": 1,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     }
+    ],
+    "loot": [],
+    "buy_mult": 1.0,
+    "supply_price": 8,
+    "supply_price_mult_by_act": {
+     "3": 2.0
+    },
+    "sell_mult": 0.5,
+    "buys": [
+     "WEAPON",
+     "SHIELD",
+     "ARMOR",
+     "ACCESSORY",
+     "CONSUMABLE",
+     "MATERIAL"
+    ],
+    "requires_flags": [
+     {
+      "key": "sunk_ward.ivo_rescued",
+      "value": true
+     }
+    ],
+    "tags": []
+   }
+  }
+ ]
+}

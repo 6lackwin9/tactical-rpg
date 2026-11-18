@@ -9,6 +9,7 @@ pub mod campaign;
 pub mod data;
 pub mod dialogue;
 pub mod explore;
+pub mod facility;
 pub mod mastery;
 pub mod new_game;
 pub mod party_ops;

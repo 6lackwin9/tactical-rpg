@@ -1909,6 +1909,9 @@ pub struct GameState {
     /// STORYUI1 4.8: the running sequence, the vignette queue and the seen list; saved as the key `story` only when
     /// not empty.
     pub story: crate::story::Story,
+    /// PR6-8 (`PK4_PK5_CAMPAIGN_HUB.md` 4): {facility qid: level} of the facilities raised above
+    /// `rpgkit_data::facility::LEVEL_MIN` (absent = that level); saved as the key `facilities` only when not empty.
+    pub facilities: IndexMap<String, i64>,
     /// Raw type problems from from_dict (not saved; validate reports them).
     pub load_problems: Vec<String>,
 }
@@ -1947,6 +1950,7 @@ impl Default for GameState {
             reward_paid: Dict::new(),
             campaign: None,
             story: crate::story::Story::default(),
+            facilities: IndexMap::new(),
             load_problems: Vec::new(),
         }
     }
@@ -2083,6 +2087,9 @@ impl GameState {
         if !self.story.is_empty() {
             out.insert("story".into(), self.story.to_value());
         }
+        if !self.facilities.is_empty() {
+            out.insert("facilities".into(), Value::Object(self.facilities.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
+        }
         Value::Object(out)
     }
 
@@ -2164,6 +2171,20 @@ impl GameState {
         if let Some(raw) = d.get("story") {
             g.story = crate::story::Story::from_value(raw, &mut g.load_problems);
         }
+        // PR6-8: an absent block reads empty (older saves, every facility at its first level)
+        match d.get("facilities").map(json::normalize) {
+            None => {}
+            Some(Value::Object(o)) => {
+                for (k, v) in o {
+                    if json::is_int(&v) {
+                        g.facilities.insert(k, json::to_int(&v));
+                    } else {
+                        g.load_problems.push(format!("facilities.{k} must be a whole number."));
+                    }
+                }
+            }
+            Some(_) => g.load_problems.push("facilities must be an object {facility qid: level}.".into()),
+        }
         g
     }
 
@@ -2235,6 +2256,14 @@ impl GameState {
             errors.extend(c.validate());
         }
         errors.extend(self.story.validate());
+        let (lo, hi) = (rpgkit_data::facility::LEVEL_MIN, rpgkit_data::facility::LEVEL_MAX);
+        for (k, v) in &self.facilities {
+            if !qid_ok(k) {
+                errors.push(format!("facilities: '{k}' must be a qualified facility id world:id."));
+            } else if !(lo + 1..=hi).contains(v) {
+                errors.push(format!("facilities.{k} must be a level {}..{hi}.", lo + 1));
+            }
+        }
         errors
     }
 }

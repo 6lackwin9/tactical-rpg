@@ -255,6 +255,8 @@ impl Data {
                 "board" => "Show me the board.",
                 // PK2-S3 (no Godot line)
                 "recipe" => "What work can you do for us?",
+                // PR6-8 (no Godot line)
+                "facility" => "How can we build this place up?",
                 _ => "",
             }
             .into(),

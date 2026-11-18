@@ -906,7 +906,8 @@ impl WorldMap {
         // CAMPAIGN1 P1, R1: the rest's cost in the upkeep's name ("Make camp (3 supplies)" in the Ashlands) and its days
         let camp = progression::can_camp(&d, &gs);
         let rule = emberwake_world::campaign::purse::rest_rule(&d, &gs.world_id);
-        let camp_label = format!("Make camp ({} {})", rule.cost, purse_word(cx, PurseWord::Upkeep));
+        // PR6-8: the cost after the facilities' rest upkeep deltas (`rest_cost`; the rule's cost without them)
+        let camp_label = format!("Make camp ({} {})", emberwake_world::campaign::purse::rest_cost(&d, &gs), purse_word(cx, PurseWord::Upkeep));
         let camp_tip = match (camp.is_empty(), rule.days) {
             (false, _) => camp.to_string(),
             (true, n) if n > 0 => format!("Rest every hero to full HP. Takes {}.", crate::runover::days(n as i64)),

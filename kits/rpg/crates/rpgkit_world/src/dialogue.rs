@@ -280,6 +280,11 @@ pub const OPEN_RECIPES: &str = "open_recipes";
 /// PK2-S3: the refusal of a step while the recipe pane is open, and of the service once nothing is offered.
 pub const RECIPES_BUSY_TEXT: &str = "Close the recipes first.";
 pub const RECIPES_NONE_TEXT: &str = "Nothing is offered now.";
+/// PR6-8: the runner's own effect of the facility service choice (never authored: the dialogue checks refuse it), the
+/// refusal of a step while the facility pane is open, and of the service once the character keeps none.
+pub const OPEN_FACILITIES: &str = "open_facilities";
+pub const FACILITIES_BUSY_TEXT: &str = "Close the facilities first.";
+pub const FACILITIES_NONE_TEXT: &str = "No facility is kept here.";
 
 pub const LOCKED_TEXT: &str = "Locked";
 pub const NOT_NOW_TEXT: &str = "Not now";
@@ -410,6 +415,8 @@ pub struct DialogueRunner {
     pub board_qid: String,
     /// PK2-S3: the character whose recipe pane is open over the conversation ("" = none), like `shop_qid`.
     pub recipe_npc: String,
+    /// PR6-8: the character whose facility pane is open over the conversation ("" = none), like `recipe_npc`.
+    pub facility_npc: String,
     tree_speaker: String,
     nodes: IndexMap<String, Dict>,
     /// Turn-in waiting for confirm: (quest qid, trailing effects, to).
@@ -417,6 +424,7 @@ pub struct DialogueRunner {
     shop_to: String,
     board_to: String,
     recipe_to: String,
+    facility_to: String,
     pub notes: Vec<String>,
     /// CAMPAIGN1 W1: the campaign events of the effects applied since the last result (a node's effects when the
     /// conversation opens included); the next result carries them as `campaign`.
@@ -606,6 +614,15 @@ impl DialogueRunner {
                 ("_service", rpgkit_data::RECIPE_SERVICE.into()),
             ]));
         }
+        // PR6-8: the facility pane, after the recipes, while the character keeps a facility
+        if !crate::facility::kept_by(d, gs, &self.character_qid).is_empty() {
+            out.push(json::obj([
+                ("text", self.line(d, gs, rpgkit_data::facility::FACILITY_SERVICE).into()),
+                ("to", "".into()),
+                ("effects", Value::Array(vec![Value::Object(json::obj([("effect", OPEN_FACILITIES.into())]))])),
+                ("_service", rpgkit_data::facility::FACILITY_SERVICE.into()),
+            ]));
+        }
         out.push(json::obj([("text", self.line(d, gs, "farewell").into()), ("to", "".into()), ("_service", "farewell".into())]));
         out
     }
@@ -704,6 +721,10 @@ impl DialogueRunner {
         if !self.recipe_npc.is_empty() {
             out.insert(rpgkit_data::RECIPE_SERVICE.into(), self.recipe_npc.clone().into());
         }
+        // PR6-8: only while the facility pane is open
+        if !self.facility_npc.is_empty() {
+            out.insert(rpgkit_data::facility::FACILITY_SERVICE.into(), self.facility_npc.clone().into());
+        }
         // PORTRAITFX1 7: the speaker's face for this node, only when the node names one (a Godot node never did)
         let expression = json::s(&node, "expression");
         if !expression.is_empty() {
@@ -723,6 +744,8 @@ impl DialogueRunner {
             Some(board::BUSY_TEXT)
         } else if !self.recipe_npc.is_empty() {
             Some(RECIPES_BUSY_TEXT)
+        } else if !self.facility_npc.is_empty() {
+            Some(FACILITIES_BUSY_TEXT)
         } else {
             None
         }
@@ -803,6 +826,14 @@ impl DialogueRunner {
                 self.recipe_to = if to.is_empty() { self.node_id.clone() } else { to };
                 let mut out = res_ok();
                 out.insert(rpgkit_data::RECIPE_SERVICE.into(), self.recipe_npc.clone().into());
+                out
+            }
+            // PR6-8: the facility pane opens over the conversation, like the recipes
+            OPEN_FACILITIES => {
+                self.facility_npc = self.character_qid.clone();
+                self.facility_to = if to.is_empty() { self.node_id.clone() } else { to };
+                let mut out = res_ok();
+                out.insert(rpgkit_data::facility::FACILITY_SERVICE.into(), self.facility_npc.clone().into());
                 out
             }
             // STORYUI1 4.7: the sequence started (in `apply`); the conversation closes and the game shows the story
@@ -910,6 +941,11 @@ impl DialogueRunner {
                 OPEN_RECIPES => {
                     if crate::recipe::offered(d, gs, &self.character_qid).is_empty() {
                         out.push(RECIPES_NONE_TEXT.into());
+                    }
+                }
+                OPEN_FACILITIES => {
+                    if crate::facility::kept_by(d, gs, &self.character_qid).is_empty() {
+                        out.push(FACILITIES_NONE_TEXT.into());
                     }
                 }
                 "fight" => {
@@ -1091,6 +1127,25 @@ impl DialogueRunner {
         self.with_notes(res)
     }
 
+    /// PR6-8: closes the facility pane back to the conversation (the node the choice led to), like `close_recipes`.
+    pub fn close_facilities(&mut self, d: &Data, gs: &mut GameState) -> Dict {
+        self.notes.clear();
+        let res = if self.facility_npc.is_empty() {
+            json::fail("No facilities are open.")
+        } else {
+            self.facility_npc.clear();
+            if self.facility_to == self.node_id {
+                let mut out = res_ok();
+                out.insert("node".into(), self.node_id.clone().into());
+                out
+            } else {
+                let to = self.facility_to.clone();
+                self.move_to(d, gs, &to)
+            }
+        };
+        self.with_notes(res)
+    }
+
     pub fn close_shop(&mut self, d: &Data, gs: &mut GameState) -> Dict {
         self.notes.clear();
         let res = if self.shop_qid.is_empty() {
@@ -1223,6 +1278,8 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
         "open_board" => board::mark_opened(d, gs, &json::s(fx, "board")),
         // PK2-S3: the runner opens the recipe pane (a service choice only; no authored effect)
         OPEN_RECIPES => {}
+        // PR6-8: the runner opens the facility pane (a service choice only; no authored effect)
+        OPEN_FACILITIES => {}
         // CAMPAIGN1 R2, R3: the rest and its note; its days run at the tick after the list (inert outside a campaign)
         "rest" => {
             let note = crate::campaign::purse::rest_effect(d, gs);

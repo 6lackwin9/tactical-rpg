@@ -2667,6 +2667,8 @@ pub(crate) fn services_text(services: &[&str]) -> String {
             "recruit" => "Recruits",
             // PK2-S3: the recipe service
             "recipe" => "Recipes",
+            // PR6-8: the facility service
+            "facility" => "Facilities",
             _ => "",
         })
         .collect::<Vec<_>>()
@@ -2674,7 +2676,7 @@ pub(crate) fn services_text(services: &[&str]) -> String {
 }
 
 /// The drawn stand-in of a service icon: today's `?` and `!` badges (a board with work is the `!`, STORYUI1 B4), a coin
-/// for a shop, a sheet with lines for recipes (PK2-S3), a plus for recruits.
+/// for a shop, a sheet with lines for recipes (PK2-S3), a house for facilities (PR6-8), a plus for recruits.
 pub(crate) fn service_glyph<A>(ui: &mut Ui<A>, service: &str, r: Rect) {
     let (cx_, cy_, sz) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0, r.w as f32);
     match service {
@@ -2695,6 +2697,14 @@ pub(crate) fn service_glyph<A>(ui: &mut Ui<A>, service: &str, r: Rect) {
                 let y = cy_ - h / 2.0 + h * k as f32 / 4.0;
                 ui.p.line(cx_ - w * 0.35, y, cx_ + w * 0.35, y, th().dim, 0.0);
             }
+        }
+        "facility" => {
+            // a house: a body under a roof
+            let (w, h) = (sz * 0.6, sz * 0.4);
+            let body = Rect::new((cx_ - w / 2.0).round() as i32, cy_.round() as i32 - 1, w.round().max(1.0) as i32, h.round().max(1.0) as i32);
+            ui.p.fill(body, th().text);
+            ui.p.line(cx_ - sz * 0.42, cy_ - 1.0, cx_, cy_ - sz * 0.42, th().gold, 0.0);
+            ui.p.line(cx_, cy_ - sz * 0.42, cx_ + sz * 0.42, cy_ - 1.0, th().gold, 0.0);
         }
         _ => {
             ui.p.line(cx_ - sz * 0.4, cy_, cx_ + sz * 0.4, cy_, th().good, 0.0);

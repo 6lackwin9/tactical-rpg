@@ -17,6 +17,8 @@ use serde_json::Value;
 
 pub mod body_slot;
 pub mod dojo_preset;
+pub mod ending;
+pub mod facility;
 pub mod looks;
 pub mod mastery;
 pub mod recipe;
@@ -116,6 +118,26 @@ pub struct ProfEntry {
     pub scaling: f64,
 }
 
+/// CLASSKEY1: the class row key of its keystone (`{id, level}`).
+pub const CLASS_KEYSTONE_KEY: &str = "keystone";
+
+/// CLASSKEY1 (`PR6-14`): a class's keystone: a passive with `slot: "keystone"`, slotted from `level` on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClassKeystone {
+    pub id: String,
+    pub level: i32,
+}
+
+impl ClassKeystone {
+    /// The row's `keystone` object; None when absent, not an object or without an id (the content check reports a bad
+    /// one). A missing level reads as 1.
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        let k = obj(o, CLASS_KEYSTONE_KEY)?;
+        let id = string(k, "id", "");
+        (!id.is_empty()).then(|| Self { id, level: int(k, "level", 1) })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ClassDef {
     pub id: String,
@@ -137,6 +159,9 @@ pub struct ClassDef {
     /// CLASSPASS1 (`PR5-62a`, `docs/sessions/U2_CLASS_DECKS.md`): always-on innate passives (`slot == ""`) granted to
     /// derived units of the class under the rule `deck` without spending a deck slot. Empty = none.
     pub passives: Vec<String>,
+    /// CLASSKEY1 (`PR6-14`, `docs/sessions/U2_CLASS.md` "Class keystones"): the class's keystone passive and the level a
+    /// unit of the class slots it at (when its own deck names no keystone; `rpgkit_rules::Unit::grant_class_keystone`).
+    pub keystone: Option<ClassKeystone>,
     /// Slot key (`main_hand` ...) -> item id; empty slots left out.
     pub loadout: IndexMap<String, String>,
     pub pouch: Vec<String>,
@@ -192,6 +217,7 @@ impl ClassDef {
             skill_path: int_map(o, "skill_path"),
             basics: strings(o, "basics"),
             passives: strings(o, "passives"),
+            keystone: ClassKeystone::from_obj(o),
             loadout,
             pouch: strings(o, "pouch"),
             remains: string(o, REMAINS_KEY, ""),
@@ -1391,8 +1417,9 @@ pub const TRIGGER_ON: [&str; 6] = ["any", "day", "battle", "enter", "act", "reci
 /// hero's battle end reaches (`rpgkit_world::roster::HeroEnd`: the channel meter's peak and last value, the commands
 /// started in a Channel round).
 pub const HERO_FILTER_KEYS: [&str; 3] = ["strain_peak", "strain_end", "channel_actions"];
-/// F1: what an `end` effect ends the run as.
-pub const END_KINDS: [&str; 2] = ["fail", "bad_end"];
+/// F1: what an `end` effect ends the run as (PR6-11: `ending`, the campaign finishes on an `endings` row,
+/// `ending::END_KIND_ENDING`).
+pub const END_KINDS: [&str; 3] = ["fail", "bad_end", ending::END_KIND_ENDING];
 /// R1: where the party may rest.
 pub const REST_WHERE: [&str; 3] = ["nodes", "rest_places", "none"];
 /// R4: what a lost battle does.
@@ -1408,7 +1435,7 @@ pub const CAMPAIGN_EFFECTS: [(&str, &[&str]); 9] = [
     ("clock_stop", &["meter"]),
     ("set_act", &["act"]),
     ("rest", &[]),
-    ("end", &["kind", "card", "text"]),
+    ("end", &["kind", "card", "text", ending::END_ENDING_KEY]),
 ];
 /// ACT1-HOOKS2 (FB-244 (2)): the keys a meter rule's effect may carry besides its kind's: `when`, flag conditions
 /// (`{key, op, value}`, all holding when the effect is reached), and `else` (true: runs only when no effect of its chain
@@ -1950,8 +1977,21 @@ pub const TOKEN_KINDS: [&str; 2] = ["flag", "member"];
 /// 4.3: a sequence holds 1..STEPS_MAX steps; an effects step 1..STEP_EFFECTS_MAX effects.
 pub const STEPS_MAX: usize = 40;
 pub const STEP_EFFECTS_MAX: usize = 8;
-/// 4.3: the step kinds.
-pub const STEP_KINDS: [&str; 5] = ["vignette", "fight", "effects", "enter", "end"];
+/// 4.3: the step kinds. PR6-10 (`PK6_PK7_BOSSES_ENDINGS.md` 3): `camp_prep`, the one-time camp before a point of no
+/// return (the story stage opens the game's prep screen; one free rest with no clock tick).
+pub const STEP_KINDS: [&str; 6] = ["vignette", "fight", "effects", "enter", "end", "camp_prep"];
+/// PR6-10: the prep step's warning when it sets no `text` (the game's prep screen shows it).
+pub const CAMP_PREP_TEXT: &str = "There is no way back past this point. Prepare first?";
+/// PR6-10: the most days a story fight's `retry_day_cost` charges per retry.
+pub const RETRY_DAY_COST_MAX: i64 = 30;
+/// PR6-10: a retried story fight with `echo_fallen` fields at most this many echo units on the enemy side.
+pub const ECHO_MAX: usize = 2;
+/// PR6-10: the enemy refs of the echo units (`"$echo_unit.1"`, `"$echo_unit.2"`): each mirrors a departed member whose
+/// life is one of `ECHO_LIVES`, the latest first. Never a roster enemy (no rewards).
+pub const ECHO_UNIT: &str = "$echo_unit";
+pub const ECHO_LIVES: [&str; 3] = KEEPSAKE_LIVES;
+/// PR6-10: an echo unit's name is this before the member's.
+pub const ECHO_NAME_PREFIX: &str = "Echo of ";
 /// 4.3: the step kinds that may only be the last step.
 pub const LAST_STEP_KINDS: [&str; 2] = ["enter", "end"];
 /// 4.3, Q5: what a lost or fled story fight does (`abort` the default).
@@ -2008,10 +2048,11 @@ pub const BOARD_SERVICE: &str = "board";
 pub fn step_keys(kind: &str) -> &'static [&'static str] {
     match kind {
         "vignette" => &["kind", "vignette", "music"],
-        "fight" => &["kind", "encounter", "on_lost", "on_fled", "music"],
+        "fight" => &["kind", "encounter", "on_lost", "on_fled", "retry_day_cost", "echo_fallen", "music"],
         "effects" => &["kind", "effects", "music"],
         "enter" => &["kind", "location", "anchor", "music"],
         "end" => &["kind", "to", "music"],
+        "camp_prep" => &["kind", "text", "keeper", "music"],
         _ => &["kind"],
     }
 }
@@ -2054,13 +2095,17 @@ pub fn board_opened_flag(board: &str) -> String {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Step {
     Vignette { vignette: String },
-    /// `on_lost` and `on_fled`: one of FIGHT_OUTCOMES.
-    Fight { encounter: String, on_lost: String, on_fled: String },
+    /// `on_lost` and `on_fled`: one of FIGHT_OUTCOMES. PR6-10: `retry_day_cost` days pass on each retry (0 = none);
+    /// `echo_fallen`: a retry fields up to `ECHO_MAX` echo units of departed members (`ECHO_UNIT`).
+    Fight { encounter: String, on_lost: String, on_fled: String, retry_day_cost: i32, echo_fallen: bool },
     Effects { effects: Vec<Value> },
     /// `anchor` "" = the location's entry.
     Enter { location: String, anchor: String },
     /// `to`: one of END_TO.
     End { to: String },
+    /// PR6-10: the camp before a point of no return: `text` the warning ("" = `CAMP_PREP_TEXT`), `keeper` the
+    /// character whose services (shop, recipes) the prep screen opens ("" = none).
+    CampPrep { text: String, keeper: String },
 }
 
 impl Step {
@@ -2068,10 +2113,17 @@ impl Step {
     pub fn from_obj(o: &Obj) -> Option<Self> {
         Some(match string(o, "kind", "").as_str() {
             "vignette" => Step::Vignette { vignette: string(o, "vignette", "") },
-            "fight" => Step::Fight { encounter: string(o, "encounter", ""), on_lost: string(o, "on_lost", "abort"), on_fled: string(o, "on_fled", "abort") },
+            "fight" => Step::Fight {
+                encounter: string(o, "encounter", ""),
+                on_lost: string(o, "on_lost", "abort"),
+                on_fled: string(o, "on_fled", "abort"),
+                retry_day_cost: o.get("retry_day_cost").and_then(Value::as_i64).unwrap_or(0).clamp(0, RETRY_DAY_COST_MAX) as i32,
+                echo_fallen: o.get("echo_fallen").and_then(Value::as_bool).unwrap_or(false),
+            },
             "effects" => Step::Effects { effects: array(o, "effects").to_vec() },
             "enter" => Step::Enter { location: string(o, "location", ""), anchor: string(o, "anchor", "") },
             "end" => Step::End { to: string(o, "to", "map") },
+            "camp_prep" => Step::CampPrep { text: string(o, "text", ""), keeper: string(o, "keeper", "") },
             _ => return None,
         })
     }
@@ -2796,6 +2848,16 @@ pub const CAPTIVE_FALLBACK: &str = "captive_fallback";
 /// PR6-7: the departed record's life and cause `CAPTIVE_UNIT` reads (`DEPART_LIVES`, `DEPART_CAUSES`).
 pub const CAPTIVE_LIFE: &str = "captured";
 pub const CAPTIVE_CAUSE: &str = "stayed";
+
+/// PR6-10: echo unit `i`'s ref (1-based, `ECHO_UNIT`).
+pub fn echo_ref(i: usize) -> String {
+    format!("{ECHO_UNIT}.{i}")
+}
+
+/// PR6-10: the 1-based index an echo ref names (`echo_ref`), None for any other ref.
+pub fn echo_index(r: &str) -> Option<usize> {
+    r.strip_prefix(ECHO_UNIT)?.strip_prefix('.')?.parse().ok().filter(|i| *i >= 1)
+}
 
 /// PR6-7: an `{id, at_least}` gate (`when_meter` on a unit meter, `requires_track` on a unit track).
 #[derive(Debug, Clone, PartialEq, Eq)]

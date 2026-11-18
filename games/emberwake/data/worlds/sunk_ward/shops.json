@@ -363,6 +363,9 @@
 			"loot": [],
 			"buy_mult": 1.0,
 			"supply_price": 8,
+			"supply_price_mult_by_act": {
+				"3": 2
+			},
 			"sell_mult": 0.5,
 			"buys": [
 				"WEAPON",

@@ -11,6 +11,7 @@
 use crate::board::{BoardAct, BoardPane};
 use crate::hud::{purse_word, PurseWord, HUD_H};
 use crate::portraits::{Faces, Who};
+use crate::facility::{FacilityAct, FacilityPane};
 use crate::recipe::{RecipeAct, RecipePane};
 use crate::screens::{Cx, GameCx, Key, Nav, Screen};
 use crate::shop::{ShopAct, ShopPane};
@@ -296,6 +297,8 @@ pub enum SvcAct {
     Board(BoardAct),
     /// A click on the recipe pane (PK2-S3; its Close goes back to the conversation).
     Recipe(RecipeAct),
+    /// A click on the facility pane (PR6-8; its Close goes back to the conversation).
+    Facility(FacilityAct),
     TogglePick(String),
     PickRecipient(usize),
     ConfirmTurnIn,
@@ -315,6 +318,8 @@ pub struct Services {
     board: BoardPane,
     /// PK2-S3: the open recipe pane's picks and last run.
     recipe: RecipePane,
+    /// PR6-8: the open facility pane's last upgrade.
+    facility: FacilityPane,
     pending: Option<Dict>,
     /// CAMPAIGN1 W3: the choice waiting on the ask before its `rest` would end the run (a Yes picks it).
     rest_ask: Option<i64>,
@@ -345,6 +350,11 @@ impl Services {
     /// PK2-S3: the character whose recipe pane is open ("" when none).
     pub fn recipe_npc(&self) -> String {
         self.runner.as_ref().filter(|r| !r.closed).map(|r| r.recipe_npc.clone()).unwrap_or_default()
+    }
+
+    /// PR6-8: the character whose facility pane is open ("" when none).
+    pub fn facility_npc(&self) -> String {
+        self.runner.as_ref().filter(|r| !r.closed).map(|r| r.facility_npc.clone()).unwrap_or_default()
     }
 
     /// The character talked to last ("" when none).
@@ -386,6 +396,7 @@ impl Services {
         self.shop = ShopPane::default();
         self.board = BoardPane::default();
         self.recipe = RecipePane::default();
+        self.facility = FacilityPane::default();
         cx.set_busy(false);
     }
 
@@ -421,13 +432,16 @@ impl Services {
     pub(crate) fn draw<A: Clone + From<SvcAct>>(&mut self, ui: &mut Ui<A>, cx: &mut Cx, view: &Dict, b: &TalkBox, veil: Rect) {
         let d = cx.data.clone();
         let gs = cx.gs().clone();
-        let (shop_qid, board_qid, recipe_npc) = (self.shop_qid(), self.board_qid(), self.recipe_npc());
+        let (shop_qid, board_qid, recipe_npc, facility_npc) = (self.shop_qid(), self.board_qid(), self.recipe_npc(), self.facility_npc());
         if !shop_qid.is_empty() {
             ui.p.fill(veil, th().game("shop_veil", SHOP_DIM));
             self.shop.draw(ui, cx, &shop_qid, |a| A::from(SvcAct::Shop(a)));
         } else if !recipe_npc.is_empty() {
             ui.p.fill(veil, th().game("shop_veil", SHOP_DIM));
             self.recipe.draw(ui, cx, &recipe_npc, |a| A::from(SvcAct::Recipe(a)));
+        } else if !facility_npc.is_empty() {
+            ui.p.fill(veil, th().game("shop_veil", SHOP_DIM));
+            self.facility.draw(ui, cx, &facility_npc, |a| A::from(SvcAct::Facility(a)));
         } else if !board_qid.is_empty() {
             ui.p.fill(veil, th().game("shop_veil", SHOP_DIM));
             let bv = emberwake_world::board::view(&d, &gs, &board_qid);
@@ -482,7 +496,7 @@ impl Services {
         if self.pending.is_some() {
             return Some(k == Key::Enter && self.act(cx, SvcAct::ConfirmTurnIn));
         }
-        if !r.shop_qid.is_empty() || !r.board_qid.is_empty() || !r.recipe_npc.is_empty() {
+        if !r.shop_qid.is_empty() || !r.board_qid.is_empty() || !r.recipe_npc.is_empty() || !r.facility_npc.is_empty() {
             return Some(false);
         }
         let view = r.view(&cx.data, cx.gs());
@@ -507,6 +521,8 @@ impl Services {
             SvcAct::CloseBoard
         } else if !self.recipe_npc().is_empty() {
             SvcAct::Recipe(RecipeAct::Close)
+        } else if !self.facility_npc().is_empty() {
+            SvcAct::Facility(FacilityAct::Close)
         } else if self.talking() {
             SvcAct::Farewell
         } else {
@@ -656,6 +672,16 @@ impl Services {
                 let res = r.close_recipes(&d, cx.gs_mut());
                 self.dialogue_result(cx, res)
             }
+            // PR6-8: an upgrade stays on the pane; Close goes back to the conversation
+            SvcAct::Facility(a) => {
+                if self.facility_npc().is_empty() || !self.facility.act(cx, a) {
+                    return false;
+                }
+                self.facility = FacilityPane::default();
+                let Some(r) = self.runner.as_mut() else { return false };
+                let res = r.close_facilities(&d, cx.gs_mut());
+                self.dialogue_result(cx, res)
+            }
             SvcAct::Board(a) => match a {
                 BoardAct::Pick(q) => {
                     self.board.pick(q);
@@ -720,7 +746,9 @@ impl Services {
             "board_pane": if board_qid.is_empty() { Value::Null } else { self.board.state() },
             "recipe": Some(self.recipe_npc()).filter(|n| !n.is_empty()),
             "recipe_pane": if self.recipe_npc().is_empty() { Value::Null } else { self.recipe.state() },
-            "portraits": if self.talking() && shop_qid.is_empty() && board_qid.is_empty() && self.recipe_npc().is_empty() { self.faces.state() } else { json!([]) }})
+            "facility": Some(self.facility_npc()).filter(|n| !n.is_empty()),
+            "facility_pane": if self.facility_npc().is_empty() { Value::Null } else { self.facility.state() },
+            "portraits": if self.talking() && shop_qid.is_empty() && board_qid.is_empty() && self.recipe_npc().is_empty() && self.facility_npc().is_empty() { self.faces.state() } else { json!([]) }})
     }
 }
 

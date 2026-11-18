@@ -60,11 +60,23 @@ fn open(d: &Data, gs: &GameState, rc: &RecipeDef) -> bool {
     rc.requires.iter().all(|c| dialogue::condition_holds(d, gs, json::dict(c)))
 }
 
-/// The cost as lines ("12 gold", "Iron x2"), purse first.
+/// PR6-8: the factor in percent on row `rc`'s purse costs from its character's facilities (`facility::recipe_pct`;
+/// 100 = none).
+pub fn facility_pct(d: &Data, gs: &GameState, rc: &RecipeDef) -> i64 {
+    crate::facility::recipe_pct(d, gs, &dialogue::character_qid(d, gs, &rc.npc), &rc.tags)
+}
+
+/// PR6-8: row `rc`'s purse cost now (`cost.gold` after `facility_pct`).
+pub fn gold_cost(d: &Data, gs: &GameState, rc: &RecipeDef) -> i64 {
+    crate::facility::scaled(rc.cost.gold, facility_pct(d, gs, rc))
+}
+
+/// The cost as lines ("12 gold", "Iron x2"), purse first (PR6-8: the purse after the facilities, `gold_cost`).
 pub fn cost_lines(d: &Data, gs: &GameState, rc: &RecipeDef) -> Vec<String> {
     let mut out = Vec::new();
-    if rc.cost.gold > 0 {
-        out.push(format!("{} {}", rc.cost.gold, terms::word(d, &gs.world_id, terms::CURRENCY)));
+    let gold = gold_cost(d, gs, rc);
+    if gold > 0 {
+        out.push(format!("{gold} {}", terms::word(d, &gs.world_id, terms::CURRENCY)));
     }
     if rc.cost.supplies > 0 {
         out.push(format!("{} {}", rc.cost.supplies, terms::word(d, &gs.world_id, terms::UPKEEP)));
@@ -129,8 +141,10 @@ pub fn pick_cost_lines(d: &Data, gs: &GameState, rc: &RecipeDef, pick: &Pick) ->
     let mut work = gs.clone();
     weapons::sync(d, &mut work);
     let Some(w) = weapons::find(&work.party, &pick.weapon) else { return out };
+    let pct = facility_pct(d, gs, rc);
     for fx in rc.effects.iter().filter(|fx| json::s(fx, "effect") == r::FX_REPAIR) {
         let (gold, salvage, count) = repair_cost(d, fx, w);
+        let gold = crate::facility::scaled(gold, pct);
         if gold > 0 {
             out.push(format!("{gold} {}", terms::word(d, &gs.world_id, terms::CURRENCY)));
         }
@@ -210,13 +224,15 @@ fn plan(d: &Data, gs: &mut GameState, npc_qid: &str, id: &str, pick: &Pick) -> R
         }
         _ => {}
     }
-    pay(d, gs, rc, pick)?;
+    // PR6-8: the facilities' factor on the purse costs, read before the cost is paid
+    let pct = facility_pct(d, gs, rc);
+    pay(d, gs, rc, pick, pct)?;
     let mut notes = Vec::new();
     for fx in &rc.effects {
         let name = json::s(fx, "effect");
         match name.as_str() {
             r::FX_SALVAGE => salvage(d, gs, fx, &pick.item, &mut notes)?,
-            r::FX_REPAIR => repair(d, gs, fx, &pick.weapon, &mut notes)?,
+            r::FX_REPAIR => repair(d, gs, fx, &pick.weapon, pct, &mut notes)?,
             r::FX_REFORGE => reforge(d, gs, fx, &pick.weapon, &mut notes)?,
             r::FX_CRAFT => craft(d, gs, fx, &mut notes)?,
             // PR6-6 (B5): the delta on the campaign gauge the effect's `axis` names, on any target
@@ -247,10 +263,12 @@ fn doctrine(gs: &mut GameState, fx: &Dict) {
     }
 }
 
-/// Pays the cost (refused when the party can't: the purse, the stash items, the picked item counted on top).
-fn pay(d: &Data, gs: &mut GameState, rc: &RecipeDef, pick: &Pick) -> Result<(), String> {
+/// Pays the cost (refused when the party can't: the purse, the stash items, the picked item counted on top); the
+/// purse cost after the facilities' factor `pct` (PR6-8).
+fn pay(d: &Data, gs: &mut GameState, rc: &RecipeDef, pick: &Pick, pct: i64) -> Result<(), String> {
     let w = gs.world_id.clone();
-    if rc.cost.gold > gs.party.gold {
+    let gold = crate::facility::scaled(rc.cost.gold, pct);
+    if gold > gs.party.gold {
         return Err(terms::not_enough_currency(d, &w));
     }
     if rc.cost.supplies > gs.party.supplies {
@@ -262,7 +280,7 @@ fn pay(d: &Data, gs: &mut GameState, rc: &RecipeDef, pick: &Pick) -> Result<(), 
             return Err(format!("Not enough {}.", d.item_name(item)));
         }
     }
-    gs.party.gold -= rc.cost.gold;
+    gs.party.gold -= gold;
     gs.party.supplies -= rc.cost.supplies;
     for (item, n) in &rc.cost.items {
         gs.party.remove_from_stash(item, *n);
@@ -425,7 +443,7 @@ fn train(d: &Data, m: &mut UnitState, who: &str, fx: &Dict, family: &str, notes:
 
 /// PK2-FOLLOWUP: `repair`: the picked weapon instance pays its share (`repair_cost`; refused when the party can't, a
 /// weapon that never wears, or one already whole) and goes back to full durability.
-fn repair(d: &Data, gs: &mut GameState, fx: &Dict, uid: &str, notes: &mut Vec<String>) -> Result<(), String> {
+fn repair(d: &Data, gs: &mut GameState, fx: &Dict, uid: &str, pct: i64, notes: &mut Vec<String>) -> Result<(), String> {
     let w = weapons::find(&gs.party, uid).cloned().ok_or("Pick a weapon.")?;
     let (name, max) = (d.item_name(&w.item), weapons::full(d, &w.item));
     if max <= 0 {
@@ -435,6 +453,8 @@ fn repair(d: &Data, gs: &mut GameState, fx: &Dict, uid: &str, notes: &mut Vec<St
         return Err(format!("{name} needs no repair."));
     }
     let (gold, salvage, count) = repair_cost(d, fx, &w);
+    // PR6-8: the facilities' factor on the purse share
+    let gold = crate::facility::scaled(gold, pct);
     if gold > gs.party.gold {
         return Err(terms::not_enough_currency(d, &gs.world_id));
     }

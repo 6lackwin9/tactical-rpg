@@ -814,9 +814,11 @@ pub fn effect_errors(v: &View, w: &str, effect: &str, fx: &Dict, el: &str) -> Ve
             }
             errors.extend(text_key(fx, "card", TEXT_MAX, false, el));
             errors.extend(text_key(fx, "text", TEXT_MAX, false, el));
-            if json::s(fx, "card").trim().is_empty() && json::s(fx, "text").trim().is_empty() {
+            // PR6-11: a kind `ending` end takes its epilogue from the endings row (card and text optional)
+            if kind != rpgkit_data::ending::END_KIND_ENDING && json::s(fx, "card").trim().is_empty() && json::s(fx, "text").trim().is_empty() {
                 errors.push(format!("{el}: an end needs a card or a text."));
             }
+            errors.extend(super::endings::end_ending_errors(v, w, fx, el));
         }
         _ => {}
     }

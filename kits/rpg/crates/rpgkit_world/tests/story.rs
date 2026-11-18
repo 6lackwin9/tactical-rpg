@@ -174,7 +174,7 @@ fn campaign_vignette_items_join_the_story_queue_in_order() {
     let fx = [json::dict(&json!({"effect": "vignette", "vignette": "v_once"})).clone(), json::dict(&json!({"effect": "sequence", "sequence": "side_story"})).clone()];
     campaign::apply_effects(&d, &mut gs, &fx, &mut events);
     assert!(gs.story.queue.contains(&"tale:v_once".to_string()));
-    assert_eq!(gs.story.running, Some(Running { sequence: "tale:side_story".into(), step: 0 }));
+    assert_eq!(gs.story.running, Some(Running { sequence: "tale:side_story".into(), step: 0, ..Default::default() }));
 }
 
 // ---- Q1-Q7 ----
@@ -278,7 +278,7 @@ fn a_sequence_choice_closes_the_conversation_and_a_vignette_choice_goes_on() {
     let res = talk.choose(&d, &mut gs, 0);
     assert!(json::b(&res, "ok", false) && talk.closed && json::b(&res, "end", false));
     assert_eq!(json::s(&res, "sequence"), "tale:side_story");
-    assert_eq!(gs.story.running, Some(Running { sequence: "tale:side_story".into(), step: 0 }));
+    assert_eq!(gs.story.running, Some(Running { sequence: "tale:side_story".into(), step: 0, ..Default::default() }));
     // refused while one runs
     let mut talk = DialogueRunner::open(&d, &mut gs, "clerk");
     let res = talk.choose(&d, &mut gs, 0);
@@ -352,7 +352,7 @@ fn a_running_the_data_lacks_is_dropped_and_a_damaged_block_is_refused() {
 fn a_new_game_runs_the_world_start_sequence_and_classic_worlds_start_on_the_map() {
     let d = data();
     let gs = new_game::create_for_world(&d, "tale", 7).expect("a new game");
-    assert_eq!(gs.story.running, Some(Running { sequence: "tale:prologue".into(), step: 1 }), "the leading effects ran");
+    assert_eq!(gs.story.running, Some(Running { sequence: "tale:prologue".into(), step: 1, ..Default::default() }), "the leading effects ran");
     assert!(gs.flag_true("story_began"));
     let gs = new_game::create_for_world(&d, "classic", 7).expect("a new game");
     assert!(gs.story.is_empty());

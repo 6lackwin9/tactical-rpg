@@ -14,6 +14,8 @@ pub mod expression_fx;
 pub mod fx_preset;
 pub mod dialogue;
 pub mod encounter;
+pub mod endings;
+pub mod facility;
 pub mod ground;
 pub mod hook_kinds;
 pub mod hooks;
