@@ -155,6 +155,160 @@ def mock(shot: Image.Image) -> Image.Image:
     return img
 
 
+# take 2 (Tushar 2026-11-18: "remove as much text as you can"; blocks and AP as quick visuals; AP pips in the game's
+# own style: blue square pips like the party plate's 10/10 row, poise as light-blue segments)
+AP_ON, AP_OFF, POISE = (96, 150, 230), (34, 42, 58), (150, 190, 235)
+
+
+def ap_pips(d, x, y, n, on, size=8, gap=2, spent=None):
+    for i in range(n):
+        c = AP_ON if i < on else AP_OFF
+        if spent is not None and i < spent:
+            c = (60, 92, 140)
+        d.rectangle((x + i * (size + gap), y, x + i * (size + gap) + size - 1, y + size - 1), fill=c)
+    return x + n * (size + gap)
+
+
+def poise(d, x, y, n, on, w=14, h=4, gap=2):
+    for i in range(n):
+        d.rectangle((x + i * (w + gap), y, x + i * (w + gap) + w - 1, y + h - 1), fill=POISE if i < on else AP_OFF)
+
+
+def glyph(d, kind, x, y, s=18, col=PARCH):
+    if kind == "shield":
+        d.polygon([(x, y), (x + s, y), (x + s, y + s * 0.55), (x + s / 2, y + s), (x, y + s * 0.55)], outline=col, width=2)
+    elif kind == "hero":
+        d.ellipse((x + s * 0.32, y, x + s * 0.68, y + s * 0.36), outline=col, width=2)
+        d.arc((x + s * 0.1, y + s * 0.42, x + s * 0.9, y + s * 1.3), 180, 360, fill=col, width=2)
+    elif kind == "auto":
+        d.arc((x, y, x + s, y + s), 30, 320, fill=col, width=2)
+        d.polygon([(x + s, y + s * 0.2), (x + s, y + s * 0.6), (x + s * 0.65, y + s * 0.42)], fill=col)
+    elif kind == "clear":
+        d.line((x + 3, y + 3, x + s - 3, y + s - 3), fill=col, width=2)
+        d.line((x + s - 3, y + 3, x + 3, y + s - 3), fill=col, width=2)
+    elif kind == "menu":
+        for k in range(3):
+            d.rectangle((x, y + 3 + k * 6, x + s, y + 4 + k * 6), fill=col)
+    elif kind == "arrow":
+        d.line((x, y + s / 2, x + s - 5, y + s / 2), fill=col, width=2)
+        d.polygon([(x + s, y + s / 2), (x + s - 7, y + s / 2 - 5), (x + s - 7, y + s / 2 + 5)], fill=col)
+    elif kind == "sword":
+        d.line((x + 2, y + s - 2, x + s - 2, y + 2), fill=col, width=3)
+        d.line((x + 3, y + s - 9, x + 9, y + s - 3), fill=col, width=2)
+    elif kind == "check":
+        d.line((x + 2, y + s / 2, x + s / 2 - 1, y + s - 3), fill=col, width=3)
+        d.line((x + s / 2 - 1, y + s - 3, x + s - 1, y + 2), fill=col, width=3)
+
+
+def intent_tile(d, x, y, col=ASSAULT, s=20):
+    d.rectangle((x, y, x + s, y + s), fill=col, outline=(190, 110, 95))
+    glyph(d, "sword", x + 2, y + 2, s - 4, PARCH)
+
+
+def mock2(shot: Image.Image) -> Image.Image:
+    img = Image.new("RGB", (1280, 720), VOID)
+    d = ImageDraw.Draw(img)
+    stage = shot.crop((291, 112, 899, 492)).resize((912, 570), Image.NEAREST)
+    img.paste(stage, (184, 72))
+    d.rectangle((184, 72, 1095, 641), outline=IRON, width=1)
+    kae = shot.crop((20, 166, 84, 230))
+    foe_p = shot.crop((1044, 220, 1108, 284))
+
+    # top strip: who is planning (face), round track, six slots, AP row, icon group, one action
+    d.rectangle((0, 0, 1280, 64), fill=BASALT)
+    d.line((0, 64, 1280, 64), fill=IRON)
+    img.paste(kae.resize((48, 48)), (10, 8))
+    d.rectangle((10, 8, 57, 55), outline=GOLD)
+    for r in range(8):                     # round track: 8 marks, the current one lit
+        cx = 72 + r * 14
+        d.ellipse((cx, 26, cx + 8, 34), fill=GOLD if r == 0 else (45, 50, 60))
+    icons = [shot.crop((186, 12, 222, 44))] + [shot.crop((236 + i * 50, 12, 272 + i * 50, 44)) for i in range(4)] + [
+        shot.crop((436, 12, 480, 44))]
+    costs = [2, 2, 2, 2, 1, 0]
+    x = 210
+    for i, (ic, c) in enumerate(zip(icons, costs)):
+        w = 56
+        sel = i == 1
+        d.rectangle((x, 4, x + w, 60), fill=SLATE, outline=GOLD if sel else IRON, width=2 if sel else 1)
+        img.paste(ic.resize((40, 34)), (x + 8, 8))
+        ap_pips(d, x + (w - (c * 10 - 2)) // 2, 48, c, c) if c else None
+        x += w + 6
+    # one AP row under the whole strip span: spent per block, the rest free
+    ap_pips(d, x + 10, 22, 10, 10, size=10, gap=3, spent=9)
+    gx = 900
+    for i, (k, act) in enumerate((("shield", True), ("hero", True), ("auto", False), ("clear", False))):
+        bx = gx + i * 46
+        d.rectangle((bx, 12, bx + 40, 52), fill=SLATE, outline=IRON)
+        glyph(d, k, bx + 11, 20, 18, PARCH)
+        if act:
+            d.polygon([(bx + 30, 44), (bx + 38, 44), (bx + 34, 49)], fill=IRON_L)
+    d.rectangle((1108, 10, 1268, 54), fill=(60, 34, 10), outline=AMBER, width=2)
+    glyph(d, "check", 1124, 22, 20, GOLD)
+    d.text((1152, 21), "Confirm", font=BODY, fill=GOLD)
+    # tooltip on the selected slot: the one place a name appears
+    frame_a(d, (262, 68, 420, 96), fill=(16, 18, 25), top=False)
+    d.text((272, 72), "Pommel Strike", font=SMALL, fill=GOLD)
+
+    # left: party
+    frame_a(d, (8, 72, 176, 641))
+    y = 84
+    d.rectangle((16, y, 168, y + 70), fill=SLATE, outline=GOLD)
+    img.paste(kae.resize((48, 48)), (22, y + 6))
+    intent_tile(d, 140, y + 6)
+    d.text((76, y + 6), "Kaelen", font=BODY, fill=PARCH)
+    bar(d, 76, y + 30, 86, 6, 1.0, HP)
+    ap_pips(d, 76, y + 42, 10, 10, size=6, gap=2, spent=9)
+    poise(d, 22, y + 60, 5, 5, w=26, h=4)
+    # right: foes, name once, next move as arrow + target face
+    frame_a(d, (1104, 72, 1272, 641))
+    for k in range(2):
+        y = 84 + k * 80
+        sel = k == 0
+        d.rectangle((1112, y, 1264, y + 70), fill=SLATE, outline=(170, 60, 50) if sel else IRON)
+        img.paste(foe_p.resize((48, 48)), (1118, y + 6))
+        d.text((1172, y + 4), "Footman", font=BODY, fill=PARCH)
+        bar(d, 1172, y + 26, 86, 6, 1.0, (150, 50, 45))
+        glyph(d, "arrow", 1172, y + 38, 20, (200, 160, 120))
+        img.paste(kae.resize((20, 20)), (1198, y + 38))
+        d.ellipse((1224, y + 42, 1236, y + 54), fill=SLATE, outline=GOLD)
+        d.text((1227, y + 41), "1", font=MONO, fill=GOLD)
+        poise(d, 1118, y + 60, 5, 5, w=26, h=4)
+
+    # detail card: per slot, the skill icon and what it does to the foe's poise
+    cx, cy = 800, 96
+    frame_a(d, (cx, cy, cx + 280, cy + 186), fill=(16, 18, 25))
+    img.paste(foe_p.resize((40, 40)), (cx + 14, cy + 14))
+    d.text((cx + 62, cy + 14), "Castellan Footman", font=TITLE_S, fill=GOLD)
+    poise(d, cx + 62, cy + 40, 5, 5, w=20, h=5)
+    rows = [(icons[1], 5, 3), (icons[2], 3, 1), (icons[3], 1, 0)]
+    for i, (ic, a, b) in enumerate(rows):
+        yy = cy + 66 + i * 30
+        d.ellipse((cx + 14, yy + 6, cx + 26, yy + 18), fill=SLATE, outline=IRON_L)
+        d.text((cx + 17, yy + 5), str(i + 2), font=MONO, fill=PARCH)
+        img.paste(ic.resize((28, 24)), (cx + 34, yy))
+        poise(d, cx + 74, yy + 9, 5, b, w=20, h=6)
+        for j in range(b, a):                  # the pips this hit takes, in amber
+            d.rectangle((cx + 74 + j * 22, yy + 9, cx + 74 + j * 22 + 19, yy + 14), fill=AMBER)
+        if b == 0:
+            d.text((cx + 192, yy + 3), "BREAK", font=MONO_L, fill=AMBER)
+    yy = cy + 160
+    glyph(d, "sword", cx + 14, yy - 2, 16, AMBER)
+    d.text((cx + 36, yy - 2), "29", font=MONO_L, fill=PARCH)
+    glyph(d, "shield", cx + 80, yy - 2, 16, (200, 90, 80))
+    d.text((cx + 102, yy - 2), "22", font=MONO_L, fill=PARCH)
+
+    # bottom: the story line only, menu as an icon
+    d.rectangle((0, 648, 1280, 720), fill=BASALT)
+    d.line((0, 648, 1280, 648), fill=IRON)
+    msg = ["The curfew bell tolls and two Castellan Footmen close the alley.",
+           "Strike while they wind up: a quick Pommel Strike breaks their guard."]
+    for i, t in enumerate(msg):
+        d.text((24, 658 + i * 22), t, font=BODY, fill=PARCH)
+    d.rectangle((1220, 662, 1264, 704), fill=SLATE, outline=IRON)
+    glyph(d, "menu", 1232, 671, 20, PARCH)
+    return img
+
+
 def label(img, text):
     out = Image.new("RGB", (img.width, img.height + 34), BASALT)
     out.paste(img, (0, 34))
@@ -173,6 +327,13 @@ def main():
     sheet.paste(a, (0, 0))
     sheet.paste(b, (0, a.height + 12))
     sheet.save(out / "battle_layout_side_by_side.png")
+    m2 = mock2(shot)
+    m2.save(out / "battle_layout_take2.png")
+    a, b = label(m, "Take 1"), label(m2, "Take 2: fewer words; slots, AP, round and moves as pips and icons")
+    sheet = Image.new("RGB", (a.width, a.height * 2 + 12), VOID)
+    sheet.paste(a, (0, 0))
+    sheet.paste(b, (0, a.height + 12))
+    sheet.save(out / "battle_layout_take1_vs_take2.png")
 
 
 if __name__ == "__main__":
