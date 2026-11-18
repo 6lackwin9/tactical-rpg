@@ -1273,6 +1273,12 @@ impl Screen<GameCx> for RegionMap {
             let idle = ClipPlayer::default();
             let mut sprites = Vec::new();
             let mut party_frame = None;
+            // PR7-23: the hub bunks' drawn rects: the plates of neighbours alternate heights and keep to the room left
+            let bunk_fits: Vec<Rect> = props
+                .iter()
+                .filter(|p| hub_bunks.iter().any(|b| b.prop == p.id))
+                .map(|p| prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles).0.unwrap_or(p.rect))
+                .collect();
             for item in &order {
                 match *item {
                     Item::Prop(i) => {
@@ -1282,10 +1288,13 @@ impl Screen<GameCx> for RegionMap {
                         // HUB-POLISH1 (1): an occupied bunk wears its member's name plate (with the bunk, in depth)
                         if let Some(m) = hub_bunks.iter().find(|b| b.prop == p.id && !b.member.is_empty()).and_then(|b| gs.party.member(&b.member)) {
                             let (name, class) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m));
-                            let plate = crate::bunks::plate_rect(&mut ui.p, fit.unwrap_or(p.rect), &name);
+                            let r = fit.unwrap_or(p.rect);
+                            let slot = crate::bunks::plate_slot(r, &bunk_fits);
+                            let plate = crate::bunks::plate_rect(&mut ui.p, r, &name, slot);
+                            let full = crate::bunks::plate_need(&mut ui.p, &name) <= plate.w;
                             crate::bunks::draw_plate(&mut ui.p, plate, &name, &class);
                             if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
-                                e["plate"] = json!({"name": name, "class": class, "rect": [plate.x, plate.y, plate.w, plate.h]});
+                                e["plate"] = json!({"name": name, "class": class, "rect": [plate.x, plate.y, plate.w, plate.h], "level": slot.level, "full": full});
                             }
                         }
                     }
