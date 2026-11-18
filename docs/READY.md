@@ -107,3 +107,4 @@ Post-Act-1 or deferred slices: Build takes no action until promoted to Section 1
 | `FB-305` | accepted | `PR7-15` | Guesses 1-7 confirmed. T1 stays on story fights; no defeat stinger or card; no music duck for now. `menu_opens.json` fix in `PR7-15`. `STRUCTURE.md` applied; Build applies `engine/README.md`. | 2026-11-18 |
 | `FB-306` | accepted | `PR7-21` | Queued as `PR7-21` at the top, with the window mode choice and the in-game popup added from this item. | 2026-11-18 |
 | `FB-307` | accepted | `PR7-26` | Queued as `PR7-26` right after `PR7-21`; battle settings open the in-game popup. | 2026-11-18 |
+| `FB-308` | accepted | `PR7-26` | Mute in Background folded into `PR7-26` as item (5) (user 2026-11-18). Other mock rows `PR7-21` left out stay listed for a later row when their settings exist. | 2026-11-18 |
