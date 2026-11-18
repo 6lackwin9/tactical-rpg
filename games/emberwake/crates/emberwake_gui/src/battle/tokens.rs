@@ -51,6 +51,8 @@ pub(super) struct UnitAnim {
     /// once the body is known (`start_wanted`).
     dash: bool,
     pub(super) dash_clip: bool,
+    /// TRANSITIONS1 T1 step 3: the slide is the battle beat's walk-in, this many ms long (0: a step's slide).
+    walk_in_ms: u64,
     /// When it fell (the death clip plays and holds, then the dead marker shows); None while it stands.
     pub(super) fell: Option<u64>,
     pub(super) seen: Seen,
@@ -96,7 +98,13 @@ impl UnitAnim {
 
     /// How long its slide runs: a dash's `DASH_MS` (INPUT1 MR12), else the walk's `walk_ms`.
     pub(super) fn slide_ms(&self, walk_ms: u64) -> u64 {
-        if self.dash { DASH_MS } else { walk_ms }
+        if self.dash {
+            DASH_MS
+        } else if self.walk_in_ms > 0 {
+            self.walk_in_ms
+        } else {
+            walk_ms
+        }
     }
 }
 
@@ -396,6 +404,33 @@ pub(super) struct Tokens {
 }
 
 impl Tokens {
+    /// TRANSITIONS1 T1 step 3: the party walks in to its start cells: each living ally of `s` slides from `cells` cells
+    /// toward the nearer side edge, facing its way in and playing `walk`, over `ms` from `now` (the FX clock). The
+    /// tokens must have caught up with the battle first (a unit not seen yet stays put).
+    pub(super) fn walk_in(&mut self, s: &Session, now: u64, ms: u64, cells: i32) {
+        for &i in &s.w.allies {
+            let (Some(a), Some(to)) = (self.anims.get_mut(i), s.w.grid.pos(i)) else { continue };
+            if !s.w.units[i].is_alive() || a.seen.pos != Some(to) {
+                continue;
+            }
+            let from = V2::new(if to.x < emberwake_battle::grid::GRID_W / 2 { to.x - cells } else { to.x + cells }, to.y);
+            a.dash = false;
+            a.walk_in_ms = ms;
+            a.step = turn(a.facing, from, to);
+            a.slide = Some((from, now));
+            a.player.play_for("walk", now, ms);
+        }
+    }
+
+    /// The walk-in skipped (T1's click): every slide still running ends where it goes.
+    pub(super) fn end_walk_in(&mut self) {
+        for a in self.anims.iter_mut().filter(|a| a.walk_in_ms > 0) {
+            a.slide = None;
+            a.walk_in_ms = 0;
+            a.player.stop();
+        }
+    }
+
     /// The tokens catch up with `s` at `now` (the animation clock). While the battle moves forward (the action log
     /// does not shrink) a unit that moved slides there playing `walk` for `walk_ms`, a hit plays `hurt` (`hurt_guarded` while it
     /// guards), a fall plays `death`, raising a guard plays `defend`, and the action just resolved plays its actor's
@@ -481,6 +516,7 @@ impl Tokens {
                             a.facing = turn(a.facing, to, aim);
                             a.step = a.facing;
                         }
+                        a.walk_in_ms = 0;
                         a.slide = Some((from, now));
                         a.player.play_for("walk", now, a.slide_ms(walk_ms));
                     }

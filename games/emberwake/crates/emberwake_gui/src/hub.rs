@@ -8,6 +8,8 @@ use aegis_ui::canvas::{rgba, Rect};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
+use aegis_ui::audio::Bus;
+use aegis_core::clock::Instant;
 use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_world::state::{GameState, UnitState};
 use emberwake_world::{mastery, progression, quest, roster, save};
@@ -446,6 +448,14 @@ pub struct Results {
     remains: Vec<(String, String)>,
     mastery: Vec<mastery::Gain>,
     wear: Vec<Dict>,
+    /// TRANSITIONS1 T2 (`over_battle`): the results stand over the battle they settled (the dimmed field under them,
+    /// sliding in from `opened`; Continue fades to black, then closes both); Reduce motion (`plain`) drops the slide and
+    /// shortens the fade; `before` is the hub's view as the fight started when a win arrives at the hub (`Arrival`).
+    over: bool,
+    plain: bool,
+    before: Option<crate::transitions::Snapshot>,
+    opened: Instant,
+    leaving: Option<(Instant, ResAct)>,
     w: Vec<Widget<ResAct>>,
 }
 
@@ -650,11 +660,64 @@ impl Results {
             remains: json::aget(res, "remains").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "item"))).collect(),
             mastery: json::aget(res, "mastery").iter().filter_map(Value::as_object).map(|x| mastery::Gain { member: s(x, "member"), family: s(x, "family"), from: json::i(x, "from", 0), to: json::i(x, "to", 0) }).collect(),
             wear: json::aget(res, "wear").iter().filter_map(Value::as_object).cloned().collect(),
+            over: false,
+            plain: false,
+            before: None,
+            opened: Instant::now(),
+            leaving: None,
             w: Vec::new(),
         }
     }
 
+    /// TRANSITIONS1 T2: the results over the battle that settled (`plain`: Reduce motion), with the hub's view as the
+    /// fight started when a win arrives at the hub (None: no arrival).
+    pub fn over_battle(mut self, plain: bool, before: Option<crate::transitions::Snapshot>) -> Self {
+        self.over = true;
+        self.plain = plain;
+        self.before = before;
+        self.opened = Instant::now();
+        self
+    }
+
+    /// T2 step 3: how far Continue's fade has gone (None: not leaving).
+    fn leave_ms(&self, now: Instant) -> Option<u64> {
+        self.leaving.map(|(t, _)| now.saturating_duration_since(t).as_millis() as u64)
+    }
+
     fn act(&mut self, cx: &mut Cx, a: ResAct) {
+        // TRANSITIONS1 T2 step 3: over a battle, Continue fades to black with the victory stinger first (a press during
+        // the fade ends it); Level up now goes at once
+        if self.over {
+            if self.leaving.is_none() {
+                self.leaving = Some((Instant::now(), a));
+                if let ResAct::Continue = a {
+                    if self.outcome == "won" {
+                        cx.audio.play(Bus::Sfx, crate::transitions::VICTORY_STINGER);
+                    }
+                    return;
+                }
+            }
+            self.leave(cx);
+            return;
+        }
+        self.close(cx, a);
+    }
+
+    /// T2 steps 3-4: the fade is over: the results and the battle under them close, and a win's arrival waits for the
+    /// hub (the region map shows it; the story stage drops it when a vignette plays next).
+    fn leave(&mut self, cx: &mut Cx) {
+        let Some((_, a)) = self.leaving else { return };
+        cx.nav.push(Nav::Pop);
+        if let Some(before) = self.before.take() {
+            let arrival = crate::transitions::arrival(&cx.data, cx.gs(), &before);
+            if let Some(g) = cx.game.as_mut() {
+                g.arrival = Some(arrival);
+            }
+        }
+        self.close(cx, a);
+    }
+
+    fn close(&mut self, cx: &mut Cx, a: ResAct) {
         cx.nav.push(Nav::Pop);
         if let ResAct::LevelUp = a {
             let first = cx.gs().party.members.iter().find(|m| self.award.contains_key(&m.id) && m.unspent(&cx.data) > 0).map(|m| m.id.clone()).unwrap_or_default();
@@ -664,9 +727,19 @@ impl Results {
 }
 
 impl Screen<GameCx> for Results {
-    /// Nothing here moves by itself.
+    /// Nothing here moves by itself, but the slide over the battle and Continue's fade (TRANSITIONS1 T2).
     fn frame_need(&self, _cx: &Cx) -> FrameNeed {
-        FrameNeed::Idle
+        let sliding = !self.plain && self.opened.elapsed().as_millis() as u64 <= crate::transitions::RESULTS_SLIDE_MS;
+        if self.over && (sliding || self.leaving.is_some()) {
+            FrameNeed::Full
+        } else {
+            FrameNeed::Idle
+        }
+    }
+    fn tick(&mut self, cx: &mut Cx) {
+        if self.leave_ms(Instant::now()).is_some_and(|ms| ms >= crate::transitions::out_ms(self.plain)) {
+            self.leave(cx);
+        }
     }
     fn id(&self) -> &'static str {
         "battle_results"
@@ -678,7 +751,18 @@ impl Screen<GameCx> for Results {
         let d = cx.data.clone();
         let gs = cx.gs().clone();
         let mut ui: Ui<ResAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), th().game("result_veil", rgba(10, 14, 24, 235)));
+        // TRANSITIONS1 T2 step 2: over the battle the field shows dimmed under the results, which slide in
+        let now = Instant::now();
+        let shift = if self.over { crate::transitions::results_shift(now.saturating_duration_since(self.opened).as_millis() as u64, self.plain) } else { 0 };
+        if self.over {
+            ui.p.fill(Rect::new(0, 0, W, H), th().game("result_field_veil", rgba(10, 14, 24, 200)));
+        } else {
+            ui.p.fill(Rect::new(0, 0, W, H), th().game("result_veil", rgba(10, 14, 24, 235)));
+        }
+        ui.p.shift(shift, 0);
+        if self.over {
+            ui.p.panel(Rect::new(12, 12, W - 24, H - 34), th().game("result_panel", rgba(10, 11, 16, 235)), th().edge, 4.0);
+        }
         let head = match self.outcome.as_str() {
             "won" => "Victory",
             "lost" => "Defeat",
@@ -777,6 +861,11 @@ impl Screen<GameCx> for Results {
             ui.button("results.level_up", Rect::new(24, y + 10, 90, 18), "Level up now", ResAct::LevelUp, true);
         }
         ui.button_full("results.continue", Rect::new(540, 300, 76, 18), "Continue", ResAct::Continue, true, true, BODY + 1.0, Vec::new());
+        ui.p.shift(-shift, 0);
+        // T2 step 3: Continue's fade to black
+        if let Some(ms) = self.leave_ms(now) {
+            crate::transitions::draw_fade(&mut ui.p, crate::transitions::out_alpha(ms, self.plain) as f32 / 255.0);
+        }
         self.w = ui.widgets;
     }
     fn key(&mut self, cx: &mut Cx, k: Key) {
@@ -786,6 +875,10 @@ impl Screen<GameCx> for Results {
     }
     fn state(&self, _cx: &Cx) -> Value {
         let mut out = json!({"outcome": self.outcome, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards, "stay_lines": self.stay_lines, "wounded": self.wounded, "departed": self.departed, "stash_short": self.stash_short});
+        // TRANSITIONS1 T2: only over a battle (the state of the other results reads as before)
+        if self.over {
+            out["over_battle"] = json!({"plain": self.plain, "arrives": self.before.is_some(), "leaving": self.leave_ms(Instant::now())});
+        }
         // PK1-S1: only when the battle left marks (the state of a battle without them reads as before)
         if !self.marks.is_empty() {
             out["marks"] = json!(self.marks.iter().map(|(m, k, v)| json!({"member": m, "mark": k, "value": v})).collect::<Vec<_>>());

@@ -83,6 +83,7 @@ fn scene_screen(cx: &Cx, scene: &Dict, on_done: impl FnOnce(&mut Cx, Ended) + 's
 fn play_queued(cx: &mut Cx) -> Option<Option<String>> {
     let d = cx.data.clone();
     let scene = story::next_scene(&d, cx.gs_mut())?;
+    drop_arrival(cx);
     let qid = s(&scene, "vignette");
     let screen = scene_screen(cx, &scene, move |cx: &mut Cx, _| {
         story::vignette_done(cx.gs_mut(), &qid);
@@ -91,6 +92,13 @@ fn play_queued(cx: &mut Cx) -> Option<Option<String>> {
     let wish = screen.player.reel.music_wish();
     cx.nav.push(Nav::Push(Box::new(screen)));
     Some(wish)
+}
+
+/// TRANSITIONS1 T2: the story goes on to a vignette, not the hub: a won fight's arrival card is dropped.
+fn drop_arrival(cx: &mut Cx) {
+    if let Some(g) = cx.game.as_mut() {
+        g.arrival = None;
+    }
 }
 
 /// A map screen's tick with nothing of its own open (no conversation, shop, board or page; its popups are screens over
@@ -193,6 +201,7 @@ impl StoryStage {
                     log_notes(cx, &res);
                     return;
                 }
+                drop_arrival(cx);
                 let screen = scene_screen(cx, &scene, |cx: &mut Cx, _| {
                     let d = cx.data.clone();
                     let res = story::step_done(&d, cx.gs_mut());

@@ -24,6 +24,7 @@
 //! (setting Auto-confirm next round; not while watching a recording), and a banner names each new round.
 
 
+mod beats;
 mod board;
 mod draw;
 mod flow;
@@ -194,6 +195,8 @@ pub enum Action {
     /// INPUT2: a click on a strip block showing a ghost entry (the entry's index in the plan): the ghost up to it becomes
     /// picks, so that command is the hero's latest pick.
     GhostSlot(usize),
+    /// TRANSITIONS1: a click anywhere during a beat skips it (T1: control starts; T2: the results open).
+    SkipBeat,
 }
 
 /// ASSETORG2: a fielded member's body and palette in world `world` (the kit's `begin_world_with` art callback): its
@@ -400,11 +403,24 @@ pub struct BattleScreen {
     /// when the last advance of a timeline battle came (`CONFIRM_GUARD_MS`).
     round_note: Option<(String, String)>,
     advanced_at: Option<Instant>,
+    /// TRANSITIONS1 (`beats.rs`): the running beat (T1 the battle beat of a story fight, T2 the victory beat), T1's
+    /// banner, whether its walk-in started, whether T2 ran, the ash wipe's cover cache, and the hub's view as the fight
+    /// started (the arrival's change lines) with whether a win here arrives at the hub (not a travel fight).
+    beat: Option<crate::transitions::Beat>,
+    intro_card: crate::transitions::IntroCard,
+    walked: bool,
+    victory_seen: bool,
+    ash: crate::transitions::Ash,
+    before: Option<crate::transitions::Snapshot>,
+    arrives: bool,
 }
 
 /// VISCLAR1-D: how long after an advance the player's Confirm is ignored: "Next round" and "Confirm round" are one button,
 /// so a click or Enter meant for the round's end must not take the plan that just came up.
 pub(crate) const CONFIRM_GUARD_MS: u64 = 350;
+
+/// TRANSITIONS1: the runner of a fight met on the road (the world map's): its win does not arrive at the hub.
+pub(crate) const TRAVEL_RUNNER: &str = "travel";
 
 /// FPSCAP1: how long after the last stir a battle must stay at rest before it draws slower.
 pub(crate) const REST_AFTER: Duration = Duration::from_millis(1500);
@@ -416,7 +432,7 @@ impl BattleScreen {
     pub(crate) fn at_rest(&self) -> bool {
         self.host.session.is_some() && !self.viewing && !self.playing && !self.auto && !self.pending_next_round && self.talk.is_none()
             && self.impacts_done(Instant::now()) && self.fx.is_empty() && self.floats.is_empty() && self.flashes.is_empty() && self.tracers.is_empty() && self.sidesteps.is_empty()
-            && !self.round_banner_alive() && !self.pips_moving()
+            && !self.round_banner_alive() && !self.pips_moving() && self.beat.is_none()
     }
 
     fn blank(cx: &Cx, mode: Mode) -> Self {
@@ -517,6 +533,13 @@ impl BattleScreen {
             banner: None,
             round_note: None,
             advanced_at: None,
+            beat: None,
+            intro_card: Default::default(),
+            walked: false,
+            victory_seen: false,
+            ash: Default::default(),
+            before: None,
+            arrives: false,
         }
     }
 
@@ -671,6 +694,8 @@ impl BattleScreen {
     /// the foes, the start-AP change); the screen gives the heroes their art and logs the start's lines.
     pub fn world(cx: &mut Cx, fight: &Dict, runner: &str) -> Result<Self, String> {
         let d = cx.data.clone();
+        // TRANSITIONS1 T2 step 4: the hub's view before the fight (the arrival lists what changed)
+        let before = crate::transitions::snapshot(&d, cx.gs());
         let started = emberwake_world::battle::begin_world_with(&d, cx.gs_mut(), fight, &mut |world, m| member_art(&d, world, m))?;
         let emberwake_world::battle::WorldFight { session, world, members, stash_short, mods, intro, .. } = started;
         // CAMPAIGN1 P3, W6: at zero upkeep the party starts with less AP (read before the session, logged once)
@@ -687,6 +712,12 @@ impl BattleScreen {
         }
         for line in stash_short {
             cx.log(line);
+        }
+        b.before = Some(before);
+        b.arrives = runner != TRAVEL_RUNNER;
+        // TRANSITIONS1 T1: a story fight opens with the battle beat
+        if runner == story::FIGHT_SOURCE {
+            b.start_intro(cx);
         }
         cx.set_busy(true);
         Ok(b)
@@ -774,7 +805,8 @@ impl Screen<GameCx> for BattleScreen {
         // SPRITE1-U, FX1-L1 3.1: the tokens and effects run on the FX clock at the animation speed setting (FxSettings
         // 0.5-2x; at most 100 wall ms a frame), which a hit-stop holds still.
         // INPUT1 PB3: at 0.5x the playback's clock runs at half the animation speed
-        let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0) / self.pace(cx) as f64;
+        // TRANSITIONS1 T2 step 1: the last hit in slow motion
+        let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0) / self.pace(cx) as f64 * self.beat.map_or(1.0, |b| b.clock_rate(now));
         self.clock.advance((now.duration_since(self.clock_at).as_secs_f64() * 1000.0).min(100.0), speed);
         self.clock_at = now;
         // PORTRAITFX1 4.5: the talk box's portrait clock moves by the frame's wall time
@@ -819,8 +851,16 @@ impl Screen<GameCx> for BattleScreen {
         if self.host.session.is_none() {
             return;
         }
+        // TRANSITIONS1 T1: the battle beat holds the battle (its talks, a scripted round, autoplay) until control starts
+        if self.intro_tick(cx, now) {
+            return;
+        }
         // ENCOUNTER2-C DT5: a talk open (or about to open) holds the playback and autoplay
         if self.talk_tick(cx, now) {
+            return;
+        }
+        // TRANSITIONS1 T2: a won world fight's victory beat, then the results
+        if self.victory_tick(cx, now) {
             return;
         }
         // INPUT1 GH2, GH7: a round's planning start drafts the ghosts; the Auto-fill setting reaches the battle (not
@@ -902,6 +942,11 @@ impl Screen<GameCx> for BattleScreen {
         if self.host.session.is_none() {
             return;
         }
+        // TRANSITIONS1: a key skips the running beat
+        if self.beat.is_some() {
+            self.skip_beat(cx);
+            return;
+        }
         // ENCOUNTER2-C DT5: the talk box's keys (1-9, Enter, Space) only
         if self.talk.is_some() {
             let pick = self.talk_state_of(cx).and_then(|gs| self.talk_view(cx, &gs)).and_then(|v| talk::talk_key(k, &v));
@@ -953,6 +998,10 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn back(&mut self, cx: &mut Cx) {
+        if self.beat.is_some() {
+            self.skip_beat(cx);
+            return;
+        }
         if self.talk.is_some() {
             return;
         }
@@ -973,6 +1022,10 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn escape(&mut self, cx: &mut Cx) {
+        if self.beat.is_some() {
+            self.skip_beat(cx);
+            return;
+        }
         if self.talk.is_some() {
             return;
         }
@@ -1009,6 +1062,14 @@ impl Screen<GameCx> for BattleScreen {
             "fx": self.fx_state(), "tokens": self.tokens.state(),
             "outcome": if self.host.session.is_some() { self.outcome() } else { String::new() },
             "popup": self.popup.as_ref().map(|p| json!({"title": p.title, "rows": p.rows.iter().map(|r| json!({"label": r.label, "detail": r.detail, "valid": r.valid})).collect::<Vec<_>>()}))});
+        // TRANSITIONS1: the running beat (key only while one runs), with T1's banner
+        if let Some(b) = self.beat {
+            out["beat"] = b.state(Instant::now());
+            if b.kind == crate::transitions::Kind::Intro {
+                let c = &self.intro_card;
+                out["beat"]["banner_text"] = json!({"name": c.name, "objective": c.objective, "foes": c.count_line()});
+            }
+        }
         // RULESET1-G: the rules the battle plays by, beyond classic (a classic battle's state keeps its shape)
         if let Some(s) = self.host.session.as_ref().filter(|s| !s.w.ruleset.rules.is_empty()) {
             out["ruleset"] = json!({"id": s.w.ruleset.id, "rules": s.w.ruleset.rules, "plan_reveal": s.w.plan_reveal, "melee_diagonal": s.w.ruleset.melee_diagonal().id()});

@@ -9,6 +9,9 @@ The format and the commands are in `engine/docs/authoring/scenarios.md`. These a
 | --- | --- | --- |
 | `menu_opens` | The main menu to the new game screen and back | 0.8 s |
 | `timeline_fight` | `tl_flank` on the Timeline ruleset, autoplay on screen to a win, with a clip | 13 s |
+| `story_battle_hub` | A new Sunk Ward game: the opening vignette, the battle beat (TRANSITIONS1 T1), the first fight won by the link's `autoplay`, the victory beat and the results over the field (T2), then the prologue's vignettes and fights to the hub | 18 s |
+
+A battle's `state.beat` is there only while a beat runs (`kind` `intro` or `victory`); wait for it to be absent before the fight takes input. A battle talk can open after the link's `autoplay` and holds the victory beat: Enter moves it on.
 
 The main menu's screen id is `main_menu`.
 

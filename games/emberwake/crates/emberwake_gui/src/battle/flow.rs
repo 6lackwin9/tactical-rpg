@@ -201,14 +201,23 @@ impl BattleScreen {
         log_settled(cx, runner, &res);
         cx.autosave();
         let fight = fight.clone();
-        cx.nav.push(Nav::Pop);
-        cx.nav.push(Nav::Push(Box::new(crate::hub::Results::new(&res, &outcome, &fight))));
+        // TRANSITIONS1 T2 step 2: the results slide over the dimmed field (the battle stays under them until Continue,
+        // which fades out and closes both; a win here leaves the hub its arrival)
+        self.beat = None;
+        let before = if outcome == "won" && self.arrives { self.before.take() } else { None };
+        let results = crate::hub::Results::new(&res, &outcome, &fight).over_battle(cx.settings.reduce_motion(), before);
+        cx.nav.push(Nav::Push(Box::new(results)));
     }
 
     // ---- Actions (all mutations are command-API requests) -----------------------------------------------------
 
     /// A player's action (a click or a key): the playback controls click (SoundEvents ui_click), then `run`.
     pub(super) fn act(&mut self, cx: &mut Cx, a: Action) {
+        // TRANSITIONS1: during a beat any press skips it (T1: control starts; T2: the results open) and does nothing else
+        if self.beat.is_some() && !matches!(a, Action::Talk(_)) {
+            self.skip_beat(cx);
+            return;
+        }
         // ENCOUNTER2-C DT5: while a talk is open only its box acts
         if self.talk.is_some() != matches!(a, Action::Talk(_)) {
             return;
@@ -457,6 +466,7 @@ impl BattleScreen {
                 self.log_scroll = 0;
             }
             Action::Continue => self.settle(cx),
+            Action::SkipBeat => self.skip_beat(cx),
             Action::Leave => cx.nav.push(Nav::Pop),
             Action::Talk(a) => self.talk_reply(cx, a),
             Action::Skip => {

@@ -48,12 +48,15 @@ pub struct Game {
     pub sample: bool,
     /// CAMPAIGN1 W1: campaign events waiting for their notice (the map screens show them one by one, `runover`).
     pub notices: Vec<Value>,
+    /// TRANSITIONS1 T2 step 4: the arrival a won fight left for the hub (the region map shows it as it comes back on top;
+    /// the story stage drops it when a vignette plays next).
+    pub arrival: Option<crate::transitions::Arrival>,
 }
 
 impl Game {
     pub fn new(gs: GameState, slot: i64, sample: bool) -> Self {
         let clean = gs.to_value();
-        Self { gs, slot, clean, busy: false, sample, notices: Vec::new() }
+        Self { gs, slot, clean, busy: false, sample, notices: Vec::new(), arrival: None }
     }
 }
 
