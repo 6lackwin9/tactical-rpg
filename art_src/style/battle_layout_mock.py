@@ -353,8 +353,9 @@ def control_group(img, d, gx=896):
             img.paste(party, (bx + 5, 17), party)
         elif k == "hero":
             img.paste(hero, (bx + 11, 15), hero)
-        elif k == "auto":                      # play: the planner fills the round for you
-            d.polygon([(bx + 15, 20), (bx + 15, 44), (bx + 33, 32)], fill=PARCH)
+        elif k == "auto":                      # play + AUTO tag (gacha/SRPG convention); >> stays free for battle speed
+            d.polygon([(bx + 15, 14), (bx + 15, 36), (bx + 32, 25)], fill=PARCH)
+            d.text((bx + 22 - d.textlength("AUTO", font=SMALL) / 2, 37), "AUTO", font=SMALL, fill=GOLD)
         else:
             glyph(d, "clear", bx + 12, 22, 20, PARCH)
         if tactic:
