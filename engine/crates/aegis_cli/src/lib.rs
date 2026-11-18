@@ -12,6 +12,7 @@
 pub mod agentplay;
 pub mod bundle;
 pub mod golden;
+pub mod new_game;
 pub mod scenario;
 
 use aegis_content::file::stringify;
@@ -79,7 +80,8 @@ aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
 aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>]
 aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]
 aegis playtest start [save=] [out=] [size=] [shots=each|off] [window=1] | do <command ...> | run <script | -> | stop | status   (an agent plays the real game, logged and screenshot per command)
-aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)";
+aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)
+aegis new game <id> [title=<title>] [root=<workspace>]   (a new game folder games/<id>/ on the engine alone: menu, play screen, host, test, scenario)";
 
 /// Runs the command line of the process: the game's commands first, then the shell's.
 pub fn run<G: Game>(game: &G) -> Result<()> {
@@ -95,6 +97,7 @@ pub fn run<G: Game>(game: &G) -> Result<()> {
         (Some("record"), Some(_)) => record(game, &args),
         (Some("content"), Some(_)) => content(game, &args),
         (Some("bundle"), Some(manifest)) => bundle::command(manifest, &args.key("out", ".")),
+        (Some("new"), Some("game")) => new_game::command(&args),
         (Some("playtest"), _) => {
             let code = agentplay::command(game, &args, &raw).unwrap_or_else(|e| {
                 println!("§ could not start: {e:#}");

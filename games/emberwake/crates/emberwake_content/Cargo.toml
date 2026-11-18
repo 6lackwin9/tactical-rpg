@@ -14,3 +14,6 @@ emberwake_rules = { path = "../emberwake_rules" }
 emberwake_data = { path = "../emberwake_data" }
 serde_json = { workspace = true }
 indexmap = { workspace = true }
+
+[lints]
+workspace = true

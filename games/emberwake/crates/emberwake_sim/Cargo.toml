@@ -11,3 +11,6 @@ emberwake_world = { path = "../emberwake_world" }
 aegis_core = { path = "../../../../engine/crates/aegis_core" }
 emberwake_content = { path = "../emberwake_content" }
 serde_json = { workspace = true }
+
+[lints]
+workspace = true
