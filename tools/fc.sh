@@ -54,6 +54,14 @@ if [ -z "${CARGO_TARGET_DIR:-}" ] && [ -f .git ]; then
   base=$(sed -n 's/^target-dir = "\(.*\)"/\1/p' .cargo/config.toml)
   export CARGO_TARGET_DIR="${base}-$(basename "$PWD")"
 fi
+# PR7-7 (cloud self-heal): on Linux .cargo/config.toml's target-dir is a Windows folder, so with nothing set cargo builds into
+# $PWD/target; and the audio crate needs the ALSA headers (name the fix once, before the build fails in a linker-style error)
+if [ "$(uname -s 2>/dev/null)" = "Linux" ] && [ "${OS:-}" != "Windows_NT" ]; then
+  [ -n "${CARGO_TARGET_DIR:-}" ] || export CARGO_TARGET_DIR="$PWD/target"
+  if ! pkg-config --exists alsa 2>/dev/null; then
+    echo "[env] ALSA development files not found (pkg-config alsa); the audio crate will not build. Fix: apt-get install -y libasound2-dev pkg-config"
+  fi
+fi
 
 # Windows Smart App Control sometimes blocks a freshly linked test binary (os error 4551): delete the blocked exe so the next
 # run relinks it, up to 3 tries (engine/docs/PORT_NOTES.md).

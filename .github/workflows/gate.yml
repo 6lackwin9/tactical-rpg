@@ -1,4 +1,5 @@
-# Commit gate on the Aegis engine (transition step 2, 2026-10-19), on PRs into main, on pushes to main and on request
+# Commit gate on the Aegis engine (transition step 2, 2026-10-19), on PRs into main, on pushes to main and develop (CI-DEVELOP1)
+# and on request
 # (Actions > gate > Run workflow): the docs lint,
 # then every crate and target built (a compiler warning fails, CI1) and every test run (the same steps as tools/fc.sh gate
 # and check_project.ps1; no Godot step since CLN-42). Docs-only pushes to main skip it; `gate` is the required check on main.
@@ -9,15 +10,16 @@ on:
   pull_request:
     branches: [main]
   push:
-    # not develop (user 2026-11-11): every landing already passes tools/fc.sh gate before it lands, and a full CI gate on
-    # each develop push used up the private repo's Actions minutes; the release PR into main runs it once per batch
-    branches: [main]
+    # develop again (PR7-7 CI-DEVELOP1, user 2026-11-17; it replaces the 2026-11-11 "CI on release PRs and main only" rule):
+    # one run per push, a newer develop push cancels the older run (see concurrency); the nightly balance bands are bands.yml
+    branches: [main, develop]
     paths-ignore: ['**.md', 'docs/**']
   workflow_dispatch:
 
 concurrency:
   group: gate-${{ github.ref }}
-  cancel-in-progress: true
+  # only a superseded develop run is cancelled; a main or PR run is never cancelled by a later one
+  cancel-in-progress: ${{ github.ref == 'refs/heads/develop' }}
 
 jobs:
   checks:
