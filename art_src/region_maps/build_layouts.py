@@ -44,12 +44,12 @@ class Layout:
         self.rect(0, 0, self.w - 1, 0, "#"); self.rect(0, self.h - 1, self.w - 1, self.h - 1, "#")
         self.rect(0, 0, 0, self.h - 1, "#"); self.rect(self.w - 1, 0, self.w - 1, self.h - 1, "#")
 
-    def prop(self, pid, art, x, y, w=1, h=1, layer="sort", wall=True):
+    def prop(self, pid, art, x, y, w=1, h=1, layer="sort", wall=True, flip=False):
         """A standing prop turns its footprint into wall (`#`), as the schema asks; a ground prop leaves tiles alone."""
         if layer == "sort" and wall:
             self.rect(x, y, x + w - 1, y + h - 1, "#")
         self.props.append({"id": pid, "art": art, "x": x, "y": y, "w": w, "h": h, "layer": layer, "variant": -1,
-                           "flip": False})
+                           "flip": flip})
 
     def indoor(self, zone_char, x0, y0, x1, y1, door, ground, art, roof_h=None):
         """An enterable building (REVEAL1 draft): a wall ring round an open floor, one doorway, the floor its own
@@ -192,14 +192,16 @@ def sluice_undercroft():
     L.rect(18, 1, 19, 5, ".", "f")
     L.rect(16, 0, 21, 0, "#")
     L.prop("sluice_gate", "portcullis", 17, 0, 4, 1)              # one barred arch in the north wall, over the causeway
-    L.prop("post_w", "ring_post", 17, 6); L.prop("post_e", "ring_post", 20, 6)
-    L.prop("skiff", "varka_skiff", 21, 4, 2, 1, layer="ground")
-    L.prop("board", "mission_board", 14, 6, 2, 1)
+    L.prop("post_w", "mooring_bollard", 17, 6); L.prop("post_e", "mooring_bollard", 20, 6)   # a pair either side of the causeway (Tushar 2026-11-17, after the board moved to the hall)
+    L.prop("skiff", "varka_skiff", 20, 3, 4, 2, layer="ground")   # big enough to carry a unit or two
     # --- the Apothecary's Slab
     L.prop("retorts", "retort_shelf", 2, 1, 3, 1)
-    L.prop("shelf", "goods_shelf", 8, 1, 2, 1)
+    # vertical pieces as in the reference (Tushar 2026-11-17): a tall shelf of flasks along the west wall, seen from
+    # the side, the herb rack and a hanging lamp on the north wall
+    L.prop("side_shelf", "retort_shelf_side", 1, 3, 1, 3)
+    L.prop("herb_rack", "herb_rack", 8, 1, 2, 1)
+    L.prop("slab_lamp", "wall_lantern", 6, 0)
     L.prop("slab", "apothecary_slab", 5, 3, 3, 2)
-    L.prop("herb_rack", "herb_rack", 1, 5, 1, 2)
     L.prop("candles", "candle_stand", 10, 4)
     # --- the Tinker's Hearth
     L.prop("hearth", "tinker_hearth", 30, 1, 3, 2)
@@ -207,22 +209,51 @@ def sluice_undercroft():
     L.prop("anvil", "anvil", 29, 4)
     L.prop("scrap", "scrap_heap", 34, 5, 2, 2)
     L.prop("crates", "crate_stack", 27, 6, 2, 1)
+    # tall pieces on the side walls (sheet props_hub_vertical_1, 2026-11-17): the weapon rack on the east wall (Tushar:
+    # flasks were out of place here), the smith's tool rack on the back wall
+    L.prop("weapon_rack", "weapon_rack_tall", 36, 2, 1, 3)
+    L.prop("hearth_lamp", "wall_lantern", 35, 0)                  # lights the weapon rack (Tushar: it blended into the dark)
+    L.prop("tool_rack", "tool_rack_tall", 34, 1)                 # on the back wall beside the forge (Tushar 2026-11-17)
     # --- the hall: the brazier everyone passes, vault piers by the doors
     L.prop("brazier", "brazier", 22, 11)
+    # the mission board stands in the hall, where everyone gathers (Tushar 2026-11-17: the basin rim was crowded)
+    L.prop("board", "mission_board", 13, 10, 2, 1)
     L.prop("pier_w", "vault_pillar", 9, 10, 2, 2); L.prop("pier_e", "vault_pillar", 27, 10, 2, 2)
     # --- the entry shaft: the ladder up to the streets
     L.prop("ladder", "iron_ladder", 7, 15, 1, 1)        # on the room's north wall, so it is seen from the front
     L.prop("entry_crates", "crate_stack", 1, 21, 2, 1)
+    L.prop("entry_stack", "crates_tall", 8, 19, 1, 3)           # crates stacked up the east wall
+    L.prop("ladder_lamp", "wall_lantern", 6, 15)                     # the lamp by the ladder in the reference
     L.prop("entry_lamp", "lantern_pole", 2, 16)
-    # --- the Dry Hollows: six kiln bunks along the north wall, three either side of the door, a table
-    for i, x in enumerate((10, 13, 16, 20, 23, 26)):
-        L.prop(f"bunk_{i + 1}", "kiln_bunk", x, 15, 2, 1)   # niches in the wall's face, not furniture on the floor
-    L.prop("table", "table_stools", 18, 20, 2, 1)
+    # --- the Dry Hollows: eight kiln bunks along the north wall, four either side of the door, two tables
+    # each bunk is a bed in an arched niche, the bed reaching onto the floor, a candle nightstand between pairs
+    # (design reference ..._ce4b19f9; hub prop sheet 1, 2026-11-17)
+    # eight bunks (PR7-19 HUBMAP-BUNKS1, Design 2026-11-18): four either side of the door, shoulder to shoulder, so the
+    # nightstands went (the kiln bunk carries its own candle). Bunks 1-6 are the six of today, inside; 7 (west end)
+    # and 8 (east end) are the two that Timber Frames unlocks, drawn empty until the cap rises
+    BUNK_X = (12, 14, 16, 20, 22, 24, 10, 26)
+    for i, x in enumerate(BUNK_X):
+        L.prop(f"bunk_{i + 1}", "niche_bunk", x, 15, 2, 2)
     L.prop("stove", "hearth_stove", 27, 20)
+    # two halves (Tushar 2026-11-17): sleeping along the bunk wall, social below. Each prop has a reason to be where
+    # it is (v12 comment: too cluttered): two tables either side of the aisle from the door, the stove on the east
+    # wall, the stores in the south-west corner; nothing else on the floor
+    L.prop("table", "table_stools", 15, 20); L.prop("table_2", "table_stools", 22, 20)   # the table blocks, its stools stay seats
+    L.prop("stores", "barrels_tall", 10, 20, 1, 3)              # a row of barrels down the west wall
     # --- the Isolation Crypts: bars beside the door, two stasis slabs
-    L.prop("crypt_bars", "crypt_bars", 30, 15, 1, 1)
+    # the whole north wall is a bar wall either side of the door (design reference ..._ce4b19f9, 2026-11-17)
+    L.prop("crypt_bars", "bar_run", 29, 15, 3, 1); L.prop("crypt_bars_2", "bar_run", 34, 15, 3, 1)
     L.prop("stasis_1", "stasis_slab", 30, 18, 2, 1); L.prop("stasis_2", "stasis_slab", 34, 18, 2, 1)
-    L.prop("crypt_candles", "candle_stand", 36, 16)
+    L.prop("crypt_candles", "candle_stand", 29, 21)
+    L.prop("crypt_chains", "chains_tall", 36, 18, 1, 3)        # chains and a pulley down the east wall   # floor corner, clear of the bar wall (reference)
+    # idle spots (BUNKS1 BK9, AI-17; ids idle_* for PR7-19), in the order they fill: eight seats at the social
+    # tables (the two stools of each table, then its near side, then its far side), one resting spot at each bunk's
+    # foot, in bunk order. (Were spot_seat_1..6 and spot_bunk_1..6 in v18-v21; renamed before any data used them.)
+    SEATS = ((14, 20), (16, 20), (21, 20), (23, 20), (15, 21), (22, 21), (15, 19), (22, 19))
+    for i, (x, y) in enumerate(SEATS):
+        L.anchor(f"idle_seat_{i + 1}", x, y, f"idle seat {i + 1} at the social tables (BUNKS1 BK9, active member)")
+    for i, x in enumerate(BUNK_X):
+        L.anchor(f"idle_bunk_{i + 1}", x, 17, f"bunk {i + 1}: resting spot at the bed's foot (BUNKS1 BK9, benched member)")
     # anchors: the location's markers keep their anchor ids
     L.anchor("spawn", 6, 17, "arrival from the world map (the ladder foot)")
     L.anchor("road", 7, 16, "exit `road`: up the ladder, World map: the Sunk Ward")
@@ -230,9 +261,9 @@ def sluice_undercroft():
     L.anchor("gate_in", 19, 2, "arrival from the Grate (the Grate's `sluice` exit to_anchor)")
     L.anchor("npc_a", 6, 5, "Sabina at the Apothecary's Slab")
     L.anchor("npc_b", 31, 3, "Berek at the Tinker's Hearth")
-    L.anchor("npc_c", 16, 7, "Talia at the mission board")
+    L.anchor("npc_c", 15, 11, "Talia at the mission board")
     L.anchor("npc_d", 22, 6, "Widow Varka at her moored skiff")
-    L.anchor("lore_a", 14, 7, "Ivo beside Talia (after the Toll-Pen rescue)")
+    L.anchor("lore_a", 12, 11, "Ivo beside Talia (after the Toll-Pen rescue)")
     L.anchor("chest_a", 10, 6, "the stash (the Slab room's corner)")
     L.anchor("rest", 22, 12, "the brazier: rest and the bunk roster")
     L.anchor("crypts", 32, 15, "the Isolation Crypts' door (Stage IV operatives, stasis slots)")

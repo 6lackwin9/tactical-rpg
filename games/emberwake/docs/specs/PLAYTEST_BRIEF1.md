@@ -1,6 +1,6 @@
 # PLAYTEST_BRIEF1: systems playtest by an agent session (draft for the user)
 
-Status: **draft, shown to the user before the session starts** (user 2026-11-18: "add the full playtest but have it be
+Status: **approved** (user 2026-11-18, "brief ok") (user 2026-11-18: "add the full playtest but have it be
 conducted by a Fable session, which is supposed to give feedback on the core systems"). Runs on the harness from READY
 `PR7-22` (`AGENT-PLAYTEST1`) against `develop`. Format: **hybrid**, a must-cover checklist first, then an open roam.
 

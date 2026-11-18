@@ -731,13 +731,47 @@ def sunk_ward_travel() -> np.ndarray:
     return tr.render(2.8)
 
 
+def one_shot(stereo: np.ndarray, seconds: float, fade: float = 0.8) -> np.ndarray:
+    # A sting is not a loop: keep the head, fade the tail out to silence.
+    n = int(seconds * SR)
+    out = stereo[:, :n].copy()
+    k = int(fade * SR)
+    out[:, -k:] *= np.linspace(1.0, 0.0, k) ** 2
+    return out
+
+
+def combat_sting() -> np.ndarray:
+    """~3 s one-shot (TRANSITIONS1, AI-18): the ash wipe's hit into battle. A minor cluster stab, low drum, anvil."""
+    tr = Track(100, 4, 4, seed=455684)
+    tr.add(drum(40, 0.9, 0.6, tr.rng, 2.6), 0.0, 0.0, 1.0, 0.25)
+    tr.add(anvil(midi("A4"), tr.rng), 0.02, -0.2, 0.55, 0.45)
+    tr.add(pad([midi(n) for n in ("A2", "C3", "E3", "A#3")], 1.4, 0.01, 0.9, 8, 0.2), 0.0, 0.0, 0.7, 0.4)
+    tr.add(drum(46, 0.5, 0.5, tr.rng, 2.2), 0.6, 0.1, 0.7, 0.25)
+    tr.add(horn(midi("E3"), 1.1), 0.62, 0.15, 0.55, 0.35)
+    return one_shot(tr.render(1.6, -1.0), 3.0)
+
+
+def victory_stinger() -> np.ndarray:
+    """~5.5 s one-shot (TRANSITIONS1, AI-18): Continue into the hub. D minor turns to F major, rising horn, a bell."""
+    tr = Track(90, 4, 4, seed=455684)
+    for i, n in enumerate(("D4", "F4", "A4")):
+        tr.add(horn(midi(n), 0.5), i * 0.36, 0.1, 0.6, 0.35)
+    tr.add(horn(midi("C5"), 2.6), 1.08, 0.1, 0.7, 0.4)
+    tr.add(pad([midi(n) for n in ("F2", "C3", "F3", "A3", "C4")], 3.6, 0.3, 1.8, 7, 0.12), 1.0, 0.0, 0.6, 0.45)
+    tr.add(bell(midi("F5"), 3.4), 1.08, -0.2, 0.45, 0.5)
+    tr.add(drum(44, 0.8, 0.4, tr.rng, 2.4), 1.06, 0.0, 0.7, 0.2)
+    return one_shot(tr.render(2.2, -1.5), 5.5, 1.6)
+
+
+STINGS = {"combat_sting", "victory_stinger"}   # one-shots in audio/stings/ (AI-18 placeholders until Flow Music)
 TRACKS = {"ashlands": ashlands, "iron_reaches": iron_reaches,
           "tidewrack": tidewrack, "combat": combat,
           "town": town, "danger": danger, "shop": shop, "travel": travel, "boss": boss,
           "story_opening": story_opening, "prologue_tension": prologue_tension,
           "story_escape": story_escape, "story_goodbye": story_goodbye,
           "sunk_ward_danger": sunk_ward_danger, "sunk_ward_boss": sunk_ward_boss,
-          "sunk_ward_shop": sunk_ward_shop, "sunk_ward_travel": sunk_ward_travel}
+          "sunk_ward_shop": sunk_ward_shop, "sunk_ward_travel": sunk_ward_travel,
+          "combat_sting": combat_sting, "victory_stinger": victory_stinger}
 # ASSETORG2 layers: the kit's mood loops; every other track is the game's
 WORKSPACE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 LAYERS = {"kit": ("kits", "rpg", "assets"), "game": ("games", "emberwake", "assets")}
@@ -749,7 +783,8 @@ def layer_of(name: str) -> str:
 
 
 def track_path(root: str, name: str) -> str:
-    return os.path.normpath(os.path.join(root, *LAYERS[layer_of(name)], "audio", "music", name + ".ogg"))
+    folder = "stings" if name in STINGS else "music"
+    return os.path.normpath(os.path.join(root, *LAYERS[layer_of(name)], "audio", folder, name + ".ogg"))
 
 
 def find_ffmpeg() -> str | None:

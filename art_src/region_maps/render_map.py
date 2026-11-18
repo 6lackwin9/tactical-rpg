@@ -9,7 +9,8 @@ art_src/region_maps/previews/<location>.png.
 A look-and-feel preview, not the game's renderer: it draws art_src/region_maps/<location>.json at 32 px a tile, the
 props' art scale. Grounds are the web-queue tile textures (TILES names the picked take), toned in code toward each
 ground's catalog colour, as REGIONGROUND1 does at the cut; a ground with no texture yet draws its flat colour. Wall
-tiles draw the boundary set's top, and its face where open ground lies south of them. Standing props stand
+tiles draw a wall set's top, and its face where open ground lies south of them: each wall cell takes the set of the
+room it faces (ROOM_WALLS, from the layout's draft_room_styles), and walls outside every room the boundary set. Standing props stand
 bottom-centred on their footprint and sort by their feet; ground props lie under them; roofs draw last unless
 --inside names their zone.
 """
@@ -32,10 +33,26 @@ BOUNDARY = {"sluice_undercroft": "drain_brick", "drowned_runoff_grate": "drain_b
 WALL_TAKES = {"drain_brick": (1, 2), "blind_tenements": (2, 1), "gorge_rock": (1, 2),
               "interior_plaster": (2, 1), "interior_stone": (1, 2)}   # (top take, face take)
 CELLS = {"flagstone": 4, "cobble_road": 6, "floorboards": 6}   # tiles a texture spans (default 8): sets the size of its stones
+# Per-room wall sets (art_src/region_maps/README.md open item 3): a room's draft_room_styles text names its walls.
+# Only the sets the text asks for are listed; every other room keeps its location's boundary set.
+ROOM_WALLS = {"sluice_undercroft": {"slab": "interior_plaster", "crypts": "interior_stone"}}
+WALL_TONES = {"interior_plaster": ((50, 47, 44), (128, 123, 114)), "interior_stone": ((34, 37, 42), (48, 52, 56))}  # (top, face); default below
+# Mirroring a design reference (Tushar 2026-11-17: the map mirrors its reference image with tiles and props): target
+# colours measured from the picked reference (art_src/region_maps/README.md), per location. ground: a ground's mean
+# colour; room_grade: per-room multipliers on the floor; void: wall tops and the outside; the wall faces use WALL_TONES.
+REF_LOOK = {"sluice_undercroft": {   # reference: flow/out/Region Maps/Underground_vault_RPG_exploratio..._ce4b19f9.jpg
+    "ground": {"flagstone": (54, 59, 63), "water": (32, 46, 54), "floorboards": (70, 51, 39), "soot_yard": (34, 33, 35),
+               "moss": (52, 66, 46)},
+    "room_grade": {"slab": (1.95, 1.95, 1.9), "hearth": (1.2, 1.05, 0.98), "crypts": (0.95, 1.02, 0.95)},
+    "void": (4, 4, 6), "face": (30, 28, 34), "patchy": {"soot_yard": 0.2, "moss": 0.42}, "patch_scale": 0.45}}
 GREY = {"cobble_road": 0.75, "flagstone": 0.5}                # how far a texture's own hue is pulled to grey before toning
 PATCHY = {"soot_yard": 0.52, "moss": 0.46}   # share of a cell these grounds cover: ash and moss lie in patches on the floor
 UNDER = "flagstone"                           # what shows between the patches
-FIT = {"portcullis": (72, 84), "kiln_bunk": (64, 56), "iron_ladder": (40, 56), "crypt_bars": (48, 52)}   # (w, h) px a wall-mounted art is scaled into
+STRETCH = {"bar_run": (96, 32), "iron_ladder": (28, 64)}   # the ladder climbs the face and the top: the way out   # (w, h) px a wall-mounted frame is stretched to: exactly the one-tile face
+IN_WALL = {"iron_ladder", "wall_lantern"}   # pieces fixed to a wall face (Tushar 2026-11-17: the ladder looked apart from its wall)
+TRIM = {"apothecary_slab": [(0, 0, 96, 42), (88, 42, 96, 84)]}   # boxes cut from an art: the slab's own lamp on a pole (Tushar 2026-11-17: "the lamp on the slab seems weird"; the room's wall lamp lights it)
+LIFT = {"weapon_rack_tall": 1.6, "tool_rack_tall": 1.3}   # dark wood and iron pieces lifted to read on a dark floor
+FIT = {"portcullis": (72, 84), "kiln_bunk": (64, 56), "iron_ladder": (40, 56), "crypt_bars": (48, 52), "wall_lantern": (18, 38)}   # (w, h) px a wall-mounted art is scaled into
 BRIGHT = 1.9   # the catalog colours are near black; the preview lifts everything by this, like the grid preview
 
 
@@ -56,6 +73,13 @@ def tone(im, colour, spread=0.38, cells=8, grey=0.0):
             p = px[x, y]
             px[x, y] = tuple(max(0, min(255, round(colour[c] + (p[c] - mean[c]) * spread))) for c in range(3))
     return im
+
+
+FOOT = 2   # px a standing prop's lowest solid row sits below its footprint edge, so it overlaps the floor it stands on
+
+
+def _fade(img, k):
+    out = img.copy(); out.putalpha(img.split()[3].point(lambda v: round(v * k))); return out
 
 
 def find(folder, stem, take):
@@ -80,6 +104,8 @@ def render(loc, tiles_dir, props_root, out, inside=""):
         if p["layer"] != "sort":
             continue
         cells = [(x, y) for y in range(p["y"], p["y"] + p["h"]) for x in range(p["x"], p["x"] + p["w"])]
+        if p["art"] in STRETCH or p["art"] in IN_WALL:
+            continue    # set into a real wall: it stays wall, so it sits in the face, not out on the floor
         ring = [(x + dx, y + dy) for x, y in cells for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))]
         if any(0 <= x < W and 0 <= y < H and e["rows"][y][x] != "#" for x, y in ring) and not any(x in (0, W - 1) or y in (0, H - 1) for x, y in cells):
             for x, y in cells:
@@ -87,13 +113,46 @@ def render(loc, tiles_dir, props_root, out, inside=""):
     tex = {}
     for gid in set(e["ground_legend"].values()) | {UNDER}:
         src = find(tiles_dir, *TILES[gid]) if gid in TILES else None
-        tex[gid] = tone(src, lift(cat[gid]), cells=CELLS.get(gid, 8), grey=GREY.get(gid, 0.0)) if src else Image.new("RGB", (8 * T, 8 * T), lift(cat[gid]))
+        target = REF_LOOK.get(loc, {}).get("ground", {}).get(gid) or lift(cat[gid])
+        tex[gid] = tone(src, target, cells=CELLS.get(gid, 8), grey=GREY.get(gid, 0.0)) if src else Image.new("RGB", (8 * T, 8 * T), target)
     bset = BOUNDARY.get(e.get("location", loc), "blind_tenements")
-    top_take, face_take = WALL_TAKES[bset]
-    top = find(tiles_dir, f"boundary_{bset}_wall", top_take)
-    face = find(tiles_dir, f"boundary_{bset}_wall_face", face_take)
-    top = tone(top, (40, 40, 46), 0.3) if top else Image.new("RGB", (8 * T, 8 * T), (40, 40, 46))
-    face = tone(face, (60, 58, 64), 0.5, cells=4) if face else Image.new("RGB", (4 * T, 4 * T), (60, 58, 64))
+
+    def wall_set(name):
+        """(top, face, face_dark) textures of one wall set, toned dark like the boundary."""
+        kind = "boundary" if name in BOUNDARY.values() or name == "blind_tenements" else "walls"
+        top_take, face_take = WALL_TAKES[name]
+        look = REF_LOOK.get(loc, {})
+        tc, fc = WALL_TONES.get(name, ((40, 40, 46), look.get("face", (60, 58, 64))))
+        if "void" in look:
+            tc = look["void"]
+        t_ = find(tiles_dir, f"{kind}_{name}_wall", top_take)
+        f_ = find(tiles_dir, f"{kind}_{name}_wall_face", face_take)
+        t_ = tone(t_, tc, 0.3) if t_ else Image.new("RGB", (8 * T, 8 * T), tc)
+        f_ = tone(f_, fc, 0.5, cells=4) if f_ else Image.new("RGB", (4 * T, 4 * T), fc)
+        return t_, f_, ImageEnhance.Brightness(f_).enhance(0.72)
+
+    top, face, _ = wall_set(bset)
+    sets = {bset: wall_set(bset)}
+    room_walls = ROOM_WALLS.get(e.get("location", loc), {})
+    for name in set(room_walls.values()):
+        sets[name] = wall_set(name)
+    zone_id = {k: v["id"] for k, v in e.get("zone_legend", {}).items()}
+    zrows = e.get("zones", [])
+
+    def room_at(x, y):
+        return zone_id.get(zrows[y][x]) if 0 <= y < len(zrows) and 0 <= x < len(zrows[y]) else None
+
+    def wall_of(x, y):
+        """The wall set of wall cell (x, y): the room whose floor it faces (the open cell south of it), else the nearest
+        room within two cells (south first, then west, east, north), else the boundary set."""
+        if not room_walls:
+            return sets[bset]
+        for k in (1, 2):
+            for dx, dy in ((0, k), (-k, 0), (k, 0), (0, -k)):
+                r = room_at(x + dx, y + dy)
+                if r:
+                    return sets[room_walls.get(r, bset)]
+        return sets[bset]
     im = Image.new("RGBA", ((W + 2 * M) * T, (H + 2 * M) * T))
     # Ground: one picture composed from the textures, with soft irregular borders between land grounds (REGIONGROUND1
     # EN 2: an edge wanders up to about 0.3 cell). The lookup position of every pixel is pushed by smooth noise, so a
@@ -125,15 +184,17 @@ def render(loc, tiles_dir, props_root, out, inside=""):
         tx = np.asarray(tex[g]); th, tw = tx.shape[:2]
         return tx[(yy % th), (xx % tw)]
 
-    blobs = noise(1.6) + 0.6 * noise(0.7) + 0.25 * noise(0.3)       # where a patchy ground lies thick
+    ps = REF_LOOK.get(loc, {}).get("patch_scale", 1.0)               # < 1: smaller, more scattered patches
+    blobs = noise(1.6 * ps) + 0.6 * noise(0.7 * ps) + 0.25 * noise(0.3 * ps)   # where a patchy ground lies thick
     lo, hi = float(blobs.min()), float(blobs.max())
     blobs = (blobs - lo) / (hi - lo)
     under = full_of(UNDER)
     for k, g in enumerate(ids):
         full = full_of(g)
         sel = pick == k
-        if g in PATCHY:
-            cut = float(np.quantile(blobs, 1 - PATCHY[g]))
+        patchy = dict(PATCHY, **REF_LOOK.get(loc, {}).get("patchy", {}))
+        if g in patchy:
+            cut = float(np.quantile(blobs, 1 - patchy[g]))
             thick = sel & (blobs >= cut)
             thin = sel & (blobs < cut) & (blobs >= cut - 0.08)        # a soft edge: half ash, half floor
             canvas[sel] = under[sel]
@@ -141,6 +202,16 @@ def render(loc, tiles_dir, props_root, out, inside=""):
             canvas[thick] = full[thick]
         else:
             canvas[sel] = full[sel]
+    grade = REF_LOOK.get(loc, {}).get("room_grade", {})
+    if grade:   # per-room light and colour, measured from the design reference (a lit slab room, a forge-warm hearth)
+        zone_id_ = {k: v["id"] for k, v in e.get("zone_legend", {}).items()}
+        zr = e.get("zones", [])
+        zgrid = np.array([[zone_id_.get(c, "") for c in r] for r in zr]) if zr else None
+        if zgrid is not None:
+            zpix = zgrid[ov, ou]
+            for room, mul in grade.items():
+                m = zpix == room
+                canvas[m] = np.clip(canvas[m].astype("float32") * np.array(mul, dtype="float32"), 0, 255).astype("uint8")
     im.paste(Image.fromarray(canvas), (0, 0))
     # a stone rim where land meets water: a dark line on the land side, a pale lip on the water side
     rim = Image.new("RGBA", im.size, (0, 0, 0, 0)); dr = ImageDraw.Draw(rim)
@@ -175,7 +246,6 @@ def render(loc, tiles_dir, props_root, out, inside=""):
     def _is_face(x, y):
         return _depth(x, y) > 0
 
-    face_dark = ImageEnhance.Brightness(face).enhance(0.72)
     for y in range(-M, H + M):
         for x in range(-M, W + M):
             if open_at(x, y):
@@ -184,6 +254,7 @@ def render(loc, tiles_dir, props_root, out, inside=""):
             if depth == 2 and open_at(x, y - 1):
                 depth = 0        # a wall two tiles thick: its far row shows its top, its near row its face
             X0, Y0 = (x + M) * T, (y + M) * T
+            top, face, face_dark = wall_of(x, y)
             if depth:
                 # the near row of a face is a little darker (it is lower, further from the light); the row that meets
                 # the wall's top carries a pale cap line
@@ -193,6 +264,17 @@ def render(loc, tiles_dir, props_root, out, inside=""):
                     ImageDraw.Draw(im).rectangle([X0, Y0, X0 + T - 1, Y0 + 2], fill=(132, 130, 140, 255))
             else:
                 im.paste(tiled(top, x, y), (X0, Y0))
+    # the back (north) walls of the top rooms stand two tiles tall, as in the design reference (Tushar 2026-11-17:
+    # "increase the wall length"): the outer border has margin above it, so its face also covers the row above; the
+    # map's walkable rows do not change
+    for x in range(W):
+        if rows[0][x] == "#" and open_at(x, 1):
+            top_, face_, face_dark_ = wall_of(x, 0)
+            X0 = (x + M) * T
+            im.paste(tiled(face_, x, 3), (X0, (M - 1) * T))
+            im.paste(tiled(face_dark_, x, 4), (X0, M * T))
+            ImageDraw.Draw(im).rectangle([X0, (M - 1) * T, X0 + T - 1, (M - 1) * T + 2], fill=(132, 130, 140, 255))
+    top, face, face_dark = sets[bset]
     edge = ImageDraw.Draw(im)
     for y in range(-1, H + 1):
         for x in range(-1, W + 1):
@@ -232,6 +314,19 @@ def render(loc, tiles_dir, props_root, out, inside=""):
             f = base / p["art"] / "v0.png"
             if f.exists():
                 a = Image.open(f).convert("RGBA")
+                for box in TRIM.get(p["art"], ()):
+                    a.paste((0, 0, 0, 0), box)
+                if p["art"].endswith("_tall"):
+                    # the magenta key leaves a pink-violet fringe on thin spears and chains: pull it to iron grey
+                    px = a.load()
+                    for yy in range(a.height):
+                        for xx in range(a.width):
+                            r, g, bb, al = px[xx, yy]
+                            if al and r - g > 18 and bb - g > 18:
+                                v = (g + min(r, bb)) // 2
+                                px[xx, yy] = (v, v, v + 4, al)
+                if p["art"] in LIFT:
+                    al = a.split()[3]; a = ImageEnhance.Brightness(a.convert("RGB")).enhance(LIFT[p["art"]]).convert("RGBA"); a.putalpha(al)
                 return a.transpose(Image.FLIP_LEFT_RIGHT) if p.get("flip") else a
         return None
 
@@ -244,10 +339,15 @@ def render(loc, tiles_dir, props_root, out, inside=""):
 
     def into_wall(a, p):
         """The prop's stone and brick pulled to the wall's colour, and a tall arch scaled to sit in a low wall."""
+        if p["art"] in STRETCH:                         # a frame that must fill the face exactly, never rise above it
+            return _masonry(a.resize(STRETCH[p["art"]], Image.LANCZOS))
         limit = FIT.get(p["art"])
         if limit and (a.width > limit[0] or a.height > limit[1]):
             k = min(limit[0] / a.width, limit[1] / a.height)
             a = a.resize((round(a.width * k), round(a.height * k)), Image.LANCZOS)
+        return _masonry(a)
+
+    def _masonry(a):
         px = a.load()
         opaque = [px[x, y] for y in range(0, a.height, 2) for x in range(0, a.width, 2) if px[x, y][3] > 128]
         if not opaque:
@@ -260,26 +360,68 @@ def render(loc, tiles_dir, props_root, out, inside=""):
                     px[x, y] = tuple(max(0, min(255, round(c + (face_mean[k] - mean[k]) * 0.75))) for k, c in enumerate((r, g, b))) + (al,)
         return a
 
+    def _prop_at(cx, cy):
+        """A wall cell made by a standing prop's footprint (furniture), not a real wall."""
+        return any(q["layer"] == "sort" and q["x"] <= cx < q["x"] + q["w"] and q["y"] <= cy < q["y"] + q["h"]
+                   for q in e["props"])
+
     def place(p, a):
         mounted = wall_mounted(p)
+        if p["layer"] == "ground" and a.width * 2 <= p["w"] * T:
+            # a low-res ground prop (a boat) grows to its footprint in whole pixel steps, so a unit could ride in it
+            # (Tushar 2026-11-17: the skiff was too small for a unit)
+            k = (p["w"] * T) // a.width
+            a = a.resize((a.width * k, a.height * k), Image.NEAREST)
         if mounted:
             a = into_wall(a, p)
             p = dict(p, no_shadow=True)
         x = (p["x"] + M) * T + (p["w"] * T - a.width) // 2
+        if p["art"].endswith("_side"):
+            # a side-view piece against a west or east wall: its brick back overlaps the wall's edge, so it stands
+            # flush to the wall like the reference's tall shelf
+            body = Image.new("RGBA", a.size, (0, 0, 0, 0))   # the brick back is the wall itself: drop it, keep the body
+            keep = (a.width - T, 0, a.width, a.height) if not p.get("flip") else (0, 0, T, a.height)
+            body.paste(a.crop(keep), keep[:2]); a = body
+            x = (p["x"] + M) * T - (a.width - T) if not p.get("flip") else (p["x"] + M) * T
+        elif not mounted and p["layer"] == "sort":
+            # art wider than its footprint stays inside the room: it never hangs over a wall beside it
+            # (Tushar 2026-11-17: the herb rack on the Slab's west wall was "out of bounds")
+            fy = p["y"] + p["h"] - 1
+            lo = (p["x"] + M) * T if p["x"] > 0 and e["rows"][fy][p["x"] - 1] == "#" and not _prop_at(p["x"] - 1, fy) else None
+            xr = p["x"] + p["w"]
+            hi = (xr + M) * T if xr < len(e["rows"][0]) and e["rows"][fy][xr] == "#" and not _prop_at(xr, fy) else None
+            if lo is not None and hi is not None and a.width > hi - lo:
+                k = (hi - lo) / a.width
+                a = a.resize((hi - lo, max(1, round(a.height * k))), Image.LANCZOS)
+                x = lo
+            elif lo is not None and x < lo:
+                x = lo
+            elif hi is not None and x + a.width > hi:
+                x = hi - a.width
+        # the art's solid pixels only: generated props carry faint baked shadow pixels (alpha > 0) below their feet,
+        # and measuring from those sat every prop a few pixels above its contact line (Tushar 2026-11-17: "props
+        # seeming not on the ground")
+        solid = a.split()[3].point(lambda v: 255 if v > 128 else 0)
+        box = solid.getbbox() or (0, 0, a.width, a.height)
+        a = Image.composite(a, Image.new("RGBA", a.size, (0, 0, 0, 0)), solid)
+        if p["layer"] == "sort":
+            y = (p["y"] + p["h"] + M) * T - box[3] + (0 if mounted else FOOT)       # the lowest solid pixel lands on the footprint's foot line
         if p["layer"] == "sort" and not p.get("no_shadow"):
-            # a contact shadow under the base, so the prop sits on the floor
-            box = a.getbbox() or (0, 0, a.width, a.height)
-            by = (p["y"] + p["h"] + M) * T - (a.height - box[3])
+            # contact, not a cast shadow (Tushar 2026-11-15: an oval under a front-view prop makes it float): the
+            # prop's own silhouette, nudged down a few pixels and blurred, darkens the floor right where each foot,
+            # leg or base meets it, so legs touch the floor and a block sits in a pool the shape of its base
+            sil = Image.new("L", a.size, 0)
+            sil.paste(solid.crop((0, 0, a.width, box[3])).point(lambda v: 210 if v else 0), (0, 0))
+            low = Image.new("L", a.size, 0)                     # only the base's lowest rows cast contact
+            band = max(4, (box[3] - box[1]) // 6)
+            low.paste(sil.crop((0, box[3] - band, a.width, box[3])), (0, box[3] - band))
             sh2 = Image.new("RGBA", im.size, (0, 0, 0, 0))
-            # no cast shadow (Tushar 2026-11-15: an oval under a front-view prop makes it float): only a thin dark
-            # line where the base meets the floor
-            ImageDraw.Draw(sh2).rectangle([x + box[0] + 1, by - 2, x + box[2] - 1, by + 1], fill=(0, 0, 0, 120))
-            sh2 = sh2.filter(ImageFilter.GaussianBlur(1))
-            im.alpha_composite(sh2)
+            dark = Image.new("RGBA", a.size, (8, 6, 10, 255)); dark.putalpha(low)
+            for dy, k in ((1, 1.0), (3, 0.7), (5, 0.4)):
+                sh2.alpha_composite(_fade(dark, k), (x, y + dy))
+            im.alpha_composite(sh2.filter(ImageFilter.GaussianBlur(1.6)))
         if p["layer"] == "ground":
             y = (p["y"] + M) * T + (p["h"] * T - a.height) // 2
-        else:
-            y = (p["y"] + p["h"] + M) * T - a.height
         im.alpha_composite(a, (x, max(0, y)))
 
     missing = []
@@ -306,7 +448,8 @@ def render(loc, tiles_dir, props_root, out, inside=""):
     LIGHTS = {"brazier": (150, (255, 170, 80)), "tinker_hearth": (140, (255, 140, 60)), "furnace_mouth": (170, (255, 120, 40)),
               "lantern_pole": (95, (255, 190, 110)), "watch_torch": (95, (255, 130, 60)), "violet_lamp_post": (100, (150, 130, 255)),
               "apothecary_slab": (85, (255, 200, 130)), "retort_shelf": (60, (255, 200, 130)), "kiln_bunk": (45, (255, 190, 120)),
-              "hearth_stove": (70, (255, 150, 80)), "candle_stand": (70, (255, 200, 120)), "shrine_altar": (80, (255, 200, 120))}
+              "hearth_stove": (70, (255, 150, 80)), "candle_stand": (70, (255, 200, 120)), "shrine_altar": (80, (255, 200, 120)), "wall_lantern": (75, (255, 190, 110)),
+              "nightstand": (40, (255, 200, 120))}
     dark = Image.new("L", im.size, 96)                      # how much darkness lies over the map (0 none, 255 black)
     glow = Image.new("RGBA", im.size, (0, 0, 0, 0))
     dd, dg = ImageDraw.Draw(dark), ImageDraw.Draw(glow)
