@@ -93,7 +93,15 @@ fn sold(gs: &GameState, sqid: &str, item: &str) -> i64 {
     gs.shops.get(sqid).map(json::dict).and_then(|m| m.get(item)).map(json::to_int).unwrap_or(0)
 }
 
-/// [{kind: item | loot | supplies, id, item, count, price, left}]; [] when closed.
+/// PR6-8 (B2): the supply price of shop row `s` now: round(supply_price x the multiplier its
+/// `supply_price_mult_by_act` names for the current act), else the supply price itself (0 = sells no supplies).
+pub fn supply_price(gs: &GameState, s: &Dict) -> i64 {
+    rpgkit_data::facility::supply_price_in_act(s, i64::from(crate::roster::act(gs)))
+}
+
+/// [{kind: item | loot | supplies, id, item, count, price, left}]; [] when closed. PR6-8: the stock and loot prices
+/// after the shop's discount take the keeper's facility `shop_pct` (`facility::shop_pct`); the supply price is
+/// `supply_price` (the act multiplier). `buy` and `trade` charge these prices.
 pub fn offers(d: &Data, gs: &GameState, r: &str) -> Vec<Dict> {
     let mut out = Vec::new();
     if !is_open(d, gs, r) {
@@ -103,6 +111,7 @@ pub fn offers(d: &Data, gs: &GameState, r: &str) -> Vec<Dict> {
     let sqid = json::s(s, "_qid");
     let rb = rep::buy_pct(keeper_band(d, gs, s));
     let off = discount_pct(gs, s);
+    let fac = crate::facility::shop_pct(d, gs, &dialogue::character_qid(d, gs, &json::s(s, "keeper")));
     for raw in json::arr(&json::normalize(json::get(s, "stock"))) {
         let st = json::dict(raw);
         if !quest::all_hold(gs, json::get(st, "requires_flags")) {
@@ -111,7 +120,7 @@ pub fn offers(d: &Data, gs: &GameState, r: &str) -> Vec<Dict> {
         let item = json::s(st, "item");
         let count = json::i(st, "count", UNLIMITED);
         let left = if count == UNLIMITED { UNLIMITED } else { (count - sold(gs, &sqid, &item)).max(0) };
-        let price = discounted(buy_price(s, value_of(d, &item), json::i(st, "price", DERIVED), rb), off);
+        let price = crate::facility::scaled(discounted(buy_price(s, value_of(d, &item), json::i(st, "price", DERIVED), rb), off), fac);
         out.push(json::obj([("kind", "item".into()), ("id", item.clone().into()), ("item", item.into()), ("count", int(count)), ("price", int(price)), ("left", int(left))]));
     }
     for raw in json::arr(&json::normalize(json::get(s, "loot"))) {
@@ -126,18 +135,18 @@ pub fn offers(d: &Data, gs: &GameState, r: &str) -> Vec<Dict> {
             ("id", lqid.into()),
             ("item", json::s(loot, "ref").into()),
             ("count", int(json::i(loot, "count", 1))),
-            ("price", int(discounted(json::i(l, "price", 1), off))),
+            ("price", int(crate::facility::scaled(discounted(json::i(l, "price", 1), off), fac))),
             ("left", int(1)),
         ]));
     }
-    let supply_price = json::i(s, "supply_price", 0);
-    if supply_price > 0 {
+    let supply = supply_price(gs, s);
+    if supply > 0 {
         out.push(json::obj([
             ("kind", SUPPLIES.into()),
             ("id", SUPPLIES.into()),
             ("item", "".into()),
             ("count", int(1)),
-            ("price", int(supply_price)),
+            ("price", int(supply)),
             ("left", int((gs.party.purse.supplies_max - gs.party.supplies).max(0))),
         ]));
     }

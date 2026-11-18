@@ -9,7 +9,7 @@ use aegis_core::json::{self, gstr, Dict};
 use serde_json::Value;
 
 /// WorldSchema.KINDS, then CAMPAIGN1's and STORYUI1's kinds (the loader's list).
-pub const KINDS: [&str; 20] = crate::source::WORLD_KINDS;
+pub const KINDS: [&str; 21] = crate::source::WORLD_KINDS;
 const TUNING_KEYS: [&str; 5] = ["hp_pct", "power", "armor", "speed", "ap"];
 const ITEM_TUNING_KEYS: [&str; 3] = ["power", "mitigation", "burden"];
 const STANCES: [&str; 4] = ["ally", "rival", "enemy", "neutral"];
@@ -128,6 +128,7 @@ pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &
         "sequences" => errors.extend(story::sequence_errors(v, w, &e)),
         "boards" => errors.extend(board::board_errors(&e)),
         rpgkit_data::RECRUITS_KIND => errors.extend(recruit_errors(v, &e)),
+        rpgkit_data::facility::FACILITIES_KIND => errors.extend(super::facility::facility_errors(v, &e)),
         _ => {}
     }
     // CAMPAIGN1 11.4: reserved flag keys in the entry's conditions and flag lists
@@ -224,6 +225,8 @@ fn shape_errors(kind: &str, e: &Dict) -> Vec<String> {
         "vignettes" => list_errors(&mut errors, &["cards"]),
         "sequences" => list_errors(&mut errors, &["steps"]),
         "boards" => list_errors(&mut errors, &["requires_flags"]),
+        // PR6-8: the json field of the facilities
+        rpgkit_data::facility::FACILITIES_KIND => list_errors(&mut errors, &["levels"]),
         // PK3 3.1: the json fields of the recruit templates
         rpgkit_data::RECRUITS_KIND => {
             list_errors(&mut errors, &["age_band"]);

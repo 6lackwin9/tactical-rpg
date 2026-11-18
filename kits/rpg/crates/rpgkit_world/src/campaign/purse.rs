@@ -219,17 +219,24 @@ pub fn rest_refusal(d: &Data, gs: &GameState) -> &'static str {
     if !progression::hurt(&gs.party) {
         return progression::REFUSE_RESTED;
     }
-    if rule.needs_upkeep && gs.party.supplies < rule.cost as i64 {
+    if rule.needs_upkeep && gs.party.supplies < rest_cost(d, gs) {
         return REFUSE_UPKEEP;
     }
     ""
 }
 
+/// R1 `cost` with PR6-8's facility `rest_upkeep` deltas in force (`facility::rest_upkeep_delta`), never below 0: the
+/// upkeep a campaign rest spends now.
+pub fn rest_cost(d: &Data, gs: &GameState) -> i64 {
+    (rest_rule(d, &gs.world_id).cost as i64 + crate::facility::rest_upkeep_delta(d, gs)).max(0)
+}
+
 /// R2's body without the tick: every member back to full (ROSTER1 W3: `progression::rest` clears the wounded), the
-/// rule's `cost` spent (never below 0) and its `days` added to the clock. Returns (spent, restored, days).
+/// rest's cost (`rest_cost`) spent (never below 0) and the rule's `days` added to the clock. Returns (spent, restored,
+/// days).
 fn rest_body(d: &Data, gs: &mut GameState) -> (i64, i64, i64) {
     let rule = rest_rule(d, &gs.world_id);
-    let spent = gs.party.spend_supplies(rule.cost as i64);
+    let spent = gs.party.spend_supplies(rest_cost(d, gs));
     let restored = progression::rest(d, &mut gs.party, &gs.world_id.clone());
     let days = (rule.days as i64).max(0);
     gs.time += days;

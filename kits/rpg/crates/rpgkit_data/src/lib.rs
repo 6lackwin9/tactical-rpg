@@ -17,6 +17,7 @@ use serde_json::Value;
 
 pub mod body_slot;
 pub mod dojo_preset;
+pub mod facility;
 pub mod looks;
 pub mod mastery;
 pub mod recipe;
