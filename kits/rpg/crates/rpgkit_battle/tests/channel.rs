@@ -965,3 +965,37 @@ fn the_ai_vents_at_high_strain() {
 fn vent_field_rules() -> Ruleset {
     rules(true, json!({"rules": [ROUND_INTENT, DECK, AP_COST, PIERCE, FIELD_INTENT, TRIGGERS, UNIT_METERS, HP_COST, CHANNEL, ruleset::PLAN_BADGES]}))
 }
+
+/// PR6-6 (`PK4_PK5_CAMPAIGN_HUB.md` 1, B5): the battle telemetry the world settle reads: a command started in a Channel
+/// round counts in `World::channel_actions` (a Standard one does not), and the channel meter's gauge keeps the highest
+/// value it held (`meter::peak`) after a Standard round's decay lowers the value.
+#[test]
+fn a_channeled_command_counts_as_a_channel_action_and_the_peak_outlasts_the_decay() {
+    let mut s = session();
+    let start = meter::value(&s.w, HERO, "strain").expect("the holder's gauge");
+    assert_eq!(meter::peak(&s.w, HERO, "strain"), Some(start), "the peak starts at the start value");
+    let cold = command(&s.w, HERO, PlanStep::engage(sid(&s.w, "t_jab"), FOE), "t_jab");
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    assert!(res.schedule(HERO, cold, 1));
+    run(&mut w, &mut res, 1, 1);
+    assert!(w.channel_actions.get(&HERO).is_none(), "a Standard command is no channel action");
+    flag(&mut s.w, HERO, true);
+    let channeled = command(&s.w, HERO, PlanStep::engage(sid(&s.w, "t_jab"), FOE), "t_jab");
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    assert!(res.schedule(HERO, channeled, 1));
+    run(&mut w, &mut res, 1, 1);
+    assert_eq!(w.channel_actions.get(&HERO).copied(), Some(1), "one channel action");
+    let paid = meter::value(&w, HERO, "strain").expect("the gauge");
+    assert!(paid > start, "the channeled cost raised the meter");
+    assert_eq!(meter::peak(&w, HERO, "strain"), Some(paid));
+    // a Standard round end decays the value; the peak stays
+    flag(&mut w, HERO, false);
+    w.meters.gauges.iter_mut().filter(|g| g.unit == HERO).for_each(|g| g.gained = false);
+    let mut res = Resolver::new(BLOCKS, 1);
+    res.apply_round_end_effects(&mut w);
+    let after = meter::value(&w, HERO, "strain").expect("the gauge");
+    assert_eq!(after, (paid - DECAY).max(0), "the decay");
+    assert_eq!(meter::peak(&w, HERO, "strain"), Some(paid), "the peak outlasts the decay");
+}

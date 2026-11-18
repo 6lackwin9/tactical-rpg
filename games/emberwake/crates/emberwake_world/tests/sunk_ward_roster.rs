@@ -51,6 +51,9 @@ fn end_of(d: &Data, gs: &GameState, fate: PartyFate) -> HeroEnd {
         hostile: String::new(),
         attacked: Vec::new(),
         worn: Vec::new(),
+        strain_peak: 0,
+        strain_end: 0,
+        channel_actions: 0,
     }
 }
 
@@ -155,4 +158,157 @@ fn pr6_3_bleedout_rules_revive_skill_salts_and_act_2_shops_match_spec() {
             "{shop_id} gates smelling_salts behind pk2.slab_open"
         );
     }
+}
+
+// ---- PR6-4 (`docs/sessions/PK3_ROSTER_LIFECYCLE.md` 3.2, 4) on the seeded data -------------------------------------
+// These read the rows the asset lane seeds after the kit slice lands (`world.recruits`, the origin and temperament
+// passives, the keepsake templates, `roster.crypts` and `roster.keepsakes.by_class`), seeded by `seeds/pr6_4.json`.
+
+/// PK3 3.2: the six cohort templates (id, class, origin passive).
+const COHORTS: [(&str, &str, &str); 6] = [
+    ("cohort_levy", "warrior", "orig_watch_shield"),
+    ("cohort_bolt", "ranger", "orig_crag_eye"),
+    ("cohort_flue", "rogue", "orig_soot_step"),
+    ("cohort_novice", "priest", "orig_mortuary_calm"),
+    ("cohort_breaker", "brawler", "orig_slag_grip"),
+    ("cohort_vat", "mage", "orig_alum_nose"),
+];
+/// PK3 3.2: the age band of every Act 2 cohort recruit.
+const COHORT_AGES: [i64; 2] = [18, 24];
+
+fn assets_dir() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+}
+
+/// A slotless catalog passive.
+fn slotless(d: &Data, id: &str) -> bool {
+    d.cat.passives.get(id).is_some_and(|p| p.slot.is_empty())
+}
+
+#[test]
+fn sunk_ward_seeds_six_cohort_templates_with_bodies_portraits_and_origins() {
+    let d = data();
+    for (id, class, origin) in COHORTS {
+        let row = d.resolve(WORLD, emberwake_data::RECRUITS_KIND, id);
+        assert!(!row.is_empty(), "{WORLD} seeds recruit template {id}");
+        let t = emberwake_data::RecruitDef::from_obj(row);
+        assert_eq!(t.class_id, class, "{id}");
+        assert!(!t.base_units.is_empty(), "{id}: base units");
+        for u in &t.base_units {
+            let unit = d.entry("units", u);
+            assert!(aegis_core::json::s(unit, "side") == "party" && aegis_core::json::s(unit, "class_id") == class, "{id}: base unit {u} is a {class} party unit");
+        }
+        let portrait = format!("portraits/common/{class}_{id}.png");
+        assert_eq!(t.art, portrait, "{id}: the AI-15 cohort portrait");
+        assert!(assets_dir().join(&portrait).is_file(), "{id}: {portrait} is shipped");
+        assert_eq!(t.age_band, COHORT_AGES.map(|a| a as i32).to_vec(), "{id}: 18-24");
+        assert_eq!(t.origins, [origin], "{id}: its origin passive");
+        assert!(slotless(&d, origin), "{origin} is a slotless catalog passive");
+        assert!(t.temperaments.iter().all(|p| slotless(&d, p)), "{id}: slotless temperament passives {:?}", t.temperaments);
+        assert!(t.names.len() >= 2, "{id}: names to draw from");
+    }
+    let problems: Vec<String> = emberwake_content::store::check(&Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap())
+        .into_iter()
+        .filter(|p| p.contains("recruits"))
+        .collect();
+    assert!(problems.is_empty(), "{problems:?}");
+}
+
+// PK3 §3.2's shared temperament pool is seeded as the slotless `temper_*` passives (PR7-10): `temper_steady`,
+// `temper_wary`, `temper_quiet` and `temper_reckless`. `temper_grim` is held back (a limit blocker): its effect needs a
+// Shaken status or resist the kit does not have yet, so no template names it.
+#[test]
+fn sunk_ward_cohort_templates_draw_from_slotless_temperament_passives() {
+    let d = data();
+    for (id, _, _) in COHORTS {
+        let t = emberwake_data::RecruitDef::from_obj(d.resolve(WORLD, emberwake_data::RECRUITS_KIND, id));
+        assert!(!t.temperaments.is_empty() && t.temperaments.iter().all(|p| slotless(&d, p)), "{id}: slotless temperament passives {:?}", t.temperaments);
+    }
+}
+
+/// PR7-10: one recruit rescued from each cohort template (a fresh act 2 game each) and sworn in carries exactly one
+/// temperament, drawn from its own template's `temperaments` pool (`roster::rescue` draws it; `swear_in` keeps it).
+#[test]
+fn each_rescued_cohort_recruit_carries_one_temperament_from_its_pool() {
+    let d = data();
+    for (id, _, _) in COHORTS {
+        let pool = emberwake_data::RecruitDef::from_obj(d.resolve(WORLD, emberwake_data::RECRUITS_KIND, id)).temperaments;
+        let mut gs = game(&d, 2);
+        gs.rng_seed = 11;
+        let open = roster::manifest(&d, WORLD).open_flag;
+        if !open.is_empty() {
+            gs.flags.insert(open, serde_json::json!(true));
+        }
+        let fx = serde_json::json!({"effect": "rescue", "template": id});
+        let (added, notes) = roster::rescue(&d, &mut gs, fx.as_object().unwrap());
+        assert_eq!(added.len(), 1, "{id}: {notes:?}");
+        let member = roster::swear_in(&d, &mut gs, "first", &serde_json::Value::Null).expect("a bunk is free");
+        let m = gs.party.member(&member).unwrap();
+        assert!(m.template.ends_with(&format!(":{id}")), "{id}: {m:?}");
+        assert!(pool.contains(&m.temperament), "{id}: temperament '{}' is from {pool:?}", m.temperament);
+        // the passives it fights with hold one temperament of the world's whole pool
+        let every: Vec<String> = COHORTS.iter().flat_map(|(t, _, _)| emberwake_data::RecruitDef::from_obj(d.resolve(WORLD, emberwake_data::RECRUITS_KIND, t)).temperaments).collect();
+        let held: Vec<String> = emberwake_world::progression::member_passives(&d, m).into_iter().filter(|p| every.contains(p)).collect();
+        assert_eq!(held, [m.temperament.clone()], "{id}: exactly one temperament");
+        assert!(slotless(&d, &m.temperament), "{id}: {} is a slotless catalog passive", m.temperament);
+    }
+}
+
+#[test]
+fn sunk_ward_binds_six_keepsake_templates_and_two_crypts() {
+    let d = data();
+    let m = roster::manifest(&d, WORLD);
+    assert_eq!(m.crypts, 2, "PK3 3.1: two Isolation Crypt places");
+    for (_, class, _) in COHORTS {
+        let item = format!("keepsake_tpl_{class}");
+        assert_eq!(m.keepsakes_by_class.get(class), Some(&item), "{class}");
+        let row = d.entry("items", &item);
+        assert_eq!(aegis_core::json::s(row, "item_type"), "ACCESSORY", "{item}");
+        assert!(aegis_core::json::i(row, "value", 1) == 0 && aegis_core::json::b(row, "special", false), "{item}: value 0, special");
+    }
+}
+
+#[test]
+fn a_rescued_cohort_levy_swears_in_and_departs_with_its_keepsake_instance() {
+    let d = data();
+    let mut gs = game(&d, 2);
+    gs.rng_seed = 11;
+    let open = roster::manifest(&d, WORLD).open_flag;
+    if !open.is_empty() {
+        gs.flags.insert(open, serde_json::json!(true));
+    }
+    let fx = serde_json::json!({"effect": "rescue", "template": "cohort_levy"});
+    let (added, notes) = roster::rescue(&d, &mut gs, fx.as_object().unwrap());
+    assert_eq!(added.len(), 1, "{notes:?}");
+    let id = roster::swear_in(&d, &mut gs, "first", &serde_json::Value::Null).expect("a bunk is free");
+    let m = gs.party.member(&id).unwrap().clone();
+    assert!(!m.name.is_empty() && m.origin == "orig_watch_shield" && m.template.ends_with(":cohort_levy"), "{m:?}");
+    assert!(roster::field_unit(&d, &gs, &m, WORLD).is_some(), "a cohort recruit takes the field");
+    let rec = roster::depart(&d, &mut gs, &id, DEAD, "downed", "").unwrap();
+    assert_eq!(rec.keepsake, format!("keepsake@{id}"));
+    let def = roster::item_def(&d, &gs.party, &rec.keepsake).expect("the instance resolves");
+    assert_eq!(def.name, format!("{}'s {}", m.name, d.item_name("keepsake_tpl_warrior")));
+}
+
+/// PR7-11 (FB-283, `P2`): the shipped `martyr_last_stand` "Last Stand" (a Martyr template's `last_passive`) is slotless
+/// and carries the row's effects: `+25%` damage on every attack, `+4` Armor, immune to Weaken and Stun (the dying at
+/// battle end is the last stand's own, `roster::last_stand`, not a passive effect).
+#[test]
+fn the_shipped_last_stand_passive_matches_the_row() {
+    use aegis_core::json;
+    let d = data();
+    let row = d.entry("passives", "martyr_last_stand");
+    assert_eq!((json::s(row, "name").as_str(), slotless(&d, "martyr_last_stand")), ("Last Stand", true));
+    let fx: Vec<serde_json::Value> = json::aget(row, "effects").to_vec();
+    let want = [
+        serde_json::json!({"type": "skill_potency", "group": "attack", "value": 0.25}),
+        serde_json::json!({"type": "stat", "stat": "armor", "value": 4}),
+        serde_json::json!({"type": "resist", "status": "weaken", "value": 100}),
+        serde_json::json!({"type": "resist", "status": "stun", "value": 100}),
+    ];
+    for w in &want {
+        let found = fx.iter().any(|e| w.as_object().unwrap().iter().all(|(k, v)| e.get(k).and_then(|x| x.as_f64()).zip(v.as_f64()).map_or(e.get(k) == Some(v), |(a, b)| (a - b).abs() < 1e-9)));
+        assert!(found, "{w} in {fx:?}");
+    }
+    assert_eq!(fx.len(), want.len(), "no other effect: {fx:?}");
 }

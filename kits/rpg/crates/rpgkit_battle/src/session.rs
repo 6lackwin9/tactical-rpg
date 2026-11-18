@@ -80,6 +80,10 @@ pub struct EncounterDef {
     pub tactics: crate::script::Tactics,
     /// PK3: rounds a downed deployed party member has to be revived before bleeding out (0 = classic non-bleeding stasis).
     pub bleed_out_rounds: i32,
+    /// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 1): the battle-start meter grants (`meter::battle_start_with`, rule
+    /// unit_meters); set by its caller (the world bridge from the region and encounter `start_meter` rows); never read
+    /// from the row (none by default).
+    pub start_meter: Vec<rpgkit_data::StartMeter>,
     /// The whole entry (objective and morale fields are read from it).
     pub raw: Obj,
 }
@@ -125,6 +129,7 @@ impl EncounterDef {
             plan_reveal: false,
             tactics: Default::default(),
             bleed_out_rounds: 0,
+            start_meter: Vec::new(),
             raw: o.clone(),
         }
     }
@@ -498,7 +503,7 @@ impl Session {
             heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
         });
         let bleed_heroes: Vec<UnitId> = (0..n_allies).filter(|c| !guests.contains(c)).collect();
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen, sides: Default::default(), marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()), skill_uses: IndexMap::new(), weapon_attacks: IndexMap::new(), dulled_lock: false, bleed_out_rounds: def.bleed_out_rounds.max(0), bleed_heroes, bleed_remaining: IndexMap::new(), dead: Vec::new() };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen, sides: Default::default(), marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()), skill_uses: IndexMap::new(), weapon_attacks: IndexMap::new(), channel_actions: IndexMap::new(), dulled_lock: false, bleed_out_rounds: def.bleed_out_rounds.max(0), bleed_heroes, bleed_remaining: IndexMap::new(), dead: Vec::new() };
         // PK2-S5b: without the rule `durability` no unit tracks weapon wear
         crate::wear::clear_without_rule(&mut w);
         w.add_item_skills();
@@ -544,7 +549,8 @@ impl Session {
         // RULESET1_INTENT MV1, TQ23: first facings and starting intents (nothing in classic)
         round_intent::battle_start(&mut w, &default_intents);
         // HOOKS1 UM1: the units' meters, their meter skills and start bands (rule unit_meters; nothing in classic)
-        crate::meter::battle_start(&mut w);
+        // PR6-7: then the caller's start_meter grants
+        crate::meter::battle_start_with(&mut w, &def.start_meter);
         let mut resolver = Resolver::new(def.total_blocks, def.rng_seed);
         for &c in allies.iter().chain(enemies.iter()) {
             resolver.register(c);
@@ -1235,6 +1241,8 @@ impl Session {
             u.hp = encounter::swap_hp(hp, max, u.max_hp, &mode);
             u.ap = ap.min(u.max_ap);
             self.w.swap_unit(c, u);
+            // BIGUNIT1 BU12: a bigger new unit takes a square holding its old cell, pushing units back if it must
+            let growth = self.w.grow_into_place(c);
             self.w.profiles.insert(c, form.profile.clone());
             if self.authored_profiles.contains_key(&c) {
                 self.authored_profiles.insert(c, form.profile.clone());
@@ -1266,6 +1274,22 @@ impl Session {
             self.events.push(entry.detail.clone());
             self.encounter_lines.push((self.resolver.log.len(), format!("[Swap] {}", entry.detail)));
             self.append(entry);
+            // BU12: each pushed unit is named; its entered cells roll their hazards as a forced move's do (no collision)
+            if growth.cramped {
+                let line = format!("[Push] {} finds no room to fill 2 x 2 cells and stays on one cell", self.w.units[c].name);
+                self.events.push(line.clone());
+                self.encounter_lines.push((self.resolver.log.len(), line));
+            }
+            for (o, from, to) in growth.pushes {
+                let cells = self.w.cells_of(o);
+                let notes = crate::command::hazard_on_enter(&mut self.w, &mut self.resolver.rng, o, &cells);
+                let mut line = format!("[Push] {} is pushed back from {from} to {to} to make room for {}", self.w.units[o].name, self.w.units[c].name);
+                for note in notes {
+                    line += &format!(" {note}");
+                }
+                self.events.push(line.clone());
+                self.encounter_lines.push((self.resolver.log.len(), line));
+            }
         }
         if !swapped.is_empty() {
             // the new rows' pouch items and the hazard switch, as at the start

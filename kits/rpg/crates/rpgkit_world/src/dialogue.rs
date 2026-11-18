@@ -945,6 +945,18 @@ impl DialogueRunner {
                         out.push(why.into());
                     }
                 }
+                // ROSTER1 PO2 (PK3 3.1): swearing in a pool entry: the roster is open and the entry waits (its home is
+                // checked when it runs: a Martyr needs a crypt place, anyone else a bunk)
+                "recruit" if fx.contains_key("pool") => {
+                    let pool = json::s(fx, "pool");
+                    if !roster::is_open(gs) {
+                        out.push(roster::CLOSED_TEXT.into());
+                    } else if pool == rpgkit_data::POOL_FIRST && gs.party.pool.is_empty() {
+                        out.push("No one waits to join.".into());
+                    } else if pool != rpgkit_data::POOL_FIRST && !gs.party.pool.iter().any(|p| p.id == pool) {
+                        out.push(format!("'{pool}' is not waiting to join."));
+                    }
+                }
                 "recruit" => {
                     let who = json::s(fx, "character");
                     let full = roster::full_text(gs);
@@ -1179,7 +1191,20 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
         "take" => {
             quest::take(d, gs, json::get(fx, "items"), json::i(fx, "gold", 0));
         }
+        // ROSTER1 PO2 (PK3 3.1): `pool` swears in a pooled recruit (a refusal is a note)
+        "recruit" if fx.contains_key("pool") => match roster::swear_in(d, gs, &json::s(fx, "pool"), fx.get("level").unwrap_or(&Value::Null)) {
+            Ok(id) => {
+                let name = gs.party.member(&id).map(|m| progression::display_name(d, m)).unwrap_or(id);
+                notes.push(format!("{name} joins the party."));
+            }
+            Err(why) => notes.push(why),
+        },
         "recruit" => recruit(d, gs, &json::s(fx, "character"), fx.get("level").unwrap_or(&Value::Null), notes),
+        // ROSTER1 PO1 (PK3 3.1): pool entries from a recruit template or a named character
+        "rescue" => {
+            let (_, said) = roster::rescue(d, gs, fx);
+            notes.extend(said);
+        }
         // ACT1-HOOKS2 (FB-244 (1)): a graft into the body of the member a flag names (the recipe's install path)
         rpgkit_data::INSTALL_EFFECT => install(d, gs, fx, notes),
         // T1.2-S2 (FB-54b): the choice-time roll and its note

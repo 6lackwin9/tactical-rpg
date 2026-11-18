@@ -25,7 +25,7 @@ Reuses already-landed **`PHASEFX1`** (`PR5-2`: `side: hostile_all` and `swap` in
 - **Crucible Lookup Spawn (`B7`: lore-free `kits/rpg/` token **`"$captive_unit"`**)**:
   - Reads `GameState.captive` snapshot (built from `party.departed` where `life == "captured"` and `cause == "stayed"`, with deterministic static fallback for standalone battle tests so `kits/rpg/` holds zero lore terms).
   - Builds Phase 1 unit (`Saint-Weapon <Name>`) inheriting that captured Founder's class visuals/skills converted to marrow versions + `Strain` meter (`+25%` Phase-2 stats if `sunk_ward.sabina_dose_to == departed.id`, honoring `PK2_GRAFTS.md` §3!).
-- **`B1` Option B — `1x1` Cell + Oversized `2x2` Sprite Art (`BIGUNIT1` Parked in `READY.md` §3)**:
+- **`B1` Option B — `1x1` Cell + Oversized `2x2` Sprite Art (`BIGUNIT1` Parked in `READY.md` §3)** (superseded 2026-11-17 by the user: real `2x2` units in `PR7-12`, [BIGUNIT1.md](../specs/BIGUNIT1.md); node 20 and node 22 units get `footprint: 2`):
   - Keep `1x1` cell occupancy in `rpgkit_battle` so `PHASEFX1` (`swap`, `hostile_all`, pathing, flank checks) works untouched; render `saint_aberration_<class>` (`Node 20`) and `Dreaming Core` (`Node 22`) visually as oversized `2x2`-footprint sprites.
 - **Encounter Sequence (`enc_34_silent_ossuary`, fighting `Nemeth` + captured `Founder`)**:
   1. **Phase 1**: Party vs `Nemeth` + `Phase 1 Captive` + `2` Inquisition guards.

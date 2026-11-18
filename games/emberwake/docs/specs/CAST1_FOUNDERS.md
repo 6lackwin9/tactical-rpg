@@ -32,7 +32,7 @@ rows of its section 6; a lore effect no spec covers is listed as deferred with i
 
 ## 2. Kaelen, the Vanguard (`founder_kaelen`, class `warrior`)
 
-Gear: main `notched_billhook` (polearm, two-handed, reach 1-2); body `castellan_breastplate`; pouch
+Gear: main `notched_billhook` (polearm, one-handed per CANON 5.2, reach 1-2); body `castellan_breastplate`; pouch
 `sulfur_poultice` x1. Discipline `castellan_drill` (passive `polearm_drill`). Title "".
 
 Skills (FP):
@@ -234,7 +234,7 @@ Deck at join: active [`shackle_pummel_slam`, `slag_slam_throw`, `foundry_shatter
 
 ## 7. Elyse, the Ichor Alchemist (`founder_elyse`, class `mage`)
 
-Gear: main `brass_vitriol_sprayer` (sprayer, two-handed, range 3); body `tanners_rubbered_coat`; pouch
+Gear: main `brass_vitriol_sprayer` (sprayer, one-handed per CANON 5.2, range 3); body `tanners_rubbered_coat`; pouch
 `pitch_fire_bomb`, `sulfur_poultice`. Discipline `still_craft` (passive `sprayer_drill`). Title "".
 Joins at M4 as a guest, then as a member (bunk 6) at the cell's average level; not in the slice (M2b).
 

@@ -5,7 +5,7 @@
 use crate::data::{Data, PARTY_MAX};
 use crate::progression;
 use aegis_core::json::{self, int, strs, Dict};
-use rpgkit_data::{Deck, RosterManifest, DEPART_LIVES, MEMBER_CONDITIONS, NO_ITEM, STATS};
+use rpgkit_data::{Deck, RosterManifest, DEPART_LIVES, HOUSING, MEMBER_CONDITIONS, NO_ITEM, STATS};
 use indexmap::IndexMap;
 
 // The gear rules live in the rules crate (the battle crate's gear dojo uses them too).
@@ -50,9 +50,13 @@ pub const FLOOR_OFFSET_KEY: &str = "floor_offset";
 /// PK2-S3: the member key of the trained proficiency levels (`UnitState::trained`).
 pub const TRAINED_KEY: &str = "trained";
 /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): the member keys of its weapon mastery XP (`UnitState::mastery_xp`) and its
-/// forge rite (`UnitState::forge_rite`); each written only when set (no save VERSION bump).
+/// forge rites (`UnitState::forge_rites`, one per family since `PR7-2` N2); each written only when set (no save VERSION
+/// bump).
 pub const MASTERY_XP_KEY: &str = "mastery_xp";
-pub const FORGE_RITE_KEY: &str = "forge_rite";
+pub const FORGE_RITES_KEY: &str = "forge_rites";
+/// The pre-`PR7-2` member key: one rite for every family (`true`). Read only: a save holding it loads it as a rite for
+/// each family the member has at mastery 3 (`UnitState::from_dict`), and is written back as `forge_rites`.
+pub const FORGE_RITE_LEGACY_KEY: &str = "forge_rite";
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
 
 pub fn is_tactic(id: &str) -> bool {
@@ -93,9 +97,9 @@ pub struct UnitState {
     /// max_stack)`; a pouch id without an entry reads its current count). A key with no copy left keeps its slot. Saved
     /// as `pouch_packed` only when not empty (no save bump: a save without it reads the current pouch).
     pub pouch_packed: IndexMap<String, i64>,
-    /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): unit track id -> the member's stage on it (1..the row's stages; a track
-    /// without an entry reads 0). Saved as `tracks` only when a stage is above 0 (no save bump: a save without it reads
-    /// every track at 0).
+    /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): unit track id -> the member's stage on it (1..the row's stages; PR6-6:
+    /// -3..3 but 0 on a signed row; a track without an entry reads 0). Saved as `tracks` only when a stage is not 0 (no
+    /// save bump: a save without it reads every track at 0).
     pub tracks: IndexMap<String, i64>,
     /// PK2-S1: the permanent max HP offset (bone-scraping, excision; negative lowers it), added to the built max HP
     /// (at least 1). Saved as `max_hp_offset` only when not 0.
@@ -115,12 +119,140 @@ pub struct UnitState {
     /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> the member's weapon mastery XP in that family (a bar toward
     /// levels 1-3, `rpgkit_data::mastery::level_of`). Saved as `mastery_xp` only when not empty.
     pub mastery_xp: IndexMap<String, i64>,
-    /// PK2-S4: the member's forge rite is done (with mastery 3 it opens the wielded family's keystone). Saved as
-    /// `forge_rite` only when true (`set_forge_rite`).
-    pub forge_rite: bool,
+    /// PK2-S4, `PR7-2` (N2): the weapon families whose forge rite the member has taken, in rite order (with mastery 3
+    /// and a masterwork main hand of the family it opens that family's keystone). Saved as `forge_rites` only when not
+    /// empty (`set_forge_rite`).
+    pub forge_rites: Vec<String>,
     /// PK2-S5a (`docs/sessions/PK2_GRAFTS.md` 6): weapon slot -> the weapon instance it wields (`crate::weapons`; the
     /// slot's `equipment` id is the instance's item). Saved as `weapons` only when not empty.
     pub weapons: IndexMap<String, crate::weapons::Weapon>,
+    /// ROSTER1 PG2, 11.4 (PK3 3.1): a procedural member's display name (`progression::display_name` reads it first).
+    /// Saved as `name` only when not empty.
+    pub name: String,
+    /// ROSTER1 BK2, 11.4: where the member lives (`rpgkit_data::HOUSING`; "" reads `bunk`). Saved as `housing` only
+    /// when not `bunk`.
+    pub housing: String,
+    /// ROSTER1 FZ1, 11.4: a Living Martyr's fuse (None = none). Saved as `fuse` only when set.
+    pub fuse: Option<MartyrFuse>,
+    /// PK3 3.1: a procedural member's origin, a slotless passive (`progression::member_passives` gathers it). Saved as
+    /// `origin` only when not empty.
+    pub origin: String,
+    /// ROSTER1 TP2, 11.4: a procedural member's temperament, a slotless passive drawn from its template (a character's
+    /// comes from its character and is not saved). Saved as `temperament` only when not empty.
+    pub temperament: String,
+    /// PK3 3.1: the `recruits` template (qid) a procedural member was drawn from (its fuse rules and portrait). Saved as
+    /// `template` only when not empty.
+    pub template: String,
+    /// KS3: the party's procedural keepsake instances (`PartyState::keepsakes`), mirrored here so a build, `can_wear`
+    /// and `validate` resolve an instance id the member wears (`item_def`); never saved (`PartyState::sync_keepsakes`).
+    pub keepsakes: Vec<Keepsake>,
+}
+
+/// ROSTER1 FZ1, 11.4 (PK3 3.1): a member's Living Martyr fuse: its value (FZ2; never lowered), its deployments and the
+/// day it joined. `last_stand` (FZ4): the player sent it on its last stand (it deploys with the template's
+/// `last_passive` and departs dead after that battle); saved only when true.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MartyrFuse {
+    pub value: i64,
+    pub deploys: i64,
+    pub since: i64,
+    pub last_stand: bool,
+}
+
+impl MartyrFuse {
+    pub fn to_value(&self) -> Value {
+        let mut out = json::obj([("value", int(self.value)), ("deploys", int(self.deploys)), ("since", int(self.since))]);
+        if self.last_stand {
+            out.insert("last_stand".into(), Value::Bool(true));
+        }
+        Value::Object(out)
+    }
+
+    pub fn from_dict(d: &Dict) -> Self {
+        Self { value: json::i(d, "value", 0), deploys: json::i(d, "deploys", 0), since: json::i(d, "since", 0), last_stand: json::b(d, "last_stand", false) }
+    }
+}
+
+/// KS3, 11.4 (PK3 4): a procedural keepsake instance in `party.keepsakes`: `keepsake@<member>`, its template item and
+/// its display name (`keepsakes.name`). Never in the stash, never sold.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Keepsake {
+    pub id: String,
+    pub item: String,
+    pub name: String,
+}
+
+impl Keepsake {
+    pub fn to_value(&self) -> Value {
+        Value::Object(json::obj([("id", Value::String(self.id.clone())), ("item", Value::String(self.item.clone())), ("name", Value::String(self.name.clone()))]))
+    }
+
+    pub fn from_dict(d: &Dict) -> Self {
+        Self { id: json::s(d, "id"), item: json::s(d, "item"), name: json::s(d, "name") }
+    }
+
+    /// KS3: the instance as an item: its template row renamed, with the instance id, a wear-legal accessory of value 0,
+    /// special (never sold). None when the template is not a catalog item.
+    pub fn item_def(&self, d: &Data) -> Option<rpgkit_data::ItemDef> {
+        let mut def = d.cat.items.get(&self.item)?.clone();
+        def.id = self.id.clone();
+        def.name = self.name.clone();
+        def.item_type = "ACCESSORY".into();
+        if !def.slot.starts_with("ACCESSORY") {
+            def.slot = "ACCESSORY_1".into();
+        }
+        def.raw.insert("id".into(), Value::String(self.id.clone()));
+        def.raw.insert("name".into(), Value::String(self.name.clone()));
+        def.raw.insert("value".into(), int(0));
+        def.raw.insert("special".into(), Value::Bool(true));
+        Some(def)
+    }
+}
+
+/// ROSTER1 PO1, 11.4 (PK3 3.1): one pool entry (`party.pool`): a rescued recruit waiting to be sworn in. `template`
+/// (qid) for a procedural recruit drawn from a `recruits` row, else `character` (qid) for a named rescue; `since` is
+/// the day it was rescued.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PoolMember {
+    pub id: String,
+    pub character: String,
+    pub template: String,
+    pub base_unit: String,
+    pub name: String,
+    pub origin: String,
+    pub temperament: String,
+    pub since: i64,
+}
+
+impl PoolMember {
+    pub fn to_value(&self) -> Value {
+        let mut out = json::obj([
+            ("id", Value::String(self.id.clone())),
+            ("character", Value::String(self.character.clone())),
+            ("base_unit", Value::String(self.base_unit.clone())),
+            ("name", Value::String(self.name.clone())),
+            ("origin", Value::String(self.origin.clone())),
+            ("temperament", Value::String(self.temperament.clone())),
+            ("since", int(self.since)),
+        ]);
+        if !self.template.is_empty() {
+            out.insert("template".into(), Value::String(self.template.clone()));
+        }
+        Value::Object(out)
+    }
+
+    pub fn from_dict(d: &Dict) -> Self {
+        Self {
+            id: json::s(d, "id"),
+            character: json::s(d, "character"),
+            template: json::s(d, "template"),
+            base_unit: json::s(d, "base_unit"),
+            name: json::s(d, "name"),
+            origin: json::s(d, "origin"),
+            temperament: json::s(d, "temperament"),
+            since: json::i(d, "since", 0),
+        }
+    }
 }
 
 /// RULESET1 9 D5: a saved `deck` value: (the deck, its type problems). Absent = the empty deck; anything but an object
@@ -239,7 +371,15 @@ impl UnitState {
     /// proficiency 0 and unmet raw `required_stats` (`wear_lock`); a saved item it refuses moves to the stash at load
     /// (`sanitize_loadout`).
     pub fn can_wear(&self, d: &Data, item: &str, slot: &str) -> Result<(), String> {
-        let def = d.cat.items.get(item).ok_or_else(|| format!("unknown item '{item}'."))?;
+        let owned = self.item_def(d, item).ok_or_else(|| format!("unknown item '{item}'."))?;
+        let def = &owned;
+        // KS3 (PK3 4): one keepsake of a template per member (a second counts as a duplicate accessory)
+        if let Some(k) = self.keepsake(item) {
+            let twin = self.equipment.iter().find(|(s, id)| s.as_str() != slot && self.keepsake(id).is_some_and(|o| o.item == k.item));
+            if twin.is_some() {
+                return Err(format!("{} already wears a {} keepsake.", progression::display_name(d, self), d.item_name(&k.item)));
+            }
+        }
         if !item_fits_slot(def, slot) {
             return Err(format!("{} can't be equipped in {}.", def.name, slot.replace('_', " ")));
         }
@@ -420,14 +560,57 @@ impl UnitState {
         if !self.mastery_xp.is_empty() {
             out.insert(MASTERY_XP_KEY.into(), Value::Object(self.mastery_xp.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
         }
-        if self.forge_rite {
-            out.insert(FORGE_RITE_KEY.into(), Value::Bool(true));
+        if !self.forge_rites.is_empty() {
+            out.insert(FORGE_RITES_KEY.into(), json::strs(&self.forge_rites));
         }
         // PK2-S5a: only a member wielding a weapon instance saves `weapons`
         if !self.weapons.is_empty() {
             out.insert(crate::weapons::MEMBER_KEY.into(), crate::weapons::member_value(&self.weapons));
         }
+        // ROSTER1 11.4 (PK3 3.1): a procedural member's keys, each only when set (housing only when not `bunk`)
+        for (key, v) in [("name", &self.name), ("origin", &self.origin), ("temperament", &self.temperament), ("template", &self.template)] {
+            if !v.is_empty() {
+                out.insert(key.into(), Value::String(v.clone()));
+            }
+        }
+        if !self.housing.is_empty() && self.housing != HOUSING[0] {
+            out.insert("housing".into(), Value::String(self.housing.clone()));
+        }
+        if let Some(f) = &self.fuse {
+            out.insert("fuse".into(), f.to_value());
+        }
         Value::Object(out)
+    }
+
+    /// ROSTER1 BK2: where the member lives (`housing`; "" reads `bunk`).
+    pub fn housing(&self) -> &str {
+        if self.housing.is_empty() {
+            HOUSING[0]
+        } else {
+            &self.housing
+        }
+    }
+
+    /// KS3: item `id` as the member reads it: a catalog item, else a procedural keepsake instance of its party
+    /// (`Keepsake::item_def`).
+    pub fn item_def(&self, d: &Data, id: &str) -> Option<rpgkit_data::ItemDef> {
+        if let Some(def) = d.cat.items.get(id) {
+            return Some(def.clone());
+        }
+        self.keepsake(id).and_then(|k| k.item_def(d))
+    }
+
+    /// KS3: the party's keepsake instance `id` (None for any other id).
+    pub fn keepsake(&self, id: &str) -> Option<&Keepsake> {
+        if !id.starts_with(rpgkit_data::KEEPSAKE_INSTANCE_PREFIX) {
+            return None;
+        }
+        self.keepsakes.iter().find(|k| k.id == id)
+    }
+
+    /// `Data::has("items", id)` or a keepsake instance of the party (KS3).
+    pub fn has_item(&self, d: &Data, id: &str) -> bool {
+        d.has("items", id) || self.keepsake(id).is_some()
     }
 
     fn hp_lost_of(raw: Option<&Value>) -> i64 {
@@ -479,8 +662,15 @@ impl UnitState {
             floor_offset: json::i(d, FLOOR_OFFSET_KEY, 0),
             trained: d.get(TRAINED_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
             mastery_xp: d.get(MASTERY_XP_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
-            forge_rite: json::b(d, FORGE_RITE_KEY, false),
+            forge_rites: Self::forge_rites_of(d),
             weapons: crate::weapons::member_from(d),
+            name: json::s(d, "name"),
+            housing: json::s(d, "housing"),
+            fuse: d.get("fuse").and_then(Value::as_object).map(MartyrFuse::from_dict),
+            origin: json::s(d, "origin"),
+            temperament: json::s(d, "temperament"),
+            template: json::s(d, "template"),
+            keepsakes: Vec::new(),
         }
     }
 
@@ -489,10 +679,41 @@ impl UnitState {
         rpgkit_data::mastery::level_of(self.mastery_xp.get(family).copied().unwrap_or(0))
     }
 
-    /// PK2-S4: sets the forge rite (with mastery 3 it opens the wielded family's keystone); the rite's source (a quest, a
-    /// recipe) is the game's.
-    pub fn set_forge_rite(&mut self, done: bool) {
-        self.forge_rite = done;
+    /// PK2-S4, `PR7-2` (N2): sets (or clears) the forge rite of weapon family `family` (with mastery 3 and a masterwork
+    /// main hand of that family it opens the family's keystone); the rite's source (a quest, a recipe) is the game's.
+    pub fn set_forge_rite(&mut self, family: &str, done: bool) {
+        let has = self.has_forge_rite(family);
+        if done && !has && !family.is_empty() {
+            self.forge_rites.push(family.to_string());
+        } else if !done && has {
+            self.forge_rites.retain(|f| f != family);
+        }
+    }
+
+    /// `PR7-2` (N2): the member has taken the forge rite of weapon family `family`.
+    pub fn has_forge_rite(&self, family: &str) -> bool {
+        self.forge_rites.iter().any(|f| f == family)
+    }
+
+    /// `PR7-2` (N2): the saved forge rites of member dict `d`: its `forge_rites` list, else (a pre-`PR7-2` save) its
+    /// single `forge_rite: true` read as a rite for every family its `mastery_xp` holds at mastery 3, in that key order
+    /// (the old rite needed mastery 3 in a family and opened the keystone of any family at mastery 3, so this keeps every
+    /// keystone the save could open; mastery never falls, so no family it could reach is lost).
+    fn forge_rites_of(d: &Dict) -> Vec<String> {
+        if d.contains_key(FORGE_RITES_KEY) {
+            let mut out: Vec<String> = Vec::new();
+            for f in json::sget(d, FORGE_RITES_KEY) {
+                if !f.is_empty() && !out.contains(&f) {
+                    out.push(f);
+                }
+            }
+            return out;
+        }
+        if !json::b(d, FORGE_RITE_LEGACY_KEY, false) {
+            return Vec::new();
+        }
+        let xp: IndexMap<String, i64> = d.get(MASTERY_XP_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default();
+        xp.into_iter().filter(|(_, v)| rpgkit_data::mastery::level_of(*v) >= rpgkit_data::mastery::MASTERY_MAX).map(|(k, _)| k).collect()
     }
 
     /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the graft count, the body slots in use.
@@ -630,6 +851,12 @@ impl UnitState {
                     warnings.push(format!("Unit '{name}': unit track '{track}' stage {stage} is held at its top stage {top}."));
                     *stage = top;
                 }
+                // PR6-6 (B5): a signed row's lean below its bottom is held there too
+                let bottom = i64::from(row.bottom());
+                if row.signed && *stage < bottom {
+                    warnings.push(format!("Unit '{name}': unit track '{track}' stage {stage} is held at its bottom stage {bottom}."));
+                    *stage = bottom;
+                }
                 true
             }
         });
@@ -675,10 +902,11 @@ impl UnitState {
             errors.push(format!("{at}: hp_lost must be 0 or more."));
         }
         // PK2-S1: a stage is never below 0 (an unknown track or a stage past the row's top is dropped or held at load,
-        // `sanitize_tracks`)
+        // `sanitize_tracks`); PR6-6 (B5): a signed row's down to its bottom (-3)
         for (track, stage) in &self.tracks {
-            if *stage < 0 {
-                errors.push(format!("{at}: track '{track}' stage must be 0 or more."));
+            let bottom = d.cat.unit_tracks.get(track).map_or(0, |t| i64::from(t.bottom()));
+            if *stage < bottom {
+                errors.push(format!("{at}: track '{track}' stage must be {bottom} or more."));
             }
         }
         // PK2-S3: a trained entry is 1..the top proficiency level
@@ -739,10 +967,24 @@ impl UnitState {
             } else if item == NO_ITEM {
                 // PR5-26 (audit B2): a slot left empty in place of its default (`stash_forbidden`)
                 continue;
-            } else if !d.has("items", item) {
+            } else if !self.has_item(d, item) {
                 errors.push(format!("{at}: unknown item '{item}' in {slot}."));
             } else if let Err(e) = self.can_wear(d, item, slot) {
                 errors.push(format!("{at}: {e}"));
+            }
+        }
+        // ROSTER1 BK2, FZ1 (PK3 3.1): a known housing; a fuse's numbers are never below 0
+        if !self.housing.is_empty() && !HOUSING.contains(&self.housing.as_str()) {
+            errors.push(format!("{at}: unknown housing '{}' (known: {}).", self.housing, HOUSING.join(", ")));
+        }
+        if let Some(f) = &self.fuse {
+            if f.value < 0 || f.deploys < 0 || f.since < 0 {
+                errors.push(format!("{at}: fuse value, deploys and since must be 0 or more."));
+            }
+        }
+        for p in [&self.origin, &self.temperament].into_iter().filter(|p| !p.is_empty()) {
+            if !d.has("passives", p) {
+                errors.push(format!("{at}: unknown passive '{p}'."));
             }
         }
         let worn = |slot: &str| self.equipment.get(slot).and_then(|i| d.cat.items.get(i));
@@ -1209,7 +1451,7 @@ impl UnitState {
                 // PR5-26 (audit B2): an emptied slot stays empty
                 self.equipment.insert(slot, item);
                 continue;
-            } else if !d.has("items", &item) {
+            } else if !self.has_item(d, &item) {
                 format!("unknown item '{item}' in {slot}.")
             } else if let Err(e) = self.can_wear(d, &item, &slot) {
                 e
@@ -1363,11 +1605,30 @@ pub struct PartyState {
     /// PK2-S5a (`docs/sessions/PK2_GRAFTS.md` 6): the weapon instances in the stash, one per stashed copy of a weapon
     /// (`crate::weapons`). Saved as `stash_weapons` only when not empty.
     pub stash_weapons: Vec<crate::weapons::Weapon>,
+    /// ROSTER1 PO1, 11.4 (PK3 3.1): the rescued recruits waiting to be sworn in, rescue order. Saved as `pool` only when
+    /// not empty.
+    pub pool: Vec<PoolMember>,
+    /// KS3, 11.4 (PK3 4): the procedural keepsake instances the party holds (worn by id, never in the stash). Saved as
+    /// `keepsakes` only when not empty; every member mirrors them (`sync_keepsakes`).
+    pub keepsakes: Vec<Keepsake>,
 }
 
 impl Default for PartyState {
     fn default() -> Self {
-        Self { members: Vec::new(), active_ids: Vec::new(), max_active: PARTY_MAX, roster: RosterCaps::default(), purse: PurseCaps::default(), stash: IndexMap::new(), gold: 0, supplies: 0, departed: Vec::new(), stash_weapons: Vec::new() }
+        Self {
+            members: Vec::new(),
+            active_ids: Vec::new(),
+            max_active: PARTY_MAX,
+            roster: RosterCaps::default(),
+            purse: PurseCaps::default(),
+            stash: IndexMap::new(),
+            gold: 0,
+            supplies: 0,
+            departed: Vec::new(),
+            stash_weapons: Vec::new(),
+            pool: Vec::new(),
+            keepsakes: Vec::new(),
+        }
     }
 }
 
@@ -1468,7 +1729,24 @@ impl PartyState {
         if !self.stash_weapons.is_empty() {
             out.insert(crate::weapons::STASH_KEY.into(), Value::Array(self.stash_weapons.iter().map(crate::weapons::Weapon::to_value).collect()));
         }
+        // ROSTER1 11.4 (PK3 3.1, 4): only a party with a pool saves `pool`, only one with keepsake instances `keepsakes`
+        if !self.pool.is_empty() {
+            out.insert("pool".into(), Value::Array(self.pool.iter().map(PoolMember::to_value).collect()));
+        }
+        if !self.keepsakes.is_empty() {
+            out.insert("keepsakes".into(), Value::Array(self.keepsakes.iter().map(Keepsake::to_value).collect()));
+        }
         Value::Object(out)
+    }
+
+    /// KS3: every member mirrors the party's keepsake instances (`UnitState::keepsakes`), so a build resolves the
+    /// instance it wears. Called at load and wherever the instances or the members change.
+    pub fn sync_keepsakes(&mut self) {
+        for m in self.members.iter_mut() {
+            if m.keepsakes != self.keepsakes {
+                m.keepsakes = self.keepsakes.clone();
+            }
+        }
     }
 
     /// ROSTER1 L1: the departed record of member `id`.
@@ -1485,7 +1763,7 @@ impl PartyState {
                 -1
             }
         };
-        Self {
+        let mut party = Self {
             members: json::aget(d, "members").iter().map(|m| UnitState::from_dict(json::dict(m))).collect(),
             active_ids: json::sget(d, "active_ids"),
             max_active: PARTY_MAX,
@@ -1496,7 +1774,11 @@ impl PartyState {
             supplies: whole("supplies"),
             departed: json::aget(d, "departed").iter().map(|x| Departed::from_dict(json::dict(x))).collect(),
             stash_weapons: crate::weapons::stash_from(d),
-        }
+            pool: json::aget(d, "pool").iter().map(|x| PoolMember::from_dict(json::dict(x))).collect(),
+            keepsakes: json::aget(d, "keepsakes").iter().map(|x| Keepsake::from_dict(json::dict(x))).collect(),
+        };
+        party.sync_keepsakes();
+        party
     }
 
     pub fn validate(&self, d: &Data) -> Vec<String> {
@@ -1530,6 +1812,41 @@ impl PartyState {
             }
             if x.day < 0 {
                 errors.push(format!("Departed '{id}': day must be 0 or more."));
+            }
+        }
+        // ROSTER1 11.4 (PK3 3.1): a pool entry's id is never a member's or a departed member's; it names a template or
+        // a character
+        for p in &self.pool {
+            let id = &p.id;
+            if !json::id_ok(id) {
+                errors.push(format!("Pool entry id '{id}' must be non-empty [a-z0-9_]."));
+            } else if seen.contains(&id) {
+                errors.push(format!("Pool entry id '{id}' is also a member, departed or pooled twice."));
+            }
+            seen.push(id);
+            if p.template.is_empty() == p.character.is_empty() {
+                errors.push(format!("Pool entry '{id}' names exactly one of a template and a character."));
+            }
+            if !p.base_unit.is_empty() && d.entry("units", &p.base_unit).is_empty() {
+                errors.push(format!("Pool entry '{id}': unknown base unit '{}'.", p.base_unit));
+            }
+            if p.since < 0 {
+                errors.push(format!("Pool entry '{id}': since must be 0 or more."));
+            }
+        }
+        // KS3: each keepsake instance is `keepsake@<member>` of a catalog item, held once and worn by one member at most
+        let mut ids: Vec<&String> = Vec::new();
+        for k in &self.keepsakes {
+            if !k.id.starts_with(rpgkit_data::KEEPSAKE_INSTANCE_PREFIX) || ids.contains(&&k.id) {
+                errors.push(format!("Keepsake '{}' must be a unique {}<member> id.", k.id, rpgkit_data::KEEPSAKE_INSTANCE_PREFIX));
+            }
+            ids.push(&k.id);
+            if !d.has("items", &k.item) {
+                errors.push(format!("Keepsake '{}': unknown item '{}'.", k.id, k.item));
+            }
+            let wearers = self.members.iter().filter(|m| m.equipment.values().any(|i| *i == k.id)).count();
+            if wearers > 1 {
+                errors.push(format!("Keepsake '{}' is worn by {wearers} members.", k.id));
             }
         }
         if self.active_ids.len() as i64 > self.max_active {

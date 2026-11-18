@@ -670,7 +670,17 @@ impl Gallery {
                 let name = cx.game.as_ref().and_then(|g| g.gs.party.members.first()).map(|m| emberwake_world::progression::display_name(&cx.data, m)).unwrap_or_default();
                 let item = cx.data.cat.items.values().filter(|i| i.offered_in_battle()).map(|i| i.name.clone()).min().unwrap_or_default();
                 let short = format!("Stash short: {name} 1 of 2 {item}");
-                let res = json::obj([("ok", true.into()), ("xp", Value::Object(xp)), ("advanced", json!([])), ("events", json!([])), ("gold", json!(30)), ("stash_short", json!([short]))]);
+                let mut res = json::obj([("ok", true.into()), ("xp", Value::Object(xp)), ("advanced", json!([])), ("events", json!([])), ("gold", json!(30)), ("stash_short", json!([short]))]);
+                // PR7-3 (review N3): sample graft-era lines (`battle::apply`'s `remains`, `mastery`, `wear`) on the
+                // catalog's first main-hand weapon: a mastery gain to level 1, its wear down to 0 (dulled) and a remains
+                let weapon = cx.data.cat.items.values().filter(|i| i.item_type == "WEAPON" && i.slot == "MAIN_HAND" && !i.weapon_type.is_empty()).min_by(|a, b| a.id.cmp(&b.id));
+                if let Some(wp) = weapon {
+                    // a use gain that reaches mastery level 1
+                    let lvl1 = emberwake_data::mastery::MASTERY_LEVEL_XP[0];
+                    res.insert("mastery".into(), json!([{"member": member, "family": wp.weapon_type, "from": lvl1 - emberwake_data::mastery::USE_XP, "to": lvl1}]));
+                    res.insert("wear".into(), json!([{"member": member, "slot": "main_hand", "uid": "sample", "item": wp.id, "worn": 4, "durability": 0, "dulled": true}]));
+                    res.insert("remains".into(), json!([{"member": member, "item": wp.id}]));
+                }
                 Box::new(crate::hub::Results::new(&res, "won", &json::Dict::new()))
             }
             _ => return None,

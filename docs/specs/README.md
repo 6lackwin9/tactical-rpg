@@ -10,6 +10,8 @@ To prevent context bloat and outdated-spec noise in both the Design and Build se
 | File | Role | Status |
 | --- | --- | --- |
 | `MASTERPLAN1.md` | Canonical 9-block, 25-sub-block, 28-connection, 186-task master plan (all 25 `.1` specs closed in `docs/sessions/*.md`) | active (`.1` closed 2026-11-07) |
+| `AUTOPILOT1.md` | Autopilot mode: the Design -> Build -> audit loop, automatic approval classes, guardrails, stages | draft (2026-11-17, awaits the user's approval) |
+| `BIGUNIT1.md` | Units that fill 2 x 2 cells: footprint, grid rules, drawing, seeds (`PR7-12`) | active (2026-11-17) |
 | `MASTERPLAN1_ROWS.md` | Mapping of all historical task rows onto the 186 masterplan tasks | active reference map |
 | `SILOS1.md` | Silo boundaries (`WORLDFIGHT1`, `SERVICES1`, `KITIDS1`) | active (Q1-Q3 closed 2026-11-07) |
 | `AGENTROLES1.md` | Lane scopes, `integration` agent, `aegis scenario`, `SKILLS1` | active (`X6`) |

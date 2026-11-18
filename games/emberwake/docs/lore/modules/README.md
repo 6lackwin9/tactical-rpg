@@ -15,11 +15,11 @@ one file `LM-nn_<slug>.md` when written.
 | Id | Kind | Seed | Answers |
 | --- | --- | --- | --- |
 | LM-01 | event | The 25 line in a weeks-long campaign: does an operative age out, and what the world does at 25 | Q-05 |
-| LM-02 | character beat | Kaelen's involuntary graft trial (an Act 2 hook) | Q-08, G-13 |
+| LM-02 | character beat | Kaelen's involuntary graft trial (an Act 2 hook); settled 2026-11-17: as a child in the Lullaby House, revealed by the `2.4` Cloister ledgers | Q-08, G-13 |
 | LM-03 | faction beat | Who breeds the Render-Beasts, and the Lockdown packs | Q-11 |
 | LM-04 | character beat | Captain Vane after M1: dies, or retreats with a bounty | Q-24, G-03 |
 | LM-05 | character beat | Inquisitor-General Ruthven: fought as a siege commander, or off stage | Q-26, G-05 |
-| LM-06 | event | Berek's quest "Cold Slag, Black Iron" and when it happens | Q-27, G-30 |
+| LM-06 | event | Berek's quest "Cold Slag, Black Iron" and when it happens; settled 2026-11-17: Act 2, after Lucan's rescue | Q-27, G-30 |
 | LM-07 | character beat | The guests Ferrand and Clemence: ages, perks, sworn in or not | Q-39, G-29 |
 | LM-08 | event | The prologue's ambush squad and bridge escort: which units | Q-73 |
 | LM-09 | character beat | The fates of Proctor Quell, Overseer Grendel and Guild-Master Orlov after their Act 1 missions | G-04 |

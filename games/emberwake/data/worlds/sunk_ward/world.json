@@ -53,7 +53,7 @@
 	"classes": {
 		"warrior": {
 			"name": "Vanguard",
-			"description": "Former garrison infantry in dented plate: billhook and halberd men who hold narrow corridors and break poise with two-handed polearms.",
+			"description": "Former garrison infantry in dented plate: billhook and halberd men who hold narrow corridors and break poise with one-handed polearms.",
 			"skill_path": {}
 		},
 		"rogue": {
@@ -90,7 +90,15 @@
 				"captured",
 				"dead",
 				"lost"
-			]
+			],
+			"by_class": {
+				"warrior": "keepsake_tpl_warrior",
+				"ranger": "keepsake_tpl_ranger",
+				"rogue": "keepsake_tpl_rogue",
+				"priest": "keepsake_tpl_priest",
+				"brawler": "keepsake_tpl_brawler",
+				"mage": "keepsake_tpl_mage"
+			}
 		},
 		"rules": [
 			{
@@ -121,7 +129,8 @@
 				],
 				"wounded_max_hp_pct": 20
 			}
-		]
+		],
+		"crypts": 2
 	},
 	"version": 1
 }

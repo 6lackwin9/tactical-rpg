@@ -377,6 +377,9 @@ fn worn_end(member: &str, worn: &[(&str, i64)]) -> HeroEnd {
         hostile: String::new(),
         attacked: Vec::new(),
         worn: worn.iter().map(|(s, n)| (s.to_string(), *n)).collect(),
+        strain_peak: 0,
+        strain_end: 0,
+        channel_actions: 0,
     }
 }
 

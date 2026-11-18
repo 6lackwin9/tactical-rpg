@@ -1,5 +1,7 @@
 # Build Session handover (cloud)
 
+> **Superseded 2026-11-17 (review)**: do not start from this file. The Build thread starts from skill `build-session`, `docs/READY.md` and `docs/FEEDBACK.md` section 1 (`docs/workflow/cloud.md` "Fresh sessions"). State below is from 2026-11-07, kept as history.
+
 Updated 2026-11-07 by the cloud Build Session after the R1 release. Read this, then run `/build-session`.
 
 ## Goal of the session

@@ -1585,6 +1585,168 @@
 				}
 			],
 			"slot": ""
+		},
+		{
+			"id": "orig_watch_shield",
+			"name": "Watch Levy's Shield",
+			"description": "Drilled behind a Watch shield: +6 Max Poise.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "max_poise",
+					"value": 6
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "orig_crag_eye",
+			"name": "Crag Eye",
+			"description": "Outwall bolt-man's eye: +1 PERC.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "PERC",
+					"value": 1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "orig_soot_step",
+			"name": "Soot Step",
+			"description": "Flue-runner's footing: 20% resistance to Slow.",
+			"effects": [
+				{
+					"type": "resist",
+					"status": "slow",
+					"value": 20
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "orig_mortuary_calm",
+			"name": "Mortuary Calm",
+			"description": "Charnel-novice's composure: +1 KNOW.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "KNOW",
+					"value": 1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "orig_slag_grip",
+			"name": "Slag Grip",
+			"description": "Kiln chain-breaker's grip: +1 STR.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "STR",
+					"value": 1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "orig_alum_nose",
+			"name": "Alum Nose",
+			"description": "Vat-still saboteur's nose: +1 INT.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "INT",
+					"value": 1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "temper_steady",
+			"name": "Steady",
+			"description": "Unshaken nerve: +6 Max Poise.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "max_poise",
+					"value": 6
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "temper_wary",
+			"name": "Wary",
+			"description": "Eyes up, always: +1 PERC.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "PERC",
+					"value": 1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "temper_quiet",
+			"name": "Quiet",
+			"description": "Watches and learns: +1 KNOW.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "KNOW",
+					"value": 1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "temper_reckless",
+			"name": "Reckless",
+			"description": "Takes the opening, ignores the cost: +5% critical chance, -1 Armor.",
+			"effects": [
+				{
+					"type": "crit",
+					"value": 5
+				},
+				{
+					"type": "stat",
+					"stat": "armor",
+					"value": -1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "martyr_last_stand",
+			"name": "Last Stand",
+			"description": "The fuse burns out: +25% damage, +4 Armor, immune to Weaken and Stun; dies when the battle ends.",
+			"effects": [
+				{
+					"type": "skill_potency",
+					"group": "attack",
+					"value": 0.25
+				},
+				{
+					"type": "stat",
+					"stat": "armor",
+					"value": 4
+				},
+				{
+					"type": "resist",
+					"status": "weaken",
+					"value": 100
+				},
+				{
+					"type": "resist",
+					"status": "stun",
+					"value": 100
+				}
+			],
+			"slot": ""
 		}
 	]
 }

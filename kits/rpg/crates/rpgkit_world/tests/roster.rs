@@ -209,7 +209,7 @@ fn party_of(d: &Data, members: &[(&str, i64)]) -> GameState {
 }
 
 fn end(member: &str, hp: i64, max_hp: i64, alive: bool) -> HeroEnd {
-    HeroEnd { member: member.into(), hp, max_hp, alive, pouch: vec!["left".into()], unloaded: vec!["spare".into()], fate: None, marks: Vec::new(), hostile: String::new(), attacked: Vec::new(), worn: Vec::new() }
+    HeroEnd { member: member.into(), hp, max_hp, alive, pouch: vec!["left".into()], unloaded: vec!["spare".into()], fate: None, marks: Vec::new(), hostile: String::new(), attacked: Vec::new(), worn: Vec::new(), strain_peak: 0, strain_end: 0, channel_actions: 0 }
 }
 
 #[test]
@@ -327,7 +327,7 @@ fn cell(d: &Data, w: &str, act: i64) -> GameState {
 
 /// A fielded hero's end at `hp` of the battle max `max` with ENCOUNTER2's `fate` (0 HP = not alive).
 fn fated(member: &str, hp: i64, max: i64, fate: PartyFate) -> HeroEnd {
-    HeroEnd { member: member.into(), hp, max_hp: max, alive: hp > 0, pouch: Vec::new(), unloaded: Vec::new(), fate: Some(fate), marks: Vec::new(), hostile: String::new(), attacked: Vec::new(), worn: Vec::new() }
+    HeroEnd { member: member.into(), hp, max_hp: max, alive: hp > 0, pouch: Vec::new(), unloaded: Vec::new(), fate: Some(fate), marks: Vec::new(), hostile: String::new(), attacked: Vec::new(), worn: Vec::new(), strain_peak: 0, strain_end: 0, channel_actions: 0 }
 }
 
 fn max_of(d: &Data, gs: &GameState, id: &str) -> i64 {
@@ -943,4 +943,334 @@ fn bled_out_party_fate_departs_dead_and_battle_init_passes_bleed_out_rounds() {
     let rec = gs2.party.departed_of("founder").expect("bled out member recorded in departed");
     assert_eq!((rec.life.as_str(), rec.cause.as_str()), ("dead", "bled_out"));
     assert!(gs2.party.member("founder").is_none());
+}
+
+// ---- PK3 3-4 (PR6-4): the pool, procedural recruits, crypts, the Living Martyr fuse, procedural keepsakes ----------
+
+/// `pw`'s bunks and crypt places, and its Martyr template's fuse numbers (the expectations derive from these; PR7-11,
+/// FB-283: the fuse numbers are the accepted ones, `per_deploy 1`, `stasis_days 7`, `max 6`, tiers at 2 and 4).
+const PW_BUNKS: i64 = 3;
+const PW_CRYPTS: i64 = 1;
+const PER_DEPLOY: i64 = 1;
+const STASIS_DAYS: i64 = 7;
+const FUSE_MAX: i64 = 6;
+const TIER_AT: [i64; 2] = [2, 4];
+const LEVY_NAMES: [&str; 3] = ["Ash", "Bryn", "Cole"];
+/// PR7-11: the Last Stand's numbers (`+25%` damage on every attack, `+4` Armor, immune to two debuffs).
+const LAST_DAMAGE: f64 = 0.25;
+const LAST_ARMOR: i32 = 4;
+const LAST_IMMUNE: [&str; 2] = ["weaken", "stun"];
+
+/// PR7-11: the last passive's effects in the shapes the game's `martyr_last_stand` seed uses.
+fn last_effects() -> Value {
+    let mut fx = vec![json!({"type": "skill_potency", "group": "attack", "value": LAST_DAMAGE}), json!({"type": "stat", "stat": "armor", "value": LAST_ARMOR})];
+    fx.extend(LAST_IMMUNE.iter().map(|st| json!({"type": "resist", "status": st, "value": 100})));
+    Value::Array(fx)
+}
+
+/// A pool world `pw` (no campaign): three bunks, one crypt place, an open flag, keepsakes on `dead` and `captured` with
+/// a `drill` template item; two recruit templates: `levy` (two base units, three names, two origins and temperaments,
+/// join level 2) and `martyr` (a fuse with tiers at TIER_AT and a last passive), and scenes that rescue and swear in.
+fn pool_data() -> Data {
+    data_with(|catalog, worlds| {
+        let passive = |id: &str| json!({"id": id, "name": id, "slot": "", "effects": [{"type": "resist", "status": "burn", "value": 5}]});
+        let mut passives: Vec<Value> = ["orig_a", "orig_b", "temper_a", "temper_b", "fuse_two", "fuse_four"].iter().map(|p| passive(p)).collect();
+        // PR7-11: the last passive in the Last Stand's shapes (a damage bonus, Armor, two immunities)
+        passives.push(json!({"id": "fuse_last", "name": "Last", "slot": "", "effects": last_effects()}));
+        catalog["passives"] = Value::Array(passives);
+        catalog["items"].as_array_mut().unwrap().push(json!({"id": "strap", "name": "Strap", "item_type": "ACCESSORY", "slot": "ACCESSORY_1", "value": 0, "special": true, "stat_bonuses": {"STR": 2}}));
+        catalog["units"].as_array_mut().unwrap().push(json!({"id": "hero2", "name": "Hero Two", "side": "party", "class_id": "drill", "level": 1}));
+        let scene = |id: &str, fx: Value| json!({"id": id, "start": "a", "services": false, "nodes": [{"id": "a", "text": "Well?", "choices": [{"text": "Go.", "effects": [fx]}]}]});
+        let mut own = own("pw");
+        own["recruits"] = with_ids("pw", json!([
+            {"id": "levy", "name": "Levy", "class_id": "drill", "base_units": ["hero", "hero2"], "names": LEVY_NAMES, "age_band": [18, 24],
+             "origins": ["orig_a", "orig_b"], "temperaments": ["temper_a", "temper_b"], "level": "2"},
+            {"id": "martyr", "name": "Martyr", "class_id": "drill", "base_units": ["hero"], "names": ["Dov", "Eda"], "origins": ["orig_a"], "temperaments": ["temper_a"],
+             "fuse": {"per_deploy": PER_DEPLOY, "stasis_days": STASIS_DAYS, "max": FUSE_MAX,
+                      "tiers": [{"at": TIER_AT[0], "passive": "fuse_two"}, {"at": TIER_AT[1], "passive": "fuse_four"}], "last_passive": "fuse_last"}}
+        ]));
+        for (id, fx) in [
+            ("s_rescue", json!({"effect": "rescue", "template": "levy", "count": 2})),
+            ("s_martyrs", json!({"effect": "rescue", "template": "martyr", "count": 2})),
+            ("s_swear", json!({"effect": "recruit", "pool": "first"})),
+        ] {
+            own["dialogues"].as_array_mut().unwrap().push(with_ids("pw", json!([scene(id, fx)]))[0].clone());
+        }
+        worlds["pw"] = json!({"manifest": {"id": "pw", "roster": {"bunks": PW_BUNKS, "crypts": PW_CRYPTS, "open_flag": "roster_open",
+            "keepsakes": {"on": ["captured", "dead"], "by_class": {"drill": "strap"}, "name": "{name}'s {item}"}}}, "own": own});
+    })
+}
+
+/// A `pw` game with `n` members (the founder, the second, catalog heroes after), seed fixed, the roster open or not.
+fn pool_game(d: &Data, n: usize, open: bool) -> GameState {
+    let mut gs = crew(d, "pw", n);
+    gs.rng_seed = 7;
+    if open {
+        gs.flags.insert("roster_open".into(), json!(true));
+    }
+    gs
+}
+
+fn rescue(d: &Data, gs: &mut GameState, template: &str, count: i64) -> Vec<String> {
+    let fx = json!({"effect": "rescue", "template": template, "count": count});
+    roster::rescue(d, gs, fx.as_object().unwrap()).0
+}
+
+#[test]
+fn rescue_draws_pool_entries_on_the_recruit_stream_with_names_no_one_holds() {
+    // PO1, PG2: a template rescue adds `count` entries `recruit_<n>`, each drawn on the `recruit` stream (base unit,
+    // name, origin, temperament from the template's lists), rescued today; the same seed draws the same pool
+    let d = pool_data();
+    let mut gs = pool_game(&d, 1, true);
+    gs.time = 4;
+    assert!(ok(&scene(&d, &mut gs, "s_rescue")));
+    let pool = gs.party.pool.clone();
+    assert_eq!(pool.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), ["recruit_1", "recruit_2"]);
+    for p in &pool {
+        assert!(LEVY_NAMES.contains(&p.name.as_str()) && ["hero", "hero2"].contains(&p.base_unit.as_str()), "{p:?}");
+        assert!(["orig_a", "orig_b"].contains(&p.origin.as_str()) && ["temper_a", "temper_b"].contains(&p.temperament.as_str()), "{p:?}");
+        assert_eq!((p.template.as_str(), p.character.as_str(), p.since), ("pw:levy", "", 4));
+    }
+    assert_ne!(pool[0].name, pool[1].name, "two entries never share a name");
+    assert!(json::to_int(&gs.rolls["recruit"]) >= 2, "the draws come from the recruit stream: {:?}", gs.rolls);
+    let mut again = pool_game(&d, 1, true);
+    again.time = 4;
+    rescue(&d, &mut again, "levy", 2);
+    assert_eq!(again.party.pool, pool, "the seeded stream draws the same pool");
+    assert_eq!(gs.read_flag("roster.pool"), Some(json!(2)));
+    // the names a member, a pool entry or a departed member holds are never drawn: one name is left for four asks
+    let mut gs = pool_game(&d, 3, true);
+    gs.party.members[2].name = LEVY_NAMES[0].into();
+    rescue(&d, &mut gs, "levy", 1);
+    let pooled = gs.party.pool[0].name.clone();
+    roster::depart(&d, &mut gs, "m3", "dead", "story", "").unwrap();
+    let fx = json!({"effect": "rescue", "template": "levy", "count": 4});
+    let (added, notes) = roster::rescue(&d, &mut gs, fx.as_object().unwrap());
+    assert_eq!(added.len(), 1, "{notes:?}");
+    let last = gs.party.pool.last().unwrap();
+    assert!(last.name != LEVY_NAMES[0] && last.name != pooled && last.id == "recruit_2", "{last:?}");
+    assert!(notes.iter().any(|n| n.contains("no free name")), "{notes:?}");
+    // a named rescue pools the character once
+    let fx = json!({"effect": "rescue", "character": "kestrel"});
+    roster::rescue(&d, &mut gs, fx.as_object().unwrap());
+    let (again, notes) = roster::rescue(&d, &mut gs, fx.as_object().unwrap());
+    assert!(again.is_empty() && notes[0].contains("already with you"), "{notes:?}");
+    assert_eq!(gs.party.pool.iter().filter(|p| p.character == "pw:kestrel").count(), 1);
+}
+
+#[test]
+fn recruit_pool_swears_in_a_pooled_recruit_or_refuses_with_the_spec_texts() {
+    // PO2, PO3: closed roster -> "The cell takes no one new yet."; open: the first entry joins with its name, origin,
+    // temperament and template, at the template's join level; with every bunk taken -> "Every bunk is taken."
+    let d = pool_data();
+    let mut gs = pool_game(&d, 2, false);
+    rescue(&d, &mut gs, "levy", 2);
+    assert_eq!(errors(&scene(&d, &mut gs, "s_swear")), [roster::CLOSED_TEXT]);
+    assert_eq!(roster::swear_in(&d, &mut gs, "first", &Value::Null), Err(roster::CLOSED_TEXT.to_string()));
+    gs.flags.insert("roster_open".into(), json!(true));
+    let entry = gs.party.pool[0].clone();
+    assert!(ok(&scene(&d, &mut gs, "s_swear")));
+    let m = gs.party.member(&entry.id).expect("sworn in").clone();
+    assert_eq!((m.name.as_str(), m.origin.as_str(), m.temperament.as_str(), m.template.as_str(), m.base_unit.as_str()), (entry.name.as_str(), entry.origin.as_str(), entry.temperament.as_str(), "pw:levy", entry.base_unit.as_str()));
+    assert_eq!((m.housing(), m.fuse.is_none()), ("bunk", true), "an unfused template's recruit sleeps in a bunk");
+    assert_eq!(progression::display_name(&d, &m), entry.name);
+    assert_eq!(roster::portrait_of(&d, &m), "", "levy names no portrait file");
+    let passives = progression::member_passives(&d, &m);
+    assert!(has(&passives, &m.origin) && has(&passives, &m.temperament), "origin and temperament are gathered: {passives:?}");
+    assert_eq!(m.total_xp, progression::xp_for_level(&d, 2), "the template's join level");
+    assert!(gs.party.pool.len() == 1 && has(&gs.party.active_ids, &entry.id));
+    assert!(gs.validate(&d).is_empty(), "{:?}", gs.validate(&d));
+    // three members fill the three bunks: the next swear-in is refused with the bunk text and the entry waits
+    let waiting = gs.party.pool[0].id.clone();
+    assert_eq!(roster::swear_in(&d, &mut gs, &waiting, &json!(1)), Err(format!("Every bunk is taken ({PW_BUNKS} of {PW_BUNKS}).")));
+    assert_eq!(gs.party.pool.len(), 1);
+    assert_eq!(roster::swear_in(&d, &mut gs, "nobody", &Value::Null), Err("'nobody' is not waiting to join.".to_string()));
+    // retire and dismiss depart with the roster cause (refused while closed)
+    let mut closed = gs.clone();
+    closed.flags.shift_remove("roster_open");
+    assert_eq!(roster::retire(&d, &mut closed, &entry.id).unwrap_err(), roster::CLOSED_TEXT);
+    let rec = roster::retire(&d, &mut gs, &entry.id).expect("retires");
+    assert_eq!((rec.life.as_str(), rec.cause.as_str(), rec.keepsake.as_str()), ("retired", "roster", ""), "retired is not a keepsake life here");
+    assert_eq!(roster::dismiss(&d, &mut gs, "second").unwrap().life, "dismissed");
+    assert_eq!(roster::swear_in(&d, &mut gs, &waiting, &Value::Null).as_deref(), Ok(waiting.as_str()), "a freed bunk takes the waiting recruit");
+}
+
+#[test]
+fn crypt_only_martyrs_take_a_crypt_place_and_no_bunk() {
+    // BK2 (PK3 3.1): a fused template's recruit is crypt_only: it takes a crypt place and no bunk, so a full bunk room
+    // still takes it; a `crypt` member keeps its bunk and takes a place too; the places cap the Martyrs
+    let d = pool_data();
+    let mut gs = pool_game(&d, PW_BUNKS as usize, true);
+    rescue(&d, &mut gs, "martyr", 2);
+    let (bunks, crypts) = (roster::bunks_used(&gs.party), roster::crypts_used(&gs.party));
+    let id = roster::swear_in(&d, &mut gs, "first", &Value::Null).expect("a Martyr needs no bunk");
+    let m = gs.party.member(&id).unwrap();
+    assert_eq!((m.housing(), m.fuse.clone().map(|f| (f.value, f.deploys, f.since))), ("crypt_only", Some((0, 0, gs.time))));
+    assert_eq!((roster::bunks_used(&gs.party), roster::crypts_used(&gs.party)), (bunks, crypts + 1));
+    assert_eq!(roster::swear_in(&d, &mut gs, "first", &Value::Null), Err(format!("Every crypt is taken ({PW_CRYPTS} of {PW_CRYPTS}).")));
+    assert_eq!(gs.read_flag("roster.living"), Some(json!(PW_BUNKS + 1)), "living counts bunks and crypts");
+    let mut stage_four = gs.clone();
+    stage_four.party.members[0].housing = "crypt".into();
+    assert_eq!((roster::bunks_used(&stage_four.party), roster::crypts_used(&stage_four.party)), (bunks, crypts + 2));
+    assert!(roster::load_warnings(&stage_four).iter().any(|w| w.contains("crypt places")), "{:?}", roster::load_warnings(&stage_four));
+    // the housing round-trips and is saved only when not a bunk
+    let saved = gs.to_value();
+    assert_eq!(saved["party"]["members"][PW_BUNKS as usize]["housing"], json!("crypt_only"));
+    assert!(saved["party"]["members"][0].get("housing").is_none());
+}
+
+/// The end of member `id` standing at full HP after a battle.
+fn standing(d: &Data, gs: &GameState, id: &str) -> HeroEnd {
+    let max = roster::field_unit(d, gs, gs.party.member(id).unwrap(), &gs.world_id).unwrap().unit.max_hp as i64;
+    fated(id, max, max, PartyFate::Standing)
+}
+
+/// A `pw` game with one sworn-in Martyr (joined on day 0): (game, member id).
+fn martyr_game(d: &Data) -> (GameState, String) {
+    let mut gs = pool_game(d, 2, true);
+    rescue(d, &mut gs, "martyr", 1);
+    let id = roster::swear_in(d, &mut gs, "first", &Value::Null).unwrap();
+    (gs, id)
+}
+
+#[test]
+fn the_fuse_ticks_by_deployments_and_stasis_days_and_its_tiers_add_up() {
+    // FZ2: value = deploys x per_deploy + floor((day - since) / stasis_days), never lowered; FZ3 (PK3 3.1): every
+    // tier at or below the value applies (cumulative)
+    let d = pool_data();
+    let (mut gs, id) = martyr_game(&d);
+    let want = |deploys: i64, days: i64| deploys * PER_DEPLOY + days / STASIS_DAYS;
+    let tiers = |gs: &GameState| roster::fuse_passives(&d, gs.party.member(&id).unwrap());
+    assert!(tiers(&gs).is_empty());
+    for n in 1..=2 {
+        let end = standing(&d, &gs, &id);
+        roster::settle_party(&d, &mut gs, &FightEnd::new("won", "pw"), &[end]);
+        assert_eq!(gs.party.member(&id).unwrap().fuse.as_ref().map(|f| (f.deploys, f.value)), Some((n, want(n, 0))));
+    }
+    assert_eq!(want(2, 0), TIER_AT[0]);
+    assert_eq!(tiers(&gs), ["fuse_two"]);
+    gs.time = 2 * STASIS_DAYS + 1;
+    roster::refresh_fuses(&d, &mut gs);
+    let m = gs.party.member(&id).unwrap();
+    assert_eq!(m.fuse.as_ref().unwrap().value, want(2, gs.time));
+    assert_eq!(want(2, gs.time), TIER_AT[1]);
+    assert_eq!(tiers(&gs), ["fuse_two", "fuse_four"], "the tiers are cumulative");
+    let built = roster::field_unit(&d, &gs, m, "pw").unwrap().unit;
+    assert!(has(&built.passives, "fuse_two") && has(&built.passives, "fuse_four"), "{:?}", built.passives);
+    // nothing lowers it: going back in time keeps the saved value
+    gs.time = 0;
+    roster::refresh_fuses(&d, &mut gs);
+    assert_eq!(gs.party.member(&id).unwrap().fuse.as_ref().unwrap().value, TIER_AT[1]);
+    assert!(roster::fuse_choices(&d, &gs).is_empty(), "below max: no choice yet");
+}
+
+#[test]
+fn a_spent_fuse_asks_retire_or_last_stand_and_a_last_stand_dies_with_a_keepsake() {
+    // FZ4: at value >= max the next deployment needs the choice; a last stand deploys with the last passive and
+    // departs dead after the battle whatever the outcome; KS3: dead is a keepsake life, so the cell gets the class's
+    // template instance named "{name}'s {item}", never a stash item
+    let d = pool_data();
+    let (mut gs, id) = martyr_game(&d);
+    let name = gs.party.member(&id).unwrap().name.clone();
+    assert!(roster::last_stand(&d, &mut gs, &id).is_err(), "not spent yet");
+    gs.time = FUSE_MAX * STASIS_DAYS;
+    assert!(roster::fuse_spent(&d, gs.party.member(&id).unwrap(), gs.time));
+    assert_eq!(roster::fuse_choices(&d, &gs), std::slice::from_ref(&id));
+    assert!(roster::fuse_refusal(&d, &gs).starts_with(&name), "{}", roster::fuse_refusal(&d, &gs));
+    // retire: departs retired (no keepsake life), no last stand
+    let mut retired = gs.clone();
+    assert_eq!(roster::retire(&d, &mut retired, &id).unwrap().life, "retired");
+    assert!(retired.party.keepsakes.is_empty());
+    roster::last_stand(&d, &mut gs, &id).expect("a spent fuse may stand");
+    assert!(roster::fuse_choices(&d, &gs).is_empty() && roster::fuse_refusal(&d, &gs).is_empty());
+    assert!(has(&roster::fuse_passives(&d, gs.party.member(&id).unwrap()), "fuse_last"));
+    let end = standing(&d, &gs, &id);
+    let settled = roster::settle_party(&d, &mut gs, &FightEnd::new("lost", "pw"), &[end]);
+    assert!(settled.departed.contains(&(id.clone(), "dead".to_string())), "{:?}", settled.departed);
+    let rec = gs.party.departed_of(&id).unwrap();
+    let ks = format!("keepsake@{id}");
+    assert_eq!((rec.life.as_str(), rec.cause.as_str(), rec.keepsake.as_str()), ("dead", "roster", ks.as_str()));
+    assert_eq!(gs.party.keepsakes, [rpgkit_world::state::Keepsake { id: ks.clone(), item: "strap".into(), name: format!("{name}'s Strap") }]);
+    assert!(!gs.party.stash.contains_key("strap") && !gs.party.stash.contains_key(&ks), "an instance is never a stash item");
+}
+
+#[test]
+fn a_last_stand_fields_with_its_passive_and_the_fight_waits_for_the_choice() {
+    // PR7-11 (FB-283): at the accepted numbers the fuse is spent after FUSE_MAX deployments or FUSE_MAX x STASIS_DAYS
+    // days; the battle start refuses with the fuse text until the choice (the screen asks first); a last stand fields
+    // the member with its last passive (+25% attack potency, +4 Armor, immune to Weaken and Stun) and it dies at the
+    // settle, whatever the outcome
+    let d = pool_data();
+    let (mut gs, id) = martyr_game(&d);
+    let fielded = |gs: &GameState| roster::field_unit(&d, gs, gs.party.member(&id).unwrap(), "pw").unwrap().unit;
+    let strike = d.cat.skill("strike").expect("the basic attack").clone();
+    let before = fielded(&gs);
+    // deployments alone spend it: one short is no choice yet, the last one makes it
+    for n in 1..=FUSE_MAX / PER_DEPLOY {
+        assert!(battle::begin_fight(&d, &mut gs, "fight").is_ok(), "deployment {n} starts");
+        let end = standing(&d, &gs, &id);
+        roster::settle_party(&d, &mut gs, &FightEnd::new("won", "pw"), &[end]);
+    }
+    assert!(roster::fuse_spent(&d, gs.party.member(&id).unwrap(), gs.time));
+    let why = roster::fuse_refusal(&d, &gs);
+    assert_eq!(battle::begin_fight(&d, &mut gs, "fight").err(), Some(why.clone()), "the start waits for the choice");
+    // the stasis days alone spend another Martyr's fuse in FUSE_MAX x STASIS_DAYS days (one day short does not)
+    let (mut idle, idle_id) = martyr_game(&d);
+    idle.time = FUSE_MAX * STASIS_DAYS - 1;
+    assert!(!roster::fuse_spent(&d, idle.party.member(&idle_id).unwrap(), idle.time));
+    idle.time += 1;
+    assert!(roster::fuse_spent(&d, idle.party.member(&idle_id).unwrap(), idle.time));
+    // both tiers hold below the last passive
+    assert_eq!(roster::fuse_passives(&d, gs.party.member(&id).unwrap()), ["fuse_two", "fuse_four"]);
+    let spent = fielded(&gs);
+    roster::last_stand(&d, &mut gs, &id).expect("a spent fuse may stand");
+    assert!(battle::begin_fight(&d, &mut gs, "fight").is_ok(), "the choice made, the fight starts");
+    let stand = fielded(&gs);
+    assert!(has(&stand.passives, "fuse_last"), "{:?}", stand.passives);
+    let gain = stand.potency_for_skill(&strike) - spent.potency_for_skill(&strike);
+    assert!((gain - LAST_DAMAGE).abs() < 1e-9, "+{LAST_DAMAGE} attack potency, got {gain}");
+    assert_eq!(rpgkit_rules::damage::base_armor_rating(&stand) - rpgkit_rules::damage::base_armor_rating(&spent), LAST_ARMOR);
+    for st in LAST_IMMUNE {
+        assert_eq!(stand.resist_for(st), 100, "immune to {st}");
+        assert!(before.resist_for(st) < 100);
+    }
+    let end = standing(&d, &gs, &id);
+    let settled = roster::settle_party(&d, &mut gs, &FightEnd::new("won", "pw"), &[end]);
+    assert!(settled.departed.contains(&(id.clone(), "dead".to_string())), "a won last stand still dies: {:?}", settled.departed);
+    assert!(gs.party.member(&id).is_none());
+}
+
+#[test]
+fn a_procedural_keepsake_is_a_wear_legal_accessory_once_per_member() {
+    // KS3 (PK3 4): `roster::item_def` resolves the instance as its template renamed, an accessory of value 0, special;
+    // a member wears it (build, can_wear, validate), never two of one template; the instances and the pool round-trip
+    let d = pool_data();
+    let (mut gs, id) = martyr_game(&d);
+    roster::depart(&d, &mut gs, &id, "dead", "story", "").unwrap();
+    rescue(&d, &mut gs, "levy", 1);
+    let ks = format!("keepsake@{id}");
+    let def = roster::item_def(&d, &gs.party, &ks).expect("the instance resolves");
+    assert_eq!((def.id.as_str(), def.item_type.as_str(), json::to_int(&def.raw["value"]), def.raw["special"].clone()), (ks.as_str(), "ACCESSORY", 0, json!(true)));
+    assert!(def.name.ends_with("'s Strap"));
+    let wearer = gs.party.members[0].id.clone();
+    gs.party.member(&wearer).unwrap().can_wear(&d, &ks, "accessory_1").expect("wear-legal");
+    let before = roster::field_unit(&d, &gs, gs.party.member(&wearer).unwrap(), "pw").unwrap().unit;
+    gs.party.member_mut(&wearer).unwrap().equipment.insert("accessory_1".into(), ks.clone());
+    let after = roster::field_unit(&d, &gs, gs.party.member(&wearer).unwrap(), "pw").unwrap().unit;
+    assert!(after.inventory.equipped.iter().any(|(_, e)| e.item.id == ks && e.item.name == def.name), "the build wears the instance");
+    assert!(after.stats.effective("STR", None, "") > before.stats.effective("STR", None, ""), "the template's bonus applies");
+    assert!(gs.validate(&d).is_empty(), "{:?}", gs.validate(&d));
+    // a second instance of the same template on the same member is a duplicate accessory
+    gs.party.keepsakes.push(rpgkit_world::state::Keepsake { id: "keepsake@ghost".into(), item: "strap".into(), name: "Ghost's Strap".into() });
+    gs.party.sync_keepsakes();
+    let twin = gs.party.member(&wearer).unwrap().can_wear(&d, "keepsake@ghost", "accessory_2");
+    assert!(twin.is_err_and(|e| e.contains("already wears")));
+    // the save keeps the pool, the instances and the worn id; a party without them saves no key
+    let back = save::decode(&d, &envelope(&gs, save::VERSION)).expect("loads");
+    assert_eq!(back.state.to_value(), gs.to_value());
+    assert_eq!((back.state.party.pool.clone(), back.state.party.keepsakes.clone()), (gs.party.pool.clone(), gs.party.keepsakes.clone()));
+    assert_eq!(back.state.party.member(&wearer).unwrap().equipment["accessory_1"], ks, "the worn instance survives the load's sanitize");
+    let plain = pool_game(&d, 2, true).to_value();
+    assert!(plain["party"].get("pool").is_none() && plain["party"].get("keepsakes").is_none());
+    assert!(["name", "housing", "fuse", "origin", "temperament", "template"].iter().all(|k| plain["party"]["members"][0].get(*k).is_none()));
 }

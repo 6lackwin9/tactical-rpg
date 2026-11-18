@@ -14,7 +14,10 @@ use crate::painter::{CanvasPolicy, Fonts, Grid, Painter, View};
 use crate::screen::{read_window_sizes, Settings, WINDOW_SIZES, Context, Cx, Held, Key, Nav, Notice, PointerPhase, Screen};
 // The window's show, size and place (DISPLAY2): the desktop only; the web page owns its canvas (WEBREL1-E2).
 #[cfg(not(target_arch = "wasm32"))]
-use crate::screen::{window_capped, window_centred, window_kept_in, window_size_of, ScreenRect, WindowShow};
+use crate::screen::{window_capped, window_centred, window_kept_in, window_size_of, ScreenRect};
+use crate::screen::WindowShow;
+#[cfg(target_arch = "wasm32")]
+use crate::screen::WebFullscreen;
 use crate::canvas::{rgba, Rect};
 use crate::pacing::{FrameNeed, Pace, Pacer};
 use crate::window::Grab;
@@ -37,10 +40,11 @@ use winit::dpi::PhysicalSize;
 use winit::dpi::PhysicalPosition;
 #[cfg(not(target_arch = "wasm32"))]
 use winit::monitor::MonitorHandle;
-#[cfg(not(target_arch = "wasm32"))]
 use winit::window::Fullscreen;
-use winit::window::{Window, WindowId};
+use winit::window::{Window, WindowAttributes, WindowId};
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod bot;
 pub mod headless;
 
 /// What the shell opens.
@@ -1392,6 +1396,16 @@ fn size_and_place(window: &Window, want: &Value, show: WindowShow) -> Option<Str
     asked.filter(|a| *a != client).map(|a| format!("Window capped to {} x {} px: {} x {} px does not fit the usable screen area.", client.0, client.1, a.0, a.1))
 }
 
+/// The web window's attributes (WEBREL1-E2): none of the desktop's sizes, so winit writes no CSS size or minimum onto
+/// the page canvas and the page's own CSS sizes it (it fills the page, and the screen in fullscreen); winit reports
+/// that size at the device pixel ratio and the drawing follows (`Resized`).
+pub fn web_attributes_of(mut attrs: WindowAttributes) -> WindowAttributes {
+    attrs.inner_size = None;
+    attrs.min_inner_size = None;
+    attrs.max_inner_size = None;
+    attrs
+}
+
 /// The settings' text size.
 fn text_scale_of(v: &Value) -> f32 {
     v["text_scale"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0) as f32
@@ -1476,6 +1490,19 @@ impl<G: Context> App<G> {
         el.exit();
     }
 
+    /// The web canvas resized: when the browser entered or left fullscreen by itself (Esc, its own controls, a refused
+    /// ask), the Fullscreen setting follows it, for this session only (DISPLAY1 rule 8; `WebFullscreen::Follow`).
+    #[cfg(target_arch = "wasm32")]
+    fn follow_fullscreen(&mut self) {
+        let (Some(shell), Some(window), Some(applied)) = (self.shell.as_mut(), self.window.as_ref(), self.applied.as_mut()) else { return };
+        let want = WindowShow::of(&shell.cx.settings.v) == WindowShow::Fullscreen;
+        let asked = WindowShow::of(applied) == WindowShow::Fullscreen;
+        if let WebFullscreen::Follow(on) = WebFullscreen::step(want, Some(asked), window.fullscreen().is_some()) {
+            shell.cx.settings.v["fullscreen"] = json!(on);
+            applied["fullscreen"] = json!(on);
+        }
+    }
+
     /// The web renderer is ready (WEBREL1-E2): sized to the canvas as it is now (it may have been resized while the
     /// init ran), vsync as the settings say.
     #[cfg(target_arch = "wasm32")]
@@ -1552,9 +1579,17 @@ impl<G: Context> App<G> {
         if self.applied.as_ref() == Some(&v) {
             return;
         }
-        // The web (WEBREL1-E2): the page owns the canvas and its size, so the window show and size settings do not apply.
+        // The web (WEBREL1-E2): the page owns the canvas and its size, so the window size and borderless settings do not
+        // apply; Fullscreen (DISPLAY1 rule 8) asks the browser, here inside the click that applied it (browsers allow
+        // fullscreen only during a user gesture).
         #[cfg(target_arch = "wasm32")]
-        let _ = window;
+        {
+            let want = WindowShow::of(&v) == WindowShow::Fullscreen;
+            let asked = self.applied.as_ref().map(|a| WindowShow::of(a) == WindowShow::Fullscreen);
+            if let WebFullscreen::Ask(on) = WebFullscreen::step(want, asked, window.fullscreen().is_some()) {
+                window.set_fullscreen(on.then_some(Fullscreen::Borderless(None)));
+            }
+        }
         #[cfg(not(target_arch = "wasm32"))]
         let show = WindowShow::of(&v);
         #[cfg(not(target_arch = "wasm32"))]
@@ -1597,8 +1632,10 @@ mod web {
     use winit::platform::web::WindowAttributesExtWebSys;
     use winit::window::WindowAttributes;
 
-    /// The canvas's size on the page, in CSS px; it is drawn at the device pixel ratio (1280 x 720 CSS px are
-    /// 2560 x 1440 px at a ratio of 2), and follows the ratio when it changes (page zoom, another screen).
+    /// The canvas's size in CSS px for the first frame only, when the page has not laid it out yet. The page owns the
+    /// canvas's CSS size (a game's page lets it fill the window; fullscreen fills the screen): winit's resize observer
+    /// reports it at the device pixel ratio (`Resized`), so the drawing buffer is always the CSS size times the ratio and
+    /// the screens scale to it as a resized desktop window does.
     pub const CANVAS_CSS: (f64, f64) = (1280.0, 720.0);
 
     /// The page's canvas with the element id `id`.
@@ -1608,11 +1645,10 @@ mod web {
         el.dyn_into::<web_sys::HtmlCanvasElement>().map_err(|_| anyhow!("the page element \"{id}\" is not a canvas"))
     }
 
-    /// The window on canvas `id`: `CANVAS_CSS` at the device pixel ratio, focusable (keys reach it), and its default
+    /// The window on canvas `id`: no size of its own (`web_attributes_of`), focusable (keys reach it), and its default
     /// actions prevented, so a right click goes back instead of opening the browser's context menu.
     pub fn attributes(attrs: WindowAttributes, id: &str) -> Result<WindowAttributes> {
-        let size = LogicalSize::new(CANVAS_CSS.0, CANVAS_CSS.1);
-        Ok(attrs.with_canvas(Some(canvas(id)?)).with_inner_size(size).with_min_inner_size(size).with_prevent_default(true).with_focusable(true))
+        Ok(super::web_attributes_of(attrs).with_canvas(Some(canvas(id)?)).with_prevent_default(true).with_focusable(true))
     }
 
     /// Starts pixels' async init on the browser's executor; the result comes back to the loop as `Wake::Surface`.
@@ -1743,7 +1779,13 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
         if self.window.is_some() {
             return;
         }
-        let (cx, stack) = self.start.take().expect("the shell starts once");
+        #[allow(unused_mut)]
+        let (mut cx, stack) = self.start.take().expect("the shell starts once");
+        // DISPLAY1 rule 8: the web's Fullscreen is for the session only (a page cannot enter it without a click).
+        #[cfg(target_arch = "wasm32")]
+        {
+            cx.settings.v["fullscreen"] = json!(false);
+        }
         // The setting `start_inactive` (a scenario run's scratch profile): the window opens without taking the focus.
         let active = cx.settings.v["start_inactive"] != json!(true);
         let attrs = Window::default_attributes().with_title(self.options.title.as_str()).with_inner_size(PhysicalSize::new(1280, 720)).with_min_inner_size(PhysicalSize::new(640, 360)).with_active(active);
@@ -1856,6 +1898,8 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
                 if let Some(s) = self.shell.as_mut() {
                     s.resize_canvas(w, h);
                 }
+                #[cfg(target_arch = "wasm32")]
+                self.follow_fullscreen();
                 // The new surface shows nothing until a frame: at once, also inside the system's own resize loop.
                 if let Some(w) = &self.window {
                     w.request_redraw();

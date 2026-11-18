@@ -1,12 +1,13 @@
 //! Unit tracks (PK2-S1, `docs/sessions/PK2_GRAFTS.md` section 2; engine-only, no Godot original): the checks of one row
 //! of the kind `unit_tracks` (the id, name, origin and cause, the advancing mark id, 1-9 stages each with a name, a
-//! slotless passive row or none, and a departure only on the last stage) and across rows (unique ids). The loader keeps
+//! slotless passive row or none, and a departure only on the last stage; PR6-6: a `signed` row holds no stages and no
+//! cause) and across rows (unique ids). The loader keeps
 //! the rows that pass, in file order.
 
 use super::View;
 use crate::source::fields;
 use aegis_core::json::{self, gstr, Dict};
-use rpgkit_data::{TRACK_DEPARTURES, TRACK_STAGES_MAX, TRACK_STAGE_KEYS};
+use rpgkit_data::{TRACK_DEPARTURES, TRACK_SIGNED_MAX, TRACK_STAGES_MAX, TRACK_STAGE_KEYS};
 use serde_json::Value;
 
 /// The catalog kind (file data/catalog/unit_tracks.json; a missing file is an empty table).
@@ -72,6 +73,24 @@ pub fn row_errors(e: &Dict, passives: &[Dict]) -> Vec<String> {
         out.push("Stages must be a list.".into());
         return out;
     };
+    // PR6-6 (`PK4_PK5_CAMPAIGN_HUB.md` 1, B5): a signed row is a lean -3..3 with no stages
+    let signed = match e.get("signed") {
+        None => false,
+        Some(Value::Bool(b)) => *b,
+        Some(_) => {
+            out.push("Signed must be true or false.".into());
+            false
+        }
+    };
+    if signed {
+        if !stages.is_empty() {
+            out.push(format!("A signed unit track (a lean -{m}..{m}) holds no stages (has {}).", stages.len(), m = TRACK_SIGNED_MAX));
+        }
+        if !cause.is_empty() {
+            out.push("A signed unit track has no departure, so no departure cause.".into());
+        }
+        return out;
+    }
     let departs = stages.iter().any(|s| s.as_object().is_some_and(|o| !json::s(o, "departure").is_empty()));
     if departs && cause.is_empty() {
         out.push("A unit track with a departure stage needs a departure cause.".into());

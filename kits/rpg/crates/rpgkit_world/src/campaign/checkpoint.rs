@@ -29,6 +29,11 @@ pub struct CheckpointDef {
     pub card: String,
     pub text: String,
     pub effects: Vec<Dict>,
+    /// PR6-6 (`PK4_PK5_CAMPAIGN_HUB.md` 2, B3): the flag key that arms it ("" = the fixed `deadline`): armed on the day
+    /// a tick first sees the flag set (`Campaign::checkpoint_armed_at`), due `offset_days` later; unarmed, it is not
+    /// open (no met, warning or miss, not in the views).
+    pub after_flag: String,
+    pub offset_days: i64,
 }
 
 impl CheckpointDef {
@@ -53,7 +58,18 @@ impl CheckpointDef {
             card: json::s(e, "card"),
             text: json::s(e, "text"),
             effects: json::aget(e, "effects").iter().filter_map(|x| x.as_object().cloned()).collect(),
+            after_flag: json::s(e, "after_flag"),
+            offset_days: json::i(e, "offset_days", 0),
         }
+    }
+
+    /// PR6-6 (B3): its deadline day in campaign `c`: `deadline`, or for an `after_flag` row the arming day plus
+    /// `offset_days` (None while unarmed).
+    pub fn due(&self, c: &Campaign) -> Option<i64> {
+        if self.after_flag.is_empty() {
+            return Some(self.deadline);
+        }
+        c.checkpoint_armed_at.get(&self.id).map(|at| at + self.offset_days)
     }
 
     /// C1: the condition holds now: the quest's objectives are done (status `ready` or `completed`), or every
@@ -72,10 +88,39 @@ pub fn defs(d: &Data, w: &str) -> Vec<CheckpointDef> {
     d.merged_entries(w, "checkpoints").into_iter().map(|e| CheckpointDef::from_row(d, e)).filter(|c| !c.id.is_empty()).collect()
 }
 
-/// The rows the tick looks at: those of the current act not yet met or missed.
-fn open(d: &Data, gs: &GameState) -> Vec<CheckpointDef> {
+/// The rows the tick looks at: those of the current act not yet met or missed, each with its deadline day (PR6-6: an
+/// `after_flag` row only once armed).
+fn open(d: &Data, gs: &GameState) -> Vec<(CheckpointDef, i64)> {
     let Some(c) = gs.campaign.as_ref() else { return Vec::new() };
-    defs(d, &gs.world_id).into_iter().filter(|cp| cp.act == c.act && !c.checkpoints.contains_key(&cp.id)).collect()
+    defs(d, &gs.world_id).into_iter().filter(|cp| cp.act == c.act && !c.checkpoints.contains_key(&cp.id)).filter_map(|cp| cp.due(c).map(|due| (cp, due))).collect()
+}
+
+/// PR6-6 (B3): whether flag key `key` is set now (a value other than false, 0, "" and null; read keys answer too).
+fn flag_set(gs: &GameState, key: &str) -> bool {
+    match gs.read_flag(key) {
+        None | Some(Value::Null) | Some(Value::Bool(false)) => false,
+        Some(Value::String(s)) => !s.is_empty(),
+        Some(Value::Number(n)) => n.as_f64() != Some(0.0),
+        Some(_) => true,
+    }
+}
+
+/// PR6-6 (B3): arms at day `day` each `after_flag` row of the current act, not met or missed and not armed yet, whose
+/// flag is set now (`Campaign::checkpoint_armed_at`).
+fn arm(d: &Data, gs: &mut GameState, day: i64) {
+    let Some(c) = gs.campaign.as_ref() else { return };
+    let act = c.act;
+    let ready: Vec<String> = defs(d, &gs.world_id)
+        .into_iter()
+        .filter(|cp| cp.act == act && !cp.after_flag.is_empty() && !c.checkpoints.contains_key(&cp.id) && !c.checkpoint_armed_at.contains_key(&cp.id))
+        .filter(|cp| flag_set(gs, &cp.after_flag))
+        .map(|cp| cp.id)
+        .collect();
+    if let Some(c) = gs.campaign.as_mut() {
+        for id in ready {
+            c.checkpoint_armed_at.insert(id, day);
+        }
+    }
 }
 
 fn record(gs: &mut GameState, id: &str, state: &str) {
@@ -87,8 +132,8 @@ fn record(gs: &mut GameState, id: &str, state: &str) {
 /// C1 at a tick's start: a condition that holds now was reached before the days of this tick passed (time moves only
 /// right before a days tick), so it is met when the day of the last tick (`last_day`) was on or before the deadline.
 pub fn step_before(d: &Data, gs: &mut GameState, last_day: i64) {
-    for cp in open(d, gs) {
-        if last_day <= cp.deadline && cp.holds(d, gs) {
+    for (cp, deadline) in open(d, gs) {
+        if last_day <= deadline && cp.holds(d, gs) {
             record(gs, &cp.id, "met");
         }
     }
@@ -101,15 +146,18 @@ pub fn step_before(d: &Data, gs: &mut GameState, last_day: i64) {
 /// whether effects ran (the rules run again).
 pub fn step(d: &Data, gs: &mut GameState, day: i64, last_day: i64, events: &mut Vec<Value>) -> bool {
     let mut ran = false;
-    for cp in open(d, gs) {
+    // PR6-6 (B3): an `after_flag` row whose flag is set now is armed today (its warnings count from today)
+    arm(d, gs, day);
+    for (cp, deadline) in open(d, gs) {
         if gs.campaign.as_ref().is_none_or(Campaign::is_over) {
             break;
         }
-        if day <= cp.deadline && cp.holds(d, gs) {
+        if day <= deadline && cp.holds(d, gs) {
             record(gs, &cp.id, "met");
             continue;
         }
-        let (before, now) = (cp.deadline - last_day, cp.deadline - day);
+        let last_day = gs.campaign.as_ref().and_then(|c| c.checkpoint_armed_at.get(&cp.id)).map_or(last_day, |at| last_day.max(*at));
+        let (before, now) = (deadline - last_day, deadline - day);
         if now >= 0 {
             for w in cp.warn_days.iter().filter(|w| before > **w && now <= **w) {
                 events.push(Value::Object(json::obj([
@@ -117,7 +165,7 @@ pub fn step(d: &Data, gs: &mut GameState, day: i64, last_day: i64, events: &mut 
                     ("checkpoint", cp.id.clone().into()),
                     ("name", cp.name.clone().into()),
                     ("quest", cp.quest.clone().into()),
-                    ("day", int(cp.deadline)),
+                    ("day", int(deadline)),
                     ("left", int(now)),
                     ("warn", int(*w)),
                 ])));
@@ -142,25 +190,26 @@ pub fn checkpoint(d: &Data, gs: &GameState, quest: &str) -> Option<(i64, i64)> {
     gs.campaign.as_ref()?;
     let qid = json::s_or(d.resolve(&gs.world_id, "quests", quest), "_qid", quest);
     let day = gs.time + 1;
-    open(d, gs).into_iter().find(|cp| !cp.quest.is_empty() && cp.quest == qid).map(|cp| (cp.deadline, (cp.deadline - day).max(0)))
+    open(d, gs).into_iter().find(|(cp, _)| !cp.quest.is_empty() && cp.quest == qid).map(|(_, due)| (due, (due - day).max(0)))
 }
 
 /// W5: every checkpoint of the world with its state: [{id, name, act, quest, day, left, state: open, met or missed}]
-/// ([] outside a campaign world).
+/// ([] outside a campaign world; PR6-6: an `after_flag` row only once armed, its day the armed deadline).
 pub fn view(d: &Data, gs: &GameState) -> Vec<Value> {
     let Some(c) = gs.campaign.as_ref() else { return Vec::new() };
     let day = gs.time + 1;
     defs(d, &gs.world_id)
         .into_iter()
-        .map(|cp| {
+        .filter_map(|cp| cp.due(c).map(|due| (cp, due)))
+        .map(|(cp, deadline)| {
             let state = c.checkpoints.get(&cp.id).cloned().unwrap_or_else(|| "open".into());
             Value::Object(json::obj([
                 ("id", cp.id.clone().into()),
                 ("name", cp.name.clone().into()),
                 ("act", int(cp.act)),
                 ("quest", cp.quest.clone().into()),
-                ("day", int(cp.deadline)),
-                ("left", int((cp.deadline - day).max(0))),
+                ("day", int(deadline)),
+                ("left", int((deadline - day).max(0))),
                 ("state", state.into()),
             ]))
         })

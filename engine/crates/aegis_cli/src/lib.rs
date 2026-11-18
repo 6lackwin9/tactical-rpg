@@ -3,6 +3,7 @@
 //!   aegis serve                                                                the game's command API over stdin / stdout
 //!   aegis link '<json>' ... [port=47800]                                       requests to a running GUI (agent link)
 //!   aegis replay <recording.json> ...                                          replay a playtest recording (see `replay`)
+//!   aegis record <requests.json | recording.json> [out=<dir>] [id=<id>]        record requests as a playtest recording (see `record`)
 //!   aegis content check | upsert | remove | world | apply | manifest | <sidecar op>  edit the data folder (see `content`)
 //!   aegis scenario check | run                                                 walk real screens from JSON files (see `scenario`)
 //!   aegis bundle <manifest.json> [out=<dir>]                                   pack a web build's bundle parts (see `bundle`)
@@ -70,6 +71,7 @@ pub trait Game {
 
 const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's command API)
 aegis replay <recording.json> [session=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
+aegis record <requests.json | recording.json> [out=<dir>] [id=<id>]   (play requests on fresh command hosts, save them as a recording)
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
 aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>]
 aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]
@@ -86,6 +88,7 @@ pub fn run<G: Game>(game: &G) -> Result<()> {
         (Some("serve"), _) => serve(game, &args),
         (Some("link"), _) => link(&raw),
         (Some("replay"), Some(_)) => replay(game, &args),
+        (Some("record"), Some(_)) => record(game, &args),
         (Some("content"), Some(_)) => content(game, &args),
         (Some("bundle"), Some(manifest)) => bundle::command(manifest, &args.key("out", ".")),
         (Some("scenario"), _) => {
@@ -355,6 +358,53 @@ pub fn replay_session_arg(args: &Args) -> Result<Option<usize>> {
         (None, None) => None,
     };
     raw.map(|k| k.parse()).transpose().context("session=K")
+}
+
+/// The sessions' requests `aegis record` plays: a list of requests (one session), a list of such lists, or a playtest
+/// recording (its sessions' requests, recorded again).
+pub fn record_sessions(input: &Value) -> Result<Vec<Vec<Value>>> {
+    use aegis_host::playtest::Recording;
+    if input["format"].is_string() {
+        let rec = Recording::from_json(input).map_err(anyhow::Error::msg)?;
+        return Ok(rec.sessions.into_iter().map(|s| s.requests).collect());
+    }
+    let list = input.as_array().context("record takes a list of requests, a list of such lists or a playtest recording")?;
+    let sessions: Vec<Vec<Value>> = if list.iter().all(Value::is_array) { list.iter().map(|s| s.as_array().cloned().unwrap_or_default()).collect() } else { vec![list.clone()] };
+    if sessions.is_empty() || sessions.iter().any(|s| s.is_empty() || s.iter().any(|r| !r["cmd"].is_string())) {
+        bail!("every session is a non-empty list of requests, each an object with a cmd");
+    }
+    Ok(sessions)
+}
+
+/// `aegis record <requests.json | recording.json> [out=<dir>] [id=<id>]` (REPLAY-CI1): plays each session's requests on a
+/// fresh command host and saves them, with the checkpoints the host took and the data folder's fingerprint, as a playtest
+/// recording (origin agent) `<out>/<id>.json` (out default `.`, id default the time stamp). A refused request stops with
+/// exit 1 and writes nothing. A recording given as input is recorded again on the data as it is now (a repro whose
+/// checkpoints an intended rule or data change moved).
+fn record<G: Game>(game: &G, args: &Args) -> Result<()> {
+    use aegis_host::playtest::{self, Recording, Session};
+    let path = args.pos(1).context("usage: aegis record <requests.json | recording.json>")?;
+    let sessions = record_sessions(&json_arg(&format!("@{path}"))?)?;
+    let dir = PathBuf::from(args.key("out", "."));
+    let content = aegis_content::fingerprint::of(&game.data_dir(args)?);
+    let id = args.keys.get("id").cloned().unwrap_or_else(|| playtest::new_id(&dir, playtest::now_secs()));
+    let mut rec = Recording::new(&id, "agent", content);
+    for (i, requests) in sessions.iter().enumerate() {
+        let mut host = game.driver(args)?;
+        for (k, req) in requests.iter().enumerate() {
+            let reply = host.send(req);
+            if reply["ok"] != json!(true) {
+                println!("§ session {i} refused request {k}: {}", reply["error"].as_str().unwrap_or("refused"));
+                std::process::exit(1);
+            }
+        }
+        let s = Session::of(host.as_ref());
+        println!("§ session {i}: {} requests, {} checkpoints, end {}", s.requests.len(), s.checkpoints.len(), s.result());
+        rec.sessions.push(s);
+    }
+    let p = rec.save(&dir).map_err(anyhow::Error::msg)?;
+    println!("§ wrote {}", p.display());
+    Ok(())
 }
 
 fn replay<G: Game>(game: &G, args: &Args) -> Result<()> {

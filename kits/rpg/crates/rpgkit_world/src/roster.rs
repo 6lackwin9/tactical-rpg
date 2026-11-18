@@ -74,6 +74,8 @@ pub fn field_unit(d: &Data, gs: &GameState, m: &UnitState, world: &str) -> Optio
     if !unit.wear.is_empty() && !crate::weapons::active(d, gs) {
         unit.wear.clear();
     }
+    // PR7-8 (RELIC-SIG1): the campaign act its `from_act` effects read (the build does not read the act)
+    unit.set_campaign_act(&d.cat_in(world), act(gs));
     let max = unit.max_hp as i64;
     let mut hp = progression::start_hp(max, m.hp_lost);
     if m.has_condition(WOUNDED) {
@@ -113,6 +115,13 @@ pub struct HeroEnd {
     /// (slot save key, amount; slot order, spent slots only; `rpgkit_battle::wear::spent`): the settle takes it from the
     /// wielded instances, each held at 0 or more (`weapons::wear`).
     pub worn: Vec<(String, i64)>,
+    /// PR6-6 (`docs/sessions/PK4_PK5_CAMPAIGN_HUB.md` 1, B5): the highest and the last value it held on the ruleset's
+    /// channel meter (`rpgkit_battle::channel::meter_id`, data-configured; 0 without one or a hero that holds none), and
+    /// the commands it started in a Channel round (`World::channel_actions`). A settle without a battle reads 0 for all
+    /// three; the campaign tick reads them (`campaign::HeroTally`: meter inputs and triggers with a `hero` filter).
+    pub strain_peak: i64,
+    pub strain_end: i64,
+    pub channel_actions: i64,
 }
 
 /// The ends of session `s`'s fielded members: `members` (member id, unloaded pouch ids) in the order they were fielded,
@@ -138,9 +147,22 @@ pub fn hero_ends(s: &Session, members: &[(String, Vec<String>)]) -> Vec<HeroEnd>
                 hostile: rpgkit_battle::mark::hostile_at_end(&s.w, a),
                 attacked: s.w.weapon_attacks.get(&a).cloned().unwrap_or_default(),
                 worn: rpgkit_battle::wear::spent(&s.w, a),
+                strain_peak: channel_meter_read(s, a, rpgkit_battle::meter::peak),
+                strain_end: channel_meter_read(s, a, rpgkit_battle::meter::value),
+                channel_actions: i64::from(s.w.channel_actions.get(&a).copied().unwrap_or(0)),
             }
         })
         .collect()
+}
+
+/// PR6-6 (B5): what `read` gives for unit `a` on the session's channel meter (0 without the rule, a channel meter, or
+/// a gauge of it on `a`).
+fn channel_meter_read(s: &Session, a: usize, read: fn(&rpgkit_battle::world::World, usize, &str) -> Option<i32>) -> i64 {
+    let id = rpgkit_battle::channel::meter_id(&s.w);
+    if id.is_empty() {
+        return 0;
+    }
+    read(&s.w, a, id).map_or(0, i64::from)
 }
 
 /// The battle a settle closes (3.2's battle-level inputs).
@@ -439,6 +461,8 @@ pub fn settle_party(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]
     let wear = crate::weapons::wear(gs, ends);
     let mut out = settle_fates(d, gs, f, ends);
     out.wear = wear;
+    // ROSTER1 FZ2, FZ4 (PK3 3.1): each fielded Martyr counts the deployment; a last stand departs dead after it
+    out.departed.extend(settle_fuses(d, gs, f, ends));
     // A1.2-K3 (INTENT2-K3): after every departure, the members who came home top their pouches up from the stash (the
     // fight's world), so a departing member takes nothing and only survivors are named short
     let home: Vec<String> = ends.iter().map(|e| e.member.clone()).filter(|m| !out.departed.iter().any(|(x, _)| x == m) && gs.party.member(m).is_some()).collect();
@@ -552,6 +576,9 @@ pub fn default_ends(d: &Data, gs: &GameState, world: &str, outcome: &str) -> Vec
                 hostile: String::new(),
                 attacked: Vec::new(),
                 worn: Vec::new(),
+                strain_peak: 0,
+                strain_end: 0,
+                channel_actions: 0,
             })
         })
         .collect()
@@ -562,7 +589,9 @@ pub fn default_ends(d: &Data, gs: &GameState, world: &str, outcome: &str) -> Vec
 /// its worn and carried gear and its pouch to the stash (its state keeps them as its record), recorded in
 /// `party.departed` with the day (`gs.time`); then KS1, KS2: when the act's keepsake lives hold `life` and its
 /// character names a `keepsake` item, the stash gets one and the record keeps the item id. Member ids are never
-/// reused, so a keepsake is paid once. Err (nothing changes) for an unknown member, life or cause.
+/// reused, so a keepsake is paid once. KS3 (PK3 4): a procedural member (one with a recruit template) gets its class's
+/// keepsake instance instead (`mint_keepsake`; the record keeps the instance id). Err (nothing changes) for an unknown
+/// member, life or cause.
 pub fn depart(d: &Data, gs: &mut GameState, id: &str, life: &str, cause: &str, encounter: &str) -> Result<Departed, String> {
     if !DEPART_LIVES.contains(&life) {
         return Err(format!("Unknown life '{life}' (known: {}).", DEPART_LIVES.join(", ")));
@@ -591,6 +620,11 @@ pub fn depart(d: &Data, gs: &mut GameState, id: &str, life: &str, cause: &str, e
         if !item.is_empty() && d.has("items", &item) {
             gs.party.add_to_stash(&item, 1);
             keepsake = item;
+        } else if let Some(k) = mint_keepsake(d, gs, &member) {
+            // KS3 (PK3 4): a procedural member's keepsake is an instance in `party.keepsakes`, never a stash item
+            keepsake = k.id.clone();
+            gs.party.keepsakes.push(k);
+            gs.party.sync_keepsakes();
         }
     }
     let record = Departed { member, life: life.into(), cause: cause.into(), encounter: encounter.into(), day: gs.time, keepsake };
@@ -642,10 +676,10 @@ pub fn bunk_cap(gs: &GameState) -> i64 {
     caps.bunk_cap(value)
 }
 
-/// BK2: the bunks in use: every member (housing `bunk` or `crypt`; `crypt_only` and its crypt places come with
-/// ROSTER1-P, so today every member takes one). Departed members free theirs (L2).
+/// BK2: the bunks in use: every member housed `bunk` or `crypt` (PK3 3.1: a `crypt_only` Living Martyr takes none,
+/// `crypts_used`). Departed members free theirs (L2).
 pub fn bunks_used(party: &PartyState) -> i64 {
-    party.members.len() as i64
+    party.members.iter().filter(|m| m.housing() != CRYPT_ONLY).count() as i64
 }
 
 /// RK1 `roster.open`: the world's `open_flag` holds (true when it names none).
@@ -721,7 +755,7 @@ pub fn party_min_refusal(gs: &GameState, e: &json::Dict) -> String {
 }
 
 /// RK1: the value of `roster.` read key `key` from the party (None when `key` is not one): `roster.living` (members,
-/// in bunks or crypts), `roster.bunks` (the cap), `roster.bunks_free`, `roster.pool` (0 until ROSTER1-P), `roster.open`,
+/// in bunks or crypts), `roster.bunks` (the cap), `roster.bunks_free`, `roster.pool` (the pool entries), `roster.open`,
 /// `roster.departed.<life>` (a count), `roster.<member>` (`ready`, its departed life, or "" when unknown).
 pub fn read_key(gs: &GameState, key: &str) -> Option<Value> {
     let p = &gs.party;
@@ -729,7 +763,7 @@ pub fn read_key(gs: &GameState, key: &str) -> Option<Value> {
         RosterRead::Living => json::int(p.members.len() as i64),
         RosterRead::Bunks => json::int(bunk_cap(gs)),
         RosterRead::BunksFree => json::int((bunk_cap(gs) - bunks_used(p)).max(0)),
-        RosterRead::Pool => json::int(0),
+        RosterRead::Pool => json::int(p.pool.len() as i64),
         RosterRead::Open => Value::Bool(is_open(gs)),
         RosterRead::Departed(life) => json::int(p.departed.iter().filter(|x| x.life == life).count() as i64),
         RosterRead::Member(id) => Value::String(if p.member(id).is_some() {
@@ -742,12 +776,337 @@ pub fn read_key(gs: &GameState, key: &str) -> Option<Value> {
 
 /// 11.4: the roster warnings of a loaded save (never a refusal): bunk use above the cap (the world's roster block
 /// changed since the save, or a save from before it). A world without a roster block warns of nothing (Godot saves
-/// may hold more members than the party max). Crypt places are checked with ROSTER1-P's housing.
+/// may hold more members than the party max). PK3 3.1: crypt use above the crypt places likewise.
 pub fn load_warnings(gs: &GameState) -> Vec<String> {
     let (n, cap) = (bunks_used(&gs.party), bunk_cap(gs));
+    let mut out = Vec::new();
     if gs.party.roster.has_block() && n > cap {
-        vec![format!("{n} members for {cap} bunks: no one new joins until a bunk is free.")]
-    } else {
-        Vec::new()
+        out.push(format!("{n} members for {cap} bunks: no one new joins until a bunk is free."));
     }
+    let (c, places) = (crypts_used(&gs.party), crypt_cap(gs));
+    if gs.party.roster.has_block() && c > places {
+        out.push(format!("{c} members for {places} crypt places: no Martyr joins until a place is free."));
+    }
+    out
+}
+
+// ---- the pool, recruits, housing, Living Martyrs and procedural keepsakes (ROSTER1-P/-M/-K, PK3 3-4) ----
+
+/// PO3 (PK3 3.1): the refusal of swearing in, retiring or dismissing while the roster's `open_flag` does not hold.
+pub const CLOSED_TEXT: &str = "The cell takes no one new yet.";
+/// FZ4 (PK3 3.1): the life and cause of a Living Martyr retired at its spent fuse, and the cause of a last stand's
+/// death (a roster choice, `rpgkit_data::DEPART_CAUSES`).
+pub const RETIRED: &str = "retired";
+pub const DISMISSED: &str = "dismissed";
+pub const ROSTER_CAUSE: &str = "roster";
+/// BK2 (PK3 3.1): the housing of a Living Martyr: a crypt place and no bunk.
+pub const CRYPT_ONLY: &str = rpgkit_data::HOUSING[2];
+
+/// PG1: the `recruits` template `r` names as seen from the played world (qid, row); None when it names none.
+pub fn template(d: &Data, gs: &GameState, r: &str) -> Option<(String, rpgkit_data::RecruitDef)> {
+    let row = d.resolve(&gs.world_id, rpgkit_data::RECRUITS_KIND, r);
+    (!row.is_empty()).then(|| (json::s(row, "_qid"), rpgkit_data::RecruitDef::from_obj(row)))
+}
+
+/// PK3 3.2: a procedural member's portrait: its template's `art` (a file under the game's assets; "" = none, the body's
+/// common portrait as for anyone else). The portrait screens read it before the character chain.
+pub fn portrait_of(d: &Data, m: &UnitState) -> String {
+    if m.template.is_empty() {
+        return String::new();
+    }
+    let world = aegis_content::split_qid(&m.template).map(|(w, _)| w).unwrap_or_default();
+    json::s(d.resolve(&world, rpgkit_data::RECRUITS_KIND, &m.template), "art")
+}
+
+/// FZ1: the fuse rules of member `m`'s template (None: no template, or a template without a fuse).
+pub fn fuse_def(d: &Data, m: &UnitState) -> Option<rpgkit_data::FuseDef> {
+    if m.template.is_empty() || m.fuse.is_none() {
+        return None;
+    }
+    let world = aegis_content::split_qid(&m.template).map(|(w, _)| w).unwrap_or_default();
+    let row = d.resolve(&world, rpgkit_data::RECRUITS_KIND, &m.template);
+    rpgkit_data::RecruitDef::from_obj(row).fuse
+}
+
+/// FZ2: member `m`'s fuse value on day `day`: `deploys x per_deploy + floor((day - since) / stasis_days)`, never below
+/// the saved value (nothing lowers it). 0 for a member without a fuse.
+pub fn fuse_value(d: &Data, m: &UnitState, day: i64) -> i64 {
+    let (Some(f), Some(def)) = (m.fuse.as_ref(), fuse_def(d, m)) else { return 0 };
+    def.value(f.deploys, day - f.since).max(f.value)
+}
+
+/// FZ2: writes every member's fuse value for the game's day (`gs.time`). The settle calls it; a runner may call it
+/// after days pass (`fuse_value` reads the day anyway).
+pub fn refresh_fuses(d: &Data, gs: &mut GameState) {
+    let day = gs.time;
+    let values: Vec<(usize, i64)> = gs.party.members.iter().enumerate().filter(|(_, m)| m.fuse.is_some()).map(|(i, m)| (i, fuse_value(d, m, day))).collect();
+    for (i, v) in values {
+        if let Some(f) = gs.party.members[i].fuse.as_mut() {
+            f.value = v;
+        }
+    }
+}
+
+/// FZ3, FZ4 (PK3 3.1): the passives member `m`'s fuse grants at its saved value: every tier at or below it (cumulative,
+/// tier order), then the template's `last_passive` on a last stand.
+pub fn fuse_passives(d: &Data, m: &UnitState) -> Vec<String> {
+    let (Some(f), Some(def)) = (m.fuse.as_ref(), fuse_def(d, m)) else { return Vec::new() };
+    let mut out = def.passives_at(f.value);
+    if f.last_stand && !def.last_passive.is_empty() && !out.contains(&def.last_passive) {
+        out.push(def.last_passive.clone());
+    }
+    out
+}
+
+/// FZ4: member `m`'s fuse is spent on day `day` (`value >= max`).
+pub fn fuse_spent(d: &Data, m: &UnitState, day: i64) -> bool {
+    fuse_def(d, m).is_some_and(|def| def.spent(fuse_value(d, m, day)))
+}
+
+/// FZ4 (PK3 3.1): the active members whose next deployment needs the choice (retire or last stand): fuse spent, no
+/// last stand chosen. The deployment prompt reads it (`fuse_refusal`).
+pub fn fuse_choices(d: &Data, gs: &GameState) -> Vec<String> {
+    gs.party.active_members().into_iter().filter(|m| fuse_spent(d, m, gs.time) && !m.fuse.as_ref().is_some_and(|f| f.last_stand)).map(|m| m.id.clone()).collect()
+}
+
+/// FZ4: why the active party can't deploy before a choice ("" = it can): the first member `fuse_choices` names.
+pub fn fuse_refusal(d: &Data, gs: &GameState) -> String {
+    match fuse_choices(d, gs).first().and_then(|id| gs.party.member(id)) {
+        None => String::new(),
+        Some(m) => format!("{}'s fuse is spent: retire them or send them on a last stand.", progression::display_name(d, m)),
+    }
+}
+
+/// FZ4 (PK3 3.1): the player sends member `id` on its last stand: it deploys with its template's `last_passive` and
+/// departs dead after that battle, whatever the outcome (`settle_party`). Err when its fuse is not spent.
+pub fn last_stand(d: &Data, gs: &mut GameState, id: &str) -> Result<(), String> {
+    let day = gs.time;
+    let m = gs.party.member(id).ok_or_else(|| format!("'{id}' is not a party member."))?;
+    if !fuse_spent(d, m, day) {
+        return Err(format!("{}'s fuse is not spent.", progression::display_name(d, m)));
+    }
+    refresh_fuses(d, gs);
+    if let Some(f) = gs.party.member_mut(id).and_then(|m| m.fuse.as_mut()) {
+        f.last_stand = true;
+    }
+    Ok(())
+}
+
+/// FZ2, FZ4: after a battle each fielded member with a fuse counts the deployment and its value is written; a member on
+/// its last stand then departs dead (cause `roster`). Returns the departures (member, life).
+fn settle_fuses(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) -> Vec<(String, String)> {
+    let mut stands = Vec::new();
+    for e in ends {
+        if let Some(fuse) = gs.party.member_mut(&e.member).and_then(|m| m.fuse.as_mut()) {
+            fuse.deploys += 1;
+            if fuse.last_stand {
+                stands.push(e.member.clone());
+            }
+        }
+    }
+    refresh_fuses(d, gs);
+    let mut out = Vec::new();
+    for id in stands {
+        if depart(d, gs, &id, DEAD, ROSTER_CAUSE, &f.encounter).is_ok() {
+            out.push((id, DEAD.to_string()));
+        }
+    }
+    out
+}
+
+/// BK2 (PK3 3.1): the crypt places in use: members housed `crypt` (Stage IV, who keep their bunk too) or `crypt_only`
+/// (Living Martyrs, no bunk).
+pub fn crypts_used(party: &PartyState) -> i64 {
+    party.members.iter().filter(|m| m.housing() != rpgkit_data::HOUSING[0]).count() as i64
+}
+
+/// BK2: the crypt places (`roster.crypts`, 0 = none).
+pub fn crypt_cap(gs: &GameState) -> i64 {
+    i64::from(gs.party.roster.manifest.crypts.max(0))
+}
+
+/// BK2, BK3 (PK3 3.1): why a recruit housed `housing` can't join now ("" = it can): a crypt-only recruit needs a free
+/// crypt place, anyone else a free bunk (`full_text`).
+pub fn housing_text(gs: &GameState, housing: &str) -> String {
+    if housing != CRYPT_ONLY {
+        return full_text(gs);
+    }
+    let (n, cap) = (crypts_used(&gs.party), crypt_cap(gs));
+    if n < cap {
+        String::new()
+    } else {
+        format!("Every crypt is taken ({n} of {cap}).")
+    }
+}
+
+/// PG2: every name a member, a pool entry or a departed member holds (a new recruit's name is none of them).
+fn names_taken(d: &Data, gs: &GameState) -> Vec<String> {
+    let p = &gs.party;
+    p.members.iter().map(|m| progression::display_name(d, m)).chain(p.pool.iter().map(|x| x.name.clone())).chain(p.departed.iter().map(|x| progression::display_name(d, &x.member))).collect()
+}
+
+/// PG2: the next procedural id `recruit_<n>`, n = 1 + the highest used by a member, a pool entry or a departed member.
+fn next_recruit_id(gs: &GameState) -> String {
+    let p = &gs.party;
+    let ids = p.members.iter().map(|m| &m.id).chain(p.pool.iter().map(|x| &x.id)).chain(p.departed.iter().map(|x| &x.member.id));
+    let top = ids.filter_map(|id| id.strip_prefix(rpgkit_data::RECRUIT_ID_PREFIX)?.parse::<i64>().ok()).max().unwrap_or(0);
+    format!("{}{}", rpgkit_data::RECRUIT_ID_PREFIX, top + 1)
+}
+
+/// PG2: one draw from `list` on the `recruit` stream ("" for an empty list; no draw for a single choice).
+fn draw(gs: &mut GameState, list: &[String]) -> String {
+    match list.len() {
+        0 => String::new(),
+        1 => list[0].clone(),
+        n => list[crate::rolls::range_i(gs, crate::rolls::RECRUIT, 0, n as i64 - 1) as usize].clone(),
+    }
+}
+
+/// PO1, PG2 (PK3 3.1): the `rescue` effect: `count` (1..RESCUE_COUNT_MAX, default 1) pool entries from the `recruits`
+/// template `template`, each drawn on the seeded `recruit` stream in order: its base unit (the effect's `base_unit`
+/// when set, else one of the template's), a name no member, pool entry or departed member holds, an origin and a
+/// temperament; id `recruit_<n>`, rescued today. Or one entry for the named character `character` (refused when it is
+/// a member, pooled or departed). Returns the entries added and the notes (a template out of free names adds fewer).
+pub fn rescue(d: &Data, gs: &mut GameState, fx: &json::Dict) -> (Vec<String>, Vec<String>) {
+    let (mut added, mut notes) = (Vec::new(), Vec::new());
+    let base_unit = json::s(fx, "base_unit");
+    let character = json::s(fx, "character");
+    if !character.is_empty() {
+        let c = d.resolve(&gs.world_id, "characters", &character).clone();
+        if c.is_empty() {
+            notes.push(format!("Unknown character '{character}'."));
+            return (added, notes);
+        }
+        let (id, qid, name) = (json::s(&c, "id"), json::s(&c, "_qid"), json::s_or(&c, "name", &json::s(&c, "id")));
+        if crate::dialogue::is_member(d, gs, &character) || gs.party.pool.iter().any(|p| p.id == id || p.character == qid) {
+            notes.push(format!("{name} is already with you."));
+        } else if has_departed(d, gs, &character) {
+            notes.push(gone_text(&name));
+        } else {
+            let base = if base_unit.is_empty() { json::s(&c, "base_unit") } else { base_unit };
+            gs.party.pool.push(crate::state::PoolMember { id: id.clone(), character: qid, base_unit: base, name: name.clone(), since: gs.time, ..Default::default() });
+            notes.push(format!("{name} waits to join."));
+            added.push(id);
+        }
+        return (added, notes);
+    }
+    let Some((qid, t)) = template(d, gs, &json::s(fx, "template")) else {
+        notes.push(format!("Unknown recruit template '{}'.", json::s(fx, "template")));
+        return (added, notes);
+    };
+    let count = json::i(fx, "count", 1).clamp(1, rpgkit_data::RESCUE_COUNT_MAX);
+    for _ in 0..count {
+        let base = if base_unit.is_empty() { draw(gs, &t.base_units) } else { base_unit.clone() };
+        let taken = names_taken(d, gs);
+        let free: Vec<String> = t.names.iter().filter(|n| !taken.contains(n)).cloned().collect();
+        if base.is_empty() || free.is_empty() {
+            notes.push(format!("{}: no free name is left for another recruit.", t.name));
+            break;
+        }
+        let name = draw(gs, &free);
+        let origin = draw(gs, &t.origins);
+        let temperament = draw(gs, &t.temperaments);
+        let id = next_recruit_id(gs);
+        gs.party.pool.push(crate::state::PoolMember { id: id.clone(), character: String::new(), template: qid.clone(), base_unit: base, name: name.clone(), origin, temperament, since: gs.time });
+        notes.push(format!("{name} waits to join."));
+        added.push(id);
+    }
+    (added, notes)
+}
+
+/// PO2, PO3 (PK3 3.1): swears pool entry `pool` (an id or `first`) into the party at `level` (BK5; Null = the
+/// template's `level`, else `highest`). Refused while the roster is closed (`CLOSED_TEXT`) or with no home for it
+/// (`housing_text`: a free bunk, or a free crypt place for a fused template's crypt-only Martyr). A template entry
+/// becomes a member with its name, origin, temperament and template; a fused template's member starts its fuse today
+/// (FZ1). BK4: it deploys when `active_ids` is empty or has room. Returns the member id.
+pub fn swear_in(d: &Data, gs: &mut GameState, pool: &str, level: &Value) -> Result<String, String> {
+    if !is_open(gs) {
+        return Err(CLOSED_TEXT.into());
+    }
+    let at = if pool == rpgkit_data::POOL_FIRST { (!gs.party.pool.is_empty()).then_some(0) } else { gs.party.pool.iter().position(|p| p.id == pool) };
+    let Some(at) = at else {
+        return Err(if pool == rpgkit_data::POOL_FIRST { "No one waits to join.".into() } else { format!("'{pool}' is not waiting to join.") });
+    };
+    let entry = gs.party.pool[at].clone();
+    let tpl = if entry.template.is_empty() { None } else { template(d, gs, &entry.template) };
+    let mut m = if entry.character.is_empty() {
+        let unit_level = json::i(d.entry("units", &entry.base_unit), "level", 1);
+        let mut m = UnitState::at_level(d, &entry.base_unit, unit_level, &entry.id);
+        m.name = entry.name.clone();
+        m.origin = entry.origin.clone();
+        m.temperament = entry.temperament.clone();
+        m.template = entry.template.clone();
+        m
+    } else {
+        let mut m = crate::new_game::hero_from_character(d, &gs.world_id, &entry.character).ok_or_else(|| format!("{} can't join the party.", entry.name))?;
+        if !entry.base_unit.is_empty() && entry.base_unit != m.base_unit {
+            let unit_level = json::i(d.entry("units", &entry.base_unit), "level", 1);
+            m.base_unit = entry.base_unit.clone();
+            m.total_xp = progression::xp_for_level(d, unit_level);
+        }
+        m
+    };
+    if tpl.as_ref().is_some_and(|(_, t)| t.fuse.is_some()) {
+        m.housing = CRYPT_ONLY.into();
+        m.fuse = Some(crate::state::MartyrFuse { since: gs.time, ..Default::default() });
+    }
+    let why = housing_text(gs, m.housing());
+    if !why.is_empty() {
+        return Err(why);
+    }
+    let level = if level.is_null() { tpl.as_ref().map_or(Value::Null, |(_, t)| t.level.clone()) } else { level.clone() };
+    m.total_xp = join_xp(d, &gs.party, m.total_xp, &level);
+    let id = m.id.clone();
+    if !gs.party.active_ids.is_empty() && (gs.party.active_ids.len() as i64) < gs.party.max_active {
+        gs.party.active_ids.push(id.clone());
+    }
+    gs.party.pool.remove(at);
+    gs.party.members.push(m);
+    gs.party.sync_keepsakes();
+    Ok(id)
+}
+
+/// PO3 (PK3 3.1): member `id` retires (departs `retired`, cause `roster`; gear to the stash). Refused while the roster
+/// is closed. FZ4: a Martyr with a spent fuse retires this way.
+pub fn retire(d: &Data, gs: &mut GameState, id: &str) -> Result<Departed, String> {
+    leave(d, gs, id, RETIRED)
+}
+
+/// PO3 (PK3 3.1): member `id` is dismissed (departs `dismissed`, cause `roster`; gear to the stash). Refused while the
+/// roster is closed.
+pub fn dismiss(d: &Data, gs: &mut GameState, id: &str) -> Result<Departed, String> {
+    leave(d, gs, id, DISMISSED)
+}
+
+fn leave(d: &Data, gs: &mut GameState, id: &str, life: &str) -> Result<Departed, String> {
+    if !is_open(gs) {
+        return Err(CLOSED_TEXT.into());
+    }
+    depart(d, gs, id, life, ROSTER_CAUSE, "")
+}
+
+/// KS3 (PK3 4): item `id` as party `party` reads it: a catalog item, else one of its keepsake instances (its template
+/// row renamed, a wear-legal accessory of value 0, special, never sold).
+pub fn item_def(d: &Data, party: &PartyState, id: &str) -> Option<rpgkit_data::ItemDef> {
+    if let Some(def) = d.cat.items.get(id) {
+        return Some(def.clone());
+    }
+    party.keepsakes.iter().find(|k| k.id == id).and_then(|k| k.item_def(d))
+}
+
+/// KS3 (PK3 4): a procedural member's keepsake instance on its departure: its class's template item
+/// (`keepsakes.by_class`), named by `keepsakes.name`, id `keepsake@<member>`; None for a member with no template, a
+/// class with no keepsake template or an instance already minted.
+fn mint_keepsake(d: &Data, gs: &GameState, m: &UnitState) -> Option<crate::state::Keepsake> {
+    if m.template.is_empty() {
+        return None;
+    }
+    let roster = manifest(d, &gs.world_id);
+    let item = roster.keepsakes_by_class.get(&m.class_id(d)).filter(|i| d.has("items", i))?;
+    let id = format!("{}{}", rpgkit_data::KEEPSAKE_INSTANCE_PREFIX, m.id);
+    if gs.party.keepsakes.iter().any(|k| k.id == id) {
+        return None;
+    }
+    let name = roster.keepsake_display(&progression::display_name(d, m), &d.item_name(item));
+    Some(crate::state::Keepsake { id, item: item.clone(), name })
 }

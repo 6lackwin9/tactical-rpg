@@ -448,7 +448,8 @@ pub fn outcome_of(s: &Session) -> Value {
     let state = state_of(s);
     let keep = ["id", "hp", "ap", "pos", "stance", "statuses", "pending", "alive", "withdrawn"];
     // PR5-26 (audit B10): the PK1/PK2 keys a unit's state carries only when set (so other checkpoints keep their shape)
-    let set = ["channel", "meters", "marks", "skill_uses", "tracks"];
+    // PR7-3 (review N3): and the weapons' `wear` (only under the rule durability with tracked weapons)
+    let set = ["channel", "meters", "marks", "skill_uses", "tracks", "wear"];
     let units: Vec<Value> = state["units"]
         .as_array()
         .map(|a| {
@@ -512,7 +513,8 @@ pub fn state_of(s: &Session) -> Value {
 /// PR5-26 (audit B10): unit `i`'s PK1 / PK2 keys on its state row `v`, each only when set: `channel` (a holder of
 /// the channel meter: whether its round is a Channel round), `channeled` (its deck's marked actives), `meters` (meter id ->
 /// value), `marks` ([[mark, value]] this battle), `skill_uses` (skill id -> uses this battle), `tracks` (track id ->
-/// stage), `forbid_hands`, `pierce_melee`.
+/// stage), `forbid_hands`, `pierce_melee`; PR7-3: `wear` (slot -> {durability, worn, dulled}), `attacked` (weapon
+/// families attacked with).
 fn pk_state(s: &Session, i: UnitId, v: &mut Value) {
     let w = &s.w;
     let u = &w.units[i];
@@ -542,6 +544,15 @@ fn pk_state(s: &Session, i: UnitId, v: &mut Value) {
     }
     if u.pierce_melee {
         v["pierce_melee"] = json!(true);
+    }
+    // PR7-3 (review N3): the wear of each weapon the unit tracks (slot save key -> durability left, worn this battle,
+    // dulled: at 0, its weapon power at `DULLED_POWER_MULT`), the keys of the settle's `wear` rows
+    if !u.wear.is_empty() {
+        v["wear"] = Value::Object(u.wear.iter().map(|(slot, wr)| (slot.engine_name().to_lowercase(), json!({"durability": wr.left(), "worn": wr.spent, "dulled": wr.dulled()}))).collect());
+    }
+    // PR7-3 (review N3): the weapon families the unit attacked with this battle (the settle's mastery use)
+    if let Some(fams) = w.weapon_attacks.get(&i).filter(|f| !f.is_empty()) {
+        v["attacked"] = json!(fams);
     }
     if s.w.is_dead(i) {
         v["dead"] = json!(true);

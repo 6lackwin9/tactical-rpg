@@ -417,3 +417,51 @@ fn rules_re_enter_at_most_eight_times_per_tick() {
     assert!(!gs.flag_true("chain_end"), "a 9th re-entry is not run");
     assert!(campaign::tick(&d, &mut gs, &Cause::Effects).is_empty() && !gs.flag_true("chain_end"), "the left-over crossing is dropped, not fired later");
 }
+
+// ---- PK3 3.1 (PR6-4): campaign effect lists rescue and swear in; a Martyr's fuse ticks on the campaign's days -----
+
+/// The fixture Martyr template's fuse numbers (the expectations derive from these).
+const STASIS_DAYS: i64 = 3;
+const TIER_AT: i64 = 2;
+
+/// `camp` with one crypt place, an open roster and a fused `martyr` template (no deployments counted per battle: the
+/// days alone move it); the catalog's slotless passives for its origin, temperament and tier.
+fn martyr_data() -> Data {
+    let passive = |id: &str| json!({"id": id, "name": id, "slot": "", "effects": [{"type": "resist", "status": "burn", "value": 5}]});
+    let worlds = json!({
+        "camp": {"manifest": {"id": "camp", "campaign": {"start_act": 1}, "roster": {"crypts": 1}}, "own": {
+            "meters": with_ids("camp", json!([clock()])),
+            "recruits": with_ids("camp", json!([{"id": "martyr", "name": "Martyr", "class_id": "fighter", "base_units": ["hero"], "names": ["Dov"],
+                "origins": ["calm"], "temperaments": ["grim"],
+                "fuse": {"per_deploy": 1, "stasis_days": STASIS_DAYS, "max": 6, "tiers": [{"at": TIER_AT, "passive": "worn"}]}}]))}}
+    });
+    let catalog = json!({
+        "classes": [{"id": "fighter", "name": "Fighter"}],
+        "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}],
+        "passives": [passive("calm"), passive("grim"), passive("worn")]
+    });
+    Data::from_values(&catalog, &worlds, &json!({}))
+}
+
+#[test]
+fn campaign_effects_rescue_and_swear_in_and_the_days_tick_a_martyrs_fuse() {
+    // PO4 (an act transition runs `rescue` then `recruit {pool: first}`), FZ1, FZ2: the Martyr joins crypt_only with its
+    // fuse started today; each STASIS_DAYS the campaign's day tick adds one, and the tier at TIER_AT applies
+    let d = martyr_data();
+    let mut gs = state(&d, "camp");
+    gs.rng_seed = 3;
+    let fx = |v: Value| json::dict(&v).clone();
+    let mut events = Vec::new();
+    let notes = campaign::apply_effects(&d, &mut gs, &[fx(json!({"effect": "rescue", "template": "martyr"})), fx(json!({"effect": "recruit", "pool": "first"}))], &mut events);
+    assert!(gs.party.pool.is_empty(), "{notes:?}");
+    let m = gs.party.members.iter().find(|m| m.name == "Dov").expect("sworn in").clone();
+    assert_eq!((m.housing(), m.origin.as_str(), m.temperament.as_str(), m.fuse.as_ref().map(|f| f.since)), ("crypt_only", "calm", "grim", Some(gs.time)));
+    for day in 1..=TIER_AT * STASIS_DAYS {
+        gs.time += 1;
+        campaign::tick(&d, &mut gs, &campaign::Cause::Days { n: 1, why: "travel".into() });
+        let now = gs.party.member(&m.id).unwrap();
+        assert_eq!(now.fuse.as_ref().unwrap().value, day / STASIS_DAYS, "day {day}");
+    }
+    let now = gs.party.member(&m.id).unwrap();
+    assert!(rpgkit_world::progression::member_passives(&d, now).contains(&"worn".to_string()));
+}

@@ -60,7 +60,7 @@ Naming & tone rule (`[LOCKED]`, `CL-07`): playable operatives and recruits are *
 | Canonical place | Notes | Renamed from |
 | --- | --- | --- |
 | `Cinderreach` | Volcanic caldera city: `Sunk Ward` (Act 1), `High Bastion` (Act 2), `Mantle Fissure` (Act 3) | - |
-| `The Sluice Undercroft` | Persistent cell hub (`node 01`): `Apothecary's Slab`, `Tinker's Hearth`, `Water-Lock Basin`, `Dry Hollows`, `Isolation Crypts` | - |
+| `The Sluice Undercroft` | Persistent cell hub (`node 00`): `Apothecary's Slab`, `Tinker's Hearth`, `Water-Lock Basin`, `Dry Hollows`, `Isolation Crypts` | - |
 | `St. Lyra's Cathedral` & `Scriptorium` | High Bastion seat of `Othemar`; `Maren`'s former post; `Scribe's Crypt` beneath it | High Cathedral, St. Agnes Chapel |
 | `The Fourth Kiln` (`node 04`) & `Tallow Vats` (`node 05`) | Syndicate forge/bone-mill (`Berek`, `Dunstan`, `Grendel`, `Jessop`) & `Orlov`'s rendering vats (`Elyse`) | Crucible Kiln |
 | `The Crucible Watchpost` (`node 06`) & `Slag Gate` (`node 07`) | Act 1 `M5` climax (`Nemeth`, winch sacrifice); the only "Crucible" | - |

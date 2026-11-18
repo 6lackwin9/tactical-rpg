@@ -42,7 +42,7 @@ const RATING_BAR_MAX: i64 = 999;
 const ROLL_DC_MIN: i64 = 1;
 const ROLL_DC_MAX: i64 = 999;
 /// Effect -> its keys besides `effect` (ACT1-HOOKS2: `install`, a graft into the body of the member a flag names).
-const EFFECTS: [(&str, &[&str]); 11] = [
+const EFFECTS: [(&str, &[&str]); 12] = [
     ("set_flag", &["key", "value"]),
     ("add_flag", &["key", "delta", "min", "max"]),
     ("start_quest", &["quest"]),
@@ -51,9 +51,11 @@ const EFFECTS: [(&str, &[&str]); 11] = [
     ("take", &["items", "gold"]),
     ("open_shop", &["shop"]),
     ("fight", &["encounter"]),
-    ("recruit", &["character", "level"]),
+    ("recruit", &["character", "level", "pool"]),
     (ROLL_EFFECT, &rpgkit_data::ROLL_EFFECT_KEYS),
     (INSTALL_EFFECT, &INSTALL_EFFECT_KEYS),
+    // ROSTER1 PO1 (PK3 3.1): pool entries from a recruit template or a named character
+    ("rescue", &rpgkit_data::RESCUE_KEYS),
 ];
 const NODE_EFFECTS: [&str; 3] = ["set_flag", "add_flag", "give"];
 /// STORYUI1 4.7: the story effect a node takes besides NODE_EFFECTS (the choice order rules keep NODE_EFFECTS).
@@ -556,7 +558,15 @@ fn effect_errors(v: &View, w: &str, effect: &str, fx: &Dict, el: &str) -> Vec<St
         "sequence" => errors.extend(ref_value_errors(v, w, fx.get("sequence").unwrap_or(&Value::from("")), "sequences", &format!("{el} sequence"))),
         "open_board" => errors.extend(ref_value_errors(v, w, fx.get("board").unwrap_or(&Value::from("")), "boards", &format!("{el} board"))),
         "recruit" => {
+            // ROSTER1 PO2 (PK3 3.1): `pool` (an entry id or `first`) swears in a pooled recruit, never with `character`
+            let pool = fx.get("pool").map(gstr).unwrap_or_default();
             match fx.get("character").and_then(Value::as_str).filter(|s| !s.is_empty()) {
+                None if fx.contains_key("pool") => {
+                    if !(pool == rpgkit_data::POOL_FIRST || json::id_ok(&pool)) || !fx.get("pool").is_some_and(Value::is_string) {
+                        errors.push(format!("{el}: pool must be a pool entry id or {}.", rpgkit_data::POOL_FIRST));
+                    }
+                }
+                Some(_) if fx.contains_key("pool") => errors.push(format!("{el}: give a character or a pool entry, not both.")),
                 None => errors.push(format!("{el}: choose a character.")),
                 Some(id) if v.worlds.resolve(w, "characters", id).is_empty() => errors.push(format!("{el}: Recruit: unknown character '{id}'.")),
                 Some(id) => errors.extend(party_character_errors(v, w, id).into_iter().map(|why| format!("{el}: {why}"))),
@@ -568,7 +578,43 @@ fn effect_errors(v: &View, w: &str, effect: &str, fx: &Dict, el: &str) -> Vec<St
             }
         }
         INSTALL_EFFECT => errors.extend(install_errors(v, fx, el)),
+        "rescue" => errors.extend(rescue_errors(v, w, fx, el)),
         _ => errors.extend(super::campaign::effect_errors(v, w, effect, fx, el)),
+    }
+    errors
+}
+
+/// ROSTER1 PO1, 11.3 (PK3 3.1): a `rescue` effect: exactly one of `template` (a `recruits` row) and `character` (a
+/// party character), `base_unit` ("" or one of the template's base units; a character's must be a party unit),
+/// `count` 1..RESCUE_COUNT_MAX (default 1).
+fn rescue_errors(v: &View, w: &str, fx: &Dict, el: &str) -> Vec<String> {
+    use rpgkit_data::{RECRUITS_KIND, RESCUE_COUNT_MAX};
+    let mut errors = Vec::new();
+    let (template, character) = (json::s(fx, "template"), json::s(fx, "character"));
+    let base_unit = json::s(fx, "base_unit");
+    match (template.is_empty(), character.is_empty()) {
+        (true, true) | (false, false) => errors.push(format!("{el}: rescue takes exactly one of template and character.")),
+        (false, true) => {
+            let t = v.worlds.resolve(w, RECRUITS_KIND, &template);
+            if t.is_empty() {
+                errors.push(format!("{el}: Rescue: unknown recruit template '{template}'."));
+            } else if !base_unit.is_empty() && !json::sget(t, "base_units").contains(&base_unit) {
+                errors.push(format!("{el}: base unit '{base_unit}' is not one of the template's base units."));
+            }
+        }
+        (true, false) => {
+            if v.worlds.resolve(w, "characters", &character).is_empty() {
+                errors.push(format!("{el}: Rescue: unknown character '{character}'."));
+            } else {
+                errors.extend(super::world::party_character_errors(v, w, &character).into_iter().map(|why| format!("{el}: {why}")));
+            }
+            if !base_unit.is_empty() && json::s(v.get("units", &base_unit), "side") != "party" {
+                errors.push(format!("{el}: base unit '{base_unit}' must be a party unit."));
+            }
+        }
+    }
+    if let Some(n) = fx.get("count").filter(|n| !int_in(n, 1, RESCUE_COUNT_MAX)) {
+        errors.push(format!("{el}: count '{}' must be a whole number 1..{RESCUE_COUNT_MAX}.", gstr(n)));
     }
     errors
 }

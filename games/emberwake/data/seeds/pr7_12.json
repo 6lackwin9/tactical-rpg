@@ -1,0 +1,85 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "calcified_amalgam",
+    "name": "The Amalgam",
+    "side": "enemy",
+    "description": "The Calcified Amalgam.",
+    "class_id": "mage",
+    "level": 5,
+    "tier": "boss",
+    "template": "class",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 40,
+    "armor": 50,
+    "poise": 90,
+    "footprint": 2,
+    "art": "brawler/base",
+    "palette": "amalgam",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "ossified_spine_volley",
+     "tendril_flail",
+     "ossification_bloom"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "ossified_spine_volley",
+      "tendril_flail"
+     ],
+     "order": {
+      "assault": [
+       "ossified_spine_volley"
+      ],
+      "guard": [
+       "tendril_flail"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "AGGRESSOR",
+    "target_pref": "NEAREST",
+    "flee_ratio": 0.0,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": true,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "none",
+    "off_hand": "none",
+    "head": "",
+    "body": "none",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "none"
+    ],
+    "loot": [
+     {
+      "item": "calcified_bone_shard",
+      "chance": 60,
+      "count": 1
+     },
+     {
+      "item": "ossified_bellows",
+      "chance": 35,
+      "count": 1
+     },
+     {
+      "item": "titan_marrow_core",
+      "chance": 5,
+      "count": 1
+     }
+    ]
+   }
+  }
+ ]
+}
