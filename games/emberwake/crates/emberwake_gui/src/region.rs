@@ -314,7 +314,6 @@ impl Screen<GameCx> for FusePrompt {
         };
         self.faces.begin();
         let pr = Rect::new(r.x + 10, r.y + 24, FUSE_PORTRAIT, FUSE_PORTRAIT);
-        ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
         let (who, look) = crate::hub::member_portrait(&d, &gs, m);
         self.faces.draw(&mut ui.p, cx, &who, &look, "roster", pr);
         let name = emberwake_world::progression::display_name(&d, m);

@@ -1295,3 +1295,4 @@ fn the_camera_shakes_the_board_only() {
 mod visclar_c_tests;
 mod visclar_d_tests;
 mod hud_frame_tests;
+mod portrait_frame_tests;

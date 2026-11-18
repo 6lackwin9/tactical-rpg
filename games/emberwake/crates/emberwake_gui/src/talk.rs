@@ -225,7 +225,7 @@ pub(crate) fn draw_box<A: Clone>(ui: &mut Ui<A>, b: &TalkBox, panel_id: &str, la
     ui.p.panel(b.r, th().game("talk_box", rgba(14, 20, 34, 250)), th().panel_edge, 4.0);
     ui.push(panel_id, "panel", label.to_string(), b.r, true, false, None, Vec::new());
     let pr = b.portrait_rect();
-    ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
+    ui.p.fill(pr, crate::portraits::portrait_well());
     portrait(&mut ui.p, pr);
     let mid = b.r.x as f32 + b.left as f32 / 2.0;
     let max_w = (b.left - 6) as f32;

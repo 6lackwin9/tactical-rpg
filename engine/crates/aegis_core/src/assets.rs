@@ -29,8 +29,23 @@ pub const FRAME_MAX: u32 = 256;
 pub const FRAMES_MAX: u32 = 64;
 pub const MS_MIN: u32 = 16;
 pub const MS_MAX: u32 = 2000;
-/// Most named colours a body's palette or a palette file holds.
+/// Most base slots (names without a `_lo` / `_hi` shade suffix) a body's palette or a palette file holds; each base
+/// may also name its two shades (S2 ramps, PR7-25), which do not count.
 pub const PALETTE_SLOTS_MAX: usize = 16;
+/// The shade suffixes of a palette slot's ramp (S2, PR7-25): `<slot>_lo` (shadow) and `<slot>_hi` (light).
+pub const SHADE_SUFFIXES: [&str; 2] = ["_lo", "_hi"];
+
+/// The base slot a shade slot name belongs to (`main_lo` -> `main`); None for a base slot name.
+pub fn shade_base(slot: &str) -> Option<&str> {
+    SHADE_SUFFIXES.iter().find_map(|s| slot.strip_suffix(s)).filter(|b| !b.is_empty())
+}
+
+/// The colour pairs a palette file swaps on a body (ASSETORG2 4.1, S2 ramps PR7-25): for every slot the file names
+/// that the body's palette names too (a base slot, or its `_lo` / `_hi` shade), the body's colour and the file's, in
+/// the file's order. A file naming only bases swaps only bases; a shade the body does not name swaps nothing.
+pub fn palette_pairs(body: &IndexMap<String, [u8; 3]>, file: &IndexMap<String, [u8; 3]>) -> Vec<([u8; 3], [u8; 3])> {
+    file.iter().filter_map(|(slot, to)| body.get(slot).map(|from| (*from, *to))).collect()
+}
 
 /// The asset roots of one game, in lookup order (game, kit, engine), and what was missing when they were found.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -154,8 +169,12 @@ fn colours(raw: Option<&Value>, label: &str, problems: &mut Vec<String>) -> Inde
         problems.push(format!("{label} must map slot names to #rrggbb colours."));
         return out;
     };
-    if o.len() > PALETTE_SLOTS_MAX {
-        problems.push(format!("{label} holds at most {PALETTE_SLOTS_MAX} slots (has {}).", o.len()));
+    let bases = o.keys().filter(|k| shade_base(k).is_none()).count();
+    if bases > PALETTE_SLOTS_MAX {
+        problems.push(format!("{label} holds at most {PALETTE_SLOTS_MAX} slots (has {bases}; _lo / _hi shades do not count)."));
+    }
+    if o.len() > PALETTE_SLOTS_MAX * (1 + SHADE_SUFFIXES.len()) {
+        problems.push(format!("{label} holds at most {} slots with their shades (has {}).", PALETTE_SLOTS_MAX * (1 + SHADE_SUFFIXES.len()), o.len()));
     }
     for (slot, v) in o {
         match v.as_str().and_then(hex_colour) {
@@ -690,7 +709,8 @@ impl ClipPlayer {
     }
 }
 
-/// A palette file `{"slots": {"main": "#5a3a30"}}`: the new colour per slot.
+/// A palette file `{"slots": {"main": "#5a3a30"}}`: the new colour per slot. A slot may be a base or one of its shades
+/// (`main_lo`, `main_hi`; S2 ramps, PR7-25), each swapping the body's colour of that name (`palette_pairs`).
 pub fn parse_palette(v: &Value) -> Result<IndexMap<String, [u8; 3]>, Vec<String>> {
     let mut problems = Vec::new();
     let empty = Dict::new();
