@@ -610,7 +610,7 @@ pub struct Frame {
 }
 
 /// The frame roles and the role each falls back to (None: the vector panel in the role's colours).
-pub const FRAME_ROLES: [(&str, Option<&str>); 15] = [
+pub const FRAME_ROLES: [(&str, Option<&str>); 16] = [
     ("panel", None),
     ("inset", None),
     ("parchment", Some("inset")),
@@ -626,6 +626,8 @@ pub const FRAME_ROLES: [(&str, Option<&str>); 15] = [
     ("tip", Some("panel")),
     ("ornate", Some("panel")),
     ("ornate_full", Some("ornate")),
+    // WEBFIX2 (a): a screen's heads-up panels (bars, rosters, logs over a board or map); the panel's frame without its own
+    ("hud", Some("panel")),
 ];
 
 /// A hover card's vector corner radius, in old units.
@@ -670,7 +672,7 @@ impl Theme {
     pub fn vector(&self, role: &str) -> (Rgba, Rgba, f32) {
         let r = self.layout.radius;
         match role {
-            "panel" | "ornate" | "ornate_full" => (self.panel, self.panel_edge, self.layout.frame_radius),
+            "panel" | "ornate" | "ornate_full" | "hud" => (self.panel, self.panel_edge, self.layout.frame_radius),
             "inset" => (self.card, self.edge, r),
             "parchment" => (self.parchment, self.edge, r),
             "button" | "tab" => (self.card, self.edge_live, r),
@@ -689,7 +691,7 @@ impl Theme {
     pub fn vector_in(&self, role: &str, m: &Metrics) -> (Rgba, Rgba, f32) {
         let (fill, edge, _) = self.vector(role);
         let radius = match role {
-            "panel" | "ornate" | "ornate_full" => m.frame_radius,
+            "panel" | "ornate" | "ornate_full" | "hud" => m.frame_radius,
             "tip" => m.uf(TIP_RADIUS),
             _ => m.radius,
         };
