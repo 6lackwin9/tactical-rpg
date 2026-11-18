@@ -527,6 +527,72 @@ def mock5(shot: Image.Image) -> Image.Image:
     return img
 
 
+# take 6 (Tushar 2026-11-18 21:18): foe card keeps only "your plan on it"; HP vs poise icons made consistent;
+# the foe list shows when it acts as a mini block ruler instead of a number
+def heart(d, x, y, s=14, col=(200, 80, 70)):
+    d.ellipse((x, y, x + s / 2, y + s / 2), fill=col)
+    d.ellipse((x + s / 2, y, x + s, y + s / 2), fill=col)
+    d.polygon([(x, y + s / 4), (x + s, y + s / 4), (x + s / 2, y + s)], fill=col)
+
+
+def mini_ruler(d, x, y, act, n=6, w=10, g=2):
+    for b in range(n):
+        d.rectangle((x + b * (w + g), y, x + b * (w + g) + w - 1, y + 4), fill=(200, 90, 80) if b in act else AP_OFF)
+
+
+def mock6(shot: Image.Image) -> Image.Image:
+    img = mock5(shot)
+    d = ImageDraw.Draw(img)
+    stage = shot.crop((291, 112, 899, 492)).resize((912, 570), Image.NEAREST)
+    img.paste(stage.crop((612, 18, 904, 262)), (796, 90))
+    kae = shot.crop((20, 166, 84, 230))
+    foe_p = shot.crop((1044, 220, 1108, 284))
+    # foe list: next move = arrow + target face, and when it acts as a mini block ruler (block 1 lit)
+    for k in range(2):
+        y = 84 + k * 80
+        d.rectangle((1170, y + 36, 1262, y + 58), fill=SLATE)
+        glyph(d, "arrow", 1172, y + 36, 18, (200, 160, 120))
+        img.paste(kae.resize((18, 18)), (1194, y + 36))
+        mini_ruler(d, 1216, y + 43, {0}, w=6, g=2)
+    cx, cy = 796, 96
+    frame_a(d, (cx, cy, cx + 288, cy + 176), fill=(16, 18, 25))
+    img.paste(foe_p.resize((40, 40)), (cx + 14, cy + 14))
+    d.text((cx + 62, cy + 12), "Castellan Footman", font=TITLE_S, fill=GOLD)
+    heart(d, cx + 62, cy + 33, 11)
+    bar(d, cx + 78, cy + 36, 100, 6, 1.0, (150, 50, 45))
+    poise_glyph(d, cx + 192, cy + 31, 14)
+    poise(d, cx + 212, cy + 36, 5, 5, w=12, h=6)
+    y = cy + 66
+    d.rectangle((cx + 12, y, cx + 15, y + 96), fill=GOLD)
+    img.paste(kae.resize((22, 22)), (cx + 24, y + 2))
+    glyph(d, "arrow", cx + 52, y + 3, 20, GOLD)
+    img.paste(foe_p.resize((22, 22)), (cx + 78, y + 2))
+    d.text((cx + 108, y + 5), "your plan on it", font=SMALL, fill=GOLD)
+    y += 32
+    t = slot_icon("pneumatic_hammer_strike", 26)
+    img.paste(t, (cx + 24, y), t)
+    for b in range(6):
+        c = GOLD if b in (1, 2, 3) else AP_OFF
+        d.rectangle((cx + 56 + b * 9, y + 11, cx + 56 + b * 9 + 7, y + 15), fill=c)
+    poise_glyph(d, cx + 116, y + 5, 14)
+    for j in range(5):
+        d.rectangle((cx + 136 + j * 13, y + 9, cx + 136 + j * 13 + 10, y + 15), fill=AMBER)
+    d.text((cx + 204, y + 4), "BREAK", font=MONO_L, fill=AMBER)
+    # HP trade, both as hearts with who-hits-whom faces
+    y += 34
+    img.paste(kae.resize((18, 18)), (cx + 24, y))
+    glyph(d, "arrow", cx + 44, y, 16, GOLD)
+    img.paste(foe_p.resize((18, 18)), (cx + 62, y))
+    heart(d, cx + 86, y + 3, 12)
+    d.text((cx + 102, y), "-34", font=MONO_L, fill=PARCH)
+    img.paste(foe_p.resize((18, 18)), (cx + 150, y))
+    glyph(d, "arrow", cx + 170, y, 16, (200, 160, 120))
+    img.paste(kae.resize((18, 18)), (cx + 188, y))
+    heart(d, cx + 212, y + 3, 12)
+    d.text((cx + 228, y), "-22", font=MONO_L, fill=PARCH)
+    return img
+
+
 def label(img, text):
     out = Image.new("RGB", (img.width, img.height + 34), BASALT)
     out.paste(img, (0, 34))
@@ -568,6 +634,17 @@ def main():
     sheet.save(out / "battle_layout_take3_vs_take4.png")
     m5 = mock5(shot)
     m5.save(out / "battle_layout_take5.png")
+    m6 = mock6(shot)
+    m6.save(out / "battle_layout_take6.png")
+    strip = m6.crop((0, 0, 1280, 66)).resize((2560, 132), Image.NEAREST)
+    card = m6.crop((790, 90, 1090, 280)).resize((900, 570), Image.NEAREST)
+    foes = m6.crop((1104, 72, 1272, 250)).resize((504, 534), Image.NEAREST)
+    sh = Image.new("RGB", (2560, 1440 + 20 + 132 + 20 + 570), VOID)
+    sh.paste(m6.resize((2560, 1440), Image.NEAREST), (0, 0))
+    sh.paste(strip, (0, 1460))
+    sh.paste(card, (0, 1612))
+    sh.paste(foes, (940, 1612))
+    sh.save(out / "battle_layout_take6_sheet.png")
 
 
 if __name__ == "__main__":
