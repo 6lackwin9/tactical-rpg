@@ -18,6 +18,8 @@
 #   tools/fc.sh rules [--contract]   the ruleset tweak report (aegis rules: register metadata, fields, bundles, tested sets, locked,
 #                                the game's rows); --contract: tunable and locked, one line each
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)
+#   tools/fc.sh sim bands [level=] [duel_seeds=] [party_seeds=] [quiet]   the balance target bands (tuning.json balance_bands):
+#                                duel win % and party clear % against their bands; exit 1 when a row is outside (not in the gate)
 #   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: session=, until=, json, variant=, write=, seeds=, fallback=)
 #   tools/fc.sh repro            replay every recording in games/emberwake/playtests/repro/ (REPLAY-CI1): a divergence, a refused
 #                                request or a panic fails; no recordings passes (part of the gate)
@@ -313,6 +315,16 @@ aegis() {  # the CLI, built on demand
   cargo run -q -p emberwake_host -- "$@"
 }
 
+sim_bands() {  # PR7-6: the balance bands of games/emberwake/tuning.json (tools/planner/sim_bands.py); exit 1 = a row outside its band
+  local py t0 code
+  if ! py=$(python_with "pass"); then echo "[sim bands] no Python 3 found"; status=2; return; fi
+  cargo build -q -p emberwake_host || { status=2; return; }
+  t0=$(date +%s)
+  "$py" tools/planner/sim_bands.py "$@"; code=$?
+  echo "[sim bands] $(( $(date +%s) - t0 )) s"
+  [ $code -ne 0 ] && status=$code
+}
+
 scenario() {  # the driver lies beside the game's program, so both are built first, in one profile
   local a rest=() rel=()
   if [ "${1:-}" = "check" ]; then aegis scenario "$@" || status=$?; return; fi
@@ -415,7 +427,8 @@ case "$1" in
   layers) layers_check ;;
   content) aegis content "${@:2}" || status=1 ;;
   rules) aegis rules "${@:2}" || status=1 ;;
-  sim) aegis sim "${@:2}" || status=1 ;;
+  sim)
+    if [ "${2:-}" = "bands" ]; then sim_bands "${@:3}"; else aegis sim "${@:2}" || status=1; fi ;;
   replay) aegis replay "${@:2}" || status=1 ;;
   repro) repro ;;
   bot) bot "${@:2}" ;;

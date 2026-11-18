@@ -41,5 +41,11 @@
   "windup_outline_alpha": 110,
   "status_cycle_ms": 1500,
   "status_pending_alpha": 0.5,
-  "status_tint_max": 70
+  "status_tint_max": 70,
+  "balance_bands": {
+    "_doc": "PR7-6 (BALANCE-BANDS1), [PROVISIONAL] bands: tools/fc.sh sim bands runs the sims below and exits non-zero when a row is outside its band (tools/planner/sim_bands.py). duel: each class's binary win % in the hero duel round robin; party: the default comp's clear % against the generated encounters. Seeds = the sim's set (seed i = 11 + 12 i). The game UI ignores this block.",
+    "level": 5,
+    "duel": {"seeds": 50, "win_pct": [40, 60]},
+    "party": {"seeds": 200, "clear_pct": {"line": [80, 95], "elite": [70, 85], "boss": [30, 50]}}
+  }
 }
