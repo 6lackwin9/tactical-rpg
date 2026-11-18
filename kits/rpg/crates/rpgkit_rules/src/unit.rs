@@ -1391,6 +1391,21 @@ impl Unit {
         list.contains(&passive.id)
     }
 
+    /// CLASSKEY1 (`PR6-14`, `docs/sessions/U2_CLASS.md` "Class keystones"): under the deck rule, a unit at `level` or
+    /// above its class keystone's level whose own deck names no keystone slots the class keystone (a passive with slot
+    /// `keystone`), unless a keystone graft or the wielded family's keystone already holds every keystone slot (one slot,
+    /// a later keystone replaces the class one). Whether it was slotted (the caller applies it with the deck passives).
+    pub fn grant_class_keystone(&mut self, cat: &Catalog, keystone: &rpgkit_data::ClassKeystone, level: i32) -> bool {
+        let Some(rule) = &self.deck_rule else { return false };
+        let free = rule.slots.keystone - self.keystone_skills.len() as i32;
+        let slottable = cat.passives.get(&keystone.id).is_some_and(|p| p.slot == "keystone");
+        if !self.deck.keystone.is_empty() || free <= 0 || level < keystone.level.max(1) || !slottable {
+            return false;
+        }
+        self.deck.keystone.push(keystone.id.clone());
+        true
+    }
+
     /// CLASSPASS1 (`PR5-62a`): applies a derived unit's slotless `class.passives` once under the deck rule.
     pub fn apply_class_passives(&mut self, cat: &Catalog) -> usize {
         if self.deck_rule.is_none() || self.class_passives.is_empty() {
@@ -1895,8 +1910,16 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
         ls.proficiency.wield = b.wield;
     }
     let mut u = build_catalog_unit(cat, e, b.default_ap, b.wield, deck_rule.as_ref(), lock_stats.as_ref(), b.growth.as_ref());
+    // CLASSKEY1: a derived party unit's class keystone (a member, or a party row; slotted only while its deck names none
+    // and no later keystone holds it). Guess (PR6-14): the spec's "recruits, generated units" are party units, so a foe
+    // of the class takes none
+    let party = b.growth.is_some() || e.side == PARTY_SIDE;
+    let class_keystone = class_for(cat, e).filter(|_| party && e.stat_mode == "derived").and_then(|c| c.keystone.clone());
     match (&b.growth, b.deck) {
         (None, Some(_)) => {
+            if let Some(k) = &class_keystone {
+                u.grant_class_keystone(cat, k, e.level);
+            }
             if u.apply_deck_passives(cat) > 0 && e.stat_mode == "derived" && class_for(cat, e).is_some() {
                 u.sync_from_stats_and_gear(cat);
                 u.hp = u.max_hp;
@@ -1941,6 +1964,12 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
     }
     if b.growth.is_some() {
         u.apply_class_passives(cat);
+        // CLASSKEY1: after the body and mastery keystones (either takes the one slot first)
+        if let Some(k) = class_keystone.as_ref().filter(|k| u.grant_class_keystone(cat, k, e.level)) {
+            if let Some(p) = cat.passives.get(&k.id) {
+                u.apply_passive(cat, p);
+            }
+        }
     }
     for id in &b.over.passives {
         if let Some(p) = cat.passives.get(id) {
