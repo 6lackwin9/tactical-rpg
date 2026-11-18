@@ -10,6 +10,7 @@
     {"step": "wait", "until": {"path": "screen", "eq": "region_map"}, "timeout_ms": 20000},
     {"step": "wait", "until": {"widget": "bunk.bunk_1"}},
     {"step": "shot", "name": "region_map"},
+    {"step": "perf", "name": "region_map", "frames": 60, "warm": 10},
     {"step": "click", "id": "marker.talia"},
     {"step": "wait", "until": {"all": [{"path": "state.walking", "eq": false}, {"path": "state.dialogue.speaker_name", "eq": "Talia Rusk"}]}, "timeout_ms": 30000},
     {"step": "shot", "name": "talk_box"},

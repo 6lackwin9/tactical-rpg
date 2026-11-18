@@ -32,6 +32,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
 | `PR7-4` (`SCENARIO-GOLDENS1`) | part 1 done (tools lane); baselines await the user | `develop` (squash `PR7-4` part 1) | Scenario `shot` step `golden` (tolerance, pixels allowance, diff image), `record=1`, launch `save`; every scenario in the gate (`tools/fc.sh scenarios_all`); three screen scenarios (menus, hub, battle; 18 shots) run as review shots until the user approves the baselines (`/mnt/project-files/pr7-4/`); `FB-313` |
 | `ENGINE-1` (`HELLO-GAME1`) | done (tools lane) | `develop` (squash `ENGINE-1`) | Sample game `games/hello/` on engine crates only: menu, walker sprite, one save slot, engine sounds, scenario `hello_walk` in the gate; programs `hello` and `hello_cli`; six RPG leaks listed; `FB-315` |
+| `ENGINE-2` (`PERF-STEP1`) | done (tools lane) | `develop` (squash `ENGINE-2`) | Scenario `perf` step (no window: frame times, calibration, `budget` with a `no verdict` on a changing load); link request `perf`; `aegis_ui::perf` and `tools/fc.sh bench` (fill, panels, text); perf steps in both games' scenarios; `FB-317` |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -309,6 +310,16 @@ FB-01 to FB-281 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Also**: `aegis_cli/src/agentplay.rs` `kill` no longer leaves `pid` unused on a target that is neither unix nor windows (the web build's warning, reported by main Build; not checkable here without the wasm target).
 - **Guess** `[PROVISIONAL]`: the game id is `hello` as the row names it; its sprite (a 16 x 16 lamp-bot, `games/hello/tools/walker_png.py`) is engine-sample art, not Emberwake art, and not for the kit library.
 - **Docs delta**: `docs/STRUCTURE.md` games section: "`games/hello/`: the engine's sample game (ENGINE-1), engine crates only; read it first when starting a game". `engine/README.md`: a "Sample game" line pointing at `games/hello/README.md`. `README.md`: the games list gains `hello`. `CLAUDE.md` Layers line: `games/hello/` (the sample game) beside `games/emberwake/`. `HISTORY.md`: "2026-11-18: engine test strings 'hello' renamed 'salve' (the layers check bans game ids; ENGINE-1)".
+
+### FB-317: ENGINE-2 perf step and painter benchmarks landed; first numbers
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-2` (PERF-STEP1), `docs/specs/AGENTROLES1.md` section 5 in part (@squash `ENGINE-2`)
+- **Built**: the no-window shell answers `perf {frames, warm}` (warm frames untimed, then whole frames back to back, a fixed CPU calibration before and after, nearest-rank p10/p50/p95/max/mean in ms, `steady` when the calibrations are within 20 %). Scenario step `perf` (`name`, `frames` = 300, `warm` = 60, `budget` {`p50_ms`, `p95_ms`, `max_ms`}): verdict `recorded`, `within`, `over` (fails the step) or `no verdict` (load changed, passes); `perf_<name>.json` in the bundle and `perf` in `result.json`. `aegis_ui::perf::bench` and the program `ui_bench` (`tools/fc.sh bench [sizes=] [runs=]`, release build, not in the gate). The sample game's scenario has two budgeted perf steps (p50 50 ms, p95 100 ms, against about 8 to 10 ms measured); Emberwake's screen scenarios record the main menu, the region map and battle planning (no budget).
+- **First numbers** (2026-11-18, dev build, no window, 1280x720, cloud): main menu p50 4.6 ms, region map 29.5 ms, battle planning 20.2 ms. Painter, dev build: a whole-canvas fill 3.7 ms at 720p and 8.6 ms at 1080p, 64 panels 5.0 and 12.4 ms, 40 text lines 1.2 and 2.5 ms. The fill alone is a fifth of a 60 fps frame at 1080p in a dev build; a release run is the next measure (`tools/fc.sh bench`).
+- **Not built** (AGENTROLES1 section 5, for a later row): frame counters in a real window, `docs/metrics/perf.jsonl` and the 5-record median rule (INTEG1-E3), the start-to-menu and working-set numbers.
+- **Guess** `[PROVISIONAL]`: the gate's budgets are loose ceilings for gross regressions only (a dev build on a shared machine); tight budgets belong in release runs. Note for PR7-4 part 2: the perf steps draw 70 extra frames before some later shots in `screens_menus` and `screens_hub`; a baseline must be recorded with them in place.
+- **Docs delta**: `engine/README.md` (no-window shell line): link requests `frames`, `clip`, `perf`; module `aegis_ui::perf`; program `ui_bench` (`tools/fc.sh bench`); scenario step `perf`. `docs/STRUCTURE.md`: none. `HISTORY.md`: none.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

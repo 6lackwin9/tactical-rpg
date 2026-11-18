@@ -49,6 +49,10 @@ const CLIP_MS_MAX: u64 = 15_000;
 pub const PAUSE_LOOK: Duration = Duration::from_secs(1);
 /// How long one link reply may take (times `slow`), and on the way out after a failure.
 const REPLY: Duration = Duration::from_secs(30);
+/// What a `perf` request may take per frame, on top of `REPLY`.
+const PERF_FRAME_WAIT: Duration = Duration::from_millis(500);
+/// What a frame takes at least, for the check against the run's deadline.
+const PERF_FRAME_FLOOR: Duration = Duration::from_millis(5);
 const REPLY_LEAVING: Duration = Duration::from_secs(5);
 /// How long a game may take to leave after `quit` before it is killed.
 pub const LEAVE: Duration = Duration::from_secs(5);
@@ -130,10 +134,55 @@ pub enum Step {
     /// `golden`: compared against the committed baseline (`crate::golden`), with this tolerance.
     Shot { name: String, max_w: u64, golden: Option<crate::golden::Tolerance> },
     Clip { name: String, frames: u64, every_ms: u64, max_w: u64 },
+    /// ENGINE-2: frame times with no window (`perf` link request); `budget` fails the step when a number is over it on a
+    /// steady machine.
+    Perf { name: String, frames: u64, warm: u64, budget: Budget },
     Pause { ms: u64 },
     Audit { scales: Vec<f64>, fail: Vec<String> },
     Repeat { times: u64, steps: Vec<Step>, until: Option<Cond> },
 }
+
+/// A `perf` step's limits in ms (None: not checked). A step with none records its numbers only.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Budget {
+    pub p50: Option<f64>,
+    pub p95: Option<f64>,
+    pub max: Option<f64>,
+}
+
+impl Budget {
+    pub fn is_empty(&self) -> bool {
+        self.p50.is_none() && self.p95.is_none() && self.max.is_none()
+    }
+
+    /// Each number of `stats` (a `perf` reply's) over its limit, as "p95 31.2 ms over 25 ms".
+    pub fn misses(&self, stats: &Value) -> Vec<String> {
+        [("p50", self.p50), ("p95", self.p95), ("max", self.max)]
+            .into_iter()
+            .filter_map(|(k, limit)| {
+                let (limit, got) = (limit?, stats[k].as_f64()?);
+                (got > limit).then(|| format!("{k} {got} ms over {limit} ms"))
+            })
+            .collect()
+    }
+}
+
+/// What a `perf` step's numbers mean: no budget, within it, over it, or none because the machine's load changed.
+pub fn perf_verdict(budget: &Budget, reply: &Value) -> (&'static str, Vec<String>) {
+    if budget.is_empty() {
+        return ("recorded", Vec::new());
+    }
+    if reply["steady"] != json!(true) {
+        return ("no verdict", Vec::new());
+    }
+    let misses = budget.misses(&reply["stats"]);
+    (if misses.is_empty() { "within" } else { "over" }, misses)
+}
+
+/// A `perf` step's bounds (the game's own are the same: `aegis_ui::shell::headless::PERF_*`) and the most a budget says.
+pub const PERF_FRAMES_MAX: u64 = 2000;
+pub const PERF_WARM_MAX: u64 = 600;
+pub const PERF_BUDGET_MS_MAX: f64 = 10_000.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scenario {
@@ -434,8 +483,39 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
             Step::Repeat { times, steps, until }
         }
         "perf" => {
-            problems.push(format!("{place}: step 'perf' is not built yet (INTEG1-E2)"));
-            bad
+            keys(&["name", "frames", "warm", "budget"], problems);
+            let name = text_of(o, "name", place, problems);
+            if !name.is_empty() && !plain_name(&name) {
+                problems.push(format!("{place}: 'name' becomes a file name: letters, digits, _ and - only, at most 80"));
+            }
+            let frames = int_of(o, "frames", Some(300), (1, PERF_FRAMES_MAX), place, problems);
+            let warm = int_of(o, "warm", Some(60), (0, PERF_WARM_MAX), place, problems);
+            let mut budget = Budget::default();
+            match o.get("budget") {
+                None => {}
+                Some(Value::Object(b)) => {
+                    for (k, v) in b {
+                        let slot = match k.as_str() {
+                            "p50_ms" => &mut budget.p50,
+                            "p95_ms" => &mut budget.p95,
+                            "max_ms" => &mut budget.max,
+                            other => {
+                                problems.push(format!("{place}.budget: unknown key '{other}' (p50_ms, p95_ms, max_ms)"));
+                                continue;
+                            }
+                        };
+                        match v.as_f64().filter(|n| *n > 0.0 && *n <= PERF_BUDGET_MS_MAX) {
+                            Some(n) => *slot = Some(n),
+                            None => problems.push(format!("{place}.budget: '{k}' is a number of ms above 0, at most {PERF_BUDGET_MS_MAX}")),
+                        }
+                    }
+                    if budget.is_empty() && b.is_empty() {
+                        problems.push(format!("{place}.budget: name at least one of p50_ms, p95_ms, max_ms"));
+                    }
+                }
+                Some(_) => problems.push(format!("{place}: 'budget' is an object (p50_ms, p95_ms, max_ms)")),
+            }
+            Step::Perf { name, frames, warm, budget }
         }
         other => {
             problems.push(format!("{place}: unknown step '{other}'"));
@@ -455,11 +535,13 @@ pub fn steps_counted(steps: &[Step]) -> u64 {
     })
 }
 
-fn has_clip(steps: &[Step]) -> bool {
-    steps.iter().any(|s| match s {
-        Step::Clip { .. } => true,
-        Step::Repeat { steps, .. } => has_clip(steps),
-        _ => false,
+/// Whether a step needs a run with no window (`clip`, `perf`), and which it is.
+fn no_window_step(steps: &[Step]) -> Option<&'static str> {
+    steps.iter().find_map(|s| match s {
+        Step::Clip { .. } => Some("clip"),
+        Step::Perf { .. } => Some("perf"),
+        Step::Repeat { steps, .. } => no_window_step(steps),
+        _ => None,
     })
 }
 
@@ -574,8 +656,8 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
             Vec::new()
         }
     };
-    if window && has_clip(&steps) {
-        p.push("scenario: a 'clip' is taken in a run with no window, and this one has 'window' true".into());
+    if let Some(kind) = no_window_step(&steps).filter(|_| window) {
+        p.push(format!("scenario: a '{kind}' is taken in a run with no window, and this one has 'window' true"));
     }
     if launch.ruleset.is_some() && launch.screen != "arena" {
         p.push("launch: 'ruleset' comes with 'screen' arena".into());
@@ -859,6 +941,8 @@ struct Run<'a> {
     record: bool,
     /// Shots to become baselines once every step has passed: (the shot, its baseline).
     recorded: Vec<(PathBuf, PathBuf)>,
+    /// ENGINE-2: each `perf` step's numbers and verdict, for result.json.
+    perf: Vec<Value>,
 }
 
 impl Run<'_> {
@@ -1023,6 +1107,36 @@ impl Run<'_> {
                     return Err(Failure { step: label.to_string(), message: format!("the clip {name}: {}", reply["error"]), gone: false });
                 }
             }
+            Step::Perf { name, frames, warm, budget } => {
+                let fail = |message: String| Failure { step: label.to_string(), message, gone: false };
+                if !self.headless {
+                    return Err(fail("frame times are measured in a run with no window".to_string()));
+                }
+                // A rough floor: every frame takes at least PERF_FRAME_FLOOR, so a request that cannot end in time is refused.
+                if Instant::now() + PERF_FRAME_FLOOR * (frames + warm) as u32 > self.deadline {
+                    return Err(fail(format!("perf {name}: {} frames run past the run's timeout_s", frames + warm)));
+                }
+                self.settle(label)?;
+                // Back to back: a dev build can take a few hundred ms a frame on a big canvas.
+                self.link.patience((REPLY + PERF_FRAME_WAIT * (frames + warm) as u32) * self.slow as u32);
+                let reply = self.ask(label, &json!({"cmd": "perf", "frames": frames, "warm": warm}));
+                self.link.patience(REPLY * self.slow as u32);
+                let reply = reply?;
+                if reply["ok"] != json!(true) {
+                    return Err(fail(format!("perf {name}: {}", reply["error"])));
+                }
+                let (verdict, misses) = perf_verdict(budget, &reply);
+                let mut kept = json!({"name": name, "step": label, "frames": frames, "warm": warm, "stats": reply["stats"], "calib_before": reply["calib_before"],
+                    "calib_after": reply["calib_after"], "steady": reply["steady"], "canvas": reply["canvas"], "build": reply["build"], "verdict": verdict});
+                if !budget.is_empty() {
+                    kept["budget"] = json!({"p50_ms": budget.p50, "p95_ms": budget.p95, "max_ms": budget.max});
+                }
+                let _ = std::fs::write(self.bundle.join(format!("perf_{name}.json")), serde_json::to_string_pretty(&kept).unwrap_or_default());
+                self.perf.push(kept);
+                if !misses.is_empty() {
+                    return Err(fail(format!("perf {name}: {} (p50 {} ms, p95 {} ms, max {} ms over {frames} frames, canvas {}x{})", misses.join(", "), reply["stats"]["p50"], reply["stats"]["p95"], reply["stats"]["max"], reply["canvas"][0], reply["canvas"][1])));
+                }
+            }
             Step::Audit { scales, fail } => {
                 self.settle(label)?;
                 for scale in scales {
@@ -1074,6 +1188,7 @@ fn kind_of(s: &Step) -> &'static str {
         Step::Assert { .. } => "assert",
         Step::Shot { .. } => "shot",
         Step::Clip { .. } => "clip",
+        Step::Perf { .. } => "perf",
         Step::Pause { .. } => "pause",
         Step::Audit { .. } => "audit",
         Step::Repeat { .. } => "repeat",
@@ -1242,10 +1357,11 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
         record["capped"] = json!(px != json!([size.0, size.1]));
         let deadline = Instant::now() + s.timeout * slow as u32;
         let golden_dir = o.baselines.as_ref().map(|b| b.join(&s.id).join(format!("{}x{}", size.0, size.1)));
-        let mut run = Run { link: link.as_mut(), game: game.as_mut(), bundle: &bundle, slow, deadline, done: Vec::new(), frame: 0, headless, golden_dir, record: o.record, recorded: Vec::new() };
+        let mut run = Run { link: link.as_mut(), game: game.as_mut(), bundle: &bundle, slow, deadline, done: Vec::new(), frame: 0, headless, golden_dir, record: o.record, recorded: Vec::new(), perf: Vec::new() };
         let walked = s.steps.iter().enumerate().try_for_each(|(i, step)| run.step(&(i + 1).to_string(), step));
         let done = std::mem::take(&mut run.done);
         let to_record = std::mem::take(&mut run.recorded);
+        let perf = std::mem::take(&mut run.perf);
         let frames = run.frame;
         match walked {
             Ok(()) => {
@@ -1287,6 +1403,9 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
                 }
             }
             record["recorded"] = json!(written);
+        }
+        if !perf.is_empty() {
+            record["perf"] = Value::Array(perf);
         }
         record["steps"] = Value::Array(done);
         record["frames"] = json!(frames);

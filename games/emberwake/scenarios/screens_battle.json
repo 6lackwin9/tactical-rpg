@@ -6,6 +6,7 @@
   "steps": [
     {"step": "wait", "until": {"path": "state.outcome", "eq": ""}},
     {"step": "pause", "ms": 1500},
-    {"step": "shot", "name": "battle_start"}
+    {"step": "shot", "name": "battle_start"},
+    {"step": "perf", "name": "battle_planning", "frames": 60, "warm": 10}
   ]
 }

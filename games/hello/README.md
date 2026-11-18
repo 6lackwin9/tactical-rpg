@@ -12,7 +12,7 @@ needs nothing of the RPG kit, and it is the place to look first when starting a 
 | Command line | `crates/hello_game/src/bin/hello_cli.rs` | `aegis_cli::Game` with no content kinds |
 | Sprite | `assets/sprites/walker.png` | 16 x 16, drawn by `tools/walker_png.py` |
 | Sounds | the engine's `assets/audio/sfx/ui_*.wav` | Found through the asset layers; the game ships none |
-| Scenario | `scenarios/hello_walk.json` | Menu, a new walk, steps and bumps, a save, back to the menu, continue; in the gate |
+| Scenario | `scenarios/hello_walk.json` | Menu, a new walk, steps and bumps, a save, back to the menu, continue, and frame times with a loose budget; in the gate |
 
 ## Running it
 

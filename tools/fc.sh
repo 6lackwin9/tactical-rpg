@@ -17,6 +17,8 @@
 #                                then the tools/planner tests (plain Python, no Pillow)
 #   tools/fc.sh assetlib         the kit asset library kits/*/library/<style>/<kind>/ and its .meta.json sidecars (ASSETLIB1: fields, enums,
 #                                PNG size, unique ids, no game lore word) plus the check's tests; part of the gate
+#   tools/fc.sh bench [sizes=1280x720,1920x1080] [runs=50]   the painter's benchmarks (ENGINE-2: fill, panels, text; ms per run,
+#                                p10/p50/p95/max, a calibration before and after) in a release build; one JSON line per size; never in the gate
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
 #   tools/fc.sh rules [--contract]   the ruleset tweak report (aegis rules: register metadata, fields, bundles, tested sets, locked,
 #                                the game's rows); --contract: tunable and locked, one line each
@@ -240,6 +242,11 @@ plannertests() {  # the tools/planner script tests (SKILLS1-FB): plain Python, n
   else
     echo "$out" | tail -n 40; echo "[plannertests] FAIL: tools/planner tests"; status=1
   fi
+}
+
+bench() {  # ENGINE-2 (PERF-STEP1): aegis_ui's ui_bench in a release build; timings only mean something on a quiet machine
+  cargo build -q --release -p aegis_ui --bin ui_bench || { status=1; return; }
+  "${CARGO_TARGET_DIR:-$PWD/target}/release/ui_bench" "$@" || status=1
 }
 
 assetlib() {  # PR7-35 (ASSETLIB1): the kit asset library check (tools/assetlib/check_library.py) and its tests; plain Python
@@ -514,6 +521,7 @@ case "$1" in
   scenario) scenario "${@:2}" ;;
   playtest) playtest "${@:2}" ;;
   assetlib) assetlib ;;
+  bench) bench "${@:2}" ;;
   web) web "${@:2}" ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;

@@ -16,6 +16,9 @@ playtest harness (`tools/fc.sh playtest`) after the prologue; make it again the 
 | `screens_hub` | Review shots from the save `saves/hub_start` (the hub right after the prologue): region map, talk box, notice board, shop, party (stats, skills, gear), world map | 25 s |
 | `screens_battle` | Review shot: `tl_flank` seed 7 at its start, planning | 4 s |
 
+The three screen scenarios also time frames (`perf`, ENGINE-2, numbers only, no budget): the main menu, the region map and
+battle planning. Measured 2026-11-18 at 1280x720 in a dev build with no window: p50 4.6 ms, 29.5 ms and 20.2 ms.
+
 A battle's `state.beat` is there only while a beat runs (`kind` `intro` or `victory`); wait for it to be absent before the fight takes input. A battle talk can open after the link's `autoplay` and holds the victory beat: Enter moves it on.
 
 The main menu's screen id is `main_menu`.
