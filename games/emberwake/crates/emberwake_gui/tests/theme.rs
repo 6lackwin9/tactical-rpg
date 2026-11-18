@@ -66,7 +66,7 @@ fn every_frame_role_resolves_to_a_game_frame_in_the_palette() {
         let f = t.frame(role).unwrap_or_else(|| panic!("frame role {role} draws the vector panel"));
         assert_eq!(f.source, format!("ui/frames/{role}.png (game)"), "{role} resolves to another role's file");
         let (size, slice) = match role {
-            "panel" => (24, 8),
+            "panel" | "hud" => (24, 8),
             "ornate" => (f.nine.slice[0] * 2 + 32, f.nine.slice[0]),
             "ornate_full" => (f.nine.slice[0] * 2 + 64, f.nine.slice[0]),
             _ => (16, 4),
@@ -148,9 +148,16 @@ fn the_frame_line_is_the_one_role() {
     let row = (f.nine.slice[1] / 2) * f.img.w;
     let at = row as usize * 4 + mid;
     assert_eq!(f.img.px[at..at + 4], line, "the top edge's line");
+    // WEBFIX2 (a): the HUD frame is the style bible's F2, the iron frame with the line along its top edge only
+    let hud = t.frame("hud").unwrap();
+    let w = hud.img.w as usize;
+    let is_line = |x: usize, y: usize| hud.img.px[(y * w + x) * 4..(y * w + x) * 4 + 3] == line[..3];
+    assert!((0..w).all(|x| is_line(x, 0)), "the HUD frame's top row is the line");
+    let top = hud.nine.scale as usize;
+    assert!(hud.img.px.chunks(4).enumerate().filter(|(_, p)| p[..3] == line[..3]).all(|(i, _)| i / w < top), "only its top edge carries it, one logical px");
     for (role, _) in FRAME_ROLES {
         let other = t.frame(role).unwrap();
-        if role != "ornate" {
+        if role != "ornate" && role != "hud" {
             assert!(!other.img.px.chunks(4).any(|p| p[..3] == line[..3]), "{role} has the line's colour but is not listed");
         }
     }

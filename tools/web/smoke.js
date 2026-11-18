@@ -9,10 +9,16 @@
 //   query  ?screen=runner&port=1 opens the Scene Runner; port= is dropped with a console line
 //   (a)    Tools > Combat Arena (goblin_skirmish, the runner's default fight) plays on the battle's own autoplay (A) to
 //          the results banner (an outcome, the Leave button); Leave goes back to the runner
-//   (b)    New game > Start reaches the first region screen in the world the new game screen had selected
+//   (b)    New game > Start plays the opening as a player would (WEBFIX2): the story scene (Space through its cards), the
+//          battle beat into the first fight, the fight on the battle's own autoplay (A), the results' Continue, and on
+//          through the prologue's scenes and fights to the first region screen in the world the new game screen selected
 //   (c)    a step on the map, Game menu > Save game > slot 1 (the save lands in localStorage under aegis/), reload the
 //          page, Continue restores the slot: the same location and position, nothing unsaved
-// Every page must run without a console error or page error. Usage: node tools/web/smoke.js <out/web>. Needs
+//   cap    (WEBFIX2 (d)) a 9000 x 5000 page (past the 8192 px texture of headless Chromium's WebGL; its emulated pixel
+//          ratio does not grow the buffer, so the size itself is large): the canvas's drawing buffer stays within the GPU's
+//          largest texture, smaller than the page, and a click still lands (New game opens)
+// boot and (b), (c) run at every page size (default 1280x720, 1600x1000, 2560x1440), the rest at the first. Every page
+// must run without a console error or page error. Usage: node tools/web/smoke.js <out/web> [WxH ...]. Needs
 // Playwright (`require('playwright')`) and its Chromium (or CHROMIUM=<path to the executable>). Exit 0 when all passed.
 'use strict';
 const fs = require('fs');
@@ -25,6 +31,12 @@ if (!dir || !fs.existsSync(path.join(dir, 'emberwake_bg.wasm'))) {
   console.error('usage: node tools/web/smoke.js <folder of a web test build (tools/fc.sh web test)>');
   process.exit(2);
 }
+
+const SIZES = (process.argv.length > 3 ? process.argv.slice(3) : ['1280x720', '1600x1000', '2560x1440']).map((s) => {
+  const [width, height] = s.split('x').map(Number);
+  if (!(width > 0 && height > 0)) { console.error(`not a page size: ${s} (WxH)`); process.exit(2); }
+  return { width, height };
+});
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json' };
 const fetched = [];
@@ -93,15 +105,23 @@ class Game {
   async click(id) {
     const p = await this.until((s) => this.widget(s, id), 10000);
     if (!check(!!p, `widget ${id} is on screen`)) return false;
+    await this.tap(p, id);
+    return true;
+  }
+
+  // A left click at the centre of widget `id` of snapshot `p`, no check (the widget may be gone by now).
+  async tap(p, id) {
     const w = this.widget(p, id);
     const box = await this.page.locator('#aegis').boundingBox();
+    // CSS px per drawing-buffer px: the buffer is the CSS size times the ratio unless capped (WEBFIX2 (d))
+    const buffer = await this.page.evaluate(() => document.getElementById('aegis').width);
+    const k = buffer > 0 ? box.width / buffer : 1 / p.dpr;
     const [ox, oy, s] = p.view;
-    const x = box.x + (ox + (w.rect[0] + w.rect[2] / 2) * s) / p.dpr;
-    const y = box.y + (oy + (w.rect[1] + w.rect[3] / 2) * s) / p.dpr;
+    const x = box.x + (ox + (w.rect[0] + w.rect[2] / 2) * s) * k;
+    const y = box.y + (oy + (w.rect[1] + w.rect[3] / 2) * s) * k;
     await this.page.mouse.move(x, y);
     await sleep(50);
     await this.page.mouse.click(x, y);
-    return true;
   }
 
   noErrors(what) {
@@ -177,7 +197,7 @@ async function arena(context, base) {
 }
 
 async function newGameSaveContinue(context, base) {
-  console.log('-- (b) New game to the first region screen');
+  console.log('-- (b) New game: the story scene, the first fight and the prologue to the first region screen');
   const g = await open(context, base);
   await g.screen('main_menu', 60000);
   await g.click('menu.new_game');
@@ -185,8 +205,21 @@ async function newGameSaveContinue(context, base) {
   const world = ng && ng.state && ng.state.selected;
   check(!!world, `the new game screen selects a world (${world})`);
   await g.click('new_game.start');
-  const region = await g.until((p) => p.screen === 'region_map' && p.game && p.game.location, 30000);
-  check(!!region && region.game.world === world, `Start reaches the region map in ${world} (${region && region.game.location})`);
+  const scene = await g.screen('vignette', 30000);
+  check(!!scene, 'Start opens the story scene');
+  if (!scene) return;
+  const fight = await prologue(g, (p) => p.screen === 'battle', 60000);
+  check(!!fight, `Space through the scene reaches the first fight (${fight ? fight.screen : 'no fight'})`);
+  if (!fight) return;
+  const control = await g.until((p) => p.screen === 'battle' && p.state && !p.state.beat, 15000);
+  check(!!control, 'the battle beat ends and the fight takes input');
+  await g.page.keyboard.press('a');
+  const won = await g.until((p) => p.screen !== 'battle' || (p.state && p.state.outcome), 240000);
+  check(!!won && (won.screen !== 'battle' || won.state.outcome === 'won'), `A plays the first fight to a win (${won && (won.state && won.state.outcome)})`);
+  const results = await prologue(g, (p) => p.screen === 'battle_results', 30000);
+  check(!!results, 'the results show');
+  const region = await prologue(g, (p) => p.screen === 'region_map' && p.game && p.game.location && !(p.state && p.state.arrival), 600000);
+  check(!!region && region.game.world === world, `the prologue reaches the region map in ${world} (${region && region.game.location})`);
   if (!region) return;
 
   console.log('-- (c) save, reload the page, Continue');
@@ -222,6 +255,53 @@ async function newGameSaveContinue(context, base) {
   await g.page.close();
 }
 
+// Plays the opening on as a player would until a snapshot `done` accepts (within `ms`, else null): Space through a
+// story scene, a fight on the battle's autoplay (A; Enter moves a talk or the ended fight on), Continue on the results;
+// a story stage or a beat plays by itself.
+async function prologue(g, done, ms) {
+  const end = Date.now() + ms;
+  for (;;) {
+    const p = await g.probe();
+    if (p && done(p)) return p;
+    if (Date.now() > end) return null;
+    const st = (p && p.state) || {};
+    if (p && p.screen === 'vignette') {
+      await g.page.keyboard.press('Space');
+    } else if (p && p.screen === 'battle' && !st.beat) {
+      if (st.outcome || st.talk) await g.page.keyboard.press('Enter');
+      else if (!st.auto) await g.page.keyboard.press('a');
+    } else if (p && p.screen === 'battle_results' && g.widget(p, 'results.continue')) {
+      await g.tap(p, 'results.continue');
+    }
+    await sleep(300);
+  }
+}
+
+// WEBFIX2 (d): a page whose drawing buffer would pass the GPU's largest texture.
+const CAP_PAGE = { width: 9000, height: 5000 };
+async function cap(browser, base) {
+  console.log(`-- buffer cap: a ${CAP_PAGE.width}x${CAP_PAGE.height} page`);
+  const context = await browser.newContext({ viewport: CAP_PAGE });
+  try {
+    const g = await open(context, base);
+    const menu = await g.screen('main_menu', 60000);
+    check(!!menu, 'the game boots to the main menu');
+    const [w, h, max, dpr] = await g.page.evaluate(() => {
+      const c = document.getElementById('aegis');
+      const gl = document.createElement('canvas').getContext('webgl2');
+      return [c.width, c.height, gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : 0, window.devicePixelRatio];
+    });
+    const asked = [CAP_PAGE.width * dpr, CAP_PAGE.height * dpr];
+    check(max > 0 && w <= max && h <= max, `the drawing buffer ${w} x ${h} is within the largest texture ${max} (asked ${asked[0]} x ${asked[1]})`);
+    check(Math.max(...asked) <= max || Math.max(w, h) === max, `the buffer is capped to the limit, not further (${w} x ${h})`);
+    await g.click('menu.new_game');
+    check(!!(await g.screen('new_game')), 'a click lands on the capped buffer (New game opens)');
+    g.noErrors('cap');
+  } finally {
+    await context.close();
+  }
+}
+
 // A browser with no WebGL (`--disable-3d-apis`): the renderer cannot start, so the shell stops and shows the reason
 // in place of the canvas; the page probe stops answering new frames.
 async function noGl(base) {
@@ -251,11 +331,15 @@ async function noGl(base) {
   const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   try {
     // A fresh context (its own localStorage) per part, so no part sees another's saves or settings.
-    for (const part of [boot, query, arena, newGameSaveContinue]) {
-      const context = await browser.newContext({ viewport: { width: 1400, height: 800 } });
-      await part(context, base);
-      await context.close();
+    for (const [i, viewport] of SIZES.entries()) {
+      console.log(`== page ${viewport.width}x${viewport.height}`);
+      for (const part of i === 0 ? [boot, query, arena, newGameSaveContinue] : [boot, newGameSaveContinue]) {
+        const context = await browser.newContext({ viewport });
+        await part(context, base);
+        await context.close();
+      }
     }
+    await cap(browser, base);
     await noGl(base);
   } finally {
     await browser.close();

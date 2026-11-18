@@ -1141,6 +1141,9 @@ impl SettingsScreen {
                     r.push(Row::Toggle("fullscreen", "Fullscreen", "The browser's fullscreen, for this session"));
                 }
                 r.push(Row::Choice("text_scale", "Text Size", "Scale of dialogue, tooltips and readouts (85%-130%)"));
+                // PR7-15 (b), FB-287 Option A: the Gameplay tab's Map zoom row also here, on the web too (the web has no
+                // window size to make the map bigger)
+                r.push(Row::Choice("map_zoom", "Map Camera Zoom", "Camera zoom on street and hub maps"));
                 if shown("fps_cap") {
                     r.push(Row::Choice("fps_cap", "Frame Rate Cap", "The most frames drawn each second"));
                 }
@@ -2868,6 +2871,39 @@ mod settings_tests {
         s.click_id(&mut cx, "settings.fullscreen").expect("fullscreen");
         assert_eq!(WindowShow::of(&cx.settings.v) == WindowShow::Fullscreen, !was, "at once");
         assert!(!s.display_dirty(&cx) && s.confirm_left(Instant::now()).is_none(), "no staging, no confirm");
+    }
+
+    /// PR7-15 (b) (FB-287 Option A): Map Camera Zoom is on the Display tab, desktop and web, full screen and popup, and
+    /// stays on Gameplay; a pick on Display applies at once (no display staging) and Gameplay shows the same value.
+    #[test]
+    fn map_zoom_is_on_the_display_tab_and_on_gameplay() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        for web in [false, true] {
+            for popup in [false, true] {
+                let base = if popup { SettingsScreen::in_game(&cx) } else { SettingsScreen::new(&cx) };
+                let mut s = if web { base.as_web() } else { base };
+                let w = redraw(&mut s, &mut cx, &mut g);
+                assert!(has(&w, "settings.map_zoom"), "Display has Map zoom (web {web}, popup {popup})");
+                s.click_id(&mut cx, "settings.tab.gameplay").expect("the Gameplay tab");
+                let w = redraw(&mut s, &mut cx, &mut g);
+                assert!(has(&w, "settings.map_zoom"), "Gameplay keeps Map zoom (web {web}, popup {popup})");
+            }
+        }
+        let mut s = SettingsScreen::new(&cx);
+        let w = redraw(&mut s, &mut cx, &mut g);
+        let row = w.iter().find(|x| x["id"] == "settings.map_zoom").expect("the row").clone();
+        let next = crate::mapview::zoom_steps().map(|z| format!("{z}x")).find(|z| Some(z.as_str()) != row["text"].as_str()).expect("another step");
+        g.kit.open = Some("settings.map_zoom".to_string());
+        redraw(&mut s, &mut cx, &mut g);
+        let at = crate::mapview::zoom_steps().position(|z| format!("{z}x") == next).unwrap();
+        s.click_id(&mut cx, &format!("settings.map_zoom.opt.{at}")).expect("the option");
+        g.kit.open = None;
+        assert!(!s.display_dirty(&cx) && s.confirm_left(Instant::now()).is_none(), "no staging, no confirm");
+        let picked = cx.settings.v["map_zoom"].clone();
+        assert_eq!(format!("{}x", picked.as_f64().unwrap()), next, "applied at once");
+        s.click_id(&mut cx, "settings.tab.gameplay").expect("the Gameplay tab");
+        let w = redraw(&mut s, &mut cx, &mut g);
+        assert_eq!(w.iter().find(|x| x["id"] == "settings.map_zoom").expect("the row")["text"], json!(next), "Gameplay shows the pick");
     }
 
     /// Restore defaults resets every row at once but stages the default display for Apply.

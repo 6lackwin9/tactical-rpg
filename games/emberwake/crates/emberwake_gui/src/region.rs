@@ -1660,7 +1660,8 @@ impl RegionMap {
         let pane = Rect::new(x, top, w, content.min(H - 4 - top));
         let whole = Rect::new(x, head.y, w, pane.y + pane.h - head.y);
         ui.p.fill(pane, th().game("map_pane", PANE));
-        ui.p.panel(pane, rgba(0, 0, 0, 0), th().edge, 3.0);
+        // WEBFIX2 (a): the legend's rows in the HUD frame (the head is its section button)
+        crate::hud::hud_panel(ui, pane, rgba(0, 0, 0, 0), th().edge, 3.0);
         let off = ui.scroll_begin("legend.rows", pane, content);
         let px = ui.icon_px(Rect::new(0, 0, ICON + 4, ICON + 4));
         let spx = ui.icon_px(Rect::new(0, 0, SERVICE + 4, SERVICE + 4));
@@ -1726,7 +1727,10 @@ impl RegionMap {
         let r = Rect::new(4, H - 4 - h, w, h);
         let hover = !modal && ui.hover(r);
         ui.p.fill(r, th().game("map_pane", PANE));
-        ui.p.panel(r, rgba(0, 0, 0, 0), if hover { th().gold } else { th().edge }, 3.0);
+        crate::hud::hud_panel(ui, r, rgba(0, 0, 0, 0), if hover { th().gold } else { th().edge }, 3.0);
+        if hover && th().frame(crate::hud::HUD_FRAME).is_some() {
+            ui.p.panel(r, rgba(0, 0, 0, 0), th().gold, 3.0);
+        }
         let last_y = r.y + 3 + (lines.len() as i32 - 1) * lh;
         draw_glyph(&mut ui.p, if self.log_open { Glyph::ChevronDown } else { Glyph::ChevronRight }, Rect::new(r.x + 4, last_y + (lh - 8) / 2, 8, 8), if hover { th().gold } else { th().dim });
         for (i, l) in lines.iter().enumerate() {

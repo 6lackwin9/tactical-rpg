@@ -94,7 +94,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
 
     // -- Top strip: the selected hero's six blocks and the round controls.
     g.panels = vec![("strip", Rect::new(2, 2, W - 4, 24)), ("grid", Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4)), ("bar", Rect::new(2, 322, W - 4, 36))];
-    ui.p.panel(Rect::new(2, 2, W - 4, 24), th().game("battle_panel", PANEL), th().edge, RADIUS);
+    crate::hud::hud_panel(&mut ui, Rect::new(2, 2, W - 4, 24), th().game("battle_panel", PANEL), th().edge, RADIUS);
     let hero_name = sel.map(|u| w.units[u].name.clone()).unwrap_or_else(|| "No hero".into());
     // UI5: the strip row leads with the hero's intent glyph (the board and the cards share it)
     let title_w = match sel.and_then(round_of) {
@@ -451,7 +451,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     }
 
     // -- Left: party cards and the selected hero.
-    ui.p.panel(Rect::new(2, 28, 124, 290), th().game("battle_panel", PANEL), th().edge, RADIUS);
+    crate::hud::hud_panel(&mut ui, Rect::new(2, 28, 124, 290), th().game("battle_panel", PANEL), th().edge, RADIUS);
     let alive = w.allies.iter().filter(|a| w.units[**a].is_active()).count();
     ui.p.text(8.0, 32.0, &format!("Party {alive}/{}", w.allies.len()), TITLE, ALLY);
     let mut y = 44;
@@ -789,7 +789,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
 
     // -- Right: hostile cards and the hovered (or first) foe's detail card.
     let right = Rect::new(W - 126, 28, 124, 290);
-    ui.p.panel(right, th().game("battle_panel", PANEL), th().edge, RADIUS);
+    crate::hud::hud_panel(&mut ui, right, th().game("battle_panel", PANEL), th().edge, RADIUS);
     let foes_active = w.enemies.iter().filter(|e| w.units[**e].is_active()).count();
     ui.p.text(right.x as f32 + 6.0, 32.0, &format!("Hostiles {foes_active}"), TITLE, th().foe);
     let mut y = 44;
@@ -913,7 +913,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     }
 
     // -- Bottom bar: playback, round and status, the last log line.
-    ui.p.panel(Rect::new(2, 322, W - 4, 36), th().game("battle_panel", PANEL), th().edge, RADIUS);
+    crate::hud::hud_panel(&mut ui, Rect::new(2, 322, W - 4, 36), th().game("battle_panel", PANEL), th().edge, RADIUS);
     ui.button_full("bar.restart", Rect::new(6, 325, 40, 14), "Restart", Action::Restart, !g.world_mode(), false, BODY, vec![("Restart the battle (R)".into(), th().text)]);
     ui.button_full("bar.step", Rect::new(48, 325, 34, 14), "Step", Action::Step, !planning || s.plan_confirmed, false, BODY, vec![("Resolve one action (Space)".into(), th().text)]);
     // Test Arena only: leave at any time (Esc does the same); a world battle is left only through its end, and its Menu
@@ -995,7 +995,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         // ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the resolver log with the encounter's phase and kill lines
         let log = s.log_lines(0, 0);
         ui.push("log.panel", "panel", format!("{} lines", log.len()), r, true, true, Some(Action::Step), Vec::new());
-        ui.p.panel(r, th().game("log_fill", rgba(10, 14, 24, 246)), th().edge, 3.0);
+        crate::hud::hud_panel(&mut ui, r, th().game("log_fill", rgba(10, 14, 24, 246)), th().edge, 3.0);
         ui.p.text(r.x as f32 + 6.0, r.y as f32 + 3.0, &format!("Combat log ({} entries)", log.len()), TITLE, th().gold);
         // the rows: text, colour, x offset, a rule after it; INPUT1 PB4: a timeline battle's lines under their round's
         // "Round <r>" and their part's DIM "Block <b>" ("Round start", "Round end") with a 1 px rule, 6 px in
@@ -1079,7 +1079,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             }
         }
         ui.push("timeline.backdrop", "backdrop", "", r, true, false, Some(Action::TimelinePick(None)), Vec::new());
-        ui.p.panel(r, th().game("timeline_fill", rgba(10, 14, 24, 250)), th().edge, RADIUS);
+        crate::hud::hud_panel(&mut ui, r, th().game("timeline_fill", rgba(10, 14, 24, 250)), th().edge, RADIUS);
         let on_track = |k: &str| Action::TimelinePick(timeline_view::unit_of(k));
         let faces = &mut g.timeline_faces;
         let icon = |ui: &mut Ui<Action>, track: &aegis_ui::timeline::Track, sq: Rect| {
