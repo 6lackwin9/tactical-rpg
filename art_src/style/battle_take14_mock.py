@@ -139,7 +139,7 @@ def header(img, d, shot, cx, cy, me):
     if e:
         tx = x + w - 36
         d.text((tx + 2, cy + 69), "(", font=B.SMALL, fill=B.PARCH)
-        star(d, tx + 8, cy + 72, 9)
+        star(d, tx + 8, cy + 73, 9)
         d.text((tx + 19, cy + 69), f"{e})", font=B.SMALL, fill=B.PARCH)
     x += w + 4
     T13.tag(d, x, cy + 68, f"BREAK in block {brk}", (120, 70, 20))
