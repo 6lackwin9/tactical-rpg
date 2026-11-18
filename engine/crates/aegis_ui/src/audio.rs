@@ -33,6 +33,9 @@ const FIRST_FADE_SEC: f32 = 2.0;
 /// A volume slider's sample plays at most this often while it is dragged (Godot VolumePreview.INTERVAL).
 const PREVIEW_INTERVAL: Duration = Duration::from_millis(150);
 
+/// The engine's setting key: silence every sound while the window lacks the focus (default on).
+pub const MUTE_IN_BACKGROUND: &str = "mute_in_background";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Bus {
     Music,
@@ -69,6 +72,8 @@ struct Track {
 
 struct State {
     levels: Levels,
+    /// The window has the focus (the shell's `set_focused`; true until told otherwise).
+    focused: bool,
     sfx: Vec<(Sink, Instant)>,
     ui: Vec<(Sink, Instant)>,
     tracks: Vec<Track>,
@@ -189,13 +194,40 @@ impl Audio {
         hit
     }
 
-    /// The four levels and mute from the settings (the engine's keys: master, music, effects, interface 0-100, mute).
-    /// The music tracks take them at the next `tick`: the shell sets the saved levels and a screen may set draft ones
-    /// in the same frame, and setting the sinks on each call made the music flip between both levels every frame.
+    /// The four levels and mute from the settings (the engine's keys: master, music, effects, interface 0-100, mute,
+    /// and `MUTE_IN_BACKGROUND`: silent while the window lacks the focus). The music tracks take them at the next
+    /// `tick`: the shell sets the saved levels and a screen may set draft ones in the same frame, and setting the sinks
+    /// on each call made the music flip between both levels every frame.
     pub fn set_levels(&self, settings: &Value) {
         let level = |k: &str| (settings[k].as_f64().unwrap_or(100.0) / 100.0).clamp(0.0, 1.0) as f32;
-        let mute = settings["mute"].as_bool().unwrap_or(false);
-        self.state.borrow_mut().levels = Levels { master: if mute { 0.0 } else { level("master") }, music: level("music"), sfx: level("effects"), ui: level("interface") };
+        let mut st = self.state.borrow_mut();
+        let away = !st.focused && settings[MUTE_IN_BACKGROUND].as_bool().unwrap_or(true);
+        let mute = settings["mute"].as_bool().unwrap_or(false) || away;
+        st.levels = Levels { master: if mute { 0.0 } else { level("master") }, music: level("music"), sfx: level("effects"), ui: level("interface") };
+    }
+
+    /// The window gained (true) or lost (false) the focus (the shell, from the window's focus events). Only the master
+    /// level follows, at the next `set_levels`; the saved volumes never change. Losing the focus also silences the
+    /// effects already playing when `settings` mutes in the background (they are short and not brought back).
+    pub fn set_focused(&self, focused: bool, settings: &Value) {
+        self.state.borrow_mut().focused = focused;
+        self.set_levels(settings);
+        let st = self.state.borrow();
+        if st.levels.master == 0.0 {
+            for (sink, _) in st.sfx.iter().chain(st.ui.iter()) {
+                sink.set_volume(0.0);
+            }
+        }
+    }
+
+    /// Whether the window has the focus as far as the audio knows (`set_focused`).
+    pub fn focused(&self) -> bool {
+        self.state.borrow().focused
+    }
+
+    /// The level `bus` plays at now (master times the bus; 0 when muted), 0-1.
+    pub fn level(&self, bus: Bus) -> f32 {
+        self.state.borrow().levels.of(bus)
     }
 
     /// Plays `rel` once on `bus` at that bus's level; a missing file is silent.
@@ -409,6 +441,7 @@ impl State {
     fn new() -> Self {
         Self {
             levels: Levels { master: 1.0, music: 0.8, sfx: 0.8, ui: 0.8 },
+            focused: true,
             sfx: Vec::new(),
             ui: Vec::new(),
             tracks: Vec::new(),

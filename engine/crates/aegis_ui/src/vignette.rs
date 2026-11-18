@@ -1020,7 +1020,9 @@ impl<G: Context> Screen<G> for VignetteScreen<G> {
         self.portrait.overlays = Mount::resolve(self.overlays, &cx.settings);
         draw_with(&mut ui, &mut cx.art, &self.player, &self.palette, still, &mut self.portrait);
         let done = self.player.done();
-        ui.push("vignette.next", "stage", "", Rect::new(0, 0, W, H), !done, false, Some(VAct::Next), tip("Continue", "A click, Space or Enter moves the scene on."));
+        // No hover card on the advance area (PR7-26): a card trailing the pointer over the whole stage covers the
+        // scene; the corner hint already says how to move on.
+        ui.push("vignette.next", "stage", "", Rect::new(0, 0, W, H), !done, false, Some(VAct::Next), Vec::new());
         if self.player.reel.skippable && !done {
             let w = (ui.p.text_w("Skip", SMALL) + 14.0).ceil() as i32;
             ui.button_full("vignette.skip", Rect::new(W - w - 6, 6, w, 13), "Skip", VAct::Skip, true, false, SMALL, tip("Skip", "Esc or a right click skips the scene."));

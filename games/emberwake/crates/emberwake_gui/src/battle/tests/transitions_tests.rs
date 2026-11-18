@@ -74,7 +74,7 @@ fn data(go_on: bool) -> Data {
 }
 
 /// A game of the scratch world, not a debug one (its fights open the battle screen), on the flat board.
-fn beat_cx(go_on: bool, reduce: bool) -> Cx {
+pub(super) fn beat_cx(go_on: bool, reduce: bool) -> Cx {
     let mut cx = game_cx();
     let d = Arc::new(data(go_on));
     let gs = emberwake_world::new_game::create_for_world(&d, WORLD, 1).expect("the scratch world starts a game");
@@ -91,7 +91,7 @@ fn fight() -> json::Dict {
 }
 
 /// The world fight of runner `runner`.
-fn battle(cx: &mut Cx, runner: &str) -> BattleScreen {
+pub(super) fn battle(cx: &mut Cx, runner: &str) -> BattleScreen {
     let b = BattleScreen::world(cx, &fight(), runner).expect("the world fight starts");
     cx.nav.clear();
     b

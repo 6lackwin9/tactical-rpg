@@ -1,0 +1,174 @@
+{
+	"format": "fc_save",
+	"game_state": {
+		"autoplay": {
+			"heroes": {},
+			"on": false,
+			"party": "balanced"
+		},
+		"campaign": {
+			"act": 1,
+			"armed": [],
+			"checkpoints": {},
+			"fired": [],
+			"meters": {
+				"alert": {
+					"label": "",
+					"value": 0,
+					"visible": true
+				},
+				"doom_clock": {
+					"due": 42,
+					"label": "",
+					"running": true,
+					"visible": true
+				}
+			},
+			"pending": [],
+			"run": "d853958b"
+		},
+		"explore": {
+			"last_rest": "sunk_ward:sluice_undercroft",
+			"last_safe": "sunk_ward:sluice_undercroft",
+			"loc_steps": 0,
+			"next_at": 16,
+			"steps": 0
+		},
+		"flags": {
+			"sunk_ward.debate1_seen": true,
+			"sunk_ward.sluice_undercroft.visited": true
+		},
+		"location_id": "sunk_ward:sluice_undercroft",
+		"loot_claimed": [
+			"sunk_ward:loot_poultices"
+		],
+		"party": {
+			"active_ids": [],
+			"gold": 85,
+			"members": [
+				{
+					"base_unit": "founder_kaelen",
+					"carried": [],
+					"equipment": {},
+					"hp_lost": 0,
+					"id": "kaelen",
+					"learned_skills": [],
+					"loadout": {
+						"class": [],
+						"extra": []
+					},
+					"lore_ref": "sunk_ward:kaelen",
+					"passives": [],
+					"pouch": [],
+					"spend": {},
+					"total_xp": 144
+				},
+				{
+					"base_unit": "founder_vesper",
+					"carried": [],
+					"equipment": {},
+					"hp_lost": 0,
+					"id": "vesper",
+					"learned_skills": [],
+					"loadout": {
+						"class": [],
+						"extra": []
+					},
+					"lore_ref": "sunk_ward:vesper",
+					"passives": [],
+					"pouch": [],
+					"spend": {},
+					"total_xp": 144
+				},
+				{
+					"base_unit": "founder_maren",
+					"carried": [],
+					"equipment": {},
+					"hp_lost": 0,
+					"id": "maren",
+					"learned_skills": [],
+					"loadout": {
+						"class": [],
+						"extra": []
+					},
+					"lore_ref": "sunk_ward:maren",
+					"passives": [],
+					"pouch": [],
+					"spend": {},
+					"total_xp": 144
+				},
+				{
+					"base_unit": "founder_hollis",
+					"carried": [],
+					"equipment": {},
+					"hp_lost": 0,
+					"id": "hollis",
+					"learned_skills": [],
+					"loadout": {
+						"class": [],
+						"extra": []
+					},
+					"lore_ref": "sunk_ward:hollis",
+					"passives": [],
+					"pouch": [],
+					"spend": {},
+					"total_xp": 144
+				}
+			],
+			"stash": {
+				"rock_salt": 1,
+				"slot_eye_tissue": 1,
+				"sulfur_poultice": 2
+			},
+			"supplies": 10,
+			"together": {
+				"hollis|kaelen": 1,
+				"hollis|maren": 1,
+				"hollis|vesper": 1,
+				"kaelen|maren": 1,
+				"kaelen|vesper": 2,
+				"maren|vesper": 1
+			}
+		},
+		"position": [
+			6,
+			17
+		],
+		"purses": {
+			"sunk_ward:enc_pro_0b": 1,
+			"sunk_ward:enc_pro_0c": 1
+		},
+		"quests": {},
+		"reward_paid": {
+			"sunk_ward:enc_pro_0b": [
+				"mortuary_flagellant#0",
+				"mortuary_flagellant#1",
+				"mortuary_flagellant#2"
+			],
+			"sunk_ward:enc_pro_0c": [
+				"footman_patrol#0",
+				"footman_patrol#1",
+				"footman_patrol#2",
+				"watch_crossbowman#0",
+				"objective"
+			]
+		},
+		"rng_seed": 1882966670,
+		"rolls": {
+			"loot": 9
+		},
+		"shops": {},
+		"story": {
+			"seen": [
+				"sunk_ward:vg_open",
+				"sunk_ward:vg_meat_market",
+				"sunk_ward:vg_bridge_cart",
+				"sunk_ward:vg_debate_1"
+			]
+		},
+		"time": 0,
+		"world_id": "sunk_ward"
+	},
+	"saved_at": 1795031539,
+	"version": 13
+}

@@ -955,4 +955,43 @@ pub(crate) mod tests {
         let character = progression::character_of(&d, &m).clone();
         assert_eq!(look_of_character(&d, &gs, &character).unspent, 0, "a world character has none");
     }
+
+    /// PR7-26 (`PLAYTEST-UI1` 4): the proof clip (only with `AEGIS_REVIEW_DIR` set): the first hero portrait with a
+    /// sidecar, composed at 240 px at 10 moments of a breath cycle, side by side in `portrait_clip.png` (the breath an
+    /// even scale, the rim eased).
+    #[test]
+    fn pr7_26_portrait_clip_shot() {
+        let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") else { return };
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/portraits/heroes");
+        let mut pngs: Vec<PathBuf> = std::fs::read_dir(&dir).expect("the heroes folder").filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|x| x == "png")).collect();
+        pngs.sort();
+        let png = pngs.iter().find(|p| p.with_extension("face.json").exists()).expect("a hero portrait with a sidecar");
+        let src = aegis_ui::art::load_png(png).expect("the portrait decodes");
+        let face = std::fs::read_to_string(png.with_extension("face.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()).and_then(|v| aegis_core::assets::parse_face(&v).ok());
+        let side = 240;
+        let frames = 10;
+        let mut strip = aegis_ui::canvas::Canvas::new(side * frames, side);
+        let mut g = gfx();
+        g.canvas = aegis_ui::canvas::Canvas::new(640, 360);
+        let mut fx = aegis_ui::portrait_fx::PortraitFx::new("pr7_26_clip");
+        let period = aegis_ui::portrait_fx::breath_period(fx.seed) as u64;
+        for k in 0..frames {
+            let now = 10_000 + k as u64 * period / frames as u64;
+            let mut p = aegis_ui::painter::Painter { c: &mut g.canvas, v: aegis_ui::painter::View::fit(640, 360), fonts: &mut g.fonts };
+            fx.draw_image(&mut p, &src, "clip", face.as_ref(), aegis_ui::canvas::Rect::new(0, 0, side, side), now, &aegis_ui::portrait_fx::PortraitOpts::default(), &mut aegis_ui::portrait_fx::Budget::default());
+            let img = fx.composed().expect("composed").clone();
+            for y in 0..img.h.min(side) {
+                for x in 0..img.w.min(side) {
+                    let i = ((y * img.w + x) * 4) as usize;
+                    let o = ((y * strip.w + k * side + x) * 4) as usize;
+                    strip.px[o..o + 4].copy_from_slice(&img.px[i..i + 4]);
+                }
+            }
+        }
+        let file = std::fs::File::create(std::path::Path::new(&out).join("portrait_clip.png")).unwrap();
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(file), strip.w as u32, side as u32);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&strip.px).unwrap();
+    }
 }
