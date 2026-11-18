@@ -12,7 +12,7 @@ use aegis_content::schema::is_id;
 use aegis_core::assets::hex_colour;
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_data::{
-    music_ask, split_token, step_keys, MusicAsk, AUDIO_DIR, CARDS_MAX, CARD_KEYS, CARD_STYLES, CARD_SUBTITLE_MAX, CARD_TEXT_MAX, CARD_TITLE_MAX, END_TO, FADE_MS_MAX, FIGHT_OUTCOMES, HOLD_MS_MAX, LAST_STEP_KINDS, MUSIC_DIR, MUSIC_EXT, MUSIC_NONE, STEPS_MAX, STEP_EFFECTS_MAX, STEP_KINDS, TOKEN_KINDS,
+    music_ask, split_token, step_keys, MusicAsk, AUDIO_DIR, CARDS_MAX, CARD_KEYS, CARD_STYLES, CARD_SUBTITLE_MAX, CARD_TEXT_MAX, CARD_TITLE_MAX, END_TO, FADE_MS_MAX, FIGHT_OUTCOMES, HOLD_MS_MAX, LAST_STEP_KINDS, MUSIC_DIR, MUSIC_EXT, MUSIC_NONE, RETRY_DAY_COST_MAX, STEPS_MAX, STEP_EFFECTS_MAX, STEP_KINDS, TOKEN_KINDS,
 };
 use serde_json::Value;
 
@@ -208,6 +208,19 @@ fn step_errors(v: &View, w: &str, i: usize, raw: &Value, last: bool) -> Vec<Stri
             errors.extend(required_ref(v, w, d, "encounter", "encounters", &label));
             errors.extend(enum_key(d, "on_lost", &FIGHT_OUTCOMES, &label));
             errors.extend(enum_key(d, "on_fled", &FIGHT_OUTCOMES, &label));
+            errors.extend(retry_errors(d, &label));
+        }
+        "camp_prep" => {
+            errors.extend(text_key(d, "text", CARD_TEXT_MAX, &label));
+            let keeper = json::s(d, "keeper");
+            if d.get("keeper").is_some_and(|k| !k.is_string()) {
+                errors.push(format!("{label}: keeper must be text."));
+            } else if !keeper.is_empty() {
+                errors.extend(ref_errors(v, w, &format!("{label} keeper"), "characters", &keeper));
+            }
+            if last {
+                errors.push(format!("{label}: a camp prep step needs a step after it."));
+            }
         }
         "effects" => {
             let raw = d.get("effects").cloned().unwrap_or(Value::Array(Vec::new()));
@@ -230,6 +243,26 @@ fn step_errors(v: &View, w: &str, i: usize, raw: &Value, last: bool) -> Vec<Stri
     }
     if !last && LAST_STEP_KINDS.contains(&kind.as_str()) {
         errors.push(format!("{label}: {} may only be the last step.", LAST_STEP_KINDS.join(" and ")));
+    }
+    errors
+}
+
+/// PR6-10: a fight step's `retry_day_cost` (0-RETRY_DAY_COST_MAX days) and `echo_fallen` (true or false), both only on a
+/// fight that retries (`on_lost` or `on_fled` `retry`).
+fn retry_errors(d: &Dict, label: &str) -> Vec<String> {
+    let mut errors = Vec::new();
+    let cost = d.get("retry_day_cost");
+    if cost.is_some_and(|c| !int_in(c, 0, RETRY_DAY_COST_MAX)) {
+        errors.push(format!("{label}: retry_day_cost must be a whole number 0-{RETRY_DAY_COST_MAX}."));
+    }
+    let echo = d.get("echo_fallen");
+    if echo.is_some_and(|e| !e.is_boolean()) {
+        errors.push(format!("{label}: echo_fallen must be true or false."));
+    }
+    let retries = ["on_lost", "on_fled"].iter().any(|k| json::s(d, k) == "retry");
+    let asks = cost.is_some_and(|c| json::is_int(c) && json::to_int(c) > 0) || echo.and_then(Value::as_bool).unwrap_or(false);
+    if asks && !retries {
+        errors.push(format!("{label}: retry_day_cost and echo_fallen need on_lost or on_fled retry."));
     }
     errors
 }

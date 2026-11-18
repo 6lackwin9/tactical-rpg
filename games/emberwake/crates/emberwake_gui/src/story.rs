@@ -4,7 +4,8 @@
 //! `story`, the `enter` and `end` steps by leaving for the region map or the main menu; queued vignettes play first
 //! (Q9). On the maps, `map_tick` hands over to the stage while a sequence runs and plays the vignette queue (W2). The
 //! card text takes the theme's colours (`palette`). Story-free: it names no place, person or flag (KIT2-UI moves the
-//! screens to the kit later, KIT1 KQ4).
+//! screens to the kit later, KIT1 KQ4). PR6-10 (`PK6_PK7_BOSSES_ENDINGS.md` 3): a `camp_prep` step opens
+//! `StoryCampPrep` (party, the keeper's services, save, one free rest, then on past the point of no return).
 
 use crate::screens::{show_errors, Cx, GameCx, Nav, Screen};
 use aegis_core::json::{self, s, s_or, Dict};
@@ -220,6 +221,11 @@ impl StoryStage {
                 }
             }
             Some(Step::Enter { .. }) | Some(Step::End { .. }) => self.finish(cx),
+            // PR6-10: the camp before the point of no return; its Go on moves the story on and closes it
+            Some(Step::CampPrep { text, keeper }) => {
+                cx.nav.push(Nav::Push(Box::new(StoryCampPrep::new(&text, &keeper))));
+                self.waiting = true;
+            }
             // Q2: `current` never gives an effects step
             Some(Step::Effects { .. }) => self.error = vec!["The story stopped at an effects step.".into()],
         }
@@ -304,12 +310,133 @@ impl Screen<GameCx> for StoryStage {
             Step::Effects { .. } => "effects",
             Step::Enter { .. } => "enter",
             Step::End { .. } => "end",
+            Step::CampPrep { .. } => "camp_prep",
         });
         json!({"sequence": running.as_ref().map(|r| r.sequence.clone()), "step": running.as_ref().map(|r| r.step), "kind": step, "waiting": self.waiting, "error": self.error})
     }
 
     fn music(&self, _cx: &Cx) -> Option<String> {
         self.music.clone()
+    }
+
+    widget_plumbing!();
+}
+
+/// PR6-10: the answer tag of the ask before the prep screen's Go on.
+pub const ASK_PREP_GO: &str = "story.prep_go";
+/// PR6-10: the ask before going on past the point of no return.
+pub const PREP_GO_ASK: &str = "Go on? There is no coming back to prepare.";
+
+#[derive(Debug, Clone, Copy)]
+pub enum PrepAct {
+    Party,
+    Services,
+    Save,
+    Rest,
+    GoOn,
+}
+
+/// PR6-10 (`PK6_PK7_BOSSES_ENDINGS.md` 3): the one-time camp a `camp_prep` step opens over the story stage: its warning
+/// (the step's `text`, else the kit's `CAMP_PREP_TEXT`), then Party (the character screen: the active four, gear,
+/// pouches, passives), the step keeper's services (its shop and recipes; only when the step names a `keeper`), Save
+/// (the save slots), one free Rest with no clock tick (`story::prep_rest`) and Go on, which asks first, then moves the
+/// story on (`story::prep_done`) and closes. No world map travel; Esc does nothing (no game menu while a sequence runs).
+pub struct StoryCampPrep {
+    text: String,
+    keeper: String,
+    w: Vec<Widget<PrepAct>>,
+}
+
+impl StoryCampPrep {
+    pub fn new(text: &str, keeper: &str) -> Self {
+        let text = if text.is_empty() { emberwake_data::CAMP_PREP_TEXT.to_string() } else { text.to_string() };
+        Self { text, keeper: keeper.to_string(), w: Vec::new() }
+    }
+
+    /// The prep's buttons: (id, label, action, enabled).
+    fn buttons(&self, cx: &Cx) -> Vec<(&'static str, String, PrepAct, bool)> {
+        let mut out = vec![("prep.party", "Party".to_string(), PrepAct::Party, true)];
+        if !self.keeper.is_empty() {
+            let who = s_or(cx.data.resolve(&cx.gs().world_id, "characters", &self.keeper), "name", &self.keeper);
+            out.push(("prep.services", format!("Visit {who}"), PrepAct::Services, true));
+        }
+        out.push(("prep.save", "Save".to_string(), PrepAct::Save, true));
+        let open = story::prep_rest_open(&cx.data, cx.gs());
+        out.push(("prep.rest", if open { "Rest (free)".to_string() } else { "Rested".to_string() }, PrepAct::Rest, open));
+        out.push(("prep.go_on", "Go on".to_string(), PrepAct::GoOn, true));
+        out
+    }
+
+    fn act(&mut self, cx: &mut Cx, a: PrepAct) {
+        match a {
+            PrepAct::Party => {
+                let screen = crate::party::Character::new(cx, "", "stats");
+                cx.nav.push(Nav::Push(Box::new(screen)));
+            }
+            PrepAct::Services => {
+                let mut screen = crate::talk::ServiceScreen::default();
+                screen.talk(cx, &self.keeper.clone());
+                cx.nav.push(Nav::Push(Box::new(screen)));
+            }
+            PrepAct::Save => cx.nav.push(Nav::Push(Box::new(crate::menus::Slots::new(true)))),
+            PrepAct::Rest => {
+                let d = cx.data.clone();
+                let res = story::prep_rest(&d, cx.gs_mut());
+                if !json::b(&res, "ok", false) {
+                    show_errors(cx, json::sget(&res, "errors"));
+                }
+                log_notes(cx, &res);
+            }
+            PrepAct::GoOn => cx.ask_tag_no(PREP_GO_ASK, ASK_PREP_GO),
+        }
+    }
+
+    /// Yes to the Go on ask: the story moves on and the prep closes (the stage plays the next step).
+    fn go_on(&mut self, cx: &mut Cx) {
+        let d = cx.data.clone();
+        let res = story::prep_done(&d, cx.gs_mut());
+        if json::b(&res, "ok", false) {
+            log_notes(cx, &res);
+        } else {
+            // the errors show, and the prep still closes so the story stage is never stranded behind it
+            show_errors(cx, json::sget(&res, "errors"));
+        }
+        cx.nav.push(Nav::Pop);
+    }
+}
+
+impl Screen<GameCx> for StoryCampPrep {
+    fn id(&self) -> &'static str {
+        "story_camp_prep"
+    }
+
+    fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        let buttons = self.buttons(cx);
+        let mut ui: Ui<PrepAct> = Ui::new(g, mouse, live);
+        ui.p.fill(Rect::new(0, 0, W, H), th().stage);
+        let r = Rect::new(120, 80, 400, 200);
+        ui.frame(r, "Camp", false);
+        let y = ui.para(r.x + 10, r.y + 30, r.w - 20, &self.text, BODY, th().text) + 10;
+        let mut by = y;
+        for (id, label, act, enabled) in buttons {
+            ui.button(id, Rect::new(r.x + (r.w - 160) / 2, by, 160, 16), &label, act, enabled);
+            by += 20;
+        }
+        self.w = ui.widgets;
+    }
+
+    /// No game menu while a sequence runs (Q8): Esc and right click do nothing here.
+    fn back(&mut self, _cx: &mut Cx) {}
+
+    fn tick(&mut self, cx: &mut Cx) {
+        if cx.take_answer(ASK_PREP_GO) {
+            self.go_on(cx);
+        }
+    }
+
+    fn state(&self, cx: &Cx) -> Value {
+        let rest_open = cx.game.as_ref().is_some_and(|g| story::prep_rest_open(&cx.data, &g.gs));
+        json!({"text": self.text, "keeper": self.keeper, "rest_open": rest_open})
     }
 
     widget_plumbing!();
@@ -359,6 +486,9 @@ pub(crate) mod tests {
         json!({"style": "text", "text": text})
     }
 
+    /// PR6-10: the `camp` sequence's retry cost (days).
+    const PREP_COST: i64 = 2;
+
     pub(crate) fn data() -> Data {
         let vignettes = json!([
             {"id": "v_intro", "name": "Intro", "cards": [text_card("The bells."), {"style": "title", "title": "Act 1", "subtitle": "The start"}]},
@@ -373,7 +503,12 @@ pub(crate) mod tests {
                 {"kind": "vignette", "vignette": "v_line"},
                 {"kind": "enter", "location": "alley", "anchor": ""}
             ]},
-            {"id": "side_story", "name": "Side", "steps": [{"kind": "vignette", "vignette": "v_news"}, {"kind": "end", "to": "menu"}]}
+            {"id": "side_story", "name": "Side", "steps": [{"kind": "vignette", "vignette": "v_news"}, {"kind": "end", "to": "menu"}]},
+            {"id": "camp", "name": "Camp", "steps": [
+                {"kind": "camp_prep", "keeper": "clerk"},
+                {"kind": "fight", "encounter": "fight_a", "on_lost": "retry", "retry_day_cost": PREP_COST, "echo_fallen": true},
+                {"kind": "end", "to": "map"}
+            ]}
         ]);
         let dialogues = json!([{"id": "talk", "start": "a", "services": false, "nodes": [
             {"id": "a", "text": "Well?", "choices": [
@@ -702,6 +837,91 @@ pub(crate) mod tests {
         }
         assert!(seen.iter().all(|o| o.0.abs() <= 1 && o.1 == 0), "at most 1 px, along x: {seen:?}");
         assert!(seen.iter().any(|o| *o != (0, 0)), "the card shakes");
+        let _ = std::fs::remove_dir_all(&cx.shot_dir);
+    }
+
+    /// PR6-10 (`PK6_PK7_BOSSES_ENDINGS.md` 3): the `camp_prep` step opens the camp over the stage: its warning (the kit's
+    /// default), Party, the keeper's services, Save, one free Rest (no time passes; then shown taken) and Go on, which
+    /// asks first and then moves the story to the fight and closes; Esc does nothing. A lost story fight with a retry day
+    /// cost passes its days and logs them. With `AEGIS_REVIEW_DIR` set it writes the camp at 1280 x 720 as
+    /// `story_camp_prep.png` there.
+    #[test]
+    fn a_camp_prep_step_opens_the_camp_whose_go_on_moves_the_story() {
+        let mut cx = story_cx(data());
+        let mut g = gfx();
+        let mut gs = new_game::create_for_world(&cx.data.clone(), "tale", 1).expect("a new game");
+        gs.story = Default::default();
+        let d = cx.data.clone();
+        assert!(json::b(&story::start(&d, &mut gs, "camp"), "ok", false));
+        enter_game(&mut cx, gs, -1, Vec::new());
+        let (_, mut stage) = take(&mut cx);
+        assert_eq!(stage.state(&cx)["kind"], json!("camp_prep"));
+        stage.tick(&mut cx);
+        let (how, mut prep) = take(&mut cx);
+        assert_eq!((how, prep.id()), ("push", "story_camp_prep"));
+        assert_eq!(stage.state(&cx)["waiting"], json!(true));
+        stage.tick(&mut cx);
+        assert!(cx.nav.is_empty(), "the stage waits on the camp");
+        prep.draw(&mut cx, &mut g, (-500, -500), true);
+        let st = prep.state(&cx);
+        assert_eq!((st["text"].clone(), st["keeper"].clone(), st["rest_open"].clone()), (json!(emberwake_data::CAMP_PREP_TEXT), json!("tale:clerk"), json!(true)));
+        let ids: Vec<Value> = prep.widgets().iter().map(|w| w["id"].clone()).collect();
+        assert_eq!(ids, [json!("prep.party"), json!("prep.services"), json!("prep.save"), json!("prep.rest"), json!("prep.go_on")]);
+        if let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") {
+            let mut big = gfx();
+            big.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+            big.view = aegis_ui::painter::View::fit(1280, 720);
+            prep.draw(&mut cx, &mut big, (-500, -500), true);
+            let file = std::fs::File::create(std::path::Path::new(&out).join("story_camp_prep.png")).unwrap();
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&big.canvas.px).unwrap();
+        }
+
+        // the doors: the character screen, the keeper's services, the save slots
+        for (id, screen) in [("prep.party", "character"), ("prep.services", "services"), ("prep.save", "save_slots")] {
+            prep.click_id(&mut cx, id).expect(id);
+            let (how, s) = take(&mut cx);
+            assert_eq!((how, s.id()), ("push", screen), "{id}");
+            cx.nav.clear();
+            cx.set_busy(false);
+        }
+        // the free rest: back to full, no time passes, once
+        let time = cx.gs().time;
+        cx.gs_mut().party.members[0].hp_lost = 3;
+        prep.click_id(&mut cx, "prep.rest").expect("Rest");
+        assert_eq!((cx.gs().party.members[0].hp_lost, cx.gs().time), (0, time));
+        assert!(cx.log.iter().any(|l| l == story::PREP_REST_TEXT));
+        prep.draw(&mut cx, &mut g, (-500, -500), true);
+        let rest = prep.widgets().into_iter().find(|w| w["id"] == "prep.rest").expect("the rest button");
+        assert_eq!(rest["enabled"], json!(false), "the rest is taken");
+        assert_eq!(prep.state(&cx)["rest_open"], json!(false));
+        prep.back(&mut cx);
+        assert!(cx.nav.is_empty(), "Esc does nothing (no game menu while a sequence runs)");
+
+        // Go on asks first; a Yes moves the story on and closes the camp
+        prep.click_id(&mut cx, "prep.go_on").expect("Go on");
+        let (how, ask) = take(&mut cx);
+        assert_eq!(how, "push");
+        assert_ne!(ask.id(), "story_camp_prep");
+        assert_eq!(step_of(&cx), Some(0), "nothing moves before the answer");
+        cx.answers.push(ASK_PREP_GO.to_string());
+        prep.tick(&mut cx);
+        assert!(matches!(cx.nav.as_slice(), [Nav::Pop]), "the camp closes");
+        assert_eq!(step_of(&cx), Some(1), "the story is at the fight");
+        cx.nav.clear();
+
+        // the fight lost: a retry that passes its days
+        stage.resume(&mut cx);
+        stage.tick(&mut cx);
+        let (_, mut fight) = take(&mut cx);
+        assert_eq!(fight.id(), "debug_fight");
+        fight.draw(&mut cx, &mut g, (-500, -500), true);
+        fight.click_id(&mut cx, "debug_fight.lost").expect("Lost");
+        assert_eq!((step_of(&cx), cx.gs().time), (Some(1), time + PREP_COST), "the retry keeps the step and passes its days");
+        assert!(cx.log.iter().any(|l| *l == story::retry_days_text(PREP_COST)));
+        assert_eq!(cx.gs().story.running.as_ref().map(|r| r.tries), Some(1));
         let _ = std::fs::remove_dir_all(&cx.shot_dir);
     }
 

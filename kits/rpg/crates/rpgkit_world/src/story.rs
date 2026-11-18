@@ -4,6 +4,8 @@
 //! (Q1-Q9): steps `vignette`, `fight` (runner `story`), `effects` (the dialogue effect body), `enter` and `end`. The
 //! game's story stage plays what `current` and `next_scene` give and reports back through `step_done`, `after_fight`,
 //! `finish` and `vignette_done`. A world without vignettes or sequences never fills the state, so it is not saved.
+//! PR6-10 (`PK6_PK7_BOSSES_ENDINGS.md` 3): step `camp_prep` (`prep_rest`, `prep_done`), a fight step's
+//! `retry_day_cost` (days pass on a retry) and `echo_fallen` (a retry fields echo units of departed members).
 
 use crate::data::Data;
 use crate::state::{qid_ok, GameState};
@@ -15,19 +17,37 @@ use serde_json::Value;
 
 /// 4.8: the keys of the saved `story` block and of its `running` part.
 pub const BLOCK_KEYS: [&str; 3] = ["running", "queue", "seen"];
-pub const RUNNING_KEYS: [&str; 2] = ["sequence", "step"];
+/// PR6-10: `tries` (retries of the running fight step) and `rested` (the prep step's free rest taken), each saved
+/// only when set.
+pub const RUNNING_KEYS: [&str; 4] = ["sequence", "step", "tries", "rested"];
 /// Q5: the log line of a lost or fled story fight that is tried again.
 pub const RETRY_TEXT: &str = "Try again.";
 /// Q1: the refusal of a second sequence.
 pub const RUNNING_TEXT: &str = "A story sequence is already running.";
 /// Q5: the runner source of a story fight.
 pub const FIGHT_SOURCE: &str = "story";
+/// PR6-10: the refusals of the prep step's calls.
+pub const NOT_PREP_TEXT: &str = "The story is not at a camp prep step.";
+pub const PREP_RESTED_TEXT: &str = "The free rest is already taken.";
+/// PR6-10: the log line of a prep step's free rest.
+pub const PREP_REST_TEXT: &str = "The party rests (no time passes).";
+/// PR6-10: the `story::fight` key holding how many echo units a retried fight fields (`battle::begin_world_with`).
+pub const ECHOES_KEY: &str = "echoes";
+
+/// PR6-10: the log line of a retry that costs `days` days.
+pub fn retry_days_text(days: i64) -> String {
+    format!("{days} day{} pass{}.", if days == 1 { "" } else { "s" }, if days == 1 { "es" } else { "" })
+}
 
 /// 4.8: the sequence that runs and the index of its current step.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Running {
     pub sequence: String,
     pub step: i64,
+    /// PR6-10: how many times the running fight step was retried (0 on any other step).
+    pub tries: i64,
+    /// PR6-10: the running camp prep step's free rest was taken.
+    pub rested: bool,
 }
 
 /// `gs.story` (4.8): written only when one of its parts is not empty.
@@ -49,7 +69,14 @@ impl Story {
     pub fn to_value(&self) -> Value {
         let mut out = Dict::new();
         if let Some(r) = &self.running {
-            out.insert("running".into(), Value::Object(json::obj([("sequence", r.sequence.clone().into()), ("step", json::int(r.step))])));
+            let mut run = json::obj([("sequence", r.sequence.clone().into()), ("step", json::int(r.step))]);
+            if r.tries > 0 {
+                run.insert("tries".into(), json::int(r.tries));
+            }
+            if r.rested {
+                run.insert("rested".into(), Value::Bool(true));
+            }
+            out.insert("running".into(), Value::Object(run));
         }
         if !self.queue.is_empty() {
             out.insert("queue".into(), json::strs(&self.queue));
@@ -72,8 +99,19 @@ impl Story {
         }
         if let Some(r) = o.get("running") {
             match r.as_object() {
-                Some(r) if r.keys().all(|k| RUNNING_KEYS.contains(&k.as_str())) && r.get("sequence").is_some_and(Value::is_string) && r.get("step").is_some_and(json::is_int) => {
-                    out.running = Some(Running { sequence: json::s(r, "sequence"), step: json::to_int(&r["step"]) });
+                Some(r)
+                    if r.keys().all(|k| RUNNING_KEYS.contains(&k.as_str()))
+                        && r.get("sequence").is_some_and(Value::is_string)
+                        && r.get("step").is_some_and(json::is_int)
+                        && r.get("tries").is_none_or(json::is_int)
+                        && r.get("rested").is_none_or(Value::is_boolean) =>
+                {
+                    out.running = Some(Running {
+                        sequence: json::s(r, "sequence"),
+                        step: json::to_int(&r["step"]),
+                        tries: r.get("tries").map_or(0, json::to_int),
+                        rested: json::b(r, "rested", false),
+                    });
                 }
                 _ => problems.push("story.running must be {sequence, step}.".into()),
             }
@@ -98,6 +136,9 @@ impl Story {
             }
             if r.step < 0 {
                 errors.push("story.running.step must be >= 0.".into());
+            }
+            if r.tries < 0 {
+                errors.push("story.running.tries must be >= 0.".into());
             }
         }
         for (key, list) in [("queue", &self.queue), ("seen", &self.seen)] {
@@ -324,8 +365,9 @@ pub fn current(d: &Data, gs: &GameState) -> Option<Step> {
     let qid = |kind: &str, r: &str| json::s_or(d.resolve(&home, kind, r), "_qid", r);
     Some(match step {
         Step::Vignette { vignette } => Step::Vignette { vignette: qid("vignettes", &vignette) },
-        Step::Fight { encounter, on_lost, on_fled } => Step::Fight { encounter: qid("encounters", &encounter), on_lost, on_fled },
+        Step::Fight { encounter, on_lost, on_fled, retry_day_cost, echo_fallen } => Step::Fight { encounter: qid("encounters", &encounter), on_lost, on_fled, retry_day_cost, echo_fallen },
         Step::Enter { location, anchor } => Step::Enter { location: qid("locations", &location), anchor },
+        Step::CampPrep { text, keeper } => Step::CampPrep { text, keeper: if keeper.is_empty() { keeper } else { qid("characters", &keeper) } },
         other => other,
     })
 }
@@ -355,6 +397,8 @@ pub fn is_running(gs: &GameState) -> bool {
 fn next_step(gs: &mut GameState) {
     if let Some(r) = gs.story.running.as_mut() {
         r.step += 1;
+        r.tries = 0;
+        r.rested = false;
     }
 }
 
@@ -378,7 +422,7 @@ pub fn start_quiet(d: &Data, gs: &mut GameState, r: &str, notes: &mut Vec<String
     if qid.is_empty() {
         return Err(format!("Unknown sequence '{r}'."));
     }
-    gs.story.running = Some(Running { sequence: qid.clone(), step: 0 });
+    gs.story.running = Some(Running { sequence: qid.clone(), step: 0, ..Default::default() });
     run_effects(d, gs, notes, events);
     Ok(qid)
 }
@@ -420,17 +464,73 @@ pub fn step_done(d: &Data, gs: &mut GameState) -> Dict {
     })
 }
 
-/// Q5: the world fight of the running `fight` step, `{source: "story", encounter}`; None at any other step.
+/// Q5: the world fight of the running `fight` step, `{source: "story", encounter}`; None at any other step. PR6-10: a
+/// retried step with `echo_fallen` adds `echoes` (`ECHOES_KEY`, only when above 0): how many echo units the fight
+/// fields (`echo_count`).
 pub fn fight(d: &Data, gs: &GameState) -> Option<Dict> {
     match current(d, gs)? {
-        Step::Fight { encounter, .. } => Some(json::obj([("source", FIGHT_SOURCE.into()), ("encounter", encounter.into())])),
+        Step::Fight { encounter, echo_fallen, .. } => {
+            let mut out = json::obj([("source", FIGHT_SOURCE.into()), ("encounter", encounter.into())]);
+            let tries = gs.story.running.as_ref().map_or(0, |r| r.tries);
+            let echoes = if echo_fallen && tries > 0 { echo_count(gs) } else { 0 };
+            if echoes > 0 {
+                out.insert(ECHOES_KEY.into(), json::int(echoes as i64));
+            }
+            Some(out)
+        }
         _ => None,
     }
 }
 
+/// PR6-10: how many echo units a retried `echo_fallen` fight fields: the departed members whose life is one of
+/// `rpgkit_data::ECHO_LIVES`, at most `rpgkit_data::ECHO_MAX`.
+pub fn echo_count(gs: &GameState) -> usize {
+    gs.party.departed.iter().filter(|x| rpgkit_data::ECHO_LIVES.contains(&x.life.as_str())).count().min(rpgkit_data::ECHO_MAX)
+}
+
+// ---- PR6-10 camp prep ----
+
+/// PR6-10: the running `camp_prep` step's free rest: every member back to full HP (`progression::rest`, the retry's
+/// rest) with no clock tick, no days and no supplies; once per prep step. {ok, errors, restored, notes}.
+pub fn prep_rest(d: &Data, gs: &mut GameState) -> Dict {
+    if !matches!(current(d, gs), Some(Step::CampPrep { .. })) {
+        return json::fail(NOT_PREP_TEXT);
+    }
+    if gs.story.running.as_ref().is_some_and(|r| r.rested) {
+        return json::fail(PREP_RESTED_TEXT);
+    }
+    let restored = progression::rest(d, &mut gs.party, &gs.world_id.clone());
+    if let Some(r) = gs.story.running.as_mut() {
+        r.rested = true;
+    }
+    let mut out = json::ok_result(true, &[]);
+    out.insert("restored".into(), json::int(restored));
+    out.insert("notes".into(), json::strs(&[PREP_REST_TEXT.to_string()]));
+    out
+}
+
+/// PR6-10: whether the running `camp_prep` step's free rest is still there to take.
+pub fn prep_rest_open(d: &Data, gs: &GameState) -> bool {
+    matches!(current(d, gs), Some(Step::CampPrep { .. })) && !gs.story.running.as_ref().is_some_and(|r| r.rested)
+}
+
+/// PR6-10: the running `camp_prep` step is over (the player went on past the point of no return): the next step, then
+/// Q3 and the campaign tick, as `step_done`.
+pub fn prep_done(d: &Data, gs: &mut GameState) -> Dict {
+    if !matches!(current(d, gs), Some(Step::CampPrep { .. })) {
+        return json::fail(NOT_PREP_TEXT);
+    }
+    with_tick(d, gs, |gs, notes, events| {
+        next_step(gs);
+        run_effects(d, gs, notes, events);
+        Vec::new()
+    })
+}
+
 /// Q5, Q8: after a story fight: `battle::settle` (rewards, quest progress), then by outcome: won, the next step; lost
 /// or fled by the step's `on_lost` / `on_fled`: `retry` brings every member back to full HP and keeps the step (the log
-/// says "Try again."), `continue` goes on, `abort` clears `running` and wakes the party on a loss (the dialogue fight's
+/// says "Try again."; PR6-10: the step's `tries` counts up when it has `echo_fallen`, and its `retry_day_cost` days pass: the game time and the
+/// campaign tick days(n, rest), whose events join `campaign`), `continue` goes on, `abort` clears `running` and wakes the party on a loss (the dialogue fight's
 /// loss path). The step moves before the game's autosave, so a load resumes at the next beat. {ok, errors, xp,
 /// advanced, events, notes, rewards, gold?, campaign?}.
 pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, tally: Option<&battle::Tally>) -> Dict {
@@ -442,14 +542,14 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
         out.insert("events".into(), Value::Array(Vec::new()));
         return out;
     }
-    let rule = match current(d, gs) {
-        Some(Step::Fight { on_lost, on_fled, .. }) => match outcome {
-            "won" => "continue".to_string(),
-            "fled" => on_fled,
-            _ => on_lost,
+    let (rule, retry_days, echo_fallen) = match current(d, gs) {
+        Some(Step::Fight { on_lost, on_fled, retry_day_cost, echo_fallen, .. }) => match outcome {
+            "won" => ("continue".to_string(), 0, false),
+            "fled" => (on_fled, retry_day_cost as i64, echo_fallen),
+            _ => (on_lost, retry_day_cost as i64, echo_fallen),
         },
         // not at a fight step (nothing runs): the dialogue fight's loss path
-        _ => "abort".to_string(),
+        _ => ("abort".to_string(), 0, false),
     };
     let act = gs.campaign.as_ref().map(|c| c.act);
     let (mut notes, mut fx_events, mut events) = (Vec::new(), Vec::new(), Vec::new());
@@ -457,6 +557,18 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
         "retry" => {
             progression::rest(d, &mut gs.party, &gs.world_id.clone());
             notes.push(RETRY_TEXT.to_string());
+            // tries only feed the echoes: a plain retry leaves the save as before
+            if echo_fallen {
+                if let Some(r) = gs.story.running.as_mut() {
+                    r.tries += 1;
+                }
+            }
+            // PR6-10: the retry's days (the run may end on them: the campaign's rules decide)
+            if retry_days > 0 {
+                gs.time += retry_days;
+                notes.push(retry_days_text(retry_days));
+                fx_events.extend(campaign::tick(d, gs, &campaign::Cause::Days { n: retry_days, why: "rest".into() }));
+            }
         }
         "continue" => {
             next_step(gs);
