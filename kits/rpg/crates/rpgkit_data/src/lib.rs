@@ -118,6 +118,26 @@ pub struct ProfEntry {
     pub scaling: f64,
 }
 
+/// CLASSKEY1: the class row key of its keystone (`{id, level}`).
+pub const CLASS_KEYSTONE_KEY: &str = "keystone";
+
+/// CLASSKEY1 (`PR6-14`): a class's keystone: a passive with `slot: "keystone"`, slotted from `level` on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClassKeystone {
+    pub id: String,
+    pub level: i32,
+}
+
+impl ClassKeystone {
+    /// The row's `keystone` object; None when absent, not an object or without an id (the content check reports a bad
+    /// one). A missing level reads as 1.
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        let k = obj(o, CLASS_KEYSTONE_KEY)?;
+        let id = string(k, "id", "");
+        (!id.is_empty()).then(|| Self { id, level: int(k, "level", 1) })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ClassDef {
     pub id: String,
@@ -139,6 +159,9 @@ pub struct ClassDef {
     /// CLASSPASS1 (`PR5-62a`, `docs/sessions/U2_CLASS_DECKS.md`): always-on innate passives (`slot == ""`) granted to
     /// derived units of the class under the rule `deck` without spending a deck slot. Empty = none.
     pub passives: Vec<String>,
+    /// CLASSKEY1 (`PR6-14`, `docs/sessions/U2_CLASS.md` "Class keystones"): the class's keystone passive and the level a
+    /// unit of the class slots it at (when its own deck names no keystone; `rpgkit_rules::Unit::grant_class_keystone`).
+    pub keystone: Option<ClassKeystone>,
     /// Slot key (`main_hand` ...) -> item id; empty slots left out.
     pub loadout: IndexMap<String, String>,
     pub pouch: Vec<String>,
@@ -194,6 +217,7 @@ impl ClassDef {
             skill_path: int_map(o, "skill_path"),
             basics: strings(o, "basics"),
             passives: strings(o, "passives"),
+            keystone: ClassKeystone::from_obj(o),
             loadout,
             pouch: strings(o, "pouch"),
             remains: string(o, REMAINS_KEY, ""),

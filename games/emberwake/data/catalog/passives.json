@@ -919,7 +919,7 @@
 		{
 			"id": "master_alchemist",
 			"name": "Master Alchemist",
-			"description": "Phosphorus Pot, Flash-Bomb and Choke-Gas are 20% stronger.",
+			"description": "Pitch Firebomb, Alum Frost-Pot, Choke-Vapor Bomb, Phosphorus Pot, Flash-Bomb and Choke-Gas are 20% stronger.",
 			"effects": [
 				{
 					"type": "skill_potency",
@@ -934,6 +934,21 @@
 				{
 					"type": "skill_potency",
 					"family": "choke_gas",
+					"value": 0.2
+				},
+				{
+					"type": "skill_potency",
+					"family": "firebomb",
+					"value": 0.2
+				},
+				{
+					"type": "skill_potency",
+					"family": "glacial_burst",
+					"value": 0.2
+				},
+				{
+					"type": "skill_potency",
+					"family": "choke_cloud",
 					"value": 0.2
 				}
 			],
