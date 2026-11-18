@@ -1,0 +1,11 @@
+{
+  "id": "screens_battle",
+  "title": "PR7-4: the battle screen as a shot (golden once the baseline is approved): a test fight at its start, planning",
+  "launch": {"screen": "arena", "scene": "tl_flank", "seed": 7},
+  "settings": {"reduce_motion": true},
+  "steps": [
+    {"step": "wait", "until": {"path": "state.outcome", "eq": ""}},
+    {"step": "pause", "ms": 1500},
+    {"step": "shot", "name": "battle_start"}
+  ]
+}

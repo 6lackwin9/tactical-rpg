@@ -12,7 +12,7 @@
 //! names the newest, which `do`, `stop` and `status` use unless `run=` says otherwise. Exit codes: 0 ok, 1 the command
 //! failed, 2 could not start (or no running game).
 
-use crate::scenario::{self, cond_holds, parse_cond, Cond, Link, TcpLink};
+use crate::scenario::{self, copy_dir, cond_holds, parse_cond, Cond, Link, TcpLink};
 use crate::Args;
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
@@ -562,8 +562,13 @@ pub fn screen_summary(t: &Value) -> String {
         r
     };
     out.push_str(&format!("clickable ({}):\n", click.len()));
-    // A big family of one kind (a board's tiles) is one line: its first and last id.
-    let family = |w: &Value| w["id"].as_str().unwrap_or("").split('.').next().unwrap_or("").to_string();
+    // A big family of rows of one kind (a board's `tile.x.y`, a list's `board.row.<id>`) is one line: its first and last
+    // id. Only ids of three parts or more fold, so a family's own buttons (`board.close`) stay listed.
+    let family = |w: &Value| {
+        let id = w["id"].as_str().unwrap_or("");
+        let parts: Vec<&str> = id.splitn(3, '.').collect();
+        if parts.len() == 3 { parts[0].to_string() } else { id.to_string() }
+    };
     let mut counts: std::collections::BTreeMap<String, Vec<&str>> = std::collections::BTreeMap::new();
     for w in &click {
         counts.entry(family(w)).or_default().push(w["id"].as_str().unwrap_or("?"));
@@ -690,20 +695,6 @@ fn tail(path: &Path, lines: usize) -> String {
     let text = std::fs::read_to_string(path).unwrap_or_default();
     let all: Vec<&str> = text.lines().collect();
     all[all.len().saturating_sub(lines)..].join("\n")
-}
-
-fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(to)?;
-    for e in std::fs::read_dir(from)? {
-        let e = e?;
-        let target = to.join(e.file_name());
-        if e.file_type()?.is_dir() {
-            copy_dir(&e.path(), &target)?;
-        } else {
-            std::fs::copy(e.path(), target)?;
-        }
-    }
-    Ok(())
 }
 
 // ---- the command line ----
@@ -857,7 +848,7 @@ fn start<G: crate::Game>(game: &G, args: &Args, idle_default: u64) -> Result<Ses
         }
     }
     if headless {
-        let o = scenario::Options { game_id: manifest.id.clone(), exe: s.exe.clone(), data: None, out: out.clone(), slow: 1, size: None, sized_ms: 0, window: false, fps: args.keys.get("fps").map(|f| f.parse()).transpose().context("fps=N")?, dpr: None };
+        let o = scenario::Options { game_id: manifest.id.clone(), exe: s.exe.clone(), data: None, out: out.clone(), slow: 1, size: None, sized_ms: 0, window: false, fps: args.keys.get("fps").map(|f| f.parse()).transpose().context("fps=N")?, dpr: None, baselines: None, record: false, saves: None };
         a.extend(scenario::headless_args(size, &o));
         a.push(format!("idle_exit={idle}"));
     }

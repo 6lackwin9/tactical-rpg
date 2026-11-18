@@ -6,8 +6,8 @@
 //!   aegis scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...] [the same keys as run]
 //! A scenario is named by where it lies: `<game folder>/scenarios/<id>.json`. The game folder is the one holding the game
 //! manifest the registered game names, and the game's program is the file named as the manifest's id beside this one
-//! (`exe=` says otherwise). Exit codes: 0 pass, 1 a step or a file failed, 2 could not start. Nothing here runs in the gate
-//! but `check` and the tests on a fake link (`tests/scenario.rs`).
+//! (`exe=` says otherwise). Exit codes: 0 pass, 1 a step or a file failed, 2 could not start. `tools/fc.sh gate` runs
+//! every scenario with no window (PR7-4); a golden `shot` compares with its baseline (`crate::golden`), `record=1` writes it.
 
 use crate::Args;
 use anyhow::{Context, Result};
@@ -79,6 +79,8 @@ pub struct Launch {
     pub scene: Option<String>,
     pub seed: Option<u64>,
     pub ruleset: Option<String>,
+    /// PR7-4: a saves folder the game starts with, `<game folder>/scenarios/saves/<save>/` copied into the scratch saves.
+    pub save: Option<String>,
 }
 
 /// LAYER-ENG-KEYS (PR5-29a): the launch keys' primary names and the other names they load under (in a file and, except
@@ -125,7 +127,8 @@ pub enum Step {
     Link { body: Value },
     Wait { until: Cond, timeout_ms: u64 },
     Assert { until: Cond },
-    Shot { name: String, max_w: u64 },
+    /// `golden`: compared against the committed baseline (`crate::golden`), with this tolerance.
+    Shot { name: String, max_w: u64, golden: Option<crate::golden::Tolerance> },
     Clip { name: String, frames: u64, every_ms: u64, max_w: u64 },
     Pause { ms: u64 },
     Audit { scales: Vec<f64>, fail: Vec<String> },
@@ -355,12 +358,27 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
             Step::Assert { until: cond("until", problems) }
         }
         "shot" => {
-            keys(&["name", "max_w"], problems);
+            keys(&["name", "max_w", "golden"], problems);
             let name = text_of(o, "name", place, problems);
             if !name.is_empty() && !plain_name(&name) {
                 problems.push(format!("{place}: 'name' becomes a file: letters, digits, _ and - only, at most 80"));
             }
-            Step::Shot { name, max_w: int_of(o, "max_w", Some(1920), (1, u64::from(SIZE_MAX.0)), place, problems) }
+            // PR7-4: `"golden": true` (exact) or `{"tolerance": 0..255, "pixels": N}`.
+            let golden = match o.get("golden") {
+                None | Some(Value::Bool(false)) => None,
+                Some(Value::Bool(true)) => Some(crate::golden::Tolerance::default()),
+                Some(Value::Object(g)) => {
+                    unknown_keys(g, &["tolerance", "pixels"], &format!("{place}.golden"), problems);
+                    let channel = int_of(g, "tolerance", Some(0), (0, 255), &format!("{place}.golden"), problems) as u8;
+                    let pixels = int_of(g, "pixels", Some(0), (0, u64::from(SIZE_MAX.0) * u64::from(SIZE_MAX.1)), &format!("{place}.golden"), problems);
+                    Some(crate::golden::Tolerance { channel, pixels })
+                }
+                Some(_) => {
+                    problems.push(format!("{place}: 'golden' is true or {{\"tolerance\", \"pixels\"}}"));
+                    None
+                }
+            };
+            Step::Shot { name, max_w: int_of(o, "max_w", Some(1920), (1, u64::from(SIZE_MAX.0)), place, problems), golden }
         }
         "clip" => {
             keys(&["name", "frames", "every_ms", "max_w"], problems);
@@ -482,12 +500,12 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
             Status::Active
         }
     };
-    let mut launch = Launch { screen: "menu".into(), scene: None, seed: None, ruleset: None };
+    let mut launch = Launch { screen: "menu".into(), scene: None, seed: None, ruleset: None, save: None };
     if let Some(l) = o.get("launch") {
         match l.as_object() {
             None => p.push("launch: an object".into()),
             Some(l) => {
-                let known: Vec<&str> = ["screen", "seed"].into_iter().chain(LAUNCH_ALIASES.iter().flat_map(|(k, old)| [*k, *old])).collect();
+                let known: Vec<&str> = ["screen", "seed", "save"].into_iter().chain(LAUNCH_ALIASES.iter().flat_map(|(k, old)| [*k, *old])).collect();
                 unknown_keys(l, &known, "launch", p);
                 match l.get("screen").map(|s| s.as_str()) {
                     None => {}
@@ -499,6 +517,13 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
                     launch.seed = Some(int_of(l, "seed", None, (0, u64::MAX), "launch", p));
                 }
                 launch.ruleset = aliased_text(l, "ruleset", p);
+                if l.contains_key("save") {
+                    let name = text_of(l, "save", "launch", p);
+                    if !name.is_empty() && !plain_name(&name) {
+                        p.push("launch: 'save' names a folder under scenarios/saves/: letters, digits, _ and - only".into());
+                    }
+                    launch.save = Some(name);
+                }
             }
         }
     }
@@ -793,6 +818,11 @@ pub struct Options {
     /// `fps=` and `dpr=`: for a game with no window (its own bounds refuse a bad one).
     pub fps: Option<u32>,
     pub dpr: Option<String>,
+    /// PR7-4: where the golden shots' baselines lie (`<game folder>/scenarios/baselines`), and `record=1`: write them.
+    pub baselines: Option<PathBuf>,
+    pub record: bool,
+    /// PR7-4: where `launch.save` folders lie (`<game folder>/scenarios/saves`).
+    pub saves: Option<PathBuf>,
 }
 
 /// One size's result.
@@ -824,6 +854,11 @@ struct Run<'a> {
     frame: u64,
     /// No window: frames are asked for, and looks are further apart.
     headless: bool,
+    /// This size's baselines folder, whether to record them, and the baselines written.
+    golden_dir: Option<PathBuf>,
+    record: bool,
+    /// Shots to become baselines once every step has passed: (the shot, its baseline).
+    recorded: Vec<(PathBuf, PathBuf)>,
 }
 
 impl Run<'_> {
@@ -948,12 +983,27 @@ impl Run<'_> {
                     return Err(Failure { step: label.to_string(), message: format!("assert: {why}"), gone: false });
                 }
             }
-            Step::Shot { name, max_w } => {
+            Step::Shot { name, max_w, golden } => {
                 self.settle(label)?;
                 let path = self.bundle.join(format!("{name}.png"));
                 let reply = self.ask(label, &json!({"cmd": "screenshot", "path": path.display().to_string(), "max_w": max_w}))?;
                 if reply["ok"] != json!(true) {
                     return Err(Failure { step: label.to_string(), message: format!("the shot {name}: {}", reply["error"]), gone: false });
+                }
+                if let Some(tol) = golden {
+                    let fail = |message: String| Failure { step: label.to_string(), message, gone: false };
+                    let dir = self.golden_dir.clone().ok_or_else(|| fail("a golden shot needs the game's baselines folder".into()))?;
+                    let base = dir.join(format!("{name}.png"));
+                    if self.record {
+                        // Written only when the whole run passes: a baseline never comes from a failed run.
+                        self.recorded.push((path.clone(), base));
+                    } else {
+                        match crate::golden::check(&path, &base, *tol, &self.bundle.join(format!("{name}.diff.png"))) {
+                            Ok(None) => {}
+                            Ok(Some(why)) => return Err(fail(format!("the golden shot {name}: {why}"))),
+                            Err(why) => return Err(fail(format!("the golden shot {name}: {why}"))),
+                        }
+                    }
                 }
             }
             Step::Clip { name, frames, every_ms, max_w } => {
@@ -1083,6 +1133,21 @@ fn keep_failure(link: &mut dyn Link, bundle: &Path) {
     let _ = link.ask(&json!({"cmd": "screenshot", "path": path.display().to_string(), "max_w": 1920}));
 }
 
+/// A folder's files and folders, copied under `to`.
+pub fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for e in std::fs::read_dir(from)? {
+        let e = e?;
+        let target = to.join(e.file_name());
+        if e.file_type()?.is_dir() {
+            copy_dir(&e.path(), &target)?;
+        } else {
+            std::fs::copy(e.path(), target)?;
+        }
+    }
+    Ok(())
+}
+
 /// Empties a bundle of an earlier run. A folder without a `result.json` is not one, and is left alone.
 fn clear_bundle(bundle: &Path) -> std::io::Result<()> {
     if bundle.join("result.json").is_file() {
@@ -1124,6 +1189,23 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
             out.message = format!("the scratch folder {}: {e}", scratch.display());
             break;
         }
+        if let Some(name) = &s.launch.save {
+            let from = o.saves.as_ref().map(|d| d.join(name));
+            match from.filter(|f| f.is_dir()) {
+                None => {
+                    out.message = format!("launch.save '{name}': no folder scenarios/saves/{name}/");
+                    let _ = std::fs::remove_dir_all(&scratch);
+                    break;
+                }
+                Some(from) => {
+                    if let Err(e) = copy_dir(&from, &scratch.join("saves")) {
+                        out.message = format!("launch.save '{name}': {e}");
+                        let _ = std::fs::remove_dir_all(&scratch);
+                        break;
+                    }
+                }
+            }
+        }
         let (mut link, mut game) = match launcher.start(&plan) {
             Ok(both) => both,
             Err(f) => {
@@ -1159,9 +1241,11 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
         record["canvas"] = canvas;
         record["capped"] = json!(px != json!([size.0, size.1]));
         let deadline = Instant::now() + s.timeout * slow as u32;
-        let mut run = Run { link: link.as_mut(), game: game.as_mut(), bundle: &bundle, slow, deadline, done: Vec::new(), frame: 0, headless };
+        let golden_dir = o.baselines.as_ref().map(|b| b.join(&s.id).join(format!("{}x{}", size.0, size.1)));
+        let mut run = Run { link: link.as_mut(), game: game.as_mut(), bundle: &bundle, slow, deadline, done: Vec::new(), frame: 0, headless, golden_dir, record: o.record, recorded: Vec::new() };
         let walked = s.steps.iter().enumerate().try_for_each(|(i, step)| run.step(&(i + 1).to_string(), step));
         let done = std::mem::take(&mut run.done);
+        let to_record = std::mem::take(&mut run.recorded);
         let frames = run.frame;
         match walked {
             Ok(()) => {
@@ -1188,6 +1272,21 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
             out.code = 1;
             out.step = Some("stop".into());
             out.message = problem;
+        }
+        if o.record && out.code == 0 {
+            let mut written = Vec::new();
+            for (shot, base) in &to_record {
+                match base.parent().map(std::fs::create_dir_all).unwrap_or(Ok(())).and_then(|_| std::fs::copy(shot, base)) {
+                    Ok(_) => written.push(base.display().to_string()),
+                    Err(e) => {
+                        out.code = 1;
+                        out.step = Some("record".into());
+                        out.message = format!("recording {}: {e}", base.display());
+                        break;
+                    }
+                }
+            }
+            record["recorded"] = json!(written);
         }
         record["steps"] = Value::Array(done);
         record["frames"] = json!(frames);
@@ -1368,7 +1467,7 @@ fn game_folder<G: crate::Game>(game: &G, args: &Args) -> Result<PathBuf> {
     manifest.parent().map(Path::to_path_buf).with_context(|| format!("{} has no folder", manifest.display()))
 }
 
-const RUN_USAGE: &str = "aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
+const RUN_USAGE: &str = "aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X] [record=1]";
 const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [ruleset=<id>] [seed=N] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
 
 /// `aegis scenario ...`; returns the exit code.
@@ -1429,7 +1528,12 @@ fn options_of(folder: &Path, args: &Args, out: &str) -> Result<Options> {
     let out = PathBuf::from(args.key("out", out));
     let window = window_asked(args)?;
     let fps = args.keys.get("fps").map(|n| n.parse::<u32>().with_context(|| format!("fps '{n}' is not a whole number"))).transpose()?;
-    Ok(Options { game_id: manifest.id.clone(), exe, data: args.keys.get("data").map(PathBuf::from), out, slow, size, sized_ms: SIZED_MS, window, fps, dpr: args.keys.get("dpr").cloned() })
+    let record = match args.key("record", "0").as_str() {
+        "0" => false,
+        "1" => true,
+        other => anyhow::bail!("record is 1 or 0, not '{other}'"),
+    };
+    Ok(Options { game_id: manifest.id.clone(), exe, data: args.keys.get("data").map(PathBuf::from), out, slow, size, sized_ms: SIZED_MS, window, fps, dpr: args.keys.get("dpr").cloned(), baselines: Some(folder.join("scenarios").join("baselines")), record, saves: Some(folder.join("scenarios").join("saves")) })
 }
 
 /// The steps of `do=`, comma separated: `key:<k>`, `click:<id>`, `hover:<id>`, `screen:<id>` (wait for it), `widget:<id>`

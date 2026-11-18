@@ -22,8 +22,9 @@ The files lie in `games/<id>/scenarios/<id>.json`; the folder names the game, th
 program is the file named as the manifest's `id`, beside the CLI (`exe=` says otherwise). `size=` replaces the file's sizes.
 `slow=N` multiplies every timeout, 1 to 20, for a machine under load. `data=` opens a scratch copy of the data folder.
 `window=1` runs every scenario in a real window. `fps=` (12 to 240, default 15) and `dpr=` (0.5 to 4, default 1) are for a run
-with no window. No scenario runs in the gate. The gate runs a game's own test that parses its files with `check_files`, and the
-driver's tests on a fake link; `aegis scenario check` is for a file being written.
+with no window. `tools/fc.sh gate` runs every scenario of the registered game (the one the CLI is built for) with no window (PR7-4), besides a game's own test that parses its
+files with `check_files` and the driver's tests on a fake link; `aegis scenario check` is for a file being written.
+`record=1` writes the baselines of the golden shots it passes (see "Golden shots").
 
 ## The file
 
@@ -33,7 +34,7 @@ driver's tests on a fake link; `aegis scenario check` is for a file being writte
 | `title` | text | "" | - |
 | `status` | `active`, `waiting` | `active` | `waiting` needs `why`; it is parsed and never run |
 | `why` | text | - | Why it waits |
-| `launch` | object | `{"screen": "menu"}` | `screen` is `menu`, `arena` or `runner`; optional `scene` (alias `encounter`), `seed`, and `ruleset` (alias `rules`) with `arena` |
+| `launch` | object | `{"screen": "menu"}` | `screen` is `menu`, `arena` or `runner`; optional `scene` (alias `encounter`), `seed`, `ruleset` (alias `rules`) with `arena`, and `save`: a folder name under `scenarios/saves/`, copied into the scratch saves before the start (PR7-4) |
 | `sizes` | list of `WxH` | `["1280x720"]` | Each from 1280x720 to 7680x4320 |
 | `settings` | object | `{}` | Merged over the scratch profile. Refused: `mute` false, `start_inactive`, `window_size`, `fullscreen`, `borderless`, `window_mode` |
 | `timeout_s` | whole number | 300 | 1 to 3600, for the whole run at one size |
@@ -67,7 +68,7 @@ An unknown key or step is a problem, not a thing ignored.
 | `link` | `body` | Any other request, as `{"cmd": ...}`: battle commands, screen commands. Not `quit` |
 | `wait` | `until`, `timeout_ms` = 10000 | Polls until true; a timeout fails |
 | `assert` | `until` | True now or fail |
-| `shot` | `name`, `max_w` = 1920 | Screenshot into the bundle, once the frames after the last change are drawn. A blank frame fails the step |
+| `shot` | `name`, `max_w` = 1920, `golden` | Screenshot into the bundle, once the frames after the last change are drawn. A blank frame fails the step. `golden`: compared with its baseline (below) |
 | `clip` | `name`, `frames` = 30, `every_ms` = 66, `max_w` = 1280 | No window only. A numbered sequence, `<name>/frame_0001.png` on: at most 120 frames, 10 to 2000 ms apart, 15 s in all |
 | `pause` | `ms` | Time passes, for a picture at a moment of an animation, with a look at the game each second. To wait for a result, use `wait` |
 | `audit` | `scales`, `fail` = all of `cut`, `edge`, `overlap`, `spill` | The text audit per text size; a kind in `fail` found fails the step |
@@ -105,6 +106,18 @@ the `game` reply. Only `absent` passes on a missing path, so a mistyped path nev
 | Sound | No window: no device is opened or needed. A real window: muted |
 | Process | Only the one it started: asked to leave over the link, killed after 5 s times `slow`. If the driver itself is killed, a game with no window leaves on its own (see below); a real window stays open until it is closed |
 
+## Golden shots
+
+A `shot` with `"golden": true` (exact) or `"golden": {"tolerance": T, "pixels": N}` compares the frame with the committed
+baseline `<game folder>/scenarios/baselines/<scenario id>/<WxH>/<name>.png`. A pixel differs when one RGBA channel is more
+than `T` (0 to 255, default 0) apart; the step fails when more than `N` pixels (default 0) differ, naming the count, the
+largest difference and their box, and keeps `<name>.diff.png`. A missing baseline fails too.
+
+`aegis scenario run <id> record=1` (or `tools/fc.sh scenario <id> record=1`) writes the baselines instead, once every step
+has passed, and lists them in `result.json` under `recorded`. A new or changed baseline needs the user's approval: it lands as a named re-record in the
+commit and a `docs/HISTORY.md` row, like an engine golden. Shoot screens at rest with `reduce_motion` on; idle sprite clips
+still move under it, so a screen with walking or idle bodies takes a `pixels` allowance (a few thousand at 1280x720).
+
 ## The bundle
 
 `<out>/<id>/<WxH>/`, default `out` is `.agent/scenario`. A re-run replaces the folder if it holds a `result.json`.
@@ -115,6 +128,7 @@ the `game` reply. Only `absent` passes on a missing path, so a mistyped path nev
 | `stderr.txt` | Once started | The game's output |
 | `recording.json`, `trail.json` | When it recorded | The playtest recording and its trail report |
 | `<name>.png` | `shot` | The canvas |
+| `<name>.diff.png` | A golden shot that failed | The baseline darkened, the differing pixels red |
 | `<name>/frame_NNNN.png` | `clip` | The canvas over time |
 | `audit_*.json` | `audit` | One reply per text size |
 | `fail.png`, `fail_tree.json` | A failed step, the game still alive | The canvas and the `ui_tree` reply |

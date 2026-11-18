@@ -11,6 +11,7 @@
 
 pub mod agentplay;
 pub mod bundle;
+pub mod golden;
 pub mod scenario;
 
 use aegis_content::file::stringify;

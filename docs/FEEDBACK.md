@@ -30,6 +30,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-22` (`AGENT-PLAYTEST1`) | done (tools lane) | `develop` (squash `PR7-22`) | `aegis playtest` start / do / run / stop / status (`tools/fc.sh playtest`), no-window by default; smoke script `games/emberwake/playtests/agent/smoke.play` plays a fresh save to the hub in the gate (~20 s); `FB-309` |
 | `PR7-26` (`PLAYTEST-UI1`) | done (UI to review) | `develop` (squash `PR7-26`) | Story advance hint gone; battle Esc or Menu opens the in-game Settings popup; hub party list fits a full roster; portrait breath keeps the face aspect and the rim light eases; Mute in Background (on by default, user 2026-11-18); Battle tab Advanced heading; shots `/mnt/project-files/pr7-26/`; `FB-310` |
 | `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
+| `PR7-4` (`SCENARIO-GOLDENS1`) | part 1 done (tools lane); baselines await the user | `develop` (squash `PR7-4` part 1) | Scenario `shot` step `golden` (tolerance, pixels allowance, diff image), `record=1`, launch `save`; every scenario in the gate (`tools/fc.sh scenarios_all`); three screen scenarios (menus, hub, battle; 18 shots) run as review shots until the user approves the baselines (`/mnt/project-files/pr7-4/`); `FB-313` |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -281,6 +282,15 @@ FB-01 to FB-281 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Built**: `kits/rpg/library/README.md` (the layout and fields; no assets yet, Art/UI fills it) and `tools/assetlib/check_library.py` (plain Python, no Pillow): AL6 (every sidecar parses, required fields, no unknown keys, `kind`/`status`/`source` enums, `kind` and `style` match the folders, `size` matches the PNG header, unique ids, every asset has a sidecar, no orphan sidecar, `style.meta.json` per style folder) and AL7 (file names, ids, tags and the style id/label refuse any game id, world id or `games/*/lore_words.txt` entry, whole word, `_` as a break). 14 fixture tests. `tools/fc.sh assetlib` runs both; the gate runs it last.
 - **Guess** `[PROVISIONAL]`: AL5 says `size` is pixels; a sound under `audio/` has none, so it takes `"size": null` (any other value is refused). Asset files are `.png`, `.ogg`, `.wav`, `.mp3`.
 - **Docs delta**: `docs/STRUCTURE.md` kit section: "`kits/rpg/library/<style>/<kind>/`: the kit asset library (ASSETLIB1), outside the shipped asset root; checked by `tools/assetlib/check_library.py` (`tools/fc.sh assetlib`, in the gate)". `HISTORY.md`: none.
+
+### FB-313: PR7-4 scenario goldens part 1 landed; baselines wait for the user
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-4` (SCENARIO-GOLDENS1) (@squash `PR7-4` part 1)
+- **Built**: `aegis_cli::golden` (PNG compare: per-channel tolerance, a pixel allowance, a diff image with the differing pixels in red, the box that holds them); a scenario `shot` takes `"golden": true` or `{"tolerance": n, "pixels": n}` and fails on a missing or differing baseline at `scenarios/baselines/<id>/<WxH>/<name>.png`; `record=1` writes the baselines only after the whole run passes; launch `"save": "<folder>"` copies `scenarios/saves/<folder>/` into the scratch saves. The gate runs every scenario of the game (`scenarios_all`, 6 scenarios, about 50 s) and fails when the dev CLI is missing. New scenarios `screens_menus`, `screens_hub` (from the fixture save `saves/hub_start`, made with the agent harness) and `screens_battle`: 18 shots.
+- **Parked**: the `golden` flags and the 18 baselines land as part 2 once the user approves the contact sheet (`/mnt/project-files/pr7-4/contact_sheet.png`). Menus are byte for byte the same run to run; the hub (idle sprites, 121 to 488 px) and the battle start take a pixels allowance (1500, 3000).
+- **Guess** `[PROVISIONAL]`: the recipe pane has no shot: no path from the fixture save opens it. A UI change to one of these screens re-records its baseline, which needs the user's approval like any golden.
+- **Docs delta**: `docs/STRUCTURE.md` game section: "`games/<id>/scenarios/baselines/` golden shots, `scenarios/saves/` fixture saves for a launch `save`". `engine/README.md` CLI row: scenario `record=1`. `HISTORY.md`: none until part 2 (the baseline record).
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
