@@ -1340,9 +1340,19 @@ pub fn breath_px(seed: u64, t: u64, s: i32) -> i32 {
     a.round() as i32
 }
 
-/// The rim value factor at `t`: 1 + 0.12 (0.6 sin(2 pi t / 1700) + 0.4 (2 h(100 + floor(t / 90)) - 1)).
+/// The rim's flicker knots: one hashed value every `RIM_KNOT_MS`, eased between (PR7-26: a value held for 90 ms and
+/// then jumping read as a flicker).
+pub const RIM_KNOT_MS: u64 = 600;
+
+/// The rim value factor at `t`: 1 + 0.12 (0.6 sin(2 pi t / 1700) + 0.4 n(t)), n eased (smoothstep) from
+/// 2 h(100 + k) - 1 to 2 h(101 + k) - 1 over knot k = floor(t / RIM_KNOT_MS): continuous, no step between frames.
 pub fn rim_factor(seed: u64, t: u64) -> f32 {
-    1.0 + 0.12 * (0.6 * cycle(t, 1700.0).sin() + 0.4 * (2.0 * hash01(seed, 100 + t / 90) - 1.0))
+    let k = t / RIM_KNOT_MS;
+    let f = (t % RIM_KNOT_MS) as f32 / RIM_KNOT_MS as f32;
+    let e = f * f * (3.0 - 2.0 * f);
+    let knot = |n: u64| 2.0 * hash01(seed, 100 + n) - 1.0;
+    let n = knot(k) + (knot(k + 1) - knot(k)) * e;
+    1.0 + 0.12 * (0.6 * cycle(t, 1700.0).sin() + 0.4 * n)
 }
 
 /// The start of every blink before `until` (a double blink's second included): blink n starts
@@ -1536,24 +1546,28 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
     let reduce = key.reduce;
     let tier = key.tier;
 
-    // 2. motion (PORTRAITFX2-M; the breath is its default): the inner rect stretched by `a` from its bottom edge
-    // (negative compresses), then shifted by (mx, my), nearest rows; a sample outside the inner rect takes its edge.
+    // 2. motion (PORTRAITFX2-M; the breath is its default): the inner rect scaled by (H + a) / H from its bottom
+    // centre, the same on both axes so a face never changes its aspect (PR7-26; negative shrinks), then shifted by
+    // (mx, my), nearest samples; a sample outside the inner rect takes its edge.
     let (a, mx, my) = key.motion;
     let a = a.max(1 - h_in);
+    let mid = (lo + hi) as f32 / 2.0;
     if a != 0 || mx != 0 || my != 0 {
         let orig = img.clone();
+        let back = h_in as f32 / (h_in + a) as f32;
+        let xs: Vec<i32> = (lo..hi).map(|x| ((mid + ((x - mx) as f32 + 0.5 - mid) * back).floor() as i32).clamp(lo, hi - 1)).collect();
         for yd in lo..hi {
             let d = (hi - 1 - (yd - my)) as i64;
             let ds = (d * h_in as i64 / (h_in + a) as i64) as i32;
             let ys = (hi - 1 - ds).clamp(lo, hi - 1);
-            for x in lo..hi {
-                put(&mut img, x, yd, get(&orig, (x - mx).clamp(lo, hi - 1), ys));
+            for (x, &xs) in (lo..hi).zip(&xs) {
+                put(&mut img, x, yd, get(&orig, xs, ys));
             }
         }
     }
-    // Anchors follow the motion: y' = bottom - (bottom - y) (H + a) / H + my, x' = x + mx.
+    // Anchors follow the motion: y' = bottom - (bottom - y) (H + a) / H + my, x' = mid + (x - mid) (H + a) / H + mx.
     let by = |y: f32| hi as f32 - (hi as f32 - y) * (h_in + a) as f32 / h_in as f32 + my as f32;
-    let bx = |x: f32| x + mx as f32;
+    let bx = |x: f32| mid + (x - mid) * (h_in + a) as f32 / h_in as f32 + mx as f32;
 
     // 3. colour: rim, desaturate, tint.
     let rim = key.rim.filter(|_| plan.rim_f != 1.0);

@@ -576,6 +576,14 @@ impl<G: Context> Shell<G> {
         self.stack.last_mut().unwrap().wheel(cx, lines);
     }
 
+    /// The window gained or lost the focus (desktop: winit's `Focused`; web: the canvas's focus and blur, which winit
+    /// reports the same way): the audio's background mute follows at once (`Audio::set_focused`, setting
+    /// `MUTE_IN_BACKGROUND`), the music tracks take the new level now, not at the next drawn frame.
+    fn focus_changed(&mut self, focused: bool) {
+        self.cx.audio.set_focused(focused, &self.cx.settings.v);
+        self.cx.audio.tick();
+    }
+
     /// Drops a press or drag in progress; true when there was one.
     fn cancel_drag(&mut self) -> bool {
         self.text_press = false;
@@ -1420,6 +1428,10 @@ enum Wake {
     /// the browser's executor and hands its result back here.
     #[cfg(target_arch = "wasm32")]
     Surface(Result<Pixels<'static>, pixels::Error>),
+    /// The page was hidden (false) or shown again (true): the document's `visibilitychange` (a tab switch that moves no
+    /// focus); the canvas's own focus and blur come as winit's `Focused`.
+    #[cfg(target_arch = "wasm32")]
+    Focus(bool),
 }
 
 struct App<G> {
@@ -1672,6 +1684,19 @@ mod web {
         LogicalSize::new(CANVAS_CSS.0, CANVAS_CSS.1).to_physical(window.scale_factor())
     }
 
+    /// The page's visibility as `Wake::Focus` (hidden: false), for the background mute: a listener on the document's
+    /// `visibilitychange` that lives as long as the page.
+    pub fn watch_visibility(proxy: EventLoopProxy<Wake>) {
+        use wasm_bindgen::closure::Closure;
+        let Some(doc) = web_sys::window().and_then(|w| w.document()) else { return };
+        let seen = doc.clone();
+        let on_change = Closure::<dyn FnMut()>::new(move || {
+            let _ = proxy.send_event(Wake::Focus(!seen.hidden()));
+        });
+        let _ = doc.add_event_listener_with_callback("visibilitychange", on_change.as_ref().unchecked_ref());
+        on_change.forget();
+    }
+
     /// Gives the canvas the keyboard focus (keys reach a page element only while it has it).
     pub fn focus(window: &Window) {
         use winit::platform::web::WindowExtWebSys;
@@ -1822,6 +1847,7 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
         {
             web::open_pixels(pw, ph, window.clone(), self.proxy.clone());
             web::focus(&window);
+            web::watch_visibility(self.proxy.clone());
         }
         #[allow(unused_mut)]
         let mut shell = Shell::open(cx, stack, &self.options, (pw, ph), window.scale_factor() as f32, icon_notice);
@@ -1851,6 +1877,12 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
             // WEBREL1 6.2: no renderer, no frames: the loop stops and the page says why
             #[cfg(target_arch = "wasm32")]
             Wake::Surface(Err(e)) => return self.fail(_el, anyhow::anyhow!("the renderer did not start (the browser needs WebGL2): {e}")),
+            #[cfg(target_arch = "wasm32")]
+            Wake::Focus(on) => {
+                if let Some(s) = self.shell.as_mut() {
+                    s.focus_changed(on);
+                }
+            }
         }
         self.pacer.touch(Instant::now());
         if let Some(w) = &self.window {
@@ -1934,8 +1966,14 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
                 if let Some(s) = self.shell.as_mut() {
                     s.cancel_drag();
                     s.cx.held = Held::default();
+                    s.focus_changed(false);
                 }
                 self.walk_keys.clear();
+            }
+            WindowEvent::Focused(true) => {
+                if let Some(s) = self.shell.as_mut() {
+                    s.focus_changed(true);
+                }
             }
             WindowEvent::KeyboardInput { event: KeyEvent { logical_key, state: ElementState::Released, .. }, .. } => {
                 if let Some(k) = walk_key(&logical_key) {

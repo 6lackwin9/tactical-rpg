@@ -3297,3 +3297,171 @@ mod pouch_stack_tests {
         assert!(widget(&c, "gear.pouch.0").is_some() && widget(&c, "gear.pouch.0.pips").is_none(), "the classic rows");
     }
 }
+
+/// PR7-26 (3) (`PLAYTEST-UI1`): the Character screen of a full party fits its frame at every text size: on every tab,
+/// for every member, no text or control leaves the frame and the text audit is clean (nothing cut off the canvas, no
+/// overlap, no spill).
+#[cfg(test)]
+mod fit_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+    use aegis_ui::screen::TEXT_SIZES;
+
+    /// The frame the screen draws in.
+    const SHEET_RECT: Rect = Rect::new(16, 16, 608, 328);
+
+    /// A game whose party is full, every extra member a copy of the first under its own id: `bunks` 0 fills the
+    /// world's party max; more gives the world a roster block of that many bunks (ROSTER1 BK1) and fills them, the
+    /// first copy wounded (its mark widens the rows).
+    pub(crate) fn full_party_cx(bunks: i64) -> Cx {
+        let mut cx = game_cx();
+        if bunks > 0 {
+            let max = cx.gs().party.roster.party_max;
+            cx.gs_mut().party.roster = emberwake_world::state::RosterCaps { party_max: max, manifest: emberwake_data::RosterManifest::from_obj(json!({"bunks": bunks, "bunks_max": bunks}).as_object().unwrap()) };
+        }
+        let cap = if bunks > 0 { emberwake_world::roster::bunk_cap(cx.gs()) } else { cx.gs().party.roster.party_max };
+        let max = cap.max(cx.gs().party.members.len() as i64) as usize;
+        let first = cx.gs().party.members[0].clone();
+        let gs = cx.gs_mut();
+        while gs.party.members.len() < max {
+            let mut m = first.clone();
+            m.id = format!("{}_copy{}", first.id, gs.party.members.len());
+            gs.party.members.push(m);
+        }
+        if bunks > 0 {
+            if let Some(m) = cx.gs_mut().party.members.get_mut(1) {
+                m.add_condition(emberwake_world::roster::WOUNDED);
+            }
+        }
+        cx
+    }
+
+    /// The problems of one frame of the hub: the text audit's counts, and every text or control outside its frame.
+    fn hub_problems(h: &crate::hub::Hub, recs: &[aegis_ui::painter::TextRec]) -> Vec<String> {
+        let w = h.widgets();
+        let boxes: Vec<(String, f32, f32, f32, f32)> = w.iter().map(|w| (w["id"].as_str().unwrap_or_default().to_string(), w["rect"][0].as_f64().unwrap() as f32, w["rect"][1].as_f64().unwrap() as f32, w["rect"][2].as_f64().unwrap() as f32, w["rect"][3].as_f64().unwrap() as f32)).collect();
+        let v = aegis_ui::text_audit::issues(recs, W as f32, H as f32, &boxes);
+        let mut out: Vec<String> = ["edge", "overlap", "spill"].iter().filter(|k| v["counts"][**k] != json!(0)).map(|k| format!("{k}: {}", v[*k])).collect();
+        let fr = crate::hub::HUB_RECT;
+        let inside = |x: f32, y: f32, w: f32, h: f32| x >= fr.x as f32 - 0.5 && y >= fr.y as f32 - 0.5 && x + w <= (fr.x + fr.w) as f32 + 0.5 && y + h <= (fr.y + fr.h) as f32 + 0.5;
+        for r in recs.iter().filter(|r| !r.clipped && !r.covered) {
+            if !inside(r.x, r.y, r.w, r.h) {
+                out.push(format!("text {:?} at {:?}", r.text, (r.x, r.y, r.w, r.h)));
+            }
+        }
+        for (id, x, y, w, h) in &boxes {
+            if !inside(*x, *y, *w, *h) {
+                out.push(format!("widget {id} at {:?}", (x, y, w, h)));
+            }
+        }
+        out
+    }
+
+    /// The hub's party list of a full party (the party max, and a roster of 8 bunks) fits the hub's frame at every
+    /// text size: no row, button or line pushed out, nothing overlapping.
+    #[test]
+    fn a_full_party_fits_the_hub_at_every_text_size() {
+        let mut bad = Vec::new();
+        for bunks in [0, 8] {
+            let mut cx = full_party_cx(bunks);
+            let mut g = gfx();
+            let n = cx.gs().party.members.len();
+            for (size, scale) in TEXT_SIZES {
+                let mut h = crate::hub::Hub::default();
+                let recs = frame(&mut h, &mut cx, &mut g, scale as f32);
+                for p in hub_problems(&h, &recs) {
+                    bad.push(format!("{n} members at {size}: {p}"));
+                }
+                // the window's measure (1280 x 720) runs a little wider: the controls stay inside there too
+                let mut big = gfx();
+                big.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+                big.view = aegis_ui::painter::View::fit(1280, 720);
+                frame(&mut h, &mut cx, &mut big, scale as f32);
+                for p in hub_problems(&h, &[]) {
+                    bad.push(format!("{n} members at {size}, 1280 x 720: {p}"));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{} problems:\n{}", bad.len(), bad.join("\n"));
+    }
+
+    /// The problems of one frame: the text audit's counts and every text or control outside the frame.
+    fn problems(c: &Character, recs: &[aegis_ui::painter::TextRec]) -> Vec<String> {
+        let mut out = Vec::new();
+        let boxes: Vec<(String, f32, f32, f32, f32)> = c.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+        let v = aegis_ui::text_audit::issues(recs, W as f32, H as f32, &boxes);
+        for k in ["edge", "overlap", "spill"] {
+            if v["counts"][k] != json!(0) {
+                out.push(format!("{k}: {}", v[k]));
+            }
+        }
+        let inside = |x: f32, y: f32, w: f32, h: f32| x >= SHEET_RECT.x as f32 - 0.5 && y >= SHEET_RECT.y as f32 - 0.5 && x + w <= (SHEET_RECT.x + SHEET_RECT.w) as f32 + 0.5 && y + h <= (SHEET_RECT.y + SHEET_RECT.h) as f32 + 0.5;
+        for r in recs.iter().filter(|r| !r.clipped && !r.covered) {
+            if !inside(r.x, r.y, r.w, r.h) {
+                out.push(format!("text {:?} at {:?}", r.text, (r.x, r.y, r.w, r.h)));
+            }
+        }
+        for w in &c.w {
+            if !inside(w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32) {
+                out.push(format!("widget {} at {:?}", w.id, w.rect));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_full_party_fits_the_frame_on_every_tab_at_every_text_size() {
+        let mut cx = full_party_cx(8);
+        let mut g = gfx();
+        let ids: Vec<String> = cx.gs().party.members.iter().map(|m| m.id.clone()).collect();
+        assert!(ids.len() as i64 >= cx.gs().party.roster.party_max, "the party is full");
+        let mut bad = Vec::new();
+        for id in &ids {
+            for (tab, _) in TABS {
+                let mut c = Character::new(&cx, id, tab);
+                for (size, scale) in TEXT_SIZES {
+                    let recs = frame(&mut c, &mut cx, &mut g, scale as f32);
+                    for p in problems(&c, &recs) {
+                        bad.push(format!("{id} {tab} at {size}: {p}"));
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{} problems:\n{}", bad.len(), bad.join("\n"));
+    }
+
+    /// The proof shots (only with `AEGIS_REVIEW_DIR` set): every tab of the full party's first member at Normal and
+    /// Extra large text and the hub's party list, 1280 x 720, as `party_<tab>_<size>.png` and `party_hub_<size>.png`.
+    #[test]
+    fn full_party_shots() {
+        let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") else { return };
+        let mut cx = full_party_cx(8);
+        let id = cx.gs().party.members[0].id.clone();
+        let mut g = gfx();
+        g.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+        g.view = aegis_ui::painter::View::fit(1280, 720);
+        for (tab, _) in TABS {
+            for (size, scale) in [("normal", 1.0f32), ("xl", 1.3)] {
+                let mut c = Character::new(&cx, &id, tab);
+                g.fonts.scale = scale;
+                c.draw(&mut cx, &mut g, (-500, -500), true);
+                let file = std::fs::File::create(std::path::Path::new(&out).join(format!("party_{tab}_{size}.png"))).unwrap();
+                let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
+                enc.set_color(png::ColorType::Rgba);
+                enc.set_depth(png::BitDepth::Eight);
+                enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
+            }
+        }
+        for (size, scale) in [("normal", 1.0f32), ("xl", 1.3)] {
+            let mut h = crate::hub::Hub::default();
+            g.fonts.scale = scale;
+            g.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+            h.draw(&mut cx, &mut g, (-500, -500), true);
+            let file = std::fs::File::create(std::path::Path::new(&out).join(format!("party_hub_{size}.png"))).unwrap();
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
+        }
+    }
+}

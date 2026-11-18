@@ -118,6 +118,9 @@ pub enum HubAct {
     Return,
 }
 
+/// The hub popup's frame.
+pub const HUB_RECT: Rect = Rect::new(95, 25, 450, 310);
+
 #[derive(Default)]
 pub struct Hub {
     w: Vec<Widget<HubAct>>,
@@ -193,7 +196,7 @@ impl Screen<GameCx> for Hub {
         ui.p.fill(Rect::new(0, 0, W, H), th().game("popup_veil", rgba(0, 0, 0, 110)));
         self.faces.begin();
         let gs = cx.gs().clone();
-        let fr = Rect::new(95, 25, 450, 310);
+        let fr = HUB_RECT;
         ui.frame(fr, &cx.world_name(&gs.world_id), true);
         ui.p.text_center(320.0, 62.0, &cx.location_name(&gs.world_id, &gs.location_id), BODY + 1.0, th().dim);
         let active: Vec<String> = gs.party.active_members().iter().map(|m| m.id.clone()).collect();
@@ -204,7 +207,7 @@ impl Screen<GameCx> for Hub {
         // 20 px portrait at the row's left, its three lines indented 22 px (the column grows by the indent, so the name
         // fits 22 px shorter than the column and the class and HP lines keep their width)
         let step = 13f32.max(ui.p.line_h(BODY + 1.0).ceil());
-        let row_h = (step * 3.0 + 3.0) as i32;
+        let mut row_h = (step * 3.0 + 3.0) as i32;
         let lines: Vec<(String, (i64, i64, bool))> = rows.iter().map(|m| (format!("{}  Lv {}", class_name(cx, m), m.level(&cx.data)), field_hp(cx, m))).collect();
         let mark = "Wounded";
         let gap = 6.0;
@@ -214,8 +217,25 @@ impl Screen<GameCx> for Hub {
             col_w = col_w.max(ui.p.text_w(class_line, BODY + 1.0).max(hp_w) + 6.0);
         }
         let col_w = (col_w + ROW_INDENT).ceil() as i32;
-        let cols = if rows.len() > 4 { 2 } else { 1 };
-        let per_col = rows.len().div_ceil(cols);
+        // PR7-26: a full roster at any text size keeps the menu below it inside the frame: past four members a second
+        // column, and more columns (as many as the frame's width holds) while the box is taller than the room left
+        // above the menu (three button rows and the detail line, over the frame's bottom edge); when the widest
+        // columns are still too tall the rows go compact (name and HP; the class line moves to the portrait's card)
+        let lh = ui.p.line_h(BODY + 1.0).ceil() as i32;
+        let bunks_h = if bunks_text(&gs).is_some() { step as i32 + 3 } else { 0 };
+        let room = fr.y + fr.h - 4 - lh - 76 - 10 - bunks_h - 80;
+        let widest = ((fr.w - 16) / col_w.max(1)).max(1) as usize;
+        let fits = |cols: usize, row_h: i32| 4 + rows.len().div_ceil(cols) as i32 * row_h <= room;
+        let mut cols = if rows.len() > 4 { 2 } else { 1 };
+        let compact = !fits(widest.max(cols), row_h);
+        if compact {
+            row_h = (step * 2.0 + 3.0) as i32;
+        }
+        while cols < widest.min(rows.len().max(1)) && !fits(cols, row_h) {
+            cols += 1;
+        }
+        let per_col = rows.len().div_ceil(cols).max(1);
+        let hp_y = if compact { step } else { step * 2.0 };
         let bh = 4 + per_col as i32 * row_h;
         let bx = Rect::new(320 - cols as i32 * col_w / 2, 80, cols as i32 * col_w, bh);
         ui.p.panel(bx, th().card, th().edge, 2.0);
@@ -226,16 +246,19 @@ impl Screen<GameCx> for Hub {
             let (who, look) = member_portrait(&cx.data, &gs, m);
             let pr = Rect::new(x as i32, y as i32, ROW_PORTRAIT, ROW_PORTRAIT);
             self.faces.draw(&mut ui.p, cx, &who, &look, "roster", pr);
-            ui.push(format!("hub.portrait.{}", m.id), "portrait", member_name(cx, m), pr, true, false, None, Vec::new());
+            let card = if compact { tip(&member_name(cx, m), class_line) } else { Vec::new() };
+            ui.push(format!("hub.portrait.{}", m.id), "portrait", member_name(cx, m), pr, true, false, None, card);
             let x = x + ROW_INDENT;
             ui.p.text_fit(x, y, &member_name(cx, m), BODY + 1.0, col_w as f32 - 6.0 - ROW_INDENT, if on { th().info } else { th().dim });
-            ui.p.text(x, y + step, class_line, BODY + 1.0, th().text);
+            if !compact {
+                ui.p.text(x, y + step, class_line, BODY + 1.0, th().text);
+            }
             let hp_line = format!("HP {hp} / {max}");
-            ui.p.text(x, y + step * 2.0, &hp_line, BODY + 1.0, th().text);
+            ui.p.text(x, y + hp_y, &hp_line, BODY + 1.0, th().text);
             if *wounded {
                 let mx = x + ui.p.text_w(&hp_line, BODY + 1.0) + gap;
-                ui.p.text(mx, y + step * 2.0, mark, BODY + 1.0, th().foe);
-                let r = Rect::new(mx as i32 - 1, (y + step * 2.0) as i32 - 1, ui.p.text_w(mark, BODY + 1.0) as i32 + 2, step as i32);
+                ui.p.text(mx, y + hp_y, mark, BODY + 1.0, th().foe);
+                let r = Rect::new(mx as i32 - 1, (y + hp_y) as i32 - 1, ui.p.text_w(mark, BODY + 1.0) as i32 + 2, step as i32);
                 ui.push(format!("hub.wounded.{}", m.id), "row", mark, r, true, false, None, tip(mark, &wounded_tip(cx, m)));
             }
         }

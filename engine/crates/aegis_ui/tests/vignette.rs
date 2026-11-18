@@ -831,3 +831,16 @@ fn x3_a_line_cards_expression_and_its_frames_base_sidecar() {
     assert_eq!(fx.expression(s.portrait.clock.now()), "", "a card without an expression holds none");
     assert_eq!(vignette::CARD_FACE_PRIORITY, 100, "the top of the cue rows' 0-100 priority range");
 }
+
+/// PR7-26 (1): the advance area carries no hover card, so nothing trails the pointer over the scene; the Skip button
+/// keeps its card.
+#[test]
+fn the_advance_area_shows_no_hover_card_next_to_the_pointer() {
+    let (mut cx, mut g) = (cx(), gfx());
+    let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![card("Hello."), card("Again.")]), TextSpeed::Normal, |_, _| {});
+    s.draw(&mut cx, &mut g, (W / 2, H / 2), true);
+    let (_, next_tip) = s.widget_rect("vignette.next").expect("the advance area");
+    assert!(next_tip.is_empty(), "no hover card on the stage: {next_tip:?}");
+    let (_, skip_tip) = s.widget_rect("vignette.skip").expect("a Skip button");
+    assert!(!skip_tip.is_empty(), "Skip keeps its card");
+}

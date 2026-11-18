@@ -468,6 +468,7 @@ impl BattleScreen {
             Action::Continue => self.settle(cx),
             Action::SkipBeat => self.skip_beat(cx),
             Action::Leave => cx.nav.push(Nav::Pop),
+            Action::Settings => cx.nav.push(Nav::Push(Box::new(crate::menus::SettingsScreen::in_game(cx)))),
             Action::Talk(a) => self.talk_reply(cx, a),
             Action::Skip => {
                 if !self.can_skip() {
