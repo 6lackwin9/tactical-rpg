@@ -118,6 +118,11 @@ impl Ctx {
         self.meters.iter().find(|m| m.0 == id).map(|m| (m.1, m.2))
     }
 
+    /// PR7-8: unit meter `id`'s min..max (None for an unknown meter; a `meter_floor` effect reads it).
+    pub fn meter_range(&self, id: &str) -> Option<(i64, i64)> {
+        self.meter(id)
+    }
+
     /// U1.2-S5: the range of a `meter` effect's delta on meter `id` (its row's `delta_max` either way; the default
     /// METER_DELTA when the row sets none).
     fn meter_delta(&self, id: &str) -> (i64, i64) {
@@ -548,6 +553,13 @@ pub fn when_errors(raw: &Value, ctx: &Ctx, at: &str, event: Option<&str>) -> Vec
     }
     enum_key(o, "intent", &ruleset::INTENTS, false, &at, &mut out);
     enum_key(o, "dual_wield", &SLOT_RULES, false, &at, &mut out);
+    // PR7-8 (RELIC-SIG1): the holder's campaign act and a meter it holds
+    whole_key(o, rpgkit_data::WHEN_FROM_ACT_KEY, rpgkit_data::WHEN_FROM_ACT, false, &at, &mut out);
+    if let Some(h) = o.get(rpgkit_data::WHEN_HOLDS_METER) {
+        if !h.as_str().is_some_and(|id| ctx.meter(id).is_some()) {
+            out.push(format!("{at}: {}: unknown unit meter '{}'.", rpgkit_data::WHEN_HOLDS_METER, gstr(h)));
+        }
+    }
     if let Some(m) = o.get("meter") {
         match m.as_object() {
             Some(m) => {
@@ -593,6 +605,10 @@ pub fn effects_errors(raw: &Value, ctx: &Ctx, at: &str, event: Option<&str>, met
         // PK1-S1 (3.2): a rider's effect acts on the unit it landed on unless it says `to: self`; recoil is the holder's
         if t == "damage" && o.contains_key("pct_of_hit") && event.is_none() && !o.contains_key("to") {
             out.push(format!("{at}: pct_of_hit is recoil on the holder: a rider sets to: self."));
+        }
+        // PR7-8 (RELIC-SIG1): a shockwave carries a hit the holder dealt (or the hit a rider rode on)
+        if t == rpgkit_data::SHOCKWAVE && event.is_some_and(|e| !e.is_empty() && !matches!(e, "hit_dealt" | "kill")) {
+            out.push(format!("{at}: shockwave needs a hit_dealt or kill trigger (or a rider)."));
         }
         if t == "redirect" {
             redirects += 1;
@@ -756,6 +772,11 @@ fn effect_errors(o: &Dict, t: &str, ctx: &Ctx, at: &str, meter_set: bool) -> Vec
             }
         }
         "reveal" => whole_key(o, "rounds", (1, 1), false, at, &mut out),
+        // PR7-8 (RELIC-SIG1): a share of the hit carried on along the line past the struck unit
+        rpgkit_data::SHOCKWAVE => {
+            whole_key(o, "tiles", rpgkit_data::SHOCKWAVE_TILES, true, at, &mut out);
+            whole_key(o, "pct_of_hit", rpgkit_data::SHOCKWAVE_PCT, true, at, &mut out);
+        }
         ROLL_TABLE => out.extend(roll_table_errors(o, ctx, at, meter_set)),
         _ => {}
     }

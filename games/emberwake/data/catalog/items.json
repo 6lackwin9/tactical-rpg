@@ -2006,7 +2006,7 @@
 			"rarity": "RARE",
 			"weight": 1.5,
 			"value": 0,
-			"description": "Proctor Quell's marrow scalpel, its blade stained black-green.",
+			"description": "Proctor Quell's silver-grooved marrow scalpel, its blade stained black-green. Every melee hit inflicts bleed; from Act 2 each hit also vents 10 Strain from the wielder.",
 			"damage_type": "slash",
 			"icon_id": "",
 			"starter_stash": false,
@@ -2027,8 +2027,41 @@
 				{
 					"kind": "effect",
 					"effect": {
-						"type": "status_potency",
-						"value": 10
+						"type": "trigger",
+						"on": "hit_dealt",
+						"when": {
+							"melee": true
+						},
+						"limit": "none",
+						"effects": [
+							{
+								"type": "inflict",
+								"status": "bleed",
+								"potency": 70,
+								"rounds": 2,
+								"to": "other"
+							}
+						]
+					}
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "trigger",
+						"on": "hit_dealt",
+						"when": {
+							"melee": true,
+							"from_act": 2
+						},
+						"limit": "none",
+						"effects": [
+							{
+								"type": "meter",
+								"meter": "strain",
+								"delta": -10,
+								"to": "self"
+							}
+						]
 					}
 				}
 			],
@@ -2041,7 +2074,7 @@
 			"rarity": "RARE",
 			"weight": 7.0,
 			"value": 0,
-			"description": "Overseer Grendel's Slag-Hammer.",
+			"description": "Overseer Grendel's piston-weighted Slag-Hammer. Every melee hit sends a shockwave 2 tiles on past the target: each foe there takes 50% of the hit.",
 			"damage_type": "blunt",
 			"icon_id": "",
 			"starter_stash": false,
@@ -2063,6 +2096,24 @@
 					"kind": "requirement",
 					"stat": "STR",
 					"value": 15
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "trigger",
+						"on": "hit_dealt",
+						"when": {
+							"melee": true
+						},
+						"limit": "none",
+						"effects": [
+							{
+								"type": "shockwave",
+								"tiles": 2,
+								"pct_of_hit": 50
+							}
+						]
+					}
 				}
 			],
 			"tiers": []
@@ -2074,7 +2125,7 @@
 			"rarity": "RARE",
 			"weight": 0.3,
 			"value": 0,
-			"description": "A vertebra that hums with other people's dreams.",
+			"description": "A fossilised titan spine-ring torn from the Calcified Amalgam. While the wearer carries Strain (Inoculated): +30% damage on every attack. From Act 2 the wearer's Strain never falls below 20.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -2083,9 +2134,26 @@
 			"slot": "ACCESSORY_1",
 			"modifiers": [
 				{
-					"kind": "stat_bonus",
-					"stat": "KNOW",
-					"value": 1
+					"kind": "effect",
+					"effect": {
+						"type": "skill_potency",
+						"group": "attack",
+						"value": 0.3,
+						"when": {
+							"holds_meter": "strain"
+						}
+					}
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "meter_floor",
+						"meter": "strain",
+						"floor": 20,
+						"when": {
+							"from_act": 2
+						}
+					}
 				}
 			],
 			"tiers": []

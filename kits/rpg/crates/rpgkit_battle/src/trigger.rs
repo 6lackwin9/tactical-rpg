@@ -386,6 +386,16 @@ fn matches(w: &World, ev: &Event, when: &Obj) -> bool {
     if !dw.is_empty() && !w.units[ev.holder].has_dual_wield(&dw) {
         return false;
     }
+    // PR7-8 (RELIC-SIG1): the holder's campaign act, and a gauge it holds (never without the rule unit_meters)
+    if let Some(a) = when.get(rpgkit_data::WHEN_FROM_ACT_KEY) {
+        if i64::from(w.units[ev.holder].campaign_act) < a.as_f64().map_or(i64::MAX, |a| a as i64) {
+            return false;
+        }
+    }
+    let held = value::string(when, rpgkit_data::WHEN_HOLDS_METER, "");
+    if !held.is_empty() && crate::meter::value(w, ev.holder, &held).is_none() {
+        return false;
+    }
     match when.get("meter") {
         None => true,
         Some(m) => m.as_object().is_some_and(|m| crate::meter::value(w, ev.holder, &value::string(m, "id", "")).is_some_and(|v| v >= value::int(m, "at_least", 0))),
@@ -925,6 +935,13 @@ pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Hol
                 crate::meter::from_effect(res, w, h, to, e, rules, block, fired);
                 continue;
             }
+            // PR7-8 (RELIC-SIG1): the hit carried on past the struck unit (one line; nothing when it reaches no foe)
+            rpgkit_data::SHOCKWAVE => {
+                let Some((what, d, r)) = shockwave(w, h, ev, e) else { continue };
+                dealt = d;
+                rows = r;
+                what
+            }
             // PK1-S1 (3.3): a weapon strike outside the plan, logged `[Strike]`
             rpgkit_data::STRIKE_NEAREST => {
                 let (l, dealt, rows) = strike_nearest(res, w, h, to, e);
@@ -986,6 +1003,48 @@ pub fn nearest_other(w: &World, c: UnitId) -> Option<UnitId> {
         return None;
     }
     (0..w.units.len()).filter(|&u| u != c && w.has(u)).min_by_key(|&u| (w.dist(c, u), u))
+}
+
+/// `PR7-8` (`RELIC-SIG1`): the tiles a `shockwave` effect of holder `h` reaches for event `ev`: the `tiles` tiles past
+/// the struck unit (`ev.other`, where it stands now) along the holder-to-target direction snapped to the 8 directions
+/// (`skill::snap`), on the grid. Empty without a struck unit on the field, a holder on the field or a direction.
+pub fn shockwave_cells(w: &World, h: &Holder, ev: &Event, tiles: i32) -> Vec<crate::grid::V2> {
+    let Some(o) = ev.other else { return Vec::new() };
+    let (Some(from), Some(at)) = (w.grid.positions[h.unit], w.grid.positions[o]) else { return Vec::new() };
+    let d = crate::skill::snap(at - from);
+    if d == crate::grid::V2::new(0, 0) {
+        return Vec::new();
+    }
+    (1..=tiles).map(|i| at + d * i).filter(|c| w.grid.is_valid(*c)).collect()
+}
+
+/// `PR7-8`: the `shockwave` effect `e` of holder `h` for hit event `ev`: each foe of the holder on `shockwave_cells`
+/// takes `pct_of_hit` percent of the event's hit (`part`, at least 1), as a recoil's share is (never mitigated again;
+/// it raises no event, depth 1). The line, the HP taken and its journal rows; None when the event has no hit or no
+/// foe stands there.
+fn shockwave(w: &mut World, h: &Holder, ev: &Event, e: &Obj) -> Option<(String, i32, Vec<(UnitId, i32)>)> {
+    let (lo, hi) = rpgkit_data::SHOCKWAVE_TILES;
+    let tiles = value::int(e, "tiles", 1).clamp(lo as i32, hi as i32);
+    let amount = part(ev.hit, value::int(e, "pct_of_hit", 0));
+    if amount <= 0 {
+        return None;
+    }
+    let foes: Vec<UnitId> = shockwave_cells(w, h, ev, tiles).into_iter().filter_map(|c| w.occupant(c)).filter(|u| w.foes_of(h.unit).contains(u)).collect();
+    if foes.is_empty() {
+        return None;
+    }
+    let mark = w.hp_journal.as_ref().map_or(0, |j| j.len());
+    let mut parts = Vec::new();
+    let mut dealt = 0;
+    for f in foes {
+        let before = w.units[f].hp;
+        w.damage(f, amount, true);
+        let lost = before - w.units[f].hp;
+        dealt += lost;
+        parts.push(format!("{lost} damage to {}{}", w.units[f].name, if w.units[f].is_alive() { "" } else { ", defeated" }));
+    }
+    let rows = w.hp_journal.as_mut().map(|j| j.split_off(mark.min(j.len()))).unwrap_or_default();
+    Some((format!("shockwave: {}", parts.join(", ")), dealt, rows))
 }
 
 /// The tag of a `strike_nearest` effect's log line.

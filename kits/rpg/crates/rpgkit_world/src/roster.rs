@@ -74,6 +74,8 @@ pub fn field_unit(d: &Data, gs: &GameState, m: &UnitState, world: &str) -> Optio
     if !unit.wear.is_empty() && !crate::weapons::active(d, gs) {
         unit.wear.clear();
     }
+    // PR7-8 (RELIC-SIG1): the campaign act its `from_act` effects read (the build does not read the act)
+    unit.set_campaign_act(&d.cat_in(world), act(gs));
     let max = unit.max_hp as i64;
     let mut hp = progression::start_hp(max, m.hp_lost);
     if m.has_condition(WOUNDED) {
