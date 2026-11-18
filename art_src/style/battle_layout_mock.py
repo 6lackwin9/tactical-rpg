@@ -406,6 +406,61 @@ def mock3(shot: Image.Image) -> Image.Image:
     return img
 
 
+# take 4 (Tushar 2026-11-18 21:10): no AP pills; a round AP tracker (max, start, planned in another colour);
+# block span obvious via a block ruler under the slots; per-move AP not capped at 4
+PLANNED = (217, 150, 60)
+
+
+def move_pips(d, x, w, y, ap):
+    """Pips centred in the tile; a tile holds 4 pips per block it spans; past that, one pip and a number."""
+    cap = 4 * max(1, round((w + 6) / 60))
+    if ap <= cap:
+        pw = ap * 10 - 2
+        ap_pips(d, x + (w - pw) // 2, y, ap, ap, size=8, gap=2)
+    else:
+        ap_pips(d, x + w // 2 - 14, y, 1, 1, size=8, gap=2)
+        d.text((x + w // 2 - 2, y - 4), str(ap), font=MONO_L, fill=AP_ON)
+
+
+def mock4(shot: Image.Image) -> Image.Image:
+    img = mock3(shot)
+    d = ImageDraw.Draw(img)
+    d.rectangle((196, 0, 896, 63), fill=BASALT)
+    plan = [("arrow", 1, 2), ("pneumatic_hammer_strike", 3, 5), ("shield_wall", 2, 2)]
+    W, G = 54, 6
+    x0 = 196
+    x = x0
+    sel = 1
+    for i, (ic, blocks, ap) in enumerate(plan):
+        w = blocks * W + (blocks - 1) * G
+        on = i == sel
+        d.rectangle((x, 3, x + w, 50), fill=SLATE, outline=GOLD if on else IRON, width=2 if on else 1)
+        t = slot_icon(ic, 32)
+        img.paste(t, (x + (w - 32) // 2, 6), t)
+        move_pips(d, x, w, 40, ap)
+        # block ruler: one notch per block, notches of one move joined, a gap between moves
+        for b in range(blocks):
+            bx = x + b * (W + G)
+            d.rectangle((bx, 55, bx + W, 60), fill=GOLD if on else IRON_L)
+            if b < blocks - 1:
+                d.rectangle((bx + W, 57, bx + W + G, 58), fill=GOLD if on else IRON_L)
+        x += w + G
+    # round AP tracker: max cap as outlined slots, start-of-round AP filled blue, the plan's AP over it in amber
+    MAX, START, USED = 12, 10, 9
+    ax, ay, sz, gp = x + 20, 18, 12, 3
+    for i in range(MAX):
+        px = ax + i * (sz + gp)
+        if i < USED:
+            d.rectangle((px, ay, px + sz - 1, ay + sz - 1), fill=PLANNED)
+        elif i < START:
+            d.rectangle((px, ay, px + sz - 1, ay + sz - 1), fill=AP_ON)
+        else:
+            d.rectangle((px, ay, px + sz - 1, ay + sz - 1), outline=IRON)
+    d.text((ax, ay + 18), "9 / 10", font=MONO_L, fill=PARCH)
+    d.text((ax + 52, ay + 19), "max 12", font=SMALL, fill=IRON_L)
+    return img
+
+
 def label(img, text):
     out = Image.new("RGB", (img.width, img.height + 34), BASALT)
     out.paste(img, (0, 34))
@@ -438,6 +493,13 @@ def main():
     sheet.paste(a, (0, 0))
     sheet.paste(b, (0, a.height + 12))
     sheet.save(out / "battle_layout_take2_vs_take3.png")
+    m4 = mock4(shot)
+    m4.save(out / "battle_layout_take4.png")
+    a, b = label(m3, "Take 3"), label(m4, "Take 4: round AP tracker, block ruler under the slots, a 3-block move, AP past 4")
+    sheet = Image.new("RGB", (a.width, a.height * 2 + 12), VOID)
+    sheet.paste(a, (0, 0))
+    sheet.paste(b, (0, a.height + 12))
+    sheet.save(out / "battle_layout_take3_vs_take4.png")
 
 
 if __name__ == "__main__":
