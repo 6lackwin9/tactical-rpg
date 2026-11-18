@@ -12,10 +12,12 @@
 //! queued in `pending` and handed on through `pending_head` / `pop_pending` (the GUI plays it; `{vignette}` items at
 //! the head move to the story queue through `story::pull_pending`, which `story::next_scene` calls, STORYUI1-W; a
 //! `{battle}` item is `trigger::fight`). Every effect list (meter rules, checkpoints, triggers) runs through the one
-//! shared effect body, `dialogue::apply_effects`. CAMPAIGN1-U: the HUD view (`view.rs`, W4) the game draws.
+//! shared effect body, `dialogue::apply_effects`. CAMPAIGN1-U: the HUD view (`view.rs`, W4) the game draws. PR6-11: an
+//! `end` of kind `ending` completes the run on an `endings` row (`ending.rs`: the ordered branch and the epilogue cards).
 
 pub mod checkpoint;
 pub mod clock;
+pub mod ending;
 pub mod meter;
 pub mod preview;
 pub mod purse;
@@ -119,6 +121,30 @@ pub struct RunOver {
     pub text: String,
     /// The `run_over` event was reported (later ticks do nothing).
     pub told: bool,
+    /// PR6-11: the `endings` row a kind `ending` end finished on ("" = none, or another kind; `ending::pick`).
+    pub ending: String,
+}
+
+impl RunOver {
+    /// A run over of kind `kind` with its card and text (no ending).
+    pub fn new(kind: &str, card: &str, text: &str) -> Self {
+        Self { kind: kind.into(), card: card.into(), text: text.into(), told: false, ending: String::new() }
+    }
+
+    /// PR6-11: the campaign was completed (an end of kind `ending`), not lost.
+    pub fn completed(&self) -> bool {
+        self.kind == rpgkit_data::ending::END_KIND_ENDING
+    }
+
+    /// The `run_over` event `{event, kind, card, text}`; a completed run adds `completed: true` and its `ending`.
+    pub fn event(&self) -> Value {
+        let mut e = json::obj([("event", "run_over".into()), ("kind", self.kind.clone().into()), ("card", self.card.clone().into()), ("text", self.text.clone().into())]);
+        if self.completed() {
+            e.insert("completed".into(), Value::Bool(true));
+            e.insert("ending".into(), self.ending.clone().into());
+        }
+        Value::Object(e)
+    }
 }
 
 /// `gs.campaign` (11.5), saved as the key `campaign` only in a campaign world (X3).
@@ -590,7 +616,7 @@ fn tick_once(d: &Data, gs: &mut GameState, cause: &Cause) -> Vec<Value> {
     let Some(c) = gs.campaign.as_mut() else { return events };
     if let Some(o) = c.over.as_mut().filter(|o| !o.told) {
         o.told = true;
-        events.push(Value::Object(json::obj([("event", "run_over".into()), ("kind", o.kind.clone().into()), ("card", o.card.clone().into()), ("text", o.text.clone().into())])));
+        events.push(o.event());
     }
     c.sync(time);
     // days a `rest` effect passed inside this tick are not ticked yet: the follow-up days(n, rest) tick sees them pass
@@ -626,7 +652,7 @@ pub fn recipe_tick(d: &Data, gs: &mut GameState, cause: &Cause, moved: bool) -> 
     let Some(c) = gs.campaign.as_mut() else { return events };
     if let Some(o) = c.over.as_mut().filter(|o| !o.told) {
         o.told = true;
-        events.push(Value::Object(json::obj([("event", "run_over".into()), ("kind", o.kind.clone().into()), ("card", o.card.clone().into()), ("text", o.text.clone().into())])));
+        events.push(o.event());
     }
     // the meters' baseline only (the clock's `last_time` is the last tick's: checkpoints count days from it)
     let values: IndexMap<String, i64> = c.meters.keys().map(|id| (id.clone(), c.value(id, time))).collect();
@@ -778,6 +804,12 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, events: &mut Vec<Va
         purse::rest_effect(d, gs);
         return true;
     }
+    // PR6-11: the ending an end of kind `ending` finishes on, picked before the campaign is borrowed (the gates read it)
+    let ending = if effect == "end" && json::s(fx, "kind") == rpgkit_data::ending::END_KIND_ENDING && gs.campaign.as_ref().is_some_and(|c| !c.is_over()) {
+        ending::pick(d, gs, &json::s(fx, rpgkit_data::ending::END_ENDING_KEY))
+    } else {
+        String::new()
+    };
     let time = gs.time;
     let Some(c) = gs.campaign.as_mut() else { return is_campaign_effect(&effect) };
     if c.is_over() {
@@ -827,7 +859,7 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, events: &mut Vec<Va
         }
         "end" => {
             if c.over.is_none() {
-                c.over = Some(RunOver { kind: json::s_or(fx, "kind", "fail"), card: json::s(fx, "card"), text: json::s(fx, "text"), told: false });
+                c.over = Some(RunOver { ending, ..RunOver::new(&json::s_or(fx, "kind", "fail"), &json::s(fx, "card"), &json::s(fx, "text")) });
             }
         }
         _ => return false,

@@ -17,6 +17,7 @@ use serde_json::Value;
 
 pub mod body_slot;
 pub mod dojo_preset;
+pub mod ending;
 pub mod facility;
 pub mod looks;
 pub mod mastery;
@@ -1392,8 +1393,9 @@ pub const TRIGGER_ON: [&str; 6] = ["any", "day", "battle", "enter", "act", "reci
 /// hero's battle end reaches (`rpgkit_world::roster::HeroEnd`: the channel meter's peak and last value, the commands
 /// started in a Channel round).
 pub const HERO_FILTER_KEYS: [&str; 3] = ["strain_peak", "strain_end", "channel_actions"];
-/// F1: what an `end` effect ends the run as.
-pub const END_KINDS: [&str; 2] = ["fail", "bad_end"];
+/// F1: what an `end` effect ends the run as (PR6-11: `ending`, the campaign finishes on an `endings` row,
+/// `ending::END_KIND_ENDING`).
+pub const END_KINDS: [&str; 3] = ["fail", "bad_end", ending::END_KIND_ENDING];
 /// R1: where the party may rest.
 pub const REST_WHERE: [&str; 3] = ["nodes", "rest_places", "none"];
 /// R4: what a lost battle does.
@@ -1409,7 +1411,7 @@ pub const CAMPAIGN_EFFECTS: [(&str, &[&str]); 9] = [
     ("clock_stop", &["meter"]),
     ("set_act", &["act"]),
     ("rest", &[]),
-    ("end", &["kind", "card", "text"]),
+    ("end", &["kind", "card", "text", ending::END_ENDING_KEY]),
 ];
 /// ACT1-HOOKS2 (FB-244 (2)): the keys a meter rule's effect may carry besides its kind's: `when`, flag conditions
 /// (`{key, op, value}`, all holding when the effect is reached), and `else` (true: runs only when no effect of its chain

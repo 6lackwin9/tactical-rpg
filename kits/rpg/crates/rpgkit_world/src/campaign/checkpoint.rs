@@ -178,7 +178,7 @@ pub fn step(d: &Data, gs: &mut GameState, day: i64, last_day: i64, events: &mut 
             apply_effects(d, gs, &cp.effects, events);
             ran = true;
         } else if let Some(c) = gs.campaign.as_mut() {
-            c.over = Some(RunOver { kind: "bad_end".into(), card: cp.card.clone(), text: cp.text.clone(), told: false });
+            c.over = Some(RunOver::new("bad_end", &cp.card, &cp.text));
         }
     }
     ran
