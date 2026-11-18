@@ -705,6 +705,46 @@ def mock7(shot: Image.Image) -> Image.Image:
     return img
 
 
+# take 8 (Tushar 2026-11-18 21:29): incoming folded into the HP bar as a red loss preview; hit blocks unmistakable on
+# the timeline; AP shows the 12 cap as a quiet visual plus a compact "10/12" notation
+def mock8(shot: Image.Image) -> Image.Image:
+    img = mock7(shot)
+    d = ImageDraw.Draw(img)
+    W, G = 54, 6
+    # party plate: drop the incoming row; preview the loss on the HP bar instead
+    d.rectangle((16, 152, 168, 190), fill=BASALT)
+    y = 84
+    d.rectangle((76, y + 28, 168, y + 38), fill=SLATE)
+    bar(d, 76, y + 30, 60, 6, 1.0, HP)
+    loss = round(60 * 22 / 242)
+    d.rectangle((136 - loss, y + 30, 136, y + 36), fill=IMPACT)
+    d.text((140, y + 26), "-22", font=MONO, fill=IMPACT)
+    # timeline: hit blocks get a red wash on the tile, a red top edge, a burst badge and a bold red ruler notch
+    for blk in HITS:
+        bx = 196 + blk * (W + G)
+        d.rectangle((bx, 49, bx + W, 54), fill=BASALT)
+        wash = Image.new("RGBA", (W - 2, 44), IMPACT + (60,))
+        img.paste(wash, (bx + 1, 4), wash)
+        d.rectangle((bx + 1, 4, bx + W - 1, 6), fill=IMPACT)
+        d.rectangle((bx, 52, bx + W, 61), fill=IMPACT)
+        cx = bx + W - 12
+        d.polygon([(cx, 8), (cx + 8, 16), (cx, 24), (cx - 8, 16)], fill=IMPACT, outline=(255, 210, 190))
+        d.text((cx - 2, 8), "!", font=MONO_L, fill=(255, 235, 220))
+    # AP: 12 slots, the 10 you have this round filled (planned in amber), the 2 above as hollow cap marks
+    ax, ay = 576, 14
+    d.rectangle((ax, 0, 890, 63), fill=BASALT)
+    d.text((ax, ay - 2), "AP", font=TITLE_S, fill=GOLD)
+    for i in range(12):
+        px = ax + 34 + i * 14
+        if i < 10:
+            d.rectangle((px, ay, px + 10, ay + 10), fill=PLANNED)
+        else:
+            d.rectangle((px, ay + 3, px + 10, ay + 7), fill=AP_OFF)
+    d.text((ax + 34, ay + 20), "10/12", font=MONO_L, fill=PARCH)
+    d.text((ax + 84, ay + 21), "· 10 planned", font=SMALL, fill=PLANNED)
+    return img
+
+
 def label(img, text):
     out = Image.new("RGB", (img.width, img.height + 34), BASALT)
     out.paste(img, (0, 34))
@@ -770,6 +810,15 @@ def main():
     sh.paste(side, (940, 1612))
     sh.paste(foes, (1480, 1612))
     sh.save(out / "battle_layout_take7_sheet.png")
+    m8 = mock8(shot)
+    m8.save(out / "battle_layout_take8.png")
+    strip = m8.crop((0, 0, 1280, 66)).resize((2560, 132), Image.NEAREST)
+    side = m8.crop((8, 72, 176, 200)).resize((504, 384), Image.NEAREST)
+    sh = Image.new("RGB", (2560, 1440 + 20 + 132 + 20 + 384), VOID)
+    sh.paste(m8.resize((2560, 1440), Image.NEAREST), (0, 0))
+    sh.paste(strip, (0, 1460))
+    sh.paste(side, (0, 1612))
+    sh.save(out / "battle_layout_take8_sheet.png")
 
 
 if __name__ == "__main__":
