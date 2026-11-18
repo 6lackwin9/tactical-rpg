@@ -148,7 +148,7 @@ pub fn build_steps(w: &World, plan: &mut Plan, actor: UnitId, profile: &AiProfil
             ranked = vec![p];
         }
         let target = ranked[0];
-        let dist = st.pos.dist(w.pos(target));
+        let dist = w.dist_at(actor, st.pos, target);
         let low_hp = ratio <= profile.defend_below && !profile.reckless;
 
         if !disengage_tried && !profile.reckless {
@@ -424,7 +424,7 @@ fn try_item(w: &World, plan: &mut Plan, actor: UnitId) -> bool {
         let mut downed: Vec<UnitId> = w.friends_of(actor).iter().copied().filter(|&f| w.can_revive(f) && w.grid.positions[f].is_some()).collect();
         downed.sort_by_key(|&f| (w.bleed_left(f), f));
         for f in downed {
-            if pos.dist(w.pos(f)) <= rv.battle_reach() && plan.add_step(w, actor, PlanStep::use_item(&rv.id, f), false).is_empty() {
+            if w.dist_at(actor, pos, f) <= rv.battle_reach() && plan.add_step(w, actor, PlanStep::use_item(&rv.id, f), false).is_empty() {
                 return true;
             }
         }
@@ -440,7 +440,7 @@ fn try_item(w: &World, plan: &mut Plan, actor: UnitId) -> bool {
         let mut best: Option<UnitId> = None;
         for &foe in w.foes_of(actor) {
             let fu = &w.units[foe];
-            if !fu.is_active() || w.grid.positions[foe].is_none() || fu.hp > b.damage || pos.dist(w.pos(foe)) > b.battle_reach() {
+            if !fu.is_active() || w.grid.positions[foe].is_none() || fu.hp > b.damage || w.dist_at(actor, pos, foe) > b.battle_reach() {
                 continue;
             }
             if best.is_none_or(|x| fu.hp < w.units[x].hp) {
@@ -621,14 +621,27 @@ fn kite_then_engage(w: &World, plan: &mut Plan, actor: UnitId, st: &SimState, fo
     // HOOKS1 GH8: a visible ground hazard that would harm the unit costs as a terrain hazard does
     let penalty = |cell: V2| crate::ground::ai_penalty(w, actor, cell);
     let prefer = |cell: V2| cover_pref(w, &shooters, cell);
+    let size = w.size_of(actor);
     let hooks = Hooks { penalty: Some(&penalty), prefer: if shooters.is_empty() { None } else { Some(&prefer) } };
     let mut want = band.1;
     while want >= band.0 {
-        if want <= st.pos.dist(target_pos) {
+        if want <= w.dist_at(actor, st.pos, ranked[0]) {
             break;
         }
         let mut goals = Cells::new();
+        let big = size > 1 || w.size_of(ranked[0]) > 1;
+        if big {
+            // BIGUNIT1 BU13: anchors at exactly `want` from the target's square
+            for cell in w.stand_goals(actor, target_pos, w.size_of(ranked[0]), (want, want), false, &blocked) {
+                if cell != st.pos && nearest_foe(w, cell, foes) >= band.0.max(cur_near.min(band.1)) {
+                    goals.insert(cell);
+                }
+            }
+        }
         for dx in -want..=want {
+            if big {
+                break;
+            }
             let dy = want - dx.abs();
             let signs: &[i32] = if dy != 0 { &[1, -1] } else { &[1] };
             for &sy in signs {
@@ -643,7 +656,7 @@ fn kite_then_engage(w: &World, plan: &mut Plan, actor: UnitId, st: &SimState, fo
             }
         }
         if !goals.is_empty() {
-            let route = path::find_path(&w.grid, st.pos, &goals, &blocked, false, &hooks);
+            let route = path::find_path_sized(&w.grid, st.pos, &goals, &blocked, false, &hooks, size);
             if !route.is_empty() && route.len() as i32 <= limit {
                 let dest = route.iter().fold(st.pos, |a, d| a + *d);
                 let mark = plan.steps_of(actor).len();
@@ -673,7 +686,7 @@ fn advance_toward(w: &World, plan: &mut Plan, actor: UnitId, st: &SimState, rank
         if route.is_empty() {
             continue;
         }
-        let reachable = path::fit_blocks(&w.grid, st.pos, &route, w.units[actor].move_per_block(), MAX_MOVE_BLOCKS);
+        let reachable = path::fit_blocks_sized(&w.grid, st.pos, &route, w.units[actor].move_per_block(), MAX_MOVE_BLOCKS, w.size_of(actor));
         let dest = reachable.iter().take(tiles as usize).fold(st.pos, |a, d| a + *d);
         if plan.add_step(w, actor, PlanStep::go_to(w.book().lowest(Kind::Move), dest), false).is_empty() {
             return true;
@@ -696,7 +709,7 @@ fn rank_targets(w: &World, plan: &Plan, actor: UnitId, st: &SimState, foes: &[Un
         if !w.units[f].is_active() || !w.has(f) || st.est(f) <= 0 {
             continue;
         }
-        let d = st.pos.dist(w.pos(f));
+        let d = w.dist_at(actor, st.pos, f);
         let hp_left = st.est(f) as f64;
         let mut score = if nearest_first { d as f64 * 100.0 + hp_left } else { hp_left + d as f64 * 4.0 };
         let mut reachable = d <= attack_reach;
@@ -726,7 +739,7 @@ fn rank_by_build(w: &World, plan: &Plan, actor: UnitId, st: &SimState, foes: &[U
         if !w.units[f].is_active() || !w.has(f) || st.est(f) <= 0 {
             continue;
         }
-        let d = st.pos.dist(w.pos(f));
+        let d = w.dist_at(actor, st.pos, f);
         let (pathless, near, this_round) = if d <= attack_reach {
             (false, d, true)
         } else {
@@ -753,10 +766,11 @@ fn retreat_dir(w: &World, plan: &Plan, actor: UnitId, pos: V2, foes: &[UnitId], 
     let cur = nearest_foe(w, pos, foes);
     for d in DIRS {
         let n = pos + d;
-        if !w.grid.is_valid(n) || !w.grid.is_walkable(n) || w.grid.is_exit(n) || blocked.contains(&n) {
+        // BIGUNIT1 BU6: a big unit's whole square
+        if !w.clear_at(actor, n, &blocked) {
             continue;
         }
-        if n.dist(target_pos) > reach {
+        if w.dist_at_cell(actor, n, target_pos) > reach {
             continue;
         }
         let gain = nearest_foe(w, n, foes) - cur;
@@ -769,7 +783,7 @@ fn retreat_dir(w: &World, plan: &Plan, actor: UnitId, pos: V2, foes: &[UnitId], 
 }
 
 fn nearest_foe(w: &World, pos: V2, foes: &[UnitId]) -> i32 {
-    foes.iter().filter(|f| w.units[**f].is_active() && w.has(**f)).map(|f| pos.dist(w.pos(*f))).fold(99, i32::min)
+    foes.iter().filter(|f| w.units[**f].is_active() && w.has(**f)).map(|f| w.dist_to(*f, pos)).fold(99, i32::min)
 }
 
 fn nearest_foe_unit(w: &World, pos: V2, foes: &[UnitId]) -> Option<UnitId> {
@@ -777,7 +791,7 @@ fn nearest_foe_unit(w: &World, pos: V2, foes: &[UnitId]) -> Option<UnitId> {
     let mut best_d = 99;
     for &f in foes {
         if w.units[f].is_active() && w.has(f) {
-            let d = pos.dist(w.pos(f));
+            let d = w.dist_to(f, pos);
             if d < best_d {
                 best_d = d;
                 best = Some(f);
@@ -902,14 +916,13 @@ fn try_disengage(w: &World, plan: &mut Plan, actor: UnitId, cap: i32, profile: &
 fn landing_cells(w: &World, plan: &Plan, actor: UnitId, sid: SkillId, target: UnitId) -> Vec<V2> {
     let st = plan.compile(w, actor);
     let band = basic_band(w, actor);
-    let target_pos = w.pos(target);
-    let here = st.pos.dist(target_pos);
+    let here = w.dist_at(actor, st.pos, target);
     let blocked = plan.blocked_cells(w, actor);
     let reachable = plan.jump_tiles_from(w, st.pos, w.cat.skills[sid].jump_tiles);
     let mut scored: Vec<(V2, i32, i32)> = Vec::new();
     for (&cell, &steps) in &reachable {
-        let d = cell.dist(target_pos);
-        if blocked.contains(&cell) || d <= here || d < band.0 || d > band.1 {
+        let d = w.dist_at(actor, cell, target);
+        if blocked.contains(&cell) || (w.size_of(actor) > 1 && !w.clear_at(actor, cell, &blocked)) || d <= here || d < band.0 || d > band.1 {
             continue;
         }
         scored.push((cell, d, steps));
@@ -1038,7 +1051,7 @@ fn early_taunt_walk(w: &World, plan: &mut Plan, actor: UnitId, taunts: &[Step]) 
     let mut diver = None;
     let mut best = 1 << 20;
     for foe in divers(w, plan, actor) {
-        let d = st.pos.dist(w.pos(foe));
+        let d = w.dist_at(actor, st.pos, foe);
         if d < best {
             best = d;
             diver = Some(foe);
@@ -1049,7 +1062,7 @@ fn early_taunt_walk(w: &World, plan: &mut Plan, actor: UnitId, taunts: &[Step]) 
     if route.is_empty() {
         return false;
     }
-    let reachable = path::fit_blocks(&w.grid, st.pos, &route, w.units[actor].move_per_block(), MAX_MOVE_BLOCKS);
+    let reachable = path::fit_blocks_sized(&w.grid, st.pos, &route, w.units[actor].move_per_block(), MAX_MOVE_BLOCKS, w.size_of(actor));
     let tiles = (reachable.len() as i32).min(plan.max_move_tiles(w, actor).min(st.ap_left.max(0)));
     let mv = w.book().lowest(Kind::Move);
     let mark = plan.steps_of(actor).len();
@@ -1186,7 +1199,7 @@ fn fortify_targets(w: &World, plan: &Plan, actor: UnitId, sid: SkillId) -> Vec<U
     let mut cands: Vec<(UnitId, i32, i32, i32, usize)> = Vec::new();
     for (i, f) in buff_candidates(w, actor, sid).into_iter().enumerate() {
         let pos = plan.planned_position(w, f);
-        let adjacent = foes.iter().filter(|&&e| w.units[e].is_active() && w.has(e) && pos.dist(w.pos(e)) <= 1).count() as i32;
+        let adjacent = foes.iter().filter(|&&e| w.units[e].is_active() && w.has(e) && w.dist_at(f, pos, e) <= 1).count() as i32;
         let taunting = held_with(&w.units[f], pulls_targeting) as i32;
         cands.push((f, adjacent, taunting, damage::armor_rating(&w.units[f]), i + 1));
     }
@@ -1215,7 +1228,7 @@ pub fn rating_scorer(w: &World) -> bool {
 /// Whether foe `foe` can reach a tile within its basic reach of `at` this round (its round's move tiles plus that
 /// reach): the same threat test as the Move Rate debuff's.
 fn threatens(w: &World, plan: &Plan, foe: UnitId, at: V2) -> bool {
-    w.pos(foe).dist(at) <= plan.max_move_tiles(w, foe) + basic_band(w, foe).1
+    w.dist_to(foe, at) <= plan.max_move_tiles(w, foe) + basic_band(w, foe).1
 }
 
 /// W2-5 I1.2-S2: the target order of a buff skill whose status raises Attack Power or Move Rate, under
@@ -1239,7 +1252,7 @@ fn rating_buff_targets(w: &World, plan: &Plan, actor: UnitId, sid: SkillId) -> O
             .enumerate()
             .filter(|&(_, f)| {
                 let (at, reach) = (plan.planned_position(w, f), plan.max_move_tiles(w, f) + basic_band(w, f).1);
-                foes.iter().any(|&e| w.pos(e).dist(at) <= reach)
+                foes.iter().any(|&e| w.dist_at(f, at, e) <= reach)
             })
             .map(|(i, f)| {
                 let u = &w.units[f];
@@ -1309,7 +1322,7 @@ fn debuff_order(w: &World, plan: &Plan, actor: UnitId, st: &str, by_power: &[Uni
                 continue;
             }
             for &f in w.friends_of(actor) {
-                if f != actor && w.units[f].is_active() && w.has(f) && plan.planned_position(w, f).dist(w.pos(foe)) <= 1 {
+                if f != actor && w.units[f].is_active() && w.has(f) && w.dist_at(f, plan.planned_position(w, f), foe) <= 1 {
                     first.push(foe);
                     break;
                 }
@@ -1321,12 +1334,12 @@ fn debuff_order(w: &World, plan: &Plan, actor: UnitId, st: &str, by_power: &[Uni
             let actor_pos = w.pos(actor);
             for &foe in by_power {
                 let threat = plan.max_move_tiles(w, foe) + basic_band(w, foe).1;
-                if w.pos(foe).dist(target_pos) <= threat {
+                if w.dist_at(fragile, target_pos, foe) <= threat {
                     first.push(foe);
                 }
             }
             godot_sort(&mut first, |a, b| {
-                let (da, db) = (actor_pos.dist(w.pos(*a)), actor_pos.dist(w.pos(*b)));
+                let (da, db) = (w.dist_at(actor, actor_pos, *a), w.dist_at(actor, actor_pos, *b));
                 if da != db {
                     da < db
                 } else {
@@ -1405,7 +1418,7 @@ fn riposte_finisher(w: &World, plan: &mut Plan, actor: UnitId, cap: i32, profile
     let st = plan.compile(w, actor);
     let near = nearest_foe_unit(w, st.pos, foes);
     let Some(near) = near else { return false };
-    if st.withdrawn || w.units[near].attack_range > 1 || st.pos.dist(w.pos(near)) != 1 {
+    if st.withdrawn || w.units[near].attack_range > 1 || w.dist_at(actor, st.pos, near) != 1 {
         return false;
     }
     for sid in ordered(w, &optional(w, w.book().granting(Kind::Defend, counters, cap, Some(&w.units[actor])), profile), profile) {
@@ -1545,7 +1558,7 @@ fn likely_target(w: &World, plan: &Plan, foe: UnitId, target: UnitId, at: V2, wh
         if pos == NO_CELL {
             continue;
         }
-        let d = foe_pos.dist(pos);
+        let d = crate::grid::square_dist(foe_pos, w.size_of(foe), pos, w.size_of(u));
         if d > threat {
             continue;
         }
@@ -1563,7 +1576,7 @@ fn likely_target(w: &World, plan: &Plan, foe: UnitId, target: UnitId, at: V2, wh
 }
 
 fn strike_chain(w: &World, foe: UnitId, target: UnitId, at: V2, by_block: i32) -> i32 {
-    let d = w.pos(foe).dist(at);
+    let d = crate::grid::square_dist(w.pos(foe), w.size_of(foe), at, w.size_of(target));
     let mut best = 0;
     let fu = &w.units[foe];
     for sid in strikes(w, foe, w.skill_cap_of(foe)) {
@@ -1599,7 +1612,7 @@ fn taunt_pull(w: &World, plan: &Plan, actor: UnitId, st: &SimState, ranked: &[Un
         return None;
     }
     let band = basic_band(w, actor);
-    let d = st.pos.dist(w.pos(taunter));
+    let d = w.dist_at(actor, st.pos, taunter);
     if d >= band.0 && d <= band.1 {
         return Some(taunter);
     }
@@ -2361,7 +2374,7 @@ fn guard_pick(w: &mut World, plan: &mut Plan, c: UnitId) -> Option<IntentPick> {
 /// last round (`World::hits`).
 fn hit_nearby(w: &World, c: UnitId) -> bool {
     let here = w.pos(c);
-    w.hits.last_round.iter().any(|&f| (f == c || w.friends_of(c).contains(&f)) && w.has(f) && w.pos(f).dist(here) <= 2)
+    w.hits.last_round.iter().any(|&f| (f == c || w.friends_of(c).contains(&f)) && w.has(f) && w.dist_at(c, here, f) <= 2)
 }
 
 /// HOOKS1 AT2 `brace_after_hit`: Guard on the `hold_line` tile (a unit with that tactic, when the tile is not its own),
@@ -2489,7 +2502,7 @@ fn gap_close_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId]) 
     let foes: Vec<UnitId> = w.foes_of(c).iter().copied().filter(|&f| w.units[f].is_active() && w.has(f) && st.est(f) > 0 && !round_intent::hidden(w, f)).collect();
     let band = basic_band(w, c);
     let diag = round_intent::melee_band(band) && round_intent::diagonal(w, c, None);
-    let dist: HashMap<UnitId, i32> = foes.iter().map(|&f| (f, round_intent::band_dist(diag, here, w.pos(f)))).collect();
+    let dist: HashMap<UnitId, i32> = foes.iter().map(|&f| (f, w.band_at(diag, c, here, f))).collect();
     // a foe already in normal reach: the Assault row fights it from here
     if dist.values().any(|d| (band.0..=band.1).contains(d)) {
         return None;
@@ -2639,12 +2652,12 @@ fn walk_cands(w: &World, plan: &Plan, c: UnitId, blocks: usize) -> Vec<(V2, Vec<
     for y in 0..GRID_H {
         for x in 0..GRID_W {
             let cell = V2::new(x, y);
-            if cell == here || cell.dist(here) > mpb * blocks as i32 || !w.grid.is_walkable(cell) || w.grid.is_exit(cell) || blocked.contains(&cell) {
+            if cell == here || cell.dist(here) > mpb * blocks as i32 || !w.grid.is_walkable(cell) || w.grid.is_exit(cell) || blocked.contains(&cell) || (w.size_of(c) > 1 && !w.clear_at(c, cell, &blocked)) {
                 continue;
             }
             let goals: Cells = [cell].into_iter().collect();
             let route = plan.route(w, c, here, &goals, &blocked, false);
-            if !route.is_empty() && route.len() <= ap && path::blocks_needed(&w.grid, here, &route, mpb) <= blocks {
+            if !route.is_empty() && route.len() <= ap && path::blocks_needed_sized(&w.grid, here, &route, mpb, w.size_of(c)) <= blocks {
                 out.push((cell, route));
             }
         }
@@ -2676,9 +2689,9 @@ pub fn cover_tile(w: &World, plan: &Plan, c: UnitId) -> Option<V2> {
         .copied()
         .filter(|&f| {
             let u = &w.units[f];
-            u.is_active() && w.has(f) && u.attack_range > 1 && w.pos(f).dist(here) <= u.move_per_block() * 2 + skill::threat_reach(u, &w.ruleset)
+            u.is_active() && w.has(f) && u.attack_range > 1 && w.dist_at(c, here, f) <= u.move_per_block() * 2 + skill::threat_reach(u, &w.ruleset)
         })
-        .min_by_key(|&f| (w.pos(f).dist(here), f))?;
+        .min_by_key(|&f| (w.dist_at(c, here, f), f))?;
     let foes: Vec<V2> = w.foes_of(c).iter().copied().filter(|&f| w.has(f)).map(|f| w.pos(f)).collect();
     let from = Some(w.pos(shooter));
     let mut cands = walk_cands(w, plan, c, 1);
@@ -2726,7 +2739,7 @@ fn reposition_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId])
     let band = basic_band(w, c);
     let here = w.pos(c);
     for cell in press_tiles(w, plan, c) {
-        let Some(&t) = ranked.iter().find(|&&f| (band.0..=band.1).contains(&w.pos(f).dist(cell))) else { continue };
+        let Some(&t) = ranked.iter().find(|&&f| (band.0..=band.1).contains(&w.dist_at(c, cell, f))) else { continue };
         let mut p = IntentPick::new(RoundIntent::Assault, RoundTarget::Unit(t));
         p.advance_to = (cell != here).then_some(cell);
         p.must_act = true;
@@ -2789,7 +2802,7 @@ fn advance_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId], pr
         // a reckless unit skips both: the move and Rest below
         if !profile.reckless && profile.role == Role::Support {
             let mut friends: Vec<UnitId> = w.friends_of(c).iter().copied().filter(|&f| f != c && w.has(f)).collect();
-            friends.sort_by_key(|&f| (w.pos(f).dist(dest), f));
+            friends.sort_by_key(|&f| (w.dist_at(c, dest, f), f));
             // A1.2-K3 (IR15, FB-121): under `field_intent` a self Support is a Stand round with a self-capable opener
             for mut p in self_stand_picks(w, c, profile) {
                 p.advance_to = Some(dest);
@@ -2853,7 +2866,7 @@ fn advance_dest(w: &World, plan: &Plan, c: UnitId, t: UnitId) -> Option<V2> {
         return None;
     }
     let route = plan.approach_path(w, c, st.pos, t, -1, -1);
-    let reachable = path::fit_blocks(&w.grid, st.pos, &route, w.units[c].move_per_block(), MAX_MOVE_BLOCKS);
+    let reachable = path::fit_blocks_sized(&w.grid, st.pos, &route, w.units[c].move_per_block(), MAX_MOVE_BLOCKS, w.size_of(c));
     let dest = reachable.iter().take(tiles as usize).fold(st.pos, |a, d| a + *d);
     (dest != st.pos).then_some(dest)
 }
@@ -3098,7 +3111,7 @@ fn hold_walk(w: &World, plan: &Plan, c: UnitId) -> Vec<V2> {
         return Vec::new();
     }
     let Some(route) = hold_route(w, plan, c, st.pos) else { return Vec::new() };
-    let reachable = path::fit_blocks(&w.grid, st.pos, &route, w.units[c].move_per_block(), MAX_MOVE_BLOCKS);
+    let reachable = path::fit_blocks_sized(&w.grid, st.pos, &route, w.units[c].move_per_block(), MAX_MOVE_BLOCKS, w.size_of(c));
     let mut cells: Vec<V2> = reachable.iter().take(tiles as usize).scan(st.pos, |a, d| {
         *a = *a + *d;
         Some(*a)

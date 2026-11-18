@@ -351,7 +351,7 @@ fn matches(w: &World, ev: &Event, when: &Obj) -> bool {
     }
     if let Some(f) = ev.ally {
         let range = value::int(when, "range", 1).max(1);
-        if !w.has(ev.holder) || w.pos(ev.holder).dist(w.pos(f)) > range {
+        if !w.has(ev.holder) || w.dist(ev.holder, f) > range {
             return false;
         }
     }
@@ -1029,7 +1029,9 @@ fn shockwave(w: &mut World, h: &Holder, ev: &Event, e: &Obj) -> Option<(String, 
     if amount <= 0 {
         return None;
     }
-    let foes: Vec<UnitId> = shockwave_cells(w, h, ev, tiles).into_iter().filter_map(|c| w.occupant(c)).filter(|u| w.foes_of(h.unit).contains(u)).collect();
+    // BIGUNIT1 BU9: a unit is struck once however many of its cells the wave crosses
+    let cells = shockwave_cells(w, h, ev, tiles);
+    let foes: Vec<UnitId> = w.occupants_once(&cells).into_iter().map(|(_, u)| u).filter(|u| w.foes_of(h.unit).contains(u)).collect();
     if foes.is_empty() {
         return None;
     }

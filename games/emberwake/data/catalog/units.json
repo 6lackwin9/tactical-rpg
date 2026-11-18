@@ -2267,6 +2267,7 @@
 			"power": 40,
 			"armor": 50,
 			"poise": 90,
+			"footprint": 2,
 			"art": "brawler/base",
 			"palette": "amalgam",
 			"portrait_tier": "",

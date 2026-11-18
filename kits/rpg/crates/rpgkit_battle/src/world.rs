@@ -1,7 +1,7 @@
 //! The battle world: units, grid, sides and AI profiles (CombatGrid unit operations, PlanContext, AiProfile,
 //! ContentFactory.ai_profile). Units are referred to by their index in `units`.
 
-use crate::grid::{Grid, V2, DEPLOY_ANCHOR_Y, DEPLOY_ROWS, GRID_H, GRID_W, NO_CELL};
+use crate::grid::{square_band, square_cells, square_covers, square_dist, square_nearest, Grid, V2, DEPLOY_ANCHOR_Y, DEPLOY_ROWS, GRID_H, GRID_W, NO_CELL};
 use crate::skill::{self, Book};
 use rpgkit_data::{Catalog, UnitDef};
 use rpgkit_rules::Unit;
@@ -231,6 +231,14 @@ impl Tactic {
     }
 }
 
+/// BIGUNIT1 BU12: what `World::grow_into_place` did: the units pushed out of the new square (unit, from, to, in order),
+/// and whether no square could be cleared, so the unit stays on one cell.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Growth {
+    pub pushes: Vec<(UnitId, V2, V2)>,
+    pub cramped: bool,
+}
+
 /// Where one step goes (`World::step_from`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StepTo {
@@ -343,6 +351,59 @@ pub fn heal_taken(amount: i32, pct: i32) -> i32 {
 }
 
 impl World {
+    /// BIGUNIT1 BU3: a world with only units on a board (allies first, `n_allies` of them; classic ruleset, no AI
+    /// profiles, nothing placed): what a deployment check needs (`deploy_misfits`).
+    pub fn bare(cat: Arc<Catalog>, units: Vec<Unit>, grid: Grid, n_allies: usize) -> Self {
+        let count = units.len();
+        Self {
+            cat,
+            units,
+            grid,
+            allies: (0..n_allies).collect(),
+            enemies: (n_allies..count).collect(),
+            profiles: IndexMap::new(),
+            total_blocks: 0,
+            hp_journal: None,
+            ruleset: Default::default(),
+            round_states: IndexMap::new(),
+            plan_reveal: false,
+            poise: IndexMap::new(),
+            hold: None,
+            unkillable: Vec::new(),
+            spared: Vec::new(),
+            ground: Default::default(),
+            meters: Default::default(),
+            arena: Default::default(),
+            hits: Default::default(),
+            autofill: true,
+            ap_regen: -1,
+            sides: Default::default(),
+            marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()),
+            skill_uses: IndexMap::new(),
+            weapon_attacks: IndexMap::new(),
+            dulled_lock: false,
+            bleed_out_rounds: 0,
+            bleed_heroes: Vec::new(),
+            bleed_remaining: IndexMap::new(),
+            dead: Vec::new(),
+        }
+    }
+
+    /// BIGUNIT1 BU3: deploys the units on `grid` as a battle start does (`deploy`, then each side's leftovers) and
+    /// returns the indices (allies first) of the 2 x 2 units that found no square where all four cells fit.
+    pub fn deploy_misfits(cat: Arc<Catalog>, grid: Grid, party: Vec<Unit>, enemies: Vec<Unit>, deployment: &str) -> Vec<UnitId> {
+        let n_allies = party.len();
+        let units: Vec<Unit> = party.into_iter().chain(enemies).collect();
+        let mut grid = grid;
+        grid.positions = vec![None; units.len()];
+        let mut w = Self::bare(cat, units, grid, n_allies);
+        let (allies, foes) = (w.allies.clone(), w.enemies.clone());
+        w.deploy(&allies, &foes, deployment);
+        w.place_leftovers(&allies, true, deployment);
+        w.place_leftovers(&foes, false, deployment);
+        (0..w.units.len()).filter(|&c| w.size_of(c) > 1 && !w.has(c)).collect()
+    }
+
     /// U1.2 slice 1 (`FB-04`): unit `c`'s pool `id` through the typed facade: HP and AP from the unit, poise from
     /// `World.poise` (None in classic or before the first refill).
     pub fn pool(&self, c: UnitId, id: rpgkit_rules::pool::PoolId) -> Option<rpgkit_rules::pool::PoolView> {
@@ -459,7 +520,12 @@ impl World {
     /// unoccupied non-exit floor tile within Chebyshev radius `1..=2`, sorted by `(distance, y, x)`.
     pub fn revive_cell(&self, c: UnitId) -> Option<V2> {
         let at = self.grid.positions.get(c).copied().flatten()?;
-        if self.occupant(at).is_none() {
+        // BIGUNIT1 BU4: a big unit needs its whole square free (`fits`)
+        if self.size_of(c) > 1 {
+            if self.fits(c, at) {
+                return Some(at);
+            }
+        } else if self.occupant(at).is_none() {
             return Some(at);
         }
         for r in 1..=2 {
@@ -470,10 +536,8 @@ impl World {
                         continue;
                     }
                     let cell = V2::new(x, y);
-                    if self.grid.is_valid(cell)
-                        && self.grid.is_walkable(cell)
-                        && !self.grid.is_exit(cell)
-                        && self.occupant(cell).is_none()
+                    let open = if self.size_of(c) > 1 { self.fits(c, cell) } else { self.grid.is_valid(cell) && self.grid.is_walkable(cell) && !self.grid.is_exit(cell) && self.occupant(cell).is_none() };
+                    if open
                         && found.is_none_or(|b| (cell.y, cell.x) < (b.y, b.x))
                     {
                         found = Some(cell);
@@ -693,6 +757,128 @@ impl World {
         self.journal(c);
     }
 
+    /// BIGUNIT1 BU12: a swapped-in unit `c` bigger than the one it replaced takes a square that holds its old cell:
+    /// the old cell as top-left, top-right, bottom-left, then bottom-right of the square, the first that fits; else the
+    /// fitting anchor nearest the old cell (distance to the square, then reading order). With no free square anywhere
+    /// it makes room on the first square whose terrain fits and whose units can all be pushed (`push_out`): the four
+    /// around the old cell in that order, then every such square on the board by distance, then reading order. When no
+    /// square can be cleared (the board holds too few free cells) the unit stays on its old cell at one cell for the rest
+    /// of the battle (`cramped`; never an overlap). Nothing moves for a one-cell unit or one already fitting. Pushes are
+    /// not attacks (the caller rolls hazards and logs them).
+    pub fn grow_into_place(&mut self, c: UnitId) -> Growth {
+        let n = self.size_of(c);
+        let Some(old) = self.grid.positions[c] else { return Growth::default() };
+        if n == 1 || !self.units[c].is_active() {
+            return Growth::default();
+        }
+        let around: Vec<V2> = vec![old, old - V2::new(n - 1, 0), old - V2::new(0, n - 1), old - V2::new(n - 1, n - 1)];
+        if let Some(&a) = around.iter().find(|&&a| self.fits(c, a)) {
+            self.grid.positions[c] = Some(a);
+            return Growth::default();
+        }
+        let board = |keep: &dyn Fn(V2) -> bool| -> Vec<V2> {
+            let mut all: Vec<(i32, i32, V2)> = Vec::new();
+            for y in 0..GRID_H {
+                for x in 0..GRID_W {
+                    let a = V2::new(x, y);
+                    if keep(a) {
+                        all.push((square_dist(a, n, old, 1), y * GRID_W + x, a));
+                    }
+                }
+            }
+            all.sort_by_key(|k| (k.0, k.1));
+            all.into_iter().map(|k| k.2).collect()
+        };
+        if let Some(&a) = board(&|a| self.fits(c, a)).first() {
+            self.grid.positions[c] = Some(a);
+            return Growth::default();
+        }
+        let mut squares: Vec<V2> = around.iter().copied().filter(|&a| self.grid.square_fits(a, n)).collect();
+        for a in board(&|a| self.grid.square_fits(a, n)) {
+            if !squares.contains(&a) {
+                squares.push(a);
+            }
+        }
+        for a in squares {
+            if let Some((pos, pushes)) = self.push_out(c, a) {
+                self.grid.positions = pos;
+                self.grid.positions[c] = Some(a);
+                return Growth { pushes, cramped: false };
+            }
+        }
+        self.units[c].footprint = 1;
+        Growth { pushes: Vec::new(), cramped: true }
+    }
+
+    /// BU12 make room: the positions after `c` takes the square at `a` and every unit on it is pushed out, or None when
+    /// some push finds nowhere to go. Units leave in the reading order of the cells they stand on; each goes to the
+    /// nearest free spot (its whole footprint walkable, not an exit, outside the cells already claimed, no unit; distance
+    /// from where it stood, then reading order). With no free spot it takes the nearest spot whose units have not moved
+    /// yet and those units are pushed in turn (a chain). Each unit moves at most once, so the chain is bounded by the
+    /// unit count. Returns (positions, pushes (unit, from, to) in order); nothing is written.
+    fn push_out(&self, c: UnitId, a: V2) -> Option<(Vec<Option<V2>>, Vec<(UnitId, V2, V2)>)> {
+        let n = self.size_of(c);
+        let mut pos = self.grid.positions.clone();
+        pos[c] = Some(a);
+        let live = |u: UnitId| u != c && self.units[u].is_active();
+        let on = |pos: &[Option<V2>], cell: V2| -> Vec<UnitId> { (0..pos.len()).filter(|&u| live(u) && pos[u].is_some_and(|p| square_covers(p, self.size_of(u), cell))).collect() };
+        let mut claimed: Vec<V2> = square_cells(a, n).collect();
+        let mut moved: Vec<UnitId> = vec![c];
+        let mut queue: Vec<UnitId> = Vec::new();
+        let enqueue = |queue: &mut Vec<UnitId>, moved: &[UnitId], us: Vec<UnitId>| {
+            for u in us {
+                if !queue.contains(&u) && !moved.contains(&u) {
+                    queue.push(u);
+                }
+            }
+        };
+        for cell in claimed.clone() {
+            enqueue(&mut queue, &moved, on(&pos, cell));
+        }
+        let mut pushes = Vec::new();
+        while !queue.is_empty() {
+            let o = queue.remove(0);
+            let (from, size) = (pos[o]?, self.size_of(o));
+            let nearest = |ok: &dyn Fn(V2) -> bool| -> Option<V2> {
+                let mut best: Option<(i32, i32, V2)> = None;
+                for y in 0..GRID_H {
+                    for x in 0..GRID_W {
+                        let to = V2::new(x, y);
+                        if self.grid.square_fits(to, size) && square_cells(to, size).all(|q| !claimed.contains(&q)) && ok(to) {
+                            let key = (to.dist(from), y * GRID_W + x);
+                            if best.is_none_or(|b| key < (b.0, b.1)) {
+                                best = Some((key.0, key.1, to));
+                            }
+                        }
+                    }
+                }
+                best.map(|b| b.2)
+            };
+            let others = |to: V2| -> Vec<UnitId> {
+                let mut us: Vec<UnitId> = Vec::new();
+                for q in square_cells(to, size) {
+                    for u in on(&pos, q) {
+                        if u != o && !us.contains(&u) {
+                            us.push(u);
+                        }
+                    }
+                }
+                us
+            };
+            let to = match nearest(&|to| others(to).is_empty()) {
+                Some(to) => to,
+                None => nearest(&|to| others(to).iter().all(|u| !moved.contains(u)))?,
+            };
+            let bumped = others(to);
+            pos[o] = Some(to);
+            claimed.extend(square_cells(to, size));
+            moved.push(o);
+            enqueue(&mut queue, &moved, bumped);
+            pushes.push((o, from, to));
+        }
+        Some((pos, pushes))
+    }
+
     // ---- CombatGrid operations that need unit state -----------------------------------------------------------
 
     /// On the grid and active (alive, not withdrawn).
@@ -704,12 +890,132 @@ impl World {
         self.grid.position(c)
     }
 
+    /// BIGUNIT1 BU5: the least distance between any cell of `a` and any cell of `b` (`V2::dist` for one-cell units).
     pub fn dist(&self, a: UnitId, b: UnitId) -> i32 {
-        self.pos(a).dist(self.pos(b))
+        square_dist(self.pos(a), self.size_of(a), self.pos(b), self.size_of(b))
     }
 
+    // ---- BIGUNIT1: footprints (a unit fills the `size_of` x `size_of` square anchored at its position) ------------
+
+    /// BIGUNIT1 BU1: the side of the square unit `c` fills (1, or 2 for a 2 x 2 unit).
+    pub fn size_of(&self, c: UnitId) -> i32 {
+        if self.units[c].footprint == 2 {
+            2
+        } else {
+            1
+        }
+    }
+
+    /// BIGUNIT1 BU2: the cells unit `c` fills, in reading order (empty off the grid).
+    pub fn cells_of(&self, c: UnitId) -> Vec<V2> {
+        self.grid.positions[c].map(|a| square_cells(a, self.size_of(c)).collect()).unwrap_or_default()
+    }
+
+    /// BIGUNIT1 BU2: the cells unit `c` would fill anchored at `anchor`.
+    pub fn cells_at(&self, c: UnitId, anchor: V2) -> Vec<V2> {
+        square_cells(anchor, self.size_of(c)).collect()
+    }
+
+    /// BIGUNIT1 BU5: the least distance from `cell` to any cell of unit `b` (`pos(b).dist(cell)` for a one-cell unit).
+    pub fn dist_to(&self, b: UnitId, cell: V2) -> i32 {
+        square_dist(cell, 1, self.pos(b), self.size_of(b))
+    }
+
+    /// BIGUNIT1 BU5: the least distance from unit `a` standing anchored at `at` to any cell of unit `b` (a planned
+    /// position's reach and range; `at.dist(pos(b))` for one-cell units).
+    pub fn dist_at(&self, a: UnitId, at: V2, b: UnitId) -> i32 {
+        square_dist(at, self.size_of(a), self.pos(b), self.size_of(b))
+    }
+
+    /// BIGUNIT1 BU5: the least distance from unit `a` standing anchored at `at` to `cell` (`at.dist(cell)` for a
+    /// one-cell unit).
+    pub fn dist_at_cell(&self, a: UnitId, at: V2, cell: V2) -> i32 {
+        square_dist(at, self.size_of(a), cell, 1)
+    }
+
+    /// BIGUNIT1 BU5: `round_intent::band_dist` from unit `a` anchored at `at` to unit `b` (diagonals under `diag`).
+    pub fn band_at(&self, diag: bool, a: UnitId, at: V2, b: UnitId) -> i32 {
+        square_band(diag, at, self.size_of(a), self.pos(b), self.size_of(b))
+    }
+
+    /// BIGUNIT1 BU5: `round_intent::band_dist` from `cell` to unit `b`.
+    pub fn band_to(&self, diag: bool, b: UnitId, cell: V2) -> i32 {
+        square_band(diag, cell, 1, self.pos(b), self.size_of(b))
+    }
+
+    /// BIGUNIT1 BU10, BU11: the cell of unit `c` nearest `to` (its position for a one-cell unit).
+    pub fn nearest_cell(&self, c: UnitId, to: V2) -> V2 {
+        square_nearest(self.pos(c), self.size_of(c), to)
+    }
+
+    /// BIGUNIT1 BU3, BU6: unit `c` fits anchored at `anchor`: every cell of its square is on the grid, walkable, not an
+    /// exit and holds no active unit but `c`.
+    pub fn fits(&self, c: UnitId, anchor: V2) -> bool {
+        self.grid.square_fits(anchor, self.size_of(c)) && square_cells(anchor, self.size_of(c)).all(|cell| self.occupant(cell).is_none_or(|o| o == c))
+    }
+
+    /// BIGUNIT1: a deployment tile is open for `c` (one-cell: walkable, not an exit, free, as before; a big unit:
+    /// `fits`).
+    fn open_for(&self, c: UnitId, cell: V2) -> bool {
+        if self.size_of(c) == 1 {
+            self.grid.is_walkable(cell) && !self.grid.is_exit(cell) && !self.is_occupied(cell)
+        } else {
+            self.fits(c, cell)
+        }
+    }
+
+    /// BIGUNIT1 BU5, BU13: the anchors `c` could stand on with the square of side `t_size` at `t_anchor` in the band
+    /// `(lo, hi)` (`square_band`, diagonals under `diag`): its square on the grid, walkable, not an exit and clear of
+    /// `blocked` (one-cell units: the cells around the target in the band, as before).
+    pub fn stand_goals(&self, c: UnitId, t_anchor: V2, t_size: i32, band: (i32, i32), diag: bool, blocked: &crate::path::Cells) -> crate::path::Cells {
+        let (sc, hi) = (self.size_of(c), band.1);
+        let mut goals = crate::path::Cells::new();
+        for y in (t_anchor.y - hi - (sc - 1))..=(t_anchor.y + t_size.max(1) - 1 + hi) {
+            for x in (t_anchor.x - hi - (sc - 1))..=(t_anchor.x + t_size.max(1) - 1 + hi) {
+                let a = V2::new(x, y);
+                let d = square_band(diag, a, sc, t_anchor, t_size);
+                if d < band.0 || d > hi {
+                    continue;
+                }
+                if square_cells(a, sc).all(|cell| self.grid.is_valid(cell) && self.grid.is_walkable(cell) && !self.grid.is_exit(cell) && !blocked.contains(&cell)) {
+                    goals.insert(a);
+                }
+            }
+        }
+        goals
+    }
+
+    /// BIGUNIT1 BU6: `c` anchored at `anchor` stands clear of `blocked`: its whole square on the grid, walkable and not
+    /// an exit (the planner's tile test for a one-cell unit).
+    pub fn clear_at(&self, c: UnitId, anchor: V2, blocked: &crate::path::Cells) -> bool {
+        square_cells(anchor, self.size_of(c)).all(|cell| self.grid.is_valid(cell) && self.grid.is_walkable(cell) && !self.grid.is_exit(cell) && !blocked.contains(&cell))
+    }
+
+    /// BIGUNIT1 BU9: whether any cell of unit `f` anchored at `anchor` is in `cells` (one-cell: `cells.contains(anchor)`).
+    pub fn square_in(&self, f: UnitId, anchor: V2, cells: &[V2]) -> bool {
+        let n = self.size_of(f);
+        if n == 1 {
+            return cells.contains(&anchor);
+        }
+        cells.iter().any(|c| square_covers(anchor, n, *c))
+    }
+
+    /// BIGUNIT1 BU9: the active units filling `cells`, each once, in the order their first cell appears.
+    pub fn occupants_once(&self, cells: &[V2]) -> Vec<(V2, UnitId)> {
+        let mut out: Vec<(V2, UnitId)> = Vec::new();
+        for &cell in cells {
+            if let Some(v) = self.occupant(cell) {
+                if !out.iter().any(|(_, u)| *u == v) {
+                    out.push((cell, v));
+                }
+            }
+        }
+        out
+    }
+
+    /// BIGUNIT1 BU4: the active unit filling `cell` (any of a big unit's cells).
     pub fn occupant(&self, cell: V2) -> Option<UnitId> {
-        (0..self.units.len()).find(|&u| self.grid.positions[u] == Some(cell) && self.units[u].is_active())
+        (0..self.units.len()).find(|&u| self.grid.positions[u].is_some_and(|a| square_covers(a, self.size_of(u), cell)) && self.units[u].is_active())
     }
 
     pub fn is_occupied(&self, cell: V2) -> bool {
@@ -717,7 +1023,11 @@ impl World {
     }
 
     pub fn place(&mut self, c: UnitId, cell: V2) -> bool {
-        if !self.grid.is_valid(cell) || !self.grid.is_walkable(cell) || self.is_occupied(cell) {
+        if self.size_of(c) > 1 {
+            if !self.fits(c, cell) {
+                return false;
+            }
+        } else if !self.grid.is_valid(cell) || !self.grid.is_walkable(cell) || self.is_occupied(cell) {
             return false;
         }
         self.grid.positions[c] = Some(cell);
@@ -769,6 +1079,10 @@ impl World {
     /// reads it too (`command::walk_preview`).
     pub fn step_from(&self, c: UnitId, from: V2, offset: V2) -> StepTo {
         let target = from + offset;
+        // BIGUNIT1 BU6: a big unit steps only when its whole square fits there; it never leaves by an exit
+        if self.size_of(c) > 1 {
+            return if target != from && self.fits(c, target) { StepTo::Enters(target) } else { StepTo::Blocked };
+        }
         if self.grid.is_exit(target) || (self.grid.open && !self.grid.is_valid(target)) {
             if self.hold.as_ref().is_some_and(|g| !g.lets_out(self, c)) {
                 return StepTo::Blocked;
@@ -786,7 +1100,11 @@ impl World {
         if !self.units[c].is_active() || self.grid.positions[c].is_none() {
             return false;
         }
-        if !self.grid.is_valid(cell) || !self.grid.is_walkable(cell) || self.grid.is_exit(cell) || self.is_occupied(cell) {
+        if self.size_of(c) > 1 {
+            if !self.fits(c, cell) {
+                return false;
+            }
+        } else if !self.grid.is_valid(cell) || !self.grid.is_walkable(cell) || self.grid.is_exit(cell) || self.is_occupied(cell) {
             return false;
         }
         self.grid.positions[c] = Some(cell);
@@ -873,7 +1191,7 @@ impl World {
     fn place_in_column(&mut self, c: UnitId, x: i32) -> bool {
         for y in DEPLOY_ROWS {
             let cell = V2::new(x, y);
-            if self.grid.is_walkable(cell) && !self.grid.is_exit(cell) && !self.is_occupied(cell) {
+            if self.open_for(c, cell) {
                 return self.place(c, cell);
             }
         }
@@ -889,7 +1207,7 @@ impl World {
             let rank = DEPLOY_ROWS.iter().position(|r| *r == y).unwrap_or(DEPLOY_ROWS.len()) as i32;
             for x in 0..GRID_W {
                 let cell = V2::new(x, y);
-                if !self.grid.is_walkable(cell) || self.grid.is_exit(cell) || self.is_occupied(cell) {
+                if !self.open_for(c, cell) {
                     continue;
                 }
                 let outward = if right { GRID_W - 1 - x } else { x };
@@ -927,7 +1245,7 @@ impl World {
             for y in 0..GRID_H {
                 for x in 0..GRID_W {
                     let cell = V2::new(x, y);
-                    if Grid::is_party_half(cell) != party_side || !self.grid.is_walkable(cell) || self.grid.is_exit(cell) || self.is_occupied(cell) {
+                    if Grid::is_party_half(cell) != party_side || !self.open_for(c, cell) {
                         continue;
                     }
                     let score = Grid::centre_distance(cell) * 1000 + y * 20 + x;

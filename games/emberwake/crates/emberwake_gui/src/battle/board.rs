@@ -306,7 +306,10 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
                 if e.pos_after != from && e.pos_after.x >= 0 {
                     let (a, b) = (center(from), center(e.pos_after));
                     ui.p.line(a.0, a.1, b.0, b.1, th().gold, 3.0);
-                    ui.p.panel(cell_rect(e.pos_after).inset(3), rgba(244, 198, 84, 40), th().gold, 2.0);
+                    // BIGUNIT1 BU15: the move preview plates every cell the unit will fill
+                    for c in w.cells_at(h, e.pos_after) {
+                        ui.p.panel(cell_rect(c).inset(3), rgba(244, 198, 84, 40), th().gold, 2.0);
+                    }
                     from = e.pos_after;
                 }
             }
@@ -344,7 +347,9 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
     for i in 0..w.units.len() {
         let Some(pos) = w.grid.pos(i) else { continue };
         let u = &w.units[i];
-        let r = cell_rect(pos);
+        // BIGUNIT1 BU14, BU15: a 2 x 2 unit's rect (its click, bar and hover) spans its four cells
+        let n = w.size_of(i);
+        let r = Rect::new(cell_rect(pos).x, cell_rect(pos).y, TILE * n, TILE * n);
         let ally = w.allies.contains(&i);
         let body = cx.art.first_body(&body_keys(&s.art[i], u));
         let palette = s.palettes.get(i).map_or("", |p| p.as_str());
@@ -363,7 +368,7 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
             continue;
         }
         let (flash, shake) = flash_of(flashes, i, now, tuning, reduce || instant);
-        let tp = geo.token_px;
+        let tp = geo.token_px * n;
         // A moving unit slides from its old tile.
         let (mut dx, mut dy) = (0, 0);
         if let Some((from, t0)) = a.slide {
@@ -374,7 +379,7 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
         }
         // FX1-L2: a miss's target steps aside and back
         let (sx, sy) = fx::sidestep_of(sidesteps, i, anim_now);
-        let tr = geo.token_rect(pos, shake + dx + sx, dy + sy);
+        let tr = geo.token_rect_n(pos, n, shake + dx + sx, dy + sy);
         let ring = if ally { ALLY } else { th().foe };
         if alive {
             // VISCLAR1-D: the ellipse in its intent's colour (`ring_intent`), else its side's
@@ -424,10 +429,10 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
         }
         // VISCLAR1 VC2, VC3: under the round intent the bars of the focus set (Alt or `all_bars`: every unit's)
         if bars_shown(overlay.is_some(), &layers, alt, &focus, i) {
-            hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 3 + dy, TILE - 6, 2), hp, u.max_hp, if ally { th().good } else { th().foe });
+            hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + r.h - 3 + dy, r.w - 6, 2), hp, u.max_hp, if ally { th().good } else { th().foe });
             // RULESET1-U slice 5: the poise bar over the HP bar (rule poise)
             if let Some(st) = poise_shown(w, i, &layers) {
-                poise_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 6 + dy, TILE - 6, 2), &st, &w.ruleset.numbers);
+                poise_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + r.h - 6 + dy, r.w - 6, 2), &st, &w.ruleset.numbers);
             }
         }
         let tip = unit_tip(s, i, sel, tells, rounds, classes);
@@ -462,7 +467,8 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
         if w.enemies.contains(&r.unit) && !show_tells {
             continue;
         }
-        intent_glyph(&mut ui.p, &w.cat, i, Rect::new(GRID_X + at.x * TILE + TILE - 11, GRID_Y + at.y * TILE + 1, 10, 10));
+        let n = w.size_of(r.unit);
+        intent_glyph(&mut ui.p, &w.cat, i, Rect::new(GRID_X + at.x * TILE + n * TILE - 11, GRID_Y + at.y * TILE + 1, 10, 10));
     }
     // HOOKS1-UI slice 4: the push forecasts above the tokens (a collision mark sits between two of them)
     draw_pushes(&mut ui.p, pushes, &Geom::new(View::Flat, tuning));
@@ -511,6 +517,8 @@ fn float_text(ui: &mut Ui<Action>, text: &str, col: Rgba, x: f32, y: f32) {
 struct StageUnit {
     i: usize,
     pos: V2,
+    /// BIGUNIT1 BU14: the side of the square it fills (1, or 2 for a 2 x 2 unit).
+    n: i32,
     ally: bool,
     /// FX1-L1 rule I: the life and HP the board shows (`Tokens::shown`).
     alive: bool,
@@ -593,19 +601,21 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
             }
         }
         let (flash, shake) = flash_of(flashes, i, now, tuning, reduce || instant);
-        let (fx, fy) = geo.foot(pos);
-        let rest = geo.token_rect(pos, dx, dy);
+        // BIGUNIT1 BU14: a 2 x 2 unit stands on its square's foot point, its sprite scaled to the square
+        let n = w.size_of(i);
+        let (fx, fy) = geo.foot_n(pos, n);
+        let rest = geo.token_rect_n(pos, n, dx, dy);
         // 3.8: the body's solid bounds of its idle frame 0 (animation frames do not move it); DIR4-HB: in the facing's
         // view (the front or back idle while it faces down or up, else the side idle with its left/right); no body:
         // the letter plate.
-        let body_rect = match body.as_deref().and_then(|k| cx.art.body_bounds_facing(k, &palette, tp, facing)) {
+        let body_rect = match body.as_deref().and_then(|k| cx.art.body_bounds_facing(k, &palette, tp * n, facing)) {
             Some(bb) => Rect::new(rest.x + bb.x, rest.y + bb.y, bb.w, bb.h),
             None => rest.inset(4),
         };
         // FX1-L2: a miss's target steps aside and back (its sprite only; its foot keeps its place in the draw order)
         let (sx, sy) = fx::sidestep_of(sidesteps, i, anim_now);
         let looks = status_draws(tokens, i, alive, wall, anim_now, tuning);
-        units.push(StageUnit { i, pos, ally, alive, hp, standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.token_rect(pos, dx + shake + sx, dy + sy), body_rect, looks });
+        units.push(StageUnit { i, pos, n, ally, alive, hp, standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.token_rect_n(pos, n, dx + shake + sx, dy + sy), body_rect, looks });
     }
     let status: Vec<StatusOn> = units.iter().filter(|t| t.alive).map(|t| StatusOn { unit: t.i, foot: (t.foot.0 as f32, t.foot.1 as f32), left: t.facing.left, looks: t.looks.clone() }).collect();
     // 3.7 pass 7: blocks, standing props and units sorted by their feet.
@@ -614,7 +624,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     let order = stage::feet_order(&items);
     let unit_of = |i: usize| units.iter().find(|t| t.i == i);
     // 3.8: a standing unit's widget rect; the front-most under the mouse is the one a click reaches.
-    let widget_rect = |t: &StageUnit| stage::unit_rect(geo.cell_rect(t.pos), t.body_rect);
+    // BIGUNIT1 BU15: a 2 x 2 unit's widget spans its four cells, so a click on any of them reaches it
+    let widget_rect = |t: &StageUnit| stage::unit_rect(geo.square_rect(t.pos, t.n), t.body_rect);
     let board_hover = if ui.live && !popup {
         order.iter().rev().find_map(|p| match p.item {
             Item::Unit(i) => unit_of(i).filter(|t| t.alive && widget_rect(t).contains(ui.mouse.0, ui.mouse.1)).map(|t| t.i),
@@ -654,7 +665,11 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     draw_hold_tiles(&mut ui.p, h, &geo);
                 }
                 if let Some(c) = hover_cell {
-                    plate(&mut ui.p, geo.cell_rect(c), rgba(255, 255, 255, 30), rgba(255, 255, 255, 160));
+                    // BIGUNIT1 BU15: a hovered 2 x 2 unit plates all four of its cells
+                    let cells = board_hover.map(|u| w.cells_of(u)).filter(|cells| !cells.is_empty()).unwrap_or_else(|| vec![c]);
+                    for c in cells {
+                        plate(&mut ui.p, geo.cell_rect(c), rgba(255, 255, 255, 30), rgba(255, 255, 255, 160));
+                    }
                 }
                 // INTENT1 area tells: the tiles an enemy's area attack will hit.
                 if show_tells {
@@ -678,7 +693,10 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                         if e.pos_after != from && e.pos_after.x >= 0 {
                             let (a, b) = (foot_f(from), foot_f(e.pos_after));
                             stage::wide_line(&mut ui.p, a.0, a.1 - 3.0, b.0, b.1 - 3.0, th().gold, 2.0, 0.0);
-                            ui.p.panel(inset2(geo.cell_rect(e.pos_after), 3, 2), rgba(244, 198, 84, 40), th().gold, 2.0);
+                            // BIGUNIT1 BU15: the move preview plates every cell the unit will fill
+                            for c in w.cells_at(h, e.pos_after) {
+                                ui.p.panel(inset2(geo.cell_rect(c), 3, 2), rgba(244, 198, 84, 40), th().gold, 2.0);
+                            }
                             from = e.pos_after;
                         }
                     }
@@ -734,16 +752,18 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                 stage::draw_prop_shadows(&mut ui.p, &mut cx.art, &w.grid);
                 for t in units.iter().filter(|t| t.alive) {
                     let (fx, fy) = (t.foot.0 as f32, t.foot.1 as f32);
-                    ui.p.ellipse(fx + 1.0, fy, 0.2 * tp as f32, 2.4, rgba(8, 10, 6, tuning.shadow_alpha));
+                    // BIGUNIT1 BU14: one shadow and one ring centred on a 2 x 2 unit's square, scaled with it
+                    let (tp, k) = (tp * t.n, t.n as f32);
+                    ui.p.ellipse(fx + 1.0, fy, 0.2 * tp as f32, 2.4 * k, rgba(8, 10, 6, tuning.shadow_alpha));
                     // VISCLAR1-D (mock `intent_ring`): the ring in its intent's colour, heavier than the side ring it
                     // replaces (`ring_intent`: the side's stays where no intent shows)
                     match ring_intent(rounds, t.i, t.ally, layers.glyphs, show_tells) {
                         Some(intent) => {
                             let col = intent_ring_color(intent);
-                            ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2, col);
-                            ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32 - 0.5, 2.7, col);
+                            ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2 * k, col);
+                            ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32 - 0.5, 2.7 * k, col);
                         }
-                        None => ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2, with_alpha(if t.ally { ALLY } else { th().foe }, tuning.foot_ring_alpha)),
+                        None => ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2 * k, with_alpha(if t.ally { ALLY } else { th().foe }, tuning.foot_ring_alpha)),
                     }
                 }
             }
@@ -755,6 +775,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                         Item::Prop(c) => stage::draw_prop(&mut ui.p, &mut cx.art, &w.grid, c),
                         Item::Unit(i) => {
                             let Some(t) = unit_of(i) else { continue };
+                            // BIGUNIT1 BU14: a 2 x 2 unit's sprite is its sheet scaled to the square
+                            let tp = tp * t.n;
                             let a = tokens.anims.get(i).unwrap_or(&still);
                             let ring = if t.ally { ALLY } else { th().foe };
                             let outline = if Some(i) == sel || Some(i) == talker { Some(th().gold) } else if hovered == Some(i) { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
@@ -804,6 +826,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                 for (k, p) in order.iter().enumerate() {
                     let Item::Unit(i) = p.item else { continue };
                     let Some(t) = unit_of(i).filter(|t| t.alive) else { continue };
+                    let tp = tp * t.n;
                     let (Some(b), Some((_, f))) = (t.body.as_deref(), frames.iter().find(|(j, _)| *j == i)) else { continue };
                     let col = match stage::through(&order, k, Some(i) == sel, hovered == Some(i), reveal) {
                         Some(Through::Side) => with_alpha(if t.ally { ALLY } else { th().foe }, 230),
@@ -827,10 +850,12 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                         ui.p.text_center(fx as f32, fy as f32 - ui.p.line_h(BODY) / 2.0, "x", BODY, col);
                     } else if t.alive && bars_shown(overlay.is_some(), &layers, alt, &focus, t.i) {
                         // VISCLAR1 VC2, VC3: under the round intent the focus set's bars (Alt or `all_bars`: all)
-                        hp_bar(&mut ui.p, Rect::new(fx - 12, fy + 3, 24, 2), t.hp, u.max_hp, if t.ally { th().good } else { th().foe });
+                        // BIGUNIT1 BU14: one bar centred on a 2 x 2 unit's square, as wide as the square allows
+                        let half = 12 * t.n;
+                        hp_bar(&mut ui.p, Rect::new(fx - half, fy + 3, 2 * half, 2), t.hp, u.max_hp, if t.ally { th().good } else { th().foe });
                         // RULESET1-U slice 5: the poise bar under the HP bar (rule poise)
                         if let Some(st) = poise_shown(w, t.i, &layers) {
-                            poise_bar(&mut ui.p, Rect::new(fx - 12, fy + 6, 24, 2), &st, &w.ruleset.numbers);
+                            poise_bar(&mut ui.p, Rect::new(fx - half, fy + 6, 2 * half, 2), &st, &w.ruleset.numbers);
                         }
                     }
                 }
@@ -838,7 +863,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                 if show_tells && overlay.is_none() {
                     for r in tells {
                         let Some(t) = units.iter().find(|t| t.i == r.unit) else { continue };
-                        let chip = Rect::new(t.foot.0 - 15, (t.foot.1 as f32 - 0.95 * tp as f32 - 2.0).round() as i32, 10, 10);
+                        let chip = Rect::new(t.foot.0 - 15, (t.foot.1 as f32 - 0.95 * (tp * t.n) as f32 - 2.0).round() as i32, 10, 10);
                         intent_chip(ui, cx, r.line.kind, chip);
                     }
                 }
@@ -849,12 +874,12 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     if w.enemies.contains(&r.unit) && !show_tells {
                         continue;
                     }
-                    intent_glyph(&mut ui.p, &w.cat, i, Rect::new(t.foot.0 + 5, (t.foot.1 as f32 - 0.95 * tp as f32 - 2.0).round() as i32, 10, 10));
+                    intent_glyph(&mut ui.p, &w.cat, i, Rect::new(t.foot.0 + 5, (t.foot.1 as f32 - 0.95 * (tp * t.n) as f32 - 2.0).round() as i32, 10, 10));
                 }
                 // RULESET1-U slice 5 (P7): a BREAK plate over each unit broken this round, above its chips
                 for i in broken_units(w, &layers) {
                     let Some(t) = units.iter().find(|t| t.i == i && t.alive) else { continue };
-                    break_plate(&mut ui.p, t.foot.0 as f32, t.foot.1 as f32 - 0.95 * tp as f32 - 13.0);
+                    break_plate(&mut ui.p, t.foot.0 as f32, t.foot.1 as f32 - 0.95 * (tp * t.n) as f32 - 13.0);
                 }
                 for c in w.grid.exits.iter().filter(|c| w.grid.is_valid(**c)) {
                     let r = geo.cell_rect(*c);
@@ -904,7 +929,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
         if !t.alive && w.occupant(t.pos).is_none() && (w.can_revive(t.i) || w.is_dead(t.i)) {
             let u = &w.units[t.i];
             let tip = unit_tip(s, t.i, sel, tells, rounds, classes);
-            ui.push(format!("unit.{}", t.i), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), geo.cell_rect(t.pos), true, Some(t.i) == sel, Some(Action::UnitClick(t.i)), tip);
+            ui.push(format!("unit.{}", t.i), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), geo.square_rect(t.pos, t.n), true, Some(t.i) == sel, Some(Action::UnitClick(t.i)), tip);
         }
     }
     for p in &order {

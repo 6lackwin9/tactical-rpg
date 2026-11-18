@@ -345,7 +345,7 @@ pub fn side_id(to: &str) -> Option<&'static str> {
 }
 /// PHASEFX1 (ACTS23 PK6 hook m): the phase effect that replaces a unit in place by another unit row (`unit` an
 /// encounter ref, `to` a unit ref) on the same cell, keeping its side; `hp` = `keep_pct` (the same share of the new max
-/// HP, the default) or `full`. One cell per unit (2 x 2 footprints are hook n).
+/// HP, the default) or `full`. A 2 x 2 unit (BIGUNIT1) takes a square holding the old cell (`World::grow_into_place`).
 pub const SWAP_EFFECT: &str = "swap";
 pub const SWAP_EFFECT_KEYS: [&str; 4] = ["type", "unit", "to", "hp"];
 pub const SWAP_KEEP_PCT: &str = "keep_pct";

@@ -125,8 +125,11 @@ pub struct Moved {
     /// What blocked a step with tiles left ("" = no collision): a unit's name, "the arena edge", "the exit", "the
     /// <terrain>".
     pub blocked_by: String,
-    /// The unit that blocked it.
+    /// The unit that blocked it (BIGUNIT1 BU8: the first of `blockers`).
     pub blocker: Option<UnitId>,
+    /// BIGUNIT1 BU8: every unit that blocked the step, in reading order of their cells (a big unit's 2-wide edge can
+    /// meet two; each takes the FM4 blocker hit).
+    pub blockers: Vec<UnitId>,
     pub hits: Vec<CollisionHit>,
     /// FM7: the Walks of the moved unit `stop_moves` cancelled.
     pub stopped: i32,
@@ -172,7 +175,7 @@ pub fn resolve(res: &mut Resolver, w: &mut World, idx: usize, windups: &[UnitId]
         if t == src || !w.has(t) {
             continue;
         }
-        let Some((dir, tiles, toward)) = aim_at(w, src, src_pos, &shove, aim, w.pos(t), moved_this_round(&res.scheduled, t), windups.contains(&t)) else { continue };
+        let Some((dir, tiles, toward)) = aim_at(w, src, src_pos, &shove, aim, w.nearest_cell(t, src_pos), moved_this_round(&res.scheduled, t), windups.contains(&t)) else { continue };
         out.push(shove_unit(res, w, t, Some(src), dir, tiles, toward, shove.stop_moves, &collide, block));
     }
     res.scheduled[idx].command.pushes = out;
@@ -193,9 +196,11 @@ fn aim_at(w: &World, src: UnitId, src_pos: V2, shove: &Shove, aim: Option<V2>, a
         return None;
     }
     let tiles = (shove.tiles + w.units[src].forced_traits().bonus_tiles).min(MAX_TILES);
+    // BIGUNIT1 BU8: a big attacker strikes from the cell of its square nearest the unit (`at`: the moved unit's cell
+    // nearest the attacker)
     let origin = match aim {
         Some(a) if shove.from_center && at != a => a,
-        _ => src_pos,
+        _ => crate::grid::square_nearest(src_pos, w.size_of(src), at),
     };
     Some((direction(w, src, origin, at, shove.pull), tiles, shove.pull.then_some(origin)))
 }
@@ -243,17 +248,22 @@ pub fn direction(w: &World, by: UnitId, origin: V2, at: V2, pull: bool) -> V2 {
 #[allow(clippy::too_many_arguments)]
 pub fn shove_unit(res: &mut Resolver, w: &mut World, t: UnitId, by: Option<UnitId>, dir: V2, tiles: i32, toward: Option<V2>, stop: bool, collide: &Collide, block: i32) -> Moved {
     let from = w.grid.pos(t).unwrap_or(crate::grid::NO_CELL);
-    let mut m = Moved { unit: t, by, pull: toward.is_some(), from, to: from, tiles: 0, held: false, blocked_by: String::new(), blocker: None, hits: Vec::new(), stopped: 0, line: String::new() };
+    let mut m = Moved { unit: t, by, pull: toward.is_some(), from, to: from, tiles: 0, held: false, blocked_by: String::new(), blocker: None, blockers: Vec::new(), hits: Vec::new(), stopped: 0, line: String::new() };
     if holds_firm(w, &res.scheduled, t, block) {
         m.held = true;
         m.line = format!("[Hold] {} holds firm", w.units[t].name);
         res.log.push(m.line.clone());
         return m;
     }
-    let (entered, refused) = steps(w, t, dir, tiles, toward);
+    let (entered, refused) = steps_all(w, t, dir, tiles, toward);
+    // BIGUNIT1 BU7, BU8: the hazards roll on the cells newly covered at each step
+    let mut covered: Vec<V2> = Vec::new();
+    let mut prev = from;
     for c in &entered {
         let moved = w.jump_unit(t, *c);
         debug_assert!(moved, "`steps` only enters tiles `jump_unit` takes");
+        covered.extend(crate::command::newly_covered(w, t, prev, *c));
+        prev = *c;
     }
     m.to = w.pos(t);
     m.tiles = entered.len() as i32;
@@ -264,23 +274,37 @@ pub fn shove_unit(res: &mut Resolver, w: &mut World, t: UnitId, by: Option<UnitI
             a.command.locked = Some((t, m.to));
         }
     }
-    let notes = hazard_on_enter(w, &mut res.rng, t, &entered);
+    let notes = hazard_on_enter(w, &mut res.rng, t, &covered);
     if stop {
         m.stopped = stop_walks(res, t);
     }
     m.line = move_line(w, &m, &notes);
     res.log.push(m.line.clone());
-    if let Some(cell) = refused {
+    if let Some(&cell) = refused.first() {
         m.blocked_by = obstacle(w, cell);
-        m.blocker = w.occupant(cell);
+        m.blockers = blockers_of(w, t, &refused);
+        m.blocker = m.blockers.first().copied();
         let hit = collision_hit(res, w, t, collide, block, true, &format!("hits {}", m.blocked_by));
         m.hits.push(hit);
-        if let Some(b) = m.blocker {
+        for b in m.blockers.clone() {
             let hit = collision_hit(res, w, b, collide, block, false, &format!("is struck by {}", w.units[t].name));
             m.hits.push(hit);
         }
     }
     m
+}
+
+/// BIGUNIT1 BU8: the units on the refused cells, each once, in the cells' reading order (`t` itself never).
+fn blockers_of(w: &World, t: UnitId, refused: &[V2]) -> Vec<UnitId> {
+    let mut out: Vec<UnitId> = Vec::new();
+    for &cell in refused {
+        if let Some(o) = w.occupant(cell).filter(|&o| o != t) {
+            if !out.contains(&o) {
+                out.push(o);
+            }
+        }
+    }
+    out
 }
 
 /// FM5: `t` holds firm against a forced move at `block`: immune always, or immune while guarding (8.3) and guarding.
@@ -299,7 +323,7 @@ fn can_enter(w: &World, t: UnitId, cell: V2) -> bool {
         && w.grid.is_walkable(cell)
         && !w.grid.stops_forced_move(cell)
         && !w.grid.is_exit(cell)
-        && !w.is_occupied(cell)
+        && w.occupant(cell).is_none_or(|o| o == t)
 }
 
 /// FM3, FM6: the step rule of every forced move, on the world as it is (nothing moves): the tiles `t` enters going by
@@ -307,29 +331,41 @@ fn can_enter(w: &World, t: UnitId, cell: V2) -> bool {
 /// a trap `t` springs, GH6, ends the move on its tile) and the cell of a step refused with tiles left (a collision,
 /// FM4). `shove_unit` moves by it and `preview` reads it, so a forecast cannot drift from the move.
 pub fn steps(w: &World, t: UnitId, dir: V2, tiles: i32, toward: Option<V2>) -> (Vec<V2>, Option<V2>) {
+    let (entered, refused) = steps_all(w, t, dir, tiles, toward);
+    (entered, refused.first().copied())
+}
+
+/// BIGUNIT1 BU8: `steps` with every refused cell of the step: a big unit's step is open only when each cell it newly
+/// covers passes FM3; the cells that refuse come in reading order (one-cell units: the one tile). The entered positions
+/// are anchors; a pull measures from the cell of the square nearest its origin.
+pub fn steps_all(w: &World, t: UnitId, dir: V2, tiles: i32, toward: Option<V2>) -> (Vec<V2>, Vec<V2>) {
     let mut entered = Vec::new();
     if dir == ZERO {
-        return (entered, None);
+        return (entered, Vec::new());
     }
     let mut here = w.pos(t);
     for _ in 0..tiles {
         if let Some(o) = toward {
-            let gap = o - here;
-            if here.dist(o) <= 1 || gap.x * dir.x + gap.y * dir.y <= 0 {
+            let near = w.size_of(t);
+            let at = crate::grid::square_nearest(here, near, o);
+            let gap = o - at;
+            if at.dist(o) <= 1 || gap.x * dir.x + gap.y * dir.y <= 0 {
                 break;
             }
         }
         let next = here + dir;
-        if !can_enter(w, t, next) {
-            return (entered, Some(next));
+        let cells = crate::command::newly_covered(w, t, here, next);
+        let refused: Vec<V2> = cells.iter().copied().filter(|&c| !can_enter(w, t, c)).collect();
+        if !refused.is_empty() {
+            return (entered, refused);
         }
         entered.push(next);
         here = next;
-        if crate::ground::trap_at(w, t, next) {
+        if cells.iter().any(|&c| crate::ground::trap_at(w, t, c)) {
             break;
         }
     }
-    (entered, None)
+    (entered, Vec::new())
 }
 
 /// HOOKS1-UI slice 4: a forced move as it would land now, the world unchanged: the unit, its tiles (from where it
@@ -347,6 +383,8 @@ pub struct Forecast {
     pub held: bool,
     pub blocked_by: String,
     pub blocker: Option<UnitId>,
+    /// BIGUNIT1 BU8: every unit a collision would hit as a blocker (reading order).
+    pub blockers: Vec<UnitId>,
 }
 
 /// HOOKS1-UI slice 4: `shove_unit`'s move of `t` by `dir` at `block` without making it (no move, no hazard roll, no
@@ -355,17 +393,18 @@ pub struct Forecast {
 #[allow(clippy::too_many_arguments)]
 pub fn preview(w: &World, sched: &[ScheduledAction], t: UnitId, by: Option<UnitId>, dir: V2, tiles: i32, toward: Option<V2>, block: i32) -> Forecast {
     let from = w.grid.pos(t).unwrap_or(crate::grid::NO_CELL);
-    let mut f = Forecast { unit: t, by, pull: toward.is_some(), dir, from, path: Vec::new(), to: from, held: false, blocked_by: String::new(), blocker: None };
+    let mut f = Forecast { unit: t, by, pull: toward.is_some(), dir, from, path: Vec::new(), to: from, held: false, blocked_by: String::new(), blocker: None, blockers: Vec::new() };
     if holds_firm(w, sched, t, block) {
         f.held = true;
         return f;
     }
-    let (path, refused) = steps(w, t, dir, tiles, toward);
+    let (path, refused) = steps_all(w, t, dir, tiles, toward);
     f.to = path.last().copied().unwrap_or(from);
     f.path = path;
-    if let Some(cell) = refused {
+    if let Some(&cell) = refused.first() {
         f.blocked_by = obstacle(w, cell);
-        f.blocker = w.occupant(cell);
+        f.blockers = blockers_of(w, t, &refused);
+        f.blocker = f.blockers.first().copied();
     }
     f
 }
@@ -389,7 +428,7 @@ pub fn forecast(w: &World, sched: &[ScheduledAction], src: UnitId, src_pos: V2, 
         let moves = moved_this_round(sched, t)
             || sched.iter().any(|a| a.unit == t && !a.cancelled && !a.landed && a.start <= impact && matches!(a.command.kind, CmdKind::Walk { .. } | CmdKind::Disengage { .. }));
         let windup = poise::in_windup(sched, t, impact);
-        let Some((dir, tiles, toward)) = aim_at(w, src, src_pos, &shove, aim, w.pos(t), moves, windup) else { continue };
+        let Some((dir, tiles, toward)) = aim_at(w, src, src_pos, &shove, aim, w.nearest_cell(t, src_pos), moves, windup) else { continue };
         out.push(preview(w, sched, t, Some(src), dir, tiles, toward, impact));
     }
     out
