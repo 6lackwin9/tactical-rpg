@@ -1924,6 +1924,9 @@ pub struct GameState {
     /// PR6-8 (`PK4_PK5_CAMPAIGN_HUB.md` 4): {facility qid: level} of the facilities raised above
     /// `rpgkit_data::facility::LEVEL_MIN` (absent = that level); saved as the key `facilities` only when not empty.
     pub facilities: IndexMap<String, i64>,
+    /// PR6-9 (`PK4_PK5_CAMPAIGN_HUB.md` 5): the siege under way (`crate::siege`); saved as the key `siege` only while
+    /// one runs.
+    pub siege: Option<crate::siege::SiegeState>,
     /// Raw type problems from from_dict (not saved; validate reports them).
     pub load_problems: Vec<String>,
 }
@@ -1963,6 +1966,7 @@ impl Default for GameState {
             campaign: None,
             story: crate::story::Story::default(),
             facilities: IndexMap::new(),
+            siege: None,
             load_problems: Vec::new(),
         }
     }
@@ -2102,6 +2106,9 @@ impl GameState {
         if !self.facilities.is_empty() {
             out.insert("facilities".into(), Value::Object(self.facilities.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
         }
+        if let Some(st) = &self.siege {
+            out.insert("siege".into(), st.to_value());
+        }
         Value::Object(out)
     }
 
@@ -2197,6 +2204,10 @@ impl GameState {
             }
             Some(_) => g.load_problems.push("facilities must be an object {facility qid: level}.".into()),
         }
+        // PR6-9: an absent block reads as no siege (older saves)
+        if let Some(raw) = d.get("siege") {
+            g.siege = crate::siege::SiegeState::from_value(raw, &mut g.load_problems);
+        }
         g
     }
 
@@ -2275,6 +2286,9 @@ impl GameState {
             } else if !(lo + 1..=hi).contains(v) {
                 errors.push(format!("facilities.{k} must be a level {}..{hi}.", lo + 1));
             }
+        }
+        if let Some(st) = self.siege.as_ref().filter(|st| !qid_ok(&st.siege)) {
+            errors.push(format!("siege: '{}' must be a qualified siege id world:id.", st.siege));
         }
         errors
     }

@@ -596,9 +596,14 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
         paid_gold = json::i(json::dget(&granted, "granted"), "gold", 0);
     }
     let count = |f: Fate| fates.iter().filter(|x| **x == f).count() as i64;
+    let mut defeated = json::obj([("slain", int(count(Fate::Killed))), ("surrendered", int(count(Fate::Surrendered))), ("fled", int(count(Fate::Fled)))]);
+    // PR6-9: a retreat's withdrawn foe, apart from the slain (the key only when there is one)
+    if count(Fate::Withdrawn) > 0 {
+        defeated.insert("withdrawn".into(), int(count(Fate::Withdrawn)));
+    }
     let rewards = json::obj([
         ("foes", int(roster.len() as i64)),
-        ("defeated", json::obj([("slain", int(count(Fate::Killed))), ("surrendered", int(count(Fate::Surrendered))), ("fled", int(count(Fate::Fled)))]).into()),
+        ("defeated", defeated.into()),
         ("gold", int(share)),
         ("drops", Value::Array(drops)),
         ("key_loot", json::strs(&key_loot)),
@@ -769,6 +774,10 @@ pub fn start_refusal(d: &Data, gs: &GameState, encounter_ref: &str) -> String {
     if gs.party.active_members().is_empty() {
         return "No active party member to fight.".into();
     }
+    // PR6-9: a siege room with every active member left downed
+    if crate::siege::running(gs) && gs.party.active_members().iter().all(|m| crate::siege::is_downed(gs, &m.id)) {
+        return crate::siege::ALL_DOWN_TEXT.into();
+    }
     let world = fight_world(d, gs, encounter_ref);
     roster::party_min_refusal(gs, d.resolve(&world, "encounters", &json::s(local, "id")))
 }
@@ -854,6 +863,9 @@ pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut Me
     if gs.party.active_members().is_empty() {
         return Err("No active party member to fight.".into());
     }
+    if crate::siege::running(gs) && gs.party.active_members().iter().all(|m| crate::siege::is_downed(gs, &m.id)) {
+        return Err(crate::siege::ALL_DOWN_TEXT.into());
+    }
     let (world, stash_short) = begin_fight(d, gs, &enc_ref)?;
     let gs: &GameState = gs;
     let entry = d.resolve(&world, "encounters", &hit_id);
@@ -877,6 +889,10 @@ pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut Me
     let mut members = Vec::new();
     let granted = flag_skills(d, gs, entry);
     for m in gs.party.active_members() {
+        // PR6-9: a member left downed in an earlier siege room sits the room out until triaged
+        if crate::siege::is_downed(gs, &m.id) {
+            continue;
+        }
         let Some(mut field) = roster::field_unit(d, gs, m, &world) else { continue };
         // ACT1-HOOKS2 (FB-244 (1)): the encounter's battle grants for this member
         for (_, skill) in granted.iter().filter(|(who, _)| *who == m.id) {
@@ -959,6 +975,7 @@ pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, ou
         "dialogue" => crate::dialogue::after_fight(d, gs, fight, outcome, tally),
         crate::story::FIGHT_SOURCE => crate::story::after_fight(d, gs, fight, outcome, tally),
         crate::campaign::trigger::FIGHT_SOURCE => crate::campaign::trigger::after_fight(d, gs, fight, outcome, tally),
+        crate::siege::FIGHT_SOURCE => crate::siege::after_fight(d, gs, fight, outcome, tally),
         _ => crate::explore::after_fight(d, gs, fight, outcome, tally),
     }
 }

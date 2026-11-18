@@ -527,7 +527,8 @@ impl<'a> Runner<'a> {
             match fate {
                 Fate::Killed => rec.slain += 1,
                 Fate::Surrendered => rec.surrendered += 1,
-                Fate::Fled => rec.fled += 1,
+                // PR6-9: a retreat's withdrawn unit counts with the fled (the record keeps its fields)
+                Fate::Fled | Fate::Withdrawn => rec.fled += 1,
                 Fate::Standing => continue,
             }
             rec.weight += weight;

@@ -198,6 +198,11 @@ pub fn start_ap(ap: i64, mods: &BattleMods) -> i64 {
 /// never), nobody hurt, and too little upkeep when `needs_upkeep`. Outside a campaign world: today's Camp
 /// (`progression::can_camp`).
 pub fn rest_refusal(d: &Data, gs: &GameState) -> &'static str {
+    // PR6-9: no rest while a siege with `no_camp` runs
+    let siege = crate::siege::camp_refusal(d, gs);
+    if !siege.is_empty() {
+        return siege;
+    }
     if gs.campaign.is_none() {
         return progression::can_camp(d, gs);
     }

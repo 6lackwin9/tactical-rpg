@@ -242,17 +242,20 @@ pub struct LogGroup {
 }
 
 /// REWARD1 2.2: how a battle left an enemy-side unit. Killed (HP 0, whoever dealt the blow), surrendered (MORALE1: a
-/// broken group withdraws in place), fled (withdrew on its own), standing (still there, or never came).
+/// broken group withdraws in place), fled (withdrew on its own), standing (still there, or never came). PR6-9:
+/// withdrawn (a `retreat` objective's unit driven to its HP floor, or gone from the field: it left alive and the party
+/// won; unlike `fled`, which is a unit leaving on its own and, for a slay target, loses the fight).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Fate {
     Killed,
     Surrendered,
     Fled,
+    Withdrawn,
     Standing,
 }
 
 impl Fate {
-    /// Killed, surrendered or fled: it pays its common rewards.
+    /// Killed, surrendered, fled or withdrawn: it pays its common rewards.
     pub fn defeated(self) -> bool {
         self != Fate::Standing
     }
@@ -262,6 +265,7 @@ impl Fate {
             Fate::Killed => "killed",
             Fate::Surrendered => "surrendered",
             Fate::Fled => "fled",
+            Fate::Withdrawn => "withdrawn",
             Fate::Standing => "standing",
         }
     }
@@ -503,7 +507,7 @@ impl Session {
             heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
         });
         let bleed_heroes: Vec<UnitId> = (0..n_allies).filter(|c| !guests.contains(c)).collect();
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen, sides: Default::default(), marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()), skill_uses: IndexMap::new(), weapon_attacks: IndexMap::new(), channel_actions: IndexMap::new(), dulled_lock: false, bleed_out_rounds: def.bleed_out_rounds.max(0), bleed_heroes, bleed_remaining: IndexMap::new(), dead: Vec::new() };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, hp_floor: None, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen, sides: Default::default(), marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()), skill_uses: IndexMap::new(), weapon_attacks: IndexMap::new(), channel_actions: IndexMap::new(), dulled_lock: false, bleed_out_rounds: def.bleed_out_rounds.max(0), bleed_heroes, bleed_remaining: IndexMap::new(), dead: Vec::new() };
         // PK2-S5b: without the rule `durability` no unit tracks weapon wear
         crate::wear::clear_without_rule(&mut w);
         w.add_item_skills();
@@ -612,6 +616,12 @@ impl Session {
             start_guests,
             start_protected,
         };
+        // PR6-9: a retreat's unit (the first of its ref) and the HP damage never takes it below
+        if s.objective.objective == encounter::RETREAT {
+            if let Some(t) = s.first_of_ref(&s.objective.unit_ref) {
+                s.w.hp_floor = Some((t, encounter::floor_hp(s.w.units[t].max_hp, s.objective.hp_floor)));
+            }
+        }
         s.begin_round(1);
         s.apply_start_ap();
         s
@@ -991,6 +1001,8 @@ impl Session {
                 let u = &self.w.units[c];
                 let fate = if !u.is_alive() {
                     Fate::Killed
+                } else if u.is_withdrawn && self.w.hp_floor.is_some_and(|(t, _)| t == c) {
+                    Fate::Withdrawn
                 } else if u.is_withdrawn {
                     if self.unit_keys.get(&c).is_some_and(|k| self.morale.surrendered.contains(k)) {
                         Fate::Surrendered
@@ -2005,9 +2017,14 @@ impl Session {
     fn verdict(&mut self, end_of_round: bool) -> String {
         let heroes: Vec<UnitId> = self.w.allies.iter().copied().filter(|a| !self.guests.contains(a)).collect();
         let foes: Vec<UnitId> = self.w.enemies.iter().copied().filter(|&e| !self.is_reserved(e)).collect();
-        let target = if self.objective.objective == "slay" { self.first_of_ref(&self.objective.unit_ref) } else { None };
+        let target = if ["slay", encounter::RETREAT].contains(&self.objective.objective.as_str()) { self.first_of_ref(&self.objective.unit_ref) } else { None };
         let (guests, protected) = (self.guests.clone(), self.protected.clone());
-        self.objective.verdict(&self.w, &heroes, &guests, &protected, &foes, end_of_round, target)
+        let out = self.objective.verdict(&self.w, &heroes, &guests, &protected, &foes, end_of_round, target);
+        // PR6-9: the retreat's unit at its floor leaves the field in place (fate `withdrawn`)
+        if let Some(t) = target.filter(|&t| out == encounter::WON && self.objective.retreat_due(&self.w, t)) {
+            self.w.withdraw_in_place(t);
+        }
+        out
     }
 
     /// ENCOUNTER2 S2 (was BattleBridge.outcome's last-round rule, written by each caller): the battle's verdict, else

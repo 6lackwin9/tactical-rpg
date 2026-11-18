@@ -20,9 +20,9 @@ pub const VERSION: i64 = 13;
 pub const FORMAT: &str = "fc_save";
 pub const AUTOSAVE_SLOT: i64 = 0;
 pub const LAST_SLOT: i64 = 5;
-const KEYS: [&str; 18] = [
+const KEYS: [&str; 19] = [
     "world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops", "time", "autoplay", "purses",
-    "reward_paid", "campaign", "story", "facilities",
+    "reward_paid", "campaign", "story", "facilities", "siege",
 ];
 const SAVES: Format = Format { tag: FORMAT, version: VERSION, first_slot: AUTOSAVE_SLOT, last_slot: LAST_SLOT, keys: &KEYS };
 

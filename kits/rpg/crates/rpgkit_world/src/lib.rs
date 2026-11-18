@@ -22,6 +22,7 @@ pub mod rolls;
 pub mod roster;
 pub mod save;
 pub mod shop;
+pub mod siege;
 pub mod skill_text;
 pub mod state;
 pub mod story;
