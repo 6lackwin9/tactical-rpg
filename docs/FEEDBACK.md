@@ -30,6 +30,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-22` (`AGENT-PLAYTEST1`) | done (tools lane) | `develop` (squash `PR7-22`) | `aegis playtest` start / do / run / stop / status (`tools/fc.sh playtest`), no-window by default; smoke script `games/emberwake/playtests/agent/smoke.play` plays a fresh save to the hub in the gate (~20 s); `FB-309` |
 | `PR7-26` (`PLAYTEST-UI1`) | done (UI to review) | `develop` (squash `PR7-26`) | Story advance hint gone; battle Esc or Menu opens the in-game Settings popup; hub party list fits a full roster; portrait breath keeps the face aspect and the rim light eases; Mute in Background (on by default, user 2026-11-18); Battle tab Advanced heading; shots `/mnt/project-files/pr7-26/`; `FB-310` |
 | `PR7-15` (`WEBFIX2`) | done (UI to review) | `develop` (squash `PR7-15`) | Battle, region and hub HUD panels draw a new `hud` frame role (F2 iron with oxblood top line; placeholder `ui/frames/hud.png`); Map Camera Zoom on Display too; web smoke plays the new opening at three sizes; web buffer capped at the GPU texture limit; `FB-312` |
+| `PR7-24` (`HUB-POLISH1`) | done (UI to review) | `develop` (squash `PR7-24`) | Occupied bunks wear a name plate (class-initial sigil and name) on the 42 px bed; the bunk card is the dialogue box (portrait left, numbered choices, keys 1-9); shots `/mnt/project-files/pr7-24/`; `FB-314` |
 | `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
 | `PR7-4` (`SCENARIO-GOLDENS1`) | part 1 done (tools lane); baselines await the user | `develop` (squash `PR7-4` part 1) | Scenario `shot` step `golden` (tolerance, pixels allowance, diff image), `record=1`, launch `save`; every scenario in the gate (`tools/fc.sh scenarios_all`); three screen scenarios (menus, hub, battle; 18 shots) run as review shots until the user approves the baselines (`/mnt/project-files/pr7-4/`); `FB-313` |
 | `ENGINE-1` (`HELLO-GAME1`) | done (tools lane) | `develop` (squash `ENGINE-1`) | Sample game `games/hello/` on engine crates only: menu, walker sprite, one save slot, engine sounds, scenario `hello_walk` in the gate; programs `hello` and `hello_cli`; six RPG leaks listed; `FB-315` |
@@ -331,6 +332,14 @@ FB-01 to FB-281 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Not built** (AGENTROLES1 section 5, for a later row): frame counters in a real window, `docs/metrics/perf.jsonl` and the 5-record median rule (INTEG1-E3), the start-to-menu and working-set numbers.
 - **Guess** `[PROVISIONAL]`: the gate's budgets are loose ceilings for gross regressions only (a dev build on a shared machine); tight budgets belong in release runs. Note for PR7-4 part 2: the perf steps draw 70 extra frames before some later shots in `screens_menus` and `screens_hub`; a baseline must be recorded with them in place.
 - **Docs delta**: `engine/README.md` (no-window shell line): link requests `frames`, `clip`, `perf`; module `aegis_ui::perf`; program `ui_bench` (`tools/fc.sh bench`); scenario step `perf`. `docs/STRUCTURE.md`: none. `HISTORY.md`: none.
+
+### FB-314: PR7-24 hub polish landed; six guesses, two questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-24` (@squash `PR7-24`)
+- **Guesses**: (1) the class sigil is a ring with the class initial (no sigil art exists); (2) the plate sits on the bed head, not the niche's brass plaque (the plaque fits one letter and meets the candle); (3) the Talk choice is hidden when no talk waits (was a greyed button); (4) Close reads "Farewell."; (5) fallback line "In the squad." / "Out of the squad."; (6) the refusal line shows in normal text colour, not red.
+- **Questions**: real sigil art later (Art/UI request), or is the drawn letter final? Keep Talk visible but locked when no talk waits?
+- **Docs delta**: `GAME_BRIEF.md` (BUNKS1 BK2): "Occupied bunks wear a game-drawn name plate (class-initial sigil and name) centred on the 42 px bed, top on the bed head (`bunks::plate_rect`, AI-17 measure constants in `bunks.rs`)." BK4: "The bunk card is the dialogue box (`talk::box_layout` / `draw_box`): portrait left, name and class-condition line, choices Squad / Lead (locked with reason) / Talk (when waiting) / Farewell, keys 1-9." `HISTORY.md`: "Old 300x136 bunk card frame with a row of buttons replaced by the dialogue box (HUB-POLISH1; user 2026-11-18 playtest item 6)."
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

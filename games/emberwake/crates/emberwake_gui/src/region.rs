@@ -1279,6 +1279,15 @@ impl Screen<GameCx> for RegionMap {
                         let p = &props[i];
                         let (fit, mounted) = prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles);
                         draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
+                        // HUB-POLISH1 (1): an occupied bunk wears its member's name plate (with the bunk, in depth)
+                        if let Some(m) = hub_bunks.iter().find(|b| b.prop == p.id && !b.member.is_empty()).and_then(|b| gs.party.member(&b.member)) {
+                            let (name, class) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m));
+                            let plate = crate::bunks::plate_rect(&mut ui.p, fit.unwrap_or(p.rect), &name);
+                            crate::bunks::draw_plate(&mut ui.p, plate, &name, &class);
+                            if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
+                                e["plate"] = json!({"name": name, "class": class, "rect": [plate.x, plate.y, plate.w, plate.h]});
+                            }
+                        }
                     }
                     Item::Block(i) => {
                         let b = &blocks[i];

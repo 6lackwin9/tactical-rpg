@@ -19,7 +19,7 @@ use aegis_core::json::{self, s, s_or, Dict};
 use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use aegis_ui::painter::Painter;
-use aegis_ui::ui::{Gfx, Ui, Widget, BODY, H, SMALL, W};
+use aegis_ui::ui::{Gfx, Tip, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use emberwake_world::dialogue::DialogueRunner;
 use emberwake_world::{quest, Data, GameState};
@@ -62,6 +62,8 @@ pub(crate) struct Reply {
     locked: bool,
     act: TalkAct,
     h: i32,
+    /// The row's hover card (none for a conversation's replies; the bunk card's choices carry their help).
+    tip: Tip,
 }
 
 /// The dialogue box measured for one frame (spec PLAYUI1 3.1): the box, its left column's width, the speaker's name
@@ -112,30 +114,37 @@ fn capped(mut lines: Vec<String>, n: usize) -> Vec<String> {
 /// text size, at most the canvas less 40), centred, `TALK_GAP` above the bottom; its height from the content, at least
 /// `TALK_MIN_H`, at most `TALK_MAX_PCT` % of the canvas (the replies, then the line, scroll when they do not fit).
 pub(crate) fn talk_layout(p: &mut Painter, view: &Dict) -> TalkBox {
+    let band_text = if s(view, "faction").is_empty() { String::new() } else { format!("{}: {}", s(view, "faction_name"), s(view, "band")) };
+    box_layout(p, &s(view, "speaker_name"), &band_text, &s(view, "text"), reply_rows(view))
+}
+
+/// The dialogue box's measure for any speaker (`talk_layout` for a conversation; HUB-POLISH1: the bunk card): the
+/// name and the DIM line under the portrait (`band_text`, "" none), the line at the right and the reply `rows` (widget
+/// id, text shown, locked, action; numbered 1-9 in order).
+pub(crate) fn box_layout(p: &mut Painter, speaker_name: &str, band_text: &str, line: &str, rows: Vec<(String, String, bool, TalkAct)>) -> TalkBox {
     let sc = p.fonts.scale;
     let bw = (W - 40).min((TALK_W as f32 * sc).round() as i32);
     let left = TALK_LEFT.max((TALK_LEFT as f32 * sc).round() as i32);
     let (lb, ls) = (p.line_h(BODY).ceil() as i32, p.line_h(SMALL).ceil() as i32);
-    let name = capped(p.wrap(&s(view, "speaker_name"), BODY, (left - 6) as f32), 2);
-    let band_text = if s(view, "faction").is_empty() { String::new() } else { format!("{}: {}", s(view, "faction_name"), s(view, "band")) };
-    let band = if band_text.is_empty() { Vec::new() } else { capped(p.wrap(&band_text, SMALL, (left - 6) as f32), 2) };
+    let name = capped(p.wrap(speaker_name, BODY, (left - 6) as f32), 2);
+    let band = if band_text.is_empty() { Vec::new() } else { capped(p.wrap(band_text, SMALL, (left - 6) as f32), 2) };
     let left_h = TALK_PAD + PORTRAIT + 3 + name.len() as i32 * lb + if band.is_empty() { 0 } else { 1 + band.len() as i32 * ls } + TALK_PAD;
     // the right part: the line on top, a 1 px divider, the replies below (3 px kept for a scroll bar)
     let rw = bw - left - 2 - TALK_PAD;
-    let text = p.wrap(&s(view, "text"), BODY, (rw - 5) as f32);
+    let text = p.wrap(line, BODY, (rw - 5) as f32);
     let text_h = text.len() as i32 * lb;
     let mut text_view_h = text_h.min(TALK_LINES * lb).max(lb);
     let num_w = p.text_w("8", BODY).ceil() as i32 + 6;
     let line_w = (rw - 4 - 5 - num_w - 4) as f32;
     let mut replies = Vec::new();
-    for (i, (id, shown, locked, act)) in reply_rows(view).into_iter().enumerate() {
+    for (i, (id, shown, locked, act)) in rows.into_iter().enumerate() {
         let lines = p.wrap(&shown, BODY, line_w);
         let h = REPLY_H.max(lines.len() as i32 * lb + 5);
         let (num, label) = match act {
             TalkAct::Choose(_) => (if i < 9 { (i + 1).to_string() } else { String::new() }, format!("{}  {shown}", i + 1)),
             TalkAct::Advance => (String::new(), shown.clone()),
         };
-        replies.push(Reply { id, num, label, lines, locked, act, h });
+        replies.push(Reply { id, num, label, lines, locked, act, h, tip: Vec::new() });
     }
     let rows_h: i32 = replies.iter().map(|r| r.h + 2).sum::<i32>() - if replies.is_empty() { 0 } else { 2 };
     let mut rows_view_h: i32 = replies.iter().take(TALK_ROWS).map(|r| r.h + 2).sum::<i32>() - if replies.is_empty() { 0 } else { 2 };
@@ -155,6 +164,25 @@ pub(crate) fn talk_layout(p: &mut Painter, view: &Dict) -> TalkBox {
     let text_view = Rect::new(rx, r.y + TALK_PAD, rw, text_view_h);
     let rows_view = Rect::new(rx, text_view.y + text_view.h + 9, rw, rows_view_h);
     TalkBox { r, left, name, band, text, text_view, replies, num_w, rows_view, rows_h }
+}
+
+impl TalkBox {
+    /// Gives reply row `id` the hover card `tip`.
+    pub(crate) fn set_tip(&mut self, id: &str, tip: Tip) {
+        if let Some(r) = self.replies.iter_mut().find(|r| r.id == id) {
+            r.tip = tip;
+        }
+    }
+
+    /// The portrait's well at the top of the left column.
+    pub(crate) fn portrait_rect(&self) -> Rect {
+        Rect::new(self.r.x + (self.left - PORTRAIT) / 2, self.r.y + TALK_PAD, PORTRAIT, PORTRAIT)
+    }
+
+    /// The reply rows' actions in order (the keys 1-9 pick them).
+    pub(crate) fn acts(&self) -> Vec<(TalkAct, bool)> {
+        self.replies.iter().map(|r| (r.act, !r.locked)).collect()
+    }
 }
 
 /// Text centred on `cx`, shortened to `max_w` (the audit keeps the full text).
@@ -177,18 +205,28 @@ fn text_center_fit(p: &mut Painter, cx: f32, y: f32, text: &str, size: f32, max_
 /// row's `TalkAct` to the screen's action.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_talk<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, gs: &GameState, faces: &mut Faces, view: &Dict, b: &TalkBox, busy: bool, act: fn(TalkAct) -> A) {
-    ui.p.panel(b.r, th().game("talk_box", rgba(14, 20, 34, 250)), th().panel_edge, 4.0);
-    ui.push("dialogue", "panel", s(view, "speaker_name"), b.r, true, false, None, Vec::new());
-    let pr = Rect::new(b.r.x + (b.left - PORTRAIT) / 2, b.r.y + TALK_PAD, PORTRAIT, PORTRAIT);
-    ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
     let d = cx.data.clone();
     let speaker = d.resolve(&gs.world_id, "characters", &s(view, "speaker"));
     let (who, look) = talk_portrait(&d, gs, speaker, view);
     faces.say(&who.key, &s(view, "expression"));
-    if !faces.draw(&mut ui.p, cx, &who, &look, "dialogue", pr) {
-        // the missing art goes to the playtest trail as before (nothing loads)
-        let _ = cx.art.first(&crate::screens::character_art(&d, speaker).2, 1, 1);
-    }
+    draw_box(ui, b, "dialogue", &s(view, "speaker_name"), busy, act, |p, pr| {
+        if !faces.draw(p, cx, &who, &look, "dialogue", pr) {
+            // the missing art goes to the playtest trail as before (nothing loads)
+            let _ = cx.art.first(&crate::screens::character_art(&d, speaker).2, 1, 1);
+        }
+    });
+}
+
+/// The dialogue box `b` for any speaker (`draw_talk`'s look; HUB-POLISH1: the bunk card): its frame (widget
+/// `panel_id`, named `label`), the portrait well with `portrait` drawing into it, the name and DIM line under it, the
+/// line and the numbered reply rows (`act` maps a row's action; all off while `busy`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_box<A: Clone>(ui: &mut Ui<A>, b: &TalkBox, panel_id: &str, label: &str, busy: bool, act: impl Fn(TalkAct) -> A, portrait: impl FnOnce(&mut Painter, Rect)) {
+    ui.p.panel(b.r, th().game("talk_box", rgba(14, 20, 34, 250)), th().panel_edge, 4.0);
+    ui.push(panel_id, "panel", label.to_string(), b.r, true, false, None, Vec::new());
+    let pr = b.portrait_rect();
+    ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
+    portrait(&mut ui.p, pr);
     let mid = b.r.x as f32 + b.left as f32 / 2.0;
     let max_w = (b.left - 6) as f32;
     let (lb, ls) = (ui.p.line_h(BODY).ceil(), ui.p.line_h(SMALL).ceil());
@@ -227,7 +265,7 @@ pub(crate) fn draw_talk<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, gs: &GameState, f
         for (i, l) in rep.lines.iter().enumerate() {
             ui.p.text_fit((rr.x + 4 + b.num_w) as f32, ty + i as f32 * lb, l, BODY, (rr.w - 8 - b.num_w) as f32, if rep.locked { th().dim } else { th().text });
         }
-        ui.push(rep.id.clone(), "choice", rep.label.clone(), rr, on, false, Some(act(rep.act)), Vec::new());
+        ui.push(rep.id.clone(), "choice", rep.label.clone(), rr, on, false, Some(act(rep.act)), rep.tip.clone());
         ry += rep.h + 2;
     }
     ui.scroll_end();
