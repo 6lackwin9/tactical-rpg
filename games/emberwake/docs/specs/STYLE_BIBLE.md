@@ -66,6 +66,11 @@ reds, royal blues or white robes. Light comes from fire and tallow (amber), neve
   Gemini web queue. Anything tied to this game (story CGs, backdrops of story beats, characters, story art) made there
   is a placeholder until its Flow version replaces it at the same path; opening CGs are made on the web queue for now
   ("lets use gemini webapp for now, but note that these will be placeholder").
+- **Placeholders in the kit library** (Tushar 2026-11-18): placeholder characters, backgrounds and CGs may also go into
+  the kit asset library (`kits/rpg/assets/`) as generic placeholder sets, stripped of every game reference (no names,
+  lore or places) and carrying only asset metadata (kind, style, size, palette, tags, status). The library may later
+  hold sets in several styles. The metadata format is to be agreed with Design and the tools and engine lane; until
+  then nothing is copied there.
 - Music: Flow Music (Lyria, house seed `455684`) for finals; synth tracks are placeholders.
 
 ## 7. Batch check (every batch, one contact sheet)
