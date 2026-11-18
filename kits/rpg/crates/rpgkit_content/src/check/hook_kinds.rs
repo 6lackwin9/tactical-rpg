@@ -116,6 +116,7 @@ pub fn row_errors(kind: &str, e: &Dict, ctx: &Ctx, refs: &Refs) -> Vec<String> {
         HAZARDS_KIND => {
             hazard_errors(e, &mut out);
             out.extend(super::hooks::hazard_meter_errors(e.get("meter"), refs.meters, "Hazard"));
+            out.extend(super::hooks::when_meter_errors(e.get(rpgkit_data::WHEN_METER), refs.meters, "Hazard"));
         }
         UNIT_METERS_KIND => meter_errors(e, ctx, refs, &mut out),
         ZONES_KIND => zone_errors(e, refs.terrain, &mut out),

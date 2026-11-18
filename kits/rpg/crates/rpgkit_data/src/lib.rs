@@ -2542,10 +2542,10 @@ pub const HEAL_TAKEN: &str = "heal_taken";
 /// AH2: the directions of an arena hazard's push.
 pub const ARENA_DIRS: [&str; 4] = ["east", "west", "north", "south"];
 /// AH1: the keys of an arena hazard row and of its `effect`.
-pub const ARENA_HAZARD_KEYS: [&str; 9] = ["id", "name", "cells", "columns", "rows", "rounds", "blocks", "effect", "line"];
+pub const ARENA_HAZARD_KEYS: [&str; 10] = ["id", "name", "cells", "columns", "rows", "rounds", "every_rounds", "blocks", "effect", "line"];
 /// PK1-S1 (3.6): `meter` `{meter, delta}` changes that unit meter of each struck holder (the ground hazard row's `meter`
 /// field too).
-pub const ARENA_EFFECT_KEYS: [&str; 9] = ["damage", "damage_pct", "stagger", "status", "potency", "magnitude", "status_rounds", "push", "meter"];
+pub const ARENA_EFFECT_KEYS: [&str; 10] = ["damage", "damage_pct", "stagger", "status", "potency", "magnitude", "status_rounds", "push", "meter", "when_meter"];
 /// PK1-S1 (3.6): the keys of a hazard's `meter` (arena effect and ground hazard row).
 pub const HAZARD_METER_KEYS: [&str; 2] = ["meter", "delta"];
 
@@ -2748,6 +2748,8 @@ pub struct HazardDef {
     pub glyph: String,
     /// PK1-S1 (3.6): the unit meter change it makes on each holder of that meter it acts on (None = none).
     pub meter: Option<MeterDelta>,
+    /// PR6-7: it acts only on units holding this meter at its `at_least` or more (None = every unit it affects).
+    pub when_meter: Option<Threshold>,
 }
 
 impl HazardDef {
@@ -2772,7 +2774,90 @@ impl HazardDef {
             tint: string(o, "tint", "#808080"),
             glyph: string(o, "glyph", "*"),
             meter: MeterDelta::of_hazard(o),
+            when_meter: Threshold::of(o, WHEN_METER),
         }
+    }
+}
+
+/// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 1): an arena hazard effect's or a ground hazard row's meter gate: it acts only on a
+/// unit holding the unit meter `id` at `at_least` or more (rule unit_meters; a unit holding no such meter is spared).
+pub const WHEN_METER: &str = "when_meter";
+/// PR6-7: an arena hazard row's periodic cadence: it strikes every N rounds (rounds N, 2N, ...), added to its `rounds`.
+pub const EVERY_ROUNDS: &str = "every_rounds";
+/// PR6-7: the most rounds `every_rounds` expands into (past any battle's last round).
+pub const EVERY_ROUNDS_HORIZON: i32 = 99;
+/// PR6-7: the battle-start meter grants of a world region or encounter row.
+pub const START_METER: &str = "start_meter";
+/// PR6-7: a world encounter's ref for the captive unit: built from the latest departed record whose life is `captured`
+/// and cause `stayed` (`party.departed`), else the encounter's `captive_fallback` character.
+pub const CAPTIVE_UNIT: &str = "$captive_unit";
+/// PR6-7: the world encounter field naming the character `CAPTIVE_UNIT` plays when no departed record qualifies.
+pub const CAPTIVE_FALLBACK: &str = "captive_fallback";
+/// PR6-7: the departed record's life and cause `CAPTIVE_UNIT` reads (`DEPART_LIVES`, `DEPART_CAUSES`).
+pub const CAPTIVE_LIFE: &str = "captured";
+pub const CAPTIVE_CAUSE: &str = "stayed";
+
+/// PR6-7: an `{id, at_least}` gate (`when_meter` on a unit meter, `requires_track` on a unit track).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Threshold {
+    pub id: String,
+    pub at_least: i32,
+}
+
+impl Threshold {
+    /// The object's keys.
+    pub const KEYS: [&'static str; 2] = ["id", "at_least"];
+
+    /// None for an empty object or one without an id.
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        Some(Self { id: string(o, "id", ""), at_least: int(o, "at_least", 0) }).filter(|t| !t.id.is_empty())
+    }
+
+    /// The gate under `key` of `o` (None when absent, empty or without an id).
+    pub fn of(o: &Obj, key: &str) -> Option<Self> {
+        obj(o, key).and_then(Self::from_obj)
+    }
+
+    /// Whether `value` (None: the unit holds none) passes.
+    pub fn met(&self, value: Option<i32>) -> bool {
+        value.is_some_and(|v| v >= self.at_least)
+    }
+}
+
+/// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 1): one `start_meter` entry of a world region or encounter: at the battle start
+/// each holder of unit meter `meter` (rule unit_meters) whose unit track `requires_track.id` is at `at_least` or more
+/// (none = every holder) gains `value` (clamped to its floor..max), after the holders' own start and floor. The world
+/// filters the entries by `unless_flag` (a set flag skips it) and `requires_flags` (conditions that must all hold).
+#[derive(Debug, Clone, PartialEq)]
+pub struct StartMeter {
+    pub meter: String,
+    pub value: i32,
+    pub requires_track: Option<Threshold>,
+    pub unless_flag: String,
+    pub requires_flags: Vec<Value>,
+}
+
+impl StartMeter {
+    /// The entry's keys.
+    pub const KEYS: [&'static str; 5] = ["meter", "value", "requires_track", "unless_flag", "requires_flags"];
+    /// The largest `value` magnitude.
+    pub const VALUE_MAX: i32 = 100;
+
+    /// None for an entry without a meter id or with value 0.
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        let s = Self {
+            meter: string(o, "meter", ""),
+            value: int(o, "value", 0).clamp(-Self::VALUE_MAX, Self::VALUE_MAX),
+            requires_track: Threshold::of(o, "requires_track"),
+            unless_flag: string(o, "unless_flag", ""),
+            requires_flags: array(o, "requires_flags").to_vec(),
+        };
+        (!s.meter.is_empty() && s.value != 0).then_some(s)
+    }
+
+    /// A row's `start_meter` entries (the ones that read).
+    pub fn list(o: &Obj) -> Vec<Self> {
+        array(o, START_METER).iter().filter_map(Value::as_object).filter_map(Self::from_obj).collect()
     }
 }
 

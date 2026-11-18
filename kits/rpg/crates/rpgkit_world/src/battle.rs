@@ -17,8 +17,31 @@ pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
 
 /// GameEncounter / WorldEncounter: the battle of encounter row `entry` resolved in `world`, with the ruleset of that
 /// world (RULESET1 3.1.2: a battle plays by the world that owns the encounter; ENCOUNTER2's linked rooms too).
+/// PR6-7: with the region and encounter `start_meter` grants as a fight with no game state reads them (`start_meters`).
 pub fn encounter_def(d: &Data, world: &str, entry: &Dict) -> EncounterDef {
-    EncounterDef::from_obj_with(entry, d.ruleset(world))
+    let mut def = EncounterDef::from_obj_with(entry, d.ruleset(world));
+    def.start_meter = start_meters(d, None, world, entry);
+    def
+}
+
+/// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 1): the battle-start meter grants of encounter row `entry` fought in `world`: the
+/// `start_meter` entries of the regions its place sits in (`travel::region_chain` of its `location`, else the party's
+/// place; innermost region first), then its own. With a game state an entry whose `unless_flag` is set or whose
+/// `requires_flags` do not all hold is skipped; with none (the host, the sim) no flag is set: an entry with
+/// `requires_flags` is skipped and `unless_flag` never skips. The battle applies them (`meter::battle_start_with`).
+pub fn start_meters(d: &Data, gs: Option<&GameState>, world: &str, entry: &Dict) -> Vec<rpgkit_data::StartMeter> {
+    let mut place = json::s(entry, "location");
+    if place.is_empty() {
+        place = gs.map(|g| g.location_id.clone()).unwrap_or_default();
+    }
+    let regions = if place.is_empty() { Vec::new() } else { crate::travel::region_chain(d, world, &place) };
+    let mut all: Vec<rpgkit_data::StartMeter> = regions.iter().flat_map(|rq| rpgkit_data::StartMeter::list(d.resolve(world, "regions", rq))).collect();
+    all.extend(rpgkit_data::StartMeter::list(entry));
+    all.retain(|g| match gs {
+        Some(gs) => (g.unless_flag.is_empty() || !quest::condition_met(gs, json::dict(&serde_json::json!({"key": g.unless_flag})))) && g.requires_flags.iter().all(|c| quest::condition_met(gs, json::dict(c))),
+        None => g.requires_flags.is_empty(),
+    });
+    all
 }
 
 /// WORLD-SIM1 (PR5-42): the battle of encounter `id` as world `world` resolves it with its authored side, for a runner
@@ -35,7 +58,9 @@ pub fn authored_fight<'a>(d: &'a Data, world: &str, id: &str, stage: i64) -> Opt
     let mut def = encounter_def(d, world, entry);
     def.id = format!("{world}:{id}");
     let allies = def.party.iter().chain(&def.guests).cloned().collect();
-    Some((def, WorldRoster { stage, allies, ..WorldRoster::new(d, world) }))
+    // PR6-7: no game state: the captive ref plays its fallback
+    let captive_fallback = json::s(entry, rpgkit_data::CAPTIVE_FALLBACK);
+    Some((def, WorldRoster { stage, allies, captive_fallback, ..WorldRoster::new(d, world) }))
 }
 
 /// RULESET1 V3: the plan reveal flag of `world`: the nearest non-empty `plan_reveal_flag` of its lineage (the world,
@@ -56,6 +81,7 @@ pub fn encounter_def_in(d: &Data, gs: &GameState, world: &str, entry: &Dict) -> 
     let mut def = encounter_def(d, world, entry);
     def.plan_reveal = plan_reveal(d, gs, world);
     def.bleed_out_rounds = crate::roster::rule(d, gs).map_or(0, |r| r.bleed_out_rounds.max(0));
+    def.start_meter = start_meters(d, Some(gs), world, entry);
     def
 }
 
@@ -72,14 +98,38 @@ pub struct WorldRoster<'a> {
     /// W.2-S3 (FB-139): the refs fighting on the party's side (the encounter's `party` and `guests`), which never scale
     /// with the stage. `new` sets none; `begin_world` sets the encounter's.
     pub allies: Vec<String>,
+    /// PR6-7: the unit the ref `rpgkit_data::CAPTIVE_UNIT` plays (`captive_def`); None: the encounter's
+    /// `captive_fallback` character (`captive_fallback`), else the ref spawns nothing.
+    pub captive: Option<rpgkit_data::UnitDef>,
+    /// PR6-7: the encounter's `captive_fallback` character ref ("" = none).
+    pub captive_fallback: String,
 }
 
 impl<'a> WorldRoster<'a> {
     /// W.2-S1 (FB-50a): the roster of a battle played in `world` at stage 0 (the one constructor; `begin_world` builds
     /// on it and sets the stage and the allies).
     pub fn new(d: &'a Data, world: impl Into<String>) -> Self {
-        Self { d, world: world.into(), stage: 0, allies: Vec::new() }
+        Self { d, world: world.into(), stage: 0, allies: Vec::new(), captive: None, captive_fallback: String::new() }
     }
+
+    /// PR6-7: the character ref a roster ref resolves as: the fallback for `CAPTIVE_UNIT` when no captive was built,
+    /// else the ref itself.
+    fn character_ref<'r>(&'r self, r: &'r str) -> &'r str {
+        if r == rpgkit_data::CAPTIVE_UNIT && self.captive.is_none() {
+            &self.captive_fallback
+        } else {
+            r
+        }
+    }
+}
+
+/// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 2): the captive unit `rpgkit_data::CAPTIVE_UNIT` plays: the latest departed record
+/// (`party.departed`) whose life is `CAPTIVE_LIFE` and cause `CAPTIVE_CAUSE`, its member snapshot built as it would
+/// fight in `world` (`progression::build_played`: its base unit at its level and spend, its name). None when no record
+/// qualifies or the snapshot does not build (the encounter's `captive_fallback` then plays it).
+pub fn captive_def(d: &Data, gs: &GameState, world: &str) -> Option<rpgkit_data::UnitDef> {
+    let x = gs.party.departed.iter().rev().find(|x| x.life == rpgkit_data::CAPTIVE_LIFE && x.cause == rpgkit_data::CAPTIVE_CAUSE)?;
+    progression::build_played(d, &x.member, world).map(|b| b.def)
 }
 
 /// W.2-S3 (FB-13): the world stage of a fight: the campaign's act in a campaign world, 0 in a world with no campaign
@@ -114,6 +164,16 @@ impl rpgkit_battle::session::Roster for WorldRoster<'_> {
     /// The character's unit entry; an enemy (not an ally, not a hero) at its stage level (`stage_level`, FB-139), an
     /// explicit `spend` topped up by the raise's extra points (`rpgkit_rules::unit::raise_level`, AUDIT-02).
     fn entry(&self, cat: &rpgkit_data::Catalog, r: &str) -> Option<rpgkit_data::UnitDef> {
+        // PR6-7: the captive snapshot as built (its own level), else the fallback character
+        if r == rpgkit_data::CAPTIVE_UNIT {
+            if let Some(c) = &self.captive {
+                return Some(c.clone());
+            }
+            if self.captive_fallback.is_empty() {
+                return None;
+            }
+        }
+        let r = self.character_ref(r);
         let e = self.d.character_unit_entry(self.d.resolve(&self.world, "characters", r));
         if e.is_empty() {
             return None;
@@ -128,18 +188,31 @@ impl rpgkit_battle::session::Roster for WorldRoster<'_> {
     /// U2.2-S2 (FB-12): the character's overrides (`character_overrides`), built from the world's catalog (HOOKS1 CN3:
     /// the class path of the world playing the battle; the battle's catalog when the world replaces no path).
     fn overrides(&self, _cat: &rpgkit_data::Catalog, r: &str) -> rpgkit_rules::Overrides {
+        if r == rpgkit_data::CAPTIVE_UNIT && self.captive.is_some() {
+            return rpgkit_rules::Overrides { path_cat: Some(self.d.cat_in(&self.world).clone()), ..Default::default() };
+        }
+        let r = self.character_ref(r);
         let mut over = character_overrides(self.d, self.d.resolve(&self.world, "characters", r), &self.world);
         over.path_cat = Some(self.d.cat_in(&self.world).clone());
         over
     }
 
     fn tier(&self, _cat: &rpgkit_data::Catalog, r: &str) -> String {
+        if let (true, Some(c)) = (r == rpgkit_data::CAPTIVE_UNIT, &self.captive) {
+            return c.tier.clone();
+        }
+        let r = self.character_ref(r);
         let e = self.d.character_unit_entry(self.d.resolve(&self.world, "characters", r));
         rpgkit_data::unit_tier(&e)
     }
 
     /// WorldFactory: lore_ref = the character's qualified id, else its id.
+    /// PR6-7: the captive snapshot plays no world character ("": never a hero's key).
     fn lore_ref(&self, _cat: &rpgkit_data::Catalog, r: &str) -> String {
+        if r == rpgkit_data::CAPTIVE_UNIT && self.captive.is_some() {
+            return String::new();
+        }
+        let r = self.character_ref(r);
         let c = self.d.resolve(&self.world, "characters", r);
         json::s_or(c, "_qid", &json::s(c, "id"))
     }
@@ -342,10 +415,12 @@ impl Tally {
         Tally { foes: roster(d, world, encounter_qid).into_iter().map(|f| Foe { key: f.key, unit_ref: f.unit_ref, fate }).collect(), guests: Some(guests), ..Default::default() }
     }
 
-    /// Each roster enemy's fate (a key missing from the tally: standing), and a note per tally foe not in the roster.
+    /// Each roster enemy's fate (a key missing from the tally: standing), and a note per tally foe not in the roster
+    /// (PR6-7: but the captive unit).
     pub fn fates_of(&self, roster: &[RosterFoe]) -> (Vec<Fate>, Vec<String>) {
         let fates = roster.iter().map(|r| self.foes.iter().find(|f| f.key == r.key).map_or(Fate::Standing, |f| f.fate)).collect();
-        let notes = self.foes.iter().filter(|f| !roster.iter().any(|r| r.key == f.key)).map(|f| format!("Tally foe '{}' is not in the encounter.", f.key)).collect();
+        // PR6-7: the captive unit is never a roster enemy (no rewards, no note)
+        let notes = self.foes.iter().filter(|f| f.unit_ref != rpgkit_data::CAPTIVE_UNIT && !roster.iter().any(|r| r.key == f.key)).map(|f| format!("Tally foe '{}' is not in the encounter.", f.key)).collect();
         (fates, notes)
     }
 }
@@ -761,7 +836,9 @@ pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut Me
     def.start_grant = StartGrant::Only(grants);
     let stage = world_stage(gs);
     let allies = def.party.iter().chain(&def.guests).cloned().collect();
-    let roster = WorldRoster { stage, allies, ..WorldRoster::new(d, world.clone()) };
+    // PR6-7: the captive snapshot and its fallback (read only when a ref names `CAPTIVE_UNIT`)
+    let (captive, captive_fallback) = (captive_def(d, gs, &world), json::s(entry, rpgkit_data::CAPTIVE_FALLBACK));
+    let roster = WorldRoster { stage, allies, captive, captive_fallback, ..WorldRoster::new(d, world.clone()) };
     let mut party = Vec::new();
     let mut members = Vec::new();
     let granted = flag_skills(d, gs, entry);

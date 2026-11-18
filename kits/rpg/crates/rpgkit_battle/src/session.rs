@@ -80,6 +80,10 @@ pub struct EncounterDef {
     pub tactics: crate::script::Tactics,
     /// PK3: rounds a downed deployed party member has to be revived before bleeding out (0 = classic non-bleeding stasis).
     pub bleed_out_rounds: i32,
+    /// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 1): the battle-start meter grants (`meter::battle_start_with`, rule
+    /// unit_meters); set by its caller (the world bridge from the region and encounter `start_meter` rows); never read
+    /// from the row (none by default).
+    pub start_meter: Vec<rpgkit_data::StartMeter>,
     /// The whole entry (objective and morale fields are read from it).
     pub raw: Obj,
 }
@@ -125,6 +129,7 @@ impl EncounterDef {
             plan_reveal: false,
             tactics: Default::default(),
             bleed_out_rounds: 0,
+            start_meter: Vec::new(),
             raw: o.clone(),
         }
     }
@@ -544,7 +549,8 @@ impl Session {
         // RULESET1_INTENT MV1, TQ23: first facings and starting intents (nothing in classic)
         round_intent::battle_start(&mut w, &default_intents);
         // HOOKS1 UM1: the units' meters, their meter skills and start bands (rule unit_meters; nothing in classic)
-        crate::meter::battle_start(&mut w);
+        // PR6-7: then the caller's start_meter grants
+        crate::meter::battle_start_with(&mut w, &def.start_meter);
         let mut resolver = Resolver::new(def.total_blocks, def.rng_seed);
         for &c in allies.iter().chain(enemies.iter()) {
             resolver.register(c);

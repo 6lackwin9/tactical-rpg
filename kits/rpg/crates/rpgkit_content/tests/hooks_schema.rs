@@ -757,9 +757,10 @@ fn the_writer_keeps_the_hook_fields_and_a_resave_is_identical() {
     let stored: Value = serde_json::from_str(&fs::read_to_string(store::file_of(&data, None, HAZARDS_KIND)).unwrap()).unwrap();
     let smoke = stored["entries"].as_array().unwrap().iter().find(|e| e["id"] == "smoke").unwrap();
     let keys: Vec<String> = smoke.as_object().unwrap().keys().cloned().collect();
-    // PK1-S1: an empty `meter` is stored as no key (a row written before it existed re-saves byte for byte)
-    let schema_keys: Vec<String> = fields(source::schema(), "content", HAZARDS_KIND).iter().map(|f| json::s(json::dict(f), "key")).filter(|k| k != "origin" && k != "meter").collect();
-    assert_eq!(keys, schema_keys, "a hazard row stores every field (origin system and an empty meter left out)");
+    // PK1-S1: an empty `meter` is stored as no key (a row written before it existed re-saves byte for byte); PR6-7:
+    // an empty `when_meter` too
+    let schema_keys: Vec<String> = fields(source::schema(), "content", HAZARDS_KIND).iter().map(|f| json::s(json::dict(f), "key")).filter(|k| k != "origin" && k != "meter" && k != "when_meter").collect();
+    assert_eq!(keys, schema_keys, "a hazard row stores every field (origin system and an empty meter or meter gate left out)");
     // a bad row is refused with its reason and the file stays as it was
     let before = fs::read_to_string(store::file_of(&data, None, ZONES_KIND)).unwrap();
     let refused = store::upsert(&data, None, ZONES_KIND, &dict(json!({"id": "swamp_bog", "name": "Bog"})), None).err().expect("a code zone id is refused");
