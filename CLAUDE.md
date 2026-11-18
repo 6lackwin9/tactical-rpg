@@ -8,7 +8,7 @@ Layers (SPLIT1, `docs/specs/SPLIT1.md`, done 2026-10-20): the engine (`engine/`,
 RPG kit is `kits/rpg/` (its genre rules in crates `rpgkit_*`, including the battle command set `rpgkit_host`, and their
 field tables `schema.json`, since KIT1-M/N; the kit names no game; plus kit assets); the game is `games/emberwake/`
 (crates `emberwake_*`, façades over the kit plus game code, `data/`, `assets/`, `tuning.json`, its manifest
-`game.json` and its design docs in `docs/`). Every task row has a Layer (engine, kit, game) and its change lands in that
+`game.json` and its design docs in `docs/`). `games/hello/` is the engine's sample game (engine crates only, ENGINE-1). Every task row has a Layer (engine, kit, game) and its change lands in that
 layer; the engine never names a game.
 
 **Mode in force: interactive** (2026-11-17; decision "Interactive mode"; this line is the single record of the mode and every skill defers to it): threads act only on the user's direct requests, one at a time; Build builds one READY row per "Build: next row", or, on "Build: run queue", up to `3` section 1 rows in order with the stop rules of `AUTOPILOT1.md` section 6 (step B0, user 2026-11-17, decision "Build queue runs (B0)"); releases only on "release now". The rest of the autopilot mode is a draft awaiting the user's approval (`docs/specs/AUTOPILOT1.md`).

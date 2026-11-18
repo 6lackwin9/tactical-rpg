@@ -13,6 +13,8 @@ Nothing major is parked yet. Provisional calls Design made while you were away, 
   before The Sweep; Warded Tallow at the Candle-Maker for 5 Scrap; Make camp needs Tallow.
 - [ ] Bunks (`PR7-43`): the hall's plank floor under the bunks with low timber screens and a step; the class blanket
   colours.
+- [ ] Gamepad on the PC (`FB-327`): repeat timing, dead zone, which button is Back (south Enter, east Back, west
+  Space, north Tab, bumpers page, Start Esc).
 
 ## Battle view: closes M1
 

@@ -31,3 +31,5 @@ Standing script/test hygiene rules: never hand-edit JSON (use `ContentCatalog.up
 | 2026-11-18 | Recipe effect `doctrine` as a reserved no-op | changed (`PR6-6`) | Moves a campaign gauge by id; two-axis rows stay until `PR6-12` reseeds them (`N4`) | Act 2 doctrine needs one signed gauge |
 | 2026-11-18 | Start-meter condition `requires_calcified` (spec only) | replaced (`PR6-7`) | Generic `requires_track: {id, at_least}` | Keeps game nouns out of the kit; never built |
 | 2026-11-18 | `checks_golden` objective enum message | re-recorded (`PR6-9`, `a3a01b69`, user approval 2026-11-18) | The message lists `retreat` | Sieges add the `retreat` objective; text-only golden change |
+| 2026-11-18 | Engine test strings "hello" | renamed "salve" (`ENGINE-1`, `FB-315`) | The sample game's id `hello` | The layers check bans game ids in engine and kit code |
+| 2026-11-18 | Xvfb recipe for cloud UI shots | replaced (`PR7-22`, `FB-309`) | `tools/fc.sh playtest` on the no-window mode | Needs no display and drives the same screens and link |
