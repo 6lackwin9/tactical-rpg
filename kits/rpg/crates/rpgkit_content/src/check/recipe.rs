@@ -91,6 +91,12 @@ pub fn row_errors(e: &Dict, loaded: &Dict) -> Vec<String> {
     }
     out.extend(cost_errors(json::get(e, "cost"), loaded));
     out.extend(effects_errors(json::get(e, "effects"), &target, loaded));
+    // PR6-6 (B5): the tags a run carries to the recipe triggers are ids
+    match e.get("tags") {
+        None => {}
+        Some(Value::Array(a)) if a.iter().all(|t| t.as_str().is_some_and(|t| json::id_ok(t) && !t.is_empty() && chars(t) <= ID_MAX)) => {}
+        Some(_) => out.push(format!("Tags must be a list of ids (1-{ID_MAX} characters of a-z, 0-9 and _).")),
+    }
     // PK2-FOLLOWUP (`PK2_GRAFTS.md` 5): masterwork forging opens with a quest, so a masterwork reforge names its gate
     let masterwork = json::arr(json::get(e, "effects")).iter().map(json::dict).any(|fx| json::s(fx, "effect") == r::FX_REFORGE && fx.get("masterwork") == Some(&Value::Bool(true)));
     if masterwork && json::arr(json::get(e, "requires")).is_empty() {

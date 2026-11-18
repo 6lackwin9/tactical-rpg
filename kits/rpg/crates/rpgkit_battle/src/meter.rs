@@ -51,6 +51,9 @@ pub struct Gauge {
     pub max: i32,
     pub gained: bool,
     pub band: Option<usize>,
+    /// PR6-6 (`PK4_PK5_CAMPAIGN_HUB.md` 1, B5): the highest value it held this battle (the start included): the world
+    /// settle's `HeroEnd::strain_peak` for the ruleset's channel meter.
+    pub peak: i32,
     applied: BandApplied,
     fired: Vec<String>,
     set_at_round_end: bool,
@@ -85,6 +88,11 @@ fn find(w: &World, c: UnitId, meter: &str) -> Option<usize> {
 /// `c`'s value of `meter` (None when it holds none).
 pub fn value(w: &World, c: UnitId, meter: &str) -> Option<i32> {
     find(w, c, meter).map(|i| w.meters.gauges[i].value)
+}
+
+/// PR6-6 (B5): the highest value `c` held on `meter` this battle (None when it holds no such meter).
+pub fn peak(w: &World, c: UnitId, meter: &str) -> Option<i32> {
+    find(w, c, meter).map(|i| w.meters.gauges[i].peak)
 }
 
 /// `c`'s meters and their values now (the planner starts from them; a snapshot records them).
@@ -165,6 +173,7 @@ fn unit_start(w: &mut World, c: UnitId) {
             let g = &mut w.meters.gauges[i];
             g.floor = g.floor.max(floor);
             g.value = g.value.max(g.floor);
+            g.peak = g.peak.max(g.value);
             continue;
         }
         let start = match (start < 0, def.start_full) {
@@ -173,7 +182,7 @@ fn unit_start(w: &mut World, c: UnitId) {
             _ => start,
         };
         let value = start.clamp(def.min, max).max(floor);
-        w.meters.gauges.push(Gauge { unit: c, meter: meter.clone(), value, floor, max, gained: false, band: None, applied: BandApplied::default(), fired: Vec::new(), set_at_round_end: false });
+        w.meters.gauges.push(Gauge { unit: c, meter: meter.clone(), value, floor, max, gained: false, band: None, peak: value, applied: BandApplied::default(), fired: Vec::new(), set_at_round_end: false });
         for s in def.skills.iter().filter(|s| cat.skill(s).is_some()) {
             if !w.units[c].meter_skills.contains(s) {
                 w.units[c].meter_skills.push(s.clone());
@@ -288,6 +297,7 @@ fn move_to(res: &mut Resolver, w: &mut World, i: usize, to: i32, h: &Holder, wha
         return false;
     }
     w.meters.gauges[i].value = new;
+    w.meters.gauges[i].peak = w.meters.gauges[i].peak.max(new);
     let l = trigger::line(w, h, &format!("{what} ({old} -> {new})"));
     res.log.push(l.clone());
     fired.push(l, 0, Vec::new());

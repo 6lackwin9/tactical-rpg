@@ -157,6 +157,9 @@ fn end(member: &str, attacked: &[&str]) -> HeroEnd {
         hostile: String::new(),
         attacked: attacked.iter().map(|s| s.to_string()).collect(),
         worn: Vec::new(),
+        strain_peak: 0,
+        strain_end: 0,
+        channel_actions: 0,
     }
 }
 

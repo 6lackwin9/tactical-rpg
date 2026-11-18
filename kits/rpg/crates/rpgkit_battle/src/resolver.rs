@@ -183,13 +183,18 @@ impl Resolver {
 
     /// PK2-S1: counts one use of the command's skill when it has a `uses_per_battle` limit. PK2-S4: an attack skill (not
     /// an item) started by a hero built from member state (`Unit::rank_choice`) records its main-hand weapon's family
-    /// (`World::weapon_attacks`). PK2-S5b: the weapon it swings wears (`wear::spend`).
+    /// (`World::weapon_attacks`). PK2-S5b: the weapon it swings wears (`wear::spend`). PR6-6: a command started in a
+    /// Channel round counts in `World::channel_actions`.
     fn count_use(&self, w: &mut World, i: usize) {
         let (c, id) = (self.scheduled[i].unit, self.scheduled[i].command.skill.clone());
         let Some(s) = w.cat.skill(&id) else { return };
         let attack = crate::skill::kind(s) == crate::skill::Kind::Attack && !crate::skill::is_item(s);
         if s.uses_per_battle > 0 {
             *w.skill_uses.entry((c, id)).or_insert(0) += 1;
+        }
+        // PR6-6 (B5): a command (not a move) started in a Channel round counts as a channel action
+        if crate::channel::is_channel(w, c) && crate::skill::kind(s) != crate::skill::Kind::Move {
+            *w.channel_actions.entry(c).or_insert(0) += 1;
         }
         let u = &w.units[c];
         let family = u.inventory.get(rpgkit_rules::gear::Slot::MainHand).filter(|e| e.item.item_type == "WEAPON").map(|e| e.weapon_type().to_string()).filter(|f| !f.is_empty());

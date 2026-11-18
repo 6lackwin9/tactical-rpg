@@ -508,7 +508,9 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     }
     // CAMPAIGN1 X4: the battle tick (meter inputs by the encounter's tags and the outcome); its events only when there
     // are some (none outside a campaign world, X3)
-    let cause = crate::campaign::Cause::Battle { encounter: qid, tags: json::sget(&enc, "tags"), outcome: outcome.to_string() };
+    // PR6-6 (B5): with each fielded hero's battle telemetry (meter inputs and triggers with a `hero` filter)
+    let heroes = tally.party.iter().map(crate::campaign::HeroTally::of).collect();
+    let cause = crate::campaign::Cause::Battle { encounter: qid, tags: json::sget(&enc, "tags"), outcome: outcome.to_string(), heroes };
     let events = crate::campaign::tick(d, gs, &cause);
     if !events.is_empty() {
         out.insert("campaign".into(), Value::Array(events));
