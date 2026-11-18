@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
 #   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test (the UI bot's
-#                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), every scenario of the game with no window (PR7-4),
+#                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), every scenario of each game with no window (PR7-4; the sample game games/hello too, ENGINE-1),
 #                                the layer check, docs --all, tooltests, plannertests, assetlib
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
@@ -352,16 +352,20 @@ playtest_smoke() {  # PR7-22: the agent playtest harness plays a fresh save to t
   rm -rf "$out"
 }
 
-scenarios_all() {  # PR7-4: every scenario of the registered game (games/emberwake/scenarios/), no window, dev build; golden shots compare against their baselines
-  local cli="${CARGO_TARGET_DIR:-$PWD/target}/debug/aegis" out log
-  [ -x "$cli" ] || [ -x "$cli.exe" ] || { echo "[scenarios] FAIL: no dev build of the CLI at $cli"; status=1; return; }
-  out=$(mktemp -d); log="$out/run.txt"
-  if "$cli" scenario run all out="$out" > "$log" 2>&1; then
-    echo "[scenarios] $(tail -n 1 "$log" | sed 's/^§ scenario run: //')"
-    rm -rf "$out"
-  else
-    grep -vE "PASS;" "$log" | head -n 20; echo "[scenarios] FAIL: a scenario failed (bundles, diff images among them, under $out)"; status=1
-  fi
+scenarios_all() {  # PR7-4: every scenario of each game, no window, dev build; golden shots compare against their baselines
+  # Emberwake's through its CLI (`aegis`), the sample game's (ENGINE-1) through its CLI (`hello_cli`, beside the game `hello`)
+  local bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" cli name out log
+  for cli in "$bin/aegis" "$bin/hello_cli"; do
+    name=$(basename "$cli"); [ "$name" = aegis ] && name=emberwake; name=${name%_cli}
+    [ -x "$cli" ] || [ -x "$cli.exe" ] || { echo "[scenarios] FAIL: no dev build of $cli"; status=1; continue; }
+    out=$(mktemp -d); log="$out/run.txt"
+    if "$cli" scenario run all out="$out" > "$log" 2>&1; then
+      echo "[scenarios] $name: $(tail -n 1 "$log" | sed 's/^§ scenario run: //')"
+      rm -rf "$out"
+    else
+      grep -vE "PASS;" "$log" | head -n 20; echo "[scenarios] FAIL: a scenario of $name failed (bundles, diff images among them, under $out)"; status=1
+    fi
+  done
 }
 
 aegis() {  # the CLI, built on demand

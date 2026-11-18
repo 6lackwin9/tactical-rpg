@@ -162,7 +162,7 @@ fn each_op_holds_as_it_says() {
     assert!(op_holds(v(json!(["a", "b"])).as_ref(), &Op::Has(json!("b"))));
     assert!(!op_holds(v(json!(["a"])).as_ref(), &Op::Has(json!("b"))));
     assert!(op_holds(v(json!({"k": 1})).as_ref(), &Op::Has(json!("k"))));
-    assert!(op_holds(v(json!("hello")).as_ref(), &Op::Has(json!("ell"))));
+    assert!(op_holds(v(json!("salve")).as_ref(), &Op::Has(json!("alv"))));
     assert!(op_holds(None, &Op::Absent));
     assert!(!op_holds(v(json!(0)).as_ref(), &Op::Absent));
     // a mistyped path passes nothing but `absent`
