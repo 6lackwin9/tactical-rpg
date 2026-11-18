@@ -150,6 +150,10 @@ pub struct RegionMap {
     hub: crate::bunks::HubState,
     /// BUNKS1 BK2, BK8: the bunks drawn last frame (agent link `state.bunks`, tests).
     bunks_drawn: Vec<Value>,
+    /// TRANSITIONS1 T2 step 4: the arrival card showing since when, and whether it opened the ticker for its change
+    /// lines (closed again when the card goes).
+    arrival: Option<(crate::transitions::Arrival, Instant)>,
+    ticker_forced: bool,
 }
 
 /// One frame's camera as the agent link reports it.
@@ -450,6 +454,32 @@ impl RegionMap {
             roofs: crate::props::RoofFade::default(),
             hub: crate::bunks::HubState::default(),
             bunks_drawn: Vec::new(),
+            arrival: None,
+            ticker_forced: false,
+        }
+    }
+
+    /// TRANSITIONS1 T2 step 4: a won fight's arrival (left by its results) shows its card; its change lines join the
+    /// log and open the ticker while the card shows. Once the card's time is up it goes (and the ticker it opened
+    /// closes).
+    fn follow_arrival(&mut self, cx: &mut Cx, now: Instant) {
+        if let Some(mut a) = cx.game.as_mut().and_then(|g| g.arrival.take()) {
+            // the card reads the hub as it opens (a story's `enter` step moves the party after the results closed)
+            a.card = crate::transitions::card(&cx.data, cx.gs());
+            for line in &a.changes {
+                cx.log(line.clone());
+            }
+            if !a.changes.is_empty() && !self.log_open {
+                self.log_open = true;
+                self.ticker_forced = true;
+            }
+            self.arrival = Some((a, now));
+        }
+        if self.arrival.as_ref().is_some_and(|(_, t)| now.saturating_duration_since(*t).as_millis() as u64 >= crate::transitions::ARRIVAL_MS) {
+            self.arrival = None;
+            if std::mem::take(&mut self.ticker_forced) {
+                self.log_open = false;
+            }
         }
     }
 
@@ -1392,6 +1422,11 @@ impl Screen<GameCx> for RegionMap {
         if !talking {
             panes.extend(self.draw_ticker(&mut ui, cx, modal));
         }
+        // TRANSITIONS1 T2 step 4: the arrival card under the HUD bar
+        if let Some((a, at)) = self.arrival.as_ref() {
+            let ms = Instant::now().saturating_duration_since(*at).as_millis() as u64;
+            crate::transitions::draw_arrival(&mut ui.p, &a.card, crate::transitions::arrival_alpha(ms, cx.settings.reduce_motion()));
+        }
         panes.extend(name_boxes);
         // -- MAPNAV1-U (DR2 6 A): an arrow at the map's edge toward each legend entry out of view (off in a talk, as
         // the legend), moved along the edge off the legend and the ticker; a click looks there
@@ -1434,6 +1469,7 @@ impl Screen<GameCx> for RegionMap {
     }
 
     fn tick(&mut self, cx: &mut Cx) {
+        self.follow_arrival(cx, Instant::now());
         self.tick_at(cx, Instant::now());
     }
 
@@ -1513,6 +1549,7 @@ impl Screen<GameCx> for RegionMap {
             "walking": !self.walk.is_empty(), "log": cx.log.iter().rev().take(8).rev().collect::<Vec<_>>(),
             "dialogue": svc["dialogue"], "turn_in": svc["turn_in"],
             "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
+            "arrival": self.arrival.as_ref().map(|(a, _)| json!({"card": a.card, "changes": a.changes})),
             "shop": svc["shop"], "board": svc["board"], "board_pane": svc["board_pane"], "sprites": self.sprites,
             // MAPNAV1-U: who leads, the edge arrows of the last frame and the tile the camera looks at (null: the party)
             // REGIONVIEW1: the camera (physical px of cell (0, 0)), the party's physical px, and the last frames of both
@@ -2996,6 +3033,9 @@ mod tests {
             ["backgrounds", "menu" | "title" | "location" | "battle" | "story", f] => png(f),
             ["audio", "sfx", f] => f.ends_with(".wav"),
             ["audio", "music", f] => f.ends_with(".ogg"),
+            // TRANSITIONS1 (AI-18): the battle beats' wipe and banners, and their one-shot stings
+            ["ui", "transitions", f] => png(f),
+            ["audio", "stings", f] => f.ends_with(".ogg"),
             _ => false,
         }
     }

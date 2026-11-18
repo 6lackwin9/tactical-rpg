@@ -970,7 +970,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     ui.button_full("bar.log", Rect::new(W - 54, 341, 48, 14), if g.show_log { "Close" } else { "Expand" }, Action::ToggleLog, true, g.show_log, BODY, vec![("Full combat log (L); the wheel scrolls".into(), th().text)]);
 
     let outcome = g.outcome();
-    if !outcome.is_empty() {
+    // TRANSITIONS1 T2: the victory beat's banner stands in for the outcome panel while it runs
+    if !outcome.is_empty() && g.beat.is_none_or(|b| b.kind != crate::transitions::Kind::Victory) {
         let r = Rect::new(GRID_X + 92, GRID_Y + 110, 200, 56);
         ui.p.panel(r, th().game("outcome_fill", rgba(10, 14, 22, 240)), th().gold, 4.0);
         let (title, col) = match outcome.as_str() {
@@ -1137,6 +1138,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         talk::draw_talk(&mut ui, cx, gs, &mut g.faces, view, &b, false, Action::Talk);
     }
 
+    // TRANSITIONS1: the running beat over everything, its full-screen widget last (a click skips it)
+    g.draw_beat(&mut ui, cx, now);
     g.w = ui.widgets;
 }
 
