@@ -948,6 +948,13 @@ pub fn objective_problems(v: &View, e: &Dict, guest_ok: &dyn Fn(&str) -> bool) -
             }
         }
         "escape" if !arena_open && exits.is_empty() => errors.push("Escape needs an exit tile.".into()),
+        // PR6-9: the retreat's unit and floor
+        rpgkit_battle::encounter::RETREAT => {
+            let target = json::s(e, "objective_unit");
+            if target.is_empty() || !strings(json::get(e, "enemies")).contains(&target) {
+                errors.push("Retreat needs a unit from enemies.".into());
+            }
+        }
         _ => {}
     }
     if json::s(e, "objective_text").chars().count() > MAX_OBJECTIVE_TEXT {

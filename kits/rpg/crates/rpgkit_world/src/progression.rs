@@ -376,6 +376,11 @@ pub fn is_rest_place(d: &Data, gs: &GameState, location_ref: &str) -> bool {
 
 /// HealRules.can_camp; in a campaign world the rest rule's refusal (CAMPAIGN1 R1, R2: `campaign::purse::rest_refusal`).
 pub fn can_camp(d: &Data, gs: &GameState) -> &'static str {
+    // PR6-9: no rest while a siege with `no_camp` runs
+    let siege = crate::siege::camp_refusal(d, gs);
+    if !siege.is_empty() {
+        return siege;
+    }
     if gs.campaign.is_some() {
         return crate::campaign::purse::rest_refusal(d, gs);
     }

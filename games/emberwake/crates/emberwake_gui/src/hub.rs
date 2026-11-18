@@ -585,11 +585,13 @@ pub fn reward_text(rewards: &Dict, outcome: &str, currency: &str, name: &dyn Fn(
     let foes = json::i(rewards, "foes", 0);
     let d = json::dget(rewards, "defeated");
     let (slain, surr, fled) = (json::i(d, "slain", 0), json::i(d, "surrendered", 0), json::i(d, "fled", 0));
-    let defeated = slain + surr + fled;
+    // PR6-9: a retreat's withdrawn foe (the key only when there is one)
+    let withdrawn = json::i(d, "withdrawn", 0);
+    let defeated = slain + surr + fled + withdrawn;
     let tally = if foes == 0 {
         String::new()
     } else {
-        let parts: Vec<String> = [(slain, "slain"), (surr, "surrendered"), (fled, "fled")].iter().filter(|(n, _)| *n > 0).map(|(n, w)| format!("{n} {w}")).collect();
+        let parts: Vec<String> = [(slain, "slain"), (surr, "surrendered"), (fled, "fled"), (withdrawn, "withdrawn")].iter().filter(|(n, _)| *n > 0).map(|(n, w)| format!("{n} {w}")).collect();
         if defeated == slain {
             format!("Foes defeated: {defeated} of {foes}.")
         } else {

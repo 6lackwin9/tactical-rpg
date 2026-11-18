@@ -47,6 +47,7 @@ mod runner;
 mod runover;
 mod screens;
 mod shop;
+mod siege;
 mod stage;
 mod story;
 mod talk;

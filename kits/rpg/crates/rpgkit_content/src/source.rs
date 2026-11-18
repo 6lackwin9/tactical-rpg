@@ -245,13 +245,14 @@ pub const BODY_SLOTS_KIND: &str = crate::check::body_slot::KIND;
 pub const RECIPES_KIND: &str = crate::check::recipe::KIND;
 /// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2), STORYUI1's `vignettes`,
 /// `sequences` and `boards` (4.1-4.4), ROSTER1-P's `recruits` (PK3 3.1), PR6-8's `facilities` (PK5 4), PR6-11's
-/// `endings` (PK7 4) and BUNKS1's `talks` (BK5; Godot had no such kinds).
-pub const WORLD_KINDS: [&str; 23] = [
+/// `endings` (PK7 4), BUNKS1's `talks` (BK5) and PR6-9's `sieges` (PK5 5; Godot had no such kinds).
+pub const WORLD_KINDS: [&str; 24] = [
     "regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops", "routes", "meters", "checkpoints", "triggers", "vignettes", "sequences", "boards",
     rpgkit_data::RECRUITS_KIND,
     rpgkit_data::facility::FACILITIES_KIND,
     rpgkit_data::ending::ENDINGS_KIND,
     rpgkit_data::talk::TALKS_KIND,
+    rpgkit_data::siege::SIEGES_KIND,
 ];
 
 const SCHEMA_TEXT: &str = include_str!("../../../schema.json");

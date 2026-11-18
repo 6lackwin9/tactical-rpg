@@ -218,6 +218,10 @@ fn member_art(d: &emberwake_world::Data, world: &str, m: &emberwake_world::UnitS
 pub fn log_settled(cx: &mut Cx, runner: &str, res: &Dict) {
     crate::region::log_events(cx, json::aget(res, "events"));
     crate::runover::take(cx, res);
+    // PR6-9: a siege room's lines (held, lost, damaged, broken)
+    for l in json::sget(json::dget(res, "siege"), "lines") {
+        cx.log(l);
+    }
     if runner == story::FIGHT_SOURCE {
         for n in json::sget(res, "notes") {
             cx.log(n);

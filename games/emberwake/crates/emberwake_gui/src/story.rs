@@ -105,7 +105,8 @@ fn drop_arrival(cx: &mut Cx) {
 /// it, so it does not tick under them): a running sequence takes over (the story stage), else the oldest queued
 /// vignette plays (W2). CAMPAIGN1 T2: the campaign queue's leading vignettes join the story queue first
 /// (`story::pull_pending`); once the vignettes played, a queued battle starts (`runover::play_pending_fight`; a queued
-/// dialogue is the region map's). True when the map handed over.
+/// dialogue is the region map's); PR6-9: then a running siege's screen (`siege::map_tick`). True when the map handed
+/// over.
 pub fn map_tick(cx: &mut Cx) -> bool {
     if !cx.has_game() || cx.busy() || !cx.nav.is_empty() {
         return false;
@@ -117,7 +118,7 @@ pub fn map_tick(cx: &mut Cx) -> bool {
     }
     let d = cx.data.clone();
     story::pull_pending(&d, cx.gs_mut());
-    play_queued(cx).is_some() || crate::runover::play_pending_fight(cx)
+    play_queued(cx).is_some() || crate::runover::play_pending_fight(cx) || crate::siege::map_tick(cx)
 }
 
 /// Logs the notes of a story result (effects, "Try again.") and takes its campaign events (CAMPAIGN1 W1).

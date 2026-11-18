@@ -1285,6 +1285,15 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
         OPEN_RECIPES => {}
         // PR6-8: the runner opens the facility pane (a service choice only; no authored effect)
         OPEN_FACILITIES => {}
+        // PR6-9: a siege opens (its first room is the game's to start; a refusal is a note)
+        rpgkit_data::siege::START_SIEGE => {
+            let why = crate::siege::start(d, gs, &json::s(fx, "siege"));
+            if why.is_empty() {
+                events.push(Value::Object(json::obj([("event", "siege_started".into()), ("siege", json::s(fx, "siege").into())])));
+            } else {
+                notes.push(why);
+            }
+        }
         // CAMPAIGN1 R2, R3: the rest and its note; its days run at the tick after the list (inert outside a campaign)
         "rest" => {
             let note = crate::campaign::purse::rest_effect(d, gs);

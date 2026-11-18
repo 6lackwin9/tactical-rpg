@@ -30,3 +30,4 @@ Standing script/test hygiene rules: never hand-edit JSON (use `ContentCatalog.up
 | 2026-11-18 | Relic plain bonuses (vertebra KNOW +1, scalpel status_potency +10) | replaced (`PR7-8`) | CANON 5.1 signature effects | Ruling F1: the data follows CANON |
 | 2026-11-18 | Recipe effect `doctrine` as a reserved no-op | changed (`PR6-6`) | Moves a campaign gauge by id; two-axis rows stay until `PR6-12` reseeds them (`N4`) | Act 2 doctrine needs one signed gauge |
 | 2026-11-18 | Start-meter condition `requires_calcified` (spec only) | replaced (`PR6-7`) | Generic `requires_track: {id, at_least}` | Keeps game nouns out of the kit; never built |
+| 2026-11-18 | `checks_golden` objective enum message | re-recorded (`PR6-9`, `a3a01b69`, user approval 2026-11-18) | The message lists `retreat` | Sieges add the `retreat` objective; text-only golden change |

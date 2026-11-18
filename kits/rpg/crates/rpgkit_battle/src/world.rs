@@ -273,6 +273,8 @@ pub struct World {
     pub hold: Option<crate::encounter::HoldGate>,
     /// ENCOUNTER2 S1: units damage never takes below 1 HP (the encounter's `unkillable`).
     pub unkillable: Vec<UnitId>,
+    /// PR6-9: a `retreat` objective's unit and the HP damage never takes it below (`encounter::floor_hp`; None: none).
+    pub hp_floor: Option<(UnitId, i32)>,
     /// S1: the unkillable units damage would have downed, in the order it first happened (once each; the session logs
     /// each one's cell).
     pub spared: Vec<UnitId>,
@@ -373,6 +375,7 @@ impl World {
             poise: IndexMap::new(),
             hold: None,
             unkillable: Vec::new(),
+            hp_floor: None,
             spared: Vec::new(),
             ground: Default::default(),
             meters: Default::default(),
@@ -482,6 +485,12 @@ impl World {
     fn damage_as(&mut self, c: UnitId, amount: i32, mitigated: bool, past_unkillable: bool) -> i32 {
         let was_alive = self.units[c].is_alive();
         let dealt = self.units[c].take_damage(amount, mitigated);
+        // PR6-9: the retreat's phase guard: damage stops at the floor (a scripted kill goes past it)
+        if let Some((t, floor)) = self.hp_floor.filter(|&(t, _)| t == c && !past_unkillable) {
+            if was_alive && self.units[t].hp < floor {
+                self.units[t].hp = floor.min(self.units[t].max_hp);
+            }
+        }
         if self.units[c].hp == 0 && !past_unkillable && self.unkillable.contains(&c) {
             self.units[c].hp = 1;
             if !self.spared.contains(&c) {
