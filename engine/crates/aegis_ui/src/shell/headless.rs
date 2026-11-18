@@ -17,7 +17,7 @@ use aegis_core::clock::Duration;
 use anyhow::{bail, Context as _, Result};
 #[cfg(not(target_arch = "wasm32"))]
 use {
-    super::{blank_reason, save_png, text_scale_of, Shell},
+    super::{blank_reason, save_png, settings::text_scale_of, Shell},
     crate::bridge,
     crate::pacing::{Pace, Pacer},
     crate::screen::window_size_of,
