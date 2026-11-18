@@ -36,9 +36,10 @@ use emberwake_host::{Battle, Host};
 use serde_json::{json, Value};
 
 /// (id, name, group, what it shows). Battle panel ids are the battle screen's own panel names.
-const ENTRIES: [(&str, &str, &str, &str); 34] = [
+const ENTRIES: [(&str, &str, &str, &str); 35] = [
     ("kit", "Kit widgets", "Kit", "Every kit widget in its states; use them, the foot of the page says what happened."),
     ("layout", "Layout", "Kit", "Anchors, shares, fills, a stack and pick, all calculated from the canvas: the layout audit's subject."),
+    ("layouts", "Screen layouts", "Kit", "UISPLIT1: every screen layout file drawn against its view fixture, or the plain default; a saved layout reloads in a debug build."),
     ("frame_tuner", "Frame tuner", "Kit", "A frame's corner, tip, line and padding on a live panel; Save in a debug build."),
     ("vignette", "Vignette player", "Kit", "The engine's sample reel or a world's vignette: image, text, title and line cards with fades, typing, hold and skip."),
     ("pip_gauge", "Pip gauge", "Kit", "The engine pip gauge in its states: kept, spent and next round's gain; red, a debt, two points a pip; numbers on hover."),
@@ -646,6 +647,7 @@ impl Gallery {
         let member = cx.game.as_ref().and_then(|g| g.gs.party.members.first()).map(|m| m.id.clone()).unwrap_or_default();
         let screen: Box<dyn Screen<GameCx>> = match id {
             "layout" => Box::new(aegis_ui::layout_specimen::LayoutSpecimen::default()),
+            "layouts" => Box::new(aegis_ui::layout_gallery::LayoutGallery::default()),
             "main_menu" => Box::new(crate::menus::MainMenu::default()),
             "new_game" => Box::new(crate::menus::NewGameScreen::new(cx)),
             "settings" => Box::new(crate::menus::SettingsScreen::new(cx)),

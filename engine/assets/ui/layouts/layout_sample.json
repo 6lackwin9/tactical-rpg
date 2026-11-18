@@ -1,0 +1,17 @@
+{
+  "screen": "layout_sample",
+  "note": "The engine's sample layout (UISPLIT1): a panel shell, a tab rail, a list, a portrait with its text and numbers, a footer button bar.",
+  "regions": [
+    {"id": "shell", "component": "panel_shell", "bind": {"title": "title"}, "anchor": "center", "w": "94%", "h": "92%"},
+    {"id": "purse", "in": "shell", "component": "text_block", "bind": {"text": "purse"}, "anchor": "top_right", "w": 40, "h": 4},
+    {"id": "tabs", "in": "shell", "component": "tab_rail", "bind": {"tabs": "tabs", "select": "tab"}, "anchor": "top_left", "w": "55%", "h": "78%", "y": 5},
+    {"id": "goods", "in": "tabs", "component": "list_row", "bind": {"rows": "goods", "select": "pick"}},
+    {"id": "side", "in": "shell", "component": "panel_shell", "style": "popup", "anchor": "top_right", "w": "42%", "h": "78%", "y": 5},
+    {"id": "picked", "in": "side", "component": "portrait", "bind": {"picture": "picked"}, "anchor": "top", "w": 24, "h": 24},
+    {"id": "about", "in": "side", "component": "text_block", "bind": {"text": "about"}, "anchor": "top", "w": "fill", "h": 14, "y": 26,
+      "when": [{"text_scale_min": 1.25, "h": 20}]},
+    {"id": "stats", "in": "side", "component": "stat_block", "bind": {"stats": "stats"}, "anchor": "bottom", "w": "fill", "h": 10, "y": -6},
+    {"id": "load", "in": "side", "component": "bar_meter", "bind": {"meter": "load"}, "anchor": "bottom", "w": "fill", "h": 4},
+    {"id": "foot", "in": "shell", "component": "button_bar", "bind": {"actions": ["buy", "leave"]}, "anchor": "bottom_right", "w": 60, "h": 7}
+  ]
+}
