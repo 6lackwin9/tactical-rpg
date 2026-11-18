@@ -401,7 +401,7 @@ impl Screen<GameCx> for BunkCard {
 /// (positions after Q); a test-only talk row lights the candles and plays from the card. With `AEGIS_REVIEW_DIR` set
 /// the hub and the card are written there as PNGs.
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::hud::hud_tests::{frame, game_cx, gfx};
     use crate::region::RegionMap;
@@ -420,7 +420,7 @@ mod tests {
 
     /// The first four party characters of the world (roster order); the first two active, the third benched, the
     /// fourth in the crypts; the party in the hub's bunk room. `talk`: a test-only talk row for the first two.
-    fn hub_cx(talk: bool) -> (Cx, Vec<String>) {
+    pub(crate) fn hub_cx(talk: bool) -> (Cx, Vec<String>) {
         let mut cx = game_cx();
         cx.art = aegis_ui::art::Art::new(Some(root()));
         cx.settings.v["reduce_motion"] = json!(true);

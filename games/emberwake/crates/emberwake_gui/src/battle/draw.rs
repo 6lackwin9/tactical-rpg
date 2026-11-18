@@ -9,7 +9,7 @@ use super::playback::PlaySpeed;
 use super::{Action, BattleScreen, ALLY, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, POISE, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
 use super::skill_menu::CHANNEL_TINT;
 use super::tips::{action_channel_note, ap_blocks, ap_gauge_of, ap_held_text, channel_action, channel_block, channel_fill, downed_banner, planned_channel_note, class_names, committed, committed_icon_chains, derived_line, derived_rows, draw_ap_pips, draw_badge_row, draw_block_label, dulled_line, dulled_weapons, inspect_tip, intent_glyph, kind_color, kind_icon, next_action, short_name, stance_name, unit_tip, ApAnim, ApPips, BlockLook, AP_PIP, DULLED_BADGE, REST_BLOCK};
-use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
+use aegis_ui::canvas::{rgba, Rect, Rgba};
 use crate::intent_text;
 use crate::portraits::{Faces, Who};
 use crate::talk;
@@ -1247,7 +1247,6 @@ pub(super) fn log_groups_json(groups: &[emberwake_battle::session::LogGroup]) ->
 #[allow(clippy::too_many_arguments)]
 fn panel_portrait(ui: &mut Ui<Action>, cx: &mut Cx, faces: &mut Faces, who: &Who, look: &emberwake_battle::portrait::Look, r: Rect, id: &str) -> Rect {
     let pr = Rect::new(r.x + PANEL_INSET, r.y + PANEL_INSET, PANEL_PORTRAIT, PANEL_PORTRAIT);
-    ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
     faces.draw(&mut ui.p, cx, who, look, PANEL_SURFACE, pr);
     ui.push(id, "portrait", who.name.clone(), pr, true, false, None, Vec::new());
     pr
@@ -1270,8 +1269,7 @@ fn plain_look(look: &emberwake_battle::portrait::Look) -> emberwake_battle::port
 /// `timeline.icon.<track>`), on the panels' dark backing, with `look`'s state rows on surface `timeline` through
 /// `faces` (capped at the minimal tier); the initial letter without a file.
 fn timeline_portrait(ui: &mut Ui<Action>, cx: &mut Cx, faces: &mut Faces, who: &Who, look: &emberwake_battle::portrait::Look, sq: Rect) {
-    ui.p.panel(sq, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
-    faces.draw(&mut ui.p, cx, who, look, TIMELINE_SURFACE, Rect::new(sq.x + 1, sq.y + 1, sq.w - 2, sq.h - 2));
+    faces.draw(&mut ui.p, cx, who, look, TIMELINE_SURFACE, sq);
 }
 
 // ---- HOOKS1-UI slice 5: the intel panel fits its lines ------------------------------------------------------------
