@@ -6481,8 +6481,8 @@ mod ground_tests {
             }
         }
 
-        /// The Settings screen's Map zoom row: a pick is a draft until Apply; then the setting holds the step and the map
-        /// draws at it.
+        /// The Settings screen's Map zoom row: a pick applies at once (SETTINGS-MOCK1); the setting holds the step and the
+        /// map draws at it.
         #[test]
         fn picking_a_map_zoom_and_applying_it_zooms_the_map() {
             let (mut cx, mut g) = (BIG.cx("square"), gfx());
@@ -6507,8 +6507,6 @@ mod ground_tests {
                 frame(&mut map, cx, g, 1.0);
                 map.geo.q
             };
-            assert_eq!(at_1x(&mut cx, &mut g), 4, "only a draft so far");
-            s.click_id(&mut cx, "settings.apply").expect("apply");
             assert_eq!(cx.settings.v["map_zoom"], json!(1.75));
             assert_eq!(at_1x(&mut cx, &mut g), 7, "the map draws at the applied step");
             let _ = std::fs::remove_dir_all(&cx.shot_dir);

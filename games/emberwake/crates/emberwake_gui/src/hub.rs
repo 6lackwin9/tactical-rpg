@@ -149,20 +149,28 @@ impl Hub {
             HubAct::Journal => cx.nav.push(Nav::Push(Box::new(Journal::default()))),
             HubAct::Save => cx.nav.push(Nav::Push(Box::new(crate::menus::Slots::new(true)))),
             HubAct::Load => cx.nav.push(Nav::Push(Box::new(crate::menus::Slots::new(false)))),
-            HubAct::Settings => cx.nav.push(Nav::Push(Box::new(crate::menus::SettingsScreen::new(cx)))),
+            HubAct::Settings => cx.nav.push(Nav::Push(Box::new(crate::menus::SettingsScreen::in_game(cx)))),
             HubAct::Return => cx.nav.push(Nav::Pop),
-            HubAct::Quit => {
-                let go = |cx: &mut Cx| {
-                    cx.end_game();
-                    cx.nav.push(Nav::Reset(Box::new(crate::menus::MainMenu::default())));
-                };
-                if cx.is_dirty() {
-                    cx.ask_no("Quit to the main menu without saving? Progress since your last save is lost.", go);
-                } else {
-                    go(cx);
-                }
-            }
+            HubAct::Quit => quit_to_title(cx),
         }
+    }
+}
+
+/// Back to the title (the hub's Quit to main menu, the in-game Settings' Return to title): not while a fight,
+/// conversation or shop is open; unsaved progress asks first (No is the default).
+pub(crate) fn quit_to_title(cx: &mut Cx) {
+    if cx.busy() {
+        show_errors(cx, vec!["Finish the fight, conversation or shop first.".into()]);
+        return;
+    }
+    let go = |cx: &mut Cx| {
+        cx.end_game();
+        cx.nav.push(Nav::Reset(Box::new(crate::menus::MainMenu::default())));
+    };
+    if cx.is_dirty() {
+        cx.ask_no("Quit to the main menu without saving? Progress since your last save is lost.", go);
+    } else {
+        go(cx);
     }
 }
 

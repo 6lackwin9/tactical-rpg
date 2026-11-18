@@ -65,10 +65,10 @@ fn the_defaults_are_the_calmer_view() {
     st.draw(&mut cx, &mut g, (-500, -500), true);
     st.click_id(&mut cx, "settings.overlay.test_hazards").unwrap();
     st.click_id(&mut cx, "settings.overlay.all_bars").unwrap();
-    let draft = st.state(&cx)["draft"].clone();
+    let draft = cx.settings.v.clone();
     assert!(Layers::of(&draft["battle_overlays"]).hazards && Layers::of(&draft["battle_overlays"]).all_bars, "a click turns each on");
     st.click_id(&mut cx, "settings.defaults").unwrap();
-    let draft = st.state(&cx)["draft"].clone();
+    let draft = cx.settings.v.clone();
     let l = Layers::of(&draft["battle_overlays"]);
     assert!(!l.hazards && !l.arena && !l.all_bars && l.moves && l.walks, "Restore defaults");
 }
@@ -91,7 +91,7 @@ fn party_foresight_off_is_a_debug_build_reader() {
     assert_eq!(has, cfg!(debug_assertions), "VC5: a debug build only");
     if has {
         st.click_id(&mut cx, "settings.debug.party_foresight_off").unwrap();
-        assert_eq!(st.state(&cx)["draft"][FORESIGHT_OFF], json!(true));
+        assert_eq!(cx.settings.v[FORESIGHT_OFF], json!(true));
     }
 }
 

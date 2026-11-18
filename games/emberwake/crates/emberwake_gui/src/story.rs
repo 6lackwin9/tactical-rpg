@@ -802,28 +802,30 @@ pub(crate) mod tests {
         assert_eq!(rule("portraits/npcs/faces/clerk/angry.png"), emberwake_content::art::face_sidecars("portraits/npcs/faces/clerk/angry.png"));
     }
 
-    /// 4.8: the settings' gameplay tab sets the text speed and reduce motion (the engine's keys), inside the tab body at
-    /// every text size.
+    /// 4.8: the settings set the text speed (Gameplay tab) and reduce motion (Display tab, SETTINGS-MOCK1), the engine's
+    /// keys, inside the tab body at every text size.
     #[test]
     fn the_gameplay_tab_sets_text_speed_and_reduce_motion() {
         let mut cx = story_cx(data());
         let mut g = gfx();
         let mut s = crate::menus::SettingsScreen::new(&cx);
         s.draw(&mut cx, &mut g, (-500, -500), true);
-        s.click_id(&mut cx, "settings.tab.gameplay").expect("the gameplay tab");
-        for &(_, scale) in TEXT_SIZES.iter() {
-            frame(&mut s, &mut cx, &mut g, scale as f32);
-            let ws = s.widgets();
-            for id in ["settings.text_speed", "settings.reduce_motion"] {
+        for (tab, id) in [("settings.tab.gameplay", "settings.text_speed"), ("settings.tab.display", "settings.reduce_motion")] {
+            s.click_id(&mut cx, tab).expect("the tab");
+            for &(_, scale) in TEXT_SIZES.iter() {
+                frame(&mut s, &mut cx, &mut g, scale as f32);
+                let ws = s.widgets();
                 let w = ws.iter().find(|w| w["id"] == id).unwrap_or_else(|| panic!("{id}"));
                 let (_, y, _, h) = rect(w);
-                assert!(y + h <= 25 + 55 + 222, "{id} inside the tab body at text size {scale}");
+                let body = ws.iter().find(|w| w["id"] == "settings.body").expect("the tab body");
+                let (_, by, _, bh) = rect(body);
+                assert!(y >= by && y + h <= by + bh, "{id} inside the tab body at text size {scale}");
             }
+            s.draw(&mut cx, &mut g, (-500, -500), true);
         }
-        assert_eq!(s.state(&cx)["draft"][vignette::TEXT_SPEED], json!("normal"), "the default speed");
+        assert_eq!(s.state(&cx)["settings"][vignette::TEXT_SPEED], json!("normal"), "the default speed");
+        // SETTINGS-MOCK1: Reduce Motion sits on the Display tab (open last) and applies at once
         s.click_id(&mut cx, "settings.reduce_motion").expect("reduce motion");
-        assert_eq!(s.state(&cx)["draft"][vignette::REDUCE_MOTION], json!(true));
-        s.click_id(&mut cx, "settings.apply").expect("apply");
         assert!(cx.settings.reduce_motion());
         let _ = std::fs::remove_dir_all(&cx.shot_dir);
     }

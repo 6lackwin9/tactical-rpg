@@ -26,6 +26,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR6-14` (`CLASSKEY1`) | done | `develop` (squash `PR6-14`) | Class `keystone: {id, level}`; party units slot it at level 6 when their deck names none; seed `pr6_14.json`; `FB-303` |
 | `PR7-13` (`BUNKS1`) | done (UI feel to review) | `develop` (squash `PR7-13`) | Hub bunks, bunk talks (`talks` kind, pair counter, templates), idle spots and passing the lead; seed `pr7_13.json`; six placeholders (AI-17); `FB-304` |
 | `PR7-14` (`TRANSITIONS1`) | done (UI feel to review) | `develop` (squash `PR7-14`) | T1 battle beat, T2 victory beat, results over the field, hub arrival card; six AI-18 placeholders; scenario `story_battle_hub`; `FB-305` |
+| `PR7-21` (`SETTINGS-MOCK1`) | done (UI to review) | `develop` (squash `PR7-21`) | Settings ported to the approved mock: tab rail, instant apply, staged Display Mode (Windowed, Borderless, Fullscreen) and Resolution with a 15 s keep-or-revert, close guard, decluttered in-game popup; review shots `/mnt/project-files/pr7-21/` beside the mock; `FB-308` |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -240,6 +241,16 @@ FB-01 to FB-281 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Source**: the user's playtest notes 1-4 (relayed by the coordinator); notes 5-7 went to Design.
 - **Bugs**: (1) the story screen shows a hover hint near the pointer telling the player to click to proceed, which is redundant; (2) the battle screen has no way to open Settings (Esc only closes panels; `battle.rs` header lists the keys, none opens the in-game settings popup); (3) the party screen at a full party spills over and pushes elements out of its frame (`party.rs` layout does not shrink or scroll past the frame); (4) portrait motion stretches faces and the light flickers (`portraits.rs` PORTRAITFX2 breath and tint, `region.rs` D1/D5 rim flicker).
 - **Recommendation**: queue one fix row (UI + test, game layer, `emberwake_gui`): (1) drop the hint; (2) a settings button on the battle HUD plus a key, opening the same in-game popup `PR7-21` declutters (so it lands after `PR7-21`); (3) the party screen fits a full party at normal and XL text, with a GUI audit test that every element stays inside the frame; (4) breath as a uniform scale or vertical bob that keeps the face's aspect, and the rim light eased instead of stepping, with a test that the portrait's aspect ratio never changes. Screenshots for the user's eyes on (3) and (4).
+
+### FB-308: PR7-21 settings landed; eight guesses, five mock rows left out, two questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-21`, `tools/mock_ui/js/04_settings.js` (@squash `PR7-21`)
+- **Guesses**: (1) every setting except desktop Display Mode and Resolution applies and saves at once, per the mock footer (six tests that assumed Apply-for-everything were updated); (2) Restore defaults resets all and stages the default display for Apply; (3) a dropdown sits between the `<` `>` arrows; (4) the mock's two-column rows became full-width so XL text fits; (5) Reduce Motion moved to Display, Portrait Effects beside it; (6) Battle shows the mock's six rows first, then Units Behind, the 25 overlay groups and the debug row in a scrolling body; (7) Controls keeps the real key bindings grouped in cards; (8) `PR7-15` has not landed, so Map zoom sits on Gameplay where the mock puts it.
+- **Left out (no setting exists)**: Language, Mute in Background, Ward Ambience volume (no ambience bus), Auto-Advance Story Dialogue, Tutorial and Tactical Hints.
+- **Known nit (fix rides with `PR7-26`)**: on web, Restore defaults stages the default `fullscreen` value, so if the browser is fullscreen the close guard can appear with no Apply on the tab; web should leave the display keys alone there.
+- **Questions**: add an ambience audio bus and Ward Ambience volume (engine audio work)? Keep the overlay groups on the Battle tab?
+- **Docs delta**: `docs/workflow/web.md` "What differs in the browser", Display row: "the Display tab shows Fullscreen (applied at once) and Text size of the display rows, plus Reduce Motion and Portrait Effects." `GAME_BRIEF.md` settings line: "Settings (SETTINGS-MOCK1): tab rail Display, Sound, Gameplay, Battle, Controls; every change saves at once except desktop Display Mode (Windowed / Borderless / Fullscreen) and Resolution, which need Apply and a 15 s keep-or-revert confirm; closing with a staged display change asks first; the hub opens the decluttered popup with Return to title." `HISTORY.md`: "Settings Apply-for-everything (draft until Apply) and the Fullscreen and Borderless checkboxes were replaced by instant apply plus a staged Display Mode choice (PR7-21, approved mock 04_settings.js)."
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

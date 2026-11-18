@@ -87,6 +87,8 @@ fn the_overlay_settings_fit_at_every_text_size() {
     let mut st = crate::menus::SettingsScreen::new(&cx);
     st.draw(&mut cx, &mut g, (-500, -500), true);
     st.click_id(&mut cx, "settings.tab.battle").unwrap();
+    // SETTINGS-MOCK1: the overlay groups sit under the mock's battle rows; the body scrolls down to them
+    g.kit.scroll.insert("settings.body".to_string(), i32::MAX / 2);
     for scale in SIZES {
         let recs = crate::hud::hud_tests::frame(&mut st, &mut cx, &mut g, scale);
         let boxes: Vec<(String, f32, f32, f32, f32)> = st.widgets().iter().map(|w| {
