@@ -39,6 +39,7 @@ pub mod layout_specimen;
 pub mod notes;
 pub mod pacing;
 pub mod painter;
+pub mod perf;
 pub mod panes;
 pub mod pips;
 pub mod playtest;
