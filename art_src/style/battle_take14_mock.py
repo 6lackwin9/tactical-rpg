@@ -24,7 +24,7 @@ T13.HITS = [(3, "vesper", "bleeding_cut", 1, 17, 26, ("bleed", "expose")),
             (5, "vesper", "bleeding_cut", 1, 10, 12, ("bleed", "weaken", "slow")),
             (6, "kaelen", "pommel_strike", 1, 12, 15, ())]
 CRIT = {"kaelen": 8, "vesper": 24}          # crit chance %, the hero's derived crit rate
-HIGH_CRIT = 20                              # at or above it the row shows the star
+HIGH_CRIT = 999                             # take 14b: no per-hit star (Tushar 22:35); crit numbers on hover only
 CRIT_MULT = 1.5
 CARD_W = 318
 OVERKILL = (150, 120, 70)
@@ -41,6 +41,32 @@ def crit_ko():
                 best = h[0] if best is None else min(best, h[0])
                 break
     return best
+
+
+def ko_chance_by(block):
+    """The exact chance the foe is down by the end of `block`, over every crit outcome of the planned hits (each hit
+    crits on its own with its hero's chance, x1.5 damage); base damage otherwise. 2^n outcomes, n <= 12 hits."""
+    hits = [h for h in T13.HITS if h[0] <= block]
+    total = 0.0
+    for mask in range(1 << len(hits)):
+        pr, dmg = 1.0, 0
+        for i, h in enumerate(hits):
+            c = CRIT[h[1]] / 100
+            if mask >> i & 1:
+                pr *= c; dmg += round(h[4] * CRIT_MULT)
+            else:
+                pr *= 1 - c; dmg += h[4]
+        if dmg >= T13.FOE_HP:
+            total += pr
+    return total
+
+
+def expected_ko(base):
+    """The earliest block before the base KO where the KO chance reaches 50%, else None (no star)."""
+    for b in range(1, base):
+        if ko_chance_by(b) >= 0.5:
+            return b
+    return None
 
 
 def broken_icon(d, x, y, s=14, col=B.AMBER, dim=False):
@@ -105,13 +131,17 @@ def header(img, d, shot, cx, cy, me):
     T13.poise_preview(d, cx + 88, cy + 51, me)
     B.pip_tag(d, cx + 228, cy + 47, T13.TH)
     x = cx + 14
-    x += T13.tag(d, x, cy + 68, f"KO in block {ko}", (130, 30, 30)) + 4
-    ck = crit_ko()
-    if ck and ck < ko:
-        d.rounded_rectangle((x, cy + 68, x + 70, cy + 84), radius=3, outline=(130, 30, 30))
-        star(d, x + 5, cy + 72, 9)
-        d.text((x + 17, cy + 69), f"crit: {ck}", font=B.SMALL, fill=B.PARCH)
-        x += 74
+    e = expected_ko(ko)
+    label = f"KO in block {ko}"
+    w = d.textlength(label, font=B.SMALL) + 10 + (36 if e else 0)
+    d.rounded_rectangle((x, cy + 68, x + w, cy + 84), radius=3, fill=(130, 30, 30))
+    d.text((x + 5, cy + 69), label, font=B.SMALL, fill=B.PARCH)
+    if e:
+        tx = x + w - 36
+        d.text((tx + 2, cy + 69), "(", font=B.SMALL, fill=B.PARCH)
+        star(d, tx + 8, cy + 72, 9)
+        d.text((tx + 19, cy + 69), f"{e})", font=B.SMALL, fill=B.PARCH)
+    x += w + 4
     T13.tag(d, x, cy + 68, f"BREAK in block {brk}", (120, 70, 20))
     return cy + 94
 
@@ -228,11 +258,18 @@ def legend():
     d.text((48, 34), "this hit breaks the foe", font=B.SMALL, fill=B.PARCH)
     broken_icon(d, 13, 59, 14, dim=True)
     d.text((48, 59), "already broken: no pips", font=B.SMALL, fill=B.PARCH)
-    star(d, 14, 86, 11)
-    d.text((48, 84), "high crit chance (20%+)", font=B.SMALL, fill=B.PARCH)
+    d.text((10, 84), "(", font=B.SMALL, fill=B.PARCH); star(d, 15, 87, 9); d.text((25, 84), "4)", font=B.SMALL, fill=B.PARCH)
+    d.text((48, 84), "crits make block 4 KO 50%+ likely", font=B.SMALL, fill=B.PARCH)
     hint_overkill(d, 8, 110)
     d.text((76, 110), "still valid, a hint", font=B.SMALL, fill=B.PARCH)
     return img
+
+
+def ko_chance_crit_build():
+    CRIT["kaelen"] = 55
+    v = ko_chance_by(4)
+    CRIT["kaelen"] = 8
+    return v
 
 
 def main():
@@ -249,10 +286,24 @@ def main():
     d.text((bx + 8, 20), "every ally per block; 4 chips -> 3 and +1", font=B.SMALL, fill=B.IRON_L)
     img.paste(b, (bx, 42))
     nx = bx + b.width + 14
-    d.text((nx + 8, 4), "Hover a row", font=B.SMALL, fill=B.GOLD)
+    d.text((nx + 8, 4), "Hover a skill in the menu", font=B.SMALL, fill=B.GOLD)
     img.paste(tip, (nx, 26))
     img.paste(lg, (nx, 150))
-    out_img = B.label(img, "Take 14: fixed poise area with a broken icon, chips after the damage, overkill hint, crit marker")
+    # a crit build: Vesper at 55%, the same plan: block 4 KO chance passes 50%, so the label gains the star
+    CRIT["kaelen"] = 55
+    var = Image.new("RGB", (CARD_W + 16, 104), B.VOID)
+    dv = ImageDraw.Draw(var)
+    B.frame_a(dv, (8, 8, 8 + CARD_W, 100), fill=(16, 18, 25))
+    header(var, dv, shot, 8, 8, None)
+    CRIT["kaelen"] = 8
+    img2 = Image.new("RGB", (img.width, img.height + var.height + 40), B.VOID)
+    img2.paste(img, (0, 0))
+    d2 = ImageDraw.Draw(img2)
+    d2.text((8, img.height + 4), f"Same plan, Kaelen as a crit build (55%): only his Hammer crit kills in block 4, so the chance is {ko_chance_crit_build():.0%}"
+            f" and the label adds the star. At his real 8% it is {ko_chance_by(4):.0%}: no star.", font=B.SMALL, fill=B.IRON_L)
+    img2.paste(var, (0, img.height + 26))
+    img = img2
+    out_img = B.label(img, "Take 14b: crit folded into the KO label (expected: 50%+ chance), no per-hit star")
     out_img.save(out / "battle_layout_take14_sheet.png")
 
 
