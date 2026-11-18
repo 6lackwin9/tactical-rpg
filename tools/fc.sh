@@ -2,7 +2,7 @@
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
 #   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test (the UI bot's
 #                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), every scenario of each game with no window (PR7-4; the sample game games/hello too, ENGINE-1),
-#                                the layer check, docs --all, tooltests, plannertests, assetlib
+#                                the layer check, the screen layout check, docs --all, tooltests, plannertests, assetlib
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
 #                                engine and kit crates (src, tests), schema.json and kit.json name no lore word, any case
@@ -17,6 +17,8 @@
 #                                then the tools/planner tests (plain Python, no Pillow)
 #   tools/fc.sh assetlib         the kit asset library kits/*/library/<style>/<kind>/ and its .meta.json sidecars (ASSETLIB1: fields, enums,
 #                                PNG size, unique ids, no game lore word) plus the check's tests; part of the gate
+#   tools/fc.sh layouts          every game's screen layouts ui/layouts/*.json against their view fixtures ui/views/*.view.json
+#                                (UISPLIT1 US5: parse, components, binds, fields and actions); part of the gate
 #   tools/fc.sh bench [sizes=1280x720,1920x1080] [runs=50]   the painter's benchmarks (ENGINE-2: fill, panels, text; ms per run,
 #                                p10/p50/p95/max, a calibration before and after) in a release build; one JSON line per size; never in the gate
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
@@ -244,6 +246,13 @@ plannertests() {  # the tools/planner script tests (SKILLS1-FB): plain Python, n
   fi
 }
 
+layouts() {  # PR7-38 (UISPLIT1 US5): aegis_ui's ui_layout check over every game folder's asset layers
+  cargo build -q -p aegis_ui --bin ui_layout || { status=1; return; }
+  local games=() d
+  for d in games/*/; do [ -f "$d/game.json" ] && games+=("${d%/}"); done
+  "${CARGO_TARGET_DIR:-$PWD/target}/debug/ui_layout" check "${games[@]}" || status=1
+}
+
 bench() {  # ENGINE-2 (PERF-STEP1): aegis_ui's ui_bench in a release build; timings only mean something on a quiet machine
   cargo build -q --release -p aegis_ui --bin ui_bench || { status=1; return; }
   "${CARGO_TARGET_DIR:-$PWD/target}/release/ui_bench" "$@" || status=1
@@ -335,6 +344,7 @@ gate() {
   playtest_smoke; [ $status -ne 0 ] && return
   scenarios_all; [ $status -ne 0 ] && return
   layers_check; [ $status -ne 0 ] && return
+  layouts; [ $status -ne 0 ] && return
   # the whole docs check; the size warnings, which are many, as one count (tools/fc.sh docs --all lists them)
   local out
   out=$(docs_check --all) || status=1
@@ -522,9 +532,10 @@ case "$1" in
   playtest) playtest "${@:2}" ;;
   assetlib) assetlib ;;
   bench) bench "${@:2}" ;;
+  layouts) layouts ;;
   web) web "${@:2}" ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;
-  *) sed -n '2,20p' "$0"; status=1 ;;
+  *) sed -n '2,23p' "$0"; status=1 ;;
 esac
 exit $status

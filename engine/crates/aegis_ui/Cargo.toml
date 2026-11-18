@@ -18,6 +18,11 @@ name = "ui_bench"
 path = "src/bin/ui_bench.rs"
 test = false
 
+[[bin]]
+name = "ui_layout"
+path = "src/bin/ui_layout.rs"
+test = false
+
 [features]
 # WEBREL1-G1: `shell`'s page probe for browser tests (`aegisProbe()`, the web build only; no effect on the desktop). A
 # game turns it on in its test build.

@@ -3034,6 +3034,9 @@ mod tests {
             ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
             // LOOK1-G1: the theme file and its nine-slice frames (`<role>.png` with a `<role>.json` sidecar)
             ["ui", "theme.json"] => true,
+            // UISPLIT1: screen layout files and their view fixtures
+            ["ui", "layouts", f] => f.ends_with(".json"),
+            ["ui", "views", f] => f.ends_with(".view.json"),
             ["ui", "frames", f] => png(f) || f.ends_with(".json"),
             ["ui", "pins" | "badges" | "chips" | "intents" | "hud" | "markers" | "services", f] | ["ui", f] => png(f),
             ["tilesets", _, _, f] | ["props", _, _, f] => v(f),
