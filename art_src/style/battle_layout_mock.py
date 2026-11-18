@@ -745,6 +745,62 @@ def mock8(shot: Image.Image) -> Image.Image:
     return img
 
 
+# take 9 (Tushar 2026-11-18 21:31): AP label sits with the readout; compact "-n" for the plan's spend; a lighter plan
+# beside the full one so spent vs left reads at a glance. Strip only (the rest of take 8 is unchanged).
+PLAN9_LIGHT = [("arrow", 1, 1, None), ("pneumatic_hammer_strike", 3, 5, (34, 3)), ("intent:rest", 2, 0, None)]
+
+
+def strip9(shot: Image.Image, plan, start=10, cap=12) -> Image.Image:
+    base = mock8(shot).crop((0, 0, 1280, 66))
+    img = base.copy()
+    d = ImageDraw.Draw(img)
+    W, G, x, sel = 54, 6, 196, 1
+    d.rectangle((196, 0, 890, 63), fill=BASALT)
+    starts, b0 = [], 0
+    for ic, blocks, ap, _ in plan:
+        starts.append(b0)
+        b0 += blocks
+    for i, (ic, blocks, ap, _) in enumerate(plan):
+        w = blocks * W + (blocks - 1) * G
+        on = i == sel
+        d.rectangle((x, 3, x + w, 48), fill=SLATE, outline=GOLD if on else IRON, width=2 if on else 1)
+        t = slot_icon(ic, 30)
+        img.paste(t, (x + (w - 30) // 2, 6), t)
+        if ap:
+            move_pips(d, x, w, 38, ap)
+        for b in range(blocks):
+            bx = x + b * (W + G)
+            d.rectangle((bx, 55, bx + W, 60), fill=GOLD if on else IRON_L)
+            if b < blocks - 1:
+                d.rectangle((bx + W, 57, bx + W + G, 58), fill=GOLD if on else IRON_L)
+        x += w + G
+    for blk in HITS:
+        bx = 196 + blk * (W + G)
+        wash = Image.new("RGBA", (W - 2, 44), IMPACT + (60,))
+        img.paste(wash, (bx + 1, 4), wash)
+        d.rectangle((bx + 1, 4, bx + W - 1, 6), fill=IMPACT)
+        d.rectangle((bx, 52, bx + W, 61), fill=IMPACT)
+        cx = bx + W - 12
+        d.polygon([(cx, 8), (cx + 8, 16), (cx, 24), (cx - 8, 16)], fill=IMPACT, outline=(255, 210, 190))
+        d.text((cx - 2, 8), "!", font=MONO_L, fill=(255, 235, 220))
+    used = sum(p[2] for p in plan)
+    # AP block: pips on top; under them "AP 10/12" and the spend as an amber "-n"
+    ax, ay = 588, 12
+    for i in range(cap):
+        px = ax + i * 14
+        if i < used:
+            d.rectangle((px, ay, px + 10, ay + 10), fill=PLANNED)
+        elif i < start:
+            d.rectangle((px, ay, px + 10, ay + 10), fill=AP_ON)
+        else:
+            d.rectangle((px, ay + 3, px + 10, ay + 7), fill=AP_OFF)
+    d.text((ax, ay + 18), "AP", font=MONO_L, fill=GOLD)
+    d.text((ax + 24, ay + 18), f"{start}/{cap}", font=MONO_L, fill=PARCH)
+    d.text((ax + 76, ay + 18), f"-{used}", font=MONO_L, fill=PLANNED)
+    return img
+
+
+
 def label(img, text):
     out = Image.new("RGB", (img.width, img.height + 34), BASALT)
     out.paste(img, (0, 34))
@@ -819,6 +875,12 @@ def main():
     sh.paste(strip, (0, 1460))
     sh.paste(side, (0, 1612))
     sh.save(out / "battle_layout_take8_sheet.png")
+    full = label(strip9(shot, PLAN7).resize((2560, 132), Image.NEAREST), "Full plan: 10 of 10 spent")
+    light = label(strip9(shot, PLAN9_LIGHT).resize((2560, 132), Image.NEAREST), "Lighter plan: 6 of 10 spent, 4 left (blue)")
+    sh = Image.new("RGB", (2560, full.height * 2 + 12), VOID)
+    sh.paste(full, (0, 0))
+    sh.paste(light, (0, full.height + 12))
+    sh.save(out / "battle_layout_take9_ap.png")
 
 
 if __name__ == "__main__":
