@@ -286,3 +286,26 @@ fn a_rescued_cohort_levy_swears_in_and_departs_with_its_keepsake_instance() {
     let def = roster::item_def(&d, &gs.party, &rec.keepsake).expect("the instance resolves");
     assert_eq!(def.name, format!("{}'s {}", m.name, d.item_name("keepsake_tpl_warrior")));
 }
+
+/// PR7-11 (FB-283, `P2`): the shipped `martyr_last_stand` "Last Stand" (a Martyr template's `last_passive`) is slotless
+/// and carries the row's effects: `+25%` damage on every attack, `+4` Armor, immune to Weaken and Stun (the dying at
+/// battle end is the last stand's own, `roster::last_stand`, not a passive effect).
+#[test]
+fn the_shipped_last_stand_passive_matches_the_row() {
+    use aegis_core::json;
+    let d = data();
+    let row = d.entry("passives", "martyr_last_stand");
+    assert_eq!((json::s(row, "name").as_str(), slotless(&d, "martyr_last_stand")), ("Last Stand", true));
+    let fx: Vec<serde_json::Value> = json::aget(row, "effects").to_vec();
+    let want = [
+        serde_json::json!({"type": "skill_potency", "group": "attack", "value": 0.25}),
+        serde_json::json!({"type": "stat", "stat": "armor", "value": 4}),
+        serde_json::json!({"type": "resist", "status": "weaken", "value": 100}),
+        serde_json::json!({"type": "resist", "status": "stun", "value": 100}),
+    ];
+    for w in &want {
+        let found = fx.iter().any(|e| w.as_object().unwrap().iter().all(|(k, v)| e.get(k).and_then(|x| x.as_f64()).zip(v.as_f64()).map_or(e.get(k) == Some(v), |(a, b)| (a - b).abs() < 1e-9)));
+        assert!(found, "{w} in {fx:?}");
+    }
+    assert_eq!(fx.len(), want.len(), "no other effect: {fx:?}");
+}

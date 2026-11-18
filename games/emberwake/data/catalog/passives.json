@@ -1719,6 +1719,34 @@
 				}
 			],
 			"slot": ""
+		},
+		{
+			"id": "martyr_last_stand",
+			"name": "Last Stand",
+			"description": "The fuse burns out: +25% damage, +4 Armor, immune to Weaken and Stun; dies when the battle ends.",
+			"effects": [
+				{
+					"type": "skill_potency",
+					"group": "attack",
+					"value": 0.25
+				},
+				{
+					"type": "stat",
+					"stat": "armor",
+					"value": 4
+				},
+				{
+					"type": "resist",
+					"status": "weaken",
+					"value": 100
+				},
+				{
+					"type": "resist",
+					"status": "stun",
+					"value": 100
+				}
+			],
+			"slot": ""
 		}
 	]
 }

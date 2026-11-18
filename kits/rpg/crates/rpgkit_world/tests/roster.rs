@@ -947,14 +947,26 @@ fn bled_out_party_fate_departs_dead_and_battle_init_passes_bleed_out_rounds() {
 
 // ---- PK3 3-4 (PR6-4): the pool, procedural recruits, crypts, the Living Martyr fuse, procedural keepsakes ----------
 
-/// `pw`'s bunks and crypt places, and its Martyr template's fuse numbers (the expectations derive from these).
+/// `pw`'s bunks and crypt places, and its Martyr template's fuse numbers (the expectations derive from these; PR7-11,
+/// FB-283: the fuse numbers are the accepted ones, `per_deploy 1`, `stasis_days 7`, `max 6`, tiers at 2 and 4).
 const PW_BUNKS: i64 = 3;
 const PW_CRYPTS: i64 = 1;
 const PER_DEPLOY: i64 = 1;
-const STASIS_DAYS: i64 = 5;
+const STASIS_DAYS: i64 = 7;
 const FUSE_MAX: i64 = 6;
 const TIER_AT: [i64; 2] = [2, 4];
 const LEVY_NAMES: [&str; 3] = ["Ash", "Bryn", "Cole"];
+/// PR7-11: the Last Stand's numbers (`+25%` damage on every attack, `+4` Armor, immune to two debuffs).
+const LAST_DAMAGE: f64 = 0.25;
+const LAST_ARMOR: i32 = 4;
+const LAST_IMMUNE: [&str; 2] = ["weaken", "stun"];
+
+/// PR7-11: the last passive's effects in the shapes the game's `martyr_last_stand` seed uses.
+fn last_effects() -> Value {
+    let mut fx = vec![json!({"type": "skill_potency", "group": "attack", "value": LAST_DAMAGE}), json!({"type": "stat", "stat": "armor", "value": LAST_ARMOR})];
+    fx.extend(LAST_IMMUNE.iter().map(|st| json!({"type": "resist", "status": st, "value": 100})));
+    Value::Array(fx)
+}
 
 /// A pool world `pw` (no campaign): three bunks, one crypt place, an open flag, keepsakes on `dead` and `captured` with
 /// a `drill` template item; two recruit templates: `levy` (two base units, three names, two origins and temperaments,
@@ -962,7 +974,10 @@ const LEVY_NAMES: [&str; 3] = ["Ash", "Bryn", "Cole"];
 fn pool_data() -> Data {
     data_with(|catalog, worlds| {
         let passive = |id: &str| json!({"id": id, "name": id, "slot": "", "effects": [{"type": "resist", "status": "burn", "value": 5}]});
-        catalog["passives"] = json!(["orig_a", "orig_b", "temper_a", "temper_b", "fuse_two", "fuse_four", "fuse_last"].iter().map(|p| passive(p)).collect::<Vec<Value>>());
+        let mut passives: Vec<Value> = ["orig_a", "orig_b", "temper_a", "temper_b", "fuse_two", "fuse_four"].iter().map(|p| passive(p)).collect();
+        // PR7-11: the last passive in the Last Stand's shapes (a damage bonus, Armor, two immunities)
+        passives.push(json!({"id": "fuse_last", "name": "Last", "slot": "", "effects": last_effects()}));
+        catalog["passives"] = Value::Array(passives);
         catalog["items"].as_array_mut().unwrap().push(json!({"id": "strap", "name": "Strap", "item_type": "ACCESSORY", "slot": "ACCESSORY_1", "value": 0, "special": true, "stat_bonuses": {"STR": 2}}));
         catalog["units"].as_array_mut().unwrap().push(json!({"id": "hero2", "name": "Hero Two", "side": "party", "class_id": "drill", "level": 1}));
         let scene = |id: &str, fx: Value| json!({"id": id, "start": "a", "services": false, "nodes": [{"id": "a", "text": "Well?", "choices": [{"text": "Go.", "effects": [fx]}]}]});
@@ -1177,6 +1192,52 @@ fn a_spent_fuse_asks_retire_or_last_stand_and_a_last_stand_dies_with_a_keepsake(
     assert_eq!((rec.life.as_str(), rec.cause.as_str(), rec.keepsake.as_str()), ("dead", "roster", ks.as_str()));
     assert_eq!(gs.party.keepsakes, [rpgkit_world::state::Keepsake { id: ks.clone(), item: "strap".into(), name: format!("{name}'s Strap") }]);
     assert!(!gs.party.stash.contains_key("strap") && !gs.party.stash.contains_key(&ks), "an instance is never a stash item");
+}
+
+#[test]
+fn a_last_stand_fields_with_its_passive_and_the_fight_waits_for_the_choice() {
+    // PR7-11 (FB-283): at the accepted numbers the fuse is spent after FUSE_MAX deployments or FUSE_MAX x STASIS_DAYS
+    // days; the battle start refuses with the fuse text until the choice (the screen asks first); a last stand fields
+    // the member with its last passive (+25% attack potency, +4 Armor, immune to Weaken and Stun) and it dies at the
+    // settle, whatever the outcome
+    let d = pool_data();
+    let (mut gs, id) = martyr_game(&d);
+    let fielded = |gs: &GameState| roster::field_unit(&d, gs, gs.party.member(&id).unwrap(), "pw").unwrap().unit;
+    let strike = d.cat.skill("strike").expect("the basic attack").clone();
+    let before = fielded(&gs);
+    // deployments alone spend it: one short is no choice yet, the last one makes it
+    for n in 1..=FUSE_MAX / PER_DEPLOY {
+        assert!(battle::begin_fight(&d, &mut gs, "fight").is_ok(), "deployment {n} starts");
+        let end = standing(&d, &gs, &id);
+        roster::settle_party(&d, &mut gs, &FightEnd::new("won", "pw"), &[end]);
+    }
+    assert!(roster::fuse_spent(&d, gs.party.member(&id).unwrap(), gs.time));
+    let why = roster::fuse_refusal(&d, &gs);
+    assert_eq!(battle::begin_fight(&d, &mut gs, "fight").err(), Some(why.clone()), "the start waits for the choice");
+    // the stasis days alone spend another Martyr's fuse in FUSE_MAX x STASIS_DAYS days (one day short does not)
+    let (mut idle, idle_id) = martyr_game(&d);
+    idle.time = FUSE_MAX * STASIS_DAYS - 1;
+    assert!(!roster::fuse_spent(&d, idle.party.member(&idle_id).unwrap(), idle.time));
+    idle.time += 1;
+    assert!(roster::fuse_spent(&d, idle.party.member(&idle_id).unwrap(), idle.time));
+    // both tiers hold below the last passive
+    assert_eq!(roster::fuse_passives(&d, gs.party.member(&id).unwrap()), ["fuse_two", "fuse_four"]);
+    let spent = fielded(&gs);
+    roster::last_stand(&d, &mut gs, &id).expect("a spent fuse may stand");
+    assert!(battle::begin_fight(&d, &mut gs, "fight").is_ok(), "the choice made, the fight starts");
+    let stand = fielded(&gs);
+    assert!(has(&stand.passives, "fuse_last"), "{:?}", stand.passives);
+    let gain = stand.potency_for_skill(&strike) - spent.potency_for_skill(&strike);
+    assert!((gain - LAST_DAMAGE).abs() < 1e-9, "+{LAST_DAMAGE} attack potency, got {gain}");
+    assert_eq!(rpgkit_rules::damage::base_armor_rating(&stand) - rpgkit_rules::damage::base_armor_rating(&spent), LAST_ARMOR);
+    for st in LAST_IMMUNE {
+        assert_eq!(stand.resist_for(st), 100, "immune to {st}");
+        assert!(before.resist_for(st) < 100);
+    }
+    let end = standing(&d, &gs, &id);
+    let settled = roster::settle_party(&d, &mut gs, &FightEnd::new("won", "pw"), &[end]);
+    assert!(settled.departed.contains(&(id.clone(), "dead".to_string())), "a won last stand still dies: {:?}", settled.departed);
+    assert!(gs.party.member(&id).is_none());
 }
 
 #[test]
