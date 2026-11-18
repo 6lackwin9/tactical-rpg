@@ -377,6 +377,12 @@ impl Services {
         self.runner = Some(r);
     }
 
+    /// BUNKS1 BK8: a prepared conversation (a bunk talk's scene) opens.
+    pub fn open_runner(&mut self, cx: &mut Cx, r: DialogueRunner) {
+        cx.set_busy(true);
+        self.runner = Some(r);
+    }
+
     /// CAMPAIGN1 T2: a queued `{dialogue}` scene opens as the conversation (`runover::pending_talk`). True when it did.
     pub fn open_pending(&mut self, cx: &mut Cx) -> bool {
         if cx.busy() || !cx.nav.is_empty() {

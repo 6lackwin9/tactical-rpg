@@ -1611,7 +1611,13 @@ pub struct PartyState {
     /// KS3, 11.4 (PK3 4): the procedural keepsake instances the party holds (worn by id, never in the stash). Saved as
     /// `keepsakes` only when not empty; every member mirrors them (`sync_keepsakes`).
     pub keepsakes: Vec<Keepsake>,
+    /// BUNKS1 BK6: the pair counter: `"a|b"` (two member ids sorted, `rpgkit_data::talk::pair_key`) -> the won or
+    /// withdrawn battles the two fought side by side. Saved as `together` only when not empty.
+    pub together: IndexMap<String, i64>,
 }
+
+/// BUNKS1 BK6: the saved key of the pair counter (`PartyState::together`).
+pub const TOGETHER_KEY: &str = "together";
 
 impl Default for PartyState {
     fn default() -> Self {
@@ -1628,6 +1634,7 @@ impl Default for PartyState {
             stash_weapons: Vec::new(),
             pool: Vec::new(),
             keepsakes: Vec::new(),
+            together: IndexMap::new(),
         }
     }
 }
@@ -1736,6 +1743,10 @@ impl PartyState {
         if !self.keepsakes.is_empty() {
             out.insert("keepsakes".into(), Value::Array(self.keepsakes.iter().map(Keepsake::to_value).collect()));
         }
+        // BUNKS1 BK6: only a party whose members fought side by side saves `together`
+        if !self.together.is_empty() {
+            out.insert(TOGETHER_KEY.into(), Value::Object(self.together.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
+        }
         Value::Object(out)
     }
 
@@ -1776,6 +1787,7 @@ impl PartyState {
             stash_weapons: crate::weapons::stash_from(d),
             pool: json::aget(d, "pool").iter().map(|x| PoolMember::from_dict(json::dict(x))).collect(),
             keepsakes: json::aget(d, "keepsakes").iter().map(|x| Keepsake::from_dict(json::dict(x))).collect(),
+            together: json::dget(d, TOGETHER_KEY).iter().filter(|(_, v)| json::is_int(v)).map(|(k, v)| (k.clone(), json::to_int(v))).filter(|(_, n)| *n > 0).collect(),
         };
         party.sync_keepsakes();
         party

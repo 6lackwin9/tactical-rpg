@@ -429,6 +429,8 @@ pub struct DialogueRunner {
     /// CAMPAIGN1 W1: the campaign events of the effects applied since the last result (a node's effects when the
     /// conversation opens included); the next result carries them as `campaign`.
     pub campaign_events: Vec<Value>,
+    /// BUNKS1 BK7: extra `{token}` values of the texts (a template talk's `{a}` and `{b}`; empty = none).
+    pub tokens_extra: IndexMap<String, String>,
 }
 
 fn res_ok() -> Dict {
@@ -646,6 +648,9 @@ impl DialogueRunner {
         let mut values = IndexMap::new();
         values.insert("npc".to_string(), self.character_name.clone());
         values.insert("gold".to_string(), gs.party.gold.to_string());
+        for (k, v) in &self.tokens_extra {
+            values.insert(k.clone(), v.clone());
+        }
         let qid = json::s(extra, "_quest");
         if !qid.is_empty() {
             values.insert("quest".into(), json::s_or(&quest::resolved(d, gs, &qid), "name", &qid));
