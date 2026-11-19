@@ -37,9 +37,9 @@ PLACEHOLDER_COMMITS = {
     "3ded9b4": "PR5-39 placeholder NPC portraits",
 }
 PROCEDURAL = [("backgrounds/battle/", "procedural backdrop (gen_art.py)"),
-              ("backgrounds/story/intro_", "procedural story card (gen_art.py)"),
+              ("backgrounds/story/intro_", "Gemini web-queue opening CG; final from Flow (STYLE_BIBLE 6)"),
               ("backgrounds/story/hearth.png", "procedural story card (gen_art.py)"),
-              ("backgrounds/story/meat_market.png", "procedural story card (gen_art.py)")]
+              ("backgrounds/story/meat_market.png", "Gemini web-queue CG; final from Flow (STYLE_BIBLE 6)")]
 # Needed by canon or an approved spec, with no file yet (inbox AI-05/AI-06, project review 2026-11-17 "Art and UI").
 MISSING = [
     ("portraits/bosses/foundry_master_jessop.png", "portrait", "Act 2", "AI-06; CANON 3.2"),

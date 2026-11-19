@@ -12,42 +12,30 @@ game and kit layers, plus the assets canon or a spec needs that have no file yet
 | item icon | 49 | 1 | 54 | 0 |
 | map | 19 | 0 | 0 | 0 |
 | music | 14 | 0 | 8 | 0 |
-| portrait | 0 | 0 | 99 | 4 |
-| prop | 148 | 0 | 0 | 8 |
-| sfx | 10 | 0 | 0 | 0 |
-| skill icon | 71 | 38 | 89 | 0 |
+| portrait | 0 | 0 | 99 | 0 |
+| prop | 152 | 0 | 0 | 0 |
+| sfx | 12 | 0 | 0 | 0 |
+| skill icon | 97 | 12 | 89 | 0 |
 | sprite sheet | 0 | 0 | 35 | 0 |
 | status icon | 16 | 0 | 0 | 0 |
-| tile | 46 | 0 | 0 | 0 |
-| ui | 66 | 0 | 0 | 0 |
-| **all** | **456** | **39** | **382** | **12** |
+| tile | 82 | 0 | 0 | 0 |
+| ui | 74 | 0 | 0 | 0 |
+| **all** | **532** | **13** | **382** | **0** |
 
 Every row, final files included: [ASSET_STATUS.csv](ASSET_STATUS.csv) (path, category, state, act, why, last
 commit). Below: what still needs work, rework and placeholders grouped by folder and reason.
 
-## Missing (12)
+## Missing (0)
 
 | Path | Category | Act | Why |
 | --- | --- | --- | --- |
-| `game:portraits/bosses/goblin_warlord.png` | portrait | ? | content check (falls back) |
-| `game:props/{ashlands,common}/keep_hall/v0.png` | prop | legacy | content check (falls back); legacy world ashlands |
-| `game:props/{ashlands,common}/barracks/v0.png` | prop | legacy | content check (falls back); legacy world ashlands |
-| `game:props/{ashlands,common}/forge/v0.png` | prop | legacy | content check (falls back); legacy world ashlands |
-| `game:props/{ashlands,common}/storehouse/v0.png` | prop | legacy | content check (falls back); legacy world ashlands |
-| `game:portraits/npcs/orsa_tallow.png` | portrait | legacy | content check (falls back); legacy world iron_reaches |
-| `game:portraits/heroes/ilse_marrow.png` | portrait | legacy | content check (falls back); legacy world tidewrack |
-| `game:portraits/heroes/pell_driftwood.png` | portrait | legacy | content check (falls back); legacy world tidewrack |
-| `game:props/{tidewrack,ashlands,common}/keep_hall/v0.png` | prop | legacy | content check (falls back); legacy world tidewrack |
-| `game:props/{tidewrack,ashlands,common}/barracks/v0.png` | prop | legacy | content check (falls back); legacy world tidewrack |
-| `game:props/{tidewrack,ashlands,common}/forge/v0.png` | prop | legacy | content check (falls back); legacy world tidewrack |
-| `game:props/{tidewrack,ashlands,common}/storehouse/v0.png` | prop | legacy | content check (falls back); legacy world tidewrack |
 
-## Rework (39)
+## Rework (13)
 
 | Folder | Category | Files | Why |
 | --- | --- | --- | --- |
 | `game:items/braces/` | item icon | 1 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
-| `game:skills/` | skill icon | 29 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
+| `game:skills/` | skill icon | 3 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
 | `kit:skills/kinds/` | skill icon | 6 | I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4) |
 | `kit:skills/kinds/` | skill icon | 3 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
 
@@ -57,7 +45,9 @@ commit). Below: what still needs work, rework and placeholders grouped by folder
 | --- | --- | --- | --- |
 | `game:audio/music/` | music | 8 | synth music placeholder |
 | `game:backgrounds/battle/` | background | 15 | procedural backdrop (gen_art.py) |
-| `game:backgrounds/story/` | background | 6 | procedural story card (gen_art.py) |
+| `game:backgrounds/story/` | background | 1 | Gemini web-queue CG; final from Flow (STYLE_BIBLE 6) |
+| `game:backgrounds/story/` | background | 4 | Gemini web-queue opening CG; final from Flow (STYLE_BIBLE 6) |
+| `game:backgrounds/story/` | background | 1 | procedural story card (gen_art.py) |
 | `game:items/accessory/` | item icon | 6 | Wave 2 placeholder pack (AI-15) |
 | `game:items/consumable/` | item icon | 1 | Wave 2 placeholder pack (AI-15) |
 | `game:items/gauntlet/` | item icon | 1 | Phase 4 U2 placeholder icons (AI-14) |
