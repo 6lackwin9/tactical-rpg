@@ -436,7 +436,7 @@ pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
     match kind {
         "skills" => skill::warnings(entry, &e).into_iter().chain(skill::hook_warnings(v, entry, &e)).collect(),
         "classes" => unit::class_warnings(v, &e),
-        "units" => unit::unit_warnings(v, &e).into_iter().chain(reward::loot_warnings(v, &e)).chain(assets::portrait_and_palette_warnings(v, &Dict::new(), &e)).collect(),
+        "units" => unit::unit_warnings(v, &e).into_iter().chain(unit::plate_name_warnings(&e)).chain(reward::loot_warnings(v, &e)).chain(assets::portrait_and_palette_warnings(v, &Dict::new(), &e)).collect(),
         "encounters" => encounter::warnings(v, &e),
         "items" => item::item_warnings(v, &e),
         "item_families" => item::family_warnings(&crate::source::derive_family(&e)),

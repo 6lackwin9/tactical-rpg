@@ -59,7 +59,8 @@ fn the_battle_hud_panels_draw_the_hud_frame() {
     b.tick(&mut cx);
     let mut g = gfx();
     let placed = hud_frames(&mut b, &mut cx, &mut g);
-    let sides = [Rect::new(2, 2, W - 4, 24), Rect::new(2, 28, 124, 290), Rect::new(W - 126, 28, 124, 290), Rect::new(2, 322, W - 4, 36)];
+    // BATTLE-UI2 (contract 3): the side panels 184 px, the board's panel between them
+    let sides = [Rect::new(2, 2, W - 4, 24), Rect::new(2, 28, 92, 290), Rect::new(W - 94, 28, 92, 290), Rect::new(98, 28, 444, 290), Rect::new(2, 322, W - 4, 36)];
     for r in sides {
         assert!(placed.contains(&r), "the battle frames {r:?}: {placed:?}");
     }

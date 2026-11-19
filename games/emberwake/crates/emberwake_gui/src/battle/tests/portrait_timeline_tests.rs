@@ -133,8 +133,10 @@ fn tl2_a_blow_flashes_the_row_without_a_jolt_at_any_window_size() {
     assert_eq!((flash.start, flash.color[..3].to_vec()), (1000, flash_of("hit").to_vec()));
     assert_eq!(f.jolt_offset(now), (0, 0), "no jolt in the row");
     assert!(!f.live(now).contains(&"breath"), "no breath in the row: {:?}", f.live(now));
-    let panel = b.panel_faces.get(&key).expect("the hero panel's portrait");
-    assert_eq!(panel.tier(), Some(Tier::Full), "the panel portrait is uncapped");
+    // BATTLE-UI2 (contract 3): the panel portrait is the plate's, uncapped: the tier its side gives
+    let panel = b.panel_faces.get(&key).expect("the plate's portrait");
+    let side = Tier::of(big.view.rect(Rect::new(0, 0, crate::battle::plates::PORTRAIT, crate::battle::plates::PORTRAIT)).w);
+    assert_eq!(panel.tier(), Some(side), "the panel portrait is uncapped");
     assert!(panel.jolt_amplitude(now) > 0.0, "the panel jolts for the same blow");
 }
 

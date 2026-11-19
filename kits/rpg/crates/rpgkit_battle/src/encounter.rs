@@ -162,6 +162,25 @@ impl Objectives {
         String::new()
     }
 
+    /// BATTLE-UI2 (`SCREEN_CONTRACT_BATTLE.md` 2): the objective's short goal for the battle's top bar ("Rout them",
+    /// "Hold 3 rounds", "Reach the exit", "Defeat Wolf", "Drive Wolf back"); the protect targets are the second line
+    /// (`protect_of`). `name_of(ref)` names units.
+    pub fn goal_of(o: &Obj, name_of: impl Fn(&str) -> String) -> String {
+        match value::string(o, "objective", "rout").as_str() {
+            "hold" => format!("Hold {} rounds", value::int(o, "objective_rounds", 3)),
+            "escape" => "Reach the exit".to_string(),
+            "slay" => format!("Defeat {}", name_of(&value::string(o, "objective_unit", ""))),
+            RETREAT => format!("Drive {} back", name_of(&value::string(o, "objective_unit", ""))),
+            _ => "Rout them".to_string(),
+        }
+    }
+
+    /// BATTLE-UI2: the top bar's protect line ("Protect A", "Protect A and B"; "" without a protect target).
+    pub fn protect_of(o: &Obj, name_of: impl Fn(&str) -> String) -> String {
+        let names: Vec<String> = value::strings(o, "protect").iter().map(|r| name_of(r)).collect();
+        if names.is_empty() { String::new() } else { format!("Protect {}", names.join(" and ")) }
+    }
+
     /// Rule 9: the objective line: `objective_text` when set, else the generated text. `name_of(ref)` names units.
     pub fn text_of(o: &Obj, name_of: impl Fn(&str) -> String) -> String {
         let authored = value::string(o, "objective_text", "").trim().to_string();
@@ -640,6 +659,19 @@ impl Phases {
 
     pub fn units_of(&self, id: &str) -> Vec<UnitId> {
         self.wave_units.get(id).cloned().unwrap_or_default()
+    }
+
+    /// BATTLE-UI2 (`SCREEN_CONTRACT_BATTLE.md` 4, the "+2 round 3" tag): the next reinforcement known by its round: the
+    /// first phase not fired or dropped whose trigger names a round and that brings units, as (units, round). Read only.
+    pub fn next_reinforcement(&self) -> Option<(usize, i32)> {
+        self.phases
+            .iter()
+            .filter(|p| !self.fired.contains_key(&p.id) && !self.dropped.contains(&p.id))
+            .filter_map(|p| {
+                let (round, n) = (value::int(&p.trigger, "round", 0), self.units_of(&p.id).len());
+                (round > 0 && n > 0).then_some((n, round))
+            })
+            .min_by_key(|x| x.1)
     }
 
     /// Rule 1: hp_below phases become due (or drop when their unit is out) after a block.
