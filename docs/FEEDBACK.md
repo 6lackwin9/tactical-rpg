@@ -80,8 +80,26 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-22` (`SEED-ARCHIVE1`) | done (tools lane) | `develop` (squash `ENGINE-22`) | 33 stale seeds moved to `data/seeds/archive/`, with a README row each. The 2 known overlaps are settled. `seed_order_known.txt` is empty. FB-367 |
 | `ENGINE-22` fix | done (tools lane) | `develop` | Correction to FB-367: my edit to `cast1a3.json` (narrowing its `bile_coat` step) moved it last in the commit order, so after main Build's `pr7_40` landing the seeds step failed: 34 findings, all `cast1a3.json` against `pr7_41_text.json`. `cast1a3.json` is now restored as it was and archived, making 34 archived seeds. `tools/fc.sh seeds` reports 67 seeds and 0 findings. `seed_order.py`'s doc and the seeds README say an old seed is archived, never edited in place. develop was red on the seeds step between 33a6b49 and this fix. |
 | `ENGINE-21` (`UISPLIT1-H`) board and save/load | Stage A done (tools lane); the character sheet waits for main Build's `PR7-45` | `develop` (squash `ENGINE-21` A1) | View-models, actions, fixtures and tests for the notice board and the save/load screens; today's drawing kept. FB-369 |
+| `ENGINE-23` (`UISPLIT1-I`) recipe and facility | Stage A done (tools lane); the party loadout waits for main Build's `PR7-51`, the world map for `PR7-47` | `develop` (squash `ENGINE-23` A1) | View-models, actions, fixtures and tests for the recipe pane and the facility screen; today's drawing kept. FB-371 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-371: ENGINE-23 UISPLIT1-I Stage A for the recipe pane and the facility screen
+
+- **Status**: open
+- **Spec**: `READY.md` §3 `ENGINE-23` (`UISPLIT1-I`), like `ENGINE-21` Stage A (@squash `ENGINE-23` A1). Order agreed with main Build: recipe and facility now; the party loadout after `PR7-51`, the world map after `PR7-47` (or first if it is still waiting when the rest is done).
+- **Recipe pane** (`emberwake_gui::recipe_view`, fixture `ui/views/recipe.view.json` from the pane tests' scratch smith):
+  - Fields: `title` (the character's name); one rows field per picker, `members`, `families`, `items`, `weapons`, each empty while the pane does not draw that picker (a row per choice, its index as the id, the clamped pick selected); `recipes` (a row per offered recipe: name, cost as `sub` ("Free" for none), the reason it can't run as `detail` in `foe`, the hover card's line as `note`, a Do row button, on while it can run); `line` (the refusal in `foe`, else the notes in `gold`).
+  - Actions: `member`, `family`, `item`, `weapon` (on only for a picker of two or more), `run`, `close`. `recipe_act` maps them to `RecipeAct`.
+  - The agent link's `recipe_pane` gains `view`.
+- **Facility screen** (`emberwake_gui::facility_view`, fixture `ui/views/facility.view.json` from the pane tests' scratch forge):
+  - Fields: `title` (the keeper's name); `facilities` (a row per facility: name, "Level N of M" as `detail`, in `good` at the top level; the effects in force as `sub`; the next level's cost as `detail2`, in `foe` while it can't be bought; the hover card's line as `note`, which is the next level while it can be bought, else the reason, or "Highest level reached."; an Upgrade row button while a level is left); `line` (as the recipe pane's).
+  - Actions: `upgrade`, `close`. `facility_act` maps them to `FacilityAct`.
+  - The facility lines (`level_line`, `now_line`, `next_line`, `cost_line`) moved into `facility.rs` functions that the drawing and the view share.
+  - The agent link's `facility_pane` gains `view`.
+- **Tests**: `recipe_view` (fields, picker rows and clamping, recipe rows on and off, the line's tones, clicks, the family and weapon pickers, a stash recipe with no picker, fixture shape); `facility_view` (rows before and after an upgrade, the gated reason, a refusal, clicks, fixture shape); the `recipe` and `facility` pane tests check the agent link's `view`. Two `#[ignore]` tests rewrite the fixtures.
+- **Guesses**: (1) The pickers are rows fields rather than a new select field kind, so a layout can draw them as a list or a picker without an engine change. (2) A gated facility row's `note` carries the reason, not the next level's line (the drawn pane shows both; the hover card shows the reason), so the view has no separate next-level field while it is gated. Stage B can add one if the mock wants it.
+- **Docs delta**: none. `HISTORY.md`: none.
 
 ### FB-369: ENGINE-21 UISPLIT1-H Stage A for the notice board and the save/load screens
 
