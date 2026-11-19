@@ -200,6 +200,8 @@ screen at 1280x720, 1:1.
   the rest summed, with the party total beside the totals).
   - Picked on the user's card 2026-11-19 18:56: A (poise bar with ticks and the count) and P1 (one party row, hover
     by member); a UI preference, revisit at the UI review.
+  - Then (user typed 2026-11-19 18:57, supersedes the P1 half of the card): A for poise; the bar shows P2 (the selected
+    hero and "Others", no duplication) and the hover lists every member (`battle_take30_pick_others_hover_2x.png`).
 - Not expressed yet: collision stagger from push or pull on the card row, hazard damage in the HP preview and the
   block ruler, reactions (riposte, counters) as a "returns -n" note, flank, guard, cover and windup modifiers in the
   skill hover, channel rounds, unit meters, weapon wear.

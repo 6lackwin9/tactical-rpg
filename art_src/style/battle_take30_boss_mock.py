@@ -190,6 +190,12 @@ def main():
     hv = T27.screen(shot)
     party_hover(hv, 212, 1068, 218)
     hv.crop((204, 66, 1076, 340)).resize((872 * 2, 548), Image.NEAREST).save(out / "battle_take30_P1_hover_2x.png")
+    # the pick (user 2026-11-19 18:57): A with P2 in the bar and the hover listing every member
+    MODE["party"] = "others"
+    ho = T27.screen(shot)
+    party_hover(ho, 212, 1068, 218)
+    ho.crop((204, 66, 1076, 340)).resize((872 * 2, 548), Image.NEAREST).save(out / "battle_take30_pick_others_hover_2x.png")
+    MODE["party"] = "all"
     # poise A vs B side by side
     pa, pb = Image.open(out / "_a.png"), Image.open(out / "_b.png")
     cmp_ = Image.new("RGB", (1000, 110), B.VOID)
