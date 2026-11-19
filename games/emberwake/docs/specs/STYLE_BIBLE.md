@@ -60,6 +60,17 @@ reds, royal blues or white robes. Light comes from fire and tallow (amber), neve
 
 - Backdrops and story cards follow the VN-stage set (the four VN stages, the M5 gate): painted, low-key, amber light.
   The procedural backdrops and story cards are placeholders (ASSET_STATUS).
+- **What a Gemini image may be** (Tushar 2026-11-18: "only thing that is probably ok/approved directly from gemini
+  webapp are assets that are not locked to the game itself and would go in the kits asset library like tilesets, props,
+  skill and gear icons"): generic library art (tilesets, props, skill and gear icons) can be approved straight from the
+  Gemini web queue. Anything tied to this game (story CGs, backdrops of story beats, characters, story art) made there
+  is a placeholder until its Flow version replaces it at the same path; opening CGs are made on the web queue for now
+  ("lets use gemini webapp for now, but note that these will be placeholder").
+- **Placeholders in the kit library** (Tushar 2026-11-18): placeholder characters, backgrounds and CGs may also go into
+  the kit asset library (`kits/rpg/assets/`) as generic placeholder sets, stripped of every game reference (no names,
+  lore or places) and carrying only asset metadata (kind, style, size, palette, tags, status). The library may later
+  hold sets in several styles. The metadata format is to be agreed with Design and the tools and engine lane; until
+  then nothing is copied there.
 - Music: Flow Music (Lyria, house seed `455684`) for finals; synth tracks are placeholders.
 
 ## 7. Batch check (every batch, one contact sheet)

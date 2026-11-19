@@ -45,3 +45,4 @@ Standing script/test hygiene rules: never hand-edit JSON (use `ContentCatalog.up
 | 2026-11-19 | HUB-POLISH1 bed plate, PR7-23 two-height plate stagger; benched members idling in front of their bunks | replaced (`PR7-43`, bunk layout B, user 2026-11-18) | Wall plates; benched members sleep in their bunk | Layout B; no golden re-recorded |
 | 2026-11-19 | Map Camera Zoom on both Settings tabs (`FB-287` Option A) | replaced (`PR7-37`, PT-33) | Display tab only | One setting, one place; no golden re-recorded |
 | 2026-11-19 | Fight 2 (Rooftop) exit tile | removed (`PR7-42`, PT-39) | Hint reworded | A round plan refused moves onto exit tiles; no golden re-recorded |
+| 2026-11-19 | `ui/frames/panel.png` iron line with corner rivets; theme `info` cyan and `good` green | replaced (`PR7-36`, ART-01, ART-02) | Frame A; gold, amber and muted tokens | Style lock; no golden re-recorded |
