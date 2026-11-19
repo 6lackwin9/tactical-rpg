@@ -1,17 +1,15 @@
 //! PR7-41 (PT-16, PT-22) on the agent systems playtest's save `cages_start` (`games/emberwake/scenarios/saves/`, the
 //! playtest of 2026-11-18): The Crossroads Cages started from the saved party, its first round drafted the way the
 //! battle screen drafts it (each member's tactic ghost in party order, `plan_apply_preset` per member). The drafted
-//! plan confirms (the check that no auto round re-grants a status it holds waits for the parked re-grant rule). Which
-//! units, skills and tiles are involved is read from the battle, not hard-coded; shipped data is only read.
+//! plan confirms; with the test-only switch `regrant` on (the parked PT-22 re-grant rule, FB-334;
+//! `AEGIS_SWITCHES=regrant`), no member's auto round spends its AP re-granting a status it already holds. Which units,
+//! skills and tiles are involved is read from the battle, not hard-coded; shipped data is only read.
 
-use aegis_core::json;
+use aegis_core::{json, switches};
 use emberwake_battle::session::Session;
 use emberwake_world::{battle, save, Data};
 use serde_json::json;
 use std::path::{Path, PathBuf};
-
-/// The PT-22 re-grant rule is parked for a Design ruling (off: its assertion below is skipped).
-const REGRANT_RULE: bool = false;
 
 fn data() -> Data {
     Data::open(&Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder")).unwrap().0
@@ -51,9 +49,9 @@ fn the_cages_ghost_draft_confirms() {
         ghost_draft(&mut s, tactic);
         let lines = plan_lines(&s);
         assert!(s.plan_is_valid(), "{tactic}: every member's drafted round is valid: {lines:#?}");
-        // PT-22: no auto round grants its unit the same status twice. Parked with the re-grant rule (Vesper's Fade loop
-        // still plans here until it lands; `/mnt/project-files/pr7-41/pt22_regrant_retarget.patch` turns it back on)
-        for &a in s.w.allies.iter().filter(|_| REGRANT_RULE) {
+        // PT-22: no auto round grants its unit the same status twice (the re-grant rule, switch `regrant`; off, Vesper's
+        // Fade loop still plans here)
+        for &a in s.w.allies.iter().filter(|_| switches::on("regrant")) {
             let grants: Vec<&str> = s.plan.compile(&s.w, a).entries.iter().map(|e| s.w.cat.skills[e.skill].grant_status.as_str()).filter(|g| !g.is_empty()).collect();
             let mut seen: Vec<&str> = Vec::new();
             for g in grants {
