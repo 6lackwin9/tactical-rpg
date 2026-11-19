@@ -52,3 +52,20 @@ damage numbers or tone down the defense numbers ... or HP numbers". The cap (`ma
 - EN8. If a tier misses, tune lethality in this order, one step per rerun, at most two reruns: enemy attack power up,
   then enemy defence (armour, guard) down, then enemy HP down; party numbers stay. Report each step in
   `BALANCE_REPORT.md`; the steps share the one intended re-record of section 3.
+
+## 5. Random encounters end at a short cap (user 2026-11-19 18:17)
+
+User: "for random encounter ... a smaller cap of like 5 rounds or 6 rounds ... and then just have the units basically
+escape ... you don't get any rewards ... and you still take the damage ... Or you can ... run away yourself, so that
+way you don't take damage, and basically you also don't lose time".
+
+- EN9. A random (step or patrol) encounter has `max_rounds` 5 (`[PROVISIONAL]` Design, from the user's 5 or 6). When
+  it reaches the cap with both sides standing, the foes escape: the fight ends as "They slipped away", no rewards (no
+  XP, loot or Scrap), and the party keeps the damage and statuses it took (persistent damage). It is not a defeat and
+  costs no more time than the rounds played.
+- EN10. The player may flee a random encounter at any planning step: the fight ends at once, no rewards, no further
+  damage, no time beyond the rounds played (the existing retreat, its current costs kept unless they add more).
+- EN11. Scripted, elite and boss fights keep their caps (section 4) and their own outcome at the cap; the baseline
+  enrage (from round 6) never reaches a random encounter, whose cap comes first.
+- EN12. The encounter needs a kit field for the cap outcome (for example `cap_outcome`: `escape` for random
+  encounters; today's outcome otherwise) so the kit names no game.

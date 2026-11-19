@@ -148,6 +148,18 @@ screen at 1280x720, 1:1.
   - Enrage (`ENRAGE2`): the round counter in the top bar warns a round ahead ("Enrage next round", amber, under the
     objective) and from the enrage round reads "Foes enraged +n"; an enraged unit's plate takes a 10 % amber tint and
     rim with an "up +10%" chip by its name, and its numbers show raised (`STATUSVIS1` attack_power row).
+- Proposed, take 27 (`battle_take27_boss_mock.py`, user 2026-11-19 18:24 on take 26, `BOSSUI1` section 5), awaiting
+  sign-off; amends take 26:
+  - Phase markers flipped: every phase still to fight is lit gold from the start, the current one brightest with a
+    ring, a beaten one dims to iron.
+  - Poise: the pips in groups of 5 with a gap, the count beside them ("6/10"), then the per-pip tag.
+  - Boss intent: while a hero targets the boss or the boss is pinned, the bar grows by two rows (58 px at 720p) in
+    place of the foe card. "Hits": every planned hit on the boss by block as a face chip with HP and poise pips, the
+    selected hero's ringed gold. "After": the phase span and poise left after each block, BREAK where it lands. At
+    the right: the selected hero's total, the party total and what is left to the next phase.
+  - Clear of units: the foe card docks at the board's top right unless it would cover the acting unit or its target
+    at 720p; then it docks top left (`battle_take27_card_clear_720p.png`). The grown boss bar ends about 60 px above
+    the board's first unit row in the shot; Build checks the same rule against the live board.
 - Not expressed yet: collision stagger from push or pull on the card row, hazard damage in the HP preview and the
   block ruler, reactions (riposte, counters) as a "returns -n" note, flank, guard, cover and windup modifiers in the
   skill hover, channel rounds, unit meters, weapon wear.

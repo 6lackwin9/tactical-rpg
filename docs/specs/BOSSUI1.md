@@ -22,8 +22,9 @@ screen.
 - BU1. Phase HP. The bar shows the current phase's HP span as a full bar: for a phase that ends on `hp_below` N %
   of a unit, the span runs from where the phase began to N %; it refills when the next phase starts. The last phase
   runs to 0. A phase that ends on `round` only keeps the plain HP bar for its span. Display only: no rule changes.
-- BU2. Phase count. A row of phase markers beside the name (one per phase of the encounter, at most 4; done ones
-  filled, the current one lit).
+- BU2. Phase count. A row of phase markers left of the name (one per phase of the encounter, at most 4). User
+  2026-11-19 18:24 (take 26): all markers start lit, the current one highlighted; a phase beaten goes dim, and the
+  highlight moves on, so the fight shows from the start how many phases are left.
 - BU3. Name per phase. The bar's title is the phase's `name` when it has one (a form or state, for example "the
   Foundry Master, Unbound"), else the boss unit's name and title. When a phase brings a different boss unit (a wave
   effect whose unit is the encounter's boss for that phase), the bar follows that unit: its name, HP and poise.
@@ -53,3 +54,20 @@ filled gold, current lit, coming hollow iron); the change runs inside the phase 
 drains, a 0.1 s gold flash as the marker fills, title and portrait crossfade 0.3 s for a new unit, the bar refills in
 0.4 s); the number beside the bar is the span left ("160/450"). Enrage (ENRAGE2 EN5): the round counter shows
 "Enrage next round" in amber a round ahead, then "Foes enraged +n"; an enraged plate takes a 10 % amber tint and rim.
+
+## 5. Take 26 review (user 2026-11-19 18:24)
+
+- BU9. Poise target (user 2026-11-19 18:26, confirming): a high break threshold plus the larger bar, so a boss
+  breaks "only once every 3 rounds or something like that when fighting against a party of the same level". Target,
+  same-level party focusing the boss: the first break in round 2 or 3, then about one break every 3 rounds; never a
+  break in round 1 from a full bar. Breaking stays optional (poise is an interrupt, not a required mechanic): a hero
+  too weak to dent the bar is fine, and building a party to break the boss is a valid choice. Tuned later in the
+  `PR7-54` data step (sim breaks per fight); the golden re-record stays the user's call.
+- BU10. Poise pips read at a glance: pips in groups of 5 with a gap (10 = two groups); at most 10.
+- BU11. Boss intent panel. Selecting the boss (or a hero targeting it) opens a boss intent panel in the bar's space
+  instead of the standard foe card: each party member's planned hits on the boss on one short timeline row each,
+  plus the party total (HP and poise), and the boss's own attack impact row. It stays compact (no taller than the
+  bar plus two rows) and never covers a unit or the selected target.
+- BU12. Any intent box or card, for bosses and mobs, sits clear of the acting unit and its target on the board.
+- BU13. The round banner carries the enrage cue (ENRAGE2 EN5): "Enrage next round", then "Foes enraged +n %" with
+  the step the foes gained; confirmed by the user's reading of take 26.
