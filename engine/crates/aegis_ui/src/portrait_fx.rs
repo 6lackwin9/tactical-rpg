@@ -1311,6 +1311,53 @@ fn side_of(p: &Painter, r: Rect) -> i32 {
     pr.w.min(pr.h)
 }
 
+// ---- The portrait frame (PR7-25, style F2) --------------------------------------------------------------------------
+
+/// The layout audit's name for a portrait frame (`LayoutRec::Placed`, at the portrait's rect).
+pub const PORTRAIT_FRAME: &str = "portrait_frame";
+/// The F2 line width in old units (2 px iron, 2 px top line).
+pub const FRAME_LINE: i32 = 2;
+/// A portrait under this side in old units (a timeline icon) takes a 1-unit line, so the frame leaves it a face.
+pub const FRAME_THIN_BELOW: i32 = 24;
+
+/// The frame's line width in this view's units for a portrait at logical `r`.
+pub fn frame_width(p: &Painter, r: Rect) -> i32 {
+    let old = r.w.min(r.h) / p.v.g.max(1);
+    p.v.u(if old < FRAME_THIN_BELOW { 1 } else { FRAME_LINE })
+}
+
+/// The border painted into the picture (the sidecar's `border`, scaled from its `size` to `r`), in logical units,
+/// rounded up; 0 without a sidecar.
+pub fn painted_border(face: Option<&Face>, r: Rect) -> i32 {
+    face.map_or(0, |f| ((f.border as f32 * r.w.min(r.h) as f32) / f.size.max(1) as f32).ceil() as i32).clamp(0, r.w.min(r.h) / 2)
+}
+
+/// PR7-25 (style bible 2, F2): the one portrait frame, drawn over a portrait already drawn into `r`: a `frame_width`
+/// line of the theme's `edge` (iron) round `r`'s inside with its top line in `frame_line` (oxblood), and between the
+/// line and the picture the band of `painted` units the picture paints as its own border filled with `well`, so no
+/// other border shows. Noted for the layout audit as `PORTRAIT_FRAME` at `r`.
+pub fn draw_frame(p: &mut Painter, r: Rect, painted: i32, well: Rgba) {
+    let t = frame_width(p, r).min(r.w / 2).min(r.h / 2).max(0);
+    if t == 0 {
+        return;
+    }
+    let th = crate::theme::th();
+    let band = painted.max(t).min(r.w / 2).min(r.h / 2);
+    if band > t {
+        let inner = Rect::new(r.x + t, r.y + t, r.w - 2 * t, r.h - 2 * t);
+        let d = band - t;
+        p.fill(Rect::new(inner.x, inner.y, inner.w, d), well);
+        p.fill(Rect::new(inner.x, inner.y + inner.h - d, inner.w, d), well);
+        p.fill(Rect::new(inner.x, inner.y + d, d, inner.h - 2 * d), well);
+        p.fill(Rect::new(inner.x + inner.w - d, inner.y + d, d, inner.h - 2 * d), well);
+    }
+    p.fill(Rect::new(r.x, r.y + r.h - t, r.w, t), th.edge);
+    p.fill(Rect::new(r.x, r.y + t, t, r.h - 2 * t), th.edge);
+    p.fill(Rect::new(r.x + r.w - t, r.y + t, t, r.h - 2 * t), th.edge);
+    p.fill(Rect::new(r.x, r.y, r.w, t), th.frame_line);
+    p.note_layout(|| crate::layout_audit::LayoutRec::Placed { what: PORTRAIT_FRAME.into(), at: r });
+}
+
 // ---- Timing rules ---------------------------------------------------------------------------------------------------
 
 /// The breath period for `seed`: 3600 x (0.9 + 0.2 h(1)) ms.

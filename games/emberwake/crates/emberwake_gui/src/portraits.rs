@@ -51,6 +51,11 @@ pub const HUES: [(&str, &str, Rgba); 8] = [
     ("Bleached Linen", "the hit flash", rgb(0xd9, 0xcb, 0xb4)),
 ];
 
+/// The portrait well (theme `portrait_well`): the dark ground every portrait draws on, inside its F2 frame.
+pub fn portrait_well() -> Rgba {
+    th().game("portrait_well", rgb(22, 30, 48))
+}
+
 /// The art-bible name of colour `#rrggbb` ("" when it is none of `HUES`).
 pub fn hue_name(hex: &str) -> &'static str {
     let Some(c) = aegis_core::assets::hex_colour(hex) else { return "" };
@@ -360,7 +365,7 @@ impl Faces {
         self.draw_parts(p, &mut cx.art, &data.cat.portrait_cues, who, look, surface, r, &opts)
     }
 
-    /// `draw` over explicit parts: the holds are the sidecar's `idle`, the state rows of `rows` that hold for `look`
+    /// `draw` over explicit parts (PR7-25: on the portrait well, inside the F2 frame, `portrait_fx::draw_frame`): the holds are the sidecar's `idle`, the state rows of `rows` that hold for `look`
     /// on `surface`, the key's pins and its line's face (`say`); the file is the first of `who`'s chain for the
     /// expression that wins; the expression effects are `self.expressions`, the plain face's motion `self.base_motion`.
     #[allow(clippy::too_many_arguments)]
@@ -391,11 +396,15 @@ impl Faces {
             }
             expression = fx.expression(now).to_string();
         }
+        let well = portrait_well();
+        p.fill(r, well);
         let drawn = found.is_some_and(|rel| fx.draw(p, art, &rel, face.as_ref(), r, now, opts, &mut self.budget));
         if !drawn {
             let size = (r.h as f32 * 0.32).clamp(SMALL, 20.0);
             p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - p.line_h(size)) / 2.0, &who.initial(), size, th().gold);
         }
+        // PR7-25 (style F2): the one portrait frame, over the picture's own painted border
+        aegis_ui::portrait_fx::draw_frame(p, r, if drawn { aegis_ui::portrait_fx::painted_border(face.as_ref(), r) } else { 0 }, well);
         drawn
     }
 

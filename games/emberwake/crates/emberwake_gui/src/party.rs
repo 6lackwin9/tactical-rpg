@@ -6,7 +6,7 @@
 
 use aegis_ui::pacing::{FrameNeed, SLOW_LIFE};
 use aegis_ui::theme::th;
-use aegis_ui::canvas::{rgb, rgba, Rect};
+use aegis_ui::canvas::{rgba, Rect};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
@@ -769,7 +769,6 @@ impl Screen<GameCx> for Character {
         // file)
         self.faces.begin();
         let pr = Rect::new(fr.x + 10, 44, PORTRAIT, PORTRAIT);
-        ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
         let (who, look) = crate::hub::member_portrait(&d, cx.gs(), &m);
         self.faces.draw(&mut ui.p, cx, &who, &look, "roster", pr);
         ui.push("character.portrait", "portrait", crate::hub::member_name(cx, &m), pr, true, false, None, Vec::new());
