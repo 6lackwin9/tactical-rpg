@@ -421,7 +421,7 @@ fn hp_text(p: &Plate) -> String {
 
 fn plate_row(p: &Plate) -> RowView {
     let tabs: Vec<String> = p.tabs.iter().map(Tab::line).collect();
-    RowView { id: p.unit.to_string(), label: p.name.clone(), detail: hp_text(p), detail2: p.ap.map_or_else(String::new, |a| format!("{}/{}", a.left(), a.cap)), sub: tabs.join(", "), picture: None, enabled: p.active }
+    RowView { id: p.unit.to_string(), label: p.name.clone(), detail: hp_text(p), detail2: p.ap.map_or_else(String::new, |a| format!("{}/{}", a.left(), a.cap)), sub: tabs.join(", "), picture: None, enabled: p.active, ..Default::default() }
 }
 
 /// The model as a `screen_layout` view (UISPLIT1 US1): texts, row lists and the bar's actions.
@@ -449,7 +449,7 @@ pub fn view(m: &BattleModel) -> View {
                     if r.after_ko {
                         sub.push("after KO".into());
                     }
-                    RowView { id: k.to_string(), label: r.name.clone(), detail: format!("-{}", r.damage), detail2: format!("{pips} pips"), sub: sub.join(", "), picture: None, enabled: true }
+                    RowView { id: k.to_string(), label: r.name.clone(), detail: format!("-{}", r.damage), detail2: format!("{pips} pips"), sub: sub.join(", "), picture: None, enabled: true, ..Default::default() }
                 })
                 .collect()
         })
