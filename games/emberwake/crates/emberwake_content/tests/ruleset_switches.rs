@@ -45,9 +45,20 @@ fn seed_entries(name: &str) -> Vec<Dict> {
     seed_rows(name, ruleset::KIND)
 }
 
+/// The seed file `name`: in `data/seeds/`, or in `data/seeds/archive/` once it no longer applies to today's rules
+/// (ENGINE-22, SEED-ARCHIVE1: the replay here still reads it as written).
+fn seed_path(name: &str) -> std::path::PathBuf {
+    let live = data_dir().join("seeds").join(name);
+    if live.is_file() {
+        live
+    } else {
+        data_dir().join("seeds").join("archive").join(name)
+    }
+}
+
 /// The rows of kind `kind` the seed `name` upserts, as given.
 fn seed_rows(name: &str, kind: &str) -> Vec<Dict> {
-    let text = std::fs::read_to_string(data_dir().join("seeds").join(name)).expect("the seed");
+    let text = std::fs::read_to_string(seed_path(name)).expect("the seed");
     let seed: Value = serde_json::from_str(&text).expect("seed JSON");
     json::arr(&seed["steps"]).iter().map(json::dict).filter(|s| json::s(s, "kind") == kind).map(|s| json::dget(s, "entry").clone()).collect()
 }
@@ -110,7 +121,7 @@ const CLASS_BASICS_DROPPED: &str = "flank_cut";
 
 /// Every step of the seed `name` as (kind, entry), in its order.
 fn seed_steps(name: &str) -> Vec<(String, Dict)> {
-    let text = std::fs::read_to_string(data_dir().join("seeds").join(name)).expect("the seed");
+    let text = std::fs::read_to_string(seed_path(name)).expect("the seed");
     let seed: Value = serde_json::from_str(&text).expect("seed JSON");
     json::arr(&seed["steps"]).iter().map(json::dict).map(|s| (json::s(s, "kind"), json::dget(s, "entry").clone())).collect()
 }
