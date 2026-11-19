@@ -128,6 +128,19 @@ screen at 1280x720, 1:1.
 - Proposed, take 26, awaiting sign-off (`BOSSUI1` BU6, user 2026-11-19 18:09 "the no number look is probably better"):
   tabs on plates and on the boss bar are the icon only, no pips or digits; the rounds left show only in the full list.
   If signed off, this supersedes the pip line above (kept here as history).
+- Proposed, take 33, awaiting sign-off (`art_src/style/battle_take33_status_mock.py`, `STATUSVIS1` SV5..SV10, user
+  2026-11-19 19:26 on take 25); replaces take 25's tick, attack_power, armor/guard, targeting and reactive cues:
+  - Locks: take 25's hatch with the icon framed on each locked block. Stagger locks blocks 1 and 4, stun 1 and 2.
+  - One HP loss: hits and ticks are one planned-loss slice on the HP bar and one number; hover lists each hit and
+    each tick with the total.
+  - Numbers after modifiers: the final number only, tinted (lowered oxblood light `#e27064`, raised gold `#f0c450`)
+    with a small down or up arrow when a modifier changed it; hover lists the base and each modifier's percent. No
+    struck base, no shield glyph.
+  - Taunt: a 20 px badge over the taunted unit's sprite (dark slate, crimson rim, the taunt icon, a pointer down),
+    bobbing 1 px; hover names the unit it must target and the rounds left. No feet ring.
+  - Riposte: the chip reads "Riposte" with no number; hover gives the likely return on the selected hero.
+  - Loadout passives: two 16 px icons under the portrait, apart from the status column; hover names them. Steadfast
+    as a status stays first in the column. Icons are placeholders until a passive icon set exists.
 
 ## 7. Skill menu (on a strip block)
 
