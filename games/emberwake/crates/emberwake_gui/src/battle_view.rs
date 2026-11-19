@@ -94,6 +94,9 @@ pub struct Plate {
     pub max_hp: i32,
     /// The HP the round's planned blows take from it (a red loss at the bar's end).
     pub incoming: i32,
+    /// Contract 6 (PR7-40 part 2): the HP the round's planned heals restore on it (a pale moss gain on the bar;
+    /// `intent::heal_on`).
+    pub heal: i32,
     pub ap: Option<ApBar>,
     /// Poise pips (lit, of) under the rule poise.
     pub poise: Option<(i32, i32)>,
@@ -112,15 +115,18 @@ pub struct Plate {
 pub enum FoeEntry {
     Full(Plate),
     Compact(Plate),
-    /// Identical foes in one row ("Ash-Crawler x4"; a click expands it).
-    Group { name: String, plates: Vec<Plate> },
+    /// Identical foes in one row ("Ash-Crawler x4"; a click expands it). `key` is their catalog unit; an open group
+    /// is a slim header (a click collapses it) followed by its foes' compact plates.
+    Group { key: String, name: String, plates: Vec<Plate>, open: bool },
 }
 
 impl FoeEntry {
     pub fn units(&self) -> Vec<UnitId> {
         match self {
             FoeEntry::Full(p) | FoeEntry::Compact(p) => vec![p.unit],
-            FoeEntry::Group { plates, .. } => plates.iter().map(|p| p.unit).collect(),
+            FoeEntry::Group { plates, open: false, .. } => plates.iter().map(|p| p.unit).collect(),
+            // an open group's foes are the compact plates after it
+            FoeEntry::Group { .. } => Vec::new(),
         }
     }
 }
@@ -290,6 +296,8 @@ pub struct Inputs<'a> {
     pub plate_name: &'a dyn Fn(UnitId) -> String,
     pub full_name: &'a dyn Fn(UnitId) -> (String, String),
     pub intent_of: &'a dyn Fn(UnitId) -> Option<RoundIntent>,
+    /// Contract 4: the groups the player opened (their catalog units).
+    pub open_groups: &'a [String],
 }
 
 /// BATTLE-UI2: the view-model of session `s` (contract 2-6).
@@ -317,12 +325,14 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
         blocks.dedup();
         m.top.impacts = blocks;
     }
-    // the foe card: the pinned or hovered foe, else the selected hero's target
+    // the foe card (contract 5): while a hero is planning, its target (the card stays there); else the pinned or hovered
+    // foe, else the selected hero's target
     let target_of = |h: UnitId| w.round_states.get(&h).and_then(|r| r.target).and_then(|t| match t {
         ri::RoundTarget::Unit(u) => Some(u),
         _ => None,
     });
-    let card_foe = inp.card_foe.or_else(|| inp.sel.and_then(target_of)).filter(|f| w.enemies.contains(f));
+    let planning_target = inp.sel.filter(|_| planning).and_then(target_of).filter(|f| w.enemies.contains(f));
+    let card_foe = planning_target.or(inp.card_foe).or_else(|| inp.sel.and_then(target_of)).filter(|f| w.enemies.contains(f));
     let cards: Vec<(UnitId, FoeCard)> = w.enemies.iter().filter(|e| w.units[**e].is_active()).map(|&e| (e, intent::foe_card(w, &sched, e))).collect();
     let plate = |u: UnitId, guest: bool| {
         let unit = &w.units[u];
@@ -340,6 +350,7 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
             hp: unit.hp,
             max_hp: unit.max_hp,
             incoming: incoming_hp.min(unit.hp.max(0)),
+            heal: if planning { intent::heal_on(w, &sched, u) } else { 0 },
             ap,
             poise: poise_of(w, u),
             tabs: tabs_of(w, u, &planned_statuses),
@@ -383,7 +394,10 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
                 m.foes.push(if Some(p.unit) == keep_full { FoeEntry::Full(p) } else { FoeEntry::Compact(p) });
             } else {
                 let name = format!("{} x{}", plates[0].name, plates.len());
-                m.foes.push(FoeEntry::Group { name, plates });
+                let open = inp.open_groups.contains(&key);
+                let members: Vec<Plate> = if open { plates.clone() } else { Vec::new() };
+                m.foes.push(FoeEntry::Group { key, name, plates, open });
+                m.foes.extend(members.into_iter().map(FoeEntry::Compact));
             }
         }
     } else {
@@ -431,7 +445,7 @@ pub fn view(m: &BattleModel) -> View {
         .iter()
         .map(|f| match f {
             FoeEntry::Full(p) | FoeEntry::Compact(p) => plate_row(p),
-            FoeEntry::Group { name, plates } => RowView { id: plates.iter().map(|p| p.unit.to_string()).collect::<Vec<_>>().join(","), label: name.clone(), detail: plates.iter().map(hp_text).collect::<Vec<_>>().join(" "), ..RowView::default() },
+            FoeEntry::Group { name, plates, .. } => RowView { id: plates.iter().map(|p| p.unit.to_string()).collect::<Vec<_>>().join(","), label: name.clone(), detail: plates.iter().map(hp_text).collect::<Vec<_>>().join(" "), ..RowView::default() },
         })
         .collect();
     let card = m.card.as_ref();

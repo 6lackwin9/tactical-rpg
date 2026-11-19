@@ -54,32 +54,44 @@ pub fn skill_icons(d: &emberwake_world::Data, id: &str) -> Vec<String> {
 }
 
 /// BATTLE-UI2 (`SCREEN_CONTRACT_BATTLE.md` 1, frame A): the plain frame of popups, cards and the HUD: a 1 px bronze
-/// outer line, a dark gap, a 1 px iron inner line and an oxblood top line, no corners, over `fill`; the contract's colours (code constants until the theme names them: `frame_a_outer`, `frame_a_inner`, `frame_a_top`).
+/// outer line, a dark gap, a 1 px iron inner line and an oxblood top line, no corners, over `fill`; the contract's colours from the theme (`frame_a_outer`, `frame_a_inner`, `frame_a_top`).
 pub fn frame_a(p: &mut aegis_ui::painter::Painter, r: aegis_ui::canvas::Rect, fill: Rgba) {
     let clear = rgba(0, 0, 0, 0);
-    p.panel(r, fill, rgb(0x74, 0x54, 0x3c), 0.0);
+    p.panel(r, fill, th().game("frame_a_outer", rgb(0x74, 0x54, 0x3c)), 0.0);
     if r.w > 2 && r.h > 2 {
-        p.panel(r.inset(1), clear, rgb(0x4b, 0x55, 0x63), 0.0);
+        p.panel(r.inset(1), clear, th().game("frame_a_inner", rgb(0x4b, 0x55, 0x63)), 0.0);
     }
-    p.line(r.x as f32 + 1.0, r.y as f32 + 1.0, (r.x + r.w - 1) as f32, r.y as f32 + 1.0, rgb(0x99, 0x1b, 0x1b), 0.0);
+    p.line(r.x as f32 + 1.0, r.y as f32 + 1.0, (r.x + r.w - 1) as f32, r.y as f32 + 1.0, th().game("frame_a_top", rgb(0x99, 0x1b, 0x1b)), 0.0);
 }
 
 /// BATTLE-UI2 (contract 3, 5): the boss gold (a boss plate's name and rim, the crown) and the planned-AP amber.
 pub fn boss_gold() -> Rgba {
-    rgb(0xe8, 0xb8, 0x4a)
+    th().game("boss_gold", rgb(0xfb, 0xbf, 0x24))
 }
 
 /// BATTLE-UI2 (contract 2, 3; `PLANNED`): the amber of planned AP, on the strip's AP line and the plates' AP bars.
 pub fn planned() -> Rgba {
-    rgb(0xd9, 0x8c, 0x2b)
+    th().game("planned", rgb(0xd9, 0x77, 0x06))
 }
 
 /// BATTLE-UI2 (contract 3): the guests' teal (their divider, rim and "AI" tag).
 pub fn guest() -> Rgba {
-    rgb(0x2d, 0xa3, 0x9a)
+    th().game("guest", rgb(0x45, 0x85, 0x7c))
 }
 
 /// BATTLE-UI2 (contract 2, 4, 5): the oxblood of KO tags, impact blocks on a ruler and debuff rims.
 pub fn oxblood() -> Rgba {
-    rgb(0x99, 0x1b, 0x1b)
+    th().game("oxblood", rgb(0x99, 0x1b, 0x1b))
+}
+
+/// BATTLE-UI2 (contract 6, PR7-40 part 2): the moss of a heal (its heart chip and the HP bar's gain): the heroes' HP
+/// moss.
+pub fn moss() -> Rgba {
+    hp()
+}
+
+/// The pale moss of a previewed heal on an HP bar.
+pub fn moss_gain() -> Rgba {
+    let [r, g, b, _] = moss();
+    rgba(r, g, b, 140)
 }

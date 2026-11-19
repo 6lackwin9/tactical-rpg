@@ -288,7 +288,7 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
         }
     }
     // HOOKS1-UI slice 1: the ground hazards and the arena's struck cells, under the round overlays
-    draw_hook_marks(&mut ui.p, marks, &Geom::new(View::Flat, tuning));
+    draw_hook_marks(&mut ui.p, &mut cx.art, marks, &Geom::new(View::Flat, tuning));
     if let Some(h) = hold {
         draw_hold_tiles(&mut ui.p, h, &Geom::new(View::Flat, tuning));
     }
@@ -660,7 +660,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
             Pass::Ground => stage::draw_ground(&mut ui.p, &mut cx.art, &w.grid, set, tuning.grid_alpha),
             Pass::Markers => {
                 // HOOKS1-UI slice 1: the ground hazards and the arena's struck cells, under the hover and the tells
-                draw_hook_marks(&mut ui.p, marks, &geo);
+                draw_hook_marks(&mut ui.p, &mut cx.art, marks, &geo);
                 if let Some(h) = hold {
                     draw_hold_tiles(&mut ui.p, h, &geo);
                 }

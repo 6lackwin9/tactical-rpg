@@ -973,10 +973,20 @@ pub fn unit_warnings(v: &View, e: &Dict) -> Vec<String> {
 }
 
 /// BATTLE-UI2 (decision "Enemy short names"): an enemy with no short name whose name is longer than a foe plate's name
-/// room (`rpgkit_data::PLATE_NAME_MAX_CHARS`) is a warning (the plate cuts it with "...").
+/// room (`rpgkit_data::PLATE_NAME_MAX_CHARS`) is a warning (the plate cuts it with "..."), as is a short name longer
+/// than that room.
 pub fn plate_name_warnings(e: &Dict) -> Vec<String> {
     let (name, short) = (json::s(e, "name"), json::s(e, "short_name"));
-    if json::s_or(e, "side", "enemy") != "enemy" || !short.trim().is_empty() || name.chars().count() <= rpgkit_data::PLATE_NAME_MAX_CHARS {
+    let max = rpgkit_data::PLATE_NAME_MAX_CHARS;
+    if json::s_or(e, "side", "enemy") != "enemy" {
+        return Vec::new();
+    }
+    let short = short.trim();
+    if !short.is_empty() {
+        // PR7-40 part 2: a short name past the plate is cut as well
+        return if short.chars().count() > max { vec![format!("Short name '{short}' is longer than a foe plate holds ({max} characters): the plate cuts it.")] } else { Vec::new() };
+    }
+    if name.chars().count() <= max {
         return Vec::new();
     }
     vec![format!("Name '{name}' is longer than a foe plate holds ({} characters) and the unit has no short name: the plate cuts it.", rpgkit_data::PLATE_NAME_MAX_CHARS)]

@@ -602,6 +602,23 @@ pub struct CardHit {
     pub after_ko: bool,
 }
 
+/// BATTLE-UI2 (`SCREEN_CONTRACT_BATTLE.md` 6, the heal preview): the HP the round's planned heals restore on `unit`
+/// over `sched` (the round as it will run): each live Support action of its side aimed at it (`heal_amount_on`),
+/// summed, after its `heal_taken` and within its missing HP now (`effective_heal`). 0 without one. Read only.
+pub fn heal_on(w: &World, sched: &[ScheduledAction], unit: UnitId) -> i32 {
+    let Some(u) = w.units.get(unit) else { return 0 };
+    let side = |c: UnitId| w.allies.contains(&c);
+    let total: i32 = sched
+        .iter()
+        .filter(|a| !a.cancelled && side(a.unit) == side(unit))
+        .filter_map(|a| match &a.command.kind {
+            CmdKind::Support { target, skill, .. } if *target == unit => Some(crate::command::heal_amount_on(w, a.unit, unit, *skill)),
+            _ => None,
+        })
+        .sum();
+    if total <= 0 { 0 } else { crate::command::effective_heal(u, total) }
+}
+
 /// BATTLE-UI2: the foe card's read of the round on foe `foe` (`foe_card`).
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FoeCard {
