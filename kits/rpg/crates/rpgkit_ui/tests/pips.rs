@@ -1,15 +1,15 @@
-//! INPUT1-AP, INPUT2 (style D): the pip gauge (`aegis_ui::pips`): fixed slots whatever the plan, one capsule a planned
+//! INPUT1-AP, INPUT2 (style D): the pip gauge (`rpgkit_ui::pips`): fixed slots whatever the plan, one capsule a planned
 //! block (two neighbouring blocks of one colour stay two), free sockets up to the points held and crossed slots above
 //! them, the slot scale above the cap, the debt and shortfall labels and the alert, the live (spending) look and
 //! fractional levels, its widget and its drawing on a 640x360 canvas with the engine font, and the Gallery samples.
 
 use aegis_ui::canvas::Canvas;
 use aegis_ui::painter::{Fonts, View};
-use aegis_ui::pips::{count, mix, pip_rect, pips_w, samples, unit, PipBlock, PipGauge, LABEL_GAP, PIP_GAP, PIP_H, PIP_W, RIM_LIGHT, TICK_DARK};
+use rpgkit_ui::pips::{count, mix, pip_rect, pips_w, samples, unit, PipBlock, PipGauge, LABEL_GAP, PIP_GAP, PIP_H, PIP_W, RIM_LIGHT, TICK_DARK};
 use aegis_ui::ui::{Gfx, Kit, Ui, BG, DIM, FOE, GOLD, INFO};
 
 fn gfx() -> Gfx {
-    let font = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/OpenSans-SemiBold.ttf")).unwrap();
+    let font = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/assets/fonts/OpenSans-SemiBold.ttf")).unwrap();
     let mut g = Gfx { canvas: Canvas::new(640, 360), view: View::fit(640, 360), fonts: Fonts::new(&font), kit: Kit::default() };
     g.canvas.clear(BG);
     g

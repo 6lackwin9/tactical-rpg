@@ -807,10 +807,10 @@ fn page(k: &Specimens, g: &mut Gfx, mouse: (i32, i32)) -> (Vec<Widget<KitAct>>, 
 /// its hover card), the picker and switches, and the page's keys.
 #[test]
 fn the_kit_page_shows_each_pane() {
-    assert_eq!(PAGES[5], "Panes");
+    assert_eq!(PAGES[4], "Panes");
     let want = ["kit.backdrop", "kit.menu.continue", "kit.rail.0", "kit.slot.0", "kit.ask.yes"];
     for (i, id) in want.iter().enumerate() {
-        let k = Specimens { page: 5, pane: i, ..Specimens::default() };
+        let k = Specimens { page: 4, pane: i, ..Specimens::default() };
         for scale in TEXT_SIZES {
             let mut g = gfx(scale);
             let (w, audit) = page(&k, &mut g, (-1, -1));
@@ -819,7 +819,7 @@ fn the_kit_page_shows_each_pane() {
             clean(&audit, &w, &format!("{} at {scale}", PANES[i]));
         }
     }
-    let mut k = Specimens { page: 5, ..Specimens::default() };
+    let mut k = Specimens { page: 4, ..Specimens::default() };
     let (w, _) = page(&k, &mut gfx(1.0), (-1, -1));
     k.act(by_id(&w, "kit.pane.1").unwrap());
     assert_eq!(k.pane, 1);
@@ -855,7 +855,7 @@ fn review_shots() {
     for (tname, t) in [("default", Theme::default()), ("tallow", tallow(true))] {
         theme::set_theme(t);
         for (i, p) in PANES.iter().enumerate() {
-            let k = Specimens { page: 5, pane: i, ..Specimens::default() };
+            let k = Specimens { page: 4, pane: i, ..Specimens::default() };
             let mut g = gfx_at(1280, 720, 1.0);
             g.canvas.clear(theme::th().bg);
             let _ = page(&k, &mut g, (-1, -1));

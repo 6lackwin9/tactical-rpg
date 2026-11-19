@@ -10,9 +10,10 @@ use aegis_ui::art::Art;
 use aegis_ui::canvas::{Canvas, Image, Rect, Rgba};
 use aegis_ui::fx::{hash01, Axis, Envelope, Shake};
 use aegis_ui::painter::{Fonts, Painter, TextRec, View};
-use aegis_ui::portrait_fx::*;
-use aegis_ui::portrait_overlays::Mount;
-use aegis_ui::specimens::{KitAct, Specimens, PORTRAIT_OVERLAYS, PORTRAIT_REACTIONS, PORTRAIT_SIZES, PORTRAIT_STATES};
+use rpgkit_ui::portrait_fx::*;
+use rpgkit_ui::portrait_overlays::Mount;
+use aegis_ui::specimens::{KitAct, PageAct};
+use rpgkit_ui::portrait_page::{KitWidgets as Specimens, PORTRAIT_OVERLAYS, PORTRAIT_REACTIONS, PORTRAIT_SIZES, PORTRAIT_STATES};
 use aegis_ui::text_audit;
 use aegis_ui::ui::{by_id, Gfx, Kit, Ui, Widget, BG};
 use serde_json::json;
@@ -24,7 +25,7 @@ const SKIN: Rgba = [164, 122, 95, 255];
 const AMBER: Rgba = [217, 119, 6, 255];
 
 fn font() -> Vec<u8> {
-    std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/OpenSans-SemiBold.ttf")).unwrap()
+    std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/assets/fonts/OpenSans-SemiBold.ttf")).unwrap()
 }
 
 /// An `n` x `n` image of `f(x, y)`.
@@ -638,7 +639,7 @@ fn e15_the_kit_portraits_page_has_its_controls_jolts_inside_its_stage_and_names_
     assert!(w.iter().any(|x| x.id == "kit.portrait.size") && by_id(&w, "kit.portrait.reduce").is_ok() && by_id(&w, "kit.portrait.anchors").is_ok());
     let stage = w.iter().find(|x| x.id == "kit.portrait.face").unwrap().rect;
     assert!(recs.iter().any(|t| t.text.starts_with("Tier full")), "96 px at scale 1: full");
-    let live = k.portrait.state();
+    let live = k.extra.state();
     assert_eq!((live["tier"].as_str(), live["effects"][0].as_str()), (Some("full"), Some("breath")), "{live}");
 
     // A crit jolt moves portrait pixels, none outside the stage (the status text under it names the jolt).
@@ -646,7 +647,7 @@ fn e15_the_kit_portraits_page_has_its_controls_jolts_inside_its_stage_and_names_
     k.advance(20.0);
     let (_, shaken, _, _) = draw_kit(&k);
     let still = k.clone();
-    still.portrait.fx.borrow_mut().stop_jolt();
+    still.extra.fx.borrow_mut().stop_jolt();
     let (_, calm, _, _) = draw_kit(&still);
     let status = Rect::new(stage.x, stage.y + stage.h, 200, 360);
     let (mut inside, mut outside) = (0, 0);
@@ -663,18 +664,18 @@ fn e15_the_kit_portraits_page_has_its_controls_jolts_inside_its_stage_and_names_
     }
     assert!(inside > 0, "the portrait moves");
     assert_eq!(outside, 0, "nothing outside its stage");
-    assert!(k.portrait.state()["effects"].as_array().unwrap().iter().any(|e| e == "jolt"), "state lists the running jolt");
+    assert!(k.extra.state()["effects"].as_array().unwrap().iter().any(|e| e == "jolt"), "state lists the running jolt");
 
     // Toggles hold their effect; size 16 is the minimal tier.
-    k.act(KitAct::PortraitToggle("glow"));
+    k.act(KitAct::Extra(PageAct::Toggle("glow")));
     k.advance(300.0);
     draw_kit(&k);
-    assert!(k.portrait.state()["effects"].as_array().unwrap().iter().any(|e| e == "glow"), "state lists the held glow");
-    k.act(KitAct::PortraitSize(PORTRAIT_SIZES.iter().position(|s| *s == 16).unwrap()));
+    assert!(k.extra.state()["effects"].as_array().unwrap().iter().any(|e| e == "glow"), "state lists the held glow");
+    k.act(KitAct::Extra(PageAct::Pick("size", PORTRAIT_SIZES.iter().position(|s| *s == 16).unwrap())));
     let (_, _, recs, audit) = draw_kit(&k);
     assert!(recs.iter().any(|t| t.text.starts_with("Tier minimal")), "size 16 names tier minimal");
     assert_eq!(audit["counts"]["cut"], 0);
-    assert_eq!(k.portrait.state()["tier"], "minimal");
+    assert_eq!(k.extra.state()["tier"], "minimal");
 }
 
 // ---- PORTRAITFX1-EX: expression effects ---------------------------------------------------------------------------
@@ -1339,13 +1340,13 @@ fn mo_the_kit_page_offers_the_motion_samples() {
     let (w, _, _, _) = draw_kit(&k);
     assert!(w.iter().any(|x| x.id == "kit.portrait.motion"), "the motion choice");
     let wince = MOTION_SAMPLES.iter().position(|n| *n == "wince").unwrap();
-    k.act(KitAct::PortraitMotion(wince));
+    k.act(KitAct::Extra(PageAct::Pick("motion", wince)));
     assert_eq!(k.last, "portrait motion wince");
     k.advance(60.0);
     let (_, _, recs, audit) = draw_kit(&k);
     assert_eq!(audit["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "the page reads clean: {audit}");
     assert!(recs.iter().any(|t| t.text.starts_with("Motion wince:") && t.text.contains("entry")), "the foot names the entry");
-    let (_, parts) = state_motion(&k.portrait.fx.borrow(), k.portrait.clock.now());
+    let (_, parts) = state_motion(&k.extra.fx.borrow(), k.extra.clock.now());
     assert!(parts.contains(&"entry".to_string()), "{parts:?}");
 }
 

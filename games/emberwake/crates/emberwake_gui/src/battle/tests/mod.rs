@@ -1119,7 +1119,7 @@ fn heavy_hits_and_breaks_shake_the_board_at_their_impact() {
     assert_eq!(fire(&mut b, &cx, 2, false, false), None, "a 2-block hit");
     assert_eq!(fire(&mut b, &cx, 1, false, true), None, "a crit");
     assert_eq!(fire(&mut b, &cx, 1, true, false), Some((heavy, at)), "a break");
-    cx.settings.v[aegis_ui::vignette::REDUCE_MOTION] = json!(true);
+    cx.settings.v[rpgkit_ui::vignette::REDUCE_MOTION] = json!(true);
     b.fx.clear();
     b.clock.hold = 0.0;
     assert_eq!(fire(&mut b, &cx, 3, true, false), None, "reduce motion: no shake");
@@ -1145,7 +1145,7 @@ fn a_fired_phase_with_a_shake_starts_it_at_once() {
     b.camera.stop();
     b.after_change(&cx);
     assert_eq!(b.camera.shake, None, "a phase starts its shake once");
-    cx.settings.v[aegis_ui::vignette::REDUCE_MOTION] = json!(true);
+    cx.settings.v[rpgkit_ui::vignette::REDUCE_MOTION] = json!(true);
     fire_phase(&mut b, "fx_tremor_2");
     b.after_change(&cx);
     assert_eq!(b.camera.shake, None, "reduce motion");
@@ -1218,7 +1218,7 @@ fn a_missed_target_sidesteps_unless_reduce_motion() {
     i.mods = fx::Mods { miss: true, ..fx::Mods::default() };
     let (u, at) = (i.target.unwrap(), i.at.unwrap());
     for (reduce, want) in [(true, false), (false, true)] {
-        cx.settings.v[aegis_ui::vignette::REDUCE_MOTION] = json!(reduce);
+        cx.settings.v[rpgkit_ui::vignette::REDUCE_MOTION] = json!(reduce);
         b.sidesteps.clear();
         b.fire(&cx, i.clone(), at);
         assert_eq!(b.sidesteps.iter().any(|s| s.0 == u && s.1 == at), want, "reduce motion {reduce}");

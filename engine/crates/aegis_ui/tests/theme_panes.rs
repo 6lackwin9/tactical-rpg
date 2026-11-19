@@ -1,8 +1,8 @@
-//! LOOK1-E1B: the window, timeline, recordings, vignette, notes and pips colours read the theme (`theme::th()`). With
-//! no theme file each pane draws pixel for pixel as before the migration (frame hashes at 1280 x 720, recorded before
-//! the first edit in `fixtures/theme/pane_hashes.json`). Each role a pane draws with changes that pane when a theme file
-//! sets it, a pip block keeps its caller's colour under any theme, and a source scan finds no colour literal left in the
-//! six files but those kept on purpose (`KEPT`).
+//! LOOK1-E1B: the window, timeline, recordings and notes colours read the theme (`theme::th()`). With no theme file
+//! each pane draws pixel for pixel as before the migration (frame hashes at 1280 x 720, recorded before the first edit
+//! in `fixtures/theme/pane_hashes.json`). Each role a pane draws with changes that pane when a theme file sets it, and a
+//! source scan finds no colour literal left in the four files but those kept on purpose (`KEPT`). The vignette and pips
+//! panes moved to the kit with their hashes (ENGINE-5: `rpgkit_ui/tests/theme_panes.rs`).
 
 use aegis_core::scratch::Scratch;
 use aegis_core::assets::Layers;
@@ -11,14 +11,12 @@ use aegis_ui::audio::Audio;
 use aegis_ui::canvas::{Canvas, Rect};
 use aegis_ui::notes::{self, NoteBox};
 use aegis_ui::painter::{Fonts, View};
-use aegis_ui::pips;
 use aegis_ui::playtest::Playtests;
 use aegis_ui::recordings::{NoteView, Recordings, SessionLabels};
 use aegis_ui::screen::{Context, Cx, Screen, Settings};
 use aegis_ui::theme;
 use aegis_ui::timeline;
 use aegis_ui::ui::{Gfx, Kit, Ui, BG};
-use aegis_ui::vignette::{self, Palette, Phase, Player, Reel, TextSpeed};
 use aegis_ui::window::{Desk, Frac, Layout, Win};
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
@@ -32,7 +30,7 @@ fn font() -> Vec<u8> {
 }
 
 const TEXT_SIZES: [f32; 4] = [0.85, 1.0, 1.15, 1.3];
-const PANES: [&str; 6] = ["window", "timeline", "recordings", "vignette", "notes", "pips"];
+const PANES: [&str; 4] = ["window", "timeline", "recordings", "notes"];
 
 struct App;
 
@@ -172,33 +170,6 @@ fn recordings_shots(scale: f32) -> Vec<Shot> {
     out
 }
 
-/// Each sample card alone, early in its fade in and in its hold (the text out, the hint when it waits); the reel, the
-/// sample and the palette built under the theme in force.
-fn vignette_shots(scale: f32) -> Vec<Shot> {
-    let sample = vignette::sample_reel();
-    let pal = Palette::default();
-    let mut out = Vec::new();
-    for (k, card) in sample.cards.iter().enumerate() {
-        let mut p = Player::new(Reel { cards: vec![card.clone()], ..sample.clone() }, TextSpeed::Normal);
-        let mut art = Art::new(None);
-        let mut frame = |name: &str, p: &Player| {
-            let mut g = gfx(scale);
-            {
-                let mut ui: Ui<()> = Ui::new(&mut g, (-1, -1), true);
-                vignette::draw(&mut ui, &mut art, p, &pal, false);
-            }
-            out.push((format!("vignette.{k}.{name}"), g.canvas.px));
-        };
-        p.advance(100);
-        frame("fade", &p);
-        while p.phase() != Phase::Hold {
-            p.advance(50);
-        }
-        frame("hold", &p);
-    }
-    out
-}
-
 /// The note box with its hint, then with a message.
 fn notes_shots(scale: f32) -> Vec<Shot> {
     let mut out = Vec::new();
@@ -214,23 +185,12 @@ fn notes_shots(scale: f32) -> Vec<Shot> {
     out
 }
 
-/// Every Gallery sample of the pip gauge, one a row.
-fn pips_shots(scale: f32) -> Vec<Shot> {
-    shots("pips", scale, &[], |ui| {
-        for (k, (_, gauge)) in pips::samples().iter().enumerate() {
-            gauge.draw(ui, &format!("pips.{k}"), 20, 16 + k as i32 * 16);
-        }
-    })
-}
-
 fn pane_shots(pane: &str, scale: f32) -> Vec<Shot> {
     match pane {
         "window" => window_shots(scale),
         "timeline" => timeline_shots(scale),
         "recordings" => recordings_shots(scale),
-        "vignette" => vignette_shots(scale),
         "notes" => notes_shots(scale),
-        "pips" => pips_shots(scale),
         _ => panic!("no pane {pane}"),
     }
 }
@@ -261,7 +221,7 @@ fn pane_hashes() -> Map<String, Value> {
 /// operating system wording, CIPANES1). Recording (only for an intended change, then diff the file):
 /// `AEGIS_RECORD_PANE_HASHES=1`.
 #[test]
-fn the_default_theme_draws_the_six_panes_exactly_as_before() {
+fn the_default_theme_draws_the_four_panes_exactly_as_before() {
     let file = root().join("tests/fixtures/theme/pane_hashes.json");
     let now = pane_hashes();
     if std::env::var("AEGIS_RECORD_PANE_HASHES").is_ok() {
@@ -278,13 +238,11 @@ fn the_default_theme_draws_the_six_panes_exactly_as_before() {
 
 /// The roles each pane draws with itself (the kit widgets it holds have their own suite). A role that stops changing
 /// its pane has gone back to a literal.
-const PANE_ROLES: [(&str, &[&str]); 6] = [
+const PANE_ROLES: [(&str, &[&str]); 4] = [
     ("window", &["card", "panel_edge", "edge", "card_hot", "title_idle", "gold", "text", "dim", "focus", "grip", "selected"]),
     ("timeline", &["ruler", "dim", "playing", "playing_edge", "card_hot", "card", "focus", "text", "edge", "selected", "lane", "lane_hatch", "lane_stripe", "impact_edge", "bg", "foe", "gold"]),
     ("recordings", &["tool_bg", "tool_pane", "gold", "dim", "edge", "text", "foe", "info", "good", "scrim", "input"]),
-    ("vignette", &["stage", "mote", "text", "gold", "dim"]),
     ("notes", &["dim", "text"]),
-    ("pips", &["socket", "socket_edge", "dim", "foe", "info", "gold"]),
 ];
 
 /// The theme with `colors` set, loaded from a scratch asset layer as a game's would be.
@@ -317,55 +275,17 @@ fn each_role_a_pane_draws_with_changes_that_pane() {
     }
 }
 
-/// A pip block's colour is the caller's (a meaning, such as the skill kind): under a theme that sets every role it stays,
-/// its ticks and rim follow it alone (`mix` toward black and white), and only the chrome around it moves.
-#[test]
-fn a_pip_block_keeps_its_own_colour_under_any_theme() {
-    let colour = [20, 200, 90, 255];
-    let frame = || {
-        let mut g = Gfx { canvas: Canvas::new(640, 360), view: View::fit(640, 360), fonts: Fonts::new(&font()), kit: Kit::default() };
-        g.canvas.clear(BG);
-        let gauge = pips::PipGauge::planned(4, &[pips::PipBlock::new(2, colour)], 12, 12);
-        {
-            let mut ui: Ui<()> = Ui::new(&mut g, (-1, -1), true);
-            gauge.draw(&mut ui, "g", 20, 40);
-        }
-        g.canvas
-    };
-    let px = |c: &Canvas, x: i32, y: i32| {
-        let i = ((y * c.w + x) * 4) as usize;
-        [c.px[i], c.px[i + 1], c.px[i + 2], c.px[i + 3]]
-    };
-    let plain = frame();
-    let colors: Map<String, Value> = theme::ROLES.iter().map(|r| (r.to_string(), json!("#ff00ff"))).collect();
-    theme::set_theme(loaded_theme("all", colors));
-    let loud = frame();
-    theme::set_theme(theme::Theme::default());
-    let (first, free) = (pips::pip_rect(20, 40, 0), pips::pip_rect(20, 40, 3));
-    let tick_x = first.x + pips::PIP_W + pips::PIP_GAP - 1;
-    let cy = first.y + first.h / 2;
-    assert_eq!(px(&loud, first.x + 2, cy), colour, "the capsule's fill");
-    assert_eq!(px(&loud, tick_x, cy), pips::mix(colour, [0, 0, 0, 255], pips::TICK_DARK), "its tick");
-    assert_eq!(px(&loud, first.x + 2, first.y), pips::mix(colour, [255, 255, 255, 255], pips::RIM_LIGHT), "its rim");
-    for (x, y) in [(first.x + 2, cy), (tick_x, cy), (first.x + 2, first.y)] {
-        assert_eq!(px(&loud, x, y), px(&plain, x, y));
-    }
-    assert_eq!(px(&loud, free.x + 2, cy), [255, 0, 255, 255], "a free socket is chrome: the theme's");
-}
-
 // ---- no colour literal left ----------------------------------------------------------------------------------------
 
 /// The colour literals kept on purpose: "no colour" (`rgba(0, 0, 0, 0)`, an unfilled panel); pure black and white that
 /// shift a caller's colour (timeline part shades and hatch, the vignette caption's darkening of the reel's frame, pip
-/// ticks and rims); and the sample rounds' data colours (the timeline's and the sample reel's backdrops: a game passes
+/// ticks and rims, now in the kit); and the sample rounds' data colours (the timeline's and the sample reel's backdrops: a game passes
 /// its own).
-const KEPT: [(&str, &[&str]); 6] = [
+const KEPT: [(&str, &[&str]); 4] = [
     ("window", &["rgba(0, 0, 0, 0)"]),
     ("timeline", &["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 90)", "rgba(255, 255, 255, 70)", "rgba(0, 0, 0, 40)", "rgba(0, 0, 0, 120)", "rgb(70, 110, 170)", "rgb(60, 120, 100)", "rgb(44, 56, 78)", "rgb(160, 70, 64)", "rgb(110, 170, 255)", "rgb(60, 80, 110)"]),
     ("recordings", &[]),
-    ("vignette", &["rgb(0, 0, 0)", "rgb(44, 21, 70)", "rgb(30, 35, 45)"]),
     ("notes", &[]),
-    ("pips", &["[0, 0, 0, 255]", "[255, 255, 255, 255]"]),
 ];
 
 /// The old colour constants of `ui`.
@@ -406,10 +326,10 @@ fn has_word(line: &str, word: &str) -> bool {
     line.match_indices(word).any(|(at, _)| !line[..at].chars().next_back().is_some_and(is_word) && !line[at + word.len()..].chars().next().is_some_and(is_word))
 }
 
-/// The six files hold no colour constant of `ui` and no colour literal but those `KEPT` names, and each `KEPT` literal
+/// The four files hold no colour constant of `ui` and no colour literal but those `KEPT` names, and each `KEPT` literal
 /// is still there (a stale list hides nothing).
 #[test]
-fn no_colour_literal_is_left_in_the_six_files() {
+fn no_colour_literal_is_left_in_the_four_files() {
     for (pane, kept) in KEPT {
         let lines = code_lines(pane);
         let found: Vec<String> = lines.iter().flat_map(|l| literals(l)).collect();

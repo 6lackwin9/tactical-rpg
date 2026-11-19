@@ -14,7 +14,7 @@ use aegis_ui::art::Art;
 use serde_json::{json, Value};
 use crate::portraits::tests::{layer, row};
 use aegis_core::assets::Layers;
-use aegis_ui::portrait_fx::{Tier, EASE_MS};
+use rpgkit_ui::portrait_fx::{Tier, EASE_MS};
 use aegis_ui::timeline::ROW_H;
 use emberwake_data::PortraitCue;
 use emberwake_rules::ruleset::TIMELINE;

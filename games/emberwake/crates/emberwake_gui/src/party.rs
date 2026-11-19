@@ -3051,7 +3051,7 @@ mod portrait_tests {
     use crate::hud::hud_tests::{frame, game_cx, gfx};
     use crate::portraits::tests::{roster_cx, row};
     use aegis_ui::fx::Clock;
-    use aegis_ui::portrait_fx::EASE_MS;
+    use rpgkit_ui::portrait_fx::EASE_MS;
     use aegis_ui::screen::TEXT_SIZES;
 
     /// The shown member's portrait rect.

@@ -4,11 +4,8 @@
 //! agent link (`bridge`), keyboard focus (`focus`), playtest recordings (`playtest`: the hub that keeps a run's
 //! sessions, trail and notes; `recordings`: the browser that plays them back), the screen stack with its shared
 //! context (`screen`: the engine half, plus the game's half through `Cx<G>`) and the window shell and event loop
-//! (`shell`), a feet-sorted draw list (`depth`) and the vignette player (`vignette`: still cards with fades, a
-//! typewriter, skip and cues, and its full screen) and the effects kit (`fx`, FX1-E: the effect clock with hit-stop,
-//! drawn primitives, a live list and the camera shake) and the portrait effects (`portrait_fx`, PORTRAITFX1-E: base
-//! life, overlays, states and reactions over a portrait, by size tier, cached and budgeted) and the pip gauge (`pips`,
-//! INPUT1-AP: a budget planned against, kept, spent and refilled, with an alert and a debt or shortfall label) and the
+//! (`shell`), a feet-sorted draw list (`depth`) and the effects kit (`fx`, FX1-E: the effect clock with hit-stop,
+//! drawn primitives, a live list and the camera shake) and the
 //! runtime theme (`theme`, LOOK1-E1: colour roles, faces, layout values and nine-slice frames over the asset layers;
 //! the default is the look before it) and the menu panes (`panes`, LOOK1-ME: backdrop, menu column, tab rail, slot
 //! card and the themed ask, standalone pieces on the theme) and the tile masks (`autotile`, LOOK1-E2: corner masks for
@@ -45,10 +42,7 @@ pub mod pacing;
 pub mod painter;
 pub mod perf;
 pub mod panes;
-pub mod pips;
 pub mod playtest;
-pub mod portrait_fx;
-pub mod portrait_overlays;
 pub mod preview;
 pub mod recordings;
 pub mod screen;
@@ -64,7 +58,6 @@ pub mod tilemap;
 pub mod timeline;
 pub mod tuning;
 pub mod ui;
-pub mod vignette;
 pub mod window;
 pub mod world_camera;
 

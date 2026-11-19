@@ -2145,10 +2145,10 @@ pub const PORTRAIT_METER_TRIGGER: &str = "meter";
 pub const PORTRAIT_EVENTS: [&str; 11] = ["hit", "crit", "guard_hit", "heal", "break", "battle_start", "ambush", "round_start", "skill", "ally_down", "victory"];
 /// PORTRAITFX2 5.3: the event whose rows read `min_level` (the skill's level).
 pub const PORTRAIT_SKILL_EVENT: &str = "skill";
-/// 5.1: the kit's copy of the engine's portrait effect names (`aegis_ui::portrait_fx::EFFECTS`, same order; the kit
+/// 5.1: the kit's copy of the engine's portrait effect names (`rpgkit_ui::portrait_fx::EFFECTS`, same order; the kit
 /// crates do not depend on the UI, so a game test keeps the two equal). ASSETORG4: no other name is read.
 pub const PORTRAIT_EFFECTS: [&str; 12] = ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "lines", "point_glow", "particles_rise", "drift", "face"];
-/// 5.1: the jolt presets (`aegis_ui::portrait_fx::PORTRAIT_JOLTS`).
+/// 5.1: the jolt presets (`rpgkit_ui::portrait_fx::PORTRAIT_JOLTS`).
 pub const PORTRAIT_JOLTS: [&str; 2] = ["hit", "crit"];
 /// 5.1: the effects whose colour a row may set.
 pub const PORTRAIT_COLOR_EFFECTS: [&str; 7] = ["flash", "tint", "glow", "lines", "point_glow", "particles_rise", "drift"];
@@ -2264,9 +2264,9 @@ impl PortraitCue {
 /// read beside the catalog kinds); a row's id is the face it draws for (PORTRAITFX2 FL1: the rows name the game's
 /// faces; a `neutral` row carries only the plain face's motion).
 pub const PORTRAIT_EXPRESSIONS_KIND: &str = "portrait_expressions";
-/// The kit's copy of the engine's mark names (`aegis_ui::portrait_fx::MARKS`; a game test keeps the two equal).
+/// The kit's copy of the engine's mark names (`rpgkit_ui::portrait_fx::MARKS`; a game test keeps the two equal).
 pub const PORTRAIT_MARKS: [&str; 2] = ["vein", "sweat"];
-/// The boxes a mark's anchor is relative to (`aegis_ui::portrait_fx::MARK_BOXES`).
+/// The boxes a mark's anchor is relative to (`rpgkit_ui::portrait_fx::MARK_BOXES`).
 pub const PORTRAIT_MARK_BOXES: [&str; 2] = ["face", "eyes"];
 
 /// An expression-effect row (PORTRAITFX1-EX, kind `portrait_expressions`): what a portrait draws while a `face` cue

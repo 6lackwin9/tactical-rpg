@@ -504,7 +504,7 @@ impl BattleScreen {
             auto_after_talk: false,
             faces: Faces::default(),
             panel_faces: Faces::default(),
-            timeline_faces: Faces::capped(aegis_ui::portrait_fx::Tier::Minimal),
+            timeline_faces: Faces::capped(rpgkit_ui::portrait_fx::Tier::Minimal),
             portrait_start: false,
             portrait_round: 0,
             portrait_outcome: String::new(),
