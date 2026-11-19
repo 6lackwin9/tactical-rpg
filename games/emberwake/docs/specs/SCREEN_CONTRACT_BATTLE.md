@@ -166,6 +166,10 @@ screen at 1280x720, 1:1.
   (too much red, icons not prominent). Take 34 calms it: move tiles are a dark tint of their kind colour (30 %) with
   a 3 px kind band on top and a kind rim, the skill icon 24 px; solid red is left only on the blow ticks; locks keep
   their hatch (`battle_take34_status_2x.png`, `battle_take34_timeline_calm_720p.png`).
+  User 2026-11-19 19:44: the calm look is much better. A unit keeps one target for the round (no target switching), so
+  take 35 (`battle_take35_timeline_mock.py`) names it once per row: face, name, a small arrow and the target's face in
+  a 150 px name column, then the timeline; the per-blow red ticks and target faces are gone; a unit with no target
+  shows a dim dash (`battle_take35_timeline_2x.png`).
 - Boss fight variant (Tushar 2026-11-18 23:19, low priority, current layout stays for now): a boss bar across the top
   of the board (full name and title, a long HP bar with phase marks, poise, statuses, the next phase or enrage cue);
   the boss leaves the foe panel, mobs keep their plates. Mocked as take 22 (`battle_take22_boss_mock.py`), awaiting
