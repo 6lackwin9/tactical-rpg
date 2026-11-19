@@ -10,6 +10,10 @@ drift). The committed fixtures are restored byte for byte afterwards, whatever h
 `phasefold`, `journey`, `checks_golden`, `rules_report`, `rng_hash`), with or without `_golden`. The test must record
 under `RECORD=1` (every engine golden does). <switch> must be read somewhere in the crates as `switches::on("<switch>")`.
 `golden-bisect list` lists the goldens and the switches the code reads.
+
+`golden-bisect repro <switch>` (TOOLS-HELP1, ENGINE-15): replays every repro recording (`games/<id>/playtests/repro/
+*.json`, through the game's CLI `replay`, as `tools/fc.sh repro` does) with the switch off and on, and lists per
+recording whether it matches and, when it does not, its first divergence lines.
 """
 import json
 import os
@@ -139,7 +143,70 @@ def record(test, crate, switch_on, switch, fixture_dirs, cargo):
     return before, written
 
 
+def game_cli(game_dir):
+    """The game's CLI program: game.json's `cli`, else `<id>_cli` (ENGINE-11, as tools/fc.sh game_cli)."""
+    try:
+        m = json.loads((game_dir / "game.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        m = {}
+    return m.get("cli") or "%s_cli" % game_dir.name
+
+
+def repro_files(root=ROOT):
+    return sorted(p for p in root.glob("games/*/playtests/repro/*.json") if not p.name.endswith(".tmp"))
+
+
+def replay_verdict(code, out):
+    """(matches, the lines that say why not)."""
+    why = [l for l in out.splitlines() if re.search(r"diverge|broken|differs|load error|panicked|refused|mismatch", l)]
+    return code == 0, why[:6]
+
+
+def repro(switch, readers):
+    files = repro_files()
+    if not files:
+        print("golden-bisect repro: no recordings under games/*/playtests/repro/")
+        return 0
+    b = subprocess.run(["cargo", "build", "-q", "--workspace", "--bins"], cwd=ROOT)
+    if b.returncode != 0:
+        return 1
+    target = Path(os.environ.get("CARGO_TARGET_DIR", ROOT / "target")) / "debug"
+    print("golden-bisect repro, switch %s (read in %s)" % (switch, ", ".join(readers)))
+    moved_n = 0
+    for f in files:
+        verdicts = {}
+        for on in (False, True):
+            env = dict(os.environ)
+            env.pop("AEGIS_SWITCHES", None)
+            if on:
+                env["AEGIS_SWITCHES"] = switch
+            r = subprocess.run([str(target / game_cli(f.parents[2])), "replay", str(f)], cwd=ROOT, env=env, capture_output=True, text=True)
+            verdicts[on] = replay_verdict(r.returncode, r.stdout + r.stderr)
+        rel = f.relative_to(ROOT)
+        (off_ok, off_why), (on_ok, on_why) = verdicts[False], verdicts[True]
+        if off_ok and on_ok:
+            print("  %s: matches with the switch off and on" % rel)
+            continue
+        if off_ok and not on_ok:
+            moved_n += 1
+        print("  %s: switch off %s, on %s" % (rel, "matches" if off_ok else "diverges", "matches" if on_ok else "diverges"))
+        for tag, why in (("off", off_why), ("on", on_why)):
+            for line in why:
+                print("    %s: %s" % (tag, line.strip()))
+    print("  %d of %d recording(s) move with the switch" % (moved_n, len(files)))
+    return 0
+
+
 def main(argv):
+    if argv[:1] == ["repro"]:
+        if len(argv) < 2:
+            print(__doc__)
+            return 2
+        readers = switches_read().get(argv[1])
+        if not readers:
+            print("golden-bisect: no code reads switch '%s'" % argv[1])
+            return 2
+        return repro(argv[1], readers)
     if argv[:1] == ["list"]:
         print("goldens: " + ", ".join(sorted(goldens())))
         sw = switches_read()

@@ -87,7 +87,7 @@ const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's com
 aegis replay <recording.json> [session=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
 aegis record <requests.json | recording.json> [out=<dir>] [id=<id>]   (play requests on fresh command hosts, save them as a recording)
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
-aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>]
+aegis content check | get <kind> <id> [world=<id>] | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>]
 aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]
 aegis playtest start [save=] [out=] [size=] [shots=each|off] [window=1] | do <command ...> | run <script | -> | stop | status   (an agent plays the real game, logged and screenshot per command)
 aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)
@@ -239,6 +239,15 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
             match content_step(&hooks, &dir, &step) {
                 Ok(line) => Ok(println!("{line}")),
                 Err(e) => fail(e),
+            }
+        }
+        Some("get") => {
+            // ENGINE-15: the stored entry as JSON (one line), for a seed built from it (`tools/fc.sh seed-from`)
+            let (Some(kind), Some(id)) = (args.pos(2), args.pos(3)) else { bail!("usage: aegis content get <kind> <id> [world=<id>]") };
+            let world = args.keys.get("world").map(String::as_str);
+            match aegis_content::store::get(&hooks, &dir, world, kind, id) {
+                Some(e) => Ok(println!("{}", serde_json::Value::Object(e))),
+                None => bail!("no {kind} entry '{id}' in {}", hooks.file_of(&dir, world, kind).display()),
             }
         }
         Some("world") => {

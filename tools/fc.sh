@@ -6,7 +6,12 @@
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh step <name>      one gate step alone, by its name in tools/gate_steps.txt (the list both gates run, ENGINE-12)
 #   tools/fc.sh golden-bisect <golden> <switch> [--keep DIR] | list   record a golden with a test-only switch
-#                                (aegis_core::switches) off and on, list the fights or runs that move; fixtures restored (ENGINE-14)
+#                                (aegis_core::switches) off and on, list the fights or runs that move; fixtures restored (ENGINE-14);
+#                                `golden-bisect repro <switch>`: the repro replays off and on, which recordings diverge (ENGINE-15)
+#   tools/fc.sh schema-field <table> <field> <json> [--after <key>] [--replace]   add a field to kits/rpg/schema.json byte for byte
+#                                (<table> content.<kind> / world.<kind>, or a bare kind when unique; ENGINE-15)
+#   tools/fc.sh seed-from <kind> <id> [<world>] [--set k=v]... [--out F [--append]]   a seed for `content apply` from a
+#                                current entry with changes (dotted keys, JSON values, `k=` removes; ENGINE-15)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
 #                                engine and kit crates (src, tests), schema.json and kit.json name no lore word, any case
 #                                (world ids, games/<id>/lore_words.txt);
@@ -581,6 +586,8 @@ case "$1" in
   step) [ -n "${2:-}" ] || { echo "usage: tools/fc.sh step <name>   (a gate step of tools/gate_steps.txt: $(gate_steps | tr '\n' ' '))"; status=2; }; [ -n "${2:-}" ] && gate_step "$2" ;;
   test) cargo_test "${@:2}" ;;
   golden-bisect) py=$(python_with "pass") || { echo "[golden-bisect] no Python 3 found"; status=1; }; [ $status -eq 0 ] && { "$py" tools/planner/golden_bisect.py "${@:2}" || status=$?; } ;;
+  schema-field) py=$(python_with "pass") || { echo "[schema-field] no Python 3 found"; status=1; }; [ $status -eq 0 ] && { "$py" tools/planner/schema_field.py "${@:2}" || status=$?; } ;;
+  seed-from) py=$(python_with "pass") || { echo "[seed-from] no Python 3 found"; status=1; }; [ $status -eq 0 ] && { "$py" tools/planner/seed_from.py "${@:2}" || status=$?; } ;;
   clippy) cargo clippy --workspace --all-targets 2>&1 | grep -E "^(warning|error)" -A4 | head -80 ;;
   docs)
     case "${2:-}" in
