@@ -475,12 +475,15 @@ fn hub_7_rooms_styles_talia_and_ivo_stay_reachable() {
     assert_eq!(explore::anchor_pos(&t, "lore_a"), (12, 11), "PR7-23 Ivo anchor in the hall at (12, 11)");
     let tgs = targets(&loc, &t);
     for anchor in ["spawn", "gate_in"] {
-        for wanted in ["talia", "ivo", "chest_a", "rest", "crypts"] {
+        // FOOTLOCKER1 (`PR7-51`): the stash chest left the hub (the bunks' footlockers open the loadout and the stash)
+        for wanted in ["talia", "ivo", "rest", "crypts"] {
             let tg = tgs.iter().find(|tg| tg.id == wanted).unwrap_or_else(|| panic!("sluice_undercroft has marker '{wanted}'"));
             let why = reach_and_use(&d, "sluice_undercroft", anchor, &loc, &t, tg);
             assert!(why.is_empty(), "sluice_undercroft '{wanted}' from '{anchor}': {why}");
         }
     }
+    let stash: Vec<String> = explore::markers_of(&loc).iter().filter(|m| explore::point_use(m) == "stash").map(|m| json::s(m, "id")).collect();
+    assert!(stash.is_empty(), "FOOTLOCKER1: no stash point on the hub map: {stash:?}");
 }
 
 /// PR5-58 (2)-(3) & FB-272(a-e): `slag_gate -> crucible_watchpost` exit lands at open `postern_in`, every danger zone

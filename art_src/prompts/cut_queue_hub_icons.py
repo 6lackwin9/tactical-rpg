@@ -147,12 +147,12 @@ def run(src, root):
     fb = cells(S("props_hub_founder_bunks_1.png"), 3, 3, inset=4, row_edges=[0, 300, 590, 1024])
     for f, c in zip(FOUNDERS, fb[:6]):
         jobs.append((P + f"bunk_gear_{f}/v0.png", tight(c, 24, 25), "gear"))
-    # AI-32 footlocker: sheet 1, tile 1 closed and tile 3 open (2 x 2 with gutters), 32 px wide, same bottom line
+    # AI-32 footlocker: sheet 1, tile 1 closed and tile 3 open (2 x 2 with gutters), both on Build's 33 x 29 canvas with
+    # the same bottom line; the open one lives at `footlocker_open/v0.png` (the asset test takes only v0.png names)
     fl = cells(S("props_hub_footlocker_2_1.png"), 2, 2, inset=14)
-    closed, opened = shrink(fl[0], 32, 28), shrink(fl[2], 32, 28)
-    h = max(closed.height, opened.height)
-    jobs.append((P + "footlocker/v0.png", place(closed, 32, closed.height), "footlocker"))
-    jobs.append((P + "footlocker/v0_open.png", place(opened, 32, opened.height), "footlocker"))
+    closed, opened = shrink(fl[0], 33, 29), shrink(fl[2], 33, 29)
+    jobs.append((P + "footlocker/v0.png", place(closed, 33, 29), "footlocker"))
+    jobs.append((P + "footlocker_open/v0.png", place(opened, 33, 29), "footlocker"))
     # AI-31 (amended: the take 5 set that take 8 shows) at Build's seed paths: `bed_timber_stack` (2 cells, the
     # half-built frame on a sawhorse, sheet 1 tile 1) and `rolled_pallet` (1 cell, two bedrolls lifted off the crates
     # of sheet 2 and sheet 1 tile 4; the crates beside them are the kit's `crate_stack`)
@@ -168,7 +168,7 @@ def run(src, root):
         dst = root / path
         dst.parent.mkdir(parents=True, exist_ok=True)
         im.save(dst)
-    return jobs, h
+    return jobs
 
 
 def contact(jobs, out):
@@ -193,7 +193,7 @@ def contact(jobs, out):
 
 def main():
     src, root = Path(sys.argv[1]), Path(sys.argv[2])
-    jobs, _ = run(src, root)
+    jobs = run(src, root)
     if len(sys.argv) > 3:
         contact(jobs, sys.argv[3])
     for p, im, _ in jobs:

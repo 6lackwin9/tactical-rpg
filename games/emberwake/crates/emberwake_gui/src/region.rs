@@ -82,6 +82,9 @@ pub enum RAct {
     Lead,
     /// BUNKS1 BK4: a click on a member idling in the hub, or on an occupied bunk: the member's card.
     Member(String),
+    /// FOOTLOCKER1: a click on a bunk's footlocker: it opens and its member's loadout opens (the gear page over the
+    /// shared stash).
+    Locker(String),
 }
 
 impl From<SvcAct> for RAct {
@@ -154,6 +157,11 @@ pub struct RegionMap {
     bunk_walls: Vec<Rect>,
     /// BUNKS-UPGRADE-PROPS1: the props holding a bunk's place drawn last frame (`{prop, until_bunk, file}`).
     bunk_held: Vec<Value>,
+    /// FOOTLOCKER1 (`PR7-51`): the footlockers drawn last frame (member, the tile it stands on, its logical rect, its
+    /// file), and the member whose footlocker is open (their loadout is open over the map; "" none: it closes when the
+    /// map is the top screen again).
+    lockers: Vec<(String, Pos, Rect, String)>,
+    locker_open: String,
     /// TRANSITIONS1 T2 step 4: the arrival card showing since when, and whether it opened the ticker for its change
     /// lines (closed again when the card goes).
     arrival: Option<(crate::transitions::Arrival, Instant)>,
@@ -547,6 +555,8 @@ impl RegionMap {
             bunks_drawn: Vec::new(),
             bunk_walls: Vec::new(),
             bunk_held: Vec::new(),
+            lockers: Vec::new(),
+            locker_open: String::new(),
             arrival: None,
             ticker_forced: false,
         }
@@ -788,6 +798,12 @@ impl RegionMap {
             }
             return;
         }
+        // FOOTLOCKER1: a footlocker ahead or underfoot opens its member's loadout
+        let here = cx.gs().position;
+        if let Some(member) = self.lockers.iter().find(|l| l.1 == ahead).or_else(|| self.lockers.iter().find(|l| l.1 == here)).map(|l| l.0.clone()) {
+            self.open_locker(cx, &member);
+            return;
+        }
         let d = cx.data.clone();
         let res = explore::interact(&d, cx.gs_mut(), dir);
         if !json::b(&res, "ok", false) {
@@ -820,6 +836,13 @@ impl RegionMap {
                 None => cx.log("Nothing there."),
             },
         }
+    }
+
+    /// FOOTLOCKER1 (`PR7-51`): `member`'s footlocker opens (the open art while the screen is up) and their loadout opens
+    /// over the map: the Character window's gear page focused on them, beside the shared stash (gear and consumables).
+    fn open_locker(&mut self, cx: &mut Cx, member: &str) {
+        self.locker_open = member.to_string();
+        cx.nav.push(Nav::Push(Box::new(crate::party::Character::new(cx, member, "gear"))));
     }
 
     /// Opens the conversation with `character` (`Services::talk`).
@@ -970,6 +993,10 @@ impl RegionMap {
                 self.walk.clear();
                 cx.nav.push(Nav::Push(Box::new(crate::bunks::BunkCard::new(&id))));
             }
+            RAct::Locker(id) => {
+                self.walk.clear();
+                self.open_locker(cx, &id);
+            }
             RAct::Hud(h) => {
                 self.walk.clear();
                 hud_open(cx, h, &REGION_HELP);
@@ -1036,6 +1063,11 @@ impl Screen<GameCx> for RegionMap {
         self.bunks_drawn.clear();
         self.bunk_walls.clear();
         self.bunk_held.clear();
+        self.lockers.clear();
+        // FOOTLOCKER1: the loadout a footlocker opened has closed once the map is the top screen again
+        if live {
+            self.locker_open.clear();
+        }
         let gs = cx.gs().clone();
         // the open conversation; a new node starts its line and its replies scrolled to the top; PORTRAITFX1-D: a
         // portrait left out of the last frame (the conversation ended or hid) is dropped
@@ -1435,17 +1467,25 @@ impl Screen<GameCx> for RegionMap {
                             wall_drawn = true;
                             let (cw, ch) = geo.cell_size();
                             let runs: Vec<(i32, i32, i32)> = crate::bunks::wall_runs(t, &hub_bunks).iter().map(|&(x0, x1, y)| (geo.ox + x0 as i32 * cw, geo.ox + x1 as i32 * cw, geo.oy + (y as i32 + 1) * ch)).collect();
-                            let niches: Vec<(crate::bunks::Pen, bool)> = hub_bunks
+                            let niches: Vec<(String, crate::bunks::Pen, String)> = hub_bunks
                                 .iter()
                                 .filter_map(|b| {
                                     let bed = crate::bunks::bed_art(&b.art);
                                     let pd = props.iter().find(|p| p.id == b.prop).filter(|_| bed.niche)?;
-                                    let founder = gs.party.member(&b.member).is_some_and(|m| !json::s(d.resolve(&gs.world_id, "characters", &m.lore_ref), "id").is_empty());
-                                    Some((crate::bunks::Pen::of(&ui.p, &bed, pd.rect, pd.flip), founder))
+                                    let founder = gs.party.member(&b.member).map(|m| json::s(d.resolve(&gs.world_id, "characters", &m.lore_ref), "id")).unwrap_or_default();
+                                    Some((b.prop.clone(), crate::bunks::Pen::of(&ui.p, &bed, pd.rect, pd.flip), founder))
                                 })
                                 .collect();
                             let k = ui.p.v.s * cw as f32 / crate::props::ART_TILE as f32;
-                            self.bunk_walls = crate::bunks::draw_wall(&mut ui, cx, &lineage, &runs, &niches, k);
+                            let pens: Vec<(crate::bunks::Pen, String)> = niches.iter().map(|(_, pen, f)| (*pen, f.clone())).collect();
+                            let (walls, emblems) = crate::bunks::draw_wall(&mut ui, cx, &lineage, &runs, &pens, k);
+                            self.bunk_walls = walls;
+                            // BUNKS-EMBLEM1: each niche bunk's emblem ("" a plain arch)
+                            for ((prop, _, _), emblem) in niches.iter().zip(emblems) {
+                                if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == prop.as_str()) {
+                                    e["emblem"] = json!(emblem);
+                                }
+                            }
                         }
                         let Some(b) = bunk else {
                             draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
@@ -1464,9 +1504,18 @@ impl Screen<GameCx> for RegionMap {
                         if !bed.niche {
                             crate::bunks::draw_post(&mut ui, &pen, &bed);
                         }
+                        // FOOTLOCKER1: the footlocker at the foot of an active or benched member's bunk, open while
+                        // their loadout is
+                        if emberwake_world::bunks::has_locker(b) {
+                            let open = self.locker_open == b.member;
+                            if let Some((file, lr)) = crate::bunks::draw_locker(&mut ui, cx, &lineage, &pen, &bed, open) {
+                                let at = geo.cell_at(lr.x + lr.w / 2, lr.y + lr.h * 3 / 4);
+                                self.lockers.push((b.member.clone(), at, lr, file));
+                            }
+                        }
                         ui.p.c.clip = kept;
                         let room = crate::bunks::plate_room(r, &fit_rects);
-                        let entry = json!({"blanket": dressed.blanket, "gear": dressed.gear, "board": dressed.board, "asleep": dressed.asleep, "pose": dressed.pose, "head": dressed.head.map(|h| json!([h.x, h.y, h.w, h.h]))});
+                        let entry = json!({"blanket": dressed.blanket, "gear": dressed.gear, "board": dressed.board, "asleep": dressed.asleep, "pose": dressed.pose, "head": dressed.head.map(|h| json!([h.x, h.y, h.w, h.h])), "fold": dressed.fold.map(|(a, b)| json!([a, b]))});
                         if let Some(m) = gs.party.member(&b.member) {
                             let (name, class, class_id) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m), m.class_id(&d));
                             let plate = crate::bunks::plate_rect(&mut ui.p, r, &bed, &name, room, p.flip);
@@ -1477,7 +1526,8 @@ impl Screen<GameCx> for RegionMap {
                                 e["plate"] = json!({"name": name, "shown": shown, "class": class, "class_id": class_id, "rect": [plate.x, plate.y, plate.w, plate.h], "full": full, "wall": bed.niche, "room": room});
                                 e["dressed"] = entry;
                             }
-                        } else if !bed.niche {
+                        } else {
+                            // FB-360: every empty bunk, on the north wall and free-standing, wears the blank plate
                             let plate = crate::bunks::plate_rect(&mut ui.p, r, &bed, "", room, p.flip);
                             crate::bunks::draw_blank_plate(&mut ui, plate);
                             if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
@@ -1594,6 +1644,13 @@ impl Screen<GameCx> for RegionMap {
             ui.push("party", "party", format!("Party at {}, {}", gs.position.0, gs.position.1), pr, true, false, (!modal && can_pass).then_some(RAct::Lead), lead_tip);
             if !modal {
                 push_hits(&mut ui, front);
+                // FOOTLOCKER1: the footlockers over the people idling by them (a small area of its own)
+                for (member, _, lr, _) in &self.lockers {
+                    let hit = lr.intersect(map_area);
+                    let name = gs.party.member(member).map(|m| crate::hub::member_name(cx, m)).unwrap_or_default();
+                    let t = if ui.hover(hit) { tip(&format!("{name}'s footlocker"), "Open: their loadout and the shared stash.") } else { Vec::new() };
+                    ui.push(format!("{}{member}", crate::bunks::LOCKER_PREFIX), "locker", format!("{name}'s footlocker"), hit, true, false, Some(RAct::Locker(member.clone())), t);
+                }
             }
             // the names over everything on the map, kept inside the map area
             for (r, label, badge) in labels {
@@ -1768,6 +1825,9 @@ impl Screen<GameCx> for RegionMap {
             // BUNKS1: in a hub, where each member idles and each bunk's member, state and candle (null elsewhere)
             "hub": self.hub.state(), "bunks": (!self.bunks_drawn.is_empty()).then(|| self.bunks_drawn.clone()),
             "bunk_held": (!self.bunk_held.is_empty()).then(|| self.bunk_held.clone()),
+            // FOOTLOCKER1: each footlocker (member, tile, rect, open, file) and whose is open ("" none)
+            "lockers": (!self.lockers.is_empty()).then(|| self.lockers.iter().map(|(m, at, r, f)| json!({"member": m, "at": [at.0, at.1], "rect": [r.x, r.y, r.w, r.h], "open": *m == self.locker_open, "file": f})).collect::<Vec<_>>()),
+            "locker_open": self.locker_open,
             "bunk_walls": (!self.bunk_walls.is_empty()).then(|| self.bunk_walls.iter().map(|r| json!([r.x, r.y, r.w, r.h])).collect::<Vec<_>>())})
     }
 
