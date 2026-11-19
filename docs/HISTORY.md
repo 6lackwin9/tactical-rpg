@@ -43,3 +43,5 @@ Standing script/test hygiene rules: never hand-edit JSON (use `ContentCatalog.up
 | 2026-11-19 | Founder deck passives and keystones never owned by the party member | fixed (`PR7-41` items 7-8) | `deck_grants` / `owned_passives` | The Skills tab hid them and battle never applied them (PT-28) |
 | 2026-11-19 | Vignette line card's own portrait panel | replaced (`ENGINE-13`) | F2 frame on the portrait well | Every portrait matches (`ART-03`); kit pane hashes `vignette.3.*` re-recorded |
 | 2026-11-19 | HUB-POLISH1 bed plate, PR7-23 two-height plate stagger; benched members idling in front of their bunks | replaced (`PR7-43`, bunk layout B, user 2026-11-18) | Wall plates; benched members sleep in their bunk | Layout B; no golden re-recorded |
+| 2026-11-19 | Map Camera Zoom on both Settings tabs (`FB-287` Option A) | replaced (`PR7-37`, PT-33) | Display tab only | One setting, one place; no golden re-recorded |
+| 2026-11-19 | Fight 2 (Rooftop) exit tile | removed (`PR7-42`, PT-39) | Hint reworded | A round plan refused moves onto exit tiles; no golden re-recorded |

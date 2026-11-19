@@ -21,6 +21,19 @@ class Moved(unittest.TestCase):
         self.assertEqual(gb.moved({"units": [["warrior L1", 3]]}, {"units": [["warrior L1", 4]]}), [("units", 1, ["warrior L1"])])
 
 
+class Repro(unittest.TestCase):
+    def test_replay_verdict_and_the_game_cli(self):
+        self.assertEqual(gb.replay_verdict(0, "replay ok: 40 frames"), (True, []))
+        self.assertEqual(gb.replay_verdict(1, "frame 12\nframe 13 diverges: hp 30 vs 28\n"), (False, ["frame 13 diverges: hp 30 vs 28"]))
+        with tempfile.TemporaryDirectory() as d:
+            g = Path(d) / "g"
+            g.mkdir()
+            (g / "game.json").write_text('{"id": "g"}', encoding="utf-8")
+            self.assertEqual(gb.game_cli(g), "g_cli")
+            (g / "game.json").write_text('{"id": "g", "cli": "aegis"}', encoding="utf-8")
+            self.assertEqual(gb.game_cli(g), "aegis")
+
+
 class Workspace(unittest.TestCase):
     def test_goldens_and_switches_are_found(self):
         with tempfile.TemporaryDirectory() as d:
