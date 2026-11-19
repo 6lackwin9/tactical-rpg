@@ -221,6 +221,13 @@ screen at 1280x720, 1:1.
     `battle_take31_plan_vs_resolve.png`, `battle_take31_stress_hover_2x.png`).
   - User 2026-11-19 19:05: agreed: outside planning only the boss HP, poise and statuses matter; in planning the
     selected hero's row and the Others row, with the hover as the optional detail. Final feel to be checked in play.
+- Proposed, take 32 (`art_src/style/battle_take32_boss_mock.py`, user 2026-11-19 19:08), replacing take 31's slots
+  and K rule:
+  - Every impact is laid on hidden cells: HP (36 px, right aligned), poise (glyph at a fixed x, number after it),
+    one 17 px cell per status chip, then a "+N" cell of its own, so "+N" never overlaps a chip. Block cells have one
+    chip cell; the Totals (bar and hover) three, with wider gaps. Nothing moves with the numbers
+    (`battle_take32_cells_guide_2x.png` draws the cells).
+  - Numbers stay whole up to 9999 (1250 sits beside 233); K starts at 10K, M at 1M.
 - Not expressed yet: collision stagger from push or pull on the card row, hazard damage in the HP preview and the
   block ruler, reactions (riposte, counters) as a "returns -n" note, flank, guard, cover and windup modifiers in the
   skill hover, channel rounds, unit meters, weapon wear.
