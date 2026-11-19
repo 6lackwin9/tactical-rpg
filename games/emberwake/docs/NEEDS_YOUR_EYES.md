@@ -33,13 +33,11 @@ Mocks waiting for you, then provisional calls Design made while you were away, t
   status kind to its place (locks on the timeline, ticks on the HP bar, attack and armour changes in the numbers, move
   changes on the grid) and the plate order (statuses with no other home first). Mock ready: battle take 25
   (`art-ui/battle_ux14/battle_take25_status_where_2x.png`), one frame per kind. Recommendation: approve.
-- [ ] Boss UI (`docs/specs/BOSSUI1.md`, your take 24 notes): HP refilled per phase with phase markers and names,
-  passive tags (no phase or enrage tags), icon-only status tabs. Take 30 ready with your take 26-29 notes
-  (`art-ui/battle_ux14/battle_take30_*`, PR #70; pick poise A one ticked bar or B ten pips, and party row P1 one
-  row that opens per member on hover or P2 hero plus "Others"; recommendation A and P1; impact-only boss intent by block, the phase break ending the round, flipped markers, pips in fives, boss intent panel, boxes clear of
-  units). Then a golden call: boss poise tuned so a focused
-  party breaks it first in round 2-3, then about every 3 rounds move the boss fights in the timeline and sim goldens. Recommendation:
-  approve once the mock is signed off.
+- [x] Boss UI mock (`docs/specs/BOSSUI1.md`): signed off through takes 26-30 (you picked poise A and party row P1);
+  built as `PR7-54`.
+- [ ] Boss poise golden call (`PR7-54` data step, BU9): boss poise tuned so a same-level party breaks it first in
+  round 2-3, then about every 3 rounds; it moves the boss fights in the timeline and sim goldens. Recommendation:
+  approve once the sim numbers are in.
 - [ ] Image queue ready: say "process image queue" in Gemini (bunk props, class glyphs, bed keepsakes, battle
   strips, Junction 7 houses; refs in `image_pipeline/refs/active`).
 - [ ] Gamepad on the PC (`FB-327`): repeat timing, dead zone, which button is Back (south Enter, east Back, west
