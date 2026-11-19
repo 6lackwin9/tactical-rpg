@@ -71,3 +71,8 @@ drains, a 0.1 s gold flash as the marker fills, title and portrait crossfade 0.3
 - BU12. Any intent box or card, for bosses and mobs, sits clear of the acting unit and its target on the board.
 - BU13. The round banner carries the enrage cue (ENRAGE2 EN5): "Enrage next round", then "Foes enraged +n %" with
   the step the foes gained; confirmed by the user's reading of take 26.
+- BU14. Overflow (Design 2026-11-19 `[PROVISIONAL]`, Art/UI question on take 27): damage past a phase's span carries
+  into the next phase when the same unit continues, because HP is one pool and BU1 is display only (no rule change,
+  no golden move); the "After" row shows the span reaching 0, the phase marker, then the next span reduced by the
+  rest. A phase that brings a new boss unit starts that unit at its own HP (no carry). Capping damage at a phase
+  threshold would be a rule change for the user.
