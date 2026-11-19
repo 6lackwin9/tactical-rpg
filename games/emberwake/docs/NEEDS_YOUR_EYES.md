@@ -33,6 +33,10 @@ Mocks waiting for you, then provisional calls Design made while you were away, t
   status kind to its place (locks on the timeline, ticks on the HP bar, attack and armour changes in the numbers, move
   changes on the grid) and the plate order (statuses with no other home first). Mock ready: battle take 25
   (`art-ui/battle_ux14/battle_take25_status_where_2x.png`), one frame per kind. Recommendation: approve.
+- [ ] Boss UI (`docs/specs/BOSSUI1.md`, your take 24 notes): HP refilled per phase with phase markers and names,
+  passive tags, icon-only status tabs. Mock take 26 to sign off (`AI-35`). Then a golden call: bosses with 10 poise
+  pips (about twice the stagger to break) move the boss fights in the timeline and sim goldens. Recommendation:
+  approve once the mock is signed off.
 - [ ] Image queue ready: say "process image queue" in Gemini (bunk props, class glyphs, bed keepsakes, battle
   strips, Junction 7 houses; refs in `image_pipeline/refs/active`).
 - [ ] Gamepad on the PC (`FB-327`): repeat timing, dead zone, which button is Back (south Enter, east Back, west
