@@ -31,7 +31,8 @@ Mocks waiting for you, then provisional calls Design made while you were away, t
   party at the bunks' scale; A looks uneven at 2x, B makes hub beds look toy-like).
 - [ ] Status shown where it acts (`docs/specs/STATUSVIS1.md`, your note 2026-11-19 18:05): Design mapped each
   status kind to its place (locks on the timeline, ticks on the HP bar, attack and armour changes in the numbers, move
-  changes on the grid) and the plate order (statuses with no other home first). Mock from Art/UI (`AI-34`) to sign off.
+  changes on the grid) and the plate order (statuses with no other home first). Mock ready: battle take 25
+  (`art-ui/battle_ux14/battle_take25_status_where_2x.png`), one frame per kind. Recommendation: approve.
 - [ ] Image queue ready: say "process image queue" in Gemini (bunk props, class glyphs, bed keepsakes, battle
   strips, Junction 7 houses; refs in `image_pipeline/refs/active`).
 - [ ] Gamepad on the PC (`FB-327`): repeat timing, dead zone, which button is Back (south Enter, east Back, west

@@ -35,7 +35,11 @@ sidebar for all the statuses". So:
 Inside the 4 slots: priority 1, then 2, then 3; inside a priority the soonest to run out first, ties to the one
 applied first (as now); statuses a planned move adds come last in their priority. Statuses that do not fit go to "+N".
 
-## 4. Open for the mock
+## 4. Open for the mock (answered by Art/UI, take 25, awaiting sign-off)
 
 - Whether priority 3 statuses still show a slim tab when there is room (recommended: yes, as now).
 - How the locked timeline block reads at 1:1 next to the planned-move colours (`SCREEN_CONTRACT_BATTLE` section 1).
+
+Answers (take 25, `/mnt/project-files/art-ui/battle_ux14/battle_take25_status_where_2x.png`): priority 3 statuses keep a
+tab when there is room; a locked block is near-black with a 45-degree hatch 5 px apart in the status's rim colour and
+the icon framed on the first locked block, the only patterned fill on the strip. The riposte chip reads "Riposte -9".
