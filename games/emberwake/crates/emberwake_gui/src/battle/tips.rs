@@ -81,57 +81,6 @@ pub(super) fn intent_glyph(p: &mut Painter, cat: &emberwake_data::Catalog, i: Ro
     p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0, &letter, SMALL, th().text);
 }
 
-/// A tell line's kind as the command colour key (`kind_color`).
-fn tell_color(kind: &str) -> Rgba {
-    kind_color(match kind {
-        "attack" | "area" => "ATTACK",
-        "support" => "SUPPORT",
-        "guard" => "DEFEND",
-        "focus" => "FOCUS",
-        "rest" => "REST",
-        "move" | "flee" | "retreat" => "MOVE",
-        "switch" => "TARGET",
-        _ => "",
-    })
-}
-
-/// RULESET1 V1, V2 on a hostile card: a row of the round's blocks with an impact badge at each impact block (a hit red,
-/// anything else gold); a revealed plan (V2) also fills each action from its start to its impact in its kind's colour,
-/// its recovery blocks dim. Returns the row's tip (a title, then a line per badge).
-pub(super) fn draw_badge_row(p: &mut Painter, t: &Intent, row: Rect, blocks: i32) -> Tip {
-    use emberwake_battle::intent::HIT;
-    let cw = row.w as f32 / blocks as f32;
-    let cell = |b: i32| {
-        let x0 = row.x + ((b - 1) as f32 * cw).round() as i32;
-        Rect::new(x0, row.y, (row.x + (b as f32 * cw).round() as i32 - x0 - 1).max(1), row.h)
-    };
-    for b in 1..=blocks {
-        p.fill(cell(b), th().game("strip_cell", rgba(14, 20, 34, 255)));
-    }
-    if t.revealed {
-        for l in t.plan.iter().filter(|l| l.blocks.0 >= 1) {
-            for b in l.blocks.0..=l.blocks.1.min(blocks) {
-                p.fill(cell(b), with_alpha(tell_color(l.kind), 210));
-            }
-            for b in (l.blocks.1 + 1)..=(l.blocks.1 + l.recovery).min(blocks) {
-                p.fill(cell(b), rgba(120, 120, 140, 110));
-            }
-        }
-    }
-    let mut tip: Tip = vec![("Impacts this round".into(), th().gold)];
-    for &(b, k) in t.impacts.iter().filter(|(b, _)| (1..=blocks).contains(b)) {
-        let c = cell(b);
-        let col = if k == HIT { th().foe } else { th().gold };
-        p.fill(Rect::new(c.x + c.w / 2 - 2, c.y, 4, c.h), col);
-        p.fill(Rect::new(c.x + c.w / 2 - 1, c.y - 1, 2, c.h + 2), col);
-        tip.push((format!("B{b}: {}", if k == HIT { "a hit lands" } else { "an action lands" }), col));
-    }
-    if tip.len() == 1 {
-        tip.push(("Nothing lands this round".into(), th().dim));
-    }
-    tip
-}
-
 /// INPUT1-AP (AP10): the AP gauge's levels in pips (full, solid outline) moving from `from` to `to` over `AP_ANIM_MS`
 /// from `at`, for member `unit` in `round`, in the planning look or not.
 #[derive(Debug, Clone, Copy)]
@@ -154,16 +103,10 @@ impl ApAnim {
 
 // ---- VISCLAR1-D: the party card's AP pips (mock `party_ap`) -------------------------------------------------------
 
-/// The pips' one colour and a spent pip's socket; no plan colours here, the strip's gauge has those.
-pub(super) fn ap_pip() -> Rgba {
-    crate::tokens::ap()
-}
-pub(super) const AP_PIP_EMPTY: Rgba = rgb(36, 44, 60);
 /// How long a card's pips take to fall when a move pays AP and to rise when the round starts (ms of the FX clock: the
 /// animation speed and 0.5x apply; at once with skip animations or reduce motion).
 pub(super) const AP_DRAIN_MS: u64 = 240;
 pub(super) const AP_REFILL_MS: u64 = 480;
-const AP_PIP_H: i32 = 5;
 
 /// What one party card's pips show over time: a pure function of the FX clock, so no window is needed to test it.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -203,27 +146,6 @@ impl ApPips {
     }
 }
 
-/// How full pip `k` is at `level` AP, with `unit` AP a pip (0 empty, 1 full; the one between is falling or rising).
-pub(super) fn pip_fill(level: f32, unit: i32, k: i32) -> f32 {
-    (level / unit.max(1) as f32 - k as f32).clamp(0.0, 1.0)
-}
-
-/// The row of AP pips with its left end at (`x`, `y`), one size whatever the maximum (the engine gauge's slots, lower);
-/// each pip a socket and the part of it still held. Returns the row's rect.
-pub(super) fn draw_ap_pips(p: &mut Painter, x: i32, y: i32, level: f32, max: i32) -> Rect {
-    use rpgkit_ui::pips::{count, unit, PIP_GAP, PIP_W};
-    let per = unit(max, AP_PIPS);
-    let slots = count(max, per);
-    for k in 0..slots {
-        let r = Rect::new(x + k * (PIP_W + PIP_GAP), y, PIP_W, AP_PIP_H);
-        p.fill(r, AP_PIP_EMPTY);
-        let held = (pip_fill(level, per, k) * PIP_W as f32).round() as i32;
-        if held > 0 {
-            p.fill(Rect::new(r.x, r.y, held, r.h), ap_pip());
-        }
-    }
-    Rect::new(x, y, rpgkit_ui::pips::pips_w(slots), AP_PIP_H)
-}
 
 // ---- Drawing ------------------------------------------------------------------------------------------------------
 

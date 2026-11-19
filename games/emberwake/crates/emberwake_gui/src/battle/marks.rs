@@ -887,17 +887,6 @@ pub(super) fn pip_view(n: &emberwake_rules::ruleset::Numbers, st: &emberwake_bat
     PipView { lit: now.clamp(0, total), total, bonus: now > total, pips: true }
 }
 
-/// The poise number beside a row: `value/max` under `bar`, `pips/poise_pips` under `poise_mode` pips.
-pub(super) fn poise_number(n: &emberwake_rules::ruleset::Numbers, st: &emberwake_battle::poise::PoiseState) -> String {
-    let v = pip_view(n, st);
-    if v.pips {
-        let now = if st.broken { 0 } else { st.pips };
-        format!("{now}/{}", v.total)
-    } else {
-        format!("{}/{}", st.value, st.max)
-    }
-}
-
 /// A poise row in `r`: the pips lit in `POISE` (a windup bonus over the max, or above `poise_pips`, shows as a gold tip
 /// on the last); every pip on a red ground once broken this round.
 pub(super) fn poise_bar(p: &mut Painter, r: Rect, st: &emberwake_battle::poise::PoiseState, n: &emberwake_rules::ruleset::Numbers) {
@@ -936,8 +925,6 @@ pub(super) fn broken_spans(s: &Session, u: usize, entries: &[(i32, i32, String, 
 /// One planned hit's forecast (RULESET1 12 "forecasts").
 pub(super) struct HitForecast {
     pub(super) target: usize,
-    skill: String,
-    block: i32,
     stagger: i32,
     pub(super) fc: emberwake_battle::poise::Forecast,
     flank: bool,
@@ -995,27 +982,6 @@ impl HitForecast {
     fn staggers(&self) -> bool {
         self.stagger > 0 || matches!(self.fc.verdict, emberwake_battle::poise::Verdict::Breaks(emberwake_battle::poise::BreakCause::Sure))
     }
-
-    /// One intel panel line: "Your Jab B3: in wind-up, breaks: poise 20 -> 0, flank" style.
-    pub(super) fn short(&self, _w: &World) -> (String, Rgba) {
-        let mut bits: Vec<String> = Vec::new();
-        let mut col = th().text;
-        if self.staggers() {
-            let (v, c) = self.verdict();
-            col = c;
-            if self.fc.windup {
-                bits.push("in wind-up".into());
-            }
-            bits.push(v.to_lowercase());
-        }
-        if self.flank {
-            bits.push("flank".into());
-        }
-        if self.pierce {
-            bits.push("armour pierced".into());
-        }
-        (format!("Your {} B{}: {}", self.skill, self.block, bits.join(", ")), col)
-    }
 }
 
 /// RULESET1-U slice 5: the forecast of each of hero `h`'s planned entries (aligned with its compiled plan; None for
@@ -1047,10 +1013,10 @@ pub(super) fn hit_forecasts(s: &Session, h: usize) -> Vec<Option<HitForecast>> {
     st.entries
         .iter()
         .zip(&planned)
-        .map(|(e, p)| {
-            let (t, cmd, block, flank) = p.as_ref()?;
+        .map(|(_, p)| {
+            let (t, cmd, _, flank) = p.as_ref()?;
             let fc = fcs.next()??;
-            let f = HitForecast { target: *t, skill: w.cat.skills[e.skill].name.clone(), block: *block, stagger: cmd.impact.stagger, fc, flank: *flank, pierce: cmd.pierces(w), pips: poise::pips_mode(&w.ruleset.numbers) };
+            let f = HitForecast { target: *t, stagger: cmd.impact.stagger, fc, flank: *flank, pierce: cmd.pierces(w), pips: poise::pips_mode(&w.ruleset.numbers) };
             // a hit with nothing to say (no stagger, no flank, no pierce) has no forecast
             (f.staggers() || f.flank || f.pierce).then_some(f)
         })

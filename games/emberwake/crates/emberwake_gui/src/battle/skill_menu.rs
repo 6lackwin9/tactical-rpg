@@ -192,7 +192,8 @@ pub(super) fn menu_place(cell: Rect, size: (i32, i32), view: Rect) -> (i32, i32)
 /// Draws the menu: panel, title, row names, and each row as a button or an icon, with its widget and hover card.
 pub(super) fn draw_menu(ui: &mut Ui<Action>, art: &mut Art, pop: &Popup, grid: &MenuGrid, row_h: i32) {
     let r = pop.rect(row_h);
-    ui.p.panel(r, th().game("popup_fill", rgba(14, 20, 34, 252)), th().gold, 3.0);
+    // BATTLE-UI2 contract 1: the menu wears frame A
+    crate::tokens::frame_a(&mut ui.p, r, th().game("popup_fill", rgba(14, 20, 34, 252)));
     // a near miss in a gap or the name column keeps the menu open
     ui.push("popup.panel", "panel", "", r, true, false, Some(Action::MenuGap), Vec::new());
     ui.p.text_fit(r.x as f32 + 5.0, r.y as f32 + 2.0, &pop.title, BODY, r.w as f32 - 10.0, th().gold);

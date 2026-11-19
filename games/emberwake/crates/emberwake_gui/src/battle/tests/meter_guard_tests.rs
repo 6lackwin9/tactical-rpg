@@ -85,7 +85,7 @@ fn meters_and_the_held_guard_follow_the_kit() {
     assert!(tip_text(&b, &format!("party.{h}")).contains(&meter_text(&mh[0])), "{}", tip_text(&b, &format!("party.{h}")));
     assert!(meter_text(&mh[0]).ends_with(&format!("({})", mh[0].band)) && !mh[0].band.is_empty());
     assert!(tip_text(&b, &format!("foe.{f}")).contains(&meter_text(&mf[0])));
-    assert_eq!(rect(&b, &format!("party.{h}")).unwrap().h, 34, "the card grows a meter row");
+    assert_eq!(rect(&b, &format!("party.{h}")).unwrap().h, crate::battle::plates::PLATE_H, "BATTLE-UI2: the plate keeps its height, the meter row inside it");
     assert!(tip_text(&b, "strip.meters").contains(&meter_text(&mh[0])));
     let held = emberwake_battle::trigger::held_at(w, f, s(&b).current_block).expect("held");
     assert!(tip_text(&b, &format!("foe.{f}")).contains(&format!("Held guard {:.0}% through B3", held * 100.0)));
@@ -107,7 +107,7 @@ fn the_layers_switch_meters_and_the_guard_edge() {
     b.draw(&mut cx, &mut g, (-500, -500), true);
     assert_ne!(on, g.canvas.px);
     assert!(rect(&b, "strip.meters").is_none());
-    assert_eq!(rect(&b, &format!("party.{h}")).unwrap().h, 30);
+    assert_eq!(rect(&b, &format!("party.{h}")).unwrap().h, crate::battle::plates::PLATE_H);
     assert!(tip_text(&b, &format!("foe.{f}")).contains("Held guard"), "the inspect line stays");
     let st = b.state(&cx);
     assert_eq!((st["meters"].clone(), st["held_guards"].clone()), (json!([]), json!([])));
@@ -166,7 +166,7 @@ fn a_timeline_battle_without_the_rules_shows_none_of_it() {
     assert!(!meter::on(w) && !emberwake_battle::trigger::on(w));
     assert!((0..w.units.len()).all(|i| meters_of(w, i, &Layers::of(&Value::Null)).is_empty() && held_guard(s(&b), i).is_none()));
     assert!(rect(&b, "strip.meters").is_none());
-    assert_eq!(rect(&b, &format!("party.{h}")).unwrap().h, 30);
+    assert_eq!(rect(&b, &format!("party.{h}")).unwrap().h, crate::battle::plates::PLATE_H);
     let st = b.state(&cx);
     assert!(st.get("meters").is_none() && st.get("held_guards").is_none());
     assert!(!b.w.iter().any(|x| x.tip.iter().any(|t| t.0.starts_with("Held guard") || t.0 == intent_text::hp_cost_text(COST) || t.0.starts_with("Test Phial"))));
