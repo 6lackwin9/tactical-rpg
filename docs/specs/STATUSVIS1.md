@@ -1,6 +1,6 @@
 # STATUSVIS1: show a status where it acts
 
-Status: draft, Design 2026-11-19, from the user's principle (2026-11-19 18:05). Art/UI mocks it (`AI-34`); Build
+Status: accepted (user 2026-11-19 19:39 on take 33, take 34 as amended; build row `PR7-57`); drafted by Design 2026-11-19, from the user's principle (2026-11-19 18:05). Art/UI mocks it (`AI-34`); Build
 rows follow the user's sign-off of the mock. Layer: kit (the mapping reads each status's `primitives`, `rating`,
 `targeting` and `fx` in `kits/rpg/crates/rpgkit_rules/src/statuses.json`, never a status id), drawn by the battle
 screen (game).
@@ -72,3 +72,7 @@ the icon framed on the first locked block, the only patterned fill on the strip.
   not leaves it.
 - SV12. Passive icons: the loadout passives need their own icon set (kit, generic, `kits/rpg/assets/passives/`), asked
   of Art/UI (`AI-39`); placeholder skill icons until then.
+- SV13. Take 34 (user 19:39): hovered numbers have no frame, only the breakdown; the 2 loadout passives sit in two
+  dedicated sockets centred under the portrait (an empty one dim), each with its own hover (name and description);
+  passives never enter the status column (it is for timed statuses). The full timeline view (T) is calmer (kind
+  tints, 24 px icons, red only for blow ticks); kept for players and the log as is.
