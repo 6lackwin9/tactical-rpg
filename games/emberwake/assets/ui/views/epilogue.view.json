@@ -1,0 +1,87 @@
+{
+  "screen": "epilogue",
+  "fields": {
+    "title": {
+      "text": "The End",
+      "tone": "good"
+    },
+    "page_kind": {
+      "text": "fates"
+    },
+    "heading": {
+      "text": "Fates"
+    },
+    "body": {
+      "text": ""
+    },
+    "outcomes": {
+      "rows": []
+    },
+    "fates": {
+      "rows": [
+        {
+          "id": "m0",
+          "label": "Member 0",
+          "detail": "Sworn",
+          "picture": null,
+          "enabled": true,
+          "sub": "Member 0 goes on.",
+          "tone": "good"
+        },
+        {
+          "id": "m1",
+          "label": "Member 1",
+          "detail": "Departed (fell) - Sworn",
+          "picture": null,
+          "enabled": true,
+          "sub": "Member 1 goes on.",
+          "tone": "dim",
+          "note": "Keepsake: A ring"
+        },
+        {
+          "id": "m2",
+          "label": "Member 2",
+          "detail": "Sworn",
+          "picture": null,
+          "enabled": true,
+          "sub": "Member 2 goes on.",
+          "tone": "good"
+        },
+        {
+          "id": "m3",
+          "label": "Member 3",
+          "detail": "Sworn",
+          "picture": null,
+          "enabled": true,
+          "sub": "Member 3 goes on.",
+          "tone": "good"
+        }
+      ]
+    },
+    "count": {
+      "text": "4 / 5"
+    }
+  },
+  "actions": [
+    {
+      "id": "back",
+      "label": "Back",
+      "enabled": true
+    },
+    {
+      "id": "next",
+      "label": "Next",
+      "enabled": true
+    },
+    {
+      "id": "load_save",
+      "label": "Load a save",
+      "enabled": false
+    },
+    {
+      "id": "main_menu",
+      "label": "Main menu",
+      "enabled": false
+    }
+  ]
+}

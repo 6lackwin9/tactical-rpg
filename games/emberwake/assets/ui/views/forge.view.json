@@ -1,0 +1,279 @@
+{
+  "screen": "forge",
+  "fields": {
+    "title": {
+      "text": "WORLD FORGE (viewer)"
+    },
+    "worlds": {
+      "rows": [
+        {
+          "id": "ashlands",
+          "label": "The Ashlands  [ashlands]",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "selected": true
+        },
+        {
+          "id": "iron_reaches",
+          "label": "The Iron Reaches  [iron_reaches]",
+          "detail": "",
+          "picture": null,
+          "enabled": true
+        },
+        {
+          "id": "sunk_ward",
+          "label": "The Sunk Ward  [sunk_ward]",
+          "detail": "",
+          "picture": null,
+          "enabled": true
+        },
+        {
+          "id": "tidewrack",
+          "label": "Tidewrack Coast  [tidewrack]",
+          "detail": "",
+          "picture": null,
+          "enabled": true
+        }
+      ]
+    },
+    "tabs": {
+      "tabs": {
+        "labels": [
+          "Overview",
+          "Regions",
+          "Locations",
+          "Factions",
+          "Characters",
+          "Items",
+          "Disciplines",
+          "Quests",
+          "Lore",
+          "Encounters",
+          "Loot",
+          "Dialogues",
+          "Shops",
+          "Routes",
+          "Meters",
+          "Checkpoints",
+          "Triggers"
+        ],
+        "open": 0
+      }
+    },
+    "entries": {
+      "rows": [
+        {
+          "id": "ashlands",
+          "label": "The Ashlands  (root)",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "selected": true
+        },
+        {
+          "id": "iron_reaches",
+          "label": "The Iron Reaches  (root)",
+          "detail": "",
+          "picture": null,
+          "enabled": true
+        },
+        {
+          "id": "sunk_ward",
+          "label": "The Sunk Ward  (root)",
+          "detail": "",
+          "picture": null,
+          "enabled": true
+        },
+        {
+          "id": "tidewrack",
+          "label": "Tidewrack Coast  -> extends ashlands",
+          "detail": "",
+          "picture": null,
+          "enabled": true
+        }
+      ]
+    },
+    "heading": {
+      "text": "The Ashlands  (root)  [ashlands]"
+    },
+    "fields": {
+      "stats": [
+        [
+          "id",
+          "ashlands"
+        ],
+        [
+          "name",
+          "The Ashlands"
+        ],
+        [
+          "tagline",
+          "Where the embers never quite die."
+        ],
+        [
+          "description",
+          "A burnt frontier on the edge of the old empire. The Ember Wardens hold the passes against the Ashen Horde, goblin warbands that crawl out of the cinder wastes every dry season."
+        ],
+        [
+          "extends",
+          "(none)"
+        ],
+        [
+          "connects",
+          "(none)"
+        ],
+        [
+          "start_location",
+          "warden_keep"
+        ],
+        [
+          "start_party",
+          "bryn_hale"
+        ],
+        [
+          "party_max",
+          "3"
+        ],
+        [
+          "start_gold",
+          "100"
+        ],
+        [
+          "stage_set",
+          "(none)"
+        ],
+        [
+          "material_family",
+          "{}"
+        ],
+        [
+          "start_supplies",
+          "10"
+        ],
+        [
+          "dialogue_roll_die",
+          "-1"
+        ],
+        [
+          "service_lines",
+          "{}"
+        ],
+        [
+          "ruleset",
+          "(none)"
+        ],
+        [
+          "plan_reveal_flag",
+          "(none)"
+        ],
+        [
+          "campaign",
+          "{}"
+        ],
+        [
+          "purse",
+          "{}"
+        ],
+        [
+          "rest",
+          "{}"
+        ],
+        [
+          "defeat",
+          "{}"
+        ],
+        [
+          "travel_modes",
+          "{}"
+        ],
+        [
+          "start_sequence",
+          "(none)"
+        ],
+        [
+          "classes",
+          "{}"
+        ],
+        [
+          "roster",
+          "{}"
+        ],
+        [
+          "version",
+          "1.0"
+        ]
+      ]
+    },
+    "summary_head": {
+      "text": "WHAT IT MEANS"
+    },
+    "summary": {
+      "stats": [
+        [
+          "The Ashlands  Where the embers never quite die.",
+          ""
+        ],
+        [
+          "Inheritance: none (a root world)",
+          ""
+        ],
+        [
+          "Connects to: -",
+          ""
+        ],
+        [
+          "Extended by: tidewrack",
+          ""
+        ],
+        [
+          "Entries: regions 2, locations 4, factions 2, characters 23, items 5, disciplines 2, quests 6, lore 3, encounters 9, loot 6, dialogues 5, shops 1, routes 3, meters 0, checkpoints 0, triggers 0",
+          ""
+        ],
+        [
+          "",
+          ""
+        ],
+        [
+          "A burnt frontier on the edge of the old empire. The Ember Wardens hold the passes against the Ashen Horde, goblin warbands that crawl out of the cinder wastes every dry season.",
+          ""
+        ]
+      ],
+      "tone": [
+        "gold",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    "foot": {
+      "text": "Validation: run it in Godot's Forge for now.",
+      "tone": "good"
+    }
+  },
+  "actions": [
+    {
+      "id": "tab",
+      "label": "Tab",
+      "enabled": true
+    },
+    {
+      "id": "select",
+      "label": "Select",
+      "enabled": true
+    },
+    {
+      "id": "world",
+      "label": "World",
+      "enabled": true
+    },
+    {
+      "id": "exit",
+      "label": "Exit",
+      "enabled": true
+    }
+  ]
+}

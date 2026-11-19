@@ -1,0 +1,84 @@
+{
+  "screen": "siege",
+  "fields": {
+    "title": {
+      "text": "The Hold"
+    },
+    "rooms": {
+      "rows": [
+        {
+          "id": "0",
+          "label": "1. Grate",
+          "detail": "Held",
+          "picture": null,
+          "enabled": true,
+          "tone": "good"
+        },
+        {
+          "id": "1",
+          "label": "2. Lock",
+          "detail": "Next",
+          "picture": null,
+          "enabled": true,
+          "tone": "gold"
+        },
+        {
+          "id": "2",
+          "label": "3. Hearth",
+          "detail": "Ahead",
+          "picture": null,
+          "enabled": true,
+          "tone": "dim"
+        }
+      ]
+    },
+    "down_head": {
+      "text": "Down (sits out until triaged):"
+    },
+    "downed": {
+      "rows": [
+        {
+          "id": "second",
+          "label": "Second",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "Spend one to revive Second.",
+          "buttons": [
+            {
+              "action": "triage",
+              "label": "Triage (Salts)",
+              "enabled": true
+            }
+          ]
+        }
+      ]
+    },
+    "line": {
+      "text": "No rest until the siege is broken.",
+      "tone": "dim"
+    }
+  },
+  "actions": [
+    {
+      "id": "triage",
+      "label": "Triage",
+      "enabled": true
+    },
+    {
+      "id": "restock",
+      "label": "Re-stock (1)",
+      "enabled": true
+    },
+    {
+      "id": "fight",
+      "label": "Fight",
+      "enabled": true
+    },
+    {
+      "id": "yield",
+      "label": "Yield the room",
+      "enabled": false
+    }
+  ]
+}

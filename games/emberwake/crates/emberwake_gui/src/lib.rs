@@ -27,10 +27,12 @@ mod controls_view;
 #[cfg(feature = "dev_tools")]
 mod dojo;
 mod epilogue;
+mod epilogue_view;
 mod facility;
 mod facility_view;
 #[cfg(feature = "dev_tools")]
 mod forge;
+mod forge_view;
 mod fx;
 #[cfg(feature = "dev_tools")]
 mod gallery;
@@ -56,6 +58,7 @@ mod shop;
 mod save_view;
 mod shop_view;
 mod siege;
+mod siege_view;
 mod stage;
 mod story;
 mod talk;
