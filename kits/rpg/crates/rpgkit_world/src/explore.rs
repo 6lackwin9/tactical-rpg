@@ -267,6 +267,10 @@ pub fn presence(d: &Data, gs: &GameState, loc_qid: &str, m: &Dict) -> &'static s
     if (kind == "encounter" || kind == "roamer") && json::b(m, "once", true) && is_done(gs, loc_qid, m) {
         return "absent";
     }
+    // PR7-41 (PT-15): a job's fight is offered only once its job is accepted
+    if (kind == "encounter" || kind == "roamer") && quest::fight_waits_for_job(d, gs, &json::s(d.resolve(&gs.world_id, "encounters", &json::s(m, "encounter")), "_qid")) {
+        return "absent";
+    }
     if kind == "exit" && !req_ok && unless_ok {
         return "locked";
     }

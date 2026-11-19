@@ -231,6 +231,17 @@ fn make_present(d: &Data, gs: &mut GameState, m: &Dict) {
             }
         }
     }
+    // PR7-41 (PT-15): a job's fight is offered once its job is accepted, so accept every quest naming the fight
+    let enc = json::s(m, "encounter");
+    if !enc.is_empty() {
+        for e in d.merged_entries(WORLD, "quests") {
+            let qid = json::s(e, "_qid");
+            let names = json::aget(&emberwake_world::quest::resolved(d, gs, &qid), "steps").iter().any(|s| json::s(json::dict(s), "encounter") == enc);
+            if names && !gs.quests.contains_key(&qid) {
+                gs.quests.insert(qid, serde_json::json!({"state": "active", "objective": 0}));
+            }
+        }
+    }
 }
 
 /// Walks `dirs` with `explore::step` from the party's tile; the last step is the use for a stepped-on target. Returns
