@@ -2,7 +2,7 @@
 //! has not said it is at rest keeps drawing, and a resting one still gets input, the agent link and its heartbeat.
 
 use aegis_ui::pacing::{pace, FrameNeed, Pace, Pacer, HEARTBEAT, SETTLE};
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 
 const CAP_60: Duration = Duration::from_micros(1_000_000 / 60);
 

@@ -10,7 +10,7 @@ use emberwake_battle::grid::V2;
 use emberwake_battle::session::Phase;
 use aegis_core::json;
 use serde_json::{json, Value};
-use std::time::Instant;
+use aegis_core::clock::Instant;
 use crate::hud::hud_tests::{frame, game_cx, gfx};
 use emberwake_world::Data;
 use std::sync::Arc;

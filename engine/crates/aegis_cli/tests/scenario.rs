@@ -967,8 +967,8 @@ fn a_run_opens_no_window_unless_the_file_or_the_flag_asks() {
 fn the_rate_and_the_device_scale_reach_a_game_with_no_window_alone() {
     let out = temp("rate");
     let o = Options { fps: Some(30), dpr: Some("1.5".into()), ..no_window(&out) };
-    assert_eq!(scenario::headless_args((1280, 720), &o), ["headless=1280x720", "fps=30", "dpr=1.5"]);
-    assert_eq!(scenario::headless_args((1280, 720), &no_window(&out)), ["headless=1280x720"]);
+    assert_eq!(scenario::headless_args((1280, 720), &o), ["headless=1280x720", "clock=step", "fps=30", "dpr=1.5"]);
+    assert_eq!(scenario::headless_args((1280, 720), &no_window(&out)), ["headless=1280x720", "clock=step"]);
     let mut l = launcher();
     assert_eq!(scenario::run_size(&scenario_of(json!([{"step": "back"}])), (1280, 720), &o, &mut l).code, 0);
     assert!(l.plans[0].args.contains(&"fps=30".to_string()));
@@ -983,18 +983,20 @@ fn with_no_window_each_action_and_shot_asks_for_its_frames() {
     let steps = json!([{"step": "click", "id": "a"}, {"step": "shot", "name": "menu"}]);
     let o = scenario::run_size(&scenario_of(steps), (1280, 720), &no_window(&out), &mut l);
     assert_eq!(o.code, 0, "{}", o.message);
-    assert_eq!(actions(&l), ["click", "frames", "frames", "screenshot", "quit"]);
+    // ENGINE-17: on the shot clock frames come only when asked, from the start on.
+    assert_eq!(actions(&l), ["frames", "click", "frames", "frames", "screenshot", "quit"]);
     let s = l.script.borrow();
     assert!(!s.asked.iter().any(|a| a["cmd"] == "step"), "a game's battle has its own step, which plays a turn");
     let asked = s.asked.iter().find(|a| a["cmd"] == "frames").unwrap();
     assert_eq!(asked["frames"], json!(scenario::SETTLE_FRAMES));
     drop(s);
-    // A game that refuses them fails the step, rather than a shot of the frame before.
+    // A game that refuses them does not run, rather than a shot of the frame before: on the shot clock the start already
+    // asks for frames (ENGINE-17), so the run could not start.
     let mut l = launcher();
     l.script.borrow_mut().refuse = Some("frames".into());
     let o = scenario::run_size(&scenario_of(json!([{"step": "click", "id": "a"}])), (1280, 720), &no_window(&out), &mut l);
-    assert_eq!(o.code, 1);
-    assert_eq!(o.step.as_deref(), Some("1"));
+    assert_eq!(o.code, 2, "{}", o.message);
+    assert!(o.message.contains("frames"), "{}", o.message);
     std::fs::remove_dir_all(&out).unwrap();
 }
 
@@ -1041,25 +1043,33 @@ fn a_clip_goes_into_the_bundle_needs_no_window_and_is_bounded() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// With no window a game leaves when nothing asks for a while, so a pause goes on asking.
+/// A pause in a window goes on asking (a game leaves when nothing asks for a while, and a death is noticed then); with no
+/// window it is game time on the shot clock, one `frames` request for that many ms (ENGINE-17).
 #[test]
 fn a_long_pause_keeps_asking() {
     let out = temp("pause_asks");
     let mut l = launcher();
     let ms = scenario::PAUSE_LOOK.as_millis() as u64 + 200;
-    let o = scenario::run_size(&scenario_of(json!([{"step": "pause", "ms": 60}])), (1280, 720), &no_window(&out), &mut l);
+    let o = run(json!([{"step": "pause", "ms": 60}]), &mut l, &out);
     assert_eq!(o.code, 0, "{}", o.message);
     let short = l.script.borrow().trees;
     let mut l = launcher();
-    let o = scenario::run_size(&scenario_of(json!([{"step": "pause", "ms": ms}])), (1280, 720), &no_window(&out), &mut l);
+    let o = run(json!([{"step": "pause", "ms": ms}]), &mut l, &out);
     assert_eq!(o.code, 0, "{}", o.message);
     assert!(l.script.borrow().trees > short, "no look in {ms} ms");
     // A game that died during it is noticed then, not at the end.
     let mut l = launcher();
     l.script.borrow_mut().dies_at = Some(3);
     l.ended = Some("exit code: 1".into());
-    let o = scenario::run_size(&scenario_of(json!([{"step": "pause", "ms": ms}])), (1280, 720), &no_window(&out), &mut l);
+    let o = run(json!([{"step": "pause", "ms": ms}]), &mut l, &out);
     assert_ne!(o.code, 0);
+    // No window: one request, at once.
+    let mut l = launcher();
+    let started = Instant::now();
+    let o = scenario::run_size(&scenario_of(json!([{"step": "pause", "ms": 5000}])), (1280, 720), &no_window(&out), &mut l);
+    assert_eq!(o.code, 0, "{}", o.message);
+    assert!(started.elapsed() < Duration::from_secs(4), "game time, not a sleep");
+    assert!(l.script.borrow().asked.iter().any(|a| a["cmd"] == "frames" && a["ms"] == json!(5000)));
     std::fs::remove_dir_all(&out).unwrap();
 }
 
@@ -1232,6 +1242,20 @@ fn a_golden_shot_parses_exact_or_with_a_tolerance_and_refuses_bad_keys() {
     assert!(problems_of(minimal(json!([{"step": "shot", "name": "a", "golden": "yes"}]))).contains("'golden' is true"));
     assert!(problems_of(minimal(json!([{"step": "shot", "name": "a", "golden": {"tolerance": 300}}]))).contains("tolerance"));
     assert!(problems_of(minimal(json!([{"step": "shot", "name": "a", "golden": {"fuzz": 1}}]))).contains("fuzz"));
+}
+
+#[test]
+fn a_shot_takes_a_time_after_its_screen_opened_on_the_shot_clock() {
+    // ENGINE-17 (SHOT-CLOCK1): `t` in seconds, kept in ms; 0 (at once) without it; out of range refused.
+    let s = scenario_of(json!([{"step": "shot", "name": "a", "t": 1.25}, {"step": "shot", "name": "b"}]));
+    assert!(matches!(&s.steps[0], Step::Shot { t_ms: 1250, .. }));
+    assert!(matches!(&s.steps[1], Step::Shot { t_ms: 0, .. }));
+    assert!(problems_of(minimal(json!([{"step": "shot", "name": "a", "t": -1}]))).contains("'t' is a number of seconds"));
+    assert!(problems_of(minimal(json!([{"step": "shot", "name": "a", "t": 61}]))).contains("'t' is a number of seconds"));
+    assert!(problems_of(minimal(json!([{"step": "shot", "name": "a", "t": "soon"}]))).contains("'t' is a number of seconds"));
+    // Every run with no window is on the shot clock.
+    let o = scenario::Options { fps: None, dpr: None, ..no_window(&temp("shot_clock")) };
+    assert!(scenario::headless_args((1280, 720), &o).contains(&"clock=step".to_string()));
 }
 
 #[test]

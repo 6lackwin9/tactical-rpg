@@ -17,7 +17,7 @@ use emberwake_battle::session::{Phase, Session};
 use aegis_ui::art::Art;
 use emberwake_battle::skill::Kind;
 use serde_json::{json, Value};
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 use emberwake_rules::ruleset::TIMELINE;
 
 fn arena(ruleset: Option<&str>) -> (Cx, Gfx, BattleScreen) {

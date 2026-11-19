@@ -252,14 +252,14 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
         match self.pacer.decide(Instant::now(), self.frame_every) {
             Pace::Redraw => {
                 el.set_control_flow(match pad_wake {
-                    Some(at) => ControlFlow::WaitUntil(at),
+                    Some(at) => ControlFlow::WaitUntil(at.into()),
                     None => ControlFlow::Wait,
                 });
                 if let Some(w) = &self.window {
                     w.request_redraw();
                 }
             }
-            Pace::WaitUntil(at) => el.set_control_flow(ControlFlow::WaitUntil(pad_wake.map_or(at, |p| p.min(at)))),
+            Pace::WaitUntil(at) => el.set_control_flow(ControlFlow::WaitUntil(pad_wake.map_or(at, |p| p.min(at)).into())),
         }
     }
 

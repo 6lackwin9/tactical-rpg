@@ -84,7 +84,8 @@ pub fn create(d: &Data, world_id: &str, ids: &[String], seed: i64) -> Result<Gam
 }
 
 fn clock_seed() -> i64 {
-    let now = aegis_core::clock::SystemTime::now().duration_since(aegis_core::clock::UNIX_EPOCH).unwrap_or_default();
+    // ENGINE-17: the shot clock gives the same date in every run, so a scenario's new game has the same seed.
+    let now = aegis_core::clock::system_now().duration_since(aegis_core::clock::UNIX_EPOCH).unwrap_or_default();
     (now.as_millis() as i64 ^ now.subsec_micros() as i64) & SEED_MAX
 }
 

@@ -11,7 +11,7 @@ use aegis_ui::ui::{Gfx, Ui, H, W};
 use emberwake_battle::session::Phase;
 use aegis_ui::art::Art;
 use serde_json::{json, Value};
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 use crate::portraits::tests::{layer, row};
 use aegis_core::assets::Layers;
 use rpgkit_ui::portrait_fx::{PortraitOpts, EASE_MS};

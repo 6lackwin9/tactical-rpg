@@ -6,6 +6,7 @@ test          every test of the workspace (the engine goldens among them)
 repro         every repro recording replays with its checkpoints matching
 playtest      the agent playtest smoke plays a fresh save to the hub
 scenarios     every scenario of each game, with no window
+shotsexact    every scenario run again: each shot byte for byte the same (the shot clock, ENGINE-17)
 newgame       a game made by `aegis new game` builds, tests and plays its scenario
 layers        engine and kit code name no game, no lore word, kit code no class id
 layouts       every screen layout fits its fixture; every string table holds the keys of en

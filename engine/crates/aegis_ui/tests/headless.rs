@@ -18,7 +18,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 
 const SIZE: (u32, u32) = (800, 450);
 
@@ -132,7 +132,7 @@ impl Game {
 
     fn start_idle(need: FrameNeed, blank: bool, fps: u32, idle: Duration) -> Self {
         let port = TcpListener::bind(("127.0.0.1", 0)).unwrap().local_addr().unwrap().port();
-        let h = Headless { size: SIZE, fps, dpr: 1.0, idle };
+        let h = Headless { size: SIZE, fps, dpr: 1.0, idle, stepped: false };
         let thread = std::thread::spawn(move || run(context(), vec![Box::new(Probe::new(need, blank)) as Box<dyn Screen<App>>], options(port, h)));
         let by = Instant::now() + Duration::from_secs(30);
         let stream = loop {
@@ -182,9 +182,12 @@ fn args(list: &[(&str, &str)]) -> Vec<(String, String)> {
 fn the_launch_arguments_select_it_and_bad_ones_are_refused() {
     assert_eq!(Headless::from_args(&args(&[("port", "1")])).unwrap(), None, "no headless=, a window");
     let h = Headless::from_args(&args(&[("headless", "1280x720")])).unwrap().unwrap();
-    assert_eq!(h, Headless { size: (1280, 720), fps: DEFAULT_FPS, dpr: 1.0, idle: Duration::from_secs(IDLE_EXIT_S) });
+    assert_eq!(h, Headless { size: (1280, 720), fps: DEFAULT_FPS, dpr: 1.0, idle: Duration::from_secs(IDLE_EXIT_S), stepped: false });
     let h = Headless::from_args(&args(&[("headless", "1920x1080"), ("fps", "30"), ("dpr", "1.5"), ("idle_exit", "3600")])).unwrap().unwrap();
-    assert_eq!(h, Headless { size: (1920, 1080), fps: 30, dpr: 1.5, idle: Duration::from_secs(3600) });
+    assert_eq!(h, Headless { size: (1920, 1080), fps: 30, dpr: 1.5, idle: Duration::from_secs(3600), stepped: false });
+    // ENGINE-17: the shot clock.
+    assert!(Headless::from_args(&args(&[("headless", "1280x720"), ("clock", "step")])).unwrap().unwrap().stepped);
+    assert!(!Headless::from_args(&args(&[("headless", "1280x720"), ("clock", "wall")])).unwrap().unwrap().stepped);
     let below = (FPS_MIN - 1).to_string();
     for bad in [
         vec![("headless", "1280")],
@@ -200,6 +203,8 @@ fn the_launch_arguments_select_it_and_bad_ones_are_refused() {
         vec![("fps", "15")],
         vec![("dpr", "2")],
         vec![("idle_exit", "60")],
+        vec![("clock", "step")],
+        vec![("headless", "1280x720"), ("clock", "fast")],
     ] {
         assert!(Headless::from_args(&args(&bad)).is_err(), "{bad:?}");
     }
@@ -209,7 +214,7 @@ fn the_launch_arguments_select_it_and_bad_ones_are_refused() {
 fn a_taken_port_is_an_error_and_not_a_silent_run() {
     let taken = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let port = taken.local_addr().unwrap().port();
-    let h = Headless { size: SIZE, fps: DEFAULT_FPS, dpr: 1.0, idle: Duration::from_secs(IDLE_EXIT_S) };
+    let h = Headless { size: SIZE, fps: DEFAULT_FPS, dpr: 1.0, idle: Duration::from_secs(IDLE_EXIT_S), stepped: false };
     let e = run(context(), vec![Box::new(Probe::new(FrameNeed::Idle, false)) as Box<dyn Screen<App>>], options(port, h)).unwrap_err();
     assert!(e.to_string().contains("busy"), "{e}");
 }

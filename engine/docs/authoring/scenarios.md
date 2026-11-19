@@ -68,10 +68,10 @@ An unknown key or step is a problem, not a thing ignored.
 | `link` | `body` | Any other request, as `{"cmd": ...}`: the game's own commands, screen commands. Not `quit` |
 | `wait` | `until`, `timeout_ms` = 10000 | Polls until true; a timeout fails |
 | `assert` | `until` | True now or fail |
-| `shot` | `name`, `max_w` = 1920, `golden` | Screenshot into the bundle, once the frames after the last change are drawn. A blank frame fails the step. `golden`: compared with its baseline (below) |
+| `shot` | `name`, `max_w` = 1920, `golden`, `t` = 0 | Screenshot into the bundle, once the frames after the last change are drawn. A blank frame fails the step. `golden`: compared with its baseline (below). `t`: no window only, seconds (0 to 60) the top screen has been open first, on the shot clock (below): a screen that fades in takes the time of its fade |
 | `clip` | `name`, `frames` = 30, `every_ms` = 66, `max_w` = 1280 | No window only. A numbered sequence, `<name>/frame_0001.png` on: at most 120 frames, 10 to 2000 ms apart, 15 s in all |
 | `perf` | `name`, `frames` = 300, `warm` = 60, `budget` | No window only. Frame times (ENGINE-2): see "Frame times" |
-| `pause` | `ms` | Time passes, for a picture at a moment of an animation, with a look at the game each second. To wait for a result, use `wait` |
+| `pause` | `ms` | Time passes, for a picture at a moment of an animation, with a look at the game each second; with no window, that much game time on the shot clock, drawn at once. To wait for a result, use `wait` |
 | `audit` | `scales`, `fail` = all of `cut`, `edge`, `overlap`, `spill` | The text audit per text size; a kind in `fail` found fails the step |
 | `repeat` | `times`, `steps`, `until` | A bounded loop. `until` is read before each turn and ends it; turns running out with `until` still false fails |
 
@@ -116,8 +116,17 @@ largest difference and their box, and keeps `<name>.diff.png`. A missing baselin
 
 `aegis scenario run <id> record=1` (or `tools/fc.sh scenario <id> record=1`) writes the baselines instead, once every step
 has passed, and lists them in `result.json` under `recorded`. A new or changed baseline needs the user's approval: it lands as a named re-record in the
-commit and a `docs/HISTORY.md` row, like an engine golden. Shoot screens at rest with `reduce_motion` on; idle sprite clips
-still move under it, so a screen with walking or idle bodies takes a `pixels` allowance (a few thousand at 1280x720).
+commit and a `docs/HISTORY.md` row, like an engine golden.
+
+## The shot clock
+
+A run with no window is on the shot clock (ENGINE-17, `aegis_core::clock`): the game's time moves only by the frames the
+driver asks for, one frame step (1 / fps) each, and the date starts at 2026-01-01 (`clock::system_now`, which a new
+game's clock seed reads). The start, each action, each `wait` look (one frame), a `pause` and a shot's `t` ask for set
+frames, so two runs of one build draw the same frames and their shots are byte for byte the same; the gate's
+`shotsexact` step runs every scenario twice and checks that. An animation, a seed or a timer that reads the real clock
+(`std::time` outside `aegis_core::clock`, a thread's own timing) breaks it, and that step names the shot. Golden shots
+therefore need no `pixels` allowance for idle sprites; a window run is on real time and never frame-exact.
 
 ## Frame times
 

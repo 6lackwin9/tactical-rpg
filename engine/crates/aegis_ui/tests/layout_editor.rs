@@ -26,7 +26,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 
 /// The fixture viewport: positions 0..1 span (40, 40) to (380, 300).
 const VIEW: Viewport = Viewport { rect: Rect::new(10, 20, 400, 300), pad: (30.0, 20.0) };
@@ -585,7 +585,7 @@ fn over_the_agent_link_a_hosting_screen_drags_reads_and_sets_the_layout() {
         icon: String::new(),
         canvas: Value::Null,
         window_sizes: Value::Null,
-        headless: Some(Headless { size: (800, 450), fps: DEFAULT_FPS, dpr: 1.0, idle: Duration::from_secs(IDLE_EXIT_S) }),
+        headless: Some(Headless { size: (800, 450), fps: DEFAULT_FPS, dpr: 1.0, idle: Duration::from_secs(IDLE_EXIT_S), stepped: false }),
     };
     let thread = std::thread::spawn(move || {
         let host = Host { ed: editor().with_view(Viewport::new(Rect::new(190, 30, 420, 300), (30.0, 20.0))), w: Vec::new() };

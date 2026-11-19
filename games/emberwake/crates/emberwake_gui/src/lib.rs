@@ -260,7 +260,7 @@ pub fn bot_run(start: &str, data: &Path, scratch: &Path, bot: &aegis_ui::shell::
     let mut args: Vec<(String, String)> = keys.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
     args.push(("data".into(), data.display().to_string()));
     args.push(("saves".into(), scratch.join("saves").display().to_string()));
-    let headless = Headless { size: bot.size, fps: aegis_ui::shell::headless::DEFAULT_FPS, dpr: 1.0, idle: aegis_core::clock::Duration::from_secs(aegis_ui::shell::headless::IDLE_EXIT_S) };
+    let headless = Headless { size: bot.size, fps: aegis_ui::shell::headless::DEFAULT_FPS, dpr: 1.0, idle: aegis_core::clock::Duration::from_secs(aegis_ui::shell::headless::IDLE_EXIT_S), stepped: false };
     let ruleset = arena_ruleset(&args)?;
     let (cx, stack, options) = launch(&args, native_roots()?, ruleset, Some(headless))?;
     Ok(aegis_ui::shell::bot::run(cx, stack, &options, bot))

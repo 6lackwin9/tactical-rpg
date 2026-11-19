@@ -11,7 +11,10 @@ did. Two runs of the same build already differ a little (idle animations: up to 
 far more on scenes mid-animation), so the counts are printed for every changed shot to tell drift from a real change.
 
   shots_all.py collect <bundles> <out>
-  shots_all.py compare <before> <after> [tolerance=N] [pixels=N]
+  shots_all.py compare <before> <after> [tolerance=N] [pixels=N] [strict=1]
+
+`strict=1` (the gate's `shotsexact` step, ENGINE-17: shots on the shot clock are frame-exact, so it runs with tolerance
+0 and pixels 0) exits 1 when any shot changed, is new or is gone.
 """
 import shutil
 import struct
@@ -136,8 +139,9 @@ def main(argv):
     if len(argv) >= 3 and argv[0] == "compare":
         opts = dict(a.split("=", 1) for a in argv[3:] if "=" in a)
         tol, px = int(opts.get("tolerance", 8)), int(opts.get("pixels", 300))
-        print("\n".join(report(*compare(argv[1], argv[2], tol, px), tolerance=tol, pixels=px)))
-        return 0
+        found = compare(argv[1], argv[2], tol, px)
+        print("\n".join(report(*found, tolerance=tol, pixels=px)))
+        return 1 if opts.get("strict") == "1" and (found[0] or found[1] or found[2]) else 0
     print(__doc__)
     return 2
 

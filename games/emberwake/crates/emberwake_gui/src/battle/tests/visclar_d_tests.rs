@@ -21,7 +21,7 @@ use emberwake_battle::round_intent::RoundIntent;
 use emberwake_battle::session::{Phase, Session};
 use emberwake_rules::ruleset::{PoiseMode, TIMELINE};
 use serde_json::{json, Value};
-use std::time::Instant;
+use aegis_core::clock::Instant;
 
 fn arena_in(view: &str, adjust: impl FnOnce(&mut Cx)) -> (Cx, Gfx, BattleScreen) {
     let mut cx = crate::hud::hud_tests::game_cx();

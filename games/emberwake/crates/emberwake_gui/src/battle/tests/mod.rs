@@ -1020,13 +1020,13 @@ fn autoplay_waits_for_the_impact_and_its_gap() {
     assert!(step_until(&mut cx, &mut b, |_, i| i.hit()), "a hit");
     b.resolve_impacts(&mut cx);
     let sent = b.host.history.len();
-    (b.playing, b.next_at) = (true, std::time::Instant::now());
-    b.clock_at = std::time::Instant::now();
+    (b.playing, b.next_at) = (true, aegis_core::clock::Instant::now());
+    b.clock_at = aegis_core::clock::Instant::now();
     b.tick(&mut cx);
     assert_eq!(b.host.history.len(), sent, "no step while the impact pends");
     b.clock.ms = b.impacts[0].at.unwrap() as f64;
     b.fire_due(&mut cx);
-    let now = std::time::Instant::now();
+    let now = aegis_core::clock::Instant::now();
     assert!(!b.impacts_done(now), "the gap after the impact");
     assert!(b.impacts_done(now + std::time::Duration::from_millis(cx.tuning.value.impact_gap_ms)), "then the next step may go");
 }
