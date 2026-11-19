@@ -48,8 +48,10 @@ the icon framed on the first locked block, the only patterned fill on the strip.
 
 - SV5. Locks. Hatched blocks or grey blocks with the status icon both work (keep the hatch of take 25). The rules
   match the user's reading: stagger locks blocks 1 and 4 (`lock_blocks` [1, 4]), so no 3-block move fits and 2-block
-  moves must be paced; stun locks the first 2 (`lock_blocks` [1, 2]), delaying the opening. Making stun lock 3 blocks
-  is a later balance call, by how often stuns land (not changed now).
+  moves must be paced; stun locks the first 2 (`lock_blocks` [1, 2]), delaying the opening. Stun stays at 2 blocks now
+  (user 19:28). Criterion for the later balance call: if stun is meant to be much rarer than stagger (which follows
+  every poise break), it becomes a strong CC locking blocks 1-3, half a round; the balance lane counts stun versus
+  stagger landings per fight and proposes it when stuns are rare.
 - SV6. One HP loss. The HP bar shows one planned-loss slice for hits and ticks together (no second negative mark for
   poison or bleed); hover breaks it down (hits, each tick).
 - SV7. Numbers after modifiers. Every deterministic number (damage, heal) is shown after all modifiers: the
