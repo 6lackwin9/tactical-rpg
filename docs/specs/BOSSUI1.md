@@ -84,3 +84,11 @@ drains, a 0.1 s gold flash as the marker fills, title and portrait crossfade 0.3
 - BU16. Boss intent rows (user 2026-11-19 18:38 on take 28): each block cell shows the impact, as the small foe
   intent bar does: HP damage, poise damage and the status chips; no skill names or icons (the strip at the top has
   them). The party row shows the phase break in the block it lands and greys the blocks after it (they will not run).
+- BU17. Why (user 2026-11-19 18:40): the phase break is the battle's transition point, "some either like a cutscene
+  or some kind of a dialogue in between phase changes to basically explain the new form of the boss", for bosses and
+  maybe elites; with the baseline enrage from round 6 (`ENRAGE2.md`), a phase killed early is rewarded and a late one
+  meets a stronger phase that is also enraged. So between the break and the next round the new phase's transition
+  plays, in order: its `talk` effect (the existing phase dialogue, at most one per phase), then an optional
+  `vignette` effect (new, kit: `{"type": "vignette", "id": "<vignette>"}`, played by the vignette player over the
+  board, skippable), then the phase banner and the bar's refill (take 26). The rule applies to any unit's `hp_below`
+  phase, so an elite fight can use it too.
