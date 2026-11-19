@@ -8,6 +8,8 @@
 # art_src/music/menu_theme.json) that a run with no arguments must never overwrite.
 # Needs numpy and ffmpeg (libvorbis). Each track renders as one circular buffer, so notes, reverb and
 # noise beds that run past the end wrap onto the start and the loop has no seam. Prints "§ wrote <path> <s>s".
+# AI-30: the ambience beds (AMBIENCE) land in the game's audio/ambience/<key>.ogg, levelled low (RMS -26 dB) for the
+# ambience bus (PR7-34); their keys follow the ones PR7-34 lists.
 import argparse
 import os
 import shutil
@@ -763,6 +765,136 @@ def victory_stinger() -> np.ndarray:
     return one_shot(tr.render(2.2, -1.5), 5.5, 1.6)
 
 
+# --- ambience beds (AI-30, PR7-34 AMBIENCE1): seamless 48 s loops for the ambience bus, no melody ---------------
+
+def ambience_level(stereo: np.ndarray, rms_db: float = -26.0, peak_db: float = -9.0) -> np.ndarray:
+    # Sit low and steady: an even loudness (RMS) under a peak ceiling, so the bus volume is the only knob.
+    rms = np.sqrt(np.mean(stereo ** 2))
+    out = stereo * (10 ** (rms_db / 20.0) / max(rms, 1e-9))
+    peak = np.max(np.abs(out))
+    ceil = 10 ** (peak_db / 20.0)
+    return out * min(1.0, ceil / max(peak, 1e-9))
+
+
+def brown(tr: Track, cutoff: float) -> np.ndarray:
+    # A circular brown-ish noise bed (integrated white noise, looped through the FFT so it has no seam).
+    x = tr.rng.standard_normal(tr.n)
+    f = np.fft.rfftfreq(tr.n, 1.0 / SR)
+    spec = np.fft.rfft(x) / np.maximum(f, 20.0) / (1.0 + (f / cutoff) ** 4)
+    y = np.fft.irfft(spec, tr.n)
+    return y / np.max(np.abs(y))
+
+
+def drip(rng: np.random.Generator) -> np.ndarray:
+    # One water drop: a short sine ping that slides up (the bubble), then a tiny splash.
+    n = int(0.35 * SR)
+    t = np.arange(n) / SR
+    f0 = rng.uniform(900, 1900)
+    ph = 2 * np.pi * np.cumsum(f0 * (1 + 0.9 * np.minimum(t / 0.025, 1.0))) / SR
+    sig = np.sin(ph) * np.exp(-t / 0.018)
+    sig += lowpass(rng.standard_normal(n), 3000.0, 600.0) * np.exp(-t / 0.01) * 0.08
+    return sig * 0.5
+
+
+def pipe_groan(rng: np.random.Generator) -> np.ndarray:
+    # A distant pipe: a low tone that bends and fades, with a little metal ring.
+    dur = rng.uniform(2.5, 4.0)
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    f = rng.uniform(55, 80) * (1 + 0.06 * np.sin(2 * np.pi * t / dur))
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    e = np.sin(np.pi * t / dur) ** 2
+    return (np.sin(ph) + 0.3 * np.sin(2.01 * ph) + 0.12 * np.sin(5.3 * ph)) * e * 0.5
+
+
+def crackle(rng: np.random.Generator) -> np.ndarray:
+    # One hearth pop: a click of bright noise, sometimes a short sputter after it.
+    n = int(rng.uniform(0.01, 0.05) * SR)
+    t = np.arange(n) / SR
+    sig = lowpass(rng.standard_normal(n), rng.uniform(3000, 7000), 800.0) * np.exp(-t / rng.uniform(0.002, 0.01))
+    return sig
+
+
+def murmur(tr: Track, voices: int, gain: float) -> None:
+    # Low talk across the room, no words: voiced noise through two moving vowel bands, gated in syllables.
+    t = np.arange(tr.n) / SR
+    bed = np.zeros((2, tr.n))
+    for v in range(voices):
+        L = tr.n / SR
+        snap = lambda f: round(f * L) / L              # whole cycles over the loop: no seam
+        f0 = snap(tr.rng.uniform(95, 190))
+        src = np.zeros(tr.n)
+        for h in range(1, 14):
+            src += np.sin(2 * np.pi * f0 * h * (t + 0.003 * np.sin(2 * np.pi * snap(0.21) * t + v))) / h
+        vowel = lowpass(src, tr.rng.uniform(700, 1100), tr.rng.uniform(250, 400))
+        rate = snap(tr.rng.uniform(2.5, 4.0))
+        syll = np.clip(np.sin(2 * np.pi * rate * t + tr.rng.uniform(0, 6)), 0, 1) ** 1.5
+        k = int(round(tr.rng.uniform(3, 6)))
+        phrase = np.clip(np.sin(2 * np.pi * k * t / (tr.n / SR) + v * 1.7) * 1.4 - 0.3, 0, 1)
+        sig = vowel * syll * phrase
+        sig = lowpass(sig, 1400.0)
+        sig /= max(np.max(np.abs(sig)), 1e-9)
+        pan = tr.rng.uniform(-0.7, 0.7)
+        bed[0] += sig * np.cos((pan + 1) * np.pi / 4)
+        bed[1] += sig * np.sin((pan + 1) * np.pi / 4)
+    tr.add_bed(bed / voices, gain, 0.6)
+
+
+def amb_drains() -> np.ndarray:
+    """48 s: the drains and culverts. A low water rush, slow drips in a wet echo, a far pipe now and then."""
+    tr = Track(60, 4, 12, seed=30101)
+    flow = np.stack([brown(tr, 260.0) for _ in range(2)])
+    flow *= 0.75 + 0.25 * np.stack([tr.lfo(3), tr.lfo(4, 1.3)])
+    tr.add_bed(flow, 0.55, 0.3)
+    wash(tr, 300.0, 1400.0, 2, 0.08, 0.5)
+    t = 0.4
+    while t < tr.n / SR:
+        tr.add(drip(tr.rng), t, tr.rng.uniform(-0.8, 0.8), tr.rng.uniform(0.25, 0.6), 0.75)
+        t += tr.rng.uniform(0.6, 2.8)
+    for k in range(3):
+        tr.add(pipe_groan(tr.rng), 6.0 + k * 15.0 + tr.rng.uniform(0, 5), tr.rng.uniform(-0.6, 0.6), 0.35, 0.6)
+    return ambience_level(tr.render(3.2, -1.5))
+
+
+def amb_streets() -> np.ndarray:
+    """48 s: above ground. Wind through the rows that swells and drops, a far bell tolling twice, a loose shutter."""
+    tr = Track(60, 4, 12, seed=30102)
+    wash(tr, 180.0, 900.0, 3, 0.55, 0.7)
+    wash(tr, 900.0, 3200.0, 5, 0.12, 0.9)
+    for start in (9.0, 33.0):
+        for i in range(3):
+            tr.add(bell(midi("D3"), 6.0), start + i * 3.2, -0.35, 0.42, 0.85)
+    for k in range(4):
+        t0 = 4.0 + k * 12.0 + tr.rng.uniform(0, 4)
+        for j in range(2):
+            n = int(0.06 * SR)
+            tt = np.arange(n) / SR
+            knock = lowpass(tr.rng.standard_normal(n), 900.0, 120.0) * np.exp(-tt / 0.02)
+            tr.add(knock, t0 + j * 0.18, 0.6, 0.25, 0.4)
+    return ambience_level(tr.render(2.6, -1.5))
+
+
+def amb_hub() -> np.ndarray:
+    """48 s: the hub hall. A crackling hearth (a soft roar under pops), low murmurs across the room, a far drip."""
+    tr = Track(60, 4, 12, seed=30103)
+    roar = np.stack([brown(tr, 500.0) for _ in range(2)])
+    roar *= 0.8 + 0.2 * np.stack([tr.lfo(7), tr.lfo(9, 0.7)])
+    tr.add_bed(roar, 0.35, 0.15)
+    t = 0.3
+    while t < tr.n / SR:
+        tr.add(crackle(tr.rng), t, tr.rng.uniform(-0.35, -0.05), tr.rng.uniform(0.04, 0.18), 0.15)
+        t += tr.rng.exponential(0.35)
+    murmur(tr, 5, 0.45)
+    t = 2.0
+    while t < tr.n / SR:
+        tr.add(drip(tr.rng), t, 0.7, 0.12, 0.8)
+        t += tr.rng.uniform(5.0, 9.0)
+    return ambience_level(tr.render(1.8, -1.5))
+
+
+AMBIENCE = {"amb_drains": amb_drains, "amb_streets": amb_streets, "amb_hub": amb_hub}   # audio/ambience/<key>.ogg
+
+
 STINGS = {"combat_sting", "victory_stinger"}   # one-shots in audio/stings/ (AI-18 placeholders until Flow Music)
 TRACKS = {"ashlands": ashlands, "iron_reaches": iron_reaches,
           "tidewrack": tidewrack, "combat": combat,
@@ -771,7 +903,7 @@ TRACKS = {"ashlands": ashlands, "iron_reaches": iron_reaches,
           "story_escape": story_escape, "story_goodbye": story_goodbye,
           "sunk_ward_danger": sunk_ward_danger, "sunk_ward_boss": sunk_ward_boss,
           "sunk_ward_shop": sunk_ward_shop, "sunk_ward_travel": sunk_ward_travel,
-          "combat_sting": combat_sting, "victory_stinger": victory_stinger}
+          "combat_sting": combat_sting, "victory_stinger": victory_stinger, **AMBIENCE}
 # ASSETORG2 layers: the kit's mood loops; every other track is the game's
 WORKSPACE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 LAYERS = {"kit": ("kits", "rpg", "assets"), "game": ("games", "emberwake", "assets")}
@@ -783,7 +915,7 @@ def layer_of(name: str) -> str:
 
 
 def track_path(root: str, name: str) -> str:
-    folder = "stings" if name in STINGS else "music"
+    folder = "stings" if name in STINGS else "ambience" if name in AMBIENCE else "music"
     return os.path.normpath(os.path.join(root, *LAYERS[layer_of(name)], "audio", folder, name + ".ogg"))
 
 
