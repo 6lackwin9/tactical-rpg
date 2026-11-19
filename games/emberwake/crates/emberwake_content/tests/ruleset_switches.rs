@@ -61,6 +61,9 @@ const DERIVED_ORDERS_SEED: &str = "w24k1b.json";
 /// seed set, so those units ship with its deck.
 const CLASS_BASICS_SEED: &str = "classbasics.json";
 
+/// PR7-41 (PT-22): the seed that fills the founders' third active slot (and puts the skill in its intent's order).
+const PR7_41_DECKS_SEED: &str = "pr7_41_decks.json";
+
 /// R4-1 slice 2 (FB-144): the seed that set `template` on the caster units (after the class-basics seed).
 const TEMPLATES_SEED: &str = "r41s2.json";
 /// R4-2 (FB-138 L2): the seed that drops the duplicate class basic `brace` from `founder_kaelen.extra_skills`.
@@ -164,11 +167,12 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     let reordered = seed_rows(DERIVED_ORDERS_SEED, "units");
     assert!(!reordered.is_empty(), "the derived-row seed re-orders unit decks");
     let class_basics = seed_steps(CLASS_BASICS_SEED);
+    let pr7_41 = seed_rows(PR7_41_DECKS_SEED, "units");
     let last_unit = |id: &str| class_basics.iter().rev().find(|(k, e)| k == "units" && json::s(e, "id") == id).map(|(_, e)| e);
     for u in &reordered {
         let id = json::s(u, "id");
         let mut e = shipped_units.get("units", &id).clone();
-        let last = last_unit(&id).unwrap_or(u);
+        let last = pr7_41.iter().find(|e| json::s(e, "id") == id).or_else(|| last_unit(&id)).unwrap_or(u);
         assert_eq!(e.get("deck"), last.get("deck"), "unit '{id}' ships with the deck the last seed leaves");
         if let Some(Value::Object(deck)) = e.get_mut("deck") {
             deck.shift_remove("order");
@@ -356,6 +360,12 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("PR7-12 unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the PR7-12 units step leaves the shipped ruleset rows");
+    // PR7-41 (PT-22): the seed's units steps fill the founders' third active slot
+    assert!(seed_entries(PR7_41_DECKS_SEED).is_empty(), "the PR7-41 seed changes no ruleset row");
+    for e in &pr7_41 {
+        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("PR7-41 unit '{}': {err:?}", json::s(e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the PR7-41 units steps leave the shipped ruleset rows");
     // PR5-52 (RULESET-MODES1): the seed removes the classic row and re-saves timeline under modes: the shipped rows
     let text = std::fs::read_to_string(data_dir().join("seeds").join(RULESETMODES1_SEED)).expect("the RULESET-MODES1 seed");
     let seed: Value = serde_json::from_str(&text).expect("seed JSON");
@@ -380,7 +390,8 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         .chain(classpass1.iter().map(|e| json::s(e, "id")))
         .chain(techniques_grafts.iter().map(|e| json::s(e, "id")))
         .chain(pr6_5.iter().map(|e| json::s(e, "id")))
-        .chain(pr7_12.iter().map(|e| json::s(e, "id")));
+        .chain(pr7_12.iter().map(|e| json::s(e, "id")))
+        .chain(pr7_41.iter().map(|e| json::s(e, "id")));
     for id in units {
         assert_eq!(seeded.get("units", &id), shipped_units.get("units", &id), "unit '{id}' as shipped");
     }
