@@ -57,11 +57,12 @@ drains, a 0.1 s gold flash as the marker fills, title and portrait crossfade 0.3
 
 ## 5. Take 26 review (user 2026-11-19 18:24)
 
-- BU9. Poise target. A boss should not break every round under focus fire, nor be near unbreakable (take 26 showed up
-  to 26 stagger to break). Target, with the whole party focusing the boss and using its staggering skills: the first
-  break in round 2 or 3, then about one break every 2-3 rounds (2 to 4 breaks in a boss fight of 10 rounds); never a
-  break in round 1 from a full bar. The `PR7-54` data step measures breaks per fight in the sim and sets the bosses'
-  `poise` and `poise_pips` to meet it (the golden re-record stays the user's call).
+- BU9. Poise target (user 2026-11-19 18:26, confirming): a high break threshold plus the larger bar, so a boss
+  breaks "only once every 3 rounds or something like that when fighting against a party of the same level". Target,
+  same-level party focusing the boss: the first break in round 2 or 3, then about one break every 3 rounds; never a
+  break in round 1 from a full bar. Breaking stays optional (poise is an interrupt, not a required mechanic): a hero
+  too weak to dent the bar is fine, and building a party to break the boss is a valid choice. Tuned later in the
+  `PR7-54` data step (sim breaks per fight); the golden re-record stays the user's call.
 - BU10. Poise pips read at a glance: pips in groups of 5 with a gap (10 = two groups); at most 10.
 - BU11. Boss intent panel. Selecting the boss (or a hero targeting it) opens a boss intent panel in the bar's space
   instead of the standard foe card: each party member's planned hits on the boss on one short timeline row each,
