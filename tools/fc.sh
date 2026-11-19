@@ -89,6 +89,12 @@ if [ "$(uname -s 2>/dev/null)" = "Linux" ] && [ "${OS:-}" != "Windows_NT" ]; the
     echo "[env] ALSA development files not found (pkg-config alsa); the audio crate will not build. Fix: apt-get install -y libasound2-dev pkg-config"
   fi
 fi
+# ENGINE-12 (PC gate, 2026-11-19): elsewhere (the desktop's main checkout) cargo builds into .cargo/config.toml's target-dir,
+# so the binary lookups below (${CARGO_TARGET_DIR:-$PWD/target}) must name that folder too, not $PWD/target
+if [ -z "${CARGO_TARGET_DIR:-}" ]; then
+  base=$(sed -n 's/^target-dir = "\(.*\)"/\1/p' .cargo/config.toml 2>/dev/null)
+  [ -n "$base" ] && export CARGO_TARGET_DIR="$base"
+fi
 
 # Windows Smart App Control sometimes blocks a freshly linked test binary (os error 4551): delete the blocked exe so the next
 # run relinks it, up to 3 tries (engine/docs/PORT_NOTES.md).

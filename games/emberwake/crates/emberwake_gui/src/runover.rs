@@ -556,6 +556,11 @@ impl Screen<GameCx> for RunOverScreen {
         json!({"kind": self.kind, "card": self.card, "text": self.text, "act": self.act, "act_save": self.key, "act_save_ready": self.act_save_missing(cx).is_empty()})
     }
 
+    /// AMBIENCE1: no place's loop under this screen.
+    fn ambience(&self, _cx: &Cx) -> Option<String> {
+        Some(String::new())
+    }
+
     fn music(&self, _cx: &Cx) -> Option<String> {
         Some(String::new())
     }

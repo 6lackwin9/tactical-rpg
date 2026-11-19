@@ -94,7 +94,7 @@ impl<G: Context> Shell<G> {
         #[allow(unused_mut)]
         let mut out = json!({"ok": true, "screen": top.id(), "stack": self.stack.iter().map(|s| s.id()).collect::<Vec<_>>(), "canvas": self.top_view().canvas(), "grid": top.grid().name(), "mouse": [self.mouse.0, self.mouse.1],
             "frame": self.frames, "px": [self.gfx.canvas.w, self.gfx.canvas.h],
-            "music": cx.audio.wanted_music(), "focus": self.gfx.kit.focus, "focus_visible": self.gfx.kit.focus_visible, "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets(),
+            "music": cx.audio.wanted_music(), "ambience": cx.audio.wanted_ambience(), "focus": self.gfx.kit.focus, "focus_visible": self.gfx.kit.focus_visible, "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets(),
             "edit": self.gfx.kit.edit.as_ref().map(|e| json!({"id": e.id, "caret": e.caret, "selection": e.selection(), "selected": e.selected(), "undo": e.history().0}))});
         #[cfg(not(target_arch = "wasm32"))]
         {
