@@ -64,15 +64,23 @@ drains, a 0.1 s gold flash as the marker fills, title and portrait crossfade 0.3
   too weak to dent the bar is fine, and building a party to break the boss is a valid choice. Tuned later in the
   `PR7-54` data step (sim breaks per fight); the golden re-record stays the user's call.
 - BU10. Poise pips read at a glance: pips in groups of 5 with a gap (10 = two groups); at most 10.
-- BU11. Boss intent panel. Selecting the boss (or a hero targeting it) opens a boss intent panel in the bar's space
-  instead of the standard foe card: each party member's planned hits on the boss on one short timeline row each,
-  plus the party total (HP and poise), and the boss's own attack impact row. It stays compact (no taller than the
-  bar plus two rows) and never covers a unit or the selected target.
+- BU11. Boss intent panel (take 28, after the user's 18:34 note that take 27 was "too busy"): in the bar's space
+  instead of the standard foe card, two damage rows by block ("Block 1" to "Block 6"): the selected hero's damage per
+  block (gold-ringed cell) and the party's damage per block, with BREAK and the next phase's marker in the block where
+  each lands; totals at the right; the boss's own attack impact row kept. No per-member chips or "After" row. It
+  stays compact and never covers a unit or the selected target.
 - BU12. Any intent box or card, for bosses and mobs, sits clear of the acting unit and its target on the board.
 - BU13. The round banner carries the enrage cue (ENRAGE2 EN5): "Enrage next round", then "Foes enraged +n %" with
   the step the foes gained; confirmed by the user's reading of take 26.
-- BU14. Overflow (Design 2026-11-19 `[PROVISIONAL]`, Art/UI question on take 27): damage past a phase's span carries
-  into the next phase when the same unit continues, because HP is one pool and BU1 is display only (no rule change,
-  no golden move); the "After" row shows the span reaching 0, the phase marker, then the next span reduced by the
-  rest. A phase that brings a new boss unit starts that unit at its own HP (no carry). Capping damage at a phase
-  threshold would be a rule change for the user.
+- BU14. ~~Overflow carries into the next phase~~ (Design `[PROVISIONAL]`, replaced the same day by BU15, user).
+- BU15. Phase break ends the round (user 2026-11-19 18:38: "if you do kill a phase in a round, it should trigger the
+  next phase in the next round only ... the damage also should not carry forward ... the moment the phase change
+  happens ... it should end the round, so none of the other actions or AP consumption happens"). A rule (kit,
+  `rpgkit_battle`): when a hit takes a boss unit to or below the threshold that ends its phase (`hp_below`), its HP
+  stops at the threshold (the rest of the hit is lost), the round ends at once (no later scheduled action of either
+  side resolves and none spends AP), the usual end-of-round steps run (`[PROVISIONAL]`: ticks and status countdown,
+  which cannot take the boss below the threshold), and the next round starts in the new phase with its effects. The
+  last phase ends with the boss's defeat as today. Phases that end on `round` are unchanged.
+- BU16. Boss intent rows (user 2026-11-19 18:38 on take 28): each block cell shows the impact, as the small foe
+  intent bar does: HP damage, poise damage and the status chips; no skill names or icons (the strip at the top has
+  them). The party row shows the phase break in the block it lands and greys the blocks after it (they will not run).

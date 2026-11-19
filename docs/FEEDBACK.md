@@ -78,6 +78,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-12` PC gate fix 2 | done (tools lane) | `develop` | The PC gate's step 10 (lints): `tools/deps/unused_deps.py` took a crate's name by splitting its path on `/`, but on Windows glob joins with a backslash, so the keep list never matched. It now uses `Path(crate).name`. In a sweep of the other tools, every other `split("/")` splits an asset key, not a path. `golden_bisect.py` now lists files as posix paths. |
 | `ENGINE-12` (`GATE-PARITY1`) | closed: the PC gate passes | `develop` ec53813 | The PC thread ran `check_project.ps1` on develop ec53813: all 15 steps passed (3952 tests, exit 0). |
 | `ENGINE-22` (`SEED-ARCHIVE1`) | done (tools lane) | `develop` (squash `ENGINE-22`) | 33 stale seeds moved to `data/seeds/archive/`, with a README row each. The 2 known overlaps are settled. `seed_order_known.txt` is empty. FB-367 |
+| `ENGINE-22` fix | done (tools lane) | `develop` | Correction to FB-367: my edit to `cast1a3.json` (narrowing its `bile_coat` step) moved it last in the commit order, so after main Build's `pr7_40` landing the seeds step failed: 34 findings, all `cast1a3.json` against `pr7_41_text.json`. `cast1a3.json` is now restored as it was and archived, making 34 archived seeds. `tools/fc.sh seeds` reports 67 seeds and 0 findings. `seed_order.py`'s doc and the seeds README say an old seed is archived, never edited in place. develop was red on the seeds step between 33a6b49 and this fix. |
 
 ## 2. Feedback Items (Append-Only)
 
