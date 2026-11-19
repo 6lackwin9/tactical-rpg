@@ -205,6 +205,9 @@ screen at 1280x720, 1:1.
   - User 2026-11-19 18:59: the Total column holds only the two row sums; no "Party -N" (the boss bar's planned loss
     says it) and no "N to phase 2" (the HP bar shows it). The phase break frame keeps "Ends block N" and "Ph. 2 next
     round".
+  - User 2026-11-19 19:00: the Total column shows each row's full impact over the blocks that run: HP, poise (glyph and
+    number) and the status chips (one and "+N" in the bar). The hover adds a Total column per member (every chip)
+    and a "Party" line under the members with the per-block and total impact (`battle_take30_totals_hover_2x.png`).
 - Not expressed yet: collision stagger from push or pull on the card row, hazard damage in the HP preview and the
   block ruler, reactions (riposte, counters) as a "returns -n" note, flank, guard, cover and windup modifiers in the
   skill hover, channel rounds, unit meters, weapon wear.

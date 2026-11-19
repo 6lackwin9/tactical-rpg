@@ -115,8 +115,10 @@ def intent_rows(img, x0, x1, y, sel="kaelen", span_left=160, pips=6, next_span=4
     sx = x1 - 14 - sw + 8
     d.line((sx - 6, y + 4, sx - 6, y + 50), fill=B.IRON)
     d.text((sx, y + 3), "Total", font=T12.TINY, fill=DIM)
-    d.text((sx, r1 + 1), f"-{mine_tot}", font=B.MONO, fill=B.IMPACT)
-    d.text((sx, r2 + 1), f"-{party_tot - (mine_tot if others else 0)}", font=B.MONO, fill=B.IMPACT)
+    last = 6 if ended is None else ended + 1
+    rest = [k for k in hits if not (others and k == sel)]
+    impact(img, d, sx, r1, mine_tot, *row_totals([sel], last)[1:])
+    impact(img, d, sx, r2, party_tot - (mine_tot if others else 0), *row_totals(rest, last)[1:])
     # user 18:59: no party total here (the boss bar's planned loss already says it)
     if ended is None:
         pass                                   # user 18:59: no "N to phase 2" (the HP bar shows it)
@@ -127,6 +129,14 @@ def intent_rows(img, x0, x1, y, sel="kaelen", span_left=160, pips=6, next_span=4
 
 
 POISE_STYLE = {"v": "bar"}
+
+
+def row_totals(keys, last=6):
+    """(HP, poise pips, statuses) summed over the blocks that run, for the Total column (user 19:00)."""
+    hp = sum(T27.HITS[k].get(b, (0, 0))[0] for k in keys for b in range(1, last + 1))
+    pp = sum(T27.HITS[k].get(b, (0, 0))[1] for k in keys for b in range(1, last + 1))
+    sts = [st for k in keys for b in range(1, last + 1) for st in LANDS.get((k, b), [])]
+    return hp, pp, sts
 
 
 def poise_bar(d, x, y, n, on, w=14, h=4, gap=2):
@@ -150,12 +160,15 @@ def party_hover(img, x0, x1, y, sel="kaelen"):
     hits = T27.HITS
     tx, sw = x0 + 76, 150
     cw = (x1 - 14 - sw - tx) // 6
-    w0, w1 = x0, x1 - sw
-    h = 30 + 18 * len(hits) + 6
+    w0, w1 = x0, x1
+    sx = x1 - 14 - sw + 8
+    h = 30 + 18 * (len(hits) + 1) + 10
     T26.T24.shadow(img, (w0, y, w1, y + h))
     T26.T24.nine(img, (w0, y, w1, y + h), "hud")
     d = ImageDraw.Draw(img)
     d.text((w0 + 12, y + 7), "Party by member", font=B.TITLE_S, fill=B.GOLD)
+    d.text((sx, y + 10), "Total", font=T12.TINY, fill=DIM)
+    d.line((sx - 6, y + 26, sx - 6, y + h - 10), fill=B.IRON)
     for i, k in enumerate(hits):
         ry = y + 30 + i * 18
         img.paste(T17.T.face(k, 14), (w0 + 10, ry))
@@ -164,7 +177,32 @@ def party_hover(img, x0, x1, y, sel="kaelen"):
             if b + 1 in hits[k]:
                 hp, pp = hits[k][b + 1]
                 impact(img, d, tx + b * cw + 10, ry - 1, hp, pp, LANDS.get((k, b + 1), []))
+        hp, pp, sts = row_totals([k])
+        all_chips(img, d, sx, ry - 1, hp, pp, sts)
+    # the party's total line under the members
+    ry = y + 30 + len(hits) * 18 + 2
+    d.line((w0 + 10, ry - 2, x1 - 10, ry - 2), fill=B.IRON)
+    d.text((w0 + 27, ry), "Party", font=B.SMALL, fill=B.PARCH)
+    for b in range(6):
+        ph = sum(hits[k].get(b + 1, (0, 0))[0] for k in hits)
+        pp = sum(hits[k].get(b + 1, (0, 0))[1] for k in hits)
+        if ph:
+            impact(img, d, tx + b * cw + 10, ry - 1, ph, pp, [st for k in hits for st in LANDS.get((k, b + 1), [])])
+    all_chips(img, d, sx, ry - 1, *row_totals(list(hits)))
     return h
+
+
+def all_chips(img, d, x, y, hp, pp, sts):
+    """The hover's Total column: HP, poise, and every status chip (the hover has the room)."""
+    d.text((x, y + 1), f"-{hp}", font=B.MONO, fill=B.IMPACT)
+    gx = x + int(d.textlength(f"-{hp}", font=B.MONO)) + 5
+    if pp:
+        B.poise_glyph(d, gx, y + 3, 10)
+        d.text((gx + 12, y + 1), str(pp), font=B.MONO, fill=B.POISE)
+        gx += 24
+    for st in sts:
+        T12.mini(img, d, gx, y + 1, st, px=12)
+        gx += 17
 
 
 def main():
@@ -193,7 +231,7 @@ def main():
     MODE["party"] = "others"
     ho = T27.screen(shot)
     party_hover(ho, 212, 1068, 218)
-    ho.crop((204, 66, 1076, 340)).resize((872 * 2, 548), Image.NEAREST).save(out / "battle_take30_pick_others_hover_2x.png")
+    ho.crop((204, 66, 1076, 360)).resize((872 * 2, 588), Image.NEAREST).save(out / "battle_take30_pick_others_hover_2x.png")
     MODE["party"] = "all"
     # poise A vs B side by side
     pa, pb = Image.open(out / "_a.png"), Image.open(out / "_b.png")
