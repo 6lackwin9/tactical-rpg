@@ -238,8 +238,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				},
 				"back_alleys": {
 					"encounters": [
@@ -250,8 +257,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				},
 				"culling_plaza": {
 					"encounters": [
@@ -266,8 +280,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				}
 			},
 			"markers": [
@@ -424,8 +445,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				},
 				"ash_yards": {
 					"encounters": [
@@ -436,8 +464,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				},
 				"mill_floor": {
 					"encounters": [
@@ -452,8 +487,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				}
 			},
 			"markers": [
@@ -601,8 +643,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				},
 				"overlook_path": {
 					"encounters": [
@@ -613,8 +662,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				},
 				"watchpost": {
 					"encounters": [
@@ -629,8 +685,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				},
 				"guardroom": {
 					"encounters": [
@@ -645,8 +708,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				}
 			},
 			"markers": [
@@ -806,8 +876,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				},
 				"back_alleys": {
 					"encounters": [
@@ -818,8 +895,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				},
 				"yard": {
 					"encounters": [
@@ -834,8 +918,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				}
 			},
 			"markers": [
@@ -963,8 +1054,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				},
 				"towpath_and_yard": {
 					"encounters": [
@@ -975,8 +1073,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				},
 				"rendering_yard": {
 					"encounters": [
@@ -991,8 +1096,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				}
 			},
 			"markers": [
@@ -1155,8 +1267,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				}
 			},
 			"markers": [
@@ -1226,8 +1345,15 @@
 					],
 					"elites": [],
 					"elite_pct": 0,
-					"steps_min": 12,
-					"steps_max": 20
+					"steps_min": 40,
+					"steps_max": 60,
+					"visit_cap": 2,
+					"rest_beaten": true,
+					"repeat_xp_pct": [
+						75,
+						50,
+						25
+					]
 				}
 			},
 			"markers": [

@@ -179,6 +179,11 @@ impl BoardPane {
         if !node.is_empty() {
             out.push((format!("Where: {node}"), BODY, th().info));
         }
+        // PR7-42 (PT-17): the level the job is meant for
+        let lv = json::i(det, "rec_level", json::i(row, "rec_level", 0));
+        if lv > 0 {
+            out.push((format!("{}.", board::rec_level_text(lv)), BODY, th().info));
+        }
         let due = json::dict(det.get("deadline").or_else(|| row.get("deadline")).unwrap_or(&Value::Null)).clone();
         if !due.is_empty() {
             out.push((s(&due, "text"), BODY, DEADLINE));
@@ -276,7 +281,14 @@ impl BoardPane {
                 let (tx, tw) = (rr.x as f32 + 4.0, (rr.w - 8) as f32);
                 let name = s(r, "name");
                 let mut ty = rr.y as f32 + 2.0;
-                ui.p.text_fit(tx, ty, &name, BODY, tw, if picked { th().gold } else { th().text });
+                // PR7-42 (PT-17): the recommended level at the name's right ("Lv 5")
+                let lv = json::i(r, "rec_level", 0);
+                let lv_text = if lv > 0 { format!("Lv {lv}") } else { String::new() };
+                let lw = if lv_text.is_empty() { 0.0 } else { ui.p.text_w(&lv_text, SMALL) + 6.0 };
+                if !lv_text.is_empty() {
+                    ui.p.text_right(tx + tw, ty + 1.0, &lv_text, SMALL, th().info);
+                }
+                ui.p.text_fit(tx, ty, &name, BODY, tw - lw, if picked { th().gold } else { th().text });
                 ty += lb as f32;
                 let node = s(r, "node_name");
                 let due = r.get("deadline").map(|v| s(json::dict(v), "text")).unwrap_or_default();
@@ -300,6 +312,9 @@ impl BoardPane {
                 }
                 if !due.is_empty() {
                     t.push((due.clone(), DEADLINE));
+                }
+                if lv > 0 {
+                    t.push((board::rec_level_text(lv), th().info));
                 }
                 ui.push(format!("board.row.{q}"), "row", name.clone(), rr, true, picked, Some(wrap(BoardAct::Pick(q.clone()))), t);
                 y += h + 1;

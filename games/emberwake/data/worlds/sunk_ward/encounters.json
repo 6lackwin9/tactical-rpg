@@ -100,12 +100,7 @@
 			"location": "meat_market_rooftops",
 			"zone": "rooftops",
 			"arena": "CLOSED",
-			"exits": [
-				[
-					11,
-					4
-				]
-			],
+			"exits": [],
 			"rows": [
 				"oooooooooooo",
 				"oo#ooooo##oo",
@@ -159,7 +154,7 @@
 			"objective_rounds": 3,
 			"objective_unit": "",
 			"objective_count": 1,
-			"objective_text": "Follow the smoke: hide, guard each other, slip away.",
+			"objective_text": "Use Vesper's smoke: hide, guard each other, drive them off.",
 			"unkillable": [],
 			"timeout_outcome": "fled",
 			"stay_behind": {},

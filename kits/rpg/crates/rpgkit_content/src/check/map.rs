@@ -24,7 +24,10 @@ const STEPS_HI: i64 = 99;
 const MAX_CHEST_KEYS: usize = 8;
 const CHEST_COUNT_MAX: i64 = 99;
 const CHEST_GOLD_MAX: i64 = 9999;
-const BINDING_KEYS: [&str; 5] = ["encounters", "elites", "elite_pct", "steps_min", "steps_max"];
+const BINDING_KEYS: [&str; 8] = ["encounters", "elites", "elite_pct", "steps_min", "steps_max", "visit_cap", "rest_beaten", "repeat_xp_pct"];
+/// PR7-42 (PACE1): a binding's `visit_cap` (0 = none) and `repeat_xp_pct` length ceilings.
+const VISIT_CAP_MAX: i64 = 9;
+const REPEAT_XP_MAX: usize = 9;
 const MARKER_COMMON: [&str; 8] = ["id", "kind", "anchor", "requires_flags", "unless_flags", "sets_flags", "label", "note"];
 const LABEL_MAX: usize = 32;
 const NOTE_MAX: usize = 160;
@@ -200,6 +203,21 @@ fn binding_errors(v: &View, w: &str, t: &Dict, map_id: &str, zone: &str, raw: &V
     }
     if json::arr(&b["encounters"]).is_empty() && json::arr(&b["elites"]).is_empty() {
         errors.push(format!("Zone binding '{zone}' binds no encounter."));
+    }
+    // PR7-42 (PACE1): the patrol pacing keys (all optional)
+    if let Some(x) = b.get("visit_cap") {
+        if !int_in(x, 0, VISIT_CAP_MAX) {
+            errors.push(format!("Zone binding '{zone}': visit_cap must be 0..{VISIT_CAP_MAX} (0 = no cap)."));
+        }
+    }
+    if b.get("rest_beaten").is_some_and(|x| !x.is_boolean()) {
+        errors.push(format!("Zone binding '{zone}': rest_beaten must be true or false."));
+    }
+    if let Some(x) = b.get("repeat_xp_pct") {
+        let ok = x.as_array().is_some_and(|l| l.len() <= REPEAT_XP_MAX && l.iter().all(|p| int_in(p, 0, 100)));
+        if !ok {
+            errors.push(format!("Zone binding '{zone}': repeat_xp_pct must be a list of at most {REPEAT_XP_MAX} percents 0..100."));
+        }
     }
     errors
 }

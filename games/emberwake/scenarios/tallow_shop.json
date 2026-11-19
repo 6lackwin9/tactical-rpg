@@ -1,0 +1,26 @@
+{
+  "id": "tallow_shop",
+  "title": "PR7-42 (PT-19): the playtest save sweep_start at Alleyway Junction 7 (8 Tallow, 76 Scrap); the Candle-Maker's first choice opens his window, which sells Warded Tallow at 5 Scrap; one bought: 9 Tallow, 71 Scrap",
+  "launch": {"save": "sweep_start"},
+  "settings": {"reduce_motion": true},
+  "timeout_s": 300,
+  "steps": [
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
+    {"step": "click", "id": "menu.continue"},
+    {"step": "wait", "until": {"path": "screen", "eq": "region_map"}, "timeout_ms": 20000},
+    {"step": "assert", "until": {"path": "state.location", "eq": "sunk_ward:alleyway_junction_7"}},
+    {"step": "pause", "ms": 800},
+    {"step": "click", "id": "marker.npc_chandler"},
+    {"step": "wait", "until": {"all": [{"path": "state.walking", "eq": false}, {"path": "state.dialogue.speaker_name", "eq": "Candle-Maker"}]}, "timeout_ms": 30000},
+    {"step": "shot", "name": "chandler_talk"},
+    {"step": "click", "id": "choice.0"},
+    {"step": "wait", "until": {"path": "state.shop", "ne": null}},
+    {"step": "shot", "name": "chandler_shop"},
+    {"step": "assert", "until": {"path": "state.party.supplies", "source": "game", "eq": 8}},
+    {"step": "click", "id": "shop.row.supplies"},
+    {"step": "click", "id": "trade.confirm"},
+    {"step": "wait", "until": {"path": "state.party.supplies", "source": "game", "eq": 9}},
+    {"step": "assert", "until": {"path": "state.party.gold", "source": "game", "eq": 71}},
+    {"step": "shot", "name": "chandler_bought"}
+  ]
+}

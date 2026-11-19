@@ -544,6 +544,10 @@ pub fn enter(d: &Data, gs: &mut GameState, location_ref: &str, anchor: &str) -> 
     gs.location_id = qid.clone();
     gs.position = pos;
     gs.explore.insert("loc_steps".into(), int(0));
+    // PR7-42 (PACE1): a new visit, a new patrol count
+    if let Some(Value::Object(p)) = gs.explore.get_mut(crate::state::PATROLS_KEY) {
+        p.shift_remove("visit");
+    }
     quest::set_flag(d, gs, &visited_flag(&qid), Value::Bool(true));
     if t.is_empty() || tile_safe(t, anchor_pos(t, SPAWN)) {
         gs.explore.insert("last_safe".into(), qid.clone().into());
@@ -838,12 +842,122 @@ fn trigger(d: &Data, gs: &mut GameState, loc: &Dict, t: &Dict, markers: &[Dict],
     if binding.is_empty() || gs.explore_int("steps") < json::i(&gs.explore, "next_at", 1) {
         return Dict::new();
     }
-    counter_pick(d, gs, binding)
+    // PR7-42 (PACE1): a paced binding never sends a patrol before its own steps_min (a counter rolled elsewhere, a new
+    // game's or a safe tile's, comes due no sooner), and no more this visit once its `visit_cap` is reached
+    if paced(binding) && gs.explore_int("steps") < json::i(binding, "steps_min", DEFAULT_STEPS_MIN) {
+        return Dict::new();
+    }
+    let cap = json::i(binding, VISIT_CAP, 0);
+    if cap > 0 && patrol_count(gs, "visit") >= cap {
+        return Dict::new();
+    }
+    let fight = counter_pick(d, gs, binding);
+    if cap > 0 && !fight.is_empty() {
+        let visit = patrol_count(gs, "visit") + 1;
+        patrols_mut(gs).insert("visit".into(), int(visit));
+    }
+    fight
+}
+
+// ---- PR7-42 (PACE1): patrol pacing ---------------------------------------------------------------------------
+
+/// A zone binding's cap on the counter fights ("patrols") of one visit to the location, counted over all its zones
+/// (0 or absent = no cap; the visit count restarts on entering a location).
+pub const VISIT_CAP: &str = "visit_cap";
+/// A zone binding's switch: an encounter of it beaten in a counter fight is not picked again on the same day
+/// (`GameState::time`); when every encounter of the binding is resting, no patrol comes.
+pub const REST_BEATEN: &str = "rest_beaten";
+/// A zone binding's XP percent of each repeat win over a counter encounter (the 2nd win's, the 3rd's, ...); repeats
+/// past the list pay 0. Absent = every win pays full XP.
+pub const REPEAT_XP_PCT: &str = "repeat_xp_pct";
+
+/// Whether a zone binding sets any patrol pacing key (`VISIT_CAP`, `REST_BEATEN`, `REPEAT_XP_PCT`); an unpaced
+/// binding counts as before PR7-42.
+pub fn paced(binding: &Dict) -> bool {
+    [VISIT_CAP, REST_BEATEN, REPEAT_XP_PCT].iter().any(|k| binding.contains_key(*k))
+}
+
+/// The patrol record (`state::PATROLS_KEY`): {visit: counter fights this visit, won: {encounter qid: counter wins},
+/// day: {encounter qid: the day of its last counter win}}; written only once a binding's pacing keys need it.
+fn patrols(gs: &GameState) -> &Dict {
+    json::dget(&gs.explore, crate::state::PATROLS_KEY)
+}
+
+fn patrols_mut(gs: &mut GameState) -> &mut Dict {
+    let slot = gs.explore.entry(crate::state::PATROLS_KEY.to_string()).or_insert_with(|| Value::Object(Dict::new()));
+    if !slot.is_object() {
+        *slot = Value::Object(Dict::new());
+    }
+    slot.as_object_mut().expect("an object")
+}
+
+fn patrol_count(gs: &GameState, key: &str) -> i64 {
+    json::i(patrols(gs), key, 0)
+}
+
+/// The counter wins over encounter `qid` so far.
+pub fn patrol_wins(gs: &GameState, qid: &str) -> i64 {
+    json::i(json::dget(patrols(gs), "won"), qid, 0)
+}
+
+/// Whether encounter `qid` rests today: beaten in a counter fight on the current day.
+pub fn patrol_resting(gs: &GameState, qid: &str) -> bool {
+    json::dget(patrols(gs), "day").get(qid).is_some_and(|v| json::is_int(v) && json::to_int(v) == gs.time)
+}
+
+/// The XP percent a counter win over `qid` pays under `binding`: 100 for the first win, then the binding's
+/// `repeat_xp_pct` by repeat (0 past the list); 100 when the binding has no such list.
+pub fn patrol_xp_pct(gs: &GameState, binding: &Dict, qid: &str) -> i64 {
+    let Some(list) = binding.get(REPEAT_XP_PCT).and_then(Value::as_array) else { return 100 };
+    let wins = patrol_wins(gs, qid);
+    if wins <= 0 {
+        return 100;
+    }
+    list.get(wins as usize - 1).map_or(0, |v| json::to_int(v).clamp(0, 100))
+}
+
+/// A binding's [encounter, weight] pairs without the encounters resting today (all of them without `rest_beaten`).
+fn awake(d: &Data, gs: &GameState, binding: &Dict, key: &str) -> Vec<Value> {
+    let pairs = json::aget(binding, key);
+    if !json::b(binding, REST_BEATEN, false) {
+        return pairs.to_vec();
+    }
+    pairs.iter().filter(|p| !patrol_resting(gs, &json::s(d.resolve(&gs.world_id, "encounters", &json::gstr(&json::arr(p).first().cloned().unwrap_or_default())), "_qid"))).cloned().collect()
+}
+
+/// The binding of a counter fight `fight` (`source` counter) at the party's tile, {} for any other fight.
+fn counter_binding(d: &Data, gs: &GameState, fight: &Dict) -> Dict {
+    if json::s(fight, "source") != "counter" {
+        return Dict::new();
+    }
+    let loc = location(d, gs);
+    let t = template_of(d, loc);
+    if t.is_empty() {
+        return Dict::new();
+    }
+    binding_at(loc, t, gs.position)
+}
+
+/// After a won counter fight under `binding`: one more win over `qid` and today's day, when the binding paces
+/// patrols by wins (`rest_beaten`, `repeat_xp_pct`).
+fn record_patrol_win(gs: &mut GameState, binding: &Dict, qid: &str) {
+    if !json::b(binding, REST_BEATEN, false) && !binding.contains_key(REPEAT_XP_PCT) {
+        return;
+    }
+    let (wins, day) = (patrol_wins(gs, qid) + 1, gs.time);
+    let p = patrols_mut(gs);
+    for (key, v) in [("won", wins), ("day", day)] {
+        let slot = p.entry(key.to_string()).or_insert_with(|| Value::Object(Dict::new()));
+        if !slot.is_object() {
+            *slot = Value::Object(Dict::new());
+        }
+        slot.as_object_mut().expect("an object").insert(qid.to_string(), int(v));
+    }
 }
 
 fn counter_pick(d: &Data, gs: &mut GameState, binding: &Dict) -> Dict {
-    let normal = json::aget(binding, "encounters");
-    let elites = json::aget(binding, "elites");
+    let (normal, elites) = (awake(d, gs, binding, "encounters"), awake(d, gs, binding, "elites"));
+    let (normal, elites) = (&normal[..], &elites[..]);
     let mut elite = false;
     if !elites.is_empty() && !normal.is_empty() {
         elite = rolls::chance(gs, rolls::EXPLORE, json::i(binding, "elite_pct", DEFAULT_ELITE_PCT));
@@ -882,7 +996,17 @@ pub fn decline_fight(d: &Data, gs: &mut GameState, fight: &Dict) {
 /// BattleBridge.apply (REWARD1: `tally` from the battle, None = settled without one), then won: done flag and
 /// sets_flags; fled: back a tile; lost: wake. Then the counter reset.
 pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, tally: Option<&crate::battle::Tally>) -> Dict {
-    let applied = crate::battle::settle(d, gs, &json::s(fight, "encounter"), outcome, tally);
+    // PR7-42 (PACE1): a counter fight's XP by its repeat wins, then the win on the patrol record
+    let patrol = counter_binding(d, gs, fight);
+    let qid = json::s(fight, "encounter");
+    let applied = if patrol.contains_key(REPEAT_XP_PCT) {
+        crate::battle::settle_xp_pct(d, gs, &qid, outcome, tally, patrol_xp_pct(gs, &patrol, &qid))
+    } else {
+        crate::battle::settle(d, gs, &qid, outcome, tally)
+    };
+    if outcome == "won" && json::b(&applied, "ok", false) && !patrol.is_empty() {
+        record_patrol_win(gs, &patrol, &qid);
+    }
     if !json::b(&applied, "ok", false) {
         let mut out = result(false, &json::sget(&applied, "errors"), Vec::new());
         out.insert("xp".into(), Value::Object(Dict::new()));
