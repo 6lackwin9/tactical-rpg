@@ -50,3 +50,4 @@ Standing script/test hygiene rules: never hand-edit JSON (use `ContentCatalog.up
 | 2026-11-19 | Scenario shots compared with a pixel allowance for idle animation (`FB-347`) | replaced (`ENGINE-17`) | Shot clock; runs are frame-exact | Baselines with an allowance hide real changes; no golden re-recorded |
 | 2026-11-19 | The kit's green exit flag and white point ring on Emberwake's maps | replaced (`PR7-36`, UX-28) | Game-drawn glyphs | Style lock; no golden re-recorded |
 | 2026-11-19 | The shop's hand drawing (PLAYUI1-P) and its per-row hover cards | replaced (`PR7-39` Stage B) | The kit's shop layout; the detail line carries the card text | UI behaviour apart from layout (UISPLIT1); no golden re-recorded |
+| 2026-11-19 | Battle intel side panel and party cards (`draw_ap_pips`, `poise_number`, `card_rows`) | replaced (`PR7-40`, BATTLE-UI2) | Plates and a docked foe card | Signed-off battle contract; no golden re-recorded |

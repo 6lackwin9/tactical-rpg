@@ -76,11 +76,12 @@ fn the_cards_lead_with_the_intent_and_carry_the_badges() {
         }
     }
     assert!(led > 0, "the enemies picked their intents at the round start (AI1)");
-    assert_eq!(widget(&b, "strip.title").rect.w, 68, "the hero's glyph takes the title's end");
+    let t = widget(&b, "strip.title").rect;
+    assert_eq!(t.x + t.w, 76, "the hero's glyph takes the title's end");
 }
 
-/// UI5: the threat intel panel shows the hovered unit of either side: over a party card it is that member, with
-/// its round intent line; over nothing, the first foe.
+/// UI5, BATTLE-UI2 (contract 5): the docked foe card shows the hovered foe and stays on a foe: over nothing the first
+/// foe, over a party plate still the foe (the member's round intent line is on the plate's hover).
 #[test]
 fn the_intel_panel_shows_either_side() {
     let (mut cx, mut g, mut b) = arena(Some(TIMELINE), false);
@@ -91,7 +92,7 @@ fn the_intel_panel_shows_either_side() {
     assert_eq!(widget(&b, "intel.unit").text, s(&b).w.units[foe].name, "nothing hovered: the first foe");
     let card = widget(&b, &format!("party.{h}")).rect;
     b.draw(&mut cx, &mut g, (card.x + card.w / 2, card.y + card.h / 2), true);
-    assert_eq!(widget(&b, "intel.unit").text, s(&b).w.units[h].name, "a party card hovered: that member");
+    assert_eq!(widget(&b, "intel.unit").text, s(&b).w.units[foe].name, "a party plate hovered: the card stays on the foe");
     let rounds = s(&b).round_intents();
     let head = intent_text::round_head(&s(&b).w, rounds.iter().find(|r| r.unit == h).unwrap()).expect("the hero's intent");
     assert!(unit_tip(s(&b), h, Some(h), &[], &rounds, &[]).iter().any(|t| t.0 == head), "{head}");
@@ -203,8 +204,9 @@ fn classic_cards_and_intel_are_unchanged() {
     for t in s(&b).enemy_intents() {
         assert!(widget(&b, &format!("foe.{}", t.unit)).text.ends_with(&intent_text::card_line(w, &t.line)));
     }
-    assert!(b.w.iter().all(|x| !x.id.ends_with(".badges") && x.id != "intel.unit"));
-    assert_eq!(widget(&b, "strip.title").rect.w, 80);
+    assert!(b.w.iter().all(|x| !x.id.ends_with(".badges") && x.id != "intel.unit"), "classic: the card is `card.unit`");
+    let t = widget(&b, "strip.title").rect;
+    assert_eq!(t.x + t.w, 88);
 }
 
 /// PR7-41 (PT-20): the forecast line names the blocks the hits land (never a move's block) and each hit by the kit's

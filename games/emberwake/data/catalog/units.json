@@ -181,6 +181,7 @@
 		{
 			"id": "goblin_brawler",
 			"name": "Goblin Brawler",
+			"short_name": "Brawler",
 			"side": "enemy",
 			"description": "Charges the nearest foe.",
 			"class_id": "brawler",
@@ -237,6 +238,7 @@
 		{
 			"id": "goblin_skirmisher",
 			"name": "Goblin Skirmisher",
+			"short_name": "Skirmisher",
 			"side": "enemy",
 			"description": "Hunts the weakest foe, falls back when hurt.",
 			"class_id": "rogue",
@@ -296,6 +298,7 @@
 		{
 			"id": "goblin_archer",
 			"name": "Goblin Archer",
+			"short_name": "Archer",
 			"side": "enemy",
 			"description": "Holds range and backs away from melee.",
 			"class_id": "ranger",
@@ -352,6 +355,7 @@
 		{
 			"id": "goblin_shaman",
 			"name": "Goblin Shaman",
+			"short_name": "Shaman",
 			"side": "enemy",
 			"description": "Smites and mends its allies.",
 			"class_id": "priest",
@@ -410,6 +414,7 @@
 		{
 			"id": "goblin_berserker",
 			"name": "Goblin Berserker",
+			"short_name": "Berserker",
 			"side": "enemy",
 			"description": "Never flees.",
 			"class_id": "brawler",
@@ -466,6 +471,7 @@
 		{
 			"id": "enemy_brawler",
 			"name": "Enemy Brawler",
+			"short_name": "Brawler",
 			"side": "enemy",
 			"description": "Goblin Ambush: the brawler guarding the scout's escape.",
 			"class_id": "brawler",
@@ -509,6 +515,7 @@
 		{
 			"id": "fleeing_scout",
 			"name": "Fleeing Scout",
+			"short_name": "Scout",
 			"side": "enemy",
 			"description": "Goblin Ambush: a lookout who runs for the exit at once (flees at any HP).",
 			"class_id": "rogue",
@@ -549,6 +556,7 @@
 		{
 			"id": "ambush_berserker",
 			"name": "Goblin Berserker",
+			"short_name": "Berserker",
 			"side": "enemy",
 			"description": "Goblin Ambush reinforcement: a tougher berserker.",
 			"class_id": "brawler",
@@ -739,6 +747,7 @@
 		{
 			"id": "goblin_warlord",
 			"name": "Goblin Warlord",
+			"short_name": "Warlord",
 			"side": "enemy",
 			"description": "",
 			"class_id": "warrior",
@@ -1592,6 +1601,7 @@
 		{
 			"id": "castellan_footman",
 			"name": "Castellan Footman",
+			"short_name": "Footman",
 			"side": "enemy",
 			"description": "Castellan Footman of the Watch.",
 			"class_id": "warrior",
@@ -1665,6 +1675,7 @@
 		{
 			"id": "watch_crossbowman",
 			"name": "Watch Crossbowman",
+			"short_name": "Crossbowman",
 			"side": "enemy",
 			"description": "Watch Crossbowman.",
 			"class_id": "ranger",
@@ -1736,6 +1747,7 @@
 		{
 			"id": "bailiff_enforcer",
 			"name": "Bailiff Enforcer",
+			"short_name": "Enforcer",
 			"side": "enemy",
 			"description": "Bailiff Enforcer.",
 			"class_id": "warrior",
@@ -1806,6 +1818,7 @@
 		{
 			"id": "tallow_dredger",
 			"name": "Tallow Dredger",
+			"short_name": "Skirmisher",
 			"side": "enemy",
 			"description": "Tallow Dredger.",
 			"class_id": "rogue",
@@ -1885,6 +1898,7 @@
 		{
 			"id": "render_beast",
 			"name": "Render-Beast",
+			"short_name": "Render-Beast",
 			"side": "enemy",
 			"description": "Render-Beast.",
 			"class_id": "rogue",
@@ -1957,6 +1971,7 @@
 		{
 			"id": "ash_crawler",
 			"name": "Ash-Crawler",
+			"short_name": "Ash-Crawler",
 			"side": "enemy",
 			"description": "Ash-Crawler.",
 			"class_id": "rogue",
@@ -2032,6 +2047,7 @@
 		{
 			"id": "calcified_husk",
 			"name": "Calcified Husk",
+			"short_name": "Husk",
 			"side": "enemy",
 			"description": "Calcified Husk.",
 			"class_id": "warrior",
@@ -2115,6 +2131,7 @@
 		{
 			"id": "overseer_grendel",
 			"name": "Overseer Grendel",
+			"short_name": "Grendel",
 			"side": "enemy",
 			"description": "Overseer Grendel of the foundry.",
 			"class_id": "brawler",
@@ -2189,6 +2206,7 @@
 		{
 			"id": "guild_master_orlov",
 			"name": "Orlov",
+			"short_name": "Orlov",
 			"side": "enemy",
 			"description": "Guild-Master Orlov of the Tallow Guild.",
 			"class_id": "brawler",
@@ -2259,6 +2277,7 @@
 		{
 			"id": "calcified_amalgam",
 			"name": "The Amalgam",
+			"short_name": "Amalgam",
 			"side": "enemy",
 			"description": "The Calcified Amalgam.",
 			"class_id": "mage",
@@ -2336,6 +2355,7 @@
 		{
 			"id": "inquisitor_prelate_nemeth",
 			"name": "Nemeth",
+			"short_name": "Nemeth",
 			"side": "enemy",
 			"description": "Inquisitor-Prelate Nemeth.",
 			"class_id": "warrior",
@@ -2685,6 +2705,7 @@
 		{
 			"id": "mortuary_flagellant",
 			"name": "Mortuary Flagellant",
+			"short_name": "Flagellant",
 			"side": "enemy",
 			"description": "Mortuary Flagellant.",
 			"class_id": "rogue",
@@ -2763,6 +2784,7 @@
 		{
 			"id": "inquisitorial_purifier",
 			"name": "Purifier",
+			"short_name": "Purifier",
 			"side": "enemy",
 			"description": "Inquisitorial Purifier.",
 			"class_id": "mage",
@@ -2848,6 +2870,7 @@
 		{
 			"id": "captain_vane",
 			"name": "Captain Vane",
+			"short_name": "Vane",
 			"side": "enemy",
 			"description": "Captain Vane of the Castellan Watch.",
 			"class_id": "warrior",
@@ -2920,6 +2943,7 @@
 		{
 			"id": "proctor_quell",
 			"name": "Proctor Quell",
+			"short_name": "Quell",
 			"side": "enemy",
 			"description": "Proctor Quell of the Iron Inquisition.",
 			"class_id": "warrior",

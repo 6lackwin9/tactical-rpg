@@ -19,7 +19,7 @@ Mocks waiting for you, then provisional calls Design made while you were away, t
   bosses by name.
 - [ ] Pacing (`PR7-42`): patrols every 40-60 steps, at most 2 per visit, no respawn until the next day; Cages offered
   before The Sweep; Warded Tallow at the Candle-Maker for 5 Scrap; Make camp needs Tallow.
-- [ ] Bunks (`PR7-43`): the hall's plank floor under the bunks with low timber screens and a step; the class blanket
+- [x] Bunks (`PR7-43`): the hall's plank floor under the bunks with low timber screens and a step; the class blanket Superseded: you signed off take 8 (2026-11-19), built as `PR7-53`.
   colours.
 - [ ] Mocks to sign off (images in the project files `art-ui/`; scripts on PR #67):
   battle take 22, the boss fight (`battle_ux14/`, contract section 9); battle take 23, the full timeline view (T)
@@ -29,6 +29,16 @@ Mocks waiting for you, then provisional calls Design made while you were away, t
   (A) scale tokens to 32 px (blurs pixels), (B) shrink tall props, (C) leave, (D) redraw tokens at 32 px. Mock ready in
   `art-ui/token_scale/` (`hub_sheet.png`, `region_sheet.png`, 2x zooms beside them). Recommendation: D (crisp pixels,
   party at the bunks' scale; A looks uneven at 2x, B makes hub beds look toy-like).
+- [ ] Status shown where it acts (`docs/specs/STATUSVIS1.md`, your note 2026-11-19 18:05): Design mapped each
+  status kind to its place (locks on the timeline, ticks on the HP bar, attack and armour changes in the numbers, move
+  changes on the grid) and the plate order (statuses with no other home first). Mock ready: battle take 25
+  (`art-ui/battle_ux14/battle_take25_status_where_2x.png`), one frame per kind. Recommendation: approve.
+- [ ] Boss UI (`docs/specs/BOSSUI1.md`, your take 24 notes): HP refilled per phase with phase markers and names,
+  passive tags (no phase or enrage tags), icon-only status tabs. Take 27 ready with your take 26 notes
+  (`art-ui/battle_ux14/battle_take27_*`, PR #70: flipped markers, pips in fives, boss intent panel, boxes clear of
+  units). Provisional: damage past a phase's span carries into the next phase (one HP pool). Then a golden call: boss poise tuned so a focused
+  party breaks it first in round 2-3, then about every 3 rounds move the boss fights in the timeline and sim goldens. Recommendation:
+  approve once the mock is signed off.
 - [ ] Image queue ready: say "process image queue" in Gemini (bunk props, class glyphs, bed keepsakes, battle
   strips, Junction 7 houses; refs in `image_pipeline/refs/active`).
 - [ ] Gamepad on the PC (`FB-327`): repeat timing, dead zone, which button is Back (south Enter, east Back, west

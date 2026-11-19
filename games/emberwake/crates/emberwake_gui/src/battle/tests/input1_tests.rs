@@ -227,7 +227,9 @@ fn the_round_controls_are_gone_and_self_opens_the_self_menu() {
     let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
     if ri::intent_of(w(&b), h).is_some() {
         let tactic = TACTIC_LABELS[b.tactic_of(h)];
-        assert!(recs.iter().any(|r| r.text.starts_with("Intent: ") && r.text.ends_with(&format!("from {tactic}"))), "the ghost's intent from the tactic");
+        // BATTLE-UI2: the hero panel under the plates is narrower, so the line may wrap
+        let all = recs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>().join(" ");
+        assert!(all.contains("Intent: ") && all.contains(&format!("from {tactic}")), "the ghost's intent from the tactic: {all}");
     }
     b.click_id(&mut cx, "hero.self").unwrap();
     assert_eq!(b.popup.as_ref().and_then(|p| p.menu), Some((h, RoundTarget::Myself)), "{}", b.message);
@@ -455,10 +457,11 @@ fn right_click(cx: &mut Cx, g: &mut Gfx, b: &mut BattleScreen, id: &str, unit: u
 }
 
 /// The texts drawn inside the intel panel at the last frame.
+/// BATTLE-UI2: the pinned unit's inspect lines (the hover of the agent link's `intel.unit`: the docked card's or a
+/// pinned member's plate).
 fn intel_text(cx: &mut Cx, g: &mut Gfx, b: &mut BattleScreen) -> String {
-    let recs = crate::hud::hud_tests::frame(b, cx, g, 1.0);
-    let r = b.panels.iter().find(|p| p.0 == "intel").expect("the intel panel").1;
-    recs.iter().filter(|t| r.contains(t.x as i32 + 1, t.y as i32 + 1)).map(|t| t.text.clone()).collect::<Vec<_>>().join("\n")
+    crate::hud::hud_tests::frame(b, cx, g, 1.0);
+    widget(b, "intel.unit").tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>().join("\n")
 }
 
 /// SL1, SL4-SL7: with a hero selected and planning a click on an enemy targets it and a click on the hero itself (its

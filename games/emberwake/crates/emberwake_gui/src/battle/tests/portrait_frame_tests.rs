@@ -195,7 +195,7 @@ fn the_battle_panel_and_timeline_portraits_are_framed() {
     cx.settings.v["reduce_motion"] = json!(true);
     let frames = draw(&mut b, &mut cx, &mut g);
     let shown = portraits(&b);
-    assert!(shown.iter().any(|(id, _)| id == "hero.portrait"), "the panel portrait: {shown:?}");
+    assert!(shown.iter().any(|(id, _)| id.starts_with("party.") && id.ends_with(".portrait")), "BATTLE-UI2: the plates' panel portraits: {shown:?}");
     for (id, r) in &shown {
         assert_f2(&g, &frames, *r, id);
     }
