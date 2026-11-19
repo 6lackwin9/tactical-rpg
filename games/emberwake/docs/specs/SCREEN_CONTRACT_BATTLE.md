@@ -208,6 +208,19 @@ screen at 1280x720, 1:1.
   - User 2026-11-19 19:00: the Total column shows each row's full impact over the blocks that run: HP, poise (glyph and
     number) and the status chips (one and "+N" in the bar). The hover adds a Total column per member (every chip)
     and a "Party" line under the members with the per-block and total impact (`battle_take30_totals_hover_2x.png`).
+- Proposed, take 31 (`art_src/style/battle_take31_boss_mock.py`, user 2026-11-19 19:02 and 19:03):
+  - Fixed slots in every impact cell, so nothing shifts with the numbers: HP (5 mono characters, right aligned),
+    poise (the glyph and 2 digits), statuses (one chip and "+N" in a block cell, three in the bar's Total, four in the
+    hover's Total). An empty slot stays empty; a block with no hit shows "-" in the HP slot.
+  - Numbers past 999 use K (1.2K, 12K, 120K) and past 999K use M, so HP never needs more than 4 characters and the
+    minus.
+  - The intent rows show only while planning (a hero selected, plan not confirmed). In resolution and the enemy turn
+    they fold away and the boss bar is 84 px; planning adds 58 px (142 px of 720).
+  - Phase break: the breaking block's header reads "Block N: ends" and the first cancelled block's header reads
+    "Ph. 2 next round"; the totals keep their slots (`battle_take31_phase_break_2x.png`,
+    `battle_take31_plan_vs_resolve.png`, `battle_take31_stress_hover_2x.png`).
+  - User 2026-11-19 19:05: agreed: outside planning only the boss HP, poise and statuses matter; in planning the
+    selected hero's row and the Others row, with the hover as the optional detail. Final feel to be checked in play.
 - Not expressed yet: collision stagger from push or pull on the card row, hazard damage in the HP preview and the
   block ruler, reactions (riposte, counters) as a "returns -n" note, flank, guard, cover and windup modifiers in the
   skill hover, channel rounds, unit meters, weapon wear.
