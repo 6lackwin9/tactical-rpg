@@ -24,6 +24,13 @@ pub const FEEL_KEYS: [&str; 4] = ["tactic", "party", "armor", "tune"];
 pub const FEEL_COUNTS_KEY: &str = "counts";
 /// ENRAGE2 (PR7-55, EN6-EN7b): the feel key that adds the pace block (by encounter tier).
 pub const FEEL_PACE_KEY: &str = "pace";
+/// BALANCE-WHATIF1 (ENGINE-26): the feel keys that change a world encounter's foes for a what-if run (report only, no
+/// data change): `foe_hp=<pct>` scales each foe's HP (100 = as authored), `foes=<n>` adds n more of the encounter's
+/// last foe, `foe_level=<n>` fights the foes n levels up. Any other mode refuses them.
+pub const FEEL_WHATIF_KEYS: [&str; 3] = ["foe_hp", "foes", "foe_level"];
+pub const FOE_HP_MAX: i32 = 1000;
+pub const FOES_MAX: i32 = 4;
+pub const FOE_LEVEL_MAX: i32 = 5;
 /// SIMCOUNT1: the help of the `counts=` key, printed apart from `usage` (`sim help`, a refused feel line): `sim_golden` holds
 /// `usage`.
 pub const FEEL_COUNTS_USAGE: &str = "       feel only: counts=on|off (off): each block and FEEL_JSON add per side the rule counts (feel::RULE_COUNTERS), protected share, Rest blocks a round, items by id; the hook counts (feel::HOOK_COUNTERS), skills landed, intents by unit, and per encounter arena strikes, windup breaks by skill, phases fired and fights with each count";
@@ -172,6 +179,11 @@ pub struct SimArgs {
     pub counts: bool,
     /// ENRAGE2 EN6-EN7b (feel only): print the pace block by encounter tier (`pace=on|off`; off).
     pub pace: bool,
+    /// BALANCE-WHATIF1 (feel only, world encounters): the foes' HP in % of authored, extra copies of the last foe, and
+    /// levels added to the foes (`FEEL_WHATIF_KEYS`).
+    pub foe_hp: i32,
+    pub foes: i32,
+    pub foe_level: i32,
     /// RULESET1-G2 (feel only): unit id -> the armour it fights with in this run (`armor=<unit>:<0-200>`).
     pub armor: IndexMap<String, i32>,
     /// RULESET1-G2 (feel only): ruleset number -> its value in this run (`tune=<key>:<value>`), applied to `ruleset`.
@@ -243,6 +255,9 @@ impl Default for SimArgs {
             drivers: vec![crate::timed::Driver::Auto],
             counts: false,
             pace: false,
+            foe_hp: 100,
+            foes: 0,
+            foe_level: 0,
             armor: IndexMap::new(),
             tune: IndexMap::new(),
             feel_keys: Vec::new(),
@@ -555,7 +570,7 @@ impl SimArgs {
     fn key(&mut self, d: &Data, key: &str, value: &str) -> Result<(), String> {
         let ids = self.game.classes.ids;
         let classes = godot_list(ids);
-        if (FEEL_KEYS.contains(&key) || key == FEEL_COUNTS_KEY || key == FEEL_PACE_KEY) && !self.feel_keys.iter().any(|k| k == key) {
+        if (FEEL_KEYS.contains(&key) || key == FEEL_COUNTS_KEY || key == FEEL_PACE_KEY || FEEL_WHATIF_KEYS.contains(&key)) && !self.feel_keys.iter().any(|k| k == key) {
             self.feel_keys.push(key.to_string());
         }
         if DEADLINE_KEYS.contains(&key) && !self.deadline_keys.iter().any(|k| k == key) {
@@ -588,6 +603,21 @@ impl SimArgs {
                     return Err(format!("counts must be on or off (got '{value}')"));
                 }
                 self.counts = value == "on";
+            }
+            "foe_hp" | "foes" | "foe_level" => {
+                let (lo, hi) = match key {
+                    "foe_hp" => (1, FOE_HP_MAX),
+                    "foes" => (0, FOES_MAX),
+                    _ => (0, FOE_LEVEL_MAX),
+                };
+                let Some(n) = value.strip_prefix('+').unwrap_or(value).parse::<i32>().ok().filter(|n| (lo..=hi).contains(n)) else {
+                    return Err(format!("{key} must be {lo}..{hi} (got '{value}')"));
+                };
+                match key {
+                    "foe_hp" => self.foe_hp = n,
+                    "foes" => self.foes = n,
+                    _ => self.foe_level = n,
+                }
             }
             "pace" => {
                 if value != "on" && value != "off" {

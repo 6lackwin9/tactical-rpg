@@ -89,8 +89,17 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-24` (`PASSIVE-ICON1`) | done (tools lane) | `develop` (squash `ENGINE-24`) | Kit field `icon` on passives with its derivation and content check A21, 16 placeholder icons, a seed giving the 97 passives their archetype, and two loadout passive icons under the portrait on party plates. FB-373 |
 | `PR7-55` (`ENRAGE2`) + `PR7-56` (`PHASEBREAK1`) | done (tools lane); the battle screen parts are main Build's (`PR7-40` part 3, `PR7-54`) | `develop` (squash `PR7-55` + `PR7-56`) | Phase break (a hit stops at the phase threshold and ends the round; phase `vignette` cue); baseline enrage by tier from round 6 (ruleset fields, seed `enrage2.json`); `timeout_outcome: escaped` for random fights (no rewards, retreat allowed); Sunk Ward caps by tier; sim `pace=on`; one boss balance run; sim, PHASEFOLD and rules contract goldens re-recorded. FB-377 |
 | `ENGINE-23` (`UISPLIT1-I`) party loadout | Stage A done (tools lane); the world map still waits for `PR7-47` | `develop` (squash `ENGINE-23` A2) | View-model, actions, fixture and tests for the party loadout (the Character window's Gear tab the footlockers open); today's drawing kept. FB-379 |
+| `ENGINE-26` (`BALANCE-WHATIF1`) | done (tools lane); the data change waits for the user | `develop` (squash `ENGINE-26`) | What-if sim keys `foe_hp=`, `foes=`, `foe_level=` (feel mode, report only); random, elite and boss what-if runs in `BALANCE_REPORT.md`. FB-381 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-381: ENGINE-26 BALANCE-WHATIF1, numbers for the three balance calls
+
+- **Status**: done (tools lane), on `develop`; report only, no data or golden change.
+- **Spec**: `READY.md` `ENGINE-26` (the `FB-377` misses).
+- **Finding**: new feel keys for world encounters (`rpgkit_sim::args::FEEL_WHATIF_KEYS`): `foe_hp=<1-1000>` (each foe's HP in %, through `max_hp_offset` so a stat refresh keeps it; `runner::scale_foe_hp`), `foes=<0-4>` (more of the encounter's last foe), `foe_level=<0-5>` (every foe that many levels up, through a new `WorldRoster::foe_levels`, 0 everywhere else; never an ally). Tests `rpgkit_sim/tests/whatif.rs`. Results in `BALANCE_REPORT.md` "2026-11-19 ENGINE-26 BALANCE-WHATIF1": (1) random fights stay at median 1 round up to foe HP +100 %; **one more foe** is the smallest change that reaches median 2 (99.4 % won), two more reach 3 (98.1 %). (2) Elite fights run 3-5 rounds, 2.4-4.0 estimated minutes; five rounds read 7 minutes at 18.9 s of planning per hero per round and 8 minutes at 21.9 s (the estimate uses 10 s). (3) Bosses as authored: the Bone-Mill Raid 28.1 % is the only one in the 20-40 % band; the Sweep 53.1, the Cages 84.4, the Tallow Vats 56.3, the Fissure 56.3 are above it; both Crucible fights 0 %. At +1 level: the Vats 40.6, the Fissure 46.9, the others move 3 points or less, the Crucible stays 0.
+- **For the user** (the three calls, numbers above): random fights: add one foe each (or two for median 3)? Elite minutes: keep the 7-8 minute target and judge the planning estimate in play, or lower the target? Bosses: the band says 20-40 % won; four bosses sit above it and the Crucible is never won: tune the Crucible first?
+- **Docs delta**: `STRUCTURE.md`: none. `HISTORY.md`: none.
 
 ### FB-379: ENGINE-23 UISPLIT1-I Stage A for the party loadout
 
