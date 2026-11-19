@@ -18,3 +18,6 @@ The other loops (`ashlands`, `iron_reaches`, `tidewrack`, `combat`; MUSIC2: `tow
 | `sunk_ward_travel` | Sunk Ward world / transit travel | D Dorian, 88 BPM (4/4) | 65.5 s | `[PROVISIONAL synth placeholder]` — rain-slick damp cobble pulse, horn & distant whistle soot march |
 
 `MusicDirector` picks the track (`games/emberwake/docs/specs/MUSIC1.md`); a region gets its own track by adding `<region>.ogg` or `<scope>_<context>.ogg`.
+
+The ambience beds that play under the music on the `ambience` bus (AMBIENCE1, AI-30) use the same keys and live beside
+this folder in `audio/ambience/` (its README lists them).

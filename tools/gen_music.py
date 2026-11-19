@@ -8,8 +8,8 @@
 # art_src/music/menu_theme.json) that a run with no arguments must never overwrite.
 # Needs numpy and ffmpeg (libvorbis). Each track renders as one circular buffer, so notes, reverb and
 # noise beds that run past the end wrap onto the start and the loop has no seam. Prints "§ wrote <path> <s>s".
-# AI-30: the ambience beds (AMBIENCE) land in the game's audio/ambience/<key>.ogg, levelled low (RMS -26 dB) for the
-# ambience bus (PR7-34); their keys follow the ones PR7-34 lists.
+# AI-30: the ambience beds (AMBIENCE, named amb:<key>) land in their layer's audio/ambience/<key>.ogg under the music
+# keys, levelled low (RMS -26 dB) for the ambience bus (PR7-34 AMBIENCE1); `--ambience` renders only them.
 import argparse
 import os
 import shutil
@@ -840,9 +840,9 @@ def murmur(tr: Track, voices: int, gain: float) -> None:
     tr.add_bed(bed / voices, gain, 0.6)
 
 
-def amb_drains() -> np.ndarray:
+def amb_drains(seed: int = 30101) -> np.ndarray:
     """48 s: the drains and culverts. A low water rush, slow drips in a wet echo, a far pipe now and then."""
-    tr = Track(60, 4, 12, seed=30101)
+    tr = Track(60, 4, 12, seed=seed)
     flow = np.stack([brown(tr, 260.0) for _ in range(2)])
     flow *= 0.75 + 0.25 * np.stack([tr.lfo(3), tr.lfo(4, 1.3)])
     tr.add_bed(flow, 0.55, 0.3)
@@ -856,12 +856,12 @@ def amb_drains() -> np.ndarray:
     return ambience_level(tr.render(3.2, -1.5))
 
 
-def amb_streets() -> np.ndarray:
+def amb_streets(seed: int = 30102, bells: int = 2, gust: float = 0.55) -> np.ndarray:
     """48 s: above ground. Wind through the rows that swells and drops, a far bell tolling twice, a loose shutter."""
-    tr = Track(60, 4, 12, seed=30102)
-    wash(tr, 180.0, 900.0, 3, 0.55, 0.7)
+    tr = Track(60, 4, 12, seed=seed)
+    wash(tr, 180.0, 900.0, 3, gust, 0.7)
     wash(tr, 900.0, 3200.0, 5, 0.12, 0.9)
-    for start in (9.0, 33.0):
+    for start in (9.0, 33.0)[:bells]:
         for i in range(3):
             tr.add(bell(midi("D3"), 6.0), start + i * 3.2, -0.35, 0.42, 0.85)
     for k in range(4):
@@ -874,9 +874,9 @@ def amb_streets() -> np.ndarray:
     return ambience_level(tr.render(2.6, -1.5))
 
 
-def amb_hub() -> np.ndarray:
+def amb_hub(seed: int = 30103) -> np.ndarray:
     """48 s: the hub hall. A crackling hearth (a soft roar under pops), low murmurs across the room, a far drip."""
-    tr = Track(60, 4, 12, seed=30103)
+    tr = Track(60, 4, 12, seed=seed)
     roar = np.stack([brown(tr, 500.0) for _ in range(2)])
     roar *= 0.8 + 0.2 * np.stack([tr.lfo(7), tr.lfo(9, 0.7)])
     tr.add_bed(roar, 0.35, 0.15)
@@ -892,7 +892,14 @@ def amb_hub() -> np.ndarray:
     return ambience_level(tr.render(1.8, -1.5))
 
 
-AMBIENCE = {"amb_drains": amb_drains, "amb_streets": amb_streets, "amb_hub": amb_hub}   # audio/ambience/<key>.ogg
+# audio/ambience/<key>.ogg, under the music keys (AMBIENCE1: the first key of a context's music chain with a file plays):
+# the kit's genre beds (field, town, travel, danger) and the game's own per world (<world>_<context>). Named "amb:<key>"
+# on the command line, so they never clash with the music keys.
+AMBIENCE = {"amb:field": lambda: amb_streets(30201, 0, 0.5), "amb:town": lambda: amb_hub(30202),
+            "amb:travel": lambda: amb_streets(30203, 0, 0.4), "amb:danger": lambda: amb_drains(30204),
+            "amb:sunk_ward_town": amb_hub, "amb:sunk_ward_field": amb_streets,
+            "amb:sunk_ward_travel": lambda: amb_streets(30105, 1, 0.45), "amb:sunk_ward_danger": amb_drains}
+KIT_AMBIENCE = {"amb:field", "amb:town", "amb:travel", "amb:danger"}
 
 
 STINGS = {"combat_sting", "victory_stinger"}   # one-shots in audio/stings/ (AI-18 placeholders until Flow Music)
@@ -911,12 +918,13 @@ KIT_TRACKS = {"combat", "boss", "town", "shop", "danger", "travel"}
 
 
 def layer_of(name: str) -> str:
-    return "kit" if name in KIT_TRACKS else "game"
+    return "kit" if name in KIT_TRACKS or name in KIT_AMBIENCE else "game"
 
 
 def track_path(root: str, name: str) -> str:
     folder = "stings" if name in STINGS else "ambience" if name in AMBIENCE else "music"
-    return os.path.normpath(os.path.join(root, *LAYERS[layer_of(name)], "audio", folder, name + ".ogg"))
+    key = name[4:] if name in AMBIENCE else name
+    return os.path.normpath(os.path.join(root, *LAYERS[layer_of(name)], "audio", folder, key + ".ogg"))
 
 
 def find_ffmpeg() -> str | None:
@@ -949,8 +957,9 @@ def main() -> int:
     ap.add_argument("--layer", action="append", choices=list(LAYERS), help="only the tracks of these layers (default all)")
     ap.add_argument("--root", default=WORKSPACE, help="workspace root holding kits/rpg/assets and games/emberwake/assets")
     ap.add_argument("--list", action="store_true", help="print each track's layer and path, render nothing")
+    ap.add_argument("--ambience", action="store_true", help="only the ambience beds (amb:<key>)")
     args = ap.parse_args()
-    names = args.tracks or list(TRACKS)
+    names = args.tracks or [n for n in TRACKS if (n in AMBIENCE) == args.ambience]
     for name in names:
         if name not in TRACKS:
             print("§ unknown track %s (known: %s)" % (name, ", ".join(TRACKS)))
