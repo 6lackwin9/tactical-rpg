@@ -600,7 +600,29 @@
 					"choices": [
 						{
 							"text": "What do you sell?",
-							"to": "stock"
+							"to": "stock",
+							"requires": [
+								{
+									"key": "sunk_ward.ivo_rescued",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "open_shop",
+									"shop": "varka_trade"
+								}
+							]
+						},
+						{
+							"text": "What do you sell?",
+							"to": "stock_shut",
+							"unless": [
+								{
+									"key": "sunk_ward.ivo_rescued",
+									"value": true
+								}
+							]
 						},
 						{
 							"text": "Why open the Basin to us?",
@@ -623,6 +645,11 @@
 				{
 					"id": "stock",
 					"text": "\"Rock Salt. Warded Tallow, by the day. Poultices. Whatever the Clerisy has sworn is not for sale, and is. I do not ask what you intend to burn.\"",
+					"next": "n0"
+				},
+				{
+					"id": "stock_shut",
+					"text": "She does not lift the veil. \"To you? Nothing yet, dear. My shelves open for friends of the Basin, and the Basin has not yet decided what you are.\"",
 					"next": "n0"
 				},
 				{

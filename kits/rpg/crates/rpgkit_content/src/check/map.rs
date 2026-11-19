@@ -53,7 +53,8 @@ fn marker_kind(kind: &str) -> Option<Dict> {
         "npc" => d(&[("character", Value::from("")), ("face", Value::from("down"))]),
         "chest" => d(&[("items", Value::Object(Dict::new())), ("loot", Value::from("")), ("gold", json::int(0)), ("supplies", json::int(0))]),
         "lore" => d(&[("lore", Value::from(""))]),
-        "point" => Dict::new(),
+        // PR7-37 (PT-03): what acting on the point does (`rpgkit_data::POINT_USES`; "" its note only)
+        "point" => d(&[("use", Value::from(""))]),
         _ => return None,
     })
 }
@@ -328,6 +329,12 @@ fn marker_text_errors(mid: &str, kind: &str, m: &Dict) -> Vec<String> {
 fn marker_kind_errors(v: &View, w: &str, e: &Dict, t: &Dict, mid: &str, kind: &str, m: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
     match kind {
+        "point" => {
+            let used = m.get("use").and_then(Value::as_str);
+            if !used.is_some_and(|u| rpgkit_data::POINT_USES.contains(&u)) {
+                errors.push(format!("Marker '{mid}': use must be one of {} (or \"\").", rpgkit_data::POINT_USES[1..].join(", ")));
+            }
+        }
         "exit" => {
             let to = json::s(m, "to");
             if to.is_empty() {

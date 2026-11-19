@@ -143,7 +143,15 @@ impl MainMenu {
                     load_slot(cx, slot);
                 }
             }
-            MenuAct::NewGame => cx.nav.push(Nav::Push(Box::new(NewGameScreen::new(cx)))),
+            // PR7-37 (PT-01): a player's New game starts the game's one start world at once (the world picker, with the
+            // test worlds, in a dev build or when the game offers more than one)
+            MenuAct::NewGame => match new_game_worlds(&cx.data).as_slice() {
+                [only] if !crate::DEV_BUILD => {
+                    let only = only.clone();
+                    start_new_game(cx, &only);
+                }
+                _ => cx.nav.push(Nav::Push(Box::new(NewGameScreen::new(cx)))),
+            },
             MenuAct::Load => cx.nav.push(Nav::Push(Box::new(Slots::new(false)))),
             MenuAct::Settings => cx.nav.push(Nav::Push(Box::new(SettingsScreen::new(cx)))),
             #[cfg(feature = "dev_tools")]
@@ -312,8 +320,11 @@ impl Screen<GameCx> for MainMenu {
             MenuItem::new("settings", "Settings", None, MenuAct::Settings),
         ]);
         // WEBREL1-G1: the dev tools (the Scene Runner) only in a build with them (`crate::DEV_TOOLS`)
+        // PR7-37 (PT-14): and only in a dev build (`crate::DEV_BUILD`); a player never sees it
         #[cfg(feature = "dev_tools")]
-        items.push(MenuItem::new("tools", "Tools (Forge, Dojo, Test Arena)", None, MenuAct::Tools));
+        if crate::DEV_BUILD {
+            items.push(MenuItem::new("tools", "Tools (Forge, Dojo, Test Arena)", None, MenuAct::Tools));
+        }
         // WEBREL1 6.2 (`FB-157`): no Quit on the web, where a page cannot close its own tab
         #[cfg(not(target_arch = "wasm32"))]
         items.push(MenuItem::new("quit", "Quit", None, MenuAct::Quit));
@@ -452,21 +463,37 @@ impl NewGameScreen {
                     return;
                 }
                 let world = self.selected.clone();
-                let head = save::peek(&cx.data, &cx.save_dir, save::AUTOSAVE_SLOT);
-                if json::b(&head, "ok", false) {
-                    let at = json::i(&head, "saved_at", 0);
-                    let q = format!(
-                        "Starting a new game replaces your autosave ({}, {}, {}). Continue?",
-                        cx.world_name(&s(&head, "world_id")),
-                        cx.location_name(&s(&head, "world_id"), &s(&head, "location_id")),
-                        if at > 0 { datetime(at) } else { "unknown time".into() }
-                    );
-                    cx.ask_no(q, move |cx| start_world(cx, &world));
-                } else {
-                    start_world(cx, &world);
-                }
+                start_new_game(cx, &world);
             }
         }
+    }
+}
+
+/// PR7-37 (PT-01): the worlds New game offers: in a dev build every playable world (the test worlds too), else the
+/// game's start worlds (`new_game::player_worlds`).
+pub fn new_game_worlds(d: &emberwake_world::Data) -> Vec<String> {
+    if crate::DEV_BUILD {
+        new_game::playable_worlds(d)
+    } else {
+        new_game::player_worlds(d)
+    }
+}
+
+/// A new game in `world`: asks first when it would replace the autosave.
+fn start_new_game(cx: &mut Cx, world: &str) {
+    let world = world.to_string();
+    let head = save::peek(&cx.data, &cx.save_dir, save::AUTOSAVE_SLOT);
+    if json::b(&head, "ok", false) {
+        let at = json::i(&head, "saved_at", 0);
+        let q = format!(
+            "Starting a new game replaces your autosave ({}, {}, {}). Continue?",
+            cx.world_name(&s(&head, "world_id")),
+            cx.location_name(&s(&head, "world_id"), &s(&head, "location_id")),
+            if at > 0 { datetime(at) } else { "unknown time".into() }
+        );
+        cx.ask_no(q, move |cx| start_world(cx, &world));
+    } else {
+        start_world(cx, &world);
     }
 }
 
@@ -492,7 +519,7 @@ impl Screen<GameCx> for NewGameScreen {
         let mut ui: Ui<NgAct> = Ui::new(g, mouse, live);
         title(&mut ui, "New game", 26);
         let mut y = 54;
-        for w in new_game::playable_worlds(&cx.data) {
+        for w in new_game_worlds(&cx.data) {
             let m = cx.data.manifest(&w);
             let lines = vec![(s_or(m, "name", &w), th().text), (s(m, "tagline"), th().text), (party_line(&Self::party_of(cx, &w)), th().text)];
             ui.card(&format!("world.{w}"), Rect::new(70, y, 500, 44), &lines, Some(NgAct::Pick(w.clone())), w == self.selected, true, Vec::new());
@@ -1186,10 +1213,10 @@ impl SettingsScreen {
                 Row::Volume("effects", "Effects Volume", "Combat steel clashes, billhooks and chains"),
                 Row::Volume("interface", "Interface Volume", "Menu chimes, card clicks and roll ticks"),
             ],
+            // PR7-37 (PT-33): Map Camera Zoom on the Display tab only (PR7-15 had it here too)
             2 => vec![
                 Row::Choice(TEXT_SPEED, "Text Speed", "How fast story captions and dialogue lines reveal"),
                 Row::Choice("map_names", "Map Labels & Names", "Person and exit names on street and hub maps"),
-                Row::Choice("map_zoom", "Map Camera Zoom", "Camera zoom on street and hub maps"),
             ],
             3 => vec![
                 Row::Choice(crate::battle::PLAYBACK_SPEED, "Playback Speed", "How a timeline round plays: 1x, 0.5x or by block"),
@@ -1223,8 +1250,8 @@ impl SettingsScreen {
             Row::Video => rh * 2 + 4,
             Row::Overlays => {
                 let head = ui.p.line_h(BODY + 1.0).ceil() as i32 + 4;
-                let groups = crate::battle::OVERLAY_GROUPS.len().div_ceil(2) as i32 * OVERLAY_PITCH;
-                head + groups + if cfg!(debug_assertions) { OVERLAY_PITCH + 4 } else { 0 }
+                let groups = crate::battle::settings_overlay_groups().len().div_ceil(2) as i32 * OVERLAY_PITCH;
+                head + groups + if crate::DEV_BUILD { OVERLAY_PITCH + 4 } else { 0 }
             }
             Row::Controls => controls(ui, Rect::new(0, 0, w, 0), false),
             Row::Heading(_) => ui.p.line_h(HEAD).ceil() as i32 + 8,
@@ -1364,7 +1391,7 @@ impl SettingsScreen {
                 ui.p.text(x as f32, y as f32, "Battle overlays (timeline battles)", BODY + 1.0, th().gold);
                 y += ui.p.line_h(BODY + 1.0).ceil() as i32 + 2;
                 let col_w = r.w / 2;
-                let groups = &crate::battle::OVERLAY_GROUPS;
+                let groups = crate::battle::settings_overlay_groups();
                 for (k, (id, label, help, default)) in groups.iter().enumerate() {
                     let (gx, gy) = (x + 3 + (k as i32 % 2) * col_w, y + (k as i32 / 2) * OVERLAY_PITCH);
                     let on = d["battle_overlays"][*id].as_bool().unwrap_or(*default);
@@ -1373,9 +1400,9 @@ impl SettingsScreen {
                         wd.tip = tip(label, help);
                     }
                 }
-                // VISCLAR1 VC4, VC5: the debug-build-only row (never in a release build)
-                #[cfg(debug_assertions)]
-                {
+                // VISCLAR1 VC4, VC5: the debug-build-only row (never in a release build); PR7-37 (PT-33): a dev build's
+                // only (`crate::DEV_BUILD`)
+                if crate::DEV_BUILD {
                     let y = y + groups.len().div_ceil(2) as i32 * OVERLAY_PITCH + 2;
                     ui.p.text(x as f32, y as f32, "Debug", BODY + 1.0, th().gold);
                     // VIEWKEYS1: the walk's base step time (a release build uses the default), beside the heading
@@ -1668,7 +1695,6 @@ const OVERLAY_PITCH: i32 = 14;
 /// Volume sliders move in steps of 5 (0-100).
 const VOLUME_STEP: f64 = 5.0;
 /// The debug Walk step slider's step, ms.
-#[cfg(debug_assertions)]
 const WALK_STEP_STEP: f64 = 10.0;
 
 fn static_key(k: &str) -> &'static str {
@@ -2899,10 +2925,10 @@ mod settings_tests {
         assert!(!s.display_dirty(&cx) && s.confirm_left(Instant::now()).is_none(), "no staging, no confirm");
     }
 
-    /// PR7-15 (b) (FB-287 Option A): Map Camera Zoom is on the Display tab, desktop and web, full screen and popup, and
-    /// stays on Gameplay; a pick on Display applies at once (no display staging) and Gameplay shows the same value.
+    /// PR7-15 (b) (FB-287 Option A): Map Camera Zoom is on the Display tab, desktop and web, full screen and popup;
+    /// PR7-37 (PT-33): on that tab only (no longer on Gameplay); a pick applies at once (no display staging).
     #[test]
-    fn map_zoom_is_on_the_display_tab_and_on_gameplay() {
+    fn map_zoom_is_on_the_display_tab_only() {
         let (mut cx, mut g) = (game_cx(), gfx());
         for web in [false, true] {
             for popup in [false, true] {
@@ -2912,7 +2938,7 @@ mod settings_tests {
                 assert!(has(&w, "settings.map_zoom"), "Display has Map zoom (web {web}, popup {popup})");
                 s.click_id(&mut cx, "settings.tab.gameplay").expect("the Gameplay tab");
                 let w = redraw(&mut s, &mut cx, &mut g);
-                assert!(has(&w, "settings.map_zoom"), "Gameplay keeps Map zoom (web {web}, popup {popup})");
+                assert!(!has(&w, "settings.map_zoom"), "Gameplay has no Map zoom (web {web}, popup {popup})");
             }
         }
         let mut s = SettingsScreen::new(&cx);
@@ -2927,9 +2953,8 @@ mod settings_tests {
         assert!(!s.display_dirty(&cx) && s.confirm_left(Instant::now()).is_none(), "no staging, no confirm");
         let picked = cx.settings.v["map_zoom"].clone();
         assert_eq!(format!("{}x", picked.as_f64().unwrap()), next, "applied at once");
-        s.click_id(&mut cx, "settings.tab.gameplay").expect("the Gameplay tab");
         let w = redraw(&mut s, &mut cx, &mut g);
-        assert_eq!(w.iter().find(|x| x["id"] == "settings.map_zoom").expect("the row")["text"], json!(next), "Gameplay shows the pick");
+        assert_eq!(w.iter().find(|x| x["id"] == "settings.map_zoom").expect("the row")["text"], json!(next), "the row shows the pick");
     }
 
     /// Restore defaults resets every row at once but stages the default display for Apply.

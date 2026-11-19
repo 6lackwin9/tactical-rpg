@@ -925,6 +925,21 @@ pub fn crypts_used(party: &PartyState) -> i64 {
     party.members.iter().filter(|m| m.housing() != rpgkit_data::HOUSING[0]).count() as i64
 }
 
+/// PR7-37 (PT-03): what the crypt places hold, as a point of interest says it: "Crypt places: 1 of 2 (Name)." or "Crypt
+/// places: none of 2 in use."; "" in a world with no crypt places.
+pub fn crypt_words(gs: &GameState, name: &dyn Fn(&str) -> String) -> String {
+    let cap = crypt_cap(gs);
+    if cap <= 0 {
+        return String::new();
+    }
+    let lying: Vec<String> = gs.party.members.iter().filter(|m| m.housing() != rpgkit_data::HOUSING[0]).map(|m| name(&m.id)).collect();
+    if lying.is_empty() {
+        format!("Crypt places: none of {cap} in use.")
+    } else {
+        format!("Crypt places: {} of {cap} ({}).", lying.len(), lying.join(", "))
+    }
+}
+
 /// BK2: the crypt places (`roster.crypts`, 0 = none).
 pub fn crypt_cap(gs: &GameState) -> i64 {
     i64::from(gs.party.roster.manifest.crypts.max(0))

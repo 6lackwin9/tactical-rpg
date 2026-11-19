@@ -343,6 +343,32 @@ fn step_encounters(d: &Data, gs: &GameState, e: &Dict) -> Vec<String> {
         .collect()
 }
 
+/// PR7-37 (PT-31): the quests (in the save's scope, in order) that have encounter `encounter_qid` as a `win_encounter`
+/// step, whatever their status.
+pub fn quests_fighting(d: &Data, gs: &GameState, encounter_qid: &str) -> Vec<String> {
+    if encounter_qid.is_empty() {
+        return Vec::new();
+    }
+    scope(d, gs).into_iter().filter(|e| step_encounters(d, gs, e).iter().any(|x| x == encounter_qid)).map(|e| json::s(e, "_qid")).collect()
+}
+
+/// PR7-37 (PT-02, PT-24): the active quests whose current objective is still to win encounter `encounter_ref` (as
+/// seen from the save's world), in quest order: the jobs a fight not won leaves open, to be tried again.
+pub fn open_on_fight(d: &Data, gs: &GameState, encounter_ref: &str) -> Vec<String> {
+    let qid = json::s(d.resolve(&gs.world_id, "encounters", encounter_ref), "_qid");
+    let target = if qid.is_empty() { encounter_ref.to_string() } else { qid };
+    if target.is_empty() {
+        return Vec::new();
+    }
+    quests_with(d, gs, "active")
+        .into_iter()
+        .filter(|q| {
+            let obj = current_objective(d, gs, q);
+            json::s(&obj, "kind") == "win_encounter" && json::s(&obj, "target") == target
+        })
+        .collect()
+}
+
 /// Whether the fight `encounter_qid` waits for its job: some job (a board quest) has it as a `win_encounter` step and
 /// no quest naming it has been accepted yet (none has a stored state). A fight no job names never waits.
 pub fn fight_waits_for_job(d: &Data, gs: &GameState, encounter_qid: &str) -> bool {

@@ -386,3 +386,20 @@ fn the_active_squad_holds_one_to_max_active_members() {
     assert_eq!(party.active_ids, vec![id(cap - 1), id(cap)]);
     assert_eq!(party.active_indexes().len() as i64, cap);
 }
+
+/// PR7-37 (PT-06): a family the deck lists plays as its `intent_of`; a worn item's skill (in none of the deck's lists)
+/// as its own (`round_intent`, else its kind's); a family the catalog lacks has none (the Skills tab then shows no
+/// empty brackets).
+#[test]
+fn a_worn_items_skill_shows_its_own_intent() {
+    let t = terms(DeckSlots { active: 3, passive: 1, keystone: 1 });
+    let cat = rpgkit_data::Catalog::from_value(&json!({"skills": [
+        {"id": "bash", "name": "Bash", "kind": "ATTACK", "level": 1, "blocks": 1, "round_intent": "maneuver"},
+        {"id": "brace", "name": "Brace", "kind": "DEFEND", "level": 1, "blocks": 1}
+    ]}));
+    assert_eq!(t.intent_for(&cat, "wall"), "guard", "the deck's own intent");
+    assert_eq!(t.intent_for(&cat, "bash"), "maneuver", "the skill's round intent");
+    assert_eq!(t.intent_for(&cat, "brace"), rpgkit_rules::ruleset::kind_intent("DEFEND"), "its kind's intent");
+    assert!(!t.intent_for(&cat, "brace").is_empty());
+    assert_eq!(t.intent_for(&cat, "missing"), "", "unknown: none");
+}

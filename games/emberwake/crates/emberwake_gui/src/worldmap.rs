@@ -897,7 +897,15 @@ impl WorldMap {
                 }
                 None => {
                     ui.p.text_fit(sx as f32, y as f32 + 3.0, &format!("No open road to {name}."), SMALL, 130.0, th().foe);
-                    y += 20;
+                    y += 12;
+                    // PR7-37 (PT-08): the next reachable step toward it (a road, then a place's exit)
+                    let hint = way_hint(cx, gs, here, &self.selected);
+                    for part in ui.p.wrap(&hint, SMALL, 130.0) {
+                        ui.p.text(sx as f32, y as f32 + 1.0, &part, SMALL, th().text);
+                        y += 8;
+                    }
+                    ui.push("world_map.way_hint", "label", hint.clone(), Rect::new(sx, y - 8, 130, 8), true, false, None, Vec::new());
+                    y += 8;
                 }
             }
         }
@@ -937,6 +945,64 @@ impl WorldMap {
         }
         crate::region::log_events(cx, json::aget(&res, "events"));
         crate::runover::take(cx, &res);
+    }
+}
+
+/// PR7-37 (PT-31): the road legs open now (`travel::legs`), as sorted route qids.
+fn open_roads(d: &emberwake_world::Data, gs: &emberwake_world::GameState) -> Vec<String> {
+    let mut out: Vec<String> = travel::legs(d, gs, &gs.world_id).iter().map(|(r, _, _)| s(r, "_qid")).filter(|q| !q.is_empty()).collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// PR7-37 (PT-31): a road that opened since the player was last told (`Game::roads_seen`) gets a log line and a notice
+/// naming its two places ("New road open: A to B."); the first look only learns the roads open then. True when it told.
+pub fn note_new_roads(cx: &mut Cx) -> bool {
+    let Some(g) = cx.game.as_ref() else { return false };
+    let (d, gs) = (cx.data.clone(), g.gs.clone());
+    let open = open_roads(&d, &gs);
+    let Some(seen) = g.roads_seen.clone() else {
+        if let Some(g) = cx.game.as_mut() {
+            g.roads_seen = Some(open);
+        }
+        return false;
+    };
+    if open == seen {
+        return false;
+    }
+    let fresh: Vec<String> = open.iter().filter(|q| !seen.contains(q)).cloned().collect();
+    if let Some(g) = cx.game.as_mut() {
+        g.roads_seen = Some(open);
+    }
+    if fresh.is_empty() {
+        return false;
+    }
+    let legs = travel::legs(&d, &gs, &gs.world_id);
+    let lines: Vec<String> = fresh
+        .iter()
+        .filter_map(|q| legs.iter().find(|(r, _, _)| s(r, "_qid") == *q))
+        .map(|(_, a, b)| format!("New road open: {} to {}.", cx.location_name(&gs.world_id, a), cx.location_name(&gs.world_id, b)))
+        .collect();
+    for l in &lines {
+        cx.log(l.clone());
+    }
+    cx.notice.extend(lines);
+    true
+}
+
+/// PR7-37 (PT-08): the hint when no way to a place is known.
+const NO_WAY: &str = "No way there is known yet.";
+
+/// PR7-37 (PT-08, PT-31): the next reachable step from `here` toward place `to` (`travel::way_toward`, in
+/// `travel::way_words`' words), else `NO_WAY`.
+fn way_hint(cx: &Cx, gs: &emberwake_world::GameState, here: &str, to: &str) -> String {
+    let way = travel::way_toward(&cx.data, gs, here, to);
+    let words = travel::way_words(&way, to, &|q: &str| cx.location_name(&gs.world_id, q));
+    if words.is_empty() {
+        NO_WAY.to_string()
+    } else {
+        format!("Next: {words}")
     }
 }
 
@@ -1183,6 +1249,11 @@ impl Screen<GameCx> for WorldMap {
                 t.push((format!("Trip: {}", trip_cost(cx, &gs, &trip)), th().info));
             } else {
                 t.push(("No open road yet.".into(), th().dim));
+                // PR7-37 (PT-08): the way there, when there is one
+                let hint = way_hint(cx, &gs, &here, &m.qid);
+                if !hint.starts_with(NO_WAY) {
+                    t.push((hint, th().info));
+                }
             }
             for step in travel::quest_steps_at(&d, &gs, &m.qid) {
                 t.push((format!("Quest: {step}"), th().gold));
@@ -1203,10 +1274,14 @@ impl Screen<GameCx> for WorldMap {
         }
         self.hits = hits;
         // -- the Legend (AO-01 (5), AO-02): the district's quests and the party, floating over the map
+        // PR7-37 (PT-31): every active quest, also one whose place the map does not show (or that has none); the row
+        // says where it is and the way there
         let mut rows: Vec<(String, String)> = Vec::new();
-        for (node, name) in travel::quest_places(&d, &gs) {
-            if nodes.iter().any(|n| s(n, "qid") == node) && !rows.iter().any(|(_, t)| *t == name) {
+        let mut quest_of: Vec<String> = Vec::new();
+        for (node, name, qid) in travel::legend_quests(&d, &gs) {
+            if !rows.iter().any(|(_, t)| *t == name) {
                 rows.push((node, name));
+                quest_of.push(qid);
             }
         }
         for n in &nodes {
@@ -1289,9 +1364,18 @@ impl Screen<GameCx> for WorldMap {
                 if let Some(img) = cx.art.image(&crate::region::service_icon("board"), 7, 7) {
                     ui.p.image(img, b);
                 }
-                ui.p.text(r.x as f32 + 12.0, r.y as f32, text, SMALL, if on { th().gold } else { th().text });
+                let shown = nodes.iter().any(|n| s(n, "qid") == *node);
+                ui.p.text(r.x as f32 + 12.0, r.y as f32, text, SMALL, if on { th().gold } else if shown { th().text } else { th().dim });
                 let place = cx.location_name(&gs.world_id, node);
-                ui.push(format!("world_map.legend.quest.{i}"), "row", text.clone(), r, true, on, Some(WAct::Node(node.clone())), tip(text, &format!("At {place}. Click to pick it.")));
+                let about = match (shown, node.is_empty()) {
+                    (true, _) => format!("At {place}. Click to pick it."),
+                    (false, false) => format!("At {place}, not on the map yet. {}", way_hint(cx, &gs, &here, node)),
+                    (false, true) => {
+                        let now = quest_of.get(i).map(|q| s(&emberwake_world::quest::current_objective(&d, &gs, q), "text")).unwrap_or_default();
+                        if now.is_empty() { "No place to travel to for it.".to_string() } else { format!("No place to travel to: {now}") }
+                    }
+                };
+                ui.push(format!("world_map.legend.quest.{i}"), "row", text.clone(), r, true, on, shown.then(|| WAct::Node(node.clone())), tip(text, &about));
                 y += row_h;
             }
             ui.p.fill(Rect::new(p.x + 3, y + 1, p.w - 6, 1), th().edge);
@@ -1402,6 +1486,10 @@ impl Screen<GameCx> for WorldMap {
     fn tick(&mut self, cx: &mut Cx) {
         if cx.take_answer(crate::runover::ASK_TRIP) {
             self.travel(cx);
+            return;
+        }
+        // PR7-37 (PT-31): a road opened since the last look says so
+        if note_new_roads(cx) {
             return;
         }
         if cx.take_answer(crate::runover::ASK_REST) {

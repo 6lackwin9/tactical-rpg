@@ -67,3 +67,20 @@ fn the_loader_reads_start_worlds_from_the_manifest_beside_the_data_folder() {
     let (d, _) = Data::open(&data_dir).expect("the data folder opens");
     assert_eq!(d.start_worlds, ["beta"], "Data carries the manifest's list");
 }
+
+/// PR7-37 (PT-01): a player's New game offers the manifest's start worlds that are playable, in the list's order
+/// (`new_game::player_worlds`); with no list, every playable world, as before; a list with none playable offers none.
+#[test]
+fn a_players_worlds_are_the_playable_start_worlds() {
+    let mut d = data();
+    let playable = new_game::playable_worlds(&d);
+    assert_eq!(new_game::player_worlds(&d), playable, "no list: every playable world");
+    let (first, other) = (playable[0].clone(), playable[1].clone());
+    d.start_worlds = vec![other.clone(), "husk".into(), "gone".into(), first.clone()];
+    assert_eq!(new_game::player_worlds(&d), [other.clone(), first], "the list's playable worlds, its order");
+    d.start_worlds = vec![other.clone()];
+    assert_eq!(new_game::player_worlds(&d), [other.clone()], "one start world: the only one offered");
+    assert!(new_game::player_worlds(&d).contains(&new_game::default_world(&d)), "the default is offered");
+    d.start_worlds = vec!["husk".into()];
+    assert!(new_game::player_worlds(&d).is_empty(), "none playable: none offered");
+}

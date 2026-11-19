@@ -488,7 +488,7 @@ impl Services {
             self.facility.draw(ui, cx, &facility_npc, |a| A::from(SvcAct::Facility(a)));
         } else if !board_qid.is_empty() {
             ui.p.fill(veil, th().game("shop_veil", SHOP_DIM));
-            let bv = emberwake_world::board::view(&d, &gs, &board_qid);
+            let bv = crate::board::with_unlock_words(&d, &gs, emberwake_world::board::view(&d, &gs, &board_qid));
             let pick = self.board.select(&bv);
             let det = if pick.is_empty() { Dict::new() } else { emberwake_world::board::detail(&d, &gs, &pick) };
             self.board.draw(ui, cx, &bv, &det, |a| A::from(SvcAct::Board(a)));

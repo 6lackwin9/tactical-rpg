@@ -929,10 +929,21 @@ fn faded(img: &Image, a: f32) -> Image {
 
 /// The hover card of the topmost hovered widget that has one.
 pub fn draw_tip<A>(p: &mut Painter, widgets: &[Widget<A>], mouse: (i32, i32)) {
-    let Some(wd) = widgets.iter().rev().find(|wd| wd.rect.contains(mouse.0, mouse.1) && (!wd.tip.is_empty() || wd.kind == "backdrop")) else { return };
-    if wd.tip.is_empty() {
-        return;
-    }
+    draw_tip_by(p, widgets, mouse, |_| mouse);
+}
+
+/// The widget whose hover card shows with the mouse at `mouse`: the topmost hovered one with a card (None under a
+/// backdrop without one).
+pub fn tip_widget<A>(widgets: &[Widget<A>], mouse: (i32, i32)) -> Option<&Widget<A>> {
+    let wd = widgets.iter().rev().find(|wd| wd.rect.contains(mouse.0, mouse.1) && (!wd.tip.is_empty() || wd.kind == "backdrop"))?;
+    (!wd.tip.is_empty()).then_some(wd)
+}
+
+/// `draw_tip` with the card placed as for a mouse at `at(widget)` (the hovered widget): a screen moves a row's card
+/// off what the row shows (beside the row instead of over the numbers next to it).
+pub fn draw_tip_by<A>(p: &mut Painter, widgets: &[Widget<A>], mouse: (i32, i32), at: impl Fn(&Widget<A>) -> (i32, i32)) {
+    let Some(wd) = tip_widget(widgets, mouse) else { return };
+    let mouse = at(wd);
     let t = theme::th();
     let m = Metrics::of(&t, p.v);
     let max_w = m.uf(160.0);

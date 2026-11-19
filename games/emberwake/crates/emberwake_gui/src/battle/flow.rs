@@ -181,6 +181,11 @@ impl BattleScreen {
         self.session().final_outcome()
     }
 
+    /// PR7-37 (PT-02, PT-24): the battle ended at its round limit (`Session::timed_out`): it reads "Out of time".
+    pub(super) fn timed_out(&self) -> bool {
+        self.host.session.as_ref().is_some_and(|s| s.timed_out())
+    }
+
     /// World battle over: the runner settles the fight from the battle's tally (REWARD1's foes and ENCOUNTER2 W1's
     /// party side: the kit's `battle::apply` settles the party first by `roster::settle_party`: the stay-behind `then`,
     /// the world's rule row, HP; then the rewards), the results popup opens.
@@ -205,7 +210,13 @@ impl BattleScreen {
         // which fades out and closes both; a win here leaves the hub its arrival)
         self.beat = None;
         let before = if outcome == "won" && self.arrives { self.before.take() } else { None };
-        let results = crate::hub::Results::new(&res, &outcome, &fight).over_battle(cx.settings.reduce_motion(), before);
+        // PR7-37 (PT-02, PT-24): a fight that ran out of rounds says so, and what it leaves open (the log keeps the line)
+        let timed_out = self.timed_out();
+        let next = if timed_out || outcome != "won" { crate::hub::open_jobs_lines(cx, &s(&fight, "encounter")) } else { Vec::new() };
+        for l in &next {
+            cx.log(l.clone());
+        }
+        let results = crate::hub::Results::new(&res, &outcome, &fight).after_fight(timed_out, next).over_battle(cx.settings.reduce_motion(), before);
         cx.nav.push(Nav::Push(Box::new(results)));
     }
 

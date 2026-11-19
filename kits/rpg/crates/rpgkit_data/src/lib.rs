@@ -2045,6 +2045,11 @@ pub const BOARD_INTRO_MAX: usize = 160;
 /// 4.7: the service line id of the board choice.
 pub const BOARD_SERVICE: &str = "board";
 
+/// PR7-37 (PT-03, PT-29): what a point of interest (a `point` marker's `use`) does when the party acts on it (E, or
+/// a click on its marker): "" says its note only; `rest` rests the party there (the campaign's rest rule, as Make
+/// camp); `crypts` says who lies in the crypt places; `stash` opens the party stash. Every point logs its line.
+pub const POINT_USES: [&str; 4] = ["", "rest", "crypts", "stash"];
+
 /// The keys a step of `kind` takes (`kind` included; an unknown kind takes only `kind`). STORYMUSIC1: every kind takes
 /// an optional `music` (as a vignette's: "" keeps the music playing).
 pub fn step_keys(kind: &str) -> &'static [&'static str] {

@@ -934,6 +934,44 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
 
 // ---- Interacting ---------------------------------------------------------------------------------------------
 
+/// PR7-37 (PT-03, PT-29): the point of interest the party acts on facing `dir`: a present `point` marker on the
+/// party's tile, else on the tile ahead (with its defaults filled); None when there is none. Read only: acting on it
+/// is the game's (`point_use`, `point_line`).
+pub fn point_near(d: &Data, gs: &GameState, dir: Pos) -> Option<Dict> {
+    let loc = location(d, gs);
+    let t = template_of(d, loc);
+    if t.is_empty() {
+        return None;
+    }
+    let (loc_qid, steps) = (json::s(loc, "_qid"), gs.explore_int("loc_steps"));
+    let ahead = (gs.position.0 + dir.0, gs.position.1 + dir.1);
+    let points: Vec<Dict> = markers_of(loc).into_iter().filter(|m| json::s(m, "kind") == "point" && presence(d, gs, &loc_qid, m) == "present").collect();
+    [gs.position, ahead].into_iter().find_map(|at| points.iter().find(|m| marker_pos(t, m, steps) == at).cloned())
+}
+
+/// PR7-37 (PT-03): what acting on point `m` does (`rpgkit_data::POINT_USES`; "" for a point that only speaks).
+pub fn point_use(m: &Dict) -> String {
+    let u = json::s(m, "use");
+    if rpgkit_data::POINT_USES.contains(&u.as_str()) {
+        u
+    } else {
+        String::new()
+    }
+}
+
+/// PR7-37 (PT-03, PT-29): the log line of point `m`: its label and its note ("The cold vaults: Slate tables ..."),
+/// either alone when the other is empty, else "Something here."; a flag the point sets adds nothing here (the game
+/// logs what the flag changed).
+pub fn point_line(m: &Dict) -> String {
+    let (label, note) = (json::s(m, "label").trim().to_string(), json::s(m, "note").trim().to_string());
+    match (label.is_empty(), note.is_empty()) {
+        (false, false) => format!("{label}: {note}"),
+        (false, true) => format!("{label}."),
+        (true, false) => note,
+        (true, true) => "Something here.".into(),
+    }
+}
+
 /// The present npc / chest / lore marker on position + dir: {ok, errors, kind ("" = nothing), ...}.
 pub fn interact(d: &Data, gs: &mut GameState, dir: Pos) -> Dict {
     let nothing = |ok: bool, errors: &[String]| {

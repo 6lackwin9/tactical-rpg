@@ -114,6 +114,17 @@ pub fn default_world(d: &Data) -> String {
     d.start_worlds.iter().find(|w| playable.contains(w)).or(playable.first()).cloned().unwrap_or_default()
 }
 
+/// PR7-37 (PT-01): the worlds a player's New game offers: the manifest's `start_worlds` that are playable, in that
+/// order; every playable world when the manifest names none (a game with no start list, as before). The other playable
+/// worlds (test worlds) are the game's to show in a developer build only.
+pub fn player_worlds(d: &Data) -> Vec<String> {
+    let playable = playable_worlds(d);
+    if d.start_worlds.is_empty() {
+        return playable;
+    }
+    d.start_worlds.iter().filter(|w| playable.contains(w)).cloned().collect()
+}
+
 pub fn create_for_world(d: &Data, world_id: &str, seed: i64) -> Result<GameState, Vec<String>> {
     let errors = playable_errors(d, world_id);
     if !errors.is_empty() {
