@@ -59,6 +59,10 @@ impl Gamepad {
             match ev.event {
                 gilrs::EventType::ButtonPressed(b, _) => {
                     let Some(p) = pad_of(b) else { continue };
+                    // CONTROLS-UI1: a rebind waiting for a button takes the d-pad too
+                    if s.capture(crate::controls::Input::Pad(p)) {
+                        continue;
+                    }
                     let k = s.controls().pad(p);
                     if k.dir().is_some() && matches!(p, Pad::DUp | Pad::DDown | Pad::DLeft | Pad::DRight) {
                         self.dpad.retain(|d| *d != k);

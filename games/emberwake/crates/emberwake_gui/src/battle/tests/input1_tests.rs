@@ -815,13 +815,15 @@ fn a_click_on_a_ghost_block_picks_its_command() {
     assert!(!matches!(aegis_ui::ui::hit(&b.w, (r.x + 2, r.y + r.h / 2)), Some(Action::GhostSlot(_))), "a solid block is no ghost slot");
 }
 
-/// The Help card lists the party keys, the Shift skill keys, F and Ctrl+click.
+/// The Settings Controls tab names the party keys, the Shift skill keys and Ctrl+click (fixed) and F (rebindable,
+/// CONTROLS-UI1 moved them from the old static table).
 #[test]
 fn the_help_keys_name_the_input2_keys() {
-    let battle = crate::menus::CONTROLS.iter().find(|(g, _)| *g == "Battle").expect("the battle keys").1;
-    for (what, key) in [("Select party member 1-4", "1-4"), ("Skills of the selected hero (timeline)", "Shift+1-9"), ("Accept the selected hero's auto-fill (timeline)", "F"), ("Support an ally while only the auto-fill shows (timeline)", "Ctrl+click")] {
-        assert!(battle.iter().any(|r| r.0 == what && r.1 == key), "{what}: {key} in {battle:?}");
+    let fixed = crate::controls_view::FIXED;
+    for (what, key) in [("Select party member", "1-4"), ("Skills of the selected hero", "Shift+1-9"), ("Support an ally (timeline)", "Ctrl+click")] {
+        assert!(fixed.iter().any(|r| r.0 == what && r.1 == key), "{what}: {key} in {fixed:?}");
     }
+    assert!(crate::controls_view::ACTIONS.iter().any(|a| a.id == "auto_fill" && a.key == aegis_ui::screen::Key::Char('f')));
 }
 
 // ---- INPUT1-AP: the AP pip gauge (INPUT1 AP3, AP5-AP10) ---------------------------------------------------------

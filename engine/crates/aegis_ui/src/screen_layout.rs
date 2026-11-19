@@ -910,20 +910,9 @@ pub fn draw_default(ui: &mut Ui<Act>, art: &mut Art, view: &View, area: Rect) ->
     let title = view.get("title").filter(|f| matches!(f, Field::Text(_))).map(|_| "title".to_string());
     let shell = Component::PanelShell { title, shell: Shell::Main, close: None, back: None, action: None, hints: None };
     let mut body = component(ui, art, "panel", &shell, view, area.pad(Insets::all(m.margin)), &mut drawn);
-    let foot = if view.actions.is_empty() { None } else { Some(body.cut_bottom(m.u(16))) };
-    let wired = |name: &str| view.act(name).map(|a| a.id.clone());
-    let line = ui.p.line_h(m.body).ceil() as i32 + m.u(1);
-    for (name, f) in view.fields.iter().filter(|(n, _)| n != "title" || !matches!(view.get("title"), Some(Field::Text(_)))) {
-        let (c, h) = match f {
-            Field::Text(_) | Field::Number(_) | Field::Flag(_) => (Component::TextBlock { text: name.clone() }, line),
-            Field::Picture(_) => (Component::Portrait { picture: name.clone() }, m.u(32)),
-            Field::Meter { .. } => (Component::BarMeter { meter: name.clone(), label: None }, m.u(5)),
-            Field::Rows(rows) => (Component::ListRow { rows: name.clone(), select: wired(name) }, rows.len() as i32 * (list_row_h(ui, rows) + m.u(1))),
-            Field::Stats(s) => (Component::StatBlock { stats: name.clone() }, s.len() as i32 * line),
-            Field::Tabs { .. } => (Component::TabRail { tabs: name.clone(), select: wired(name).unwrap_or_default() }, m.u(12)),
-            Field::Slots(s) => (Component::SlotCard { slots: name.clone(), select: wired(name) }, s.len() as i32 * m.u(19)),
-            Field::Icons(i) => (Component::IconGrid { icons: name.clone(), select: wired(name) }, ((i.len() as i32 + 7) / 8).max(1) * m.u(17)),
-        };
+    let foot = if view.actions.is_empty() { None } else { Some(body.cut_bottom(m.u(DEFAULT_FOOT))) };
+    for (name, f) in default_fields(view) {
+        let (c, h) = default_field(ui, view, name, f, body.w);
         let label_h = ui.p.line_h(m.small).ceil() as i32;
         let head = body.cut_top(label_h);
         let dim = ui.t.dim;
@@ -942,9 +931,54 @@ pub fn draw_default(ui: &mut Ui<Act>, art: &mut Art, view: &View, area: Rect) ->
     drawn
 }
 
+/// The default's footer bar height, in old units.
+const DEFAULT_FOOT: i32 = 16;
+
+/// The fields the default lists in its body: all but a text `title` (the shell's title).
+fn default_fields(view: &View) -> impl Iterator<Item = (&String, &Field)> {
+    let titled = matches!(view.get("title"), Some(Field::Text(_)));
+    view.fields.iter().filter(move |(n, _)| n != "title" || !titled).map(|(n, f)| (n, f))
+}
+
+/// The component the default draws field `name` with in a body `w` wide, and its height. A list, tab, slot or icon field
+/// is wired to the action of the same id when the view offers one. A text that wraps takes its lines (`Ui::para`).
+fn default_field<A: Clone>(ui: &mut Ui<A>, view: &View, name: &str, f: &Field, w: i32) -> (Component, i32) {
+    let m = ui.m();
+    let wired = |name: &str| view.act(name).map(|a| a.id.clone());
+    let line = ui.p.line_h(m.body).ceil() as i32 + m.u(1);
+    let name = name.to_string();
+    match f {
+        Field::Text(_) | Field::Number(_) | Field::Flag(_) => {
+            let lines = f.as_text().map_or(1, |t| ui.p.wrap(&t, m.body, w as f32).len().max(1));
+            (Component::TextBlock { text: name }, line + ((lines - 1) as f32 * m.body * crate::ui::PARA_LINE).ceil() as i32)
+        }
+        Field::Picture(_) => (Component::Portrait { picture: name }, m.u(32)),
+        Field::Meter { .. } => (Component::BarMeter { meter: name, label: None }, m.u(5)),
+        Field::Rows(rows) => (Component::ListRow { select: wired(&name), rows: name }, rows.len() as i32 * (list_row_h(ui, rows) + m.u(1))),
+        Field::Stats(s) => (Component::StatBlock { stats: name }, s.len() as i32 * line),
+        Field::Tabs { .. } => (Component::TabRail { select: wired(&name).unwrap_or_default(), tabs: name }, m.u(12)),
+        Field::Slots(s) => (Component::SlotCard { select: wired(&name), slots: name }, s.len() as i32 * m.u(19)),
+        Field::Icons(i) => (Component::IconGrid { select: wired(&name), icons: name }, ((i.len() as i32 + 7) / 8).max(1) * m.u(17)),
+    }
+}
+
+/// CONTROLS-UI1: the height the default (`draw_default`) takes to show all of `view` at width `w`, so a screen that
+/// hosts it in a scroll area can give it its whole height.
+pub fn default_height<A: Clone>(ui: &mut Ui<A>, view: &View, w: i32) -> i32 {
+    let m = ui.m();
+    let probe = Rect::new(0, 0, (w - 2 * m.margin).max(1), m.u(400));
+    let inner = ui.frame_content("panel", probe);
+    let pad_h = probe.h - inner.h;
+    let title = if matches!(view.get("title"), Some(Field::Text(t)) if !t.is_empty()) { m.u(crate::panes::SHELL_TITLE_H) } else { 0 };
+    let foot = if view.actions.is_empty() { 0 } else { m.u(DEFAULT_FOOT) };
+    let label_h = ui.p.line_h(m.small).ceil() as i32;
+    let fields: i32 = default_fields(view).map(|(n, f)| label_h + default_field(ui, view, n, f, inner.w).1 + m.u(2)).sum();
+    2 * m.margin + pad_h + title + foot + fields
+}
+
 /// A list row's height: the theme's row with a line to spare, or the shared row's (`panes::row_h_on`) when a row has a
 /// picture or a sub-line.
-fn list_row_h(ui: &Ui<Act>, rows: &[RowView]) -> i32 {
+fn list_row_h<A: Clone>(ui: &Ui<A>, rows: &[RowView]) -> i32 {
     let m = ui.m();
     if rows.iter().any(|r| r.picture.is_some() || !r.sub.is_empty()) {
         crate::panes::row_h_on(&m, &ui.p)

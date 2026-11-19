@@ -1,0 +1,22 @@
+{
+  "screen": "settings_controls",
+  "fields": {
+    "prompt": {"text": "W is already Walk up. Swap it to Interact with the marker you face? Enter swaps, Esc cancels."},
+    "bindings": {"rows": [
+      {"id": "confirm", "label": "Confirm / confirm the round", "detail": "Enter · Pad A", "enabled": true},
+      {"id": "press", "label": "Press / step, next round", "detail": "Space · Pad X", "enabled": true},
+      {"id": "back", "label": "Back / game menu", "detail": "Esc · Pad B", "enabled": true},
+      {"id": "up", "label": "Up / move up", "detail": "Up · D-pad Up", "enabled": true},
+      {"id": "walk_up", "label": "Walk up", "detail": "W · no pad button", "enabled": true},
+      {"id": "interact", "label": "Interact with the marker you face", "detail": "Press a key or button…", "enabled": true},
+      {"id": "party", "label": "Party / playback speed (battle)", "detail": "P · no pad button", "enabled": true}
+    ]},
+    "fixed": {"stats": [["Run", "Hold Shift"], ["Back / inspect a unit", "Right click"], ["Skills of the selected hero", "Shift+1-9"]]}
+  },
+  "actions": [
+    {"id": "bindings", "label": "Rebind", "enabled": true},
+    {"id": "swap", "label": "Swap", "enabled": true},
+    {"id": "cancel", "label": "Cancel", "enabled": true},
+    {"id": "reset", "label": "Reset to defaults", "enabled": true}
+  ]
+}

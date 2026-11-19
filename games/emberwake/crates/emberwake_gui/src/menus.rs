@@ -844,6 +844,8 @@ pub enum SetAct {
     GuardStay,
     GuardDiscard,
     GuardApply,
+    /// CONTROLS-UI1 (PR7-44): an action of the Controls tab's view (`controls_view`).
+    View(aegis_ui::screen_layout::Act),
 }
 
 /// The settings keys Display Mode and Resolution stage until Apply (DISPLAY2's `fullscreen` and `borderless`, and
@@ -864,22 +866,6 @@ pub const DISPLAY_MODES: [(WindowShow, &str, &str); 3] = [
 const ANIM_SPEEDS: [f64; 7] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 /// PLAYUI1-M: the region map's marker names (value, label); the first is the default.
 pub const MAP_NAMES: [(&str, &str); 2] = [("hover", "On hover"), ("always", "Always")];
-pub(crate) const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
-    (
-        "Menus",
-        &[
-            ("Confirm / press the focused button", "Enter, Space"),
-            ("Back / close the top panel", "Escape"),
-            ("Focus the next / previous control", "Tab, Shift+Tab"),
-            ("Move focus", "Arrow keys (not on the map)"),
-            ("Step a focused slider", "Left, Right"),
-            ("Back / close (mouse)", "Right click"),
-        ],
-    ),
-    ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Run", "Hold Shift"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
-    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Select party member 1-4", "1-4"), ("Skills of the selected hero (timeline)", "Shift+1-9"), ("Accept the selected hero's auto-fill (timeline)", "F"), ("Support an ally while only the auto-fill shows (timeline)", "Ctrl+click"), ("Target self (timeline)", "S"), ("Inspect a unit (timeline)", "Right click"), ("Clear inspect, deselect (timeline)", "Escape"), ("Full timeline view, open / close (timeline)", "T, Escape"), ("Playback speed: 1x, 0.5x, block by block (timeline)", "P"), ("Next block (timeline)", "N"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every bar, arrow and hazard mark (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
-];
-
 /// A volume slider's sample and bus (scripts/audio/volume_preview.gd: the master sample plays on the interface bus).
 fn preview_of(key: &str) -> Option<(Bus, &'static str)> {
     match key {
@@ -922,6 +908,9 @@ pub struct SettingsScreen {
     guard: Option<Leave>,
     /// PR7-41 (PT-32): opened from a world battle whose fight allows a retreat: the footer offers Retreat.
     retreat: bool,
+    /// CONTROLS-UI1 (PR7-44): the Controls tab's rebind in progress, and the layouts its view draws with.
+    rebind: aegis_ui::controls::Rebind,
+    layouts: aegis_ui::screen_layout::Layouts,
     w: Vec<Widget<SetAct>>,
 }
 
@@ -964,7 +953,8 @@ impl SettingsScreen {
     }
 
     fn open(cx: &Cx, popup: bool) -> Self {
-        Self { tab: 0, popup, web: ON_WEB, pending: staged_of(&cx.settings.v), confirm: None, guard: None, retreat: false, w: Vec::new() }
+        let layouts = aegis_ui::screen_layout::Layouts::new(cx.art.layers().clone());
+        Self { tab: 0, popup, web: ON_WEB, pending: staged_of(&cx.settings.v), confirm: None, guard: None, retreat: false, rebind: Default::default(), layouts, w: Vec::new() }
     }
 
     /// PR7-41 (PT-32): the in-game popup as a world battle's Menu: Retreat in the footer when `can_retreat` (the
@@ -1125,7 +1115,15 @@ impl SettingsScreen {
 
     fn act(&mut self, cx: &mut Cx, a: SetAct) {
         match a {
-            SetAct::Tab(t) => self.tab = t.min(TABS.len() - 1),
+            SetAct::Tab(t) => {
+                self.tab = t.min(TABS.len() - 1);
+                self.rebind.cancel();
+            }
+            SetAct::View(a) => {
+                if crate::controls_view::act(&mut self.rebind, &mut cx.settings.v, &a) {
+                    Self::save(cx);
+                }
+            }
             SetAct::Toggle(k) => {
                 let on = !cx.settings.v[k].as_bool().unwrap_or(false);
                 Self::commit(cx, k, Value::Bool(on));
@@ -1191,6 +1189,7 @@ impl SettingsScreen {
                 // Every row at once, but the display: its defaults are staged for Apply like any display change. The web
                 // stages nothing (PR7-26): its Fullscreen is the browser's, so the display keys stay as they are.
                 let mut d = Settings::defaults(default_settings());
+                self.rebind.cancel();
                 self.pending = staged_of(if self.web { &cx.settings.v } else { &d });
                 for k in STAGED {
                     d[k] = cx.settings.v[k].clone();
@@ -1284,7 +1283,7 @@ impl SettingsScreen {
         }
     }
 
-    fn row_height(&self, ui: &mut Ui<SetAct>, row: Row, w: i32) -> i32 {
+    fn row_height(&self, ui: &mut Ui<SetAct>, cx: &Cx, row: Row, w: i32) -> i32 {
         let rh = self.row_h(ui);
         match row {
             Row::Video => rh * 2 + 4,
@@ -1293,7 +1292,8 @@ impl SettingsScreen {
                 let groups = crate::battle::settings_overlay_groups().len().div_ceil(2) as i32 * OVERLAY_PITCH;
                 head + groups + if crate::DEV_BUILD { OVERLAY_PITCH + 4 } else { 0 }
             }
-            Row::Controls => controls(ui, Rect::new(0, 0, w, 0), false),
+            // CONTROLS-UI1: the default takes its whole height (the body scrolls it); a layout file places its own
+            Row::Controls => aegis_ui::screen_layout::default_height(ui, &crate::controls_view::view(&cx.settings.v, &self.rebind), w),
             Row::Heading(_) => ui.p.line_h(HEAD).ceil() as i32 + 8,
             _ => rh,
         }
@@ -1457,9 +1457,8 @@ impl SettingsScreen {
                     }
                 }
             }
-            Row::Controls => {
-                controls(ui, r, true);
-            }
+            // drawn by `draw` through its view (CONTROLS-UI1)
+            Row::Controls => {}
         }
     }
 
@@ -1522,36 +1521,6 @@ impl SettingsScreen {
     }
 }
 
-/// The Controls tab's groups in `r` (from `r.y`): a card per group, each row's action at the left and its keys at the
-/// right (under it when the two do not fit side by side). Returns the height; draws only when `draw`.
-fn controls(ui: &mut Ui<SetAct>, r: Rect, draw: bool) -> i32 {
-    let t = th();
-    let (lh, hh) = (ui.p.line_h(BODY).ceil() as i32, ui.p.line_h(BODY + 1.0).ceil() as i32);
-    let mut y = r.y;
-    for (head, rows) in CONTROLS {
-        let top = y;
-        let mut yy = y + 3 + hh + 1;
-        let mut lines = Vec::new();
-        for (what, keys) in rows {
-            let (ww, kw) = (ui.p.text_w(what, BODY), ui.p.text_w(keys, BODY));
-            let two = ww + kw + 24.0 > (r.w - 16) as f32;
-            lines.push((yy, two, *what, *keys));
-            yy += if two { 2 * lh } else { lh } + 1;
-        }
-        let h = yy - top + 3;
-        if draw {
-            ui.p.panel(Rect::new(r.x, top, r.w, h), t.card, t.edge, 2.0);
-            ui.p.text_face(Typeface::Display, (r.x + 6) as f32, (top + 3) as f32, head, BODY + 1.0, t.gold);
-            for (ly, two, what, keys) in lines {
-                ui.p.text((r.x + 8) as f32, ly as f32, what, BODY, t.text);
-                ui.p.text_right((r.x + r.w - 8) as f32, (if two { ly + lh } else { ly }) as f32, keys, BODY, t.gold);
-            }
-        }
-        y = top + h + GAP;
-    }
-    y - r.y
-}
-
 impl Screen<GameCx> for SettingsScreen {
     /// Nothing here moves by itself but the confirm's countdown.
     fn frame_need(&self, _cx: &Cx) -> FrameNeed {
@@ -1570,9 +1539,23 @@ impl Screen<GameCx> for SettingsScreen {
     fn tick(&mut self, cx: &mut Cx) {
         self.tick_at(cx, Instant::now());
     }
-    /// Right click and Esc: the confirm reverts, the guard stays, else the screen closes (asking first when a display
-    /// change is staged).
+    /// CONTROLS-UI1: while a rebind waits (or asks to swap), the raw key or pad button is its input.
+    fn capture(&mut self, cx: &mut Cx, input: aegis_ui::controls::Input) -> bool {
+        if self.tab != TABS.len() - 1 || !self.rebind.capturing() {
+            return false;
+        }
+        if self.rebind.input(&crate::controls_view::ACTIONS, &mut cx.settings.v, input) == aegis_ui::controls::Outcome::Bound {
+            Self::save(cx);
+        }
+        true
+    }
+    /// Right click and Esc: a rebind cancels, the confirm reverts, the guard stays, else the screen closes (asking first
+    /// when a display change is staged).
     fn back(&mut self, cx: &mut Cx) {
+        if self.rebind.capturing() {
+            self.rebind.cancel();
+            return;
+        }
         let a = if self.confirm.is_some() {
             SetAct::Revert
         } else if self.guard.is_some() {
@@ -1688,12 +1671,23 @@ impl Screen<GameCx> for SettingsScreen {
         let view = Rect::new(body.x, body.y + hh + 3, body.w, body.h - hh - 3);
         let rows = self.rows(cx);
         let inner_w = view.w - 5;
-        let heights: Vec<i32> = rows.iter().map(|row| self.row_height(&mut ui, *row, inner_w)).collect();
+        // CONTROLS-UI1: the Controls tab's view and its layout (None: the default); a layout's problems go to the notice
+        let controls = matches!(rows.first(), Some(Row::Controls)).then(|| crate::controls_view::view(&cx.settings.v, &self.rebind));
+        let layout = controls.as_ref().and_then(|v| self.layouts.get(v).cloned());
+        cx.notice.extend(self.layouts.take_problems());
+        let heights: Vec<i32> = rows.iter().map(|row| if layout.is_some() && matches!(row, Row::Controls) { view.h } else { self.row_height(&mut ui, cx, *row, inner_w) }).collect();
         let content = heights.iter().sum::<i32>() + GAP * (rows.len() as i32 - 1).max(0);
         let off = ui.scroll_begin("settings.body", view, content);
         let mut y = view.y - off;
         for (row, h) in rows.iter().zip(&heights) {
-            self.draw_row(&mut ui, cx, *row, Rect::new(view.x, y, inner_w, *h));
+            let r = Rect::new(view.x, y, inner_w, *h);
+            match (row, &controls) {
+                (Row::Controls, Some(v)) => {
+                    let art = &mut cx.art;
+                    ui.nest(SetAct::View, |sub| aegis_ui::screen_layout::draw(sub, art, layout.as_ref(), v, r));
+                }
+                _ => self.draw_row(&mut ui, cx, *row, r),
+            }
             y += h + GAP;
         }
         ui.scroll_end();
@@ -1723,7 +1717,7 @@ impl Screen<GameCx> for SettingsScreen {
     }
     fn state(&self, cx: &Cx) -> Value {
         json!({"tab": TABS[self.tab].0, "popup": self.popup, "settings": cx.settings.v, "pending": self.pending, "display_dirty": self.display_dirty(cx),
-            "confirm_left": self.confirm_left(Instant::now()), "guard": self.guard.map(|g| format!("{g:?}").to_lowercase())})
+            "confirm_left": self.confirm_left(Instant::now()), "guard": self.guard.map(|g| format!("{g:?}").to_lowercase()), "rebind": crate::controls_view::state(&self.rebind)})
     }
     widget_plumbing!();
 }
@@ -3077,6 +3071,69 @@ mod settings_tests {
         assert!(!s.display_dirty(&cx), "nothing staged");
         s.click_id(&mut cx, "settings.close").expect("close");
         assert!(matches!(cx.nav.last(), Some(Nav::Pop)) && s.state(&cx)["guard"].is_null(), "closes with no guard: {}", s.state(&cx));
+    }
+
+    /// CONTROLS-UI1 (PR7-44): the Controls tab lists every action with its key and pad button; a click on a row waits
+    /// for the raw input (`capture`), a key rebinds and the file is saved; right click (and Esc) cancel; a clash asks and
+    /// Swap trades the two; Reset to defaults drops the map; the map read back from the saved file is the one shown.
+    #[test]
+    fn the_controls_tab_rebinds_saves_and_resets() {
+        use aegis_ui::controls::{Controls, Input};
+        use crate::controls_view::{binding_text, ACTIONS};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        for popup in [false, true] {
+            let mut s = if popup { SettingsScreen::in_game(&cx) } else { SettingsScreen::new(&cx) };
+            redraw(&mut s, &mut cx, &mut g);
+            s.click_id(&mut cx, "settings.tab.controls").expect("the tab");
+            let w = redraw(&mut s, &mut cx, &mut g);
+            let row = |i: usize| format!("settings_controls.f_bindings.{i}");
+            for (i, a) in ACTIONS.iter().enumerate() {
+                let r = w.iter().find(|x| x["id"] == json!(row(i))).unwrap_or_else(|| panic!("{}'s row", a.id));
+                assert!(r["text"].as_str().unwrap().contains(a.label), "{r}");
+            }
+            let at = |id: &str| ACTIONS.iter().position(|a| a.id == id).unwrap();
+            // idle: a key goes on to the screen
+            assert!(!s.capture(&mut cx, Input::Key(Key::Char('r'))));
+            s.click_id(&mut cx, &row(at("journal"))).expect("the row");
+            assert_eq!(s.state(&cx)["rebind"], json!({"step": "waiting", "action": "journal"}));
+            assert!(s.capture(&mut cx, Input::Key(Key::Char('k'))));
+            assert_eq!(saved(&cx, "controls")["keys"]["k"], json!("j"), "saved at once");
+            // the file read again gives the same map and the row shows it
+            let back = Settings::load(cx.shot_dir.join("settings.json"), default_settings());
+            let c = Controls::from_settings(&back.v).0;
+            assert_eq!(c, Controls::from_settings(&cx.settings.v).0);
+            assert_eq!(c.key_for(Key::Char('j')), Some(Key::Char('k')));
+            assert!(binding_text(&c, &ACTIONS[at("journal")]).starts_with("K · "));
+            // right click cancels a waiting rebind and keeps the screen open
+            s.click_id(&mut cx, &row(at("journal"))).expect("the row");
+            s.back(&mut cx);
+            assert_eq!(s.state(&cx)["rebind"], json!({"step": "idle"}));
+            assert!(cx.nav.is_empty(), "the screen stays");
+            // a clash asks; Swap trades
+            s.click_id(&mut cx, &row(at("interact"))).expect("the row");
+            assert!(s.capture(&mut cx, Input::Key(Key::Char('z'))));
+            assert_eq!(s.state(&cx)["rebind"]["with"], json!("undo"));
+            // the question fits at every text size (GUI audit)
+            for &(_, scale) in TEXT_SIZES.iter() {
+                let recs = frame(&mut s, &mut cx, &mut g, scale as f32);
+                let boxes: Vec<(String, f32, f32, f32, f32)> = s.widgets().iter().filter(|w| w["kind"] != "scroll" && rect(w).2 > 0 && rect(w).3 > 0).map(|w| {
+                    let r = rect(w);
+                    (w["id"].as_str().unwrap_or("").to_string(), r.0 as f32, r.1 as f32, r.2 as f32, r.3 as f32)
+                }).collect();
+                let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+                assert_eq!(v["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "popup {popup} scale {scale}: {v}");
+                assert!(recs.iter().any(|r| r.text.contains("taken")), "the asked row says so");
+            }
+            redraw(&mut s, &mut cx, &mut g);
+            s.click_id(&mut cx, "settings_controls.swap").expect("Swap");
+            let c = Controls::from_settings(&cx.settings.v).0;
+            assert_eq!((c.key_for(Key::Char('e')), c.key_for(Key::Char('z'))), (Some(Key::Char('z')), Some(Key::Char('e'))));
+            // Reset to defaults: the saved file has no map
+            redraw(&mut s, &mut cx, &mut g);
+            s.click_id(&mut cx, "settings_controls.reset").expect("Reset");
+            assert_eq!(saved(&cx, "controls"), Value::Null);
+            assert_eq!(Controls::from_settings(&cx.settings.v).0, Controls::default());
+        }
     }
 
     /// Every tab, the confirm and the guard fit at the four text sizes, full screen and popup: no text spills out of

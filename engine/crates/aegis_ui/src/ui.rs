@@ -67,7 +67,15 @@ pub struct Widget<A> {
     pub drop: Option<String>,
 }
 
+/// A paragraph's line pitch, as a multiple of its text size (`Ui::para`).
+pub const PARA_LINE: f32 = 1.35;
+
 impl<A> Widget<A> {
+    /// The same widget with its action through `f` (`Ui::nest`).
+    pub fn map<B>(self, f: impl Fn(A) -> B) -> Widget<B> {
+        Widget { id: self.id, kind: self.kind, text: self.text, rect: self.rect, enabled: self.enabled, active: self.active, action: self.action.map(f), tip: self.tip, drag: self.drag, drop: self.drop }
+    }
+
     pub fn info(&self) -> Value {
         let mut info = json!({"id": self.id, "kind": self.kind, "text": self.text, "rect": [self.rect.x, self.rect.y, self.rect.w, self.rect.h],
             "enabled": self.enabled, "active": self.active, "clickable": self.action.is_some() || self.kind == "select", "tip": self.tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>()});
@@ -237,6 +245,38 @@ impl<'a, A: Clone> Ui<'a, A> {
         let t = theme::th();
         g.fonts.sync(&t);
         Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None, clips: Vec::new(), scroll, scrolls: 0, edit, t, focus, device, corner: None }
+    }
+
+    /// CONTROLS-UI1: draws a part whose widgets carry another action type (a `screen_layout` view's `Act` inside a screen
+    /// of its own actions): `f` gets a Ui over the same canvas, clip, scroll offsets, theme and input state; its widgets
+    /// join this one's, each action through `map`.
+    pub fn nest<B: Clone, R>(&mut self, map: impl Fn(B) -> A, f: impl FnOnce(&mut Ui<'_, B>) -> R) -> R {
+        let (out, widgets) = {
+            let mut sub: Ui<'_, B> = Ui {
+                p: Painter { c: &mut *self.p.c, v: self.p.v, fonts: &mut *self.p.fonts },
+                widgets: Vec::new(),
+                mouse: self.mouse,
+                live: self.live,
+                open: self.open.clone(),
+                drag: self.drag.clone(),
+                clip: self.clip,
+                clips: Vec::new(),
+                scroll: self.scroll.clone(),
+                scrolls: 0,
+                edit: self.edit.clone(),
+                t: self.t.clone(),
+                focus: self.focus.clone(),
+                device: self.device,
+                corner: self.corner,
+            };
+            let out = f(&mut sub);
+            (out, std::mem::take(&mut sub.widgets))
+        };
+        // the part's clips are its own: this one's comes back
+        let clip = self.clip;
+        self.p.clip(clip);
+        self.widgets.extend(widgets.into_iter().map(|w| w.map(&map)));
+        out
     }
 
     /// The layout's tokens for this screen's grid (LAYOUT720 6.2, 14): text sizes, gaps, small control heights and `u`, the
@@ -743,7 +783,7 @@ impl<'a, A: Clone> Ui<'a, A> {
     /// Wrapped text; returns the y below it.
     pub fn para(&mut self, x: i32, y: i32, w: i32, text: &str, size: f32, col: Rgba) -> i32 {
         let mut yy = y as f32;
-        let step = size * 1.35;
+        let step = size * PARA_LINE;
         for line in self.p.wrap(text, size, w as f32) {
             self.p.text(x as f32, yy, &line, size, col);
             yy += step;
