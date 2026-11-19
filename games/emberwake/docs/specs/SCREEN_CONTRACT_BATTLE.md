@@ -228,6 +228,9 @@ screen at 1280x720, 1:1.
     chip cell; the Totals (bar and hover) three, with wider gaps. Nothing moves with the numbers
     (`battle_take32_cells_guide_2x.png` draws the cells).
   - Numbers stay whole up to 9999 (1250 sits beside 233); K starts at 10K, M at 1M.
+  - User 2026-11-19 19:15: signed off visually (spacing and readability good). Open after the playtest: the
+    numbers may be too many. Fallback if play shows redundancy: drop the per-block cells and keep only totals (the
+    selected hero, Others, and the party total breakdown), leaning on the skill strip directly above for timing.
 - Not expressed yet: collision stagger from push or pull on the card row, hazard damage in the HP preview and the
   block ruler, reactions (riposte, counters) as a "returns -n" note, flank, guard, cover and windup modifiers in the
   skill hover, channel rounds, unit meters, weapon wear.
