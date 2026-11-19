@@ -34,8 +34,38 @@ pub struct FacilityPane {
 }
 
 /// The effects of the levels reached of a facility row of `facility::view`, in level order.
-fn in_force(row: &json::Dict) -> Vec<String> {
+pub(crate) fn in_force(row: &json::Dict) -> Vec<String> {
     json::aget(row, "levels").iter().map(json::dict).filter(|l| json::b(l, "reached", false)).flat_map(|l| json::sget(l, "effects")).collect()
+}
+
+/// ENGINE-23: a facility row's texts as the pane draws them, shared with its view-model: the effects in force, and the
+/// next level's line and cost line ("" at the top).
+pub(crate) fn now_line(row: &json::Dict) -> String {
+    let now = in_force(row);
+    if now.is_empty() { "No effects yet.".to_string() } else { format!("Now: {}", now.join(", ")) }
+}
+
+pub(crate) fn level_line(row: &json::Dict) -> String {
+    format!("Level {} of {}", json::i(row, "level", 1), json::i(row, "top", 1))
+}
+
+pub(crate) fn next_line(row: &json::Dict) -> String {
+    let next = json::dget(row, "next");
+    if next.is_empty() {
+        return String::new();
+    }
+    let effects = json::sget(next, "effects");
+    let gains = if effects.is_empty() { String::new() } else { format!(": {}", effects.join(", ")) };
+    format!("Next: level {} {}{gains}", json::i(next, "level", 0), s(next, "name"))
+}
+
+pub(crate) fn cost_line(row: &json::Dict) -> String {
+    let next = json::dget(row, "next");
+    if next.is_empty() {
+        return String::new();
+    }
+    let cost = json::sget(next, "cost").join(", ");
+    format!("Cost: {}", if cost.is_empty() { "Free".to_string() } else { cost })
 }
 
 /// A line of the pane: drawn fitted to `w` and pushed as a label `id` carrying its full text (a shortened line keeps
@@ -97,25 +127,19 @@ impl FacilityPane {
                 break;
             }
             let id = s(row, "id");
-            let head = format!("{}  Level {} of {}", s(row, "name"), json::i(row, "level", 1), json::i(row, "top", 1));
+            let head = format!("{}  {}", s(row, "name"), level_line(row));
             line(ui, format!("facility.{id}.head"), &head, x0, y, BODY, text_w, th().text);
             let (sx, sw) = (x0 + 8, text_w - 8);
             let mut ly = y + lb;
-            let now = in_force(row);
-            let now_line = if now.is_empty() { "No effects yet.".to_string() } else { format!("Now: {}", now.join(", ")) };
-            line(ui, format!("facility.{id}.now"), &now_line, sx, ly, SMALL, sw, th().dim);
+            line(ui, format!("facility.{id}.now"), &now_line(row), sx, ly, SMALL, sw, th().dim);
             ly += ls;
             if next.is_empty() {
                 line(ui, format!("facility.{id}.top"), "Highest level reached.", sx, ly, SMALL, sw, th().good);
             } else {
-                let effects = json::sget(next, "effects");
-                let gains = if effects.is_empty() { String::new() } else { format!(": {}", effects.join(", ")) };
-                let next_line = format!("Next: level {} {}{gains}", json::i(next, "level", 0), s(next, "name"));
+                let next_line = next_line(row);
                 line(ui, format!("facility.{id}.next"), &next_line, sx, ly, SMALL, sw, th().text);
                 ly += ls;
-                let cost = json::sget(next, "cost").join(", ");
-                let cost_line = format!("Cost: {}", if cost.is_empty() { "Free".to_string() } else { cost });
-                line(ui, format!("facility.{id}.cost"), &cost_line, sx, ly, SMALL, sw, th().dim);
+                line(ui, format!("facility.{id}.cost"), &cost_line(row), sx, ly, SMALL, sw, th().dim);
                 if !reason.is_empty() {
                     ly += ls;
                     line(ui, format!("facility.{id}.reason"), &reason, sx, ly, SMALL, sw, th().foe);
@@ -146,7 +170,7 @@ impl FacilityPane {
 /// says so) and turns off with its reason once the next level is gated, Back returns to the conversation; the pane reads
 /// clean at the four text sizes (TEXTFIT1's audit).
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::facility::FacilityAct;
     use crate::hud::hud_tests::{frame, gfx, rect};
     use crate::screens::{enter_game, GameCx, Screen};
@@ -159,9 +183,9 @@ mod tests {
     use emberwake_world::{explore, facility, new_game, Data};
     use serde_json::{json, Value};
 
-    const FUNDS: i64 = 100;
+    pub(crate) const FUNDS: i64 = 100;
     const COST_2: i64 = 40;
-    const GATE: &str = "ward.gate";
+    pub(crate) const GATE: &str = "ward.gate";
 
     fn with_ids(w: &str, rows: Value) -> Value {
         let rows = json::arr(&rows)
@@ -179,7 +203,7 @@ mod tests {
 
     /// Smith keeps the forge (level 2 for `COST_2` with a shop discount, level 3 gated by `GATE` with long names and
     /// several effects so its lines run long) and a second facility with no levels past the first.
-    fn data() -> Data {
+    pub(crate) fn data() -> Data {
         let catalog = json!({
             "classes": [{"id": "fighter", "name": "Fighter"}],
             "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}],
@@ -226,6 +250,7 @@ mod tests {
         let mut host = open(&mut cx, &mut g);
         assert!(explore::npc_services(&cx.data, cx.gs(), "ward:smith").contains(&"facility"), "the service badge");
         assert_eq!(host.state(&cx)["facility"], json!("ward:smith"));
+        assert_eq!(host.state(&cx)["facility_pane"]["view"]["screen"], json!("facility"), "ENGINE-23: the view-model on the agent link");
         assert!(widget(&host, "facility").is_some() && widget(&host, "dialogue").is_none(), "the pane in the dialogue box's place");
         assert!(widget(&host, "facility.up.ward:forge").is_some_and(|w| w["enabled"] == json!(true)), "Upgrade on a level that can be bought");
         assert!(widget(&host, "facility.up.ward:shed").is_none(), "no Upgrade at the top level");

@@ -57,7 +57,7 @@ fn clamped(list: &[String], index: usize) -> String {
 
 /// PK2-FOLLOWUP: a weapon instance's pick label: its item, its durability of its full (when it wears), a masterwork
 /// mark and who wields it (else the stash), read on a synced copy as `recipe::targets` lists them.
-fn weapon_labels(d: &Data, gs: &GameState, uids: &[String]) -> Vec<String> {
+pub(crate) fn weapon_labels(d: &Data, gs: &GameState, uids: &[String]) -> Vec<String> {
     let mut work = gs.clone();
     weapons::sync(d, &mut work);
     uids.iter()
@@ -79,17 +79,17 @@ impl RecipePane {
 
     /// The targets of the first recipe of `view` working on `target` (the stash items an item recipe breaks down, the
     /// weapon instances a weapon recipe works on).
-    fn targets(view: &[Value], target: &str) -> Vec<String> {
+    pub(crate) fn targets(view: &[Value], target: &str) -> Vec<String> {
         view.iter().map(json::dict).find(|r| s(r, "target") == target).map(|r| json::sget(r, "targets")).unwrap_or_default()
     }
 
     /// The stash items an item recipe of `view` may break down (the first such recipe's targets).
-    fn items(view: &[Value]) -> Vec<String> {
+    pub(crate) fn items(view: &[Value]) -> Vec<String> {
         Self::targets(view, TARGET_ITEM)
     }
 
     /// PK2-FOLLOWUP: the families the rows of `view` let the pick name, in order and each once.
-    fn families(view: &[Value]) -> Vec<String> {
+    pub(crate) fn families(view: &[Value]) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for f in view.iter().flat_map(|r| json::sget(json::dict(r), "families")) {
             if !out.contains(&f) {
@@ -231,7 +231,7 @@ impl RecipePane {
 /// reply opens the pane in the dialogue box's place, Do runs the recipe (the cost paid, the member trained, the line
 /// says so) and turns off once it can't run again (its reason shows), Back returns to the conversation.
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::hud::hud_tests::{frame, gfx};
     use crate::screens::{enter_game, GameCx, Screen};
     use crate::story::tests::story_cx;
@@ -241,8 +241,8 @@ mod tests {
     use emberwake_world::{explore, new_game, weapons, Data};
     use serde_json::{json, Value};
 
-    const FUNDS: i64 = 50;
-    const PRICE: i64 = 5;
+    pub(crate) const FUNDS: i64 = 50;
+    pub(crate) const PRICE: i64 = 5;
     const SALVAGE: i64 = 2;
 
     fn with_ids(w: &str, rows: Value) -> Value {
@@ -259,7 +259,7 @@ mod tests {
         Value::Array(rows)
     }
 
-    fn data() -> Data {
+    pub(crate) fn data() -> Data {
         let catalog = json!({
             "classes": [{"id": "fighter", "name": "Fighter", "proficiency": {"sword": {"level": 3, "role": "main"}, "bow": {"level": 2, "role": "secondary"}}}],
             "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}],
@@ -297,6 +297,7 @@ mod tests {
         host.click_id(&mut cx, &format!("choice.{k}")).expect("the recipe reply");
         frame(&mut host, &mut cx, &mut g, 1.0);
         assert_eq!(host.state(&cx)["recipe"], json!("ward:smith"));
+        assert_eq!(host.state(&cx)["recipe_pane"]["view"]["screen"], json!("recipe"), "ENGINE-23: the view-model on the agent link");
         assert!(widget(&host, "recipe").is_some() && widget(&host, "dialogue").is_none(), "the pane in the dialogue box's place");
         assert!(widget(&host, "recipe.do.train_bow").is_some_and(|w| w["enabled"] == json!(true)), "Do on a recipe that can run");
         host.click_id(&mut cx, "recipe.do.train_bow").expect("Do");
@@ -320,13 +321,13 @@ mod tests {
     }
 
     /// The act weapon instances start in, the blade's full durability and the repair's full price.
-    const FROM_ACT: i64 = 2;
-    const FULL: i64 = 20;
+    pub(crate) const FROM_ACT: i64 = 2;
+    pub(crate) const FULL: i64 = 20;
     const REPAIR: i64 = 10;
 
     /// PK2-FOLLOWUP: a class with two minor families, a wearing blade, the smith's minor training and repair, under a
     /// ruleset with the rule `durability` from act `FROM_ACT`.
-    fn steel_data() -> Data {
+    pub(crate) fn steel_data() -> Data {
         let catalog = json!({
             "classes": [{"id": "fighter", "name": "Fighter", "proficiency": {"sword": {"level": 3, "role": "main"}, "mace": {"level": 1, "role": "minor"}, "dagger": {"level": 1, "role": "minor"}}}],
             "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}],
@@ -388,7 +389,7 @@ mod tests {
     const ORE: i64 = 2;
 
     /// A scratch world whose smith offers only a stash recipe: `ORE` ore and `PRICE` gold make `MADE` bolts.
-    fn craft_data() -> Data {
+    pub(crate) fn craft_data() -> Data {
         let catalog = json!({
             "classes": [{"id": "fighter", "name": "Fighter", "proficiency": {"sword": {"level": 3, "role": "main"}}}],
             "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}],

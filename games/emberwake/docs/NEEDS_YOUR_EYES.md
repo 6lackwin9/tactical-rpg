@@ -29,10 +29,8 @@ Mocks waiting for you, then provisional calls Design made while you were away, t
   (A) scale tokens to 32 px (blurs pixels), (B) shrink tall props, (C) leave, (D) redraw tokens at 32 px. Mock ready in
   `art-ui/token_scale/` (`hub_sheet.png`, `region_sheet.png`, 2x zooms beside them). Recommendation: D (crisp pixels,
   party at the bunks' scale; A looks uneven at 2x, B makes hub beds look toy-like).
-- [ ] Status shown where it acts (`docs/specs/STATUSVIS1.md`, your note 2026-11-19 18:05): Design mapped each
-  status kind to its place (locks on the timeline, ticks on the HP bar, attack and armour changes in the numbers, move
-  changes on the grid) and the plate order (statuses with no other home first). Your take 25 notes (19:26) are in the spec
-  section 5; revised as take 33 (`art-ui/battle_ux14/battle_take33_status_2x.png`, PR #70). Recommendation: approve.
+- [x] Status shown where it acts (`docs/specs/STATUSVIS1.md`): you approved take 33 with the take 34 changes
+  (19:39); built as `PR7-57`. A later kit row redraws the legacy status icons (`AI-24`).
 - [x] Boss UI mock (`docs/specs/BOSSUI1.md`): signed off through takes 26-32 (poise A; hero plus "Others", every member on hover);
   built as `PR7-54` (take 31 shape). Once it lands, play a boss fight and check the feel of the boss intent rows. Your 19:15 note:
   if the numbers feel too many in play, the fallback is to drop the per-block cells and keep only the totals (selected

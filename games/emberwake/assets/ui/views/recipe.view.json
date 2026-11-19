@@ -1,0 +1,114 @@
+{
+  "screen": "recipe",
+  "fields": {
+    "title": {
+      "text": "Smith"
+    },
+    "members": {
+      "rows": [
+        {
+          "id": "0",
+          "label": "Hero",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "selected": true
+        }
+      ]
+    },
+    "families": {
+      "rows": []
+    },
+    "items": {
+      "rows": [
+        {
+          "id": "0",
+          "label": "Rusty",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "selected": true
+        },
+        {
+          "id": "1",
+          "label": "Spare",
+          "detail": "",
+          "picture": null,
+          "enabled": true
+        }
+      ]
+    },
+    "weapons": {
+      "rows": []
+    },
+    "recipes": {
+      "rows": [
+        {
+          "id": "train_bow",
+          "label": "Bow Training",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "5 gold",
+          "buttons": [
+            {
+              "action": "run",
+              "label": "Do",
+              "enabled": true
+            }
+          ]
+        },
+        {
+          "id": "break_down",
+          "label": "Break Down",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "Free",
+          "buttons": [
+            {
+              "action": "run",
+              "label": "Do",
+              "enabled": true
+            }
+          ]
+        }
+      ]
+    },
+    "line": {
+      "text": ""
+    }
+  },
+  "actions": [
+    {
+      "id": "member",
+      "label": "For",
+      "enabled": false
+    },
+    {
+      "id": "family",
+      "label": "Family",
+      "enabled": false
+    },
+    {
+      "id": "item",
+      "label": "Item",
+      "enabled": true
+    },
+    {
+      "id": "weapon",
+      "label": "Weapon",
+      "enabled": false
+    },
+    {
+      "id": "run",
+      "label": "Do",
+      "enabled": true
+    },
+    {
+      "id": "close",
+      "label": "Close",
+      "enabled": true
+    }
+  ]
+}
