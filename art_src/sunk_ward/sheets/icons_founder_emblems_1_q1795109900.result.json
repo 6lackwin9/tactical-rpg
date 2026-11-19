@@ -1,0 +1,22 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "time": "2026-11-19T19:57:10Z",
+  "prompt_sent": "Use the attached image only as the reference for style, palette and pixel size. A sprite sheet of six small pixel-art emblem icons for a dark gothic tactical RPG, in a 3 x 2 grid with wide gaps, each centred in its cell on a flat solid #FF00FF magenta background, no text, no labels, no grid lines. Each icon is one small personal keepsake object, drawn so it is recognisable as that exact object at 16 x 12 pixels: bold chunky shapes in warm gold with a 1 px very dark outline, plus at most one small accent colour where it helps; no background plate, no fine detail. Seen from the side or front, the classic RPG inventory-icon view. 1. A gouged sigil: a round wax-seal medallion with two short ribbon tails hanging below it, a deep scratch gouged across its face. 2. A runner's whistle: a small round-barrelled whistle with its mouthpiece to one side and a cord loop. 3. A copyist's quill: a long feather quill standing in a small squat inkpot (dark ink at its mouth). 4. A focusing monocle: a single round lens in a thick rim, pale blue glass with a glint, and a fine chain hanging from it in a loose curve. 5. A shackle link: an iron manacle cuff, a thick open U-shaped shackle with a pin across its mouth and one broken chain link hanging from it. 6. A cracked retort: an alchemist's retort, a round glass bulb with a long neck that leaves the top and bends sideways and down to a thin spout, teal liquid in the bulb, a crack across the glass. Same weight, stroke width and scale for all six.",
+  "references": [
+    "G:/My Drive/image_pipeline/refs/hub_bunk_gear_ref.png"
+  ],
+  "n": 2,
+  "files": [
+    {
+      "file": "output/icons_founder_emblems_1_q1795109900_1.png",
+      "width": 1264,
+      "height": 848
+    },
+    {
+      "file": "output/icons_founder_emblems_1_q1795109900_2.png",
+      "width": 1264,
+      "height": 848
+    }
+  ],
+  "notes": "Verified resolution (>=1024px) and aspect ratio within 3% tolerance."
+}

@@ -1,0 +1,17 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "time": "2026-11-19T19:57:10Z",
+  "prompt_sent": "Use the attached image only as the reference for WHAT each object is (six keepsake item icons, left to right); ignore their square slate tiles. A sprite sheet of six separate tiny pixel-art props for a dark gothic tactical RPG, seen from a top-down three-quarter view, each lying flat on a bed blanket, in a 3 x 2 grid with wide empty gaps, each centred in its cell on a flat solid #FF00FF magenta background. NO tile, NO frame, NO background plate, no cast shadows, no labels, no text, nothing touching another cell. Each must read at about 12 x 12 pixels in game:\n1. A gouged iron sigil plate on a leather thong (Kaelen). 2. A small tin runner whistle on a cord (Vesper). 3. A copyist quill beside a tiny ink pot (Maren). 4. A brass focusing monocle on a coiled cord (Hollis). 5. A single heavy broken shackle link (Dunstan). 6. A small cracked glass retort with a faint green stain (Elyse).\nColours: scavenged iron #4b5563, tarnished brass, bone, dark leather, faint green glass. Chunky simple silhouettes with a 1 px dark outline, matte, same pixel size for all six.",
+  "references": [
+    "G:/My Drive/image_pipeline/refs/bunk_keepsakes_ref.png"
+  ],
+  "n": 1,
+  "files": [
+    {
+      "file": "output/props_hub_bunk_keepsakes_1_q1795073926.png",
+      "width": 1200,
+      "height": 896
+    }
+  ],
+  "notes": "Verified resolution (>=1024px) and aspect ratio within 3% tolerance."
+}
