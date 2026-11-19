@@ -104,8 +104,25 @@ screen at 1280x720, 1:1.
   dashed means it lands from a planned move; a heal is a moss heart (theme moss, not bright green) and previews as a
   pale moss gain on the HP bar.
 - Tabs on plates: icon plus the rounds left as up to 3 pips (the shipped data lasts 1 to 3 rounds; a permanent one is a
-  full bar). 5x4 pips at 1:1.
+  full bar). 5x4 pips at 1:1. Superseded by the take 25 proposal below if signed off (user 2026-11-19 18:00: the pips
+  read poorly at this size).
 - Order: the soonest to run out first, ties to the one applied first; statuses a planned move adds come last.
+- Proposed (Art/UI take 24 B and take 25, `STATUSVIS1`, `AI-34`; awaiting the user's sign-off):
+  - Tabs carry the icon only, no rounds (user 2026-11-19 18:02); the rounds live in the full list. Take 24 A (a bold
+    pixel digit beside the icon) is the alternative.
+  - Each status also shows where it acts, by primitive (`STATUSVIS1` section 2), in its kind colour with its icon as
+    the key: locked blocks hatched on the unit's timeline lane and the AP row (`block_lock`); the coming tick as a
+    pending oxblood (regen: moss) slice on the HP bar with a drip and the amount, and a tick mark at the round's end on
+    the lane (`tick`); the changed number with a small down (oxblood) or up (gold) arrow and the base struck through
+    (`attack_power`); lost move tiles dimmed at the range edge, gained ones gold-edged (`move_rate`); a shield glyph
+    and the cut beside the incoming number (`armor`, `guard`); the taunter's crimson hoop with the foe intents bent to
+    it, a stealthed unit greyed as a target (`targeting`); a counter chip in the hit preview (`reactive`);
+    `rule_flag` (steadfast) on the plate only.
+  - Plate order: `STATUSVIS1` section 3 (priority 1, then 2, then 3; inside a priority the order above). Priority 3
+    statuses keep a tab when there is room (`STATUSVIS1` section 4, first item).
+  - A locked block at 1:1: a near-black block with 45 degree hatch lines 5 px apart in the status's rim colour and the
+    status icon in a framed square on its first block; it is the only patterned fill on the strip, so it never reads
+    as a planned move colour (`STATUSVIS1` section 4, second item).
 - The full list (hover "+N" or press the plate): icon, name, a one-line effect, rounds left as a number ("new" for a
   planned one).
 
