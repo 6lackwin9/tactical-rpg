@@ -305,7 +305,7 @@ impl Battle {
                 if s.confirm_plan() {
                     json!({"ok": true, "actions": scheduled(s)})
                 } else {
-                    err("plan refused: fix the invalid steps (see plan_view)")
+                    err(refused(s))
                 }
             }
             "step" => {
@@ -313,7 +313,7 @@ impl Battle {
                     return e;
                 }
                 if s.phase == Phase::Planning && !s.plan_confirmed && !s.confirm_plan() {
-                    return err("plan refused");
+                    return err(refused(s));
                 }
                 let from = s.resolver.log.len();
                 s.step_next();
@@ -324,7 +324,7 @@ impl Battle {
                     return e;
                 }
                 if s.phase == Phase::Planning && !s.plan_confirmed && !s.confirm_plan() {
-                    return err("plan refused");
+                    return err(refused(s));
                 }
                 let from = s.resolver.log.len();
                 while s.phase != Phase::Replay {
@@ -727,6 +727,8 @@ fn set_plan(s: &mut Session, req: &Value) -> Value {
         return err("not planning");
     }
     let Some(u) = unit_arg(s, req, "unit").filter(|u| s.w.allies.contains(u)) else { return err("plan needs a party unit") };
+    // PR7-41 (PT-16): a round set by hand is never redrafted at Confirm
+    s.hand_set(u);
     let steps = req.get("steps").and_then(Value::as_array).cloned().unwrap_or_default();
     s.plan.set_steps(u, Vec::new());
     let mut results = Vec::new();
@@ -738,6 +740,11 @@ fn set_plan(s: &mut Session, req: &Value) -> Value {
         results.push(if r.is_empty() { json!({"ok": true}) } else { json!({"ok": false, "error": r}) });
     }
     json!({"ok": true, "steps": results, "plan": plan_view(s, Some(u))})
+}
+
+/// PR7-41 (PT-16): a refused confirm in player words: "Plan refused: " and the session's cause (the hero and the step).
+fn refused(s: &Session) -> String {
+    format!("Plan refused: {}", s.plan_refusal().unwrap_or_else(|| "a step cannot be played.".into()))
 }
 
 fn plan_view(s: &Session, only: Option<UnitId>) -> Value {
@@ -803,6 +810,8 @@ fn edit_steps(s: &mut Session, req: &Value, op: &str) -> Value {
         return err("not planning");
     }
     let Some(u) = unit_arg(s, req, "unit").filter(|u| s.w.allies.contains(u)) else { return err("needs a party unit") };
+    // PR7-41 (PT-16): a round edited by hand is never redrafted at Confirm
+    s.hand_set(u);
     match op {
         "add" => {
             let step = match req.get("step").map(|v| step_from(s, v)) {

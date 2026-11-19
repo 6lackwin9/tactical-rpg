@@ -42,8 +42,8 @@
 				"kaelen"
 			],
 			"enemies": [
-				"footman_patrol",
-				"footman_patrol"
+				"footman_curfew",
+				"footman_curfew"
 			],
 			"phases": [
 				{

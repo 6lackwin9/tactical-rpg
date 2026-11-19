@@ -5,6 +5,8 @@ The format and the commands are in `engine/docs/authoring/scenarios.md`. These a
 needs the user's approval (`engine/docs/authoring/scenarios.md` "Golden shots"). `saves/hub_start/` was made with the agent
 playtest harness (`tools/fc.sh playtest`) after the prologue; make it again the same way when a save change breaks it.
 `saves/m3_stuck/` is the agent systems playtest's save of 2026-11-18 (PT-15), kept as found: it must load through the repair.
+`saves/cages_start/` is the same playtest's save at the Ash-Crawl Crossroads (PT-16), kept as found: its fight's first auto-filled plan was refused.
+`saves/sweep_start/` is the same playtest's save at Alleyway Junction 7 before The Sweep (PT-17, PT-20), kept as found.
 
 ## The scenarios
 
@@ -17,6 +19,9 @@ playtest harness (`tools/fc.sh playtest`) after the prologue; make it again the 
 | `screens_hub` | Review shots from the save `saves/hub_start` (the hub right after the prologue): region map, talk box, notice board, shop, party (stats, skills, gear), world map | 25 s |
 | `screens_battle` | Review shot: `tl_flank` seed 7 at its start, planning | 4 s |
 | `job_fight_repair` | PR7-41 (PT-15): the save `saves/m3_stuck` (The Bone-Mill Raid won before it was taken) loads with the repair notice and the job ready; travel to the hub, turn it in to Talia | 6 s |
+| `cages_auto_plan` | PR7-41 (PT-16, PT-22): the save `saves/cages_start` enters The Crossroads Cages; Confirm takes the untouched auto-filled plan and the round plays | about 10 s |
+| `sweep_telegraph` | PR7-41 (PT-17, PT-20): the save `saves/sweep_start` enters The Sweep; with Vesper selected the Footman's card names the block its Heavy Thrust lands; round 2 marks Gilded Sunder's tiles | about 25 s |
+| `fight1_pommel_hint` | PR7-41 (PT-21): a new game's first fight; the untouched auto plan's Pommel Strike breaks a Heavy Thrust before it lands (the round 1 log) | about 25 s |
 
 The three screen scenarios also time frames (`perf`, ENGINE-2, numbers only, no budget): the main menu, the region map and
 battle planning. Measured 2026-11-18 at 1280x720 in a dev build with no window: p50 4.6 ms, 29.5 ms and 20.2 ms.

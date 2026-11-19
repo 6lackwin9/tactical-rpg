@@ -600,6 +600,18 @@ fn plan_lines(s: &Session, u: usize) -> Tip {
     t
 }
 
+/// PR7-41 (PT-20): the hits enemy `e`'s scheduled actions land on hero `h` this round (the kit's `intent::hits_on`),
+/// with the party's plan booked after them while it is still being planned (afterwards it is scheduled).
+pub(super) fn hits_on_hero(s: &Session, e: usize, h: usize) -> Vec<emberwake_battle::intent::HitOn> {
+    use emberwake_battle::intent;
+    let w = &s.w;
+    if s.phase == Phase::Planning && !s.plan_confirmed {
+        intent::hits_on(w, &intent::planned_schedule(w, &s.resolver.scheduled, &s.plan), e, h)
+    } else {
+        intent::hits_on(w, &s.resolver.scheduled, e, h)
+    }
+}
+
 /// IS2: a facing in words (the board's top is north); None for no facing.
 fn facing_name(f: V2) -> Option<&'static str> {
     match (f.x.signum(), f.y.signum()) {
@@ -680,6 +692,7 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
         t.extend(plan_lines(s, i));
     }
     if !ally && u.is_active() {
+        let mut hit_shown = false;
         match tell {
             Some(r) => {
                 // IS2: the tell's first action only while the tells show (I)
@@ -693,7 +706,9 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
                         t.push((intent_text::plan_line(w, l), th().text));
                     }
                 }
-                if let Some(f) = sel.and_then(|h| intent_text::forecast(r, h)).filter(|_| tells_shown) {
+                // PR7-41 (PT-20): the hits on the selected hero, per hit at the block each lands, with its guard then
+                if let Some(f) = sel.filter(|_| tells_shown).and_then(|h| intent_text::forecast(r, h, &intent_text::forecast_hits(r, h, hits_on_hero(s, i, h)))) {
+                    hit_shown = f.starts_with("Targets you");
                     t.push((f, th().foe));
                 }
             }
@@ -703,7 +718,9 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
         }
         if let Some(h) = sel.filter(|h| w.units[*h].is_active()) {
             let strike = w.book().lowest(Kind::Attack);
-            t.push((format!("{} deals about {} with a Strike, takes about {}", w.units[h].name, expected(w, h, i, strike, None, 0.0, 1.0), expected(w, i, h, strike, None, 0.0, 1.0)), ALLY));
+            // PT-20: a Strike's hit each way; what the enemy has planned on the hero is the forecast line above
+            let deals = expected(w, h, i, strike, None, 0.0, 1.0);
+            t.push((if hit_shown { format!("{} deals about {deals} a hit with a Strike", w.units[h].name) } else { format!("{} deals about {deals} a hit with a Strike, takes about {} from its Strike", w.units[h].name, expected(w, i, h, strike, None, 0.0, 1.0)) }, ALLY));
         }
     }
     if let Some(banner) = downed_banner(w, i) {

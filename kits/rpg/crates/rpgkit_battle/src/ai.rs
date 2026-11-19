@@ -2205,6 +2205,14 @@ fn tactic_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, t
             let st = plan.compile(w, c);
             let mut foes: Vec<UnitId> = w.foes_of(c).iter().copied().filter(|&f| w.units[f].is_active() && w.has(f) && st.est(f) > 0).collect();
             foes.sort_by_key(|&f| (st.est(f), f));
+            // PR7-41 (PT-22): the weakest foe the round lands an attack on first (not a whole round closing in on one
+            // it cannot reach); else, as before, the weakest it has a path to
+            for &t in &foes {
+                let p = IntentPick::new(RoundIntent::Assault, RoundTarget::Unit(t));
+                if trial_read(w, plan, c, &p, &|w: &World, plan: &Plan| attacks_this_round(w, plan, c, t)) {
+                    return Some(p);
+                }
+            }
             assault_pick(w, plan, c, &foes)
         }
         Tactic::GuardCounter => {
@@ -2777,6 +2785,11 @@ fn engage_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId]) -> 
     None
 }
 
+/// PR7-41 (PT-22): whether `c`'s planned round holds an attack on `t`.
+fn attacks_this_round(w: &World, plan: &Plan, c: UnitId, t: UnitId) -> bool {
+    plan.compile(w, c).entries.iter().any(|e| e.target == Some(t) && skill::kind(&w.cat.skills[e.skill]) == Kind::Attack)
+}
+
 /// AI1 row 5 (and the Assault tactics): Assault on the first of `targets` the planner offers it on.
 fn assault_pick(w: &mut World, plan: &mut Plan, c: UnitId, targets: &[UnitId]) -> Option<IntentPick> {
     for &t in targets {
@@ -3010,6 +3023,13 @@ fn commit(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> Result<V
         rest_round(w, plan, c, round_intent_plan::REST);
     }
     Ok(lines)
+}
+
+/// PR7-41 (PT-16): the last resort for a drafted round that stays broken after its redrafts (`Session::redraft_broken`):
+/// its steps cleared, then Rest in every free block, so the auto-filled plan always confirms.
+pub fn rest_fallback(w: &World, plan: &mut Plan, c: UnitId) {
+    plan.clear(c);
+    rest_round(w, plan, c, "rest: no round plans");
 }
 
 /// RS1: Rest on every free block left of `c`'s round, tagged `tag` (PL6).

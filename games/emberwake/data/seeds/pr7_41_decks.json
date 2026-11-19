@@ -1,0 +1,387 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_vesper",
+    "name": "Vesper",
+    "side": "party",
+    "description": "Founder base unit: Vesper, a level 1 rogue.",
+    "class_id": "rogue",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "rogue/base",
+    "palette": "vesper",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "hamstring_sever",
+     "ash_cloud_fade",
+     "throat_carver"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "hamstring_sever",
+      "ash_cloud_fade",
+      "throat_carver"
+     ],
+     "order": {
+      "assault": [
+       "throat_carver",
+       "strike"
+      ],
+      "guard": [
+       "ash_cloud_fade",
+       "active_guard"
+      ],
+      "maneuver": [
+       "hamstring_sever",
+       "flank_cut"
+      ]
+     },
+     "passive": [
+      "prowlers_cadence",
+      "anatomical_flaw"
+     ],
+     "keystone": [
+      "ghost_of_the_undercroft"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "curfew_bodkin",
+    "off_hand": "ash_cloak",
+    "head": "",
+    "body": "soot_leathers",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "sulfur_poultice",
+     "pitch_fire_bomb"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_hollis",
+    "name": "Hollis",
+    "side": "party",
+    "description": "Founder base unit: Hollis, a level 1 ranger.",
+    "class_id": "ranger",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "ranger/base",
+    "palette": "hollis",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "poachers_quarrel",
+     "tripwire_snare",
+     "heavy_winch_sunder"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "poachers_quarrel",
+      "tripwire_snare",
+      "heavy_winch_sunder"
+     ],
+     "order": {
+      "assault": [
+       "poachers_quarrel",
+       "heavy_winch_sunder",
+       "strike"
+      ],
+      "guard": [
+       "active_guard"
+      ],
+      "maneuver": [
+       "disengage_step"
+      ],
+      "field": [
+       "tripwire_snare"
+      ]
+     },
+     "passive": [
+      "high_ground_traverse",
+      "cover_breaker"
+     ],
+     "keystone": [
+      "dead_eye_discipline"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "winch_arbalest",
+    "off_hand": "hip_quiver",
+    "head": "",
+    "body": "poachers_brigandine",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "sulfur_poultice"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_dunstan",
+    "name": "Dunstan",
+    "side": "party",
+    "description": "Founder base unit: Dunstan, a level 1 brawler.",
+    "class_id": "brawler",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "brawler/base",
+    "palette": "dunstan",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "shackle_pummel_slam",
+     "slag_slam_throw",
+     "foundry_shatter"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "shackle_pummel_slam",
+      "slag_slam_throw",
+      "foundry_shatter"
+     ],
+     "order": {
+      "assault": [
+       "slag_slam_throw",
+       "shackle_pummel_slam",
+       "foundry_shatter",
+       "strike"
+      ],
+      "guard": [
+       "active_guard"
+      ]
+     },
+     "passive": [
+      "hypertrophy",
+      "anvil_posture"
+     ],
+     "keystone": [
+      "unbroken_iron"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "penal_shackles",
+    "off_hand": "forearm_braces",
+    "head": "",
+    "body": "penal_foundry_apron",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "sulfur_poultice"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_kaelen",
+    "name": "Kaelen",
+    "side": "party",
+    "description": "Founder base unit: Kaelen, a level 1 warrior.",
+    "class_id": "warrior",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "warrior/2h_axe",
+    "palette": "kaelen",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "pommel_strike",
+     "intercepting_hook",
+     "billhook_sunder",
+     "seventh_ward_bulwark"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "pommel_strike",
+      "intercepting_hook",
+      "billhook_sunder"
+     ],
+     "order": {
+      "assault": [
+       "pommel_strike",
+       "billhook_sunder",
+       "strike"
+      ],
+      "guard": [
+       "intercepting_hook",
+       "active_guard"
+      ]
+     },
+     "passive": [
+      "braced_poise",
+      "kinetic_leverage"
+     ],
+     "keystone": [
+      "unbroken_phalanx"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "notched_billhook",
+    "off_hand": "shd_kite",
+    "head": "",
+    "body": "castellan_breastplate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "sulfur_poultice"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_elyse",
+    "name": "Elyse",
+    "side": "party",
+    "description": "Founder base unit: Elyse, a level 1 mage.",
+    "class_id": "mage",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "ranger/wenn_tallow",
+    "palette": "elyse",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "phosphorus_pot",
+     "magnesium_flash_bomb",
+     "choke_gas"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "phosphorus_pot",
+      "magnesium_flash_bomb",
+      "choke_gas"
+     ],
+     "order": {
+      "assault": [
+       "magnesium_flash_bomb",
+       "strike"
+      ],
+      "guard": [
+       "active_guard"
+      ],
+      "field": [
+       "phosphorus_pot",
+       "choke_gas"
+      ]
+     },
+     "passive": [
+      "combustion_formula",
+      "catalytic_munitions"
+     ],
+     "keystone": [
+      "master_alchemist"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "brass_vitriol_sprayer",
+    "off_hand": "wpn_orb",
+    "head": "",
+    "body": "tanners_rubbered_coat",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "pitch_fire_bomb",
+     "sulfur_poultice"
+    ],
+    "loot": []
+   }
+  }
+ ]
+}

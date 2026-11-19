@@ -1403,7 +1403,7 @@ fn follow(w: &mut World, src: UnitId, t: UnitId, band: (i32, i32), diag: bool, f
 }
 
 /// RULESET1_INTENT MV3: the power factor of a flank hit (`flank_power_mult`; 1.0 otherwise).
-fn flank_power(w: &World, flank: bool) -> f64 {
+pub(crate) fn flank_power(w: &World, flank: bool) -> f64 {
     if flank {
         w.ruleset.numbers.flank_power_mult
     } else {
