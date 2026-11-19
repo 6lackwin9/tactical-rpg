@@ -168,13 +168,38 @@ def move_stove(base, shot):
     base.paste(stove.crop((0, 0, 46, 78)), (617, 512))
 
 
-def scene(shot, back, items):
+def timber_stack(img, x, y):
+    """Act 1: the Timber Frames project waiting: bed frame planks stacked on two bearers, a rolled pallet beside."""
+    d = ImageDraw.Draw(img)
+    for k in range(5):
+        yy = y + 30 - k * 6
+        d.rectangle((x + k % 2 * 3, yy, x + 70 + k % 2 * 3, yy + 5), fill=(128, 90, 54) if k % 2 else (112, 78, 46),
+                    outline=H1.TIMBER_D)
+    for bx in (x + 8, x + 58):
+        d.rectangle((bx, y + 36, bx + 6, y + 40), fill=H1.TIMBER_D)
+    d.ellipse((x + 76, y + 18, x + 94, y + 40), fill=(150, 140, 120), outline=(90, 84, 72))
+    d.ellipse((x + 81, y + 23, x + 89, y + 35), outline=(110, 102, 88))
+    d.line((x + 76, y + 29, x + 94, y + 29), fill=(120, 60, 40))
+
+
+def act1_props(img):
+    """Where the two Act 2 bunks go: props holding the space until the upgrade (crates, the bed timber)."""
+    crate = Image.open(H1.ROOT / "kits/rpg/assets/props/common/crate_stack/v0.png").convert("RGBA")
+    timber_stack(img, 358, 610)
+    img.alpha_composite(crate, (928 - crate.width - 4, 656 - crate.height))
+    timber_stack(img, 928 - crate.width - 104, 612)
+
+
+def scene(shot, back, items, act=2):
     img = H3.clean_room(shot)
     H3.planks(img, 352, 552, 400, 658)                 # the west barrels go
     move_stove(img, shot)
     wall(img)
     for x, e in zip(XS, H1.ROSTER[:6]):
         north_bed(img, x, e, back, items)
+    if act == 1:
+        act1_props(img)
+        return img.crop(CROP).convert("RGB")
     south_bed(img, 354, 592, H1.ROSTER[6], False)       # head on the west wall
     south_bed(img, 928 - 96 - 2, 592, H1.ROSTER[7], True)   # head on the east wall
     return img.crop(CROP).convert("RGB")
@@ -203,6 +228,14 @@ def main():
     zz.paste(z, (0, 22)); zz.paste(z2, (732, 22))
     sheet = Image.new("RGB", (max(one.width, zz.width), one.height + zz.height + 12), B.VOID)
     sheet.paste(one, (0, 0)); sheet.paste(zz, (0, one.height + 12))
+    a1 = scene(shot, "arch", "locker", act=1)
+    a1.save(out / "hub_bunks_take4_1b_act1_720p.png")
+    up = Image.new("RGB", (w * 2 + 12, h + 22), B.VOID)
+    du = ImageDraw.Draw(up)
+    du.text((6, 3), "Act 1: props hold the two bunk spots (bed timber, crates)", font=B.SMALL, fill=B.GOLD)
+    du.text((w + 18, 3), "Act 2, after Berek's project: the props go, the beds come in", font=B.SMALL, fill=B.GOLD)
+    up.paste(a1, (0, 20)); up.paste(ims[1][1], (w + 12, 20))
+    up.save(out / "hub_bunks_take4_upgrade.png")
     B.label(sheet, "Hub bunks take 4: built wall, arch or headboard, gear on a peg board or a footlocker").save(
         out / "hub_bunks_take4_sheet.png")
 
