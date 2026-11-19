@@ -52,6 +52,8 @@ pub struct RowView {
     /// ENGINE-19: a theme colour role (`theme::ROLES`, for example `foe` for a price above the gold left) for `detail`;
     /// "" the row's own text colour (JSON `tone`).
     pub tone: String,
+    /// PR7-39 Stage B: the same for `detail2` (JSON `tone2`).
+    pub tone2: String,
     /// ENGINE-19: the longer line a `detail_line` region shows while this row is under the pointer or focused ("" none;
     /// JSON `note`).
     pub note: String,
@@ -141,7 +143,7 @@ impl Field {
                 if r.selected {
                     o["selected"] = json!(true);
                 }
-                for (k, v) in [("tone", &r.tone), ("note", &r.note)] {
+                for (k, v) in [("tone", &r.tone), ("tone2", &r.tone2), ("note", &r.note)] {
                     if !v.is_empty() {
                         o[k] = json!(v);
                     }
@@ -182,9 +184,11 @@ impl Field {
                         if !r.is_object() {
                             return Err("a row is an object".to_string());
                         }
-                        let tone = s(r, "tone");
-                        if !tone.is_empty() && !crate::theme::ROLES.contains(&tone.as_str()) {
-                            return Err(format!("a row's 'tone' is a theme colour role, not '{tone}'"));
+                        let (tone, tone2) = (s(r, "tone"), s(r, "tone2"));
+                        for x in [&tone, &tone2] {
+                            if !x.is_empty() && !crate::theme::ROLES.contains(&x.as_str()) {
+                                return Err(format!("a row's 'tone' is a theme colour role, not '{x}'"));
+                            }
                         }
                         let buttons = match r.get("buttons") {
                             None => Vec::new(),
@@ -207,6 +211,7 @@ impl Field {
                             enabled: r.get("enabled").and_then(Value::as_bool).unwrap_or(true),
                             selected: r.get("selected").and_then(Value::as_bool).unwrap_or(false),
                             tone,
+                            tone2,
                             note: s(r, "note"),
                             buttons,
                         })
@@ -432,13 +437,16 @@ impl Place {
 pub enum Shell {
     Main,
     Popup,
+    /// PR7-39 Stage B: a plain box inside a panel (a list's column): one thin `edge` line over the fill the region's
+    /// `fill` names (a theme colour token), no frame file.
+    Box,
 }
 
 impl Shell {
     fn role(self) -> &'static str {
         match self {
             Shell::Main => "ornate",
-            Shell::Popup => "panel",
+            Shell::Popup | Shell::Box => "panel",
         }
     }
 }
@@ -448,16 +456,23 @@ impl Shell {
 pub enum Component {
     /// A frame; regions `in` it are placed in its body. PR7-36 (UX-01, UX-07): with the close box (action `close`), Back
     /// at the footer's left (action `back`), the main action at its right (`action`) and the key hints (text `hints`).
-    PanelShell { title: Option<String>, shell: Shell, close: Option<String>, back: Option<String>, action: Option<String>, hints: Option<String> },
-    TextBlock { text: String },
+    /// PR7-39 Stage B: `fill`, a `box`'s fill colour (a theme colour token: a role or a game colour; None the ground).
+    PanelShell { title: Option<String>, shell: Shell, close: Option<String>, back: Option<String>, action: Option<String>, hints: Option<String>, fill: Option<String> },
+    /// PR7-39 Stage B: `look` (`style`): body text, `muted` (small, dim) or `right` (right-aligned); a `\n` in the text
+    /// starts a new line (each wraps on its own).
+    TextBlock { text: String, look: TextLook },
     /// ENGINE-18: `muted` draws both columns in the dim colour (a list of fixed things beside the live ones).
     StatBlock { stats: String, muted: bool },
-    /// ENGINE-18: a section heading with its own fixed text (the region's `text`), bound to no view field.
-    Heading { text: String },
+    /// ENGINE-18: a section heading with its own fixed text (the region's `text`), bound to no view field. PR7-39 Stage
+    /// B: `look` its style: gold in the display face (`Heading`), dim small body text (`Muted`), or a panel's title in
+    /// the display face (`Title`).
+    /// It may bind a text field `text` instead of a fixed text (a panel's title).
+    Heading { text: String, look: HeadingLook, field: Option<String> },
     /// ENGINE-19: `then` a second rows field listed under a divider, dimmed and never clicked (what the shop does not
     /// buy); `ids` the row widget ids' prefix (region key `row_ids`): `<ids>.<row id>` from the view's own ids, else
     /// `<screen>.<region>.<i>`.
-    ListRow { rows: String, select: Option<String>, then: Option<String>, ids: Option<String> },
+    /// PR7-39 Stage B: `plain` (`style: plain`) draws the numbers in the body face, not the mono one.
+    ListRow { rows: String, select: Option<String>, then: Option<String>, ids: Option<String>, plain: bool },
     /// ENGINE-19: the note of the row under the pointer or focused (`RowView::note`, from any list of the layout), else
     /// the text field `text` if bound.
     DetailLine { text: Option<String> },
@@ -471,6 +486,24 @@ pub enum Component {
     Tooltip { text: String },
     /// The rect goes back to the screen's code under this name.
     Custom { slot: String },
+}
+
+/// A text block's style (`style`: none, `muted`, `right`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TextLook {
+    #[default]
+    Body,
+    Muted,
+    Right,
+}
+
+/// A heading's style (`style`: none, `muted`, `title`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HeadingLook {
+    #[default]
+    Heading,
+    Muted,
+    Title,
 }
 
 /// Each component: its name, the bind keys it needs, the ones it may take.
@@ -488,7 +521,7 @@ pub const COMPONENTS: [(&str, &[&str], &[&str]); 15] = [
     ("button_bar", &["actions"], &[]),
     ("tooltip", &["text"], &[]),
     ("custom", &["slot"], &[]),
-    ("heading", &[], &[]),
+    ("heading", &[], &["text"]),
     ("detail_line", &[], &["text"]),
 ];
 
@@ -552,7 +585,7 @@ impl Layout {
             } else if regions.iter().any(|x| x.id == id) {
                 p.push(format!("{at}: another region has this id"));
             }
-            for k in r.keys().filter(|k| !["id", "component", "bind", "in", "anchor", "w", "h", "x", "y", "style", "text", "when", "note", "row_ids"].contains(&k.as_str())) {
+            for k in r.keys().filter(|k| !["id", "component", "bind", "in", "anchor", "w", "h", "x", "y", "style", "text", "when", "note", "row_ids", "fill"].contains(&k.as_str())) {
                 p.push(format!("{at}: unknown key '{k}'"));
             }
             let within = r.get("in").and_then(Value::as_str).map(str::to_string);
@@ -595,11 +628,17 @@ impl Layout {
                 p.push(format!("{at}: {name} takes no bind '{k}'"));
             }
             let style = r.get("style").and_then(Value::as_str);
-            if style.is_some() && name != "panel_shell" && name != "stat_block" {
-                p.push(format!("{at}: 'style' is for a panel_shell (main, popup) or a stat_block (muted)"));
+            if style.is_some() && !["panel_shell", "stat_block", "heading", "list_row", "text_block"].contains(&name) {
+                p.push(format!("{at}: 'style' is for a panel_shell (main, popup, box), a stat_block (muted), a heading (muted, title), a list_row (plain) or a text_block (muted, right)"));
             }
-            if r.contains_key("text") != (name == "heading") {
-                p.push(format!("{at}: 'text' is a heading's own text, and a heading needs it"));
+            let fill = r.get("fill").and_then(Value::as_str).map(str::to_string);
+            if r.contains_key("fill") && (style != Some("box") || fill.as_deref().is_none_or(|f| !plain_id(f))) {
+                p.push(format!("{at}: 'fill' is a box panel_shell's fill, a theme colour name"));
+            }
+            if r.contains_key("text") && name != "heading" {
+                p.push(format!("{at}: 'text' is a heading's own text"));
+            } else if name == "heading" && r.contains_key("text") == bind.contains_key("text") {
+                p.push(format!("{at}: a heading needs its own 'text' or a bound text field, not both"));
             }
             let text = |k: &str| bind_text(bind, k).unwrap_or_default();
             // ENGINE-19: `row_ids` true (`<screen>.row`) or a prefix, on a list_row only
@@ -638,13 +677,26 @@ impl Layout {
                     shell: match style {
                         None | Some("main") => Shell::Main,
                         Some("popup") => Shell::Popup,
+                        Some("box") => Shell::Box,
                         Some(other) => {
-                            p.push(format!("{at}: 'style' is main or popup, not '{other}'"));
+                            p.push(format!("{at}: 'style' is main, popup or box, not '{other}'"));
                             Shell::Main
                         }
                     },
+                    fill: fill.clone(),
                 },
-                "text_block" => Component::TextBlock { text: text("text") },
+                "text_block" => Component::TextBlock {
+                    text: text("text"),
+                    look: match style {
+                        None => TextLook::Body,
+                        Some("muted") => TextLook::Muted,
+                        Some("right") => TextLook::Right,
+                        Some(other) => {
+                            p.push(format!("{at}: a text_block's 'style' is muted or right, not '{other}'"));
+                            TextLook::Body
+                        }
+                    },
+                },
                 "stat_block" => Component::StatBlock {
                     stats: text("stats"),
                     muted: match style {
@@ -656,8 +708,33 @@ impl Layout {
                         }
                     },
                 },
-                "heading" => Component::Heading { text: r.get("text").and_then(Value::as_str).unwrap_or("").to_string() },
-                "list_row" => Component::ListRow { rows: text("rows"), select: bind_text(bind, "select"), then: bind_text(bind, "then"), ids },
+                "heading" => Component::Heading {
+                    text: r.get("text").and_then(Value::as_str).unwrap_or("").to_string(),
+                    field: bind_text(bind, "text"),
+                    look: match style {
+                        None => HeadingLook::Heading,
+                        Some("muted") => HeadingLook::Muted,
+                        Some("title") => HeadingLook::Title,
+                        Some(other) => {
+                            p.push(format!("{at}: a heading's 'style' is muted or title, not '{other}'"));
+                            HeadingLook::Heading
+                        }
+                    },
+                },
+                "list_row" => Component::ListRow {
+                    rows: text("rows"),
+                    select: bind_text(bind, "select"),
+                    then: bind_text(bind, "then"),
+                    ids,
+                    plain: match style {
+                        None => false,
+                        Some("plain") => true,
+                        Some(other) => {
+                            p.push(format!("{at}: a list_row's 'style' is plain, not '{other}'"));
+                            false
+                        }
+                    },
+                },
                 "detail_line" => Component::DetailLine { text: bind_text(bind, "text") },
                 "tab_rail" => Component::TabRail { tabs: text("tabs"), select: text("select") },
                 "slot_card" => Component::SlotCard { slots: text("slots"), select: bind_text(bind, "select") },
@@ -709,7 +786,7 @@ impl Layout {
                         action(a, &mut p);
                     }
                 }
-                Component::TextBlock { text } | Component::Tooltip { text } => field(text, &["text", "number", "flag"], &mut p),
+                Component::TextBlock { text, .. } | Component::Tooltip { text } => field(text, &["text", "number", "flag"], &mut p),
                 Component::StatBlock { stats, .. } => field(stats, &["stats"], &mut p),
                 Component::ListRow { rows, select, then, .. } => {
                     field(rows, &["rows"], &mut p);
@@ -761,6 +838,7 @@ impl Layout {
                         field(l, &["text", "number"], &mut p);
                     }
                 }
+                Component::Heading { field: Some(t), .. } => field(t, &["text", "number", "flag"], &mut p),
                 Component::Custom { .. } | Component::Heading { .. } => {}
             }
         }
@@ -837,7 +915,15 @@ fn component(ui: &mut Ui<Act>, art: &mut Art, region: &str, c: &Component, view:
     // A select action the view offers and has enabled; otherwise the items draw but do nothing.
     let live = |a: &Option<String>| a.as_ref().filter(|a| view.act(a).is_some_and(|v| v.enabled)).cloned();
     match c {
-        Component::PanelShell { title, shell, close, back, action: main, hints } => {
+        Component::PanelShell { shell: Shell::Box, fill, .. } => {
+            // PR7-39 Stage B: a plain box: the fill token's colour (else the ground), one thin edge line
+            let t = ui.t.clone();
+            let col = fill.as_deref().and_then(|f| t.role(f).or_else(|| t.game_colors.get(f).copied())).unwrap_or(t.bg);
+            ui.p.panel(r, col, t.edge, m.radius);
+            ui.push(format!("{screen}.{region}"), "shell", String::new(), r, true, false, None, Vec::new());
+            r.pad(Insets::all(1))
+        }
+        Component::PanelShell { title, shell, close, back, action: main, hints, .. } => {
             // PR7-36 (UX-01): the shared shell; a chrome action the view does not offer (or has off) is left out
             let title = title.as_ref().map(|t| text_of(t)).unwrap_or_default();
             let hints = hints.as_ref().map(|h| text_of(h)).unwrap_or_default();
@@ -858,9 +944,23 @@ fn component(ui: &mut Ui<Act>, art: &mut Art, region: &str, c: &Component, view:
                 crate::panes::ShellAct::Action => act(&ids.2, None),
             })
         }
-        Component::TextBlock { text } => {
-            let col = ui.t.text;
-            ui.para(r.x, r.y, r.w, &text_of(text), m.body, col);
+        Component::TextBlock { text, look } => {
+            // PR7-39 Stage B: each `\n` line wraps on its own, one body line under the last
+            let (size, col) = match look {
+                TextLook::Muted => (m.small, ui.t.dim),
+                _ => (m.body, ui.t.text),
+            };
+            let mut y = r.y;
+            for line in text_of(text).split('\n') {
+                if *look == TextLook::Right {
+                    let w = ui.p.text_w(line, size).min(r.w as f32);
+                    ui.p.text_fit((r.x + r.w) as f32 - w, y as f32, line, size, r.w as f32, col);
+                    y += ui.p.line_h(size).ceil() as i32;
+                } else {
+                    let end = ui.para(r.x, y, r.w, line, size, col);
+                    y = end.max(y + ui.p.line_h(size).ceil() as i32);
+                }
+            }
             r
         }
         Component::Tooltip { text } => {
@@ -889,13 +989,19 @@ fn component(ui: &mut Ui<Act>, art: &mut Art, region: &str, c: &Component, view:
             }
             r
         }
-        Component::Heading { text } => {
-            // ENGINE-18: the section heading: gold, in the display face, on one line (cut to fit)
-            let gold = ui.t.gold;
-            ui.p.text_fit_face(crate::painter::Typeface::Display, r.x as f32, r.y as f32, text, m.body, r.w as f32, gold);
+        Component::Heading { text, look, field } => {
+            let text = &field.as_ref().map_or_else(|| text.clone(), |f| text_of(f));
+            // ENGINE-18: the section heading: gold, in the display face, on one line (cut to fit). PR7-39 Stage B: muted
+            // (small dim body text) or a panel's title (the display face at 10 old units)
+            let (face, size, col) = match look {
+                HeadingLook::Heading => (crate::painter::Typeface::Display, m.body, ui.t.gold),
+                HeadingLook::Muted => (crate::painter::Typeface::Body, m.small, ui.t.dim),
+                HeadingLook::Title => (crate::painter::Typeface::Display, m.body * 10.0 / crate::ui::BODY, ui.t.gold),
+            };
+            ui.p.text_fit_face(face, r.x as f32, r.y as f32, text, size, r.w as f32, col);
             r
         }
-        Component::ListRow { rows, select, then, ids } => {
+        Component::ListRow { rows, select, then, ids, plain } => {
             if let Some(Field::Rows(list)) = view.get(rows) {
                 // PR7-36 (UX-03): the shared row: icon tile, name, grey sub-line, numbers in the mono face. ENGINE-18:
                 // the rows scroll inside the region (the wheel; keys and pad keep the focused row and one each side in
@@ -937,7 +1043,7 @@ fn component(ui: &mut Ui<Act>, art: &mut Art, region: &str, c: &Component, view:
                 }
                 let off = if scrolls { ui.scroll_begin(&area, r, content) } else { 0 };
                 let w = if scrolls { r.w - m.u(4) } else { r.w };
-                let mono = crate::painter::Typeface::Mono;
+                let mono = if *plain { crate::painter::Typeface::Body } else { crate::painter::Typeface::Mono };
                 let two = all.iter().any(|x| !x.detail2.is_empty());
                 let columns: Vec<i32> = if two {
                     let widest = |ui: &mut Ui<Act>, f: fn(&RowView) -> &str| all.iter().map(|x| ui.p.text_w_face(mono, f(x), m.body).ceil() as i32).max().unwrap_or(0);
@@ -947,8 +1053,8 @@ fn component(ui: &mut Ui<Act>, art: &mut Art, region: &str, c: &Component, view:
                 };
                 let bare = all.iter().all(|x| x.picture.is_none());
                 // the buttons' column: as wide as the widest row's buttons, kept free on every row so the numbers line up
-                let bw = |ui: &mut Ui<Act>, b: &RowButton| ui.p.text_w(&b.label, m.body).ceil() as i32 + m.u(4);
-                let buttons_w = list.iter().map(|x| x.buttons.iter().map(|b| bw(ui, b) + m.u(1)).sum::<i32>()).max().unwrap_or(0);
+                let bw = |ui: &mut Ui<Act>, b: &RowButton| ui.p.text_w(&b.label, m.body).ceil() as i32 + m.u(8);
+                let buttons_w = list.iter().map(|x| x.buttons.iter().map(|b| bw(ui, b) + m.u(2)).sum::<i32>()).max().unwrap_or(0);
                 let focus = ui.focus_id().map(str::to_string);
                 let theme = ui.t.clone();
                 let tone = |name: &str| if name.is_empty() { None } else { theme.role(name) };
@@ -974,15 +1080,15 @@ fn component(ui: &mut Ui<Act>, art: &mut Art, region: &str, c: &Component, view:
                         vec![row.detail.clone()]
                     };
                     let id = &widgets[i];
-                    let look = crate::panes::RowLook { icon: icon.as_ref(), glyph: "", name: &row.label, sub: &row.sub, numbers: &numbers, selected: row.selected && !after, enabled: row.enabled && !after, columns: &columns, bare, tone: if after { None } else { tone(&row.tone) } };
+                    let look = crate::panes::RowLook { icon: icon.as_ref(), glyph: "", name: &row.label, sub: &row.sub, numbers: &numbers, selected: row.selected && !after, enabled: row.enabled && !after, columns: &columns, bare, tone: if after { None } else { tone(&row.tone) }, tone2: if after || !two { None } else { tone(&row.tone2) }, plain: *plain };
                     crate::panes::list_row(ui, id, rr, &look, on, Vec::new());
-                    let mut x = rr.x + rr.w + m.u(1);
+                    let mut x = rr.x + rr.w + m.u(2);
                     if !after {
                         for b in &row.buttons {
                             let bwid = bw(ui, b);
                             let enabled = b.enabled && row.enabled && view.act(&b.action).is_some_and(|a| a.enabled);
                             ui.button_full(&format!("{id}.{}", b.action), Rect::new(x, rr.y + m.u(1), bwid, (h - m.u(2)).max(0)), &b.label, act(&b.action, Some(row.id.clone())), enabled, false, m.body, Vec::new());
-                            x += bwid + m.u(1);
+                            x += bwid + m.u(2);
                         }
                     }
                     // the hot row for a detail line: under the pointer first, else the focused one
@@ -1149,7 +1255,7 @@ pub fn draw_default(ui: &mut Ui<Act>, art: &mut Art, view: &View, area: Rect) ->
     let m = ui.m();
     let mut drawn = Drawn::default();
     let title = view.get("title").filter(|f| matches!(f, Field::Text(_))).map(|_| "title".to_string());
-    let shell = Component::PanelShell { title, shell: Shell::Main, close: None, back: None, action: None, hints: None };
+    let shell = Component::PanelShell { title, shell: Shell::Main, close: None, back: None, action: None, hints: None, fill: None };
     let mut body = component(ui, art, "panel", &shell, view, area.pad(Insets::all(m.margin)), &mut drawn);
     let foot = if view.actions.is_empty() { None } else { Some(body.cut_bottom(m.u(DEFAULT_FOOT))) };
     for (name, f) in default_fields(view) {
@@ -1191,11 +1297,11 @@ fn default_field<A: Clone>(ui: &mut Ui<A>, view: &View, name: &str, f: &Field, w
     match f {
         Field::Text(_) | Field::Number(_) | Field::Flag(_) => {
             let lines = f.as_text().map_or(1, |t| ui.p.wrap(&t, m.body, w as f32).len().max(1));
-            (Component::TextBlock { text: name }, line + ((lines - 1) as f32 * m.body * crate::ui::PARA_LINE).ceil() as i32)
+            (Component::TextBlock { text: name, look: TextLook::Body }, line + ((lines - 1) as f32 * m.body * crate::ui::PARA_LINE).ceil() as i32)
         }
         Field::Picture(_) => (Component::Portrait { picture: name }, m.u(32)),
         Field::Meter { .. } => (Component::BarMeter { meter: name, label: None }, m.u(5)),
-        Field::Rows(rows) => (Component::ListRow { select: wired(&name), rows: name, then: None, ids: None }, rows.len() as i32 * (list_row_h(ui, rows) + m.u(1))),
+        Field::Rows(rows) => (Component::ListRow { select: wired(&name), rows: name, then: None, ids: None, plain: false }, rows.len() as i32 * (list_row_h(ui, rows) + m.u(1))),
         Field::Stats(s) => (Component::StatBlock { stats: name, muted: false }, s.len() as i32 * line),
         Field::Tabs { .. } => (Component::TabRail { select: wired(&name).unwrap_or_default(), tabs: name }, m.u(12)),
         Field::Slots(s) => (Component::SlotCard { select: wired(&name), slots: name }, s.len() as i32 * m.u(19)),

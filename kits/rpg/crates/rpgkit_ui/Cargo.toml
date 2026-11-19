@@ -4,11 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 # KIT-UI1 (ENGINE-8 KU1) and ENGINE-PURITY-3 (ENGINE-5 part 2): the RPG kit's UI on the engine's `aegis_ui`: the
-# portrait effects and overlays, the pip gauge, the vignette player and the Kit widgets' Portraits page. Names no game.
+# portrait effects and overlays, the pip gauge, the vignette player, the Kit widgets' Portraits page and
+# the shop (KU2, on rpgkit_world's shop rules). Names no game.
 [dependencies]
 aegis_ui = { path = "../../../../engine/crates/aegis_ui" }
 aegis_core = { path = "../../../../engine/crates/aegis_core" }
 aegis_layout = { path = "../../../../engine/crates/aegis_layout" }
+rpgkit_world = { path = "../rpgkit_world" }
 serde_json = { workspace = true }
 
 [dev-dependencies]

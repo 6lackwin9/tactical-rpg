@@ -55,8 +55,11 @@ buttons and `<screen>.<region>.<i>` for the items of a region, so agents and sce
 - `x`, `y`: an offset in grid tokens after anchoring, on the screen's axes (`y: -6` moves a `bottom` region up).
 - `in`: an earlier region; the region is placed inside its content (a panel shell's body, a tab rail's page).
 - `when`: overrides of the place keys from a text scale up (`text_scale_min`), the last matching one wins.
-- `style`: `main` (the `ornate` frame) or `popup` (the `panel` frame) for a `panel_shell`; `muted` (both columns
-  dim) for a `stat_block`. `text`: a `heading`'s own words (a heading only). `note`: free text.
+- `style`: `main` (the `ornate` frame), `popup` (the `panel` frame) or `box` (one thin `edge` line over the theme
+  colour the region's `fill` names, no frame file: a column inside a main panel) for a `panel_shell`; `muted` (both
+  columns dim) for a `stat_block`; `muted` (small, dim) or `title` (a panel's title, the display face) for a `heading`;
+  `muted` or `right` (right-aligned) for a `text_block`, whose `\n` starts a new line; `plain` (numbers in the body
+  face, not the mono one) for a `list_row`. `text`: a `heading`'s own words (a heading only). `note`: free text.
 - `row_ids` (a `list_row` only): `true` gives the rows the view's own ids, `<screen>.row.<id>`; a prefix such as
   `"stash.row"` gives `<prefix>.<id>`. Two lists of a layout may not share a prefix.
 
@@ -67,7 +70,7 @@ buttons and `<screen>.<region>.<i>` for the items of a region, so agents and sce
 | `stat_block` | `stats` |
 | `list_row` | `rows` (`select`, `then`) |
 | `detail_line` | (`text`): the note of the row under the pointer, else the focused row's, else this text |
-| `heading` | none: its `text` key is the heading (gold, display face, one line) |
+| `heading` | none: its `text` key is the heading (gold, display face, one line); or (`text`) a bound text field |
 | `tab_rail` | `tabs`, `select` |
 | `slot_card` | `slots` (`select`) |
 | `menu_column`, `button_bar` | `actions`: a list of action ids, or `"all"` |
@@ -89,6 +92,7 @@ Rows for a shop-like screen (ENGINE-19):
   it says so, when its row is off, or when the view has its action off. Every row of the list keeps the widest row's
   buttons' room free, so the numbers line up.
 - `selected: true` draws the row in the selected fill (for example a row already in the trade).
+- `tone2`: the same for `detail2` (a count in `info`, say).
 - `tone`: a theme colour role (`foe`, `good`, `gold`, `info`, `dim`...) for the row's `detail`, so a price above the
   gold left can show in `foe` with no colour in the layout. An unknown role is refused.
 - `note`: the longer line a `detail_line` region shows while the row is under the pointer or focused. The screen gets

@@ -194,3 +194,44 @@ fn the_new_parts_parse_or_are_refused() {
     assert!(problems.iter().any(|p| p.contains("no action 'buy10'")), "{problems:?}");
     assert!(matches!(view().get("detail"), Some(Field::Text(_))));
 }
+
+/// PR7-39 Stage B: the styles a hand-drawn screen's look needs: a plain `box` panel (thin edge, a theme fill), a
+/// heading `muted` or `title` (and bound to a field), a `muted` or `right` text block whose `\n` starts a line, a
+/// `plain` list (numbers in the body face) and a second number's `tone2`.
+#[test]
+fn the_styles_for_a_hand_drawn_look_parse_draw_or_are_refused() {
+    let bad = |regions: Value| Layout::from_json(&json!({"screen": "shop", "regions": regions})).err().unwrap_or_default().join(" | ");
+    let ok = json!([
+        {"id": "col", "component": "panel_shell", "style": "box", "fill": "column", "w": 50, "h": 40},
+        {"id": "t", "component": "heading", "style": "title", "bind": {"text": "detail"}, "w": 50, "h": 4},
+        {"id": "h", "component": "heading", "style": "muted", "text": "Shop", "w": 50, "h": 2, "y": 5},
+        {"id": "r", "component": "text_block", "style": "right", "bind": {"text": "detail"}, "w": 50, "h": 3, "y": 8},
+        {"id": "m", "in": "col", "component": "text_block", "style": "muted", "bind": {"text": "detail"}},
+        {"id": "l", "in": "col", "component": "list_row", "style": "plain", "bind": {"rows": "offers"}}
+    ]);
+    assert_eq!(bad(ok.clone()), "");
+    assert!(bad(json!([{"id": "c", "component": "panel_shell", "style": "popup", "fill": "column"}])).contains("'fill' is a box panel_shell's fill"));
+    assert!(bad(json!([{"id": "h", "component": "heading", "style": "loud", "text": "x"}])).contains("muted or title, not 'loud'"));
+    assert!(bad(json!([{"id": "h", "component": "heading", "text": "x", "bind": {"text": "detail"}}])).contains("not both"));
+    assert!(bad(json!([{"id": "l", "component": "list_row", "style": "muted", "bind": {"rows": "offers"}}])).contains("plain, not 'muted'"));
+    assert!(bad(json!([{"id": "t", "component": "text_block", "style": "plain", "bind": {"text": "detail"}}])).contains("muted or right, not 'plain'"));
+    // drawn: the box is a shell widget; two lines of a text block sit one under the other
+    let mut v = view_json();
+    v["fields"]["detail"] = json!({"text": "Total: 0\nPurse: 5"});
+    v["fields"]["offers"]["rows"][0]["tone2"] = json!("info");
+    let v = View::from_json(&v).unwrap();
+    assert_eq!(View::from_json(&v.to_json()).unwrap(), v, "tone2 goes out and back");
+    let l = Layout::from_json(&json!({"screen": "shop", "regions": ok})).unwrap();
+    let mut g = gfx();
+    g.fonts.audit = Some(Vec::new());
+    let layers = aegis_core::assets::Layers::of(vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")]);
+    let mut art = aegis_ui::art::Art::layered(layers);
+    let mut ui: Ui<Act> = Ui::new(&mut g, (-1, -1), true);
+    screen_layout::draw(&mut ui, &mut art, Some(&l), &v, SCREEN);
+    assert_eq!(get(&ui.widgets, "shop.col").kind, "shell");
+    drop(ui);
+    let recs = g.fonts.audit.take().unwrap_or_default();
+    let y = |t: &str| recs.iter().filter(|r| r.text == t).map(|r| r.y).fold(f32::MAX, f32::min);
+    let (a, b) = (y("Total: 0"), y("Purse: 5"));
+    assert!(a < f32::MAX && b > a, "the second line under the first: {a} {b}");
+}

@@ -53,7 +53,7 @@ fn a_layout_file_names_each_problem_in_it() {
         (region(json!({"bind": {}})), "text_block needs bind 'text'"),
         (region(json!({"bind": {"text": "t", "rows": "r"}})), "takes no bind 'rows'"),
         (region(json!({"in": "nowhere"})), "no earlier region"),
-        (region(json!({"style": "popup"})), "'style' is for a panel_shell"),
+        (region(json!({"style": "popup"})), "a text_block's 'style' is muted or right, not 'popup'"),
         (region(json!({"colour": "#fff"})), "unknown key 'colour'"),
         (region(json!({"when": [{"h": 3}]})), "'text_scale_min' is a text scale"),
         (region(json!({"component": "button_bar", "bind": {"actions": "some"}})), "list of action ids or \"all\""),
