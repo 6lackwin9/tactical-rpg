@@ -61,7 +61,7 @@ pub fn view(cx: &Cx, pane: &ShopPane, sq: &str) -> View {
             }
             let (cap, x) = (buy_cap(o), trade.bought(&kind, &id));
             let n = (json::i(o, "left", 0) != shop::UNLIMITED).then_some(cap);
-            RowView { id, label, detail: format!("{} {cur}", json::i(o, "price", 0)), detail2: of_text(x, n), sub: String::new(), picture: picture(cx, &item), enabled: cap - x > 0 }
+            RowView { id, label, detail: format!("{} {cur}", json::i(o, "price", 0)), detail2: of_text(x, n), sub: String::new(), picture: picture(cx, &item), enabled: cap - x > 0, ..Default::default() }
         })
         .collect();
     let mut lines = Vec::new();
@@ -70,18 +70,18 @@ pub fn view(cx: &Cx, pane: &ShopPane, sq: &str) -> View {
         let item = if kind == shop::SUPPLIES { String::new() } else { s(o, "item") };
         let label = if item.is_empty() { upkeep.clone() } else { d.item_name(&item) };
         let gold = -json::i(o, "price", 0) * n;
-        lines.push(RowView { id: format!("buy.{id}"), label: format!("{label} x{n}"), detail: format!("{gold:+}"), detail2: String::new(), sub: String::new(), picture: picture(cx, &item), enabled: true });
+        lines.push(RowView { id: format!("buy.{id}"), label: format!("{label} x{n}"), detail: format!("{gold:+}"), detail2: String::new(), sub: String::new(), picture: picture(cx, &item), enabled: true, ..Default::default() });
     }
     for (item, n) in &trade.sells {
         let gold = sale.iter().find(|r| s(r, "item") == *item).map_or(0, |r| json::i(r, "price", 0)) * n;
-        lines.push(RowView { id: format!("sell.{item}"), label: format!("{} x{n}", d.item_name(item)), detail: format!("{gold:+}"), detail2: String::new(), sub: String::new(), picture: picture(cx, item), enabled: true });
+        lines.push(RowView { id: format!("sell.{item}"), label: format!("{} x{n}", d.item_name(item)), detail: format!("{gold:+}"), detail2: String::new(), sub: String::new(), picture: picture(cx, item), enabled: true, ..Default::default() });
     }
     let stash_rows: Vec<RowView> = sale
         .iter()
         .map(|r| {
             let item = s(r, "item");
             let (owned, x) = (json::i(r, "count", 0), trade.sold(&item));
-            RowView { id: item.clone(), label: d.item_name(&item), detail: format!("{} {cur}", json::i(r, "price", 0)), detail2: of_text(x, Some(owned)), sub: String::new(), picture: picture(cx, &item), enabled: owned - x > 0 }
+            RowView { id: item.clone(), label: d.item_name(&item), detail: format!("{} {cur}", json::i(r, "price", 0)), detail2: of_text(x, Some(owned)), sub: String::new(), picture: picture(cx, &item), enabled: owned - x > 0, ..Default::default() }
         })
         .collect();
     let others: Vec<RowView> = gs
@@ -89,7 +89,7 @@ pub fn view(cx: &Cx, pane: &ShopPane, sq: &str) -> View {
         .stash
         .iter()
         .filter(|(id, n)| **n > 0 && !sale.iter().any(|r| s(r, "item") == **id))
-        .map(|(id, n)| RowView { id: id.clone(), label: d.item_name(id), detail: format!("x{n}"), detail2: String::new(), sub: String::new(), picture: picture(cx, id), enabled: false })
+        .map(|(id, n)| RowView { id: id.clone(), label: d.item_name(id), detail: format!("x{n}"), detail2: String::new(), sub: String::new(), picture: picture(cx, id), enabled: false, ..Default::default() })
         .collect();
     let net = earned - spent;
     let total = if net == 0 { format!("Total: 0 {cur_word}") } else { format!("Total: {net:+} {cur_word}") };
