@@ -1768,6 +1768,7 @@ fn sample_timeline(block: Option<i32>, track: Option<String>) -> Timeline {
         selected_block: block,
         selected_track: track,
         sections: vec![Section { title: "Allies".into(), colour: INFO, tracks: vec![lead, scout, warden] }, Section { title: "Enemies".into(), colour: FOE, tracks: vec![brute, lurker] }],
+        ruler: None,
     }
 }
 

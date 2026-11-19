@@ -6,7 +6,7 @@
 //! in (`Launch`) and its content fingerprint.
 //!
 //! LAYER-ENG-API (PR5-29c): the session picker was `recordings.battle` (`ID_ALIASES`: the agent link still takes the
-//! old id) and its state key `battle` is `session`; the words the pane draws stay (`SESSION_LABELS`).
+//! old id) and its state key `battle` is `session`; the words the pane draws are the game's (`Recordings::labels`, ENGINE-5).
 
 use crate::canvas::Rect;
 use crate::playtest::TAGS;
@@ -23,15 +23,16 @@ pub const SETTING: &str = "record_playtests";
 /// Old widget ids of this screen the agent link still takes (old, new; LAYER-ENG-API): an id that is the old one or
 /// starts with it and a dot (the picker's options) is read as the new one.
 pub const ID_ALIASES: [(&str, &str); 1] = [("recordings.battle", "recordings.session")];
-/// The words the pane draws for sessions: the picker's header and the list's count ("3 battles"). They predate
-/// LAYER-ENG-API and stay as drawn because the recordings pane's pixel hashes pin them
-/// (`tests/fixtures/theme/pane_hashes.json`); renaming them is a theme re-record.
-pub const SESSION_LABELS: SessionLabels = SessionLabels { header: "BATTLE", count: "battles" };
+/// The words the pane draws for sessions when the game names none: the picker's header and the list's count
+/// ("3 sessions"). ENGINE-5: a game names its own with `Recordings::labels` (the RPG's "BATTLE", "battles"; the
+/// recordings pane's pinned pixel hashes, `tests/fixtures/theme/pane_hashes.json`, are drawn with those).
+pub const SESSION_LABELS: SessionLabels = SessionLabels { header: "SESSION", count: "sessions" };
 /// The keys of a session's first request that name its scene, first found wins: `scene`, then a command set's
 /// `encounter` (the RPG kit's `new` request; a read alias, LAYER-ENG-API).
 pub const SCENE_KEYS: [&str; 2] = ["scene", "encounter"];
 
 /// See `SESSION_LABELS`.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SessionLabels {
     /// Above the session picker.
     pub header: &'static str,
@@ -92,6 +93,8 @@ pub struct Recordings<G> {
     session_pick: usize,
     round: usize,
     pub message: String,
+    /// The game's words for a session (`SESSION_LABELS` by default).
+    labels: SessionLabels,
     w: Vec<Widget<Act>>,
 }
 
@@ -121,9 +124,15 @@ pub fn open_folder(path: &Path) -> Result<(), String> {
 
 impl<G> Recordings<G> {
     pub fn new(cx: &Cx<G>, launch: Launch<G>, content: fn(&Cx<G>) -> Value, repo: Vec<PathBuf>) -> Self {
-        let mut s = Self { launch, content, repo, items: Vec::new(), pick: 0, session_pick: 0, round: 0, message: String::new(), w: Vec::new() };
+        let mut s = Self { launch, content, repo, items: Vec::new(), pick: 0, session_pick: 0, round: 0, message: String::new(), labels: SESSION_LABELS, w: Vec::new() };
         s.refresh(cx);
         s
+    }
+
+    /// The game's words for a session (ENGINE-5): the picker's header and the list's count.
+    pub fn labels(mut self, labels: SessionLabels) -> Self {
+        self.labels = labels;
+        self
     }
 
     fn refresh(&mut self, cx: &Cx<G>) {
@@ -249,7 +258,7 @@ impl<G> Screen<G> for Recordings<G> {
                         badges.push("stale");
                     }
                     let badge = if badges.is_empty() { String::new() } else { format!(" [{}]", badges.join(", ")) };
-                    (format!("{id}  {} {}, {} notes{badge}", rec.sessions.len(), SESSION_LABELS.count, rec.notes.len()), if cx.playtest.stale(rec) { t.dim } else { t.text })
+                    (format!("{id}  {} {}, {} notes{badge}", rec.sessions.len(), self.labels.count, rec.notes.len()), if cx.playtest.stale(rec) { t.dim } else { t.text })
                 }
                 Err(_) => (format!("{id}  (unreadable)"), t.foe),
             };
@@ -280,7 +289,7 @@ impl<G> Screen<G> for Recordings<G> {
                     y += 9;
                 }
                 y += 2;
-                ui.p.text(x as f32, y as f32, SESSION_LABELS.header, SMALL, t.info);
+                ui.p.text(x as f32, y as f32, self.labels.header, SMALL, t.info);
                 y += 9;
                 let labels: Vec<String> = rec
                     .sessions

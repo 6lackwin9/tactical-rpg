@@ -28,6 +28,9 @@ use aegis_core::clock::Instant;
 /// The game as the shell sees it.
 pub struct Emberwake;
 
+/// The screens the program opens on as `screen=` (ENGINE-5: the game's launch table, once the engine's closed list).
+pub const LAUNCH_SCREENS: [&str; 3] = ["menu", "arena", "runner"];
+
 impl Game for Emberwake {
     type Content = emberwake_content::store::RpgContent;
     const USAGE: &'static str = "aegis sim <mode> [level] [seeds] [key=value ...]   (aegis sim help: modes and keys)\naegis battle <encounter id | world:<world>/<id>> [seed=N] [preset=balanced] [ruleset=classic|timeline] [rules=-id,+id] [log]
@@ -54,6 +57,20 @@ aegis rules [--contract]   (the ruleset tweak report; --contract: tunable and lo
 
     fn content(&self) -> Self::Content {
         emberwake_content::store::RpgContent
+    }
+
+    /// The program's `screen=` launches (`emberwake_gui`): the main menu, the arena and the scene runner.
+    fn launch_screens(&self) -> &'static [&'static str] {
+        &LAUNCH_SCREENS
+    }
+
+    /// A ruleset is played only in the arena (the program refuses `ruleset=` anywhere else).
+    fn launch_problems(&self, launch: &aegis_cli::scenario::Launch) -> Vec<String> {
+        let mut p = aegis_cli::scenario::screen_problems(launch, &LAUNCH_SCREENS);
+        if launch.ruleset.is_some() && launch.screen != "arena" {
+            p.push("launch: 'ruleset' comes with 'screen' arena".into());
+        }
+        p
     }
 
     fn host(&self, args: &Args) -> Result<Box<dyn FnMut(&Value) -> Value>> {

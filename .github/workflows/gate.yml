@@ -53,11 +53,11 @@ jobs:
         run: bash tools/fc.sh gate
 
   # CI-HARDEN1 (ENGINE-4): the shipping target. Every crate built (a warning fails) and every test run on Windows, with
-  # the MSVC stable toolchain (the desktop's gnullvm pin needs llvm-mingw, which the runner lacks). ADVISORY for now: not
-  # in the needs of `gate` below, so a red Windows run never blocks a push; it becomes required once it has been green
-  # (docs/FEEDBACK.md FB-323 asks Design).
+  # the MSVC stable toolchain (the desktop's gnullvm pin needs llvm-mingw, which the runner lacks). REQUIRED on a pull
+  # request into main (`gate` below fails when it is red), ADVISORY on a push to develop or main (Design 2026-11-18,
+  # READY section 4 FB-323; first green run 2026-11-18, develop 2f0d382).
   windows:
-    name: windows (advisory)
+    name: windows
     runs-on: windows-latest
     timeout-minutes: 45
     env:
@@ -164,11 +164,13 @@ jobs:
           NODE_PATH="$RUNNER_TEMP/pw/node_modules" bash tools/fc.sh web smoke
 
   gate:
-    needs: [checks]
+    needs: [checks, windows]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: All jobs passed
         run: |
           echo "checks: ${{ needs.checks.result }}"
+          echo "windows: ${{ needs.windows.result }} (required on a pull request into main only)"
           [ "${{ needs.checks.result }}" = success ]
+          if [ "${{ github.event_name }}" = pull_request ]; then [ "${{ needs.windows.result }}" = success ]; fi

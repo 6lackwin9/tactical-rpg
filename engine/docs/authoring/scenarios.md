@@ -34,7 +34,7 @@ files with `check_files` and the driver's tests on a fake link; `aegis scenario 
 | `title` | text | "" | - |
 | `status` | `active`, `waiting` | `active` | `waiting` needs `why`; it is parsed and never run |
 | `why` | text | - | Why it waits |
-| `launch` | object | `{"screen": "menu"}` | `screen` is `menu`, `arena` or `runner`; optional `scene` (alias `encounter`), `seed`, `ruleset` (alias `rules`) with `arena`, and `save`: a folder name under `scenarios/saves/`, copied into the scratch saves before the start (PR7-4) |
+| `launch` | object | `{"screen": "menu"}` | `screen` is any screen id the game opens on (its `Game::launch_screens`, checked by `check`, `run` and `shots`; Emberwake: `menu`, `arena`, `runner`); optional `scene` (alias `encounter`), `seed`, `ruleset` (alias `rules`; the game says which screens take it, Emberwake: `arena`), and `save`: a folder name under `scenarios/saves/`, copied into the scratch saves before the start (PR7-4) |
 | `sizes` | list of `WxH` | `["1280x720"]` | Each from 1280x720 to 7680x4320 |
 | `settings` | object | `{}` | Merged over the scratch profile. Refused: `mute` false, `start_inactive`, `window_size`, `fullscreen`, `borderless`, `window_mode` |
 | `timeout_s` | whole number | 300 | 1 to 3600, for the whole run at one size |
@@ -65,7 +65,7 @@ An unknown key or step is a problem, not a thing ignored.
 | `type` | `text` | Into the field being edited |
 | `drag` | `id`, `to` | Press, move, release; `to` is a widget id or `[x, y]` |
 | `back` | - | Back |
-| `link` | `body` | Any other request, as `{"cmd": ...}`: battle commands, screen commands. Not `quit` |
+| `link` | `body` | Any other request, as `{"cmd": ...}`: the game's own commands, screen commands. Not `quit` |
 | `wait` | `until`, `timeout_ms` = 10000 | Polls until true; a timeout fails |
 | `assert` | `until` | True now or fail |
 | `shot` | `name`, `max_w` = 1920, `golden` | Screenshot into the bundle, once the frames after the last change are drawn. A blank frame fails the step. `golden`: compared with its baseline (below) |

@@ -71,6 +71,16 @@ pub trait Game {
     fn host(&self, args: &Args) -> Result<Box<dyn FnMut(&Value) -> Value>>;
     /// A fresh command host as a replay drives it (`replay`: one per run).
     fn driver(&self, args: &Args) -> Result<Box<dyn aegis_host::Driver>>;
+    /// ENGINE-5: the screens a scenario's `launch.screen` (and `scenario shots screen=`) may name: the ids the game's
+    /// program takes as `screen=`. Default: the main menu only.
+    fn launch_screens(&self) -> &'static [&'static str] {
+        &["menu"]
+    }
+    /// The problems of a scenario's launch for this game (`scenario check`, `run`, `shots`); by default its screen is
+    /// one of `launch_screens`. A game adds its own rules (which screens take `scene` or `ruleset`).
+    fn launch_problems(&self, launch: &scenario::Launch) -> Vec<String> {
+        scenario::screen_problems(launch, self.launch_screens())
+    }
 }
 
 const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's command API)

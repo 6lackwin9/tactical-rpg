@@ -13,7 +13,7 @@ use aegis_ui::notes::{self, NoteBox};
 use aegis_ui::painter::{Fonts, View};
 use aegis_ui::pips;
 use aegis_ui::playtest::Playtests;
-use aegis_ui::recordings::{NoteView, Recordings};
+use aegis_ui::recordings::{NoteView, Recordings, SessionLabels};
 use aegis_ui::screen::{Context, Cx, Screen, Settings};
 use aegis_ui::theme;
 use aegis_ui::timeline;
@@ -155,7 +155,7 @@ fn recordings_shots(scale: f32) -> Vec<Shot> {
         ("recordings.empty", "tests/fixtures/theme/no_such_folder", ""),
     ] {
         let mut c = cx(dir);
-        let mut s = Recordings::new(&c, launch, |_| Value::Null, Vec::new());
+        let mut s = Recordings::new(&c, launch, |_| Value::Null, Vec::new()).labels(SessionLabels { header: "BATTLE", count: "battles" });
         s.message = message.into();
         let mut g = gfx(scale);
         s.draw(&mut c, &mut g, (-1, -1), true);
