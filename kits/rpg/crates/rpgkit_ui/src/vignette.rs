@@ -16,7 +16,7 @@ use aegis_ui::audio::Bus;
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use aegis_ui::fx::{Camera, Clock, ShakeLimits, ShakeTable};
 use aegis_ui::painter::Painter;
-use crate::portrait_fx::{idle_cues, Budget, Cue, ExpressionFx, PortraitFx, PortraitOpts};
+use crate::portrait_fx::{draw_frame, idle_cues, painted_border, portrait_well, Budget, Cue, ExpressionFx, PortraitFx, PortraitOpts};
 use crate::portrait_overlays::Mount;
 use aegis_ui::screen::{Context, Cx, Key, Screen, Settings};
 use aegis_ui::theme::th;
@@ -731,14 +731,14 @@ impl CardPortrait {
     }
 
     /// Draws `c`'s portrait into `r`: the first file of its chain with its sidecar (`face_of`) and the card's
-    /// `expression` held as a `face` cue; false (and no portrait kept) when no layer holds any, so the frame stays
-    /// empty.
-    fn draw(&mut self, p: &mut Painter, art: &mut Art, c: &Card, r: Rect, reduce_motion: bool) -> bool {
+    /// `expression` held as a `face` cue; the border the drawn picture paints as its own (`painted_border`), or None
+    /// (and no portrait kept) when no layer holds any, so the frame stays empty.
+    fn draw(&mut self, p: &mut Painter, art: &mut Art, c: &Card, r: Rect, reduce_motion: bool) -> Option<i32> {
         let Some(rel) = art.first_rel(&c.portrait) else {
             self.fx = None;
             // the missing art goes to the playtest trail as before (nothing loads)
             let _ = art.first(&c.portrait, 1, 1);
-            return false;
+            return None;
         };
         let key = if c.portrait_key.is_empty() { rel.clone() } else { c.portrait_key.clone() };
         let now = self.clock.now();
@@ -755,7 +755,7 @@ impl CardPortrait {
         fx.set_expressions(&self.expressions);
         let opts = PortraitOpts { reduce_motion, rim_default: self.rim, show_anchors: false, tier_cap: None, overlays: self.overlays };
         self.budget.begin();
-        fx.draw(p, art, &rel, face.as_ref(), r, now, &opts, &mut self.budget)
+        fx.draw(p, art, &rel, face.as_ref(), r, now, &opts, &mut self.budget).then(|| painted_border(face.as_ref(), r))
     }
 }
 
@@ -854,9 +854,12 @@ pub fn draw_with<A: Clone>(ui: &mut Ui<A>, art: &mut Art, pl: &Player, pal: &Pal
         Style::Line => {
             let x = CAPTION_X + PORTRAIT + 8;
             let r = caption(ui, x, CAPTION_X + CAPTION_W - x, PORTRAIT, &c.speaker, &c.text, shown, frame, pal);
+            // ENGINE-13 (ART-03): on the portrait well inside the F2 frame, as every other portrait
             let face = Rect::new(CAPTION_X, r.y, PORTRAIT, PORTRAIT);
-            ui.p.panel(face, with_alpha(lerp(frame, rgb(0, 0, 0), 0.3), 225), with_alpha(pal.dim, 160), RADIUS);
-            portrait.draw(&mut ui.p, art, c, face.inset(2), reduce_motion);
+            let well = portrait_well();
+            ui.p.fill(face, well);
+            let painted = portrait.draw(&mut ui.p, art, c, face, reduce_motion).unwrap_or(0);
+            draw_frame(&mut ui.p, face, painted, well);
         }
     }
     // Back to the still view (restored, not shifted back, so no float drift).

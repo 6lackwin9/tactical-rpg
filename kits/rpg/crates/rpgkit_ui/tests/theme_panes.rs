@@ -126,7 +126,14 @@ fn the_default_theme_draws_the_kit_panes_exactly_as_before() {
             }
         }
     }
-    let recorded: Map<String, Value> = serde_json::from_str(&std::fs::read_to_string(root().join("tests/fixtures/theme/pane_hashes.json")).unwrap()).unwrap();
+    let file = root().join("tests/fixtures/theme/pane_hashes.json");
+    // Re-recording (only for an intended change, named in the commit; then diff the file): `AEGIS_RECORD_PANE_HASHES=1`.
+    // ENGINE-13 re-recorded the line card's 8 frames (`vignette.3.*`: its portrait on the well inside the F2 frame).
+    if std::env::var("AEGIS_RECORD_PANE_HASHES").is_ok() {
+        std::fs::write(&file, serde_json::to_string_pretty(&Value::Object(now)).unwrap() + "\n").unwrap();
+        return;
+    }
+    let recorded: Map<String, Value> = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(recorded.len(), now.len(), "the same frames as recorded");
     let differ: Vec<&String> = recorded.keys().filter(|k| now.get(*k) != recorded.get(*k)).collect();
     assert!(differ.is_empty(), "frames that changed under the default theme: {differ:?}");
@@ -259,4 +266,16 @@ fn no_colour_literal_is_left_in_the_kit_panes() {
             assert!(at.is_empty(), "{pane}: the constant {c}: {at:?}");
         }
     }
+}
+
+/// `AEGIS_SHOT_DIR=<folder>`: the line card in its hold at Normal text, as a PNG, for review (no check).
+#[test]
+fn the_line_card_shot_for_review() {
+    let Ok(dir) = std::env::var("AEGIS_SHOT_DIR") else { return };
+    let (_, px) = vignette_shots(1.0).into_iter().find(|(n, _)| n == "vignette.3.hold").expect("the line card");
+    let path = Path::new(&dir).join("vignette_line_card.png");
+    let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(path).unwrap()), 1280, 720);
+    enc.set_color(png::ColorType::Rgba);
+    enc.set_depth(png::BitDepth::Eight);
+    enc.write_header().unwrap().write_image_data(&px).unwrap();
 }

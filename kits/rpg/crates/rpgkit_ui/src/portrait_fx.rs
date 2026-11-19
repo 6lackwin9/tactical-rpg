@@ -1332,6 +1332,12 @@ pub fn painted_border(face: Option<&Face>, r: Rect) -> i32 {
     face.map_or(0, |f| ((f.border as f32 * r.w.min(r.h) as f32) / f.size.max(1) as f32).ceil() as i32).clamp(0, r.w.min(r.h) / 2)
 }
 
+/// The colour a portrait draws on inside its frame: the theme's game colour `portrait_well` (ENGINE-13: the vignette
+/// player's line cards read it too), else a dark slate.
+pub fn portrait_well() -> Rgba {
+    aegis_ui::theme::th().game("portrait_well", aegis_ui::canvas::rgb(22, 30, 48))
+}
+
 /// PR7-25 (style bible 2, F2): the one portrait frame, drawn over a portrait already drawn into `r`: a `frame_width`
 /// line of the theme's `edge` (iron) round `r`'s inside with its top line in `frame_line` (oxblood), and between the
 /// line and the picture the band of `painted` units the picture paints as its own border filled with `well`, so no
