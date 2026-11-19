@@ -1235,6 +1235,11 @@ impl Screen<GameCx> for BattleScreen {
         Some(reply)
     }
 
+    /// AMBIENCE1: no place's loop under this screen.
+    fn ambience(&self, _cx: &Cx) -> Option<String> {
+        Some(String::new())
+    }
+
     /// MUSIC1: boss when an enemy unit has the boss tier, else combat; scoped to the battle's world and location.
     /// MUSICVAR1: one variant per battle (`music_request`), seeded by the battle's seed.
     fn music(&self, cx: &Cx) -> Option<String> {

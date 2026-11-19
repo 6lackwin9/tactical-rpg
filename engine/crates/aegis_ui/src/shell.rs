@@ -365,6 +365,8 @@ impl<G: Context> Shell<G> {
         let cx = &self.cx;
         let track = self.stack.iter().rev().find_map(|s| s.music(cx));
         cx.audio.music(track.as_deref());
+        let bed = self.stack.iter().rev().find_map(|s| s.ambience(cx)).filter(|b| !b.is_empty());
+        cx.audio.ambience(bed.as_deref());
         cx.audio.tick();
         self.frames += 1;
     }

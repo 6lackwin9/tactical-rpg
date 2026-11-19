@@ -873,6 +873,7 @@ fn preview_of(key: &str) -> Option<(Bus, &'static str)> {
         "music" => Some((Bus::Music, "sfx/ui_confirm.wav")),
         "effects" => Some((Bus::Sfx, "sfx/hit.wav")),
         "interface" => Some((Bus::Ui, "sfx/ui_click.wav")),
+        "ambience" => Some((Bus::Ambience, "sfx/ui_confirm.wav")),
         _ => None,
     }
 }
@@ -1251,6 +1252,8 @@ impl SettingsScreen {
                 Row::Volume("music", "Music Volume", "Orchestral and hurdy-gurdy ward score"),
                 Row::Volume("effects", "Effects Volume", "Combat steel clashes, billhooks and chains"),
                 Row::Volume("interface", "Interface Volume", "Menu chimes, card clicks and roll ticks"),
+                // PR7-34 (AMBIENCE1): the settings mock's row
+                Row::Volume("ambience", "Ward Ambience", "Canal rain, distant bells and furnace rumble"),
             ],
             // PR7-37 (PT-33): Map Camera Zoom on the Display tab only (PR7-15 had it here too)
             2 => vec![
@@ -1732,7 +1735,7 @@ const VOLUME_STEP: f64 = 5.0;
 const WALK_STEP_STEP: f64 = 10.0;
 
 fn static_key(k: &str) -> &'static str {
-    ["master", "music", "effects", "interface"].into_iter().find(|x| *x == k).unwrap_or("master")
+    ["master", "music", "effects", "interface", "ambience"].into_iter().find(|x| *x == k).unwrap_or("master")
 }
 
 #[cfg(test)]
@@ -3035,6 +3038,35 @@ mod settings_tests {
         assert_eq!(cx.audio.level(Bus::Music), full, "off: a lost focus keeps the sound");
         cx.audio.set_focused(true, &cx.settings.v);
         assert_eq!(volumes(&cx), before, "the saved volumes never change");
+    }
+
+    /// PR7-34 (AMBIENCE1): the Sound tab's Ward Ambience slider sits below Interface Volume, full screen and popup; its
+    /// arrow saves the `ambience` key at once and the ambience bus plays at the new level, the music's untouched.
+    #[test]
+    fn the_sound_tab_has_a_ward_ambience_slider_on_its_own_bus() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        assert_eq!(Settings::defaults(default_settings())["ambience"], json!(80), "a default beside the other volumes");
+        for popup in [false, true] {
+            let mut s = if popup { SettingsScreen::in_game(&cx) } else { SettingsScreen::new(&cx) };
+            redraw(&mut s, &mut cx, &mut g);
+            s.click_id(&mut cx, "settings.tab.sound").expect("sound");
+            let w = redraw(&mut s, &mut cx, &mut g);
+            let y = |id: &str| w.iter().find(|x| x["id"] == id).and_then(|x| x["rect"][1].as_i64()).unwrap_or_else(|| panic!("{id} drawn (popup {popup})"));
+            assert!(y("settings.interface") < y("settings.ambience"), "popup {popup}: below Interface Volume");
+            assert!(has(&w, "settings.ambience.down") && has(&w, "settings.ambience.up"));
+        }
+        let mut s = SettingsScreen::new(&cx);
+        redraw(&mut s, &mut cx, &mut g);
+        s.click_id(&mut cx, "settings.tab.sound").expect("sound");
+        redraw(&mut s, &mut cx, &mut g);
+        cx.audio.set_levels(&cx.settings.v);
+        let (music, bed) = (cx.audio.level(Bus::Music), cx.audio.level(Bus::Ambience));
+        let was = cx.settings.v["ambience"].as_f64().unwrap();
+        s.click_id(&mut cx, "settings.ambience.down").expect("the arrow");
+        assert_eq!(saved(&cx, "ambience").as_f64(), Some(was - VOLUME_STEP), "saved at once");
+        cx.audio.set_levels(&cx.settings.v);
+        assert!(cx.audio.level(Bus::Ambience) < bed, "the ambience bus follows");
+        assert_eq!(cx.audio.level(Bus::Music), music, "the music does not");
     }
 
     /// FB-308 (PR7-26 row): the Battle tab's rows past the mock's six (Units Behind, the overlay groups, the debug row)

@@ -1534,6 +1534,11 @@ impl Screen<GameCx> for WorldMap {
         music::game_track(cx, music::TRAVEL)
     }
 
+    /// AMBIENCE1: the road's ambient loop.
+    fn ambience(&self, cx: &Cx) -> Option<String> {
+        music::game_ambience(cx, music::TRAVEL)
+    }
+
     widget_plumbing!();
 }
 
