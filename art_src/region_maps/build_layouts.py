@@ -264,7 +264,7 @@ def sluice_undercroft():
     L.anchor("npc_c", 15, 11, "Talia at the mission board")
     L.anchor("npc_d", 22, 6, "Widow Varka at her moored skiff")
     L.anchor("lore_a", 12, 11, "Ivo beside Talia (after the Toll-Pen rescue)")
-    L.anchor("chest_a", 10, 6, "the stash (the Slab room's corner)")
+    # chest_a (the stash) dropped 2026-11-19: no chest on the hub map (PR7-51, AI-32); the footlockers replace it
     L.anchor("rest", 22, 12, "the brazier: rest and the bunk roster")
     L.anchor("crypts", 32, 15, "the Isolation Crypts' door (Stage IV operatives, stasis slots)")
     legend = {"a": {"id": "slab", "kind": "safe"}, "w": {"id": "basin", "kind": "safe"}, "t": {"id": "hearth", "kind": "safe"},

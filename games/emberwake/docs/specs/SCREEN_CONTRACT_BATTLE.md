@@ -100,52 +100,138 @@ screen at 1280x720, 1:1.
 
 ## 6. Statuses
 
-- Every status uses its own kit icon (`kits/rpg/assets/statuses/`); the rim says buff (gold) or debuff (oxblood);
-  dashed means it lands from a planned move; a heal is a moss heart (theme moss, not bright green) and previews as a
-  pale moss gain on the HP bar.
-- Tabs on plates: icon plus the rounds left as up to 3 pips (the shipped data lasts 1 to 3 rounds; a permanent one is a
-  full bar). 5x4 pips at 1:1. Superseded by the take 25 proposal below if signed off (user 2026-11-19 18:00: the pips
-  read poorly at this size).
-- Order: the soonest to run out first, ties to the one applied first; statuses a planned move adds come last.
-- Proposed (Art/UI take 24 B and take 25, `STATUSVIS1`, `AI-34`; awaiting the user's sign-off):
-  - Tabs carry the icon only, no rounds (user 2026-11-19 18:02); the rounds live in the full list. Take 24 A (a bold
-    pixel digit beside the icon) is the alternative.
-  - Each status also shows where it acts, by primitive (`STATUSVIS1` section 2), in its kind colour with its icon as
-    the key: locked blocks hatched on the unit's timeline lane and the AP row (`block_lock`); the coming tick as a
-    pending oxblood (regen: moss) slice on the HP bar with a drip and the amount, and a tick mark at the round's end on
-    the lane (`tick`); the changed number with a small down (oxblood) or up (gold) arrow and the base struck through
-    (`attack_power`); lost move tiles dimmed at the range edge, gained ones gold-edged (`move_rate`); a shield glyph
-    and the cut beside the incoming number (`armor`, `guard`); the taunter's crimson hoop with the foe intents bent to
-    it, a stealthed unit greyed as a target (`targeting`); a counter chip in the hit preview (`reactive`);
-    `rule_flag` (steadfast) on the plate only.
-  - Plate order: `STATUSVIS1` section 3 (priority 1, then 2, then 3; inside a priority the order above). Priority 3
-    statuses keep a tab when there is room (`STATUSVIS1` section 4, first item).
-  - A locked block at 1:1: a near-black block with 45 degree hatch lines 5 px apart in the status's rim colour and the
-    status icon in a framed square on its first block; it is the only patterned fill on the strip, so it never reads
-    as a planned move colour (`STATUSVIS1` section 4, second item).
+Signed off 2026-11-19 (takes 33 to 36, `STATUSVIS1` SV5 to SV15; mocks `art_src/style/battle_take33_status_mock.py`
+to `battle_take36_locks_mock.py`, shots in the project files `art-ui/battle_ux14/`).
+
+- Icons: every status uses its own kit icon (`kits/rpg/assets/statuses/`); the rim says buff (gold) or debuff
+  (oxblood); dashed means it lands from a planned move; a heal is a moss heart (theme moss, not bright green) and
+  previews as a pale moss gain on the HP bar. The legacy status icons are reworked later (`AI-24`).
+- Tabs on plates and on the boss bar: the icon only, no pips and no digits (user 2026-11-19 18:02 and 18:09); the
+  rounds left show only in the full list.
+- Order: `STATUSVIS1` section 3 (priority 1, then 2, then 3); inside a priority the soonest to run out first, ties to
+  the one applied first; statuses a planned move adds come last. Priority 3 statuses keep a tab when there is room.
+  Steadfast (a `rule_flag`) shows on the plate only and stays first in the column.
 - The full list (hover "+N" or press the plate): icon, name, a one-line effect, rounds left as a number ("new" for a
   planned one).
+- Where each status acts (`STATUSVIS1` section 2), in its kind colour with its icon as the key:
+  - Locks (`block_lock`, SV15): grey blocks with the status icon, built like the other tiles, on the top strip (a
+    grey tile with the icon in the skill-icon frame and a grey bar under it) and in the full timeline view (grey tint,
+    band and rim). Stun is one continuous grey block over its locked blocks (blocks 1 and 2); stagger is two separate
+    one-block grey blocks (blocks 1 and 4). No hatch. AP follows the rules (SV11): a locked block leaves whatever AP
+    the rules give, the display changes none.
+  - One HP loss (SV6): hits and ticks are one planned-loss slice on the HP bar and one number; hovering the number
+    lists each hit and each tick with the total. Regen previews as the moss gain.
+  - Numbers after modifiers (SV7, SV13): every deterministic number (damage, heal) is the final number only, tinted
+    when a modifier changed it (lowered oxblood light `#e27064` with a small down arrow, raised gold `#f0c450` with a
+    small up arrow). A hovered number gets no frame; its hover lists the base and each modifier's percent. No struck
+    base, no shield glyph.
+  - Movement (`move_rate`): lost move tiles dimmed at the range edge, gained ones gold-edged.
+  - Taunt (SV8): a 20 px badge over the taunted unit's sprite (dark slate, crimson rim, the taunt icon, a pointer
+    down), bobbing 1 px; hover names the unit it must target and the rounds left. No ring at the feet. A stealthed
+    unit greys as a target.
+  - Riposte (SV9): the counter chip in the hit preview reads "Riposte" with no number; hover gives the likely return
+    on the selected hero.
+- Loadout passives (SV10, SV12, SV13): two dedicated 18 px sockets centred under the plate's portrait (a loadout holds
+  at most 2; an empty one stays a dim socket), each with its own hover (the passive's name and what it does). The icon
+  is the passive's kit archetype icon (`kits/rpg/assets/passives/<archetype>.png`, `AI-39`). Passives never enter the
+  status column, which is for statuses that last a few rounds.
+- History (superseded, kept for the record): the 3-pip rounds on tabs (take 16), the bold digit (take 24 A), the hatched
+  lock block (take 25, take 33), take 25's pending tick slice beside the hit, the struck base with the arrow, the shield
+  glyph beside the incoming number, the taunter's hoop at the feet and the "always on" passives box (take 33).
 
 ## 7. Skill menu (on a strip block)
 
 - Opens on the block; the foe panel and foe card stay visible beside it. One row per skill: icon, name, AP pips, block
   span, HP and poise damage against the current target, status chips; hover lights the move's blocks on the strip.
+- Clear of the foe side (`FB-364`, BU12): the menu never covers the docked foe card, the foe panel or the selected
+  target. Code keeps it clear: a menu opened beside a board tile flips side, or opens above or below the tile;
+  `battle.json` may give the preferred side, and code does the avoiding (built with `PR7-54`).
 
 ## 8. Board
 
 - Ground hazards: tinted tiles with the hazard's icon and rounds left; push or pull: a dashed gold arrow to a dashed
   landing tile on the target.
 
-## 9. Open items (not yet mocked)
+## 9. Boss bar and full timeline view
 
-- Victory and defeat report (UX-19; provisional mock in `screens_ai21_mock.py`). The full timeline view (T) and
-  playback controls: mocked as take 23 (`battle_take23_timeline_mock.py`, `[PROVISIONAL]`), awaiting his review.
-- Boss fight variant (Tushar 2026-11-18 23:19, low priority, current layout stays for now): a boss bar across the top
-  of the board (full name and title, a long HP bar with phase marks, poise, statuses, the next phase or enrage cue);
-  the boss leaves the foe panel, mobs keep their plates. Mocked as take 22 (`battle_take22_boss_mock.py`), awaiting
-  his review.
+Signed off 2026-11-19: the boss UI from takes 26 to 32 (`BOSSUI1` BU9 to BU17, `ENRAGE2` EN5; mocks
+`art_src/style/battle_take26_boss_mock.py` to `battle_take32_boss_mock.py`), the full timeline view from takes 34 to
+36 (`STATUSVIS1` SV14, SV15). Shots in the project files `art-ui/battle_ux14/`.
+
+### 9.1 Boss bar
+
+- Who: a boss leaves the foe panel and takes the bar across the top of the board; mobs keep their plates. The bar sits
+  in the HUD frame (`hud`, double line), inset over the board top: 84 px tall, plus 58 px of intent rows while
+  planning (142 px of 720).
+- Row 1: the portrait with the crown; the phase markers left of the title, one diamond per phase (at most 4): every
+  phase still to fight lit gold, the current one brightest with a ring, a beaten one dimmed to iron; the title is the
+  phase's name or form, else the unit's name and title; the boss passive tags right-aligned (one per passive, its
+  display name; hover or focus shows its description in a HUD-frame tip). No phase-change cue and no enrage tag.
+- Row 2: the current phase's HP span as a full bar with the planned impact; the number beside it is the span left
+  ("160/450"). It refills when the next phase starts; a phase that brings a different boss unit swaps the bar to that
+  unit (portrait, name, HP, poise, passives).
+- Row 3: poise as one 80 px bar with a faint tick per pip and the count beside it ("6/10"), read like the plate AP bar
+  (take 30 A, user 18:56; 10 pips for a boss, BU9 and BU10); the per-pip tag; icon-only status tabs; then the boss's
+  own intent and its impact as on a foe card.
+- Phase change, inside the existing phase transition (about 0.9 s): the span drains to 0; a 0.1 s gold flash on the
+  bar while the marker dims and the new tags and statuses swap in; the portrait (new unit only) and title crossfade
+  (0.3 s); the bar refills left to right (0.4 s). The transition is the place for a phase cutscene or dialogue (BU17).
+- Enrage (`ENRAGE2`, BU13): the round counter in the top bar warns a round ahead ("Enrage next round", amber, under
+  the objective) and from the enrage round reads "Foes enraged +n %"; an enraged unit's plate takes a 10 % amber tint
+  and rim with an "up +10%" chip by its name, and its numbers show raised (section 6, numbers after modifiers).
+
+### 9.2 Boss intent rows (planning only)
+
+- When: while planning (a hero selected, plan not confirmed) and a hero targets the boss or the boss is pinned, the
+  bar grows by the two intent rows in place of the docked foe card. In resolution and the enemy turn they fold away
+  and the bar is 84 px (take 31; user 19:05: outside planning only the boss HP, poise and statuses matter).
+- Layout: "Block 1" to "Block 6" headers over two rows (BU11, take 30 P2, user 18:57). Row 1: the selected hero (face,
+  name) and their impact per block in a gold-ringed cell. Row 2: "Others", the rest of the party summed per block (no
+  duplication of the selected hero). Hover or press the rows: one line per member in the same block columns, each with
+  a Total column holding every chip, and a "Party" line under the members with the per-block and total impact.
+- A cell (BU16): the block's impact as the small foe intent shows it: HP damage, poise as one shield glyph and the pips
+  taken as a number, one 12 px status chip and "+N"; no skill names or icons (the strip above has them); "-" in the HP
+  cell where the row does not hit.
+- Fixed cells (take 32): every impact sits on hidden cells so nothing moves with the numbers: HP 36 px right aligned,
+  poise (the glyph at a fixed x, the number after it), one 17 px cell per status chip, then a "+N" cell of its own.
+  Block cells have one chip cell; the Totals (bar and hover) three, with wider gaps (`battle_take32_cells_guide_2x.png`).
+- Numbers: whole up to 9999 (1250 sits beside 233); K from 10K (12K, 120K), M from 1M.
+- Totals, at the right: each row's full impact over the blocks that run (HP, poise glyph and number, status chips).
+  No "Party -N" (the bar's planned loss says it) and no "N to phase 2" (the HP bar shows it).
+- Phase break (BU15, BU16): a hit that takes the span to 0 ends the round. The breaking block's header reads "Block N:
+  ends" and is ringed gold with the next phase's diamond; the first cancelled block's header reads "Ph. 2 next round";
+  the blocks after it grey out and their numbers are struck (they do not run, no AP spent); totals count only what
+  lands. No carry into the next phase. BREAK with the broken-poise glyph marks the block where the boss's poise breaks.
+- Clearance (BU12): the foe card, the boss intent rows and any intent box sit clear of the acting unit and its target.
+  The foe card docks at the board's top right unless it would cover the acting unit or its target at 720p, then top
+  left; the grown boss bar ends clear of the board's first unit row (Build checks it on the live board).
+- Open after the playtest (user 19:15): the numbers may be too many. Fallback if play shows redundancy: drop the
+  per-block cells and keep only the totals (the selected hero, Others and the party breakdown), leaning on the skill
+  strip above for timing.
+- History (superseded): take 22's continuous bar; option B's segment strip under the bar (read as a second HP bar);
+  take 27's "Hits" and "After" rows, face chips and the carry into the next phase (BU14, replaced by BU15); the 5 + 5
+  poise pips (take 27, replaced by take 30 A); P1's one party row; take 31's 5-character slots and K from 1000.
+
+### 9.3 Full timeline view (T)
+
+- Purpose (for the player, not a log): T opens the whole round at once, every unit's moves by block, to check the plan
+  before Confirm and to follow playback (take 23 layout, `battle_take23_timeline_mock.py`).
+- Rows: one per unit. A 150 px name column: face, name, a small arrow and the face of the unit's one target for the
+  round (a unit keeps one target, SV14). An enemy target in a crimson frame; an ally (Support) or self in a teal frame
+  with a teal arrow; an area skill's main target with a small amber ring on the face's corner; a ground tile (field
+  spells) as a 3 x 3 floor patch with the target tile lit (hover rings that tile on the board); Maneuver, Rest or no
+  target a dim dash. No per-blow ticks or target faces.
+- Tiles (take 34): a move tile is a dark tint of its kind colour (30 %) with a 3 px kind band on top and a kind rim,
+  the skill icon 24 px. Locked blocks are grey tiles with the status icon (section 6, SV15).
+- User 2026-11-19 19:48: signed off (far less busy; the tile glyph with the board highlight on hover, the area mark and
+  the teal ally frame all work). Playback controls stay as take 23.
+
+## 10. Open items (not yet mocked)
+
+- Victory and defeat report (UX-19; provisional mock in `screens_ai21_mock.py`).
 - Not expressed yet: collision stagger from push or pull on the card row, hazard damage in the HP preview and the
   block ruler, reactions (riposte, counters) as a "returns -n" note, flank, guard, cover and windup modifiers in the
   skill hover, channel rounds, unit meters, weapon wear.
 - Legibility at 1:1 (take 16): the 64 px status icons blur at 16 px; they need hand-made 16 px versions with simple
-  silhouettes (a kit icon batch). Skill icons at 32 px (half the source) read well.
+  silhouettes (`AI-24`, widened to a rework of the legacy status icons). Skill icons at 32 px (half the source) read
+  well.

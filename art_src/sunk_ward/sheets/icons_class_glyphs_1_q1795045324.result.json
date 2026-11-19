@@ -1,0 +1,17 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "time": "2026-11-19T19:57:10Z",
+  "prompt_sent": "Use the attached image only as the reference for style, palette and pixel size. A sprite sheet of six small square UI glyphs for a dark gothic tactical RPG, in a 3 x 2 grid with wide gaps, each centred in its cell on a flat solid #FF00FF magenta background, no text, no labels, no grid lines. Each is a single chunky silhouette in tarnished brass with a 1 px dark iron outline, readable at 10 x 10 pixels and at 16 x 16, on no background plate:\n1. Warrior: a short straight sword point up. 2. Ranger: a bow with an arrow nocked. 3. Rogue: a dagger point down. 4. Priest: a hanging censer. 5. Mage: a round-bottomed flask. 6. Brawler: a clenched fist with a cuff.\nSame weight and stroke width for all six, simple shapes, no fine detail.",
+  "references": [
+    "G:/My Drive/image_pipeline/refs/hub_bunk_gear_ref.png"
+  ],
+  "n": 1,
+  "files": [
+    {
+      "file": "output/icons_class_glyphs_1_q1795045324.png",
+      "width": 1024,
+      "height": 1024
+    }
+  ],
+  "notes": "Verified resolution (>=1024px) and aspect ratio within 3% tolerance."
+}
