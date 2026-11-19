@@ -123,7 +123,7 @@ pub fn buy_cap(o: &Dict) -> i64 {
 }
 
 /// "X of N" (an unlimited offer shows X only, blank at 0).
-fn of_text(x: i64, n: Option<i64>) -> String {
+pub(crate) fn of_text(x: i64, n: Option<i64>) -> String {
     match n {
         Some(n) => format!("{x} of {n}"),
         None if x > 0 => x.to_string(),
@@ -220,8 +220,8 @@ struct Row {
 pub struct ShopPane {
     pub trade: Trade,
     /// The item last under the pointer (Some("") = supplies).
-    detail: Option<String>,
-    errors: Vec<String>,
+    pub(crate) detail: Option<String>,
+    pub(crate) errors: Vec<String>,
 }
 
 impl ShopPane {

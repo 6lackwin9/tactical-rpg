@@ -783,15 +783,23 @@ impl Services {
         }
     }
 
+    /// PR7-39 (UISPLIT1-G Stage A): the trade's agent reading with the shop's view-model (`shop_view::view`) under
+    /// `view`, the same fields a layout file draws.
+    fn shop_state(&self, cx: &Cx, sq: &str) -> Value {
+        let mut st = self.shop.state();
+        st["view"] = crate::shop_view::view(cx, &self.shop, sq).to_json();
+        st
+    }
+
     /// The agent link's reading, in the region map's key order: `dialogue` (the open conversation's view), `turn_in`,
-    /// `shop` (the trade), `board` (its qid), `board_pane` and `portraits` (PORTRAITFX1 4.11: the speaker's portrait
+    /// `shop` (the trade, its view-model under `view`), `board` (its qid), `board_pane` and `portraits` (PORTRAITFX1 4.11: the speaker's portrait
     /// while the talk box shows; the shop or the board hides it).
     pub fn state(&self, cx: &Cx) -> Value {
         let gs = cx.gs();
         let (shop_qid, board_qid) = (self.shop_qid(), self.board_qid());
         json!({"dialogue": self.runner.as_ref().filter(|r| !r.closed).map(|r| Value::Object(r.view(&cx.data, gs))),
             "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
-            "shop": if shop_qid.is_empty() { Value::Null } else { self.shop.state() }, "board": Some(board_qid.clone()).filter(|b| !b.is_empty()),
+            "shop": if shop_qid.is_empty() { Value::Null } else { self.shop_state(cx, &shop_qid) }, "board": Some(board_qid.clone()).filter(|b| !b.is_empty()),
             "board_pane": if board_qid.is_empty() { Value::Null } else { self.board.state() },
             "recipe": Some(self.recipe_npc()).filter(|n| !n.is_empty()),
             "recipe_pane": if self.recipe_npc().is_empty() { Value::Null } else { self.recipe.state() },
