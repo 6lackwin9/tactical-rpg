@@ -181,6 +181,20 @@ pub fn game_track(cx: &Cx, ctx: &str) -> Option<String> {
     }
 }
 
+/// AMBIENCE1: the ambience file of a key (the same keys as the music, `ambience/<key>.ogg`).
+pub fn ambience_path(key: &str) -> String {
+    format!("ambience/{key}.ogg")
+}
+
+/// AMBIENCE1: the ambience loop of a region or hub context in the game in play: the first key of the context's music
+/// chain (`candidates`: `<region>_town`, ..., `town`, `field`) with a file under `audio/ambience`, so a place gets its
+/// own loop by adding `<scope>_<context>.ogg` or `<scope>.ogg`, no code. `Some("")` (silence) when none has a file.
+pub fn game_ambience(cx: &Cx, ctx: &str) -> Option<String> {
+    let (world, location) = cx.game.as_ref().map_or(("", ""), |g| (g.gs.world_id.as_str(), g.gs.location_id.as_str()));
+    let hit = candidates(&cx.data, ctx, world, location).into_iter().map(|k| ambience_path(&k)).find(|p| cx.audio.has(p));
+    Some(hit.unwrap_or_default())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -217,7 +231,7 @@ mod tests {
         let audio = Audio::offline_layered(roots.clone());
         let mut n = 0;
         for root in &roots {
-            for folder in ["music", "sfx"] {
+            for folder in ["music", "sfx", "ambience"] {
                 for e in std::fs::read_dir(root.join(folder)).into_iter().flatten().flatten() {
                     let name = e.file_name().to_string_lossy().to_string();
                     if name.ends_with(".ogg") || name.ends_with(".wav") {
@@ -231,6 +245,10 @@ mod tests {
         let d = data();
         for ctx in [MENU, FIELD, TRAVEL, TOWN, SHOP, DANGER, COMBAT, BOSS] {
             assert!(candidates(&d, ctx, "ashlands", "").iter().any(|k| audio.has(&path(k))), "{ctx} has no track");
+        }
+        // AMBIENCE1: every region and hub context has an ambience loop (the kit's placeholders until the real ones)
+        for ctx in [FIELD, TRAVEL, TOWN, SHOP, DANGER] {
+            assert!(candidates(&d, ctx, "ashlands", "").iter().any(|k| audio.has(&ambience_path(k))), "{ctx} has no ambience");
         }
     }
 

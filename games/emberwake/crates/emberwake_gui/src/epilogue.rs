@@ -282,6 +282,11 @@ impl Screen<GameCx> for EpilogueScreen {
                "outcomes": self.epilogue.outcomes, "fates": self.epilogue.fates.iter().map(|f| json!({"member": f.member, "name": f.name, "departed": f.departed, "tag": fate_tag(f), "text": f.text, "keepsake": f.keepsake})).collect::<Vec<_>>()})
     }
 
+    /// AMBIENCE1: no place's loop under this screen.
+    fn ambience(&self, _cx: &Cx) -> Option<String> {
+        Some(String::new())
+    }
+
     fn music(&self, _cx: &Cx) -> Option<String> {
         Some(String::new())
     }

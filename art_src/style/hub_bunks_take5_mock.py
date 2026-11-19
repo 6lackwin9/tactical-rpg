@@ -25,6 +25,8 @@ import hub_bunks_take4_mock as H4  # noqa: E402
 WALL_Y0, WALL_Y1 = H4.WALL_Y0, H4.WALL_Y1
 GOLD = (214, 170, 72)
 IRON, IRON_D = (96, 100, 108), (52, 54, 60)
+LOCKERS = False
+CRYPT = {"Hollis"}            # the mock's member down in the crypts (closed footlocker)
 RECRUIT_GEAR = {"warrior": "polearm", "rogue": "knife", "priest": "censer", "ranger": "crossbow", "brawler": "gauntlet",
                 "mage": "sprayer"}
 
@@ -115,8 +117,33 @@ def bunk(img, cx, name, cls, state, founder, mark):
         H4.sleeper(img, cx, top, name, bed)
     gear = H4.gear_img(name) if founder else recruit_gear(cls)
     pegboard(img, cx, gear)
+    if LOCKERS:
+        footlocker(img, cx, top + bed.height, "crypt" if name in CRYPT else state)
     style = ("gold" if founder else "iron") if mark == "L" else "brass"
     plate(ImageDraw.Draw(img), cx, name, cls, style)
+
+
+def footlocker(img, cx, bed_bottom, state):
+    """AI-32: the bedside footlocker that opens the loadout. Open (lid up, kit inside) for a member at the hub, closed
+    for one in the crypts, none on an empty bunk."""
+    if state == "empty":
+        return
+    d = ImageDraw.Draw(img)
+    x0, y0 = cx - 15, bed_bottom + 3
+    if state != "crypt":
+        d.rectangle((x0 + 1, y0 - 9, x0 + 29, y0), fill=(110, 76, 44), outline=H1.TIMBER_D)      # the raised lid
+        d.line((x0 + 5, y0 - 9, x0 + 5, y0), fill=(70, 72, 78)); d.line((x0 + 25, y0 - 9, x0 + 25, y0), fill=(70, 72, 78))
+    d.rectangle((x0, y0, x0 + 30, y0 + 13), fill=(98, 68, 40), outline=H1.TIMBER_D)
+    if state == "crypt":
+        d.rectangle((x0, y0, x0 + 30, y0 + 4), fill=(122, 86, 52), outline=H1.TIMBER_D)
+        d.rectangle((x0 + 13, y0 + 5, x0 + 17, y0 + 9), fill=(176, 132, 64))
+    else:
+        d.rectangle((x0 + 3, y0 + 1, x0 + 27, y0 + 4), fill=(40, 30, 22))                     # inside, kit showing
+        d.rectangle((x0 + 4, y0 + 1, x0 + 13, y0 + 4), fill=(170, 160, 140))                  # folded cloth
+        d.ellipse((x0 + 16, y0 - 1, x0 + 23, y0 + 5), fill=(120, 84, 50))                     # a pouch
+        d.rectangle((x0 + 24, y0, x0 + 26, y0 + 4), fill=(150, 154, 160))                     # a flask
+    for bx in (x0 + 5, x0 + 24):
+        d.line((bx, y0 + 4, bx, y0 + 13), fill=(70, 72, 78), width=2)
 
 
 def act1_props(img):
@@ -162,6 +189,8 @@ def room(shot, mark, act):
     else:
         H4.south_bed(img, 354, 592, H1.ROSTER[6], False)
         H4.south_bed(img, 928 - 96 - 2, 592, H1.ROSTER[7], True)
+        if LOCKERS:
+            footlocker(img, 354 + 96 + 18, 620, H1.ROSTER[6][2])     # at the recruit bed's foot; the empty bunk has none
     return img.crop(H4.CROP).convert("RGB")
 
 
@@ -204,6 +233,20 @@ def main():
         out / "hub_bunks_take5_room.png")
     for m in "PLQ":
         room(shot, m, 2).save(out / f"hub_bunks_take5_{m}_720p.png")
+    global LOCKERS
+    LOCKERS = True
+    b1, b2 = room(shot, "P", 1), room(shot, "P", 2)
+    lk = Image.new("RGB", (rw * 2 + 12, rh + 22), B.VOID)
+    dl = ImageDraw.Draw(lk)
+    dl.text((6, 3), "AI-32 footlockers, Act 1: open at the hub, closed for Hollis (in the crypts)", font=B.SMALL, fill=B.GOLD)
+    dl.text((rw + 18, 3), "Act 2: the recruit's bed gets one too; none on the empty bunk", font=B.SMALL, fill=B.GOLD)
+    lk.paste(b1, (0, 20)); lk.paste(b2, (rw + 12, 20))
+    z = b1.crop((40, 20, 660, 150)).resize((1240, 260), Image.NEAREST)
+    full = Image.new("RGB", (lk.width, lk.height + z.height + 24), B.VOID)
+    full.paste(lk, (0, 0)); full.paste(z, (0, lk.height + 20))
+    ImageDraw.Draw(full).text((6, lk.height + 4), "Act 1, 2x", font=B.SMALL, fill=B.GOLD)
+    B.label(full, "Hub bunks take 5: bedside footlockers open the loadout").save(out / "hub_bunks_take5_footlockers.png")
+    LOCKERS = False
     act1 = a1.crop((40, 240, 660, 324)).resize((1240, 168), Image.NEAREST)
     act1.save(out / "hub_bunks_take5_act1_props_2x.png")
 

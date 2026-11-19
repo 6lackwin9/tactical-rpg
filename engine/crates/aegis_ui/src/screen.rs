@@ -262,7 +262,7 @@ impl Settings {
     /// and `reduce_motion` (`REDUCE_MOTION`: no drifting or shaking effects; shared with FX1); ASSETORG4:
     /// `portrait_overlays` (the player's switch of a portrait overlay layer, the kit's `portrait_overlays::SETTING`; on).
     pub fn engine_defaults() -> Value {
-        json!({"mute": false, "master": 100, "music": 80, "effects": 80, "interface": 80, "fullscreen": false, "borderless": false, "window_size": "1280x720",
+        json!({"mute": false, "master": 100, "music": 80, "effects": 80, "interface": 80, "ambience": 80, "fullscreen": false, "borderless": false, "window_size": "1280x720",
             "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0, "record_playtests": cfg!(debug_assertions), "text_speed": "normal", "reduce_motion": false, "portrait_overlays": true,
             crate::audio::MUTE_IN_BACKGROUND: true})
     }
@@ -526,6 +526,12 @@ pub trait Screen<G> {
     /// The music this screen wants (a path under the game's audio folder); the shell plays the topmost screen's
     /// wish, None lets the screen below choose.
     fn music(&self, _cx: &Cx<G>) -> Option<String> {
+        None
+    }
+    /// The ambience loop this screen wants (AMBIENCE1; a path under the game's audio folder, `ambience/<key>.ogg`),
+    /// chosen as the music is: the topmost screen's wish plays, None lets the screen below choose, and `Some("")` is
+    /// silence (a battle over a region, say).
+    fn ambience(&self, _cx: &Cx<G>) -> Option<String> {
         None
     }
     /// Drag and drop (UIKIT2): whether payload `from` (`Ui::draggable`) may be dropped on the target `to`

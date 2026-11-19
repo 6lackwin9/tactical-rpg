@@ -1730,6 +1730,12 @@ impl Screen<GameCx> for RegionMap {
         cx.game.as_ref().and_then(|g| music::game_track(cx, music::region_context(&cx.data, &g.gs, shop)))
     }
 
+    /// AMBIENCE1: the place's ambient loop, by the music's context (a shop keeps the town's, `shop` falls back to it).
+    fn ambience(&self, cx: &Cx) -> Option<String> {
+        let shop = !self.svc.shop_qid().is_empty();
+        cx.game.as_ref().and_then(|g| music::game_ambience(cx, music::region_context(&cx.data, &g.gs, shop)))
+    }
+
     widget_plumbing!();
 }
 
@@ -3269,6 +3275,8 @@ mod tests {
             ["backgrounds", "menu" | "title" | "location" | "battle" | "story", f] => png(f),
             ["audio", "sfx", f] => f.ends_with(".wav"),
             ["audio", "music", f] => f.ends_with(".ogg"),
+            // AMBIENCE1: a place's ambient loop
+            ["audio", "ambience", f] => f.ends_with(".ogg"),
             // TRANSITIONS1 (AI-18): the battle beats' wipe and banners, and their one-shot stings
             ["ui", "transitions", f] => png(f),
             ["audio", "stings", f] => f.ends_with(".ogg"),
