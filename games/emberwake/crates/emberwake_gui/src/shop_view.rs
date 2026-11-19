@@ -92,6 +92,9 @@ mod tests {
             assert_eq!(row(&v, OFFERS, &id).detail2, of_text(x, n));
             assert_eq!(row(&v, TRADE, &format!("buy.{id}")).detail, format!("{:+}", -json::i(o, "price", 0) * x));
             assert!(v.act(CONFIRM).unwrap().enabled && v.act(CLEAR).unwrap().enabled);
+            // ENGINE-20 (FB-361): a buy makes the total negative: toned foe, the purse untoned while it is affordable
+            assert_eq!((v.tone_of("totals", 0), v.tone_of("totals", 1), v.tone_of("total", 0)), (Some("foe"), None, Some("foe")), "{q}");
+            assert_eq!(view(&cx, &ShopPane::default(), &q).tone_of("totals", 0), None, "an empty trade: no tone");
             while pane.trade.bought(&kind, &id) < cap {
                 go(&mut cx, &mut pane, &q, "buy10", &id);
             }
@@ -109,6 +112,12 @@ mod tests {
                 assert!(pane.trade.is_empty());
             }
             let gold = cx.gs().party.gold;
+            // a trade the purse cannot pay: the purse line in foe too
+            cx.gs_mut().party.gold = 0;
+            go(&mut cx, &mut pane, &q, "buy", &id);
+            assert_eq!(view(&cx, &pane, &q).tone_of("totals", 1), Some("foe"), "{q}: cannot be afforded");
+            go(&mut cx, &mut pane, &q, CLEAR, "");
+            cx.gs_mut().party.gold = gold;
             go(&mut cx, &mut pane, &q, "buy", &id);
             assert!(!go(&mut cx, &mut pane, &q, CONFIRM, ""));
             assert!(pane.trade.is_empty() && pane.errors().is_empty(), "{q}: the trade settles");

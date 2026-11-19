@@ -35,6 +35,11 @@ each field is an object with one key, its kind:
 | slots | `{"slots": [{"id", "title", "lines", "stamp", "picture"}]}` | `slot_card` |
 | icons | `{"icons": ["path.png"]}` | `icon_grid` |
 
+A text, number or stats field may carry a second key, `"tone"` (ENGINE-20): a theme colour role for every line (a
+text's `\n` lines, a stat block's values) or a list with one per line (`""` keeps the default), for example
+`{"text": "Total: -5\nPurse: 0 -> -5", "tone": ["foe", ""]}`. Screen code sets it with `View::tone`; a layout still
+names no colour. An unknown role, or a tone on another kind of field, is refused.
+
 A click on a drawn widget hands the screen an `Act { action, arg }`: a button's action id, or a list's or slot's
 `select` action with the item id as `arg`, a tab's or icon's with its index. Widget ids are `<screen>.<action>` for
 buttons and `<screen>.<region>.<i>` for the items of a region, so agents and scenarios find them by name.

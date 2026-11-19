@@ -99,10 +99,12 @@
       "text": ""
     },
     "totals": {
-      "text": "Total: -111 Scrap\nScrap: 240 -> 129"
+      "text": "Total: -111 Scrap\nScrap: 240 -> 129",
+      "tone": ["foe", ""]
     },
     "total": {
-      "text": "Total: -111 Scrap"
+      "text": "Total: -111 Scrap",
+      "tone": "foe"
     },
     "purse": {
       "text": "Scrap: 240 -> 129"

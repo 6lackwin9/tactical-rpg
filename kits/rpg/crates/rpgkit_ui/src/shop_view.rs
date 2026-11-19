@@ -127,6 +127,10 @@ pub fn view_with<G: ShopGame>(cx: &G, pane: &ShopPane, sq: &str, pick: &mut dyn 
         .field(OTHERS, Field::Rows(others))
         .field("detail", Field::Text(pane.detail.clone().unwrap_or_default()))
         .field("errors", Field::Text(errors));
+    // ENGINE-20 (FB-361): the totals toned by sign, as the hand drawing was: the total foe below 0 and good above it,
+    // the purse foe when the trade cannot be afforded
+    let (net_tone, purse_tone) = (if net < 0 { "foe" } else if net > 0 { "good" } else { "" }, if after < 0 { "foe" } else { "" });
+    v = v.tone("totals", &[net_tone, purse_tone]).tone("total", &[net_tone]).tone("purse", &[purse_tone]);
     for (id, n) in BUY {
         v = v.action(id, &if n == 1 { "Buy".to_string() } else { format!("+{n}") }, true);
     }
