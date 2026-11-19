@@ -246,6 +246,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     let hero_label = format!("Hero: {}", TACTIC_LABELS[sel.map_or(g.hero_tactic, |u| if timeline { g.tactic_of(u) } else { g.hero_tactic })]);
     // ENCOUNTER2-C4: a locked round still to play: Skip in Confirm's place (the rest of the round at once)
     let skip = g.can_skip();
+    // PR7-41 (PT-32): while a talk is up (the intro's too) only its box takes clicks, so the strip reads disabled
+    let open = !g.talk_due();
     let (label, action, enabled) = if planning {
         // ENCOUNTER2 H1: planning cannot be confirmed before the holder is picked
         ("Confirm round", Action::Confirm, !s.needs_stay_pick())
@@ -435,19 +437,19 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
         x = end + 2;
     } else {
-        ui.dropdown("strip.party", Rect::new(x, 6, party_w, 16), &party_label, Action::PartyMenu, planning, vec![("Party tactic".into(), th().gold), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), th().text)]);
+        ui.dropdown("strip.party", Rect::new(x, 6, party_w, 16), &party_label, Action::PartyMenu, planning && open, vec![("Party tactic".into(), th().gold), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), th().text)]);
         x += party_w + 2;
-        ui.dropdown("strip.hero", Rect::new(x, 6, hero_w, 16), &hero_label, Action::HeroMenu, planning && sel.is_some(), vec![("Hero tactic".into(), th().gold), ("AI-drafts the selected hero only.".into(), th().text)]);
+        ui.dropdown("strip.hero", Rect::new(x, 6, hero_w, 16), &hero_label, Action::HeroMenu, planning && sel.is_some() && open, vec![("Hero tactic".into(), th().gold), ("AI-drafts the selected hero only.".into(), th().text)]);
         x += hero_w + 2;
     }
-    ui.button_full("strip.auto", Rect::new(x, 6, auto_w, 16), "Auto", Action::Autoplay, !s.combat_over, g.auto, BODY, vec![("Autoplay".into(), th().gold), ("Drafts with the party tactic, confirms and plays rounds until the battle ends. Click again to stop.".into(), th().text)]);
+    ui.button_full("strip.auto", Rect::new(x, 6, auto_w, 16), "Auto", Action::Autoplay, !s.combat_over && open, g.auto, BODY, vec![("Autoplay".into(), th().gold), ("Drafts with the party tactic, confirms and plays rounds until the battle ends. Click again to stop.".into(), th().text)]);
     x += auto_w + 2;
-    ui.button_full("strip.clear", Rect::new(x, 6, clear_w, 16), "Clear", Action::Clear, planning && sel.is_some(), false, BODY, vec![(if timeline { "Clears the selected hero's picks (the planner fills the round again)." } else { "Clears the selected hero's steps." }.into(), th().text)]);
+    ui.button_full("strip.clear", Rect::new(x, 6, clear_w, 16), "Clear", Action::Clear, planning && sel.is_some() && open, false, BODY, vec![(if timeline { "Clears the selected hero's picks (the planner fills the round again); with no picks, empties its auto-filled round (the hero rests)." } else { "Clears the selected hero's steps." }.into(), th().text)]);
     x += clear_w + 2;
     if skip {
-        ui.button_full("battle.skip", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled, true, BODY, vec![("Skip".into(), th().gold), ("Resolves the rest of this scripted round at once.".into(), th().text)]);
+        ui.button_full("battle.skip", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled && open, true, BODY, vec![("Skip".into(), th().gold), ("Resolves the rest of this scripted round at once.".into(), th().text)]);
     } else {
-        ui.button_full("strip.confirm", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled, planning, BODY, vec![(label.into(), th().gold)]);
+        ui.button_full("strip.confirm", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled && open, planning, BODY, vec![(label.into(), th().gold)]);
     }
 
     // -- Left: party cards and the selected hero.
@@ -528,7 +530,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             ui.p.panel(r.inset(1), rgba(0, 0, 0, 0), HELD, RADIUS);
         }
         let tip = unit_tip(s, a, sel, &tells, &rounds, &classes);
-        ui.push(format!("party.{a}"), "card", format!("{} HP {}/{} AP {}/{}", u.name, u.hp, u.max_hp, u.ap, u.max_ap), r, true, is_sel, Some(Action::Select(a)), tip);
+        ui.push(format!("party.{a}"), "card", format!("{} HP {}/{} {}", u.name, u.hp, u.max_hp, crate::intent_text::ap_text(u.ap, u.max_ap, "/")), r, true, is_sel, Some(Action::Select(a)), tip);
         y += r.h + 3;
     }
     g.cards_shown = cards_shown;
@@ -919,12 +921,17 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
 
     // -- Bottom bar: playback, round and status, the last log line.
     crate::hud::hud_panel(&mut ui, Rect::new(2, 322, W - 4, 36), th().game("battle_panel", PANEL), th().edge, RADIUS);
-    ui.button_full("bar.restart", Rect::new(6, 325, 40, 14), "Restart", Action::Restart, !g.world_mode(), false, BODY, vec![("Restart the battle (R)".into(), th().text)]);
-    ui.button_full("bar.step", Rect::new(48, 325, 34, 14), "Step", Action::Step, !planning || s.plan_confirmed, false, BODY, vec![("Resolve one action (Space)".into(), th().text)]);
+    // PR7-41 (PT-32): Restart and Step show only when they work (a world battle never restarts; Step once a round runs)
+    if !g.world_mode() {
+        ui.button_full("bar.restart", Rect::new(6, 325, 40, 14), "Restart", Action::Restart, true, false, BODY, vec![("Restart the battle (R)".into(), th().text)]);
+    }
+    if !planning {
+        ui.button_full("bar.step", Rect::new(48, 325, 34, 14), "Step", Action::Step, true, false, BODY, vec![("Resolve one action (Space)".into(), th().text)]);
+    }
     // Test Arena only: leave at any time (Esc does the same); a world battle is left only through its end, and its Menu
     // (PR7-26; Esc with nothing open does the same) opens the in-game Settings popup in the same place.
     if g.world_mode() {
-        ui.button_full("bar.menu", Rect::new(84, 325, 30, 14), "Menu", Action::Settings, true, false, BODY, vec![("Menu (Esc)".into(), th().gold), ("Settings, and Return to title once the fight is over.".into(), th().text)]);
+        ui.button_full("bar.menu", Rect::new(84, 325, 30, 14), "Menu", Action::Settings, true, false, BODY, vec![("Menu (Esc)".into(), th().gold), ("Settings, Retreat where the fight allows it, and Return to title once the fight is over.".into(), th().text)]);
     } else {
         ui.button_full("bar.exit", Rect::new(84, 325, 30, 14), "Exit", Action::Leave, true, false, BODY, vec![("Back to the screen you came from (Esc)".into(), th().text)]);
     }
@@ -945,6 +952,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         Some((prompt, summary)) => summary_and_prompt(summary, prompt, room, |t| ui.p.text_w(t, BODY)),
         None => g.message.clone(),
     };
+    // PR7-41 (PT-34): the phase word leads the bar already ("Round 2/8  Round over"), so the message does not repeat it
+    let shown_message = without_phase(&shown_message, phase);
     ui.p.text_fit((200 + ox) as f32, 326.0, &shown_message, BODY, room, th().text);
     ui.push("bar.status", "label", format!("Round {} {phase}: {shown_message}", s.current_round), Rect::new(88 + ox, 325, 540 - ox - chip_w, 12), true, false, None, Vec::new());
     if let Some(chip) = chip {
@@ -1007,7 +1016,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let mut wrapped: Vec<(String, Rgba, f32, bool)> = Vec::new();
         let wrap_line = |p: &mut Painter, out: &mut Vec<(String, Rgba, f32, bool)>, l: &str, indent: f32| {
             let col = if l.starts_with("[Phase]") { th().gold } else if l.starts_with("[Kill]") { th().foe } else if l.starts_with("[Attack]") { th().text } else if l.starts_with("[Support]") { th().good } else if l.contains("Failed") || l.contains("Out of Range") { th().foe } else { th().dim };
-            for (k, part) in p.wrap(l, SMALL, (r.w - 22) as f32 - indent).into_iter().enumerate() {
+            for (k, part) in p.wrap(&crate::intent_text::plain(l), SMALL, (r.w - 22) as f32 - indent).into_iter().enumerate() {
                 out.push((if k == 0 { part } else { format!("   {part}") }, col, indent, false));
             }
         };
@@ -1199,6 +1208,14 @@ pub(super) fn summary_and_prompt(summary: &str, prompt: &str, room: f32, mut wid
             Some(k) => kept = &kept[..k],
             None => return prompt.to_string(),
         }
+    }
+}
+
+/// PR7-41 (PT-34): `message` without a lead that repeats the bar's `phase` word ("Round over: 1 break" -> "1 break").
+pub(super) fn without_phase(message: &str, phase: &str) -> String {
+    match message.strip_prefix(phase) {
+        Some(rest) if rest.starts_with(':') || rest.starts_with('.') => rest[1..].trim_start().to_string(),
+        _ => message.to_string(),
     }
 }
 

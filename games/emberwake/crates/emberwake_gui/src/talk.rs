@@ -519,16 +519,19 @@ impl Services {
         if allowed > 0 {
             ui.p.text(fr.x as f32 + 10.0, y as f32, &format!("Choose {allowed} of:"), BODY, th().gold);
             y += 13;
-            for lq in offers {
+            for lq in offers.iter().cloned() {
                 let loot = d.resolve(&gs.world_id, "loot", &lq);
                 let on = self.picks.contains(&lq);
                 ui.checkbox(&format!("turn_in.pick.{lq}"), fr.x + 14, y, &s_or(loot, "name", &lq), on, A::from(SvcAct::TogglePick(lq.clone())), true);
                 y += 14;
             }
         }
-        let names: Vec<String> = gs.party.members.iter().map(|m| crate::hub::member_name(cx, m)).collect();
-        ui.p.text(fr.x as f32 + 10.0, y as f32 + 5.0, "Passive / skill rewards go to", BODY, th().dim);
-        ui.select("turn_in.recipient", Rect::new(fr.x + 150, y + 2, 120, 15), &names, self.recipient, |i| A::from(SvcAct::PickRecipient(i)), gs.party.members.len() > 1, Vec::new());
+        // PR7-41 (PT-35): the recipient only when a passive or skill reward (or a pickable one) needs one
+        if quest::needs_recipient(d, gs, json::dget(&q, "rewards"), &offers) {
+            let names: Vec<String> = gs.party.members.iter().map(|m| crate::hub::member_name(cx, m)).collect();
+            ui.p.text(fr.x as f32 + 10.0, y as f32 + 5.0, "Passive / skill rewards go to", BODY, th().dim);
+            ui.select("turn_in.recipient", Rect::new(fr.x + 150, y + 2, 120, 15), &names, self.recipient, |i| A::from(SvcAct::PickRecipient(i)), gs.party.members.len() > 1, Vec::new());
+        }
         ui.button("turn_in.cancel", Rect::new(fr.x + fr.w - 120, fr.y + fr.h - 24, 52, 16), "Cancel", A::from(SvcAct::CancelTurnIn), true);
         ui.button("turn_in.confirm", Rect::new(fr.x + fr.w - 62, fr.y + fr.h - 24, 52, 16), "Confirm", A::from(SvcAct::ConfirmTurnIn), self.picks.len() as i64 <= allowed);
     }
@@ -609,7 +612,7 @@ impl Services {
             return false;
         }
         for n in json::sget(&res, "notes") {
-            cx.log(n);
+            log_note(cx, n);
         }
         if let Some(g) = res.get("granted").and_then(Value::as_object) {
             let mut got = Vec::new();
@@ -793,6 +796,16 @@ impl Services {
             "facility": Some(self.facility_npc()).filter(|n| !n.is_empty()),
             "facility_pane": if self.facility_npc().is_empty() { Value::Null } else { self.facility.state() },
             "portraits": if self.talking() && shop_qid.is_empty() && board_qid.is_empty() && self.recipe_npc().is_empty() && self.facility_npc().is_empty() { self.faces.state() } else { json!([]) }})
+    }
+}
+
+/// Logs a result note; PR7-41 (PT-36): a recruit's note ("<name> joins the party.") is followed by what the member
+/// arrives with (`dialogue::join_flags`: the bench, unspent points).
+pub(crate) fn log_note(cx: &mut Cx, n: String) {
+    let flags = emberwake_world::dialogue::join_note_member(&cx.data, cx.gs(), &n).map(|id| emberwake_world::dialogue::join_flags(&cx.data, cx.gs(), &id)).unwrap_or_default();
+    cx.log(n);
+    for f in flags {
+        cx.log(f);
     }
 }
 

@@ -684,18 +684,22 @@ impl Screen<GameCx> for Slots {
             let head = save::peek(&cx.data, &cx.save_dir, slot);
             let exists = json::b(&head, "exists", false);
             let ok = json::b(&head, "ok", false);
-            let label = if slot == 0 { "Autosave".to_string() } else { format!("Slot {slot}") };
+            let mut label = if slot == 0 { "Autosave".to_string() } else { format!("Slot {slot}") };
+            // PR7-41 (PT-35): the place and time on the slot's line, the whole party on its own line (no cut names)
             let status = if ok {
                 let world = s(&head, "world_id");
                 let party: Vec<String> = json::aget(&head, "party")
                     .iter()
                     .map(|m| {
                         let m = json::dict(m);
-                        format!("{} Lv {}", s_or(cx.data.entry("units", &s(m, "base_unit")), "name", &s(m, "base_unit")), json::i(m, "level", 0))
+                        // the member's character name in the saved world, else its base unit's
+                        let unit = s_or(cx.data.entry("units", &s(m, "base_unit")), "name", &s(m, "base_unit"));
+                        format!("{} Lv {}", s_or(cx.data.resolve(&world, "characters", &s(m, "id")), "name", &unit), json::i(m, "level", 0))
                     })
                     .collect();
                 let at = json::i(&head, "saved_at", 0);
-                format!("{}, {} · {} · {}", cx.world_name(&world), cx.location_name(&world, &s(&head, "location_id")), party.join(", "), if at > 0 { datetime(at) } else { String::new() })
+                label = format!("{label} · {}, {}{}", cx.world_name(&world), cx.location_name(&world, &s(&head, "location_id")), if at > 0 { format!(" · {}", datetime(at)) } else { String::new() });
+                party.join(", ")
             } else if exists {
                 format!("Can't load ({})", s(&head, "error"))
             } else {
@@ -767,6 +771,8 @@ pub enum SetAct {
     Close,
     /// The popup's Return to title.
     Title,
+    /// PR7-41 (PT-32): the battle Menu's Retreat (asks first).
+    Retreat,
     /// The close guard's three answers.
     GuardStay,
     GuardDiscard,
@@ -847,8 +853,13 @@ pub struct SettingsScreen {
     pending: Value,
     confirm: Option<Confirm>,
     guard: Option<Leave>,
+    /// PR7-41 (PT-32): opened from a world battle whose fight allows a retreat: the footer offers Retreat.
+    retreat: bool,
     w: Vec<Widget<SetAct>>,
 }
+
+/// PR7-41 (PT-32): the answer tag of the battle Menu's Retreat question (Yes: the battle screen sends `retreat`).
+pub const RETREAT_ASK: &str = "battle.retreat";
 
 /// The rows a tab lists, top to bottom.
 #[derive(Clone, Copy)]
@@ -886,7 +897,15 @@ impl SettingsScreen {
     }
 
     fn open(cx: &Cx, popup: bool) -> Self {
-        Self { tab: 0, popup, web: ON_WEB, pending: staged_of(&cx.settings.v), confirm: None, guard: None, w: Vec::new() }
+        Self { tab: 0, popup, web: ON_WEB, pending: staged_of(&cx.settings.v), confirm: None, guard: None, retreat: false, w: Vec::new() }
+    }
+
+    /// PR7-41 (PT-32): the in-game popup as a world battle's Menu: Retreat in the footer when `can_retreat` (the
+    /// fight allows it now, `Session::can_retreat`).
+    pub fn in_battle(cx: &Cx, can_retreat: bool) -> Self {
+        let mut s = Self::open(cx, true);
+        s.retreat = can_retreat;
+        s
     }
 
     /// The web build's rows on any build (tests).
@@ -1114,6 +1133,10 @@ impl SettingsScreen {
             }
             SetAct::Close => self.leave(cx, Leave::Close),
             SetAct::Title => self.leave(cx, Leave::Title),
+            SetAct::Retreat => {
+                cx.nav.push(Nav::Pop);
+                cx.ask_tag_no("Retreat from this fight? The party falls back to where it came from. Foes already beaten still pay; the rest pay nothing, and the fight is not won.", RETREAT_ASK);
+            }
             SetAct::GuardStay => self.guard = None,
             SetAct::GuardDiscard => {
                 self.pending = staged_of(&cx.settings.v);
@@ -1522,6 +1545,9 @@ impl Screen<GameCx> for SettingsScreen {
         let mut foot = vec![("settings.defaults", "Restore defaults", SetAct::Defaults)];
         if popup {
             foot.insert(0, ("settings.title", "Return to title", SetAct::Title));
+        }
+        if popup && self.retreat {
+            foot.insert(0, ("settings.retreat", "Retreat", SetAct::Retreat));
         }
         for (id, label, a) in foot {
             let bw = ui.p.text_w(label, BODY).ceil() as i32 + 14;

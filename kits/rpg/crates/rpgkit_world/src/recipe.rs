@@ -50,6 +50,20 @@ pub fn offered<'a>(d: &'a Data, gs: &GameState, npc_qid: &str) -> Vec<&'a Recipe
     d.cat.recipes.values().filter(|rc| offers(d, gs, npc_qid, rc) && open(d, gs, rc)).collect()
 }
 
+/// PR7-41 (PT-30): what item `item` is for in the recipes: one "<recipe> (<character>)" per row whose cost takes it,
+/// in catalog order, each recipe once (offered now or not: the line names the use, not its requirements).
+pub fn uses_of(d: &Data, gs: &GameState, item: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for rc in d.cat.recipes.values().filter(|rc| rc.cost.items.contains_key(item)) {
+        let who = json::s(d.resolve(&gs.world_id, "characters", &dialogue::character_qid(d, gs, &rc.npc)), "name");
+        let line = if who.is_empty() { rc.name.clone() } else { format!("{} ({who})", rc.name) };
+        if !out.contains(&line) {
+            out.push(line);
+        }
+    }
+    out
+}
+
 /// Whether row `rc` names character `npc_qid`.
 fn offers(d: &Data, gs: &GameState, npc_qid: &str, rc: &RecipeDef) -> bool {
     !npc_qid.is_empty() && dialogue::character_qid(d, gs, &rc.npc) == npc_qid

@@ -252,7 +252,7 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
             if timeline && planning && unit.is_active() {
                 tip.extend(ap_lines(&rip::ap_forecast(pw, plan, u)).into_iter().map(|l| (l, ALLY)));
             } else {
-                tip.push((format!("AP {} of {}", unit.ap, unit.max_ap), ALLY));
+                tip.push((crate::intent_text::ap_text(unit.ap, unit.max_ap, " of "), ALLY));
             }
             if !unit.is_alive() {
                 tip.push(("Down".into(), FOE));

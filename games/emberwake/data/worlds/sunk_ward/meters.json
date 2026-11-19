@@ -43,7 +43,7 @@
 				{
 					"id": "a_suspicious",
 					"at": "suspicious",
-					"warn": "The Inquisition is Suspicious: the ward gates are watched. Quiet jobs and bribes at Talia lower Alert."
+					"warn": "The Inquisition is Suspicious: the ward gates are watched. Loud fights raise Alert most; a toll paid to Bailiff Corvo at the Third Ward gate lowers it."
 				},
 				{
 					"id": "a_lockdown",

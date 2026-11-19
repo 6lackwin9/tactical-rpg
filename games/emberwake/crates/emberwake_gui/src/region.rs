@@ -361,6 +361,15 @@ pub fn fight_now(cx: &mut Cx, fight: &Dict, runner: &str) {
     begin_fight(cx, fight, runner);
 }
 
+/// PR7-41 (PT-34): a hub bunk's widget label: its member's name (never the id), or "Empty bunk".
+fn bunk_label(d: &emberwake_world::Data, gs: &emberwake_world::GameState, member: &str) -> String {
+    match gs.party.member(member) {
+        Some(m) => emberwake_world::progression::display_name(d, m),
+        None if member.is_empty() => "Empty bunk".into(),
+        None => member.to_string(),
+    }
+}
+
 /// Event lines for the log; `autosave` writes the autosave.
 pub fn log_events(cx: &mut Cx, events: &[Value]) {
     for e in events {
@@ -369,14 +378,19 @@ pub fn log_events(cx: &mut Cx, events: &[Value]) {
             "entered" => {
                 let loc = s(e, "location");
                 let name = cx.location_name(&cx.gs().world_id.clone(), &loc);
-                cx.log(format!("Entered {name}."));
+                // PR7-41 (PT-34): one arrival line: a travel's arrival enters the place, and the world map's Enter
+                // enters it again; the second "Entered" line is dropped while it is the last one logged
+                let line = format!("Entered {name}.");
+                if cx.log.iter().rev().find(|l| l.starts_with("Entered ")) != Some(&line) {
+                    cx.log(line);
+                }
                 for q in json::sget(e, "advanced") {
                     let qn = s_or(&quest::resolved(&cx.data, cx.gs(), &q), "name", &q);
                     cx.log(format!("Quest updated: {qn}."));
                 }
             }
             "rested" => cx.log(format!("The party rests (+{} HP).", json::i(e, "restored", 0))),
-            "locked" => cx.log(format!("Locked: {}", s(e, "text"))),
+            "locked" => cx.log(explore::locked_words(&s(e, "text"))),
             // CAMPAIGN1 P1: the purse's names (the Ashlands lines are today's); R2: a rest's days
             "camped" => {
                 let days = json::i(e, "days", 0);
@@ -1120,7 +1134,7 @@ impl Screen<GameCx> for RegionMap {
                 let hit = p.rect.intersect(map_area);
                 let (name, word) = if ui.hover(hit) { crate::bunks::bunk_tip(&d, &gs, b) } else { (String::new(), String::new()) };
                 let act = (!b.member.is_empty()).then(|| RAct::Member(b.member.clone()));
-                ui.push(format!("{}{}", crate::bunks::BUNK_PREFIX, b.prop), "bunk", b.member.clone(), hit, true, false, act, if name.is_empty() { Vec::new() } else { tip(&name, &word) });
+                ui.push(format!("{}{}", crate::bunks::BUNK_PREFIX, b.prop), "bunk", bunk_label(&d, &gs, &b.member), hit, true, false, act, if name.is_empty() { Vec::new() } else { tip(&name, &word) });
             }
             let steps = gs.explore_int("loc_steps");
             // PLAYUI1-R: the people in the conversation turn to the party; the clock the sprites play at

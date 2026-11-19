@@ -8,6 +8,22 @@ use emberwake_battle::refusal::Reason;
 use emberwake_battle::round_intent::{ManeuverKind, RoundTarget};
 use emberwake_battle::world::World;
 
+/// PR7-41 (PT-27): a unit's AP as the screen shows it: never below 0; AP debt (the kit's rule: a chase or follow may
+/// spend past 0, owed at the next round start) is named apart: "AP 0/10 (1 owed)".
+pub fn ap_text(ap: i32, max: i32, sep: &str) -> String {
+    if ap < 0 {
+        format!("AP 0{sep}{max} ({} owed)", -ap)
+    } else {
+        format!("AP {ap}{sep}{max}")
+    }
+}
+
+/// PR7-41 (PT-34): a kit log or event line in player words (the kit's wording stays in its goldens): "new tactics"
+/// reads "fights differently", a log cell's "blocked by no route" reads "no way through".
+pub fn plain(line: &str) -> String {
+    line.replace("new tactics", "fights differently").replace("blocked by no route", "no way through")
+}
+
 /// "B1" or "B1-2" for a (start, end) block pair.
 pub fn block_text(blocks: (i32, i32)) -> String {
     if blocks.0 == blocks.1 {

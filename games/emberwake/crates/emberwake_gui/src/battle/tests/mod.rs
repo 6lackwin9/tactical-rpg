@@ -33,6 +33,7 @@ mod dulled_tests;
 mod transitions_tests;
 mod settings_popup_tests;
 mod ally_pick_tests;
+mod menu_retreat_tests;
 
 use crate::battle::flow::{boss_fight, sound_of};
 use crate::battle::{Action, BattleScreen};

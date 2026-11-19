@@ -926,10 +926,11 @@ impl Character {
             let mark = "Wounded";
             let x = end + 12.0;
             let after = ui.p.text(x, 104.0, mark, BODY + 1.0, th().foe);
-            ui.p.text(after + 5.0, 104.0, &format!("HP {hp} / {max}"), BODY + 1.0, th().dim);
-            let w = ui.p.text_w(&format!("{mark} HP {hp} / {max}"), BODY + 1.0) + 5.0;
+            // PR7-41 (PT-34): the HP it takes the field with, named so beside the sheet's (rested) Max HP
+            ui.p.text(after + 5.0, 104.0, &format!("field HP {hp} / {max}"), BODY + 1.0, th().dim);
+            let w = ui.p.text_w(&format!("{mark} field HP {hp} / {max}"), BODY + 1.0) + 5.0;
             let lh = (ui.p.line_h(BODY + 1.0) + 2.0).ceil() as i32;
-            ui.push("stats.wounded", "row", format!("{mark} HP {hp} / {max}"), Rect::new(x as i32 - 2, 102, w as i32 + 4, lh), true, false, None, tip(mark, &crate::hub::wounded_tip(cx, m)));
+            ui.push("stats.wounded", "row", format!("{mark} field HP {hp} / {max}"), Rect::new(x as i32 - 2, 102, w as i32 + 4, lh), true, false, None, tip(mark, &crate::hub::wounded_tip(cx, m)));
         }
         let active = gs.party.active_members().iter().any(|a| a.id == m.id);
         let n = gs.party.active_members().len();
@@ -1544,6 +1545,9 @@ impl Character {
                 Some((_, n)) => format!("{help} {n}"),
                 None => help.to_string(),
             };
+            // PR7-41 (PT-30): what a kept item is for (recipes, story)
+            let note = crate::shop::item_use_note(d, cx.gs(), id);
+            let help = if note.is_empty() { help } else { format!("{help} {note}") };
             let y = 116 + row as i32 * 15;
             ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, y, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), th().text, act, false, item_tip(d, id, &help));
             if let Some((b, _)) = &badge {
@@ -1651,6 +1655,18 @@ impl Character {
             let bx = mx + mw - 2 * BTN - 2;
             ui.button_full(&format!("gear.pouch.{i}.less"), Rect::new(bx, y + 1, BTN, 12), "-", PAct::PouchPack(item.clone(), packed - 1), packed > 1, false, SMALL, tip("Pack fewer", "Packs one copy less (a copy above the new count goes back to the stash now)."));
             ui.button_full(&format!("gear.pouch.{i}.more"), Rect::new(bx + BTN + 2, y + 1, BTN, 12), "+", PAct::PouchPack(item.clone(), packed + 1), packed < limit, false, SMALL, tip("Pack more", "Packs one copy more: auto-fill brings it from the stash when a fight starts or ends."));
+        }
+        // PR7-41 (PT-30): the pips explained under the slots: a filled pip is a copy in the pouch, a hollow one a copy
+        // still to come from the stash (the stash keeps it until a fight starts)
+        if !slots.is_empty() {
+            let y = 224 + POUCH_MAX as i32 * 15 + 1;
+            let (cy, r) = (y as f32 + 5.0, 2.5);
+            ui.p.ellipse(mx as f32 + 5.0, cy, r, r, th().gold);
+            let x = ui.p.text(mx as f32 + 10.0, y as f32, "in pouch", SMALL, th().dim) + 6.0;
+            ui.p.ellipse_ring(x + 3.0, cy, r, r, th().gold);
+            ui.p.text_fit(x + 8.0, y as f32, "from the stash at the next fight", SMALL, (mx + mw) as f32 - x - 10.0, th().dim);
+            let legend = "Filled pip: a copy in the pouch. Hollow pip: a packed copy still in the stash; auto-fill moves it into the pouch when a fight starts, so the stash count changes then.";
+            ui.push("gear.pouch.legend", "label", legend, Rect::new(mx, y, mw, 11), true, false, None, tip("Pouch pips", legend));
         }
     }
 
@@ -2065,10 +2081,16 @@ mod tests {
             ids.first().map(|s| s.to_string())
         };
         let staff = wear(&m, "main_hand", &|i| i.two_handed && i.item_type == "WEAPON").expect("a 2H weapon a mage can wear");
-        let one = wear(&m, "main_hand", &|i| !i.two_handed && i.item_type == "WEAPON").expect("a 1H weapon a mage can wear");
+        // PR7-41 (PT-30): not the class default itself (a copy of the worn default is refused)
+        let default_main = m.default_item(&d, "", "main_hand");
+        let one = wear(&m, "main_hand", &|i| !i.two_handed && i.item_type == "WEAPON" && Some(&i.id) != default_main.as_ref()).expect("a 1H weapon a mage can wear");
         let focus = wear(&m, "off_hand", &|i| matches!(i.weapon_type.as_str(), "orb" | "tome")).expect("a focus");
         // the class default main hand may be two-handed: a one-handed weapon first frees the off hand for the focus
         drop_move(&d, "", &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
+        // PR7-41 (PT-30): a stash copy of the class default is refused, so the default off hand is emptied first
+        if m.default_item(&d, "", "off_hand").as_deref() == Some(focus.as_str()) {
+            m.equipment.insert("off_hand".into(), emberwake_data::NO_ITEM.into());
+        }
         drop_move(&d, "", &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand", false).unwrap();
         drop_move(&d, "", &mut m, &mut st, &format!("stash.{staff}"), "slot.main_hand", false).unwrap();
         assert!(!m.equipment.contains_key("off_hand"), "the focus is stowed");
@@ -3066,7 +3088,7 @@ mod tests {
         assert!(wounded && hp <= field);
         let t = texts(&crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0));
         assert!(t.contains(&format!("Bunks {}/6", cx.gs().party.members.len())), "{t:?}");
-        assert!(t.contains(&"Wounded".to_string()) && t.contains(&format!("HP {hp} / {field}")), "{t:?}");
+        assert!(t.contains(&"Wounded".to_string()) && t.contains(&format!("field HP {hp} / {field}")), "{t:?}");
         assert!(c.w.iter().any(|w| w.id == "stats.wounded"));
         for (size, scale) in aegis_ui::screen::TEXT_SIZES {
             let recs = crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, scale as f32);

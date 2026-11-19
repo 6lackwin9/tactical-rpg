@@ -124,7 +124,7 @@ pub fn map_tick(cx: &mut Cx) -> bool {
 /// Logs the notes of a story result (effects, "Try again.") and takes its campaign events (CAMPAIGN1 W1).
 fn log_notes(cx: &mut Cx, res: &Dict) {
     for n in json::sget(res, "notes") {
-        cx.log(n);
+        crate::talk::log_note(cx, n);
     }
     crate::runover::take(cx, res);
 }
