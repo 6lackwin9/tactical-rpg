@@ -57,6 +57,8 @@ pub const PLACED_MAX: usize = 64;
 const CLEARANCE: f32 = 0.05;
 /// A mark's blend at full alpha, so it stays quiet.
 const MARK_ALPHA: f32 = 0.6;
+/// What a contact line keeps of the colour under it (`GroundLayer::contact`).
+pub const CONTACT_DIM: f32 = 0.55;
 
 /// A one-off mark's art at the job's density, at most `MARK_PX_MAX` a side.
 #[derive(Debug, Clone, Copy)]
@@ -96,6 +98,9 @@ pub struct GroundLayer<'a> {
     pub clamp_water: bool,
     /// Stone land-water rim along cardinal borders with unblocked non-sunken land.
     pub stone_rim: bool,
+    /// A 1 art px dark contact line where this ground meets another non-sunken ground (`CONTACT_DIM`), drawn on the
+    /// upper ground's side of the boundary; either ground having it draws the line.
+    pub contact: bool,
 }
 
 impl<'a> GroundLayer<'a> {
@@ -117,6 +122,7 @@ impl<'a> GroundLayer<'a> {
             under_colour: [0, 0, 0, 0],
             clamp_water: false,
             stone_rim: false,
+            contact: false,
         }
     }
 }
@@ -180,7 +186,7 @@ impl GroundKey {
             for v in [l.wear, l.tone, l.patches, l.patchy] {
                 h.u64(v.to_bits() as u64);
             }
-            h.bytes(&[l.strays as u8, l.sunken as u8, l.clamp_water as u8, l.stone_rim as u8]);
+            h.bytes(&[l.strays as u8, l.sunken as u8, l.clamp_water as u8, l.stone_rim as u8, l.contact as u8]);
             h.picture(l.under_tex);
             h.bytes(&l.under_colour);
             h.i32(l.marks_per_100);
@@ -777,6 +783,30 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
             }
         }
     }
+    // The contact lines (ART-20): an art pixel of a ground next to (4 ways) a pixel of a lower one, neither sunken and
+    // either with `contact`, darkens; so the line is 1 art px wide on the upper ground's side and follows the edge's noise.
+    let contact: Vec<bool> = by_rank.iter().map(|i| job.layers[*i].contact).collect();
+    if contact.iter().any(|c| *c) {
+        let lower = |g: u8, ax: i32, ay: i32| {
+            if ax < 0 || ay < 0 || ax >= w || ay >= h {
+                return false;
+            }
+            let n = top[(ay * w + ax) as usize];
+            n < g && !sunken[n as usize] && (contact[g as usize] || contact[n as usize])
+        };
+        for ay in 0..h {
+            for ax in 0..w {
+                let i = (ay * w + ax) as usize;
+                let g = top[i];
+                if sunken[g as usize] {
+                    continue;
+                }
+                if lower(g, ax - 1, ay) || lower(g, ax + 1, ay) || lower(g, ax, ay - 1) || lower(g, ax, ay + 1) {
+                    dim(&mut px, i, CONTACT_DIM);
+                }
+            }
+        }
+    }
     Base { w, h, px, top, by_rank, cell_rank }
 }
 
@@ -1323,6 +1353,7 @@ struct LoadedLayer {
     under_colour: Rgba,
     clamp_water: bool,
     stone_rim: bool,
+    contact: bool,
 }
 
 fn compose_loaded(job: &LoadedJob) -> Image {
@@ -1345,6 +1376,7 @@ fn compose_loaded(job: &LoadedJob) -> Image {
             under_colour: l.under_colour,
             clamp_water: l.clamp_water,
             stone_rim: l.stone_rim,
+            contact: l.contact,
         })
         .collect();
     compose(&GroundJob { seed: job.seed, cols: job.cols, rows: job.rows, cell: job.cell, cells: &job.cells, blocked: &job.blocked, layers: &layers, placed: &job.placed })
@@ -1426,7 +1458,7 @@ fn load_job(job: &Value, dir: &Path) -> Result<LoadedJob> {
     let mut layers = Vec::new();
     for (i, (k, v)) in legend.iter().enumerate() {
         let o = v.as_object().ok_or_else(|| anyhow!("legend {k} must be an object"))?;
-        known_keys(o, &["order", "tex", "colour", "wear", "strays", "tone", "patches", "sunken", "marks", "marks_per_100", "patchy", "under_tex", "under_colour", "clamp_water", "stone_rim"], &format!("legend {k}"))?;
+        known_keys(o, &["order", "tex", "colour", "wear", "strays", "tone", "patches", "sunken", "marks", "marks_per_100", "patchy", "under_tex", "under_colour", "clamp_water", "stone_rim", "contact"], &format!("legend {k}"))?;
         let f = |name: &str| -> Result<f32> { o.get(name).map_or(Ok(0.0), |v| number(v, name).map(|n| n as f32)) };
         let flag = |name: &str| -> Result<bool> { o.get(name).map_or(Ok(false), |v| v.as_bool().ok_or_else(|| anyhow!("{name} must be true or false"))) };
         let tex = match o.get("tex") {
@@ -1498,6 +1530,7 @@ fn load_job(job: &Value, dir: &Path) -> Result<LoadedJob> {
             under_colour,
             clamp_water: flag("clamp_water")?,
             stone_rim: flag("stone_rim")?,
+            contact: flag("contact")?,
         });
     }
     let mut orders: Vec<i32> = layers.iter().map(|l| l.order).collect();
