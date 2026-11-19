@@ -74,6 +74,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-34` (`AMBIENCE1`) | done (tools lane) | `develop` (squash `PR7-34`) | An ambience bus and loop channel in the engine beside the music; region, hub and road screens play `ambience/<key>.ogg` by the music's keys; a Ward Ambience slider on the Sound tab; placeholder loops in the kit. FB-363 |
 | `ENGINE-12` PC gate fix | done (tools lane) | `develop` | The PC gate failed at step 4 (playtest): in the desktop's main checkout `tools/fc.sh` looked for binaries in `$PWD/target` while cargo built into `.cargo/config.toml`'s target-dir. `fc.sh` now exports that target-dir when `CARGO_TARGET_DIR` is unset (off Linux), as linked worktrees already did. The PC re-run is next. |
 | `ENGINE-20` (`TOOLS-HELP3`) | done (tools lane) | `develop` (squash `ENGINE-20`) | Seed order check (gate step `seeds`), `seed-from --fields` with a `fields` upsert in the writer, `shots-all crop=` and before / after / diff sheets, toned text fields and the shop's total toned by sign again. FB-365 |
+| `ENGINE-12` PC gate fix 2 | done (tools lane) | `develop` | The PC gate's step 10 (lints): `tools/deps/unused_deps.py` took a crate's name by splitting its path on `/`, but on Windows glob joins with a backslash, so the keep list never matched. It now uses `Path(crate).name`. In a sweep of the other tools, every other `split("/")` splits an asset key, not a path. `golden_bisect.py` now lists files as posix paths. |
 
 ## 2. Feedback Items (Append-Only)
 

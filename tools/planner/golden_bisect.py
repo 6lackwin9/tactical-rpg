@@ -64,7 +64,7 @@ def switches_read(root=ROOT):
             if "target" in f.parts:
                 continue
             for m in SWITCH_RE.finditer(f.read_text(encoding="utf-8", errors="replace")):
-                out.setdefault(m.group(1), []).append(str(f.relative_to(root)))
+                out.setdefault(m.group(1), []).append(f.relative_to(root).as_posix())
     return out
 
 
