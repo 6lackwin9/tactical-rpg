@@ -21,6 +21,7 @@ pub mod ending;
 pub mod facility;
 pub mod looks;
 pub mod mastery;
+pub mod passive_icon;
 pub mod recipe;
 pub mod siege;
 pub mod talk;
@@ -1110,6 +1111,9 @@ pub struct PassiveDef {
     pub effects: Vec<Value>,
     /// RULESET1 9 D3 (rule deck): "" = source-granted, always on; "passive" or "keystone" = applies only while slotted.
     pub slot: String,
+    /// PASSIVE-ICON1 (ENGINE-24): its icon archetype (`passive_icon::ARCHETYPES`); "" = derived from its effects
+    /// (`passive_icon::of`).
+    pub icon: String,
 }
 
 /// The formula input name of the unit level (DERIVE1 4.1; reserved: no row id or constant takes it).
@@ -1278,7 +1282,7 @@ impl Catalog {
             cat.items.insert(i.id.clone(), i);
         }
         for o in rows("passives") {
-            let p = PassiveDef { id: string(&o, "id", ""), name: string(&o, "name", ""), effects: array(&o, "effects").to_vec(), slot: string(&o, "slot", "") };
+            let p = PassiveDef { id: string(&o, "id", ""), name: string(&o, "name", ""), effects: array(&o, "effects").to_vec(), slot: string(&o, "slot", ""), icon: string(&o, "icon", "") };
             cat.passives.insert(p.id.clone(), p);
         }
         for o in rows("encounters") {

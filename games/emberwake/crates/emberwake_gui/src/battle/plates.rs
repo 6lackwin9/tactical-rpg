@@ -250,6 +250,28 @@ pub(super) fn party_plate(ui: &mut Ui<super::Action>, cx: &mut Cx, faces: &mut F
         pips(&mut ui.p, party_poise_row(r), lit, max);
     }
     status_column(ui, cx, &format!("party.{}", p.unit), &p.tabs, col, STATUS_SLOTS);
+    passive_row(ui, cx, &format!("party.{}", p.unit), &p.passives, Rect::new(pr.x, pr.y + pr.h + 1, pr.w, PASSIVE_ICON));
+}
+
+/// PASSIVE-ICON1 (ENGINE-24, STATUSVIS1 SV10): a passive icon under the portrait (16 px at 1280 x 720) and the gap.
+pub(super) const PASSIVE_ICON: i32 = 8;
+const PASSIVE_GAP: i32 = 2;
+/// SV12: the placeholder while an archetype's icon is not there yet (a skill kind's icon).
+const PASSIVE_PLACEHOLDER: &str = "skills/kinds/focus.png";
+
+/// SV10: the loadout's passives as small icons in `row` under the portrait (apart from the status column), each its
+/// own label `<id>.passive.<i>` with the passive's name on its hover card.
+fn passive_row(ui: &mut Ui<super::Action>, cx: &mut Cx, id: &str, passives: &[crate::battle_view::PlatePassive], row: Rect) {
+    for (i, p) in passives.iter().enumerate() {
+        let r = Rect::new(row.x + i as i32 * (PASSIVE_ICON + PASSIVE_GAP), row.y, PASSIVE_ICON, PASSIVE_ICON);
+        if r.x + r.w > row.x + row.w {
+            break;
+        }
+        let px = ui.icon_px(r).max(1);
+        let img = cx.art.first(&[p.icon.clone(), PASSIVE_PLACEHOLDER.to_string()], px, px).cloned();
+        aegis_ui::panes::icon_tile(ui, r, img.as_ref(), if img.is_none() { "P" } else { "" });
+        ui.push(format!("{id}.passive.{i}"), "label", p.name.clone(), r, true, false, None, vec![(p.name.clone(), th().gold), ("Loadout passive: always on.".into(), th().text)]);
+    }
 }
 
 /// Contract 3: a guest's compact plate (teal rim, "AI" tag, HP, intent, a gold "Protect" tag).

@@ -3258,6 +3258,8 @@ mod tests {
             ["portraits", "full_body", f] => png(f),
             ["items", _, f] => png(f),
             ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
+            // PASSIVE-ICON1: the kit's passive icon archetypes
+            ["passives", f] => png(f),
             // LOOK1-G1: the theme file and its nine-slice frames (`<role>.png` with a `<role>.json` sidecar)
             ["ui", "theme.json"] => true,
             // UISPLIT1: screen layout files and their view fixtures

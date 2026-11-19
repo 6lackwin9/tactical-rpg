@@ -111,7 +111,7 @@ impl Holders {
     fn with_traits(&self, mut cat: Catalog) -> Catalog {
         for (i, (_, e)) in self.0.iter().enumerate() {
             let id = format!("trait{i}");
-            cat.passives.insert(id.clone(), PassiveDef { id, name: format!("Trait {i}"), effects: vec![e.clone()], slot: String::new() });
+            cat.passives.insert(id.clone(), PassiveDef { id, name: format!("Trait {i}"), effects: vec![e.clone()], slot: String::new(), icon: String::new() });
         }
         cat
     }

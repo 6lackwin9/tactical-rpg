@@ -112,3 +112,25 @@ fn every_shipped_palette_file_parses() {
     assert!(!layers.roots.is_empty());
     assert_eq!(aegis_core::assets::palette_problems(&layers), Vec::<String>::new());
 }
+
+/// PASSIVE-ICON1 (ENGINE-24) A21: a passive's `icon` must be a kit archetype with its file in the layers (an empty one
+/// passes); every shipped passive names one, and the kit layer holds all of them.
+#[test]
+fn passive_icons_are_checked_against_the_layers() {
+    let root = layer("a21");
+    png(&root.join("passives/resist.png"), 64, 64);
+    let v = view(&root);
+    let p = |icon: &str, effects: Value| json::obj([("id", json!("p")), ("icon", json!(icon)), ("effects", effects)]);
+    assert!(assets::passive_icon_errors(&v, &p("resist", json!([]))).is_empty());
+    assert!(assets::passive_icon_errors(&v, &p("", json!([{"type": "crit", "value": 5}]))).is_empty(), "derived: falls back to a skill icon");
+    assert_eq!(assets::passive_icon_errors(&v, &p("crit_up", json!([]))), ["Icon 'crit_up' has no file passives/crit_up.png (game, kit or engine)."]);
+    assert!(assets::passive_icon_errors(&v, &p("nope", json!([])))[0].starts_with("Icon 'nope' isn't a passive icon archetype"));
+    let kit = Layers::of(vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../kits/rpg/assets")]);
+    for key in emberwake_data::passive_icon::ARCHETYPES {
+        assert!(kit.has(&emberwake_data::passive_icon::path(key)), "the kit holds {key}");
+    }
+    let shipped = store::view(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data"));
+    for e in shipped.entries("passives") {
+        assert!(emberwake_data::passive_icon::known(&json::s(e, "icon")), "{} names its archetype", json::s(e, "id"));
+    }
+}

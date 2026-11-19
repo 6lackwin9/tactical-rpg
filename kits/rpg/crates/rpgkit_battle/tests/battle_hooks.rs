@@ -36,7 +36,7 @@ fn catalog() -> Catalog {
     let meters = vec![json!({"id": "tension", "name": "Tension", "short": "Te", "min": MIN, "max": MAX, "start": START, "show": "bar"})];
     let unit = |id: &str, side: &str| json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 400, "power": 100, "armor": 0, "speed": 10, "attack_range": 1, "skill_cap": 5});
     let mut cat = Catalog::from_value(&json!({"skills": skills, "unit_meters": meters, "units": [unit("p_hero", "party"), unit("p_ally", "party"), unit("p_foe", "enemy")]}));
-    cat.passives.insert("trait0".into(), PassiveDef { id: "trait0".into(), name: "Trait".into(), effects: vec![json!({"type": "meter", "meter": "tension"})], slot: String::new() });
+    cat.passives.insert("trait0".into(), PassiveDef { id: "trait0".into(), name: "Trait".into(), effects: vec![json!({"type": "meter", "meter": "tension"})], slot: String::new(), icon: String::new() });
     cat
 }
 
