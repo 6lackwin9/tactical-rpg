@@ -359,6 +359,8 @@ pub(super) struct GroundMark {
     /// One of the party's own hidden hazards (the foes do not see it): drawn fainter.
     pub(super) hidden: bool,
     last_round: i32,
+    /// PR7-40 part 2 (contract 8): the hazard's icon (its status's kit icon; "" none: the glyph shows).
+    icon: String,
     tip: Tip,
 }
 
@@ -375,12 +377,14 @@ pub(super) struct HookMarks {
     /// held; the hover lines read `ground` and `arena` whatever these say.
     show_ground: bool,
     pub(super) show_arena: bool,
+    /// The round now (a ground hazard's rounds left, contract 8).
+    round: i32,
 }
 
 impl HookMarks {
     pub(super) fn of(s: &Session, layers: &Layers, alt: bool) -> HookMarks {
         let w = &s.w;
-        let mut out = HookMarks { show_ground: layers.hazards || alt, show_arena: layers.arena || alt, ..HookMarks::default() };
+        let mut out = HookMarks { show_ground: layers.hazards || alt, show_arena: layers.arena || alt, round: s.current_round, ..HookMarks::default() };
         if emberwake_battle::ground::on(w) {
             // the party's side sees what any of its members sees (GH6 is per side)
             if let Some(&viewer) = w.allies.first() {
@@ -529,12 +533,15 @@ fn ground_mark(w: &World, cell: V2, p: &emberwake_battle::ground::Placed) -> Gro
     if d.hidden {
         tip.push(("Hidden from the foes".into(), th().dim));
     }
-    GroundMark { cell, id: d.id.clone(), name: d.name.clone(), tint, glyph: d.glyph.clone(), hidden: d.hidden, last_round: p.last_round, tip }
+    let icon = if d.status.is_empty() { String::new() } else { emberwake_content::art::status_icon(&d.status) };
+    GroundMark { cell, id: d.id.clone(), name: d.name.clone(), tint, glyph: d.glyph.clone(), hidden: d.hidden, last_round: p.last_round, icon, tip }
 }
 
 /// HOOKS1-UI slice 1: the ground hazards (a tinted plate with the row's glyph; the party's own hidden ones fainter) and
 /// the arena's struck cells (an amber plate with a hatch) on the ground, under the tokens and the round overlays.
-pub(super) fn draw_hook_marks(p: &mut Painter, m: &HookMarks, geo: &Geom) {
+/// PR7-40 part 2 (contract 8): a ground hazard shows its icon (its status's kit icon; the glyph without one) and its
+/// rounds left in the plate's top left.
+pub(super) fn draw_hook_marks(p: &mut Painter, art: &mut aegis_ui::art::Art, m: &HookMarks, geo: &Geom) {
     let plate_of = |c: V2| match geo.view {
         View::Stage => inset2(geo.cell_rect(c), 1, 1),
         View::Flat => geo.cell_rect(c).inset(1),
@@ -543,9 +550,18 @@ pub(super) fn draw_hook_marks(p: &mut Painter, m: &HookMarks, geo: &Geom) {
         let r = plate_of(g.cell);
         let (fill, edge) = if g.hidden { (36, 120) } else { (70, 200) };
         plate(p, r, with_alpha(g.tint, fill), with_alpha(g.tint, edge));
-        if !g.glyph.is_empty() {
+        let alpha = if g.hidden { 150 } else { 235 };
+        let side = (r.h / 3).clamp(5, 8);
+        let ir = Rect::new(r.x + 2, r.y + 2, side, side);
+        let px = ((side as f32) * p.v.s).round().max(1.0) as i32;
+        let drawn = !g.icon.is_empty() && art.image(&g.icon, px, px).map(|img| p.image_alpha(img, ir, alpha)).is_some();
+        let left = g.last_round - m.round + 1;
+        if left > 0 && g.last_round > 0 {
+            p.text(if drawn { (ir.x + ir.w + 1) as f32 } else { ir.x as f32 }, ir.y as f32 - 0.5, &left.to_string(), SMALL, with_alpha(th().text, alpha));
+        }
+        if !drawn && !g.glyph.is_empty() {
             let cy = r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0;
-            p.text_center(r.x as f32 + r.w as f32 / 2.0, cy, &g.glyph, SMALL, with_alpha(th().text, if g.hidden { 150 } else { 235 }));
+            p.text_center(r.x as f32 + r.w as f32 / 2.0, cy, &g.glyph, SMALL, with_alpha(th().text, alpha));
         }
     }
     let mut struck: Vec<V2> = Vec::new();
@@ -752,12 +768,19 @@ pub(super) fn draw_pushes(p: &mut Painter, list: &[emberwake_battle::forced::For
         }
         let (tx, ty) = ground_pt(geo, f.to);
         if f.to != f.from {
-            stage::wide_line(p, fx, fy, tx, ty, PUSH, 2.0, 0.0);
+            // PR7-40 part 2 (contract 8): a dashed gold arrow to a dashed landing tile
+            let gold = th().gold;
+            let land = geo.cell_rect(f.to).inset(1);
+            let (x0, y0, x1, y1) = (land.x as f32, land.y as f32, (land.x + land.w) as f32, (land.y + land.h) as f32);
+            for (a, b, c, d) in [(x0, y0, x1, y0), (x0, y1, x1, y1), (x0, y0, x0, y1), (x1, y0, x1, y1)] {
+                p.line(a, b, c, d, gold, 2.0);
+            }
+            stage::wide_line(p, fx, fy, tx, ty, gold, 1.5, 3.0);
             let (dx, dy) = (tx - fx, ty - fy);
             let len = (dx * dx + dy * dy).sqrt().max(1.0);
             let (ux, uy) = (dx / len, dy / len);
             for s in [1.0f32, -1.0] {
-                stage::wide_line(p, tx, ty, tx - ux * 6.0 - uy * 4.0 * s, ty - uy * 6.0 + ux * 4.0 * s, PUSH, 2.0, 0.0);
+                stage::wide_line(p, tx, ty, tx - ux * 6.0 - uy * 4.0 * s, ty - uy * 6.0 + ux * 4.0 * s, gold, 1.5, 0.0);
             }
         }
         if !f.blocked_by.is_empty() {

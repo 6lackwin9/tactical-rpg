@@ -52,6 +52,28 @@ pub(super) fn icon(ui: &mut Ui<super::Action>, cx: &mut Cx, rel: &str, r: Rect, 
     }
 }
 
+/// Contract 6 (PR7-40 part 2): the moss heart of a heal in `r`: the kit's heart badge, or a drawn moss heart.
+pub(super) fn heal_heart(ui: &mut Ui<super::Action>, cx: &mut Cx, r: Rect) {
+    if !icon(ui, cx, HEART, r, 255) {
+        heart_shape(&mut ui.p, r, crate::tokens::moss());
+    }
+}
+
+/// A small heart drawn in `r` (two lobes and a point) in `col`.
+pub(super) fn heart_shape(p: &mut Painter, r: Rect, col: Rgba) {
+    let (x, y, w, h) = (r.x as f32, r.y as f32, r.w as f32, r.h as f32);
+    let lobe = w / 4.0;
+    p.ellipse(x + lobe, y + lobe, lobe, lobe, col);
+    p.ellipse(x + w - lobe, y + lobe, lobe, lobe, col);
+    let rows = (h - lobe).ceil() as i32;
+    for k in 0..rows.max(1) {
+        let t = k as f32 / rows.max(1) as f32;
+        let half = (w / 2.0) * (1.0 - t);
+        let cxm = x + w / 2.0;
+        p.fill(Rect::new((cxm - half).round() as i32, (y + lobe + k as f32).round() as i32, (half * 2.0).round().max(1.0) as i32, 1), col);
+    }
+}
+
 /// A gold crown on `r` (the boss mark): the badge file, or a drawn crown.
 pub(super) fn crown(ui: &mut Ui<super::Action>, cx: &mut Cx, r: Rect) {
     if !icon(ui, cx, CROWN, r, 255) {
@@ -60,6 +82,18 @@ pub(super) fn crown(ui: &mut Ui<super::Action>, cx: &mut Cx, r: Rect) {
         for k in 0..3 {
             let x = r.x + k * (r.w - 1) / 2;
             ui.p.fill(Rect::new(x, r.y, 1, r.h / 2 + 1), g);
+        }
+    }
+}
+
+/// Contract 6 (PR7-40 part 2): `hp_bar` with the planned heal `gain` past the lit end in pale moss.
+fn hp_bar(p: &mut Painter, r: Rect, value: i32, max: i32, col: Rgba, loss: i32, gain: i32) {
+    bar(p, r, value, max, col, loss);
+    if gain > 0 && max > 0 && r.w > 0 {
+        let at = |v: i32| (r.w * v.clamp(0, max) + max - 1) / max;
+        let (from, to) = (at(value), at(value + gain));
+        if to > from {
+            p.fill(Rect::new(r.x + from, r.y, to - from, r.h), crate::tokens::moss_gain());
         }
     }
 }
@@ -185,12 +219,25 @@ pub(super) fn party_plate(ui: &mut Ui<super::Action>, cx: &mut Cx, faces: &mut F
     let room = (text_w - if p.intent.is_some() { INTENT_TILE + 1 } else { 0 }) as f32;
     name_in(&mut ui.p, tx as f32, r.y as f32 + 2.0, &p.name, room, if p.active { super::ally() } else { th().dim });
     // HP: the bar with the incoming loss, its numbers under it
-    bar(&mut ui.p, Rect::new(tx, r.y + 13, text_w, 3), p.hp, p.max_hp, if p.active { hp() } else { th().dim }, p.incoming);
+    hp_bar(&mut ui.p, Rect::new(tx, r.y + 13, text_w, 3), p.hp, p.max_hp, if p.active { hp() } else { th().dim }, p.incoming, p.heal);
     let hp_text = format!("{}/{}", p.hp, p.max_hp);
     let hw = ui.p.text_w(&hp_text, SMALL);
     ui.p.text(tx as f32, r.y as f32 + 17.0, &hp_text, SMALL, th().text);
+    let mut nx = tx as f32 + hw + 3.0;
     if p.incoming > 0 {
-        ui.p.text(tx as f32 + hw + 3.0, r.y as f32 + 17.0, &format!("-{}", p.incoming), SMALL, th().foe);
+        let t = format!("-{}", p.incoming);
+        ui.p.text(nx, r.y as f32 + 17.0, &t, SMALL, th().foe);
+        nx += ui.p.text_w(&t, SMALL) + 2.0;
+    }
+    // contract 6: a planned heal, the moss heart and "+n"
+    if p.heal > 0 {
+        let t = format!("+{}", p.heal);
+        if nx + 7.0 + ui.p.text_w(&t, SMALL) <= (tx + text_w) as f32 {
+            heal_heart(ui, cx, Rect::new(nx as i32, r.y + 17, 6, 6));
+            ui.p.text(nx + 7.0, r.y as f32 + 17.0, &t, SMALL, crate::tokens::moss());
+            let tw = 7 + ui.p.text_w(&t, SMALL).ceil() as i32;
+            ui.push(format!("party.{}.heal", p.unit), "label", t.clone(), Rect::new(nx as i32, r.y + 17, tw, 7), true, false, None, vec![("Planned heal".into(), crate::tokens::moss()), (format!("{t} HP this round"), th().text)]);
+        }
     }
     // AP: one bar, the balance after the plan beside it (grey at 0)
     if let Some(a) = p.ap {
@@ -217,7 +264,7 @@ pub(super) fn guest_plate(ui: &mut Ui<super::Action>, cx: &mut Cx, faces: &mut F
         intent_glyph(&mut ui.p, &w.cat, i, Rect::new(right - INTENT_TILE, r.y + 2, INTENT_TILE, INTENT_TILE));
     }
     name_in(&mut ui.p, tx as f32, r.y as f32 + 2.0, &p.name, (right - INTENT_TILE - 1 - tx) as f32, if p.active { super::ally() } else { th().dim });
-    bar(&mut ui.p, Rect::new(tx, r.y + 12, right - tx, 2), p.hp, p.max_hp, if p.active { hp() } else { th().dim }, p.incoming);
+    hp_bar(&mut ui.p, Rect::new(tx, r.y + 12, right - tx, 2), p.hp, p.max_hp, if p.active { hp() } else { th().dim }, p.incoming, p.heal);
     let mut x = tx as f32;
     for (label, col) in [("AI", guest())].into_iter().chain(p.protect.then_some(("Protect", th().gold))) {
         let lw = ui.p.text_w(label, SMALL) + 4.0;
@@ -328,10 +375,24 @@ pub(super) fn group_row(ui: &mut Ui<super::Action>, cx: &mut Cx, small: &mut Fac
     }
 }
 
+/// Contract 4 (PR7-40 part 2): an open group's slim header ("Ash-Crawler x4" and an up chevron; a click closes it).
+pub(super) fn group_header(ui: &mut Ui<super::Action>, name: &str, r: Rect) {
+    frame_a(&mut ui.p, r, th().card);
+    let tx = r.x + 3;
+    ui.p.text_fit(tx as f32, r.y as f32 + (r.h as f32 - ui.p.line_h(SMALL)) / 2.0, name, SMALL, (r.w - 14) as f32, th().text);
+    let (cx, cy) = ((r.x + r.w - 6) as f32, r.y as f32 + r.h as f32 / 2.0);
+    ui.p.line(cx - 2.5, cy + 1.2, cx, cy - 1.3, th().text, 0.0);
+    ui.p.line(cx, cy - 1.3, cx + 2.5, cy + 1.2, th().text, 0.0);
+}
+
+/// Contract 4: an open group's header height.
+pub(super) const GROUP_HEAD_H: i32 = 10;
+
 /// Contract 4: the height of a foe panel row.
 pub(super) fn entry_h(e: &FoeEntry) -> i32 {
     match e {
         FoeEntry::Full(_) => PLATE_H,
+        FoeEntry::Group { open: true, .. } => GROUP_HEAD_H,
         _ => COMPACT_H,
     }
 }

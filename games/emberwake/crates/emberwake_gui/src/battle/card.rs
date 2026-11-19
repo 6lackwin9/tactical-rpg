@@ -7,7 +7,7 @@
 //! after-KO tag) and in the party view a row per block (the block badge, the hitters' faces, the summed damage, the pips
 //! per hit, the chips, "KO"), and the totals.
 
-use super::plates::{crown, icon, Looks, CRIT_STAR, HEART, SPLIT_SHIELD};
+use super::plates::{crown, icon, Looks, CRIT_STAR, SPLIT_SHIELD};
 use crate::battle_view::{CardRow, CardView, CARD_CHIPS};
 use crate::portraits::Faces;
 use crate::screens::Cx;
@@ -119,11 +119,8 @@ fn row(ui: &mut Ui<super::Action>, cx: &mut Cx, small: &mut Faces, looks: &Looks
         }
         at = at.max(x + 12 + 4 * 10);
     }
-    // the damage: a moss heart for a heal would go here; a blow shows the red heart and "-34"
-    let hr = Rect::new(at, y + 1, 7, 7);
-    if !icon(ui, cx, HEART, hr, 255) {
-        ui.p.circle(hr.x as f32 + 3.5, hr.y as f32 + 3.5, 2.5, th().foe);
-    }
+    // the damage: a blow shows the red heart and "-34" (the kit's heart badge is the heal's moss heart, contract 6)
+    super::plates::heart_shape(&mut ui.p, Rect::new(at, y + 2, 6, 5), th().foe);
     let dmg = format!("-{}", r.damage);
     ui.p.text(at as f32 + 9.0, y as f32 + 1.0, &dmg, BODY, if r.after_ko { th().dim } else { th().text });
     line_box(ui, &format!("card.row.{k}.damage"), &dmg, Rect::new(at + 9, y, 24, ROW_H - 1), BODY);

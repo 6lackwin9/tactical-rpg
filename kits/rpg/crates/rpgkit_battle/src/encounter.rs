@@ -163,11 +163,11 @@ impl Objectives {
     }
 
     /// BATTLE-UI2 (`SCREEN_CONTRACT_BATTLE.md` 2): the objective's short goal for the battle's top bar ("Rout them",
-    /// "Hold 3 rounds", "Reach the exit", "Defeat Wolf", "Drive Wolf back"); the protect targets are the second line
+    /// "Survive 3 rounds", "Reach the exit", "Defeat Wolf", "Drive Wolf back"); the protect targets are the second line
     /// (`protect_of`). `name_of(ref)` names units.
     pub fn goal_of(o: &Obj, name_of: impl Fn(&str) -> String) -> String {
         match value::string(o, "objective", "rout").as_str() {
-            "hold" => format!("Hold {} rounds", value::int(o, "objective_rounds", 3)),
+            "hold" => format!("Survive {} rounds", value::int(o, "objective_rounds", 3)),
             "escape" => "Reach the exit".to_string(),
             "slay" => format!("Defeat {}", name_of(&value::string(o, "objective_unit", ""))),
             RETREAT => format!("Drive {} back", name_of(&value::string(o, "objective_unit", ""))),

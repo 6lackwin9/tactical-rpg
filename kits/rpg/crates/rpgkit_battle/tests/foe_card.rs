@@ -198,3 +198,32 @@ fn the_crit_star_marks_the_block_crits_down_the_foe_by_half_the_time() {
     assert!(none.hits.iter().all(|h| h.crit_chance == 0.0));
     assert_eq!((none.ko_block, none.crit_star), (sure.ko_block, None));
 }
+
+/// Sets the hero's crit chance to exactly `pct` % (its passive crit moves the chance one for one).
+fn crit_at(s: &mut Session, pct: f64) {
+    let now = rpgkit_rules::damage::crit_chance(&s.w.units[HERO]);
+    s.w.units[HERO].passive_crit += pct - now;
+    assert!((rpgkit_rules::damage::crit_chance(&s.w.units[HERO]) - pct).abs() < 1e-9, "crit chance {pct}");
+}
+
+/// The 50 % boundary (contract 5, "reaches 50%"): two jabs, the base KO at the second, the first jab's crit alone
+/// downs the foe; at a 50 % crit chance the foe is down by block 1 exactly half the time (a star), at 40 % it is not.
+#[test]
+fn the_crit_star_holds_at_exactly_half_and_not_below() {
+    let steps = [(HERO, "c_jab"), (HERO, "c_jab")];
+    let probe = card(&session(5000), &plan_of(&session(5000).w, &steps));
+    let first = &probe.hits[0];
+    let hp = first.damage + 1;
+    assert!(probe.hits[1].impact > first.impact, "the jabs land in two blocks: {probe:?}");
+    let mut s = session(hp);
+    let plan = plan_of(&s.w, &steps);
+    crit_at(&mut s, 50.0);
+    let half = card(&s, &plan);
+    assert_eq!(half.ko_block, Some(half.hits[1].impact), "the base KO at the second jab");
+    assert!(half.hits[0].crit_damage >= hp, "the first jab's crit downs it: {half:?}");
+    assert_eq!(half.hits[0].crit_chance, 0.5);
+    assert_eq!(half.crit_star, Some(half.hits[0].impact));
+    crit_at(&mut s, 40.0);
+    let below = card(&s, &plan);
+    assert_eq!((below.ko_block, below.crit_star), (half.ko_block, None));
+}
