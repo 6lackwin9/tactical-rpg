@@ -1,4 +1,9 @@
-# UI frames (Emberwake)
+# UI art (Emberwake)
+
+## Frames (`frames/`)
+
+This note sits here, not in `frames/`: the theme loader accepts only `<role>.png` and `<role>.json` there
+(`aegis_ui::theme::load_frames`).
 
 Nine-slice frame art for the game's panels, buttons and cards. Each `<name>.png` has a sidecar `<name>.json` with its
 `slice` margins (left, top, right, bottom, in source pixels) and the `scale` it draws at; the large ornate frames add
