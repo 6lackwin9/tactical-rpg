@@ -1170,3 +1170,41 @@ fn the_menu_cells_are_one_list_lit_by_the_target() {
     assert_eq!(key(&on_tile[..open.len()]), key(&open));
     assert_eq!(on_tile.last().map(|o| o.picks.clone()), Some(vec![Pick::StepAfter(tile)]));
 }
+
+/// BATTLE-UI2 (battle contract 7, the skill menu's row): `pick_hits` is the foe card's hits of the picked steps alone,
+/// on the round as it would run after the pick: the ghost it replaces and the ghost after it do not count, the live plan
+/// does not change, and a refused pick has none. `next_pick_block` is the block after the last pick (1 with none).
+#[test]
+fn pick_hits_are_the_cards_hits_of_the_picked_steps() {
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(4, 4));
+    place(&mut s.w, FOOTMAN, V2::new(5, 4));
+    round_intent::set_intent(&mut s.w, VANGUARD, RoundIntent::Assault).unwrap();
+    round_intent::set_target(&mut s.w, VANGUARD, foe(FOOTMAN)).unwrap();
+    rip::plan_unit(&mut s.w, &mut s.plan, VANGUARD).unwrap();
+    assert_eq!(rip::next_pick_block(&s.w, &s.plan, VANGUARD), 1, "no pick: block 1");
+    let before = rows(&s.w, &s.plan, VANGUARD);
+    let sc = sk(&s, "tl_shoulder_check");
+    let sched = s.resolver.scheduled.clone();
+    let got = rip::pick_hits(&s.w, &s.plan, &sched, VANGUARD, foe(FOOTMAN), &[sc.clone()], FOOTMAN).expect("the pick is live");
+    assert_eq!(rows(&s.w, &s.plan, VANGUARD), before, "read only");
+    // the same pick made: the card's hits from the vanguard's picked entries (not the ghost after them)
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[sc.clone()]).unwrap();
+    let r = rows(&s.w, &s.plan, VANGUARD);
+    let picked: Vec<i32> = r.iter().filter(|x| !x.6).map(|x| x.1).collect();
+    assert_eq!(picked, [1], "one picked entry at block 1");
+    assert_eq!(rip::next_pick_block(&s.w, &s.plan, VANGUARD), r[0].2 + 1, "the next pick starts after it");
+    let card = rpgkit_battle::intent::foe_card(&s.w, &rpgkit_battle::intent::planned_schedule(&s.w, &sched, &s.plan), FOOTMAN);
+    let mine: Vec<_> = card.hits.iter().filter(|h| h.unit == VANGUARD && picked.contains(&h.start)).collect();
+    assert!(!mine.is_empty() && mine.iter().map(|h| h.damage).sum::<i32>() > 0, "the strike lands");
+    assert_eq!(got, rip::PickHits { hits: mine.len(), damage: mine.iter().map(|h| h.damage).sum(), pips: mine.iter().map(|h| h.pips).sum(), breaks: mine.iter().any(|h| h.breaks) });
+    assert!(card.hits.iter().any(|h| h.unit == VANGUARD && !picked.contains(&h.start)) || r.iter().all(|x| !x.6 || w_rest(&s.w, &x.0)), "the ghost after the pick lands its own hits, which the row leaves out");
+    // a pick the kit refuses (a guard skill on a foe) has none
+    let guard = sk(&s, "active_guard");
+    assert_eq!(rip::pick_hits(&s.w, &s.plan, &sched, VANGUARD, foe(FOOTMAN), &[guard], FOOTMAN).filter(|h| h.hits > 0), None);
+}
+
+/// A rest or move entry (lands no hit).
+fn w_rest(w: &World, id: &str) -> bool {
+    matches!(skill::kind(&w.cat.skills[sid(w, id)]), Kind::Rest | Kind::Move)
+}

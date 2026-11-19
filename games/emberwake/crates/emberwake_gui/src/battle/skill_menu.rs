@@ -1,15 +1,18 @@
-//! VISCLAR1-D (mock `menu_icons`, decision "Battle view answers, part 2"): the skill menu as icons only. A neutral row (Fill,
-//! Move, Rest) on top, then one row per intent the ruleset lists. Every place comes from the menu's anchor and the rows the
-//! kit lists, and that list does not change with the picks, so when an opener fixes the intent the other rows fade where
-//! they stand. Sizes are in the wrapper's units, as the rest of this screen; the measured columns grow with the text size.
-//! INTENT2-U (IR19, Option A): every intent row on one line, no block count on a cell; a pouch item is an icon cell in
-//! each row it allows, after the skills, with its live copies as an `xN` badge in the corner (its card has the cost).
+//! VISCLAR1-D (mock `menu_icons`, decision "Battle view answers, part 2"): the skill menu. A neutral row (Fill, Move, Rest)
+//! on top, then the rows of each intent the ruleset lists. Every place comes from the menu's anchor and the rows the kit
+//! lists, and that list does not change with the picks, so when an opener fixes the intent the other rows fade where they
+//! stand. Sizes are in the wrapper's units, as the rest of this screen; the measured columns grow with the text size.
+//! INTENT2-U (IR19, Option A): a pouch item is a row in each intent it allows, after the skills, with its live copies as
+//! an `xN` badge on its icon (its card has the cost). BATTLE-UI2 (PR7-40 part 3, battle contract 7, FB-358): one row per
+//! skill replaces the icon grid (one skill menu everywhere): icon, name, AP pips and block span, HP and poise damage on
+//! the target, status chips; it opens on a strip block, on a board target, and on a ghost block from a right click or
+//! the menu key (Tab, pad north).
 
 use super::board::with_alpha;
 use super::input::{Popup, Row};
 use super::tips::{icon_line, intent_ring_color, text_outlined};
 use super::Action;
-use aegis_ui::art::Art;
+use crate::screens::Cx;
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use aegis_ui::painter::Painter;
 use aegis_ui::theme::th;
@@ -72,37 +75,62 @@ pub(super) fn menu_intents(w: &World) -> Vec<RoundIntent> {
     RoundIntent::ALL.into_iter().filter(|i| emberwake_battle::round_intent::listed(w, *i)).collect()
 }
 
-/// The layout of a skill menu. `places[k]`: popup row `k`'s line of cells and column; line 0 is the neutral row.
+/// BATTLE-UI2 (battle contract 7): a skill row's facts: its AP and blocks, what it lands on its target (the kit's
+/// `pick_hits`; None off a foe or refused), whether it heals and the statuses it brings (the strip's chips).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(super) struct RowFacts {
+    pub(super) ap: i32,
+    pub(super) blocks: i32,
+    pub(super) hits: Option<emberwake_battle::round_intent_plan::PickHits>,
+    pub(super) heal: bool,
+    pub(super) statuses: Vec<String>,
+}
+
+/// BATTLE-UI2 (battle contract 7): a skill row's height, its icon's side, the damage and poise columns, a status chip.
+pub(super) const ROW_H: i32 = 17;
+const ROW_ICON: i32 = 14;
+const DAMAGE_W: i32 = 30;
+const POISE_W: i32 = 24;
+const CHIP: i32 = 8;
+/// The chips a row shows (then "+N"), and the widest name column.
+const ROW_CHIPS: usize = 3;
+const NAME_MAX_W: i32 = 104;
+/// The footer's hint (contract 7: hover lights the move's blocks on the strip) and its height.
+pub(super) const MENU_HINT: &str = "Hover a row: its blocks light on the timeline";
+const FOOT_H: i32 = 9;
+
+/// The layout of a skill menu (BATTLE-UI2 contract 7: one row per skill, replacing VISCLAR1-D's icon grid; the neutral
+/// buttons on a line under the title). `places[k]`: popup row `k`'s line and column; the neutral lines come first (a
+/// button each), then one line per skill row, the rows of each intent together in the ruleset's order.
 #[derive(Debug, Clone)]
 pub(super) struct MenuGrid {
-    /// Each row's name and intent (None: the neutral row) and the first line of cells it takes.
+    /// Each intent's name and the first line its rows take (a neutral line: None).
     pub(super) lines: Vec<(String, Option<RoundIntent>, i32)>,
     pub(super) places: Vec<(i32, i32)>,
-    /// How many lines of cells in all.
+    /// How many lines in all (the neutral lines and the skill rows).
     pub(super) depth: i32,
-    /// The most cells on a line.
-    pub(super) cols: i32,
-    /// The round's intent once a pick holds it: the other rows fade.
+    /// The round's intent once a pick holds it: the other intents' rows fade.
     pub(super) fixed: Option<RoundIntent>,
     /// The intent rows drawn and clickable. Every listed row keeps its place whether it shows or not, so showing a subset is
     /// this one list and nothing shifts. Every listed intent today.
     pub(super) shown: Vec<RoundIntent>,
-    /// The name column and a neutral button's width, measured for the text size (`fit`).
+    /// The name column, measured for the text size (`fit`).
     pub(super) label_w: i32,
     pub(super) neutral: Vec<Vec<&'static str>>,
     pub(super) neutral_ws: Vec<Vec<i32>>,
     pub(super) rest_name: String,
     /// GEAR-REWORK1 (PR5-51a pass 2): the Off-Hand button's text (its action's name; measured with the buttons).
     pub(super) off_name: String,
+    /// The skill rows' names, measured for the name column.
+    names: Vec<String>,
 }
 
 impl MenuGrid {
-    /// The layout of `rows` under the rows of `intents` (each with its name; every intent the ruleset lists, so the places
-    /// do not depend on `shown`): a row's place is the next free one in its slot, each intent's row on one line.
+    /// The layout of `rows` under the intents `intents` (each with its name; every intent the ruleset lists, so the places
+    /// do not depend on `shown`): the neutral buttons on their lines, then each intent's rows in their order, one a line.
     pub(super) fn new(intents: &[(RoundIntent, String)], shown: Vec<RoundIntent>, rows: &[Row], fixed: Option<RoundIntent>) -> Self {
         let mut lines = vec![(NEUTRAL_LINE.to_string(), None, 0)];
         let mut places = vec![(0, 0); rows.len()];
-        let mut cols = 0;
         let neutral = neutral_lines(rows);
         let neutral_ws = neutral.iter().map(|line| vec![ICON + 7; line.len()]).collect();
         let mut depth = neutral.len() as i32;
@@ -113,25 +141,24 @@ impl MenuGrid {
                 }
             }
         }
+        let mut names = Vec::new();
         for (i, name) in intents {
             lines.push((name.clone(), Some(*i), depth));
-            let cells: Vec<usize> = (0..rows.len()).filter(|&k| rows[k].slot == Some(Slot::Intent(*i))).collect();
-            // INTENT2-U (IR19, Option A): a row stays on one line, however many cells it holds
-            for (n, k) in cells.iter().enumerate() {
-                places[*k] = (depth, n as i32);
-                cols = cols.max(n as i32 + 1);
+            for k in (0..rows.len()).filter(|&k| rows[k].slot == Some(Slot::Intent(*i))) {
+                places[k] = (depth, 0);
+                names.push(rows[k].label.clone());
+                depth += 1;
             }
-            depth += 1;
         }
         let rest_name = rows.iter().find(|r| r.slot == Some(Slot::Neutral("Rest"))).map(|r| r.label.clone()).filter(|l| l != "Rest").unwrap_or_default();
         let off_name = rows.iter().find(|r| r.slot == Some(Slot::Neutral(OFF_HAND))).map(|r| r.label.clone()).unwrap_or_default();
-        MenuGrid { lines, places, depth, cols, fixed, shown, label_w: 40, neutral, neutral_ws, rest_name, off_name }
+        MenuGrid { lines, places, depth, fixed, shown, label_w: 60, neutral, neutral_ws, rest_name, off_name, names }
     }
 
     /// Measures the name column and each neutral button individually for the text size.
     pub(super) fn fit(&mut self, p: &mut Painter) {
-        let label = self.lines.iter().map(|l| p.text_w(&l.0, BODY)).fold(0.0, f32::max);
-        self.label_w = label.ceil() as i32 + 2;
+        let label = self.names.iter().map(|l| p.text_w(l, BODY)).fold(0.0, f32::max);
+        self.label_w = (label.ceil() as i32 + 2).clamp(40, NAME_MAX_W);
         self.neutral_ws = self.neutral.iter().map(|line| {
             line.iter().map(|&b| {
                 let text = if b == "Rest" && !self.rest_name.is_empty() {
@@ -146,24 +173,37 @@ impl MenuGrid {
         }).collect();
     }
 
-    /// The panel's size with a title row `row_h` high.
-    pub(super) fn size(&self, row_h: i32) -> (i32, i32) {
-        let neutral = self.neutral_ws.iter().map(|line| line.iter().map(|&w| w + GAP).sum::<i32>()).max().unwrap_or(0);
-        let cells = neutral.max(self.cols * (ICON + GAP));
-        ((2 * PAD + self.label_w + GAP + cells - GAP).max(MENU_MIN_W), row_h + 2 + self.depth * (ICON + GAP) - GAP + PAD)
+    /// The neutral lines' count.
+    fn neutral_n(&self) -> i32 {
+        self.neutral.len() as i32
     }
 
-    /// Row `k`'s rect in a panel at (`x`, `y`).
+    /// A skill row's width: icon, name column, damage, poise and chips.
+    fn row_w(&self) -> i32 {
+        ROW_ICON + 4 + self.label_w + 4 + DAMAGE_W + POISE_W + ROW_CHIPS as i32 * (CHIP + 1) + 4
+    }
+
+    /// The panel's size with a title row `row_h` high (the footer's hint under the rows).
+    pub(super) fn size(&self, row_h: i32) -> (i32, i32) {
+        let neutral = self.neutral_ws.iter().map(|line| line.iter().map(|&w| w + GAP).sum::<i32>() - GAP).max().unwrap_or(0);
+        let rows = self.depth - self.neutral_n();
+        let h = row_h + 2 + self.neutral_n() * (ICON + GAP) + rows * (ROW_H + 1) + FOOT_H + PAD;
+        ((2 * PAD + neutral.max(self.row_w())).max(MENU_MIN_W), h)
+    }
+
+    /// Row `k`'s rect in a panel at (`x`, `y`): a neutral button, or a skill row across the panel.
     pub(super) fn cell(&self, x: i32, y: i32, row_h: i32, k: usize) -> Rect {
         let (line, col) = self.places.get(k).copied().unwrap_or((0, 0));
-        let left = x + PAD + self.label_w + GAP;
-        let top = y + row_h + 2 + line * (ICON + GAP);
-        if let Some(ws) = usize::try_from(line).ok().and_then(|l| self.neutral_ws.get(l)) {
+        let left = x + PAD;
+        let top = y + row_h + 2;
+        if let Some(ws) = usize::try_from(line).ok().filter(|l| *l < self.neutral.len()).and_then(|l| self.neutral_ws.get(l)) {
             let off: i32 = ws.iter().take(col as usize).map(|&w| w + GAP).sum();
             let bw = ws.get(col as usize).copied().unwrap_or(ICON + 7);
-            Rect::new(left + off, top, bw, ICON)
+            Rect::new(left + off, top + line * (ICON + GAP), bw, ICON)
         } else {
-            Rect::new(left + col * (ICON + GAP), top, ICON, ICON)
+            let (w, _) = self.size(row_h);
+            let r = line - self.neutral_n();
+            Rect::new(left, top + self.neutral_n() * (ICON + GAP) + r * (ROW_H + 1), w - 2 * PAD, ROW_H)
         }
     }
 
@@ -172,7 +212,7 @@ impl MenuGrid {
         !matches!(slot, Some(Slot::Intent(i)) if !self.shown.contains(&i))
     }
 
-    /// Whether `i`'s row fades: another intent fixed the round.
+    /// Whether `i`'s rows fade: another intent fixed the round.
     pub(super) fn faded(&self, i: Option<RoundIntent>) -> bool {
         matches!((self.fixed, i), (Some(f), Some(i)) if f != i)
     }
@@ -189,25 +229,38 @@ pub(super) fn menu_place(cell: Rect, size: (i32, i32), view: Rect) -> (i32, i32)
     (x, y)
 }
 
-/// Draws the menu: panel, title, row names, and each row as a button or an icon, with its widget and hover card.
-pub(super) fn draw_menu(ui: &mut Ui<Action>, art: &mut Art, pop: &Popup, grid: &MenuGrid, row_h: i32) {
+/// BATTLE-UI2 (battle contract 7): where a menu of `size` opens on strip block `block`: under it, its left edge on the
+/// block's, inside the screen `view`.
+pub(super) fn menu_below(block: Rect, size: (i32, i32), view: Rect) -> (i32, i32) {
+    let (w, h) = size;
+    let x = block.x.clamp(view.x, (view.x + view.w - w).max(view.x));
+    let y = (block.y + block.h + GAP + 2).clamp(view.y, (view.y + view.h - h).max(view.y));
+    (x, y)
+}
+
+/// Draws the menu: panel, title, the neutral buttons, one row per skill (contract 7: icon, name, AP pips and block span,
+/// HP and poise damage on the target, status chips) and the footer's hint, each with its widget and hover card.
+pub(super) fn draw_menu(ui: &mut Ui<Action>, cx: &mut Cx, pop: &Popup, grid: &MenuGrid, row_h: i32) {
     let r = pop.rect(row_h);
     // BATTLE-UI2 contract 1: the menu wears frame A
     crate::tokens::frame_a(&mut ui.p, r, th().game("popup_fill", rgba(14, 20, 34, 252)));
-    // a near miss in a gap or the name column keeps the menu open
+    // a near miss in a gap keeps the menu open
     ui.push("popup.panel", "panel", "", r, true, false, Some(Action::MenuGap), Vec::new());
-    ui.p.text_fit(r.x as f32 + 5.0, r.y as f32 + 2.0, &pop.title, BODY, r.w as f32 - 10.0, th().gold);
-    let line_h = ui.p.line_h(BODY);
-    for (name, intent, line) in grid.lines.iter().filter(|l| l.1.is_none_or(|i| grid.shown.contains(&i))) {
-        let y = r.y + row_h + 2 + line * (ICON + GAP);
-        let ink = intent.map_or(th().dim, intent_ring_color);
-        let ink = if grid.faded(*intent) { with_alpha(ink, FADE) } else { ink };
-        ui.p.text(r.x as f32 + PAD as f32, y as f32 + (ICON as f32 - line_h) / 2.0, name, BODY, ink);
+    let title = ui.p.fit(&pop.title, BODY, r.w as f32 - 10.0);
+    ui.p.text_face(aegis_ui::painter::Typeface::Display, r.x as f32 + 5.0, r.y as f32 + 2.0, &title, BODY, th().gold);
+    let hint_y = r.y + r.h - PAD - FOOT_H + 1;
+    ui.p.text_fit(r.x as f32 + 5.0, hint_y as f32, MENU_HINT, SMALL, r.w as f32 - 10.0, th().dim);
+    // a hairline between two intents' rows (each intent's first line after the first)
+    let firsts: Vec<i32> = grid.lines.iter().filter(|l| l.1.is_some_and(|i| grid.shown.contains(&i))).map(|l| l.2).collect();
+    for line in firsts.iter().skip(1).filter(|l| **l < grid.depth && pop.rows.iter().enumerate().any(|(k, _)| grid.places.get(k).map(|p| p.0) == Some(**l))) {
+        let y = r.y + row_h + 2 + grid.neutral.len() as i32 * (ICON + GAP) + (line - grid.neutral.len() as i32) * (ROW_H + 1) - 1;
+        ui.p.fill(Rect::new(r.x + PAD, y, r.w - 2 * PAD, 1), with_alpha(th().edge, 160));
     }
     for (k, row) in pop.rows.iter().enumerate().filter(|(_, r)| grid.shows(r.slot)) {
         let rr = pop.row(row_h, k);
         let hover = ui.hover(rr);
-        let shows = if row.valid { 255 } else { FADE };
+        let faded = matches!(row.slot, Some(Slot::Intent(i)) if grid.faded(Some(i)));
+        let shows = if row.valid && !faded { 255 } else { FADE };
         let lit = hover && row.valid;
         match row.slot {
             Some(Slot::Neutral(text)) => {
@@ -222,34 +275,92 @@ pub(super) fn draw_menu(ui: &mut Ui<Action>, art: &mut Art, pop: &Popup, grid: &
                 let shown = if (text == "Rest" || text == OFF_HAND) && !row.label.is_empty() { row.label.as_str() } else { text };
                 ui.p.text_center(rr.x as f32 + rr.w as f32 / 2.0, y, shown, SMALL, with_alpha(th().text, shows.max(110)));
             }
-            _ => {
-                let edge = if lit { th().gold } else { CELL_EDGE };
-                ui.p.panel(rr, with_alpha(th().card, shows), with_alpha(edge, shows), 1.5);
-                let px = ((ICON - 2) as f32 * ui.p.v.s).round().max(1.0) as i32;
-                let rel = art.first_rel(&row.icon);
-                if let Some(img) = rel.as_deref().and_then(|rel| art.image(rel, px, px)) {
-                    ui.p.image_alpha(img, Rect::new(rr.x + 1, rr.y + 1, ICON - 2, ICON - 2), shows);
-                }
-                // PR7-36 (ART-12): the row's intent as a thin bottom line on the icon
-                if let Some(Slot::Intent(i)) = row.slot {
-                    icon_line(&mut ui.p, Rect::new(rr.x + 1, rr.y + 1, ICON - 2, ICON - 2), intent_ring_color(i), shows);
-                }
-                // the second cell of a skill with both Maneuver kinds: Disengage (its card says so)
-                if matches!(&row.act, super::input::RowAct::Pick(p) if matches!(p[..], [rip::Pick::Skill { kind: Some(ManeuverKind::Disengage), .. }])) {
-                    ui.p.fill(Rect::new(rr.x + rr.w - 5, rr.y + rr.h - 5, 4, 4), with_alpha(th().text, shows));
-                }
-            }
-        }
-        // a pouch item's copies left (INTENT2-U: the corner `xN` badge)
-        if let Some(n) = row.count {
-            let text = format!("x{n}");
-            let (tw, lh) = (ui.p.text_w(&text, SMALL), ui.p.line_h(SMALL));
-            text_outlined(&mut ui.p, (rr.x + rr.w) as f32 - tw - 1.0, (rr.y + rr.h) as f32 - lh, &text, SMALL, with_alpha(th().text, shows.max(150)), rgba(0, 0, 0, shows));
+            _ => skill_row(ui, cx, row, rr, grid.label_w, shows, lit),
         }
         // IF3, IN6: a pick that changes the intent and drops intent-bound buffs: a red corner
         if row.warn {
             ui.p.fill(Rect::new(rr.x + rr.w - 4, rr.y + 1, 3, 3), with_alpha(th().foe, shows));
         }
         ui.push(format!("popup.{k}"), "option", format!("{} {}", row.label, row.detail), rr, row.valid, hover, Some(Action::Choose(k)), row.tip.clone());
+    }
+}
+
+/// One skill row in `rr` (contract 7): the icon with its intent line, the name over its AP pips and block span, the HP
+/// damage and the poise pips on the target, the status chips; `shows` its alpha, `lit` hovered and live.
+fn skill_row(ui: &mut Ui<Action>, cx: &mut Cx, row: &Row, rr: Rect, name_w: i32, shows: u8, lit: bool) {
+    if lit {
+        ui.p.panel(rr, th().card_hot, th().gold, 1.5);
+    }
+    let ir = Rect::new(rr.x + 2, rr.y + (ROW_H - ROW_ICON) / 2, ROW_ICON, ROW_ICON);
+    ui.p.panel(ir, with_alpha(th().card, shows), with_alpha(if lit { th().gold } else { CELL_EDGE }, shows), 1.0);
+    let px = ui.icon_px(ir).max(1);
+    let rel = cx.art.first_rel(&row.icon);
+    if let Some(img) = rel.as_deref().and_then(|rel| cx.art.image(rel, px, px)) {
+        ui.p.image_alpha(img, Rect::new(ir.x + 1, ir.y + 1, ir.w - 2, ir.h - 2), shows);
+    }
+    // PR7-36 (ART-12): the row's intent as a thin bottom line on the icon
+    if let Some(Slot::Intent(i)) = row.slot {
+        icon_line(&mut ui.p, Rect::new(ir.x + 1, ir.y + 1, ir.w - 2, ir.h - 2), intent_ring_color(i), shows);
+    }
+    // the second cell of a skill with both Maneuver kinds: Disengage (its card says so)
+    if matches!(&row.act, super::input::RowAct::Pick(p) if matches!(p[..], [rip::Pick::Skill { kind: Some(ManeuverKind::Disengage), .. }])) {
+        ui.p.fill(Rect::new(ir.x + ir.w - 5, ir.y + ir.h - 5, 4, 4), with_alpha(th().text, shows));
+    }
+    // a pouch item's copies left (INTENT2-U: the corner `xN` badge)
+    if let Some(n) = row.count {
+        let text = format!("x{n}");
+        let (tw, lh) = (ui.p.text_w(&text, SMALL), ui.p.line_h(SMALL));
+        text_outlined(&mut ui.p, (ir.x + ir.w) as f32 - tw, (ir.y + ir.h) as f32 - lh + 1.0, &text, SMALL, with_alpha(th().text, shows.max(150)), rgba(0, 0, 0, shows));
+    }
+    let nx = ir.x + ir.w + 4;
+    let name = ui.p.fit(&row.label, BODY, name_w as f32);
+    ui.p.text(nx as f32, rr.y as f32, &name, BODY, with_alpha(th().text, shows));
+    let Some(f) = &row.facts else { return };
+    // the AP pips (blue), then the block span (grey), under the name
+    let py = rr.y + ROW_H - 5;
+    let mut at = nx;
+    for _ in 0..f.ap.clamp(0, 12) {
+        ui.p.fill(Rect::new(at, py, 3, 3), with_alpha(crate::tokens::ally(), shows));
+        at += 4;
+    }
+    at += if f.ap > 0 { 3 } else { 0 };
+    for _ in 0..f.blocks.clamp(0, 6) {
+        ui.p.fill(Rect::new(at, py + 1, 3, 2), with_alpha(CELL_EDGE, shows));
+        at += 4;
+    }
+    let mut x = nx + name_w + 4;
+    if let Some(h) = f.hits.filter(|h| h.hits > 0) {
+        super::plates::heart_shape(&mut ui.p, Rect::new(x, rr.y + 5, 6, 5), with_alpha(th().foe, shows));
+        ui.p.text(x as f32 + 8.0, rr.y as f32 + 3.0, &format!("-{}", h.damage), BODY, with_alpha(th().text, shows));
+        let dx = x + DAMAGE_W;
+        if h.breaks {
+            let sr = Rect::new(dx, rr.y + 4, 7, 7);
+            if !super::plates::icon(ui, cx, super::plates::SPLIT_SHIELD, sr, shows) {
+                ui.p.panel(sr, rgba(0, 0, 0, 0), with_alpha(crate::tokens::planned(), shows), 1.0);
+            }
+        } else {
+            for k in 0..h.pips.clamp(0, 5) {
+                ui.p.fill(Rect::new(dx + k * 4, rr.y + 6, 3, 3), with_alpha(crate::tokens::planned(), shows));
+            }
+        }
+    }
+    x += DAMAGE_W + POISE_W;
+    // the heal's moss heart, then each status the move brings (at most ROW_CHIPS, then "+N")
+    let mut chips: Vec<String> = Vec::new();
+    if f.heal {
+        chips.push(String::new());
+    }
+    chips.extend(f.statuses.iter().cloned());
+    for st in chips.iter().take(ROW_CHIPS) {
+        let cr = Rect::new(x, rr.y + (ROW_H - CHIP) / 2, CHIP, CHIP);
+        if st.is_empty() {
+            super::plates::heal_heart(ui, cx, cr);
+        } else if !super::plates::icon(ui, cx, &emberwake_content::art::status_icon(st), cr, shows) {
+            ui.p.panel(cr, rgba(0, 0, 0, 0), with_alpha(crate::tokens::oxblood(), shows), 1.0);
+        }
+        x += CHIP + 1;
+    }
+    if chips.len() > ROW_CHIPS {
+        ui.p.text(x as f32, rr.y as f32 + 4.0, &format!("+{}", chips.len() - ROW_CHIPS), SMALL, with_alpha(th().text, shows));
     }
 }

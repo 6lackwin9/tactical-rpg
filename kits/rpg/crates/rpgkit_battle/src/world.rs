@@ -275,6 +275,11 @@ pub struct World {
     pub unkillable: Vec<UnitId>,
     /// PR6-9: a `retreat` objective's unit and the HP damage never takes it below (`encounter::floor_hp`; None: none).
     pub hp_floor: Option<(UnitId, i32)>,
+    /// PHASEBREAK1 (PR7-56, BOSSUI1 BU15): the HP each unit's next `hp_below` phase ends at (the session sets them at
+    /// every block start). A hit that takes the unit to or below it stops there and breaks the phase (`phase_break`).
+    pub phase_floors: IndexMap<UnitId, i32>,
+    /// PHASEBREAK1: the unit whose phase a hit just broke (the session ends the round and takes it).
+    pub phase_break: Option<UnitId>,
     /// S1: the unkillable units damage would have downed, in the order it first happened (once each; the session logs
     /// each one's cell).
     pub spared: Vec<UnitId>,
@@ -376,6 +381,8 @@ impl World {
             hold: None,
             unkillable: Vec::new(),
             hp_floor: None,
+            phase_floors: IndexMap::new(),
+            phase_break: None,
             spared: Vec::new(),
             ground: Default::default(),
             meters: Default::default(),
@@ -483,12 +490,21 @@ impl World {
     }
 
     fn damage_as(&mut self, c: UnitId, amount: i32, mitigated: bool, past_unkillable: bool) -> i32 {
-        let was_alive = self.units[c].is_alive();
-        let dealt = self.units[c].take_damage(amount, mitigated);
+        let (was_alive, hp0) = (self.units[c].is_alive(), self.units[c].hp);
+        let mut dealt = self.units[c].take_damage(amount, mitigated);
         // PR6-9: the retreat's phase guard: damage stops at the floor (a scripted kill goes past it)
         if let Some((t, floor)) = self.hp_floor.filter(|&(t, _)| t == c && !past_unkillable) {
             if was_alive && self.units[t].hp < floor {
                 self.units[t].hp = floor.min(self.units[t].max_hp);
+            }
+        }
+        // PHASEBREAK1: a hit to or past the phase's threshold stops at it (the rest is lost, so the damage dealt is the HP
+        // it took) and breaks the phase
+        if let Some(&floor) = self.phase_floors.get(&c).filter(|_| was_alive && !past_unkillable) {
+            if self.units[c].hp <= floor {
+                self.units[c].hp = floor.clamp(1, self.units[c].max_hp.max(1));
+                dealt = (hp0 - self.units[c].hp).max(0);
+                self.phase_break = Some(c);
             }
         }
         if self.units[c].hp == 0 && !past_unkillable && self.unkillable.contains(&c) {

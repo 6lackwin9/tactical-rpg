@@ -188,6 +188,23 @@ fn a_fled_fight_pays_the_xp_of_the_foes_it_defeated() {
     assert_eq!(none["xp"], json!({}));
 }
 
+/// ENRAGE2 EN9: foes that slipped away at a random fight's round cap pay nothing, not even the ones the party
+/// defeated (a flight with the same tally pays them), and no gold.
+#[test]
+fn an_escaped_fight_pays_nothing() {
+    let (_s, d) = scratch("escaped", &[(Some("ashlands"), "encounters", "ash_scouts", purse(15, false))]);
+    let t = tally(&d, "ashlands:ash_scouts", &|k| if k == "ash_skirmisher#0" { Fate::Killed } else { Fate::Standing });
+    let fled = battle::apply(&d, &mut game(&d), "ashlands:ash_scouts", "fled", &t);
+    assert_ne!(fled["xp"], json!({}), "a flight pays the defeated foe");
+    let mut gs = game(&d);
+    let res = battle::apply(&d, &mut gs, "ashlands:ash_scouts", battle::ESCAPED, &t);
+    assert!(json::b(&res, "ok", false), "{res:?}");
+    assert_eq!(res["xp"], json!({}));
+    let rewards = json::dget(&res, "rewards");
+    assert_eq!((json::i(rewards, "gold", -1), json::aget(rewards, "drops").len()), (0, 0));
+    assert_eq!(json::i(json::dget(rewards, "defeated"), "slain", 0), 1, "the tally still tells who fell");
+}
+
 fn purse(g: i64, once: bool) -> Value {
     json!({"purse": {"gold_min": g, "gold_max": g, "once": once}})
 }

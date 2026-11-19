@@ -497,12 +497,17 @@ pub struct Results {
 
 /// PR7-37 (PT-02): the outcome label of a fight that ran out of rounds (whatever its `timeout_outcome` settles it as).
 pub const OUT_OF_TIME: &str = "Out of time";
+/// ENRAGE2 EN9: the head of a random fight whose foes slipped away at its round cap.
+pub const SLIPPED_AWAY: &str = "They slipped away";
+/// ENRAGE2 EN9: its note.
+pub const SLIPPED_NOTE: &str = "The foes got away before the fight was won. No rewards; the party keeps its wounds.";
 
 /// PR7-37 (PT-02, PT-24): the results' and the battle banner's label of an outcome: "Out of time" at the round limit,
 /// else Victory, Defeat or Fled.
 pub fn outcome_head(outcome: &str, timed_out: bool) -> &str {
     match outcome {
         "won" => "Victory",
+        emberwake_world::battle::ESCAPED => SLIPPED_AWAY,
         _ if timed_out => OUT_OF_TIME,
         "lost" => "Defeat",
         "fled" => "Fled",
@@ -870,7 +875,9 @@ impl Screen<GameCx> for Results {
         };
         let currency = emberwake_world::terms::short(&d, &world, emberwake_world::terms::CURRENCY);
         let (tally, mut note, reward_lines) = reward_text(&self.rewards, &self.outcome, &currency, &name);
-        if self.timed_out {
+        if self.outcome == emberwake_world::battle::ESCAPED {
+            note = SLIPPED_NOTE.to_string();
+        } else if self.timed_out {
             note = timeout_note(&self.rewards).to_string();
         }
         let line = (ui.p.line_h(BODY + 1.0) + 3.0).ceil() as i32;
@@ -1035,6 +1042,7 @@ mod tests {
     #[test]
     fn a_timed_out_fight_reads_out_of_time() {
         assert_eq!(outcome_head("lost", true), OUT_OF_TIME);
+        assert_eq!(outcome_head("escaped", true), SLIPPED_AWAY, "ENRAGE2 EN9: a random fight's foes slipped away");
         assert_eq!(outcome_head("", true), OUT_OF_TIME);
         assert_eq!(outcome_head("lost", false), "Defeat");
         assert_eq!(outcome_head("won", true), "Victory");

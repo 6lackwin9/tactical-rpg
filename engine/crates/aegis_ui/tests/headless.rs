@@ -131,7 +131,7 @@ impl Game {
     }
 
     fn start_idle(need: FrameNeed, blank: bool, fps: u32, idle: Duration) -> Self {
-        let port = TcpListener::bind(("127.0.0.1", 0)).unwrap().local_addr().unwrap().port();
+        let port = fresh_port();
         let h = Headless { size: SIZE, fps, dpr: 1.0, idle, stepped: false };
         let thread = std::thread::spawn(move || run(context(), vec![Box::new(Probe::new(need, blank)) as Box<dyn Screen<App>>], options(port, h)));
         let by = Instant::now() + Duration::from_secs(30);
@@ -157,13 +157,29 @@ impl Game {
     }
 
     fn frames(&mut self) -> u64 {
-        self.ask(json!({"cmd": "ui_tree"}))["frame"].as_u64().unwrap()
+        let tree = self.ask(json!({"cmd": "ui_tree"}));
+        tree["frame"].as_u64().unwrap_or_else(|| panic!("ui_tree has no frame count: {tree}"))
     }
 
     /// `quit` over the link: the screens leave and the run returns, with no process exit.
     fn stop(mut self) {
         assert_eq!(self.ask(json!({"cmd": "quit"}))["ok"], json!(true));
         self.thread.join().unwrap().unwrap();
+    }
+}
+
+/// A free local port no other game of this run was handed. A port the OS gives for port 0 is free only until it is
+/// dropped, and Windows hands it out again soon: two games starting in parallel could get the same one, and a test would
+/// then talk to another test's game (a null reply as that game quits; develop CI run 362).
+fn fresh_port() -> u16 {
+    static GIVEN: std::sync::Mutex<Vec<u16>> = std::sync::Mutex::new(Vec::new());
+    let mut given = GIVEN.lock().unwrap_or_else(|e| e.into_inner());
+    loop {
+        let port = TcpListener::bind(("127.0.0.1", 0)).unwrap().local_addr().unwrap().port();
+        if !given.contains(&port) {
+            given.push(port);
+            return port;
+        }
     }
 }
 

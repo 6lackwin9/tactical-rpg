@@ -7,7 +7,7 @@ use crate::source::content;
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_battle::encounter::{
     ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND, BROKEN, BROKEN_KEYS, DOWNED, DOWNED_KEYS, FALLBACKS, KILL_EFFECT, KILL_EFFECT_KEYS, KILL_MAX_UNITS, KILL_MAX_WITHIN, PARTY_NAME, PARTY_PREFIX, PICK_DEFAULTS, ROUND_KEYS, STAY_HOLD,
-    STAY_MODES, STAY_STAND, STAY_THEN, TALK_EFFECT, TALK_EFFECT_KEYS, SIDE_EFFECT, SIDE_EFFECT_KEYS, SIDE_TARGETS, SIDE_ALIASES, side_id, SWAP_EFFECT, SWAP_EFFECT_KEYS, SWAP_HP, SWAP_KEEP_PCT, ENEMY_SIDE, PARTY_SIDE,
+    STAY_MODES, STAY_STAND, STAY_THEN, TALK_EFFECT, TALK_EFFECT_KEYS, VIGNETTE_EFFECT, VIGNETTE_EFFECT_KEYS, SIDE_EFFECT, SIDE_EFFECT_KEYS, SIDE_TARGETS, SIDE_ALIASES, side_id, SWAP_EFFECT, SWAP_EFFECT_KEYS, SWAP_HP, SWAP_KEEP_PCT, ENEMY_SIDE, PARTY_SIDE,
 };
 use rpgkit_battle::grid::{Grid, TerrainTable, GRID_H, GRID_W, V2};
 use rpgkit_rules::status;
@@ -120,6 +120,10 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
     if !talk_effects(e).is_empty() {
         errors.push("A talk needs a world encounter (dialogue trees live in worlds).".into());
     }
+    // PHASEBREAK1: vignettes are world rows too
+    if !vignette_effects(e).is_empty() {
+        errors.push("A vignette needs a world encounter (vignettes live in worlds).".into());
+    }
     errors.extend(objective_problems(v, e, &|_: &str| true));
     errors.extend(morale_problems(e));
     errors.extend(purse_problems(e));
@@ -217,7 +221,8 @@ const ENRAGE_POWER_MAX: i64 = 25;
 const DEFAULT_ENRAGE_POWER: i64 = 20;
 /// The phase effects (BOSS1; HOOKS1 DU1 adds `deck`; FX1 5.1 `shake`; ENCOUNTER2 P1 `kill`; ENCOUNTER2-C DT1 `talk`;
 /// PHASEFX1 `side` and `swap`).
-const EFFECTS: [&str; 11] = ["line", "wave", "status", "ai", "enrage", rpgkit_data::DECK_EFFECT, rpgkit_data::SHAKE_EFFECT, KILL_EFFECT, TALK_EFFECT, SIDE_EFFECT, SWAP_EFFECT];
+/// PHASEBREAK1 adds `vignette`.
+const EFFECTS: [&str; 12] = ["line", "wave", "status", "ai", "enrage", rpgkit_data::DECK_EFFECT, rpgkit_data::SHAKE_EFFECT, KILL_EFFECT, TALK_EFFECT, SIDE_EFFECT, SWAP_EFFECT, VIGNETTE_EFFECT];
 /// ENCOUNTER2 P2 adds `group`.
 const PHASE_KEYS: [&str; 6] = ["id", "name", "trigger", "effects", "pause_autoplay", "group"];
 /// ENCOUNTER2 P2: a group is 1 to 24 characters a-z, 0-9 or _.
@@ -251,6 +256,7 @@ fn effect_keys(kind: &str) -> &'static [&'static str] {
         rpgkit_data::SHAKE_EFFECT => &rpgkit_data::SHAKE_EFFECT_KEYS,
         KILL_EFFECT => &KILL_EFFECT_KEYS,
         TALK_EFFECT => &TALK_EFFECT_KEYS,
+        VIGNETTE_EFFECT => &VIGNETTE_EFFECT_KEYS,
         SIDE_EFFECT => &SIDE_EFFECT_KEYS,
         SWAP_EFFECT => &SWAP_EFFECT_KEYS,
         _ => &["type", "unit", "power"],
@@ -474,6 +480,11 @@ pub fn talk_effects(e: &Dict) -> Vec<(String, &Dict)> {
     dicts(json::get(e, "phases")).into_iter().flat_map(|p| dicts(json::get(p, "effects")).into_iter().filter(|fx| json::s(fx, "type") == TALK_EFFECT).map(move |fx| (json::s(p, "id"), fx))).collect()
 }
 
+/// PHASEBREAK1: every `vignette` effect of an encounter's phases, with its phase id.
+pub fn vignette_effects(e: &Dict) -> Vec<(String, &Dict)> {
+    dicts(json::get(e, "phases")).into_iter().flat_map(|p| dicts(json::get(p, "effects")).into_iter().filter(|fx| json::s(fx, "type") == VIGNETTE_EFFECT).map(move |fx| (json::s(p, "id"), fx))).collect()
+}
+
 /// ENCOUNTER2-C 5.2 (world encounters, world `w`): each talk's dialogue resolves there and its tree runs in a battle
 /// (only set_flag / add_flag effects, `dialogue::battle_talk_errors`), its speaker is "" or a character there; a
 /// `broken` trigger needs the poise rule in the world's ruleset.
@@ -492,6 +503,15 @@ pub fn world_talk_problems(v: &View, w: &str, e: &Dict) -> Vec<String> {
         let speaker = json::s(fx, "speaker");
         if !speaker.is_empty() {
             errors.extend(super::world::ref_errors(v, w, &format!("Phase '{phase}': talk speaker"), "characters", &speaker));
+        }
+    }
+    // PHASEBREAK1: each vignette resolves in the world
+    for (phase, fx) in vignette_effects(e) {
+        let id = json::s(fx, "id");
+        if id.is_empty() {
+            errors.push(format!("Phase '{phase}': a vignette needs an id."));
+        } else {
+            errors.extend(super::world::ref_errors(v, w, &format!("Phase '{phase}': vignette"), "vignettes", &id));
         }
     }
     if has_broken_trigger(e) && !super::hooks::lists_rule(super::hooks::world_ruleset_row(v, w), rpgkit_rules::ruleset::POISE) {
@@ -567,6 +587,10 @@ fn effects_errors(tag: &str, raw: &Value, known: &[String], ref_ok: &dyn Fn(&str
     }
     if talks > 1 {
         errors.push(format!("Phase '{tag}': one talk per phase."));
+    }
+    let vignettes = list.iter().filter_map(Value::as_object).filter(|fx| json::s(fx, "type") == VIGNETTE_EFFECT).count();
+    if vignettes > 1 {
+        errors.push(format!("Phase '{tag}': one vignette per phase."));
     }
     if lines > 1 {
         errors.push(format!("Phase '{tag}': one line per phase."));

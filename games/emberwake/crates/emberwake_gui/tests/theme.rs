@@ -526,6 +526,20 @@ fn the_game_theme_sets_every_role_but_foe() {
     }
 }
 
+/// PR7-40 part 3 (FB-358): the file's `game_colors` keys stand in alphabetical order (read from the text: the JSON
+/// map does not keep the file's order).
+#[test]
+fn the_game_colours_are_in_alphabetical_order() {
+    let text = std::fs::read_to_string(game_dir().join("assets/ui/theme.json")).unwrap();
+    let start = text.find("\"game_colors\": {").expect("the game colours") + "\"game_colors\": {".len();
+    let block = &text[start..start + text[start..].find('}').expect("the block's end")];
+    let keys: Vec<&str> = block.lines().filter_map(|l| l.trim().strip_prefix('"').and_then(|l| l.split('"').next())).collect();
+    let mut sorted = keys.clone();
+    sorted.sort();
+    assert!(!keys.is_empty());
+    assert_eq!(keys, sorted);
+}
+
 // ---- PR7-36 (STYLE-PASS1, ART-01): no widget draws a colour outside the theme ------------------------------------------
 
 /// Saturation and value of `c` (0 to 1).

@@ -1,0 +1,284 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "rulesets",
+      "entry": {
+        "id": "timeline",
+        "enrage_from_round": 6,
+        "enrage_step": {
+          "minion": 10,
+          "standard": 10,
+          "elite": 15,
+          "boss": 20
+        },
+        "enrage_max_stacks": 4
+      },
+      "fields": [
+        "enrage_from_round",
+        "enrage_step",
+        "enrage_max_stacks"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_pro_0a",
+        "max_rounds": 6
+      },
+      "fields": [
+        "max_rounds"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_pro_0b",
+        "max_rounds": 6
+      },
+      "fields": [
+        "max_rounds"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_pro_0c",
+        "max_rounds": 6
+      },
+      "fields": [
+        "max_rounds"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_evt_01",
+        "max_rounds": 12
+      },
+      "fields": [
+        "max_rounds"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_evt_02",
+        "max_rounds": 12
+      },
+      "fields": [
+        "max_rounds"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_evt_03",
+        "max_rounds": 12
+      },
+      "fields": [
+        "max_rounds"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_evt_04",
+        "max_rounds": 12
+      },
+      "fields": [
+        "max_rounds"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_evt_05",
+        "max_rounds": 12
+      },
+      "fields": [
+        "max_rounds"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_evt_06",
+        "max_rounds": 12
+      },
+      "fields": [
+        "max_rounds"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_evt_06_overlook",
+        "max_rounds": 12
+      },
+      "fields": [
+        "max_rounds"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_roam_watch",
+        "max_rounds": 5,
+        "timeout_outcome": "escaped"
+      },
+      "fields": [
+        "max_rounds",
+        "timeout_outcome"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_roam_dredgers",
+        "max_rounds": 5,
+        "timeout_outcome": "escaped"
+      },
+      "fields": [
+        "max_rounds",
+        "timeout_outcome"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_roam_sentries",
+        "max_rounds": 5,
+        "timeout_outcome": "escaped"
+      },
+      "fields": [
+        "max_rounds",
+        "timeout_outcome"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_scav_alley",
+        "max_rounds": 5,
+        "timeout_outcome": "escaped"
+      },
+      "fields": [
+        "max_rounds",
+        "timeout_outcome"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_scav_crossroads",
+        "max_rounds": 5,
+        "timeout_outcome": "escaped"
+      },
+      "fields": [
+        "max_rounds",
+        "timeout_outcome"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_scav_kiln",
+        "max_rounds": 5,
+        "timeout_outcome": "escaped"
+      },
+      "fields": [
+        "max_rounds",
+        "timeout_outcome"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_scav_vats",
+        "max_rounds": 5,
+        "timeout_outcome": "escaped"
+      },
+      "fields": [
+        "max_rounds",
+        "timeout_outcome"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_scav_watchpost",
+        "max_rounds": 5,
+        "timeout_outcome": "escaped"
+      },
+      "fields": [
+        "max_rounds",
+        "timeout_outcome"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_patrol_third_ward",
+        "max_rounds": 5,
+        "timeout_outcome": "escaped"
+      },
+      "fields": [
+        "max_rounds",
+        "timeout_outcome"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_patrol_slag_gate",
+        "max_rounds": 5,
+        "timeout_outcome": "escaped"
+      },
+      "fields": [
+        "max_rounds",
+        "timeout_outcome"
+      ]
+    }
+  ]
+}

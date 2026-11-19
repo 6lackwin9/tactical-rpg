@@ -386,7 +386,7 @@ impl<'a> Runner<'a> {
     /// line) when the encounter does not resolve.
     pub fn fight_world(&mut self, world: &str, id: &str, seed: i64) -> FightRes {
         let d = self.d;
-        let Some((mut def, roster)) = rpgkit_world::battle::authored_fight(d, world, id, i64::from(self.args.stage)) else {
+        let Some((mut def, mut roster)) = rpgkit_world::battle::authored_fight(d, world, id, i64::from(self.args.stage)) else {
             self.print(format!("SIM unknown world encounter {world}/{id}"));
             return FightRes::default();
         };
@@ -398,7 +398,13 @@ impl<'a> Runner<'a> {
         def.max_rounds = round_limit;
         def.rng_seed = seed;
         def.ruleset = self.args.ruleset_for(Some(&d.ruleset(world)));
-        let s = Session::start(d.cat.clone(), def, &roster);
+        // BALANCE-WHATIF1 (ENGINE-26): the what-if foes (more of the last one, levels up, HP scaled)
+        roster.foe_levels = i64::from(self.args.foe_level);
+        if let Some(last) = def.enemies.last().cloned() {
+            def.enemies.extend(std::iter::repeat_n(last, self.args.foes.max(0) as usize));
+        }
+        let mut s = Session::start(d.cat.clone(), def, &roster);
+        scale_foe_hp(&mut s, self.args.foe_hp);
         self.play(s, round_limit, jitter.as_mut())
     }
 
@@ -684,3 +690,17 @@ impl<'a> Runner<'a> {
     }
 }
 
+/// BALANCE-WHATIF1 (ENGINE-26): every foe of `s` at `pct` % of its max HP, full; through the permanent offset, so a
+/// stat refresh in the fight keeps it (100: unchanged).
+pub fn scale_foe_hp(s: &mut Session, pct: i32) {
+    if pct == 100 {
+        return;
+    }
+    for e in s.w.enemies.clone() {
+        let u = &mut s.w.units[e];
+        let scaled = (i64::from(u.max_hp) * i64::from(pct) / 100).max(1) as i32;
+        u.max_hp_offset += scaled - u.max_hp;
+        u.max_hp = scaled;
+        u.hp = scaled;
+    }
+}

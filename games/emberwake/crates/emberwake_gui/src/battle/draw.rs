@@ -468,7 +468,16 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         if accept.is_some() {
             tip.push(("Click: accept the auto-fill up to here (F: all of it)".into(), th().dim));
         }
-        ui.push(format!("strip.block{b}"), "block", entry.map(|e| e.2.clone()).unwrap_or_else(|| "empty".into()), wr, true, live_block == b, accept.map(Action::GhostSlot), tip);
+        // BATTLE-UI2 (battle contract 7, FB-358): an empty or a picked block opens the skill menu under it; a ghost block
+        // opens it from a right click or the menu key (Tab, pad north)
+        let menu = timeline && planning && accept.is_none() && open && sel.is_some_and(|u| w.allies.contains(&u) && w.units[u].is_active());
+        if menu {
+            tip.push(("Click: the skill menu for this block".into(), th().dim));
+        } else if accept.is_some() {
+            tip.push(("Right click or Tab: the skill menu".into(), th().dim));
+        }
+        let action = accept.map(Action::GhostSlot).or(menu.then_some(Action::StripMenu(b)));
+        ui.push(format!("strip.block{b}"), "block", entry.map(|e| e.2.clone()).unwrap_or_else(|| "empty".into()), wr, true, live_block == b, action, tip);
     }
     // Each action is one continuous span over its blocks, coloured by kind (COMBAT-UI3).
     let mut strip_labels = Vec::new();
@@ -1154,6 +1163,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         ui.p.panel(r, th().game("outcome_fill", rgba(10, 14, 22, 240)), th().gold, 4.0);
         let (title, col) = match outcome.as_str() {
             "won" => ("Victory", th().good),
+            // ENRAGE2 EN9: a random fight's foes slipped away at its round cap
+            emberwake_world::battle::ESCAPED => (crate::hub::SLIPPED_AWAY, th().gold),
             // PR7-37 (PT-02): the round limit ran out (nobody fled)
             _ if g.timed_out() => (crate::hub::OUT_OF_TIME, th().gold),
             "lost" => ("Defeat", th().foe),
@@ -1284,7 +1295,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         // VISCLAR1-D: the skill menu as icons
         let pop = g.popup.clone().expect("the grid's popup");
         ui.push("popup.backdrop", "backdrop", "", Rect::new(0, 0, W, H), true, false, Some(Action::ClosePopup), Vec::new());
-        super::skill_menu::draw_menu(&mut ui, &mut cx.art, &pop, &grid, g.menu_row);
+        super::skill_menu::draw_menu(&mut ui, cx, &pop, &grid, g.menu_row);
     } else if let Some(pop) = g.popup.clone() {
         let r = pop.rect(g.menu_row);
         ui.push("popup.backdrop", "backdrop", "", Rect::new(0, 0, W, H), true, false, Some(Action::ClosePopup), Vec::new());

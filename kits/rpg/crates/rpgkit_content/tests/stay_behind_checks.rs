@@ -106,7 +106,7 @@ fn the_schema_carries_the_fields_in_both_encounter_sections() {
         let row = |key: &str| fields(source::schema(), section, "encounters").iter().map(json::dict).find(|f| json::s(f, "key") == key).cloned().unwrap_or_else(|| panic!("{section}.encounters.{key}"));
         assert_eq!((json::s(&row("unkillable"), "type"), row("unkillable").get("default").cloned()), ("refs".into(), Some(json!([]))), "{section}");
         assert_eq!(row("timeout_outcome").get("default"), Some(&json!("fled")), "{section}");
-        assert_eq!(row("timeout_outcome").get("options"), Some(&json!(["fled", "lost"])), "{section}");
+        assert_eq!(row("timeout_outcome").get("options"), Some(&json!(["fled", "lost", "escaped"])), "{section}");
         assert_eq!((json::s(&row("stay_behind"), "type"), row("stay_behind").get("default").cloned()), ("json".into(), Some(json!({}))), "{section}");
     }
     let e = normalize(fields(source::schema(), "content", "encounters"), &dict(json!({"id": "x"})), false);

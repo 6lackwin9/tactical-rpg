@@ -7,6 +7,79 @@
 | [BALANCE_REPORT_2026-11A.md](../../../docs/archive/BALANCE_REPORT_2026-11A.md) | `PR5-27` .. `R1-BAL`, `INPUT1-MB`, `RULESET1`, `REWARD1-B`, `BAL4/5` (`2026-10-18 .. 2026-11-10`) | All pre-`U3_GEAR_REWORK` Channel Duel, `R4-CLOSE` (`61.0%` feel / `92%` party), `R1..R4`, and classic Ashlands balance runs |
 | [BALANCE_REPORT_2026-10.md](../../../docs/archive/BALANCE_REPORT_2026-10.md) | `2026-10-17` initial runs | Earliest October 2026 baseline snapshot |
 
+## 2026-11-19 ENGINE-26 BALANCE-WHATIF1 what-if runs (`FB-381`)
+
+Report only: no data or golden change; the user picks the data change. Sunk Ward, timeline rules with the ENRAGE2
+enrage, the authored parties, 32 seeds per fight, `aegis sim feel pace=on` with the new what-if keys `foe_hp=`,
+`foes=` and `foe_level=` (the foes as changed for the run only). Minutes are the EN7b estimate (10 s planning per hero
+per round plus 5 s, 0.42 s playback per block, 0.9 s between rounds).
+
+**1. Random fights** (the 10 escape fights together, 320 fights; target median 2-3 rounds with won % at least 85):
+
+| Change | Won % | Escaped % | Won median rounds | Minutes |
+| --- | --- | --- | --- | --- |
+| As authored | 100 | 0 | 1 | 0.8 |
+| Foe HP +25 % | 100 | 0 | 1 | 0.8 |
+| Foe HP +50 % | 100 | 0 | 1 | 0.8 |
+| Foe HP +100 % | 100 | 0 | 1 | 0.8 |
+| One more foe | 99.4 | 0.6 | 2 | 1.6 |
+| One more foe, HP +25 % | 100 | 0 | 2 | 1.6 |
+| One more foe, HP +50 % | 100 | 0 | 2 | 1.6 |
+| One more foe, HP +100 % | 98.4 | 1.6 | 2 | 1.6 |
+| Two more foes | 98.1 | 1.9 | 3 | 2.4 |
+
+HP alone does not move the median (foe HP x4 first reaches 2 rounds, x10 reaches 4 with 22 % escaping). The smallest
+change that reaches the target is **one more foe** per random fight (median 2); two more reach median 3.
+
+**2. Elite minutes** (four heroes and 6 blocks in every elite fight):
+
+| Fight | Won % | Won median rounds | Minutes now |
+| --- | --- | --- | --- |
+| Corvo's Gate | 93.8 | 5 | 4.0 |
+| Proctor Wardens | 100 | 3 | 2.4 |
+| Kiln Haulers | 96.9 | 3 | 2.4 |
+| Guild Bruisers | 96.9 | 4 | 3.2 |
+
+At the elite round target of 5, today's estimate reads 4.0 minutes. Five rounds read 7 minutes at **18.9 s** of planning
+per hero per round and 8 minutes at **21.9 s** (today's estimate: 10 s). Whether either fits real play is for the
+user's playtest.
+
+**3. Bosses** at the authored level and with every foe one level up (`foe_level=1`), beside the approved boss band of
+20-40 % won:
+
+| Fight | Won % (authored) | Median rounds won | Won % (+1 level) | Median rounds won |
+| --- | --- | --- | --- | --- |
+| The Sweep | 53.1 | 10 | 50.0 | 10 |
+| The Crossroads Cages | 84.4 | 7 | 81.3 | 8 |
+| The Bone-Mill Raid | 28.1 | 7 | 25.0 | 6.5 |
+| The Tallow Vats | 56.3 | 9 | 40.6 | 8 |
+| The Awakening Fissure | 56.3 | 10 | 46.9 | 10 |
+| The Crucible | 0 | - | 0 | - |
+| The Crucible (Overlook) | 0 | - | 0 | - |
+
+Only the Bone-Mill Raid sits in the band as authored; +1 level brings the Tallow Vats to its top edge (40.6 %). The
+Sweep, the Cages and the Fissure stay above it at +1 level, and both Crucible fights are never won at either level
+(lost 28 of 32 as authored).
+
+## 2026-11-19 PR7-55 ENRAGE2 + PR7-56 PHASEBREAK1 boss run (`FB-377`)
+
+- Run: `aegis sim feel enc=<all 24 Sunk Ward encounters> seeds=32 pace=on`, rule off (`tune=enrage_from_round:0`) and
+  on (the shipped timeline numbers: from round 6, minion and standard 10 %, elite 15 %, boss 20 %, 4 steps), both with
+  the phase break and the new caps (mob 6, elite 8, boss 12, random Sunk Ward fights 5 with the foes escaping).
+- Enrage, off to on (won %): The Sweep 56 to 53, The Cages 84 to 84, Bone-Mill 28 to 28, Vats 62 to 56, The Awakening
+  Fissure 66 to 56 (the largest drop, inside the 10-point band), Crucible 0 to 0 (tuned for human play,
+  `FB-253`); every fight won in 5 rounds or fewer is unchanged; Vats and the Fissure median 0.5 rounds shorter. The
+  steps stay as specified (no tuning needed inside the band).
+- Pace by tier, rule on (EN6, EN7, EN7b; minutes = won median rounds x (10 s per hero + 5 s + 6 blocks x 0.42 s +
+  0.9 s)): mob (prologue 3) won 95.8 %, capped 4.2 %, median 4, 1.8 min; random (10) won 100 %, capped 0 %, median
+  1, 0.8 min; elite (corvo gate and 3 elite roamers) won 96.9 %, capped 2.3 %, median 4, 3.2 min; boss (7) won
+  39.7 %, capped 5.4 %, median 9, 7.3 min. Caps: mob and elite under the 5 % target; boss median inside 8-11.
+- Misses, not tuned (EN8 raises lethality, which would make them shorter still; listed for Design): random fights
+  end in 1 round (PACE1 mob band 2-4); elites take about 3 minutes against the 7-8 target (at 5 rounds the EN7b
+  estimate is about 4 minutes, so the elite minutes target and the round target disagree); boss win rate is low at the
+  authored levels (Bone-Mill 28 %).
+- Stun and stagger (blocks lost per fight; SV5): mob 0 and 1.7, random 0 and 0, elite 0.8 and 0.8, boss 0.2 and 1.5.
+
 ## 2026-11-19 PR7-42 pacing run (`FB-348`)
 
 - Feel (10 seeds, authored party), unchanged by PR7-42: Rooftop 100%, Corvo gate 90%, The Sweep 30%, The Cages 80%,

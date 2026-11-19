@@ -1,0 +1,221 @@
+{
+  "screen": "loadout",
+  "fields": {
+    "title": {
+      "text": "Bryn Hale"
+    },
+    "heading": {
+      "text": "Warrior  Lv 5"
+    },
+    "stats": {
+      "stats": [
+        [
+          "STR",
+          "21"
+        ],
+        [
+          "DEX",
+          "7"
+        ],
+        [
+          "INT",
+          "6"
+        ],
+        [
+          "CONS",
+          "25"
+        ],
+        [
+          "PERC",
+          "15"
+        ],
+        [
+          "KNOW",
+          "10"
+        ],
+        [
+          "Max HP",
+          "302"
+        ],
+        [
+          "Initiative",
+          "15"
+        ],
+        [
+          "Tiles per move",
+          "3"
+        ],
+        [
+          "Crit %",
+          "12"
+        ],
+        [
+          "Melee power",
+          "52"
+        ],
+        [
+          "Ranged power",
+          "11"
+        ],
+        [
+          "Armor",
+          "23"
+        ],
+        [
+          "Debuff resist %",
+          "15"
+        ],
+        [
+          "AP",
+          "10"
+        ]
+      ]
+    },
+    "equipped": {
+      "rows": [
+        {
+          "id": "main_hand",
+          "label": "Main Hand: Iron Billhook",
+          "detail": "",
+          "picture": "items/polearm/base.png",
+          "enabled": false,
+          "note": "Class default gear: drag an item from the stash onto this slot to replace it."
+        },
+        {
+          "id": "off_hand",
+          "label": "Off Hand: Iron Kite Shield",
+          "detail": "",
+          "picture": "items/shield/base.png",
+          "enabled": false,
+          "note": "Class default gear: drag an item from the stash onto this slot to replace it."
+        },
+        {
+          "id": "head",
+          "label": "Head: empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "note": "Empty: drag an item from the stash onto this slot."
+        },
+        {
+          "id": "body",
+          "label": "Body: Steel Plate Cuirass",
+          "detail": "",
+          "picture": "items/heavy/base.png",
+          "enabled": false,
+          "note": "Class default gear: drag an item from the stash onto this slot to replace it."
+        },
+        {
+          "id": "accessory_1",
+          "label": "Accessory 1: empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "note": "Empty: drag an item from the stash onto this slot."
+        },
+        {
+          "id": "accessory_2",
+          "label": "Accessory 2: empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "note": "Empty: drag an item from the stash onto this slot."
+        }
+      ]
+    },
+    "off_hand": {
+      "text": "Shield Bash",
+      "tone": "gold"
+    },
+    "pouch": {
+      "rows": [
+        {
+          "id": "0",
+          "label": "1. Empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "note": "Drag a consumable from the stash here; the hero can use it in battle."
+        },
+        {
+          "id": "1",
+          "label": "2. Empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "note": "Drag a consumable from the stash here; the hero can use it in battle."
+        },
+        {
+          "id": "2",
+          "label": "3. Empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "note": "Drag a consumable from the stash here; the hero can use it in battle."
+        }
+      ]
+    },
+    "stash": {
+      "rows": [
+        {
+          "id": "acc_bear_ring",
+          "label": "Ring of the Bear x2",
+          "detail": "",
+          "picture": "items/accessory/base.png",
+          "enabled": true,
+          "note": "Click to wear it, or drag it onto a slot."
+        },
+        {
+          "id": "alum_inhaler",
+          "label": "Snapped Alum Inhaler x2",
+          "detail": "",
+          "picture": "items/consumable/base.png",
+          "enabled": true,
+          "note": "Click to put one in the battle pouch, or drag it onto a pouch slot."
+        }
+      ]
+    }
+  },
+  "actions": [
+    {
+      "id": "take_off",
+      "label": "Take off",
+      "enabled": true
+    },
+    {
+      "id": "pouch_out",
+      "label": "Take out",
+      "enabled": true
+    },
+    {
+      "id": "pack_less",
+      "label": "-",
+      "enabled": true
+    },
+    {
+      "id": "pack_more",
+      "label": "+",
+      "enabled": true
+    },
+    {
+      "id": "use",
+      "label": "Use",
+      "enabled": true
+    },
+    {
+      "id": "reset",
+      "label": "Reset",
+      "enabled": false
+    },
+    {
+      "id": "confirm",
+      "label": "Confirm",
+      "enabled": false
+    },
+    {
+      "id": "close",
+      "label": "Close",
+      "enabled": true
+    }
+  ]
+}

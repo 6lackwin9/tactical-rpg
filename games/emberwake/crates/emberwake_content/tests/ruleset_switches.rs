@@ -89,6 +89,8 @@ const PK1S3_SEED: &str = "pk1s3.json";
 /// PR5-19 (PK2-S6): the seed that added the extension rule `durability` to the `timeline` rules (after the PK1-S3
 /// seed). The loader keeps the rules in the register's order, so where the seed lists it does not matter here.
 const PK2S6_SEED: &str = "pk2s6.json";
+/// ENRAGE2 (PR7-55): the seed that set the timeline's baseline enrage numbers.
+const ENRAGE2_SEED: &str = "enrage2.json";
 
 /// PR5-34 (SUNKWARD-FIX1): the seed that gave `founder_maren` the censer attack `thurible_smite` (extra skills, active
 /// deck, `assault` order) and added the unit `tithe_captive` (after the PK2-S6 seed; no ruleset row changes).
@@ -162,8 +164,16 @@ const RULESETMODES1_SEED: &str = "rulesetmodes1.json";
 fn the_seed_sets_the_values_the_rows_read_now() {
     // PR5-52: the shipped rows (timeline only); before RULESET-MODES1 the catalog also held the classic row, which read
     // as the built-in classic preset
-    let shipped = rows(&data_dir());
-    assert!(shipped.iter().all(|(id, _)| id != CLASSIC), "classic is no shipped row (the kit's preset)");
+    let final_rows = rows(&data_dir());
+    assert!(final_rows.iter().all(|(id, _)| id != CLASSIC), "classic is no shipped row (the kit's preset)");
+    // ENRAGE2 (PR7-55): the last seed, enrage2, set the timeline's baseline enrage numbers; the replay below runs
+    // without them and the seed's step closes it
+    let mut shipped = final_rows.clone();
+    for (_, r) in shipped.iter_mut().filter(|(id, _)| id == TIMELINE) {
+        assert!(r.numbers.enrage_from_round > 0, "the shipped timeline enrages");
+        r.numbers.enrage_from_round = 0;
+        r.numbers.enrage_step.clear();
+    }
     let mut before = shipped.clone();
     before.push((CLASSIC.to_string(), Ruleset::classic()));
     let entries = seed_entries("cln45.json");
@@ -396,7 +406,15 @@ fn the_seed_sets_the_values_the_rows_read_now() {
             _ => store::upsert(&tmp, None, &kind, json::dget(step, "entry"), None).map(|_| ()).unwrap_or_else(|err| panic!("RULESET-MODES1 upsert: {err:?}")),
         }
     }
-    assert_eq!(rows(&tmp), shipped, "the RULESET-MODES1 seed gives the shipped rows");
+    assert_eq!(rows(&tmp), shipped, "the RULESET-MODES1 seed gives the shipped rows (bar ENRAGE2's numbers)");
+    // ENRAGE2 (PR7-55): the seed's `fields` step (its keys over the stored row) gives the shipped rows
+    for step in seed_entries(ENRAGE2_SEED) {
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(store::file_of(&tmp, None, ruleset::KIND)).unwrap()).unwrap();
+        let mut e = json::aget(json::dict(&file), "entries").iter().map(json::dict).find(|r| json::s(r, "id") == json::s(&step, "id")).cloned().expect("the stored row");
+        e.extend(step.clone());
+        store::upsert(&tmp, None, ruleset::KIND, &e, None).unwrap_or_else(|err| panic!("ENRAGE2 row '{}': {err:?}", json::s(&e, "id")));
+    }
+    assert_eq!(rows(&tmp), final_rows, "the ENRAGE2 seed gives the shipped rows");
     let file = store::file_of(&tmp, None, ruleset::KIND);
     assert_eq!(std::fs::read_to_string(&file).unwrap(), std::fs::read_to_string(store::file_of(&data_dir(), None, ruleset::KIND)).unwrap(), "byte for byte the shipped file");
     let seeded = store::view(&tmp);
