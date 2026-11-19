@@ -67,10 +67,16 @@ pub fn award(d: &Data, state: &mut UnitState, xp: i64) -> Dict {
 
 /// Full encounter XP to every active member; member id -> award result + "xp".
 pub fn award_encounter(d: &Data, party: &mut PartyState, enemies: &[(i64, String)]) -> Dict {
+    award_encounter_pct(d, party, enemies, 100)
+}
+
+/// PR7-42 (PACE1): `award_encounter` paying `pct` percent of each member's XP (rounded down; 100 = all of it).
+pub fn award_encounter_pct(d: &Data, party: &mut PartyState, enemies: &[(i64, String)], pct: i64) -> Dict {
     let mut out = Dict::new();
     for i in party.active_indexes() {
         let m = &mut party.members[i];
-        let xp = encounter_xp(d, enemies, m.level(d));
+        let full = encounter_xp(d, enemies, m.level(d));
+        let xp = if pct >= 100 { full } else { full * pct.max(0) / 100 };
         let mut res = award(d, m, xp);
         res.insert("xp".into(), int(xp));
         out.insert(m.id.clone(), Value::Object(res));

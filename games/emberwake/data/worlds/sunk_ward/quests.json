@@ -34,7 +34,8 @@
 			"board": "talia_board",
 			"track": "main",
 			"show_locked": true,
-			"closed_text": ""
+			"closed_text": "",
+			"rec_level": 5
 		},
 		{
 			"id": "q_a1_m2",
@@ -66,7 +67,8 @@
 			"board": "talia_board",
 			"track": "main",
 			"show_locked": true,
-			"closed_text": ""
+			"closed_text": "",
+			"rec_level": 4
 		},
 		{
 			"id": "q_a1_m3",

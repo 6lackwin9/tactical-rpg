@@ -118,10 +118,20 @@ fn trip_cost(cx: &Cx, gs: &emberwake_world::GameState, trip: &serde_json::Map<St
     cost_text(cx, gs, json::i(trip, "time", 0), json::i(trip, "supplies", 0))
 }
 
-/// `time` and `supplies` as the tips say them ("2 days, 2 Tallow" in a campaign world).
+/// `time` and `supplies` as the tips say them ("2 days, 2 Tallow" in a campaign world); PR7-42 (PT-19): a trip that
+/// empties the upkeep adds the fight penalty it brings ("1 day, 1 Tallow, -2 AP").
 fn cost_text(cx: &Cx, gs: &emberwake_world::GameState, time: i64, supplies: i64) -> String {
     let length = if gs.campaign.is_some() { crate::runover::days(time) } else { format!("{time} time") };
-    format!("{length}, {supplies} {}", purse_word(cx, PurseWord::Upkeep))
+    let ap = emberwake_world::campaign::purse::starved_ap(&cx.data, gs, emberwake_world::campaign::purse::upkeep_after(gs, supplies));
+    let penalty = if ap < 0 { format!(", {ap} AP") } else { String::new() };
+    format!("{length}, {supplies} {}{penalty}", purse_word(cx, PurseWord::Upkeep))
+}
+
+/// PR7-42 (PT-19): the legend's line while the upkeep holds `left` and that costs AP in a fight ("No Tallow: fights
+/// -2 AP"); None otherwise.
+fn starved_line(cx: &Cx, gs: &emberwake_world::GameState, left: i64) -> Option<String> {
+    let ap = emberwake_world::campaign::purse::starved_ap(&cx.data, gs, left);
+    (ap < 0).then(|| format!("No {}: fights {ap} AP", purse_word(cx, PurseWord::Upkeep)))
 }
 
 /// CAMPAIGN1-TM: the mode button's tip: the mode's own tip, its days a leg and the road-fight change, and how to switch.
@@ -868,6 +878,11 @@ impl WorldMap {
                 Some(way) => {
                     // CAMPAIGN1 W5: the arrival day and the days left in a campaign world; MAP-HOOKS1: of the chosen way
                     let mut text = format!("{}. Roads can be ambushed.", cost_text(cx, &gs, way.days, way.supplies));
+                    // PR7-42 (PT-19): a trip that empties the upkeep says what the fights after it cost
+                    let left = emberwake_world::campaign::purse::upkeep_after(&gs, way.supplies);
+                    if let Some(line) = starved_line(cx, &gs, left) {
+                        text = format!("{text} On arrival: {line}.");
+                    }
                     if let Some(m) = &mode {
                         text = format!("{}: {text}", m.name);
                     }
@@ -1294,8 +1309,11 @@ impl Screen<GameCx> for WorldMap {
         let row_h = (ui.p.line_h(SMALL) + 1.0).ceil() as i32;
         let head = "Active quests";
         let head_w = ui.p.text_w(head, SMALL + 1.0) + 2.0 * PANEL_BTN as f32 + 8.0;
-        let widest = rows.iter().map(|(_, t)| ui.p.text_w(t, SMALL)).fold(head_w, f32::max);
-        let size = (((widest + 18.0).ceil() as i32).clamp(96, 150), 4 + row_h + 2 + row_h * rows.len().max(1) as i32 + 3 + row_h + 3);
+        // PR7-42 (PT-19): with the upkeep at 0, the legend's last row says what that costs in a fight
+        let starved = starved_line(cx, &gs, gs.party.supplies);
+        let widest = rows.iter().map(|(_, t)| ui.p.text_w(t, SMALL)).fold(head_w, f32::max).max(starved.as_ref().map_or(0.0, |t| ui.p.text_w(t, SMALL)));
+        let extra = if starved.is_some() { row_h } else { 0 };
+        let size = (((widest + 18.0).ceil() as i32).clamp(96, 150), 4 + row_h + 2 + row_h * rows.len().max(1) as i32 + 3 + row_h + extra + 3);
         let chip = ((ui.p.text_w("Legend", SMALL + 1.0) + 18.0).ceil() as i32, row_h + 4);
         let taken: Vec<Rect> = marks.iter().flat_map(|m| [m.r, m.label]).collect();
         let held = ui.dragging() == Some(LEGEND_DRAG);
@@ -1389,6 +1407,12 @@ impl Screen<GameCx> for WorldMap {
             ui.p.text(r.x as f32 + 12.0, r.y as f32, "Your party", SMALL, th().text);
             let party_place = cx.location_name(&gs.world_id, &here);
             ui.push("world_map.legend.party", "row", "Your party", r, true, false, Some(WAct::Node(here.clone())), tip("Your party", &format!("At {party_place}, marked by the cyan ring.")));
+            if let Some(line) = &starved {
+                let r = Rect::new(p.x + 2, r.y + row_h, p.w - 4, row_h);
+                ui.p.text_fit(r.x as f32 + 4.0, r.y as f32, line, SMALL, (r.w - 6) as f32, th().foe);
+                let word = purse_word(cx, PurseWord::Upkeep);
+                ui.push("world_map.legend.upkeep", "label", line.clone(), r, true, false, None, tip(&format!("No {word}"), &format!("{line}. Travel still works; buy more {word} to fight at full AP.")));
+            }
         }
         // -- HUD bar (PLAYUI1-H): Back and the location name; gold, supplies and the icon buttons at the right
         let back_w = (ui.p.text_w("Back", BODY) + 8.0).ceil().max(26.0) as i32;
@@ -2458,7 +2482,28 @@ mod tests {
         assert_eq!(wm.state(&cx)["selected"], json!(node), "the row picks its place");
     }
 
-    // ---- PR5-48 (MAP-LAYOUT-ED) -----------------------------------------------------------------------------------
+    /// PR7-42 (PT-19): at zero upkeep the legend's last row names the fights' AP change; a trip that empties the purse
+    /// says it in its cost; with upkeep left and a short trip, neither shows.
+    #[test]
+    fn zero_upkeep_shows_its_ap_penalty_in_the_legend_and_the_trip_cost() {
+        let mut cx = ward_hub(&[], &[], false);
+        let d = cx.data.clone();
+        let ap = emberwake_world::campaign::purse::purse(&d, SW).start_ap as i64;
+        assert!(ap < 0, "the ward's fights start with less AP at zero upkeep");
+        let (mut wm, mut g) = (WorldMap::new(), gfx());
+        cx.gs_mut().party.supplies = 3;
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        assert!(!wm.widgets().iter().any(|w| w["id"] == json!("world_map.legend.upkeep")), "no row with upkeep left");
+        let gs = cx.gs().clone();
+        assert!(!cost_text(&cx, &gs, 1, 1).contains("AP"), "a trip that leaves some: {}", cost_text(&cx, &gs, 1, 1));
+        assert!(cost_text(&cx, &gs, 3, 3).ends_with(&format!(", {ap} AP")), "a trip that empties it: {}", cost_text(&cx, &gs, 3, 3));
+        cx.gs_mut().party.supplies = 0;
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let row = wm.widgets().into_iter().find(|w| w["id"] == json!("world_map.legend.upkeep")).expect("the legend's upkeep row at 0");
+        assert!(row["text"].as_str().is_some_and(|t| t.ends_with(&format!("{ap} AP"))), "{row:?}");
+    }
+
+    // ---- PR5-48 (MAP-LAYOUT-ED)-----------------------------------------------------------------------------------
 
     fn game_layers() -> Layers {
         Layers::for_game(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))

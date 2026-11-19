@@ -187,6 +187,21 @@ pub fn battle_mods(d: &Data, gs: &GameState) -> BattleMods {
     BattleMods { start_ap: ap, note: format!("No {}: {ap} AP", p.upkeep.name) }
 }
 
+/// PR7-42 (PACE1): the start-AP change a fight would bring with the party's upkeep at `left` (`at_zero.start_ap` when
+/// `left` is 0 or less, else 0); 0 outside a campaign world. Read only: the map shows it on a route that empties the
+/// purse and in its legend while the purse is empty.
+pub fn starved_ap(d: &Data, gs: &GameState, left: i64) -> i64 {
+    if gs.campaign.is_none() || left > 0 {
+        return 0;
+    }
+    (purse(d, &gs.world_id).start_ap as i64).min(0)
+}
+
+/// PR7-42 (PACE1): the upkeep the party holds after a trip spending `upkeep` (never below 0).
+pub fn upkeep_after(gs: &GameState, upkeep: i64) -> i64 {
+    (gs.party.supplies - upkeep.max(0)).max(0)
+}
+
 /// P3: a party unit's AP at the battle's start after `mods` (never below 0).
 pub fn start_ap(ap: i64, mods: &BattleMods) -> i64 {
     (ap + mods.start_ap).max(0)

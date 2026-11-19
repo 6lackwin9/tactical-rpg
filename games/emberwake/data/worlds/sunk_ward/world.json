@@ -44,7 +44,7 @@
 		"cost": 1,
 		"where": "rest_places",
 		"on_enter": false,
-		"needs_upkeep": false
+		"needs_upkeep": true
 	},
 	"defeat": {
 		"mode": "retreat",

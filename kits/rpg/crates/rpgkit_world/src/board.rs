@@ -178,8 +178,9 @@ pub fn unlock_words(d: &Data, gs: &GameState, qid: &str) -> String {
 }
 
 /// B5, B6: board `r` as the pane shows it: {board, name, keeper, keeper_name, intro, open, sections: [{id, title,
-/// rows: [{quest, name, status, node, node_name, line, deadline?}]}]} (empty sections left out; `deadline` {day, left,
-/// text} only for a quest with an open checkpoint); {} for an unknown board.
+/// rows: [{quest, name, status, node, node_name, line, deadline?, rec_level?}]}]} (empty sections left out; `deadline`
+/// {day, left, text} only for a quest with an open checkpoint; `rec_level` only when set, PR7-42); {} for an unknown
+/// board.
 pub fn view(d: &Data, gs: &GameState, r: &str) -> Dict {
     let b = board_of(d, gs, r);
     if b.is_empty() {
@@ -204,8 +205,18 @@ pub fn view(d: &Data, gs: &GameState, r: &str) -> Dict {
         if let Some(due) = deadline(d, gs, &q) {
             row.insert("deadline".into(), due);
         }
+        let level = rec_level(d, gs, &q);
+        if level > 0 {
+            row.insert("rec_level".into(), json::int(level));
+        }
         rows.push((section, Value::Object(row)));
     }
+    // PR7-42 (PACE1): each section lists its rated quests by recommended level, lowest first, then the unrated ones
+    // (stable: file order among equals)
+    rows.sort_by_key(|(_, row)| match json::i(json::dict(row), "rec_level", 0) {
+        0 => i64::MAX,
+        n => n,
+    });
     let sections: Vec<Value> = SECTIONS
         .iter()
         .filter_map(|(id, title)| {
@@ -273,7 +284,25 @@ pub fn detail(d: &Data, gs: &GameState, qid: &str) -> Dict {
     if let Some(due) = deadline(d, gs, &json::s(&q, "_qid")) {
         out.insert("deadline".into(), due);
     }
+    let level = rec_level(d, gs, qid);
+    if level > 0 {
+        out.insert("rec_level".into(), json::int(level));
+    }
     out
+}
+
+/// PR7-42 (PACE1): quest `qid`'s recommended party level (`rec_level`; 0 = none).
+pub fn rec_level(d: &Data, gs: &GameState, qid: &str) -> i64 {
+    json::i(&quest::resolved(d, gs, qid), "rec_level", 0).max(0)
+}
+
+/// PR7-42 (PACE1): the words of a recommended level ("Recommended level 5"; "" for none).
+pub fn rec_level_text(level: i64) -> String {
+    if level > 0 {
+        format!("Recommended level {level}")
+    } else {
+        String::new()
+    }
 }
 
 /// B4: whether the character `character_qid` keeps an open board with at least one available quest.

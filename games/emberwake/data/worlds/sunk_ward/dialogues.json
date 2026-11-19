@@ -1415,8 +1415,18 @@
 			"nodes": [
 				{
 					"id": "n0",
-					"text": "The candle-maker keeps one eye on the window. \"Tallow's dear. Warded tallow is dearer. I sell the plain kind and tell nobody it's plain.\" The wicks hang in rows like pale ribs.",
+					"text": "The candle-maker keeps one eye on the window. \"Tallow's dear. Warded tallow is dearer, and I have it, five Scrap the cake.\" The wicks hang in rows like pale ribs.",
 					"choices": [
+						{
+							"text": "Buy Warded Tallow.",
+							"to": "stock",
+							"effects": [
+								{
+									"effect": "open_shop",
+									"shop": "chandler_stall"
+								}
+							]
+						},
 						{
 							"text": "Ask for more.",
 							"to": "more"
@@ -1430,6 +1440,16 @@
 				{
 					"id": "more",
 					"text": "\"The Watch buy by the dozen, never by the pound. Ask yourself why.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "stock",
+					"text": "\"Keep it dry and keep it lit. The wards only hold while it burns.\"",
 					"choices": [
 						{
 							"text": "Leave.",
