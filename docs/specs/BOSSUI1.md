@@ -43,7 +43,13 @@ screen.
   `poise_pips` moves the timeline and sim goldens of any boss fight they hold, so that data step waits for the user's
   approval of the re-record (`NEEDS_YOUR_EYES`).
 
-## 4. Open for the mock
+## 4. Open for the mock (answered by Art/UI, take 26, awaiting sign-off)
 
 - Where the phase markers sit at 1:1 (left of the name or under the bar).
 - How the bar changes between phases (refill sweep, name crossfade) within the existing phase transition.
+
+Answers (take 26, PR #70, `art-ui/battle_ux14/battle_take26_*`): phase markers are diamonds left of the name (done
+filled gold, current lit, coming hollow iron); the change runs inside the phase transition, about 0.9 s (the span
+drains, a 0.1 s gold flash as the marker fills, title and portrait crossfade 0.3 s for a new unit, the bar refills in
+0.4 s); the number beside the bar is the span left ("160/450"). Enrage (ENRAGE2 EN5): the round counter shows
+"Enrage next round" in amber a round ahead, then "Foes enraged +n"; an enraged plate takes a 10 % amber tint and rim.

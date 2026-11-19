@@ -33,3 +33,22 @@ turtling, by the AI and by players.
   shipped fight's win rate drops more than 10 points at its intended level. Tune the steps (EN2) inside that band.
 - The rule moves the timeline and sim goldens of every fight that reaches round 6. The user asked for the mechanic,
   so the re-record is an intended change: name it in the commit and a `HISTORY.md` row.
+
+## 4. Round cap and lethality (user 2026-11-19 18:13)
+
+User: "It's good to have a cap, but ideally we should not be hitting the cap ... then either we need to tune up the
+damage numbers or tone down the defense numbers ... or HP numbers". The cap (`max_rounds`, 8 today) stays.
+
+- EN6. The `PR7-55` sim also reports, per tier mix (mob, elite, boss) with the rule on: the share of fights that reach
+  the cap, and the won-fight median rounds against the PACE1 bands (decision "PACE1 round targets": mob 3 (2-4), elite
+  5 (4-6), boss 8 (7-9)).
+- EN7. Targets (decision "Fight length in minutes and round caps", user 2026-11-19 18:16): round caps by encounter
+  tier, mob 6, elite 8, boss 12 (`max_rounds`); at most 5 % of mob and elite fights reach their cap; won-fight medians
+  mob 3, elite 5, boss 8-11. Minutes per fight: mob 1-2, elite 7-8, boss up to 15.
+- EN7b. Minutes are estimated per fight as rounds x (planning time + playback time): playback from the timeline's
+  blocks at the default speed; planning `[PROVISIONAL]` 10 s per hero per round plus 5 s per round, calibrated against
+  the PC playtest input log (`C:\dev\playtest_live\live.log`) when the user next plays. The sim reports estimated
+  minutes next to rounds per tier.
+- EN8. If a tier misses, tune lethality in this order, one step per rerun, at most two reruns: enemy attack power up,
+  then enemy defence (armour, guard) down, then enemy HP down; party numbers stay. Report each step in
+  `BALANCE_REPORT.md`; the steps share the one intended re-record of section 3.
