@@ -59,6 +59,23 @@ class SeedOrder(unittest.TestCase):
             self.assertEqual(so.known_set(Path(d) / "none.txt"), set())
 
 
+class SeedOrderShallow(unittest.TestCase):
+    def test_a_seed_at_a_shallow_boundary_fails_with_its_reason(self):
+        import contextlib, io
+        real = so.cut_off
+        so.cut_off = lambda paths, cut=None: ["a.json", "b.json"]
+        try:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(so.main([]), 1)
+            self.assertIn("shallow clone hides the commit order of 2 seed(s) (a.json, b.json)", out.getvalue())
+        finally:
+            so.cut_off = real
+
+    def test_a_full_clone_cuts_nothing(self):
+        self.assertEqual(so.cut_off(["x.json"], cut=set()), [])
+
+
 class ShotsCrop(unittest.TestCase):
     def test_parse_crop(self):
         self.assertEqual(sa.parse_crop("1,2,3,4"), (1, 2, 3, 4))

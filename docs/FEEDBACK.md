@@ -82,6 +82,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-22` fix | done (tools lane) | `develop` | Correction to FB-367: my edit to `cast1a3.json` (narrowing its `bile_coat` step) moved it last in the commit order, so after main Build's `pr7_40` landing the seeds step failed: 34 findings, all `cast1a3.json` against `pr7_41_text.json`. `cast1a3.json` is now restored as it was and archived, making 34 archived seeds. `tools/fc.sh seeds` reports 67 seeds and 0 findings. `seed_order.py`'s doc and the seeds README say an old seed is archived, never edited in place. develop was red on the seeds step between 33a6b49 and this fix. |
 | `ENGINE-21` (`UISPLIT1-H`) board and save/load | Stage A done (tools lane); the character sheet waits for main Build's `PR7-45` | `develop` (squash `ENGINE-21` A1) | View-models, actions, fixtures and tests for the notice board and the save/load screens; today's drawing kept. FB-369 |
 | `ENGINE-23` (`UISPLIT1-I`) recipe and facility | Stage A done (tools lane); the party loadout waits for main Build's `PR7-51`, the world map for `PR7-47` | `develop` (squash `ENGINE-23` A1) | View-models, actions, fixtures and tests for the recipe pane and the facility screen; today's drawing kept. FB-371 |
+| `ENGINE-20` fix (CI seeds) | done (tools lane) | `develop` | The seeds step failed on CI since 18:13 UTC: the gate job's depth-1 checkout gave every seed the same commit time. The checks job now checks out with `fetch-depth: 0`, and `seed_order.py` fails with its reason when a seed's last commit is a shallow clone's boundary. FB-375 |
 | `ENGINE-24` (`PASSIVE-ICON1`) | done (tools lane) | `develop` (squash `ENGINE-24`) | Kit field `icon` on passives with its derivation and content check A21, 16 placeholder icons, a seed giving the 97 passives their archetype, and two loadout passive icons under the portrait on party plates. FB-373 |
 
 ## 2. Feedback Items (Append-Only)
@@ -101,6 +102,15 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 - **Tests**: `passive_icon` unit tests (field wins, derivation table); `emberwake_content` `asset_checks` (A21 with set, derived, missing and unknown keys; every archetype file in the kit; every shipped passive names its archetype); `battle::tests::passive_icon_tests` (two slots shown under the portrait, the third not, a foe none).
 - **Guesses**: (1) The content check reads only a set `icon`, so a passive with none passes and its plate icon falls back. (2) The placeholders are copies of skill kind icons, as SV12 says, rather than drawn letters. (3) The 17 changes above. Each is a one-line seed step to change.
 - **Docs delta**: `STRUCTURE.md`: `kits/rpg/assets/passives/` holds the passive archetype icons; `rpgkit_data::passive_icon`. `HISTORY.md`: none.
+
+### FB-375: ENGINE-20 fix, the seed order check on a shallow clone
+
+- **Status**: open
+- **Found by**: Merge & Release, a release blocker. develop's CI gate failed only on the seeds step since 18:13 UTC (a30ebd08, 724484af, 58c04388), with 54 findings. A deep clone passes.
+- **Cause**: `seed_order.py` orders seeds by `git log -1 --format=%at`. `actions/checkout@v4` checks out at depth 1, so every seed carried the one commit's time and the replay order was by name. The cloud container's clone is shallow too (23 seeds sat at its boundary commits), so the local passes were partly luck.
+- **Fix**: `gate.yml`'s checks job checks out with `fetch-depth: 0`. `seed_order.py` now fails with its reason, naming the seeds, when a seed's last commit is a boundary commit of a shallow clone (`cut_off`, from git's `shallow` file). A full clone cuts nothing. Two new tests in `test_tools_help3.py`.
+- **Checked**: on a depth-1 clone the step fails with the new message; after `git fetch --unshallow` the step passes (67 seeds, 0 findings); planner tests pass (65); docs clean.
+- **Docs delta**: `docs/workflow/cloud.md` (or the known-issues table): a cloud session runs `git fetch --unshallow origin` once before its first gate, or the seeds step stops with the shallow message. `HISTORY.md`: none.
 
 ### FB-371: ENGINE-23 UISPLIT1-I Stage A for the recipe pane and the facility screen
 
