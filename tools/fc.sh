@@ -8,6 +8,10 @@
 #   tools/fc.sh golden-bisect <golden> <switch> [--keep DIR] | list   record a golden with a test-only switch
 #                                (aegis_core::switches) off and on, list the fights or runs that move; fixtures restored (ENGINE-14);
 #                                `golden-bisect repro <switch>`: the repro replays off and on, which recordings diverge (ENGINE-15)
+#   tools/fc.sh scenario shots-all out=<dir> [compare=<before dir>]   every scenario's shots in one flat folder
+#                                (<scenario>__<shot>.png, index.txt); compare= lists the shots changed (pixel counts), new and gone (ENGINE-16)
+#   tools/fc.sh rename <old> <new> [<path>...] [--strings] [--comments] [--dry]   an identifier renamed across Rust and JSON;
+#                                string literals and comments left unless asked; legacy, game data and fixtures only listed (ENGINE-16)
 #   tools/fc.sh schema-field <table> <field> <json> [--after <key>] [--replace]   add a field to kits/rpg/schema.json byte for byte
 #                                (<table> content.<kind> / world.<kind>, or a bare kind when unique; ENGINE-15)
 #   tools/fc.sh seed-from <kind> <id> [<world>] [--set k=v]... [--out F [--append]]   a seed for `content apply` from a
@@ -470,10 +474,26 @@ sim_bands() {  # PR7-6: the balance bands of games/emberwake/tuning.json (tools/
   [ $code -ne 0 ] && status=$code
 }
 
+shots_all() {  # ENGINE-16: every scenario's shots in one flat folder (tools/planner/shots_all.py), optionally against a before folder
+  local a out="" cmp="" pass=() opts=() tmp py
+  for a in "$@"; do
+    case "$a" in out=*) out=${a#out=} ;; compare=*) cmp=${a#compare=} ;; tolerance=*|pixels=*) opts+=("$a") ;; *) pass+=("$a") ;; esac
+  done
+  [ -n "$out" ] || { echo "usage: tools/fc.sh scenario shots-all out=<dir> [compare=<before dir> [tolerance=8] [pixels=300]] [size=WxH] [profile=dev|release] [slow=] [data=]"; status=2; return; }
+  py=$(python_with "pass") || { echo "[shots-all] no Python 3 found"; status=2; return; }
+  [ -z "$cmp" ] || [ -d "$cmp" ] || { echo "[shots-all] no folder $cmp to compare with"; status=2; return; }
+  tmp=$(mktemp -d)
+  scenario all out="$tmp" "${pass[@]}"
+  "$py" tools/planner/shots_all.py collect "$tmp" "$out" || status=1
+  [ -z "$cmp" ] || "$py" tools/planner/shots_all.py compare "$cmp" "$out" "${opts[@]}" || status=1
+  if [ $status -eq 0 ]; then rm -rf "$tmp"; else echo "[shots-all] a scenario failed: bundles kept under $tmp (the shots it took are in $out)"; fi
+}
+
 scenario() {  # the driver lies beside the game's program, so both are built first, in one profile
   local a rest=() rel=()
   if [ "${1:-}" = "check" ]; then aegis scenario "$@" || status=$?; return; fi
-  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] | shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...]"; status=2; return; }
+  if [ "${1:-}" = "shots-all" ]; then shift; shots_all "$@"; return; fi
+  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | shots-all out=<dir> [compare=<dir>] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] | shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...]"; status=2; return; }
   local verb=run
   if [ "$1" = "shots" ]; then
     verb=shots; shift
@@ -588,6 +608,7 @@ case "$1" in
   golden-bisect) py=$(python_with "pass") || { echo "[golden-bisect] no Python 3 found"; status=1; }; [ $status -eq 0 ] && { "$py" tools/planner/golden_bisect.py "${@:2}" || status=$?; } ;;
   schema-field) py=$(python_with "pass") || { echo "[schema-field] no Python 3 found"; status=1; }; [ $status -eq 0 ] && { "$py" tools/planner/schema_field.py "${@:2}" || status=$?; } ;;
   seed-from) py=$(python_with "pass") || { echo "[seed-from] no Python 3 found"; status=1; }; [ $status -eq 0 ] && { "$py" tools/planner/seed_from.py "${@:2}" || status=$?; } ;;
+  rename) py=$(python_with "pass") || { echo "[rename] no Python 3 found"; status=1; }; [ $status -eq 0 ] && { "$py" tools/planner/rename_ident.py "${@:2}" || status=$?; } ;;
   clippy) cargo clippy --workspace --all-targets 2>&1 | grep -E "^(warning|error)" -A4 | head -80 ;;
   docs)
     case "${2:-}" in
