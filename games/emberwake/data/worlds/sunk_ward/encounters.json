@@ -74,7 +74,7 @@
 			"objective_rounds": 3,
 			"objective_unit": "",
 			"objective_count": 1,
-			"objective_text": "Strike while they wind up: a quick Pommel Strike breaks a slow blow.",
+			"objective_text": "Click a foe and pick Pommel Strike: a quick hit breaks a slow blow.",
 			"unkillable": [],
 			"timeout_outcome": "fled",
 			"stay_behind": {},

@@ -555,6 +555,11 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             let tip = vec![("Self (S)".into(), th().gold), (format!("{} targets itself: its Guard and self skills.", u.name), th().text)];
             let bw = ((ui.p.text_w("Self", SMALL) + 10.0).ceil() as i32).max(30);
             ui.button_full("hero.self", Rect::new(tx, row3, bw, 11), "Self", Action::SelfTarget, planning, false, SMALL, tip);
+            // PR7-41 (PT-23): the Ally button beside it: the members the hero can use a skill or pouch item on
+            let others = w.allies.iter().any(|&a| a != h && ((w.units[a].is_active() && w.has(a)) || w.can_revive(a)));
+            let tip = vec![("Ally".into(), th().gold), (format!("{} uses a skill or pouch item on another member: pick the member, then the skill (Ctrl+click on a member does the same).", u.name), th().text)];
+            let aw = ((ui.p.text_w("Ally", SMALL) + 10.0).ceil() as i32).max(30);
+            ui.button_full("hero.ally", Rect::new(tx + bw + 3, row3, aw, 11), "Ally", Action::AllyTarget, planning && others, false, SMALL, tip);
             row3 + 13
         } else {
             row3

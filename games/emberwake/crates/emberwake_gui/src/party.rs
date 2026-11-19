@@ -985,13 +985,14 @@ impl Character {
             ui.push("stats.pk2", "row", line, Rect::new(66, PK2_Y - 1, (label_x - 74.0) as i32, 256 - (PK2_Y - 1)), true, false, None, tip("Mastery and weapons", &card.join(" ")));
         }
         // the re-gathered list (FB-63 (2); a hero's temperament is not in the save)
-        let owned = progression::member_passives(d, m);
+        let owned: Vec<String> = progression::member_passives(d, m).into_iter().filter(|p| d.cat.passives.get(p).is_none_or(|x| x.slot.is_empty())).collect();
         let names: Vec<String> = owned.iter().map(|p| s_or(d.entry("passives", p), "name", p)).collect();
-        let line = format!("Passives: {}", if names.is_empty() { "none".into() } else { names.join(", ") });
+        // PR7-41 (PT-28): these apply with no slot; the slotted passives and the keystone sit on the Skills tab
+        let line = format!("Innate passives (no slot): {}", if names.is_empty() { "none".into() } else { names.join(", ") });
         ui.p.text_fit(68.0, 258.0, &line, BODY + 1.0, label_x - 78.0, th().dim);
         let about: Vec<String> = owned.iter().map(|p| format!("{}: {}", s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"))).collect();
         let line_h = (ui.p.line_h(BODY + 1.0) + 2.0).ceil().max(13.0) as i32;
-        ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, line_h), true, false, None, tip("Passives", &if about.is_empty() { "None yet: passives come from the hero's background, faction, disciplines and named items.".into() } else { about.join(" ") }));
+        ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, line_h), true, false, None, tip("Innate passives", &format!("{} Slotted passives and the keystone are on the Skills tab.", if about.is_empty() { "None yet: innate passives come from the hero's background, faction, disciplines and named items.".to_string() } else { about.join(" ") })));
     }
 
     fn draw_level(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
@@ -1206,6 +1207,7 @@ impl Character {
         };
         let passive_of = |p: &str| (s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"));
         let name_of = |kind: &str, id: &str| if kind == "active" { skill_of(id).0 } else { passive_of(id).0 };
+        let (level, key_level) = (m.level(d) as i32, progression::keystone_level(d, m));
         // Left: the buckets.
         let mut y = 104;
         for (kind, label, takes) in DECK_KINDS {
@@ -1214,6 +1216,9 @@ impl Character {
             ui.p.text(64.0, y as f32, &format!("{label} {} / {cap}", list.len()), BODY + 1.0, th().info);
             if kind == "active" {
                 ui.p.text(150.0, y as f32, if self.deck.is_empty() { "Automatic deck" } else { "Custom deck" }, BODY, th().dim);
+            } else {
+                // PR7-41 (PT-28): where this kind comes from, on the header
+                ui.p.text_fit(150.0, y as f32, &deck_source_hint(kind, level, key_level), BODY, 150.0, th().dim);
             }
             y += 11;
             for i in 0..cap {
@@ -1223,8 +1228,10 @@ impl Character {
                     None => {
                         ui.p.panel(r, th().game("slot_empty", rgba(20, 28, 46, 120)), th().game("slot_empty_edge", rgba(58, 78, 116, 120)), 2.0);
                         ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, "Empty", BODY, th().dim);
-                        let help = if t.owned(kind).is_empty() && kind != "active" {
-                            format!("Holds one of the hero's {takes}; none owned yet: they come from the hero's background, faction, disciplines and named items.")
+                        let help = if kind == "keystone" && level < key_level {
+                            format!("Holds one of the hero's {takes}. The class keystone opens at level {key_level} (the hero is level {level}); a Tier III graft or a mastery 3 masterwork can take the slot instead.")
+                        } else if t.owned(kind).is_empty() && kind != "active" {
+                            format!("Holds one of the hero's {takes}; none owned yet: they come from the hero's own deck, background, faction, disciplines and named items.")
                         } else {
                             format!("Holds one of the hero's {takes}: drag one here, or click it in the owned list.")
                         };
@@ -1698,6 +1705,16 @@ fn off_hand_preview(b: &emberwake_rules::unit::OffHandButton) -> (String, aegis_
 /// INPUT1 FL3: places a line in the follow-up editor, and the width of an order entry's follow-up toggle.
 const FOLLOW_PER: usize = 5;
 const FOLLOW_TOGGLE: i32 = 11;
+
+/// PR7-41 (PT-28): the dim line on a Passives or Keystone bucket's header: where that kind comes from, and for the
+/// keystone the level it opens at (`progression::keystone_level`) for a hero at `level`.
+pub(crate) fn deck_source_hint(kind: &str, level: i32, key_level: i32) -> String {
+    match kind {
+        "keystone" if level < key_level => format!("Opens at level {key_level}"),
+        "keystone" => format!("Class keystone, from level {key_level}"),
+        _ => "From the hero's deck and background".into(),
+    }
+}
 
 pub(crate) fn deck_json(d: &Deck) -> Value {
     let lists = |m: &IndexMap<String, Vec<String>>| Value::Object(m.iter().map(|(k, v)| (k.clone(), json!(v))).collect());
@@ -2933,6 +2950,24 @@ mod tests {
         assert_eq!(source_name(cat, GEAR_EFFECT_SOURCE), "Worn item effects");
         for grant in [format!("gear:{id}"), format!("gear:{id}:tier2"), format!("gear:{id}:mastery")] {
             assert!(!source_name(cat, &src(&grant)).contains(GEAR_EFFECT_SOURCE), "{grant}");
+        }
+    }
+
+    /// PR7-41 (PT-28): the Passives and Keystone headers say where they come from, the keystone with the level it opens
+    /// at (`progression::keystone_level`); an empty keystone slot below that level says so on its card.
+    #[test]
+    fn the_deck_buckets_say_where_passives_and_the_keystone_come_from() {
+        assert_eq!(deck_source_hint("keystone", 3, 6), "Opens at level 6");
+        assert_eq!(deck_source_hint("keystone", 6, 6), "Class keystone, from level 6");
+        assert!(deck_source_hint("passive", 1, 6).contains("deck"));
+        let (mut cx, member) = deck_cx(true);
+        let m = cx.gs().party.member(&member).unwrap().clone();
+        let (level, key_level) = (m.level(&cx.data) as i32, progression::keystone_level(&cx.data, &m));
+        let mut c = Character::new(&cx, &member, "skills");
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        let slot = c.w.iter().find(|w| w.id == "skills.keystone.0").expect("the keystone slot");
+        if level < key_level && slot.text == "Empty" {
+            assert!(slot.tip.iter().any(|t| t.0.contains(&format!("opens at level {key_level}"))), "{:?}", slot.tip);
         }
     }
 

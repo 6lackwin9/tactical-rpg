@@ -171,6 +171,19 @@ pub fn menu_refusal_text(reasons: &[Reason]) -> String {
     reasons.iter().map(one).collect::<Vec<_>>().join(emberwake_battle::round_intent_plan::REASONS_JOIN)
 }
 
+/// PR7-41 (PT-23): how to give a skill-menu cell the target it asks for, in the battle screen's controls, for the
+/// kit's "Target ... to use this" refusals that need yourself or an ally (None for any other reason: an enemy or a
+/// tile is clicked on the board, as the menu was).
+pub fn target_control(reasons: &[Reason]) -> Option<&'static str> {
+    let text = reasons.iter().map(|r| r.to_string()).find(|t| t.starts_with("Target ") && t.ends_with(" to use this"))?;
+    match (text.contains("yourself"), text.contains("an ally")) {
+        (true, true) => Some("Self button (key S) for yourself; Ally button (or Ctrl+click a member) for an ally."),
+        (false, true) => Some("Ally button in the hero panel, or Ctrl+click a member."),
+        (true, false) => Some("Self button in the hero panel (key S)."),
+        _ => None,
+    }
+}
+
 /// INPUT1 MR4: a skill's range in words for its menu row tip and hover card: "Range 2: dash to a flank, then hit" or
 /// "Range 3: dash behind, then hit" for a skill with a position (its range N), else its band ("Range 2-4", "Range 1").
 pub fn range_line(w: &World, c: usize, s: &emberwake_data::SkillDef) -> String {
