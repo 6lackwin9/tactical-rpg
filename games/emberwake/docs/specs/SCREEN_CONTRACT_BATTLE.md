@@ -177,6 +177,8 @@ screen at 1280x720, 1:1.
   an ally (Support) or self in a teal frame with a teal arrow, an area skill's main target with a small amber ring on
   the face's corner, a ground tile (field spells) as a 3 x 3 floor patch with the target tile lit (hover rings that
   tile on the board), Maneuver or Rest only a dim dash (`battle_take36_locks_2x.png`).
+  User 2026-11-19 19:48: signed off (far less busy; the tile glyph with the board highlight on hover, the area mark
+  and the teal ally frame all work).
 - Boss fight variant (Tushar 2026-11-18 23:19, low priority, current layout stays for now): a boss bar across the top
   of the board (full name and title, a long HP bar with phase marks, poise, statuses, the next phase or enrage cue);
   the boss leaves the foe panel, mobs keep their plates. Mocked as take 22 (`battle_take22_boss_mock.py`), awaiting
