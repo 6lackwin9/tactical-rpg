@@ -232,6 +232,18 @@ pub fn place(gs: &GameState, loc: &Dict, t: &Dict, leader: &str) -> Spots {
     out
 }
 
+/// FOOTLOCKER1: whether bunk `b` has a footlocker at its foot (the way to its member's loadout and the shared stash):
+/// an occupied bunk whose member's loadout can change (in the active or benched roster); none on an empty bunk and
+/// none for a member in the crypts (their loadout is locked).
+pub fn has_locker(b: &Bunk) -> bool {
+    !b.member.is_empty() && matches!(b.state, BunkState::Active | BunkState::Benched)
+}
+
+/// FOOTLOCKER1: the bunks of map `t` with a footlocker (`has_locker`), in bunk order.
+pub fn lockers(gs: &GameState, t: &Dict) -> Vec<Bunk> {
+    bunks(gs, t).into_iter().filter(has_locker).collect()
+}
+
 /// HUB-BUNKS2 (4): the bunks of map `t` whose member sleeps there: a benched member in the hub rests in their bunk
 /// (state `Benched`), in bunk order.
 pub fn sleepers(gs: &GameState, t: &Dict) -> Vec<Bunk> {

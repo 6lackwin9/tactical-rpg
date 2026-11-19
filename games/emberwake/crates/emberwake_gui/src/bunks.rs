@@ -184,6 +184,17 @@ pub const FLOOR_ART: &str = "bunk_floor";
 pub const NICHE_ART: &str = "bunk_niche";
 pub const LUNETTE_ART: &str = "bunk_lunette";
 pub const PEGBOARD_ART: &str = "bunk_pegboard";
+/// FOOTLOCKER1 (`PR7-51`): the footlocker at a bunk's foot (`props/<set>/footlocker/v0.png` closed, its open state's
+/// art `footlocker_open/v0.png` as the bunks' `<art>_<state>`: the layered tree has no `v0_open.png`; placeholders cut
+/// from the take 8 mock until Art/UI `AI-32`), and the widget id prefix of its click area (`locker.<member>`).
+pub const LOCKER_ART: &str = "footlocker";
+pub const LOCKER_OPEN: &str = "_open";
+pub const LOCKER_PREFIX: &str = "locker.";
+/// BUNKS-EMBLEM1 (`PR7-52`): a founder's emblem in the lunette (`ui/badges/founder_<character id>.png`, placeholders
+/// from the take 8 mock until Art/UI `AI-33`), centred on the bed and its top this many art px over the bed's top (1 px
+/// inside the lunette's arch).
+pub const EMBLEM_PREFIX: &str = "ui/badges/founder_";
+pub const EMBLEM_TOP: i32 = -11;
 
 /// BUNKS-LAYOUT3: how a bunk is laid out, in art px of its bed art from the bed's drawn top-left (measured from the take
 /// 8 mock, `art_src/style/hub_bunks_take8_mock.py`, at 720p where an art px is a screen px): the art's size; how far the
@@ -202,6 +213,9 @@ pub struct BedArt {
     pub head: (i32, i32, i32, i32),
     pub cover_y: Option<i32>,
     pub plate_mid: (i32, i32),
+    /// FOOTLOCKER1: the footlocker art's top-left (both states share its frame): a niche bed's centred below its foot,
+    /// a free-standing bed's beside its foot (the take 8 mock).
+    pub locker: (i32, i32),
 }
 
 /// The niche bunk's dressing (art px from the bed's top-left, take 8): the wall band's top and the plank strip's top
@@ -221,9 +235,9 @@ pub const POST: (i32, i32, i32) = (4, 6, 7);
 /// before BUNKS-LAYOUT3), else the niche bed (`niche_bunk`; `kiln_bunk` before BUNKS-LAYOUT3).
 pub fn bed_art(art: &str) -> BedArt {
     if art.starts_with("niche_bunk") || art.starts_with("kiln_bunk") {
-        BedArt { size: (ART_SIDE, 80), offset: (-8, 11), niche: true, frame: (0, 6), head: (14, 6, 20, 25), cover_y: Some(27), plate_mid: (24, -20) }
+        BedArt { size: (ART_SIDE, 80), offset: (-8, 11), niche: true, frame: (0, 6), head: (14, 6, 20, 25), cover_y: Some(27), plate_mid: (24, -20), locker: (8, 72) }
     } else {
-        BedArt { size: (96, 64), offset: (0, 0), niche: false, frame: (-5, 6), head: (9, 8, 20, 24), cover_y: None, plate_mid: (34, -6) }
+        BedArt { size: (96, 64), offset: (0, 0), niche: false, frame: (-5, 6), head: (9, 8, 20, 24), cover_y: None, plate_mid: (34, -6), locker: (98, 18) }
     }
 }
 
@@ -331,9 +345,11 @@ pub fn wall_runs(t: &Dict, bunks: &[Bunk]) -> Vec<(i64, i64, i64)> {
 
 /// BUNKS-LAYOUT3 (1): the dressed north wall and the niches, drawn once before the bunks: along each wall run (`runs`,
 /// logical x from and to and the wall foot y) the stone tile over the wall band and the plank strip at its foot; then
-/// each niche bunk's (`niches`: its pen and whether a named founder sleeps there) arched niche with its keystone, and a
-/// founder's lunette cloth in the arch head. `k` is the physical px per art px. The runs it drew (logical).
-pub fn draw_wall(ui: &mut Ui<impl Clone>, cx: &mut Cx, lineage: &[String], runs: &[(i32, i32, i32)], niches: &[(Pen, bool)], k: f32) -> Vec<Rect> {
+/// each niche bunk's (`niches`: its pen and the character id of the named founder who sleeps there, "" for a recruit or
+/// an empty bunk) arched niche with its keystone, and a founder's lunette cloth in the arch head with the founder's
+/// emblem filling it (BUNKS-EMBLEM1, `EMBLEM_PREFIX`; a recruit's arch stays plain). `k` is the physical px per art px.
+/// The runs it drew (logical) and, per niche, the emblem file it drew ("" none).
+pub fn draw_wall(ui: &mut Ui<impl Clone>, cx: &mut Cx, lineage: &[String], runs: &[(i32, i32, i32)], niches: &[(Pen, String)], k: f32) -> (Vec<Rect>, Vec<String>) {
     let mut out = Vec::new();
     let kept = ui.p.c.clip;
     let tile = |ui: &mut Ui<_>, cx: &mut Cx, art: &str, x0: i32, x1: i32, top: i32, bottom: i32| {
@@ -361,18 +377,50 @@ pub fn draw_wall(ui: &mut Ui<impl Clone>, cx: &mut Cx, lineage: &[String], runs:
         tile(ui, cx, FLOOR_ART, x0, x1, at(STRIP_TOP - WALL_FOOT), f);
         out.push(Rect::new(lx0, foot - ((WALL_FOOT - WALL_TOP) as f32 * k / ui.p.v.s).round() as i32, lx1 - lx0, ((WALL_FOOT - WALL_TOP) as f32 * k / ui.p.v.s).round() as i32));
     }
+    let mut emblems = Vec::new();
     for (pen, founder) in niches {
         pen_art(ui, cx, lineage, pen, NICHE_ART, NICHE_AT.0, NICHE_AT.1);
-        if *founder {
+        let mut drawn = String::new();
+        if !founder.is_empty() {
             pen_art(ui, cx, lineage, pen, LUNETTE_ART, LUNETTE_AT.0, LUNETTE_AT.1);
+            let file = format!("{EMBLEM_PREFIX}{founder}.png");
+            if let Some((w, _)) = cx.art.size_of(&file) {
+                if pen_file(ui, cx, pen, &file, ART_SIDE / 2 - w / 2, EMBLEM_TOP).is_some() {
+                    drawn = file;
+                }
+            }
         }
+        emblems.push(drawn);
     }
-    out
+    (out, emblems)
 }
 
 /// BUNKS-LAYOUT3: draws bunk `b`'s bed (art file `file`, its state's where it has one) with `pen`.
 pub fn draw_bed(ui: &mut Ui<impl Clone>, cx: &mut Cx, pen: &Pen, file: Option<&str>) -> bool {
     file.is_some_and(|f| pen_file(ui, cx, pen, f, 0, 0).is_some())
+}
+
+/// FOOTLOCKER1: the footlocker's file along the world lineage: closed `footlocker`, open `footlocker_open` (the closed
+/// art without one).
+pub fn locker_file(cx: &mut Cx, lineage: &[String], open: bool) -> Option<String> {
+    let opened = if open { prop_file(cx, lineage, &format!("{LOCKER_ART}{LOCKER_OPEN}")) } else { None };
+    opened.or_else(|| prop_file(cx, lineage, LOCKER_ART))
+}
+
+/// FOOTLOCKER1: draws the footlocker of bed `bed` with `pen` at `bed.locker` (open while its member's loadout is open):
+/// the file drawn and its logical rect (the click area), None without the art.
+pub fn draw_locker(ui: &mut Ui<impl Clone>, cx: &mut Cx, lineage: &[String], pen: &Pen, bed: &BedArt, open: bool) -> Option<(String, Rect)> {
+    let file = locker_file(cx, lineage, open)?;
+    let (w, h) = cx.art.size_of(&file)?;
+    pen_file(ui, cx, pen, &file, bed.locker.0, bed.locker.1)?;
+    Some((file, pen.logical(&ui.p, bed.locker.0, bed.locker.1, w, h)))
+}
+
+/// The first row of `file` (art px) with an opaque pixel, None without the file or when it is clear.
+pub fn first_opaque_row(cx: &mut Cx, file: &str) -> Option<i32> {
+    let (w, h) = cx.art.size_of(file)?;
+    let img = cx.art.image(file, w, h)?;
+    (0..img.h).find(|&y| (0..img.w).any(|x| img.px[((y * img.w + x) * 4 + 3) as usize] > 0))
 }
 
 /// HUB-BUNKS2 (2): the room a plate of the bunk drawn in `r` has among the hub's bunks `all` (their drawn rects): the
@@ -470,6 +518,9 @@ pub struct Dressed {
     pub asleep: bool,
     pub pose: String,
     pub head: Option<Rect>,
+    /// BUNKS-EMBLEM1 (2): the sleeper's blanket turned down over the shoulders (art rows from, to): the blanket's top rows
+    /// drawn again from the bed's `cover_y`, so no sheet shows between the head and the cover.
+    pub fold: Option<(i32, i32)>,
 }
 
 /// BUNKS-LAYOUT3 (4): the clip a sleeper is drawn in (the unit's front idle pose, head and shoulders on the pillow).
@@ -515,6 +566,16 @@ pub fn dress(ui: &mut Ui<impl Clone>, cx: &mut Cx, lineage: &[String], b: &Bunk,
                         pen_file(ui, cx, pen, f, 0, 0);
                     }
                     pen_art(ui, cx, lineage, pen, &blanket, 0, 0);
+                    // BUNKS-EMBLEM1 (2): the blanket's top rows again from `cover_y` (the fold over the shoulders)
+                    if let Some(bf) = prop_file(cx, lineage, &blanket) {
+                        if let Some(top) = first_opaque_row(cx, &bf).filter(|t| *t > y) {
+                            let lift = top - y;
+                            let band = pen.rect(0, y, bed.size.0, 2 * lift);
+                            ui.p.c.clip = Some(kept.map_or(band, |c| c.intersect(band)));
+                            pen_file(ui, cx, pen, &bf, 0, -lift);
+                            out.fold = Some((y, y + 2 * lift));
+                        }
+                    }
                 }
                 ui.p.c.clip = kept;
                 out.head = Some(pen.logical(&ui.p, hx, hy, hw, hh));
@@ -894,7 +955,8 @@ pub(crate) mod tests {
     /// HUB-BUNKS2 (2), replacing the HUB-POLISH1 bed plate and the PR7-23 two-height stagger (`FB-314`, `FB-316`): every
     /// occupied bunk state (active, benched, crypt) wears a brass plate with its member's name and class, centred on the
     /// bunk: a niche bunk's on the wall just above its arch, a free-standing bunk's on its headboard; at most its room
-    /// among its neighbours less `PLATE_GAP`, so no two plates overlap, at every text size; an empty bunk wears none; at
+    /// among its neighbours less `PLATE_GAP`, so no two plates overlap, at every text size; an empty bunk wears the blank
+    /// plate (FB-360, north and south); at
     /// Normal every shipped party character's name reads whole on every occupied bunk (larger sizes may show the first
     /// word or shorten it).
     #[test]
@@ -910,7 +972,8 @@ pub(crate) mod tests {
             for b in &bunks {
                 let member = b["member"].as_str().unwrap();
                 if member.is_empty() {
-                    assert!(b.get("plate").is_none(), "{size}: an empty bunk has no plate: {b}");
+                    assert!(b.get("plate").is_none(), "{size}: an empty bunk has no name plate: {b}");
+                    assert!(b["blank_plate"].is_array(), "{size}: FB-360: every empty bunk wears the blank plate: {b}");
                     continue;
                 }
                 states.push(b["state"].as_str().unwrap().to_string());
@@ -1170,6 +1233,148 @@ pub(crate) mod tests {
         assert!(held_bunks.iter().all(|b| bunks.contains(b) && clickable.contains(b)), "after: the held bunks drawn: {bunks:?}");
         assert!(held.is_empty(), "after: the props gone: {held:?}");
         shot(&g, "hub_upgrade_after_1280");
+    }
+
+    /// The hub's footlockers last frame: (member, tile, open, file).
+    fn lockers(map: &RegionMap, cx: &Cx) -> Vec<(String, (i64, i64), bool, String)> {
+        let st = map.state(cx);
+        st["lockers"].as_array().cloned().unwrap_or_default().iter().map(|l| (l["member"].as_str().unwrap().to_string(), (l["at"][0].as_i64().unwrap(), l["at"][1].as_i64().unwrap()), l["open"] == json!(true), l["file"].as_str().unwrap().to_string())).collect()
+    }
+
+    /// FOOTLOCKER1 (`PR7-51`): a footlocker stands at the foot of each active and benched member's bunk, closed; none
+    /// for the member in the crypts, none on an empty bunk. A click on one (or E beside it) opens it, the open art
+    /// shows under the member's loadout (the Character window's gear page on that member, over the shared stash), and
+    /// once the map is the top screen again it is closed.
+    #[test]
+    fn footlocker1_a_click_opens_the_members_loadout_and_closing_it_closes_the_footlocker() {
+        let (mut cx, ids) = hub_cx(false);
+        let mut g = gfx_720();
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs())).clone();
+        let want: Vec<String> = kit::lockers(cx.gs(), &t).into_iter().map(|b| b.member).collect();
+        assert_eq!(want, ids[..3].to_vec(), "the active pair and the benched member; not the crypt member");
+        let all = lockers(&map, &cx);
+        assert_eq!(all.iter().map(|l| l.0.clone()).collect::<Vec<_>>(), want, "one drawn per bunk with a footlocker: {all:?}");
+        assert!(all.iter().all(|l| !l.2 && l.3.ends_with("/footlocker/v0.png")), "closed by default: {all:?}");
+        assert!(!all.iter().any(|l| l.0 == ids[3]), "no footlocker for a member in the crypts");
+        let empty = map.state(&cx)["bunks"].as_array().cloned().unwrap().iter().filter(|b| b["member"] == json!("")).count();
+        assert!(empty > 0 && all.len() + 1 + empty == map.state(&cx)["bunks"].as_array().unwrap().len(), "none on an empty bunk");
+        // the click: the loadout of that member, on the gear page
+        map.click_id(&mut cx, &format!("{LOCKER_PREFIX}{}", ids[0])).expect("the footlocker is clickable");
+        let mut sheet = match cx.nav.pop() {
+            Some(Nav::Push(s)) => s,
+            _ => panic!("the loadout opens"),
+        };
+        assert_eq!(sheet.id(), "character");
+        frame(sheet.as_mut(), &mut cx, &mut g, 1.0);
+        let st = sheet.state(&cx);
+        assert_eq!((st["member"].clone(), st["tab"].clone()), (json!(ids[0]), json!("gear")), "that member's loadout: {st}");
+        // under the loadout (the map drawn, not the top screen) the footlocker shows open
+        map.draw(&mut cx, &mut g, (-500, -500), false);
+        let open: Vec<_> = lockers(&map, &cx).into_iter().filter(|l| l.2).collect();
+        assert_eq!(open.len(), 1, "{open:?}");
+        assert_eq!(open[0].0, ids[0]);
+        assert!(open[0].3.ends_with("/footlocker_open/v0.png"), "the open art: {open:?}");
+        shot(&g, "hub_footlocker_open");
+        // the loadout closed: the map on top again, the footlocker closed
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert!(lockers(&map, &cx).iter().all(|l| !l.2 && l.3.ends_with("/footlocker/v0.png")), "closed again");
+        assert_eq!(map.state(&cx)["locker_open"], json!(""));
+        // E standing at a footlocker opens it too
+        let (_, at, _, _) = lockers(&map, &cx).into_iter().find(|l| l.0 == ids[1]).unwrap();
+        cx.gs_mut().position = at;
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        map.key(&mut cx, Key::Char('e'));
+        match cx.nav.pop() {
+            Some(Nav::Push(s)) => {
+                assert_eq!(s.id(), "character");
+                assert_eq!(s.state(&cx)["member"], json!(ids[1]), "E by the footlocker: its member's loadout");
+            }
+            _ => panic!("E by the footlocker opens the loadout"),
+        }
+        assert_eq!(map.state(&cx)["locker_open"], json!(ids[1]));
+    }
+
+    /// FOOTLOCKER1 (3): the stash chest left the hub map: no point there opens the stash, no chest marker is drawn (the
+    /// shared stash stays in the menus: the HUD's Stash).
+    #[test]
+    fn footlocker1_no_stash_chest_on_the_hub_map() {
+        let (mut cx, _) = hub_cx(false);
+        let mut g = gfx_720();
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let loc = explore::location(&cx.data, cx.gs()).clone();
+        let stash: Vec<String> = explore::markers_of(&loc).iter().filter(|m| explore::point_use(m) == "stash" || json::s(m, "kind") == "chest").map(|m| json::s(m, "id")).collect();
+        assert!(stash.is_empty(), "no stash chest on the hub: {stash:?}");
+        let ids: Vec<String> = map.widgets().iter().filter_map(|w| w["id"].as_str().map(str::to_string)).collect();
+        assert!(ids.iter().any(|i| i == "hud.stash"), "the stash stays in the menus: {ids:?}");
+    }
+
+    /// BUNKS-EMBLEM1 (`PR7-52`) (1): a founder's niche bunk shows its emblem (`ui/badges/founder_<id>.png`) in the
+    /// lunette; a recruit's arch stays plain.
+    #[test]
+    fn bunks_emblem1_founders_wear_their_emblem_recruits_the_plain_arch() {
+        let (mut cx, ids) = hub_cx(false);
+        // the second member as a recruit: no character behind it
+        cx.gs_mut().party.members[1].lore_ref = String::new();
+        let mut g = gfx_720();
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let bunks = map.state(&cx)["bunks"].as_array().cloned().unwrap();
+        for b in bunks.iter().filter(|b| b["niche"] == json!(true)) {
+            let member = b["member"].as_str().unwrap();
+            let emblem = b["emblem"].as_str().unwrap_or("");
+            let founder = !member.is_empty() && member != ids[1];
+            if founder {
+                assert_eq!(emblem, format!("{EMBLEM_PREFIX}{member}.png"), "a founder's emblem: {b}");
+            } else {
+                assert_eq!(emblem, "", "a recruit or an empty bunk: the plain arch: {b}");
+            }
+        }
+        shot(&g, "hub_emblems_1280");
+    }
+
+    /// BUNKS-EMBLEM1 (2): a sleeper's blanket comes up over the shoulders: the fold starts at the bed's `cover_y`, at or
+    /// above the bottom of the head's rows, and the pixel at the bed's middle on that row is the blanket's (its top row),
+    /// not the sheet's.
+    #[test]
+    fn bunks_emblem1_the_sleepers_blanket_meets_the_head() {
+        let (mut cx, ids) = hub_cx_founders();
+        let mut g = gfx_720();
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let bunks = map.state(&cx)["bunks"].as_array().cloned().unwrap();
+        let bed = bed_art("niche_bunk");
+        let cover = bed.cover_y.unwrap();
+        let mut seen = 0;
+        for id in &ids[4..] {
+            let e = bunks.iter().find(|b| b["member"] == json!(id)).unwrap();
+            assert_eq!(e["dressed"]["asleep"], json!(true), "{e}");
+            let fold = e["dressed"]["fold"].as_array().unwrap_or_else(|| panic!("a fold: {e}"));
+            let (top, bottom) = (fold[0].as_i64().unwrap() as i32, fold[1].as_i64().unwrap() as i32);
+            assert_eq!(top, cover, "the fold from the cover row: {e}");
+            assert!(top <= bed.head.1 + bed.head.3 && bottom > top, "no gap under the head: {e}");
+            let class = e["dressed"]["blanket"].as_str().unwrap();
+            let file = format!("props/sunk_ward/niche_bunk{BLANKET_ART}{class}/v0.png");
+            let first = first_opaque_row(&mut cx, &file).expect("the blanket art");
+            let img = cx.art.image(&file, bed.size.0, bed.size.1).unwrap().clone();
+            let want = |x: i32, y: i32| {
+                let i = ((y * img.w + x) * 4) as usize;
+                [img.px[i], img.px[i + 1], img.px[i + 2], img.px[i + 3]]
+            };
+            // at 1280 x 720 an art px is a screen px (2 per logical px; the logical rect may round the bed's top down by
+            // one, so the row looked at is the fold's first or second)
+            let (x0, y0) = ((e["drawn"][0].as_i64().unwrap() * 2) as i32, (e["drawn"][1].as_i64().unwrap() * 2) as i32);
+            let mid = bed.size.0 / 2;
+            assert_eq!(want(mid, first)[3], 255, "the blanket's top row is opaque at the middle");
+            let i = (((y0 + cover + 1) * g.canvas.w + x0 + mid) * 4) as usize;
+            let got = [g.canvas.px[i], g.canvas.px[i + 1], g.canvas.px[i + 2], 255];
+            assert!(got == want(mid, first) || got == want(mid, first + 1), "{id}: the cover row shows the blanket over the shoulders: {got:?}");
+            seen += 1;
+        }
+        assert_eq!(seen, 2);
+        shot(&g, "hub_sleepers_1280");
     }
 
     /// HUB-POLISH1 (2): the card is the dialogue box: the talk box's frame and place (`TALK_W` wide times the text

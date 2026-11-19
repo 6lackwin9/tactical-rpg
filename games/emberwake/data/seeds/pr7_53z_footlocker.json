@@ -1,0 +1,257 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "maps",
+      "fields": [
+        "anchors"
+      ],
+      "entry": {
+        "id": "sunk_ward_undercroft",
+        "anchors": [
+          {
+            "id": "idle_seat_1",
+            "x": 14,
+            "y": 20
+          },
+          {
+            "id": "idle_seat_2",
+            "x": 16,
+            "y": 20
+          },
+          {
+            "id": "idle_seat_3",
+            "x": 21,
+            "y": 20
+          },
+          {
+            "id": "idle_seat_4",
+            "x": 23,
+            "y": 20
+          },
+          {
+            "id": "idle_seat_5",
+            "x": 15,
+            "y": 21
+          },
+          {
+            "id": "idle_seat_6",
+            "x": 22,
+            "y": 21
+          },
+          {
+            "id": "idle_seat_7",
+            "x": 15,
+            "y": 19
+          },
+          {
+            "id": "idle_seat_8",
+            "x": 22,
+            "y": 19
+          },
+          {
+            "id": "idle_bunk_1",
+            "x": 11,
+            "y": 17
+          },
+          {
+            "id": "idle_bunk_2",
+            "x": 14,
+            "y": 17
+          },
+          {
+            "id": "idle_bunk_3",
+            "x": 16,
+            "y": 17
+          },
+          {
+            "id": "idle_bunk_4",
+            "x": 21,
+            "y": 17
+          },
+          {
+            "id": "idle_bunk_5",
+            "x": 24,
+            "y": 17
+          },
+          {
+            "id": "idle_bunk_6",
+            "x": 26,
+            "y": 17
+          },
+          {
+            "id": "idle_bunk_7",
+            "x": 13,
+            "y": 22
+          },
+          {
+            "id": "idle_bunk_8",
+            "x": 24,
+            "y": 22
+          },
+          {
+            "id": "spawn",
+            "x": 6,
+            "y": 17
+          },
+          {
+            "id": "road",
+            "x": 7,
+            "y": 16
+          },
+          {
+            "id": "gate",
+            "x": 18,
+            "y": 1
+          },
+          {
+            "id": "gate_in",
+            "x": 19,
+            "y": 2
+          },
+          {
+            "id": "npc_a",
+            "x": 6,
+            "y": 5
+          },
+          {
+            "id": "npc_b",
+            "x": 31,
+            "y": 3
+          },
+          {
+            "id": "npc_c",
+            "x": 15,
+            "y": 11
+          },
+          {
+            "id": "npc_d",
+            "x": 22,
+            "y": 6
+          },
+          {
+            "id": "lore_a",
+            "x": 12,
+            "y": 11
+          },
+          {
+            "id": "rest",
+            "x": 22,
+            "y": 12
+          },
+          {
+            "id": "crypts",
+            "x": 32,
+            "y": 15
+          }
+        ]
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "locations",
+      "world": "sunk_ward",
+      "fields": [
+        "markers"
+      ],
+      "entry": {
+        "id": "sluice_undercroft",
+        "markers": [
+          {
+            "id": "gate",
+            "kind": "exit",
+            "anchor": "gate",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "to": "drowned_runoff_grate",
+            "label": "Down the sluice gate",
+            "to_anchor": "sluice_in"
+          },
+          {
+            "id": "road",
+            "kind": "exit",
+            "anchor": "road",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "to": "world_map",
+            "label": "World map: the Sunk Ward"
+          },
+          {
+            "id": "sabina",
+            "kind": "npc",
+            "anchor": "npc_a",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "character": "sabina_kress"
+          },
+          {
+            "id": "berek",
+            "kind": "npc",
+            "anchor": "npc_b",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "character": "berek_dorn"
+          },
+          {
+            "id": "talia",
+            "kind": "npc",
+            "anchor": "npc_c",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "character": "talia_rusk"
+          },
+          {
+            "id": "varka",
+            "kind": "npc",
+            "anchor": "npc_d",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "character": "widow_varka"
+          },
+          {
+            "id": "ivo",
+            "kind": "npc",
+            "anchor": "lore_a",
+            "requires_flags": [
+              {
+                "key": "sunk_ward.ivo_rescued",
+                "value": true
+              }
+            ],
+            "unless_flags": [],
+            "sets_flags": [],
+            "character": "ivo"
+          },
+          {
+            "id": "rest",
+            "kind": "point",
+            "anchor": "rest",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "label": "The hall coke-brazier",
+            "note": "Low anthracite embers in a cast pan, keeping the basin damp off the Hall slabs.",
+            "use": "rest"
+          },
+          {
+            "id": "crypts",
+            "kind": "point",
+            "anchor": "crypts",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "label": "The cold vaults",
+            "note": "Slate mortuary tables under iron bars. Nobody sleeps down in this wing.",
+            "use": "crypts"
+          }
+        ]
+      }
+    }
+  ]
+}
