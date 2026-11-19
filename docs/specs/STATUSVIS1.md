@@ -66,3 +66,9 @@ the icon framed on the first locked block, the only patterned fill on the strip.
 - SV10. Loadout passives apart. The 2 passive slots of a loadout (always on) show as two small icons under the
   portrait on the unit's plate or profile, apart from the buff and debuff column; steadfast as a status stays
   priority 1 in the column.
+- SV11. AP (Design 2026-11-19, Art/UI question on take 33): the display follows the rules and changes none; a lock
+  takes the blocks away, and the AP row shows the AP the rules leave that round (Build reads it from the battle rules
+  when building, `rpgkit_battle` poise and status code), so a lock that also costs AP shows on the row, one that does
+  not leaves it.
+- SV12. Passive icons: the loadout passives need their own icon set (kit, generic, `kits/rpg/assets/passives/`), asked
+  of Art/UI (`AI-39`); placeholder skill icons until then.
