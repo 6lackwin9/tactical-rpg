@@ -94,17 +94,22 @@ fn the_condition_word_reads_wounded_then_ready_or_resting() {
 }
 
 #[test]
-fn active_members_idle_at_the_tables_and_benched_ones_at_their_bunks() {
+fn active_members_idle_at_the_tables_and_benched_ones_sleep_in_their_bunks() {
     let d = data(true);
     let t = map();
     let mut gs = game(&d, 5);
     // the table spots: the idle anchor, then west, east, south and north of the table
     assert_eq!(bunks::table_spots(&loc(), &t), vec![(9, 6), (4, 5), (7, 5), (5, 6), (6, 6), (5, 4), (6, 4)]);
     let spots = bunks::place(&gs, &loc(), &t, "m1");
-    assert_eq!(spots, vec![("m2".to_string(), (9, 6)), ("m3".to_string(), (4, 5)), ("m4".to_string(), (9, 1))], "m4 sleeps in bunk_4; m5 has no bunk prop: not shown");
+    // HUB-BUNKS2 (4): the benched m4 sleeps in bunk_4 (idles nowhere); m5 has no bunk prop: not shown
+    assert_eq!(spots, vec![("m2".to_string(), (9, 6)), ("m3".to_string(), (4, 5))]);
+    let asleep = bunks::sleepers(&gs, &t);
+    assert_eq!(asleep.iter().map(|b| (b.prop.as_str(), b.member.as_str())).collect::<Vec<_>>(), vec![("bunk_4", "m4")]);
+    assert!(asleep.iter().all(|b| b.state == BunkState::Benched));
     // a crypt member is not shown
     gs.party.members[3].housing = "crypt".into();
     assert!(!bunks::place(&gs, &loc(), &t, "m1").iter().any(|(id, _)| id == "m4"));
+    assert!(bunks::sleepers(&gs, &t).is_empty(), "a crypt member does not sleep in a bunk");
 }
 
 #[test]

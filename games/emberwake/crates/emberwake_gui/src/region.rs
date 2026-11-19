@@ -150,6 +150,8 @@ pub struct RegionMap {
     hub: crate::bunks::HubState,
     /// BUNKS1 BK2, BK8: the bunks drawn last frame (agent link `state.bunks`, tests).
     bunks_drawn: Vec<Value>,
+    /// HUB-BUNKS2 (5): the niche bunks' nook floor runs drawn last frame.
+    nooks: Vec<Rect>,
     /// TRANSITIONS1 T2 step 4: the arrival card showing since when, and whether it opened the ticker for its change
     /// lines (closed again when the card goes).
     arrival: Option<(crate::transitions::Arrival, Instant)>,
@@ -467,6 +469,7 @@ impl RegionMap {
             roofs: crate::props::RoofFade::default(),
             hub: crate::bunks::HubState::default(),
             bunks_drawn: Vec::new(),
+            nooks: Vec::new(),
             arrival: None,
             ticker_forced: false,
         }
@@ -923,6 +926,7 @@ impl Screen<GameCx> for RegionMap {
         let lead_now = leader_id(cx);
         self.hub.sync(&d, cx.gs_mut(), &lead_now);
         self.bunks_drawn.clear();
+        self.nooks.clear();
         let gs = cx.gs().clone();
         // the open conversation; a new node starts its line and its replies scrolled to the top; PORTRAITFX1-D: a
         // portrait left out of the last frame (the conversation ended or hid) is dropped
@@ -1286,28 +1290,47 @@ impl Screen<GameCx> for RegionMap {
             let idle = ClipPlayer::default();
             let mut sprites = Vec::new();
             let mut party_frame = None;
-            // PR7-23: the hub bunks' drawn rects: the plates of neighbours alternate heights and keep to the room left
-            let bunk_fits: Vec<Rect> = props
+            // HUB-BUNKS2: the hub bunks' drawn rects (a plate keeps to the room its neighbours leave) and the niche bunks'
+            // nooks (drawn once, before the first bunk)
+            let bunk_fits: Vec<(Rect, String)> = props
                 .iter()
                 .filter(|p| hub_bunks.iter().any(|b| b.prop == p.id))
-                .map(|p| prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles).0.unwrap_or(p.rect))
+                .map(|p| {
+                    let art = prop_art_of(&prop_arts, &geo, p).unwrap_or("").to_string();
+                    (prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles).0.unwrap_or(p.rect), art)
+                })
                 .collect();
+            let fit_rects: Vec<Rect> = bunk_fits.iter().map(|(r, _)| *r).collect();
+            let mut nooks_drawn = false;
             for item in &order {
                 match *item {
                     Item::Prop(i) => {
                         let p = &props[i];
                         let (fit, mounted) = prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles);
+                        let bunk = hub_bunks.iter().find(|b| b.prop == p.id);
+                        if bunk.is_some() && !nooks_drawn {
+                            nooks_drawn = true;
+                            let niches: Vec<Rect> = bunk_fits.iter().filter(|(_, art)| !crate::bunks::bed_art(art).head_south).map(|(r, _)| *r).collect();
+                            self.nooks = crate::bunks::draw_nooks(&mut ui, cx, &lineage, &niches);
+                        }
                         draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
-                        // HUB-POLISH1 (1): an occupied bunk wears its member's name plate (with the bunk, in depth)
-                        if let Some(m) = hub_bunks.iter().find(|b| b.prop == p.id && !b.member.is_empty()).and_then(|b| gs.party.member(&b.member)) {
-                            let (name, class) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m));
+                        // HUB-BUNKS2 (2)-(4): an occupied bunk's dressing and its brass plate (with the bunk, in depth)
+                        if let Some(b) = bunk.filter(|b| !b.member.is_empty()) {
                             let r = fit.unwrap_or(p.rect);
-                            let slot = crate::bunks::plate_slot(r, &bunk_fits);
-                            let plate = crate::bunks::plate_rect(&mut ui.p, r, &name, slot);
-                            let full = crate::bunks::plate_need(&mut ui.p, &name) <= plate.w;
-                            crate::bunks::draw_plate(&mut ui.p, plate, &name, &class);
-                            if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
-                                e["plate"] = json!({"name": name, "class": class, "rect": [plate.x, plate.y, plate.w, plate.h], "level": slot.level, "full": full});
+                            let bed = crate::bunks::bed_art(prop_art_of(&prop_arts, &geo, p).unwrap_or(&b.art));
+                            let dressed = crate::bunks::dress(&mut ui, cx, &lineage, b, &bed, r);
+                            if let Some(m) = gs.party.member(&b.member) {
+                                let (name, class, class_id) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m), m.class_id(&d));
+                                let room = crate::bunks::plate_room(r, &fit_rects);
+                                let plate = crate::bunks::plate_rect(&mut ui.p, r, &bed, &name, room);
+                                let full = crate::bunks::plate_need(&mut ui.p, &name) <= plate.w;
+                                let shown = crate::bunks::plate_name(&mut ui.p, &name, plate.w);
+                                crate::bunks::draw_plate(&mut ui, cx, plate, &name, &class_id, &class);
+                                if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
+                                    e["plate"] = json!({"name": name, "shown": shown, "class": class, "class_id": class_id, "rect": [plate.x, plate.y, plate.w, plate.h], "full": full, "wall": !bed.head_south, "room": room});
+                                    e["drawn"] = json!([r.x, r.y, r.w, r.h]);
+                                    e["dressed"] = json!({"blanket": dressed.blanket, "gear": dressed.gear, "keepsake": dressed.keepsake, "asleep": dressed.asleep});
+                                }
                             }
                         }
                     }
@@ -1592,7 +1615,8 @@ impl Screen<GameCx> for RegionMap {
             // REVEAL1 1.3: each roofed indoor zone's roof opacity (0 gone, 1 opaque)
             "roofs": self.roofs.state(),
             // BUNKS1: in a hub, where each member idles and each bunk's member, state and candle (null elsewhere)
-            "hub": self.hub.state(), "bunks": (!self.bunks_drawn.is_empty()).then(|| self.bunks_drawn.clone())})
+            "hub": self.hub.state(), "bunks": (!self.bunks_drawn.is_empty()).then(|| self.bunks_drawn.clone()),
+            "nooks": (!self.nooks.is_empty()).then(|| self.nooks.iter().map(|r| json!([r.x, r.y, r.w, r.h])).collect::<Vec<_>>())})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
