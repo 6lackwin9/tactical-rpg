@@ -77,7 +77,7 @@ fn a_bad_file_is_named_and_refused_in_every_field() {
         (json!({"id": "x"}), "'steps' is a list"),
         (json!({"id": "x", "status": "waiting", "steps": [{"step": "back"}]}), "needs 'why'"),
         (json!({"id": "x", "status": "someday", "steps": [{"step": "back"}]}), "'status' is"),
-        (json!({"id": "x", "launch": {"screen": "credits"}, "steps": [{"step": "back"}]}), "'screen' is menu, arena or runner"),
+        (json!({"id": "x", "launch": {"screen": "the credits"}, "steps": [{"step": "back"}]}), "'screen' is a screen id"),
         (json!({"id": "x", "launch": {"map": 1}, "steps": [{"step": "back"}]}), "launch: unknown key"),
         (json!({"id": "x", "sizes": ["640x360"], "steps": [{"step": "back"}]}), "is under 1280x720"),
         (json!({"id": "x", "sizes": ["1280x719"], "steps": [{"step": "back"}]}), "is under 1280x720"),
@@ -1081,13 +1081,17 @@ fn a_file_that_cannot_run_as_written_is_a_problem() {
     let mut v = minimal(json!([{"step": "repeat", "times": 2, "steps": [{"step": "clip", "name": "c"}]}]));
     v["window"] = json!(true);
     assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("clip")), "a clip needs no window, even inside a repeat");
+}
+
+/// ENGINE-5: any screen id parses; the game's list (`Game::launch_screens`, the default `menu`) is checked apart.
+#[test]
+fn a_launch_screen_is_any_id_and_the_game_says_which_it_opens_on() {
     let mut v = minimal(json!([{"step": "back"}]));
-    v["launch"] = json!({"screen": "runner", "ruleset": "r1"});
-    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("ruleset")));
-    v["launch"] = json!({"ruleset": "r1"});
-    assert!(parse("x", &v).is_err(), "the default screen is not the arena");
-    v["launch"] = json!({"screen": "runner", "rules": "r1"});
-    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("ruleset")), "the alias is held to the same rule");
+    v["launch"] = json!({"screen": "credits", "ruleset": "r1"});
+    let s = parse("x", &v).expect("any screen id parses, with any launch key");
+    assert_eq!(s.launch.screen, "credits");
+    assert!(scenario::screen_problems(&s.launch, &["menu"])[0].contains("'screen' credits is not one this game opens on (menu)"));
+    assert!(scenario::screen_problems(&s.launch, &["menu", "credits"]).is_empty());
 }
 
 #[test]
@@ -1148,7 +1152,7 @@ fn the_old_launch_key_names_still_load() {
         assert!(problems.iter().any(|p| p.contains(key) && p.contains(old) && p.contains("both")), "{key}/{old}: {problems:?}");
     }
     v["launch"] = json!({"screen": "menu", "rules": "r1"});
-    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("'ruleset' comes with 'screen' arena")), "the alias is checked as the key");
+    assert_eq!(parse("x", &v).unwrap().launch.ruleset.as_deref(), Some("r1"), "the alias loads as the key (which screens take it is the game's rule, ENGINE-5)");
     v["launch"] = json!({"screen": "arena", "fight": "e1"});
     assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("unknown key 'fight'")));
 }
@@ -1193,7 +1197,7 @@ fn proof_shots_turn_a_short_list_into_steps() {
     // A clip stands for a shot too.
     assert_eq!(scenario::do_steps("clip:c").unwrap().len(), 1);
 
-    for bad in [vec!["do=key"], vec!["do=jump:up"], vec!["do=pause:soon"], vec!["seed=x"], vec!["do=clip:c:many"], vec!["screen=nowhere"], vec!["do=shot:a/b"]] {
+    for bad in [vec!["do=key"], vec!["do=jump:up"], vec!["do=pause:soon"], vec!["seed=x"], vec!["do=clip:c:many"], vec!["screen=no where"], vec!["do=shot:a/b"]] {
         assert!(scenario::shots_scenario("x", &keys(&bad)).is_err(), "{bad:?}");
     }
     assert!(scenario::shots_scenario("a/b", &keys(&[])).is_err(), "the name becomes a folder");

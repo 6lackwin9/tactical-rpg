@@ -59,10 +59,8 @@ mod viewkeys;
 mod web;
 mod worldmap;
 
-use aegis_content::manifest::{self, Manifest};
+use aegis_content::manifest;
 use aegis_ui::art;
-use aegis_ui::audio::Audio;
-use aegis_ui::screen::Settings;
 use aegis_ui::shell::headless::Headless;
 use aegis_ui::shell::Options;
 use aegis_ui::tuning::TuningFile;
@@ -157,35 +155,26 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
     let data_dir = arg(args, "data").map(PathBuf::from).or_else(|| emberwake_world::find_data_dir(&start)).context("data folder not found: pass data=<dir> (a data folder or a Godot export folder)")?;
     let (data, mut notices) = emberwake_world::Data::open(&data_dir).with_context(|| format!("loading the data in {}", data_dir.display()))?;
     let data = Arc::new(data);
-    let manifest = match game_dir.as_ref().map(|g| Manifest::read(&g.join(manifest::FILE))) {
-        Some(Ok(m)) => m,
-        found => {
-            notices.push(match found {
-                Some(Err(e)) => e,
-                _ => format!("Game folder games/{GAME_ID} (game.json) not found."),
-            });
-            Manifest { id: GAME_ID.into(), title: GAME_ID.into(), ..Manifest::default() }
-        }
-    };
-    let project = game_dir.clone().or_else(|| art::find_project(&start));
-    let home = game_dir.unwrap_or_else(|| PathBuf::from("."));
+    // ENGINE-11: the manifest, layers, saves and shots folders, settings, sound and the shell's options come from the
+    // engine's game start; the data, the tuning, the launch keys and the first screens are the game's.
     let engine = engine_dir.unwrap_or_else(|| PathBuf::from("."));
-    let save_dir = match arg(args, "saves") {
-        Some(dir) => PathBuf::from(dir),
-        None => {
-            if let Err(e) = aegis_save::adopt_shared(GAME_ID) {
-                notices.push(format!("Copying the saves into {}: {e}", aegis_save::user_dir(GAME_ID).display()));
-            }
-            aegis_save::user_dir(GAME_ID).join("saves")
+    let mut launch = aegis_ui::start::Start::new(GAME_ID, game_dir.clone(), &engine, args, headless);
+    notices.append(&mut launch.notice);
+    if arg(args, "saves").is_none() {
+        if let Err(e) = aegis_save::adopt_shared(GAME_ID) {
+            notices.push(format!("Copying the saves into {}: {e}", aegis_save::user_dir(GAME_ID).display()));
         }
-    };
-    let title = format!("Aegis - {}", manifest.title);
-    let (icon, canvas, window_sizes) = (manifest.icon.clone(), manifest.canvas.clone(), manifest.window_sizes.clone());
+    }
+    let project = game_dir.clone().or_else(|| art::find_project(&start));
+    if game_dir.is_none() {
+        launch.layers = project.as_ref().map(|p| aegis_core::assets::Layers::for_game(p)).unwrap_or_default();
+    }
+    let home = game_dir.unwrap_or_else(|| PathBuf::from("."));
     let game = GameCx {
         data,
-        manifest,
+        manifest: launch.manifest.clone(),
         game: None,
-        save_dir,
+        save_dir: launch.save_dir.clone(),
         tuning: TuningFile::new(Some(home.join("tuning.json"))),
         log: Vec::new(),
         encounter: launch_key(args, "scene", "encounter")?.unwrap_or("goblin_skirmish").to_string(),
@@ -193,29 +182,19 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
         debug: false,
         data_dir,
     };
-    let mut settings = Settings::load(aegis_save::user_dir(GAME_ID).join("settings.json"), default_settings());
+    let mut settings = launch.settings(default_settings());
     settings.keep_window_size(&screens::WINDOW_SIZES);
     force_shipped_views(&mut settings.v, arg(args, "screen"));
     // Playtest recordings are never on in the web build (WEBREL1 6.1, `vfs::dev::ON`), so its data is never hashed.
     let record = aegis_core::vfs::dev::ON && settings.v["record_playtests"].as_bool().unwrap_or(cfg!(debug_assertions));
     // The data fingerprint a recording carries; hashed only while recording is on.
     let content = if record { aegis_content::fingerprint::of(&game.data_dir) } else { serde_json::Value::Null };
-    let layers = project.as_ref().map(|p| aegis_core::assets::Layers::for_game(p)).unwrap_or_default();
+    let playtest = aegis_ui::playtest::Playtests::new(aegis_save::user_dir(GAME_ID).join("playtests"), record, content);
+    // ASSETORG2: sounds and music over the same layers as the art (game, kit, engine)
+    let audio = launch.audio();
+    launch.notice = notices;
     #[allow(unused_mut)]
-    let mut cx = Cx {
-        playtest: aegis_ui::playtest::Playtests::new(aegis_save::user_dir(GAME_ID).join("playtests"), record, content),
-        settings,
-        art: art::Art::new(project),
-        // ASSETORG2: sounds and music over the same layers as the art (game, kit, engine)
-        audio: if headless.is_some() { Audio::offline_layers(&layers) } else { Audio::of_layers(&layers) },
-        nav: Vec::new(),
-        notice: notices,
-        shot_dir: home.join(".shots"),
-        quit: false,
-        answers: Vec::new(),
-        held: Default::default(),
-        app: game,
-    };
+    let (mut cx, options) = launch.cx(settings, art::Art::new(project), audio, playtest, game);
     #[allow(unused_mut)]
     let mut stack: Vec<Box<dyn Screen<GameCx>>> = vec![Box::new(menus::MainMenu::default())];
     match arg(args, "screen") {
@@ -237,8 +216,6 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
         }
         _ => {}
     }
-    let port = arg(args, "port").and_then(|p| p.parse().ok()).unwrap_or(aegis_ui::bridge::DEFAULT_PORT);
-    let options = Options { title, font: engine.join("assets/fonts/OpenSans-SemiBold.ttf"), port, icon, canvas, window_sizes, headless };
     Ok((cx, stack, options))
 }
 

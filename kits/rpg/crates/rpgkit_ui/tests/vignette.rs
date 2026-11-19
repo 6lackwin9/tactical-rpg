@@ -14,7 +14,7 @@ use aegis_ui::playtest::Playtests;
 use aegis_ui::screen::{Context, Cx, Nav, Screen, Settings, TEXT_SIZES, TEXT_SPEEDS};
 use aegis_ui::text_audit;
 use aegis_ui::ui::{Gfx, Kit, Ui, H, W};
-use aegis_ui::vignette::{self, Card, Ended, Palette, Phase, Player, Reel, Style, TextSpeed, VignetteScreen, CARD_BODY, SKIP_TAG};
+use rpgkit_ui::vignette::{self, Card, Ended, Palette, Phase, Player, Reel, Style, TextSpeed, VignetteScreen, CARD_BODY, SKIP_TAG};
 use serde_json::{json, Value};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -49,7 +49,7 @@ fn cx() -> Cx<App> {
 }
 
 fn gfx() -> Gfx {
-    let font = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/OpenSans-SemiBold.ttf")).unwrap();
+    let font = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/assets/fonts/OpenSans-SemiBold.ttf")).unwrap();
     Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() }
 }
 
@@ -652,7 +652,7 @@ fn art_cx(layer: std::path::PathBuf) -> Cx<App> {
 /// draws no portrait.
 #[test]
 fn d3_a_line_card_portrait_lives_with_its_sidecar_idle() {
-    use aegis_ui::portrait_fx::EASE_MS;
+    use rpgkit_ui::portrait_fx::EASE_MS;
     let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "idle": [{"effect": "point_glow", "color": "#c084fc", "intensity": 0.8}]});
     let layer = portrait_layer("idle", Some(face));
     let mut cx = art_cx(layer.to_path_buf());
@@ -706,8 +706,8 @@ fn d3_a_line_card_portrait_lives_with_its_sidecar_idle() {
 /// otherwise the base portrait (its blink) still draws and the agent link lists no overlay.
 #[test]
 fn d3b_line_card_overlays_follow_the_game_switch_and_the_player_setting() {
-    use aegis_ui::portrait_fx::EASE_MS;
-    use aegis_ui::portrait_overlays::{Mount, SETTING};
+    use rpgkit_ui::portrait_fx::EASE_MS;
+    use rpgkit_ui::portrait_overlays::{Mount, SETTING};
     let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "idle": [{"effect": "point_glow", "color": "#c084fc", "intensity": 0.8}]});
     let layer = portrait_layer("idle_mount", Some(face));
     let mut g = gfx();
@@ -792,7 +792,7 @@ fn frame_then_base(rel: &str) -> Vec<String> {
 /// and idle overlays when the screen is given the layout's sidecar rule (`portrait_sidecars`), and none without it.
 #[test]
 fn x3_a_line_cards_expression_and_its_frames_base_sidecar() {
-    use aegis_ui::portrait_fx::EASE_MS;
+    use rpgkit_ui::portrait_fx::EASE_MS;
     let c = Card::from_json(&json!({"style": "line", "speaker": "ida", "expression": "angry", "text": "Out!"}));
     assert_eq!(c.expression, "angry");
     assert_eq!(Card::from_json(&json!({"style": "line", "text": "Hi."})).expression, "", "no key: neutral");
@@ -843,4 +843,13 @@ fn the_advance_area_shows_no_hover_card_next_to_the_pointer() {
     assert!(next_tip.is_empty(), "no hover card on the stage: {next_tip:?}");
     let (_, skip_tip) = s.widget_rect("vignette.skip").expect("a Skip button");
     assert!(!skip_tip.is_empty(), "Skip keeps its card");
+}
+
+/// ENGINE-5: the player reads the engine's shared reduce-motion key (`aegis_ui::screen::REDUCE_MOTION`).
+#[test]
+fn the_player_reads_the_shared_reduce_motion_setting() {
+    let mut s = aegis_ui::screen::Settings::load(std::env::temp_dir().join("rpgkit_vignette_no_settings.json"), serde_json::json!({}));
+    assert!(!rpgkit_ui::vignette::reduce_motion(&s));
+    s.v[aegis_ui::screen::REDUCE_MOTION] = serde_json::json!(true);
+    assert!(rpgkit_ui::vignette::reduce_motion(&s) && s.reduce_motion());
 }

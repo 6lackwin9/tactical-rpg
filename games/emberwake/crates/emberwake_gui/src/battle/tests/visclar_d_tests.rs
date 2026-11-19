@@ -393,14 +393,14 @@ fn a_card_shows_one_colour_of_pips_and_the_numbers_beside_the_rows() {
     b.tick(&mut cx);
     let a = b.selected.unwrap();
     let max = s(&b).w.units[a].max_ap;
-    let per = aegis_ui::pips::unit(max, AP_PIPS);
-    let slots = aegis_ui::pips::count(max, per);
+    let per = rpgkit_ui::pips::unit(max, AP_PIPS);
+    let slots = rpgkit_ui::pips::count(max, per);
     let lit = slots / 2;
     b.host.session.as_mut().unwrap().w.units[a].ap = lit * per;
     let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
     let rows = card_rows(widget_rect(&b, &format!("party.{a}")), 0.0);
     for k in 0..slots {
-        let pip = aegis_ui::pips::pip_rect(rows.ap.x, rows.ap.y + rows.ap.h / 2, k);
+        let pip = rpgkit_ui::pips::pip_rect(rows.ap.x, rows.ap.y + rows.ap.h / 2, k);
         let (x, y) = (pip.x + pip.w / 2, rows.ap.y + rows.ap.h / 2);
         assert_eq!(px(&g, x, y)[..3], if k < lit { AP_PIP } else { AP_PIP_EMPTY }[..3], "pip {k} of {slots}, {lit} lit");
     }

@@ -483,7 +483,7 @@ fn arena_effect_text(w: &World, h: &emberwake_battle::arena::Hazard) -> String {
 fn ground_mark(w: &World, cell: V2, p: &emberwake_battle::ground::Placed) -> GroundMark {
     let d = &p.def;
     let placer = w.units.get(p.by).map(|u| u.name.clone()).unwrap_or_default();
-    let tint = aegis_ui::vignette::hex(&d.tint).unwrap_or(rgb(200, 120, 220));
+    let tint = rpgkit_ui::vignette::hex(&d.tint).unwrap_or(rgb(200, 120, 220));
     let mut tip: Tip = vec![(d.name.clone(), tint)];
     if !d.description.is_empty() {
         tip.push((d.description.clone(), th().text));

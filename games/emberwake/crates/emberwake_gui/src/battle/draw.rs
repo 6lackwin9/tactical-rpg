@@ -264,7 +264,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     let blocks = s.def.total_blocks.max(1);
     // INPUT1-AP (AP6): under the round intent the blocks leave the AP gauge its 12 pips and a label ("-<n>") at their
     // end, kept whether or not a hero is selected, so the strip does not shift
-    let gauge_w = if timeline { aegis_ui::pips::pips_w(AP_PIPS) + aegis_ui::pips::LABEL_GAP + aegis_ui::pips::label_w(&mut ui, "-00") } else { 0 };
+    let gauge_w = if timeline { rpgkit_ui::pips::pips_w(AP_PIPS) + rpgkit_ui::pips::LABEL_GAP + rpgkit_ui::pips::label_w(&mut ui, "-00") } else { 0 };
     let room = W - 6 - bx - 6 - 8 - auto_w - clear_w - confirm_w - if timeline { gauge_w + 2 } else { 0 };
     // AP6: with the gauge the blocks give up width down to 20 each (their span labels cut, TEXTFIT1) before the menus
     let bw = ((room - party_w - hero_w) / blocks).clamp(if timeline { 20 } else { 26 }, 34);

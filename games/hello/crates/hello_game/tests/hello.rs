@@ -27,6 +27,24 @@ fn a_walk_steps_onto_free_tiles_and_bumps_into_walls_and_stones() {
     assert!(!walk::blocked(walk::START.0, walk::START.1), "the start is free");
 }
 
+/// WORLD-PRIM1 (ENGINE-9, WP4): a walk to a tile takes the shortest free route (the engine's grid search), round the
+/// stones, and refuses a stone or the wall.
+#[test]
+fn a_walk_to_a_tile_takes_the_shortest_free_route() {
+    let w = Walk::default();
+    assert_eq!(w.route(walk::START), Some(Vec::new()), "already there");
+    assert_eq!(w.route((6, 4)), None, "a stone");
+    assert_eq!(w.route((0, 0)), None, "the wall");
+    let to = (8, 4);
+    let steps = w.route(to).expect("free");
+    assert_eq!(steps.len() as i64, (to.0 - w.x).abs() + (to.1 - w.y).abs() + 2, "round the stone column at x 6, two steps more than straight");
+    let mut walker = w;
+    for (dx, dy) in &steps {
+        assert!(walker.step(*dx, *dy), "every step is onto a free tile");
+    }
+    assert_eq!((walker.x, walker.y), to);
+}
+
 #[test]
 fn a_walk_reads_back_its_saved_form_and_refuses_a_broken_one() {
     let w = Walk { x: 4, y: 3, steps: 9 };

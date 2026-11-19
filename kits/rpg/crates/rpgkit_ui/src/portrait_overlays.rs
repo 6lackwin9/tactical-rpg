@@ -11,10 +11,10 @@
 //! - The painting (`paint_anchored` before the expression mark, `paint_rising` after it) is called by
 //!   `portrait_fx::compose` only for a mounted draw; its numbers are PORTRAITFX1 4.3 steps 5 and 6.
 
-use crate::canvas::Image;
-use crate::fx::hash01;
+use aegis_ui::canvas::Image;
+use aegis_ui::fx::hash01;
 use crate::portrait_fx::{alpha, cycle, drift, fill_ellipse, flare_on, over, particle_specks, Level, Tier, LINE_GROW_MS};
-use crate::screen::Settings;
+use aegis_ui::screen::Settings;
 use aegis_core::assets::{Face, IDLE_OVERLAYS};
 use std::collections::{BTreeMap, BTreeSet};
 

@@ -304,6 +304,7 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
         selected_block: o.block,
         selected_track: o.selected.filter(|u| w.allies.contains(u)).map(track_key),
         sections: vec![Section { title: "Party".into(), colour: ALLY, tracks: party }, Section { title: "Enemies".into(), colour: FOE, tracks: enemies }],
+        ruler: None,
     }
 }
 

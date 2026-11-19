@@ -1,5 +1,5 @@
 //! PR7-25 (`STYLE-ENGINE1` 2, style bible 2 F2): every portrait draws inside the one frame of the portrait widget
-//! (`portraits::Faces` -> `aegis_ui::portrait_fx::draw_frame`): a 2-unit iron line (the theme's `edge`; 1 unit on a
+//! (`portraits::Faces` -> `rpgkit_ui::portrait_fx::draw_frame`): a 2-unit iron line (the theme's `edge`; 1 unit on a
 //! portrait under `FRAME_THIN_BELOW`) with its top line in the theme's `frame_line` (oxblood), and no other border:
 //! the border a picture paints itself (its sidecar's `border`) is covered. GUI audit on the talk box, the bunk card,
 //! the Character screen, the hub's party box, the battle's panel portrait and the timeline's icons at 1280 x 720,
@@ -13,7 +13,7 @@ use aegis_ui::art::Art;
 use aegis_ui::canvas::{Canvas, Rect};
 use aegis_ui::layout_audit::LayoutRec;
 use aegis_ui::painter::View;
-use aegis_ui::portrait_fx::{FRAME_LINE, FRAME_THIN_BELOW, PORTRAIT_FRAME};
+use rpgkit_ui::portrait_fx::{FRAME_LINE, FRAME_THIN_BELOW, PORTRAIT_FRAME};
 use aegis_ui::ui::{Gfx, Ui};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};

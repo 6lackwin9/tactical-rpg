@@ -3617,7 +3617,7 @@ mod portrait_tests {
     use aegis_core::assets::Layers;
     use aegis_ui::art::Art;
     use aegis_ui::fx::Clock;
-    use aegis_ui::portrait_fx::{blink_phase, blink_starts, seed_of, tq, BLINK_MS, EASE_MS};
+    use rpgkit_ui::portrait_fx::{blink_phase, blink_starts, seed_of, tq, BLINK_MS, EASE_MS};
     use aegis_ui::screen::TEXT_SIZES;
     use emberwake_data::PortraitCue;
 
@@ -6135,7 +6135,7 @@ mod ground_tests {
                 for (reduce, z) in [(false, 1.0), (true, 1.0), (false, 2.0), (true, 2.0)] {
                     let (mut cx, mut g) = (BIG.cx(view), gfx_at(1280, 720));
                     cx.settings.v["map_zoom"] = json!(z);
-                    cx.settings.v[aegis_ui::vignette::REDUCE_MOTION] = json!(reduce);
+                    cx.settings.v[rpgkit_ui::vignette::REDUCE_MOTION] = json!(reduce);
                     let mut map = RegionMap::new(&mut cx);
                     cx.gs_mut().position = (60, 40);
                     let t0 = Instant::now();

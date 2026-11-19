@@ -923,7 +923,7 @@ fn the_gallery_ground_view_draws_every_view_and_zoom_clean() {
     for view in 0..TILE_VIEWS.len() {
         for zoom in 0..TILE_ZOOMS.len() {
             let mut k = Specimens::default();
-            k.act(KitAct::Page(6));
+            k.act(KitAct::Page(5));
             k.act(KitAct::TileGround);
             k.act(KitAct::TileView(view));
             k.act(KitAct::TileZoom(zoom));
@@ -946,7 +946,7 @@ fn the_gallery_ground_view_draws_every_view_and_zoom_clean() {
     }
     // Redrawing composes nothing; the other view composes once, then flipping back nothing.
     let mut k = Specimens::default();
-    k.act(KitAct::Page(6));
+    k.act(KitAct::Page(5));
     k.act(KitAct::TileGround);
     page(&k, &mut gfx(1.0));
     let c0 = ground::ground_composes();

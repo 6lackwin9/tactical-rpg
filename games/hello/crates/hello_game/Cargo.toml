@@ -15,6 +15,7 @@ path = "src/bin/hello_cli.rs"
 
 [dependencies]
 aegis_core = { path = "../../../../engine/crates/aegis_core" }
+aegis_grid = { path = "../../../../engine/crates/aegis_grid" }
 aegis_host = { path = "../../../../engine/crates/aegis_host" }
 aegis_save = { path = "../../../../engine/crates/aegis_save" }
 aegis_content = { path = "../../../../engine/crates/aegis_content" }

@@ -4,7 +4,15 @@ What only you can judge, with what to do. The planner keeps this current: new it
 
 ## For the next session (Design keeps this list; updated 2026-11-18 23:45)
 
-Nothing major is parked yet. Mocks waiting for you, then provisional calls Design made while you were away, to confirm or change:
+Parked for your approval (golden re-records need your word):
+
+- [ ] Auto-plan fixes that move the timeline and sim goldens (`PR7-41` item 6, `PT-22`, patch
+  `/mnt/project-files/pr7-41/pt22_regrant_retarget.patch`): (a) auto-fill stops re-granting a multi-round self status
+  the unit already holds (ends Vesper's Fade loop; 6 of 18 timeline fights move); (b) a hero whose target is down or
+  out of reach retargets the nearest reachable foe instead of resting (8 fights move, sim golden run 21, one repro
+  re-recorded). Recommendation: approve both for heroes; enemies keep resting (TG4 unchanged).
+
+Mocks waiting for you, then provisional calls Design made while you were away, to confirm or change:
 
 - [ ] Enemy short names for the foe plates (`PR7-40`): Brawler, Berserker, Footman, Enforcer, Husk, Archer,
   Crossbowman, Purifier, Shaman, Skirmisher (also the Tallow Dredger), Scout, Flagellant, Render-Beast, Ash-Crawler;

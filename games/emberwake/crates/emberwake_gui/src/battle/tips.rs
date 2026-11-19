@@ -209,7 +209,7 @@ pub(super) fn pip_fill(level: f32, unit: i32, k: i32) -> f32 {
 /// The row of AP pips with its left end at (`x`, `y`), one size whatever the maximum (the engine gauge's slots, lower);
 /// each pip a socket and the part of it still held. Returns the row's rect.
 pub(super) fn draw_ap_pips(p: &mut Painter, x: i32, y: i32, level: f32, max: i32) -> Rect {
-    use aegis_ui::pips::{count, unit, PIP_GAP, PIP_W};
+    use rpgkit_ui::pips::{count, unit, PIP_GAP, PIP_W};
     let per = unit(max, AP_PIPS);
     let slots = count(max, per);
     for k in 0..slots {
@@ -220,7 +220,7 @@ pub(super) fn draw_ap_pips(p: &mut Painter, x: i32, y: i32, level: f32, max: i32
             p.fill(Rect::new(r.x, r.y, held, r.h), AP_PIP);
         }
     }
-    Rect::new(x, y, aegis_ui::pips::pips_w(slots), AP_PIP_H)
+    Rect::new(x, y, rpgkit_ui::pips::pips_w(slots), AP_PIP_H)
 }
 
 // ---- Drawing ------------------------------------------------------------------------------------------------------
@@ -540,7 +540,7 @@ pub(crate) fn ap_lines(f: &rip::ApForecast) -> Vec<String> {
 
 /// AP6, AP9: "1 pip = <u> AP" when a pip of the AP gauge stands for more than one AP (`max_ap` above `AP_PIPS`).
 fn pip_line(max: i32) -> Option<String> {
-    let u = aegis_ui::pips::unit(max, AP_PIPS);
+    let u = rpgkit_ui::pips::unit(max, AP_PIPS);
     (u > 1).then(|| format!("1 pip = {u} AP"))
 }
 
@@ -549,8 +549,8 @@ pub(super) const AP_PAID: Rgba = rgb(96, 106, 128);
 
 /// INPUT2 (style D): the gauge's planned blocks from a member's plan entries `(AP, skill kind, ghost)`: one block an
 /// entry that costs AP, in its kind's colour (`kind_color`, the strip's), a ghost entry as a ghost block.
-pub(super) fn ap_blocks(entries: &[(i32, String, bool)]) -> Vec<aegis_ui::pips::PipBlock> {
-    entries.iter().filter(|e| e.0 > 0).map(|(ap, kind, ghost)| aegis_ui::pips::PipBlock { ap: *ap, colour: kind_color(kind), ghost: *ghost }).collect()
+pub(super) fn ap_blocks(entries: &[(i32, String, bool)]) -> Vec<rpgkit_ui::pips::PipBlock> {
+    entries.iter().filter(|e| e.0 > 0).map(|(ap, kind, ghost)| rpgkit_ui::pips::PipBlock { ap: *ap, colour: kind_color(kind), ghost: *ghost }).collect()
 }
 
 /// INPUT1-AP (AP6-AP10), INPUT2 (style D): the AP gauge of party member `u`. Planning (`f` its forecast, of the hovered
@@ -558,8 +558,8 @@ pub(super) fn ap_blocks(entries: &[(i32, String, bool)]) -> Vec<aegis_ui::pips::
 /// colour, free sockets up to its AP, crossed slots up to its max; red with "-<n>" after the slots for a hovered row it
 /// cannot pay (`short`); playback: what it paid since `start` as one block, its live AP as sockets. A debt shows "-<n>"
 /// before crossed slots. Its hover card: AP9's lines (playback: the live AP), "1 pip = <u> AP" above 12 AP.
-pub(super) fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, blocks: &[aegis_ui::pips::PipBlock], short: Option<i32>, start: i32) -> aegis_ui::pips::PipGauge {
-    use aegis_ui::pips::PipGauge;
+pub(super) fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, blocks: &[rpgkit_ui::pips::PipBlock], short: Option<i32>, start: i32) -> rpgkit_ui::pips::PipGauge {
+    use rpgkit_ui::pips::PipGauge;
     let unit = &w.units[u];
     match f {
         Some(f) => {

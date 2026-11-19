@@ -12,10 +12,10 @@
 //! the UI Gallery's states. LAYOUT720-E4: the gauge draws in the units of the screen's grid (`Ui::m`), its positions still
 //! sums from the row's start; the consts are old units, and `pips_w` and `pip_rect` answer in them (`_on`: on any grid).
 
-use crate::canvas::{rgba, Rect, Rgba};
-use crate::theme::{th, Metrics};
-use crate::timeline::GHOST_ALPHA;
-use crate::ui::{Tip, Ui};
+use aegis_ui::canvas::{rgba, Rect, Rgba};
+use aegis_ui::theme::{th, Metrics};
+use aegis_ui::timeline::GHOST_ALPHA;
+use aegis_ui::ui::{Tip, Ui};
 use aegis_layout::Insets;
 
 /// One slot's size and the gap between slots (old units): 12 slots take 71.

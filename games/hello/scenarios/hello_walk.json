@@ -1,6 +1,6 @@
 {
   "id": "hello_walk",
-  "title": "The sample game: a new walk, steps and bumps, a save, back to the menu, continue",
+  "title": "The sample game: a new walk, steps and bumps, a save, back to the menu, continue, a walk to a tile",
   "steps": [
     {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
     {"step": "assert", "until": {"path": "state.can_continue", "eq": false}},
@@ -25,6 +25,10 @@
     {"step": "assert", "until": {"path": "state.can_continue", "eq": true}},
     {"step": "click", "id": "menu.continue"},
     {"step": "wait", "until": {"path": "screen", "eq": "field"}},
-    {"step": "assert", "until": {"all": [{"path": "state.walk.x", "eq": 5}, {"path": "state.walk.y", "eq": 7}, {"path": "state.walk.steps", "eq": 7}]}}
+    {"step": "assert", "until": {"all": [{"path": "state.walk.x", "eq": 5}, {"path": "state.walk.y", "eq": 7}, {"path": "state.walk.steps", "eq": 7}]}},
+    {"step": "link", "body": {"cmd": "walk_to", "x": 9, "y": 2}},
+    {"step": "wait", "until": {"all": [{"path": "state.path_left", "eq": 0}, {"path": "state.sliding", "eq": false}]}},
+    {"step": "assert", "until": {"all": [{"path": "state.walk.x", "eq": 9}, {"path": "state.walk.y", "eq": 2}, {"path": "state.walk.steps", "eq": 16}]}},
+    {"step": "shot", "name": "walked"}
   ]
 }

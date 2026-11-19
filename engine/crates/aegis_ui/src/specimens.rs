@@ -4,10 +4,9 @@
 //! page's foot: the widgets, the block timeline with its segment parts, links and marks (RULESET1-E), and the effects
 //! kit (FX1-E: each primitive and shake preset on a small stage, the clock's speed and hit-stop, a local reduce
 //! motion; STATUSFX1-E: the orbit and a loop of the chosen primitive, its still look under reduce motion); the Effects
-//! page runs on its own clock, fed by `tick` (wall time) or `advance` (tests). PORTRAITFX1-E: a
-//! fourth page, Portraits, draws the engine's code-drawn sample face (`portrait_fx::sample`) through a `PortraitFx` at a
-//! chosen size, with toggles for each overlay and state, buttons for the reactions, a local reduce motion and the
-//! anchors check, on its own clock. PORTRAITFX1-TL: the Timeline page's Icons check (`kit.timeline.icons`) gives every
+//! page runs on its own clock, fed by `tick` (wall time) or `advance` (tests). ENGINE-5: a kit or game adds a page of
+//! its own (`KitPage`, `SpecimensWith<P>`; the RPG kit's Portraits page, `rpgkit_ui::portrait_page`, at the fourth
+//! tab), its tab placed among the engine's and its clock fed the same way. PORTRAITFX1-TL: the Timeline page's Icons check (`kit.timeline.icons`) gives every
 //! track its icon square (`Track.icon`), drawn by the page through `Timeline::draw_icons`. LOOK1-E1: a fifth page,
 //! Theme, shows the theme in force (`theme::th()`): every colour role's swatch, name and value, the LOOK1 8.2 contrast
 //! pairs with pass or fail, the three faces at the four text sizes, the header, badge and inset pieces, every frame
@@ -31,11 +30,9 @@ use crate::layout_editor::{self, LayoutAct, LayoutEditor};
 use crate::screen::PointerPhase;
 use crate::ground::{self, GroundJob, GroundKey, GroundLayer};
 use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Looped, Orbit, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
-use crate::portrait_fx::{self, Budget, Cue, ExpressionFx, Motion, PortraitFx, PortraitOpts, Tier, MOTION_SAMPLES};
-use crate::portrait_overlays::Mount;
-use aegis_core::assets::{Face, Layers};
+use aegis_core::assets::Layers;
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::rc::Rc;
 use crate::painter::{Painter, Typeface};
 use crate::panes::{ask_dialog, ask_key, backdrop, backdrop_pane, menu_column, menu_column_styled, menu_key, menu_title, slot_card, tab_key, tab_rail, AskView, Corner, MenuItem, MenuStyle, SlotView};
@@ -76,15 +73,8 @@ pub enum KitAct {
     HitStop,
     Reduce,
     Loop,
-    /// The Portraits page: an overlay or state toggle (`PORTRAIT_OVERLAYS`, `PORTRAIT_STATES`), a reaction
-    /// (`PORTRAIT_REACTIONS`), the size (`PORTRAIT_SIZES` index), its reduce-motion and anchors checks.
-    PortraitToggle(&'static str),
-    PortraitFire(&'static str),
-    PortraitSize(usize),
-    PortraitReduce,
-    PortraitAnchors,
-    /// PORTRAITFX2-M: the motion profile (`portrait_fx::MOTION_SAMPLES` index).
-    PortraitMotion(usize),
+    /// ENGINE-5: an action of the page a kit or game adds (`KitPage`, `Specimens<P>`).
+    Extra(PageAct),
     /// LOOK1-E1: the Theme page's switch (`THEME_VIEWS` index) and the frame role shown large (`FRAME_ROLES` index).
     ThemeView(usize),
     ThemeFrame(usize),
@@ -112,7 +102,47 @@ pub enum KitAct {
 }
 
 pub const TABS: [&str; 3] = ["First", "Second", "Third"];
-pub const PAGES: [&str; 9] = ["Widgets", "Timeline", "Effects", "Portraits", "Theme", "Panes", "Tiles", "Frames", "Layout"];
+/// The engine's pages, in tab order; a kit or game page (`KitPage`) goes in at its `AT` (`Specimens::pages`).
+pub const PAGES: [&str; 8] = ["Widgets", "Timeline", "Effects", "Theme", "Panes", "Tiles", "Frames", "Layout"];
+
+/// ENGINE-5 (ENGINE-PURITY-3 part 2): a page a kit or game adds to the Kit widgets, beside the engine's own (the RPG
+/// kit's Portraits page, `rpgkit_ui::portrait_page`; `SpecimensWith<P>`). Its tab goes in at `AT` among `PAGES`; its controls send
+/// `KitAct::Extra`; its clock moves with the page's wall time while it is on view, and with `Specimens::advance`.
+pub trait KitPage: Clone + std::fmt::Debug + Default {
+    /// The tab's name; None: no page (`NoPage`).
+    const NAME: Option<&'static str>;
+    /// Where the tab goes among `PAGES` (0 first).
+    const AT: usize;
+    /// Does `a`; what it did (the page's "Last:" line).
+    fn act(&mut self, a: &PageAct) -> String;
+    /// Draws the page in `r` (above the foot).
+    fn draw<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A);
+    /// Moves the page's clock by `ms`.
+    fn advance(&mut self, ms: f64);
+}
+
+/// No added page: the engine's pages alone.
+#[derive(Debug, Clone, Default)]
+pub struct NoPage;
+
+impl KitPage for NoPage {
+    const NAME: Option<&'static str> = None;
+    const AT: usize = 0;
+    fn act(&mut self, _: &PageAct) -> String {
+        String::new()
+    }
+    fn draw<A: Clone>(&self, _: &mut Ui<A>, _: Rect, _: &impl Fn(KitAct) -> A) {}
+    fn advance(&mut self, _: f64) {}
+}
+
+/// What an added page's controls send: a toggle or a button by name, a choice (which, index), a check by name.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PageAct {
+    Toggle(&'static str),
+    Fire(&'static str),
+    Pick(&'static str, usize),
+    Check(&'static str),
+}
 /// LOOK1-E2: the Tiles page's views (name, logical cell width and height at 1x) and zooms.
 pub const TILE_VIEWS: [(&str, i32, i32); 2] = [("Square 16 x 16", 16, 16), ("Tilted 32 x 24", 32, 24)];
 pub const TILE_ZOOMS: [i32; 3] = [1, 2, 3];
@@ -148,16 +178,6 @@ pub const PANE_TABS: [&str; 4] = ["Video", "Audio", "Controls", "Text"];
 pub const THEME_VIEWS: [&str; 3] = ["Engine default", "Layers' theme", "Frames off"];
 /// The text sizes the Theme page shows each face at (the settings' four, `screen::TEXT_SIZES`).
 pub const THEME_TEXT_SIZES: [f32; 4] = [0.85, 1.0, 1.15, 1.3];
-/// The Portraits page: the sizes on offer (logical px), the toggles, the reactions and the stage (the largest size
-/// plus the jolt ceiling and a margin on every side).
-pub const PORTRAIT_SIZES: [i32; 6] = [96, 64, 48, 32, 24, 16];
-pub const PORTRAIT_OVERLAYS: [&str; 5] = ["glow", "lines", "point_glow", "particles_rise", "drift"];
-/// The overlay toggles' labels (`PORTRAIT_OVERLAYS` order): FB-206 (2b) renamed the cue names only; the page keeps the
-/// words it always showed, so it draws byte for byte as before (the theme hashes, `tests/fixtures/theme`).
-pub const PORTRAIT_OVERLAY_LABELS: [&str; 5] = ["Glow", "Veins", "Eye glow", "Ash", "Smoke"];
-pub const PORTRAIT_STATES: [&str; 4] = ["desaturate", "tint", "fade", "still"];
-pub const PORTRAIT_REACTIONS: [&str; 3] = ["flash", "jolt.hit", "jolt.crit"];
-pub const PORTRAIT_STAGE: i32 = 96 + 2 * 6;
 /// The Effects page: its stage (dark, the dummies 160 px apart), the clock speeds and the hit-stop.
 pub const FX_STAGE_W: i32 = 240;
 pub const FX_STAGE_H: i32 = 120;
@@ -186,9 +206,13 @@ const TILE_LINE: Rgba = rgb(14, 15, 20);
 pub const OPTIONS: [&str; 4] = ["Small", "Normal", "Large", "Extra large"];
 pub const SLIDER_STEPS: usize = 5;
 
-/// The page's sample values; what the last widget used did is shown at the foot of the page.
+/// The engine's pages alone.
+pub type Specimens = SpecimensWith<NoPage>;
+
+/// The page's sample values with an added page `P` (`KitPage`); what the last widget used did is shown at the foot
+/// of the page.
 #[derive(Debug, Clone)]
-pub struct Specimens {
+pub struct SpecimensWith<P: KitPage> {
     pub tab: usize,
     pub checked: bool,
     pub value: i32,
@@ -214,8 +238,9 @@ pub struct Specimens {
     pub icons: bool,
     /// The Effects page's state.
     pub fx: FxDemo,
-    /// The Portraits page's state.
-    pub portrait: PortraitDemo,
+    /// The added page (`KitPage`) and its last wall time.
+    pub extra: P,
+    pub extra_wall: Option<aegis_core::clock::Instant>,
     /// The Theme page's switch (`THEME_VIEWS`) and its large frame role (`FRAME_ROLES` index).
     pub theme_view: usize,
     pub theme_frame: usize,
@@ -309,88 +334,6 @@ impl TileCache {
     /// The first variant of tile `kind` in `set`, from the top layer holding it.
     fn tile(&mut self, set: &str, kind: &str) -> Option<&Image> {
         self.image(&format!("tilesets/{set}/{kind}/v0.png"))
-    }
-}
-
-/// The Portraits page's clock, portrait (its cache behind a `RefCell`: the page draws through `&self`), sample face
-/// and choices.
-#[derive(Debug, Clone)]
-pub struct PortraitDemo {
-    pub clock: Clock,
-    pub fx: RefCell<PortraitFx>,
-    budget: RefCell<Budget>,
-    /// The overlays and states toggled on.
-    pub on: BTreeSet<&'static str>,
-    /// `PORTRAIT_SIZES` index.
-    pub size: usize,
-    pub reduce: bool,
-    pub anchors: bool,
-    /// PORTRAITFX2-M: the motion profile shown (`MOTION_SAMPLES` index; 0, the breath, holds no face).
-    pub motion: usize,
-    pub image: Image,
-    pub face: Face,
-    last_wall: Option<aegis_core::clock::Instant>,
-}
-
-impl Default for PortraitDemo {
-    fn default() -> Self {
-        let (image, face) = portrait_fx::sample();
-        let mut fx = PortraitFx::new("kit.sample");
-        // one face per sample profile (named after it), so choosing one starts its entry and blends from the last
-        let rows: Vec<ExpressionFx> = MOTION_SAMPLES.iter().filter_map(|n| Motion::sample(n).map(|m| ExpressionFx { motion: m, ..ExpressionFx::new(n) })).collect();
-        fx.set_expressions(&rows);
-        Self { clock: Clock::default(), fx: RefCell::new(fx), budget: RefCell::new(Budget::default()), on: BTreeSet::new(), size: 0, reduce: false, anchors: false, motion: 0, image, face, last_wall: None }
-    }
-}
-
-impl PortraitDemo {
-    /// Toggles overlay or state `e` and holds the new set; what it did.
-    fn toggle(&mut self, e: &'static str) -> String {
-        let on = !self.on.remove(e);
-        if on {
-            self.on.insert(e);
-        }
-        self.hold();
-        format!("portrait {} {}", e, if on { "on" } else { "off" })
-    }
-
-    /// Holds the toggled set and the chosen motion's face.
-    fn hold(&mut self) {
-        let mut cues: Vec<Cue> = self.on.iter().filter_map(|x| Cue::parse(x, "").map(|c| c.with_key(&format!("kit.{x}")))).collect();
-        let name = MOTION_SAMPLES[self.motion % MOTION_SAMPLES.len()];
-        if self.motion > 0 {
-            cues.extend(Cue::parse("face", "").map(|c| c.with_expression(name).with_key("kit.motion")));
-        }
-        self.fx.borrow_mut().hold(&cues, self.clock.now());
-    }
-
-    /// PORTRAITFX2-M: shows motion profile `i`; what it did.
-    fn set_motion(&mut self, i: usize) -> String {
-        self.motion = i % MOTION_SAMPLES.len();
-        self.hold();
-        format!("portrait motion {}", MOTION_SAMPLES[self.motion])
-    }
-
-    /// Fires reaction `what` (`flash`, `jolt.hit`, `jolt.crit`); what it did.
-    fn fire(&mut self, what: &str) -> String {
-        let cue = match what {
-            "flash" => Cue::parse("flash", ""),
-            _ => Cue::parse("jolt", what.trim_start_matches("jolt.")),
-        };
-        let Some(cue) = cue else { return format!("no reaction {what}") };
-        self.fx.borrow_mut().fire(cue, self.clock.now());
-        let still = self.reduce && what.starts_with("jolt");
-        format!("portrait {what}{}", if still { ": no motion (reduce motion)" } else { "" })
-    }
-
-    fn opts(&self) -> PortraitOpts {
-        // the page shows every overlay toggle, so it mounts the opt-in overlay layer (ASSETORG4)
-        PortraitOpts { reduce_motion: self.reduce, rim_default: None, show_anchors: self.anchors, tier_cap: None, overlays: Mount::Mounted }
-    }
-
-    /// The portrait's agent state at the page's clock (`PortraitFx::state`).
-    pub fn state(&self) -> serde_json::Value {
-        self.fx.borrow().state(self.clock.now())
     }
 }
 
@@ -516,7 +459,7 @@ impl FxDemo {
     }
 }
 
-impl Default for Specimens {
+impl<P: KitPage> Default for SpecimensWith<P> {
     fn default() -> Self {
         Self {
             tab: 0,
@@ -538,7 +481,8 @@ impl Default for Specimens {
             track: None,
             icons: false,
             fx: FxDemo::default(),
-            portrait: PortraitDemo::default(),
+            extra: P::default(),
+            extra_wall: None,
             theme_view: 1,
             theme_frame: 0,
             pane: 0,
@@ -556,7 +500,7 @@ impl Default for Specimens {
     }
 }
 
-impl Specimens {
+impl<P: KitPage> SpecimensWith<P> {
     pub fn act(&mut self, a: KitAct) {
         self.last = match &a {
             KitAct::Press(what) => format!("pressed {what}"),
@@ -571,7 +515,7 @@ impl Specimens {
             KitAct::Lock => format!("lock {}", if self.locked { "off" } else { "on" }),
             KitAct::Icon(what) => format!("icon {what}"),
             KitAct::Fold => format!("section {}", if self.open { "folded" } else { "opened" }),
-            KitAct::Page(i) => format!("page {}", PAGES[*i % PAGES.len()]),
+            KitAct::Page(i) => format!("page {}", self.page_name(*i)),
             KitAct::Block(b) => format!("block {b}"),
             KitAct::Track(t) => format!("track {t}"),
             KitAct::Segment(t, s) => format!("segment {s} on {t}"),
@@ -582,12 +526,7 @@ impl Specimens {
             KitAct::HitStop => format!("hit-stop {}", if self.fx.hit_stop { "off" } else { "on" }),
             KitAct::Reduce => format!("reduce motion {}", if self.fx.reduce { "off" } else { "on" }),
             KitAct::Loop => format!("loop {} {}", self.fx.chosen, if self.fx.looping { "off" } else { "on" }),
-            KitAct::PortraitToggle(e) => self.portrait.toggle(e),
-            KitAct::PortraitFire(w) => self.portrait.fire(w),
-            KitAct::PortraitSize(i) => format!("portrait size {} px", PORTRAIT_SIZES[*i % PORTRAIT_SIZES.len()]),
-            KitAct::PortraitReduce => format!("portrait reduce motion {}", if self.portrait.reduce { "off" } else { "on" }),
-            KitAct::PortraitAnchors => format!("portrait anchors {}", if self.portrait.anchors { "off" } else { "on" }),
-            KitAct::PortraitMotion(i) => self.portrait.set_motion(*i),
+            KitAct::Extra(x) => self.extra.act(x),
             KitAct::ThemeView(i) => format!("theme {}", THEME_VIEWS[*i % THEME_VIEWS.len()]),
             KitAct::ThemeFrame(i) => format!("frame {}", FRAME_ROLES[*i % FRAME_ROLES.len()].0),
             KitAct::Pane(i) => format!("pane {}", PANES[*i % PANES.len()]),
@@ -622,8 +561,8 @@ impl Specimens {
             KitAct::Lock => self.locked = !self.locked,
             KitAct::Fold => self.open = !self.open,
             KitAct::Page(i) => {
-                self.page = i % PAGES.len();
-                if self.page != 4 {
+                self.page = i % Self::pages().len();
+                if self.on_page() != "Theme" {
                     self.leave_theme();
                 }
             }
@@ -639,9 +578,6 @@ impl Specimens {
                 }
             }
             KitAct::Loop => self.fx.toggle_loop(),
-            KitAct::PortraitSize(i) => self.portrait.size = i % PORTRAIT_SIZES.len(),
-            KitAct::PortraitReduce => self.portrait.reduce = !self.portrait.reduce,
-            KitAct::PortraitAnchors => self.portrait.anchors = !self.portrait.anchors,
             KitAct::ThemeView(i) => {
                 self.theme_view = i % THEME_VIEWS.len();
                 theme::set_theme(theme_view(self.theme_view));
@@ -680,7 +616,7 @@ impl Specimens {
                 self.layout.act(a);
                 self.last = self.layout.note.clone();
             }
-            KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) | KitAct::Effect(_) | KitAct::Shake(_) | KitAct::PortraitToggle(_) | KitAct::PortraitFire(_) | KitAct::PortraitMotion(_) => {}
+            KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) | KitAct::Effect(_) | KitAct::Shake(_) | KitAct::Extra(_) => {}
         }
     }
 
@@ -693,31 +629,56 @@ impl Specimens {
         }
     }
 
-    /// The Effects or Portraits page's clock moves by the wall time since the last call (at most
-    /// `vignette::MAX_FRAME_MS`), while that page is on view (the gallery screen calls it every frame).
+    /// The Effects page's clock, or the added page's (`KitPage`), moves by the wall time since the last call (at most
+    /// `fx::MAX_FRAME_MS`), while that page is on view (the gallery screen calls it every frame).
     pub fn tick(&mut self) {
         let now = aegis_core::clock::Instant::now();
-        let since = |last: Option<aegis_core::clock::Instant>| last.map_or(0.0, |l| (now.duration_since(l).as_secs_f64() * 1000.0).min(crate::vignette::MAX_FRAME_MS as f64));
-        if self.page == 2 {
+        let since = |last: Option<aegis_core::clock::Instant>| last.map_or(0.0, |l| (now.duration_since(l).as_secs_f64() * 1000.0).min(crate::fx::MAX_FRAME_MS as f64));
+        if self.on_page() == "Effects" {
             let ms = since(self.fx.last_wall);
             self.fx.last_wall = Some(now);
             self.fx.advance(ms);
         } else {
             self.fx.last_wall = None;
         }
-        if self.page == 3 {
-            let ms = since(self.portrait.last_wall);
-            self.portrait.last_wall = Some(now);
-            self.portrait.clock.advance(ms, 1.0);
+        if P::NAME.is_some() && self.on_page() == P::NAME.unwrap_or_default() {
+            let ms = since(self.extra_wall);
+            self.extra_wall = Some(now);
+            self.extra.advance(ms);
         } else {
-            self.portrait.last_wall = None;
+            self.extra_wall = None;
         }
     }
 
-    /// The Effects page's clock moves by `wall_ms` (`FxDemo::advance`), and the Portraits page's clock with it.
+    /// The Effects page's clock moves by `wall_ms` (`FxDemo::advance`), and the added page's clock with it.
     pub fn advance(&mut self, wall_ms: f64) {
         self.fx.advance(wall_ms);
-        self.portrait.clock.advance(wall_ms, 1.0);
+        self.extra.advance(wall_ms);
+    }
+
+    /// The pages in tab order: `PAGES` with the added page's (`KitPage::NAME`) at its `AT`.
+    pub fn pages() -> Vec<&'static str> {
+        let mut v = PAGES.to_vec();
+        if let Some(n) = P::NAME {
+            v.insert(P::AT.min(v.len()), n);
+        }
+        v
+    }
+
+    /// The tab index of page `name` (`pages`), if there is one.
+    pub fn page_of(name: &str) -> Option<usize> {
+        Self::pages().iter().position(|p| *p == name)
+    }
+
+    /// The name of page `i` (`pages`, wrapping).
+    fn page_name(&self, i: usize) -> &'static str {
+        let pages = Self::pages();
+        pages[i % pages.len()]
+    }
+
+    /// The page on view's name.
+    pub fn on_page(&self) -> &'static str {
+        self.page_name(self.page)
     }
 
     /// A chip (`chip.<name>`) onto the other box (`box.left` / `box.right`).
@@ -754,32 +715,26 @@ impl Specimens {
     /// start with `kit.`.
     pub fn draw<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: impl Fn(KitAct) -> A) {
         let mut tx = r.x + r.w - 6;
-        for (i, p) in PAGES.iter().enumerate().rev() {
+        for (i, p) in Self::pages().iter().enumerate().rev() {
             let w = (ui.p.text_w(p, BODY) + 12.0).ceil() as i32;
             tx -= w;
             ui.tab(&format!("kit.page.{i}"), Rect::new(tx, r.y + r.h - 15, w, 14), p, wrap(KitAct::Page(i)), self.page == i);
             tx -= 2;
         }
-        if self.page == 1 {
-            self.draw_timeline(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
-        } else if self.page == 2 {
-            self.draw_effects(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
-        } else if self.page == 3 {
-            self.draw_portraits(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
-        } else if self.page == 4 {
-            self.draw_theme(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
-        } else if self.page == 5 {
-            self.draw_panes(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
-        } else if self.page == 6 {
-            self.draw_tiles(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
-        } else if self.page == 7 {
-            self.tuner.draw(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &|a| wrap(KitAct::Tuner(a)));
-        } else if self.page == 8 {
-            let page = Rect::new(r.x, r.y, r.w, r.h - 18);
-            self.layout.set_view(layout_editor::sample_view(&self.layout, LayoutEditor::split(page).1));
-            self.layout.draw(ui, page, &|a| wrap(KitAct::Layout(a)));
-        } else {
-            self.draw_widgets(ui, r, &wrap);
+        let page = Rect::new(r.x, r.y, r.w, r.h - 18);
+        match self.on_page() {
+            "Timeline" => self.draw_timeline(ui, page, &wrap),
+            "Effects" => self.draw_effects(ui, page, &wrap),
+            "Theme" => self.draw_theme(ui, page, &wrap),
+            "Panes" => self.draw_panes(ui, page, &wrap),
+            "Tiles" => self.draw_tiles(ui, page, &wrap),
+            "Frames" => self.tuner.draw(ui, page, &|a| wrap(KitAct::Tuner(a))),
+            "Layout" => {
+                self.layout.set_view(layout_editor::sample_view(&self.layout, LayoutEditor::split(page).1));
+                self.layout.draw(ui, page, &|a| wrap(KitAct::Layout(a)));
+            }
+            "Widgets" => self.draw_widgets(ui, r, &wrap),
+            _ => self.extra.draw(ui, page, &wrap),
         }
         ui.p.text_fit((r.x + 6) as f32, (r.y + r.h - 12) as f32, &format!("Last: {}", self.last), SMALL, (tx - r.x - 10) as f32, GOOD);
     }
@@ -910,93 +865,6 @@ impl Specimens {
         ui.checkbox("kit.fx.reduce", x2, yy + 2, "Reduce motion (this page)", d.reduce, wrap(KitAct::Reduce), true);
         yy += 14 + 5;
         ui.checkbox("kit.fx.loop", x2, yy + 2, &format!("Loop {} (every ms + {FX_LOOP_GAP_MS})", d.chosen), d.looping, wrap(KitAct::Loop), true);
-    }
-
-    /// The Portraits page: the stage (`kit.portrait.face`: the portrait and its jolt room) with the sample face at the
-    /// chosen size and, under it, the tier and what is live; beside it a toggle per overlay and state
-    /// (`kit.portrait.<effect>`), a button per reaction (`kit.portrait.flash`, `kit.portrait.jolt.hit`,
-    /// `kit.portrait.jolt.crit`), the size (`kit.portrait.size`), reduce motion (`kit.portrait.reduce`), the
-    /// anchors check (`kit.portrait.anchors`) and (PORTRAITFX2-M) the motion profile (`kit.portrait.motion`, the foot
-    /// line naming its live parts).
-    fn draw_portraits<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
-        let d = &self.portrait;
-        let x = r.x + 6;
-        let line = ui.p.line_h(SMALL).ceil() as i32;
-        ui.p.text(x as f32, (r.y + 4) as f32, "Portraits: base life, overlays, states and reactions over a code-drawn face", SMALL, INFO);
-        let y = r.y + 4 + line + 2;
-        let stage = Rect::new(x, y, PORTRAIT_STAGE, PORTRAIT_STAGE);
-        ui.p.panel(stage, STAGE_BG, crate::ui::BORDER, 2.0);
-        let size = PORTRAIT_SIZES[d.size.min(PORTRAIT_SIZES.len() - 1)];
-        let face = Rect::new(stage.x + (stage.w - size) / 2, stage.y + (stage.h - size) / 2, size, size);
-        let now = d.clock.now();
-        {
-            let mut budget = d.budget.borrow_mut();
-            budget.begin();
-            d.fx.borrow_mut().draw_image(&mut ui.p, &d.image, "kit.sample", Some(&d.face), face, now, &d.opts(), &mut budget);
-        }
-        let (tier, live, parts) = {
-            let fx = d.fx.borrow();
-            (fx.tier().map_or("", Tier::name), fx.live(now), fx.motion(portrait_fx::tq(now)).parts)
-        };
-        let device = (size as f32 * ui.p.v.s).round() as i32;
-        ui.push("kit.portrait.face", "portrait", format!("sample portrait: {size} px, tier {tier}"), stage, true, false, None, Vec::new());
-        let col_w = 200;
-        let named = |v: &[&str]| if v.is_empty() { "nothing".to_string() } else { v.join(", ") };
-        let foot = format!("Tier {tier} ({device} device px). Live: {}", named(&live));
-        let fy = ui.para(x, stage.y + stage.h + 4, col_w, &foot, SMALL, DIM);
-        let fy = ui.para(x, fy, col_w, &format!("Motion {}: {}", MOTION_SAMPLES[d.motion % MOTION_SAMPLES.len()], named(&parts)), SMALL, DIM);
-        ui.para(
-            x,
-            fy + 4,
-            col_w,
-            // the labels' words (`PORTRAIT_OVERLAY_LABELS`), kept so the page draws as before FB-206 (2b)
-            "Pure functions of the clock and a seed from the key, composed at the drawn size and cached. From 96 device px everything draws; 48-95 drops breath, veins and smoke; below 48 only flashes, colour states, fade and the eye glow's core. Reduce motion stops breath, jolts, flicker and drift.",
-            SMALL,
-            TEXT,
-        );
-
-        // -- Controls beside the stage
-        let x2 = x + col_w + 10;
-        let right = r.x + r.w - 6;
-        let head = |ui: &mut Ui<A>, y: i32, t: &str| -> i32 {
-            ui.p.text(x2 as f32, y as f32, t, SMALL, INFO);
-            y + line + 1
-        };
-        let mut yy = y;
-        for (title, names) in [("Overlays (held at full strength)", &PORTRAIT_OVERLAYS[..]), ("States", &PORTRAIT_STATES[..])] {
-            yy = head(ui, yy, title);
-            let mut bx = x2;
-            for name in names.iter().copied() {
-                let label = portrait_label(name);
-                let w = 12 + ui.p.text_w(&label, BODY).ceil() as i32 + 4;
-                if bx + w > right {
-                    bx = x2;
-                    yy += 16;
-                }
-                ui.checkbox(&format!("kit.portrait.{name}"), bx, yy + 2, &label, d.on.contains(name), wrap(KitAct::PortraitToggle(name)), true);
-                bx += w + 8;
-            }
-            yy += 14 + 5;
-        }
-        yy = head(ui, yy, "Reactions");
-        let mut bx = x2;
-        for (what, label) in PORTRAIT_REACTIONS.iter().zip(["Flash", "Hit jolt", "Crit jolt"]) {
-            let w = (ui.p.text_w(label, BODY) + 12.0).ceil() as i32;
-            ui.button(&format!("kit.portrait.{what}"), Rect::new(bx, yy, w, 14), label, wrap(KitAct::PortraitFire(what)), true);
-            bx += w + 3;
-        }
-        yy += 14 + 5;
-        yy = head(ui, yy, "Size, motion, anchors");
-        let sizes: Vec<String> = PORTRAIT_SIZES.iter().map(|s| format!("{s} px")).collect();
-        ui.select("kit.portrait.size", Rect::new(x2, yy, 56, 14), &sizes, d.size, |i| wrap(KitAct::PortraitSize(i)), true, tip("Size", "The portrait's side in logical px; the tier follows the device px."));
-        ui.checkbox("kit.portrait.reduce", x2 + 64, yy + 2, "Reduce motion (this page)", d.reduce, wrap(KitAct::PortraitReduce), true);
-        yy += 14 + 5;
-        ui.checkbox("kit.portrait.anchors", x2, yy + 2, "Anchors (eye boxes, glow, vein roots)", d.anchors, wrap(KitAct::PortraitAnchors), true);
-        // PORTRAITFX2-M: the motion profile
-        yy += 14 + 5;
-        let names: Vec<String> = MOTION_SAMPLES.iter().map(|n| cap(n)).collect();
-        ui.select("kit.portrait.motion", Rect::new(x2, yy, 72, 14), &names, d.motion, |i| wrap(KitAct::PortraitMotion(i)), true, tip("Motion", "The face's motion profile: parts combined by one function (cycle, lean, bob, entry, settle, rest, shiver, flush)."));
-        ui.p.text((x2 + 80) as f32, (yy + 2) as f32, "Motion profile", SMALL, DIM);
     }
 
     /// The widgets page: two columns of named groups.
@@ -1194,10 +1062,10 @@ pub fn sample_portraits() -> &'static [Image] {
     })
 }
 
-impl Specimens {
+impl<P: KitPage> SpecimensWith<P> {
     /// PR5-48: a handle drag on the Layout page (`Screen::pointer` of the gallery screen). True when the page took it.
     pub fn pointer(&mut self, id: &str, phase: PointerPhase, pos: (i32, i32)) -> bool {
-        if self.page != 8 {
+        if self.on_page() != "Layout" {
             return false;
         }
         let used = self.layout.pointer(id, phase, pos);
@@ -1209,7 +1077,7 @@ impl Specimens {
 
     /// PR5-48: the Layout page's agent commands (`layout_markers`, `layout`; `LayoutEditor::command`), on that page only.
     pub fn command(&mut self, body: &serde_json::Value) -> Option<serde_json::Value> {
-        if self.page != 8 {
+        if self.on_page() != "Layout" {
             return None;
         }
         let out = self.layout.command(body)?;
@@ -1225,21 +1093,21 @@ impl Specimens {
 
     /// `key` with the modifiers held (PR5-48: the Layout page's Shift nudge and Ctrl+Z).
     pub fn key_with(&mut self, k: Key, shift: bool, ctrl: bool) -> bool {
-        if self.page == 8 {
+        if self.on_page() == "Layout" {
             let used = self.layout.key(k, shift, ctrl);
             if used {
                 self.last = self.layout.note.clone();
             }
             return used;
         }
-        if self.page == 7 {
+        if self.on_page() == "Frames" {
             let used = self.tuner.key(k);
             if used {
                 self.last = self.tuner.note.clone();
             }
             return used;
         }
-        if self.page != 5 {
+        if self.on_page() != "Panes" {
             return false;
         }
         let a = match self.pane {
@@ -1348,7 +1216,7 @@ impl Specimens {
     }
 }
 
-impl Specimens {
+impl<P: KitPage> SpecimensWith<P> {
     /// The Tiles page (LOOK1-E2): the set picker (`kit.tiles.set`), the view (`kit.tiles.view.<i>`) and zoom
     /// (`kit.tiles.zoom.<i>`) tabs, the pair picker (`kit.tiles.pair`, for a set with several pairs), what the set
     /// gives and the pan buttons (`kit.tiles.pan.<dir>`, live when the map is larger than its stage), then the fixture
@@ -1546,7 +1414,7 @@ pub fn theme_view(view: usize) -> Theme {
     }
 }
 
-impl Specimens {
+impl<P: KitPage> SpecimensWith<P> {
     /// The Theme page (LOOK1-E1): the switch and the sources on top, the rest in a scroll area.
     fn draw_theme<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
         let t = ui.t.clone();
@@ -1768,6 +1636,7 @@ fn sample_timeline(block: Option<i32>, track: Option<String>) -> Timeline {
         selected_block: block,
         selected_track: track,
         sections: vec![Section { title: "Allies".into(), colour: INFO, tracks: vec![lead, scout, warden] }, Section { title: "Enemies".into(), colour: FOE, tracks: vec![brute, lurker] }],
+        ruler: None,
     }
 }
 
@@ -1784,15 +1653,6 @@ fn sample_icon(n: i32) -> Image {
         }
     }
     Image { w: n, h: n, px }
-}
-
-/// A Portraits page toggle's label: an overlay's `PORTRAIT_OVERLAY_LABELS` entry, else `name` with `_` as spaces and
-/// its first letter in upper case.
-pub fn portrait_label(name: &str) -> String {
-    match PORTRAIT_OVERLAYS.iter().position(|o| *o == name) {
-        Some(i) => PORTRAIT_OVERLAY_LABELS[i].to_string(),
-        None => cap(&name.replace('_', " ")),
-    }
 }
 
 /// `kind` with its first letter in upper case.

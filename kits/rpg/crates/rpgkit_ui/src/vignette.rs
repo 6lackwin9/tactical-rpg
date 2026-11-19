@@ -11,28 +11,28 @@
 //! `expression` holds as a `face` cue (the caller's chain already starts at that frame) and the caller may name where a
 //! drawn file's anchors come from (`portrait_sidecars`: an expression frame without its own sidecar takes its base's).
 
-use crate::art::Art;
-use crate::audio::Bus;
-use crate::canvas::{rgb, rgba, Rect, Rgba};
-use crate::fx::{Camera, Clock, ShakeLimits, ShakeTable};
-use crate::painter::Painter;
+use aegis_ui::art::Art;
+use aegis_ui::audio::Bus;
+use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
+use aegis_ui::fx::{Camera, Clock, ShakeLimits, ShakeTable};
+use aegis_ui::painter::Painter;
 use crate::portrait_fx::{idle_cues, Budget, Cue, ExpressionFx, PortraitFx, PortraitOpts};
 use crate::portrait_overlays::Mount;
-use crate::screen::{Context, Cx, Key, Screen, Settings};
-use crate::theme::th;
-use crate::ui::{tip, Gfx, Ui, Widget, BODY, RADIUS, SMALL, H, W};
+use aegis_ui::screen::{Context, Cx, Key, Screen, Settings};
+use aegis_ui::theme::th;
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, RADIUS, SMALL, H, W};
 use aegis_core::json;
 use serde_json::{json, Value};
 use aegis_core::clock::Instant;
 
 /// The settings keys (engine keys, `Settings::engine_defaults`).
 pub const TEXT_SPEED: &str = "text_speed";
-pub const REDUCE_MOTION: &str = "reduce_motion";
+pub use aegis_ui::screen::REDUCE_MOTION;
 /// The answer tag of the "Skip this scene?" question.
 pub const SKIP_TAG: &str = "vignette.skip";
 pub const SKIP_QUESTION: &str = "Skip this scene?";
 /// The longest frame the screen feeds the model (a stall or a window drag does not jump the reel).
-pub const MAX_FRAME_MS: u32 = 100;
+pub use aegis_ui::fx::MAX_FRAME_MS;
 /// The card text size (the caption, the line, the text card, the subtitle); the title is three times it.
 pub const CARD_BODY: f32 = BODY + 1.0;
 /// Layout on the 640 x 360 stage (V9).
@@ -1074,5 +1074,5 @@ impl<G: Context> Screen<G> for VignetteScreen<G> {
         self.player.reel.music_wish()
     }
 
-    crate::widget_plumbing!(Cx<G>);
+    aegis_ui::widget_plumbing!(Cx<G>);
 }

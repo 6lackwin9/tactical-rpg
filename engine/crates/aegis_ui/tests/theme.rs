@@ -74,10 +74,11 @@ fn frame_hash(g: &Gfx) -> String {
     format!("{h:016x}")
 }
 
-/// Every hash: each page (the four the Kit page had before the theme), each text size, idle and hovered.
+/// Every hash: each page (the engine's three of the four the Kit page had before the theme; the fourth, Portraits,
+/// moved to the kit with its hashes, ENGINE-5: `rpgkit_ui/tests/portrait_page.rs`), each text size, idle and hovered.
 fn kit_hashes() -> Map<String, Value> {
     let mut out = Map::new();
-    for (page, name) in ["widgets", "timeline", "effects", "portraits"].iter().enumerate() {
+    for (page, name) in ["widgets", "timeline", "effects"].iter().enumerate() {
         let k = Specimens { page, ..Specimens::default() };
         for scale in TEXT_SIZES {
             let (g, w) = draw_page(&k, scale, (-1, -1));
@@ -1009,8 +1010,8 @@ fn frames_off_draws_the_vector_panel() {
 /// The Theme page at 1280 x 720 at each text size: every role, face and frame role is listed, the text audit is clean.
 #[test]
 fn the_theme_page_lists_the_theme_and_its_text_fits() {
-    assert_eq!(PAGES[4], "Theme");
-    let k = Specimens { page: 4, ..Specimens::default() };
+    assert_eq!(PAGES[3], "Theme");
+    let k = Specimens { page: 3, ..Specimens::default() };
     for scale in TEXT_SIZES {
         let mut g = kit_gfx(scale);
         g.fonts.audit = Some(Vec::new());
@@ -1037,7 +1038,7 @@ fn the_theme_page_lists_the_theme_and_its_text_fits() {
 #[test]
 fn the_theme_switch_sets_the_theme_in_force() {
     theme::install(Theme { text: [1, 2, 3, 255], ..Theme::default() });
-    let mut k = Specimens { page: 4, ..Specimens::default() };
+    let mut k = Specimens { page: 3, ..Specimens::default() };
     k.act(KitAct::ThemeView(0));
     assert_eq!(theme::th().text, Theme::default().text);
     k.act(KitAct::ThemeView(2));

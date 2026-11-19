@@ -170,7 +170,7 @@ fn is(c: &Canvas, x: i32, y: i32, want: [u8; 3]) -> bool {
 
 fn tiles_page(set: usize) -> Specimens {
     let mut k = Specimens::default();
-    k.act(KitAct::Page(6));
+    k.act(KitAct::Page(5));
     k.act(KitAct::TileSet(set));
     k
 }
@@ -320,7 +320,7 @@ fn a_set_with_two_pairs_picks_each() {
 /// the map is larger than its stage and stops at the map's end.
 #[test]
 fn every_view_and_zoom_draws_clean() {
-    assert_eq!(PAGES[6], "Tiles");
+    assert_eq!(PAGES[5], "Tiles");
     let (_dir, layers) = fixture_layers("views");
     theme::set_layers(layers);
     for set in 0..2 {

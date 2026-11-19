@@ -1,5 +1,5 @@
 //! ASSETORG4 section 2.2 (FB-227): the portrait overlay FX (`glow`, `lines`, `point_glow`, `particles_rise`, `drift`)
-//! are the opt-in layer `aegis_ui::portrait_overlays`. Unmounted (the default `PortraitOpts`), a portrait holding every
+//! are the opt-in layer `rpgkit_ui::portrait_overlays`. Unmounted (the default `PortraitOpts`), a portrait holding every
 //! overlay composes exactly what it composes holding none: the base life (breath, rim, blink), states, reactions and
 //! expressions still draw, and `live` lists no overlay. Mounted, the overlays draw. `Mount::resolve` takes the game's
 //! switch and the player's setting (`SETTING`, on when missing). Images are built here (the engine's sample face).
@@ -7,14 +7,14 @@
 use aegis_core::assets::Face;
 use aegis_ui::canvas::{Canvas, Image, Rect};
 use aegis_ui::painter::{Fonts, Painter, View};
-use aegis_ui::portrait_fx::{idle_cues, sample, Budget, Cue, ExpressionFx, PortraitFx, PortraitOpts, Tier, BASE_LIFE};
-use aegis_ui::portrait_overlays::{is_overlay, player_on, Mount, OVERLAYS, SETTING};
+use rpgkit_ui::portrait_fx::{idle_cues, sample, Budget, Cue, ExpressionFx, PortraitFx, PortraitOpts, Tier, BASE_LIFE};
+use rpgkit_ui::portrait_overlays::{is_overlay, player_on, Mount, OVERLAYS, SETTING};
 use aegis_ui::screen::Settings;
 use serde_json::json;
 use std::path::Path;
 
 fn fonts() -> Fonts {
-    Fonts::new(&std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/OpenSans-SemiBold.ttf")).unwrap())
+    Fonts::new(&std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/assets/fonts/OpenSans-SemiBold.ttf")).unwrap())
 }
 
 /// The composed image and live list of a fresh portrait holding `cues` from 0 (and the sample face's sidecar overlays

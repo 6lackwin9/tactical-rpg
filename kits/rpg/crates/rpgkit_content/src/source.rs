@@ -106,10 +106,10 @@ pub const FROM_ACT_MAX: i64 = 9;
 /// (or false) the roads hold still.
 pub const WORLD_MAP_LANTERN_FLICKER: &str = "world_map_lantern_flicker";
 /// ASSETORG4 (FB-227): the optional game manifest switch of the engine's opt-in portrait overlay layer
-/// (`aegis_ui::portrait_overlays`: glow, lines, point glow, particles rise, drift over the portraits of talk boxes,
+/// (`rpgkit_ui::portrait_overlays`: glow, lines, point glow, particles rise, drift over the portraits of talk boxes,
 /// vignettes, party cards and timeline icons), `true` or `false`; the player's setting can still turn it off. Without it
 /// (or false) portraits draw their base life, states, reactions and expressions only, so a game opts in. The kit's
-/// copy of the engine's settings key `aegis_ui::portrait_overlays::SETTING` (a GUI test keeps them equal).
+/// copy of the engine's settings key `rpgkit_ui::portrait_overlays::SETTING` (a GUI test keeps them equal).
 pub const PORTRAIT_OVERLAYS: &str = "portrait_overlays";
 /// The game manifest keys the kit registers (E2.2-S2: checked by `aegis content manifest` and the data check), in the
 /// order a write keeps them.

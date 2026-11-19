@@ -33,3 +33,7 @@ Standing script/test hygiene rules: never hand-edit JSON (use `ContentCatalog.up
 | 2026-11-18 | `checks_golden` objective enum message | re-recorded (`PR6-9`, `a3a01b69`, user approval 2026-11-18) | The message lists `retreat` | Sieges add the `retreat` objective; text-only golden change |
 | 2026-11-18 | Engine test strings "hello" | renamed "salve" (`ENGINE-1`, `FB-315`) | The sample game's id `hello` | The layers check bans game ids in engine and kit code |
 | 2026-11-18 | Xvfb recipe for cloud UI shots | replaced (`PR7-22`, `FB-309`) | `tools/fc.sh playtest` on the no-window mode | Needs no display and drives the same screens and link |
+| 2026-11-19 | Scenario launch screens as the engine's closed list (menu, arena, runner) | replaced (`ENGINE-5`) | The game's own launch list | Engine names no game screens |
+| 2026-11-19 | Portrait border painted into pictures and per-screen 1 px well panels | replaced (`PR7-25`, `ART-03`) | UI-drawn F2 frame | One frame on every screen |
+| 2026-11-19 | Job fights offered before the job was accepted | fixed (`PR7-41` item 1, `PT-15`) | Gated by accept, catch-up on accept and on load | A fight won early left the job stuck; no golden re-recorded |
+| 2026-11-19 | `check_project.ps1` with its own five steps and a PowerShell copy of the layers check | replaced (`ENGINE-12`) | Both gates read `tools/gate_steps.txt` | The desktop gate had drifted from `fc.sh gate` |

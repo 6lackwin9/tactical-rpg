@@ -23,10 +23,10 @@
 //!   are an opt-in layer: a draw composes them only when `PortraitOpts::overlays` mounts it (`Mount::Mounted`); the
 //!   default draws the base portrait, states, reactions and expressions only.
 
-use crate::art::Art;
-use crate::canvas::{Image, Rect, Rgba};
-use crate::fx::{hash01, Axis, Camera, Envelope, Shake, ShakeLimits};
-use crate::painter::Painter;
+use aegis_ui::art::Art;
+use aegis_ui::canvas::{Image, Rect, Rgba};
+use aegis_ui::fx::{hash01, Axis, Camera, Envelope, Shake, ShakeLimits};
+use aegis_ui::painter::Painter;
 use crate::portrait_overlays::{self, Mount};
 use aegis_core::assets::{Face, IdleOverlay, IDLE_OVERLAYS};
 use serde_json::{json, Value};
@@ -1341,7 +1341,7 @@ pub fn draw_frame(p: &mut Painter, r: Rect, painted: i32, well: Rgba) {
     if t == 0 {
         return;
     }
-    let th = crate::theme::th();
+    let th = aegis_ui::theme::th();
     let band = painted.max(t).min(r.w / 2).min(r.h / 2);
     if band > t {
         let inner = Rect::new(r.x + t, r.y + t, r.w - 2 * t, r.h - 2 * t);
@@ -1355,7 +1355,7 @@ pub fn draw_frame(p: &mut Painter, r: Rect, painted: i32, well: Rgba) {
     p.fill(Rect::new(r.x, r.y + t, t, r.h - 2 * t), th.edge);
     p.fill(Rect::new(r.x + r.w - t, r.y + t, t, r.h - 2 * t), th.edge);
     p.fill(Rect::new(r.x, r.y, r.w, t), th.frame_line);
-    p.note_layout(|| crate::layout_audit::LayoutRec::Placed { what: PORTRAIT_FRAME.into(), at: r });
+    p.note_layout(|| aegis_ui::layout_audit::LayoutRec::Placed { what: PORTRAIT_FRAME.into(), at: r });
 }
 
 // ---- Timing rules ---------------------------------------------------------------------------------------------------

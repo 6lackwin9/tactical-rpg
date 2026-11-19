@@ -13,7 +13,6 @@ use aegis_ui::screen::Settings;
 use aegis_ui::specimens::{KitAct, Specimens, FX_SPEEDS};
 use aegis_ui::text_audit;
 use aegis_ui::ui::{by_id, Gfx, Kit, Ui, Widget, BG};
-use aegis_ui::vignette;
 use serde_json::json;
 use std::path::Path;
 
@@ -308,9 +307,9 @@ fn e11_a_silhouette_paints_the_solid_pixels_and_mirrors_with_flip() {
 fn e12_reduce_motion_is_the_shared_setting() {
     let mut s = Settings::load(std::env::temp_dir().join("aegis_fx_no_settings.json"), json!({}));
     assert!(!s.reduce_motion(), "off on the defaults");
-    s.v[vignette::REDUCE_MOTION] = json!(true);
-    assert!(s.reduce_motion() && vignette::reduce_motion(&s), "on when set, the same key the vignette player reads");
-    s.v.as_object_mut().unwrap().shift_remove(vignette::REDUCE_MOTION);
+    s.v[aegis_ui::screen::REDUCE_MOTION] = json!(true);
+    assert!(s.reduce_motion(), "on when set (the kit's vignette player reads the same key)");
+    s.v.as_object_mut().unwrap().shift_remove(aegis_ui::screen::REDUCE_MOTION);
     assert!(!s.reduce_motion(), "false when missing");
 }
 
