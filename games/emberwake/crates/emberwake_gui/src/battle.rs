@@ -784,11 +784,20 @@ impl Screen<GameCx> for BattleScreen {
         !self.field_aiming()
     }
 
-    /// BATTLE-UI2 (battle contract 7, FB-358): Tab and the pad's north button are the skill menu key while planning
-    /// (`menu_key`); any other time they move the keyboard focus as before.
-    fn capture(&mut self, _cx: &mut Cx, input: aegis_ui::controls::Input) -> bool {
-        use aegis_ui::controls::{Input, Pad};
-        matches!(input, Input::Key(Key::Tab) | Input::Pad(Pad::North)) && self.menu_key()
+    /// BATTLE-UI2 (battle contract 7, FB-358): whatever the player's control map turns into Tab (by default the Tab key
+    /// and the pad's north button) is the skill menu key while planning (`menu_key`); any other time it moves the
+    /// keyboard focus as before. The raw input is read through the map, so a CONTROLS-UI1 rebind is respected.
+    fn capture(&mut self, cx: &mut Cx, input: aegis_ui::controls::Input) -> bool {
+        use aegis_ui::controls::{Controls, Input};
+        if !self.menu_key() {
+            return false;
+        }
+        let (map, _) = Controls::from_settings(&cx.settings.v);
+        let gives = match input {
+            Input::Key(k) => map.key(k),
+            Input::Pad(p) => map.pad(p),
+        };
+        gives == Key::Tab
     }
 
     /// FPSCAP1: a battle waiting for the player moves slowly (idle clips, portraits, status loops); any other time every

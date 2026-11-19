@@ -122,6 +122,21 @@ fn the_menu_opens_on_a_strip_block() {
     assert!(b.popup.is_none());
 }
 
+/// Contract 7 with CONTROLS-UI1: the menu key is whatever the player's map turns into Tab, not the raw Tab key or pad
+/// north; a swap of Tab and pad north with Pad X moves the menu key with it.
+#[test]
+fn the_menu_key_follows_a_rebind() {
+    let (mut cx, _g, mut b) = arena(None, "", "flat");
+    let (mut map, _) = aegis_ui::controls::Controls::from_settings(&cx.settings.v);
+    map.bind_pad(Key::Tab, Pad::West);
+    cx.settings.v[aegis_ui::controls::SETTINGS_KEY] = map.to_json();
+    b.mouse = (-500, -500);
+    assert!(!b.capture(&mut cx, Input::Pad(Pad::North)), "pad north no longer gives Tab");
+    assert!(b.capture(&mut cx, Input::Pad(Pad::West)), "Pad X now gives Tab and opens the menu");
+    b.popup = None;
+    assert!(b.capture(&mut cx, Input::Key(Key::Tab)), "the Tab key still gives Tab");
+}
+
 /// Contract 7: each skill row's facts are the kit option's AP and blocks and the kit's `pick_hits` on the foe; the
 /// panel draws the damage of a row that lands one.
 #[test]
