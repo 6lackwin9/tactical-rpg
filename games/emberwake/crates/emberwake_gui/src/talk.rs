@@ -222,7 +222,9 @@ pub(crate) fn draw_talk<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, gs: &GameState, f
 /// line and the numbered reply rows (`act` maps a row's action; all off while `busy`).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_box<A: Clone>(ui: &mut Ui<A>, b: &TalkBox, panel_id: &str, label: &str, busy: bool, act: impl Fn(TalkAct) -> A, portrait: impl FnOnce(&mut Painter, Rect)) {
-    ui.p.panel(b.r, th().game("talk_box", rgba(14, 20, 34, 250)), th().panel_edge, 4.0);
+    // PR7-36 (ART-02): a popup, the double-line tier over the box's fill
+    ui.p.fill(b.r, th().game("talk_box", rgba(14, 20, 34, 250)));
+    ui.frame_body("panel", b.r);
     ui.push(panel_id, "panel", label.to_string(), b.r, true, false, None, Vec::new());
     let pr = b.portrait_rect();
     ui.p.fill(pr, crate::portraits::portrait_well());
@@ -488,7 +490,7 @@ impl Services {
             self.facility.draw(ui, cx, &facility_npc, |a| A::from(SvcAct::Facility(a)));
         } else if !board_qid.is_empty() {
             ui.p.fill(veil, th().game("shop_veil", SHOP_DIM));
-            let bv = emberwake_world::board::view(&d, &gs, &board_qid);
+            let bv = crate::board::with_unlock_words(&d, &gs, emberwake_world::board::view(&d, &gs, &board_qid));
             let pick = self.board.select(&bv);
             let det = if pick.is_empty() { Dict::new() } else { emberwake_world::board::detail(&d, &gs, &pick) };
             self.board.draw(ui, cx, &bv, &det, |a| A::from(SvcAct::Board(a)));

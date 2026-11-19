@@ -373,6 +373,73 @@ fn bunk_label(d: &emberwake_world::Data, gs: &emberwake_world::GameState, member
 }
 
 /// Event lines for the log; `autosave` writes the autosave.
+/// PR7-37 (PT-29): `line` logged unless it is the last line already (a point stepped onto, then acted on).
+fn log_once(cx: &mut Cx, line: String) {
+    if cx.log.last() != Some(&line) {
+        cx.log(line);
+    }
+}
+
+/// PR7-37 (PT-29): the jobs that turned ready since `before` (a flag a point set finished one) say so.
+fn log_newly_ready(cx: &mut Cx, before: &[String]) {
+    let (d, gs) = (&cx.data, cx.gs());
+    let lines: Vec<String> = quest::quests_with(d, gs, "ready")
+        .into_iter()
+        .filter(|q| !before.contains(q))
+        .map(|q| format!("Quest updated: {} is ready to turn in.", s_or(&quest::resolved(d, gs, &q), "name", &q)))
+        .collect();
+    for line in lines {
+        cx.log(line);
+    }
+}
+
+/// PR7-37 (PT-03, PT-29): the party acts on point of interest `m` (E facing it or on it, or a click on its marker):
+/// its line (`explore::point_line`), then its use (`explore::point_use`): `rest` rests there as Make camp does (a
+/// refusal says why; a rest that would end the run asks first), `crypts` says who lies in the crypt places, `stash`
+/// opens the party stash (the Character window's Gear tab).
+pub fn act_on_point(cx: &mut Cx, m: &Dict) {
+    log_once(cx, explore::point_line(m));
+    match explore::point_use(m).as_str() {
+        "rest" => {
+            let d = cx.data.clone();
+            let refusal = emberwake_world::progression::can_camp(&d, cx.gs());
+            if !refusal.is_empty() {
+                cx.log(refusal.to_string());
+                return;
+            }
+            let days = emberwake_world::campaign::purse::rest_rule(&d, &cx.gs().world_id).days as i64;
+            match crate::runover::days_ask(cx, days, "Resting", "Rest") {
+                Some(q) => cx.ask_no(q, rest_here),
+                None => rest_here(cx),
+            }
+        }
+        "crypts" => {
+            let (d, gs) = (cx.data.clone(), cx.gs().clone());
+            let name = |id: &str| gs.party.member(id).map(|m| emberwake_world::progression::display_name(&d, m)).unwrap_or_else(|| id.to_string());
+            let line = emberwake_world::roster::crypt_words(&gs, &name);
+            if !line.is_empty() {
+                cx.log(line);
+            }
+        }
+        "stash" => hud_open(cx, Hud::Stash, &[]),
+        _ => {}
+    }
+}
+
+/// PR7-37 (PT-29): a rest at a point of interest (`progression::make_camp`, the world map's Make camp): its lines.
+fn rest_here(cx: &mut Cx) {
+    let d = cx.data.clone();
+    let res = emberwake_world::progression::make_camp(&d, cx.gs_mut());
+    if !json::b(&res, "ok", false) {
+        for e in json::sget(&res, "errors") {
+            cx.log(e);
+        }
+        return;
+    }
+    log_events(cx, json::aget(&res, "events"));
+    crate::runover::take(cx, &res);
+}
+
 pub fn log_events(cx: &mut Cx, events: &[Value]) {
     for e in events {
         let e = json::dict(e);
@@ -418,6 +485,13 @@ pub fn log_events(cx: &mut Cx, events: &[Value]) {
                 cx.log(format!("Defeated. The party wakes at {name} and {how}."));
             }
             "retreat_failed" => cx.log(s(e, "text")),
+            // PR7-37 (PT-29): a point the party stepped onto that set a flag says so (its line)
+            "flags_set" => {
+                let loc = explore::location(&cx.data, cx.gs()).clone();
+                if let Some(m) = explore::markers_of(&loc).into_iter().find(|m| s(m, "id") == s(e, "marker") && s(m, "kind") == "point") {
+                    log_once(cx, explore::point_line(&m));
+                }
+            }
             "exit" => log_events(cx, json::aget(e, "events")),
             "autosave" => cx.autosave(),
             _ => {}
@@ -554,6 +628,9 @@ impl RegionMap {
         self.turn(dir);
         let d = cx.data.clone();
         let from = cx.gs().position;
+        // PR7-37 (PT-29): the jobs ready before the step, so a flag a point sets says what it changed (taken before the
+        // step: whether a flag is set is known only after it; a list of ids, read once per step)
+        let ready_before = quest::quests_with(&d, cx.gs(), "ready");
         let res = explore::step(&d, cx.gs_mut(), dir);
         if cx.gs().position != from {
             // TURNFEEL1: a clean corner plays the rest of the leg first; the next step and the walk clip wait for it
@@ -574,6 +651,9 @@ impl RegionMap {
         }
         let events = json::aget(&res, "events").to_vec();
         log_events(cx, &events);
+        if events.iter().any(|e| s(json::dict(e), "kind") == "flags_set") {
+            log_newly_ready(cx, &ready_before);
+        }
         crate::runover::take(cx, &res);
         let mut go_on = true;
         for e in &events {
@@ -648,7 +728,8 @@ impl RegionMap {
         // STORYUI1 W2, 5.3: with nothing open, a running sequence takes over and queued vignettes play; CAMPAIGN1 W1,
         // F3: campaign notices first, then the run-over screen once the run is over; T2: the campaign queue's head
         // plays (vignettes and battles through `story::map_tick`, a dialogue scene here)
-        if !self.modal() && (crate::runover::map_tick(cx) || crate::story::map_tick(cx) || self.svc.open_pending(cx)) {
+        // PR7-37 (PT-31): then a road opened since the last look (a log line and a notice)
+        if !self.modal() && (crate::runover::map_tick(cx) || crate::story::map_tick(cx) || self.svc.open_pending(cx) || crate::worldmap::note_new_roads(cx)) {
             self.walk.clear();
             self.walk_target = None;
             return;
@@ -730,7 +811,11 @@ impl RegionMap {
                     }
                 }
             }
-            _ => cx.log("Nothing there."),
+            // PR7-37 (PT-03, PT-29): a point of interest underfoot or ahead answers (its line, then its use)
+            _ => match explore::point_near(&d, cx.gs(), dir) {
+                Some(m) => act_on_point(cx, &m),
+                None => cx.log("Nothing there."),
+            },
         }
     }
 
@@ -792,6 +877,26 @@ impl RegionMap {
         let Some(m) = explore::markers_of(loc).into_iter().find(|m| s(m, "id") == id) else { return };
         let at = explore::marker_pos(t, &m, gs.explore_int("loc_steps"));
         let solid = ["npc", "chest", "lore"].contains(&s(&m, "kind").as_str()) || explore::presence(&d, gs, &s(loc, "_qid"), &m) == "locked";
+        // PR7-37 (PT-03, PT-29): a point of interest is acted on once the party stands on it or beside it (the walk
+        // goes onto it, or beside it when its tile is walled off)
+        if s(&m, "kind") == "point" && explore::presence(&d, gs, &s(loc, "_qid"), &m) == "present" {
+            let dir = (at.0 - gs.position.0, at.1 - gs.position.1);
+            if dir == (0, 0) || explore::DIRS.contains(&dir) {
+                if dir != (0, 0) {
+                    self.turn(dir);
+                }
+                act_on_point(cx, &m);
+                return;
+            }
+            match self.path_to(cx, at, false).filter(|p| !p.is_empty()).or_else(|| self.path_to(cx, at, true).filter(|p| !p.is_empty())) {
+                Some(path) => {
+                    self.walk = path;
+                    self.walk_target = Some(id.to_string());
+                }
+                None => cx.log("You can't get there."),
+            }
+            return;
+        }
         if solid {
             let dir = (at.0 - gs.position.0, at.1 - gs.position.1);
             if explore::DIRS.contains(&dir) {
@@ -885,8 +990,8 @@ impl RegionMap {
 
     fn marker_style(kind: &str, state: &str) -> (Rgba, &'static str) {
         match (kind, state) {
-            ("exit", "locked") => (rgb(180, 70, 60), ">"),
-            ("exit", _) => (rgb(70, 190, 100), ">"),
+            ("exit", "locked") => (crate::tokens::exit(false), ">"),
+            ("exit", _) => (crate::tokens::exit(true), ">"),
             ("chest", "spent") => (rgb(90, 74, 50), "c"),
             ("chest", _) => (rgb(200, 150, 60), "c"),
             ("lore", _) => (rgb(150, 110, 220), "L"),
@@ -3607,11 +3712,12 @@ mod talk_tests {
     #[test]
     fn the_shop_hides_the_box_over_a_dimmed_map() {
         let (mut cx, mut g) = (game_cx(), gfx());
-        // the map's brightness left of the box (the legend and the ticker are hidden while talking)
+        // the map's brightness left of the box (the legend and the ticker are hidden while talking) and of the shop's
+        // frame (PR7-36: the ornate main-panel tier, whose corners reach out past the panel, and the rows' icon tiles)
         let light = |g: &Gfx| -> u64 {
             let mut sum = 0;
             for y in (HUD_H + 2)..(H - 10) {
-                for x in 0..100 {
+                for x in 0..14 {
                     let i = ((y * g.canvas.w + x) * 4) as usize;
                     sum += g.canvas.px[i..i + 3].iter().map(|v| *v as u64).sum::<u64>();
                 }
@@ -6550,8 +6656,7 @@ mod ground_tests {
             let (mut cx, mut g) = (BIG.cx("square"), gfx());
             let mut s = crate::menus::SettingsScreen::new(&cx);
             s.draw(&mut cx, &mut g, (-500, -500), true);
-            s.click_id(&mut cx, "settings.tab.gameplay").expect("the gameplay tab");
-            s.draw(&mut cx, &mut g, (-500, -500), true);
+            // PR7-37 (PT-33): the row is on the Display tab (the first) only
             let row = s.widgets().into_iter().find(|w| w["id"] == "settings.map_zoom").expect("the row");
             assert_eq!(row["text"], json!("1x"), "the default");
             g.kit.open = Some("settings.map_zoom".to_string());

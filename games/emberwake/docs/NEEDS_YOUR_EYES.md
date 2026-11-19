@@ -25,6 +25,8 @@ Mocks waiting for you, then provisional calls Design made while you were away, t
   battle take 22, the boss fight (`battle_ux14/`, contract section 9); battle take 23, the full timeline view (T)
   and playback controls; the screens for the victory report, story, character, shop, notice board and saves
   (`screens_ai21/`). Build rows follow sign-off.
+- [ ] Image queue ready: say "process image queue" in Gemini (bunk props, class glyphs, bed keepsakes, battle
+  strips, Junction 7 houses; refs in `image_pipeline/refs/active`).
 - [ ] Gamepad on the PC (`FB-327`): repeat timing, dead zone, which button is Back (south Enter, east Back, west
   Space, north Tab, bumpers page, Start Esc).
 

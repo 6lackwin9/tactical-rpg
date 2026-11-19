@@ -180,8 +180,8 @@ fn the_schema_carries_the_story_kinds_and_fields() {
     let defaults = |kind: &str| -> Vec<Value> { field_keys(kind).iter().map(|k| json::get(&field(kind, k), "default").clone()).collect() };
     assert_eq!(defaults("vignettes")[1..7], [json!("New Vignette"), json!(""), json!(rpgkit_data::FRAME_COLOUR), json!(true), json!(false), json!([])]);
     assert_eq!(json::s(&field("boards", "keeper"), "ref"), "characters");
-    // 4.5: the quest fields come after tags; 4.6: the manifest field
-    assert!(field_keys("quests").ends_with(&["tags", "board", "track", "show_locked", "closed_text"].map(String::from)));
+    // 4.5: the quest fields come after tags (PR7-42: then the recommended level); 4.6: the manifest field
+    assert!(field_keys("quests").ends_with(&["tags", "board", "track", "show_locked", "closed_text", "rec_level"].map(String::from)));
     assert_eq!(json::sget(&field("quests", "track"), "options"), rpgkit_data::TRACKS.map(String::from));
     assert_eq!(json::get(&field("quests", "track"), "default"), &json!("side"));
     assert_eq!(json::s(&field("quests", "board"), "ref"), "boards");

@@ -4,7 +4,7 @@ use aegis_ui::theme::th;
 use super::board::with_alpha;
 use super::marks::{held_guard, meter_text, HELD, METER};
 use super::overlays::reach_text;
-use super::{ALLY, AP_ANIM_MS, AP_PIPS, POISE};
+use super::{AP_ANIM_MS, AP_PIPS, POISE};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::intent_text;
 use emberwake_battle::intent::Intent;
@@ -155,7 +155,9 @@ impl ApAnim {
 // ---- VISCLAR1-D: the party card's AP pips (mock `party_ap`) -------------------------------------------------------
 
 /// The pips' one colour and a spent pip's socket; no plan colours here, the strip's gauge has those.
-pub(super) const AP_PIP: Rgba = rgb(110, 160, 235);
+pub(super) fn ap_pip() -> Rgba {
+    crate::tokens::ap()
+}
 pub(super) const AP_PIP_EMPTY: Rgba = rgb(36, 44, 60);
 /// How long a card's pips take to fall when a move pays AP and to rise when the round starts (ms of the FX clock: the
 /// animation speed and 0.5x apply; at once with skip animations or reduce motion).
@@ -217,7 +219,7 @@ pub(super) fn draw_ap_pips(p: &mut Painter, x: i32, y: i32, level: f32, max: i32
         p.fill(r, AP_PIP_EMPTY);
         let held = (pip_fill(level, per, k) * PIP_W as f32).round() as i32;
         if held > 0 {
-            p.fill(Rect::new(r.x, r.y, held, r.h), AP_PIP);
+            p.fill(Rect::new(r.x, r.y, held, r.h), ap_pip());
         }
     }
     Rect::new(x, y, rpgkit_ui::pips::pips_w(slots), AP_PIP_H)
@@ -563,14 +565,14 @@ pub(super) fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, bloc
     let unit = &w.units[u];
     match f {
         Some(f) => {
-            let g = PipGauge::planned(f.now, blocks, f.max, AP_PIPS).with_tip(ap_lines(f).into_iter().map(|l| (l, ALLY)).collect());
+            let g = PipGauge::planned(f.now, blocks, f.max, AP_PIPS).with_tip(ap_lines(f).into_iter().map(|l| (l, crate::tokens::ally())).collect());
             match short {
                 Some(n) => g.short(n),
                 None => g,
             }
         }
         None => {
-            let mut tip: Tip = vec![(crate::intent_text::ap_text(unit.ap, unit.max_ap, " of "), ALLY)];
+            let mut tip: Tip = vec![(crate::intent_text::ap_text(unit.ap, unit.max_ap, " of "), crate::tokens::ally())];
             if start > unit.ap {
                 tip.push((format!("Paid this round: {}", start - unit.ap), th().text));
             }
@@ -633,7 +635,7 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     let u = &w.units[i];
     let ally = w.allies.contains(&i);
     let tells_shown = inspect.unwrap_or(true);
-    let mut t: Tip = vec![(u.name.clone(), if ally { ALLY } else { th().foe })];
+    let mut t: Tip = vec![(u.name.clone(), if ally { crate::tokens::ally() } else { th().foe })];
     let round = rounds.iter().find(|r| r.unit == i);
     let tell = tells.iter().find(|r| r.unit == i).or(round.filter(|_| !ally));
     if let Some((head, intent)) = round.filter(|_| u.is_active()).and_then(|r| Some((intent_text::round_head(w, r)?, r.round_intent?))) {
@@ -687,7 +689,7 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     // IS3: an inspected party member's AP numbers, picks and plan (round intent)
     if ally && u.is_active() && inspect.is_some() && ri::on(w) {
         if s.phase == Phase::Planning && !s.plan_confirmed {
-            t.extend(ap_lines(&rip::ap_forecast(w, &s.plan, i)).into_iter().map(|l| (l, ALLY)));
+            t.extend(ap_lines(&rip::ap_forecast(w, &s.plan, i)).into_iter().map(|l| (l, crate::tokens::ally())));
         }
         t.extend(plan_lines(s, i));
     }
@@ -701,7 +703,7 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
                 }
                 // V1, V2: who reads the plan (a reader who fell stays listed), the enrage or the battle's plan reveal
                 if let Some(head) = intent_text::reveal_head(w, r, |p| s.w.cat.passives.get(p).map(|x| x.name.clone()).unwrap_or_else(|| p.to_string())) {
-                    t.push((head, ALLY));
+                    t.push((head, crate::tokens::ally()));
                     for l in &r.plan {
                         t.push((intent_text::plan_line(w, l), th().text));
                     }
@@ -720,7 +722,7 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
             let strike = w.book().lowest(Kind::Attack);
             // PT-20: a Strike's hit each way; what the enemy has planned on the hero is the forecast line above
             let deals = expected(w, h, i, strike, None, 0.0, 1.0);
-            t.push((if hit_shown { format!("{} deals about {deals} a hit with a Strike", w.units[h].name) } else { format!("{} deals about {deals} a hit with a Strike, takes about {} from its Strike", w.units[h].name, expected(w, i, h, strike, None, 0.0, 1.0)) }, ALLY));
+            t.push((if hit_shown { format!("{} deals about {deals} a hit with a Strike", w.units[h].name) } else { format!("{} deals about {deals} a hit with a Strike, takes about {} from its Strike", w.units[h].name, expected(w, i, h, strike, None, 0.0, 1.0)) }, crate::tokens::ally()));
         }
     }
     if let Some(banner) = downed_banner(w, i) {

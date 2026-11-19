@@ -97,6 +97,20 @@ fn peek_when(gs: &emberwake_world::state::GameState) -> String {
     format!("Day {}", gs.time + 1)
 }
 
+/// PR7-36 (ART-08): the dimmed title backdrop (about 60 %) with an `ornate` main panel over `r`, for the screens the title
+/// opens in place (slots, New game).
+fn menu_panel<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, r: Rect) {
+    let area = ui.screen();
+    let picture = if cx.art.has(TITLE_ART) { TITLE_ART } else { MENU_ART };
+    let img = cx.art.size_of(picture).and_then(|(w, h)| cx.art.image(picture, w, h));
+    panes::backdrop(&mut ui.p, img, area, MENU_DIM, MENU_VIGNETTE);
+    ui.p.fill(r, th().panel);
+    ui.frame_body("ornate", r);
+}
+
+/// How far the title backdrop dims under a panel (about 60 %).
+const MENU_DIM: u8 = 153;
+
 /// What Continue's peek shows of the newest save.
 struct Peek {
     location: String,
@@ -143,7 +157,15 @@ impl MainMenu {
                     load_slot(cx, slot);
                 }
             }
-            MenuAct::NewGame => cx.nav.push(Nav::Push(Box::new(NewGameScreen::new(cx)))),
+            // PR7-37 (PT-01): a player's New game starts the game's one start world at once (the world picker, with the
+            // test worlds, in a dev build or when the game offers more than one)
+            MenuAct::NewGame => match new_game_worlds(&cx.data).as_slice() {
+                [only] if !crate::DEV_BUILD => {
+                    let only = only.clone();
+                    start_new_game(cx, &only);
+                }
+                _ => cx.nav.push(Nav::Push(Box::new(NewGameScreen::new(cx)))),
+            },
             MenuAct::Load => cx.nav.push(Nav::Push(Box::new(Slots::new(false)))),
             MenuAct::Settings => cx.nav.push(Nav::Push(Box::new(SettingsScreen::new(cx)))),
             #[cfg(feature = "dev_tools")]
@@ -312,14 +334,17 @@ impl Screen<GameCx> for MainMenu {
             MenuItem::new("settings", "Settings", None, MenuAct::Settings),
         ]);
         // WEBREL1-G1: the dev tools (the Scene Runner) only in a build with them (`crate::DEV_TOOLS`)
+        // PR7-37 (PT-14): and only in a dev build (`crate::DEV_BUILD`); a player never sees it
         #[cfg(feature = "dev_tools")]
-        items.push(MenuItem::new("tools", "Tools (Forge, Dojo, Test Arena)", None, MenuAct::Tools));
+        if crate::DEV_BUILD {
+            items.push(MenuItem::new("tools", "Tools (Forge, Dojo, Test Arena)", None, MenuAct::Tools));
+        }
         // WEBREL1 6.2 (`FB-157`): no Quit on the web, where a page cannot close its own tab
         #[cfg(not(target_arch = "wasm32"))]
         items.push(MenuItem::new("quit", "Quit", None, MenuAct::Quit));
         // The column widens leftward at the larger text sizes so its longest label is never cut (only the labels take
         // the mouse: `MenuStyle::Text`).
-        let widest = items.iter().map(|i| ui.p.text_w(&i.label, m.title)).fold(0.0, f32::max);
+        let widest = items.iter().map(|i| ui.p.text_w_face(Typeface::Display, &i.label, m.title)).fold(0.0, f32::max);
         let w = resolve(&[frac(MENU_W)], area.w)[0].max(panes::snap_up_on(widest.ceil() as i32 + 2 * m.padding, m.grid));
         let (column, peek_room) = cut_column(area, w, m.u(PEEK_GAP));
         let hovered = panes::menu_column_styled(&mut ui, "menu", column.x, column.y, column.w, m.u(MENU_H), m.u(MENU_STEP), &items, MenuStyle::Text);
@@ -452,21 +477,37 @@ impl NewGameScreen {
                     return;
                 }
                 let world = self.selected.clone();
-                let head = save::peek(&cx.data, &cx.save_dir, save::AUTOSAVE_SLOT);
-                if json::b(&head, "ok", false) {
-                    let at = json::i(&head, "saved_at", 0);
-                    let q = format!(
-                        "Starting a new game replaces your autosave ({}, {}, {}). Continue?",
-                        cx.world_name(&s(&head, "world_id")),
-                        cx.location_name(&s(&head, "world_id"), &s(&head, "location_id")),
-                        if at > 0 { datetime(at) } else { "unknown time".into() }
-                    );
-                    cx.ask_no(q, move |cx| start_world(cx, &world));
-                } else {
-                    start_world(cx, &world);
-                }
+                start_new_game(cx, &world);
             }
         }
+    }
+}
+
+/// PR7-37 (PT-01): the worlds New game offers: in a dev build every playable world (the test worlds too), else the
+/// game's start worlds (`new_game::player_worlds`).
+pub fn new_game_worlds(d: &emberwake_world::Data) -> Vec<String> {
+    if crate::DEV_BUILD {
+        new_game::playable_worlds(d)
+    } else {
+        new_game::player_worlds(d)
+    }
+}
+
+/// A new game in `world`: asks first when it would replace the autosave.
+fn start_new_game(cx: &mut Cx, world: &str) {
+    let world = world.to_string();
+    let head = save::peek(&cx.data, &cx.save_dir, save::AUTOSAVE_SLOT);
+    if json::b(&head, "ok", false) {
+        let at = json::i(&head, "saved_at", 0);
+        let q = format!(
+            "Starting a new game replaces your autosave ({}, {}, {}). Continue?",
+            cx.world_name(&s(&head, "world_id")),
+            cx.location_name(&s(&head, "world_id"), &s(&head, "location_id")),
+            if at > 0 { datetime(at) } else { "unknown time".into() }
+        );
+        cx.ask_no(q, move |cx| start_world(cx, &world));
+    } else {
+        start_world(cx, &world);
     }
 }
 
@@ -490,9 +531,11 @@ impl Screen<GameCx> for NewGameScreen {
     }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<NgAct> = Ui::new(g, mouse, live);
+        // PR7-36 (ART-08): a main panel over the dimmed title backdrop
+        menu_panel(&mut ui, cx, Rect::new(56, 8, 528, 312));
         title(&mut ui, "New game", 26);
         let mut y = 54;
-        for w in new_game::playable_worlds(&cx.data) {
+        for w in new_game_worlds(&cx.data) {
             let m = cx.data.manifest(&w);
             let lines = vec![(s_or(m, "name", &w), th().text), (s(m, "tagline"), th().text), (party_line(&Self::party_of(cx, &w)), th().text)];
             ui.card(&format!("world.{w}"), Rect::new(70, y, 500, 44), &lines, Some(NgAct::Pick(w.clone())), w == self.selected, true, Vec::new());
@@ -528,6 +571,9 @@ pub enum SlotAct {
 pub struct Slots {
     saving: bool,
     w: Vec<Widget<SlotAct>>,
+    /// PR7-36 (ART-08): each filled slot's lead and day, read once per save (keyed by slot and its `saved_at`).
+    leads: std::collections::BTreeMap<(i64, i64), Option<Peek>>,
+    faces: Faces,
 }
 
 /// What a slot row offers (PLAYUI1 section 1): the row's click (or why there is none, its hover card) and the icons in
@@ -569,7 +615,7 @@ pub fn slot_row(saving: bool, slot: i64, exists: bool, ok: bool, locked: bool, n
 
 impl Slots {
     pub fn new(saving: bool) -> Self {
-        Self { saving, w: Vec::new() }
+        Self { saving, w: Vec::new(), leads: std::collections::BTreeMap::new(), faces: Faces::default() }
     }
 
     fn describe(cx: &Cx, slot: i64) -> String {
@@ -678,12 +724,22 @@ impl Screen<GameCx> for Slots {
     }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<SlotAct> = Ui::new(g, mouse, live);
+        self.faces.begin();
+        // PR7-36 (ART-08): a main panel over the dimmed title backdrop, as Settings sits over the menu
+        menu_panel(&mut ui, cx, Rect::new(56, 8, 528, 312));
         title(&mut ui, if self.saving { "Save game" } else { "Load game" }, 26);
         for slot in save::AUTOSAVE_SLOT..=save::LAST_SLOT {
-            let r = Rect::new(70, 54 + slot as i32 * 36, 500, 31);
+            let mut r = Rect::new(70, 54 + slot as i32 * 36, 500, 31);
             let head = save::peek(&cx.data, &cx.save_dir, slot);
             let exists = json::b(&head, "exists", false);
             let ok = json::b(&head, "ok", false);
+            let lead = if ok {
+                let key = (slot, json::i(&head, "saved_at", 0));
+                self.leads.retain(|k, _| k.0 != slot || *k == key);
+                self.leads.entry(key).or_insert_with(|| Peek::read(cx, slot)).as_ref().map(|p| (p.when.clone(), p.party.first().cloned()))
+            } else {
+                None
+            };
             let mut label = if slot == 0 { "Autosave".to_string() } else { format!("Slot {slot}") };
             // PR7-41 (PT-35): the place and time on the slot's line, the whole party on its own line (no cut names)
             let status = if ok {
@@ -710,11 +766,22 @@ impl Screen<GameCx> for Slots {
             let row = slot_row(self.saving, slot, exists, ok, locked, Self::no_save(cx));
             let hover = row.action.is_some() && ui.hover(r);
             ui.p.panel(r, if hover { th().card_hot } else { th().game("menu_row", rgba(26, 36, 58, 250)) }, if hover { th().gold } else { th().edge }, 2.0);
+            let card = r;
+            // the lead's portrait at the row's left and the day on its first line
+            if let Some((when, lead)) = &lead {
+                if let Some((_, _, who, look)) = lead {
+                    let pr = Rect::new(r.x + 2, r.y + 2, r.h - 4, r.h - 4);
+                    self.faces.draw(&mut ui.p, cx, who, look, "roster", pr);
+                    r.x += r.h;
+                    r.w -= r.h;
+                }
+                label = format!("{label} · {when}");
+            }
             let text_w = (r.w - 8 - if row.delete { 40 } else { 0 }) as f32;
             ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &label, BODY, text_w, if ok { th().text } else { th().dim });
-            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 16.0, &status, BODY, text_w, if ok { th().info } else { th().dim });
+            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 16.0, &status, BODY, text_w, th().dim);
             let enabled = row.action.is_some();
-            ui.push(format!("slot.{slot}"), "card", format!("{label}: {status}"), r, enabled, false, row.action, tip(&label, &row.why));
+            ui.push(format!("slot.{slot}"), "card", format!("{label}: {status}"), card, enabled, false, row.action, tip(&label, &row.why));
             let del = Rect::new(r.x + r.w - 4 - 16, r.y + 4, 16, 16);
             let px = ui.icon_px(del);
             if row.lock {
@@ -1186,10 +1253,10 @@ impl SettingsScreen {
                 Row::Volume("effects", "Effects Volume", "Combat steel clashes, billhooks and chains"),
                 Row::Volume("interface", "Interface Volume", "Menu chimes, card clicks and roll ticks"),
             ],
+            // PR7-37 (PT-33): Map Camera Zoom on the Display tab only (PR7-15 had it here too)
             2 => vec![
                 Row::Choice(TEXT_SPEED, "Text Speed", "How fast story captions and dialogue lines reveal"),
                 Row::Choice("map_names", "Map Labels & Names", "Person and exit names on street and hub maps"),
-                Row::Choice("map_zoom", "Map Camera Zoom", "Camera zoom on street and hub maps"),
             ],
             3 => vec![
                 Row::Choice(crate::battle::PLAYBACK_SPEED, "Playback Speed", "How a timeline round plays: 1x, 0.5x or by block"),
@@ -1223,8 +1290,8 @@ impl SettingsScreen {
             Row::Video => rh * 2 + 4,
             Row::Overlays => {
                 let head = ui.p.line_h(BODY + 1.0).ceil() as i32 + 4;
-                let groups = crate::battle::OVERLAY_GROUPS.len().div_ceil(2) as i32 * OVERLAY_PITCH;
-                head + groups + if cfg!(debug_assertions) { OVERLAY_PITCH + 4 } else { 0 }
+                let groups = crate::battle::settings_overlay_groups().len().div_ceil(2) as i32 * OVERLAY_PITCH;
+                head + groups + if crate::DEV_BUILD { OVERLAY_PITCH + 4 } else { 0 }
             }
             Row::Controls => controls(ui, Rect::new(0, 0, w, 0), false),
             Row::Heading(_) => ui.p.line_h(HEAD).ceil() as i32 + 8,
@@ -1364,7 +1431,7 @@ impl SettingsScreen {
                 ui.p.text(x as f32, y as f32, "Battle overlays (timeline battles)", BODY + 1.0, th().gold);
                 y += ui.p.line_h(BODY + 1.0).ceil() as i32 + 2;
                 let col_w = r.w / 2;
-                let groups = &crate::battle::OVERLAY_GROUPS;
+                let groups = crate::battle::settings_overlay_groups();
                 for (k, (id, label, help, default)) in groups.iter().enumerate() {
                     let (gx, gy) = (x + 3 + (k as i32 % 2) * col_w, y + (k as i32 / 2) * OVERLAY_PITCH);
                     let on = d["battle_overlays"][*id].as_bool().unwrap_or(*default);
@@ -1373,9 +1440,9 @@ impl SettingsScreen {
                         wd.tip = tip(label, help);
                     }
                 }
-                // VISCLAR1 VC4, VC5: the debug-build-only row (never in a release build)
-                #[cfg(debug_assertions)]
-                {
+                // VISCLAR1 VC4, VC5: the debug-build-only row (never in a release build); PR7-37 (PT-33): a dev build's
+                // only (`crate::DEV_BUILD`)
+                if crate::DEV_BUILD {
                     let y = y + groups.len().div_ceil(2) as i32 * OVERLAY_PITCH + 2;
                     ui.p.text(x as f32, y as f32, "Debug", BODY + 1.0, th().gold);
                     // VIEWKEYS1: the walk's base step time (a release build uses the default), beside the heading
@@ -1582,7 +1649,7 @@ impl Screen<GameCx> for SettingsScreen {
                 let sub = if i == 0 && self.web { "Fullscreen & text" } else { sub };
                 ui.p.text_fit((tr.x + 7) as f32, y + lh, sub, HELP, room, t.dim);
             }
-            aegis_ui::ui::draw_glyph(&mut ui.p, Glyph::ChevronRight, Rect::new(tr.x + tr.w - 14, tr.y + (tab_h - 8) / 2, 8, 8), if open { t.gold } else { t.dim });
+            aegis_ui::ui::draw_glyph(&mut ui.p, Glyph::ChevronRight, Rect::new(tr.x + tr.w - 14, tr.y + (tab_h - 8) / 2, 8, 8), if open { crate::tokens::accent() } else { t.dim });
             ui.push(format!("settings.tab.{}", name.to_lowercase()), "tab", *name, tr, true, open, Some(SetAct::Tab(i)), Vec::new());
         }
         // the tab body: its heading (and the Display badge or Sound's Mute all), then its rows, scrolling when taller
@@ -1668,7 +1735,6 @@ const OVERLAY_PITCH: i32 = 14;
 /// Volume sliders move in steps of 5 (0-100).
 const VOLUME_STEP: f64 = 5.0;
 /// The debug Walk step slider's step, ms.
-#[cfg(debug_assertions)]
 const WALK_STEP_STEP: f64 = 10.0;
 
 fn static_key(k: &str) -> &'static str {
@@ -2899,10 +2965,10 @@ mod settings_tests {
         assert!(!s.display_dirty(&cx) && s.confirm_left(Instant::now()).is_none(), "no staging, no confirm");
     }
 
-    /// PR7-15 (b) (FB-287 Option A): Map Camera Zoom is on the Display tab, desktop and web, full screen and popup, and
-    /// stays on Gameplay; a pick on Display applies at once (no display staging) and Gameplay shows the same value.
+    /// PR7-15 (b) (FB-287 Option A): Map Camera Zoom is on the Display tab, desktop and web, full screen and popup;
+    /// PR7-37 (PT-33): on that tab only (no longer on Gameplay); a pick applies at once (no display staging).
     #[test]
-    fn map_zoom_is_on_the_display_tab_and_on_gameplay() {
+    fn map_zoom_is_on_the_display_tab_only() {
         let (mut cx, mut g) = (game_cx(), gfx());
         for web in [false, true] {
             for popup in [false, true] {
@@ -2912,7 +2978,7 @@ mod settings_tests {
                 assert!(has(&w, "settings.map_zoom"), "Display has Map zoom (web {web}, popup {popup})");
                 s.click_id(&mut cx, "settings.tab.gameplay").expect("the Gameplay tab");
                 let w = redraw(&mut s, &mut cx, &mut g);
-                assert!(has(&w, "settings.map_zoom"), "Gameplay keeps Map zoom (web {web}, popup {popup})");
+                assert!(!has(&w, "settings.map_zoom"), "Gameplay has no Map zoom (web {web}, popup {popup})");
             }
         }
         let mut s = SettingsScreen::new(&cx);
@@ -2927,9 +2993,8 @@ mod settings_tests {
         assert!(!s.display_dirty(&cx) && s.confirm_left(Instant::now()).is_none(), "no staging, no confirm");
         let picked = cx.settings.v["map_zoom"].clone();
         assert_eq!(format!("{}x", picked.as_f64().unwrap()), next, "applied at once");
-        s.click_id(&mut cx, "settings.tab.gameplay").expect("the Gameplay tab");
         let w = redraw(&mut s, &mut cx, &mut g);
-        assert_eq!(w.iter().find(|x| x["id"] == "settings.map_zoom").expect("the row")["text"], json!(next), "Gameplay shows the pick");
+        assert_eq!(w.iter().find(|x| x["id"] == "settings.map_zoom").expect("the row")["text"], json!(next), "the row shows the pick");
     }
 
     /// Restore defaults resets every row at once but stages the default display for Apply.

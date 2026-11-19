@@ -9,7 +9,7 @@ use crate::battle::draw::card_rows;
 use crate::battle::flow::next_round_by_itself;
 use crate::battle::marks::{pip_view, poise_number, poise_pip_rect, poise_pips, PipView, POISE_PIPS};
 use crate::battle::playback::{round_banner_alpha, ROUND_BANNER_MS};
-use crate::battle::tips::{intent_ring_color, pip_fill, ring_intent, ApPips, AP_DRAIN_MS, AP_PIP, AP_PIP_EMPTY, AP_REFILL_MS, REST_BLOCK};
+use crate::battle::tips::{intent_ring_color, pip_fill, ring_intent, ApPips, AP_DRAIN_MS, ap_pip, AP_PIP_EMPTY, AP_REFILL_MS, REST_BLOCK};
 use crate::battle::{Action, BattleScreen, AP_PIPS, AUTO_CONFIRM, CONFIRM_GUARD_MS, GRID_X, GRID_Y, POISE, TILE};
 use crate::screens::{Cx, Key, Screen};
 use aegis_ui::canvas::{Rect, Rgba};
@@ -402,7 +402,7 @@ fn a_card_shows_one_colour_of_pips_and_the_numbers_beside_the_rows() {
     for k in 0..slots {
         let pip = rpgkit_ui::pips::pip_rect(rows.ap.x, rows.ap.y + rows.ap.h / 2, k);
         let (x, y) = (pip.x + pip.w / 2, rows.ap.y + rows.ap.h / 2);
-        assert_eq!(px(&g, x, y)[..3], if k < lit { AP_PIP } else { AP_PIP_EMPTY }[..3], "pip {k} of {slots}, {lit} lit");
+        assert_eq!(px(&g, x, y)[..3], if k < lit { ap_pip() } else { AP_PIP_EMPTY }[..3], "pip {k} of {slots}, {lit} lit");
     }
     // every number sits to the right of its row, on the row's line, inside the card
     let u = &s(&b).w.units[a];

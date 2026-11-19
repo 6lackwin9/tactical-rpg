@@ -12,6 +12,7 @@ use aegis_core::json::{self, s, s_or, Dict};
 use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, H, RADIUS, SMALL, W};
+use aegis_ui::painter::Typeface;
 use aegis_ui::widget_plumbing;
 use emberwake_world::board;
 use serde_json::{json, Value};
@@ -46,6 +47,26 @@ pub enum BoardAct {
 pub struct BoardPane {
     pub selected: String,
     pub errors: Vec<String>,
+}
+
+/// PR7-37 (PT-31): board view `view` with each locked row that says only "Locked" (or nothing) saying what opens it
+/// (`board::unlock_words`), where the kit can tell.
+pub fn with_unlock_words(d: &emberwake_world::Data, gs: &emberwake_world::GameState, mut view: Dict) -> Dict {
+    if let Some(Value::Array(secs)) = view.get_mut("sections") {
+        for sec in secs.iter_mut() {
+            let Some(Value::Array(rows)) = sec.get_mut("rows") else { continue };
+            for r in rows.iter_mut().filter_map(Value::as_object_mut) {
+                let line = s(r, "line");
+                if s(r, "status") == "locked" && (line.is_empty() || line == emberwake_world::dialogue::LOCKED_TEXT) {
+                    let words = emberwake_world::board::unlock_words(d, gs, &s(r, "quest"));
+                    if !words.is_empty() {
+                        r.insert("line".into(), words.into());
+                    }
+                }
+            }
+        }
+    }
+    view
 }
 
 /// Every row of a board view, in section order (each with its section id under `_section`).
@@ -159,6 +180,11 @@ impl BoardPane {
         if !node.is_empty() {
             out.push((format!("Where: {node}"), BODY, th().info));
         }
+        // PR7-42 (PT-17): the level the job is meant for
+        let lv = json::i(det, "rec_level", json::i(row, "rec_level", 0));
+        if lv > 0 {
+            out.push((format!("{}.", board::rec_level_text(lv)), BODY, th().info));
+        }
         let due = json::dict(det.get("deadline").or_else(|| row.get("deadline")).unwrap_or(&Value::Null)).clone();
         if !due.is_empty() {
             out.push((s(&due, "text"), BODY, DEADLINE));
@@ -172,7 +198,9 @@ impl BoardPane {
     pub fn draw<A: Clone>(&mut self, ui: &mut Ui<A>, cx: &Cx, view: &Dict, det: &Dict, wrap: impl Fn(BoardAct) -> A) {
         let fr = crate::shop::frame_rect(&ui.p);
         let name = s_or(view, "name", "Board");
-        ui.p.panel(fr, th().panel, th().panel_edge, 4.0);
+        // PR7-36 (ART-02): a main panel, the ornate tier
+        ui.p.fill(fr, th().panel);
+        ui.frame_body("ornate", fr);
         ui.push("board", "panel", name.clone(), fr, true, false, None, Vec::new());
         let sc = ui.p.fonts.scale;
         let (lb, ls) = (ui.p.line_h(BODY).ceil() as i32, ui.p.line_h(SMALL).ceil() as i32);
@@ -181,7 +209,7 @@ impl BoardPane {
         let keeper = s(view, "keeper_name");
         let keeper_w = if keeper.is_empty() { 0.0 } else { ui.p.text_w(&keeper, BODY) + 12.0 };
         let head_h = ui.p.line_h(HEAD).ceil() as i32;
-        ui.p.text_fit(x0 as f32, fr.y as f32 + 5.0, &name, HEAD, inner as f32 - keeper_w, th().gold);
+        ui.p.text_fit_face(Typeface::Display, x0 as f32, fr.y as f32 + 5.0, &name, HEAD, inner as f32 - keeper_w, th().gold);
         if !keeper.is_empty() {
             ui.p.text_right(right as f32, (fr.y + 5 + head_h - lb) as f32, &keeper, BODY, th().dim);
         }
@@ -256,7 +284,14 @@ impl BoardPane {
                 let (tx, tw) = (rr.x as f32 + 4.0, (rr.w - 8) as f32);
                 let name = s(r, "name");
                 let mut ty = rr.y as f32 + 2.0;
-                ui.p.text_fit(tx, ty, &name, BODY, tw, if picked { th().gold } else { th().text });
+                // PR7-42 (PT-17): the recommended level at the name's right ("Lv 5")
+                let lv = json::i(r, "rec_level", 0);
+                let lv_text = if lv > 0 { format!("Lv {lv}") } else { String::new() };
+                let lw = if lv_text.is_empty() { 0.0 } else { ui.p.text_w(&lv_text, SMALL) + 6.0 };
+                if !lv_text.is_empty() {
+                    ui.p.text_right(tx + tw, ty + 1.0, &lv_text, SMALL, th().info);
+                }
+                ui.p.text_fit(tx, ty, &name, BODY, tw - lw, if picked { th().gold } else { th().text });
                 ty += lb as f32;
                 let node = s(r, "node_name");
                 let due = r.get("deadline").map(|v| s(json::dict(v), "text")).unwrap_or_default();
@@ -280,6 +315,9 @@ impl BoardPane {
                 }
                 if !due.is_empty() {
                     t.push((due.clone(), DEADLINE));
+                }
+                if lv > 0 {
+                    t.push((board::rec_level_text(lv), th().info));
                 }
                 ui.push(format!("board.row.{q}"), "row", name.clone(), rr, true, picked, Some(wrap(BoardAct::Pick(q.clone()))), t);
                 y += h + 1;

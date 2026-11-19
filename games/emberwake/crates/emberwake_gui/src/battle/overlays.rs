@@ -127,6 +127,12 @@ pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 24] = [
     ("tracers", "Impact tracers", "A short line from each actor to what its action hit, during playback.", true),
 ];
 
+/// PR7-37 (PT-33): the groups the Settings Battle tab lists: every group in a dev build (`crate::DEV_BUILD`), else
+/// all but the boards' marks for testing (`test_` ids, off by default; Alt still draws them).
+pub(crate) fn settings_overlay_groups() -> Vec<(&'static str, &'static str, &'static str, bool)> {
+    OVERLAY_GROUPS.iter().copied().filter(|g| crate::DEV_BUILD || !g.0.starts_with("test_")).collect()
+}
+
 /// VISCLAR1 VC6: a group's default (`OVERLAY_GROUPS`; an unknown id is on).
 pub(crate) fn overlay_default(id: &str) -> bool {
     OVERLAY_GROUPS.iter().find(|g| g.0 == id).is_none_or(|g| g.3)
@@ -377,7 +383,8 @@ pub(super) fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
         View::Flat => geo.cell_rect(c).inset(1),
     };
     for c in &o.band {
-        plate(p, plate_of(*c), rgba(110, 170, 255, 22), rgba(110, 170, 255, 70));
+        let (fill, edge) = crate::tokens::move_tile();
+        plate(p, plate_of(*c), fill, edge);
     }
     for c in &o.front {
         plate(p, plate_of(*c), rgba(240, 100, 92, 46), rgba(240, 100, 92, 110));
@@ -418,7 +425,7 @@ pub(super) fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
     }
     // INPUT1 MR13: the hovered Engage row's open position tiles: a GOLD ring plate (preferred), a DIM one (fallback)
     for (c, preferred) in &o.positions {
-        let col = if *preferred { th().gold } else { th().dim };
+        let col = if *preferred { th().gold } else { th().parchment };
         plate(p, plate_of(*c), with_alpha(col, 36), col);
     }
     for c in o.target.iter().chain(&o.target_more) {

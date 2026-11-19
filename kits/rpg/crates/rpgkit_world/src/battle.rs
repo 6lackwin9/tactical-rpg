@@ -375,6 +375,9 @@ pub struct Tally {
     /// ACT1-HOOKS1 (FB-241 c): how the battle left each party-side guest (the encounter's `guests`), for its
     /// `survivors` flag. None = not known (a tally built by hand): the flag is left as it is.
     pub guests: Option<Vec<GuestEnd>>,
+    /// PR7-42 (PACE1): the percent of the XP the defeated enemies pay (a repeat patrol's, `explore::patrol_xp_pct`);
+    /// None = full XP.
+    pub xp_pct: Option<i64>,
 }
 
 /// ACT1-HOOKS1: one party-side guest at the battle's end: its encounter ref and whether it lived (alive and still on
@@ -525,7 +528,7 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     // 2. XP for the defeated enemies only (none: no award at all). A won fight whose roster does not resolve from the
     // party's world (a road fight on another world's route) gives every member a 0 award, as before REWARD1 (Godot).
     let levels: Vec<(i64, String)> = roster.iter().zip(&defeated).filter(|(_, d)| **d).map(|(f, _)| (f.level, f.tier.clone())).collect();
-    let xp = if levels.is_empty() && !(won && roster.is_empty()) { Dict::new() } else { progression::award_encounter(d, &mut gs.party, &levels) };
+    let xp = if levels.is_empty() && !(won && roster.is_empty()) { Dict::new() } else { progression::award_encounter_pct(d, &mut gs.party, &levels, tally.xp_pct.unwrap_or(100)) };
     // 3. the quest hook
     let advanced = if won { quest::on_encounter_won(d, gs, encounter_qid) } else { Vec::new() };
     // 4. the purse share
@@ -962,14 +965,30 @@ pub fn settle(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, 
     match tally {
         Some(t) => apply(d, gs, encounter_qid, outcome, t),
         None => {
-            let mut t = Tally::default_for(d, &gs.world_id.clone(), encounter_qid, outcome);
-            if roster::rule(d, gs).is_some() {
-                t.world = fight_world(d, gs, encounter_qid);
-                t.party = roster::default_ends(d, gs, &t.world, outcome);
-            }
+            let t = default_tally(d, gs, encounter_qid, outcome);
             apply(d, gs, encounter_qid, outcome, &t)
         }
     }
+}
+
+/// PR7-42 (PACE1): `settle` paying `xp_pct` percent of the XP (a repeat patrol win's, `explore::patrol_xp_pct`).
+pub fn settle_xp_pct(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, tally: Option<&Tally>, xp_pct: i64) -> Dict {
+    let mut t = match tally {
+        Some(t) => t.clone(),
+        None => default_tally(d, gs, encounter_qid, outcome),
+    };
+    t.xp_pct = Some(xp_pct.clamp(0, 100));
+    apply(d, gs, encounter_qid, outcome, &t)
+}
+
+/// The tally of a fight settled without one (`settle`'s `None`).
+fn default_tally(d: &Data, gs: &GameState, encounter_qid: &str, outcome: &str) -> Tally {
+    let mut t = Tally::default_for(d, &gs.world_id.clone(), encounter_qid, outcome);
+    if roster::rule(d, gs).is_some() {
+        t.world = fight_world(d, gs, encounter_qid);
+        t.party = roster::default_ends(d, gs, &t.world, outcome);
+    }
+    t
 }
 
 /// W.2-S1 (FB-50a): the settle of a world fight by the runner that started it (BattleBridge's after_fight by the

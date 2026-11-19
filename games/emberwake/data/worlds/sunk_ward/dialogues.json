@@ -600,7 +600,29 @@
 					"choices": [
 						{
 							"text": "What do you sell?",
-							"to": "stock"
+							"to": "stock",
+							"requires": [
+								{
+									"key": "sunk_ward.ivo_rescued",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "open_shop",
+									"shop": "varka_trade"
+								}
+							]
+						},
+						{
+							"text": "What do you sell?",
+							"to": "stock_shut",
+							"unless": [
+								{
+									"key": "sunk_ward.ivo_rescued",
+									"value": true
+								}
+							]
 						},
 						{
 							"text": "Why open the Basin to us?",
@@ -623,6 +645,11 @@
 				{
 					"id": "stock",
 					"text": "\"Rock Salt. Warded Tallow, by the day. Poultices. Whatever the Clerisy has sworn is not for sale, and is. I do not ask what you intend to burn.\"",
+					"next": "n0"
+				},
+				{
+					"id": "stock_shut",
+					"text": "She does not lift the veil. \"To you? Nothing yet, dear. My shelves open for friends of the Basin, and the Basin has not yet decided what you are.\"",
 					"next": "n0"
 				},
 				{
@@ -1388,8 +1415,18 @@
 			"nodes": [
 				{
 					"id": "n0",
-					"text": "The candle-maker keeps one eye on the window. \"Tallow's dear. Warded tallow is dearer. I sell the plain kind and tell nobody it's plain.\" The wicks hang in rows like pale ribs.",
+					"text": "The candle-maker keeps one eye on the window. \"Tallow's dear. Warded tallow is dearer, and I have it, five Scrap the cake.\" The wicks hang in rows like pale ribs.",
 					"choices": [
+						{
+							"text": "Buy Warded Tallow.",
+							"to": "stock",
+							"effects": [
+								{
+									"effect": "open_shop",
+									"shop": "chandler_stall"
+								}
+							]
+						},
 						{
 							"text": "Ask for more.",
 							"to": "more"
@@ -1403,6 +1440,16 @@
 				{
 					"id": "more",
 					"text": "\"The Watch buy by the dozen, never by the pound. Ask yourself why.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "stock",
+					"text": "\"Keep it dry and keep it lit. The wards only hold while it burns.\"",
 					"choices": [
 						{
 							"text": "Leave.",

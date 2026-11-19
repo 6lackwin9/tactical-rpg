@@ -8,6 +8,7 @@ use crate::round_intent;
 use crate::world::{UnitId, World};
 use aegis_core::rng::GodotRng;
 use aegis_core::sort::godot_sort;
+use aegis_core::switches;
 use rpgkit_rules::status;
 
 #[derive(Debug, Clone)]
@@ -235,6 +236,20 @@ impl Resolver {
                 CmdKind::Item { item, target, .. } => item.revive && item.battle_reach() > 0 && w.can_revive(*target) && !w.foes_of(c).contains(target),
                 _ => false,
             };
+            // PR7-41 (PT-22): a hero's attack whose target is gone, or out of its reach and chase from where the hero
+            // stands, turns on the nearest foe it reaches instead (`Command::retarget`; logged "[Retarget]"); with none
+            // the TG4 Rest below as before (a gone target) or the attack as planned (one out of reach). Behind the
+            // test-only switch `retarget` until the golden ruling (FB-334); off, TG4 as before
+            let lost = a.command.acted_on(w).filter(|&t| !w.units[t].is_active() || a.command.target_out_of_chase(w));
+            if let Some(t) = lost.filter(|_| switches::on("retarget") && !revives_target && w.allies.contains(&c) && round_intent::intent_of(w, c).is_some()) {
+                if let Some(n) = self.scheduled[i].command.retarget(w) {
+                    let how = if w.units[t].is_active() { "is out of reach" } else { "is down" };
+                    let msg = format!("[Retarget] {}'s target {} {how}: {} turns on {}", w.units[c].name, w.units[t].name, self.scheduled[i].command.name, w.units[n].name);
+                    self.notes.push((i, msg.clone()));
+                    self.log.push(msg);
+                }
+            }
+            let a = &self.scheduled[i];
             if !revives_target && round_intent::intent_of(w, c).is_some() && a.command.acted_on(w).is_some_and(|t| !w.units[t].is_active()) {
                 let gone = w.units[a.command.acted_on(w).unwrap()].name.clone();
                 for later in self.scheduled.iter_mut().filter(|x| x.unit == c && !x.cancelled && x.start >= block) {

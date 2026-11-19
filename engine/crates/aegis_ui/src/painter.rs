@@ -858,12 +858,34 @@ impl<'a> Painter<'a> {
         }
     }
 
+    /// `text_fit` in `face` (a title in the display face).
+    #[allow(clippy::too_many_arguments)]
+    pub fn text_fit_face(&mut self, face: Typeface, x: f32, y: f32, s: &str, size: f32, max_w: f32, col: Rgba) {
+        let t = self.fit_face(face, s, size, max_w);
+        self.text_face(face, x, y, &t, size, col);
+        if t != s {
+            self.mark_cut(s);
+        }
+    }
+
     /// TEXTFIT1: the text just drawn was `full` shortened (for the audit; drawing that shortens text with `fit`
     /// itself calls this after drawing).
     pub fn mark_cut(&mut self, full: &str) {
         if let Some(last) = self.fonts.audit.as_mut().and_then(|a| a.last_mut()) {
             last.cut = Some(full.to_string());
         }
+    }
+
+    /// `fit` measured in `face`.
+    pub fn fit_face(&mut self, face: Typeface, s: &str, size: f32, max_w: f32) -> String {
+        if self.text_w_face(face, s, size) <= max_w {
+            return s.to_string();
+        }
+        let mut out: String = s.to_string();
+        while !out.is_empty() && self.text_w_face(face, &format!("{out}..."), size) > max_w {
+            out.pop();
+        }
+        format!("{}...", out.trim_end())
     }
 
     pub fn fit(&mut self, s: &str, size: f32, max_w: f32) -> String {

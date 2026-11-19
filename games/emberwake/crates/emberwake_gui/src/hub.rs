@@ -357,7 +357,7 @@ impl Screen<GameCx> for Journal {
         let mut ui: Ui<JAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), th().game("popup_veil", rgba(0, 0, 0, 110)));
         let fr = Rect::new(16, 16, 608, 328);
-        ui.frame(fr, "Journal", false);
+        ui.frame_in("ornate", fr, "Journal", false);
         let groups = Self::shown(cx);
         let all: Vec<String> = groups.iter().flat_map(|g| g.2.clone()).collect();
         if !all.contains(&self.selected) {
@@ -488,7 +488,52 @@ pub struct Results {
     before: Option<crate::transitions::Snapshot>,
     opened: Instant,
     leaving: Option<(Instant, ResAct)>,
+    /// PR7-37 (PT-02, PT-24): the fight ended at its round limit (it reads "Out of time"), and the lines on what it
+    /// leaves open (`open_jobs_lines`).
+    timed_out: bool,
+    next_lines: Vec<String>,
     w: Vec<Widget<ResAct>>,
+}
+
+/// PR7-37 (PT-02): the outcome label of a fight that ran out of rounds (whatever its `timeout_outcome` settles it as).
+pub const OUT_OF_TIME: &str = "Out of time";
+
+/// PR7-37 (PT-02, PT-24): the results' and the battle banner's label of an outcome: "Out of time" at the round limit,
+/// else Victory, Defeat or Fled.
+pub fn outcome_head(outcome: &str, timed_out: bool) -> &str {
+    match outcome {
+        "won" => "Victory",
+        _ if timed_out => OUT_OF_TIME,
+        "lost" => "Defeat",
+        "fled" => "Fled",
+        o => o,
+    }
+}
+
+/// PR7-37 (PT-02, PT-24): the note of a fight that ran out of rounds, by whether a foe was defeated (`reward_text`'s
+/// tally): no one fled, the round limit ended it.
+pub fn timeout_note(rewards: &Dict) -> &'static str {
+    if defeated_of(rewards) > 0 {
+        "The round limit ran out before the fight was won. The party keeps the rewards of the foes it defeated."
+    } else {
+        "The round limit ran out before the fight was won. No foe was defeated, so no rewards."
+    }
+}
+
+/// PR7-37 (PT-02, PT-24): what a fight not won leaves open: one line per job whose current step is to win it
+/// (`quest::open_on_fight`): it can be tried again.
+pub fn open_jobs_lines(cx: &Cx, encounter_ref: &str) -> Vec<String> {
+    let (d, gs) = (&cx.data, cx.gs());
+    quest::open_on_fight(d, gs, encounter_ref)
+        .iter()
+        .map(|q| format!("{} is still open: rest, then try the fight again.", s_or(&quest::resolved(d, gs, q), "name", q)))
+        .collect()
+}
+
+/// REWARD1: the foes the rewards count as defeated (slain, surrendered, fled and withdrawn).
+fn defeated_of(rewards: &Dict) -> i64 {
+    let d = json::dget(rewards, "defeated");
+    ["slain", "surrendered", "fled", "withdrawn"].iter().map(|k| json::i(d, k, 0)).sum()
 }
 
 /// How a party line of the results reads (its colour).
@@ -704,8 +749,17 @@ impl Results {
             before: None,
             opened: Instant::now(),
             leaving: None,
+            timed_out: false,
+            next_lines: Vec::new(),
             w: Vec::new(),
         }
+    }
+
+    /// PR7-37 (PT-02, PT-24): the fight ran out of rounds (`timed_out`), and the lines on what it leaves open.
+    pub fn after_fight(mut self, timed_out: bool, next_lines: Vec<String>) -> Self {
+        self.timed_out = timed_out;
+        self.next_lines = next_lines;
+        self
     }
 
     /// TRANSITIONS1 T2: the results over the battle that settled (`plain`: Reduce motion), with the hub's view as the
@@ -800,15 +854,13 @@ impl Screen<GameCx> for Results {
         }
         ui.p.shift(shift, 0);
         if self.over {
-            ui.p.panel(Rect::new(12, 12, W - 24, H - 34), th().game("result_panel", rgba(10, 11, 16, 235)), th().edge, 4.0);
+            // PR7-36 (ART-02): the results are a main panel: the ornate tier over the panel's fill
+            let r = Rect::new(12, 12, W - 24, H - 34);
+            ui.p.fill(r, th().game("result_panel", rgba(10, 11, 16, 235)));
+            ui.frame_body("ornate", r);
         }
-        let head = match self.outcome.as_str() {
-            "won" => "Victory",
-            "lost" => "Defeat",
-            "fled" => "Fled",
-            o => o,
-        };
-        ui.p.text(24.0, 24.0, head, aegis_ui::ui::HEAD + 4.0, th().gold);
+        let head = outcome_head(&self.outcome, self.timed_out);
+        ui.p.text_face(aegis_ui::painter::Typeface::Display, 24.0, 24.0, head, aegis_ui::ui::HEAD + 4.0, th().gold);
         let world = gs.world_id.clone();
         let name = |kind: &str, id: &str| -> String {
             match kind {
@@ -817,7 +869,10 @@ impl Screen<GameCx> for Results {
             }
         };
         let currency = emberwake_world::terms::short(&d, &world, emberwake_world::terms::CURRENCY);
-        let (tally, note, reward_lines) = reward_text(&self.rewards, &self.outcome, &currency, &name);
+        let (tally, mut note, reward_lines) = reward_text(&self.rewards, &self.outcome, &currency, &name);
+        if self.timed_out {
+            note = timeout_note(&self.rewards).to_string();
+        }
         let line = (ui.p.line_h(BODY + 1.0) + 3.0).ceil() as i32;
         let mut y = 50;
         for (text, col) in [(&tally, th().text), (&note, th().dim)] {
@@ -825,6 +880,11 @@ impl Screen<GameCx> for Results {
                 ui.p.text(24.0, y as f32, text, BODY + 1.0, col);
                 y += line;
             }
+        }
+        // PR7-37 (PT-24): what happens next (the jobs it leaves open)
+        for text in &self.next_lines {
+            ui.p.text(24.0, y as f32, text, BODY + 1.0, th().gold);
+            y += line;
         }
         // ENCOUNTER2 W4: who stayed behind ("Kaelen held the winch.")
         for text in &self.stay_lines {
@@ -913,7 +973,7 @@ impl Screen<GameCx> for Results {
         }
     }
     fn state(&self, _cx: &Cx) -> Value {
-        let mut out = json!({"outcome": self.outcome, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards, "stay_lines": self.stay_lines, "wounded": self.wounded, "departed": self.departed, "stash_short": self.stash_short});
+        let mut out = json!({"outcome": self.outcome, "head": outcome_head(&self.outcome, self.timed_out), "next": self.next_lines, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards, "stay_lines": self.stay_lines, "wounded": self.wounded, "departed": self.departed, "stash_short": self.stash_short});
         // TRANSITIONS1 T2: only over a battle (the state of the other results reads as before)
         if self.over {
             out["over_battle"] = json!({"plain": self.plain, "arrives": self.before.is_some(), "leaving": self.leave_ms(Instant::now())});
@@ -968,6 +1028,18 @@ mod tests {
             r.insert(k.clone(), v.clone());
         }
         r
+    }
+
+    /// PR7-37 (PT-02): a fight that ran out of rounds heads "Out of time", not "Defeat", and its note says the
+    /// round limit ended it, with or without the rewards of foes already down; a win stays a win.
+    #[test]
+    fn a_timed_out_fight_reads_out_of_time() {
+        assert_eq!(outcome_head("lost", true), OUT_OF_TIME);
+        assert_eq!(outcome_head("", true), OUT_OF_TIME);
+        assert_eq!(outcome_head("lost", false), "Defeat");
+        assert_eq!(outcome_head("won", true), "Victory");
+        assert!(timeout_note(&rewards(0, 0, 0, json!({}))).contains("No foe was defeated"));
+        assert!(timeout_note(&rewards(1, 0, 0, json!({}))).contains("keeps the rewards"));
     }
 
     /// REWARD1 section 7: the tally line, each outcome's note, and the reward lines in order.

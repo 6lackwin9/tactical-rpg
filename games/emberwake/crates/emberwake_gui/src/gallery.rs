@@ -78,7 +78,7 @@ const ENTRIES: [(&str, &str, &str, &str); 35] = [
 const NEEDS_GAME: [&str; 13] = ["region", "dialogue", "shop", "hub", "journal", "stats", "level_up", "skills", "gear", "world_map", "results", "save", "battle_talk"];
 /// Where a preview's mouse is (off every widget).
 const OFF: (i32, i32) = (-10_000, -10_000);
-const ALLY: Rgba = [110, 170, 255, 255];
+use crate::tokens::ally;
 /// The strip under the timeline: an action's details or a block's snapshot.
 const DETAIL_H: i32 = 64;
 
@@ -1087,7 +1087,7 @@ impl Screen<GameCx> for Gallery {
             let snap = d.block.and_then(|b| s.round_record(d.viewed).and_then(|r| r.snapshots.get(b as usize)).map(|sn| (b, sn)));
             let lines: Vec<(String, Rgba)> = match (d.block, snap) {
                 (Some(_), Some((b, sn))) => std::iter::once((format!("After block {b} of round {}", d.viewed), th().gold))
-                    .chain(s.w.allies.iter().chain(s.w.enemies.iter()).filter_map(|&u| sn.get(u).filter(|x| x.pos.is_some() || x.hp <= 0 || x.withdrawn).map(|x| (snap_line(&s.w.units[u].name, x), if s.w.allies.contains(&u) { ALLY } else { th().foe }))))
+                    .chain(s.w.allies.iter().chain(s.w.enemies.iter()).filter_map(|&u| sn.get(u).filter(|x| x.pos.is_some() || x.hp <= 0 || x.withdrawn).map(|x| (snap_line(&s.w.units[u].name, x), if s.w.allies.contains(&u) { ally() } else { th().foe }))))
                     .collect(),
                 (Some(b), None) => vec![(format!("Block {b} has not resolved yet."), th().dim)],
                 _ if !d.detail.is_empty() => d.detail.clone(),

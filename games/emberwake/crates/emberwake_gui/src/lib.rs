@@ -52,6 +52,7 @@ mod stage;
 mod story;
 mod talk;
 mod timeline_view;
+mod tokens;
 mod transitions;
 mod tuning;
 mod viewkeys;
@@ -80,6 +81,11 @@ pub const DEV_TOOLS: bool = cfg!(feature = "dev_tools");
 /// The debug build's dev keys (F5, F6, F7, F9, F10, F11; VIEWKEYS1, EXPLOREVIEW1, TURNFEEL1): a debug build with the
 /// dev tools. A release build takes the keys and does nothing, as before.
 pub(crate) const DEV_KEYS: bool = cfg!(all(debug_assertions, feature = "dev_tools"));
+
+/// PR7-37 (PT-01, PT-14, PT-33): a dev build (`DEV_KEYS`: a debug build with the dev tools) shows the developer
+/// surfaces a player never sees: the main menu's Tools, the test worlds on New game, the world map's Edit layout and
+/// the Settings rows for testing (the "(testing)" overlays, the Debug row). Any other build hides them.
+pub(crate) const DEV_BUILD: bool = DEV_KEYS;
 
 fn arg<'a>(args: &'a [(String, String)], k: &str) -> Option<&'a str> {
     args.iter().find(|(a, _)| a == k).map(|(_, v)| v.as_str())

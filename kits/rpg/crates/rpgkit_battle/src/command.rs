@@ -1191,6 +1191,52 @@ impl Command {
         }
     }
 
+    /// PR7-41 (PT-22): the foe a single-target attack of a hero turns on when its own target is gone, or out of its reach
+    /// and chase from where the hero stands: the nearest active, visible foe within the attack's reach band from the
+    /// hero's tile plus its chase (or dash) tiles; ties by unit order. Sets it as the attack's target and returns it;
+    /// None (nothing changed) when no foe qualifies or the command is no such attack (a Maneuver attack carrying its
+    /// own move to a tile by its target is none).
+    pub fn retarget(&mut self, w: &World) -> Option<UnitId> {
+        let (src, diag) = (self.source, self.diagonal);
+        if self.carry != Carry::None {
+            return None;
+        }
+        let CmdKind::Attack { target, follow_tiles, dash_tiles, min_range, max_range, .. } = &mut self.kind else { return None };
+        if !w.has(src) {
+            return None;
+        }
+        let band = reach_band(w, src, *min_range, *max_range);
+        let extra = (*follow_tiles).max(*dash_tiles).max(0);
+        let from = w.pos(src);
+        let (_, f) = w
+            .foes_of(src)
+            .iter()
+            .copied()
+            .filter(|&f| w.units[f].is_active() && w.has(f) && !round_intent::hidden(w, f))
+            .map(|f| (w.band_at(diag, src, from, f), f))
+            .filter(|&(d, _)| d >= band.0 && d <= band.1 + extra)
+            .min()?;
+        *target = Some(f);
+        Some(f)
+    }
+
+    /// PR7-41 (PT-22): whether this attack's target, active, is beyond its reach band plus its chase (or dash) tiles
+    /// from where its unit stands (it would end "cannot reach"); false for any other command (a carried Maneuver
+    /// attack too: its move takes it to its tile).
+    pub fn target_out_of_chase(&self, w: &World) -> bool {
+        if self.carry != Carry::None {
+            return false;
+        }
+        let CmdKind::Attack { follow_tiles, dash_tiles, min_range, max_range, .. } = &self.kind else { return false };
+        let Some(t) = self.acted_on(w) else { return false };
+        if !w.units[t].is_active() || !w.has(t) || !w.has(self.source) {
+            return false;
+        }
+        let band = reach_band(w, self.source, *min_range, *max_range);
+        let d = w.band_at(self.diagonal, self.source, w.pos(self.source), t);
+        d > band.1 + (*follow_tiles).max(*dash_tiles).max(0)
+    }
+
     /// RULESET1_INTENT TG4: the command becomes Rest blocks (no AP, no stance, no move); its blocks stay booked.
     pub fn into_rest(&mut self) {
         self.kind = CmdKind::Rest { recover_ap: 0 };

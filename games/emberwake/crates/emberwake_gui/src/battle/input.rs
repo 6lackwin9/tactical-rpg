@@ -4,7 +4,7 @@ use aegis_ui::theme::th;
 use super::marks::skills_hp;
 use super::playback::PlaySpeed;
 use super::skill_menu::{menu_intents, MenuGrid, Slot};
-use super::{Action, BattleScreen, ALLY, TACTICS, TACTIC_HELP, TACTIC_INTENT_HELP, TACTIC_LABELS};
+use super::{Action, BattleScreen, ally, TACTICS, TACTIC_HELP, TACTIC_INTENT_HELP, TACTIC_LABELS};
 use aegis_ui::canvas::Rect;
 use crate::intent_text;
 use crate::screens::Cx;
@@ -1073,7 +1073,7 @@ impl BattleScreen {
                 let heal: i64 = es.iter().map(|e| e["est_heal"].as_i64().unwrap_or(0)).sum();
                 let first = es.first().map(|e| e["start"].as_i64().unwrap_or(0)).unwrap_or(0);
                 let last = es.last().map(|e| e["end"].as_i64().unwrap_or(0)).unwrap_or(0);
-                tip.push((format!("Blocks {first}-{last}, AP left after: {}", p["ap_left"]), ALLY));
+                tip.push((format!("Blocks {first}-{last}, AP left after: {}", p["ap_left"]), ally()));
                 let mut d = format!("{} AP", p["ap"].as_i64().unwrap_or(0));
                 if let Some(c) = skills_hp(&skills, &step) {
                     d.push_str(&format!("  {c} HP"));

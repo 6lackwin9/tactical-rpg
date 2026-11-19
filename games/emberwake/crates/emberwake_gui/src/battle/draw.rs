@@ -6,9 +6,9 @@ use super::input::{engage_positions, kind_name, pick_text, rest_text, skill_text
 use super::marks::{arena_badge, arrows_of, broken_spans, draw_hold_pick, draw_tracers, focus_set, held_guard, hit_forecasts, meter_row, meter_text, meters_of, party_foresight_off, pip_view, poise_bar, poise_number, poise_shown, push_forecasts, push_text, seen_intents, HitForecast, HoldMarks, HookMarks, HELD, METER};
 use super::overlays::{overlay_of, reach_text, Layers};
 use super::playback::PlaySpeed;
-use super::{Action, BattleScreen, ALLY, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, POISE, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
+use super::{Action, BattleScreen, ally, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, POISE, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
 use super::skill_menu::CHANNEL_TINT;
-use super::tips::{action_channel_note, ap_blocks, ap_gauge_of, ap_held_text, channel_action, channel_block, channel_fill, downed_banner, planned_channel_note, class_names, committed, committed_icon_chains, derived_line, derived_rows, draw_ap_pips, draw_badge_row, draw_block_label, dulled_line, dulled_weapons, inspect_tip, intent_glyph, kind_color, kind_icon, next_action, short_name, stance_name, unit_tip, ApAnim, ApPips, BlockLook, AP_PIP, DULLED_BADGE, REST_BLOCK};
+use super::tips::{action_channel_note, ap_blocks, ap_gauge_of, ap_held_text, channel_action, channel_block, channel_fill, downed_banner, planned_channel_note, class_names, committed, committed_icon_chains, derived_line, derived_rows, draw_ap_pips, draw_badge_row, draw_block_label, dulled_line, dulled_weapons, inspect_tip, intent_glyph, kind_color, kind_icon, next_action, short_name, stance_name, unit_tip, ApAnim, ApPips, BlockLook, ap_pip, DULLED_BADGE, REST_BLOCK};
 use aegis_ui::canvas::{rgba, Rect, Rgba};
 use crate::intent_text;
 use crate::portraits::{Faces, Who};
@@ -298,7 +298,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                     tip.push((format!("Target: {t}"), th().foe));
                 }
                 if e.5 > 0 {
-                    tip.push((format!("{} AP", e.5), ALLY));
+                    tip.push((format!("{} AP", e.5), ally()));
                 }
                 if e.6 > 0 {
                     tip.push((format!("Expected damage about {}", e.6), th().gold));
@@ -454,8 +454,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
 
     // -- Left: party cards and the selected hero.
     crate::hud::hud_panel(&mut ui, Rect::new(2, 28, 124, 290), th().game("battle_panel", PANEL), th().edge, RADIUS);
-    let alive = w.allies.iter().filter(|a| w.units[**a].is_active()).count();
-    ui.p.text(8.0, 32.0, &format!("Party {alive}/{}", w.allies.len()), TITLE, ALLY);
+    // PR7-37 (PT-02): the heroes still standing: on their feet, on the field or gone out by an exit (not downed)
+    let alive = w.allies.iter().filter(|a| w.units[**a].is_alive()).count();
+    ui.p.text(8.0, 32.0, &format!("Party {alive}/{}", w.allies.len()), TITLE, ally());
     let mut y = 44;
     // UI5: the party member the mouse is over (its card or its token) fills the threat intel panel
     let mut hovered_ally = None;
@@ -493,7 +494,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             ui.push(format!("party.{a}.dulled"), "badge", dulled.iter().map(|x| dulled_line(x)).collect::<Vec<_>>().join("; "), br, true, false, None, tip);
             bw + 2
         };
-        ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 1.5, &u.name, BODY, if glyph.is_some() { 94.0 } else { 108.0 } - badge_w as f32, if u.is_active() { ALLY } else { th().dim });
+        ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 1.5, &u.name, BODY, if glyph.is_some() { 94.0 } else { 108.0 } - badge_w as f32, if u.is_active() { ally() } else { th().dim });
         // VISCLAR1-D (mock `party_ap`): HP, poise and AP each a row, its number beside it at the card's right edge
         let number = |ui: &mut Ui<Action>, row: Rect, text: &str, col: Rgba| {
             let (right, shown) = (rows.right as f32, ui.p.fit(text, SMALL, (r.x + r.w - 2 - rows.right + rows.number_w) as f32));
@@ -505,7 +506,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             ui.p.text_fit(r.x as f32 + 4.0, rows.poise.y as f32, &banner, SMALL, (r.w - 8) as f32, bcol);
             cards_shown.push(json!({"unit": a, "ap": u.ap, "ap_shown": 0.0, "poise_pips": Option::<i32>::None, "poise": Option::<i32>::None}));
         } else {
-            hp_bar(&mut ui.p, rows.hp, u.hp, u.max_hp, th().good);
+            hp_bar(&mut ui.p, rows.hp, u.hp, u.max_hp, crate::tokens::hp());
             number(&mut ui, rows.hp, &format!("{}/{}", u.hp, u.max_hp), th().text);
             // RULESET1-U slice 5: the member's poise under its HP bar (rule poise)
             let poise = poise_shown(w, a, &layers);
@@ -522,7 +523,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             g.card_ap[k].1 = g.card_ap[k].1.follow(u.ap as f32, fx_now, pips_still);
             let level = g.card_ap[k].1.level(fx_now);
             draw_ap_pips(&mut ui.p, rows.ap.x, rows.ap.y, level, u.max_ap);
-            number(&mut ui, rows.ap, &format!("{}/{}", u.ap, u.max_ap), AP_PIP);
+            number(&mut ui, rows.ap, &format!("{}/{}", u.ap, u.max_ap), ap_pip());
             cards_shown.push(json!({"unit": a, "ap": u.ap, "ap_shown": level, "poise_pips": poise.as_ref().map(|st| pip_view(&w.ruleset.numbers, st).lit), "poise": poise.as_ref().map(|st| st.value)}));
         }
         meter_row(&mut ui.p, Rect::new(r.x + 4, r.y + rows.h - 1, 108, 3), &ms);
@@ -587,7 +588,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                 lines.push((format!("Next: {}", u.st.pending.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), th().dim));
             }
         };
-        let ap_line = (format!("AP left {}/{}", if s.plan_confirmed { u.ap } else { st.ap_left }, u.max_ap), ALLY);
+        let ap_line = (format!("AP left {}/{}", if s.plan_confirmed { u.ap } else { st.ap_left }, u.max_ap), ally());
         // PK1-S2c (FB-174, PK1-S1 `ap` set): why the hero's AP is held this round (the kit's `State::ap_held`)
         let ap_held = s.resolver.triggers.ap_held(h).map(|(ap, src)| (ap_held_text(ap, src), th().foe));
         if timeline {
@@ -846,7 +847,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             let tip = draw_badge_row(&mut ui.p, t, row, s.def.total_blocks.max(1));
             ui.push(format!("foe.{e}.badges"), "badges", tip.iter().skip(1).map(|x| x.0.clone()).collect::<Vec<_>>().join("; "), row, true, false, None, tip);
         }
-        ui.p.text_right(r.x as f32 + r.w as f32 - 3.0, r.y as f32 + 1.5, &format!("{}/{}", u.hp, u.max_hp), BODY, if u.is_active() { th().good } else { th().dim });
+        ui.p.text_right(r.x as f32 + r.w as f32 - 3.0, r.y as f32 + 1.5, &format!("{}/{}", u.hp, u.max_hp), BODY, if u.is_active() { th().text } else { th().dim });
         if u.is_active() {
             let lh = ui.p.line_h(SMALL);
             for (k, line) in next_lines.iter().enumerate() {
@@ -885,7 +886,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     if let Some(e) = detail_foe {
         let r = Rect::new(right.x + 4, y + 2, 116, 318 - y - 6);
         g.panels.push(("intel", r));
-        ui.p.panel(r, th().card, if w.allies.contains(&e) { ALLY } else { th().foe }, RADIUS);
+        ui.p.panel(r, th().card, if w.allies.contains(&e) { ally() } else { th().foe }, RADIUS);
         let mut ly = r.y as f32 + 3.0;
         let mut lines = if pinned.is_some() { inspect_tip(s, e, sel, &tells, &rounds, &classes, show_tells) } else { unit_tip(s, e, sel, &tells, &rounds, &classes) };
         // RULESET1-U slice 5: the selected hero's planned hits on this unit, forecast (rule poise)
@@ -991,6 +992,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         ui.p.panel(r, th().game("outcome_fill", rgba(10, 14, 22, 240)), th().gold, 4.0);
         let (title, col) = match outcome.as_str() {
             "won" => ("Victory", th().good),
+            // PR7-37 (PT-02): the round limit ran out (nobody fled)
+            _ if g.timed_out() => (crate::hub::OUT_OF_TIME, th().gold),
             "lost" => ("Defeat", th().foe),
             "fled" => ("Fled", th().gold),
             _ => ("Battle over", th().gold),

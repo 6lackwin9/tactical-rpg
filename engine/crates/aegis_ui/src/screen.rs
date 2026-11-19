@@ -553,12 +553,10 @@ macro_rules! widget_plumbing {
     () => {
         $crate::widget_plumbing!(Cx);
     };
-    ($cx:ty) => {
+    // A screen that draws its own hover card (`fn draw_tip`, e.g. through `ui::draw_tip_by`): the rest of the plumbing.
+    (own_tip $cx:ty) => {
         fn widgets(&self) -> Vec<serde_json::Value> {
             self.w.iter().map(|w| w.info()).collect()
-        }
-        fn draw_tip(&self, p: &mut $crate::painter::Painter, mouse: (i32, i32)) {
-            $crate::ui::draw_tip(p, &self.w, mouse)
         }
         fn click(&mut self, cx: &mut $cx, pos: (i32, i32)) -> bool {
             match $crate::ui::hit(&self.w, pos) {
@@ -577,6 +575,12 @@ macro_rules! widget_plumbing {
         fn widget_rect(&self, id: &str) -> Option<($crate::canvas::Rect, Vec<String>)> {
             self.w.iter().find(|w| w.id == id).map(|w| (w.rect, w.tip.iter().map(|t| t.0.clone()).collect()))
         }
+    };
+    ($cx:ty) => {
+        fn draw_tip(&self, p: &mut $crate::painter::Painter, mouse: (i32, i32)) {
+            $crate::ui::draw_tip(p, &self.w, mouse)
+        }
+        $crate::widget_plumbing!(own_tip $cx);
     };
 }
 
@@ -717,8 +721,8 @@ pub fn show_errors<G: 'static>(cx: &mut Cx<G>, errors: Vec<String>) {
     }
 }
 
-/// A centred screen title.
+/// A centred screen title, in the theme's display face (PR7-36: every screen title in one face).
 pub fn title(ui: &mut Ui<impl Clone>, text: &str, y: i32) {
     let gold = ui.t.gold;
-    ui.p.text_center(W as f32 / 2.0, y as f32, text, ui::HEAD + 4.0, gold);
+    ui.p.text_center_face(crate::painter::Typeface::Display, W as f32 / 2.0, y as f32, text, ui::HEAD + 4.0, gold);
 }

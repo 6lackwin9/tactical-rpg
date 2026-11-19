@@ -723,8 +723,13 @@ impl<'a, A: Clone> Ui<'a, A> {
     /// A modal frame with a gold title (the display face; frame role `panel`); returns the content top y
     /// (`Metrics::frame_title_h` below the top).
     pub fn frame(&mut self, r: Rect, title: &str, centered: bool) -> i32 {
+        self.frame_in("panel", r, title, centered)
+    }
+
+    /// `frame` in frame role `role`: a screen's main panel takes `ornate`, a small popup `panel` (the two tiers).
+    pub fn frame_in(&mut self, role: &str, r: Rect, title: &str, centered: bool) -> i32 {
         let (t, m) = (self.t.clone(), self.m());
-        self.draw_role(&t, "panel", r, t.panel, t.panel_edge, m.frame_radius);
+        self.draw_role(&t, role, r, t.panel, t.panel_edge, m.frame_radius);
         if !title.is_empty() {
             if centered {
                 self.p.text_center_face(Typeface::Display, r.x as f32 + r.w as f32 / 2.0, r.y as f32 + m.uf(6.0), title, m.head, t.gold);
@@ -929,10 +934,21 @@ fn faded(img: &Image, a: f32) -> Image {
 
 /// The hover card of the topmost hovered widget that has one.
 pub fn draw_tip<A>(p: &mut Painter, widgets: &[Widget<A>], mouse: (i32, i32)) {
-    let Some(wd) = widgets.iter().rev().find(|wd| wd.rect.contains(mouse.0, mouse.1) && (!wd.tip.is_empty() || wd.kind == "backdrop")) else { return };
-    if wd.tip.is_empty() {
-        return;
-    }
+    draw_tip_by(p, widgets, mouse, |_| mouse);
+}
+
+/// The widget whose hover card shows with the mouse at `mouse`: the topmost hovered one with a card (None under a
+/// backdrop without one).
+pub fn tip_widget<A>(widgets: &[Widget<A>], mouse: (i32, i32)) -> Option<&Widget<A>> {
+    let wd = widgets.iter().rev().find(|wd| wd.rect.contains(mouse.0, mouse.1) && (!wd.tip.is_empty() || wd.kind == "backdrop"))?;
+    (!wd.tip.is_empty()).then_some(wd)
+}
+
+/// `draw_tip` with the card placed as for a mouse at `at(widget)` (the hovered widget): a screen moves a row's card
+/// off what the row shows (beside the row instead of over the numbers next to it).
+pub fn draw_tip_by<A>(p: &mut Painter, widgets: &[Widget<A>], mouse: (i32, i32), at: impl Fn(&Widget<A>) -> (i32, i32)) {
+    let Some(wd) = tip_widget(widgets, mouse) else { return };
+    let mouse = at(wd);
     let t = theme::th();
     let m = Metrics::of(&t, p.v);
     let max_w = m.uf(160.0);

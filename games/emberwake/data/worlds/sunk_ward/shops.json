@@ -382,6 +382,19 @@
 				}
 			],
 			"tags": []
+		},
+		{
+			"id": "chandler_stall",
+			"name": "The Chandler's Window",
+			"keeper": "cit_chandler",
+			"stock": [],
+			"loot": [],
+			"buy_mult": 1.0,
+			"supply_price": 5,
+			"sell_mult": 0.4,
+			"buys": [],
+			"requires_flags": [],
+			"tags": []
 		}
 	]
 }
