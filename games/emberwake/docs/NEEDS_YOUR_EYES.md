@@ -36,7 +36,7 @@ Mocks waiting for you, then provisional calls Design made while you were away, t
 - [ ] Boss UI (`docs/specs/BOSSUI1.md`, your take 24 notes): HP refilled per phase with phase markers and names,
   passive tags (no phase or enrage tags), icon-only status tabs. Take 28 ready with your take 26 and 27 notes
   (`art-ui/battle_ux14/battle_take28_*`, PR #70: a simpler two-row boss intent by block, flipped markers, pips in fives, boss intent panel, boxes clear of
-  units). Provisional: damage past a phase's span carries into the next phase (one HP pool). Then a golden call: boss poise tuned so a focused
+  units). Then a golden call: boss poise tuned so a focused
   party breaks it first in round 2-3, then about every 3 rounds move the boss fights in the timeline and sim goldens. Recommendation:
   approve once the mock is signed off.
 - [ ] Image queue ready: say "process image queue" in Gemini (bunk props, class glyphs, bed keepsakes, battle
