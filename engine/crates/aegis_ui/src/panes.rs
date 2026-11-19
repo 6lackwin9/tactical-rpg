@@ -1041,6 +1041,12 @@ pub struct RowLook<'a> {
     pub columns: &'a [i32],
     /// ENGINE-18: no icon tile at all (a row with no picture and no glyph in a list with none): the name starts at the left.
     pub bare: bool,
+    /// ENGINE-19: the first number's colour (a theme role the view named), on or off; None the row's text colour.
+    pub tone: Option<Rgba>,
+    /// PR7-39 Stage B: the second number's colour, the same way.
+    pub tone2: Option<Rgba>,
+    /// PR7-39 Stage B: the numbers in the body face, not the mono one.
+    pub plain: bool,
 }
 
 /// A list row's height on the grid of `m`: the icon with the padding, or its two lines if taller.
@@ -1084,12 +1090,18 @@ pub fn list_row<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, v: &RowLook, action
         tile.x + tile.w + m.u(3)
     };
     let mut right = r.x + r.w - m.u(4);
-    let mono = Typeface::Mono;
+    let mono = if v.plain { Typeface::Body } else { Typeface::Mono };
     let fixed = v.columns.len() == v.numbers.len();
     for (i, n) in v.numbers.iter().enumerate().rev() {
         let w = ui.p.text_w_face(mono, n, m.body);
         let y = r.y as f32 + (r.h as f32 - ui.p.line_h_face(mono, m.body)) / 2.0;
-        ui.p.text_face(mono, right as f32 - w, y, n, m.body, if v.enabled { t.text } else { t.dim });
+        let col = match v.tone {
+            Some(c) if i == 0 => c,
+            _ if i == 1 && v.tone2.is_some() => v.tone2.unwrap_or(t.text),
+            _ if v.enabled => t.text,
+            _ => t.dim,
+        };
+        ui.p.text_face(mono, right as f32 - w, y, n, m.body, col);
         right -= if fixed { v.columns[i] } else { w.ceil() as i32 } + m.gutter;
     }
     let room = (right - x).max(0) as f32;

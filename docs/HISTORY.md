@@ -48,3 +48,5 @@ Standing script/test hygiene rules: never hand-edit JSON (use `ContentCatalog.up
 | 2026-11-19 | `ui/frames/panel.png` iron line with corner rivets; theme `info` cyan and `good` green | replaced (`PR7-36`, ART-01, ART-02) | Frame A; gold, amber and muted tokens | Style lock; no golden re-recorded |
 | 2026-11-19 | Static Controls key table (`menus::CONTROLS`) | replaced (`PR7-44`) | Rebindable `settings_controls` view | Rebinding asked for; no golden re-recorded |
 | 2026-11-19 | Scenario shots compared with a pixel allowance for idle animation (`FB-347`) | replaced (`ENGINE-17`) | Shot clock; runs are frame-exact | Baselines with an allowance hide real changes; no golden re-recorded |
+| 2026-11-19 | The kit's green exit flag and white point ring on Emberwake's maps | replaced (`PR7-36`, UX-28) | Game-drawn glyphs | Style lock; no golden re-recorded |
+| 2026-11-19 | The shop's hand drawing (PLAYUI1-P) and its per-row hover cards | replaced (`PR7-39` Stage B) | The kit's shop layout; the detail line carries the card text | UI behaviour apart from layout (UISPLIT1); no golden re-recorded |

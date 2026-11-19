@@ -29,7 +29,7 @@ each field is an object with one key, its kind:
 | text, number, flag | `{"text": "..."}`, `{"number": 3}`, `{"flag": true}` | `text_block`, `tooltip` |
 | picture | `{"picture": "ui/help.png"}` (an asset path) | `portrait` |
 | meter | `{"meter": [7, 20]}` (value, max) | `bar_meter` |
-| rows | `{"rows": [{"id", "label", "detail", "detail2", "sub", "picture", "enabled"}]}` | `list_row` |
+| rows | `{"rows": [{"id", "label", "detail", "detail2", "sub", "picture", "enabled", "selected", "tone", "note", "buttons"}]}` | `list_row` |
 | stats | `{"stats": [["Weight", "3"]]}` | `stat_block` |
 | tabs | `{"tabs": {"labels": [...], "open": 0}}` | `tab_rail` |
 | slots | `{"slots": [{"id", "title", "lines", "stamp", "picture"}]}` | `slot_card` |
@@ -55,16 +55,22 @@ buttons and `<screen>.<region>.<i>` for the items of a region, so agents and sce
 - `x`, `y`: an offset in grid tokens after anchoring, on the screen's axes (`y: -6` moves a `bottom` region up).
 - `in`: an earlier region; the region is placed inside its content (a panel shell's body, a tab rail's page).
 - `when`: overrides of the place keys from a text scale up (`text_scale_min`), the last matching one wins.
-- `style`: `main` (the `ornate` frame) or `popup` (the `panel` frame) for a `panel_shell`; `muted` (both columns
-  dim) for a `stat_block`. `text`: a `heading`'s own words (a heading only). `note`: free text.
+- `style`: `main` (the `ornate` frame), `popup` (the `panel` frame) or `box` (one thin `edge` line over the theme
+  colour the region's `fill` names, no frame file: a column inside a main panel) for a `panel_shell`; `muted` (both
+  columns dim) for a `stat_block`; `muted` (small, dim) or `title` (a panel's title, the display face) for a `heading`;
+  `muted` or `right` (right-aligned) for a `text_block`, whose `\n` starts a new line; `plain` (numbers in the body
+  face, not the mono one) for a `list_row`. `text`: a `heading`'s own words (a heading only). `note`: free text.
+- `row_ids` (a `list_row` only): `true` gives the rows the view's own ids, `<screen>.row.<id>`; a prefix such as
+  `"stash.row"` gives `<prefix>.<id>`. Two lists of a layout may not share a prefix.
 
 | Component | Binds (required, then optional) |
 | --- | --- |
 | `panel_shell` | (`title`) |
 | `text_block`, `tooltip` | `text` |
 | `stat_block` | `stats` |
-| `list_row` | `rows` (`select`) |
-| `heading` | none: its `text` key is the heading (gold, display face, one line) |
+| `list_row` | `rows` (`select`, `then`) |
+| `detail_line` | (`text`): the note of the row under the pointer, else the focused row's, else this text |
+| `heading` | none: its `text` key is the heading (gold, display face, one line); or (`text`) a bound text field |
 | `tab_rail` | `tabs`, `select` |
 | `slot_card` | `slots` (`select`) |
 | `menu_column`, `button_bar` | `actions`: a list of action ids, or `"all"` |
@@ -78,6 +84,21 @@ keep the focused row and one row each side in view), with a scroll bar, and ever
 or not, so `<screen>.<region>.<n>` resolves for any row. A list whose rows have no picture draws no icon tiles. Rows
 with a `detail2` show two numbers columns (`detail`, then `detail2` at the right end), each as wide as its widest
 entry in the list, so they line up. The default layout gives a list its whole height, so it never scrolls.
+
+Rows for a shop-like screen (ENGINE-19):
+
+- `buttons`: `[{"action": "buy5", "label": "+5", "enabled": true}]` draws buttons at the row's right end. Each is its
+  own widget, `<row widget id>.<action>`, and runs that view action with the row's id as `arg`. A button is off when
+  it says so, when its row is off, or when the view has its action off. Every row of the list keeps the widest row's
+  buttons' room free, so the numbers line up.
+- `selected: true` draws the row in the selected fill (for example a row already in the trade).
+- `tone2`: the same for `detail2` (a count in `info`, say).
+- `tone`: a theme colour role (`foe`, `good`, `gold`, `info`, `dim`...) for the row's `detail`, so a price above the
+  gold left can show in `foe` with no colour in the layout. An unknown role is refused.
+- `note`: the longer line a `detail_line` region shows while the row is under the pointer or focused. The screen gets
+  that row back in `Drawn::hot` (its widget id and note), for a detail line that stays after the pointer leaves.
+- bind `then`: a second rows field listed under a divider in the same scroll area, dimmed and never clicked (what a
+  shop does not buy). Its widgets are `<screen>.<region>.then.<i>`.
 
 A tab rail lower than 24 units draws as a horizontal strip, and a region `in` it goes below the strip. A region id
 may not also be an action id (their widget ids would clash). A list, tab, slot or icon whose `select` action is missing

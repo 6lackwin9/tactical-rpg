@@ -1090,8 +1090,8 @@ pub(crate) mod tests {
         let row = map.widgets().into_iter().map(|w| s(json::dict(&w), "id")).find(|id| id.starts_with("shop.row.")).expect("the supply row");
         map.click_id(&mut cx, &row).expect("adds the supplies");
         frame(&mut map, &mut cx, &mut g, 1.0);
-        let card = map.widgets().into_iter().find(|w| w["id"] == "trade.confirm").expect("confirm")["tip"].to_string();
-        assert!(card.contains("Not enough Scrap: 2 more needed."), "{card}");
+        let why = map.state(&cx)["shop"]["view"]["fields"]["errors"]["text"].as_str().unwrap_or("").to_string();
+        assert!(why.contains("Not enough Scrap: 2 more needed.") && !map.widgets().iter().any(|w| w["id"] == "shop.confirm" && w["enabled"] == json!(true)), "{why}");
     }
 
     /// P1: the purse words of log lines and tips: the camp world's short names; a world without a purse keeps today's
