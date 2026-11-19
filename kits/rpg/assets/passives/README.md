@@ -5,7 +5,7 @@ the shared slate tile (STYLE_BIBLE section 4), added in code when the sheet is c
 It must read at 16 px, the size under a plate's portrait. A game points each of its passives at one archetype; the kit
 names no game.
 
-Status: queued on the image pipeline as `icons_kit_passives_1` (2026-11-19); no files yet.
+Status: placeholder set landed 2026-11-19 from the image pipeline run `icons_kit_passives_1` (sheet 2, cut by `art_src/prompts/cut_queue_hub_icons.py`): `<archetype>.png`, 64 px. Generic kit art, so it may be approved as final after review in game.
 
 | Archetype | Object | Covers |
 | --- | --- | --- |
