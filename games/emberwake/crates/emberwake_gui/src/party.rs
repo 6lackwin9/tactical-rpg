@@ -2066,7 +2066,7 @@ mod tests {
     #[test]
     fn a_member_forbidden_two_handers_keeps_them_off_and_its_empty_slot() {
         let (mut d, mut m, mut st) = setup();
-        let no_2h = emberwake_data::PassiveDef { id: "t_no_2h".into(), name: "No 2H".into(), effects: vec![json!({"type": "forbid_hands", "hands": 2})], slot: String::new() };
+        let no_2h = emberwake_data::PassiveDef { id: "t_no_2h".into(), name: "No 2H".into(), effects: vec![json!({"type": "forbid_hands", "hands": 2})], slot: String::new(), icon: String::new() };
         std::sync::Arc::make_mut(&mut d.cat).passives.insert(no_2h.id.clone(), no_2h);
         let mut great: Vec<&String> = d.cat.items.iter().filter(|(id, i)| i.two_handed && m.can_wear(&d, id, "main_hand").is_ok()).map(|(id, _)| id).collect();
         great.sort();
@@ -2273,7 +2273,7 @@ mod tests {
         assert!(text.ends_with(&format!("KNOW {know} x 10 = 5 (capped at the max; 0-5).")), "{text}");
         // a passive `stat` effect on the derived id (a scratch passive applied to the built unit): the value rises by it
         // and the breakdown names the passive
-        let steady = emberwake_data::PassiveDef { id: "test_steady".into(), name: "Steady Test".into(), effects: vec![json!({"type": "stat", "stat": "nerve", "value": 4})], slot: String::new() };
+        let steady = emberwake_data::PassiveDef { id: "test_steady".into(), name: "Steady Test".into(), effects: vec![json!({"type": "stat", "stat": "nerve", "value": 4})], slot: String::new(), icon: String::new() };
         let mut d = d.clone();
         d.edit_cat(|cat| {
             cat.passives.insert(steady.id.clone(), steady.clone());

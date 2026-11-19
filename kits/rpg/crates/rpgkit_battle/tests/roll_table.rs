@@ -81,7 +81,7 @@ fn session() -> Session {
     let mut def = EncounterDef::from_obj(row.as_object().unwrap());
     def.ruleset = Ruleset::from_row(json!({"id": TIMELINE, "name": "Timeline", "rules": [TRIGGERS, UNIT_METERS]}).as_object().unwrap());
     let mut cat = catalog();
-    cat.passives.insert("trait0".into(), PassiveDef { id: "trait0".into(), name: "Trait".into(), effects: vec![json!({"type": "meter", "meter": "rupture"})], slot: String::new() });
+    cat.passives.insert("trait0".into(), PassiveDef { id: "trait0".into(), name: "Trait".into(), effects: vec![json!({"type": "meter", "meter": "rupture"})], slot: String::new(), icon: String::new() });
     let mut s = Session::start(Arc::new(cat), def, &Holders);
     for (c, cell) in [(HERO, V2::new(4, 4)), (1, V2::new(4, 5)), (FOE, V2::new(5, 4))] {
         s.w.grid.positions[c] = Some(cell);

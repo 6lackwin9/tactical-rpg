@@ -345,7 +345,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
     let has_skill = |id: &str| v.has("skills", id);
     match kind {
         "skills" => errors.extend(skill::entry_errors(v, &e)),
-        "passives" => errors.extend(simple::effect_errors(json::get(&e, "effects"), &has_skill, &v.derived_ids(), false, false, &hooks::Ctx::of(v))),
+        "passives" => {
+            errors.extend(simple::effect_errors(json::get(&e, "effects"), &has_skill, &v.derived_ids(), false, false, &hooks::Ctx::of(v)));
+            errors.extend(assets::passive_icon_errors(v, &e));
+        }
         "terrain" => errors.extend(simple::terrain_errors(v, &e, current_id)),
         "classes" => errors.extend(unit::class_errors(v, &e)),
         "units" => {

@@ -105,8 +105,38 @@ def cli_stored(game, keys):
     return lambda kind, eid, world: table.get((kind, world, eid))
 
 
+def boundary():
+    """The commits a shallow clone cuts its history at (none in a full clone). A seed whose last commit is one of them
+    carries that commit's time, not its own (a depth-1 CI checkout: every seed the same time)."""
+    r = subprocess.run(["git", "rev-parse", "--git-path", "shallow"], cwd=ROOT, capture_output=True, text=True)
+    path = Path(r.stdout.strip()) if r.returncode == 0 else None
+    if path is not None and not path.is_absolute():
+        path = ROOT / path
+    if path is None or not path.is_file():
+        return set()
+    return {ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()}
+
+
+def cut_off(paths, cut=None):
+    """The seeds of `paths` whose last commit is a shallow clone's boundary commit (their commit order is unknown)."""
+    cut = boundary() if cut is None else cut
+    if not cut:
+        return []
+    out = []
+    for p in paths:
+        r = subprocess.run(["git", "log", "--format=%H", "-1", "--", str(p)], cwd=ROOT, capture_output=True, text=True)
+        if r.stdout.strip() in cut:
+            out.append(Path(p).name)
+    return out
+
+
 def main(argv):
     show_all = "--all" in argv
+    folder = ROOT / "games" / (([a for a in argv if not a.startswith("--")] or ["emberwake"])[0]) / "data" / "seeds"
+    lost = cut_off(sorted(folder.glob("*.json")))
+    if lost:
+        print("[seeds] FAIL: a shallow clone hides the commit order of %d seed(s) (%s); check out with full history (git fetch --unshallow, or fetch-depth: 0 in CI)" % (len(lost), ", ".join(lost[:5]) + (" ..." if len(lost) > 5 else "")))
+        return 1
     pos = [a for a in argv if not a.startswith("--")]
     game = pos[0] if pos else "emberwake"
     folder = ROOT / "games" / game / "data" / "seeds"

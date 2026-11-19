@@ -13,7 +13,8 @@
 					"levels": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "weapon_drill"
 		},
 		{
 			"id": "bow_training",
@@ -26,7 +27,8 @@
 					"levels": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "weapon_drill"
 		},
 		{
 			"id": "hardy",
@@ -39,7 +41,8 @@
 					"value": 2
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "might"
 		},
 		{
 			"id": "keen_senses",
@@ -52,7 +55,8 @@
 					"value": 2
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "perception"
 		},
 		{
 			"id": "ruin_lore",
@@ -68,7 +72,8 @@
 					}
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "intellect"
 		},
 		{
 			"id": "steady_nerves",
@@ -86,7 +91,8 @@
 					"value": 25
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "poise_up"
 		},
 		{
 			"id": "second_wind",
@@ -98,7 +104,8 @@
 					"value": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "ap_gain"
 		},
 		{
 			"id": "dirty_tricks",
@@ -110,7 +117,8 @@
 					"value": 5
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "crit_up"
 		},
 		{
 			"id": "field_medic",
@@ -123,7 +131,8 @@
 					"levels": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "heal_up"
 		},
 		{
 			"id": "arcane_study",
@@ -136,7 +145,8 @@
 					"levels": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "intellect"
 		},
 		{
 			"id": "riposte_drill",
@@ -149,7 +159,8 @@
 					"levels": 2
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "weapon_drill"
 		},
 		{
 			"id": "wardens_eye",
@@ -160,7 +171,8 @@
 					"type": "foresight"
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "plan_sight"
 		},
 		{
 			"id": "tl_braced_poise",
@@ -173,7 +185,8 @@
 					"value": 20
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "poise_up"
 		},
 		{
 			"id": "tl_anvil_posture",
@@ -186,7 +199,8 @@
 					"max_blocks": 1
 				}
 			],
-			"slot": "keystone"
+			"slot": "keystone",
+			"icon": "poise_up"
 		},
 		{
 			"id": "tl_hawk_eye",
@@ -198,7 +212,8 @@
 					"range": 4
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "plan_sight"
 		},
 		{
 			"id": "polearm_drill",
@@ -211,7 +226,8 @@
 					"levels": 2
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "weapon_drill"
 		},
 		{
 			"id": "censer_drill",
@@ -224,7 +240,8 @@
 					"levels": 2
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "weapon_drill"
 		},
 		{
 			"id": "sprayer_drill",
@@ -237,7 +254,8 @@
 					"levels": 2
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "weapon_drill"
 		},
 		{
 			"id": "scourge_drill",
@@ -250,7 +268,8 @@
 					"levels": 2
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "weapon_drill"
 		},
 		{
 			"id": "bone_saw_drill",
@@ -263,7 +282,8 @@
 					"levels": 2
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "weapon_drill"
 		},
 		{
 			"id": "braced_poise",
@@ -280,7 +300,8 @@
 					"immune": "guarding"
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "poise_up"
 		},
 		{
 			"id": "kinetic_leverage",
@@ -298,7 +319,8 @@
 					]
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "ap_gain"
 		},
 		{
 			"id": "unbroken_phalanx",
@@ -318,7 +340,8 @@
 					]
 				}
 			],
-			"slot": "keystone"
+			"slot": "keystone",
+			"icon": "immovable"
 		},
 		{
 			"id": "castellans_penance",
@@ -344,7 +367,8 @@
 					]
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "cover_ally"
 		},
 		{
 			"id": "prowlers_cadence",
@@ -362,7 +386,8 @@
 					"value": 40
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "agility"
 		},
 		{
 			"id": "ghost_of_the_undercroft",
@@ -377,7 +402,8 @@
 					"value": 1
 				}
 			],
-			"slot": "keystone"
+			"slot": "keystone",
+			"icon": "plan_sight"
 		},
 		{
 			"id": "anatomical_precision",
@@ -395,7 +421,8 @@
 					"value": 25
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "poise_up"
 		},
 		{
 			"id": "triage_efficiency",
@@ -416,7 +443,8 @@
 					]
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "heal_up"
 		},
 		{
 			"id": "pure_hippocratic_oath",
@@ -429,7 +457,8 @@
 					"value": 0.4
 				}
 			],
-			"slot": "keystone"
+			"slot": "keystone",
+			"icon": "heal_up"
 		},
 		{
 			"id": "copyist_of_st_lyras",
@@ -453,7 +482,8 @@
 					]
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "heal_up"
 		},
 		{
 			"id": "high_ground_traverse",
@@ -466,7 +496,8 @@
 					"value": 2
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "perception"
 		},
 		{
 			"id": "cover_breaker",
@@ -478,7 +509,8 @@
 					"value": 15
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "status_potency"
 		},
 		{
 			"id": "dead_eye_discipline",
@@ -503,7 +535,8 @@
 					]
 				}
 			],
-			"slot": "keystone"
+			"slot": "keystone",
+			"icon": "ap_gain"
 		},
 		{
 			"id": "crag_hawkeye",
@@ -515,7 +548,8 @@
 					"range": 4
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "plan_sight"
 		},
 		{
 			"id": "hypertrophy",
@@ -532,7 +566,8 @@
 					"bonus_tiles": 1
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "might"
 		},
 		{
 			"id": "anvil_posture",
@@ -545,7 +580,8 @@
 					"max_blocks": 1
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "poise_up"
 		},
 		{
 			"id": "unbroken_iron",
@@ -573,7 +609,8 @@
 					]
 				}
 			],
-			"slot": "keystone"
+			"slot": "keystone",
+			"icon": "last_stand"
 		},
 		{
 			"id": "foundry_wired_spite",
@@ -617,7 +654,8 @@
 					]
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "last_stand"
 		},
 		{
 			"id": "combustion_formula",
@@ -630,7 +668,8 @@
 					"value": 50
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "resist"
 		},
 		{
 			"id": "catalytic_munitions",
@@ -656,7 +695,8 @@
 					]
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "status_potency"
 		},
 		{
 			"id": "volatile_reaction_catalyst",
@@ -669,7 +709,8 @@
 					"value": 2
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "intellect"
 		},
 		{
 			"id": "unyielding_authority",
@@ -686,7 +727,8 @@
 					"immune": "always"
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "immovable"
 		},
 		{
 			"id": "fanatical_agony",
@@ -713,7 +755,8 @@
 					]
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "last_stand"
 		},
 		{
 			"id": "heat_tempered_carapace",
@@ -731,7 +774,8 @@
 					"value": 50
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "resist"
 		},
 		{
 			"id": "calcified_frame",
@@ -749,7 +793,8 @@
 					"value": 50
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "resist"
 		},
 		{
 			"id": "traitors_discipline",
@@ -767,7 +812,8 @@
 					"value": 50
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "poise_up"
 		},
 		{
 			"id": "marrow_valve",
@@ -780,7 +826,8 @@
 					"value": 25
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "resist"
 		},
 		{
 			"id": "molten_slag_tempering",
@@ -798,7 +845,8 @@
 					"max_blocks": 0
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "resist"
 		},
 		{
 			"id": "vat_masters_grease",
@@ -816,7 +864,8 @@
 					"value": 50
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "resist"
 		},
 		{
 			"id": "amalgam_carapace",
@@ -839,7 +888,8 @@
 					"value": 50
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "resist"
 		},
 		{
 			"id": "marrow_infused",
@@ -862,7 +912,8 @@
 					"value": 75
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "poise_up"
 		},
 		{
 			"id": "anatomical_flaw",
@@ -880,7 +931,8 @@
 					"value": 0.15
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "crit_up"
 		},
 		{
 			"id": "cinder_childs_reflex",
@@ -914,7 +966,8 @@
 					]
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "agility"
 		},
 		{
 			"id": "master_alchemist",
@@ -952,7 +1005,8 @@
 					"value": 0.2
 				}
 			],
-			"slot": "keystone"
+			"slot": "keystone",
+			"icon": "status_potency"
 		},
 		{
 			"id": "mastery_poise_ward",
@@ -965,7 +1019,8 @@
 					"value": 15
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "poise_up"
 		},
 		{
 			"id": "mastery_bleed_edge",
@@ -977,7 +1032,8 @@
 					"value": 5
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "status_potency"
 		},
 		{
 			"id": "mastery_heavy_impact",
@@ -989,7 +1045,8 @@
 					"bonus_tiles": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "might"
 		},
 		{
 			"id": "mastery_agile_step",
@@ -1002,7 +1059,8 @@
 					"value": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "agility"
 		},
 		{
 			"id": "mastery_arcane_focus",
@@ -1015,7 +1073,8 @@
 					"value": 0.1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "intellect"
 		},
 		{
 			"id": "mastery_sacred_censer",
@@ -1028,7 +1087,8 @@
 					"value": 0.1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "heal_up"
 		},
 		{
 			"id": "mastery_bulwark_stance",
@@ -1040,7 +1100,8 @@
 					"immune": "guarding"
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "immovable"
 		},
 		{
 			"id": "mastery_woven_ward",
@@ -1052,7 +1113,8 @@
 					"value": 3
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "status_potency"
 		},
 		{
 			"id": "mastery_bow",
@@ -1065,7 +1127,8 @@
 					"value": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "perception"
 		},
 		{
 			"id": "mastery_crossbow",
@@ -1078,7 +1141,8 @@
 					"value": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "perception"
 		},
 		{
 			"id": "mastery_fist",
@@ -1091,7 +1155,8 @@
 					"value": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "might"
 		},
 		{
 			"id": "inoculated_test",
@@ -1113,7 +1178,8 @@
 					"skill": "marrow_bolt"
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "status_potency"
 		},
 		{
 			"id": "aberrant_strain",
@@ -1127,7 +1193,8 @@
 					"floor": 0
 				}
 			],
-			"slot": "passive"
+			"slot": "passive",
+			"icon": "status_potency"
 		},
 		{
 			"id": "calcify_1",
@@ -1185,7 +1252,8 @@
 					"value": 5
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "resist"
 		},
 		{
 			"id": "calcify_4",
@@ -1200,7 +1268,8 @@
 					"type": "pierce_melee"
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "might"
 		},
 		{
 			"id": "heavy_drill",
@@ -1213,7 +1282,8 @@
 					"levels": 2
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "armour_drill"
 		},
 		{
 			"id": "medium_drill",
@@ -1226,7 +1296,8 @@
 					"levels": 2
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "armour_drill"
 		},
 		{
 			"id": "light_drill",
@@ -1239,7 +1310,8 @@
 					"levels": 2
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "armour_drill"
 		},
 		{
 			"id": "vanguard_poise",
@@ -1256,7 +1328,8 @@
 					"immune": "guarding"
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "poise_up"
 		},
 		{
 			"id": "iron_counter",
@@ -1276,7 +1349,8 @@
 					]
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "ap_gain"
 		},
 		{
 			"id": "iron_shoulders",
@@ -1293,7 +1367,8 @@
 					"bonus_tiles": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "might"
 		},
 		{
 			"id": "kiln_poise",
@@ -1323,7 +1398,8 @@
 					"limit": "battle"
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "last_stand"
 		},
 		{
 			"id": "keen_elevation",
@@ -1342,7 +1418,8 @@
 					"ranged": true
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "perception"
 		},
 		{
 			"id": "patient_sight",
@@ -1369,7 +1446,8 @@
 					]
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "status_potency"
 		},
 		{
 			"id": "twin_light_tempo",
@@ -1417,7 +1495,8 @@
 					]
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "crit_up"
 		},
 		{
 			"id": "gutter_reflex",
@@ -1448,7 +1527,8 @@
 					]
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "agility"
 		},
 		{
 			"id": "triage_discipline",
@@ -1476,7 +1556,8 @@
 					]
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "heal_up"
 		},
 		{
 			"id": "surgical_precision",
@@ -1493,7 +1574,8 @@
 					"value": 10
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "heal_up"
 		},
 		{
 			"id": "reactive_reagents",
@@ -1529,7 +1611,8 @@
 					]
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "resist"
 		},
 		{
 			"id": "catalytic_reserve",
@@ -1557,7 +1640,8 @@
 					"value": 0.1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "intellect"
 		},
 		{
 			"id": "calcify_2",
@@ -1575,7 +1659,8 @@
 					"value": -1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "immovable"
 		},
 		{
 			"id": "calcify_3",
@@ -1599,7 +1684,8 @@
 					"value": -0.15
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "resist"
 		},
 		{
 			"id": "orig_watch_shield",
@@ -1612,7 +1698,8 @@
 					"value": 6
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "poise_up"
 		},
 		{
 			"id": "orig_crag_eye",
@@ -1625,7 +1712,8 @@
 					"value": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "perception"
 		},
 		{
 			"id": "orig_soot_step",
@@ -1638,7 +1726,8 @@
 					"value": 20
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "agility"
 		},
 		{
 			"id": "orig_mortuary_calm",
@@ -1651,7 +1740,8 @@
 					"value": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "intellect"
 		},
 		{
 			"id": "orig_slag_grip",
@@ -1664,7 +1754,8 @@
 					"value": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "might"
 		},
 		{
 			"id": "orig_alum_nose",
@@ -1677,7 +1768,8 @@
 					"value": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "intellect"
 		},
 		{
 			"id": "temper_steady",
@@ -1690,7 +1782,8 @@
 					"value": 6
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "poise_up"
 		},
 		{
 			"id": "temper_wary",
@@ -1703,7 +1796,8 @@
 					"value": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "perception"
 		},
 		{
 			"id": "temper_quiet",
@@ -1716,7 +1810,8 @@
 					"value": 1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "intellect"
 		},
 		{
 			"id": "temper_reckless",
@@ -1733,7 +1828,8 @@
 					"value": -1
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "crit_up"
 		},
 		{
 			"id": "martyr_last_stand",
@@ -1761,7 +1857,8 @@
 					"value": 100
 				}
 			],
-			"slot": ""
+			"slot": "",
+			"icon": "last_stand"
 		}
 	]
 }

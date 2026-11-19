@@ -150,8 +150,10 @@ pub struct RegionMap {
     hub: crate::bunks::HubState,
     /// BUNKS1 BK2, BK8: the bunks drawn last frame (agent link `state.bunks`, tests).
     bunks_drawn: Vec<Value>,
-    /// HUB-BUNKS2 (5): the niche bunks' nook floor runs drawn last frame.
-    nooks: Vec<Rect>,
+    /// BUNKS-LAYOUT3 (1): the dressed north wall runs drawn last frame (the wall band and its plank strip).
+    bunk_walls: Vec<Rect>,
+    /// BUNKS-UPGRADE-PROPS1: the props holding a bunk's place drawn last frame (`{prop, until_bunk, file}`).
+    bunk_held: Vec<Value>,
     /// TRANSITIONS1 T2 step 4: the arrival card showing since when, and whether it opened the ticker for its change
     /// lines (closed again when the card goes).
     arrival: Option<(crate::transitions::Arrival, Instant)>,
@@ -543,7 +545,8 @@ impl RegionMap {
             roofs: crate::props::RoofFade::default(),
             hub: crate::bunks::HubState::default(),
             bunks_drawn: Vec::new(),
-            nooks: Vec::new(),
+            bunk_walls: Vec::new(),
+            bunk_held: Vec::new(),
             arrival: None,
             ticker_forced: false,
         }
@@ -1031,7 +1034,8 @@ impl Screen<GameCx> for RegionMap {
         let lead_now = leader_id(cx);
         self.hub.sync(&d, cx.gs_mut(), &lead_now);
         self.bunks_drawn.clear();
-        self.nooks.clear();
+        self.bunk_walls.clear();
+        self.bunk_held.clear();
         let gs = cx.gs().clone();
         // the open conversation; a new node starts its line and its replies scrolled to the top; PORTRAITFX1-D: a
         // portrait left out of the last frame (the conversation ended or hid) is dropped
@@ -1208,17 +1212,34 @@ impl Screen<GameCx> for RegionMap {
             // PROPS1 4.2-4.6: the ground props over the tiles; the standing props go into the sorted pass below. Props
             // are art only: no widget, and walking still comes from `rows`
             // BUNKS1 BK2: in a hub each bunk prop draws its state's art (`<art>_<state>`, where that art exists)
-            let hub_bunks = if self.hub.on() { emberwake_world::bunks::bunks(&gs, t) } else { Vec::new() };
-            let state_t = crate::bunks::state_props(t, &hub_bunks, |art, x, y| {
+            // BUNKS-UPGRADE-PROPS1: the props holding a bunk's place show until the bunk cap reaches it, then the bunk
+            let shown_t = if self.hub.on() { emberwake_world::bunks::shown_props(&gs, t) } else { None };
+            let base_t = shown_t.as_ref().unwrap_or(t);
+            let hub_bunks: Vec<emberwake_world::bunks::Bunk> = if self.hub.on() {
+                let shown: Vec<String> = json::aget(base_t, "props").iter().map(|p| s(json::dict(p), "id")).collect();
+                emberwake_world::bunks::bunks(&gs, t).into_iter().filter(|b| shown.contains(&b.prop)).collect()
+            } else {
+                Vec::new()
+            };
+            let state_t = crate::bunks::state_props(base_t, &hub_bunks, |art, x, y| {
                 let dirs = emberwake_content::art::prop_dirs(&lineage, art);
                 let dirs: Vec<&str> = dirs.iter().map(String::as_str).collect();
                 cx.art.pick(&dirs, None, x as i32, y as i32).is_some()
             });
-            let props = crate::props::layout(state_t.as_ref().unwrap_or(t), &lineage, (geo.ox, geo.oy), geo.cell_size(), paint_area, |dirs, variant, x, y| {
+            let props = crate::props::layout(state_t.as_ref().unwrap_or(base_t), &lineage, (geo.ox, geo.oy), geo.cell_size(), paint_area, |dirs, variant, x, y| {
                 let rel = cx.art.pick(dirs, variant, x, y)?;
                 let size = cx.art.size_of(&rel)?;
                 Some((rel, size))
             });
+            if self.hub.on() {
+                for raw in json::aget(base_t, "props") {
+                    let held = s(json::dict(raw), emberwake_world::bunks::UNTIL_BUNK);
+                    let id = s(json::dict(raw), "id");
+                    if let Some(p) = props.iter().find(|p| !held.is_empty() && p.id == id) {
+                        self.bunk_held.push(json!({"prop": id, "until_bunk": held, "file": p.file}));
+                    }
+                }
+            }
             let prop_arts = collect_prop_arts(t);
             // REGIONVIEW1: past the map is boundary art only: a prop's art that overhangs it is cut there (a footprint
             // cannot leave the map: check P8)
@@ -1233,14 +1254,16 @@ impl Screen<GameCx> for RegionMap {
             for b in &hub_bunks {
                 let Some(p) = props.iter().find(|p| p.id == b.prop) else { continue };
                 let candle = !b.member.is_empty() && waiting.iter().any(|w| w.has(&b.member));
-                self.bunks_drawn.push(json!({"prop": b.prop, "member": b.member, "state": b.state.name(), "candle": candle, "file": p.file}));
+                let bed = crate::bunks::bed_art(&b.art);
+                let drawn = crate::bunks::drawn_rect(&bed, p.rect);
+                self.bunks_drawn.push(json!({"prop": b.prop, "member": b.member, "state": b.state.name(), "candle": candle, "file": p.file, "niche": bed.niche, "drawn": [drawn.x, drawn.y, drawn.w, drawn.h], "flip": p.flip}));
                 if candle {
-                    candles.push(p.rect);
+                    candles.push(drawn);
                 }
                 if modal {
                     continue;
                 }
-                let hit = p.rect.intersect(map_area);
+                let hit = crate::bunks::drawn_rect(&crate::bunks::bed_art(&b.art), p.rect).intersect(map_area);
                 let (name, word) = if ui.hover(hit) { crate::bunks::bunk_tip(&d, &gs, b) } else { (String::new(), String::new()) };
                 let act = (!b.member.is_empty()).then(|| RAct::Member(b.member.clone()));
                 ui.push(format!("{}{}", crate::bunks::BUNK_PREFIX, b.prop), "bunk", bunk_label(&d, &gs, &b.member), hit, true, false, act, if name.is_empty() { Vec::new() } else { tip(&name, &word) });
@@ -1395,47 +1418,70 @@ impl Screen<GameCx> for RegionMap {
             let idle = ClipPlayer::default();
             let mut sprites = Vec::new();
             let mut party_frame = None;
-            // HUB-BUNKS2: the hub bunks' drawn rects (a plate keeps to the room its neighbours leave) and the niche bunks'
-            // nooks (drawn once, before the first bunk)
-            let bunk_fits: Vec<(Rect, String)> = props
+            // HUB-BUNKS2, BUNKS-LAYOUT3: the hub bunks' drawn rects (a plate keeps to the room its neighbours leave) and
+            // the dressed north wall with the niches (drawn once, before the first bunk)
+            let fit_rects: Vec<Rect> = props
                 .iter()
-                .filter(|p| hub_bunks.iter().any(|b| b.prop == p.id))
-                .map(|p| {
-                    let art = prop_art_of(&prop_arts, &geo, p).unwrap_or("").to_string();
-                    (prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles).0.unwrap_or(p.rect), art)
-                })
+                .filter_map(|p| hub_bunks.iter().find(|b| b.prop == p.id).map(|b| crate::bunks::drawn_rect(&crate::bunks::bed_art(&b.art), p.rect)))
                 .collect();
-            let fit_rects: Vec<Rect> = bunk_fits.iter().map(|(r, _)| *r).collect();
-            let mut nooks_drawn = false;
+            let mut wall_drawn = false;
             for item in &order {
                 match *item {
                     Item::Prop(i) => {
                         let p = &props[i];
                         let (fit, mounted) = prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles);
                         let bunk = hub_bunks.iter().find(|b| b.prop == p.id);
-                        if bunk.is_some() && !nooks_drawn {
-                            nooks_drawn = true;
-                            let niches: Vec<Rect> = bunk_fits.iter().filter(|(_, art)| !crate::bunks::bed_art(art).head_south).map(|(r, _)| *r).collect();
-                            self.nooks = crate::bunks::draw_nooks(&mut ui, cx, &lineage, &niches);
+                        if bunk.is_some() && !wall_drawn {
+                            wall_drawn = true;
+                            let (cw, ch) = geo.cell_size();
+                            let runs: Vec<(i32, i32, i32)> = crate::bunks::wall_runs(t, &hub_bunks).iter().map(|&(x0, x1, y)| (geo.ox + x0 as i32 * cw, geo.ox + x1 as i32 * cw, geo.oy + (y as i32 + 1) * ch)).collect();
+                            let niches: Vec<(crate::bunks::Pen, bool)> = hub_bunks
+                                .iter()
+                                .filter_map(|b| {
+                                    let bed = crate::bunks::bed_art(&b.art);
+                                    let pd = props.iter().find(|p| p.id == b.prop).filter(|_| bed.niche)?;
+                                    let founder = gs.party.member(&b.member).is_some_and(|m| !json::s(d.resolve(&gs.world_id, "characters", &m.lore_ref), "id").is_empty());
+                                    Some((crate::bunks::Pen::of(&ui.p, &bed, pd.rect, pd.flip), founder))
+                                })
+                                .collect();
+                            let k = ui.p.v.s * cw as f32 / crate::props::ART_TILE as f32;
+                            self.bunk_walls = crate::bunks::draw_wall(&mut ui, cx, &lineage, &runs, &niches, k);
                         }
-                        draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
-                        // HUB-BUNKS2 (2)-(4): an occupied bunk's dressing and its brass plate (with the bunk, in depth)
-                        if let Some(b) = bunk.filter(|b| !b.member.is_empty()) {
-                            let r = fit.unwrap_or(p.rect);
-                            let bed = crate::bunks::bed_art(prop_art_of(&prop_arts, &geo, p).unwrap_or(&b.art));
-                            let dressed = crate::bunks::dress(&mut ui, cx, &lineage, b, &bed, r);
-                            if let Some(m) = gs.party.member(&b.member) {
-                                let (name, class, class_id) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m), m.class_id(&d));
-                                let room = crate::bunks::plate_room(r, &fit_rects);
-                                let plate = crate::bunks::plate_rect(&mut ui.p, r, &bed, &name, room);
-                                let full = crate::bunks::plate_need(&mut ui.p, &name) <= plate.w;
-                                let shown = crate::bunks::plate_name(&mut ui.p, &name, plate.w);
-                                crate::bunks::draw_plate(&mut ui, cx, plate, &name, &class_id, &class);
-                                if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
-                                    e["plate"] = json!({"name": name, "shown": shown, "class": class, "class_id": class_id, "rect": [plate.x, plate.y, plate.w, plate.h], "full": full, "wall": !bed.head_south, "room": room});
-                                    e["drawn"] = json!([r.x, r.y, r.w, r.h]);
-                                    e["dressed"] = json!({"blanket": dressed.blanket, "gear": dressed.gear, "keepsake": dressed.keepsake, "asleep": dressed.asleep});
-                                }
+                        let Some(b) = bunk else {
+                            draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
+                            continue;
+                        };
+                        // BUNKS-LAYOUT3: the bed at the take 8 mock's place, its dressing and its brass plate (with the
+                        // bunk, in depth)
+                        let bed = crate::bunks::bed_art(&b.art);
+                        let pen = crate::bunks::Pen::of(&ui.p, &bed, p.rect, p.flip);
+                        let r = crate::bunks::drawn_rect(&bed, p.rect);
+                        let kept = ui.p.c.clip;
+                        let inside = ui.p.v.rect(map_rect);
+                        ui.p.c.clip = Some(kept.map_or(inside, |c| c.intersect(inside)));
+                        crate::bunks::draw_bed(&mut ui, cx, &pen, p.file.as_deref());
+                        let dressed = crate::bunks::dress(&mut ui, cx, &lineage, b, &bed, &pen, p.file.as_deref());
+                        if !bed.niche {
+                            crate::bunks::draw_post(&mut ui, &pen, &bed);
+                        }
+                        ui.p.c.clip = kept;
+                        let room = crate::bunks::plate_room(r, &fit_rects);
+                        let entry = json!({"blanket": dressed.blanket, "gear": dressed.gear, "board": dressed.board, "asleep": dressed.asleep, "pose": dressed.pose, "head": dressed.head.map(|h| json!([h.x, h.y, h.w, h.h]))});
+                        if let Some(m) = gs.party.member(&b.member) {
+                            let (name, class, class_id) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m), m.class_id(&d));
+                            let plate = crate::bunks::plate_rect(&mut ui.p, r, &bed, &name, room, p.flip);
+                            let full = crate::bunks::plate_need(&mut ui.p, &name) <= plate.w;
+                            let shown = crate::bunks::plate_name(&mut ui.p, &name, plate.w);
+                            crate::bunks::draw_plate(&mut ui, cx, plate, &name, &class_id, &class);
+                            if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
+                                e["plate"] = json!({"name": name, "shown": shown, "class": class, "class_id": class_id, "rect": [plate.x, plate.y, plate.w, plate.h], "full": full, "wall": bed.niche, "room": room});
+                                e["dressed"] = entry;
+                            }
+                        } else if !bed.niche {
+                            let plate = crate::bunks::plate_rect(&mut ui.p, r, &bed, "", room, p.flip);
+                            crate::bunks::draw_blank_plate(&mut ui, plate);
+                            if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
+                                e["blank_plate"] = json!([plate.x, plate.y, plate.w, plate.h]);
                             }
                         }
                     }
@@ -1721,7 +1767,8 @@ impl Screen<GameCx> for RegionMap {
             "roofs": self.roofs.state(),
             // BUNKS1: in a hub, where each member idles and each bunk's member, state and candle (null elsewhere)
             "hub": self.hub.state(), "bunks": (!self.bunks_drawn.is_empty()).then(|| self.bunks_drawn.clone()),
-            "nooks": (!self.nooks.is_empty()).then(|| self.nooks.iter().map(|r| json!([r.x, r.y, r.w, r.h])).collect::<Vec<_>>())})
+            "bunk_held": (!self.bunk_held.is_empty()).then(|| self.bunk_held.clone()),
+            "bunk_walls": (!self.bunk_walls.is_empty()).then(|| self.bunk_walls.iter().map(|r| json!([r.x, r.y, r.w, r.h])).collect::<Vec<_>>())})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
@@ -3258,6 +3305,8 @@ mod tests {
             ["portraits", "full_body", f] => png(f),
             ["items", _, f] => png(f),
             ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
+            // PASSIVE-ICON1: the kit's passive icon archetypes
+            ["passives", f] => png(f),
             // LOOK1-G1: the theme file and its nine-slice frames (`<role>.png` with a `<role>.json` sidecar)
             ["ui", "theme.json"] => true,
             // UISPLIT1: screen layout files and their view fixtures

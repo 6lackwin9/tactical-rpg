@@ -84,7 +84,7 @@ fn session(rules: Ruleset) -> World {
     let mut def = EncounterDef::from_obj(row.as_object().unwrap());
     def.ruleset = rules;
     let mut cat = catalog();
-    cat.passives.insert("t_trait".into(), PassiveDef { id: "t_trait".into(), name: "Trait".into(), effects: vec![json!({"type": "meter", "meter": "t_gauge"})], slot: String::new() });
+    cat.passives.insert("t_trait".into(), PassiveDef { id: "t_trait".into(), name: "Trait".into(), effects: vec![json!({"type": "meter", "meter": "t_gauge"})], slot: String::new(), icon: String::new() });
     let mut s = Session::start(Arc::new(cat), def, &Holders);
     for (c, cell) in [(HERO, V2::new(4, 4)), (ALLY, V2::new(4, 5)), (FOE, V2::new(5, 4))] {
         s.w.grid.positions[c] = Some(cell);

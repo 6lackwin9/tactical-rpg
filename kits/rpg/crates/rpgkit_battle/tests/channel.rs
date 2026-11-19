@@ -147,7 +147,7 @@ fn session_roster(ruleset: Ruleset, roster: &dyn Roster) -> Session {
     let mut def = EncounterDef::from_obj(row.as_object().unwrap());
     def.ruleset = ruleset;
     let mut cat = catalog();
-    cat.passives.insert("inoculated".into(), PassiveDef { id: "inoculated".into(), name: "Inoculated".into(), effects: vec![json!({"type": "meter", "meter": "strain"})], slot: String::new() });
+    cat.passives.insert("inoculated".into(), PassiveDef { id: "inoculated".into(), name: "Inoculated".into(), effects: vec![json!({"type": "meter", "meter": "strain"})], slot: String::new(), icon: String::new() });
     let mut s = Session::start(Arc::new(cat), def, roster);
     for (c, cell) in [(HERO, V2::new(4, 4)), (ALLY, V2::new(4, 5)), (FOE, V2::new(5, 4)), (FOE2, V2::new(5, 6))] {
         s.w.grid.positions[c] = Some(cell);

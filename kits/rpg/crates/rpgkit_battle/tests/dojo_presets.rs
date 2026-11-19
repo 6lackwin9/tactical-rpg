@@ -28,7 +28,7 @@ fn catalog(rows: Value) -> Catalog {
         "unit_meters": [{"id": "strain", "name": "Strain", "short": "St", "min": 0, "max": 100, "show": "bar", "bands": [{"id": "calm", "from": 0}]}],
         "dojo_presets": rows,
     }));
-    cat.passives.insert("p_meter".into(), PassiveDef { id: "p_meter".into(), name: "Meter Test".into(), effects: vec![json!({"type": "meter", "meter": "strain"})], slot: String::new() });
+    cat.passives.insert("p_meter".into(), PassiveDef { id: "p_meter".into(), name: "Meter Test".into(), effects: vec![json!({"type": "meter", "meter": "strain"})], slot: String::new(), icon: String::new() });
     cat
 }
 

@@ -53,7 +53,16 @@ fn seeded(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
     for step in seed["steps"].as_array().expect("seed steps") {
         assert_eq!(step["op"], "upsert", "the seed only upserts");
         let kind = step["kind"].as_str().unwrap();
-        if let Err(e) = store::upsert(&dir, None, kind, json::dict(&step["entry"]), None) {
+        // PASSIVE-ICON1 (ENGINE-24): the later seed `passive_icon1.json` owns a passive's `icon`; the replay keeps it
+        let mut entry = json::dict(&step["entry"]).clone();
+        if kind == "passives" && !entry.contains_key("icon") {
+            let shipped: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("catalog/passives.json")).unwrap()).unwrap();
+            let id = json::s(&entry, "id");
+            if let Some(row) = json::aget(json::dict(&shipped), "entries").iter().map(json::dict).find(|r| json::s(r, "id") == id) {
+                entry.insert("icon".into(), row.get("icon").cloned().unwrap_or_default());
+            }
+        }
+        if let Err(e) = store::upsert(&dir, None, kind, &entry, None) {
             panic!("seed step {kind}: {e:?}");
         }
     }

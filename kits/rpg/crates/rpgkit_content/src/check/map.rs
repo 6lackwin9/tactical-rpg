@@ -2,12 +2,13 @@
 //! template, the [encounter, weight] pair lists (also used by routes) and the soft location warnings. PROPS1: the
 //! map template's own prop checks P1-P12 (`prop_errors`, engine-only: Godot's MapCatalog had no props). REVEAL1: the
 //! `roof` layer and its zone (R1, in `prop_errors`), a zone legend entry's `indoor` and `wall_set` and the map's own
-//! `boundary` (`reveal_errors`), and a roof over every indoor cell (R2, `roof_warnings`).
+//! `boundary` (`reveal_errors`), and a roof over every indoor cell (R2, `roof_warnings`). BUNKS-UPGRADE-PROPS1: a
+//! prop's `until_bunk` names a bunk prop of the same map, and the two may share tiles (`until_bunk_errors`).
 
 use super::quest::flag_list_errors;
 use super::world::{qid, ref_errors};
 use super::View;
-use crate::source::{prop_full, MAP_BOUNDARY, PROP_KEYS, PROP_ROOF_OF, ZONE_INDOOR, ZONE_WALL_SET};
+use crate::source::{prop_full, BUNK_PROP_PREFIX, MAP_BOUNDARY, PROP_KEYS, PROP_ROOF_OF, PROP_UNTIL_BUNK, ZONE_INDOOR, ZONE_WALL_SET};
 use aegis_core::json::{self, gstr, Dict};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -525,12 +526,15 @@ pub fn prop_errors(t: &Dict) -> Vec<String> {
     }
     let grid = grid(t);
     let mut ids: Vec<String> = Vec::new();
+    // BUNKS-UPGRADE-PROPS1: whether prop `a` holds the place of bunk prop `b` (its `until_bunk`)
+    let held: Vec<(String, String)> = list.iter().map(|p| (json::s(json::dict(p), "id"), json::s(json::dict(p), PROP_UNTIL_BUNK))).filter(|(_, b)| !b.is_empty()).collect();
+    let holds = |a: &str, b: &str| held.iter().any(|(x, y)| x == a && y == b);
     // tile -> the standing prop on it
     let mut standing: HashMap<(i64, i64), String> = HashMap::new();
     for (i, raw) in list.iter().enumerate() {
         let p = prop_full(json::dict(raw));
         let id = json::s(&p, "id");
-        for k in p.keys().filter(|k| !PROP_KEYS.contains(&k.as_str()) && k.as_str() != PROP_ROOF_OF) {
+        for k in p.keys().filter(|k| !PROP_KEYS.contains(&k.as_str()) && k.as_str() != PROP_ROOF_OF && k.as_str() != PROP_UNTIL_BUNK) {
             errors.push(format!("Prop '{id}': unknown field '{k}'."));
         }
         if !prop_name_ok(p.get("id"), PROP_ID_MAX) {
@@ -564,6 +568,8 @@ pub fn prop_errors(t: &Dict) -> Vec<String> {
                 let mut met: Vec<String> = Vec::new();
                 for &(tx, ty) in &tiles {
                     match standing.get(&(tx, ty)) {
+                        // a prop holding a bunk's place and that bunk never show together
+                        Some(other) if holds(&id, other) || holds(other, &id) => {}
                         Some(other) if !met.contains(other) => {
                             errors.push(format!("Props '{other}' and '{id}' stand on the same tile ({tx}, {ty})."));
                             met.push(other.clone());
@@ -580,6 +586,7 @@ pub fn prop_errors(t: &Dict) -> Vec<String> {
             errors.push(format!("Prop '{id}': layer must be sort, ground or roof."));
         }
         errors.extend(roof_of_errors(t, &id, layer, &p));
+        errors.extend(until_bunk_errors(list, &id, &p));
         let variant_ok = p.get("variant").is_some_and(|v| json::is_int(v) && (-1..=PROP_VARIANT_MAX).contains(&json::to_int(v)));
         if !variant_ok || !p.get("flip").is_some_and(Value::is_boolean) {
             errors.push(format!("Prop '{id}': variant is -1 (by position) or 0-{PROP_VARIANT_MAX}; flip is true or false."));
@@ -616,6 +623,26 @@ fn roof_of_errors(t: &Dict, id: &str, layer: &str, p: &Dict) -> Vec<String> {
         vec![format!("Prop '{id}': roof_of '{zone}' is not an indoor zone of this map (a zone_legend entry with indoor: true).")]
     } else {
         Vec::new()
+    }
+}
+
+/// BUNKS-UPGRADE-PROPS1 of one prop: its `until_bunk` is text, "" or the id of another bunk prop (`bunk_<n>`) of the
+/// map's props `list`; a bunk prop takes none (a bunk never holds another's place).
+fn until_bunk_errors(list: &[Value], id: &str, p: &Dict) -> Vec<String> {
+    let Some(bunk) = p.get(PROP_UNTIL_BUNK).map_or(Some(""), Value::as_str) else {
+        return vec![format!("Prop '{id}': {PROP_UNTIL_BUNK} must be text (a bunk prop id).")];
+    };
+    if bunk.is_empty() {
+        return Vec::new();
+    }
+    if id.starts_with(BUNK_PROP_PREFIX) {
+        return vec![format!("Prop '{id}': a bunk prop takes no {PROP_UNTIL_BUNK}.")];
+    }
+    let is_bunk = bunk.starts_with(BUNK_PROP_PREFIX) && list.iter().any(|o| json::s(json::dict(o), "id") == bunk);
+    if is_bunk {
+        Vec::new()
+    } else {
+        vec![format!("Prop '{id}': {PROP_UNTIL_BUNK} '{bunk}' is not a bunk prop of this map (an id {BUNK_PROP_PREFIX}<n>).")]
     }
 }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cut the 2026-11-19 image queue run (AI-25, AI-31, AI-32, AI-39) into runtime art.
+"""Cut the 2026-11-19 image queue run (AI-25, AI-31 amended, AI-32, AI-39) into runtime art.
 
 Usage: python3 -I art_src/prompts/cut_queue_hub_icons.py <sheets_dir> <repo_root> [<contact_out.png>]
 
@@ -10,7 +10,7 @@ edges stay crisp. Passive icons go on the shared I2 slate tile (`i2_recut.slate_
 """
 import sys
 from pathlib import Path
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 ROOT_HINT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT_HINT / "art_src/style"))
@@ -32,7 +32,7 @@ def key(im):
     for y in range(H):
         for x in range(W):
             r, g, b, _ = px[x, y]
-            if min(r, b) - g > 55 and abs(r - b) < 110:
+            if (min(r, b) - g > 55 and abs(r - b) < 110) or (b > g + 20 and r > g + 40):  # magenta and pink fringe
                 px[x, y] = (0, 0, 0, 0)
     return im
 
@@ -72,6 +72,30 @@ def shrink(obj, box_w, box_h):
                 k = 255 / max(al, 1)
                 op[x, y] = (min(255, int(r * k)), min(255, int(g * k)), min(255, int(b * k)), 255)
     return out
+
+
+def lift_roll(sheet, box):
+    """A bedroll lifted off the crates behind it: keep its pale canvas, close over its bands and outline, drop magenta."""
+    im = sheet.convert("RGB").crop(box)
+    px = im.load()
+    W, H = im.size
+    mask = Image.new("L", (W, H), 0)
+    mp = mask.load()
+    for y in range(H):
+        for x in range(W):
+            r, g, b = px[x, y]
+            if r > 120 and g > 105 and b > 75 and min(r, b) - g <= 55:
+                mp[x, y] = 255
+    mask = mask.filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.MinFilter(7)).filter(ImageFilter.MaxFilter(3))
+    mask = mask.filter(ImageFilter.MinFilter(5)).filter(ImageFilter.MaxFilter(5))  # opening: drop specks
+    for y in range(H):
+        for x in range(W):
+            r, g, b = px[x, y]
+            if min(r, b) - g > 55:
+                mp[x, y] = 0
+    out = im.convert("RGBA")
+    out.putalpha(mask)
+    return out.crop(out.getbbox())
 
 
 def cells(sheet, cols, rows, inset=0, row_edges=None, th=2):
@@ -118,26 +142,28 @@ def run(src, root):
     # AI-25 class markers: 3 x 2 brass glyphs, 18 x 18 (16 px glyph centred)
     for k, c in zip(CLASSES, cells(S("icons_class_glyphs_1.png"), 3, 2, inset=6)):
         jobs.append((G + f"ui/markers/class_{k}.png", place(shrink(c, 16, 16), 18, 18, bottom=False), "marker"))
-    # AI-25 bed keepsakes: 3 x 2, at most 12 x 12, cropped tight like the current cuts (th=7 drops thin cords)
-    ks = cells(S("props_hub_bunk_keepsakes_1.png"), 3, 2, inset=6, th=7)
-    ks[0] = ks[0].crop((0, 105, ks[0].width, ks[0].height))  # Kaelen's pendant: drop the neck cord above it
-    for f, c in zip(FOUNDERS, ks):
-        jobs.append((P + f"bunk_keepsake_{f}/v0.png", tight(c, 12, 12), "keepsake"))
-    # AI-25 founder peg boards (cells 1..6) and the timber bunk (cell 7); 8 and 9 stay in the master only
+    # AI-25 bed keepsakes, the timber bunk and its screen are retired (PR7-53 take 8 layout); masters keep them
+    # AI-25 founder peg boards (cells 1..6); the bunk cells 7..9 stay in the master only
     fb = cells(S("props_hub_founder_bunks_1.png"), 3, 3, inset=4, row_edges=[0, 300, 590, 1024])
     for f, c in zip(FOUNDERS, fb[:6]):
         jobs.append((P + f"bunk_gear_{f}/v0.png", tight(c, 24, 25), "gear"))
-    jobs.append((P + "timber_bunk/v0.png", place(shrink(fb[6], 48, 80), 48, 80), "bunk"))
     # AI-32 footlocker: sheet 1, tile 1 closed and tile 3 open (2 x 2 with gutters), 32 px wide, same bottom line
     fl = cells(S("props_hub_footlocker_2_1.png"), 2, 2, inset=14)
     closed, opened = shrink(fl[0], 32, 28), shrink(fl[2], 32, 28)
     h = max(closed.height, opened.height)
     jobs.append((P + "footlocker/v0.png", place(closed, 32, closed.height), "footlocker"))
     jobs.append((P + "footlocker/v0_open.png", place(opened, 32, opened.height), "footlocker"))
-    # AI-31 upgrade spots: sheet 1, tile 1 bed timber, tile 3 rolled pallets, 90 px wide
+    # AI-31 (amended: the take 5 set that take 8 shows) at Build's seed paths: `bed_timber_stack` (2 cells, the
+    # half-built frame on a sawhorse, sheet 1 tile 1) and `rolled_pallet` (1 cell, two bedrolls lifted off the crates
+    # of sheet 2 and sheet 1 tile 4; the crates beside them are the kit's `crate_stack`)
     us = cells(S("props_hub_upgrade_spots_2_1.png"), 2, 2, inset=14)
-    jobs.append((P + "bed_timber_stack/v0.png", tight(us[0], 90, 52), "spot"))
-    jobs.append((P + "rolled_pallet/v0.png", tight(us[2], 90, 52), "spot"))
+    jobs.append((P + "bed_timber_stack/v0.png", tight(us[0], 74, 56), "spot"))
+    top = lift_roll(Image.open(src / "props_hub_upgrade_spots_2_2.png"), (730, 770, 990, 950))
+    low = lift_roll(Image.open(src / "props_hub_upgrade_spots_2_1.png"), (700, 750, 980, 950))
+    pile = Image.new("RGBA", (max(top.width, low.width) + 20, low.height + top.height // 2), (0, 0, 0, 0))
+    pile.alpha_composite(top, (20, 0))
+    pile.alpha_composite(low, (0, pile.height - low.height))
+    jobs.append((P + "rolled_pallet/v0.png", tight(pile.crop(pile.getbbox()), 32, 32), "spot"))
     for path, im, _ in jobs:
         dst = root / path
         dst.parent.mkdir(parents=True, exist_ok=True)

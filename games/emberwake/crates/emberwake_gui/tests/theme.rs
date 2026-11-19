@@ -556,8 +556,9 @@ fn every_theme_colour_a_widget_reads_is_in_the_style_palette() {
             off.push(format!("role {role} {}", theme::colour_hex(c)));
         }
     }
-    // Prop paint the code draws for placeholder art (the bunks' timber, PR7-43 replaces it), oak and rust darks.
-    const PROP_PAINT: [&str; 2] = ["bunk_screen", "bunk_step"];
+    // Prop paint the code draws for placeholder art (the bunks' timber, PR7-43 replaces it), oak and rust darks; the
+    // bunk name plates' brass (BUNKS-LAYOUT3, the take 8 mock's).
+    const PROP_PAINT: [&str; 4] = ["bunk_screen", "bunk_step", "bunk_plate", "bunk_plate_edge"];
     for (name, c) in &t.game_colors {
         if !in_style(*c) && !PROP_PAINT.contains(&name.as_str()) {
             off.push(format!("game colour {name} {}", theme::colour_hex(*c)));
