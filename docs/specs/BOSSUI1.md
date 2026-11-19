@@ -64,10 +64,11 @@ drains, a 0.1 s gold flash as the marker fills, title and portrait crossfade 0.3
   too weak to dent the bar is fine, and building a party to break the boss is a valid choice. Tuned later in the
   `PR7-54` data step (sim breaks per fight); the golden re-record stays the user's call.
 - BU10. Poise pips read at a glance: pips in groups of 5 with a gap (10 = two groups); at most 10.
-- BU11. Boss intent panel. Selecting the boss (or a hero targeting it) opens a boss intent panel in the bar's space
-  instead of the standard foe card: each party member's planned hits on the boss on one short timeline row each,
-  plus the party total (HP and poise), and the boss's own attack impact row. It stays compact (no taller than the
-  bar plus two rows) and never covers a unit or the selected target.
+- BU11. Boss intent panel (take 28, after the user's 18:34 note that take 27 was "too busy"): in the bar's space
+  instead of the standard foe card, two damage rows by block ("Block 1" to "Block 6"): the selected hero's damage per
+  block (gold-ringed cell) and the party's damage per block, with BREAK and the next phase's marker in the block where
+  each lands; totals at the right; the boss's own attack impact row kept. No per-member chips or "After" row. It
+  stays compact and never covers a unit or the selected target.
 - BU12. Any intent box or card, for bosses and mobs, sits clear of the acting unit and its target on the board.
 - BU13. The round banner carries the enrage cue (ENRAGE2 EN5): "Enrage next round", then "Foes enraged +n %" with
   the step the foes gained; confirmed by the user's reading of take 26.
