@@ -132,7 +132,7 @@ impl DRow {
 }
 
 /// The ruleset the party screen reads derived rows by: the ruleset of the save's world (RULESET1 3.1.1).
-fn party_ruleset(cx: &Cx) -> String {
+pub(crate) fn party_ruleset(cx: &Cx) -> String {
     cx.data.ruleset_id(&cx.gs().world_id)
 }
 
@@ -351,6 +351,25 @@ impl Character {
         Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, gear_stacks: false, gear_world: String::new(), pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", follow_open: None, faces: crate::portraits::Faces::default(), w: Vec::new() }
     }
 
+    /// ENGINE-23: the Gear tab's draft as the loadout view reads it: the open draft (the member and the stash), else
+    /// the member and the party stash as saved, with whether the pouch holds stacks (`pouch_stacks`).
+    pub(crate) fn gear_now(&self, cx: &Cx) -> (UnitState, Stash, bool) {
+        match &self.gear {
+            Some((w, st)) => (w.clone(), st.clone(), self.gear_stacks),
+            None => (self.m(cx).clone(), cx.gs().party.stash.clone(), cx.data.ruleset(&cx.gs().world_id).numbers.pouch_stacks),
+        }
+    }
+
+    /// ENGINE-23: the member shown and whether the Gear tab's draft differs from the saved state (Reset and Confirm on).
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn gear_member(&self) -> &str {
+        &self.member
+    }
+
+    pub(crate) fn gear_dirty(&self, cx: &Cx) -> bool {
+        self.gear.as_ref().is_some_and(|(w, st)| w != self.m(cx) || *st != cx.gs().party.stash)
+    }
+
     fn m<'a>(&self, cx: &'a Cx) -> &'a UnitState {
         cx.gs().party.member(&self.member).expect("member")
     }
@@ -478,7 +497,7 @@ impl Character {
         }
     }
 
-    fn act(&mut self, cx: &mut Cx, a: PAct) {
+    pub(crate) fn act(&mut self, cx: &mut Cx, a: PAct) {
         let d = cx.data.clone();
         match a {
             PAct::Member(step) => {
@@ -906,6 +925,10 @@ impl Screen<GameCx> for Character {
 
     fn state(&self, cx: &Cx) -> Value {
         let mut out = json!({"member": self.member, "tab": self.tab, "draft": self.draft.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<String, Value>>(), "has_draft": self.has_draft(cx), "portraits": self.faces.state()});
+        // ENGINE-23 (UISPLIT1-I Stage A): the loadout's view-model on the Gear tab
+        if self.tab == "gear" {
+            out["view"] = crate::loadout_view::view(cx, self).to_json();
+        }
         if let (true, Some(t)) = (self.tab == "skills", &self.terms) {
             let shown = t.shown(&self.deck);
             out["deck"] = deck_json(&self.deck);
@@ -1508,22 +1531,10 @@ impl Character {
         ui.p.text(mx as f32 + 2.0, 102.0, "Equipped", head, th().info);
         for (i, slot) in LOADOUT_SLOTS.iter().enumerate() {
             let y = 116 + i as i32 * 15;
-            // PR5-26 (audit B2): a slot left empty (`NO_ITEM`) shows empty, as no item
-            let explicit = work.equipment.get(*slot).cloned().filter(|i| i != NO_ITEM);
-            let shown = explicit.clone().or_else(|| {
-                let s = emberwake_rules::gear::Slot::parse(slot)?;
-                built.as_ref().and_then(|b| b.unit.inventory.get(s).map(|e| e.item.id.clone()))
-            });
-            let name = shown.as_ref().map(|i| d.item_name(i)).unwrap_or_else(|| "empty".into());
-            // AUDIT-04 (PR5-40): a wielded weapon instance shows its durability, and MW when masterwork
-            let label = format!("{}: {name}{}", title_case(slot), instance_note(d, &wields, slot));
-            // U3.2-S3 (FB-34): the worn item's wield penalty, as the built unit fights with it
-            let badge = shown.as_ref().and_then(|i| d.cat.items.get(i)).and_then(|def| wield_badge(built.as_ref().map(|b| &b.unit), def));
-            let note = badge.as_ref().map(|(_, n)| format!(" {n}")).unwrap_or_default();
-            let card = match (&explicit, &shown) {
-                (Some(item), _) => item_tip(d, item, &format!("Click or drag it to the stash to take it off (the class default comes back); drag it onto another slot it fits to move it.{note}")),
-                (None, Some(item)) => item_tip(d, item, &format!("Class default gear: drag an item from the stash onto this slot to replace it.{note}")),
-                (None, None) => tip(&label, "Empty: drag an item from the stash onto this slot."),
+            let GearSlot { explicit, shown, label, badge, help } = gear_slot(d, &work, &wields, built.as_ref(), slot);
+            let card = match &shown {
+                Some(item) => item_tip(d, item, &help),
+                None => tip(&label, &help),
             };
             // PR7-36 (ART-05): the slot's tile (the item's icon, an empty-slot glyph) at the row's left
             item_tile(ui, cx, Rect::new(mx, y, 14, 14), shown.as_deref());
@@ -1543,13 +1554,10 @@ impl Character {
             for i in 0..POUCH_MAX {
                 let y = 224 + i as i32 * 15;
                 let item = work.pouch.get(i);
-                let label = match item {
-                    Some(item) => format!("{}. {}", i + 1, d.item_name(item)),
-                    None => format!("{}. Empty", i + 1),
-                };
+                let label = pouch_label(d, i, item.map(String::as_str));
                 let card = match item {
-                    Some(item) => item_tip(d, item, "Click or drag it to the stash to take it out; drag it onto another pouch slot to reorder."),
-                    None => tip(&label, "Drag a consumable from the stash here; the hero can use it in battle."),
+                    Some(item) => item_tip(d, item, POUCH_ITEM_HELP),
+                    None => tip(&label, POUCH_EMPTY_HELP),
                 };
                 item_tile(ui, cx, Rect::new(mx, y, 14, 14), item.map(String::as_str));
                 ui.row(&format!("gear.pouch.{i}"), Rect::new(mx + 16, y, mw - 16, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card);
@@ -1566,8 +1574,8 @@ impl Character {
         ui.p.panel(area, th().game("party_area", rgba(20, 28, 46, 160)), th().edge, 2.0);
         ui.push("gear.stash", "panel", "Party stash", area, true, false, None, tip("Party stash", "Drop a worn or pouch item here to take it off."));
         ui.drop_target("stash");
-        let mut ids: Vec<&String> = stash.keys().filter(|id| d.cat.items.contains_key(*id)).collect();
-        ids.sort_by_key(|id| d.item_name(id));
+        let ids = stash_ids(d, &stash);
+        let ids: Vec<&String> = ids.iter().collect();
         const ROWS: usize = 10;
         self.gear_scroll = self.gear_scroll.min(ids.len().saturating_sub(ROWS));
         if ids.is_empty() {
@@ -1575,27 +1583,8 @@ impl Character {
         }
         for (row, id) in ids.iter().skip(self.gear_scroll).take(ROWS).enumerate() {
             let def = &d.cat.items[*id];
-            let (act, help) = if def.is_equipment() {
-                (Some(PAct::Equip((*id).clone())), "Click to wear it, or drag it onto a slot.")
-            } else if def.item_type == "CONSUMABLE" {
-                (Some(PAct::PouchAdd((*id).clone())), "Click to put one in the battle pouch, or drag it onto a pouch slot.")
-            } else if def.item_type == emberwake_data::MASTERY_BOOK {
-                // PK2-FOLLOWUP (FB-214 (f)): a mastery book is read, not worn (a click, no drag)
-                (Some(PAct::ReadBook((*id).clone())), "Click to read it: this hero gains its weapon family's mastery (proficiency 2 or more, not yet mastery 3).")
-            } else {
-                (None, "Not wearable.")
-            };
+            let StashRow { act, badge, help } = stash_row(d, cx.gs(), built.as_ref(), id);
             let movable = act.as_ref().is_some_and(|a| !matches!(a, PAct::ReadBook(_)));
-            // U3.2-S3 (FB-34): every item shows (training is no gate); one the hero would wear under a wield penalty
-            // carries the badge, and its card says why
-            let badge = wield_badge(built.as_ref().map(|b| &b.unit), def);
-            let help = match &badge {
-                Some((_, n)) => format!("{help} {n}"),
-                None => help.to_string(),
-            };
-            // PR7-41 (PT-30): what a kept item is for (recipes, story)
-            let note = crate::shop::item_use_note(d, cx.gs(), id);
-            let help = if note.is_empty() { help } else { format!("{help} {note}") };
             let y = 116 + row as i32 * 15;
             ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, y, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), th().text, act, false, item_tip(d, id, &help));
             if let Some((b, _)) = &badge {
@@ -1669,17 +1658,10 @@ impl Character {
             let item = slots.get(i);
             let pips_w = 5 * PIP;
             let name_w = mw - 2 * (BTN + 2) - pips_w - 2;
-            let label = match item {
-                Some(item) => format!("{}. {}", i + 1, d.item_name(item)),
-                None => format!("{}. Empty", i + 1),
-            };
+            let label = pouch_label(d, i, item.map(String::as_str));
             let card = match item {
-                Some(item) => {
-                    let (cur, packed, left) = (work.pouch_count(item), work.packed(item), stash.get(item).copied().unwrap_or(0));
-                    let short = if cur < packed { " Hollow pips: copies still to come from the stash." } else { "" };
-                    item_tip(d, item, &format!("In the pouch: {cur}; packs {packed} (stash {left}). Auto-fill tops it up to {packed} from the stash when a fight starts while this hero is active, and after each fight this hero comes home from.{short} Click or drag it to the stash to empty the slot; drag it onto another slot to move it; - and + set how many it packs."))
-                }
-                None => tip(&label, "Drag a consumable from the stash here (or click it in the stash): the slot packs as many as its stack holds."),
+                Some(item) => item_tip(d, item, &stack_help(work, stash, item)),
+                None => tip(&label, STACK_EMPTY_HELP),
             };
             ui.row(&format!("gear.pouch.{i}"), Rect::new(mx, y, name_w, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card.clone());
             if item.is_some() {
@@ -1813,13 +1795,106 @@ pub(crate) fn deck_json(d: &Deck) -> Value {
 /// instances are active (`weapons::active`), the kit's `weapons::sync_party` over the draft member, the draft stash and
 /// the party's stashed instances (`stash_weapons`), so a stashed masterwork moved into the main hand wields its
 /// instance (its technique opens in the sheet and the preview); the draft itself otherwise.
-fn wielding(d: &Data, gs: &GameState, work: &UnitState, stash: &Stash) -> UnitState {
+pub(crate) fn wielding(d: &Data, gs: &GameState, work: &UnitState, stash: &Stash) -> UnitState {
     if !weapons::active(d, gs) {
         return work.clone();
     }
     let mut party = PartyState { members: vec![work.clone()], stash: stash.clone(), stash_weapons: gs.party.stash_weapons.clone(), ..PartyState::default() };
     weapons::sync_party(d, &mut party);
     party.members.swap_remove(0)
+}
+
+/// ENGINE-23: the Gear tab's equipped slot as drawn and as the loadout view shows it: the item worn by choice
+/// (`explicit`), the item shown (that, else the class default the built unit wears), the row's label, the wield
+/// penalty badge (short, note) and the hover card's help line.
+pub(crate) struct GearSlot {
+    pub explicit: Option<String>,
+    pub shown: Option<String>,
+    pub label: String,
+    pub badge: Option<(String, String)>,
+    pub help: String,
+}
+
+pub(crate) fn gear_slot(d: &Data, work: &UnitState, wields: &UnitState, built: Option<&progression::Built>, slot: &str) -> GearSlot {
+    // PR5-26 (audit B2): a slot left empty (`NO_ITEM`) shows empty, as no item
+    let explicit = work.equipment.get(slot).cloned().filter(|i| i != NO_ITEM);
+    let shown = explicit.clone().or_else(|| {
+        let s = emberwake_rules::gear::Slot::parse(slot)?;
+        built.and_then(|b| b.unit.inventory.get(s).map(|e| e.item.id.clone()))
+    });
+    let name = shown.as_ref().map(|i| d.item_name(i)).unwrap_or_else(|| "empty".into());
+    // AUDIT-04 (PR5-40): a wielded weapon instance shows its durability, and MW when masterwork
+    let label = format!("{}: {name}{}", title_case(slot), instance_note(d, wields, slot));
+    // U3.2-S3 (FB-34): the worn item's wield penalty, as the built unit fights with it
+    let badge = shown.as_ref().and_then(|i| d.cat.items.get(i)).and_then(|def| wield_badge(built.map(|b| &b.unit), def));
+    let note = badge.as_ref().map(|(_, n)| format!(" {n}")).unwrap_or_default();
+    let help = match (&explicit, &shown) {
+        (Some(_), _) => format!("Click or drag it to the stash to take it off (the class default comes back); drag it onto another slot it fits to move it.{note}"),
+        (None, Some(_)) => format!("Class default gear: drag an item from the stash onto this slot to replace it.{note}"),
+        (None, None) => "Empty: drag an item from the stash onto this slot.".into(),
+    };
+    GearSlot { explicit, shown, label, badge, help }
+}
+
+/// The classic battle pouch's help lines: a filled slot's and an empty one's.
+pub(crate) const POUCH_ITEM_HELP: &str = "Click or drag it to the stash to take it out; drag it onto another pouch slot to reorder.";
+pub(crate) const POUCH_EMPTY_HELP: &str = "Drag a consumable from the stash here; the hero can use it in battle.";
+
+/// Pouch slot `i`'s label ("1. Name", "1. Empty").
+pub(crate) fn pouch_label(d: &Data, i: usize, item: Option<&str>) -> String {
+    match item {
+        Some(item) => format!("{}. {}", i + 1, d.item_name(item)),
+        None => format!("{}. Empty", i + 1),
+    }
+}
+
+/// INTENT2-U: a stack slot's help line (in the pouch, packed, in the stash, how auto-fill tops it up) and an empty
+/// stack slot's.
+pub(crate) fn stack_help(work: &UnitState, stash: &Stash, item: &str) -> String {
+    let (cur, packed, left) = (work.pouch_count(item), work.packed(item), stash.get(item).copied().unwrap_or(0));
+    let short = if cur < packed { " Hollow pips: copies still to come from the stash." } else { "" };
+    format!("In the pouch: {cur}; packs {packed} (stash {left}). Auto-fill tops it up to {packed} from the stash when a fight starts while this hero is active, and after each fight this hero comes home from.{short} Click or drag it to the stash to empty the slot; drag it onto another slot to move it; - and + set how many it packs.")
+}
+pub(crate) const STACK_EMPTY_HELP: &str = "Drag a consumable from the stash here (or click it in the stash): the slot packs as many as its stack holds.";
+
+/// The party stash's catalog items, by name.
+pub(crate) fn stash_ids(d: &Data, stash: &Stash) -> Vec<String> {
+    let mut ids: Vec<String> = stash.keys().filter(|id| d.cat.items.contains_key(*id)).cloned().collect();
+    ids.sort_by_key(|id| d.item_name(id));
+    ids
+}
+
+/// ENGINE-23: a stash row's click (wear, pouch, read; None for an item that is none of these), its wield penalty
+/// badge and its hover card's help line.
+pub(crate) struct StashRow {
+    pub act: Option<PAct>,
+    pub badge: Option<(String, String)>,
+    pub help: String,
+}
+
+pub(crate) fn stash_row(d: &Data, gs: &GameState, built: Option<&progression::Built>, id: &str) -> StashRow {
+    let def = &d.cat.items[id];
+    let (act, help) = if def.is_equipment() {
+        (Some(PAct::Equip(id.to_string())), "Click to wear it, or drag it onto a slot.")
+    } else if def.item_type == "CONSUMABLE" {
+        (Some(PAct::PouchAdd(id.to_string())), "Click to put one in the battle pouch, or drag it onto a pouch slot.")
+    } else if def.item_type == emberwake_data::MASTERY_BOOK {
+        // PK2-FOLLOWUP (FB-214 (f)): a mastery book is read, not worn (a click, no drag)
+        (Some(PAct::ReadBook(id.to_string())), "Click to read it: this hero gains its weapon family's mastery (proficiency 2 or more, not yet mastery 3).")
+    } else {
+        (None, "Not wearable.")
+    };
+    // U3.2-S3 (FB-34): every item shows (training is no gate); one the hero would wear under a wield penalty carries
+    // the badge, and its card says why
+    let badge = wield_badge(built.map(|b| &b.unit), def);
+    let help = match &badge {
+        Some((_, n)) => format!("{help} {n}"),
+        None => help.to_string(),
+    };
+    // PR7-41 (PT-30): what a kept item is for (recipes, story)
+    let note = crate::shop::item_use_note(d, gs, id);
+    let help = if note.is_empty() { help } else { format!("{help} {note}") };
+    StashRow { act, badge, help }
 }
 
 /// AUDIT-04 (PR5-40): " (durability/full)" of the weapon instance `m` wields in `slot`, with " MW" for a masterwork;
@@ -1866,7 +1941,7 @@ fn pk2_rows(d: &Data, world: &str, m: &UnitState) -> Vec<(DRow, String)> {
 }
 
 /// The Gear tab's stat list: the core stats with gear, then the derived rows (`derived`), as `m` fights in `world`.
-fn sheet(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
+pub(crate) fn sheet(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
     let Some(b) = progression::build_with(d, m, world, false) else { return Vec::new() };
     let mut out: Vec<DRow> = STATS.iter().map(|st| DRow::plain(st, b.unit.stats.stat(st, None) as i64, stat_desc(st))).collect();
     out.extend(derived_of(&d.cat, ruleset, &b.unit));

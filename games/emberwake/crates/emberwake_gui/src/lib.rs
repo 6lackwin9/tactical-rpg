@@ -38,6 +38,7 @@ mod ground;
 mod hud;
 mod hub;
 mod intent_text;
+mod loadout_view;
 mod mapview;
 mod menus;
 mod music;
