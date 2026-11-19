@@ -1,4 +1,4 @@
-"""Hub bunk room take 8 (Tushar 2026-11-19 17:44): take 7's A (the lunette) with his notes, 1280x720 at 1:1.
+"""Hub bunk room take 8 (take 9 icons from 17:49: the five that did not read as their keepsakes redrawn) (Tushar 2026-11-19 17:44): take 7's A (the lunette) with his notes, 1280x720 at 1:1.
 
 Usage: python3 art_src/style/hub_bunks_take8_mock.py <hub shot.png> <out_dir>
   - the keepsake silhouettes in flat gold did not read as the keepsakes (Dunstan's least): each founder now has a drawn
@@ -27,6 +27,8 @@ WALL_Y0 = H4.WALL_Y0
 BED_TOP = H7.BED_TOP
 G, HI, LINE = (222, 178, 84, 255), (252, 228, 150, 255), (34, 12, 10, 255)
 LENS, BREW = (176, 206, 220, 255), (96, 176, 150, 255)
+RIBBON, INK_POT = (150, 40, 36, 255), (70, 74, 86, 255)
+IRON, IRON_HI = (128, 132, 140, 255), (196, 200, 206, 255)
 
 
 def outline(im, col):
@@ -48,11 +50,13 @@ def outline(im, col):
 def icon(name):
     im = Image.new("RGBA", (15, 11))
     d = ImageDraw.Draw(im)
-    if name == "Kaelen":        # the gouged sigil: a seal disc, a ring inset, a deep gouge across it
-        d.ellipse((2, 0, 12, 10), fill=G)
-        d.arc((2, 0, 12, 10), 140, 250, fill=HI)
-        d.ellipse((5, 3, 9, 7), outline=LINE)
-        d.line((3, 9, 11, 1), fill=LINE, width=2)
+    if name == "Kaelen":        # the gouged sigil: a wax-seal medallion, two ribbon tails, a gouge across its face
+        d.polygon([(5, 6), (7, 6), (5, 10), (3, 10)], fill=RIBBON)
+        d.polygon([(8, 6), (10, 6), (12, 10), (10, 10)], fill=RIBBON)
+        d.ellipse((3, 0, 11, 7), fill=G)
+        d.arc((3, 0, 11, 7), 150, 250, fill=HI)
+        d.point((7, 3), fill=(150, 104, 40, 255))
+        d.line((4, 6, 10, 1), fill=LINE)
     elif name == "Vesper":      # the runner whistle: a round barrel, the vent on top, a long mouthpiece
         d.ellipse((1, 2, 8, 9), fill=G)
         d.rectangle((5, 2, 14, 5), fill=G)
@@ -60,34 +64,39 @@ def icon(name):
         d.point((2, 4), fill=HI)
         d.rectangle((6, 3, 7, 4), fill=LINE)
         d.ellipse((3, 4, 6, 7), outline=(150, 104, 40, 255))
-    elif name == "Maren":       # the copyist quill: a curved vane with barbs, a bare shaft, the inked nib
-        d.polygon([(14, 0), (11, 0), (6, 4), (4, 7), (6, 7), (10, 5), (14, 2)], fill=G)
-        d.line((13, 1, 3, 9), fill=HI)
-        for x, y in ((11, 3), (9, 4), (7, 6)):
-            d.point((x, y + 1), fill=LINE)
-        d.line((4, 8, 2, 10), fill=G)
-        d.point((1, 10), fill=LINE)
-        d.point((2, 10), fill=LINE)
-    elif name == "Hollis":      # the focusing monocle: a thick rim, a pale lens with a glint, its chain
-        d.ellipse((1, 0, 9, 8), fill=G)
-        d.ellipse((3, 2, 7, 6), fill=LENS)
-        d.point((4, 3), fill=(240, 250, 255, 255))
-        for i, (x, y) in enumerate(((9, 7), (10, 8), (11, 8), (12, 9), (13, 10))):
+    elif name == "Maren":       # the copyist quill standing in its squat inkpot
+        d.polygon([(13, 0), (11, 0), (8, 3), (7, 6), (8, 6), (11, 4), (13, 2)], fill=G)
+        d.line((12, 1, 7, 7), fill=HI)
+        d.point((10, 3), fill=LINE)
+        d.point((9, 4), fill=LINE)
+        d.ellipse((3, 6, 10, 10), fill=INK_POT)
+        d.rectangle((5, 5, 8, 6), fill=INK_POT)
+        d.line((5, 5, 8, 5), fill=LINE)
+        d.point((4, 8), fill=(150, 156, 168, 255))
+    elif name == "Hollis":      # the focusing monocle: a lens in a thick rim, a fine chain in a loose curve, no handle
+        d.ellipse((0, 0, 8, 8), fill=G)
+        d.ellipse((2, 2, 6, 6), fill=LENS)
+        d.point((3, 3), fill=(240, 250, 255, 255))
+        for i, (x, y) in enumerate(((8, 5), (10, 6), (11, 8), (12, 10), (10, 10), (8, 10))):
             d.point((x, y), fill=G if i % 2 == 0 else HI)
-    elif name == "Dunstan":     # the shackle link: a long link through an upright one, the upright split open
-        d.ellipse((0, 2, 9, 8), outline=G, width=2)
-        d.ellipse((7, 0, 13, 10), outline=G, width=2)
-        d.rectangle((9, 9, 11, 10), fill=(0, 0, 0, 0))
-        d.line((7, 4, 8, 4), fill=G)
-        d.point((2, 3), fill=HI)
-        d.point((9, 1), fill=HI)
-    elif name == "Elyse":       # the cracked retort: a round bulb with its brew, the long bent neck, a crack
-        d.ellipse((1, 3, 8, 10), fill=G)
-        d.chord((2, 4, 7, 9), 0, 180, fill=BREW)
-        d.line((6, 4, 13, 0), fill=G, width=2)
-        d.point((3, 4), fill=HI)
-        d.line((4, 5, 5, 7), fill=LINE)
-        d.point((6, 7), fill=LINE)
+    elif name == "Dunstan":     # the shackle link: a U-shaped iron shackle, its pin across the mouth, a broken link below
+        d.arc((2, 0, 10, 10), 0, 180, fill=IRON, width=2)
+        d.rectangle((2, 0, 3, 5), fill=IRON)
+        d.rectangle((9, 0, 10, 5), fill=IRON)
+        d.rectangle((1, 0, 11, 1), fill=G)
+        d.point((0, 0), fill=G); d.point((12, 0), fill=G)
+        d.point((3, 3), fill=IRON_HI)
+        d.ellipse((11, 6, 14, 10), outline=IRON)
+        d.point((14, 8), fill=(0, 0, 0, 0))
+    elif name == "Elyse":       # the cracked retort: a round bulb, its neck leaving the top and bending down to a spout
+        d.ellipse((0, 3, 7, 10), fill=G)
+        d.chord((1, 5, 6, 9), 0, 180, fill=BREW)
+        d.line((4, 3, 8, 1), fill=G, width=2)
+        d.line((8, 1, 14, 6), fill=G, width=1)
+        d.line((8, 2, 13, 6), fill=G, width=1)
+        d.point((2, 4), fill=HI)
+        d.line((3, 6, 4, 8), fill=LINE)
+        d.point((5, 8), fill=LINE)
     return outline(im, LINE)
 
 
