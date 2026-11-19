@@ -80,8 +80,29 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-12` (`GATE-PARITY1`) | closed: the PC gate passes | `develop` ec53813 | The PC thread ran `check_project.ps1` on develop ec53813: all 15 steps passed (3952 tests, exit 0). |
 | `ENGINE-22` (`SEED-ARCHIVE1`) | done (tools lane) | `develop` (squash `ENGINE-22`) | 33 stale seeds moved to `data/seeds/archive/`, with a README row each. The 2 known overlaps are settled. `seed_order_known.txt` is empty. FB-367 |
 | `ENGINE-22` fix | done (tools lane) | `develop` | Correction to FB-367: my edit to `cast1a3.json` (narrowing its `bile_coat` step) moved it last in the commit order, so after main Build's `pr7_40` landing the seeds step failed: 34 findings, all `cast1a3.json` against `pr7_41_text.json`. `cast1a3.json` is now restored as it was and archived, making 34 archived seeds. `tools/fc.sh seeds` reports 67 seeds and 0 findings. `seed_order.py`'s doc and the seeds README say an old seed is archived, never edited in place. develop was red on the seeds step between 33a6b49 and this fix. |
+| `ENGINE-21` (`UISPLIT1-H`) board and save/load | Stage A done (tools lane); the character sheet waits for main Build's `PR7-45` | `develop` (squash `ENGINE-21` A1) | View-models, actions, fixtures and tests for the notice board and the save/load screens; today's drawing kept. FB-369 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-369: ENGINE-21 UISPLIT1-H Stage A for the notice board and the save/load screens
+
+- **Status**: open
+- **Spec**: `READY.md` §3 `ENGINE-21` (`UISPLIT1-H`), like `PR7-39` Stage A (@squash `ENGINE-21` A1). Order agreed with main Build: board, save/load, then the character sheet after `PR7-45` (item 5 touches its header).
+- **Board** (`emberwake_gui::board_view`, fixture `ui/views/board.view.json` from the UI Gallery's sample board):
+  - Fields: `title`, `keeper`, `intro`; one rows field per kit section (`main`, `jobs`, `under_way`, `locked`, `closed`). Each row is a quest: name, "Lv N" (`info`), the deadline as `detail2` in `foe`, the node as `sub`, the section's line as `note`, and the pick selected.
+  - More fields: `detail_title`; `detail`, the paragraphs one per line, each toned as drawn (ENGINE-20 tones; the deadline's Arterial Red is `foe`); `accept_why`; `errors`.
+  - Actions: `pick`, `accept` (on only for an offered quest), `close`. `board_act` maps a view click back to `BoardAct`.
+  - The agent link's `board_pane` gains `view`.
+  - `BoardPane::detail_paras` now names theme roles instead of colours, and the pane draws them in the same colours.
+- **Save/load** (`emberwake_gui::save_view`, fixture `ui/views/slots.view.json`, screen id `slots` for both modes):
+  - Fields: `title`, `mode`, and `slots`, a row per slot with the autosave first. Each row's first line is the label, the lead's day the `detail`, the party or the reason the `sub`, the card's line the `note`. A row is on when a click saves or loads. Its buttons are lock or unlock, and delete (off while locked).
+  - Actions: `open`, `lock`, `unlock`, `delete`, `back`. `slot_act` maps them to `SlotAct`.
+  - The slot lines moved into `menus::slot_text`, which the drawing and the view share.
+  - The screen's agent link state is `{saving, view}`.
+- **Tests**: `board_view` (sections, rows, detail tones, Accept on and off with the reason, clicks, empty board, fixture shape); `menus` (the slots view matches the drawn cards row by row in both modes, a locked slot, clicks, fixture shape); `talk` (the hub's board carries its view). Two `#[ignore]` tests rewrite the fixtures from the samples.
+- **Guesses**: (1) Save/load is a rows list with row buttons, not `slot_card`, because slot cards have no buttons and no on or off state. Stage B can still pick either. (2) One `slots` screen for save and load, told apart by `mode`. (3) The board's sections are five fixed rows fields, not one list with headings, so a layout can place each section.
+- **Seen, not changed**: a save with no location shows `The Ashlands,  · <time>` (an empty place after the comma) on the drawn row. That is today's drawing (`PR7-29` redraws the rows), so the fixture uses a sample place.
+- **Docs delta**: none. `HISTORY.md`: none.
 
 ### FB-367: ENGINE-22 SEED-ARCHIVE1, 33 stale seeds archived, the seed order check has no known findings
 

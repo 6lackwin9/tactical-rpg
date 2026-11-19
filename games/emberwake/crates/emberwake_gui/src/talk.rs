@@ -785,6 +785,19 @@ impl Services {
 
     /// PR7-39 (UISPLIT1-G Stage A): the trade's agent reading with the shop's view-model (`shop_view::view`) under
     /// `view`, the same fields a layout file draws.
+    /// The board pane's agent reading with its view-model under `view` (UISPLIT1-H Stage A: the pick as the pane
+    /// would draw it, on a copy so reading changes nothing).
+    fn board_state(&self, cx: &Cx, bq: &str) -> Value {
+        let (d, gs) = (&cx.data, cx.gs());
+        let bv = crate::board::with_unlock_words(d, gs, emberwake_world::board::view(d, gs, bq));
+        let mut pane = crate::board::BoardPane { selected: self.board.selected.clone(), errors: self.board.errors.clone() };
+        let pick = pane.select(&bv);
+        let det = if pick.is_empty() { Dict::new() } else { emberwake_world::board::detail(d, gs, &pick) };
+        let mut st = self.board.state();
+        st["view"] = crate::board_view::view(cx, &pane, &bv, &det).to_json();
+        st
+    }
+
     fn shop_state(&self, cx: &Cx, sq: &str) -> Value {
         let mut st = self.shop.state();
         st["view"] = crate::shop_view::view(cx, &self.shop, sq).to_json();
@@ -792,7 +805,7 @@ impl Services {
     }
 
     /// The agent link's reading, in the region map's key order: `dialogue` (the open conversation's view), `turn_in`,
-    /// `shop` (the trade, its view-model under `view`), `board` (its qid), `board_pane` and `portraits` (PORTRAITFX1 4.11: the speaker's portrait
+    /// `shop` (the trade, its view-model under `view`), `board` (its qid), `board_pane` (its view-model under `view`) and `portraits` (PORTRAITFX1 4.11: the speaker's portrait
     /// while the talk box shows; the shop or the board hides it).
     pub fn state(&self, cx: &Cx) -> Value {
         let gs = cx.gs();
@@ -800,7 +813,7 @@ impl Services {
         json!({"dialogue": self.runner.as_ref().filter(|r| !r.closed).map(|r| Value::Object(r.view(&cx.data, gs))),
             "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
             "shop": if shop_qid.is_empty() { Value::Null } else { self.shop_state(cx, &shop_qid) }, "board": Some(board_qid.clone()).filter(|b| !b.is_empty()),
-            "board_pane": if board_qid.is_empty() { Value::Null } else { self.board.state() },
+            "board_pane": if board_qid.is_empty() { Value::Null } else { self.board_state(cx, &board_qid) },
             "recipe": Some(self.recipe_npc()).filter(|n| !n.is_empty()),
             "recipe_pane": if self.recipe_npc().is_empty() { Value::Null } else { self.recipe.state() },
             "facility": Some(self.facility_npc()).filter(|n| !n.is_empty()),
@@ -1142,6 +1155,10 @@ mod tests {
         let host = open(&mut cx, &mut g, "talia_rusk", "board").expect("Talia's board reply");
         assert_eq!(host.state(&cx)["board"], json!(format!("{W}:talia_board")));
         assert!(has(&host, "board"), "the BoardPane draws");
+        // UISPLIT1-H Stage A: the agent link carries the board's view-model
+        let bv = &host.state(&cx)["board_pane"]["view"];
+        assert_eq!(bv["screen"], json!("board"));
+        assert!(bv["fields"]["main"]["rows"].is_array() && bv["actions"].as_array().is_some_and(|a| a.len() == 3), "{bv}");
         for (who, shop) in [("sabina_kress", "sabina_slab"), ("berek_dorn", "berek_hearth")] {
             let host = open(&mut cx, &mut g, who, "shop").unwrap_or_else(|| panic!("{who}'s shop reply"));
             assert!(host.state(&cx)["shop"].is_object() && has(&host, "shop"), "{shop}: the ShopPane opens");

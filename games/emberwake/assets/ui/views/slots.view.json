@@ -1,0 +1,124 @@
+{
+  "screen": "slots",
+  "fields": {
+    "title": {
+      "text": "Save game"
+    },
+    "mode": {
+      "text": "save"
+    },
+    "slots": {
+      "rows": [
+        {
+          "id": "0",
+          "label": "Autosave",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "sub": "Empty",
+          "tone": "dim",
+          "note": "The game writes the autosave."
+        },
+        {
+          "id": "1",
+          "label": "Slot 1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "Empty",
+          "tone": "dim",
+          "note": "Save here."
+        },
+        {
+          "id": "2",
+          "label": "Slot 2 · The Ashlands, Warden Keep · 2026-11-19 19:02",
+          "detail": "Day 1",
+          "picture": null,
+          "enabled": true,
+          "sub": "Bryn Hale Lv 5",
+          "note": "Save over this save.",
+          "buttons": [
+            {
+              "action": "lock",
+              "label": "Lock",
+              "enabled": true
+            },
+            {
+              "action": "delete",
+              "label": "Delete",
+              "enabled": true
+            }
+          ]
+        },
+        {
+          "id": "3",
+          "label": "Slot 3 · The Ashlands, Warden Keep · 2026-11-19 19:02",
+          "detail": "Day 1",
+          "picture": null,
+          "enabled": false,
+          "sub": "Bryn Hale Lv 5",
+          "note": "Locked: unlock it to save over it.",
+          "buttons": [
+            {
+              "action": "unlock",
+              "label": "Unlock",
+              "enabled": true
+            },
+            {
+              "action": "delete",
+              "label": "Delete",
+              "enabled": false
+            }
+          ]
+        },
+        {
+          "id": "4",
+          "label": "Slot 4",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "Empty",
+          "tone": "dim",
+          "note": "Save here."
+        },
+        {
+          "id": "5",
+          "label": "Slot 5",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "Empty",
+          "tone": "dim",
+          "note": "Save here."
+        }
+      ]
+    }
+  },
+  "actions": [
+    {
+      "id": "open",
+      "label": "Save",
+      "enabled": true
+    },
+    {
+      "id": "lock",
+      "label": "Lock",
+      "enabled": true
+    },
+    {
+      "id": "unlock",
+      "label": "Unlock",
+      "enabled": true
+    },
+    {
+      "id": "delete",
+      "label": "Delete",
+      "enabled": true
+    },
+    {
+      "id": "back",
+      "label": "Back",
+      "enabled": true
+    }
+  ]
+}

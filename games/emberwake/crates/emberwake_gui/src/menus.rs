@@ -19,7 +19,7 @@ use aegis_core::clock::{Duration, Instant};
 use rpgkit_ui::vignette::{TextSpeed, REDUCE_MOTION, TEXT_SPEED};
 use rpgkit_ui::portrait_overlays;
 use aegis_ui::widget_plumbing;
-use aegis_core::json::{self, s, s_or};
+use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_world::{new_game, progression, save};
 use serde_json::{json, Value};
 
@@ -695,6 +695,46 @@ impl Slots {
     }
 }
 
+/// A slot row's first line (its name and, for a readable save, the world, the place and the time) and its second (the
+/// whole party, or why it can't load, or "Empty"); PR7-41 (PT-35). The day of the save's lead follows from `slot_when`.
+pub(crate) fn slot_text(cx: &Cx, slot: i64, head: &Dict) -> (String, String) {
+    let (exists, ok) = (json::b(head, "exists", false), json::b(head, "ok", false));
+    let mut label = if slot == 0 { "Autosave".to_string() } else { format!("Slot {slot}") };
+    // PR7-41 (PT-35): the place and time on the slot's line, the whole party on its own line (no cut names)
+    let status = if ok {
+        let world = s(head, "world_id");
+        let party: Vec<String> = json::aget(head, "party")
+            .iter()
+            .map(|m| {
+                let m = json::dict(m);
+                // the member's character name in the saved world, else its base unit's
+                let unit = s_or(cx.data.entry("units", &s(m, "base_unit")), "name", &s(m, "base_unit"));
+                format!("{} Lv {}", s_or(cx.data.resolve(&world, "characters", &s(m, "id")), "name", &unit), json::i(m, "level", 0))
+            })
+            .collect();
+        let at = json::i(head, "saved_at", 0);
+        label = format!("{label} · {}, {}{}", cx.world_name(&world), cx.location_name(&world, &s(head, "location_id")), if at > 0 { format!(" · {}", datetime(at)) } else { String::new() });
+        party.join(", ")
+    } else if exists {
+        format!("Can't load ({})", s(head, "error"))
+    } else {
+        "Empty".into()
+    };
+    (label, status)
+}
+
+/// The day line of a readable save's lead (the Continue peek's), None when it does not load.
+pub(crate) fn slot_when(cx: &Cx, slot: i64) -> Option<String> {
+    Peek::read(cx, slot).map(|p| p.when)
+}
+
+impl Slots {
+    /// Why the running game can't be saved now (`no_save`), for the view-model.
+    pub(crate) fn no_save_now(cx: &Cx) -> &'static str {
+        Self::no_save(cx)
+    }
+}
+
 fn save_now(cx: &mut Cx, slot: i64) {
     if cx.game.as_ref().is_some_and(|g| g.sample) {
         return show_errors(cx, vec!["The UI Gallery's sample game is not saved.".into()]);
@@ -740,27 +780,7 @@ impl Screen<GameCx> for Slots {
             } else {
                 None
             };
-            let mut label = if slot == 0 { "Autosave".to_string() } else { format!("Slot {slot}") };
-            // PR7-41 (PT-35): the place and time on the slot's line, the whole party on its own line (no cut names)
-            let status = if ok {
-                let world = s(&head, "world_id");
-                let party: Vec<String> = json::aget(&head, "party")
-                    .iter()
-                    .map(|m| {
-                        let m = json::dict(m);
-                        // the member's character name in the saved world, else its base unit's
-                        let unit = s_or(cx.data.entry("units", &s(m, "base_unit")), "name", &s(m, "base_unit"));
-                        format!("{} Lv {}", s_or(cx.data.resolve(&world, "characters", &s(m, "id")), "name", &unit), json::i(m, "level", 0))
-                    })
-                    .collect();
-                let at = json::i(&head, "saved_at", 0);
-                label = format!("{label} · {}, {}{}", cx.world_name(&world), cx.location_name(&world, &s(&head, "location_id")), if at > 0 { format!(" · {}", datetime(at)) } else { String::new() });
-                party.join(", ")
-            } else if exists {
-                format!("Can't load ({})", s(&head, "error"))
-            } else {
-                "Empty".into()
-            };
+            let (mut label, status) = slot_text(cx, slot, &head);
             // The whole row is the click (PLAYUI1 section 1); lock and delete are icons in its top-right corner.
             let locked = save::is_locked(&cx.save_dir, slot);
             let row = slot_row(self.saving, slot, exists, ok, locked, Self::no_save(cx));
@@ -802,6 +822,10 @@ impl Screen<GameCx> for Slots {
         }
         ui.button("slots.back", Rect::new(70, 292, 70, 18), "Back", SlotAct::Back, true);
         self.w = ui.widgets;
+    }
+    /// The agent link's reading: the screen's view-model (UISPLIT1-H Stage A, `save_view`).
+    fn state(&self, cx: &Cx) -> Value {
+        json!({"saving": self.saving, "view": crate::save_view::view(cx, self.saving).to_json()})
     }
     widget_plumbing!();
 }
@@ -1829,6 +1853,69 @@ mod tests {
         ask.draw(cx, g, (-1, -1), true);
         ask.click_id(cx, "ask.yes").unwrap();
         cx.nav.clear();
+    }
+
+    /// UISPLIT1-H Stage A (`save_view`): the slot list's view says what the drawn rows say: a row per slot, on exactly
+    /// when its card takes a click, its note the card's line, lock or unlock and delete as buttons where the icons show
+    /// (delete off while locked); the agent link carries it; a view click maps to the screen's own act.
+    #[test]
+    fn the_slots_view_matches_the_drawn_rows() {
+        use crate::save_view::{slot_act, view, BACK, DELETE, LOCK, OPEN, UNLOCK};
+        use aegis_ui::screen_layout::{Act, Field};
+        let dir = aegis_core::scratch::Scratch::vacant("emberwake_slots_view");
+        let mut cx = cx(dir.to_path_buf());
+        let mut g = gfx();
+        assert!(save::write(&cx.data, &dir, cx.gs(), 2, 0).is_empty() && save::write(&cx.data, &dir, cx.gs(), 3, 0).is_empty());
+        save::set_locked(&dir, 3, true).unwrap();
+        for saving in [true, false] {
+            let mut s = Slots::new(saving);
+            let w = frame(&mut s, &mut cx, &mut g);
+            let v = view(&cx, saving);
+            assert_eq!(s.state(&cx)["view"], v.to_json(), "the agent link's view");
+            let Some(Field::Rows(rows)) = v.get("slots") else { panic!("slots") };
+            assert_eq!(rows.len() as i64, save::LAST_SLOT - save::AUTOSAVE_SLOT + 1);
+            for r in rows {
+                let card = get(&w, &format!("slot.{}", r.id)).unwrap();
+                assert_eq!(card["enabled"].as_bool(), Some(r.enabled), "{saving} slot {}", r.id);
+                assert_eq!(card["tip"][1].as_str(), Some(r.note.as_str()), "{saving} slot {}", r.id);
+                let has = |a: &str| r.buttons.iter().find(|b| b.action == a);
+                assert_eq!(get(&w, &format!("slot.{}.lock", r.id)).is_some(), has(LOCK).or(has(UNLOCK)).is_some(), "slot {}", r.id);
+                assert_eq!(get(&w, &format!("slot.{}.delete", r.id)).is_some(), has(DELETE).is_some(), "slot {}", r.id);
+            }
+            let three = rows.iter().find(|r| r.id == "3").unwrap();
+            assert!(three.buttons.iter().any(|b| b.action == UNLOCK) && three.buttons.iter().any(|b| b.action == DELETE && !b.enabled), "locked: unlock, delete off");
+            assert!(!rows[0].detail.is_empty() || !json::b(&save::peek(&cx.data, &dir, 0), "ok", false), "a readable save shows its day");
+            assert!(!rows.iter().find(|r| r.id == "2").unwrap().detail.is_empty(), "slot 2's day");
+            let act = |a: &str, arg: Option<&str>| slot_act(saving, &Act { action: a.into(), arg: arg.map(str::to_string) });
+            assert_eq!(act(OPEN, Some("2")), Some(if saving { SlotAct::Save(2) } else { SlotAct::Load(2) }));
+            assert_eq!((act(LOCK, Some("2")), act(UNLOCK, Some("3")), act(DELETE, Some("2")), act(BACK, None)), (Some(SlotAct::Lock(2, true)), Some(SlotAct::Lock(3, false)), Some(SlotAct::Delete(2)), Some(SlotAct::Back)));
+            assert_eq!((act(OPEN, None), act("nope", Some("1"))), (None, None));
+        }
+    }
+
+    /// US6: the fixture has the view's shape (field names and kinds, action ids).
+    #[test]
+    fn the_slots_fixture_has_the_view_shape() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let layers = aegis_core::assets::Layers::of(vec![root]);
+        let fixture = aegis_ui::screen_layout::load_fixture(&layers, crate::save_view::SCREEN).expect("the fixture file").expect("it parses");
+        let dir = aegis_core::scratch::Scratch::vacant("emberwake_slots_fixture");
+        let cx = cx(dir.to_path_buf());
+        let shape = |v: &aegis_ui::screen_layout::View| (v.screen.clone(), v.fields.iter().map(|(n, f)| (n.clone(), f.kind())).collect::<Vec<_>>(), v.actions.iter().map(|a| a.id.clone()).collect::<Vec<_>>());
+        assert_eq!(shape(&fixture), shape(&crate::save_view::view(&cx, true)));
+    }
+
+    /// Writes the fixture (by hand: `cargo test -p emberwake_gui write_slots_fixture -- --ignored`): the save screen with
+    /// a save in slot 2 and a locked one in slot 3.
+    #[test]
+    #[ignore]
+    fn write_slots_fixture() {
+        let dir = aegis_core::scratch::Scratch::vacant("emberwake_slots_write");
+        let cx = cx(dir.to_path_buf());
+        assert!(save::write(&cx.data, &dir, cx.gs(), 2, 0).is_empty() && save::write(&cx.data, &dir, cx.gs(), 3, 0).is_empty());
+        save::set_locked(&dir, 3, true).unwrap();
+        let v = crate::save_view::view(&cx, true).to_json();
+        std::fs::write(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/ui/views/slots.view.json"), serde_json::to_string_pretty(&v).unwrap() + "\n").unwrap();
     }
 
     /// PLAYUI1 section 1 acceptance over the screen's widgets (the agent link's ids): `slot.2` saves an empty slot at
