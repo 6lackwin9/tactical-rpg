@@ -34,8 +34,9 @@ Mocks waiting for you, then provisional calls Design made while you were away, t
   changes on the grid) and the plate order (statuses with no other home first). Mock ready: battle take 25
   (`art-ui/battle_ux14/battle_take25_status_where_2x.png`), one frame per kind. Recommendation: approve.
 - [ ] Boss UI (`docs/specs/BOSSUI1.md`, your take 24 notes): HP refilled per phase with phase markers and names,
-  passive tags (no phase or enrage tags), icon-only status tabs. Take 29 ready with your take 26-28 notes
-  (`art-ui/battle_ux14/battle_take29_*`, PR #70: impact-only boss intent by block, the phase break ending the round, flipped markers, pips in fives, boss intent panel, boxes clear of
+  passive tags (no phase or enrage tags), icon-only status tabs. Take 30 ready with your take 26-29 notes
+  (`art-ui/battle_ux14/battle_take30_*`, PR #70; pick poise A one ticked bar or B ten pips, and party row P1 one
+  row that opens per member on hover or P2 hero plus "Others"; recommendation A and P1; impact-only boss intent by block, the phase break ending the round, flipped markers, pips in fives, boss intent panel, boxes clear of
   units). Then a golden call: boss poise tuned so a focused
   party breaks it first in round 2-3, then about every 3 rounds move the boss fights in the timeline and sim goldens. Recommendation:
   approve once the mock is signed off.
