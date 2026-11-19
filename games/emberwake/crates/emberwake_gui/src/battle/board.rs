@@ -1,10 +1,10 @@
 //! The battle board: the Flat and Stage views' passes over the tiles, tokens, markers and hit rects (`Board`, `draw_flat`, `draw_stage`), status loops on tokens, board geometry helpers.
 
 use aegis_ui::theme::th;
-use super::marks::{bars_shown, break_plate, broken_units, draw_arrows, draw_hold_tiles, draw_hook_marks, draw_pushes, exit_sign, poise_bar, poise_shown, HoldMarks, HookMarks};
+use super::marks::{bars_shown, break_plate, broken_units, draw_arrows, draw_hold_tiles, draw_hook_marks, draw_pushes, exit_glyph, exit_sign, poise_bar, poise_shown, HoldMarks, HookMarks};
 use super::overlays::{draw_overlay, Layers, Overlay};
 use super::skill_menu::{CHANNEL_TINT, CHANNEL_TINT_ALPHA};
-use super::{Action, ALLY, AMBER, DASH_MS, GRID_X, GRID_Y, TILE};
+use super::{Action, AMBER, DASH_MS, GRID_X, GRID_Y, TILE};
 use super::tips::{intent_glyph, intent_ring_color, ring_intent, unit_tip};
 use super::tokens::{body_keys, hit_flash, token_frame, token_outline, Float, Tokens, UnitAnim};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
@@ -276,12 +276,12 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
                 // ENCOUNTER2 H7: a hold escape's exit reads SHUT or OPEN (layer `gate`)
                 let (word, fill, edge) = exit_sign(hold);
                 ui.p.panel(r.inset(7), fill, edge, 2.0);
-                ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, word, SMALL, th().bg);
+                ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, exit_glyph(word), SMALL, th().bg);
             }
             if planning && sel.is_some() && ui.hover(r) && !popup {
                 ui.p.panel(r.inset(1), rgba(255, 255, 255, 30), rgba(255, 255, 255, 160), 1.5);
             }
-            let mut tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), th().good), ("A unit that steps here leaves the battle.".into(), th().text)] } else { Vec::new() };
+            let mut tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), crate::tokens::exit(true)), ("A unit that steps here leaves the battle.".into(), th().text)] } else { Vec::new() };
             tip.extend(marks.tile_tip(c));
             tip.extend(hold.map(|h| h.tile_tip(w, c)).unwrap_or_default());
             ui.push(format!("tile.{gx}.{gy}"), "tile", tid, r, planning, false, if w.occupant(c).is_none() { Some(Action::TileClick(c)) } else { None }, tip);
@@ -380,7 +380,7 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
         // FX1-L2: a miss's target steps aside and back
         let (sx, sy) = fx::sidestep_of(sidesteps, i, anim_now);
         let tr = geo.token_rect_n(pos, n, shake + dx + sx, dy + sy);
-        let ring = if ally { ALLY } else { th().foe };
+        let ring = if ally { crate::tokens::ally() } else { th().foe };
         if alive {
             // VISCLAR1-D: the ellipse in its intent's colour (`ring_intent`), else its side's
             let foot = ring_intent(rounds, i, ally, layers.glyphs, show_tells).map_or(ring, intent_ring_color);
@@ -429,7 +429,7 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
         }
         // VISCLAR1 VC2, VC3: under the round intent the bars of the focus set (Alt or `all_bars`: every unit's)
         if bars_shown(overlay.is_some(), &layers, alt, &focus, i) {
-            hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + r.h - 3 + dy, r.w - 6, 2), hp, u.max_hp, if ally { th().good } else { th().foe });
+            hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + r.h - 3 + dy, r.w - 6, 2), hp, u.max_hp, if ally { crate::tokens::hp() } else { th().foe });
             // RULESET1-U slice 5: the poise bar over the HP bar (rule poise)
             if let Some(st) = poise_shown(w, i, &layers) {
                 poise_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + r.h - 6 + dy, r.w - 6, 2), &st, &w.ruleset.numbers);
@@ -759,7 +759,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                             ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2 * k, col);
                             ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32 - 0.5, 2.7 * k, col);
                         }
-                        None => ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2 * k, with_alpha(if t.ally { ALLY } else { th().foe }, tuning.foot_ring_alpha)),
+                        None => ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2 * k, with_alpha(if t.ally { crate::tokens::ally() } else { th().foe }, tuning.foot_ring_alpha)),
                     }
                 }
             }
@@ -774,7 +774,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                             // BIGUNIT1 BU14: a 2 x 2 unit's sprite is its sheet scaled to the square
                             let tp = tp * t.n;
                             let a = tokens.anims.get(i).unwrap_or(&still);
-                            let ring = if t.ally { ALLY } else { th().foe };
+                            let ring = if t.ally { crate::tokens::ally() } else { th().foe };
                             let outline = if Some(i) == sel || Some(i) == talker { Some(th().gold) } else if hovered == Some(i) { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
                             // STATUSFX1: a stealthed token (sprite and outline) at 55 % alpha
                             let alpha = fx::token_alpha(&t.looks, tuning);
@@ -825,7 +825,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     let tp = tp * t.n;
                     let (Some(b), Some((_, f))) = (t.body.as_deref(), frames.iter().find(|(j, _)| *j == i)) else { continue };
                     let col = match stage::through(&order, k, Some(i) == sel, hovered == Some(i), reveal) {
-                        Some(Through::Side) => with_alpha(if t.ally { ALLY } else { th().foe }, 230),
+                        Some(Through::Side) => with_alpha(if t.ally { crate::tokens::ally() } else { th().foe }, 230),
                         Some(Through::Selected) => th().gold,
                         Some(Through::Hovered) => rgba(255, 255, 255, tuning.hover_outline_alpha),
                         None => continue,
@@ -848,7 +848,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                         // VISCLAR1 VC2, VC3: under the round intent the focus set's bars (Alt or `all_bars`: all)
                         // BIGUNIT1 BU14: one bar centred on a 2 x 2 unit's square, as wide as the square allows
                         let half = 12 * t.n;
-                        hp_bar(&mut ui.p, Rect::new(fx - half, fy + 3, 2 * half, 2), t.hp, u.max_hp, if t.ally { th().good } else { th().foe });
+                        hp_bar(&mut ui.p, Rect::new(fx - half, fy + 3, 2 * half, 2), t.hp, u.max_hp, if t.ally { crate::tokens::hp() } else { th().foe });
                         // RULESET1-U slice 5: the poise bar under the HP bar (rule poise)
                         if let Some(st) = poise_shown(w, t.i, &layers) {
                             poise_bar(&mut ui.p, Rect::new(fx - half, fy + 6, 2 * half, 2), &st, &w.ruleset.numbers);
@@ -884,7 +884,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     // ENCOUNTER2 H7: a hold escape's exit reads SHUT or OPEN (layer `gate`)
                     let (word, fill, edge) = exit_sign(hold);
                     ui.p.panel(sign, fill, edge, 2.0);
-                    ui.p.text_center(cx_ as f32, sign.y as f32 + (sign.h as f32 - ui.p.line_h(SMALL)) / 2.0, word, SMALL, th().bg);
+                    ui.p.text_center(cx_ as f32, sign.y as f32 + (sign.h as f32 - ui.p.line_h(SMALL)) / 2.0, exit_glyph(word), SMALL, th().bg);
                 }
                 for f in floats {
                     let Some(pos) = w.grid.pos(f.unit) else { continue };
@@ -915,7 +915,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     for gy in 0..GRID_H {
         for gx in 0..GRID_W {
             let c = V2::new(gx, gy);
-            let mut tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), th().good), ("A unit that steps here leaves the battle.".into(), th().text)] } else { Vec::new() };
+            let mut tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), crate::tokens::exit(true)), ("A unit that steps here leaves the battle.".into(), th().text)] } else { Vec::new() };
             tip.extend(marks.tile_tip(c));
             tip.extend(hold.map(|h| h.tile_tip(w, c)).unwrap_or_default());
             ui.push(format!("tile.{gx}.{gy}"), "tile", w.grid.terrain_id(c), geo.cell_rect(c), planning, false, if w.occupant(c).is_none() { Some(Action::TileClick(c)) } else { None }, tip);

@@ -357,7 +357,7 @@ impl Screen<GameCx> for Journal {
         let mut ui: Ui<JAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), th().game("popup_veil", rgba(0, 0, 0, 110)));
         let fr = Rect::new(16, 16, 608, 328);
-        ui.frame(fr, "Journal", false);
+        ui.frame_in("ornate", fr, "Journal", false);
         let groups = Self::shown(cx);
         let all: Vec<String> = groups.iter().flat_map(|g| g.2.clone()).collect();
         if !all.contains(&self.selected) {
@@ -854,10 +854,13 @@ impl Screen<GameCx> for Results {
         }
         ui.p.shift(shift, 0);
         if self.over {
-            ui.p.panel(Rect::new(12, 12, W - 24, H - 34), th().game("result_panel", rgba(10, 11, 16, 235)), th().edge, 4.0);
+            // PR7-36 (ART-02): the results are a main panel: the ornate tier over the panel's fill
+            let r = Rect::new(12, 12, W - 24, H - 34);
+            ui.p.fill(r, th().game("result_panel", rgba(10, 11, 16, 235)));
+            ui.frame_body("ornate", r);
         }
         let head = outcome_head(&self.outcome, self.timed_out);
-        ui.p.text(24.0, 24.0, head, aegis_ui::ui::HEAD + 4.0, th().gold);
+        ui.p.text_face(aegis_ui::painter::Typeface::Display, 24.0, 24.0, head, aegis_ui::ui::HEAD + 4.0, th().gold);
         let world = gs.world_id.clone();
         let name = |kind: &str, id: &str| -> String {
             match kind {

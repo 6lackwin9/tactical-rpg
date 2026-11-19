@@ -990,8 +990,8 @@ impl RegionMap {
 
     fn marker_style(kind: &str, state: &str) -> (Rgba, &'static str) {
         match (kind, state) {
-            ("exit", "locked") => (rgb(180, 70, 60), ">"),
-            ("exit", _) => (rgb(70, 190, 100), ">"),
+            ("exit", "locked") => (crate::tokens::exit(false), ">"),
+            ("exit", _) => (crate::tokens::exit(true), ">"),
             ("chest", "spent") => (rgb(90, 74, 50), "c"),
             ("chest", _) => (rgb(200, 150, 60), "c"),
             ("lore", _) => (rgb(150, 110, 220), "L"),
@@ -3712,11 +3712,12 @@ mod talk_tests {
     #[test]
     fn the_shop_hides_the_box_over_a_dimmed_map() {
         let (mut cx, mut g) = (game_cx(), gfx());
-        // the map's brightness left of the box (the legend and the ticker are hidden while talking)
+        // the map's brightness left of the box (the legend and the ticker are hidden while talking) and of the shop's
+        // frame (PR7-36: the ornate main-panel tier, whose corners reach out past the panel, and the rows' icon tiles)
         let light = |g: &Gfx| -> u64 {
             let mut sum = 0;
             for y in (HUD_H + 2)..(H - 10) {
-                for x in 0..100 {
+                for x in 0..14 {
                     let i = ((y * g.canvas.w + x) * 4) as usize;
                     sum += g.canvas.px[i..i + 3].iter().map(|v| *v as u64).sum::<u64>();
                 }

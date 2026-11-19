@@ -37,8 +37,10 @@ pub const VIEW_SUFFIX: &str = ".view.json";
 pub struct RowView {
     pub id: String,
     pub label: String,
-    /// A second text at the row's right end ("" none).
+    /// A second text at the row's right end ("" none): the row's numbers, in the mono face.
     pub detail: String,
+    /// PR7-36 (UX-03): a grey line under the label ("" none).
+    pub sub: String,
     /// A picture at its left (an asset path), if any.
     pub picture: Option<String>,
     pub enabled: bool,
@@ -106,7 +108,13 @@ impl Field {
             Field::Flag(b) => json!({"flag": b}),
             Field::Picture(p) => json!({"picture": p}),
             Field::Meter { value, max } => json!({"meter": [value, max]}),
-            Field::Rows(rows) => json!({"rows": rows.iter().map(|r| json!({"id": r.id, "label": r.label, "detail": r.detail, "picture": pic(&r.picture), "enabled": r.enabled})).collect::<Vec<_>>()}),
+            Field::Rows(rows) => json!({"rows": rows.iter().map(|r| {
+                let mut o = json!({"id": r.id, "label": r.label, "detail": r.detail, "picture": pic(&r.picture), "enabled": r.enabled});
+                if !r.sub.is_empty() {
+                    o["sub"] = json!(r.sub);
+                }
+                o
+            }).collect::<Vec<_>>()}),
             Field::Stats(s) => json!({"stats": s.iter().map(|(a, b)| json!([a, b])).collect::<Vec<_>>()}),
             Field::Tabs { labels, open } => json!({"tabs": {"labels": labels, "open": open}}),
             Field::Slots(s) => json!({"slots": s.iter().map(|c| json!({"id": c.id, "title": c.title, "lines": c.lines, "stamp": c.stamp, "picture": pic(&c.picture)})).collect::<Vec<_>>()}),
@@ -135,7 +143,7 @@ impl Field {
                 list("rows")?
                     .iter()
                     .map(|r| {
-                        r.is_object().then(|| RowView { id: s(r, "id"), label: s(r, "label"), detail: s(r, "detail"), picture: pic(r), enabled: r.get("enabled").and_then(Value::as_bool).unwrap_or(true) }).ok_or("a row is an object")
+                        r.is_object().then(|| RowView { id: s(r, "id"), label: s(r, "label"), detail: s(r, "detail"), sub: s(r, "sub"), picture: pic(r), enabled: r.get("enabled").and_then(Value::as_bool).unwrap_or(true) }).ok_or("a row is an object")
                     })
                     .collect::<Result<_, _>>()?,
             ),
@@ -372,8 +380,9 @@ impl Shell {
 /// The fixed component set (US3). Each names the view fields (by kind) and actions it binds.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Component {
-    /// A frame; regions `in` it are placed in its body.
-    PanelShell { title: Option<String>, shell: Shell },
+    /// A frame; regions `in` it are placed in its body. PR7-36 (UX-01, UX-07): with the close box (action `close`), Back
+    /// at the footer's left (action `back`), the main action at its right (`action`) and the key hints (text `hints`).
+    PanelShell { title: Option<String>, shell: Shell, close: Option<String>, back: Option<String>, action: Option<String>, hints: Option<String> },
     TextBlock { text: String },
     StatBlock { stats: String },
     ListRow { rows: String, select: Option<String> },
@@ -391,7 +400,7 @@ pub enum Component {
 
 /// Each component: its name, the bind keys it needs, the ones it may take.
 pub const COMPONENTS: [(&str, &[&str], &[&str]); 13] = [
-    ("panel_shell", &[], &["title"]),
+    ("panel_shell", &[], &["title", "close", "back", "action", "hints"]),
     ("text_block", &["text"], &[]),
     ("stat_block", &["stats"], &[]),
     ("list_row", &["rows"], &["select"]),
@@ -524,6 +533,10 @@ impl Layout {
             let component = match name {
                 "panel_shell" => Component::PanelShell {
                     title: bind_text(bind, "title"),
+                    close: bind_text(bind, "close"),
+                    back: bind_text(bind, "back"),
+                    action: bind_text(bind, "action"),
+                    hints: bind_text(bind, "hints"),
                     shell: match style {
                         None | Some("main") => Shell::Main,
                         Some("popup") => Shell::Popup,
@@ -578,9 +591,12 @@ impl Layout {
                 }
             };
             match &r.component {
-                Component::PanelShell { title, .. } => {
-                    if let Some(t) = title {
+                Component::PanelShell { title, close, back, action: main, hints, .. } => {
+                    for t in title.iter().chain(hints) {
                         field(t, &["text"], &mut p);
+                    }
+                    for a in close.iter().chain(back).chain(main) {
+                        action(a, &mut p);
                     }
                 }
                 Component::TextBlock { text } | Component::Tooltip { text } => field(text, &["text", "number", "flag"], &mut p),
@@ -682,15 +698,26 @@ fn component(ui: &mut Ui<Act>, art: &mut Art, region: &str, c: &Component, view:
     // A select action the view offers and has enabled; otherwise the items draw but do nothing.
     let live = |a: &Option<String>| a.as_ref().filter(|a| view.act(a).is_some_and(|v| v.enabled)).cloned();
     match c {
-        Component::PanelShell { title, shell } => {
-            let mut body = ui.frame_body(shell.role(), r);
-            if let Some(t) = title {
-                let head = body.cut_top(ui.p.line_h(m.head).ceil() as i32 + m.u(2));
-                let gold = ui.t.gold;
-                let line = text_of(t);
-                ui.p.text_fit(head.x as f32, head.y as f32, &line, m.head, head.w as f32, gold);
-            }
-            body
+        Component::PanelShell { title, shell, close, back, action: main, hints } => {
+            // PR7-36 (UX-01): the shared shell; a chrome action the view does not offer (or has off) is left out
+            let title = title.as_ref().map(|t| text_of(t)).unwrap_or_default();
+            let hints = hints.as_ref().map(|h| text_of(h)).unwrap_or_default();
+            let label = |a: &Option<String>| a.as_ref().and_then(|a| view.act(a)).map(|a| (a.label.clone(), a.enabled));
+            let (back_v, main_v) = (label(back), label(main));
+            let v = crate::panes::ShellView {
+                title: &title,
+                role: shell.role(),
+                close: close.as_ref().is_some_and(|a| view.act(a).is_some_and(|x| x.enabled)),
+                back: back_v.as_ref().map(|b| b.0.as_str()),
+                action: main_v.as_ref().map(|a| (a.0.as_str(), a.1)),
+                hints: &hints,
+            };
+            let ids = (close.clone().unwrap_or_default(), back.clone().unwrap_or_default(), main.clone().unwrap_or_default());
+            crate::panes::shell_in(ui, &format!("{screen}.{region}"), r, &v, |k| match k {
+                crate::panes::ShellAct::Close => act(&ids.0, None),
+                crate::panes::ShellAct::Back => act(&ids.1, None),
+                crate::panes::ShellAct::Action => act(&ids.2, None),
+            })
         }
         Component::TextBlock { text } => {
             let col = ui.t.text;
@@ -698,11 +725,12 @@ fn component(ui: &mut Ui<Act>, art: &mut Art, region: &str, c: &Component, view:
             r
         }
         Component::Tooltip { text } => {
-            let (fill, edge) = (ui.t.tip, ui.t.edge);
-            ui.p.panel(r, fill, edge, m.radius);
-            let col = ui.t.text;
-            let pad = m.padding;
-            ui.para(r.x + pad, r.y + pad, r.w - 2 * pad, &text_of(text), m.small, col);
+            // PR7-36 (UX-06): the one tooltip style: its first line the gold title, at most three lines under it
+            let all = text_of(text);
+            let mut lines = all.lines();
+            let title = lines.next().unwrap_or("").to_string();
+            let body: Vec<String> = lines.map(str::to_string).collect();
+            crate::panes::tooltip_box(&mut ui.p, r, &title, &body);
             r
         }
         Component::StatBlock { stats } => {
@@ -724,31 +752,21 @@ fn component(ui: &mut Ui<Act>, art: &mut Art, region: &str, c: &Component, view:
         }
         Component::ListRow { rows, select } => {
             if let Some(Field::Rows(list)) = view.get(rows) {
-                let (h, gap) = (m.row_h, m.u(1));
-                let text = ui.t.text;
+                // PR7-36 (UX-03): the shared row: icon tile, name, grey sub-line, numbers in the mono face
+                let (h, gap) = (list_row_h(ui, list), m.u(1));
                 for (i, row) in list.iter().enumerate() {
                     let y = r.y + i as i32 * (h + gap);
                     if y + h > r.y + r.h {
                         ui.report_overflow(region, r, (list.len() - i) as i32 * (h + gap));
                         break;
                     }
-                    let mut rr = Rect::new(r.x, y, r.w, h);
+                    let rr = Rect::new(r.x, y, r.w, h);
                     let on = live(select).filter(|_| row.enabled).map(|a| act(&a, Some(row.id.clone())));
-                    let col = if row.enabled { text } else { ui.t.dim };
-                    // A row's picture sits right of the label's text, before the detail.
-                    ui.row(&format!("{screen}.{region}.{i}"), rr, &row.label, col, on, false, Vec::new());
-                    if let Some(img) = row.picture.as_ref().and_then(|p| art.image(p, h, h)) {
-                        let lx = rr.x + m.u(4) + ui.p.text_w(&row.label, m.body).ceil() as i32 + m.u(2);
-                        if lx + h <= rr.x + rr.w {
-                            ui.image_in(img, Rect::new(lx, rr.y, h, h));
-                        }
-                    }
-                    if !row.detail.is_empty() {
-                        rr = rr.pad(Insets::xy(m.u(4), 0));
-                        let w = ui.p.text_w(&row.detail, m.body);
-                        let dim = ui.t.dim;
-                        ui.p.text((rr.x + rr.w) as f32 - w, rr.y as f32 + (h as f32 - ui.p.line_h(m.body)) / 2.0, &row.detail, m.body, dim);
-                    }
+                    let side = m.u(crate::panes::ROW_ICON);
+                    let icon = row.picture.as_ref().and_then(|p| art.image(p, side, side)).cloned();
+                    let numbers: Vec<String> = if row.detail.is_empty() { Vec::new() } else { vec![row.detail.clone()] };
+                    let look = crate::panes::RowLook { icon: icon.as_ref(), glyph: "", name: &row.label, sub: &row.sub, numbers: &numbers, selected: false, enabled: row.enabled };
+                    crate::panes::list_row(ui, &format!("{screen}.{region}.{i}"), rr, &look, on, Vec::new());
                 }
             }
             r
@@ -890,7 +908,7 @@ pub fn draw_default(ui: &mut Ui<Act>, art: &mut Art, view: &View, area: Rect) ->
     let m = ui.m();
     let mut drawn = Drawn::default();
     let title = view.get("title").filter(|f| matches!(f, Field::Text(_))).map(|_| "title".to_string());
-    let shell = Component::PanelShell { title, shell: Shell::Main };
+    let shell = Component::PanelShell { title, shell: Shell::Main, close: None, back: None, action: None, hints: None };
     let mut body = component(ui, art, "panel", &shell, view, area.pad(Insets::all(m.margin)), &mut drawn);
     let foot = if view.actions.is_empty() { None } else { Some(body.cut_bottom(m.u(16))) };
     let wired = |name: &str| view.act(name).map(|a| a.id.clone());
@@ -900,7 +918,7 @@ pub fn draw_default(ui: &mut Ui<Act>, art: &mut Art, view: &View, area: Rect) ->
             Field::Text(_) | Field::Number(_) | Field::Flag(_) => (Component::TextBlock { text: name.clone() }, line),
             Field::Picture(_) => (Component::Portrait { picture: name.clone() }, m.u(32)),
             Field::Meter { .. } => (Component::BarMeter { meter: name.clone(), label: None }, m.u(5)),
-            Field::Rows(rows) => (Component::ListRow { rows: name.clone(), select: wired(name) }, rows.len() as i32 * (m.row_h + m.u(1))),
+            Field::Rows(rows) => (Component::ListRow { rows: name.clone(), select: wired(name) }, rows.len() as i32 * (list_row_h(ui, rows) + m.u(1))),
             Field::Stats(s) => (Component::StatBlock { stats: name.clone() }, s.len() as i32 * line),
             Field::Tabs { .. } => (Component::TabRail { tabs: name.clone(), select: wired(name).unwrap_or_default() }, m.u(12)),
             Field::Slots(s) => (Component::SlotCard { slots: name.clone(), select: wired(name) }, s.len() as i32 * m.u(19)),
@@ -922,6 +940,17 @@ pub fn draw_default(ui: &mut Ui<Act>, art: &mut Art, view: &View, area: Rect) ->
         component(ui, art, "actions", &bar, view, foot.pad(Insets { l: 0, t: m.u(2), r: 0, b: 0 }), &mut drawn);
     }
     drawn
+}
+
+/// A list row's height: the theme's row with a line to spare, or the shared row's (`panes::row_h_on`) when a row has a
+/// picture or a sub-line.
+fn list_row_h(ui: &Ui<Act>, rows: &[RowView]) -> i32 {
+    let m = ui.m();
+    if rows.iter().any(|r| r.picture.is_some() || !r.sub.is_empty()) {
+        crate::panes::row_h_on(&m, &ui.p)
+    } else {
+        m.row_h
+    }
 }
 
 /// The widget ids and kinds a drawing recorded, for a test or the agent link.

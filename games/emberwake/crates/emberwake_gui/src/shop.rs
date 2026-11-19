@@ -10,7 +10,7 @@ use crate::screens::Cx;
 use aegis_core::json::{self, s, s_or, Dict};
 use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
-use aegis_ui::painter::Painter;
+use aegis_ui::painter::{Painter, Typeface};
 use aegis_ui::ui::{tip, Ui, BODY, RADIUS, SMALL, W, H};
 use emberwake_world::{shop, Data, GameState};
 use emberwake_world::terms::{CURRENCY, UPKEEP};
@@ -28,12 +28,19 @@ const PAD: i32 = 7;
 const GAP: i32 = 6;
 /// The columns' shares (shop, trade, stash; spec 4.2 at Normal).
 const COLS: [i32; 3] = [230, 150, 200];
-/// A row's least height and its icon slot (filled when ICONUI1 lands).
-const ROW_H: i32 = 14;
-const ICON: i32 = 12;
+/// A row's least height and its icon slot (PR7-36, ART-05: a 32 px I2 tile at 1280 x 720).
+const ROW_H: i32 = 18;
+const ICON: i32 = 16;
 /// The columns' fill.
 const COL_BG: Rgba = rgb(14, 20, 34);
 /// Buy lines and prices above the gold left: the kit has no warning colour of its own, its problem red stands in.
+
+/// PR7-36 (ART-05): item `id`'s I2 tile in `r` (its icon chain; the bare tile when no file is there).
+pub(crate) fn item_tile<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, r: Rect, id: &str) {
+    let px = ui.icon_px(r);
+    let img = cx.art.first(&crate::tokens::item_icons(&cx.data, id), px, px).cloned();
+    aegis_ui::panes::icon_tile(ui, r, img.as_ref(), "");
+}
 
 /// A click in the shop.
 #[derive(Debug, Clone)]
@@ -288,9 +295,11 @@ impl ShopPane {
 
     /// Draws the trade of shop `sq` (spec 4.2): header, the three columns, the detail line, refusals and the action
     /// bar; `wrap` makes a screen action of a shop click.
-    pub fn draw<A: Clone>(&mut self, ui: &mut Ui<A>, cx: &Cx, sq: &str, wrap: impl Fn(ShopAct) -> A) {
-        let d = &cx.data;
-        let gs = cx.gs();
+    pub fn draw<A: Clone>(&mut self, ui: &mut Ui<A>, cx: &mut Cx, sq: &str, wrap: impl Fn(ShopAct) -> A) {
+        let data = cx.data.clone();
+        let d = &*data;
+        let state = cx.gs().clone();
+        let gs = &state;
         let sh = shop::shop_of(d, gs, sq);
         let name = s_or(sh, "name", sq);
         let offers = shop::offers(d, gs, sq);
@@ -300,7 +309,9 @@ impl ShopPane {
         // TERMS1 TU4: the purse names of the world being played (labels `short`, sentences `word`)
         let (cur, cur_word, upkeep) = (term_short(cx, CURRENCY), term_word(cx, CURRENCY), term_short(cx, UPKEEP));
         let fr = frame_rect(&ui.p);
-        ui.p.panel(fr, th().panel, th().panel_edge, 4.0);
+        // PR7-36 (ART-02): a main panel, the ornate tier
+        ui.p.fill(fr, th().panel);
+        ui.frame_body("ornate", fr);
         ui.push("shop", "panel", name.clone(), fr, true, false, None, Vec::new());
         let (lb, ls) = (ui.p.line_h(BODY).ceil() as i32, ui.p.line_h(SMALL).ceil() as i32);
         let rh = ROW_H.max(lb + 3);
@@ -309,7 +320,7 @@ impl ShopPane {
         let fq = shop::keeper_faction(d, gs, sh);
         let band = if fq.is_empty() { String::new() } else { format!("{}: {}", s(d.resolve(&gs.world_id, "factions", &fq), "name"), shop::keeper_band(d, gs, sh)) };
         let band_w = if band.is_empty() { 0.0 } else { ui.p.text_w(&band, BODY) + 12.0 };
-        ui.p.text_fit(x0 as f32, fr.y as f32 + 5.0, &name, 10.0, (fr.w - 2 * PAD) as f32 - band_w, th().gold);
+        ui.p.text_fit_face(Typeface::Display, x0 as f32, fr.y as f32 + 5.0, &name, 10.0, (fr.w - 2 * PAD) as f32 - band_w, th().gold);
         let head_h = ui.p.line_h(10.0).ceil() as i32;
         if !band.is_empty() {
             ui.p.text_right(right as f32, (fr.y + 5 + head_h - lb) as f32, &band, BODY, th().dim);
@@ -436,7 +447,7 @@ impl ShopPane {
     /// in a scroll area; `gold_left` colours shop prices above it; `others` are stash items the shop does not buy,
     /// listed dimmed under a divider.
     #[allow(clippy::too_many_arguments)]
-    fn list<A: Clone>(&mut self, ui: &mut Ui<A>, cx: &Cx, side: &str, area: Rect, rows: &[Row], gold_left: Option<i64>, others: &[(String, i64)], wrap: &impl Fn(ShopAct) -> A) {
+    fn list<A: Clone>(&mut self, ui: &mut Ui<A>, cx: &mut Cx, side: &str, area: Rect, rows: &[Row], gold_left: Option<i64>, others: &[(String, i64)], wrap: &impl Fn(ShopAct) -> A) {
         let (lb, rh) = {
             let lb = ui.p.line_h(BODY).ceil() as i32;
             (lb, ROW_H.max(lb + 3))
@@ -474,6 +485,7 @@ impl ShopPane {
             let price_col = if gold_left.is_some_and(|g| r.price > g) { th().foe } else if on { th().gold } else { th().dim };
             let count = of_text(r.x, r.n);
             let name_x = rr.x + 2 + ICON + 3;
+            item_tile(ui, cx, Rect::new(rr.x + 1, rr.y + (rh - ICON) / 2, ICON, ICON), &r.item);
             let price_right = count_right - count_w - 6;
             ui.p.text_fit(name_x as f32, ty, &r.label, BODY, (price_right - price_w - 6 - name_x) as f32, if on || r.x > 0 { th().text } else { th().dim });
             ui.p.text_right(price_right as f32, ty, &price, BODY, price_col);
@@ -501,6 +513,7 @@ impl ShopPane {
                 let count = format!("x{n}");
                 let cw = ui.p.text_w(&count, BODY).ceil() as i32;
                 let name_x = rr.x + 2 + ICON + 3;
+                item_tile(ui, cx, Rect::new(rr.x + 1, rr.y + (rh - ICON) / 2, ICON, ICON), item);
                 ui.p.text_fit(name_x as f32, ty, &label, BODY, (rr.x + rr.w - 3 - cw - 6 - name_x) as f32, th().dim);
                 ui.p.text_right((rr.x + rr.w - 3) as f32, ty, &count, BODY, th().dim);
                 if ui.hover(rr) {

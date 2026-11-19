@@ -12,6 +12,7 @@ use aegis_core::json::{self, s, s_or, Dict};
 use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, H, RADIUS, SMALL, W};
+use aegis_ui::painter::Typeface;
 use aegis_ui::widget_plumbing;
 use emberwake_world::board;
 use serde_json::{json, Value};
@@ -197,7 +198,9 @@ impl BoardPane {
     pub fn draw<A: Clone>(&mut self, ui: &mut Ui<A>, cx: &Cx, view: &Dict, det: &Dict, wrap: impl Fn(BoardAct) -> A) {
         let fr = crate::shop::frame_rect(&ui.p);
         let name = s_or(view, "name", "Board");
-        ui.p.panel(fr, th().panel, th().panel_edge, 4.0);
+        // PR7-36 (ART-02): a main panel, the ornate tier
+        ui.p.fill(fr, th().panel);
+        ui.frame_body("ornate", fr);
         ui.push("board", "panel", name.clone(), fr, true, false, None, Vec::new());
         let sc = ui.p.fonts.scale;
         let (lb, ls) = (ui.p.line_h(BODY).ceil() as i32, ui.p.line_h(SMALL).ceil() as i32);
@@ -206,7 +209,7 @@ impl BoardPane {
         let keeper = s(view, "keeper_name");
         let keeper_w = if keeper.is_empty() { 0.0 } else { ui.p.text_w(&keeper, BODY) + 12.0 };
         let head_h = ui.p.line_h(HEAD).ceil() as i32;
-        ui.p.text_fit(x0 as f32, fr.y as f32 + 5.0, &name, HEAD, inner as f32 - keeper_w, th().gold);
+        ui.p.text_fit_face(Typeface::Display, x0 as f32, fr.y as f32 + 5.0, &name, HEAD, inner as f32 - keeper_w, th().gold);
         if !keeper.is_empty() {
             ui.p.text_right(right as f32, (fr.y + 5 + head_h - lb) as f32, &keeper, BODY, th().dim);
         }

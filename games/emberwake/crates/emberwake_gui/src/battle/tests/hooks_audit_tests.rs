@@ -6,7 +6,7 @@
 use crate::battle::draw::{intel_parts, INTEL_HEAD, INTEL_LINE, INTEL_MORE};
 use crate::battle::marks::{HELD, METER};
 use crate::battle::overlays::OVERLAY_GROUPS;
-use crate::battle::{BattleScreen, ALLY, POISE};
+use crate::battle::{BattleScreen, ally, POISE};
 use aegis_ui::canvas::Rgba;
 use crate::screens::{Cx, Screen};
 use aegis_ui::painter::Painter;
@@ -122,7 +122,7 @@ fn the_intel_panel_drops_the_level_line_first_then_points_to_the_hover_card() {
         ("Poise 46/46".into(), POISE),
         ("Test Heat 5/20".into(), METER),
         ("Held guard 50% through B3".into(), HELD),
-        ("Warrior deals about 47 with a Strike, takes about 22".into(), ALLY),
+        ("Warrior deals about 47 with a Strike, takes about 22".into(), ally()),
     ];
     let height = |parts: &[(String, Rgba, bool)]| parts.iter().map(|x| if x.2 { INTEL_HEAD } else { INTEL_LINE }).sum::<f32>();
     let all = intel_parts(&mut p, &lines, 1000.0);
