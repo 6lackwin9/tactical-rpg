@@ -160,6 +160,9 @@ screen at 1280x720, 1:1.
   - Clear of units: the foe card docks at the board's top right unless it would cover the acting unit or its target
     at 720p; then it docks top left (`battle_take27_card_clear_720p.png`). The grown boss bar ends about 60 px above
     the board's first unit row in the shot; Build checks the same rule against the live board.
+  - Carry (`BOSSUI1` BU14): a hit past the span shows in "After" as the span at 0, the next phase's marker, then the
+    next span less the remainder (gold number); the bar's impact fills the span and its number gets the marker; the
+    totals read "+6 to ph. 2" (`battle_take27_carry_2x.png`). A phase with a new boss unit takes no carry.
 - Not expressed yet: collision stagger from push or pull on the card row, hazard damage in the HP preview and the
   block ruler, reactions (riposte, counters) as a "returns -n" note, flank, guard, cover and windup modifiers in the
   skill hover, channel rounds, unit meters, weapon wear.

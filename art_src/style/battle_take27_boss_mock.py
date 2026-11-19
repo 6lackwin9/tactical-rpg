@@ -97,7 +97,7 @@ def chip(img, d, x, y, k, hp, pp, on):
     return w
 
 
-def intent_rows(img, x0, x1, y, sel="kaelen", span_left=160, pips=6):
+def intent_rows(img, x0, x1, y, sel="kaelen", span_left=160, pips=6, next_span=450):
     """BOSSUI1 section 5: two rows in the bar. Hits: every planned hit on the boss by block, the selected hero's
     ringed. After: the phase span and poise left after each block, BREAK where it lands; totals at the right."""
     d = ImageDraw.Draw(img)
@@ -116,8 +116,16 @@ def intent_rows(img, x0, x1, y, sel="kaelen", span_left=160, pips=6):
                 hp, pp = HITS[k][b + 1]
                 cx += chip(img, d, cx, y + 4, k, hp, pp, k == sel) + 3
                 left, pl = left - hp, max(0, pl - pp)
-        B.bar(d, bx + 10, y + 29, cw - 46, 5, left / span_left, (150, 50, 45))
-        d.text((bx + cw - 32, y + 25), str(left), font=T12.TINY, fill=B.PARCH)
+        if left <= 0:
+            # BU14: the span reaches 0, the next phase's marker, then its span less the carried remainder
+            B.bar(d, bx + 10, y + 29, 18, 5, 0, (150, 50, 45))
+            m = bx + 36
+            d.polygon([(m, y + 26), (m + 5, y + 31), (m, y + 36), (m - 5, y + 31)], fill=(255, 220, 110), outline=LIT)
+            B.bar(d, bx + 46, y + 29, cw - 82, 5, (next_span + left) / next_span, (150, 50, 45))
+            d.text((bx + cw - 32, y + 25), str(next_span + left), font=T12.TINY, fill=B.GOLD)
+        else:
+            B.bar(d, bx + 10, y + 29, cw - 46, 5, left / span_left, (150, 50, 45))
+            d.text((bx + cw - 32, y + 25), str(left), font=T12.TINY, fill=B.PARCH)
         for p in range(pips):
             d.rectangle((bx + 10 + p * 7, y + 38, bx + 14 + p * 7, y + 41), fill=B.POISE if p < pl else B.AP_OFF)
         if pl == 0 and not brk:
@@ -131,7 +139,10 @@ def intent_rows(img, x0, x1, y, sel="kaelen", span_left=160, pips=6):
     mine = sum(v[0] for v in HITS[sel].values())
     d.text((sx, y + 5), f"{NAMES[sel]} -{mine}", font=B.SMALL, fill=B.GOLD)
     d.text((sx, y + 26), f"Party -{span_left - left}", font=B.SMALL, fill=B.PARCH)
-    d.text((sx + 92, y + 27), f"{left} to ph. 2", font=T12.TINY, fill=B.GOLD)
+    if left > 0:
+        d.text((sx + 92, y + 27), f"{left} to ph. 2", font=T12.TINY, fill=B.GOLD)
+    else:
+        d.text((sx + 92, y + 27), f"+{-left} to ph. 2", font=T12.TINY, fill=B.GOLD)
     return y + EXTRA
 
 
@@ -156,6 +167,17 @@ def main():
     s = screen(shot)
     s.save(out / "battle_take27_boss_intent_720p.png")
     s.crop((204, 66, 1076, 216)).resize((872 * 2, 300), Image.NEAREST).save(out / "battle_take27_boss_intent_2x.png")
+    # BU14: a carried hit (Kaelen's block 6 hit 30 instead of 14: 166 on a 160 span, 6 carry into phase 2)
+    HITS["kaelen"][6] = (30, 0)
+    T26.PHASES[0] = T26.PHASES[0][:7] + (160,) + T26.PHASES[0][8:]   # the bar's impact fills the span
+    c = screen(shot)
+    cd = ImageDraw.Draw(c)
+    cd.rectangle((976, 116, 1060, 131), fill=c.getpixel((1050, 112)))
+    cd.text((978, 117), "-166", font=B.MONO, fill=B.IMPACT)
+    cd.polygon([(1024, 119), (1029, 124), (1024, 129), (1019, 124)], fill=(255, 220, 110))
+    T26.PHASES[0] = T26.PHASES[0][:7] + (150,) + T26.PHASES[0][8:]
+    c.crop((204, 66, 1076, 216)).resize((872 * 2, 300), Image.NEAREST).save(out / "battle_take27_carry_2x.png")
+    HITS["kaelen"][6] = (14, 0)
     # contract 5 rule at 720p: the foe card docks top right unless it would cover the acting unit or its target
     # (the Castellan Footman's helmet is under the take 26 card); then it docks top left of the board
     T24.boss_bar = lambda img, x0, x1, y: boss_bar(img, x0, x1, y, ph=0)
