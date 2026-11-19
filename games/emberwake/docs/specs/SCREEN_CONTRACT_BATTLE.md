@@ -198,6 +198,8 @@ screen at 1280x720, 1:1.
   taken as a number ("2"), and shows at most one status chip and "+N"; party row, recommended P1: the whole party in
   one row, hover or press it for one line per member in the same block columns (P2: the selected hero and "Others",
   the rest summed, with the party total beside the totals).
+  - Picked on the user's card 2026-11-19 18:56: A (poise bar with ticks and the count) and P1 (one party row, hover
+    by member); a UI preference, revisit at the UI review.
 - Not expressed yet: collision stagger from push or pull on the card row, hazard damage in the HP preview and the
   block ruler, reactions (riposte, counters) as a "returns -n" note, flank, guard, cover and windup modifiers in the
   skill hover, channel rounds, unit meters, weapon wear.
