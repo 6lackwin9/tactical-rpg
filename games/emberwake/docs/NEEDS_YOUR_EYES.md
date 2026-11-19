@@ -19,7 +19,7 @@ Mocks waiting for you, then provisional calls Design made while you were away, t
   bosses by name.
 - [ ] Pacing (`PR7-42`): patrols every 40-60 steps, at most 2 per visit, no respawn until the next day; Cages offered
   before The Sweep; Warded Tallow at the Candle-Maker for 5 Scrap; Make camp needs Tallow.
-- [ ] Bunks (`PR7-43`): the hall's plank floor under the bunks with low timber screens and a step; the class blanket
+- [x] Bunks (`PR7-43`): the hall's plank floor under the bunks with low timber screens and a step; the class blanket Superseded: you signed off take 8 (2026-11-19), built as `PR7-53`.
   colours.
 - [ ] Mocks to sign off (images in the project files `art-ui/`; scripts on PR #67):
   battle take 22, the boss fight (`battle_ux14/`, contract section 9); battle take 23, the full timeline view (T)

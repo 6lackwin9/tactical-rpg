@@ -273,6 +273,10 @@ pub struct View {
     pub screen: String,
     pub fields: Vec<(String, Field)>,
     pub actions: Vec<ActionView>,
+    /// ENGINE-20 (TOOLS-HELP3): a text or stats field's tones by field name, theme colour roles: one for every line (a
+    /// text's `\n` lines, a stat block's values), or one per line in order ("" keeps the default colour). In JSON the
+    /// field's second key, `"tone"`: a role or a list of roles.
+    pub tones: Vec<(String, Vec<String>)>,
 }
 
 impl View {
@@ -293,13 +297,37 @@ impl View {
     pub fn get(&self, name: &str) -> Option<&Field> {
         self.fields.iter().find(|(n, _)| n == name).map(|(_, f)| f)
     }
+    /// ENGINE-20: the field `name` toned (`tones`): a role for every line, or one per line (all "": untoned).
+    pub fn tone(mut self, name: &str, tones: &[&str]) -> Self {
+        self.tones.retain(|(n, _)| n != name);
+        if tones.iter().any(|t| !t.is_empty()) {
+            self.tones.push((name.to_string(), tones.iter().map(|t| t.to_string()).collect()));
+        }
+        self
+    }
+    /// The tone of line `i` of field `name`: the one tone of all its lines, else line i's; None for the default colour.
+    pub fn tone_of(&self, name: &str, i: usize) -> Option<&str> {
+        let t = &self.tones.iter().find(|(n, _)| n == name)?.1;
+        let one = if t.len() == 1 { t.first() } else { t.get(i) };
+        one.map(String::as_str).filter(|s| !s.is_empty())
+    }
     pub fn act(&self, id: &str) -> Option<&ActionView> {
         self.actions.iter().find(|a| a.id == id)
     }
 
     /// `{"screen", "fields": {name: field}, "actions": [{"id", "label", "enabled"}]}`, the fixture's form.
     pub fn to_json(&self) -> Value {
-        let fields: Map<String, Value> = self.fields.iter().map(|(n, f)| (n.clone(), f.to_json())).collect();
+        let fields: Map<String, Value> = self
+            .fields
+            .iter()
+            .map(|(n, f)| {
+                let mut j = f.to_json();
+                if let Some((_, t)) = self.tones.iter().find(|(m, _)| m == n) {
+                    j["tone"] = if t.len() == 1 { json!(t[0]) } else { json!(t) };
+                }
+                (n.clone(), j)
+            })
+            .collect();
         json!({"screen": self.screen, "fields": fields, "actions": self.actions.iter().map(|a| json!({"id": a.id, "label": a.label, "enabled": a.enabled})).collect::<Vec<_>>()})
     }
 
@@ -314,12 +342,23 @@ impl View {
         if !plain_id(&screen) {
             problems.push("'screen' is the screen's id: letters, digits and _".into());
         }
-        let mut fields = Vec::new();
+        let (mut fields, mut tones) = (Vec::new(), Vec::new());
         match o.get("fields") {
             Some(Value::Object(f)) => {
                 for (name, x) in f {
-                    match Field::from_json(x) {
-                        Ok(field) => fields.push((name.clone(), field)),
+                    // ENGINE-20: a text or stats field may carry a second key, its tone (a role, or one per line)
+                    let mut x = x.clone();
+                    let tone = x.as_object_mut().and_then(|m| m.remove("tone"));
+                    match Field::from_json(&x) {
+                        Ok(field) => {
+                            if let Some(t) = tone {
+                                match tone_list(&t, &field) {
+                                    Ok(t) => tones.push((name.clone(), t)),
+                                    Err(e) => problems.push(format!("field '{name}': {e}")),
+                                }
+                            }
+                            fields.push((name.clone(), field))
+                        }
                         Err(e) => problems.push(format!("field '{name}': {e}")),
                     }
                 }
@@ -335,10 +374,27 @@ impl View {
             }
         }
         if problems.is_empty() {
-            Ok(View { screen, fields, actions })
+            Ok(View { screen, fields, actions, tones })
         } else {
             Err(problems)
         }
+    }
+}
+
+/// A field's `tone` (ENGINE-20): a theme colour role or a list of them ("" for the default), on a text, number or stats
+/// field only.
+fn tone_list(t: &Value, field: &Field) -> Result<Vec<String>, String> {
+    if !matches!(field, Field::Text(_) | Field::Number(_) | Field::Stats(_)) {
+        return Err(format!("'tone' is for a text or stats field, not {}", field.kind()));
+    }
+    let list: Vec<String> = match t {
+        Value::String(s) => vec![s.clone()],
+        Value::Array(a) => a.iter().map(|x| x.as_str().map(str::to_string).ok_or("'tone' is a role or a list of roles")).collect::<Result<_, _>>()?,
+        _ => return Err("'tone' is a role or a list of roles".into()),
+    };
+    match list.iter().find(|x| !x.is_empty() && !crate::theme::ROLES.contains(&x.as_str())) {
+        Some(bad) => Err(format!("a field's 'tone' is a theme colour role, not '{bad}'")),
+        None => Ok(list),
     }
 }
 
@@ -951,7 +1007,9 @@ fn component(ui: &mut Ui<Act>, art: &mut Art, region: &str, c: &Component, view:
                 _ => (m.body, ui.t.text),
             };
             let mut y = r.y;
-            for line in text_of(text).split('\n') {
+            for (i, line) in text_of(text).split('\n').enumerate() {
+                // ENGINE-20: a line's tone from the view (a theme role)
+                let col = view.tone_of(text, i).and_then(|t| ui.t.role(t)).unwrap_or(col);
                 if *look == TextLook::Right {
                     let w = ui.p.text_w(line, size).min(r.w as f32);
                     ui.p.text_fit((r.x + r.w) as f32 - w, y as f32, line, size, r.w as f32, col);
@@ -984,7 +1042,8 @@ fn component(ui: &mut Ui<Act>, art: &mut Art, region: &str, c: &Component, view:
                     }
                     ui.p.text_fit(r.x as f32, y as f32, k, m.body, r.w as f32 * 0.6, dim);
                     let w = ui.p.text_w(v, m.body);
-                    ui.p.text((r.x + r.w) as f32 - w, y as f32, v, m.body, text);
+                    let col = view.tone_of(stats, i).and_then(|t| ui.t.role(t)).unwrap_or(text);
+                    ui.p.text((r.x + r.w) as f32 - w, y as f32, v, m.body, col);
                 }
             }
             r

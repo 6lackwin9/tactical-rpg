@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TOOLS-HELP1 (ENGINE-15): `tools/fc.sh seed-from <kind> <id> [<world>] --set k=v ... [--out F] [--append]`.
+"""TOOLS-HELP1 (ENGINE-15): `tools/fc.sh seed-from <kind> <id> [<world>] --set k=v ... [--fields a,b] [--out F] [--append]`.
 
 Writes a seed for `aegis content apply` from a current entry with a change: reads the stored entry
 (`aegis content get <kind> <id> [world=<world>]`, through the game's CLI), sets each `k=v` (a dotted key reaches
@@ -7,6 +7,11 @@ inside: `deck.active=[...]`; the value is JSON when it parses, else a plain stri
 so the writer's default applies) and prints the seed `{"steps": [{"op": "upsert", "kind", ["world",] "entry"}]}`,
 or writes it to `--out F` (`--append` adds the step to F's steps). Whole floats the reader gives (`1.0`) are written
 as whole numbers. It writes no data: apply the seed with `tools/fc.sh content apply F`.
+
+ENGINE-20 (TOOLS-HELP3): `--fields a,b` writes only those top-level fields (the step's `"fields"`: the writer changes
+just them in the stored entry, a field the entry then leaves out is removed), so the seed changes no more than it means
+to and a later seed's other fields survive a re-run (the seed order check, `tools/fc.sh seeds`). Each `--set` must
+fall inside a named field.
 """
 import json
 import os
@@ -48,16 +53,23 @@ def set_path(entry, key, raw):
         node[parts[-1]] = parse_value(raw)
 
 
-def seed_step(kind, world, entry, sets):
+def seed_step(kind, world, entry, sets, fields=None):
     entry = whole(entry)
     for s in sets:
         if "=" not in s:
             raise ValueError("--set takes k=v, not %r" % s)
         k, v = s.split("=", 1)
+        if fields is not None and k.split(".")[0] not in fields:
+            raise ValueError("--set %s is outside --fields %s" % (k, ",".join(fields)))
         set_path(entry, k, v)
     step = {"op": "upsert", "kind": kind}
     if world:
         step["world"] = world
+    if fields is not None:
+        if not fields or "id" in fields:
+            raise ValueError("--fields names the top-level fields to write (not id)")
+        step["fields"] = list(fields)
+        entry = {k: v for k, v in entry.items() if k == "id" or k in fields}
     step["entry"] = entry
     return step
 
@@ -73,7 +85,7 @@ def stored(kind, eid, world):
 
 
 def main(argv):
-    pos, sets, out, append = [], [], None, False
+    pos, sets, out, append, fields = [], [], None, False, None
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -82,6 +94,8 @@ def main(argv):
             i += 2
         elif a == "--out":
             out, i = Path(argv[i + 1]), i + 2
+        elif a == "--fields":
+            fields, i = [f for f in argv[i + 1].split(",") if f], i + 2
         elif a == "--append":
             append, i = True, i + 1
         else:
@@ -93,7 +107,7 @@ def main(argv):
     kind, eid = pos[0], pos[1]
     world = pos[2] if len(pos) == 3 else None
     try:
-        step = seed_step(kind, world, stored(kind, eid, world), sets)
+        step = seed_step(kind, world, stored(kind, eid, world), sets, fields)
     except ValueError as e:
         print("seed-from: %s" % e)
         return 1

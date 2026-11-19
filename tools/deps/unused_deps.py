@@ -5,6 +5,7 @@ A dependency counts as used when its name (dashes as underscores) appears as a w
 Exit 1 and one line per unused dependency. Plain Python 3.11+ (tomllib); run from the repository root.
 """
 import glob
+from pathlib import Path
 import re
 import sys
 import tomllib
@@ -29,7 +30,7 @@ def unused(crate):
     tables = [manifest.get(k, {}) for k in ("dependencies", "dev-dependencies", "build-dependencies")]
     for target in manifest.get("target", {}).values():
         tables += [target.get(k, {}) for k in ("dependencies", "dev-dependencies", "build-dependencies")]
-    name = crate.rstrip("/").split("/")[-1]
+    name = Path(crate).name  # on Windows glob joins with a backslash: never split the path on "/"
     out = []
     for table in tables:
         for dep in table:

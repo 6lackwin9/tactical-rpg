@@ -235,3 +235,36 @@ fn the_styles_for_a_hand_drawn_look_parse_draw_or_are_refused() {
     let (a, b) = (y("Total: 0"), y("Purse: 5"));
     assert!(a < f32::MAX && b > a, "the second line under the first: {a} {b}");
 }
+
+/// ENGINE-20 (TOOLS-HELP3, FB-361): a text or stats field takes a tone from the view (a theme role for every line, or
+/// one per line), drawn in that colour; it goes out and back in JSON and an unknown role or a tone on another kind of
+/// field is refused.
+#[test]
+fn a_text_field_takes_its_tone_from_the_view() {
+    let v = View::from_json(&json!({"screen": "s", "fields": {
+        "totals": {"text": "Total: -5\nPurse: 0 -> -5", "tone": ["foe", ""]},
+        "one": {"text": "a\nb", "tone": "good"},
+        "stats": {"stats": [["Gold", "3"]], "tone": "foe"}
+    }}))
+    .expect("toned fields parse");
+    assert_eq!((v.tone_of("totals", 0), v.tone_of("totals", 1), v.tone_of("one", 1), v.tone_of("stats", 0)), (Some("foe"), None, Some("good"), Some("foe")));
+    assert_eq!(View::from_json(&v.to_json()).unwrap(), v, "out and back");
+    assert_eq!(View::new("s").text("x", "y").tone("x", &["", ""]).tones, Vec::new(), "all default: untoned");
+    for (field, why) in [(json!({"text": "x", "tone": "loud"}), "not 'loud'"), (json!({"rows": [], "tone": "foe"}), "text or stats field"), (json!({"text": "x", "tone": 3}), "a role or a list")] {
+        let err = View::from_json(&json!({"screen": "s", "fields": {"f": field}})).err().unwrap_or_default().join(" ");
+        assert!(err.contains(why), "{err}");
+    }
+    // drawn: the toned line holds the theme's foe colour, the same text untoned does not
+    let l = Layout::from_json(&json!({"screen": "s", "regions": [{"id": "t", "component": "text_block", "bind": {"text": "totals"}, "anchor": "top_left", "w": 60, "h": 10}]})).unwrap();
+    let foe = Theme::default().foe;
+    let has_foe = |v: &View| {
+        let mut g = gfx();
+        let mut art = aegis_ui::art::Art::new(None);
+        let mut ui: Ui<Act> = Ui::new(&mut g, (-1, -1), true);
+        screen_layout::draw(&mut ui, &mut art, Some(&l), v, SCREEN);
+        drop(ui);
+        g.canvas.px.chunks(4).any(|p| (0..3).all(|k| (p[k] as i32 - foe[k] as i32).abs() <= 8))
+    };
+    let plain = View { tones: Vec::new(), ..v.clone() };
+    assert!(has_foe(&v) && !has_foe(&plain), "the total in foe");
+}

@@ -10,6 +10,7 @@ shotsexact    every scenario run again: each shot byte for byte the same (the sh
 newgame       a game made by `aegis new game` builds, tests and plays its scenario
 layers        engine and kit code name no game, no lore word, kit code no class id
 layouts       every screen layout fits its fixture; every string table holds the keys of en
+seeds         the seeds replayed in commit order leave the shipped data as it is (ENGINE-20)
 lints         the deny set under clippy; no unused dependency
 docs          the whole docs check (markdown lint; size warnings as one count)
 tooltests     the tools/tiles tests

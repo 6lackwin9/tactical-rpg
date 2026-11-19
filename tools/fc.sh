@@ -8,14 +8,19 @@
 #   tools/fc.sh golden-bisect <golden> <switch> [--keep DIR] | list   record a golden with a test-only switch
 #                                (aegis_core::switches) off and on, list the fights or runs that move; fixtures restored (ENGINE-14);
 #                                `golden-bisect repro <switch>`: the repro replays off and on, which recordings diverge (ENGINE-15)
-#   tools/fc.sh scenario shots-all out=<dir> [compare=<before dir>]   every scenario's shots in one flat folder
+#   tools/fc.sh scenario shots-all out=<dir> [compare=<before dir>] [crop=x,y,w,h]   every scenario's shots in one flat folder
 #                                (<scenario>__<shot>.png, index.txt); compare= lists the shots changed (pixel counts), new and gone (ENGINE-16)
+#                                and writes before | after | diff sheets into <out>/compare/ (sheets=0: none); crop= compares only that
+#                                rectangle and writes each shot's crop into <out>/crops/ (ENGINE-20)
 #   tools/fc.sh rename <old> <new> [<path>...] [--strings] [--comments] [--dry]   an identifier renamed across Rust and JSON;
 #                                string literals and comments left unless asked; legacy, game data and fixtures only listed (ENGINE-16)
 #   tools/fc.sh schema-field <table> <field> <json> [--after <key>] [--replace]   add a field to kits/rpg/schema.json byte for byte
 #                                (<table> content.<kind> / world.<kind>, or a bare kind when unique; ENGINE-15)
-#   tools/fc.sh seed-from <kind> <id> [<world>] [--set k=v]... [--out F [--append]]   a seed for `content apply` from a
-#                                current entry with changes (dotted keys, JSON values, `k=` removes; ENGINE-15)
+#   tools/fc.sh seed-from <kind> <id> [<world>] [--set k=v]... [--fields a,b] [--out F [--append]]   a seed for `content apply`
+#                                from a current entry with changes (dotted keys, JSON values, `k=` removes; ENGINE-15); --fields
+#                                writes only those fields, so a re-run undoes no later seed (ENGINE-20)
+#   tools/fc.sh seeds [--all]    the seed order check (in the gate): every game's seeds replayed in commit order leave the shipped
+#                                data as it is; a finding not in tools/planner/seed_order_known.txt fails (ENGINE-20)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
 #                                engine and kit crates (src, tests), schema.json and kit.json name no lore word, any case
 #                                (world ids, games/<id>/lore_words.txt);
@@ -323,6 +328,16 @@ assetlib() {  # PR7-35 (ASSETLIB1): the kit asset library check (tools/assetlib/
   fi
 }
 
+seeds_check() {  # ENGINE-20 (TOOLS-HELP3): the seeds replayed in commit order leave the shipped data as it is (tools/planner/seed_order.py)
+  local py g
+  if ! py=$(python_with "pass"); then echo "[seeds] SKIP: no Python 3 found"; return 0; fi
+  for g in games/*/data/seeds; do
+    [ -d "$g" ] || continue
+    g=${g#games/}; g=${g%%/*}
+    "$py" tools/planner/seed_order.py "$g" "$@" || status=1
+  done
+}
+
 layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crates name no game and have no path into games/
   local id ids=() hits bad=0
   # the engine's sample game `hello` is exempt (ENGINE-11, FB-315 (a)): engine docs and code may point at games/hello/
@@ -415,6 +430,7 @@ gate_step() {  # GATE-PARITY1 (ENGINE-12): one gate step by its name in tools/ga
     tooltests) tooltests ;;
     plannertests) plannertests ;;
     assetlib) assetlib ;;
+    seeds) seeds_check ;;
     *) echo "[gate] FAIL: no gate step '$1' (tools/gate_steps.txt names it, tools/fc.sh gate_step has no such step)"; status=1 ;;
   esac
 }
@@ -510,14 +526,14 @@ sim_bands() {  # PR7-6: the balance bands of games/emberwake/tuning.json (tools/
 shots_all() {  # ENGINE-16: every scenario's shots in one flat folder (tools/planner/shots_all.py), optionally against a before folder
   local a out="" cmp="" pass=() opts=() tmp py
   for a in "$@"; do
-    case "$a" in out=*) out=${a#out=} ;; compare=*) cmp=${a#compare=} ;; tolerance=*|pixels=*) opts+=("$a") ;; *) pass+=("$a") ;; esac
+    case "$a" in out=*) out=${a#out=} ;; compare=*) cmp=${a#compare=} ;; tolerance=*|pixels=*|crop=*|sheets=*) opts+=("$a") ;; *) pass+=("$a") ;; esac
   done
-  [ -n "$out" ] || { echo "usage: tools/fc.sh scenario shots-all out=<dir> [compare=<before dir> [tolerance=8] [pixels=300]] [size=WxH] [profile=dev|release] [slow=] [data=]"; status=2; return; }
+  [ -n "$out" ] || { echo "usage: tools/fc.sh scenario shots-all out=<dir> [compare=<before dir> [tolerance=8] [pixels=300] [sheets=0]] [crop=x,y,w,h] [size=WxH] [profile=dev|release] [slow=] [data=]"; status=2; return; }
   py=$(python_with "pass") || { echo "[shots-all] no Python 3 found"; status=2; return; }
   [ -z "$cmp" ] || [ -d "$cmp" ] || { echo "[shots-all] no folder $cmp to compare with"; status=2; return; }
   tmp=$(mktemp -d)
   scenario all out="$tmp" "${pass[@]}"
-  "$py" tools/planner/shots_all.py collect "$tmp" "$out" || status=1
+  "$py" tools/planner/shots_all.py collect "$tmp" "$out" "${opts[@]}" || status=1
   [ -z "$cmp" ] || "$py" tools/planner/shots_all.py compare "$cmp" "$out" "${opts[@]}" || status=1
   if [ $status -eq 0 ]; then rm -rf "$tmp"; else echo "[shots-all] a scenario failed: bundles kept under $tmp (the shots it took are in $out)"; fi
 }
@@ -660,6 +676,7 @@ case "$1" in
   scenario) scenario "${@:2}" ;;
   playtest) playtest "${@:2}" ;;
   assetlib) assetlib ;;
+  seeds) seeds_check "${@:2}" ;;
   bench) bench "${@:2}" ;;
   layouts) layouts ;;
   lints) lints ;;
