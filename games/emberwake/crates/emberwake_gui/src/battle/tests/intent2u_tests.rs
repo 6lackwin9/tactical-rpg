@@ -91,26 +91,28 @@ fn a_two_row_item_has_a_cell_in_each_row() {
     assert_eq!(on_tile.len(), cells.len(), "the same cells whatever the target (nothing shifts)");
 }
 
-/// IR19 Option A: every intent row on one line, and an item's cell comes after the skills of its row.
+/// IR19 Option A as BATTLE-UI2 keeps it (battle contract 7, one row per skill): an intent's rows stand together, one
+/// line each, and an item's row comes after the skills of its intent.
 #[test]
 fn every_row_is_one_line_with_items_after_the_skills() {
     let (mut cx, mut g, mut b, _h, foe, id) = bomb_arena(TIMELINE);
     b.act(&mut cx, Action::UnitClick(foe));
     b.draw(&mut cx, &mut g, (-500, -500), true);
     let p = b.popup.as_ref().unwrap();
-    let grid = p.grid.as_ref().expect("the icon menu");
+    let grid = p.grid.as_ref().expect("the skill menu");
     for (_, intent, line) in grid.lines.iter().filter(|l| l.1.is_some()) {
         let in_row: Vec<usize> = (0..p.rows.len()).filter(|&k| p.rows[k].slot == intent.map(Slot::Intent)).collect();
-        assert!(in_row.iter().all(|&k| grid.places[k].0 == *line), "{intent:?}: one line");
-        let skills = in_row.iter().filter(|&&k| matches!(&p.rows[k].act, RowAct::Pick(x) if matches!(x[..], [rip::Pick::Skill { .. }]))).map(|&k| grid.places[k].1).max();
-        let items = in_row.iter().filter(|&&k| matches!(&p.rows[k].act, RowAct::Pick(x) if matches!(&x[..], [rip::Pick::Item(i)] if *i == id))).map(|&k| grid.places[k].1).min();
+        let mut lines: Vec<i32> = in_row.iter().map(|&k| grid.places[k].0).collect();
+        lines.sort();
+        assert_eq!(lines, (*line..*line + in_row.len() as i32).collect::<Vec<_>>(), "{intent:?}: its rows together, one line each");
+        let skills = in_row.iter().filter(|&&k| matches!(&p.rows[k].act, RowAct::Pick(x) if matches!(x[..], [rip::Pick::Skill { .. }]))).map(|&k| grid.places[k].0).max();
+        let items = in_row.iter().filter(|&&k| matches!(&p.rows[k].act, RowAct::Pick(x) if matches!(&x[..], [rip::Pick::Item(i)] if *i == id))).map(|&k| grid.places[k].0).min();
         if let (Some(s), Some(i)) = (skills, items) {
             assert!(i > s, "{intent:?}: the item after the skills");
         }
     }
     let rows: Vec<i32> = grid.lines.iter().filter(|l| l.1.is_some()).map(|l| l.2).collect();
-    let first = rows[0];
-    assert!(first >= 1 && rows == (first..first + rows.len() as i32).collect::<Vec<_>>(), "one line per row, none wraps: {rows:?}");
+    assert!(rows[0] >= 1 && rows.windows(2).all(|x| x[0] <= x[1]), "the intents in order under the neutral line: {rows:?}");
     // no block count on the cells: the only text on an item cell is its `xN` badge
     let k = item_cells(&b, &id)[0].0;
     let left = s(&b).plan.items_left(&s(&b).w, b.selected.unwrap(), &id, -1);

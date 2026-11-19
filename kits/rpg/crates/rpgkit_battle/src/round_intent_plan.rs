@@ -2308,6 +2308,47 @@ pub fn preview_plan(w: &World, plan: &Plan, c: UnitId, at: RoundTarget, picks: &
     trial(w, plan, c, at, picks).map_err(String::from)
 }
 
+/// BATTLE-UI2 (skill menu row, battle contract section 7): what a pick would land on one foe, summed over its hits.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PickHits {
+    /// The hits the pick's own steps land on the foe.
+    pub hits: usize,
+    pub damage: i32,
+    /// The poise pips they break, and whether one empties the bar.
+    pub pips: i32,
+    pub breaks: bool,
+}
+
+/// BATTLE-UI2 (battle contract section 7): the foe card's hits (`intent::foe_card` over the round as it would run,
+/// `intent::planned_schedule` of `sched` with the trial plan) of the steps `picks` on `at` add to `c`'s round, on `foe`;
+/// None when the picks are refused. The ghost the picks replace and the ghost after them do not count. Read only.
+pub fn pick_hits(w: &World, plan: &Plan, sched: &[crate::resolver::ScheduledAction], c: UnitId, at: RoundTarget, picks: &[Pick], foe: UnitId) -> Option<PickHits> {
+    let before = if picks_of(w, c).is_empty() { 0 } else { ghost_from(w, plan, c) };
+    let (w2, p2) = trial(w, plan, c, at, picks).ok()?;
+    let entries = p2.entries_for(&w2, c);
+    let ghost = ghosts_of(&w2, &p2, c, &entries);
+    let starts: Vec<i32> = entries.iter().zip(&ghost).skip(before).filter(|(_, g)| !**g).map(|(e, _)| e.start_block).collect();
+    let card = crate::intent::foe_card(&w2, &crate::intent::planned_schedule(&w2, sched, &p2), foe);
+    Some(card.hits.iter().filter(|h| h.unit == c && starts.contains(&h.start)).fold(PickHits::default(), |mut s, h| {
+        s.hits += 1;
+        s.damage += h.damage;
+        s.pips += h.pips;
+        s.breaks |= h.breaks;
+        s
+    }))
+}
+
+/// BATTLE-UI2 (battle contract section 7): the block `c`'s next pick starts on: the one after its last picked entry
+/// (block 1 with no pick); past the round's last block when its picks fill the round.
+pub fn next_pick_block(w: &World, plan: &Plan, c: UnitId) -> i32 {
+    let entries = plan.entries_for(w, c);
+    if picks_of(w, c).is_empty() {
+        return 1;
+    }
+    let ghost = ghosts_of(w, plan, c, &entries);
+    entries.iter().zip(&ghost).filter(|(_, g)| !**g).map(|(e, _)| e.end_block(w) + 1).max().unwrap_or(1)
+}
+
 /// PR5-32 (A4.2-K1b, INTENT2-U): the row an entry's impact tiles are marked in under the Field rows: an area item's or an
 /// area attack skill's entry with tiles, in the Assault row when it is locked on a target (it follows its target), else
 /// in the round's `intent` (a Field throw or aim); None for any other entry.

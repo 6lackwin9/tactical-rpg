@@ -22,7 +22,7 @@
     {"step": "wait", "until": {"path": "state.popup.title", "has": "use on an ally"}},
     {"step": "shot", "name": "ally_list"},
     {"step": "click", "id": "popup.0"},
-    {"step": "wait", "until": {"path": "state.popup.title", "has": "Hollis ->"}},
+    {"step": "wait", "until": {"path": "state.popup.title", "has": "Block 1 vs "}},
     {"step": "shot", "name": "ally_skill_menu"}
   ]
 }

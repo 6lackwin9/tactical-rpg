@@ -1,0 +1,25 @@
+{
+  "id": "battle_board_marks",
+  "title": "PR7-40 part 3 (BATTLE-UI2, contract 6-8): kit_winch_escape on the Timeline ruleset; round 1 the Ranger lays a Snare Wire on the Warlord's tile; round 2 the Warrior plans a Shield Bash that pushes the Warlord and the Priest a Tend Wounds on the Rogue: proof shots of the heal +n, the status chips, the hazard with its rounds left, the push arrow and landing tile, and the row skill menu on a strip block",
+  "launch": {"screen": "arena", "scene": "kit_winch_escape", "ruleset": "timeline"},
+  "settings": {"reduce_motion": true, "battle_overlays": {"test_hazards": true}},
+  "timeout_s": 600,
+  "steps": [
+    {"step": "wait", "until": {"path": "state.ruleset.id", "eq": "timeline"}},
+    {"step": "link", "body": {"cmd": "stay_pick", "unit": 2}},
+    {"step": "link", "body": {"cmd": "pick", "unit": 1, "target": [7, 4], "pick": {"skill": "snare_wire"}}},
+    {"step": "link", "body": {"cmd": "confirm"}},
+    {"step": "link", "body": {"cmd": "resolve"}},
+    {"step": "link", "body": {"cmd": "advance"}},
+    {"step": "wait", "until": {"path": "state.view.fields.round.text", "has": "Round 2"}, "timeout_ms": 20000},
+    {"step": "link", "body": {"cmd": "pick", "unit": 0, "target": 4, "pick": {"skill": "shield_bash"}}},
+    {"step": "link", "body": {"cmd": "pick", "unit": 3, "target": 2, "pick": {"skill": "tend_wounds"}}},
+    {"step": "key", "key": "1"},
+    {"step": "wait", "until": {"widget": "strip.block1"}},
+    {"step": "pause", "ms": 3000},
+    {"step": "shot", "name": "marks"},
+    {"step": "click", "id": "strip.block1"},
+    {"step": "wait", "until": {"path": "state.popup.title", "has": " vs "}},
+    {"step": "shot", "name": "row_menu"}
+  ]
+}

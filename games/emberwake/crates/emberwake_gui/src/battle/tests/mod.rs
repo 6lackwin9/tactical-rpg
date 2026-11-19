@@ -1,5 +1,6 @@
 mod pacing_tests;
 mod battle_ui2b_tests;
+mod battle_ui2c_tests;
 mod passive_icon_tests;
 mod data_looks_tests;
 mod windup_tests;

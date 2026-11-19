@@ -278,6 +278,7 @@ impl BattleScreen {
             Action::TileClick(c) => self.tile_click(cx, c),
             Action::FillGhost => self.accept_ghost(cx, None),
             Action::GhostSlot(k) => self.accept_ghost(cx, Some(k)),
+            Action::StripMenu(b) => self.strip_menu(b),
             Action::Choose(i) => {
                 let Some(p) = self.popup.take() else { return };
                 let Some(row) = p.rows.get(i).filter(|r| r.valid).cloned() else {

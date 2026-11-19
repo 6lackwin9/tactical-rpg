@@ -3,7 +3,7 @@
 use aegis_ui::theme::th;
 use super::marks::skills_hp;
 use super::playback::PlaySpeed;
-use super::skill_menu::{menu_intents, MenuGrid, Slot};
+use super::skill_menu::{menu_intents, MenuGrid, RowFacts, Slot};
 use super::{Action, BattleScreen, ally, TACTICS, TACTIC_HELP, TACTIC_INTENT_HELP, TACTIC_LABELS};
 use aegis_ui::canvas::Rect;
 use crate::intent_text;
@@ -246,6 +246,8 @@ pub(super) struct Row {
     pub(super) at: Option<RoundTarget>,
     /// VISCLAR1-D: a pouch item's copies left (drawn on its cell).
     pub(super) count: Option<i32>,
+    /// BATTLE-UI2 (battle contract 7): a skill row's cost and what it lands on the target (None: a button or a text row).
+    pub(super) facts: Option<RowFacts>,
 }
 
 #[derive(Debug, Clone)]
@@ -261,6 +263,8 @@ pub(super) struct Popup {
     pub(super) grid: Option<MenuGrid>,
     /// VISCLAR1-D: the board tile the skill menu opens beside (None: where it was placed).
     pub(super) anchor: Option<V2>,
+    /// BATTLE-UI2 (battle contract 7): the strip block the skill menu opened on and its rect (it opens under it).
+    pub(super) block: Option<(i32, Rect)>,
 }
 
 impl Popup {
@@ -295,9 +299,10 @@ impl Popup {
         g.fit(p);
         let (w, h) = g.size(row_h);
         self.w = w;
-        (self.x, self.y) = match tile {
-            Some(t) => super::skill_menu::menu_place(t, (w, h), view),
-            None => (self.x.clamp(2, (W - w - 2).max(2)), self.y.clamp(2, (H - h - 2).max(2))),
+        (self.x, self.y) = match (self.block, tile) {
+            (Some((_, b)), _) => super::skill_menu::menu_below(b, (w, h), Rect::new(2, 2, W - 4, H - 4)),
+            (None, Some(t)) => super::skill_menu::menu_place(t, (w, h), view),
+            (None, None) => (self.x.clamp(2, (W - w - 2).max(2)), self.y.clamp(2, (H - h - 2).max(2))),
         };
     }
 }
@@ -320,10 +325,11 @@ impl BattleScreen {
                 icon: Vec::new(),
                 at: None,
                 count: None,
+                facts: None,
             })
             .collect();
         let anchor = self.w.iter().find(|w| w.id == if party { "strip.party" } else { "strip.hero" }).map(|w| w.rect).unwrap_or_default();
-        self.popup = Some(Popup { title: if party { "Draft the whole party".into() } else { "Draft the selected hero".into() }, x: anchor.x, y: anchor.y + anchor.h + 1, w: 120, rows, menu: None, grid: None, anchor: None });
+        self.popup = Some(Popup { title: if party { "Draft the whole party".into() } else { "Draft the selected hero".into() }, x: anchor.x, y: anchor.y + anchor.h + 1, w: 120, rows, menu: None, grid: None, anchor: None, block: None });
     }
 
     pub(super) fn unit_click(&mut self, cx: &Cx, u: usize) {
@@ -589,7 +595,7 @@ impl BattleScreen {
         let mut rows: Vec<Row> = opts
             .iter()
             .filter(|o| o.intent.map_or(!o.picks.iter().any(|p| p.holds_target()), |i| listed.contains(&i)))
-            .map(|o| Row { label: pick_label(s, h, &o.picks), detail: o.problem.as_ref().map_or_else(|| pick_detail(&w.cat, o), |_| intent_text::menu_refusal_text(&o.reasons)), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty(), ap_short: o.ap_short, slot: Some(slot_of(o)), icon: cell_icon(w, o), at: Some(o.at), count: item_count(s, h, o) })
+            .map(|o| Row { label: pick_label(s, h, &o.picks), detail: o.problem.as_ref().map_or_else(|| pick_detail(&w.cat, o), |_| intent_text::menu_refusal_text(&o.reasons)), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty(), ap_short: o.ap_short, slot: Some(slot_of(o)), icon: cell_icon(w, o), at: Some(o.at), count: item_count(s, h, o), facts: Some(row_facts(s, h, o)) })
             .collect();
         if !rows.is_empty() {
             // VISCLAR1-D: on a unit the Move takes its tile from the next click (on a tile it is one of the kit's cells)
@@ -597,7 +603,7 @@ impl BattleScreen {
                 let why = rip::move_refusal(w, &s.plan, h);
                 let mut tip: Tip = vec![("Move".into(), th().gold), (move_tip(w), th().text)];
                 tip.extend(why.iter().map(|y| (y.clone(), th().foe)));
-                rows.push(Row { label: "Move".into(), detail: why.clone().unwrap_or_else(|| "then click a tile".into()), valid: why.is_none(), act: RowAct::MoveAim, tip, warn: false, ap_short: None, slot: Some(Slot::Neutral("Move")), icon: Vec::new(), at: None, count: None });
+                rows.push(Row { label: "Move".into(), detail: why.clone().unwrap_or_else(|| "then click a tile".into()), valid: why.is_none(), act: RowAct::MoveAim, tip, warn: false, ap_short: None, slot: Some(Slot::Neutral("Move")), icon: Vec::new(), at: None, count: None, facts: None });
             }
             // VISCLAR1-C, VISCLAR1-D: Fill on the neutral row, faded with no ghost to take
             let has_ghost = self.deferred.iter().any(|d| d.0 == h) || rip::ghost_entries(w, &s.plan, h).contains(&true);
@@ -606,7 +612,7 @@ impl BattleScreen {
             if after_move {
                 tip.push((rip::ONLY_REST.into(), th().foe));
             }
-            rows.push(Row { label: "Fill".into(), detail: if after_move { rip::ONLY_REST } else if has_ghost { "the rest of the round" } else { "nothing to fill" }.into(), valid: has_ghost && !after_move, act: RowAct::Fill, tip, warn: false, ap_short: None, slot: Some(Slot::Neutral("Fill")), icon: Vec::new(), at: None, count: None });
+            rows.push(Row { label: "Fill".into(), detail: if after_move { rip::ONLY_REST } else if has_ghost { "the rest of the round" } else { "nothing to fill" }.into(), valid: has_ghost && !after_move, act: RowAct::Fill, tip, warn: false, ap_short: None, slot: Some(Slot::Neutral("Fill")), icon: Vec::new(), at: None, count: None, facts: None });
             // PK1-S2c (PK1 4.3 item 1): the Channel toggle, only for a hero that can Channel; never locked
             if let Some(row) = channel_row(w, h) {
                 rows.push(row);
@@ -618,7 +624,7 @@ impl BattleScreen {
         let round = w.round_states.get(&h).and_then(|r| r.target);
         if let RoundTarget::Unit(u) = at {
             if u != h && w.allies.contains(&u) && w.units[u].is_active() {
-                rows.push(Row { label: format!("Select {}", w.units[u].name), detail: String::new(), valid: true, act: RowAct::SelectAlly(u), tip: vec![(format!("Select {}", w.units[u].name), th().gold), ("Plan this hero's round instead.".into(), th().text)], warn: false, ap_short: None, slot: Some(Slot::Neutral("Select")), icon: Vec::new(), at: None, count: None });
+                rows.push(Row { label: format!("Select {}", w.units[u].name), detail: String::new(), valid: true, act: RowAct::SelectAlly(u), tip: vec![(format!("Select {}", w.units[u].name), th().gold), ("Plan this hero's round instead.".into(), th().text)], warn: false, ap_short: None, slot: Some(Slot::Neutral("Select")), icon: Vec::new(), at: None, count: None, facts: None });
             }
         }
         let skill_rows = rows.iter().any(|r| matches!(r.act, RowAct::Pick(_)));
@@ -627,7 +633,13 @@ impl BattleScreen {
         } else if !rows.iter().any(|r| r.valid && matches!(r.act, RowAct::Pick(_))) {
             format!("No skill reaches {} this round", target_name(w, at))
         } else {
-            format!("{} -> {}", w.units[h].name, target_name(w, at))
+            // BATTLE-UI2 (battle contract 7): the block the next pick starts on and the target ("Block 2 vs Footman")
+            let next = rip::next_pick_block(w, &s.plan, h);
+            if next <= s.def.total_blocks {
+                format!("Block {next} vs {}", target_name(w, at))
+            } else {
+                format!("{} -> {}", w.units[h].name, target_name(w, at))
+            }
         };
         (title, rows)
     }
@@ -660,12 +672,62 @@ impl BattleScreen {
         let fixed = rip::picks_of(w, h).iter().any(|p| p.holds_target()).then(|| ri::intent_of(w, h)).flatten();
         // every row shows (the row list is one input: a subset keeps every place)
         let grid = MenuGrid::new(&intents, intents.iter().map(|i| i.0).collect(), &rows, fixed);
-        let mut popup = Popup { title, x, y, w: 0, rows, menu: Some((h, at)), grid: Some(grid), anchor };
+        // BATTLE-UI2 (battle contract 7): a menu opened on a strip block stays under it as it re-lists
+        let block = self.popup.as_ref().filter(|p| p.menu == Some((h, at))).and_then(|p| p.block);
+        let mut popup = Popup { title, x, y, w: 0, rows, menu: Some((h, at)), grid: Some(grid), anchor, block };
         let (pw, ph) = popup.grid.as_ref().map_or((0, 0), |g| g.size(self.menu_row));
         popup.w = pw;
         popup.x = x.clamp(2, (W - pw - 2).max(2));
         popup.y = y.clamp(2, (H - ph - 2).max(2));
         self.popup = Some(popup);
+    }
+
+    /// BATTLE-UI2 (battle contract 7, FB-358): the selected hero's skill menu opened on strip block `b` (a click on an
+    /// empty or a picked block; a right click or the menu key on a ghost block), on the hero's round target (else the
+    /// target its intent proposes, else itself), under the block. Nothing outside planning or without a party hero.
+    pub(super) fn strip_menu(&mut self, b: i32) {
+        if !self.planning() {
+            return;
+        }
+        let w = &self.session().w;
+        let Some(h) = self.selected.filter(|&h| ri::on(w) && w.allies.contains(&h) && w.units[h].is_active() && w.has(h)) else { return };
+        let at = w.round_states.get(&h).and_then(|r| r.target).or_else(|| ri::intent_of(w, h).and_then(|i| rip::proposed_target(w, h, i))).unwrap_or(RoundTarget::Myself);
+        let rect = self.w.iter().find(|x| x.id == format!("strip.block{b}")).map(|x| x.rect).unwrap_or_default();
+        self.move_aim = None;
+        self.move_tiles.clear();
+        self.popup = None;
+        self.open_menu(h, at, None, false);
+        if let Some(p) = self.popup.as_mut().filter(|p| p.menu.is_some()) {
+            p.block = Some((b, rect));
+        }
+    }
+
+    /// BATTLE-UI2 (battle contract 7): the strip block under the mouse in the last frame, and whether it shows a ghost
+    /// entry (its click accepts the ghost).
+    pub(super) fn strip_block_under_mouse(&self) -> Option<(i32, bool)> {
+        let (mx, my) = self.mouse;
+        let w = self.w.iter().rev().find(|x| x.id.starts_with("strip.block") && x.rect.contains(mx, my))?;
+        let b = w.id["strip.block".len()..].parse().ok()?;
+        Some((b, matches!(w.action, Some(Action::GhostSlot(_)))))
+    }
+
+    /// BATTLE-UI2 (battle contract 7, FB-358): the menu key (Tab, pad north) while planning: the skill menu on the strip
+    /// block under the mouse, else on the block the next pick starts on; again it closes the menu. False when it does not
+    /// apply (the key keeps its focus move).
+    pub(super) fn menu_key(&mut self) -> bool {
+        if self.talk.is_some() || self.beat.is_some() || self.host.session.is_none() || !self.planning() {
+            return false;
+        }
+        let w = &self.session().w;
+        let Some(h) = self.selected.filter(|&h| ri::on(w) && w.allies.contains(&h) && w.units[h].is_active()) else { return false };
+        if self.popup.as_ref().is_some_and(|p| p.menu.is_some()) {
+            self.popup = None;
+            return true;
+        }
+        let total = self.session().def.total_blocks.max(1);
+        let b = self.strip_block_under_mouse().map(|x| x.0).unwrap_or_else(|| rip::next_pick_block(&self.session().w, &self.session().plan, h).clamp(1, total));
+        self.strip_menu(b);
+        true
     }
 
     /// IF4: appends `picks` (a menu row or a hotkey) to `h`'s round on `at` through the host's `pick`; the message names
@@ -733,7 +795,7 @@ impl BattleScreen {
                 let who = w.units[a].name.clone();
                 let detail = format!("{n} pick{}", if n == 1 { "" } else { "s" });
                 let tip: Tip = vec![(who.clone(), th().gold), (format!("Opens {name}'s skill menu on {who} (the same as Ctrl+click on {who})."), th().text)];
-                Row { label: who, detail, valid: true, act: RowAct::AllyMenu(a), tip, warn: false, ap_short: None, slot: None, icon: Vec::new(), at: None, count: None }
+                Row { label: who, detail, valid: true, act: RowAct::AllyMenu(a), tip, warn: false, ap_short: None, slot: None, icon: Vec::new(), at: None, count: None, facts: None }
             })
             .collect();
         self.open_popup(format!("{name}: use on an ally"), rows);
@@ -1004,7 +1066,7 @@ impl BattleScreen {
         let (mx, my) = self.mouse;
         let w = 170;
         let h = self.menu_row + 4 + rows.len() as i32 * self.menu_row;
-        self.popup = Some(Popup { title, x: mx.clamp(2, W - w - 2), y: my.clamp(2, H - h - 2), w, rows, menu: None, grid: None, anchor: None });
+        self.popup = Some(Popup { title, x: mx.clamp(2, W - w - 2), y: my.clamp(2, H - h - 2), w, rows, menu: None, grid: None, anchor: None, block: None });
     }
 
     /// Candidate steps for hero `h` (`what`: foe / ally / self / tile), each probed through the API.
@@ -1092,7 +1154,7 @@ impl BattleScreen {
                 tip.push((r.clone(), th().foe));
                 r
             };
-            rows.push(Row { label, detail, valid, act: RowAct::Step(step), tip, warn: false, ap_short: None, slot: None, icon: Vec::new(), at: None, count: None });
+            rows.push(Row { label, detail, valid, act: RowAct::Step(step), tip, warn: false, ap_short: None, slot: None, icon: Vec::new(), at: None, count: None, facts: None });
         }
         rows.sort_by_key(|r| !r.valid);
         rows
@@ -1121,7 +1183,7 @@ fn channel_row(w: &World, h: usize) -> Option<Row> {
     if on {
         tip.insert(1, (format!("On: this is a {name} round"), super::skill_menu::CHANNEL_TINT));
     }
-    Some(Row { label: name, detail, valid: true, act: RowAct::Channel(!on), tip, warn: false, ap_short: None, slot: Some(Slot::Neutral(super::skill_menu::CHANNEL)), icon: Vec::new(), at: None, count: None })
+    Some(Row { label: name, detail, valid: true, act: RowAct::Channel(!on), tip, warn: false, ap_short: None, slot: Some(Slot::Neutral(super::skill_menu::CHANNEL)), icon: Vec::new(), at: None, count: None, facts: None })
 }
 
 /// GEAR-REWORK1 (PR5-51a pass 2, `docs/sessions/U3_GEAR_REWORK.md` 4): `h`'s off-hand action (the kit's
@@ -1139,7 +1201,7 @@ fn off_hand_row(w: &World, h: usize, rows: &mut Vec<Row>) {
     let name = w.cat.skills[a.skill].name.clone();
     let mut row = cells.iter().find(|r| r.valid).or(cells.first()).cloned().unwrap_or_else(|| {
         let why = a.problem.clone().unwrap_or_else(|| OFF_HAND_UNOFFERED.to_string());
-        Row { label: name.clone(), detail: why.clone(), valid: false, act: RowAct::Pick(vec![rip::Pick::Skill { skill: a.skill, kind: None }]), tip: vec![(why, th().foe)], warn: false, ap_short: None, slot: None, icon: Vec::new(), at: None, count: None }
+        Row { label: name.clone(), detail: why.clone(), valid: false, act: RowAct::Pick(vec![rip::Pick::Skill { skill: a.skill, kind: None }]), tip: vec![(why, th().foe)], warn: false, ap_short: None, slot: None, icon: Vec::new(), at: None, count: None, facts: None }
     });
     if let Some(p) = a.problem.as_ref().filter(|_| row.valid) {
         row.valid = false;
@@ -1179,6 +1241,31 @@ fn meter_name(w: &World) -> String {
 /// VISCLAR1-D: what the menu's Move does (the kit's `build_picks`).
 fn move_tip(w: &World) -> String {
     format!("Before a skill, it moves first. After one, it replaces the last auto-filled block, up to {} move blocks, and only Rest can follow. 1 AP a tile; near keeps blocks for Rest, far is safer.", w.ruleset.numbers.move_after_blocks)
+}
+
+/// BATTLE-UI2 (battle contract 7): a skill row's facts: its AP and blocks, what it lands on its target when that is a foe
+/// (the kit's `pick_hits` over the round as it will run; a refused row none), whether its skill heals and the statuses it
+/// applies or grants (the strip's chips; an item none).
+fn row_facts(s: &Session, h: usize, o: &rip::PickOption) -> RowFacts {
+    let w = &s.w;
+    let hits = match o.at {
+        RoundTarget::Unit(u) if o.problem.is_none() && w.foes_of(h).contains(&u) => rip::pick_hits(w, &s.plan, &s.resolver.scheduled, h, o.at, &o.picks, u),
+        _ => None,
+    };
+    let skill = o.picks.iter().find_map(|p| match p {
+        rip::Pick::Skill { skill, .. } => Some(&w.cat.skills[*skill]),
+        _ => None,
+    });
+    let (heal, statuses) = skill.map_or((false, Vec::new()), |sk| {
+        let mut st: Vec<String> = Vec::new();
+        for x in [&sk.status_effect, &sk.grant_status] {
+            if !x.is_empty() && !st.contains(x) {
+                st.push(x.clone());
+            }
+        }
+        (emberwake_battle::skill::heals(sk), st)
+    });
+    RowFacts { ap: o.ap, blocks: o.blocks, hits, heal, statuses }
 }
 
 /// VISCLAR1-D: a pouch item's copies left.
