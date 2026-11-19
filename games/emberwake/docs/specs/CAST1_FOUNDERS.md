@@ -67,7 +67,7 @@ Passives, keystone and trait (FP):
 Penance and the Hook both answer `ally_hit`; which one takes a hit while the Hook runs is CQ18 (HOOKS1 8.4 allows
 one redirect a hit).
 
-Deck at level 1: active [`pommel_strike`, `intercepting_hook`]; passive [`braced_poise`, `kinetic_leverage`]; keystone
+Deck at level 1: active [`pommel_strike`, `intercepting_hook`]; passive [`braced_poise`, `kinetic_leverage`]; keystone (from level 6, `FB-338`)
 [`unbroken_phalanx`]. Full deck from level 3: active [`pommel_strike`, `billhook_sunder`, `seventh_ward_bulwark`] or
 the player's pick.
 
@@ -106,8 +106,8 @@ Gear: main `curfew_bodkin` (dagger); body `soot_leathers`; pouch `sulfur_poultic
 | `ghost_of_the_undercroft` | Ghost of the Undercroft | keystone | `foresight` (no range); `ap_regen` +1 | Q-58 a: rebuilt on foresight and stealth |
 | `cinder_childs_reflex` | Gutter-Runner's Reflex | "" | trigger `evaded`: grant `haste` 1 round; trigger `kill` with `when.skills` [`throat_carver`]: `ap` 2 (HOOKS1 8.6, HQ16 a) | - |
 
-Deck at level 1: active [`hamstring_sever`, `ash_cloud_fade`]; passive [`prowlers_cadence`, `anatomical_flaw`];
-keystone [`ghost_of_the_undercroft`].
+Deck at level 1: active [`hamstring_sever`, `ash_cloud_fade`]; passive [`prowlers_cadence`, `anatomical_flaw`]; keystone (from level 6, `FB-338`)
+[`ghost_of_the_undercroft`].
 
 | Intent | Order (level 1) | Order (full) |
 | --- | --- | --- |
@@ -148,7 +148,8 @@ x2. Discipline `scriptorium_rites` (passive `censer_drill`). Title "".
 The Bile Phial (Q-61 b): 0-3 pips, 0 at each battle's start (HOOKS1 9; row `bile_phial`).
 
 Deck at level 1: active [`brimstone_cauterize`, `tourniquet_tonic`]; passive [`anatomical_precision`,
-`triage_efficiency`]; keystone [`pure_hippocratic_oath`].
+`triage_efficiency`]; keystone (from level 6, `FB-338`)
+[`pure_hippocratic_oath`].
 
 | Intent | Order (level 1) | Order (full) |
 | --- | --- | --- |
@@ -185,8 +186,8 @@ Gear: main `winch_arbalest` (crossbow, range 4); body `poachers_brigandine`; pou
 
 Dead-Eye's `reveal` shows him the enemies' next-round plan (HQ7 a; RULESET1 V2).
 
-Deck at level 1: active [`poachers_quarrel`, `tripwire_snare`]; passive [`high_ground_traverse`, `cover_breaker`];
-keystone [`dead_eye_discipline`].
+Deck at level 1: active [`poachers_quarrel`, `tripwire_snare`]; passive [`high_ground_traverse`, `cover_breaker`]; keystone (from level 6, `FB-338`)
+[`dead_eye_discipline`].
 
 | Intent | Order (level 1) | Order (full) |
 | --- | --- | --- |
