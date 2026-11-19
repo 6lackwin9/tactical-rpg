@@ -75,8 +75,27 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-12` PC gate fix | done (tools lane) | `develop` | The PC gate failed at step 4 (playtest): in the desktop's main checkout `tools/fc.sh` looked for binaries in `$PWD/target` while cargo built into `.cargo/config.toml`'s target-dir. `fc.sh` now exports that target-dir when `CARGO_TARGET_DIR` is unset (off Linux), as linked worktrees already did. The PC re-run is next. |
 | `ENGINE-20` (`TOOLS-HELP3`) | done (tools lane) | `develop` (squash `ENGINE-20`) | Seed order check (gate step `seeds`), `seed-from --fields` with a `fields` upsert in the writer, `shots-all crop=` and before / after / diff sheets, toned text fields and the shop's total toned by sign again. FB-365 |
 | `ENGINE-12` PC gate fix 2 | done (tools lane) | `develop` | The PC gate's step 10 (lints): `tools/deps/unused_deps.py` took a crate's name by splitting its path on `/`, but on Windows glob joins with a backslash, so the keep list never matched. It now uses `Path(crate).name`. In a sweep of the other tools, every other `split("/")` splits an asset key, not a path. `golden_bisect.py` now lists files as posix paths. |
+| `ENGINE-12` (`GATE-PARITY1`) | closed: the PC gate passes | `develop` ec53813 | The PC thread ran `check_project.ps1` on develop ec53813: all 15 steps passed (3952 tests, exit 0). |
+| `ENGINE-22` (`SEED-ARCHIVE1`) | done (tools lane) | `develop` (squash `ENGINE-22`) | 33 stale seeds moved to `data/seeds/archive/`, with a README row each. The 2 known overlaps are settled. `seed_order_known.txt` is empty. FB-367 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-367: ENGINE-22 SEED-ARCHIVE1, 33 stale seeds archived, the seed order check has no known findings
+
+- **Status**: open
+- **Spec**: `READY.md` §3 `ENGINE-22` (`SEED-ARCHIVE1`) (@squash `ENGINE-22`)
+- **Built**:
+  - I applied each of the 100 seeds alone to a fresh copy of the shipped data. 33 are refused, not 17. The 17 in FB-365 came from a run that stopped early.
+  - The 33 moved with `git mv` to `games/emberwake/data/seeds/archive/`. The seeds README has a table of them: name, last commit, and the writer's refusal (old intents and deck orders, gear types, hands, techniques, dojo presets).
+  - The 67 left in the folder each apply cleanly alone.
+  - No shipped data file changed: only seed files moved or were edited.
+- **Known cases**:
+  - `classpass1_data.json` is among the archived 33.
+  - `cast1a3.json` still applies, so it stays. Its `bile_coat` step now names its `fields` (every field except `description`, `grant_status`, `status_magnitude` and `status_rounds`), so a re-run keeps the shipped values that `empower1.json` set. Applied alone, it leaves `bile_coat` as shipped; I checked.
+  - `tools/planner/seed_order_known.txt` holds comments only. `tools/fc.sh seeds` reports 67 seeds and 0 known findings.
+- **Code**: `emberwake_content/tests/ruleset_switches.rs` replays several of the archived seeds by name. It now reads `data/seeds/<name>` and falls back to `data/seeds/archive/<name>`. Both tests pass.
+- **Guess**: the archive is a subfolder, not git history only, because the ruleset switch tests still read some of those seeds.
+- **Docs delta**: the `patch-and-seed` skill could say "a seed that no longer applies moves to `data/seeds/archive/`". `HISTORY.md`: none.
 
 ### FB-365: ENGINE-20 TOOLS-HELP3, seed order check, seed-from --fields, shot crops and the toned shop total
 
