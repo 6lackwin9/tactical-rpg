@@ -170,6 +170,13 @@ screen at 1280x720, 1:1.
   take 35 (`battle_take35_timeline_mock.py`) names it once per row: face, name, a small arrow and the target's face in
   a 150 px name column, then the timeline; the per-blow red ticks and target faces are gone; a unit with no target
   shows a dim dash (`battle_take35_timeline_2x.png`).
+  Take 36 (`battle_take36_locks_mock.py`, user 19:45 and 19:46, `STATUSVIS1` SV14): locked blocks are grey blocks
+  with the status icon, built like the other tiles (grey tint, band and rim in the T view; a grey tile with the icon in
+  the skill-icon frame and a grey bar under it on the top strip), replacing the hatch on both; stun is one continuous
+  grey block over its locked blocks, stagger two separate one-block grey blocks. Targets: an enemy in a crimson frame,
+  an ally (Support) or self in a teal frame with a teal arrow, an area skill's main target with a small amber ring on
+  the face's corner, a ground tile (field spells) as a 3 x 3 floor patch with the target tile lit (hover rings that
+  tile on the board), Maneuver or Rest only a dim dash (`battle_take36_locks_2x.png`).
 - Boss fight variant (Tushar 2026-11-18 23:19, low priority, current layout stays for now): a boss bar across the top
   of the board (full name and title, a long HP bar with phase marks, poise, statuses, the next phase or enrage cue);
   the boss leaves the foe panel, mobs keep their plates. Mocked as take 22 (`battle_take22_boss_mock.py`), awaiting
