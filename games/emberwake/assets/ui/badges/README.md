@@ -1,6 +1,6 @@
-# Game icons
+# Game badges
 
-Game-specific icons (the kit's generic icons live in `kits/rpg/assets/icons/`).
+Game-specific badges (`ui/badges/<id>.png`, ASSETORG2 section 3).
 
 | File | What | Source | Status |
 | --- | --- | --- | --- |
