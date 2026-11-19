@@ -163,6 +163,12 @@ screen at 1280x720, 1:1.
   - Carry (`BOSSUI1` BU14): a hit past the span shows in "After" as the span at 0, the next phase's marker, then the
     next span less the remainder (gold number); the bar's impact fills the span and its number gets the marker; the
     totals read "+6 to ph. 2" (`battle_take27_carry_2x.png`). A phase with a new boss unit takes no carry.
+- Proposed, take 28 (`battle_take28_boss_mock.py`, user 2026-11-19 18:34: take 27's intent "too busy"; markers and
+  clearance approved), awaiting sign-off; replaces take 27's "Hits" and "After" rows: two rows of damage by block
+  under "Block 1".."Block 6" headers. Row 1: the selected hero (face, name), their damage per block in a gold-ringed
+  cell, "-" where they do not hit. Row 2: "Party", the whole party's damage per block, the broken-poise glyph with
+  "BREAK" in the block where the boss breaks, the next phase's diamond with "Ph. 2" where the span runs out. Right:
+  "Total" with each row's sum and what is left to (or carried into) the next phase. No per-member chips.
 - Not expressed yet: collision stagger from push or pull on the card row, hazard damage in the HP preview and the
   block ruler, reactions (riposte, counters) as a "returns -n" note, flank, guard, cover and windup modifiers in the
   skill hover, channel rounds, unit meters, weapon wear.
