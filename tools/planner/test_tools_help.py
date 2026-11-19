@@ -47,6 +47,14 @@ class SeedFrom(unittest.TestCase):
         self.assertEqual(list(sd.seed_step("classes", None, {"id": "c"}, [])), ["op", "kind", "entry"])
         json.dumps(step)
 
+    def test_fields_write_only_the_named_fields(self):
+        entry = {"id": "w", "level": 1, "deck": {"active": ["a"]}, "note": "x"}
+        step = sd.seed_step("units", None, entry, ["deck.active=[\"b\"]", "note="], ["deck", "note"])
+        self.assertEqual(step, {"op": "upsert", "kind": "units", "fields": ["deck", "note"], "entry": {"id": "w", "deck": {"active": ["b"]}}})
+        for sets, fields in [(["level=2"], ["deck"]), ([], []), ([], ["id"])]:
+            with self.assertRaises(ValueError):
+                sd.seed_step("units", None, entry, sets, fields)
+
     def test_refusals(self):
         with self.assertRaises(ValueError):
             sd.seed_step("units", None, {"id": "w"}, ["level"])

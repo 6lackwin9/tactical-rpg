@@ -64,3 +64,29 @@ fn plain_remove_of_a_missing_entry_still_fails() {
     assert_eq!(ids(&dir), ["a", "b"]);
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// ENGINE-20 (TOOLS-HELP3): an upsert with `"fields"` changes only the named fields of the stored entry (one left out
+/// of the entry is removed) and keeps the rest, so it never undoes another seed's fields; it is refused for a missing
+/// entry, a field it does not name, `id`, or a list that is not names.
+#[test]
+fn an_upsert_with_fields_changes_only_those() {
+    let dir = scratch("fields");
+    let whole = json!({"op": "upsert", "kind": "things", "entry": {"id": "a", "name": "Ash", "cost": 3, "tag": "x"}});
+    content_step(&Flat, &dir, &whole).expect("a whole upsert");
+    let step = json!({"op": "upsert", "kind": "things", "fields": ["cost", "tag"], "entry": {"id": "a", "cost": 5}});
+    let line = content_step(&Flat, &dir, &step).expect("fields");
+    assert!(line.starts_with("replaced things 'a'"), "{line}");
+    let a = raw_entries(&dir.join("things.json")).into_iter().find(|e| e["id"] == "a").expect("a");
+    assert_eq!((a.get("name"), a.get("cost").and_then(Value::as_f64), a.get("tag")), (Some(&json!("Ash")), Some(5.0), None), "name kept, cost changed, tag removed");
+    for (bad, why) in [
+        (json!({"op": "upsert", "kind": "things", "fields": ["cost"], "entry": {"id": "zz", "cost": 1}}), "no things entry 'zz'"),
+        (json!({"op": "upsert", "kind": "things", "fields": ["cost"], "entry": {"id": "a", "cost": 1, "name": "B"}}), "holds 'name'"),
+        (json!({"op": "upsert", "kind": "things", "fields": ["id"], "entry": {"id": "a"}}), "never names 'id'"),
+        (json!({"op": "upsert", "kind": "things", "fields": "cost", "entry": {"id": "a"}}), "a list of"),
+        (json!({"op": "upsert", "kind": "things", "fields": [], "entry": {"id": "a"}}), "a list of"),
+    ] {
+        let err = content_step(&Flat, &dir, &bad).expect_err("refused").join(" ");
+        assert!(err.contains(why), "{err}");
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}

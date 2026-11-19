@@ -73,8 +73,35 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-39` (`UISPLIT1-G`) Stage B fix | done (tools lane) | `develop` (squash `PR7-39` Stage B fix) | The shop's layout matches the hand-drawn look: body-face numbers, thin column boxes, muted headings and title at the old inset, totals spaced as before (new layout styles). FB-361 |
 | `PR7-34` (`AMBIENCE1`) | done (tools lane) | `develop` (squash `PR7-34`) | An ambience bus and loop channel in the engine beside the music; region, hub and road screens play `ambience/<key>.ogg` by the music's keys; a Ward Ambience slider on the Sound tab; placeholder loops in the kit. FB-363 |
 | `ENGINE-12` PC gate fix | done (tools lane) | `develop` | The PC gate failed at step 4 (playtest): in the desktop's main checkout `tools/fc.sh` looked for binaries in `$PWD/target` while cargo built into `.cargo/config.toml`'s target-dir. `fc.sh` now exports that target-dir when `CARGO_TARGET_DIR` is unset (off Linux), as linked worktrees already did. The PC re-run is next. |
+| `ENGINE-20` (`TOOLS-HELP3`) | done (tools lane) | `develop` (squash `ENGINE-20`) | Seed order check (gate step `seeds`), `seed-from --fields` with a `fields` upsert in the writer, `shots-all crop=` and before / after / diff sheets, toned text fields and the shop's total toned by sign again. FB-365 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-365: ENGINE-20 TOOLS-HELP3, seed order check, seed-from --fields, shot crops and the toned shop total
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-20` (`TOOLS-HELP3`), items 1 to 3, with `FB-354` and `FB-361` (@squash `ENGINE-20`)
+- **Built, item 1**:
+  - The writer (`aegis_cli::content_step`): an upsert step may carry `"fields": [..]`. It then changes only those top-level fields of the stored entry. A named field the entry leaves out is removed, so the writer's default applies. It is refused for a missing entry, for `id`, or for an entry field the list does not name.
+  - `aegis content get @<list.json>` returns many stored entries in one run.
+  - `tools/fc.sh seed-from ... --fields a,b` writes such a step. Each `--set` must fall inside the named fields.
+  - `tools/fc.sh seeds [--all]` (`tools/planner/seed_order.py`) is now a gate step, `seeds`, after `layouts`. It orders each game's seeds by their last commit, then by name. For every entry that two or more seeds upsert, it compares the last seed's entry with the shipped one. A field the last seed writes differently, while an earlier seed wrote the shipped value, is a finding: `<last> undoes <earlier> on <kind> <id>: <fields>`. It reads the data only. The run takes about 2 s.
+- **Not a replay to an empty store**: the row asked for a replay into an empty store. I applied all 100 seeds in order to a copy of the data first, and 17 of them no longer apply to today's rules (old classes, hands and decks). So the check compares the seeds' entries statically instead of running the writer.
+- **Findings**:
+  - Today it finds 2, both old and both listed in `tools/planner/seed_order_known.txt` so they pass: `cast1a3.json` undoes `empower1.json` on skills `bile_coat` (description, grant_status, status_magnitude), and `classpass1_data.json` undoes `gearrework1.json` on item_families `shield` (off_hand_category). Any new finding fails the gate.
+  - The `sunk_ward_undercroft` case is clean now: `pr7_36b`, the last seed, matches the data.
+  - A cleanup pass could move the 2 known seeds, and the seeds that no longer apply, out of the folder (README rule). That is game data, so I left it.
+- **Built, item 2**:
+  - `tools/fc.sh scenario shots-all out=<dir> [compare=<dir>] [crop=x,y,w,h] [sheets=0]`. `crop=` compares only that rectangle and writes each shot's crop into `<out>/crops/`.
+  - `compare=` writes a before / after / diff sheet for each changed shot into `<out>/compare/`. The diff is the after shot dimmed, with each changed pixel in red. Plain Python, no Pillow.
+  - The gate's `shotsexact` step also writes sheets when a shot changes, which helps when it fails.
+- **Built, item 3**:
+  - A text, number or stats field may carry `"tone"`: a role for every line, or a list with one role per line. `View::tone` sets it and `View::tone_of` reads it. `text_block` lines and `stat_block` values draw in that role.
+  - The kit shop tones `totals` and `total` by sign: `foe` below 0, `good` above 0. The purse line is `foe` when the trade cannot be afforded, as the hand drawing was.
+  - The fixture carries the tones. The authoring page is updated.
+- **Tests**: `aegis_cli/tests/content_step.rs` (fields upsert and its refusals); `aegis_ui/tests/layout_kit3.rs` (tones parse, go out and back, are refused, and draw in foe); `emberwake_gui` `shop_view` (total `foe` after a buy, purse `foe` when unaffordable, none on an empty trade); `tools/planner/test_tools_help3.py` (order, findings, fields steps, the known file, crop parse, crop count, sheet layout, collect crops); `test_tools_help.py` (`--fields`).
+- **Guesses**: (1) The order is the last commit time, then the name, with uncommitted seeds last. (2) Known findings pass through a list in `tools/planner`, so the gate can land green without touching game data. (3) Sheets are on by default whenever `compare=` is given.
+- **Docs delta**: none beyond `tools/fc.sh` usage, `tools/gate_steps.txt` (15 steps) and the authoring page. The `patch-and-seed` skill could mention `--fields` and `tools/fc.sh seeds`. `HISTORY.md`: none.
 
 ### FB-363: PR7-34 AMBIENCE1, an ambience bus with its own loop channel and the Ward Ambience slider
 

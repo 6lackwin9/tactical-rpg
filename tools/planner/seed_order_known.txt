@@ -1,0 +1,4 @@
+# ENGINE-20 (TOOLS-HELP3): seed order findings already in the data when the check landed (2026-11-19); they pass.
+# One per line: <last seed> <earlier seed> <kind> <id>. Remove a line when its seed leaves the folder or is re-saved.
+cast1a3.json empower1.json skills bile_coat
+classpass1_data.json gearrework1.json item_families shield

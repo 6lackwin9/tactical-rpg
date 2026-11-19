@@ -10,8 +10,13 @@ changed when one channel moved more than `tolerance` (default 8); a shot changed
 did. Two runs of the same build already differ a little (idle animations: up to a few hundred pixels on the hub screens,
 far more on scenes mid-animation), so the counts are printed for every changed shot to tell drift from a real change.
 
-  shots_all.py collect <bundles> <out>
-  shots_all.py compare <before> <after> [tolerance=N] [pixels=N] [strict=1]
+  shots_all.py collect <bundles> <out> [crop=x,y,w,h]
+  shots_all.py compare <before> <after> [tolerance=N] [pixels=N] [strict=1] [crop=x,y,w,h] [sheets=0]
+
+TOOLS-HELP3 (ENGINE-20 item 2): `crop=x,y,w,h` (pixels of the shot, clipped to it) narrows the comparison to that
+rectangle, and `collect` also writes each shot's crop into `<out>/crops/`. `compare` writes a sheet per changed shot
+into `<after>/compare/<name>`: the before, the after and the diff side by side (of the crop when there is one; the diff
+shows the after dimmed with each changed pixel in red); `sheets=0` writes none. Plain Python (no Pillow).
 
 `strict=1` (the gate's `shotsexact` step, ENGINE-17: shots on the shot clock are frame-exact, so it runs with tolerance
 0 and pixels 0) exits 1 when any shot changed, is new or is gone.
@@ -63,12 +68,81 @@ def png_rows(path):
     return w, bpp, rows
 
 
-def changed_pixels(a, b, tolerance=8):
-    """Pixels where one channel moved more than tolerance; None when the sizes differ."""
+def parse_crop(text):
+    """(x, y, w, h) from "x,y,w,h" (whole numbers, w and h above 0); None for an empty text."""
+    if not text:
+        return None
+    try:
+        x, y, w, h = (int(v) for v in text.split(","))
+    except ValueError:
+        raise ValueError("crop is x,y,w,h in whole pixels, not %r" % text)
+    if w <= 0 or h <= 0 or x < 0 or y < 0:
+        raise ValueError("crop %r: x and y from 0, w and h above 0" % text)
+    return x, y, w, h
+
+
+def crop_rows(w, bpp, rows, crop):
+    """(width, bpp, rows) of the crop of a picture, clipped to it (the whole picture without a crop)."""
+    if crop is None:
+        return w, bpp, rows
+    x, y, cw, ch = crop
+    x0, y0 = min(x, w), min(y, len(rows))
+    x1, y1 = min(x + cw, w), min(y + ch, len(rows))
+    return x1 - x0, bpp, [row[x0 * bpp:x1 * bpp] for row in rows[y0:y1]]
+
+
+def rgb(bpp, row):
+    """An 8-bit row of 1 to 4 channels as RGB bytes (grey spread, alpha dropped)."""
+    if bpp == 3:
+        return bytes(row)
+    out = bytearray()
+    for i in range(0, len(row), bpp):
+        px = row[i:i + bpp]
+        out += bytes((px[0],) * 3) if bpp in (1, 2) else bytes(px[:3])
+    return bytes(out)
+
+
+def write_png(path, w, rows):
+    """An 8-bit RGB PNG of RGB `rows` (filter 0)."""
+    def chunk(kind, body):
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
+    raw = b"".join(b"\x00" + r for r in rows)
+    data = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, len(rows), 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b"")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_bytes(data)
+
+
+GAP = 8
+
+
+def sheet(a, b, out, tolerance=8, crop=None):
+    """Writes before | after | diff side by side (the crop of each) to `out`; the diff is the after at a third of its
+    brightness with every changed pixel red. False (nothing written) when the sizes differ."""
+    wa, pa, ra = crop_rows(*png_rows(a), crop)
+    wb, pb, rb = crop_rows(*png_rows(b), crop)
+    if (wa, len(ra)) != (wb, len(rb)) or wa == 0 or not ra:
+        return False
+    gap = bytes((40, 40, 40)) * GAP
+    rows = []
+    for x, y in zip(ra, rb):
+        x3, y3 = rgb(pa, x), rgb(pb, y)
+        d = bytearray(v // 3 for v in y3)
+        for i in range(wa):
+            if any(abs(x[i * pa + k] - y[i * pb + k]) > tolerance for k in range(min(pa, pb))):
+                d[i * 3:i * 3 + 3] = b"\xff\x20\x20"
+        rows.append(x3 + gap + y3 + gap + bytes(d))
+    write_png(out, wa * 3 + GAP * 2, rows)
+    return True
+
+
+def changed_pixels(a, b, tolerance=8, crop=None):
+    """Pixels where one channel moved more than tolerance (inside `crop` when given); None when the sizes differ."""
     wa, pa, ra = png_rows(a)
     wb, pb, rb = png_rows(b)
     if (wa, pa, len(ra)) != (wb, pb, len(rb)):
         return None
+    wa, pa, ra = crop_rows(wa, pa, ra, crop)
+    wb, pb, rb = crop_rows(wb, pb, rb, crop)
     n = 0
     for x, y in zip(ra, rb):
         if x == y:
@@ -93,30 +167,39 @@ def shots(bundles):
     return out
 
 
-def collect(bundles, out):
+def collect(bundles, out, crop=None):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    for old in out.glob("*.png"):
+    for old in list(out.glob("*.png")) + list(out.glob("crops/*.png")):
         old.unlink()
     found = shots(bundles)
     for name, p in found.items():
         shutil.copyfile(p, out / name)
+        if crop is not None:
+            w, bpp, rows = crop_rows(*png_rows(p), crop)
+            if w and rows:
+                write_png(out / "crops" / name, w, [rgb(bpp, r) for r in rows])
     (out / "index.txt").write_text("".join(n + "\n" for n in found), encoding="utf-8")
     return sorted(found)
 
 
-def compare(before, after, tolerance=8, pixels=300):
-    """([(name, changed pixels or None for a new size)], new, gone, unchanged count)."""
+def compare(before, after, tolerance=8, pixels=300, crop=None, sheets=False):
+    """([(name, changed pixels or None for a new size)], new, gone, unchanged count); `sheets`: a before | after | diff
+    sheet per changed shot in `<after>/compare/`."""
     a = {p.name: p for p in Path(before).glob("*.png")}
     b = {p.name: p for p in Path(after).glob("*.png")}
+    for old in Path(after).glob("compare/*.png"):
+        old.unlink()
     changed, same = [], 0
     for n in sorted(a.keys() & b.keys()):
         if a[n].read_bytes() == b[n].read_bytes():
             same += 1
             continue
-        k = changed_pixels(a[n], b[n], tolerance)
+        k = changed_pixels(a[n], b[n], tolerance, crop)
         if k is None or k > pixels:
             changed.append((n, k))
+            if sheets and k is not None:
+                sheet(a[n], b[n], Path(after) / "compare" / n, tolerance, crop)
         else:
             same += 1
     changed.sort(key=lambda c: (-(c[1] if c[1] is not None else 1 << 40), c[0]))
@@ -132,15 +215,25 @@ def report(changed, new, gone, same, tolerance=8, pixels=300):
 
 
 def main(argv):
-    if len(argv) == 3 and argv[0] == "collect":
-        names = collect(argv[1], argv[2])
+    opts = dict(a.split("=", 1) for a in argv[3:] if "=" in a)
+    try:
+        crop = parse_crop(opts.get("crop", ""))
+    except ValueError as e:
+        print("[shots-all] %s" % e)
+        return 2
+    if len(argv) >= 3 and argv[0] == "collect":
+        names = collect(argv[1], argv[2], crop)
         print("[shots-all] %d shot(s) of %d scenario(s) in %s" % (len(names), len({n.split("__")[0] for n in names}), argv[2]))
         return 0
     if len(argv) >= 3 and argv[0] == "compare":
-        opts = dict(a.split("=", 1) for a in argv[3:] if "=" in a)
         tol, px = int(opts.get("tolerance", 8)), int(opts.get("pixels", 300))
-        found = compare(argv[1], argv[2], tol, px)
-        print("\n".join(report(*found, tolerance=tol, pixels=px)))
+        found = compare(argv[1], argv[2], tol, px, crop, opts.get("sheets", "1") != "0")
+        lines = report(*found, tolerance=tol, pixels=px)
+        if crop is not None:
+            lines[0] += " inside crop %s" % ",".join(map(str, crop))
+        if found[0] and opts.get("sheets", "1") != "0":
+            lines.append("  sheets (before | after | diff): %s" % (Path(argv[2]) / "compare"))
+        print("\n".join(lines))
         return 1 if opts.get("strict") == "1" and (found[0] or found[1] or found[2]) else 0
     print(__doc__)
     return 2

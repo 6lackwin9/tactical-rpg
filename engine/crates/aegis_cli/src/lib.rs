@@ -87,7 +87,7 @@ const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's com
 aegis replay <recording.json> [session=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
 aegis record <requests.json | recording.json> [out=<dir>] [id=<id>]   (play requests on fresh command hosts, save them as a recording)
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
-aegis content check | get <kind> <id> [world=<id>] | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>]
+aegis content check | get <kind> <id> [world=<id>] | get @<list.json> | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>]
 aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]
 aegis playtest start [save=] [out=] [size=] [shots=each|off] [window=1] | do <command ...> | run <script | -> | stop | status   (an agent plays the real game, logged and screenshot per command)
 aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)
@@ -138,7 +138,8 @@ pub fn json_arg(raw: &str) -> Result<Value> {
     serde_json::from_str(&text).context("parsing the JSON argument")
 }
 
-/// One content step: {"op": "upsert", "kind", "entry", "world"?, "replace"?}, {"op": "remove", "kind", "id",
+/// One content step: {"op": "upsert", "kind", "entry", "world"?, "replace"?, "fields"? (ENGINE-20: only these top-level
+/// fields of the stored entry change, each to the entry's value or, left out of it, removed; the entry must exist)}, {"op": "remove", "kind", "id",
 /// "world"?, "if_exists"? (true: a missing entry is a no-op, PR5-51b)}, {"op": "world", "id", "fields", "full"?} (a world manifest, WORLDW1) or {"op": <a sidecar op of the
 /// game>, "name", "edits"?} (PR5-48, `Hooks::sidecar`).
 pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Result<String, Vec<String>> {
@@ -169,7 +170,11 @@ pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result
         }
         "upsert" => {
             let entry = step.get("entry").and_then(|e| e.as_object()).ok_or_else(|| vec!["upsert needs an entry object".to_string()])?;
-            let o = store::upsert(hooks, dir, world.as_deref(), &kind, entry, s("replace").as_deref())?;
+            let merged = match step.get("fields") {
+                None => None,
+                Some(f) => Some(only_fields(hooks, dir, world.as_deref(), &kind, entry, f)?),
+            };
+            let o = store::upsert(hooks, dir, world.as_deref(), &kind, merged.as_ref().unwrap_or(entry), s("replace").as_deref())?;
             (if o.replaced { "replaced" } else { "added" }, o)
         }
         other => {
@@ -179,6 +184,32 @@ pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result
     };
     let id = s("id").or_else(|| step.get("entry").and_then(|e| e.get("id")).and_then(|v| v.as_str()).map(String::from)).unwrap_or_default();
     Ok(format!("{verb} {kind} '{id}' in {}", outcome.file.display()))
+}
+
+/// ENGINE-20 (TOOLS-HELP3): the stored entry with only the named top-level `fields` taken from `entry` (one left out of
+/// it is removed), so a seed changes no more than it names and never undoes a later seed's other fields.
+fn only_fields(hooks: &impl Hooks, dir: &Path, world: Option<&str>, kind: &str, entry: &serde_json::Map<String, Value>, fields: &Value) -> std::result::Result<serde_json::Map<String, Value>, Vec<String>> {
+    let names: Vec<&str> = fields.as_array().map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+    if names.is_empty() || fields.as_array().map_or(true, |a| a.len() != names.len()) {
+        return Err(vec!["'fields' is a list of the entry's top-level field names".to_string()]);
+    }
+    if names.contains(&"id") {
+        return Err(vec!["'fields' never names 'id' (the entry's id picks it)".to_string()]);
+    }
+    let id = entry.get("id").and_then(Value::as_str).unwrap_or("");
+    let Some(mut stored) = store::get(hooks, dir, world, kind, id) else {
+        return Err(vec![format!("fields: no {kind} entry '{id}' to change (a new entry is a whole upsert)")]);
+    };
+    if let Some(extra) = entry.keys().find(|k| *k != "id" && !names.contains(&k.as_str())) {
+        return Err(vec![format!("fields: the entry holds '{extra}', which 'fields' does not name")]);
+    }
+    for n in names {
+        match entry.get(n) {
+            Some(v) => stored.insert(n.to_string(), v.clone()),
+            None => stored.remove(n),
+        };
+    }
+    Ok(stored)
 }
 
 /// `aegis content ...`: the data folder edited through the engine's writer (`aegis_content::store` with the game's
@@ -240,6 +271,24 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
                 Ok(line) => Ok(println!("{line}")),
                 Err(e) => fail(e),
             }
+        }
+        Some("get") if args.pos(2).is_some_and(|a| a.starts_with('@')) => {
+            // ENGINE-20: many entries in one run, `get @<list.json>` of [{"kind", "id", "world"?}]: one JSON array line,
+            // null for an entry not stored (the seed order check, `tools/fc.sh seeds`)
+            let list = json_arg(args.pos(2).unwrap_or_default())?;
+            let out: Vec<Value> = list
+                .as_array()
+                .context("get @<file>: a list of {\"kind\", \"id\", \"world\"?}")?
+                .iter()
+                .map(|k| {
+                    let f = |n: &str| k.get(n).and_then(Value::as_str);
+                    match (f("kind"), f("id")) {
+                        (Some(kind), Some(id)) => aegis_content::store::get(&hooks, &dir, f("world"), kind, id).map_or(Value::Null, Value::Object),
+                        _ => Value::Null,
+                    }
+                })
+                .collect();
+            Ok(println!("{}", Value::Array(out)))
         }
         Some("get") => {
             // ENGINE-15: the stored entry as JSON (one line), for a seed built from it (`tools/fc.sh seed-from`)
