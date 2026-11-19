@@ -82,3 +82,9 @@ the icon framed on the first locked block, the only patterned fill on the strip.
   keeps its main target in the row with a small area mark; a Maneuver or Rest-only row shows a dim dash; a Support
   row shows the ally. If the parked auto-plan retarget after a KO (`PR7-41` item 6 (b), awaiting the user) is
   approved, the row adds the new target after an arrow at the block where it switches.
+- SV15. Take 36 (user 2026-11-19 19:45, 19:46). Locked blocks are grey blocks with the status icon, no hatch (replaces
+  the hatch of SV5 and section 4), on the top strip and in the full timeline view: stun one continuous grey block,
+  stagger two separate one-block grey blocks. Targets in a T view row: an enemy in a crimson frame; an ally or self in
+  a teal frame with a teal arrow; an area skill's main target with a small amber ring on the face corner; a ground
+  tile (field spells) as a 3x3 floor patch with the target tile lit, whose hover rings that tile on the board; a
+  dim dash for Maneuver or Rest only.
