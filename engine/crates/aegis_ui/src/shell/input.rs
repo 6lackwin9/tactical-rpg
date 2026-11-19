@@ -684,13 +684,35 @@ impl<G: Context> Shell<G> {
 
     /// A pressed key, through the control map, to the top screen.
     pub(super) fn press(&mut self, k: Key) {
+        if self.capture(crate::controls::Input::Key(k)) {
+            return;
+        }
         let k = self.controls().key(k);
         self.key(k);
     }
 
     /// A pad button, through the control map, to the top screen.
     pub(super) fn pad(&mut self, p: crate::controls::Pad) {
+        if self.capture(crate::controls::Input::Pad(p)) {
+            return;
+        }
         let k = self.controls().pad(p);
         self.key(k);
+    }
+
+    /// CONTROLS-UI1: the raw input to the top screen's `capture` first (a rebind waiting for it). True: taken.
+    pub(super) fn capture(&mut self, input: crate::controls::Input) -> bool {
+        let cx = &mut self.cx;
+        if !self.stack.last_mut().unwrap().capture(cx, input) {
+            return false;
+        }
+        let name = match input {
+            crate::controls::Input::Key(k) => k.name(),
+            crate::controls::Input::Pad(p) => format!("pad:{}", p.name()),
+        };
+        self.cx.playtest.trail(json!({"type": "key", "key": name, "mods": "", "captured": true}));
+        self.cancel_drag();
+        self.settle();
+        true
     }
 }
