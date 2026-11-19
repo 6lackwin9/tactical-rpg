@@ -1,0 +1,28 @@
+[package]
+name = "hello_game"
+version = "0.1.0"
+edition = "2021"
+
+# ENGINE-1 (HELLO-GAME1): the engine's sample game, on the engine alone (no kit). Two programs, as Emberwake has: the
+# game (`hello`) and the engine's command line for it (`hello_cli scenario run all`, `hello_cli playtest start`).
+[[bin]]
+name = "hello"
+path = "src/main.rs"
+
+[[bin]]
+name = "hello_cli"
+path = "src/bin/hello_cli.rs"
+
+[dependencies]
+aegis_core = { path = "../../../../engine/crates/aegis_core" }
+aegis_grid = { path = "../../../../engine/crates/aegis_grid" }
+aegis_host = { path = "../../../../engine/crates/aegis_host" }
+aegis_save = { path = "../../../../engine/crates/aegis_save" }
+aegis_content = { path = "../../../../engine/crates/aegis_content" }
+aegis_ui = { path = "../../../../engine/crates/aegis_ui" }
+aegis_cli = { path = "../../../../engine/crates/aegis_cli" }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

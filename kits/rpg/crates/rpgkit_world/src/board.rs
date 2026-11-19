@@ -139,9 +139,48 @@ pub fn lock_reason(d: &Data, gs: &GameState, qid: &str) -> String {
     dialogue::lock_reason(d, gs, &json::obj([("requires", Value::Array(conds))]))
 }
 
+/// PR7-37 (PT-31): what opens locked quest `qid`, in words, for a board that has no better reason than "Locked": the
+/// quests and fights that set the flags its `requires_flags` still miss ("Opens after The Sweep and The Cages."): a
+/// quest whose `complete_flags` sets one, else a campaign trigger that sets it on winning a fight (named by the quest
+/// that fights it, else the fight); "" when none is found (or the quest is not locked by a flag).
+pub fn unlock_words(d: &Data, gs: &GameState, qid: &str) -> String {
+    let e = d.resolve(&gs.world_id, "quests", qid);
+    let mut after: Vec<String> = Vec::new();
+    let add = |name: String, after: &mut Vec<String>| {
+        if !name.is_empty() && !after.contains(&name) {
+            after.push(name);
+        }
+    };
+    let quest_name = |q: &str| json::s(&quest::resolved(d, gs, q), "name");
+    for c in json::aget(e, "requires_flags").iter().map(json::dict).filter(|c| !quest::condition_met(gs, c)) {
+        let key = json::s(c, "key");
+        let sets = |fx: &Dict| json::s(fx, "key") == key && (json::s_or(fx, "effect", "set_flag") == "set_flag");
+        let by_quest = d
+            .merged_entries(&gs.world_id, "quests")
+            .into_iter()
+            .find(|q| json::aget(q, "complete_flags").iter().any(|f| json::s(json::dict(f), "key") == key))
+            .map(|q| quest_name(&json::s(q, "_qid")));
+        if let Some(n) = by_quest.filter(|n| !n.is_empty()) {
+            add(n, &mut after);
+            continue;
+        }
+        for t in crate::campaign::trigger::defs(d, &gs.world_id).iter().filter(|t| t.on == "battle" && t.outcome == "won" && t.effects.iter().any(sets)) {
+            let by_fight = quest::quests_fighting(d, gs, &t.encounter).first().map(|q| quest_name(q)).filter(|n| !n.is_empty());
+            let name = by_fight.unwrap_or_else(|| json::s(d.resolve(&gs.world_id, "encounters", &t.encounter), "name"));
+            add(name, &mut after);
+        }
+    }
+    match after.as_slice() {
+        [] => String::new(),
+        [one] => format!("Opens after {one}."),
+        [rest @ .., last] => format!("Opens after {} and {last}.", rest.join(", ")),
+    }
+}
+
 /// B5, B6: board `r` as the pane shows it: {board, name, keeper, keeper_name, intro, open, sections: [{id, title,
-/// rows: [{quest, name, status, node, node_name, line, deadline?}]}]} (empty sections left out; `deadline` {day, left,
-/// text} only for a quest with an open checkpoint); {} for an unknown board.
+/// rows: [{quest, name, status, node, node_name, line, deadline?, rec_level?}]}]} (empty sections left out; `deadline`
+/// {day, left, text} only for a quest with an open checkpoint; `rec_level` only when set, PR7-42); {} for an unknown
+/// board.
 pub fn view(d: &Data, gs: &GameState, r: &str) -> Dict {
     let b = board_of(d, gs, r);
     if b.is_empty() {
@@ -166,8 +205,18 @@ pub fn view(d: &Data, gs: &GameState, r: &str) -> Dict {
         if let Some(due) = deadline(d, gs, &q) {
             row.insert("deadline".into(), due);
         }
+        let level = rec_level(d, gs, &q);
+        if level > 0 {
+            row.insert("rec_level".into(), json::int(level));
+        }
         rows.push((section, Value::Object(row)));
     }
+    // PR7-42 (PACE1): each section lists its rated quests by recommended level, lowest first, then the unrated ones
+    // (stable: file order among equals)
+    rows.sort_by_key(|(_, row)| match json::i(json::dict(row), "rec_level", 0) {
+        0 => i64::MAX,
+        n => n,
+    });
     let sections: Vec<Value> = SECTIONS
         .iter()
         .filter_map(|(id, title)| {
@@ -235,7 +284,25 @@ pub fn detail(d: &Data, gs: &GameState, qid: &str) -> Dict {
     if let Some(due) = deadline(d, gs, &json::s(&q, "_qid")) {
         out.insert("deadline".into(), due);
     }
+    let level = rec_level(d, gs, qid);
+    if level > 0 {
+        out.insert("rec_level".into(), json::int(level));
+    }
     out
+}
+
+/// PR7-42 (PACE1): quest `qid`'s recommended party level (`rec_level`; 0 = none).
+pub fn rec_level(d: &Data, gs: &GameState, qid: &str) -> i64 {
+    json::i(&quest::resolved(d, gs, qid), "rec_level", 0).max(0)
+}
+
+/// PR7-42 (PACE1): the words of a recommended level ("Recommended level 5"; "" for none).
+pub fn rec_level_text(level: i64) -> String {
+    if level > 0 {
+        format!("Recommended level {level}")
+    } else {
+        String::new()
+    }
 }
 
 /// B4: whether the character `character_qid` keeps an open board with at least one available quest.

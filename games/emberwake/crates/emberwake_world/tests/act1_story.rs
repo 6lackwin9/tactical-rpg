@@ -10,7 +10,6 @@ use aegis_core::json::{self, Dict};
 use emberwake_data::Step;
 use emberwake_world::dialogue::DialogueRunner;
 use emberwake_battle::encounter::PartyFate;
-use emberwake_battle::{channel, meter};
 use emberwake_world::{battle, board, campaign, dialogue, explore, mastery, new_game, quest, recipe, roster, shop, story, travel, weapons, Data, GameState};
 use serde_json::Value;
 use std::path::Path;
@@ -753,7 +752,11 @@ fn m5_with_the_overlook_opens_the_gate_and_the_pk2_recipes() {
     assert!(gs.flag_true(&flag("hollis_overlook")));
     assert_eq!(explore::presence(&d, &gs, &q("crucible_watchpost"), &overlook), "absent", "the overlook is used once");
     assert_eq!(quest_encounter(&d, &gs, "q_a1_m5"), q("enc_evt_06_overlook"), "the hollis_overlook variant picks the overlook fight");
-    let shown: Vec<String> = encounter_markers(&d, &gs).into_iter().map(|(_, e)| e).collect();
+    // PR7-41 (PT-15): the job's fight waits until M5 is taken, then the Crucible shows the overlook fight only
+    assert!(encounter_markers(&d, &gs).is_empty(), "no M5 fight before M5 is taken");
+    let mut taken = gs.clone();
+    assert_eq!(quest::start(&d, &mut taken, &q("q_a1_m5")), Vec::<String>::new());
+    let shown: Vec<String> = encounter_markers(&d, &taken).into_iter().map(|(_, e)| e).collect();
     assert_eq!(shown, [q("enc_evt_06_overlook")], "the Crucible shows the overlook fight only");
     for npc in ["sabina_kress", "berek_dorn"] {
         assert!(offered(&d, &gs, npc).is_empty(), "{npc}: no PK2 recipe before M5");
@@ -856,7 +859,6 @@ fn m2_rewards_the_captives_that_lived() {
     let mut paid: Vec<i64> = Vec::new();
     for alive in 0..=guests {
         let (mut gs, _) = after_prologue(&d);
-        let salt_before = gs.party.stash.get("rock_salt").copied().unwrap_or(0);
         run_quest_with_guests(&d, &mut gs, "q_a1_m2", alive);
         assert_eq!(gs.flag(&key).and_then(Value::as_i64), Some(alive as i64), "{alive} captives lived");
         let item = campaign::pending_head(&gs).cloned().expect("Maren's scene is queued");
@@ -879,6 +881,8 @@ fn m2_rewards_the_captives_that_lived() {
             .find(|c| json::s(c, "text") == json::s(&chosen, "text"))
             .map(|c| json::aget(c, "effects").iter().map(json::dict).filter(|fx| json::s(fx, "effect") == "give").map(|fx| json::i(json::dget(fx, "items"), "rock_salt", 0)).sum())
             .unwrap_or(0);
+        // PR6-5 added `rock_salt` enemy drops on M2 foes, so snapshot right before the reply executes.
+        let salt_before = gs.party.stash.get("rock_salt").copied().unwrap_or(0);
         assert!(ok(&r.choose(&d, &mut gs, open[0] as i64)), "the reply is taken");
         assert_eq!(gs.party.stash.get("rock_salt").copied().unwrap_or(0) - salt_before, give, "{alive} lived: the reply's Rock Salt");
         paid.push(give);
@@ -1130,61 +1134,37 @@ fn begin_next_story_fight(d: &Data, gs: &mut GameState) -> (Dict, battle::WorldF
     panic!("no fight step");
 }
 
-/// `enc_evt_05` (the Interlude's fight): each `flag_skills` entry grants `marrow_lash` to the Founder whose id
-/// `sabina_dose_to` holds. Per Founder dosed in the scene: exactly that fielded member holds the skill for the battle,
-/// plays it in a Standard round with no channel meter and so no Strain paid (no Strain in Act 1), and keeps nothing
-/// after the fight.
+/// `enc_evt_05` (the Interlude's fight), after PR7-9 (ruling `F5`, Act 1 is Cold Steel only): the encounter grants no
+/// skill, so whichever Founder takes the dose, nobody holds `marrow_lash` (or any battle grant) in the fight and
+/// nothing is learned after it; the dose choice still records in `sabina_dose_to` for the Act 2 grant (`PR6-12`).
+/// Replaces the PR5-44 test that asserted the Act 1 grant.
 #[test]
-fn the_dosed_founder_fights_the_interlude_holding_marrow_lash_for_free() {
+fn the_dosed_founder_fights_the_interlude_without_a_marrow_grant() {
     let d = data();
     let enc = entry(&d, "encounters", "enc_evt_05").clone();
-    let grants: Vec<Dict> = json::aget(&enc, "flag_skills").iter().map(|g| json::dict(g).clone()).collect();
+    assert!(json::aget(&enc, "flag_skills").is_empty(), "enc_evt_05 grants no skill in Act 1");
     let founders: Vec<String> = dose_replies(&d).into_iter().map(|(to, _)| to).collect();
-    assert_eq!(grants.len(), founders.len(), "one grant per Founder");
-    let skill = json::s(&grants[0], "skill");
-    for (g, f) in grants.iter().zip(&founders) {
-        assert_eq!(json::s(g, "member_from_flag"), flag("sabina_dose_to"));
-        assert_eq!(json::s(g, "skill"), skill, "every grant is the same Tier I skill");
-        let req: Vec<(String, String)> = json::aget(g, "requires_flags").iter().map(json::dict).map(|c| (json::s(c, "key"), json::s(c, "value"))).collect();
-        assert!(founders.iter().any(|x| req == [(flag("sabina_dose_to"), x.clone())]), "{f}: the grant is keyed on one Founder: {req:?}");
-    }
-    let mut keyed: Vec<String> = grants.iter().map(|g| json::s(json::dict(&json::aget(g, "requires_flags")[0]), "value")).collect();
-    let mut want = founders.clone();
-    keyed.sort();
-    want.sort();
-    assert_eq!(keyed, want, "every Founder has its own grant");
-    assert_eq!(skill, "marrow_lash");
+    assert!(!founders.is_empty());
     for founder in &founders {
         let mut gs = after_tier2(&d);
         let learned: Vec<(String, Vec<String>)> = gs.party.members.iter().map(|m| (m.id.clone(), m.learned_skills.clone())).collect();
         dose_to(&d, &mut gs, founder);
+        assert_eq!(gs.flag(&flag("sabina_dose_to")), Some(&Value::from(founder.clone())), "the dose still records");
         assert_eq!(gs.story.running.as_ref().map(|r| r.sequence.clone()), Some(q("seq_interlude")));
         let (fight, f) = begin_next_story_fight(&d, &mut gs);
         assert_eq!(json::s(&fight, "encounter"), q("enc_evt_05"));
         assert!(f.members.iter().any(|(m, _)| m == founder), "{founder} is fielded");
         let w = &f.session.w;
-        let k = w.book().find(&skill).expect("marrow_lash in the battle's book");
-        let def = w.cat.skills[k].clone();
         for (i, (m, _)) in f.members.iter().enumerate() {
             let u = &w.units[i];
-            if m == founder {
-                assert_eq!(u.battle_skills, [skill.clone()], "{founder} holds {skill} for the battle");
-                assert!(u.owns_skill(&w.cat, &skill), "{founder} owns {skill} in the battle");
-                assert!(!channel::can_channel(w, i), "{founder}: no channel meter in Act 1");
-                assert!(channel::standard_grant(w, i, &def), "{founder} plays {skill} in a Standard round");
-                assert_eq!(channel::problem(w, i, &def), None, "{founder}: {skill} is open");
-                assert!(channel::meters_for(w, i, &def).is_empty(), "{founder}: {skill} pays no Strain");
-                assert_eq!(meter::value(w, i, "strain"), None, "{founder} holds no Strain");
-            } else {
-                assert!(u.battle_skills.is_empty(), "{m} (not dosed) holds no grant: {:?}", u.battle_skills);
-                assert!(!u.owns_skill(&w.cat, &skill), "{m} does not own {skill}");
-            }
+            assert!(u.battle_skills.is_empty(), "{m} holds no battle grant: {:?}", u.battle_skills);
+            assert!(!u.owns_skill(&w.cat, "marrow_lash"), "{m} does not own marrow_lash in Act 1");
         }
         let tally = f.tally();
         let r = battle::finish_world(&d, &mut gs, &json::s(&fight, "source"), &fight, "won", Some(&tally));
         assert!(ok(&r), "{r:?}");
         let after: Vec<(String, Vec<String>)> = gs.party.members.iter().map(|m| (m.id.clone(), m.learned_skills.clone())).collect();
-        assert_eq!(after, learned, "{founder}: nothing is learned for good");
+        assert_eq!(after, learned, "{founder}: nothing is learned");
         let played = play_sequence(&d, &mut gs);
         assert!(played.fights.is_empty(), "the Interlude has one fight: {played:?}");
         assert!(gs.flag_true(&flag("interlude_done")));

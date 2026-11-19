@@ -487,7 +487,7 @@ mod tests {
     }
 
     /// VIEWKEYS1: the Settings debug row's Walk step: only a debug build draws it, in range at every step, beside the
-    /// foresight box and not on it; the pick is a draft until Apply, which saves it and the map walks by it.
+    /// foresight box and not on it; a pick is saved at once (SETTINGS-MOCK1) and the map walks by it.
     #[cfg(debug_assertions)]
     #[test]
     fn the_walk_step_slider_tunes_the_step_on_apply() {
@@ -507,8 +507,6 @@ mod tests {
         assert_eq!(steps.len(), ((WALK_STEP_MS.1 - WALK_STEP_MS.0) / 10.0) as usize + 1);
         let at = ((180.0 - WALK_STEP_MS.0) / 10.0) as usize;
         s.click_id(&mut cx, &format!("settings.debug.walk_step.step.{at}")).expect("the step");
-        assert_eq!(cx.settings.v[WALK_STEP_KEY], json!(WALK_STEP_MS.2), "only a draft so far");
-        s.click_id(&mut cx, "settings.apply").expect("apply");
         assert_eq!(WalkStep::of(&cx.settings.v, false).base, 180.0, "not the volumes' 0-100 clamp");
         assert_eq!(saved(&cx, WALK_STEP_KEY).as_f64(), Some(180.0), "the file");
         // the slider's ends are the range's
@@ -518,17 +516,16 @@ mod tests {
             s.click_id(&mut cx, "settings.tab.battle").expect("the tab");
             s.draw(&mut cx, &mut g, (-500, -500), true);
             s.click_id(&mut cx, &format!("settings.debug.walk_step.step.{i}")).expect("the end");
-            s.click_id(&mut cx, "settings.apply").expect("apply");
             assert_eq!(WalkStep::of(&cx.settings.v, false).base, want);
         }
     }
 
-    /// DISPLAY2: the Display tab has the two toggles and its Resolution row greys out only in Fullscreen; a toggle is a
-    /// draft until Apply, which saves it.
+    /// DISPLAY2, SETTINGS-MOCK1: the Display tab's Display Mode choice (Windowed, Borderless, Fullscreen) and its
+    /// Resolution row, which greys out only in Fullscreen; a pick is staged until Apply, which saves it.
     #[test]
     fn the_display_tab_greys_resolution_only_in_fullscreen() {
         use crate::hud::hud_tests::gfx;
-        let (mut cx, mut g) = (game_cx(), gfx());
+        let (mut cx, mut g, mut g2) = (game_cx(), gfx(), gfx());
         let mut s = crate::menus::SettingsScreen::new(&cx);
         s.draw(&mut cx, &mut g, (-500, -500), true);
         s.click_id(&mut cx, "settings.tab.display").expect("the tab");
@@ -537,15 +534,18 @@ mod tests {
             s.widgets().iter().find(|w| w["id"] == "settings.window_size").expect("the row")["enabled"].clone()
         };
         assert_eq!(enabled(&mut s, &mut cx), json!(true), "Windowed");
-        s.click_id(&mut cx, "settings.borderless").expect("the toggle");
+        s.click_id(&mut cx, "settings.display_mode.next").expect("the arrow");
         assert_eq!(enabled(&mut s, &mut cx), json!(true), "Borderless");
-        s.click_id(&mut cx, "settings.fullscreen").expect("the toggle");
+        s.click_id(&mut cx, "settings.display_mode.next").expect("the arrow");
         assert_eq!(enabled(&mut s, &mut cx), json!(false), "Fullscreen");
-        assert_eq!(WindowShow::of(&cx.settings.v), WindowShow::Windowed, "only a draft so far");
+        assert_eq!(WindowShow::of(&cx.settings.v), WindowShow::Windowed, "only staged so far");
         s.click_id(&mut cx, "settings.apply").expect("apply");
         assert_eq!(WindowShow::of(&cx.settings.v), WindowShow::Fullscreen);
-        assert_eq!((saved(&cx, "fullscreen"), saved(&cx, "borderless")), (json!(true), json!(true)), "the file");
-        s.click_id(&mut cx, "settings.fullscreen").expect("the toggle");
+        assert_eq!((saved(&cx, "fullscreen"), saved(&cx, "borderless")), (json!(true), json!(false)), "the file");
+        s.draw(&mut cx, &mut g2, (-500, -500), true);
+        s.click_id(&mut cx, "settings.confirm.keep").expect("keep");
+        let _ = enabled(&mut s, &mut cx);
+        s.click_id(&mut cx, "settings.display_mode.prev").expect("the arrow");
         assert_eq!(enabled(&mut s, &mut cx), json!(true), "Borderless again");
     }
 

@@ -50,3 +50,23 @@ Moved to other sub-blocks: AI roles as weighted choice with randomness (AI, I1).
 4. **World stage on `WorldRoster` and XP weight (`FB-13`, `FB-139`)**: Pass `stage` on `WorldRoster` (derived from `campaign.act` in campaign worlds, `0` in non-campaign worlds, host, and sim), and have `Roster::entry` and `roster()` compute enemy level (`base_level + stage * growth_per_stage`, where `growth_per_stage` is a per-unit `int` field on `units.json`, default `0`, applied to enemies only — `tier != "hero"`, no party guests) and XP weight using that `stage`. `WORLDFIGHT1` (`C18`) lands in `W2-6`.
 5. **Proficiency slice ordering (`FB-14`)**: Build the proficiency bonus slice (`C3`) after `U3.1` and `U4.1` close so Level 1-3 rules (requirement discount, crit/burden, Level 3 effect) are implemented once.
 6. **Module naming, schema shares & `auto_spend` (`FB-15`, `FB-44`, `FB-46`)**: Name the module `unit_budget` (distinct from gear `budget.rs`), keep `base_stats` and `growth` as a computed compatibility view so `party.rs`, `forge.rs`, `sim`, and goldens hold without churn, and move class JSON rows to stored float shares (`base_shares`, `growth_shares` with a float-stats field type in `aegis_content` and `auto_spend` reading `growth_shares`) together with the stat-weights schema slice (`FB-44`, `FB-46`). Keep loadout templates as an optional final slice.
+
+## Class keystones (`CLASSKEY1`, user 2026-11-17)
+
+Accepted by the user 2026-11-17 ("all recs keystones"; decision "Class pass and class keystones (user 2026-11-17)"). A class deck is **3 actives + 2 passives + 1 keystone**, matching the timeline ruleset's `deck_slots` (`active: 3, passive: 2, keystone: 1`).
+
+- **Class keystone**: each class names one keystone passive (`slot: "keystone"`), learned at **level 6** (after the `skill_path` skills at levels 1, 2 and 4). It is the default for every unit of the class that has no keystone of its own (recruits, generated units); Founder decks that already slot a keystone keep it.
+
+| Class | Keystone | Effect |
+| --- | --- | --- |
+| `warrior` | `unbroken_phalanx` | Steadfast while guarding |
+| `rogue` | `ghost_of_the_undercroft` | Sees the enemy round plan; +1 AP each round |
+| `priest` | `pure_hippocratic_oath` | Healing skills 40% stronger |
+| `ranger` | `dead_eye_discipline` | A ranged kill returns 2 AP and reveals the next enemy round plan |
+| `brawler` | `unbroken_iron` | Once, below 30% HP: 2 AP and Fortify |
+| `mage` | `master_alchemist` | +20% potency on `firebomb`, `glacial_burst`, `choke_cloud` (added) and on Elyse's `phosphorus_pot`, `magnesium_flash_bomb`, `choke_gas` (kept, so her deck is unchanged) |
+
+- **One slot, later keystones replace it**: the Inoculated keystone (Tier III graft, `PK2_GRAFTS.md`) and the Cold Steel weapon keystone (mastery 3 masterwork) go into the same single keystone slot; the player picks one. No second keystone slot.
+- **Extra class skills (planned, not built)**: a class may later teach more than 3 actives so the player chooses which 3 to slot (build flexibility). Held as `CLASSSKILLS-EXTRA` in `READY.md` §3.
+- **Skill ranks**: retired for good (the `PR5-62b` removal of `47` `_2`/`_3` ranks stands); skills grow through weapon mastery, passives and grafts. Closes `FB-231(b)`.
+

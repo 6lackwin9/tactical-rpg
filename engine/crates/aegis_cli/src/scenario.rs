@@ -6,8 +6,8 @@
 //!   aegis scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...] [the same keys as run]
 //! A scenario is named by where it lies: `<game folder>/scenarios/<id>.json`. The game folder is the one holding the game
 //! manifest the registered game names, and the game's program is the file named as the manifest's id beside this one
-//! (`exe=` says otherwise). Exit codes: 0 pass, 1 a step or a file failed, 2 could not start. Nothing here runs in the gate
-//! but `check` and the tests on a fake link (`tests/scenario.rs`).
+//! (`exe=` says otherwise). Exit codes: 0 pass, 1 a step or a file failed, 2 could not start. `tools/fc.sh gate` runs
+//! every scenario with no window (PR7-4); a golden `shot` compares with its baseline (`crate::golden`), `record=1` writes it.
 
 use crate::Args;
 use anyhow::{Context, Result};
@@ -29,6 +29,11 @@ pub const SLOW_MAX: u32 = 20;
 pub const WAIT_MS_DEFAULT: u64 = 10_000;
 /// Frames a driver waits for after an action: the link replies before the frame is drawn, so the second one is whole.
 pub const SETTLE_FRAMES: u64 = 2;
+/// The latest a shot's `t` may ask for, in seconds after its screen opened (ENGINE-17).
+pub const SHOT_T_MAX_S: f64 = 60.0;
+/// Frames a `wait` draws between two looks in a run with no window (ENGINE-17): on the shot clock time moves only by
+/// the frames asked for, so a wait asks for them, a fixed number each look, and the run is the same every time.
+pub const WAIT_FRAMES: u64 = 1;
 /// How long the frames may take to come (times `slow`) before the window counts as stalled.
 pub const SETTLE_MS: u64 = 10_000;
 /// How long a new window may take to answer on the link, and to reach the asked size (a capped size never does).
@@ -49,6 +54,10 @@ const CLIP_MS_MAX: u64 = 15_000;
 pub const PAUSE_LOOK: Duration = Duration::from_secs(1);
 /// How long one link reply may take (times `slow`), and on the way out after a failure.
 const REPLY: Duration = Duration::from_secs(30);
+/// What a `perf` request may take per frame, on top of `REPLY`.
+const PERF_FRAME_WAIT: Duration = Duration::from_millis(500);
+/// What a frame takes at least, for the check against the run's deadline.
+const PERF_FRAME_FLOOR: Duration = Duration::from_millis(5);
 const REPLY_LEAVING: Duration = Duration::from_secs(5);
 /// How long a game may take to leave after `quit` before it is killed.
 pub const LEAVE: Duration = Duration::from_secs(5);
@@ -70,15 +79,18 @@ pub enum Status {
     Waiting(String),
 }
 
-/// How the game starts (`launch` in the file): `scene` is the game's id of what the screen opens on, `ruleset` the
-/// game's id of the ruleset it plays by (only with `screen` arena); both reach the game as the launch keys `scene=` and
-/// `ruleset=`.
+/// How the game starts (`launch` in the file): `screen` is any screen id the game opens on (ENGINE-5: the game's list,
+/// `Game::launch_screens`, checked by `check`, `run` and `shots`; `menu` when the file names none), `scene` the game's
+/// id of what the screen opens on, `ruleset` the game's id of the ruleset it plays by; both reach the game as the launch
+/// keys `scene=` and `ruleset=`, and the game says which screens take them (`Game::launch_problems`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Launch {
     pub screen: String,
     pub scene: Option<String>,
     pub seed: Option<u64>,
     pub ruleset: Option<String>,
+    /// PR7-4: a saves folder the game starts with, `<game folder>/scenarios/saves/<save>/` copied into the scratch saves.
+    pub save: Option<String>,
 }
 
 /// LAYER-ENG-KEYS (PR5-29a): the launch keys' primary names and the other names they load under (in a file and, except
@@ -125,12 +137,59 @@ pub enum Step {
     Link { body: Value },
     Wait { until: Cond, timeout_ms: u64 },
     Assert { until: Cond },
-    Shot { name: String, max_w: u64 },
+    /// `golden`: compared against the committed baseline (`crate::golden`), with this tolerance.
+    /// `t` (ENGINE-17): the shot waits until the top screen has been open that long, in ms, on the shot clock (0: at once).
+    Shot { name: String, max_w: u64, golden: Option<crate::golden::Tolerance>, t_ms: u64 },
     Clip { name: String, frames: u64, every_ms: u64, max_w: u64 },
+    /// ENGINE-2: frame times with no window (`perf` link request); `budget` fails the step when a number is over it on a
+    /// steady machine.
+    Perf { name: String, frames: u64, warm: u64, budget: Budget },
     Pause { ms: u64 },
     Audit { scales: Vec<f64>, fail: Vec<String> },
     Repeat { times: u64, steps: Vec<Step>, until: Option<Cond> },
 }
+
+/// A `perf` step's limits in ms (None: not checked). A step with none records its numbers only.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Budget {
+    pub p50: Option<f64>,
+    pub p95: Option<f64>,
+    pub max: Option<f64>,
+}
+
+impl Budget {
+    pub fn is_empty(&self) -> bool {
+        self.p50.is_none() && self.p95.is_none() && self.max.is_none()
+    }
+
+    /// Each number of `stats` (a `perf` reply's) over its limit, as "p95 31.2 ms over 25 ms".
+    pub fn misses(&self, stats: &Value) -> Vec<String> {
+        [("p50", self.p50), ("p95", self.p95), ("max", self.max)]
+            .into_iter()
+            .filter_map(|(k, limit)| {
+                let (limit, got) = (limit?, stats[k].as_f64()?);
+                (got > limit).then(|| format!("{k} {got} ms over {limit} ms"))
+            })
+            .collect()
+    }
+}
+
+/// What a `perf` step's numbers mean: no budget, within it, over it, or none because the machine's load changed.
+pub fn perf_verdict(budget: &Budget, reply: &Value) -> (&'static str, Vec<String>) {
+    if budget.is_empty() {
+        return ("recorded", Vec::new());
+    }
+    if reply["steady"] != json!(true) {
+        return ("no verdict", Vec::new());
+    }
+    let misses = budget.misses(&reply["stats"]);
+    (if misses.is_empty() { "within" } else { "over" }, misses)
+}
+
+/// A `perf` step's bounds (the game's own are the same: `aegis_ui::shell::headless::PERF_*`) and the most a budget says.
+pub const PERF_FRAMES_MAX: u64 = 2000;
+pub const PERF_WARM_MAX: u64 = 600;
+pub const PERF_BUDGET_MS_MAX: f64 = 10_000.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scenario {
@@ -355,12 +414,38 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
             Step::Assert { until: cond("until", problems) }
         }
         "shot" => {
-            keys(&["name", "max_w"], problems);
+            keys(&["name", "max_w", "golden", "t"], problems);
             let name = text_of(o, "name", place, problems);
+            // ENGINE-17: `"t": <s>`, seconds after the top screen opened (0 to SHOT_T_MAX_S; 0, the default, is at once).
+            let t_ms = match o.get("t") {
+                None => 0,
+                Some(v) => match v.as_f64().filter(|t| (0.0..=SHOT_T_MAX_S).contains(t)) {
+                    Some(t) => (t * 1000.0).round() as u64,
+                    None => {
+                        problems.push(format!("{place}: 't' is a number of seconds from 0 to {SHOT_T_MAX_S}"));
+                        0
+                    }
+                },
+            };
             if !name.is_empty() && !plain_name(&name) {
                 problems.push(format!("{place}: 'name' becomes a file: letters, digits, _ and - only, at most 80"));
             }
-            Step::Shot { name, max_w: int_of(o, "max_w", Some(1920), (1, u64::from(SIZE_MAX.0)), place, problems) }
+            // PR7-4: `"golden": true` (exact) or `{"tolerance": 0..255, "pixels": N}`.
+            let golden = match o.get("golden") {
+                None | Some(Value::Bool(false)) => None,
+                Some(Value::Bool(true)) => Some(crate::golden::Tolerance::default()),
+                Some(Value::Object(g)) => {
+                    unknown_keys(g, &["tolerance", "pixels"], &format!("{place}.golden"), problems);
+                    let channel = int_of(g, "tolerance", Some(0), (0, 255), &format!("{place}.golden"), problems) as u8;
+                    let pixels = int_of(g, "pixels", Some(0), (0, u64::from(SIZE_MAX.0) * u64::from(SIZE_MAX.1)), &format!("{place}.golden"), problems);
+                    Some(crate::golden::Tolerance { channel, pixels })
+                }
+                Some(_) => {
+                    problems.push(format!("{place}: 'golden' is true or {{\"tolerance\", \"pixels\"}}"));
+                    None
+                }
+            };
+            Step::Shot { name, max_w: int_of(o, "max_w", Some(1920), (1, u64::from(SIZE_MAX.0)), place, problems), golden, t_ms }
         }
         "clip" => {
             keys(&["name", "frames", "every_ms", "max_w"], problems);
@@ -416,8 +501,39 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
             Step::Repeat { times, steps, until }
         }
         "perf" => {
-            problems.push(format!("{place}: step 'perf' is not built yet (INTEG1-E2)"));
-            bad
+            keys(&["name", "frames", "warm", "budget"], problems);
+            let name = text_of(o, "name", place, problems);
+            if !name.is_empty() && !plain_name(&name) {
+                problems.push(format!("{place}: 'name' becomes a file name: letters, digits, _ and - only, at most 80"));
+            }
+            let frames = int_of(o, "frames", Some(300), (1, PERF_FRAMES_MAX), place, problems);
+            let warm = int_of(o, "warm", Some(60), (0, PERF_WARM_MAX), place, problems);
+            let mut budget = Budget::default();
+            match o.get("budget") {
+                None => {}
+                Some(Value::Object(b)) => {
+                    for (k, v) in b {
+                        let slot = match k.as_str() {
+                            "p50_ms" => &mut budget.p50,
+                            "p95_ms" => &mut budget.p95,
+                            "max_ms" => &mut budget.max,
+                            other => {
+                                problems.push(format!("{place}.budget: unknown key '{other}' (p50_ms, p95_ms, max_ms)"));
+                                continue;
+                            }
+                        };
+                        match v.as_f64().filter(|n| *n > 0.0 && *n <= PERF_BUDGET_MS_MAX) {
+                            Some(n) => *slot = Some(n),
+                            None => problems.push(format!("{place}.budget: '{k}' is a number of ms above 0, at most {PERF_BUDGET_MS_MAX}")),
+                        }
+                    }
+                    if budget.is_empty() && b.is_empty() {
+                        problems.push(format!("{place}.budget: name at least one of p50_ms, p95_ms, max_ms"));
+                    }
+                }
+                Some(_) => problems.push(format!("{place}: 'budget' is an object (p50_ms, p95_ms, max_ms)")),
+            }
+            Step::Perf { name, frames, warm, budget }
         }
         other => {
             problems.push(format!("{place}: unknown step '{other}'"));
@@ -437,11 +553,13 @@ pub fn steps_counted(steps: &[Step]) -> u64 {
     })
 }
 
-fn has_clip(steps: &[Step]) -> bool {
-    steps.iter().any(|s| match s {
-        Step::Clip { .. } => true,
-        Step::Repeat { steps, .. } => has_clip(steps),
-        _ => false,
+/// Whether a step needs a run with no window (`clip`, `perf`), and which it is.
+fn no_window_step(steps: &[Step]) -> Option<&'static str> {
+    steps.iter().find_map(|s| match s {
+        Step::Clip { .. } => Some("clip"),
+        Step::Perf { .. } => Some("perf"),
+        Step::Repeat { steps, .. } => no_window_step(steps),
+        _ => None,
     })
 }
 
@@ -482,23 +600,30 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
             Status::Active
         }
     };
-    let mut launch = Launch { screen: "menu".into(), scene: None, seed: None, ruleset: None };
+    let mut launch = Launch { screen: "menu".into(), scene: None, seed: None, ruleset: None, save: None };
     if let Some(l) = o.get("launch") {
         match l.as_object() {
             None => p.push("launch: an object".into()),
             Some(l) => {
-                let known: Vec<&str> = ["screen", "seed"].into_iter().chain(LAUNCH_ALIASES.iter().flat_map(|(k, old)| [*k, *old])).collect();
+                let known: Vec<&str> = ["screen", "seed", "save"].into_iter().chain(LAUNCH_ALIASES.iter().flat_map(|(k, old)| [*k, *old])).collect();
                 unknown_keys(l, &known, "launch", p);
                 match l.get("screen").map(|s| s.as_str()) {
                     None => {}
-                    Some(Some(s @ ("menu" | "arena" | "runner"))) => launch.screen = s.to_string(),
-                    Some(_) => p.push("launch: 'screen' is menu, arena or runner".into()),
+                    Some(Some(s)) if plain_name(s) => launch.screen = s.to_string(),
+                    Some(_) => p.push("launch: 'screen' is a screen id: letters, digits, _ and - only".into()),
                 }
                 launch.scene = aliased_text(l, "scene", p);
                 if l.contains_key("seed") {
                     launch.seed = Some(int_of(l, "seed", None, (0, u64::MAX), "launch", p));
                 }
                 launch.ruleset = aliased_text(l, "ruleset", p);
+                if l.contains_key("save") {
+                    let name = text_of(l, "save", "launch", p);
+                    if !name.is_empty() && !plain_name(&name) {
+                        p.push("launch: 'save' names a folder under scenarios/saves/: letters, digits, _ and - only".into());
+                    }
+                    launch.save = Some(name);
+                }
             }
         }
     }
@@ -549,11 +674,8 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
             Vec::new()
         }
     };
-    if window && has_clip(&steps) {
-        p.push("scenario: a 'clip' is taken in a run with no window, and this one has 'window' true".into());
-    }
-    if launch.ruleset.is_some() && launch.screen != "arena" {
-        p.push("launch: 'ruleset' comes with 'screen' arena".into());
+    if let Some(kind) = no_window_step(&steps).filter(|_| window) {
+        p.push(format!("scenario: a '{kind}' is taken in a run with no window, and this one has 'window' true"));
     }
     let counted = steps_counted(&steps);
     if counted > STEPS_MAX {
@@ -582,6 +704,16 @@ pub fn load(path: &Path) -> std::result::Result<Scenario, Vec<String>> {
 /// The `*.json` files of a scenarios folder by name (none when it does not exist).
 pub fn files_in(dir: &Path) -> Vec<PathBuf> {
     files_with(dir, "json")
+}
+
+/// The launch's problems for a game that opens on `screens` (ENGINE-5; `Game::launch_problems`' default): the screen is
+/// one of them.
+pub fn screen_problems(launch: &Launch, screens: &[&str]) -> Vec<String> {
+    if screens.contains(&launch.screen.as_str()) {
+        Vec::new()
+    } else {
+        vec![format!("launch: 'screen' {} is not one this game opens on ({})", launch.screen, screens.join(", "))]
+    }
 }
 
 /// Every problem of the files, each naming its file; empty when all parse. What `check` and a game's parse test call.
@@ -793,6 +925,11 @@ pub struct Options {
     /// `fps=` and `dpr=`: for a game with no window (its own bounds refuse a bad one).
     pub fps: Option<u32>,
     pub dpr: Option<String>,
+    /// PR7-4: where the golden shots' baselines lie (`<game folder>/scenarios/baselines`), and `record=1`: write them.
+    pub baselines: Option<PathBuf>,
+    pub record: bool,
+    /// PR7-4: where `launch.save` folders lie (`<game folder>/scenarios/saves`).
+    pub saves: Option<PathBuf>,
 }
 
 /// One size's result.
@@ -824,6 +961,13 @@ struct Run<'a> {
     frame: u64,
     /// No window: frames are asked for, and looks are further apart.
     headless: bool,
+    /// This size's baselines folder, whether to record them, and the baselines written.
+    golden_dir: Option<PathBuf>,
+    record: bool,
+    /// Shots to become baselines once every step has passed: (the shot, its baseline).
+    recorded: Vec<(PathBuf, PathBuf)>,
+    /// ENGINE-2: each `perf` step's numbers and verdict, for result.json.
+    perf: Vec<Value>,
 }
 
 impl Run<'_> {
@@ -886,6 +1030,15 @@ impl Run<'_> {
         Ok(tree)
     }
 
+    /// A `frames` request to a game with no window, whose reply must say `ok`.
+    fn frames(&mut self, step: &str, body: Value) -> std::result::Result<(), Failure> {
+        let reply = self.ask(step, &body)?;
+        if reply["ok"] != json!(true) {
+            return Err(Failure { step: step.to_string(), message: format!("the frames asked for ({body}): {}", reply["error"]), gone: false });
+        }
+        Ok(())
+    }
+
     /// A request whose reply must not say `ok` false, and the frames after it.
     fn act(&mut self, step: &str, body: Value) -> std::result::Result<(), Failure> {
         let reply = self.ask(step, &body)?;
@@ -929,8 +1082,16 @@ impl Run<'_> {
                     if let Some(fail) = self.over_time(label, by, &why) {
                         return Err(fail);
                     }
-                    std::thread::sleep(if self.headless { POLL_HEADLESS } else { POLL });
+                    if self.headless {
+                        self.frames(label, json!({"cmd": "frames", "frames": WAIT_FRAMES}))?;
+                    } else {
+                        std::thread::sleep(POLL);
+                    }
                 }
+            }
+            Step::Pause { ms } if self.headless => {
+                // The shot clock: the pause is that much game time, drawn at once.
+                self.frames(label, json!({"cmd": "frames", "ms": ms}))?;
             }
             Step::Pause { ms } => {
                 let by = Instant::now() + Duration::from_millis(*ms);
@@ -948,12 +1109,33 @@ impl Run<'_> {
                     return Err(Failure { step: label.to_string(), message: format!("assert: {why}"), gone: false });
                 }
             }
-            Step::Shot { name, max_w } => {
+            Step::Shot { name, max_w, golden, t_ms } => {
                 self.settle(label)?;
+                if *t_ms > 0 {
+                    if !self.headless {
+                        return Err(Failure { step: label.to_string(), message: "a shot's t is taken in a run with no window (the shot clock)".to_string(), gone: false });
+                    }
+                    self.frames(label, json!({"cmd": "frames", "since_open_ms": t_ms}))?;
+                }
                 let path = self.bundle.join(format!("{name}.png"));
                 let reply = self.ask(label, &json!({"cmd": "screenshot", "path": path.display().to_string(), "max_w": max_w}))?;
                 if reply["ok"] != json!(true) {
                     return Err(Failure { step: label.to_string(), message: format!("the shot {name}: {}", reply["error"]), gone: false });
+                }
+                if let Some(tol) = golden {
+                    let fail = |message: String| Failure { step: label.to_string(), message, gone: false };
+                    let dir = self.golden_dir.clone().ok_or_else(|| fail("a golden shot needs the game's baselines folder".into()))?;
+                    let base = dir.join(format!("{name}.png"));
+                    if self.record {
+                        // Written only when the whole run passes: a baseline never comes from a failed run.
+                        self.recorded.push((path.clone(), base));
+                    } else {
+                        match crate::golden::check(&path, &base, *tol, &self.bundle.join(format!("{name}.diff.png"))) {
+                            Ok(None) => {}
+                            Ok(Some(why)) => return Err(fail(format!("the golden shot {name}: {why}"))),
+                            Err(why) => return Err(fail(format!("the golden shot {name}: {why}"))),
+                        }
+                    }
                 }
             }
             Step::Clip { name, frames, every_ms, max_w } => {
@@ -971,6 +1153,36 @@ impl Run<'_> {
                 self.link.patience(REPLY * self.slow as u32);
                 if reply["ok"] != json!(true) {
                     return Err(Failure { step: label.to_string(), message: format!("the clip {name}: {}", reply["error"]), gone: false });
+                }
+            }
+            Step::Perf { name, frames, warm, budget } => {
+                let fail = |message: String| Failure { step: label.to_string(), message, gone: false };
+                if !self.headless {
+                    return Err(fail("frame times are measured in a run with no window".to_string()));
+                }
+                // A rough floor: every frame takes at least PERF_FRAME_FLOOR, so a request that cannot end in time is refused.
+                if Instant::now() + PERF_FRAME_FLOOR * (frames + warm) as u32 > self.deadline {
+                    return Err(fail(format!("perf {name}: {} frames run past the run's timeout_s", frames + warm)));
+                }
+                self.settle(label)?;
+                // Back to back: a dev build can take a few hundred ms a frame on a big canvas.
+                self.link.patience((REPLY + PERF_FRAME_WAIT * (frames + warm) as u32) * self.slow as u32);
+                let reply = self.ask(label, &json!({"cmd": "perf", "frames": frames, "warm": warm}));
+                self.link.patience(REPLY * self.slow as u32);
+                let reply = reply?;
+                if reply["ok"] != json!(true) {
+                    return Err(fail(format!("perf {name}: {}", reply["error"])));
+                }
+                let (verdict, misses) = perf_verdict(budget, &reply);
+                let mut kept = json!({"name": name, "step": label, "frames": frames, "warm": warm, "stats": reply["stats"], "calib_before": reply["calib_before"],
+                    "calib_after": reply["calib_after"], "steady": reply["steady"], "canvas": reply["canvas"], "build": reply["build"], "verdict": verdict});
+                if !budget.is_empty() {
+                    kept["budget"] = json!({"p50_ms": budget.p50, "p95_ms": budget.p95, "max_ms": budget.max});
+                }
+                let _ = std::fs::write(self.bundle.join(format!("perf_{name}.json")), serde_json::to_string_pretty(&kept).unwrap_or_default());
+                self.perf.push(kept);
+                if !misses.is_empty() {
+                    return Err(fail(format!("perf {name}: {} (p50 {} ms, p95 {} ms, max {} ms over {frames} frames, canvas {}x{})", misses.join(", "), reply["stats"]["p50"], reply["stats"]["p95"], reply["stats"]["max"], reply["canvas"][0], reply["canvas"][1])));
                 }
             }
             Step::Audit { scales, fail } => {
@@ -1024,6 +1236,7 @@ fn kind_of(s: &Step) -> &'static str {
         Step::Assert { .. } => "assert",
         Step::Shot { .. } => "shot",
         Step::Clip { .. } => "clip",
+        Step::Perf { .. } => "perf",
         Step::Pause { .. } => "pause",
         Step::Audit { .. } => "audit",
         Step::Repeat { .. } => "repeat",
@@ -1036,7 +1249,8 @@ fn cut(text: &str, max: usize) -> String {
 
 /// Asks until the window is ready: the link names the process that was started, frames come, and it has reached the size
 /// (or will not: a capped size stays smaller). `Err(retry)` says whether another port may help.
-fn ready(link: &mut dyn Link, game: &mut dyn Process, want: (u32, u32), sized_ms: u64, slow: u64, poll: Duration) -> std::result::Result<(Value, Value), StartFailure> {
+fn ready(link: &mut dyn Link, game: &mut dyn Process, want: (u32, u32), sized_ms: u64, slow: u64, headless: bool) -> std::result::Result<(Value, Value), StartFailure> {
+    let poll = if headless { POLL_HEADLESS } else { POLL };
     let fail = |reason: String, retry: bool| StartFailure { reason, retry };
     let first = link.ask(&json!({"cmd": "ui_tree"})).map_err(|e| fail(format!("the link: {e}"), false))?;
     if first["pid"] != json!(game.pid()) {
@@ -1058,7 +1272,15 @@ fn ready(link: &mut dyn Link, game: &mut dyn Process, want: (u32, u32), sized_ms
         if let Some(how) = game.exited() {
             return Err(fail(format!("the game ended while starting: {how}"), false));
         }
-        std::thread::sleep(poll);
+        if headless {
+            // The shot clock (ENGINE-17): no frame comes unless asked for; the same frames in every run.
+            let reply = link.ask(&json!({"cmd": "frames", "frames": SETTLE_FRAMES})).map_err(|e| fail(format!("the link: {e}"), false))?;
+            if reply["ok"] != json!(true) {
+                return Err(fail(format!("the frames asked for: {}", reply["error"]), false));
+            }
+        } else {
+            std::thread::sleep(poll);
+        }
     }
 }
 
@@ -1083,6 +1305,21 @@ fn keep_failure(link: &mut dyn Link, bundle: &Path) {
     let _ = link.ask(&json!({"cmd": "screenshot", "path": path.display().to_string(), "max_w": 1920}));
 }
 
+/// A folder's files and folders, copied under `to`.
+pub fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for e in std::fs::read_dir(from)? {
+        let e = e?;
+        let target = to.join(e.file_name());
+        if e.file_type()?.is_dir() {
+            copy_dir(&e.path(), &target)?;
+        } else {
+            std::fs::copy(e.path(), target)?;
+        }
+    }
+    Ok(())
+}
+
 /// Empties a bundle of an earlier run. A folder without a `result.json` is not one, and is left alone.
 fn clear_bundle(bundle: &Path) -> std::io::Result<()> {
     if bundle.join("result.json").is_file() {
@@ -1104,7 +1341,6 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
     }
     let started = Instant::now();
     let headless = !(s.window || o.window);
-    let poll = if headless { POLL_HEADLESS } else { POLL };
     let mut record = json!({"id": s.id, "title": s.title, "size": format!("{}x{}", size.0, size.1), "slow": slow, "window": !headless});
     for attempt in 1..=PORT_TRIES {
         let port = match free_port() {
@@ -1119,10 +1355,30 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
         let mut plan = plan(s, size, &o.game_id, &o.exe, o.data.as_deref(), port, &scratch);
         if headless {
             plan.args.extend(headless_args(size, o));
+            // ENGINE-17: a scenario is always on the shot clock, so two runs of a build draw the same frames (the agent
+            // playtest, which shares the arguments above, stays on real time).
+            plan.args.push("clock=step".to_string());
         }
         if let Err(e) = write_scratch(&plan) {
             out.message = format!("the scratch folder {}: {e}", scratch.display());
             break;
+        }
+        if let Some(name) = &s.launch.save {
+            let from = o.saves.as_ref().map(|d| d.join(name));
+            match from.filter(|f| f.is_dir()) {
+                None => {
+                    out.message = format!("launch.save '{name}': no folder scenarios/saves/{name}/");
+                    let _ = std::fs::remove_dir_all(&scratch);
+                    break;
+                }
+                Some(from) => {
+                    if let Err(e) = copy_dir(&from, &scratch.join("saves")) {
+                        out.message = format!("launch.save '{name}': {e}");
+                        let _ = std::fs::remove_dir_all(&scratch);
+                        break;
+                    }
+                }
+            }
         }
         let (mut link, mut game) = match launcher.start(&plan) {
             Ok(both) => both,
@@ -1136,7 +1392,7 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
             }
         };
         record["port"] = json!(port);
-        let readiness = ready(link.as_mut(), game.as_mut(), size, o.sized_ms, slow, poll);
+        let readiness = ready(link.as_mut(), game.as_mut(), size, o.sized_ms, slow, headless);
         let (px, canvas) = match readiness {
             Ok(both) => both,
             Err(f) => {
@@ -1159,9 +1415,12 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
         record["canvas"] = canvas;
         record["capped"] = json!(px != json!([size.0, size.1]));
         let deadline = Instant::now() + s.timeout * slow as u32;
-        let mut run = Run { link: link.as_mut(), game: game.as_mut(), bundle: &bundle, slow, deadline, done: Vec::new(), frame: 0, headless };
+        let golden_dir = o.baselines.as_ref().map(|b| b.join(&s.id).join(format!("{}x{}", size.0, size.1)));
+        let mut run = Run { link: link.as_mut(), game: game.as_mut(), bundle: &bundle, slow, deadline, done: Vec::new(), frame: 0, headless, golden_dir, record: o.record, recorded: Vec::new(), perf: Vec::new() };
         let walked = s.steps.iter().enumerate().try_for_each(|(i, step)| run.step(&(i + 1).to_string(), step));
         let done = std::mem::take(&mut run.done);
+        let to_record = std::mem::take(&mut run.recorded);
+        let perf = std::mem::take(&mut run.perf);
         let frames = run.frame;
         match walked {
             Ok(()) => {
@@ -1188,6 +1447,24 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
             out.code = 1;
             out.step = Some("stop".into());
             out.message = problem;
+        }
+        if o.record && out.code == 0 {
+            let mut written = Vec::new();
+            for (shot, base) in &to_record {
+                match base.parent().map(std::fs::create_dir_all).unwrap_or(Ok(())).and_then(|_| std::fs::copy(shot, base)) {
+                    Ok(_) => written.push(base.display().to_string()),
+                    Err(e) => {
+                        out.code = 1;
+                        out.step = Some("record".into());
+                        out.message = format!("recording {}: {e}", base.display());
+                        break;
+                    }
+                }
+            }
+            record["recorded"] = json!(written);
+        }
+        if !perf.is_empty() {
+            record["perf"] = Value::Array(perf);
         }
         record["steps"] = Value::Array(done);
         record["frames"] = json!(frames);
@@ -1368,28 +1645,29 @@ fn game_folder<G: crate::Game>(game: &G, args: &Args) -> Result<PathBuf> {
     manifest.parent().map(Path::to_path_buf).with_context(|| format!("{} has no folder", manifest.display()))
 }
 
-const RUN_USAGE: &str = "aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
-const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [ruleset=<id>] [seed=N] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
+const RUN_USAGE: &str = "aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X] [record=1]";
+const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=<id>] [scene=<id>] [ruleset=<id>] [seed=N] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
 
 /// `aegis scenario ...`; returns the exit code.
 pub fn command<G: crate::Game>(game: &G, args: &Args) -> Result<i32> {
     let folder = game_folder(game, args)?;
     let scenarios = folder.join("scenarios");
+    let launch = |l: &Launch| game.launch_problems(l);
     match args.pos(1) {
-        Some("check") => Ok(check(&scenarios, args.pos(2).unwrap_or("all"))),
+        Some("check") => Ok(check(&scenarios, args.pos(2).unwrap_or("all"), &launch)),
         Some("run") => {
             let Some(what) = args.pos(2) else {
                 println!("usage: {RUN_USAGE}");
                 return Ok(2);
             };
-            run(&folder, &scenarios, what, args)
+            run(&folder, &scenarios, what, args, &launch)
         }
         Some("shots") => {
             let Some(name) = args.pos(2) else {
                 println!("usage: {SHOTS_USAGE}");
                 return Ok(2);
             };
-            shots(&folder, name, args)
+            shots(&folder, name, args, &launch)
         }
         _ => {
             println!("usage: aegis scenario check [<file> | all]\n       {RUN_USAGE}\n       {SHOTS_USAGE}");
@@ -1398,9 +1676,18 @@ pub fn command<G: crate::Game>(game: &G, args: &Args) -> Result<i32> {
     }
 }
 
-fn check(scenarios: &Path, what: &str) -> i32 {
+/// What the game says of a launch (`Game::launch_problems`).
+type LaunchCheck<'a> = dyn Fn(&Launch) -> Vec<String> + 'a;
+
+/// A loaded scenario's problems as the game sees its launch, each naming the scenario.
+fn game_problems(s: &Scenario, launch: &LaunchCheck) -> Vec<String> {
+    launch(&s.launch).into_iter().map(|p| format!("{}: {p}", s.id)).collect()
+}
+
+fn check(scenarios: &Path, what: &str, launch: &LaunchCheck) -> i32 {
     let files = if what == "all" { files_in(scenarios) } else { vec![PathBuf::from(what)] };
-    let problems = check_files(&files);
+    let mut problems = check_files(&files);
+    problems.extend(files.iter().filter_map(|f| load(f).ok()).flat_map(|s| game_problems(&s, launch)));
     for p in &problems {
         println!("§ {p}");
     }
@@ -1429,7 +1716,12 @@ fn options_of(folder: &Path, args: &Args, out: &str) -> Result<Options> {
     let out = PathBuf::from(args.key("out", out));
     let window = window_asked(args)?;
     let fps = args.keys.get("fps").map(|n| n.parse::<u32>().with_context(|| format!("fps '{n}' is not a whole number"))).transpose()?;
-    Ok(Options { game_id: manifest.id.clone(), exe, data: args.keys.get("data").map(PathBuf::from), out, slow, size, sized_ms: SIZED_MS, window, fps, dpr: args.keys.get("dpr").cloned() })
+    let record = match args.key("record", "0").as_str() {
+        "0" => false,
+        "1" => true,
+        other => anyhow::bail!("record is 1 or 0, not '{other}'"),
+    };
+    Ok(Options { game_id: manifest.id.clone(), exe, data: args.keys.get("data").map(PathBuf::from), out, slow, size, sized_ms: SIZED_MS, window, fps, dpr: args.keys.get("dpr").cloned(), baselines: Some(folder.join("scenarios").join("baselines")), record, saves: Some(folder.join("scenarios").join("saves")) })
 }
 
 /// The steps of `do=`, comma separated: `key:<k>`, `click:<id>`, `hover:<id>`, `screen:<id>` (wait for it), `widget:<id>`
@@ -1488,9 +1780,12 @@ pub fn shots_scenario(name: &str, args: &Args) -> std::result::Result<Scenario, 
 
 /// `aegis scenario shots`: a named fight or screen, driven and photographed with no scenario file. The bundle is a
 /// scenario's; the pictures are listed.
-fn shots(folder: &Path, name: &str, args: &Args) -> Result<i32> {
+fn shots(folder: &Path, name: &str, args: &Args, launch: &LaunchCheck) -> Result<i32> {
     let options = options_of(folder, args, ".agent/shots")?;
-    let s = match shots_scenario(name, args) {
+    let s = match shots_scenario(name, args).and_then(|s| match game_problems(&s, launch) {
+        p if p.is_empty() => Ok(s),
+        p => Err(p),
+    }) {
         Ok(s) => s,
         Err(problems) => {
             problems.iter().for_each(|p| println!("§ {p}"));
@@ -1529,7 +1824,7 @@ fn print_outcome(r: &Outcome) {
     }
 }
 
-fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args) -> Result<i32> {
+fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args, launch: &LaunchCheck) -> Result<i32> {
     let options = options_of(folder, args, ".agent/scenario")?;
     let slow = options.slow;
     let files = match what {
@@ -1540,7 +1835,10 @@ fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args) -> Result<i32> 
     let mut worst = 0;
     let mut loaded = Vec::new();
     for f in &files {
-        match load(f) {
+        match load(f).and_then(|s| match game_problems(&s, launch) {
+            p if p.is_empty() => Ok(s),
+            p => Err(p),
+        }) {
             Ok(s) => loaded.push(s),
             Err(problems) => {
                 problems.iter().for_each(|p| println!("§ {p}"));

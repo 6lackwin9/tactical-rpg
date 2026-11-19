@@ -1,0 +1,51 @@
+# Nightly balance bands (PR7-7 CI-DEVELOP1): tools/fc.sh sim bands on develop. Exit 1 = a row outside its band, 2 = malformed
+# bands or a tool failure; either fails the job. The bands table goes to the job summary. Scheduled workflows run from the
+# default branch, so this file must be on main for the cron to fire; workflow_dispatch works from any branch holding it.
+name: bands
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: bands
+  cancel-in-progress: false
+
+jobs:
+  bands:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      RUSTUP_TOOLCHAIN: stable
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: System libraries (ALSA, for the audio crate on Linux)
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libasound2-dev pkg-config
+
+      - name: Rust toolchain
+        run: rustup toolchain install stable --profile minimal && rustc --version
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Balance bands
+        run: |
+          set +e
+          bash tools/fc.sh sim bands 2>&1 | tee "$RUNNER_TEMP/bands.txt"
+          code=${PIPESTATUS[0]}
+          {
+            echo "## Balance bands (develop $(git rev-parse --short HEAD))"
+            echo "exit code: $code (0 in band, 1 a row outside its band, 2 malformed or tool failure)"
+            echo '```'
+            cat "$RUNNER_TEMP/bands.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"

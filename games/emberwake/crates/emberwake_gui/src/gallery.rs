@@ -1,7 +1,7 @@
 //! UI Gallery (UIGALLERY1, Scene Runner; decision "UIGALLERY1 answers"): the UI one element at a time, each on sample
 //! data and named, so each can be judged and refined on its own. Three groups:
 //! - Kit: the engine's widgets in their states (`aegis_ui::specimens`), and the vignette player on the engine's sample
-//!   reel (STORYUI1-E, `aegis_ui::vignette`; the preview plays on and starts over, Open plays it full screen) or any
+//!   reel (STORYUI1-E, `rpgkit_ui::vignette`; the preview plays on and starts over, Open plays it full screen) or any
 //!   world's vignette as written, in the game's card palette (STORYUI1-U1, a reel picker over the preview).
 //! - Art: Portraits (PORTRAITFX1-G 6.3): every portrait of the game and kit layers (expression frames under their
 //!   character) drawn through the game's binding (`portraits::Faces`) with the Kit widgets' portrait controls, its
@@ -23,22 +23,24 @@ use aegis_core::assets::Layers;
 use aegis_core::json;
 use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
-use aegis_ui::portrait_fx::{Cue, Tier};
+use rpgkit_ui::portrait_fx::{Cue, Tier};
 use aegis_ui::preview;
 use aegis_ui::screen::PointerPhase;
-use aegis_ui::specimens::{portrait_label, KitAct, Specimens, PORTRAIT_OVERLAYS, PORTRAIT_REACTIONS, PORTRAIT_SIZES, PORTRAIT_STAGE, PORTRAIT_STATES};
+use aegis_ui::specimens::KitAct;
+use rpgkit_ui::portrait_page::{portrait_label, KitWidgets, PORTRAIT_OVERLAYS, PORTRAIT_REACTIONS, PORTRAIT_SIZES, PORTRAIT_STAGE, PORTRAIT_STATES};
 use aegis_ui::timeline::Timeline;
 use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, SMALL, TITLE, W};
-use aegis_ui::vignette;
+use rpgkit_ui::vignette;
 use aegis_ui::widget_plumbing;
 use emberwake_battle::session::{Phase, Session, UnitSnap};
 use emberwake_host::{Battle, Host};
 use serde_json::{json, Value};
 
 /// (id, name, group, what it shows). Battle panel ids are the battle screen's own panel names.
-const ENTRIES: [(&str, &str, &str, &str); 34] = [
+const ENTRIES: [(&str, &str, &str, &str); 35] = [
     ("kit", "Kit widgets", "Kit", "Every kit widget in its states; use them, the foot of the page says what happened."),
     ("layout", "Layout", "Kit", "Anchors, shares, fills, a stack and pick, all calculated from the canvas: the layout audit's subject."),
+    ("layouts", "Screen layouts", "Kit", "UISPLIT1: every screen layout file drawn against its view fixture, or the plain default; a saved layout reloads in a debug build."),
     ("frame_tuner", "Frame tuner", "Kit", "A frame's corner, tip, line and padding on a live panel; Save in a debug build."),
     ("vignette", "Vignette player", "Kit", "The engine's sample reel or a world's vignette: image, text, title and line cards with fades, typing, hold and skip."),
     ("pip_gauge", "Pip gauge", "Kit", "The engine pip gauge in its states: kept, spent and next round's gain; red, a debt, two points a pip; numbers on hover."),
@@ -76,7 +78,7 @@ const ENTRIES: [(&str, &str, &str, &str); 34] = [
 const NEEDS_GAME: [&str; 13] = ["region", "dialogue", "shop", "hub", "journal", "stats", "level_up", "skills", "gear", "world_map", "results", "save", "battle_talk"];
 /// Where a preview's mouse is (off every widget).
 const OFF: (i32, i32) = (-10_000, -10_000);
-const ALLY: Rgba = [110, 170, 255, 255];
+use crate::tokens::ally;
 /// The strip under the timeline: an action's details or a block's snapshot.
 const DETAIL_H: i32 = 64;
 
@@ -592,7 +594,7 @@ pub struct Gallery {
     /// The vignette entry's reel (an index into `story::gallery_reels`).
     reel: usize,
     demo: Option<Demo>,
-    kit: Specimens,
+    kit: KitWidgets,
     portraits: PortraitPage,
     shown: Option<Shown>,
     battle: Option<BattleScreen>,
@@ -612,12 +614,12 @@ impl Default for Gallery {
 impl Gallery {
     /// PR5-48: the Kit widgets entry shows its Layout page (the layout editor).
     fn on_layout_page(&self) -> bool {
-        ENTRIES[self.entry].0 == "kit" && aegis_ui::specimens::PAGES.get(self.kit.page) == Some(&"Layout")
+        ENTRIES[self.entry].0 == "kit" && self.kit.on_page() == "Layout"
     }
 
     pub fn new() -> Self {
         let s = aegis_ui::timeline::sample();
-        Self { entry: 0, reel: 0, demo: None, kit: Specimens::default(), portraits: PortraitPage::default(), shown: None, battle: None, pane: (s.selected_block, s.selected_track), own_game: None, w: Vec::new() }
+        Self { entry: 0, reel: 0, demo: None, kit: KitWidgets::default(), portraits: PortraitPage::default(), shown: None, battle: None, pane: (s.selected_block, s.selected_track), own_game: None, w: Vec::new() }
     }
 
     /// The sample game for the screen entries: a debug game (nothing saved) of the first playable world.
@@ -646,6 +648,7 @@ impl Gallery {
         let member = cx.game.as_ref().and_then(|g| g.gs.party.members.first()).map(|m| m.id.clone()).unwrap_or_default();
         let screen: Box<dyn Screen<GameCx>> = match id {
             "layout" => Box::new(aegis_ui::layout_specimen::LayoutSpecimen::default()),
+            "layouts" => Box::new(aegis_ui::layout_gallery::LayoutGallery::default()),
             "main_menu" => Box::new(crate::menus::MainMenu::default()),
             "new_game" => Box::new(crate::menus::NewGameScreen::new(cx)),
             "settings" => Box::new(crate::menus::SettingsScreen::new(cx)),
@@ -670,7 +673,17 @@ impl Gallery {
                 let name = cx.game.as_ref().and_then(|g| g.gs.party.members.first()).map(|m| emberwake_world::progression::display_name(&cx.data, m)).unwrap_or_default();
                 let item = cx.data.cat.items.values().filter(|i| i.offered_in_battle()).map(|i| i.name.clone()).min().unwrap_or_default();
                 let short = format!("Stash short: {name} 1 of 2 {item}");
-                let res = json::obj([("ok", true.into()), ("xp", Value::Object(xp)), ("advanced", json!([])), ("events", json!([])), ("gold", json!(30)), ("stash_short", json!([short]))]);
+                let mut res = json::obj([("ok", true.into()), ("xp", Value::Object(xp)), ("advanced", json!([])), ("events", json!([])), ("gold", json!(30)), ("stash_short", json!([short]))]);
+                // PR7-3 (review N3): sample graft-era lines (`battle::apply`'s `remains`, `mastery`, `wear`) on the
+                // catalog's first main-hand weapon: a mastery gain to level 1, its wear down to 0 (dulled) and a remains
+                let weapon = cx.data.cat.items.values().filter(|i| i.item_type == "WEAPON" && i.slot == "MAIN_HAND" && !i.weapon_type.is_empty()).min_by(|a, b| a.id.cmp(&b.id));
+                if let Some(wp) = weapon {
+                    // a use gain that reaches mastery level 1
+                    let lvl1 = emberwake_data::mastery::MASTERY_LEVEL_XP[0];
+                    res.insert("mastery".into(), json!([{"member": member, "family": wp.weapon_type, "from": lvl1 - emberwake_data::mastery::USE_XP, "to": lvl1}]));
+                    res.insert("wear".into(), json!([{"member": member, "slot": "main_hand", "uid": "sample", "item": wp.id, "worn": 4, "durability": 0, "dulled": true}]));
+                    res.insert("remains".into(), json!([{"member": member, "item": wp.id}]));
+                }
                 Box::new(crate::hub::Results::new(&res, "won", &json::Dict::new()))
             }
             _ => return None,
@@ -926,7 +939,7 @@ fn draw_timeline_pane(ui: &mut Ui<GAct>, r: Rect, name: &str, about: &str, sel: 
     t.draw(ui, "gallery.pane", Rect::new(r.x + 4, top, r.w - 8, r.y + r.h - 4 - top), GAct::PaneBlock, |k| GAct::PaneTrack(k.to_string()), |k, _| GAct::PaneTrack(k.to_string()));
 }
 
-/// INPUT1-AP: the Pip gauge entry (Kit): the engine's pip gauge alone, each sample state (`aegis_ui::pips::samples`)
+/// INPUT1-AP: the Pip gauge entry (Kit): the engine's pip gauge alone, each sample state (`rpgkit_ui::pips::samples`)
 /// in a row with its name, the gauge (`gallery.pip.<k>`, its numbers on hover) and its reading, under a legend.
 fn draw_pip_gauges(ui: &mut Ui<GAct>, r: Rect, name: &str, about: &str) {
     ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, name, TITLE, th().gold);
@@ -938,7 +951,7 @@ fn draw_pip_gauges(ui: &mut Ui<GAct>, r: Rect, name: &str, about: &str) {
     let row_h = (ui.p.line_h(BODY) + 6.0).ceil() as i32;
     y += row_h;
     let (label_w, gauge_w) = (210, 90);
-    for (k, (label, gauge)) in aegis_ui::pips::samples().into_iter().enumerate() {
+    for (k, (label, gauge)) in rpgkit_ui::pips::samples().into_iter().enumerate() {
         ui.p.text_fit(r.x as f32 + 4.0, y as f32, label, BODY, label_w as f32 - 8.0, th().text);
         let cy = y + (ui.p.line_h(BODY) / 2.0).round() as i32;
         gauge.draw(ui, &format!("gallery.pip.{k}"), r.x + label_w, cy);
@@ -1074,7 +1087,7 @@ impl Screen<GameCx> for Gallery {
             let snap = d.block.and_then(|b| s.round_record(d.viewed).and_then(|r| r.snapshots.get(b as usize)).map(|sn| (b, sn)));
             let lines: Vec<(String, Rgba)> = match (d.block, snap) {
                 (Some(_), Some((b, sn))) => std::iter::once((format!("After block {b} of round {}", d.viewed), th().gold))
-                    .chain(s.w.allies.iter().chain(s.w.enemies.iter()).filter_map(|&u| sn.get(u).filter(|x| x.pos.is_some() || x.hp <= 0 || x.withdrawn).map(|x| (snap_line(&s.w.units[u].name, x), if s.w.allies.contains(&u) { ALLY } else { th().foe }))))
+                    .chain(s.w.allies.iter().chain(s.w.enemies.iter()).filter_map(|&u| sn.get(u).filter(|x| x.pos.is_some() || x.hp <= 0 || x.withdrawn).map(|x| (snap_line(&s.w.units[u].name, x), if s.w.allies.contains(&u) { ally() } else { th().foe }))))
                     .collect(),
                 (Some(b), None) => vec![(format!("Block {b} has not resolved yet."), th().dim)],
                 _ if !d.detail.is_empty() => d.detail.clone(),
@@ -1211,7 +1224,7 @@ mod tests {
         let (mut cx, mut g) = (game_cx(), gfx());
         let mut gallery = Gallery::new();
         gallery.act(&mut cx, GAct::Entry(ENTRIES.iter().position(|e| e.0 == "kit").unwrap()));
-        let page = aegis_ui::specimens::PAGES.iter().position(|p| *p == "Layout").expect("a Layout page");
+        let page = KitWidgets::page_of("Layout").expect("a Layout page");
         gallery.draw(&mut cx, &mut g, (-500, -500), true);
         assert!(gallery.arrow_focus() && gallery.state(&cx)[STATE_KEY].is_null(), "not on the Layout page yet");
         gallery.click_id(&mut cx, &format!("kit.page.{page}")).unwrap();
@@ -1256,7 +1269,7 @@ mod tests {
         let mut gallery = Gallery::new();
         let at = |id: &str| ENTRIES.iter().position(|e| e.0 == id).unwrap();
         gallery.act(&mut cx, GAct::Entry(at("kit")));
-        let page = aegis_ui::specimens::PAGES.iter().position(|p| *p == "Panes").expect("a Panes page");
+        let page = KitWidgets::page_of("Panes").expect("a Panes page");
         let pane = |name: &str| aegis_ui::specimens::PANES.iter().position(|p| *p == name).unwrap_or_else(|| panic!("a pane {name}"));
         let open = |gallery: &mut Gallery, cx: &mut Cx, g: &mut Gfx, id: String| {
             gallery.draw(cx, g, (-500, -500), true);
@@ -1337,7 +1350,7 @@ mod tests {
         let i = ENTRIES.iter().position(|e| e.0 == "pip_gauge").expect("a pip gauge entry");
         assert_eq!(ENTRIES[i].2, "Kit");
         gallery.act(&mut cx, GAct::Entry(i));
-        let samples = aegis_ui::pips::samples();
+        let samples = rpgkit_ui::pips::samples();
         for &(_, scale) in aegis_ui::screen::TEXT_SIZES.iter() {
             let recs: Vec<aegis_ui::painter::TextRec> = frame(&mut gallery, &mut cx, &mut g, scale as f32).into_iter().filter(|r| r.x >= 110.0).collect();
             let ws = gallery.widgets();

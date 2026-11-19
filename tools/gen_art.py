@@ -3016,6 +3016,19 @@ def fr_box(w: int, h: int, rings, centre: str, centre_a: int = 255) -> Image.Ima
     return img
 
 
+# PR7-36 (ART-02, UX-36/37 option A): the popup tier's double line. Bronze outer line, a dark gap, an iron inner line
+# (each 1 logical px, 2 art px), the top edge's outer line in the frame line's oxblood; no corners.
+BRONZE = "#74543c"
+
+
+def fr_double_line() -> Image.Image:
+    img = fr_box(24, 24, [BRONZE, BRONZE, VOID, VOID, IRON, IRON], VOID, 0xf0)
+    for y in range(2):
+        for x in range(img.width):
+            img.putpixel((x, y), rgb(frame_line()))
+    return img
+
+
 def fr_rivets(img: Image.Image) -> None:
     # a 4 x 4 Cinder Ash rivet with a 2 x 2 Pewter top-left, 2 px in from each corner
     w, h = img.size
@@ -3133,8 +3146,7 @@ def ui_frames():
         if lit:
             fr_lit(img)
         return img
-    panel = fr_box(24, 24, [IRON, IRON, BASALT, BASALT], VOID, 0xf0)
-    fr_rivets(panel)
+    panel = fr_double_line()
     s4, s8 = {"slice": [4, 4, 4, 4]}, {"slice": [8, 8, 8, 8]}
     out = {
         "panel": (panel, s8),

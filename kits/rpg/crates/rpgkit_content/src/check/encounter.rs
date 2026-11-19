@@ -143,6 +143,7 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
         _ => errors.push("Exit tiles must be a list of [x, y] pairs.".into()),
     }
     errors.extend(rows_problems(v, e));
+    errors.extend(footprint_problems(v, e, &|r: &str| r.to_string()));
     // ENCOUNTER2 S1 and section 6: unkillable refs and the stay-behind block
     errors.extend(unkillable_problems(e));
     errors.extend(stay_behind_problems(v, e, false));
@@ -152,6 +153,25 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
     errors.extend(super::hooks::arena_hazards_errors(e, &v.ids(rpgkit_data::UNIT_METERS_KIND)));
     errors.extend(super::hooks::deck_effect_errors(v, e, None, &|r: &str| v.get("units", r).clone()));
     errors
+}
+
+/// BIGUNIT1 BU3: every 2 x 2 unit of the encounter (`footprint` 2 on its unit row; `base_of` maps a party or enemy
+/// ref to that row's id) deploys where all four cells fit: inside the arena, walkable, not an exit and clear of every
+/// other unit, deployed as a battle start places them (`World::deploy_misfits`). One error per unit that does not fit;
+/// nothing when the encounter has no 2 x 2 unit.
+pub fn footprint_problems(v: &View, e: &Dict, base_of: &dyn Fn(&str) -> String) -> Vec<String> {
+    let (party, foes) = (strings(json::get(e, "party")), strings(json::get(e, "enemies")));
+    let row = |r: &str| v.typed.units.get(&base_of(r));
+    if !party.iter().chain(&foes).any(|r| row(r).is_some_and(|u| u.footprint == 2)) {
+        return Vec::new();
+    }
+    let unit = |r: &String| row(r).map_or_else(|| rpgkit_rules::Unit::stand_in(r, 1, 1), |u| rpgkit_rules::unit::build_unit(&v.typed, u, 0));
+    let def = rpgkit_battle::session::EncounterDef::from_obj_with(e, Default::default());
+    let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&v.typed), 0);
+    grid.apply_board(&def.zone, &def.rows, &v.typed.zones);
+    let refs: Vec<&String> = party.iter().chain(&foes).collect();
+    let misfits = rpgkit_battle::world::World::deploy_misfits(std::sync::Arc::new(v.typed.clone()), grid, party.iter().map(unit).collect(), foes.iter().map(unit).collect(), &def.deployment);
+    misfits.into_iter().map(|c| format!("'{}' fills 2 x 2 cells and finds no free 2 x 2 square to deploy on (all four cells inside the arena, walkable, not an exit, clear of other units).", refs[c])).collect()
 }
 
 /// ENCOUNTER2 R0: `rows` is empty (the zone's rows) or GRID_H strings of GRID_W known terrain glyphs (catalog and
@@ -928,6 +948,13 @@ pub fn objective_problems(v: &View, e: &Dict, guest_ok: &dyn Fn(&str) -> bool) -
             }
         }
         "escape" if !arena_open && exits.is_empty() => errors.push("Escape needs an exit tile.".into()),
+        // PR6-9: the retreat's unit and floor
+        rpgkit_battle::encounter::RETREAT => {
+            let target = json::s(e, "objective_unit");
+            if target.is_empty() || !strings(json::get(e, "enemies")).contains(&target) {
+                errors.push("Retreat needs a unit from enemies.".into());
+            }
+        }
         _ => {}
     }
     if json::s(e, "objective_text").chars().count() > MAX_OBJECTIVE_TEXT {

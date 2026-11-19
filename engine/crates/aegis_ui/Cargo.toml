@@ -13,6 +13,16 @@ name = "shot_compare"
 path = "src/bin/shot_compare.rs"
 test = false
 
+[[bin]]
+name = "ui_bench"
+path = "src/bin/ui_bench.rs"
+test = false
+
+[[bin]]
+name = "ui_layout"
+path = "src/bin/ui_layout.rs"
+test = false
+
 [features]
 # WEBREL1-G1: `shell`'s page probe for browser tests (`aegisProbe()`, the web build only; no effect on the desktop). A
 # game turns it on in its test build.
@@ -21,6 +31,7 @@ web_probe = []
 [dependencies]
 aegis_host = { path = "../aegis_host" }
 aegis_core = { path = "../aegis_core" }
+aegis_content = { path = "../aegis_content" }
 aegis_save = { path = "../aegis_save" }
 aegis_layout = { path = "../aegis_layout" }
 serde_json = { workspace = true }
@@ -44,8 +55,13 @@ arboard = { version = "3.7.0", default-features = false }
 cpal = { version = "0.15.3", features = ["wasm-bindgen"] }
 wasm-bindgen = "=0.2.129"
 wasm-bindgen-futures = "0.4.79"
-web-sys = { version = "0.3.106", features = ["console", "Document", "Element", "HtmlCanvasElement", "HtmlElement", "Node", "Window"] }
+web-sys = { version = "0.3.106", features = ["console", "Document", "Element", "EventTarget", "HtmlCanvasElement", "HtmlElement", "Node", "Window"] }
 
 # DISPLAY2: the monitor's work area (GetMonitorInfoW); winit reports only the whole monitor. The version winit uses.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52.0", features = ["Win32_Foundation", "Win32_Graphics_Gdi"] }
+# INPUT-MAP1 (ENGINE-7): the gamepad on Windows (Windows.Gaming.Input); elsewhere the link's `pad` request stands in
+gilrs = "0.11.2"
+
+[lints]
+workspace = true

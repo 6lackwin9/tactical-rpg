@@ -28,7 +28,7 @@ use emberwake_battle::session::{Phase, Session};
 use emberwake_battle::world::World;
 
 /// The party's colour (labels, the section title).
-pub const ALLY: Rgba = rgb(110, 170, 255);
+use crate::tokens::ally;
 /// The enemies' colour.
 pub const FOE: Rgba = rgb(240, 100, 92);
 /// A Rest span under the round intent (dim, as on the strip).
@@ -140,7 +140,7 @@ fn plan_segments(pw: &World, plan: &Plan, u: usize, layers: &Layers) -> Vec<Segm
             let why = reasons.get(i).filter(|r| !r.is_empty());
             let mut card = Vec::new();
             if e.total_ap() > 0 {
-                card.push((format!("{} AP", e.total_ap()), ALLY));
+                card.push((format!("{} AP", e.total_ap()), ally()));
             }
             if let Some(why) = why.filter(|_| !ghost) {
                 card.push((format!("Why: {why}"), th().dim));
@@ -250,14 +250,14 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
             }
             // TV3: AP9's lines while planning (the gauge's forecast), the live AP otherwise
             if timeline && planning && unit.is_active() {
-                tip.extend(ap_lines(&rip::ap_forecast(pw, plan, u)).into_iter().map(|l| (l, ALLY)));
+                tip.extend(ap_lines(&rip::ap_forecast(pw, plan, u)).into_iter().map(|l| (l, ally())));
             } else {
-                tip.push((format!("AP {} of {}", unit.ap, unit.max_ap), ALLY));
+                tip.push((crate::intent_text::ap_text(unit.ap, unit.max_ap, " of "), ally()));
             }
             if !unit.is_alive() {
                 tip.push(("Down".into(), FOE));
             }
-            Track { key: track_key(u), label, colour: if unit.is_active() { ALLY } else { DOWN }, segments, marks, tip, hatched: !unit.is_alive(), ..Track::default() }
+            Track { key: track_key(u), label, colour: if unit.is_active() { ally() } else { DOWN }, segments, marks, tip, hatched: !unit.is_alive(), ..Track::default() }
         })
         .collect();
     let enemies: Vec<Track> = w
@@ -303,7 +303,8 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
         playhead,
         selected_block: o.block,
         selected_track: o.selected.filter(|u| w.allies.contains(u)).map(track_key),
-        sections: vec![Section { title: "Party".into(), colour: ALLY, tracks: party }, Section { title: "Enemies".into(), colour: FOE, tracks: enemies }],
+        sections: vec![Section { title: "Party".into(), colour: ally(), tracks: party }, Section { title: "Enemies".into(), colour: FOE, tracks: enemies }],
+        ruler: None,
     }
 }
 

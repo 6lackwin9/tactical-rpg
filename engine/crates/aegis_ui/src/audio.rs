@@ -1,7 +1,7 @@
 //! Sound and music (Godot AudioDirector, MusicDirector's player, VolumePreview's throttle), game-agnostic: sound files
 //! under the game's audio folder, addressed by relative path ("sfx/hit.wav", "music/town.ogg"); four levels
-//! (master, music, effects, interface, 0-100, from the settings) and mute; a voice pool per bus (the oldest restarts
-//! when all are busy); one music track wanted at a time, crossfaded and looped. The game decides which sound and which
+//! (master, music, effects, interface, ambience, 0-100, from the settings) and mute; a voice pool per bus (the oldest
+//! restarts when all are busy); one music track wanted at a time, crossfaded and looped. The game decides which sound and which
 //! track (screens name their music, `Screen::music`). Without an audio device (or headless) everything is silent. On
 //! the web (WEBREL1-E2) the device opens at the player's first gesture (`unlock`): a page may not start audio before
 //! one, and sounds asked for until then are dropped, not queued.
@@ -11,6 +11,10 @@
 //! `VARIANT_STREAM` (its own generator, so no gameplay roll moves) and never the previous request's pick. An Ogg Vorbis
 //! track tagged `LOOPSTART` (and `LOOPLENGTH`, in sample frames) plays its intro once and then loops that span
 //! (`loop_points`, `IntroLoop`); an untagged one loops whole as before.
+//!
+//! AMBIENCE1: an ambience loop (a place's wind, crowd or water, `Screen::ambience`) plays on its own channel beside the
+//! music, on the `Ambience` bus (the settings key `ambience`): one loop wanted at a time, crossfaded and looped like the
+//! music, so a change of music never cuts it and a change of place never cuts the music.
 
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use serde_json::Value;
@@ -28,16 +32,23 @@ const SFX_VOICES: usize = 8;
 const UI_VOICES: usize = 2;
 /// Music plays 6 dB under the effects (Godot MUSIC_DB -6).
 const MUSIC_GAIN: f32 = 0.501;
+/// Ambience plays at the music's -6 dB too: a bed under the effects.
+const AMBIENCE_GAIN: f32 = 0.501;
 const CROSSFADE_SEC: f32 = 1.0;
 const FIRST_FADE_SEC: f32 = 2.0;
 /// A volume slider's sample plays at most this often while it is dragged (Godot VolumePreview.INTERVAL).
 const PREVIEW_INTERVAL: Duration = Duration::from_millis(150);
+
+/// The engine's setting key: silence every sound while the window lacks the focus (default on).
+pub const MUTE_IN_BACKGROUND: &str = "mute_in_background";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Bus {
     Music,
     Sfx,
     Ui,
+    /// AMBIENCE1: a place's ambient loop (`Audio::ambience`); its one-shots share the effects' voices.
+    Ambience,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -46,6 +57,7 @@ struct Levels {
     music: f32,
     sfx: f32,
     ui: f32,
+    ambience: f32,
 }
 
 impl Levels {
@@ -55,6 +67,7 @@ impl Levels {
                 Bus::Music => self.music,
                 Bus::Sfx => self.sfx,
                 Bus::Ui => self.ui,
+                Bus::Ambience => self.ambience,
             }
     }
 }
@@ -69,10 +82,15 @@ struct Track {
 
 struct State {
     levels: Levels,
+    /// The window has the focus (the shell's `set_focused`; true until told otherwise).
+    focused: bool,
     sfx: Vec<(Sink, Instant)>,
     ui: Vec<(Sink, Instant)>,
     tracks: Vec<Track>,
     wanted: Option<String>,
+    /// The ambience channel (AMBIENCE1): its loops fading in and out, and the one wanted.
+    beds: Vec<Track>,
+    wanted_bed: Option<String>,
     last_tick: Instant,
     last_preview: Option<Instant>,
     cache: HashMap<String, Option<Arc<[u8]>>>,
@@ -145,6 +163,8 @@ impl Audio {
         self.device = open_device();
         let wanted = self.state.borrow_mut().wanted.take();
         self.music(wanted.as_deref());
+        let bed = self.state.borrow_mut().wanted_bed.take();
+        self.ambience(bed.as_deref());
     }
 
     /// The audio folders of asset `layers` (each root's `audio/`).
@@ -189,13 +209,40 @@ impl Audio {
         hit
     }
 
-    /// The four levels and mute from the settings (the engine's keys: master, music, effects, interface 0-100, mute).
-    /// The music tracks take them at the next `tick`: the shell sets the saved levels and a screen may set draft ones
-    /// in the same frame, and setting the sinks on each call made the music flip between both levels every frame.
+    /// The five levels and mute from the settings (the engine's keys: master, music, effects, interface, ambience 0-100, mute,
+    /// and `MUTE_IN_BACKGROUND`: silent while the window lacks the focus). The music tracks take them at the next
+    /// `tick`: the shell sets the saved levels and a screen may set draft ones in the same frame, and setting the sinks
+    /// on each call made the music flip between both levels every frame.
     pub fn set_levels(&self, settings: &Value) {
         let level = |k: &str| (settings[k].as_f64().unwrap_or(100.0) / 100.0).clamp(0.0, 1.0) as f32;
-        let mute = settings["mute"].as_bool().unwrap_or(false);
-        self.state.borrow_mut().levels = Levels { master: if mute { 0.0 } else { level("master") }, music: level("music"), sfx: level("effects"), ui: level("interface") };
+        let mut st = self.state.borrow_mut();
+        let away = !st.focused && settings[MUTE_IN_BACKGROUND].as_bool().unwrap_or(true);
+        let mute = settings["mute"].as_bool().unwrap_or(false) || away;
+        st.levels = Levels { master: if mute { 0.0 } else { level("master") }, music: level("music"), sfx: level("effects"), ui: level("interface"), ambience: level("ambience") };
+    }
+
+    /// The window gained (true) or lost (false) the focus (the shell, from the window's focus events). Only the master
+    /// level follows, at the next `set_levels`; the saved volumes never change. Losing the focus also silences the
+    /// effects already playing when `settings` mutes in the background (they are short and not brought back).
+    pub fn set_focused(&self, focused: bool, settings: &Value) {
+        self.state.borrow_mut().focused = focused;
+        self.set_levels(settings);
+        let st = self.state.borrow();
+        if st.levels.master == 0.0 {
+            for (sink, _) in st.sfx.iter().chain(st.ui.iter()) {
+                sink.set_volume(0.0);
+            }
+        }
+    }
+
+    /// Whether the window has the focus as far as the audio knows (`set_focused`).
+    pub fn focused(&self) -> bool {
+        self.state.borrow().focused
+    }
+
+    /// The level `bus` plays at now (master times the bus; 0 when muted), 0-1.
+    pub fn level(&self, bus: Bus) -> f32 {
+        self.state.borrow().levels.of(bus)
     }
 
     /// Plays `rel` once on `bus` at that bus's level; a missing file is silent.
@@ -231,8 +278,8 @@ impl Audio {
         sink.append(source);
         let mut st = self.state.borrow_mut();
         let (voices, max) = match bus {
-            Bus::Sfx => (&mut st.sfx, SFX_VOICES),
-            _ => (&mut st.ui, UI_VOICES),
+            Bus::Sfx | Bus::Ambience => (&mut st.sfx, SFX_VOICES),
+            Bus::Music | Bus::Ui => (&mut st.ui, UI_VOICES),
         };
         voices.retain(|(s, _)| !s.empty());
         if voices.len() >= max {
@@ -337,13 +384,44 @@ impl Audio {
         }
         let Some(rel) = rel else { return };
         drop(st);
-        let (Some(device), Some(bytes)) = (&self.device, self.bytes(rel)) else { return };
+        if let Some(track) = self.start_loop(rel, was_silent) {
+            self.state.borrow_mut().tracks.push(track);
+        }
+    }
+
+    /// A looped track of `rel` at gain 0, fading in (from silence slower); None offline or when it does not play.
+    fn start_loop(&self, rel: &str, was_silent: bool) -> Option<Track> {
+        let (Some(device), Some(bytes)) = (&self.device, self.bytes(rel)) else { return None };
         let points = loop_points(&bytes);
-        let (Ok(source), Ok(sink)) = (Decoder::new(Cursor::new(bytes)), Sink::try_new(&device.handle)) else { return };
+        let (Ok(source), Ok(sink)) = (Decoder::new(Cursor::new(bytes)), Sink::try_new(&device.handle)) else { return None };
         sink.set_volume(0.0);
         sink.append(looped(source, points));
+        Some(Track { sink, gain: 0.0, target: 1.0, rate: 1.0 / if was_silent { FIRST_FADE_SEC } else { CROSSFADE_SEC } })
+    }
+
+    /// The ambience loop wanted now (AMBIENCE1; `None`: none), on its own channel beside the music: a new loop fades in
+    /// over the old one, which fades out; loop points work as for the music. The music is untouched.
+    pub fn ambience(&self, rel: Option<&str>) {
         let mut st = self.state.borrow_mut();
-        st.tracks.push(Track { sink, gain: 0.0, target: 1.0, rate: 1.0 / if was_silent { FIRST_FADE_SEC } else { CROSSFADE_SEC } });
+        if st.wanted_bed.as_deref() == rel {
+            return;
+        }
+        let was_silent = st.wanted_bed.is_none();
+        st.wanted_bed = rel.map(String::from);
+        for t in st.beds.iter_mut() {
+            t.target = 0.0;
+            t.rate = 1.0 / CROSSFADE_SEC;
+        }
+        let Some(rel) = rel else { return };
+        drop(st);
+        if let Some(track) = self.start_loop(rel, was_silent) {
+            self.state.borrow_mut().beds.push(track);
+        }
+    }
+
+    /// The ambience loop wanted now (for the agent link and tests; also without a device).
+    pub fn wanted_ambience(&self) -> Option<String> {
+        self.state.borrow().wanted_bed.clone()
     }
 
     /// The track wanted now (for the agent link and tests; also without a device).
@@ -353,7 +431,8 @@ impl Audio {
 
     /// A music fade is running: `tick` still has work to do.
     pub fn fading(&self) -> bool {
-        self.state.borrow().tracks.iter().any(|t| t.gain != t.target)
+        let st = self.state.borrow();
+        st.tracks.iter().chain(st.beds.iter()).any(|t| t.gain != t.target)
     }
 
     /// Advances the fades; tracks faded to silence stop. The shell calls it every frame.
@@ -363,13 +442,16 @@ impl Audio {
         let now = Instant::now();
         let dt = now.duration_since(st.last_tick).as_secs_f32().min(0.25);
         st.last_tick = now;
-        let level = st.levels.of(Bus::Music) * MUSIC_GAIN;
-        for t in st.tracks.iter_mut() {
-            let step = t.rate * dt;
-            t.gain = if t.gain < t.target { (t.gain + step).min(t.target) } else { (t.gain - step).max(t.target) };
-            t.sink.set_volume(t.gain * level);
+        let (music, bed) = (st.levels.of(Bus::Music) * MUSIC_GAIN, st.levels.of(Bus::Ambience) * AMBIENCE_GAIN);
+        let st = &mut *st;
+        for (tracks, level) in [(&mut st.tracks, music), (&mut st.beds, bed)] {
+            for t in tracks.iter_mut() {
+                let step = t.rate * dt;
+                t.gain = if t.gain < t.target { (t.gain + step).min(t.target) } else { (t.gain - step).max(t.target) };
+                t.sink.set_volume(t.gain * level);
+            }
+            tracks.retain(|t| !(t.target == 0.0 && t.gain <= 0.0));
         }
-        st.tracks.retain(|t| !(t.target == 0.0 && t.gain <= 0.0));
     }
 
     /// A bundle part was mounted since the caches were filled (WEBREL1-G1: the web build's audio comes as a later part,
@@ -386,12 +468,16 @@ impl Audio {
             st.cache.retain(|_, read| read.is_some());
             st.found.retain(|_, hit| *hit);
             st.pools.clear();   // a new part may bring variants
-            if st.tracks.iter().any(|t| t.target > 0.0) {
-                return;
-            }
-            st.wanted.take()
+            let music = if st.tracks.iter().any(|t| t.target > 0.0) { None } else { Some(st.wanted.take()) };
+            let bed = if st.beds.iter().any(|t| t.target > 0.0) { None } else { Some(st.wanted_bed.take()) };
+            (music, bed)
         };
-        self.music(wanted.as_deref());
+        if let Some(m) = wanted.0 {
+            self.music(m.as_deref());
+        }
+        if let Some(b) = wanted.1 {
+            self.ambience(b.as_deref());
+        }
     }
 
     /// The bytes of `rel`, read once (a missing or unreadable file is remembered as None, until the next mount).
@@ -408,11 +494,14 @@ impl Audio {
 impl State {
     fn new() -> Self {
         Self {
-            levels: Levels { master: 1.0, music: 0.8, sfx: 0.8, ui: 0.8 },
+            levels: Levels { master: 1.0, music: 0.8, sfx: 0.8, ui: 0.8, ambience: 0.8 },
+            focused: true,
             sfx: Vec::new(),
             ui: Vec::new(),
             tracks: Vec::new(),
             wanted: None,
+            beds: Vec::new(),
+            wanted_bed: None,
             last_tick: Instant::now(),
             last_preview: None,
             cache: HashMap::new(),
@@ -663,6 +752,26 @@ mod tests {
         assert_eq!((l.of(Bus::Music), l.of(Bus::Sfx), l.of(Bus::Ui)), (0.4, 0.5, 0.1));
         a.set_levels(&json!({"master": 50, "music": 80, "effects": 100, "interface": 20, "mute": true}));
         assert_eq!(a.state.borrow().levels.of(Bus::Sfx), 0.0);
+    }
+
+    #[test]
+    fn the_ambience_bus_has_its_own_level_and_loop_beside_the_music() {
+        let a = Audio::offline(None);
+        a.set_levels(&json!({"master": 50, "music": 80, "ambience": 40}));
+        assert_eq!((a.level(Bus::Music), a.level(Bus::Ambience)), (0.4, 0.2));
+        a.set_levels(&json!({"master": 50}));
+        assert_eq!(a.level(Bus::Ambience), 0.5, "no saved ambience level: full, as the other buses");
+        a.set_levels(&json!({"master": 50, "ambience": 40, "mute": true}));
+        assert_eq!(a.level(Bus::Ambience), 0.0, "mute silences it");
+        a.music(Some("music/town.ogg"));
+        a.ambience(Some("ambience/town.ogg"));
+        assert_eq!(a.wanted_ambience().as_deref(), Some("ambience/town.ogg"));
+        a.music(Some("music/battle.ogg"));
+        assert_eq!(a.wanted_ambience().as_deref(), Some("ambience/town.ogg"), "a new track keeps the ambience");
+        a.ambience(None);
+        assert_eq!((a.wanted_music().as_deref(), a.wanted_ambience()), (Some("music/battle.ogg"), None), "and back");
+        a.tick();
+        assert!(!a.fading());
     }
 
     #[test]

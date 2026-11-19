@@ -17,8 +17,31 @@ pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
 
 /// GameEncounter / WorldEncounter: the battle of encounter row `entry` resolved in `world`, with the ruleset of that
 /// world (RULESET1 3.1.2: a battle plays by the world that owns the encounter; ENCOUNTER2's linked rooms too).
+/// PR6-7: with the region and encounter `start_meter` grants as a fight with no game state reads them (`start_meters`).
 pub fn encounter_def(d: &Data, world: &str, entry: &Dict) -> EncounterDef {
-    EncounterDef::from_obj_with(entry, d.ruleset(world))
+    let mut def = EncounterDef::from_obj_with(entry, d.ruleset(world));
+    def.start_meter = start_meters(d, None, world, entry);
+    def
+}
+
+/// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 1): the battle-start meter grants of encounter row `entry` fought in `world`: the
+/// `start_meter` entries of the regions its place sits in (`travel::region_chain` of its `location`, else the party's
+/// place; innermost region first), then its own. With a game state an entry whose `unless_flag` is set or whose
+/// `requires_flags` do not all hold is skipped; with none (the host, the sim) no flag is set: an entry with
+/// `requires_flags` is skipped and `unless_flag` never skips. The battle applies them (`meter::battle_start_with`).
+pub fn start_meters(d: &Data, gs: Option<&GameState>, world: &str, entry: &Dict) -> Vec<rpgkit_data::StartMeter> {
+    let mut place = json::s(entry, "location");
+    if place.is_empty() {
+        place = gs.map(|g| g.location_id.clone()).unwrap_or_default();
+    }
+    let regions = if place.is_empty() { Vec::new() } else { crate::travel::region_chain(d, world, &place) };
+    let mut all: Vec<rpgkit_data::StartMeter> = regions.iter().flat_map(|rq| rpgkit_data::StartMeter::list(d.resolve(world, "regions", rq))).collect();
+    all.extend(rpgkit_data::StartMeter::list(entry));
+    all.retain(|g| match gs {
+        Some(gs) => (g.unless_flag.is_empty() || !quest::condition_met(gs, json::dict(&serde_json::json!({"key": g.unless_flag})))) && g.requires_flags.iter().all(|c| quest::condition_met(gs, json::dict(c))),
+        None => g.requires_flags.is_empty(),
+    });
+    all
 }
 
 /// WORLD-SIM1 (PR5-42): the battle of encounter `id` as world `world` resolves it with its authored side, for a runner
@@ -35,7 +58,9 @@ pub fn authored_fight<'a>(d: &'a Data, world: &str, id: &str, stage: i64) -> Opt
     let mut def = encounter_def(d, world, entry);
     def.id = format!("{world}:{id}");
     let allies = def.party.iter().chain(&def.guests).cloned().collect();
-    Some((def, WorldRoster { stage, allies, ..WorldRoster::new(d, world) }))
+    // PR6-7: no game state: the captive ref plays its fallback
+    let captive_fallback = json::s(entry, rpgkit_data::CAPTIVE_FALLBACK);
+    Some((def, WorldRoster { stage, allies, captive_fallback, ..WorldRoster::new(d, world) }))
 }
 
 /// RULESET1 V3: the plan reveal flag of `world`: the nearest non-empty `plan_reveal_flag` of its lineage (the world,
@@ -51,10 +76,12 @@ pub fn plan_reveal(d: &Data, gs: &GameState, world: &str) -> bool {
     !flag.is_empty() && quest::condition_met(gs, json::dict(&serde_json::json!({"key": flag})))
 }
 
-/// `encounter_def` with the game state's reveal (V3): the battle the world runner starts.
+/// `encounter_def` with the game state's reveal (V3) and active bleed-out rounds (PK3): the battle the world runner starts.
 pub fn encounter_def_in(d: &Data, gs: &GameState, world: &str, entry: &Dict) -> EncounterDef {
     let mut def = encounter_def(d, world, entry);
     def.plan_reveal = plan_reveal(d, gs, world);
+    def.bleed_out_rounds = crate::roster::rule(d, gs).map_or(0, |r| r.bleed_out_rounds.max(0));
+    def.start_meter = start_meters(d, Some(gs), world, entry);
     def
 }
 
@@ -71,14 +98,62 @@ pub struct WorldRoster<'a> {
     /// W.2-S3 (FB-139): the refs fighting on the party's side (the encounter's `party` and `guests`), which never scale
     /// with the stage. `new` sets none; `begin_world` sets the encounter's.
     pub allies: Vec<String>,
+    /// PR6-7: the unit the ref `rpgkit_data::CAPTIVE_UNIT` plays (`captive_def`); None: the encounter's
+    /// `captive_fallback` character (`captive_fallback`), else the ref spawns nothing.
+    pub captive: Option<rpgkit_data::UnitDef>,
+    /// PR6-7: the encounter's `captive_fallback` character ref ("" = none).
+    pub captive_fallback: String,
+    /// PR6-10: the units the echo refs play (`rpgkit_data::echo_ref(i)` plays `echoes[i - 1]`; `echo_defs`).
+    pub echoes: Vec<rpgkit_data::UnitDef>,
 }
 
 impl<'a> WorldRoster<'a> {
     /// W.2-S1 (FB-50a): the roster of a battle played in `world` at stage 0 (the one constructor; `begin_world` builds
     /// on it and sets the stage and the allies).
     pub fn new(d: &'a Data, world: impl Into<String>) -> Self {
-        Self { d, world: world.into(), stage: 0, allies: Vec::new() }
+        Self { d, world: world.into(), stage: 0, allies: Vec::new(), captive: None, captive_fallback: String::new(), echoes: Vec::new() }
     }
+
+    /// PR6-10: the echo unit an echo ref plays (None for any other ref, or an index past the built echoes).
+    fn echo(&self, r: &str) -> Option<&rpgkit_data::UnitDef> {
+        rpgkit_data::echo_index(r).and_then(|i| self.echoes.get(i - 1))
+    }
+
+    /// PR6-7: the character ref a roster ref resolves as: the fallback for `CAPTIVE_UNIT` when no captive was built,
+    /// else the ref itself.
+    fn character_ref<'r>(&'r self, r: &'r str) -> &'r str {
+        if r == rpgkit_data::CAPTIVE_UNIT && self.captive.is_none() {
+            &self.captive_fallback
+        } else {
+            r
+        }
+    }
+}
+
+/// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 2): the captive unit `rpgkit_data::CAPTIVE_UNIT` plays: the latest departed record
+/// (`party.departed`) whose life is `CAPTIVE_LIFE` and cause `CAPTIVE_CAUSE`, its member snapshot built as it would
+/// fight in `world` (`progression::build_played`: its base unit at its level and spend, its name). None when no record
+/// qualifies or the snapshot does not build (the encounter's `captive_fallback` then plays it).
+pub fn captive_def(d: &Data, gs: &GameState, world: &str) -> Option<rpgkit_data::UnitDef> {
+    let x = gs.party.departed.iter().rev().find(|x| x.life == rpgkit_data::CAPTIVE_LIFE && x.cause == rpgkit_data::CAPTIVE_CAUSE)?;
+    progression::build_played(d, &x.member, world).map(|b| b.def)
+}
+
+/// PR6-10 (`PK6_PK7_BOSSES_ENDINGS.md` 3): up to `n` (at most `rpgkit_data::ECHO_MAX`) echo units: the departed records
+/// whose life is one of `rpgkit_data::ECHO_LIVES`, the latest first, each member snapshot built as it would fight in
+/// `world` (`progression::build_played`, as the captive) and named `ECHO_NAME_PREFIX` + its name. A snapshot that does
+/// not build is skipped.
+pub fn echo_defs(d: &Data, gs: &GameState, world: &str, n: usize) -> Vec<rpgkit_data::UnitDef> {
+    let lives = rpgkit_data::ECHO_LIVES;
+    let fallen = gs.party.departed.iter().rev().filter(|x| lives.contains(&x.life.as_str()));
+    let built = fallen.filter_map(|x| progression::build_played(d, &x.member, world).map(|b| b.def));
+    built
+        .map(|mut def| {
+            def.name = format!("{}{}", rpgkit_data::ECHO_NAME_PREFIX, def.name);
+            def
+        })
+        .take(n.min(rpgkit_data::ECHO_MAX))
+        .collect()
 }
 
 /// W.2-S3 (FB-13): the world stage of a fight: the campaign's act in a campaign world, 0 in a world with no campaign
@@ -113,6 +188,20 @@ impl rpgkit_battle::session::Roster for WorldRoster<'_> {
     /// The character's unit entry; an enemy (not an ally, not a hero) at its stage level (`stage_level`, FB-139), an
     /// explicit `spend` topped up by the raise's extra points (`rpgkit_rules::unit::raise_level`, AUDIT-02).
     fn entry(&self, cat: &rpgkit_data::Catalog, r: &str) -> Option<rpgkit_data::UnitDef> {
+        // PR6-10: an echo unit as built (its own level)
+        if let Some(e) = self.echo(r) {
+            return Some(e.clone());
+        }
+        // PR6-7: the captive snapshot as built (its own level), else the fallback character
+        if r == rpgkit_data::CAPTIVE_UNIT {
+            if let Some(c) = &self.captive {
+                return Some(c.clone());
+            }
+            if self.captive_fallback.is_empty() {
+                return None;
+            }
+        }
+        let r = self.character_ref(r);
         let e = self.d.character_unit_entry(self.d.resolve(&self.world, "characters", r));
         if e.is_empty() {
             return None;
@@ -127,18 +216,34 @@ impl rpgkit_battle::session::Roster for WorldRoster<'_> {
     /// U2.2-S2 (FB-12): the character's overrides (`character_overrides`), built from the world's catalog (HOOKS1 CN3:
     /// the class path of the world playing the battle; the battle's catalog when the world replaces no path).
     fn overrides(&self, _cat: &rpgkit_data::Catalog, r: &str) -> rpgkit_rules::Overrides {
+        if (r == rpgkit_data::CAPTIVE_UNIT && self.captive.is_some()) || self.echo(r).is_some() {
+            return rpgkit_rules::Overrides { path_cat: Some(self.d.cat_in(&self.world).clone()), ..Default::default() };
+        }
+        let r = self.character_ref(r);
         let mut over = character_overrides(self.d, self.d.resolve(&self.world, "characters", r), &self.world);
         over.path_cat = Some(self.d.cat_in(&self.world).clone());
         over
     }
 
     fn tier(&self, _cat: &rpgkit_data::Catalog, r: &str) -> String {
+        if let (true, Some(c)) = (r == rpgkit_data::CAPTIVE_UNIT, &self.captive) {
+            return c.tier.clone();
+        }
+        if let Some(e) = self.echo(r) {
+            return e.tier.clone();
+        }
+        let r = self.character_ref(r);
         let e = self.d.character_unit_entry(self.d.resolve(&self.world, "characters", r));
         rpgkit_data::unit_tier(&e)
     }
 
     /// WorldFactory: lore_ref = the character's qualified id, else its id.
+    /// PR6-7: the captive snapshot plays no world character ("": never a hero's key).
     fn lore_ref(&self, _cat: &rpgkit_data::Catalog, r: &str) -> String {
+        if (r == rpgkit_data::CAPTIVE_UNIT && self.captive.is_some()) || self.echo(r).is_some() {
+            return String::new();
+        }
+        let r = self.character_ref(r);
         let c = self.d.resolve(&self.world, "characters", r);
         json::s_or(c, "_qid", &json::s(c, "id"))
     }
@@ -270,6 +375,9 @@ pub struct Tally {
     /// ACT1-HOOKS1 (FB-241 c): how the battle left each party-side guest (the encounter's `guests`), for its
     /// `survivors` flag. None = not known (a tally built by hand): the flag is left as it is.
     pub guests: Option<Vec<GuestEnd>>,
+    /// PR7-42 (PACE1): the percent of the XP the defeated enemies pay (a repeat patrol's, `explore::patrol_xp_pct`);
+    /// None = full XP.
+    pub xp_pct: Option<i64>,
 }
 
 /// ACT1-HOOKS1: one party-side guest at the battle's end: its encounter ref and whether it lived (alive and still on
@@ -306,13 +414,16 @@ fn guest_of(d: &Data, world: &str, r: &str, unit: &str) -> bool {
 
 /// ACT1-HOOKS1 (FB-241 c): the encounter's `survivors` flag set (on every outcome) to how many guests of its `unit`
 /// lived; nothing when the encounter names no flag or the tally does not know its guests.
-fn record_survivors(d: &Data, gs: &mut GameState, enc: &Dict, tally: &Tally) {
+/// PR7-41 (PT-25): returns (lived, of) for the results screen, None when nothing was recorded.
+fn record_survivors(d: &Data, gs: &mut GameState, enc: &Dict, tally: &Tally) -> Option<(i64, i64)> {
     let block = json::dget(enc, SURVIVORS);
     let flag = json::s(block, "flag");
-    let Some(guests) = tally.guests.as_ref().filter(|_| !flag.is_empty()) else { return };
+    let guests = tally.guests.as_ref().filter(|_| !flag.is_empty())?;
     let (world, unit) = (json::s_or(enc, "_world", &gs.world_id), json::s(block, "unit"));
-    let n = guests.iter().filter(|g| g.alive && guest_of(d, &world, &g.unit_ref, &unit)).count() as i64;
+    let counted: Vec<&GuestEnd> = guests.iter().filter(|g| guest_of(d, &world, &g.unit_ref, &unit)).collect();
+    let n = counted.iter().filter(|g| g.alive).count() as i64;
     quest::set_flag(d, gs, &flag, int(n));
+    Some((n, counted.len() as i64))
 }
 
 impl Tally {
@@ -341,10 +452,12 @@ impl Tally {
         Tally { foes: roster(d, world, encounter_qid).into_iter().map(|f| Foe { key: f.key, unit_ref: f.unit_ref, fate }).collect(), guests: Some(guests), ..Default::default() }
     }
 
-    /// Each roster enemy's fate (a key missing from the tally: standing), and a note per tally foe not in the roster.
+    /// Each roster enemy's fate (a key missing from the tally: standing), and a note per tally foe not in the roster
+    /// (PR6-7: but the captive unit).
     pub fn fates_of(&self, roster: &[RosterFoe]) -> (Vec<Fate>, Vec<String>) {
         let fates = roster.iter().map(|r| self.foes.iter().find(|f| f.key == r.key).map_or(Fate::Standing, |f| f.fate)).collect();
-        let notes = self.foes.iter().filter(|f| !roster.iter().any(|r| r.key == f.key)).map(|f| format!("Tally foe '{}' is not in the encounter.", f.key)).collect();
+        // PR6-7: the captive unit is never a roster enemy (no rewards, no note); PR6-10: nor an echo unit
+        let notes = self.foes.iter().filter(|f| f.unit_ref != rpgkit_data::CAPTIVE_UNIT && rpgkit_data::echo_index(&f.unit_ref).is_none() && !roster.iter().any(|r| r.key == f.key)).map(|f| format!("Tally foe '{}' is not in the encounter.", f.key)).collect();
         (fates, notes)
     }
 }
@@ -407,7 +520,7 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     // 1. the party side first (ROSTER1 3.2 and L5, ENCOUNTER2 W1-W4): before the XP, the quest hook and the tick
     let (party_keys, party_notes) = settle_party_side(d, gs, &enc, encounter_qid, outcome, tally);
     // ACT1-HOOKS1 (FB-241 c): the guests that lived, on every outcome
-    record_survivors(d, gs, &enc, tally);
+    let survivors = record_survivors(d, gs, &enc, tally);
     let roster = roster_at(d, &world, encounter_qid, world_stage(gs));
     let (fates, mut notes) = tally.fates_of(&roster);
     notes.extend(party_notes);
@@ -415,7 +528,7 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     // 2. XP for the defeated enemies only (none: no award at all). A won fight whose roster does not resolve from the
     // party's world (a road fight on another world's route) gives every member a 0 award, as before REWARD1 (Godot).
     let levels: Vec<(i64, String)> = roster.iter().zip(&defeated).filter(|(_, d)| **d).map(|(f, _)| (f.level, f.tier.clone())).collect();
-    let xp = if levels.is_empty() && !(won && roster.is_empty()) { Dict::new() } else { progression::award_encounter(d, &mut gs.party, &levels) };
+    let xp = if levels.is_empty() && !(won && roster.is_empty()) { Dict::new() } else { progression::award_encounter_pct(d, &mut gs.party, &levels, tally.xp_pct.unwrap_or(100)) };
     // 3. the quest hook
     let advanced = if won { quest::on_encounter_won(d, gs, encounter_qid) } else { Vec::new() };
     // 4. the purse share
@@ -489,9 +602,14 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
         paid_gold = json::i(json::dget(&granted, "granted"), "gold", 0);
     }
     let count = |f: Fate| fates.iter().filter(|x| **x == f).count() as i64;
+    let mut defeated = json::obj([("slain", int(count(Fate::Killed))), ("surrendered", int(count(Fate::Surrendered))), ("fled", int(count(Fate::Fled)))]);
+    // PR6-9: a retreat's withdrawn foe, apart from the slain (the key only when there is one)
+    if count(Fate::Withdrawn) > 0 {
+        defeated.insert("withdrawn".into(), int(count(Fate::Withdrawn)));
+    }
     let rewards = json::obj([
         ("foes", int(roster.len() as i64)),
-        ("defeated", json::obj([("slain", int(count(Fate::Killed))), ("surrendered", int(count(Fate::Surrendered))), ("fled", int(count(Fate::Fled)))]).into()),
+        ("defeated", defeated.into()),
         ("gold", int(share)),
         ("drops", Value::Array(drops)),
         ("key_loot", json::strs(&key_loot)),
@@ -499,6 +617,11 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
         ("objective", Value::Object(objective)),
         ("notes", json::strs(&notes)),
     ]);
+    let mut rewards = rewards;
+    // PR7-41 (PT-25): an encounter counting its guests (`survivors`) tells how many lived (the key only then)
+    if let Some((lived, of)) = survivors {
+        rewards.insert("survivors".into(), serde_json::json!({"lived": lived, "of": of}));
+    }
     let mut out = done(true, &[], xp, &advanced);
     out.insert("rewards".into(), Value::Object(rewards));
     out.extend(party_keys);
@@ -507,7 +630,9 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     }
     // CAMPAIGN1 X4: the battle tick (meter inputs by the encounter's tags and the outcome); its events only when there
     // are some (none outside a campaign world, X3)
-    let cause = crate::campaign::Cause::Battle { encounter: qid, tags: json::sget(&enc, "tags"), outcome: outcome.to_string() };
+    // PR6-6 (B5): with each fielded hero's battle telemetry (meter inputs and triggers with a `hero` filter)
+    let heroes = tally.party.iter().map(crate::campaign::HeroTally::of).collect();
+    let cause = crate::campaign::Cause::Battle { encounter: qid, tags: json::sget(&enc, "tags"), outcome: outcome.to_string(), heroes };
     let events = crate::campaign::tick(d, gs, &cause);
     if !events.is_empty() {
         out.insert("campaign".into(), Value::Array(events));
@@ -648,9 +773,30 @@ fn settle_party_side(d: &Data, gs: &mut GameState, played_enc: &Dict, encounter_
     (out, notes)
 }
 
+/// PR7-11: why world fight `encounter_ref` can't start with the saved party, the fuse aside ("" = it can): an unknown
+/// encounter, no active member, or the fight world's entry's `party_min` above the active members (BK6), with the
+/// texts `begin_world_with` and `begin_fight` refuse with. A screen reads it before it asks the Living Martyr choice
+/// (`roster::fuse_refusal`, which `begin_fight` refuses with after these), so no choice is made for a refused fight.
+pub fn start_refusal(d: &Data, gs: &GameState, encounter_ref: &str) -> String {
+    let local = d.resolve(&gs.world_id, "encounters", encounter_ref);
+    if local.is_empty() {
+        return format!("Unknown encounter '{encounter_ref}'.");
+    }
+    if gs.party.active_members().is_empty() {
+        return "No active party member to fight.".into();
+    }
+    // PR6-9: a siege room with every active member left downed
+    if crate::siege::running(gs) && gs.party.active_members().iter().all(|m| crate::siege::is_downed(gs, &m.id)) {
+        return crate::siege::ALL_DOWN_TEXT.into();
+    }
+    let world = fight_world(d, gs, encounter_ref);
+    roster::party_min_refusal(gs, d.resolve(&world, "encounters", &json::s(local, "id")))
+}
+
 /// A world fight's start with the saved party (BattleBridge.encounter_for; `begin_world` builds the fight after it):
 /// the world that resolves `encounter_ref` (`fight_world`), refused when the fight world's entry's `party_min`
-/// is above the active members (ROSTER1 BK6, `roster::party_min_refusal`); then A1.2-K3 (INTENT2-K3) the combat-start
+/// is above the active members (ROSTER1 BK6, `roster::party_min_refusal`) or an active member's Living Martyr fuse is
+/// spent with no choice made (FZ4, `roster::fuse_refusal`, PR7-11); then A1.2-K3 (INTENT2-K3) the combat-start
 /// auto-fill of the active members' pouches (`roster::auto_fill_at_start`, under the world's `pouch_stacks`). Returns
 /// the fight world and the auto-fill's "Stash short" lines.
 pub fn begin_fight(d: &Data, gs: &mut GameState, encounter_ref: &str) -> Result<(String, Vec<String>), String> {
@@ -660,6 +806,12 @@ pub fn begin_fight(d: &Data, gs: &mut GameState, encounter_ref: &str) -> Result<
     let short = roster::party_min_refusal(gs, entry);
     if !short.is_empty() {
         return Err(short);
+    }
+    // FZ4 (PK3 3.1, PR7-11): an active member whose fuse is spent needs the retire / last stand choice first (the
+    // screen asks it before it starts the fight; a headless runner gets the reason)
+    let spent = roster::fuse_refusal(d, gs);
+    if !spent.is_empty() {
+        return Err(spent);
     }
     let lines = roster::auto_fill_at_start(d, gs, &world);
     // PK2-S5a: the fielded members wield their gear's instances (a masterwork main hand opens its technique)
@@ -722,6 +874,9 @@ pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut Me
     if gs.party.active_members().is_empty() {
         return Err("No active party member to fight.".into());
     }
+    if crate::siege::running(gs) && gs.party.active_members().iter().all(|m| crate::siege::is_downed(gs, &m.id)) {
+        return Err(crate::siege::ALL_DOWN_TEXT.into());
+    }
     let (world, stash_short) = begin_fight(d, gs, &enc_ref)?;
     let gs: &GameState = gs;
     let entry = d.resolve(&world, "encounters", &hit_id);
@@ -735,11 +890,20 @@ pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut Me
     def.start_grant = StartGrant::Only(grants);
     let stage = world_stage(gs);
     let allies = def.party.iter().chain(&def.guests).cloned().collect();
-    let roster = WorldRoster { stage, allies, ..WorldRoster::new(d, world.clone()) };
+    // PR6-7: the captive snapshot and its fallback (read only when a ref names `CAPTIVE_UNIT`)
+    let (captive, captive_fallback) = (captive_def(d, gs, &world), json::s(entry, rpgkit_data::CAPTIVE_FALLBACK));
+    // PR6-10: a retried story fight's echo units (`story::ECHOES_KEY`), fielded after the encounter's enemies
+    let echoes = echo_defs(d, gs, &world, json::i(fight, crate::story::ECHOES_KEY, 0).max(0) as usize);
+    def.enemies.extend((1..=echoes.len()).map(rpgkit_data::echo_ref));
+    let roster = WorldRoster { stage, allies, captive, captive_fallback, echoes, ..WorldRoster::new(d, world.clone()) };
     let mut party = Vec::new();
     let mut members = Vec::new();
     let granted = flag_skills(d, gs, entry);
     for m in gs.party.active_members() {
+        // PR6-9: a member left downed in an earlier siege room sits the room out until triaged
+        if crate::siege::is_downed(gs, &m.id) {
+            continue;
+        }
         let Some(mut field) = roster::field_unit(d, gs, m, &world) else { continue };
         // ACT1-HOOKS2 (FB-244 (1)): the encounter's battle grants for this member
         for (_, skill) in granted.iter().filter(|(who, _)| *who == m.id) {
@@ -801,14 +965,30 @@ pub fn settle(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, 
     match tally {
         Some(t) => apply(d, gs, encounter_qid, outcome, t),
         None => {
-            let mut t = Tally::default_for(d, &gs.world_id.clone(), encounter_qid, outcome);
-            if roster::rule(d, gs).is_some() {
-                t.world = fight_world(d, gs, encounter_qid);
-                t.party = roster::default_ends(d, gs, &t.world, outcome);
-            }
+            let t = default_tally(d, gs, encounter_qid, outcome);
             apply(d, gs, encounter_qid, outcome, &t)
         }
     }
+}
+
+/// PR7-42 (PACE1): `settle` paying `xp_pct` percent of the XP (a repeat patrol win's, `explore::patrol_xp_pct`).
+pub fn settle_xp_pct(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, tally: Option<&Tally>, xp_pct: i64) -> Dict {
+    let mut t = match tally {
+        Some(t) => t.clone(),
+        None => default_tally(d, gs, encounter_qid, outcome),
+    };
+    t.xp_pct = Some(xp_pct.clamp(0, 100));
+    apply(d, gs, encounter_qid, outcome, &t)
+}
+
+/// The tally of a fight settled without one (`settle`'s `None`).
+fn default_tally(d: &Data, gs: &GameState, encounter_qid: &str, outcome: &str) -> Tally {
+    let mut t = Tally::default_for(d, &gs.world_id.clone(), encounter_qid, outcome);
+    if roster::rule(d, gs).is_some() {
+        t.world = fight_world(d, gs, encounter_qid);
+        t.party = roster::default_ends(d, gs, &t.world, outcome);
+    }
+    t
 }
 
 /// W.2-S1 (FB-50a): the settle of a world fight by the runner that started it (BattleBridge's after_fight by the
@@ -822,6 +1002,7 @@ pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, ou
         "dialogue" => crate::dialogue::after_fight(d, gs, fight, outcome, tally),
         crate::story::FIGHT_SOURCE => crate::story::after_fight(d, gs, fight, outcome, tally),
         crate::campaign::trigger::FIGHT_SOURCE => crate::campaign::trigger::after_fight(d, gs, fight, outcome, tally),
+        crate::siege::FIGHT_SOURCE => crate::siege::after_fight(d, gs, fight, outcome, tally),
         _ => crate::explore::after_fight(d, gs, fight, outcome, tally),
     }
 }

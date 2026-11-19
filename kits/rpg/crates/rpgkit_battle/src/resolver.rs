@@ -8,6 +8,7 @@ use crate::round_intent;
 use crate::world::{UnitId, World};
 use aegis_core::rng::GodotRng;
 use aegis_core::sort::godot_sort;
+use aegis_core::switches;
 use rpgkit_rules::status;
 
 #[derive(Debug, Clone)]
@@ -183,13 +184,18 @@ impl Resolver {
 
     /// PK2-S1: counts one use of the command's skill when it has a `uses_per_battle` limit. PK2-S4: an attack skill (not
     /// an item) started by a hero built from member state (`Unit::rank_choice`) records its main-hand weapon's family
-    /// (`World::weapon_attacks`). PK2-S5b: the weapon it swings wears (`wear::spend`).
+    /// (`World::weapon_attacks`). PK2-S5b: the weapon it swings wears (`wear::spend`). PR6-6: a command started in a
+    /// Channel round counts in `World::channel_actions`.
     fn count_use(&self, w: &mut World, i: usize) {
         let (c, id) = (self.scheduled[i].unit, self.scheduled[i].command.skill.clone());
         let Some(s) = w.cat.skill(&id) else { return };
         let attack = crate::skill::kind(s) == crate::skill::Kind::Attack && !crate::skill::is_item(s);
         if s.uses_per_battle > 0 {
             *w.skill_uses.entry((c, id)).or_insert(0) += 1;
+        }
+        // PR6-6 (B5): a command (not a move) started in a Channel round counts as a channel action
+        if crate::channel::is_channel(w, c) && crate::skill::kind(s) != crate::skill::Kind::Move {
+            *w.channel_actions.entry(c).or_insert(0) += 1;
         }
         let u = &w.units[c];
         let family = u.inventory.get(rpgkit_rules::gear::Slot::MainHand).filter(|e| e.item.item_type == "WEAPON").map(|e| e.weapon_type().to_string()).filter(|f| !f.is_empty());
@@ -224,8 +230,27 @@ impl Resolver {
             }
             let c = a.unit;
             // RULESET1_INTENT TG4: a unit holding an intent whose target is gone before a command on it starts rests
-            // through that command and every later one this round (no AP)
-            if round_intent::intent_of(w, c).is_some() && a.command.acted_on(w).is_some_and(|t| !w.units[t].is_active()) {
+            // through that command and every later one this round (no AP); PK3: revive skills/items still target downed bleeding allies.
+            let revives_target = match &a.command.kind {
+                CmdKind::Support { skill, target, .. } => w.cat.skills[*skill].revive && w.can_revive(*target),
+                CmdKind::Item { item, target, .. } => item.revive && item.battle_reach() > 0 && w.can_revive(*target) && !w.foes_of(c).contains(target),
+                _ => false,
+            };
+            // PR7-41 (PT-22): a hero's attack whose target is gone, or out of its reach and chase from where the hero
+            // stands, turns on the nearest foe it reaches instead (`Command::retarget`; logged "[Retarget]"); with none
+            // the TG4 Rest below as before (a gone target) or the attack as planned (one out of reach). Behind the
+            // test-only switch `retarget` until the golden ruling (FB-334); off, TG4 as before
+            let lost = a.command.acted_on(w).filter(|&t| !w.units[t].is_active() || a.command.target_out_of_chase(w));
+            if let Some(t) = lost.filter(|_| switches::on("retarget") && !revives_target && w.allies.contains(&c) && round_intent::intent_of(w, c).is_some()) {
+                if let Some(n) = self.scheduled[i].command.retarget(w) {
+                    let how = if w.units[t].is_active() { "is out of reach" } else { "is down" };
+                    let msg = format!("[Retarget] {}'s target {} {how}: {} turns on {}", w.units[c].name, w.units[t].name, self.scheduled[i].command.name, w.units[n].name);
+                    self.notes.push((i, msg.clone()));
+                    self.log.push(msg);
+                }
+            }
+            let a = &self.scheduled[i];
+            if !revives_target && round_intent::intent_of(w, c).is_some() && a.command.acted_on(w).is_some_and(|t| !w.units[t].is_active()) {
                 let gone = w.units[a.command.acted_on(w).unwrap()].name.clone();
                 for later in self.scheduled.iter_mut().filter(|x| x.unit == c && !x.cancelled && x.start >= block) {
                     later.command.into_rest();
@@ -451,6 +476,20 @@ impl Resolver {
             w.units[c].held_guard = None;
         }
         crate::ground::settle(self, w);
+        // PK3: decrement bleed-out timer on downed bleeding party members; at 0 they bleed out permanently.
+        for &c in &self.registered.clone() {
+            let Some(rem) = w.bleed_remaining.get_mut(&c) else { continue };
+            if !w.units[c].is_alive() && !w.units[c].is_withdrawn && !w.dead.contains(&c) {
+                *rem -= 1;
+                if *rem <= 0 {
+                    w.bleed_remaining.shift_remove(&c);
+                    if !w.dead.contains(&c) {
+                        w.dead.push(c);
+                    }
+                    self.log.push(format!("{} bleeds out.", w.units[c].name));
+                }
+            }
+        }
     }
 
     /// _record_round_end: the step row with the status's recorded source.

@@ -21,10 +21,10 @@ fn shipped() -> Theme {
     }
 }
 
-/// The art bible's 16 hues (games/emberwake/docs/lore/specs/art_and_visual_style.md section 3) and the two inset
-/// darks the G1 frame table names.
-const PALETTE: [&str; 18] = [
-    "#0a0b10", "#14171f", "#1e232d", "#2c221e", "#4b5563", "#9ca3af", "#d9cbb4", "#6b7280", "#92400e", "#d97706", "#fbbf24", "#e11d48", "#991b1b", "#9333ea", "#c084fc", "#06b6d4", "#050608", "#0e1016",
+/// The art bible's 16 hues (games/emberwake/docs/lore/specs/art_and_visual_style.md section 3), the two inset
+/// darks the G1 frame table names and the popup frame's bronze outer line (PR7-36, frame A).
+const PALETTE: [&str; 19] = [
+    "#0a0b10", "#14171f", "#1e232d", "#2c221e", "#4b5563", "#9ca3af", "#d9cbb4", "#6b7280", "#92400e", "#d97706", "#fbbf24", "#e11d48", "#991b1b", "#9333ea", "#c084fc", "#06b6d4", "#050608", "#0e1016", "#74543c",
 ];
 
 #[test]
@@ -35,10 +35,11 @@ fn the_game_theme_loads_clean_from_the_game_layers() {
     assert_eq!(t.layout.radius, 0.0);
     assert_eq!(t.layout.frame_radius, 0.0);
     assert_eq!(t.layout.focus_glow, 1);
-    // The focus ring follows the focus colour; foe and good keep today's (LOOK1 Q10).
+    // The focus ring follows the focus colour; foe keeps today's (LOOK1 Q10); good news is amber (PR7-36, ART-01).
     assert_eq!(t.ring, t.focus);
     let d = Theme::default();
-    assert_eq!((t.foe, t.good), (d.foe, d.good));
+    assert_eq!(t.foe, d.foe);
+    assert_eq!(t.good, parse_colour("#d97706").unwrap());
 }
 
 #[test]
@@ -66,7 +67,7 @@ fn every_frame_role_resolves_to_a_game_frame_in_the_palette() {
         let f = t.frame(role).unwrap_or_else(|| panic!("frame role {role} draws the vector panel"));
         assert_eq!(f.source, format!("ui/frames/{role}.png (game)"), "{role} resolves to another role's file");
         let (size, slice) = match role {
-            "panel" => (24, 8),
+            "panel" | "hud" => (24, 8),
             "ornate" => (f.nine.slice[0] * 2 + 32, f.nine.slice[0]),
             "ornate_full" => (f.nine.slice[0] * 2 + 64, f.nine.slice[0]),
             _ => (16, 4),
@@ -148,9 +149,22 @@ fn the_frame_line_is_the_one_role() {
     let row = (f.nine.slice[1] / 2) * f.img.w;
     let at = row as usize * 4 + mid;
     assert_eq!(f.img.px[at..at + 4], line, "the top edge's line");
+    // WEBFIX2 (a): the HUD frame is the style bible's F2, the iron frame with the line along its top edge only
+    let hud = t.frame("hud").unwrap();
+    let w = hud.img.w as usize;
+    let is_line = |x: usize, y: usize| hud.img.px[(y * w + x) * 4..(y * w + x) * 4 + 3] == line[..3];
+    assert!((0..w).all(|x| is_line(x, 0)), "the HUD frame's top row is the line");
+    let top = hud.nine.scale as usize;
+    assert!(hud.img.px.chunks(4).enumerate().filter(|(_, p)| p[..3] == line[..3]).all(|(i, _)| i / w < top), "only its top edge carries it, one logical px");
+    // PR7-36 (ART-02, frame A): the popup frame `panel` carries the line along its top edge too, the bronze and iron
+    // double line on the other three
+    let panel = t.frame("panel").unwrap();
+    let pw = panel.img.w as usize;
+    assert!((0..pw).all(|x| panel.img.px[x * 4..x * 4 + 3] == line[..3]), "the popup frame's top row is the line");
+    assert_eq!(panel.img.px[(4 * pw) * 4..(4 * pw) * 4 + 3], parse_colour("#74543c").unwrap()[..3], "the bronze outer line");
     for (role, _) in FRAME_ROLES {
         let other = t.frame(role).unwrap();
-        if role != "ornate" {
+        if role != "ornate" && role != "hud" && role != "panel" {
             assert!(!other.img.px.chunks(4).any(|p| p[..3] == line[..3]), "{role} has the line's colour but is not listed");
         }
     }
@@ -501,14 +515,123 @@ fn every_fill_behind_text_reads() {
     assert!(low.is_empty(), "{low:?}");
 }
 
-/// The theme sets every role but the two the spec leaves at today's (LOOK1 Q10), so no screen keeps a navy default.
+/// The theme sets every role but the one the spec leaves at today's (LOOK1 Q10: `foe`; `good` is set since PR7-36), so
+/// no screen keeps a navy or bright green default.
 #[test]
-fn the_game_theme_sets_every_role_but_foe_and_good() {
+fn the_game_theme_sets_every_role_but_foe() {
     let file: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(game_dir().join("assets/ui/theme.json")).unwrap()).unwrap();
     let colors = file["colors"].as_object().unwrap();
     for role in theme::ROLES {
-        assert_eq!(colors.contains_key(*role), !["foe", "good"].contains(role), "{role}");
+        assert_eq!(colors.contains_key(*role), *role != "foe", "{role}");
     }
+}
+
+// ---- PR7-36 (STYLE-PASS1, ART-01): no widget draws a colour outside the theme ------------------------------------------
+
+/// Saturation and value of `c` (0 to 1).
+fn sat_val(c: [u8; 4]) -> (f32, f32) {
+    let (hi, lo) = (c[0].max(c[1]).max(c[2]) as f32, c[0].min(c[1]).min(c[2]) as f32);
+    (if hi == 0.0 { 0.0 } else { (hi - lo) / hi }, hi / 255.0)
+}
+
+/// The style rule of a theme colour (style bible 1, report ART-01): one of the palette's hues, else muted (saturation at
+/// most 0.55 and value at most 0.60, as the HP and AP tokens), else a near-neutral (saturation at most 0.25: the
+/// parchment and candle lights, the blacks).
+fn in_style(c: [u8; 4]) -> bool {
+    let palette = PALETTE.iter().any(|h| parse_colour(h).is_some_and(|p| p[..3] == c[..3]));
+    let (s, v) = sat_val(c);
+    palette || (s <= 0.55 && v <= 0.60) || s <= 0.25
+}
+
+/// The accents the agent playtest found on every screen (ART-01): cyan, bright green and light blue, as the code wrote them.
+const OFF_PALETTE: [[u8; 3]; 9] = [[6, 182, 212], [34, 211, 238], [96, 210, 110], [102, 225, 130], [70, 190, 100], [70, 200, 90], [110, 170, 255], [110, 160, 235], [140, 196, 236]];
+
+#[test]
+fn every_theme_colour_a_widget_reads_is_in_the_style_palette() {
+    let t = shipped();
+    let mut off = Vec::new();
+    for role in theme::ROLES.iter().filter(|r| **r != "foe") {
+        let c = t.role(role).unwrap();
+        if !in_style(c) {
+            off.push(format!("role {role} {}", theme::colour_hex(c)));
+        }
+    }
+    // Prop paint the code draws for placeholder art (the bunks' timber, PR7-43 replaces it), oak and rust darks.
+    const PROP_PAINT: [&str; 2] = ["bunk_screen", "bunk_step"];
+    for (name, c) in &t.game_colors {
+        if !in_style(*c) && !PROP_PAINT.contains(&name.as_str()) {
+            off.push(format!("game colour {name} {}", theme::colour_hex(*c)));
+        }
+    }
+    assert!(off.is_empty(), "outside the style palette: {off:?}");
+    // The muted HP and AP tokens hold the report's limit.
+    for name in ["hp", "ap"] {
+        let (s, v) = sat_val(t.game(name, [0; 4]));
+        assert!(s <= 0.55 && v <= 0.60, "{name}: saturation {s:.2}, value {v:.2}");
+    }
+}
+
+/// The numbers of every colour literal in `code` (`rgb(..)`, `rgba(..)`, `[r, g, b, a]`), decimal or hex.
+fn colour_literals(code: &str) -> Vec<[u8; 3]> {
+    let num = |t: &str| {
+        let t = t.trim();
+        t.strip_prefix("0x").map_or_else(|| t.parse::<u8>().ok(), |h| u8::from_str_radix(h, 16).ok())
+    };
+    let mut out = Vec::new();
+    for (open, close, lead) in [("rgb(", ')', true), ("rgba(", ')', true), ("[", ']', false)] {
+        let mut rest = code;
+        while let Some(at) = rest.find(open) {
+            let before = rest[..at].chars().last();
+            rest = &rest[at + open.len()..];
+            if lead && before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                continue;
+            }
+            let Some(end) = rest.find(close) else { break };
+            let parts: Vec<Option<u8>> = rest[..end].split(',').map(num).collect();
+            if (3..=4).contains(&parts.len()) && parts.iter().all(Option::is_some) && (lead || parts.len() == 4) {
+                out.push([parts[0].unwrap(), parts[1].unwrap(), parts[2].unwrap()]);
+            }
+        }
+    }
+    out
+}
+
+/// `code` without the fallbacks of its `.game(name, fallback)` calls: a fallback draws only with no theme file.
+fn without_fallbacks(code: &str) -> String {
+    let mut out = String::new();
+    let mut rest = code;
+    while let Some(at) = rest.find(".game(\"\"") {
+        out.push_str(&rest[..at]);
+        rest = &rest[at + 9..];
+        let mut depth = 1;
+        let stop = rest.char_indices().find(|(_, c)| {
+            match c {
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                _ => {}
+            }
+            depth == 0
+        });
+        rest = &rest[stop.map_or(rest.len(), |s| s.0 + 1)..];
+    }
+    out.push_str(rest);
+    out
+}
+
+#[test]
+fn no_screen_draws_an_off_palette_accent_past_the_theme() {
+    let mut found = Vec::new();
+    for (file, src) in sources() {
+        let code = without_fallbacks(&code_only(&src));
+        // The portrait and effect art hues keep the palette's Salt Cyan (cold), by design (art_and_visual_style 3).
+        let art = file == "fx.rs" || file == "portraits.rs";
+        for c in colour_literals(&code) {
+            if OFF_PALETTE.contains(&c) && !(art && c == [6, 182, 212]) {
+                found.push(format!("{file}: {c:?}"));
+            }
+        }
+    }
+    assert!(found.is_empty(), "draw these through a theme token (`tokens.rs`, `th()`): {found:?}");
 }
 
 /// The two things LOOK1-E1B left open: hovering the desk's grip shows, and the ruler's playing label reads on its fill.

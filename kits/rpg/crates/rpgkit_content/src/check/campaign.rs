@@ -9,7 +9,7 @@ use super::quest::{condition_errors, SET_FLAG_LISTS};
 use super::world::ref_errors;
 use super::{dialogue, map, View};
 use aegis_core::json::{self, gstr, Dict};
-use rpgkit_data::{CAMPAIGN_READ_KEYS, DEFEAT_MODES, END_KINDS, INPUT_ON, METER_TONES, OUTCOMES, REST_WHERE, RULE_DIRS, TRAVEL_MODES_KEYS, TRAVEL_MODES_MAX, TRAVEL_MODE_KEYS};
+use rpgkit_data::{CAMPAIGN_READ_KEYS, DEFEAT_MODES, END_KINDS, HERO_FILTER_KEYS, INPUT_ON, METER_TONES, OUTCOMES, REST_WHERE, RULE_DIRS, TRAVEL_MODES_KEYS, TRAVEL_MODES_MAX, TRAVEL_MODE_KEYS};
 use serde_json::Value;
 
 /// Acts are numbered 0 (before the first) to 9.
@@ -35,6 +35,8 @@ const INPUTS_MAX: usize = 12;
 /// A countdown's longest run and a checkpoint's latest deadline (days).
 pub const DAYS_MAX: i64 = 999;
 const WARN_DAY_MAX: i64 = 30;
+/// PR6-6 (B5): a `hero` filter minimum's top (a meter value or a count of commands).
+const HERO_MIN_MAX: i64 = 999;
 /// A band-modifier's road-fight percentage (100 = unchanged).
 const MODIFIER_PCT_MAX: i64 = 300;
 const CAMPAIGN_KEYS: [&str; 2] = ["start_act", "act_saves"];
@@ -54,8 +56,10 @@ const THEN_KEYS: [&str; 4] = ["vignette", "battle", "dialogue", "speaker"];
 /// The keys an input of `on` takes.
 fn input_keys(on: &str) -> &'static [&'static str] {
     match on {
-        "battle" => &["on", "tags", "outcomes", "delta", "acts"],
+        "battle" => &["on", "tags", "outcomes", "delta", "acts", "hero"],
         "day" => &["on", "delta", "acts"],
+        // PR6-6 (B5): a recipe run, by the recipe's tags
+        "recipe" => &["on", "tags", "delta", "acts"],
         _ => &["on", "route_tags", "modes", "delta", "acts"],
     }
 }
@@ -549,6 +553,21 @@ fn input_errors(i: usize, raw: &Value, span: i64, modes: &[String]) -> Vec<Strin
             errors.push(format!("{label}: outcomes must be a list of {}.", OUTCOMES.join(", ")));
         }
     }
+    if let Some(h) = d.get("hero") {
+        errors.extend(hero_errors(h, &label));
+    }
+    errors
+}
+
+/// PR6-6 (`PK4_PK5_CAMPAIGN_HUB.md` 1, B5): a `hero` filter (a battle input's, a battle trigger's): an object of
+/// `HERO_FILTER_KEYS` minimums, each a whole number 0..`HERO_MIN_MAX`.
+pub(super) fn hero_errors(raw: &Value, label: &str) -> Vec<String> {
+    let mut errors = Vec::new();
+    let Some(d) = object(raw, &format!("{label}: hero"), &mut errors) else { return errors };
+    errors.extend(unknown_keys(d, &HERO_FILTER_KEYS, &format!("{label}: hero")));
+    for k in HERO_FILTER_KEYS {
+        errors.extend(int_key(d, k, 0, HERO_MIN_MAX, &format!("{label}: hero")));
+    }
     errors
 }
 
@@ -591,6 +610,26 @@ pub fn checkpoint_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
         _ => {}
     }
     errors.extend(condition_errors(met_when, "Met when"));
+    // PR6-6 (B3): armed by a flag, due offset_days after
+    let after_flag = json::s(e, "after_flag");
+    let offset = json::get(e, "offset_days");
+    if after_flag.is_empty() {
+        if json::is_int(offset) && json::to_int(offset) != 0 {
+            errors.push("Offset days is for a checkpoint armed by a flag (after_flag) only.".into());
+        }
+    } else {
+        if !super::quest::flag_key_ok(&after_flag) {
+            errors.push(format!("Armed by flag: '{after_flag}' is not a flag key."));
+        } else {
+            let why = read_key_error(v, w, &after_flag);
+            if !why.is_empty() {
+                errors.push(format!("Armed by flag: {why}"));
+            }
+        }
+        if !int_in(offset, 1, DAYS_MAX) {
+            errors.push(format!("Offset days must be 1..{DAYS_MAX} for a checkpoint armed by a flag."));
+        }
+    }
     if let Some(days) = list(json::get(e, "warn_days"), "Warn days", &mut errors) {
         let ok = days.iter().all(|d| int_in(d, 1, WARN_DAY_MAX)) && days.windows(2).all(|p| json::to_int(&p[0]) > json::to_int(&p[1]));
         if !ok {
@@ -624,6 +663,23 @@ pub fn trigger_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     if !json::s(e, "location").is_empty() && on != "enter" && on != "any" {
         errors.push("Location is for on enter or on any only.".into());
     }
+    // PR6-6 (B5): the hero filter is a battle's; the recipe filters a recipe run's
+    let hero = json::get(e, "hero");
+    if hero.as_object().is_some_and(|h| !h.is_empty()) && on != "battle" {
+        errors.push("Hero is for on battle only.".into());
+    }
+    if !hero.is_null() {
+        errors.extend(hero_errors(hero, "Hero"));
+    }
+    let recipe = json::s(e, "recipe");
+    let recipe_tags = json::get(e, "recipe_tags");
+    if (!recipe.is_empty() || !json::arr(recipe_tags).is_empty()) && on != "recipe" {
+        errors.push("Recipe and Recipe tags are for on recipe only.".into());
+    }
+    if !recipe.is_empty() && !v.entries(rpgkit_data::recipe::RECIPES_KIND).iter().any(|r| json::s(r, "id") == recipe) {
+        errors.push(format!("Recipe: unknown recipe '{recipe}'."));
+    }
+    errors.extend(strings_key(e, "recipe_tags", "Recipe tags"));
     errors.extend(condition_errors(json::get(e, "when"), "When"));
     let (effects, then) = (json::get(e, "effects"), json::get(e, "then"));
     if json::arr(effects).is_empty() && json::arr(then).is_empty() {
@@ -743,6 +799,8 @@ pub fn effect_errors(v: &View, w: &str, effect: &str, fx: &Dict, el: &str) -> Ve
                 errors.push(format!("{el}: days must be a whole number {lo}..{DAYS_MAX}."));
             }
             errors.extend(text_key(fx, "label", LABEL_MAX, false, el));
+            // PR6-6 (B4): a set that never shortens a running clock
+            errors.extend(bool_key(fx, "keep_longer", el));
         }
         "set_act" => {
             if !int_in(json::get(fx, "act"), 0, ACT_MAX) {
@@ -756,9 +814,11 @@ pub fn effect_errors(v: &View, w: &str, effect: &str, fx: &Dict, el: &str) -> Ve
             }
             errors.extend(text_key(fx, "card", TEXT_MAX, false, el));
             errors.extend(text_key(fx, "text", TEXT_MAX, false, el));
-            if json::s(fx, "card").trim().is_empty() && json::s(fx, "text").trim().is_empty() {
+            // PR6-11: a kind `ending` end takes its epilogue from the endings row (card and text optional)
+            if kind != rpgkit_data::ending::END_KIND_ENDING && json::s(fx, "card").trim().is_empty() && json::s(fx, "text").trim().is_empty() {
                 errors.push(format!("{el}: an end needs a card or a text."));
             }
+            errors.extend(super::endings::end_ending_errors(v, w, fx, el));
         }
         _ => {}
     }

@@ -227,7 +227,9 @@ fn the_round_controls_are_gone_and_self_opens_the_self_menu() {
     let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
     if ri::intent_of(w(&b), h).is_some() {
         let tactic = TACTIC_LABELS[b.tactic_of(h)];
-        assert!(recs.iter().any(|r| r.text.starts_with("Intent: ") && r.text.ends_with(&format!("from {tactic}"))), "the ghost's intent from the tactic");
+        // BATTLE-UI2: the hero panel under the plates is narrower, so the line may wrap
+        let all = recs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>().join(" ");
+        assert!(all.contains("Intent: ") && all.contains(&format!("from {tactic}")), "the ghost's intent from the tactic: {all}");
     }
     b.click_id(&mut cx, "hero.self").unwrap();
     assert_eq!(b.popup.as_ref().and_then(|p| p.menu), Some((h, RoundTarget::Myself)), "{}", b.message);
@@ -455,10 +457,11 @@ fn right_click(cx: &mut Cx, g: &mut Gfx, b: &mut BattleScreen, id: &str, unit: u
 }
 
 /// The texts drawn inside the intel panel at the last frame.
+/// BATTLE-UI2: the pinned unit's inspect lines (the hover of the agent link's `intel.unit`: the docked card's or a
+/// pinned member's plate).
 fn intel_text(cx: &mut Cx, g: &mut Gfx, b: &mut BattleScreen) -> String {
-    let recs = crate::hud::hud_tests::frame(b, cx, g, 1.0);
-    let r = b.panels.iter().find(|p| p.0 == "intel").expect("the intel panel").1;
-    recs.iter().filter(|t| r.contains(t.x as i32 + 1, t.y as i32 + 1)).map(|t| t.text.clone()).collect::<Vec<_>>().join("\n")
+    crate::hud::hud_tests::frame(b, cx, g, 1.0);
+    widget(b, "intel.unit").tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>().join("\n")
 }
 
 /// SL1, SL4-SL7: with a hero selected and planning a click on an enemy targets it and a click on the hero itself (its
@@ -815,13 +818,15 @@ fn a_click_on_a_ghost_block_picks_its_command() {
     assert!(!matches!(aegis_ui::ui::hit(&b.w, (r.x + 2, r.y + r.h / 2)), Some(Action::GhostSlot(_))), "a solid block is no ghost slot");
 }
 
-/// The Help card lists the party keys, the Shift skill keys, F and Ctrl+click.
+/// The Settings Controls tab names the party keys, the Shift skill keys and Ctrl+click (fixed) and F (rebindable,
+/// CONTROLS-UI1 moved them from the old static table).
 #[test]
 fn the_help_keys_name_the_input2_keys() {
-    let battle = crate::menus::CONTROLS.iter().find(|(g, _)| *g == "Battle").expect("the battle keys").1;
-    for (what, key) in [("Select party member 1-4", "1-4"), ("Skills of the selected hero (timeline)", "Shift+1-9"), ("Accept the selected hero's auto-fill (timeline)", "F"), ("Support an ally while only the auto-fill shows (timeline)", "Ctrl+click")] {
-        assert!(battle.iter().any(|r| r.0 == what && r.1 == key), "{what}: {key} in {battle:?}");
+    let fixed = crate::controls_view::FIXED;
+    for (what, key) in [("Select party member", "1-4"), ("Skills of the selected hero", "Shift+1-9"), ("Support an ally (timeline)", "Ctrl+click")] {
+        assert!(fixed.iter().any(|r| r.0 == what && r.1 == key), "{what}: {key} in {fixed:?}");
     }
+    assert!(crate::controls_view::ACTIONS.iter().any(|a| a.id == "auto_fill" && a.key == aegis_ui::screen::Key::Char('f')));
 }
 
 // ---- INPUT1-AP: the AP pip gauge (INPUT1 AP3, AP5-AP10) ---------------------------------------------------------
@@ -1001,7 +1006,7 @@ fn playback_drains_the_paid_pips() {
     let max = w(&b).units[h].max_ap;
     let paid: i32 = b.session().resolver.scheduled.iter().filter(|a| a.unit == h && !a.cancelled).map(|a| a.command.ap_cost + a.command.stance_switch_cost).sum();
     let st = gauge(&b, &cx);
-    assert_eq!(st["pips"], json!(aegis_ui::pips::PipGauge::live(start, live, AP_PAID, max, AP_PIPS).reading()));
+    assert_eq!(st["pips"], json!(rpgkit_ui::pips::PipGauge::live(start, live, AP_PAID, max, AP_PIPS).reading()));
     let read = st["pips"].as_str().unwrap().to_string();
     let count = |code: &str| read.split(' ').filter(|p| *p == code).count() as i32;
     if max <= AP_PIPS && live >= 0 && live <= start {
@@ -1021,13 +1026,13 @@ fn playback_drains_the_paid_pips() {
         a.at = a.at.checked_sub(Duration::from_millis(200)).unwrap_or(a.at);
         drawn(&mut cx, &mut g, &mut b);
     }
-    let done = aegis_ui::pips::PipGauge::live(start, pay_to, AP_PAID, max, AP_PIPS).reading();
+    let done = rpgkit_ui::pips::PipGauge::live(start, pay_to, AP_PAID, max, AP_PIPS).reading();
     assert_eq!(gauge(&b, &cx)["pips"], json!(done), "after 150 ms");
     // skip animations: at once
     cx.settings.v["skip_anim"] = json!(true);
     set_ap(&cx, &mut b, h, pay_to.max(1) - 1, None);
     drawn(&mut cx, &mut g, &mut b);
-    assert_eq!(gauge(&b, &cx)["pips"], json!(aegis_ui::pips::PipGauge::live(start, pay_to.max(1) - 1, AP_PAID, max, AP_PIPS).reading()), "skip animations: at once");
+    assert_eq!(gauge(&b, &cx)["pips"], json!(rpgkit_ui::pips::PipGauge::live(start, pay_to.max(1) - 1, AP_PAID, max, AP_PIPS).reading()), "skip animations: at once");
     // the next planning: the forecast again
     b.run(&mut cx, Action::NextRound);
     b.tick(&mut cx);

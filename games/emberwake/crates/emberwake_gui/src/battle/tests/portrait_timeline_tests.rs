@@ -14,7 +14,7 @@ use aegis_ui::art::Art;
 use serde_json::{json, Value};
 use crate::portraits::tests::{layer, row};
 use aegis_core::assets::Layers;
-use aegis_ui::portrait_fx::{Tier, EASE_MS};
+use rpgkit_ui::portrait_fx::{Tier, EASE_MS};
 use aegis_ui::timeline::ROW_H;
 use emberwake_data::PortraitCue;
 use emberwake_rules::ruleset::TIMELINE;
@@ -43,7 +43,7 @@ fn flash_of(event: &str) -> [u8; 3] {
 /// The first catalog encounter under the timeline ruleset on the stage view (its steps wait for their impacts),
 /// the fixture rows, a scratch portrait for every unit (layers named after `tag`: one per test, as they run side
 /// by side), the timeline view open, drawn once.
-fn battle(tag: &str) -> (Cx, Gfx, BattleScreen) {
+pub(super) fn battle(tag: &str) -> (Cx, Gfx, BattleScreen) {
     let mut cx = crate::hud::hud_tests::game_cx();
     std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").edit_cat(|c| c.portrait_cues = rows());
     cx.settings.v["battle_view"] = json!("stage");
@@ -133,8 +133,10 @@ fn tl2_a_blow_flashes_the_row_without_a_jolt_at_any_window_size() {
     assert_eq!((flash.start, flash.color[..3].to_vec()), (1000, flash_of("hit").to_vec()));
     assert_eq!(f.jolt_offset(now), (0, 0), "no jolt in the row");
     assert!(!f.live(now).contains(&"breath"), "no breath in the row: {:?}", f.live(now));
-    let panel = b.panel_faces.get(&key).expect("the hero panel's portrait");
-    assert_eq!(panel.tier(), Some(Tier::Full), "the panel portrait is uncapped");
+    // BATTLE-UI2 (contract 3): the panel portrait is the plate's, uncapped: the tier its side gives
+    let panel = b.panel_faces.get(&key).expect("the plate's portrait");
+    let side = Tier::of(big.view.rect(Rect::new(0, 0, crate::battle::plates::PORTRAIT, crate::battle::plates::PORTRAIT)).w);
+    assert_eq!(panel.tier(), Some(side), "the panel portrait is uncapped");
     assert!(panel.jolt_amplitude(now) > 0.0, "the panel jolts for the same blow");
 }
 

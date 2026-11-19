@@ -1,16 +1,17 @@
 <!doctype html>
-<!-- WEBREL1-G1: the web build's page (tools/fc.sh web copies it into out/web/). The game draws on the canvas "aegis"
-     (1280 x 720 CSS px at the device pixel ratio, shell::start_web); emberwake.js is wasm-bindgen's glue, which starts
-     the game: it fetches bundle.json and the bundle parts beside this page and shows its own loading bar. -->
+<!-- WEBREL1-G1: the web build's page (tools/fc.sh web copies it into out/web/). The game draws on the canvas "aegis",
+     which fills the page (and the screen in fullscreen, the itch.io button's or the game's own): the page owns its CSS
+     size, the engine draws it at the device pixel ratio and scales the game to it (shell::start_web). emberwake.js is
+     wasm-bindgen's glue, which starts the game: it fetches bundle.json and the bundle parts beside this page and shows
+     its own loading bar. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=1280">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Emberwake</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #0e0c0a; overflow: hidden; }
-  body { display: flex; align-items: center; justify-content: center; }
-  canvas { display: block; outline: none; }
+  html, body { margin: 0; width: 100%; height: 100%; background: #0e0c0a; overflow: hidden; }
+  canvas#aegis { display: block; width: 100vw; height: 100vh; outline: none; touch-action: none; }
 </style>
 </head>
 <body>

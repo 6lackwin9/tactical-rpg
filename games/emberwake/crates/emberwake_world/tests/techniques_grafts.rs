@@ -15,8 +15,10 @@ use emberwake_battle::mark;
 use emberwake_battle::round_intent::{Pick as RoundPick, RoundTarget};
 use emberwake_battle::round_intent_plan;
 use emberwake_battle::session::Phase;
-use emberwake_battle::{channel, meter};
+use emberwake_battle::{channel, meter, plan};
 use emberwake_data::mastery::MASTERY_LEVEL_XP;
+use emberwake_rules::damage::{self, base_armor_rating, HitInput};
+use emberwake_rules::unit::skill_is_ranged;
 use emberwake_rules::Unit;
 use emberwake_world::{battle, mastery, new_game, recipe, roster, weapons, Data, GameState};
 use recipe::Pick;
@@ -186,6 +188,9 @@ fn sabina_grafts_channel_rounds_and_keystone_exclusion_work_in_sunk_ward() {
     // Give Kaelen Mastery 3 + Forge Rite too so we prove Inoculated Keystone preempts Cold Steel Keystone.
     mastery::gain(&d, &mut gs, "kaelen", "polearm", MASTERY_LEVEL_XP[2]).unwrap();
     run_ok(&d, &mut gs, BEREK, "hearth_rite", &kaelen);
+    // PR7-2 (N2): the keystone is forged into a masterwork of the family, so it works only while one is in the main hand
+    assert!(built(&d, &gs, "kaelen").mastery_keystone.is_empty(), "no Cold Steel keystone without a masterwork main hand");
+    gs.party.member_mut("kaelen").unwrap().weapons.get_mut(weapons::MAIN_HAND).expect("an instance in the main hand").masterwork = true;
     assert_eq!(built(&d, &gs, "kaelen").mastery_keystone, "polearm_cordon", "Cold Steel keystone active before cranial keystone");
 
     run_ok(&d, &mut gs, SABINA, "sg_ks_war_cranial", &kaelen);
@@ -291,4 +296,164 @@ fn legacy_mastery_passives_no_longer_leak_weapon_techniques() {
             p.effects
         );
     }
+}
+
+#[test]
+fn calcification_stage_ii_and_iii_passives_apply_in_crucible() {
+    let d = data();
+    let track = d.cat.unit_tracks.get("calcification").expect("calcification track");
+    assert_eq!(track.stages[1].passive, "calcify_2");
+    assert_eq!(track.stages[2].passive, "calcify_3");
+    assert_eq!(d.cat.passives["calcify_2"].slot, "");
+    assert_eq!(d.cat.passives["calcify_3"].slot, "");
+
+    let mut gs = act2_game(&d);
+    let base = built(&d, &gs, "hollis");
+    let (base_armor, base_move) = (base_armor_rating(&base), base.move_per_block());
+
+    // Stage II (`calcify_2`): +2 Armor Rating, -1 Move Rate (min 1).
+    gs.party.member_mut("hollis").unwrap().tracks.insert("calcification".into(), 2);
+    let stage2 = built(&d, &gs, "hollis");
+    assert!(stage2.passives.contains(&"calcify_1".into()) && stage2.passives.contains(&"calcify_2".into()));
+    assert_eq!(base_armor_rating(&stage2), base_armor + 2);
+    assert_eq!(stage2.move_per_block(), (base_move - 1).max(1));
+
+    // Stage III (`calcify_3`): cumulative Stage II bonuses + weaken/stun resist 100 + -15% ranged beyond 3 tiles.
+    gs.party.member_mut("hollis").unwrap().tracks.insert("calcification".into(), 3);
+    let stage3 = built(&d, &gs, "hollis");
+    assert_eq!(base_armor_rating(&stage3), base_armor + 2);
+    assert_eq!(stage3.move_per_block(), (base_move - 1).max(1));
+    assert_eq!(stage3.status_resist.get("weaken").copied(), Some(100));
+    assert_eq!(stage3.status_resist.get("stun").copied(), Some(100));
+
+    let fight: Dict = json::dict(&json!({"source": "story", "encounter": CRUCIBLE})).clone();
+    let mut f = battle::begin_world(&d, &mut gs, &fight).expect("Crucible starts");
+    let hollis_u = f.members.iter().position(|(id, _)| id == "hollis").expect("Hollis fielded");
+    let foe_u = f.session.w.enemies[0];
+    assert_eq!(base_armor_rating(&f.session.w.units[hollis_u]), base_armor + 2);
+    assert_eq!(f.session.w.units[hollis_u].move_per_block(), (base_move - 1).max(1));
+    assert_eq!(f.session.w.units[hollis_u].status_resist.get("weaken").copied(), Some(100));
+    assert_eq!(f.session.w.units[hollis_u].status_resist.get("stun").copied(), Some(100));
+
+    let ranged_sid = (0..f.session.w.cat.skills.len())
+        .find(|&sid| {
+            let s = &f.session.w.cat.skills[sid];
+            s.kind == "ATTACK" && s.power_mult > 0.0 && skill_is_ranged(s)
+        })
+        .expect("a damaging ranged skill");
+
+    // Distance 3 stays full damage; distance 4 triggers `min_distance: 4` (-15%) on both `damage::compute` and `plan::expected_with`.
+    f.session.w.grid.positions[hollis_u] = Some(emberwake_battle::grid::V2::new(2, 4));
+    f.session.w.grid.positions[foe_u] = Some(emberwake_battle::grid::V2::new(5, 4)); // dist = 3
+    let est_d3 = plan::expected_with(&f.session.w, hollis_u, foe_u, ranged_sid, None, 0.0, 1.0, false);
+    let raw_d3 = damage::compute(&f.session.w.units[hollis_u], &f.session.w.units[foe_u], HitInput { ranged: true, distance: 3, ..HitInput::default() }).final_dmg;
+
+    f.session.w.grid.positions[foe_u] = Some(emberwake_battle::grid::V2::new(6, 4)); // dist = 4
+    let est_d4 = plan::expected_with(&f.session.w, hollis_u, foe_u, ranged_sid, None, 0.0, 1.0, false);
+    let raw_d4 = damage::compute(&f.session.w.units[hollis_u], &f.session.w.units[foe_u], HitInput { ranged: true, distance: 4, ..HitInput::default() }).final_dmg;
+
+    assert!(est_d4 < est_d3, "expected damage at dist 4 ({est_d4}) < dist 3 ({est_d3})");
+    assert!(raw_d4 < raw_d3, "raw ranged hit at dist 4 ({raw_d4}) < dist 3 ({raw_d3})");
+}
+
+#[test]
+fn pr6_5_act2_drops_manuals_shops_and_pk2_flags_match_spec() {
+    let d = data();
+
+    // 1. "manual" item family + all 15 MASTERY_BOOK items (`book_<family>`).
+    let manual_fam = d.entry("item_families", "manual");
+    assert_eq!(json::s(manual_fam, "item_type"), "MASTERY_BOOK");
+    assert_eq!(json::s(manual_fam, "art"), "manual");
+
+    for fam in MAIN_HAND_FAMILIES {
+        let id = format!("book_{fam}");
+        let raw = d.entry("items", &id);
+        assert_eq!(json::s(raw, "family"), "manual", "{id} family");
+        assert_eq!(json::s(raw, "icon_id"), id, "{id} icon_id");
+        assert_eq!(json::i(raw, "value", 0), 65, "{id} value");
+        let item = d.cat.items.get(&id).unwrap_or_else(|| panic!("{id} missing"));
+        let book = item.book.as_ref().unwrap_or_else(|| panic!("{id} missing book spec"));
+        assert_eq!((book.family.as_str(), book.xp), (fam, 150));
+    }
+
+    // `mastery::read_book` grants +225 XP at proficiency 3 (Kaelen polearm) and +150 XP at proficiency 2 (Kaelen sword).
+    let mut gs = act2_game(&d);
+    gs.party.add_to_stash("book_polearm", 1);
+    gs.party.add_to_stash("book_sword", 1);
+    let r3 = mastery::read_book(&d, &mut gs, "kaelen", "book_polearm");
+    assert!(json::b(&r3, "ok", false), "read book_polearm: {r3:?}");
+    assert_eq!(gs.party.member("kaelen").unwrap().mastery_xp.get("polearm").copied(), Some(225));
+    assert_eq!(gs.party.stash.get("book_polearm").copied().unwrap_or(0), 0);
+
+    let r2 = mastery::read_book(&d, &mut gs, "kaelen", "book_sword");
+    assert!(json::b(&r2, "ok", false), "read book_sword: {r2:?}");
+    assert_eq!(gs.party.member("kaelen").unwrap().mastery_xp.get("sword").copied(), Some(150));
+
+    // 2. Unit `slot_*` organ & tissue drops (`sum(chance) <= 100`).
+    let expected_loot: [(&str, &[&str]); 7] = [
+        ("calcified_husk", &["calcified_bone_shard", "sinew_braid", "ossified_bellows", "slot_bone_spur", "slot_chitin_plate"]),
+        ("ash_crawler", &["caustic_gall_sac", "sinew_braid", "slot_blood_sac"]),
+        ("tallow_dredger", &["caustic_gall_sac", "boning_knife", "slot_blood_sac"]),
+        ("render_beast", &["render_beast_tendon", "stalker_optic_nerve", "slot_eye_tissue"]),
+        ("inquisitorial_purifier", &["pyre_nozzle", "brimstone_draught", "slot_eye_tissue", "rock_salt"]),
+        ("mortuary_flagellant", &["sulfur_poultice", "slot_eye_tissue", "rock_salt"]),
+        ("calcified_amalgam", &["calcified_bone_shard", "ossified_bellows", "titan_marrow_core"]),
+    ];
+    for (uid, items) in expected_loot {
+        assert!(d.cat.units.contains_key(uid), "unit {uid} missing from catalog");
+        let loot = json::aget(d.entry("units", uid), "loot");
+        let total: i64 = loot.iter().map(|r| r.get("chance").and_then(Value::as_i64).unwrap_or(0)).sum();
+        assert!(total <= 100, "{uid} loot chances exceed 100: {total}");
+        for it in items {
+            assert!(
+                loot.iter().any(|r| r.get("item").and_then(Value::as_str) == Some(*it) && r.get("chance").and_then(Value::as_i64).unwrap_or(0) > 0),
+                "{uid} missing loot {it}: {loot:?}"
+            );
+        }
+    }
+
+    // 3. Shop stock (`berek_hearth` & `varka_trade`), `black_iron_ingot` (count 2, 80 Scrap, pk2.masterwork_quest), & `seq_after_m5`.
+    let hearth = d.resolve(WORLD, "shops", "berek_hearth");
+    let h_stock = json::aget(hearth, "stock");
+    for fam in ["polearm", "greatsword", "sword", "hammer", "gauntlet", "fist", "crossbow", "bow"] {
+        let bid = format!("book_{fam}");
+        let row = h_stock.iter().find(|r| r.get("item").and_then(Value::as_str) == Some(bid.as_str())).unwrap_or_else(|| panic!("berek_hearth missing {bid}"));
+        assert_eq!(row["count"], json!(1));
+        assert!(row["requires_flags"].as_array().unwrap().iter().any(|f| f["key"] == "pk2.hearth_open" && f["value"] == true));
+    }
+    let ingot_row = h_stock.iter().find(|r| r.get("item").and_then(Value::as_str) == Some("black_iron_ingot")).expect("berek_hearth stocks black_iron_ingot");
+    assert_eq!((ingot_row["count"].clone(), ingot_row["price"].clone()), (json!(2), json!(80)));
+    assert!(ingot_row["requires_flags"].as_array().unwrap().iter().any(|f| f["key"] == "pk2.masterwork_quest" && f["value"] == true));
+    assert!(json::aget(hearth, "loot").iter().any(|r| r.get("loot").and_then(Value::as_str) == Some("loot_hearth_ingot_cache") && r["price"] == json!(80)));
+
+    let varka = d.resolve(WORLD, "shops", "varka_trade");
+    let v_stock = json::aget(varka, "stock");
+    for fam in ["knife", "dagger", "censer", "bone_saw", "scourge", "sprayer", "staff"] {
+        let bid = format!("book_{fam}");
+        let row = v_stock.iter().find(|r| r.get("item").and_then(Value::as_str) == Some(bid.as_str())).unwrap_or_else(|| panic!("varka_trade missing {bid}"));
+        assert_eq!(row["count"], json!(1));
+        assert!(row["requires_flags"].as_array().unwrap().iter().any(|f| f["key"] == "pk2.slab_open" && f["value"] == true));
+    }
+    assert!(v_stock.iter().any(|r| r.get("item").and_then(Value::as_str) == Some("smelling_salts")), "PR6-3 smelling_salts preserved");
+    assert!(v_stock.iter().any(|r| r.get("item").and_then(Value::as_str) == Some("con_quenched_salt")), "con_quenched_salt preserved");
+
+    // `seq_after_m5` keeps `pk2.slab_open` + `pk2.hearth_open` intact.
+    let seq_json = serde_json::to_string(d.resolve(WORLD, "sequences", "seq_after_m5")).unwrap();
+    assert!(seq_json.contains("pk2.slab_open") && seq_json.contains("pk2.hearth_open"), "seq_after_m5 preserves pk2 openers");
+
+    // Offers respect pk2 gates cleanly via `emberwake_world::shop::offers`.
+    let hearth_qid = format!("{WORLD}:berek_hearth");
+    let mut act1_gs = act2_game(&d);
+    for key in ["pk2.hearth_open", "pk2.slab_open", "pk2.masterwork_quest"] {
+        act1_gs.flags.shift_remove(key);
+    }
+    act1_gs.set_flag("sunk_ward.debate1_seen", Value::Bool(true));
+    let act1_offers = emberwake_world::shop::offers(&d, &act1_gs, &hearth_qid);
+    assert!(!act1_offers.iter().any(|o| json::s(o, "item") == "black_iron_ingot" || json::s(o, "item").starts_with("book_")));
+
+    gs.set_flag("sunk_ward.debate1_seen", Value::Bool(true));
+    let act2_offers = emberwake_world::shop::offers(&d, &gs, &hearth_qid);
+    assert!(act2_offers.iter().any(|o| json::s(o, "item") == "book_polearm" && json::i(o, "left", 0) == 1));
+    assert!(act2_offers.iter().any(|o| json::s(o, "kind") == "item" && json::s(o, "item") == "black_iron_ingot" && json::i(o, "left", 0) == 2 && json::i(o, "price", 0) == 80));
+    assert!(act2_offers.iter().any(|o| json::s(o, "kind") == "loot" && json::s(o, "item") == "black_iron_ingot" && json::i(o, "price", 0) == 80));
 }

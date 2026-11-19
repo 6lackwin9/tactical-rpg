@@ -179,7 +179,7 @@
 			"role": "npc",
 			"base_unit": "priest",
 			"art": "",
-			"palette": "",
+			"palette": "sabina_kress",
 			"portrait_tier": "",
 			"background": "Runs the Slab: graft surgery, excision, flushes and bone-scraping.",
 			"personality": "Flesh-Broker voice",
@@ -201,7 +201,7 @@
 			"role": "npc",
 			"base_unit": "warrior",
 			"art": "",
-			"palette": "",
+			"palette": "berek_dorn",
 			"portrait_tier": "",
 			"background": "Runs the Hearth: training, drills, salvage, repair and reforge.",
 			"personality": "Preservationist voice",
@@ -696,7 +696,7 @@
 			"role": "npc",
 			"base_unit": "priest",
 			"art": "",
-			"palette": "",
+			"palette": "widow_varka",
 			"portrait_tier": "",
 			"background": "Salt-widow proprietor of the Leaking Vat sluice line, in a waxed black mourning veil with brass salt-scales. Opens the Basin's black-market Trade once Ivo is home.",
 			"personality": "Mercenary, courteous, counts everything twice",
@@ -1108,6 +1108,32 @@
 				"provisional",
 				"ambient"
 			]
+		},
+		{
+			"id": "footman_curfew",
+			"name": "Castellan Footman",
+			"title": "",
+			"role": "enemy",
+			"base_unit": "castellan_footman",
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"background": "",
+			"personality": "",
+			"faction": "",
+			"home": "",
+			"disciplines": [],
+			"passives": [],
+			"named_items": [],
+			"keepsake": "",
+			"tuning": {
+				"hp_pct": -30,
+				"power": -2,
+				"speed": -3
+			},
+			"dialogue": "",
+			"gone_flags": [],
+			"tags": []
 		}
 	]
 }

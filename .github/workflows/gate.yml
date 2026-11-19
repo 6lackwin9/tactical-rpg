@@ -1,4 +1,5 @@
-# Commit gate on the Aegis engine (transition step 2, 2026-10-19), on PRs into main, on pushes to main and on request
+# Commit gate on the Aegis engine (transition step 2, 2026-10-19), on PRs into main, on pushes to main and develop (CI-DEVELOP1)
+# and on request
 # (Actions > gate > Run workflow): the docs lint,
 # then every crate and target built (a compiler warning fails, CI1) and every test run (the same steps as tools/fc.sh gate
 # and check_project.ps1; no Godot step since CLN-42). Docs-only pushes to main skip it; `gate` is the required check on main.
@@ -9,15 +10,16 @@ on:
   pull_request:
     branches: [main]
   push:
-    # not develop (user 2026-11-11): every landing already passes tools/fc.sh gate before it lands, and a full CI gate on
-    # each develop push used up the private repo's Actions minutes; the release PR into main runs it once per batch
-    branches: [main]
+    # develop again (PR7-7 CI-DEVELOP1, user 2026-11-17; it replaces the 2026-11-11 "CI on release PRs and main only" rule):
+    # one run per push, a newer develop push cancels the older run (see concurrency); the nightly balance bands are bands.yml
+    branches: [main, develop]
     paths-ignore: ['**.md', 'docs/**']
   workflow_dispatch:
 
 concurrency:
   group: gate-${{ github.ref }}
-  cancel-in-progress: true
+  # only a superseded develop run is cancelled; a main or PR run is never cancelled by a later one
+  cancel-in-progress: ${{ github.ref == 'refs/heads/develop' }}
 
 jobs:
   checks:
@@ -29,6 +31,8 @@ jobs:
       CARGO_TERM_COLOR: never
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the seed order check (tools/planner/seed_order.py) orders seeds by their commit times
 
       - name: Docs lint
         run: bash tools/fc.sh docs
@@ -49,6 +53,38 @@ jobs:
 
       - name: Build and test
         run: bash tools/fc.sh gate
+
+  # CI-HARDEN1 (ENGINE-4): the shipping target. Every crate built (a warning fails) and every test run on Windows, with
+  # the MSVC stable toolchain (the desktop's gnullvm pin needs llvm-mingw, which the runner lacks). REQUIRED on a pull
+  # request into main (`gate` below fails when it is red), ADVISORY on a push to develop or main (Design 2026-11-18,
+  # READY section 4 FB-323; first green run 2026-11-18, develop 2f0d382).
+  windows:
+    name: windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: stable-x86_64-pc-windows-msvc
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target   # .cargo/config.toml points at the desktop's own folder
+      CARGO_TERM_COLOR: never
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: rustup toolchain install stable-x86_64-pc-windows-msvc --profile minimal && rustc --version
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Build every crate
+        run: bash tools/fc.sh build
+
+      - name: Every test
+        run: bash tools/fc.sh test
 
   # WEBREL1-P1: the web TEST build on PRs into main (the release PR), uploaded as the artifact web-build. ADVISORY: not in
   # the needs of `gate` below and not a required check, so a red web job never blocks a release (WEBREL1 section 5: the
@@ -130,11 +166,13 @@ jobs:
           NODE_PATH="$RUNNER_TEMP/pw/node_modules" bash tools/fc.sh web smoke
 
   gate:
-    needs: [checks]
+    needs: [checks, windows]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: All jobs passed
         run: |
           echo "checks: ${{ needs.checks.result }}"
+          echo "windows: ${{ needs.windows.result }} (required on a pull request into main only)"
           [ "${{ needs.checks.result }}" = success ]
+          if [ "${{ github.event_name }}" = pull_request ]; then [ "${{ needs.windows.result }}" = success ]; fi

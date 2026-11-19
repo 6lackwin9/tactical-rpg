@@ -70,7 +70,7 @@ kits/rpg/
     statuses/<status>.png
     map/markers/<marker>.png
     ui/{pins,badges,chips,intents}/<id>.png
-    audio/sfx/<key>.wav, audio/music/<key>.ogg
+    audio/sfx/<key>.wav, audio/music/<key>.ogg, audio/ambience/<key>.ogg
 games/<id>/assets/
   units/<class>/<variant>/...                named bodies; palettes of named characters
   portraits/{heroes,npcs,elites,bosses}/<id>.png   (common/ only to override the kit)
@@ -79,7 +79,7 @@ games/<id>/assets/
   skills/<family>.png                        skill family icons
   tilesets/<set>/<tile>/v<n>.png             world tilesets (set = world id)
   backgrounds/{menu,title,world_map,location}/<id>.png
-  audio/music/<key>.ogg, audio/sfx/<key>.wav
+  audio/music/<key>.ogg, audio/sfx/<key>.wav, audio/ambience/<key>.ogg   (AMBIENCE1, by the music's keys)
 ```
 
 Layout test (replaces ASSETORG1's depth test): every file under each root matches one pattern above (plus

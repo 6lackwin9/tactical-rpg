@@ -12,7 +12,7 @@ use crate::screens::{Cx, Key, Screen};
 use aegis_ui::ui::{Gfx, H, W};
 use aegis_core::json::{self, s};
 use serde_json::{json, Value};
-use std::time::Instant;
+use aegis_core::clock::Instant;
 use crate::hud::hud_tests::{frame, game_cx, gfx, rect};
 use crate::screens::Game;
 use aegis_ui::screen::TEXT_SIZES;

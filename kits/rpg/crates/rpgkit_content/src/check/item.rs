@@ -429,6 +429,9 @@ pub fn item_errors(v: &View, e: &Dict, family: &Dict, inherit: bool) -> Vec<Stri
     out.extend(modifier_problems(v, e, family));
     out.extend(tier_problems(v, e, family));
     out.extend(text_problems(&json::s(e, "description"), e));
+    if t != "CONSUMABLE" && json::b(e, "revive", false) {
+        out.push("Revive belongs to CONSUMABLE items only.".into());
+    }
     if t == "CONSUMABLE" {
         out.extend(consumable_problems(v, e));
         // HOOKS1 GH2: the hazard a consumable leaves (no SKILL shape: an item has no area of its own)
@@ -864,6 +867,17 @@ fn consumable_problems(v: &View, e: &Dict) -> Vec<String> {
     }
     out.extend(unmark_problems(e));
     out.extend(meter_delta_problems(v, e));
+    if json::b(e, "revive", false) {
+        if json::i(e, "heal", 0) <= 0 {
+            out.push("Revive: needs heal > 0.".into());
+        }
+        if json::i(e, "damage", 0) > 0 {
+            out.push("Revive: a revive consumable is used on allies (no damage).".into());
+        }
+        if json::i(e, "use_reach", -1) == 0 {
+            out.push("Revive: cannot be self-only (use_reach must be > 0).".into());
+        }
+    }
     // ACT1-HOOKS2 (FB-244 (6)): armour piercing changes only an item's damage (an error, so the flag never sits idle)
     if json::b(e, rpgkit_data::ITEM_ARMOR_PIERCING, false) && json::i(e, "damage", 0) <= 0 {
         out.push("Armour piercing: only a damage item pierces armour (set damage or clear it).".into());

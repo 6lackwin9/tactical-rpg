@@ -6,7 +6,7 @@
 //!   long_hover         a hover dwell of 3000 ms or more
 //!   refused_confirm    a refused plan confirm, with its reason
 //!   error              an error or warning, with the last user event before it
-//!   undo_churn         3+ remove / undo / clear plan edits for one unit in one round
+//!   undo_churn         3+ remove / undo / clear plan edits for one subject in one round
 //!   double_open        a panel / modal opens again without a close
 //!   close_without_open
 //!   left_open          still open at a screen change or the end (not the screen's own: opened within 1 s of it)
@@ -17,7 +17,7 @@
 //! Each flag names the nearest earlier note within 30 s. The report never fails a run.
 //!
 //! Trail events: {t: ms, type, ...}; controls are `ctl` {path, cls, text, tip, interactive?}. Types: screen {path,
-//! leaked}, panel / modal {ctl, open}, button {ctl}, key {key, mods}, hover {ctl, ms}, plan_edit {kind, unit, round},
+//! leaked}, panel / modal {ctl, open}, button {ctl}, key {key, mods}, hover {ctl, ms}, plan_edit {kind, subject (or `unit`), round},
 //! confirm {ok, reason, round}, view, note {n}, click {button, pos, ctl (null over the game world), cell?, handled},
 //! error {level, msg, where}, asset {ns, key, variant, source, screen}.
 
@@ -204,7 +204,9 @@ fn singles(trail: &[Value], flags: &mut Vec<Value>) {
 fn churn(trail: &[Value], flags: &mut Vec<Value>) {
     let mut counts: Vec<(String, usize)> = Vec::new();
     for e in trail.iter().filter(|e| ty(e) == "plan_edit" && CHURN_KINDS.contains(&e["kind"].as_str().unwrap_or(""))) {
-        let unit = match &e["unit"] {
+        // ENGINE-5: the edited thing is `subject`; `unit` (the RPG kit's name for it) is read when it is missing.
+        let who = if e["subject"].is_null() { &e["unit"] } else { &e["subject"] };
+        let unit = match who {
             Value::String(s) => s.clone(),
             other => other.to_string(),
         };

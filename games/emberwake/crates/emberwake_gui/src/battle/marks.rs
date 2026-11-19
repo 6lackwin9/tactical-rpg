@@ -359,6 +359,8 @@ pub(super) struct GroundMark {
     /// One of the party's own hidden hazards (the foes do not see it): drawn fainter.
     pub(super) hidden: bool,
     last_round: i32,
+    /// PR7-40 part 2 (contract 8): the hazard's icon (its status's kit icon; "" none: the glyph shows).
+    icon: String,
     tip: Tip,
 }
 
@@ -375,12 +377,14 @@ pub(super) struct HookMarks {
     /// held; the hover lines read `ground` and `arena` whatever these say.
     show_ground: bool,
     pub(super) show_arena: bool,
+    /// The round now (a ground hazard's rounds left, contract 8).
+    round: i32,
 }
 
 impl HookMarks {
     pub(super) fn of(s: &Session, layers: &Layers, alt: bool) -> HookMarks {
         let w = &s.w;
-        let mut out = HookMarks { show_ground: layers.hazards || alt, show_arena: layers.arena || alt, ..HookMarks::default() };
+        let mut out = HookMarks { show_ground: layers.hazards || alt, show_arena: layers.arena || alt, round: s.current_round, ..HookMarks::default() };
         if emberwake_battle::ground::on(w) {
             // the party's side sees what any of its members sees (GH6 is per side)
             if let Some(&viewer) = w.allies.first() {
@@ -483,7 +487,7 @@ fn arena_effect_text(w: &World, h: &emberwake_battle::arena::Hazard) -> String {
 fn ground_mark(w: &World, cell: V2, p: &emberwake_battle::ground::Placed) -> GroundMark {
     let d = &p.def;
     let placer = w.units.get(p.by).map(|u| u.name.clone()).unwrap_or_default();
-    let tint = aegis_ui::vignette::hex(&d.tint).unwrap_or(rgb(200, 120, 220));
+    let tint = rpgkit_ui::vignette::hex(&d.tint).unwrap_or(rgb(200, 120, 220));
     let mut tip: Tip = vec![(d.name.clone(), tint)];
     if !d.description.is_empty() {
         tip.push((d.description.clone(), th().text));
@@ -529,12 +533,15 @@ fn ground_mark(w: &World, cell: V2, p: &emberwake_battle::ground::Placed) -> Gro
     if d.hidden {
         tip.push(("Hidden from the foes".into(), th().dim));
     }
-    GroundMark { cell, id: d.id.clone(), name: d.name.clone(), tint, glyph: d.glyph.clone(), hidden: d.hidden, last_round: p.last_round, tip }
+    let icon = if d.status.is_empty() { String::new() } else { emberwake_content::art::status_icon(&d.status) };
+    GroundMark { cell, id: d.id.clone(), name: d.name.clone(), tint, glyph: d.glyph.clone(), hidden: d.hidden, last_round: p.last_round, icon, tip }
 }
 
 /// HOOKS1-UI slice 1: the ground hazards (a tinted plate with the row's glyph; the party's own hidden ones fainter) and
 /// the arena's struck cells (an amber plate with a hatch) on the ground, under the tokens and the round overlays.
-pub(super) fn draw_hook_marks(p: &mut Painter, m: &HookMarks, geo: &Geom) {
+/// PR7-40 part 2 (contract 8): a ground hazard shows its icon (its status's kit icon; the glyph without one) and its
+/// rounds left in the plate's top left.
+pub(super) fn draw_hook_marks(p: &mut Painter, art: &mut aegis_ui::art::Art, m: &HookMarks, geo: &Geom) {
     let plate_of = |c: V2| match geo.view {
         View::Stage => inset2(geo.cell_rect(c), 1, 1),
         View::Flat => geo.cell_rect(c).inset(1),
@@ -543,9 +550,18 @@ pub(super) fn draw_hook_marks(p: &mut Painter, m: &HookMarks, geo: &Geom) {
         let r = plate_of(g.cell);
         let (fill, edge) = if g.hidden { (36, 120) } else { (70, 200) };
         plate(p, r, with_alpha(g.tint, fill), with_alpha(g.tint, edge));
-        if !g.glyph.is_empty() {
+        let alpha = if g.hidden { 150 } else { 235 };
+        let side = (r.h / 3).clamp(5, 8);
+        let ir = Rect::new(r.x + 2, r.y + 2, side, side);
+        let px = ((side as f32) * p.v.s).round().max(1.0) as i32;
+        let drawn = !g.icon.is_empty() && art.image(&g.icon, px, px).map(|img| p.image_alpha(img, ir, alpha)).is_some();
+        let left = g.last_round - m.round + 1;
+        if left > 0 && g.last_round > 0 {
+            p.text(if drawn { (ir.x + ir.w + 1) as f32 } else { ir.x as f32 }, ir.y as f32 - 0.5, &left.to_string(), SMALL, with_alpha(th().text, alpha));
+        }
+        if !drawn && !g.glyph.is_empty() {
             let cy = r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0;
-            p.text_center(r.x as f32 + r.w as f32 / 2.0, cy, &g.glyph, SMALL, with_alpha(th().text, if g.hidden { 150 } else { 235 }));
+            p.text_center(r.x as f32 + r.w as f32 / 2.0, cy, &g.glyph, SMALL, with_alpha(th().text, alpha));
         }
     }
     let mut struck: Vec<V2> = Vec::new();
@@ -626,14 +642,21 @@ pub(super) fn hold_pick_ids(s: &Session) -> Vec<usize> {
     s.w.hold.as_ref().map(|g| g.heroes.iter().copied().filter(|&c| s.w.has(c)).collect()).unwrap_or_default()
 }
 
-/// An exit's sign: EXIT (green) without a hold escape or with the `gate` layer off; else SHUT (red) or OPEN (green).
+/// An exit's sign: EXIT (amber, drawn as an arrow marker: `exit_glyph`) without a hold escape or with the `gate` layer
+/// off; else SHUT (oxblood) or OPEN (amber). PR7-36 (ART-17): the theme's exit tokens, not green and red.
 pub(super) fn exit_sign(hold: Option<&HoldMarks>) -> (&'static str, Rgba, Rgba) {
-    let green = (rgba(70, 200, 90, 230), rgba(200, 255, 210, 255));
+    let open = (with_alpha(crate::tokens::exit(true), 230), th().gold);
     match hold.filter(|h| h.show_gate) {
-        Some(h) if !h.open => ("SHUT", rgba(200, 60, 56, 235), rgba(255, 210, 200, 255)),
-        Some(_) => ("OPEN", green.0, green.1),
-        None => ("EXIT", green.0, green.1),
+        Some(h) if !h.open => ("SHUT", with_alpha(crate::tokens::exit(false), 235), th().text),
+        Some(_) => ("OPEN", open.0, open.1),
+        None => ("EXIT", open.0, open.1),
     }
+}
+
+/// What an exit's sign shows on the board: a plain exit is an arrow marker like the map's exits; a hold escape's
+/// gate keeps its word.
+pub(super) fn exit_glyph(word: &'static str) -> &'static str {
+    if word == "EXIT" { ">" } else { word }
 }
 
 /// H7: each hold tile with a gold objective ring and a plate with the label's first letter ("W" for the winch).
@@ -745,12 +768,19 @@ pub(super) fn draw_pushes(p: &mut Painter, list: &[emberwake_battle::forced::For
         }
         let (tx, ty) = ground_pt(geo, f.to);
         if f.to != f.from {
-            stage::wide_line(p, fx, fy, tx, ty, PUSH, 2.0, 0.0);
+            // PR7-40 part 2 (contract 8): a dashed gold arrow to a dashed landing tile
+            let gold = th().gold;
+            let land = geo.cell_rect(f.to).inset(1);
+            let (x0, y0, x1, y1) = (land.x as f32, land.y as f32, (land.x + land.w) as f32, (land.y + land.h) as f32);
+            for (a, b, c, d) in [(x0, y0, x1, y0), (x0, y1, x1, y1), (x0, y0, x0, y1), (x1, y0, x1, y1)] {
+                p.line(a, b, c, d, gold, 2.0);
+            }
+            stage::wide_line(p, fx, fy, tx, ty, gold, 1.5, 3.0);
             let (dx, dy) = (tx - fx, ty - fy);
             let len = (dx * dx + dy * dy).sqrt().max(1.0);
             let (ux, uy) = (dx / len, dy / len);
             for s in [1.0f32, -1.0] {
-                stage::wide_line(p, tx, ty, tx - ux * 6.0 - uy * 4.0 * s, ty - uy * 6.0 + ux * 4.0 * s, PUSH, 2.0, 0.0);
+                stage::wide_line(p, tx, ty, tx - ux * 6.0 - uy * 4.0 * s, ty - uy * 6.0 + ux * 4.0 * s, gold, 1.5, 0.0);
             }
         }
         if !f.blocked_by.is_empty() {
@@ -880,17 +910,6 @@ pub(super) fn pip_view(n: &emberwake_rules::ruleset::Numbers, st: &emberwake_bat
     PipView { lit: now.clamp(0, total), total, bonus: now > total, pips: true }
 }
 
-/// The poise number beside a row: `value/max` under `bar`, `pips/poise_pips` under `poise_mode` pips.
-pub(super) fn poise_number(n: &emberwake_rules::ruleset::Numbers, st: &emberwake_battle::poise::PoiseState) -> String {
-    let v = pip_view(n, st);
-    if v.pips {
-        let now = if st.broken { 0 } else { st.pips };
-        format!("{now}/{}", v.total)
-    } else {
-        format!("{}/{}", st.value, st.max)
-    }
-}
-
 /// A poise row in `r`: the pips lit in `POISE` (a windup bonus over the max, or above `poise_pips`, shows as a gold tip
 /// on the last); every pip on a red ground once broken this round.
 pub(super) fn poise_bar(p: &mut Painter, r: Rect, st: &emberwake_battle::poise::PoiseState, n: &emberwake_rules::ruleset::Numbers) {
@@ -929,8 +948,6 @@ pub(super) fn broken_spans(s: &Session, u: usize, entries: &[(i32, i32, String, 
 /// One planned hit's forecast (RULESET1 12 "forecasts").
 pub(super) struct HitForecast {
     pub(super) target: usize,
-    skill: String,
-    block: i32,
     stagger: i32,
     pub(super) fc: emberwake_battle::poise::Forecast,
     flank: bool,
@@ -988,27 +1005,6 @@ impl HitForecast {
     fn staggers(&self) -> bool {
         self.stagger > 0 || matches!(self.fc.verdict, emberwake_battle::poise::Verdict::Breaks(emberwake_battle::poise::BreakCause::Sure))
     }
-
-    /// One intel panel line: "Your Jab B3: in wind-up, breaks: poise 20 -> 0, flank" style.
-    pub(super) fn short(&self, _w: &World) -> (String, Rgba) {
-        let mut bits: Vec<String> = Vec::new();
-        let mut col = th().text;
-        if self.staggers() {
-            let (v, c) = self.verdict();
-            col = c;
-            if self.fc.windup {
-                bits.push("in wind-up".into());
-            }
-            bits.push(v.to_lowercase());
-        }
-        if self.flank {
-            bits.push("flank".into());
-        }
-        if self.pierce {
-            bits.push("armour pierced".into());
-        }
-        (format!("Your {} B{}: {}", self.skill, self.block, bits.join(", ")), col)
-    }
 }
 
 /// RULESET1-U slice 5: the forecast of each of hero `h`'s planned entries (aligned with its compiled plan; None for
@@ -1040,10 +1036,10 @@ pub(super) fn hit_forecasts(s: &Session, h: usize) -> Vec<Option<HitForecast>> {
     st.entries
         .iter()
         .zip(&planned)
-        .map(|(e, p)| {
-            let (t, cmd, block, flank) = p.as_ref()?;
+        .map(|(_, p)| {
+            let (t, cmd, _, flank) = p.as_ref()?;
             let fc = fcs.next()??;
-            let f = HitForecast { target: *t, skill: w.cat.skills[e.skill].name.clone(), block: *block, stagger: cmd.impact.stagger, fc, flank: *flank, pierce: cmd.pierces(w), pips: poise::pips_mode(&w.ruleset.numbers) };
+            let f = HitForecast { target: *t, stagger: cmd.impact.stagger, fc, flank: *flank, pierce: cmd.pierces(w), pips: poise::pips_mode(&w.ruleset.numbers) };
             // a hit with nothing to say (no stagger, no flank, no pierce) has no forecast
             (f.staggers() || f.flank || f.pierce).then_some(f)
         })
@@ -1056,5 +1052,5 @@ pub(super) fn round_summary_text(s: &Session, layers: &Layers) -> Option<String>
     if !ri::on(&s.w) || !layers.summary {
         return None;
     }
-    Some(ri::summary_text(&ri::round_summary(&s.w, &s.resolver.scheduled)))
+    Some(ri::summary_text(&s.round_summary()))
 }

@@ -80,6 +80,8 @@ pub enum RAct {
     Pan(String),
     /// MAPNAV1-U: the next standing active member leads (Q, or a click on the leader).
     Lead,
+    /// BUNKS1 BK4: a click on a member idling in the hub, or on an occupied bunk: the member's card.
+    Member(String),
 }
 
 impl From<SvcAct> for RAct {
@@ -144,6 +146,16 @@ pub struct RegionMap {
     opened_at: Instant,
     /// REVEAL1 1.3: each indoor zone's roof opacity over frames.
     roofs: crate::props::RoofFade,
+    /// BUNKS1 BK9-BK12: in a hub, where each member idles (re-placed on entry, traded on a lead pass).
+    hub: crate::bunks::HubState,
+    /// BUNKS1 BK2, BK8: the bunks drawn last frame (agent link `state.bunks`, tests).
+    bunks_drawn: Vec<Value>,
+    /// HUB-BUNKS2 (5): the niche bunks' nook floor runs drawn last frame.
+    nooks: Vec<Rect>,
+    /// TRANSITIONS1 T2 step 4: the arrival card showing since when, and whether it opened the ticker for its change
+    /// lines (closed again when the card goes).
+    arrival: Option<(crate::transitions::Arrival, Instant)>,
+    ticker_forced: bool,
 }
 
 /// One frame's camera as the agent link reports it.
@@ -164,27 +176,270 @@ pub fn begin_fight(cx: &mut Cx, fight: &Dict, runner: &str) {
     }
 }
 
-/// `begin_fight` that hands the reason back when the battle cannot start (the story stage shows it itself).
-pub fn try_fight(cx: &mut Cx, fight: &Dict, runner: &str) -> Result<(), String> {
+/// What `try_fight` opened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FightStart {
+    /// The battle (or the debug game's fight popup).
+    Battle,
+    /// PR7-11: the Retire / Last Stand prompt (`FusePrompt`); the fight comes after the choice.
+    FusePrompt,
+}
+
+/// `begin_fight` that hands the reason back when the battle cannot start (the story stage shows it itself); the prompt
+/// starts the fight itself once the choice is made.
+pub fn try_fight(cx: &mut Cx, fight: &Dict, runner: &str) -> Result<FightStart, String> {
+    open_fight(cx, fight, runner, true)
+}
+
+/// PR7-11: `try_fight` for the story stage: a prompt the start opens only closes after the choice, and the stage runs
+/// its fight step again (the battle, or the reason on the stage's error card, never a wait on nothing).
+pub fn try_story_fight(cx: &mut Cx, fight: &Dict, runner: &str) -> Result<FightStart, String> {
+    open_fight(cx, fight, runner, false)
+}
+
+fn open_fight(cx: &mut Cx, fight: &Dict, runner: &str, prompt_starts: bool) -> Result<FightStart, String> {
+    // FZ4 (PK3 3.1, PR7-11): an active Living Martyr whose fuse is spent: the Retire / Last Stand prompt first, but
+    // only for a fight that would start (the other refusals come first, so no choice is made for nothing; the kit's
+    // battle start refuses until the choice, `roster::fuse_refusal`)
+    if let Some(member) = emberwake_world::roster::fuse_choices(&cx.data, cx.gs()).first().cloned() {
+        let why = emberwake_world::battle::start_refusal(&cx.data, cx.gs(), &s(fight, "encounter"));
+        if !why.is_empty() {
+            return Err(why);
+        }
+        cx.nav.push(Nav::Push(Box::new(FusePrompt::new(fight, runner, &member, prompt_starts))));
+        return Ok(FightStart::FusePrompt);
+    }
     // a debug game starts from the Scene Runner, so only a build with the dev tools has one
     #[cfg(feature = "dev_tools")]
     if cx.debug {
         cx.nav.push(Nav::Push(Box::new(crate::runner::DebugFight::new(fight, runner))));
-        return Ok(());
+        return Ok(FightStart::Battle);
     }
     let b = crate::battle::BattleScreen::world(cx, fight, runner)?;
     cx.nav.push(Nav::Push(Box::new(b)));
-    Ok(())
+    Ok(FightStart::Battle)
 }
 
-/// Logs "Fight: <name>!" and starts world fight `fight` (`begin_fight`).
+/// FZ4 (PK3 3.1, PR7-11): the choice a Living Martyr with a spent fuse needs before its next deployment.
+#[derive(Debug, Clone)]
+pub enum FuseAct {
+    /// `roster::retire`: the member departs `retired` (gear to the stash); the fight then starts without it.
+    Retire,
+    /// `roster::last_stand`: the member deploys with its template's `last_passive` and dies at the battle's settle.
+    LastStand,
+}
+
+/// FZ4 (PK3 3.1, PR7-11): the Retire / Last Stand prompt `try_fight` opens beside BK6's `party_min` refusal when
+/// `roster::fuse_refusal` fires: the Martyr's portrait (`roster::portrait_of` through `hub::member_portrait`), the
+/// refusal text and its fuse, and the two choices; either one goes on to the fight (`fight_now`, which asks again for
+/// the next spent Martyr; the story stage runs its step again instead). It opens only for a fight that would start
+/// (`battle::start_refusal` first), and refuses a Retire that fight would then refuse. No way back: the deployment
+/// waits on the choice.
+pub struct FusePrompt {
+    fight: Dict,
+    runner: String,
+    member: String,
+    /// The prompt starts the fight after the choice (`begin_fight`); false for the story stage, which runs its fight
+    /// step again when the prompt closes (`try_story_fight`).
+    starts: bool,
+    /// A refused choice's reason (a closed roster refuses Retire, and so does a Retire the fight's `party_min` refuses).
+    message: String,
+    faces: crate::portraits::Faces,
+    w: Vec<Widget<FuseAct>>,
+}
+
+/// The prompt's frame and its portrait side.
+const FUSE_BOX: (i32, i32) = (320, 132);
+const FUSE_PORTRAIT: i32 = 72;
+
+impl FusePrompt {
+    pub fn new(fight: &Dict, runner: &str, member: &str, starts: bool) -> Self {
+        Self { fight: fight.clone(), runner: runner.to_string(), member: member.to_string(), starts, message: String::new(), faces: Default::default(), w: Vec::new() }
+    }
+
+    /// Why member `self.member` can't retire for this fight ("" = it can): the roster's refusal, or the fight's start
+    /// refusal without it (BK6's `party_min`, no active member left), tried on a copy of the game.
+    fn retire_refusal(&self, cx: &Cx) -> String {
+        let d = &cx.data;
+        let mut trial = cx.gs().clone();
+        if let Err(e) = emberwake_world::roster::retire(d, &mut trial, &self.member) {
+            return e;
+        }
+        let why = emberwake_world::battle::start_refusal(d, &trial, &s(&self.fight, "encounter"));
+        if why.is_empty() {
+            return why;
+        }
+        let name = cx.gs().party.member(&self.member).map(|m| emberwake_world::progression::display_name(d, m)).unwrap_or_default();
+        format!("{name} can't retire before this fight: {why}")
+    }
+
+    fn act(&mut self, cx: &mut Cx, a: FuseAct) {
+        let d = cx.data.clone();
+        let name = cx.gs().party.member(&self.member).map(|m| emberwake_world::progression::display_name(&d, m)).unwrap_or_default();
+        let done = match a {
+            FuseAct::Retire => match self.retire_refusal(cx) {
+                why if !why.is_empty() => Err(why),
+                _ => emberwake_world::roster::retire(&d, cx.gs_mut(), &self.member).map(|_| format!("{name} retires; the fuse is spent.")),
+            },
+            FuseAct::LastStand => emberwake_world::roster::last_stand(&d, cx.gs_mut(), &self.member).map(|()| format!("{name} goes on a last stand.")),
+        };
+        match done {
+            Err(e) => self.message = e,
+            Ok(line) => {
+                cx.log(line);
+                cx.nav.push(Nav::Pop);
+                if self.starts {
+                    fight_now(cx, &self.fight, &self.runner);
+                }
+            }
+        }
+    }
+}
+
+impl Screen<GameCx> for FusePrompt {
+    fn id(&self) -> &'static str {
+        "fuse_prompt"
+    }
+    fn overlay(&self) -> bool {
+        true
+    }
+    fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        let d = cx.data.clone();
+        let gs = cx.gs().clone();
+        let mut ui: Ui<FuseAct> = Ui::new(g, mouse, live);
+        ui.p.fill(Rect::new(0, 0, W, H), th().scrim);
+        let r = Rect::new((W - FUSE_BOX.0) / 2, (H - FUSE_BOX.1) / 2, FUSE_BOX.0, FUSE_BOX.1);
+        ui.frame(r, "The fuse is spent", false);
+        let Some(m) = gs.party.member(&self.member) else {
+            self.w = ui.widgets;
+            return;
+        };
+        self.faces.begin();
+        let pr = Rect::new(r.x + 10, r.y + 24, FUSE_PORTRAIT, FUSE_PORTRAIT);
+        let (who, look) = crate::hub::member_portrait(&d, &gs, m);
+        self.faces.draw(&mut ui.p, cx, &who, &look, "roster", pr);
+        let name = emberwake_world::progression::display_name(&d, m);
+        ui.push("fuse.portrait", "portrait", name.clone(), pr, true, false, None, Vec::new());
+        let tx = (pr.x + pr.w + 10) as f32;
+        let tw = (r.x + r.w - 10) as f32 - tx;
+        ui.p.text_fit(tx, (r.y + 30) as f32, &name, BODY, tw, th().text);
+        let why = emberwake_world::roster::fuse_refusal(&d, &gs);
+        let mut y = (r.y + 46) as f32;
+        for line in ui.p.wrap(&why, SMALL, tw) {
+            ui.p.text(tx, y, &line, SMALL, th().dim);
+            y += 12.0;
+        }
+        if let Some(def) = emberwake_world::roster::fuse_def(&d, m) {
+            ui.p.text(tx, y + 4.0, &format!("Fuse {} of {}", emberwake_world::roster::fuse_value(&d, m, gs.time), def.max), SMALL, th().text);
+        }
+        if !self.message.is_empty() {
+            ui.p.text_fit(tx, (r.y + r.h - 40) as f32, &self.message, SMALL, tw, th().foe);
+        }
+        let by = r.y + r.h - 26;
+        ui.button_tip("fuse.retire", Rect::new(r.x + r.w - 190, by, 86, 18), "Retire", FuseAct::Retire, true, tip("Retire", "They leave the cell alive; their gear goes to the stash."));
+        ui.button_tip("fuse.last_stand", Rect::new(r.x + r.w - 96, by, 86, 18), "Last Stand", FuseAct::LastStand, true, tip("Last Stand", "They fight once more, hardened, and die when the battle ends."));
+        self.faces.tick();
+        self.w = ui.widgets;
+    }
+    fn back(&mut self, _cx: &mut Cx) {}
+    fn state(&self, cx: &Cx) -> Value {
+        let d = &cx.data;
+        let m = cx.gs().party.member(&self.member);
+        let portrait = m.map(|m| emberwake_world::roster::portrait_of(d, m)).unwrap_or_default();
+        json!({"member": self.member, "portrait": portrait, "refusal": emberwake_world::roster::fuse_refusal(d, cx.gs()), "message": self.message,
+               "encounter": s(&self.fight, "encounter")})
+    }
+    widget_plumbing!();
+}
+
+/// Logs "Fight: <name>!" and starts world fight `fight` (`begin_fight`; PR7-11: the log waits while a spent fuse's
+/// prompt opens first).
 pub fn fight_now(cx: &mut Cx, fight: &Dict, runner: &str) {
     let name = s_or(cx.data.resolve(&cx.gs().world_id, "encounters", &s(fight, "encounter")), "name", "Enemies");
-    cx.log(format!("Fight: {name}!"));
+    // PR7-11: not while a spent fuse's prompt comes first (it logs this when the choice starts the fight)
+    if emberwake_world::roster::fuse_choices(&cx.data, cx.gs()).is_empty() {
+        cx.log(format!("Fight: {name}!"));
+    }
     begin_fight(cx, fight, runner);
 }
 
+/// PR7-41 (PT-34): a hub bunk's widget label: its member's name (never the id), or "Empty bunk".
+fn bunk_label(d: &emberwake_world::Data, gs: &emberwake_world::GameState, member: &str) -> String {
+    match gs.party.member(member) {
+        Some(m) => emberwake_world::progression::display_name(d, m),
+        None if member.is_empty() => "Empty bunk".into(),
+        None => member.to_string(),
+    }
+}
+
 /// Event lines for the log; `autosave` writes the autosave.
+/// PR7-37 (PT-29): `line` logged unless it is the last line already (a point stepped onto, then acted on).
+fn log_once(cx: &mut Cx, line: String) {
+    if cx.log.last() != Some(&line) {
+        cx.log(line);
+    }
+}
+
+/// PR7-37 (PT-29): the jobs that turned ready since `before` (a flag a point set finished one) say so.
+fn log_newly_ready(cx: &mut Cx, before: &[String]) {
+    let (d, gs) = (&cx.data, cx.gs());
+    let lines: Vec<String> = quest::quests_with(d, gs, "ready")
+        .into_iter()
+        .filter(|q| !before.contains(q))
+        .map(|q| format!("Quest updated: {} is ready to turn in.", s_or(&quest::resolved(d, gs, &q), "name", &q)))
+        .collect();
+    for line in lines {
+        cx.log(line);
+    }
+}
+
+/// PR7-37 (PT-03, PT-29): the party acts on point of interest `m` (E facing it or on it, or a click on its marker):
+/// its line (`explore::point_line`), then its use (`explore::point_use`): `rest` rests there as Make camp does (a
+/// refusal says why; a rest that would end the run asks first), `crypts` says who lies in the crypt places, `stash`
+/// opens the party stash (the Character window's Gear tab).
+pub fn act_on_point(cx: &mut Cx, m: &Dict) {
+    log_once(cx, explore::point_line(m));
+    match explore::point_use(m).as_str() {
+        "rest" => {
+            let d = cx.data.clone();
+            let refusal = emberwake_world::progression::can_camp(&d, cx.gs());
+            if !refusal.is_empty() {
+                cx.log(refusal.to_string());
+                return;
+            }
+            let days = emberwake_world::campaign::purse::rest_rule(&d, &cx.gs().world_id).days as i64;
+            match crate::runover::days_ask(cx, days, "Resting", "Rest") {
+                Some(q) => cx.ask_no(q, rest_here),
+                None => rest_here(cx),
+            }
+        }
+        "crypts" => {
+            let (d, gs) = (cx.data.clone(), cx.gs().clone());
+            let name = |id: &str| gs.party.member(id).map(|m| emberwake_world::progression::display_name(&d, m)).unwrap_or_else(|| id.to_string());
+            let line = emberwake_world::roster::crypt_words(&gs, &name);
+            if !line.is_empty() {
+                cx.log(line);
+            }
+        }
+        "stash" => hud_open(cx, Hud::Stash, &[]),
+        _ => {}
+    }
+}
+
+/// PR7-37 (PT-29): a rest at a point of interest (`progression::make_camp`, the world map's Make camp): its lines.
+fn rest_here(cx: &mut Cx) {
+    let d = cx.data.clone();
+    let res = emberwake_world::progression::make_camp(&d, cx.gs_mut());
+    if !json::b(&res, "ok", false) {
+        for e in json::sget(&res, "errors") {
+            cx.log(e);
+        }
+        return;
+    }
+    log_events(cx, json::aget(&res, "events"));
+    crate::runover::take(cx, &res);
+}
+
 pub fn log_events(cx: &mut Cx, events: &[Value]) {
     for e in events {
         let e = json::dict(e);
@@ -192,14 +447,19 @@ pub fn log_events(cx: &mut Cx, events: &[Value]) {
             "entered" => {
                 let loc = s(e, "location");
                 let name = cx.location_name(&cx.gs().world_id.clone(), &loc);
-                cx.log(format!("Entered {name}."));
+                // PR7-41 (PT-34): one arrival line: a travel's arrival enters the place, and the world map's Enter
+                // enters it again; the second "Entered" line is dropped while it is the last one logged
+                let line = format!("Entered {name}.");
+                if cx.log.iter().rev().find(|l| l.starts_with("Entered ")) != Some(&line) {
+                    cx.log(line);
+                }
                 for q in json::sget(e, "advanced") {
                     let qn = s_or(&quest::resolved(&cx.data, cx.gs(), &q), "name", &q);
                     cx.log(format!("Quest updated: {qn}."));
                 }
             }
             "rested" => cx.log(format!("The party rests (+{} HP).", json::i(e, "restored", 0))),
-            "locked" => cx.log(format!("Locked: {}", s(e, "text"))),
+            "locked" => cx.log(explore::locked_words(&s(e, "text"))),
             // CAMPAIGN1 P1: the purse's names (the Ashlands lines are today's); R2: a rest's days
             "camped" => {
                 let days = json::i(e, "days", 0);
@@ -225,6 +485,13 @@ pub fn log_events(cx: &mut Cx, events: &[Value]) {
                 cx.log(format!("Defeated. The party wakes at {name} and {how}."));
             }
             "retreat_failed" => cx.log(s(e, "text")),
+            // PR7-37 (PT-29): a point the party stepped onto that set a flag says so (its line)
+            "flags_set" => {
+                let loc = explore::location(&cx.data, cx.gs()).clone();
+                if let Some(m) = explore::markers_of(&loc).into_iter().find(|m| s(m, "id") == s(e, "marker") && s(m, "kind") == "point") {
+                    log_once(cx, explore::point_line(&m));
+                }
+            }
             "exit" => log_events(cx, json::aget(e, "events")),
             "autosave" => cx.autosave(),
             _ => {}
@@ -274,7 +541,61 @@ impl RegionMap {
             cam_trail: VecDeque::new(),
             opened_at: Instant::now(),
             roofs: crate::props::RoofFade::default(),
+            hub: crate::bunks::HubState::default(),
+            bunks_drawn: Vec::new(),
+            nooks: Vec::new(),
+            arrival: None,
+            ticker_forced: false,
         }
+    }
+
+    /// TRANSITIONS1 T2 step 4: a won fight's arrival (left by its results) shows its card; its change lines join the
+    /// log and open the ticker while the card shows. Once the card's time is up it goes (and the ticker it opened
+    /// closes).
+    fn follow_arrival(&mut self, cx: &mut Cx, now: Instant) {
+        if let Some(mut a) = cx.game.as_mut().and_then(|g| g.arrival.take()) {
+            // the card reads the hub as it opens (a story's `enter` step moves the party after the results closed)
+            a.card = crate::transitions::card(&cx.data, cx.gs());
+            for line in &a.changes {
+                cx.log(line.clone());
+            }
+            if !a.changes.is_empty() && !self.log_open {
+                self.log_open = true;
+                self.ticker_forced = true;
+            }
+            self.arrival = Some((a, now));
+        }
+        if self.arrival.as_ref().is_some_and(|(_, t)| now.saturating_duration_since(*t).as_millis() as u64 >= crate::transitions::ARRIVAL_MS) {
+            self.arrival = None;
+            if std::mem::take(&mut self.ticker_forced) {
+                self.log_open = false;
+            }
+        }
+    }
+
+    /// BUNKS1 BK8: plays member `id`'s waiting talk as a scene (`talks::play`: the seen flag, the reward); false when
+    /// none waits.
+    fn play_talk(&mut self, cx: &mut Cx, id: &str) -> bool {
+        let d = cx.data.clone();
+        let Some(w) = emberwake_world::talks::waiting_for(&d, cx.gs(), id) else { return false };
+        self.walk.clear();
+        let (r, reward) = emberwake_world::talks::play(&d, cx.gs_mut(), &w);
+        if r.closed {
+            show_errors(cx, r.errors.clone());
+            return true;
+        }
+        if !reward.is_empty() {
+            cx.log(format!("Received {}.", d.item_name(&reward)));
+        }
+        self.svc.open_runner(cx, r);
+        true
+    }
+
+    /// BUNKS1 BK8: the card's Talk answer (`bunks::TALK_ANSWER`), the member it names.
+    fn take_talk_answer(cx: &mut Cx) -> Option<String> {
+        let at = cx.answers.iter().position(|a| a.starts_with(crate::bunks::TALK_ANSWER))?;
+        let a = cx.answers.remove(at);
+        Some(a[crate::bunks::TALK_ANSWER.len()..].to_string())
     }
 
     /// The scheduled time of a step due at `now`: `next_walk` while on schedule, so the steps average `step` whatever
@@ -307,6 +628,9 @@ impl RegionMap {
         self.turn(dir);
         let d = cx.data.clone();
         let from = cx.gs().position;
+        // PR7-37 (PT-29): the jobs ready before the step, so a flag a point sets says what it changed (taken before the
+        // step: whether a flag is set is known only after it; a list of ids, read once per step)
+        let ready_before = quest::quests_with(&d, cx.gs(), "ready");
         let res = explore::step(&d, cx.gs_mut(), dir);
         if cx.gs().position != from {
             // TURNFEEL1: a clean corner plays the rest of the leg first; the next step and the walk clip wait for it
@@ -327,6 +651,9 @@ impl RegionMap {
         }
         let events = json::aget(&res, "events").to_vec();
         log_events(cx, &events);
+        if events.iter().any(|e| s(json::dict(e), "kind") == "flags_set") {
+            log_newly_ready(cx, &ready_before);
+        }
         crate::runover::take(cx, &res);
         let mut go_on = true;
         for e in &events {
@@ -391,10 +718,18 @@ impl RegionMap {
             }
             return;
         }
+        // BUNKS1 BK8: the card's Talk plays the member's waiting talk
+        if let Some(id) = Self::take_talk_answer(cx) {
+            if !self.modal() {
+                self.play_talk(cx, &id);
+            }
+            return;
+        }
         // STORYUI1 W2, 5.3: with nothing open, a running sequence takes over and queued vignettes play; CAMPAIGN1 W1,
         // F3: campaign notices first, then the run-over screen once the run is over; T2: the campaign queue's head
         // plays (vignettes and battles through `story::map_tick`, a dialogue scene here)
-        if !self.modal() && (crate::runover::map_tick(cx) || crate::story::map_tick(cx) || self.svc.open_pending(cx)) {
+        // PR7-37 (PT-31): then a road opened since the last look (a log line and a notice)
+        if !self.modal() && (crate::runover::map_tick(cx) || crate::story::map_tick(cx) || self.svc.open_pending(cx) || crate::worldmap::note_new_roads(cx)) {
             self.walk.clear();
             self.walk_target = None;
             return;
@@ -441,6 +776,15 @@ impl RegionMap {
 
     fn interact(&mut self, cx: &mut Cx, dir: Pos) {
         self.turn(dir);
+        // BUNKS1 BK8, BK11: a member idling ahead plays its waiting talk (the lead's too), else opens its card
+        let ahead = (cx.gs().position.0 + dir.0, cx.gs().position.1 + dir.1);
+        let member = self.hub.member_at(ahead);
+        if !member.is_empty() {
+            if !self.play_talk(cx, &member) {
+                cx.nav.push(Nav::Push(Box::new(crate::bunks::BunkCard::new(&member))));
+            }
+            return;
+        }
         let d = cx.data.clone();
         let res = explore::interact(&d, cx.gs_mut(), dir);
         if !json::b(&res, "ok", false) {
@@ -467,7 +811,11 @@ impl RegionMap {
                     }
                 }
             }
-            _ => cx.log("Nothing there."),
+            // PR7-37 (PT-03, PT-29): a point of interest underfoot or ahead answers (its line, then its use)
+            _ => match explore::point_near(&d, cx.gs(), dir) {
+                Some(m) => act_on_point(cx, &m),
+                None => cx.log("Nothing there."),
+            },
         }
     }
 
@@ -529,6 +877,26 @@ impl RegionMap {
         let Some(m) = explore::markers_of(loc).into_iter().find(|m| s(m, "id") == id) else { return };
         let at = explore::marker_pos(t, &m, gs.explore_int("loc_steps"));
         let solid = ["npc", "chest", "lore"].contains(&s(&m, "kind").as_str()) || explore::presence(&d, gs, &s(loc, "_qid"), &m) == "locked";
+        // PR7-37 (PT-03, PT-29): a point of interest is acted on once the party stands on it or beside it (the walk
+        // goes onto it, or beside it when its tile is walled off)
+        if s(&m, "kind") == "point" && explore::presence(&d, gs, &s(loc, "_qid"), &m) == "present" {
+            let dir = (at.0 - gs.position.0, at.1 - gs.position.1);
+            if dir == (0, 0) || explore::DIRS.contains(&dir) {
+                if dir != (0, 0) {
+                    self.turn(dir);
+                }
+                act_on_point(cx, &m);
+                return;
+            }
+            match self.path_to(cx, at, false).filter(|p| !p.is_empty()).or_else(|| self.path_to(cx, at, true).filter(|p| !p.is_empty())) {
+                Some(path) => {
+                    self.walk = path;
+                    self.walk_target = Some(id.to_string());
+                }
+                None => cx.log("You can't get there."),
+            }
+            return;
+        }
         if solid {
             let dir = (at.0 - gs.position.0, at.1 - gs.position.1);
             if explore::DIRS.contains(&dir) {
@@ -595,6 +963,10 @@ impl RegionMap {
                 }
             }
             RAct::Menu => cx.nav.push(Nav::Push(Box::new(crate::hub::Hub::default()))),
+            RAct::Member(id) => {
+                self.walk.clear();
+                cx.nav.push(Nav::Push(Box::new(crate::bunks::BunkCard::new(&id))));
+            }
             RAct::Hud(h) => {
                 self.walk.clear();
                 hud_open(cx, h, &REGION_HELP);
@@ -618,14 +990,14 @@ impl RegionMap {
 
     fn marker_style(kind: &str, state: &str) -> (Rgba, &'static str) {
         match (kind, state) {
-            ("exit", "locked") => (rgb(180, 70, 60), ">"),
-            ("exit", _) => (rgb(70, 190, 100), ">"),
+            ("exit", "locked") => (crate::tokens::exit(false), ">"),
+            ("exit", _) => (crate::tokens::exit(true), ">"),
             ("chest", "spent") => (rgb(90, 74, 50), "c"),
             ("chest", _) => (rgb(200, 150, 60), "c"),
             ("lore", _) => (rgb(150, 110, 220), "L"),
             ("encounter", _) => (rgb(220, 70, 60), "!"),
             ("roamer", _) => (rgb(230, 110, 60), "R"),
-            ("npc", _) => (rgb(230, 190, 80), ""),
+            ("npc", _) | ("member", _) => (rgb(230, 190, 80), ""),
             _ => (rgb(230, 220, 120), "?"),
         }
     }
@@ -655,6 +1027,11 @@ impl Screen<GameCx> for RegionMap {
             self.walk.clear();
         }
         let d = cx.data.clone();
+        // BUNKS1 BK9-BK12: in a hub, the members' idle places (a lead change trades two of them)
+        let lead_now = leader_id(cx);
+        self.hub.sync(&d, cx.gs_mut(), &lead_now);
+        self.bunks_drawn.clear();
+        self.nooks.clear();
         let gs = cx.gs().clone();
         // the open conversation; a new node starts its line and its replies scrolled to the top; PORTRAITFX1-D: a
         // portrait left out of the last frame (the conversation ended or hid) is dropped
@@ -830,7 +1207,14 @@ impl Screen<GameCx> for RegionMap {
             }
             // PROPS1 4.2-4.6: the ground props over the tiles; the standing props go into the sorted pass below. Props
             // are art only: no widget, and walking still comes from `rows`
-            let props = crate::props::layout(t, &lineage, (geo.ox, geo.oy), geo.cell_size(), paint_area, |dirs, variant, x, y| {
+            // BUNKS1 BK2: in a hub each bunk prop draws its state's art (`<art>_<state>`, where that art exists)
+            let hub_bunks = if self.hub.on() { emberwake_world::bunks::bunks(&gs, t) } else { Vec::new() };
+            let state_t = crate::bunks::state_props(t, &hub_bunks, |art, x, y| {
+                let dirs = emberwake_content::art::prop_dirs(&lineage, art);
+                let dirs: Vec<&str> = dirs.iter().map(String::as_str).collect();
+                cx.art.pick(&dirs, None, x as i32, y as i32).is_some()
+            });
+            let props = crate::props::layout(state_t.as_ref().unwrap_or(t), &lineage, (geo.ox, geo.oy), geo.cell_size(), paint_area, |dirs, variant, x, y| {
                 let rel = cx.art.pick(dirs, variant, x, y)?;
                 let size = cx.art.size_of(&rel)?;
                 Some((rel, size))
@@ -841,6 +1225,25 @@ impl Screen<GameCx> for RegionMap {
             let map_rect = Rect::new(geo.ox, geo.oy, map_w as i32 * geo.cell_size().0, map_h as i32 * geo.cell_size().1);
             for p in props.iter().filter(|p| p.ground) {
                 draw_prop(&mut ui, cx, p, None, false, map_rect, q);
+            }
+            // BUNKS1 BK3, BK4, BK8: each bunk's click area (its drawn art; under the markers and the party), its hover
+            // name and condition, and whether a talk waits on its member (a candle, drawn over the scene below)
+            let waiting = if self.hub.on() { emberwake_world::talks::waiting(&d, &gs) } else { Vec::new() };
+            let mut candles: Vec<Rect> = Vec::new();
+            for b in &hub_bunks {
+                let Some(p) = props.iter().find(|p| p.id == b.prop) else { continue };
+                let candle = !b.member.is_empty() && waiting.iter().any(|w| w.has(&b.member));
+                self.bunks_drawn.push(json!({"prop": b.prop, "member": b.member, "state": b.state.name(), "candle": candle, "file": p.file}));
+                if candle {
+                    candles.push(p.rect);
+                }
+                if modal {
+                    continue;
+                }
+                let hit = p.rect.intersect(map_area);
+                let (name, word) = if ui.hover(hit) { crate::bunks::bunk_tip(&d, &gs, b) } else { (String::new(), String::new()) };
+                let act = (!b.member.is_empty()).then(|| RAct::Member(b.member.clone()));
+                ui.push(format!("{}{}", crate::bunks::BUNK_PREFIX, b.prop), "bunk", bunk_label(&d, &gs, &b.member), hit, true, false, act, if name.is_empty() { Vec::new() } else { tip(&name, &word) });
             }
             let steps = gs.explore_int("loc_steps");
             // PLAYUI1-R: the people in the conversation turn to the party; the clock the sprites play at
@@ -897,7 +1300,7 @@ impl Screen<GameCx> for RegionMap {
                     npc = Some(NpcDraw { body, sprite, palette, initial: s(who, "name").chars().next().unwrap_or('?').to_string(), face, offset: idle_offset(&s(who, "id")) });
                 }
                 // 2.2: the first service is the badge (turn_in and offer are today's `ready` and `quest`)
-                marks.push(MarkDraw { id: id.clone(), r, top: top.y, kind: kind.clone(), state: state.clone(), npc, badge: services.first().copied() });
+                marks.push(MarkDraw { id: id.clone(), r, top: top.y, kind: kind.clone(), state: state.clone(), npc, badge: services.first().copied(), glyph: glyph_of(&kind, &explore::point_use(&m)) });
                 // EXPLOREVIEW1 3.5: a person's click area is their cell, so the cell north of them still walks (a tall
                 // sprite's head takes no click); tilted, an icon's is the cell and the icon standing on it
                 let hit = if tilted && kind != "npc" { mapview::union(r, top) } else { r };
@@ -913,6 +1316,32 @@ impl Screen<GameCx> for RegionMap {
                     t.push((services_text(&services), th().info));
                 }
                 hits.push(MarkHit { id, label, hit, foot: r.y + r.h, tip: t, named, name_rect, badge: !services.is_empty() });
+            }
+            // BUNKS1 BK9: the members idling in the hub, drawn and clicked like the people (their card on a click)
+            let mut talk_marks: Vec<(Rect, i32)> = Vec::new();
+            for (id, at) in self.hub.spots.clone() {
+                let Some(m) = gs.party.member(&id) else { continue };
+                let r = geo.cell_of(at);
+                let seen = r.intersect(map_area);
+                if seen.w <= 0 || seen.h <= 0 {
+                    continue;
+                }
+                let (body, palette) = crate::bunks::member_art(&d, &gs, m);
+                let sprite = cx.art.first_body(&emberwake_content::art::body_chain(&body));
+                let top = if sprite.is_some() { mapview::sprite_rect(r) } else { mapview::icon_rect(r) };
+                let name = crate::hub::member_name(cx, m);
+                let key = format!("{}{id}", crate::bunks::MEMBER_PREFIX);
+                if waiting.iter().any(|w| w.has(&id)) {
+                    talk_marks.push((r, top.y));
+                }
+                marks.push(MarkDraw { id: key.clone(), r, top: top.y, kind: "member".into(), state: String::new(), npc: Some(NpcDraw { body, sprite, palette, initial: name.chars().next().unwrap_or('?').to_string(), face: Facing::default(), offset: idle_offset(&id) }), badge: None, glyph: None });
+                let name_rect = Rect::new(r.x, top.y, r.w, r.h);
+                let named = !names_always && !modal && !tilted && ui.hover(r);
+                if named || names_always {
+                    labels.push((name_rect, name.clone(), false));
+                }
+                let word = if ui.hover(r) { emberwake_world::bunks::condition(&d, &gs, m) } else { "" };
+                hits.push(MarkHit { id: key, label: name.clone(), hit: r, foot: r.y + r.h, tip: tip(&name, word), named: named || names_always, name_rect, badge: false });
             }
             // tilted: the front-most click area under the pointer names its marker (click areas overlap)
             if tilted && !names_always && !modal {
@@ -966,12 +1395,49 @@ impl Screen<GameCx> for RegionMap {
             let idle = ClipPlayer::default();
             let mut sprites = Vec::new();
             let mut party_frame = None;
+            // HUB-BUNKS2: the hub bunks' drawn rects (a plate keeps to the room its neighbours leave) and the niche bunks'
+            // nooks (drawn once, before the first bunk)
+            let bunk_fits: Vec<(Rect, String)> = props
+                .iter()
+                .filter(|p| hub_bunks.iter().any(|b| b.prop == p.id))
+                .map(|p| {
+                    let art = prop_art_of(&prop_arts, &geo, p).unwrap_or("").to_string();
+                    (prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles).0.unwrap_or(p.rect), art)
+                })
+                .collect();
+            let fit_rects: Vec<Rect> = bunk_fits.iter().map(|(r, _)| *r).collect();
+            let mut nooks_drawn = false;
             for item in &order {
                 match *item {
                     Item::Prop(i) => {
                         let p = &props[i];
                         let (fit, mounted) = prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles);
+                        let bunk = hub_bunks.iter().find(|b| b.prop == p.id);
+                        if bunk.is_some() && !nooks_drawn {
+                            nooks_drawn = true;
+                            let niches: Vec<Rect> = bunk_fits.iter().filter(|(_, art)| !crate::bunks::bed_art(art).head_south).map(|(r, _)| *r).collect();
+                            self.nooks = crate::bunks::draw_nooks(&mut ui, cx, &lineage, &niches);
+                        }
                         draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
+                        // HUB-BUNKS2 (2)-(4): an occupied bunk's dressing and its brass plate (with the bunk, in depth)
+                        if let Some(b) = bunk.filter(|b| !b.member.is_empty()) {
+                            let r = fit.unwrap_or(p.rect);
+                            let bed = crate::bunks::bed_art(prop_art_of(&prop_arts, &geo, p).unwrap_or(&b.art));
+                            let dressed = crate::bunks::dress(&mut ui, cx, &lineage, b, &bed, r);
+                            if let Some(m) = gs.party.member(&b.member) {
+                                let (name, class, class_id) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m), m.class_id(&d));
+                                let room = crate::bunks::plate_room(r, &fit_rects);
+                                let plate = crate::bunks::plate_rect(&mut ui.p, r, &bed, &name, room);
+                                let full = crate::bunks::plate_need(&mut ui.p, &name) <= plate.w;
+                                let shown = crate::bunks::plate_name(&mut ui.p, &name, plate.w);
+                                crate::bunks::draw_plate(&mut ui, cx, plate, &name, &class_id, &class);
+                                if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
+                                    e["plate"] = json!({"name": name, "shown": shown, "class": class, "class_id": class_id, "rect": [plate.x, plate.y, plate.w, plate.h], "full": full, "wall": !bed.head_south, "room": room});
+                                    e["drawn"] = json!([r.x, r.y, r.w, r.h]);
+                                    e["dressed"] = json!({"blanket": dressed.blanket, "gear": dressed.gear, "keepsake": dressed.keepsake, "asleep": dressed.asleep});
+                                }
+                            }
+                        }
                     }
                     Item::Block(i) => {
                         let b = &blocks[i];
@@ -1052,6 +1518,18 @@ impl Screen<GameCx> for RegionMap {
                     None => service_glyph(&mut ui, first, br),
                 }
             }
+            // BUNKS1 BK8, BK11: a candle on each bunk whose member has a waiting talk, a speech mark over each member
+            // (the lead too) it waits on
+            let side = 12 * q / 4;
+            for r in &candles {
+                crate::bunks::draw_mark(&mut ui, cx, crate::bunks::CANDLE_ICON, Rect::new(r.x + r.w - side, r.y, side, side));
+            }
+            if self.hub.on() && waiting.iter().any(|w| w.has(&lead_now)) {
+                talk_marks.push((pr, drawn_party.y));
+            }
+            for (r, top) in &talk_marks {
+                crate::bunks::draw_mark(&mut ui, cx, crate::bunks::TALK_ICON, Rect::new(r.x + r.w / 2 - side / 2, top - side, side, side));
+            }
             // MAPNAV1-U: a click on the leader (or Q) passes the lead to the next standing active member
             let lead = leader_id(cx);
             let lead_name = gs.party.member(&lead).map(|m| crate::hub::member_name(cx, m)).unwrap_or_default();
@@ -1103,6 +1581,11 @@ impl Screen<GameCx> for RegionMap {
         if !talking {
             panes.extend(self.draw_ticker(&mut ui, cx, modal));
         }
+        // TRANSITIONS1 T2 step 4: the arrival card under the HUD bar
+        if let Some((a, at)) = self.arrival.as_ref() {
+            let ms = Instant::now().saturating_duration_since(*at).as_millis() as u64;
+            crate::transitions::draw_arrival(&mut ui.p, &a.card, crate::transitions::arrival_alpha(ms, cx.settings.reduce_motion()));
+        }
         panes.extend(name_boxes);
         // -- MAPNAV1-U (DR2 6 A): an arrow at the map's edge toward each legend entry out of view (off in a talk, as
         // the legend), moved along the edge off the legend and the ticker; a click looks there
@@ -1145,6 +1628,7 @@ impl Screen<GameCx> for RegionMap {
     }
 
     fn tick(&mut self, cx: &mut Cx) {
+        self.follow_arrival(cx, Instant::now());
         self.tick_at(cx, Instant::now());
     }
 
@@ -1224,6 +1708,7 @@ impl Screen<GameCx> for RegionMap {
             "walking": !self.walk.is_empty(), "log": cx.log.iter().rev().take(8).rev().collect::<Vec<_>>(),
             "dialogue": svc["dialogue"], "turn_in": svc["turn_in"],
             "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
+            "arrival": self.arrival.as_ref().map(|(a, _)| json!({"card": a.card, "changes": a.changes})),
             "shop": svc["shop"], "board": svc["board"], "board_pane": svc["board_pane"], "sprites": self.sprites,
             // MAPNAV1-U: who leads, the edge arrows of the last frame and the tile the camera looks at (null: the party)
             // REGIONVIEW1: the camera (physical px of cell (0, 0)), the party's physical px, and the last frames of both
@@ -1233,13 +1718,22 @@ impl Screen<GameCx> for RegionMap {
             // PORTRAITFX1 4.11: the speaker's portrait while the talk box shows (the shop or the board hides it)
             "portraits": svc["portraits"],
             // REVEAL1 1.3: each roofed indoor zone's roof opacity (0 gone, 1 opaque)
-            "roofs": self.roofs.state()})
+            "roofs": self.roofs.state(),
+            // BUNKS1: in a hub, where each member idles and each bunk's member, state and candle (null elsewhere)
+            "hub": self.hub.state(), "bunks": (!self.bunks_drawn.is_empty()).then(|| self.bunks_drawn.clone()),
+            "nooks": (!self.nooks.is_empty()).then(|| self.nooks.iter().map(|r| json!([r.x, r.y, r.w, r.h])).collect::<Vec<_>>())})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
     fn music(&self, cx: &Cx) -> Option<String> {
         let shop = !self.svc.shop_qid().is_empty();
         cx.game.as_ref().and_then(|g| music::game_track(cx, music::region_context(&cx.data, &g.gs, shop)))
+    }
+
+    /// AMBIENCE1: the place's ambient loop, by the music's context (a shop keeps the town's, `shop` falls back to it).
+    fn ambience(&self, cx: &Cx) -> Option<String> {
+        let shop = !self.svc.shop_qid().is_empty();
+        cx.game.as_ref().and_then(|g| music::game_ambience(cx, music::region_context(&cx.data, &g.gs, shop)))
     }
 
     widget_plumbing!();
@@ -1332,7 +1826,8 @@ impl RegionMap {
         let pane = Rect::new(x, top, w, content.min(H - 4 - top));
         let whole = Rect::new(x, head.y, w, pane.y + pane.h - head.y);
         ui.p.fill(pane, th().game("map_pane", PANE));
-        ui.p.panel(pane, rgba(0, 0, 0, 0), th().edge, 3.0);
+        // WEBFIX2 (a): the legend's rows in the HUD frame (the head is its section button)
+        crate::hud::hud_panel(ui, pane, rgba(0, 0, 0, 0), th().edge, 3.0);
         let off = ui.scroll_begin("legend.rows", pane, content);
         let px = ui.icon_px(Rect::new(0, 0, ICON + 4, ICON + 4));
         let spx = ui.icon_px(Rect::new(0, 0, SERVICE + 4, SERVICE + 4));
@@ -1343,9 +1838,11 @@ impl RegionMap {
                 ui.p.panel(r, th().card_hot, th().edge_hot, 3.0);
             }
             let ir = Rect::new(r.x + 4, r.y + (rh - ICON) / 2, ICON, ICON);
-            match cx.art.image(&emberwake_content::art::marker(marker_icon(&kind, &state)), px, px) {
-                Some(img) => ui.p.image(img, ir),
-                None => ui.p.fill(Rect::new(ir.x + 2, ir.y + 2, ICON - 4, ICON - 4), Self::marker_style(&kind, &state).0),
+            // PR7-36 (UX-28): an exit, chest or lore row shows the map's glyph (points have no legend row)
+            match (glyph_of(&kind, ""), cx.art.image(&emberwake_content::art::marker(marker_icon(&kind, &state)), px, px)) {
+                (Some(g), _) => draw_map_glyph(&mut ui.p, ir, g, glyph_colour(&kind, &state)),
+                (None, Some(img)) => ui.p.image(img, ir),
+                (None, None) => ui.p.fill(Rect::new(ir.x + 2, ir.y + 2, ICON - 4, ICON - 4), Self::marker_style(&kind, &state).0),
             }
             let sw = services.len() as i32 * (SERVICE + 1);
             let tx = ir.x + ICON + 4;
@@ -1398,7 +1895,10 @@ impl RegionMap {
         let r = Rect::new(4, H - 4 - h, w, h);
         let hover = !modal && ui.hover(r);
         ui.p.fill(r, th().game("map_pane", PANE));
-        ui.p.panel(r, rgba(0, 0, 0, 0), if hover { th().gold } else { th().edge }, 3.0);
+        crate::hud::hud_panel(ui, r, rgba(0, 0, 0, 0), if hover { th().gold } else { th().edge }, 3.0);
+        if hover && th().frame(crate::hud::HUD_FRAME).is_some() {
+            ui.p.panel(r, rgba(0, 0, 0, 0), th().gold, 3.0);
+        }
         let last_y = r.y + 3 + (lines.len() as i32 - 1) * lh;
         draw_glyph(&mut ui.p, if self.log_open { Glyph::ChevronDown } else { Glyph::ChevronRight }, Rect::new(r.x + 4, last_y + (lh - 8) / 2, 8, 8), if hover { th().gold } else { th().dim });
         for (i, l) in lines.iter().enumerate() {
@@ -1425,6 +1925,8 @@ struct MarkDraw {
     state: String,
     npc: Option<NpcDraw>,
     badge: Option<&'static str>,
+    /// PR7-36 (UX-28): the drawn glyph of an exit or point of interest (`glyph_of`).
+    glyph: Option<MapGlyph>,
 }
 
 /// A marker's click area and name, taken before the sorted pass (EXPLOREVIEW1 3.5): its id, label, the area, its feet,
@@ -1453,6 +1955,12 @@ fn front_hit(hits: &[MarkHit], over: impl Fn(Rect) -> bool) -> Option<&MarkHit> 
 /// The markers' click areas, in the order given.
 fn push_hits(ui: &mut Ui<RAct>, hits: Vec<MarkHit>) {
     for h in hits {
+        // BUNKS1 BK4: an idling member opens its card
+        if let Some(id) = h.id.strip_prefix(crate::bunks::MEMBER_PREFIX) {
+            let act = RAct::Member(id.to_string());
+            ui.push(h.id.clone(), "member", h.label, h.hit, true, false, Some(act), h.tip);
+            continue;
+        }
         ui.push(format!("marker.{}", h.id), "marker", h.label, h.hit, true, false, Some(RAct::Marker(h.id)), h.tip);
     }
 }
@@ -1653,6 +2161,10 @@ fn draw_marker(ui: &mut Ui<RAct>, cx: &mut Cx, m: &MarkDraw, ts: i32, idle: &Cli
             Some(img) => ui.p.image(img, tok),
             None => ui.p.text_center(cx_, cy_ - 4.0, &n.initial, BODY, rgb(20, 20, 20)),
         }
+        return None;
+    }
+    if let Some(g) = m.glyph {
+        draw_map_glyph(&mut ui.p, r, g, glyph_colour(&m.kind, &m.state));
         return None;
     }
     let px = ui.icon_px(Rect::new(0, 0, ts + 4, ts + 4));
@@ -2477,6 +2989,67 @@ fn marker_icon(kind: &str, state: &str) -> &'static str {
     }
 }
 
+/// PR7-36 (UX-28, ART-19): what an exit or point of interest shows on the region map and its legend: a small glyph per
+/// kind, drawn by the game in the theme's colours (`glyph_colour`) over the kit's generic marker art.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MapGlyph {
+    Exit,
+    Chest,
+    Rest,
+    Vault,
+    Lore,
+    Look,
+}
+
+/// The glyph of a marker of `kind` (a point's by its `use`: `explore::point_use`); None: the marker keeps its art.
+pub(crate) fn glyph_of(kind: &str, point_use: &str) -> Option<MapGlyph> {
+    Some(match (kind, point_use) {
+        ("exit", _) => MapGlyph::Exit,
+        ("chest", _) | ("point", "stash") => MapGlyph::Chest,
+        ("lore", _) => MapGlyph::Lore,
+        ("point", "rest") => MapGlyph::Rest,
+        ("point", "crypts") => MapGlyph::Vault,
+        ("point", _) => MapGlyph::Look,
+        _ => return None,
+    })
+}
+
+/// A glyph's colour: amber while it can be used (`tokens::exit`), iron once used (`state` "spent"), a locked exit
+/// oxblood.
+pub(crate) fn glyph_colour(kind: &str, state: &str) -> Rgba {
+    match (kind, state) {
+        ("exit", "locked") => crate::tokens::exit(false),
+        (_, "spent") => th().edge,
+        _ => crate::tokens::exit(true),
+    }
+}
+
+/// A glyph's 8 x 8 picture, `#` drawn.
+fn glyph_rows(g: MapGlyph) -> [&'static str; 8] {
+    match g {
+        MapGlyph::Exit => ["...#....", "...##...", "...###..", "#######.", "#######.", "...###..", "...##...", "...#...."],
+        MapGlyph::Chest => ["........", ".######.", ".#....#.", "########", "###..###", "########", ".######.", "........"],
+        MapGlyph::Rest => ["...#....", "...##...", "..###...", "..####..", ".#####..", ".######.", "..####..", "#.####.#"],
+        MapGlyph::Vault => ["..####..", ".#....#.", "#.#..#.#", "#.#..#.#", "#.#..#.#", "#.#..#.#", "########", "........"],
+        MapGlyph::Lore => ["........", ".##..##.", "#..##..#", "#..##..#", "#..##..#", "###..###", "...##...", "........"],
+        MapGlyph::Look => ["........", "...##...", "..#..#..", ".#.##.#.", ".#.##.#.", "..#..#..", "...##...", "........"],
+    }
+}
+
+/// Draws glyph `g` in `col` on a dark plate filling `r` (a marker icon's rect), its cells whole logical px.
+pub(crate) fn draw_map_glyph(p: &mut aegis_ui::painter::Painter, r: Rect, g: MapGlyph, col: Rgba) {
+    p.panel(r, th().panel, rgba(col[0], col[1], col[2], 150), 2.0);
+    let k = ((r.w.min(r.h) - 4) / 8).max(1);
+    let (x0, y0) = (r.x + (r.w - 8 * k) / 2, r.y + (r.h - 8 * k) / 2);
+    for (y, row) in glyph_rows(g).iter().enumerate() {
+        for (x, c) in row.bytes().enumerate() {
+            if c == b'#' {
+                p.fill(Rect::new(x0 + x as i32 * k, y0 + y as i32 * k, k, k), col);
+            }
+        }
+    }
+}
+
 /// A service's icon (spec PLAYUI1 section 6): `turn_in` and `offer` are the quest badges `ready` and `quest`; a board
 /// with work (STORYUI1 B4) is the quest badge too.
 pub(crate) fn service_icon(service: &str) -> String {
@@ -2499,6 +3072,8 @@ pub(crate) fn services_text(services: &[&str]) -> String {
             "recruit" => "Recruits",
             // PK2-S3: the recipe service
             "recipe" => "Recipes",
+            // PR6-8: the facility service
+            "facility" => "Facilities",
             _ => "",
         })
         .collect::<Vec<_>>()
@@ -2506,7 +3081,7 @@ pub(crate) fn services_text(services: &[&str]) -> String {
 }
 
 /// The drawn stand-in of a service icon: today's `?` and `!` badges (a board with work is the `!`, STORYUI1 B4), a coin
-/// for a shop, a sheet with lines for recipes (PK2-S3), a plus for recruits.
+/// for a shop, a sheet with lines for recipes (PK2-S3), a house for facilities (PR6-8), a plus for recruits.
 pub(crate) fn service_glyph<A>(ui: &mut Ui<A>, service: &str, r: Rect) {
     let (cx_, cy_, sz) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0, r.w as f32);
     match service {
@@ -2527,6 +3102,14 @@ pub(crate) fn service_glyph<A>(ui: &mut Ui<A>, service: &str, r: Rect) {
                 let y = cy_ - h / 2.0 + h * k as f32 / 4.0;
                 ui.p.line(cx_ - w * 0.35, y, cx_ + w * 0.35, y, th().dim, 0.0);
             }
+        }
+        "facility" => {
+            // a house: a body under a roof
+            let (w, h) = (sz * 0.6, sz * 0.4);
+            let body = Rect::new((cx_ - w / 2.0).round() as i32, cy_.round() as i32 - 1, w.round().max(1.0) as i32, h.round().max(1.0) as i32);
+            ui.p.fill(body, th().text);
+            ui.p.line(cx_ - sz * 0.42, cy_ - 1.0, cx_, cy_ - sz * 0.42, th().gold, 0.0);
+            ui.p.line(cx_, cy_ - sz * 0.42, cx_ + sz * 0.42, cy_ - 1.0, th().gold, 0.0);
         }
         _ => {
             ui.p.line(cx_ - sz * 0.4, cy_, cx_ + sz * 0.4, cy_, th().good, 0.0);
@@ -2677,6 +3260,9 @@ mod tests {
             ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
             // LOOK1-G1: the theme file and its nine-slice frames (`<role>.png` with a `<role>.json` sidecar)
             ["ui", "theme.json"] => true,
+            // UISPLIT1: screen layout files and their view fixtures
+            ["ui", "layouts", f] => f.ends_with(".json"),
+            ["ui", "views", f] => f.ends_with(".view.json"),
             ["ui", "frames", f] => png(f) || f.ends_with(".json"),
             ["ui", "pins" | "badges" | "chips" | "intents" | "hud" | "markers" | "services", f] | ["ui", f] => png(f),
             ["tilesets", _, _, f] | ["props", _, _, f] => v(f),
@@ -2689,6 +3275,11 @@ mod tests {
             ["backgrounds", "menu" | "title" | "location" | "battle" | "story", f] => png(f),
             ["audio", "sfx", f] => f.ends_with(".wav"),
             ["audio", "music", f] => f.ends_with(".ogg"),
+            // AMBIENCE1: a place's ambient loop
+            ["audio", "ambience", f] => f.ends_with(".ogg"),
+            // TRANSITIONS1 (AI-18): the battle beats' wipe and banners, and their one-shot stings
+            ["ui", "transitions", f] => png(f),
+            ["audio", "stings", f] => f.ends_with(".ogg"),
             _ => false,
         }
     }
@@ -3198,11 +3789,12 @@ mod talk_tests {
     #[test]
     fn the_shop_hides_the_box_over_a_dimmed_map() {
         let (mut cx, mut g) = (game_cx(), gfx());
-        // the map's brightness left of the box (the legend and the ticker are hidden while talking)
+        // the map's brightness left of the box (the legend and the ticker are hidden while talking) and of the shop's
+        // frame (PR7-36: the ornate main-panel tier, whose corners reach out past the panel, and the rows' icon tiles)
         let light = |g: &Gfx| -> u64 {
             let mut sum = 0;
             for y in (HUD_H + 2)..(H - 10) {
-                for x in 0..100 {
+                for x in 0..14 {
                     let i = ((y * g.canvas.w + x) * 4) as usize;
                     sum += g.canvas.px[i..i + 3].iter().map(|v| *v as u64).sum::<u64>();
                 }
@@ -3246,7 +3838,7 @@ mod portrait_tests {
     use aegis_core::assets::Layers;
     use aegis_ui::art::Art;
     use aegis_ui::fx::Clock;
-    use aegis_ui::portrait_fx::{blink_phase, blink_starts, seed_of, tq, BLINK_MS, EASE_MS};
+    use rpgkit_ui::portrait_fx::{blink_phase, blink_starts, seed_of, tq, BLINK_MS, EASE_MS};
     use aegis_ui::screen::TEXT_SIZES;
     use emberwake_data::PortraitCue;
 
@@ -5764,7 +6356,7 @@ mod ground_tests {
                 for (reduce, z) in [(false, 1.0), (true, 1.0), (false, 2.0), (true, 2.0)] {
                     let (mut cx, mut g) = (BIG.cx(view), gfx_at(1280, 720));
                     cx.settings.v["map_zoom"] = json!(z);
-                    cx.settings.v[aegis_ui::vignette::REDUCE_MOTION] = json!(reduce);
+                    cx.settings.v[rpgkit_ui::vignette::REDUCE_MOTION] = json!(reduce);
                     let mut map = RegionMap::new(&mut cx);
                     cx.gs_mut().position = (60, 40);
                     let t0 = Instant::now();
@@ -6134,15 +6726,14 @@ mod ground_tests {
             }
         }
 
-        /// The Settings screen's Map zoom row: a pick is a draft until Apply; then the setting holds the step and the map
-        /// draws at it.
+        /// The Settings screen's Map zoom row: a pick applies at once (SETTINGS-MOCK1); the setting holds the step and the
+        /// map draws at it.
         #[test]
         fn picking_a_map_zoom_and_applying_it_zooms_the_map() {
             let (mut cx, mut g) = (BIG.cx("square"), gfx());
             let mut s = crate::menus::SettingsScreen::new(&cx);
             s.draw(&mut cx, &mut g, (-500, -500), true);
-            s.click_id(&mut cx, "settings.tab.gameplay").expect("the gameplay tab");
-            s.draw(&mut cx, &mut g, (-500, -500), true);
+            // PR7-37 (PT-33): the row is on the Display tab (the first) only
             let row = s.widgets().into_iter().find(|w| w["id"] == "settings.map_zoom").expect("the row");
             assert_eq!(row["text"], json!("1x"), "the default");
             g.kit.open = Some("settings.map_zoom".to_string());
@@ -6160,8 +6751,6 @@ mod ground_tests {
                 frame(&mut map, cx, g, 1.0);
                 map.geo.q
             };
-            assert_eq!(at_1x(&mut cx, &mut g), 4, "only a draft so far");
-            s.click_id(&mut cx, "settings.apply").expect("apply");
             assert_eq!(cx.settings.v["map_zoom"], json!(1.75));
             assert_eq!(at_1x(&mut cx, &mut g), 7, "the map draws at the applied step");
             let _ = std::fs::remove_dir_all(&cx.shot_dir);
@@ -6891,5 +7480,247 @@ mod ground_tests {
             assert!(has_badge_near(&map, &g, (26, 26)), "indoor NPC badge visible when roof is faded");
             let _ = std::fs::remove_dir_all(&root);
         }
+    }
+}
+
+/// PR7-11 (FZ4, PK3 3.1): the Retire / Last Stand prompt on a scratch Martyr (a test-only recruit template in the
+/// played world; no shipped id is written).
+#[cfg(test)]
+mod fuse_prompt_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+    use emberwake_world::roster;
+
+    const TEMPLATE: &str = "zz_martyr";
+    const ART: &str = "portraits/common/zz_martyr.png";
+
+    /// A debug game whose first active member is a Living Martyr of `TEMPLATE` (a fuse of max 1, one deployment
+    /// made, so it is spent; its last passive the catalog's first passive), a second active member beside it, the
+    /// roster open: (cx, member, last passive, a fight of the world's first encounter).
+    fn martyr_cx() -> (Cx, String, String, Dict) {
+        let mut cx = game_cx();
+        let world = cx.gs().world_id.clone();
+        let last = cx.data.cat.passives.keys().next().cloned().expect("a catalog passive");
+        let encounter = cx.data.catalogs.own_entries(&world, "encounters").first().map(|e| s(e, "id")).expect("an encounter");
+        let row = json!({"id": TEMPLATE, "name": "Martyr", "class_id": "", "base_units": [], "names": ["Zed"], "art": ART,
+                         "fuse": {"per_deploy": 1, "stasis_days": 7, "max": 1, "tiers": [], "last_passive": last},
+                         "_world": world, "_qid": format!("{world}:{TEMPLATE}")});
+        let data = std::sync::Arc::get_mut(&mut cx.app.data).expect("this test's own data");
+        data.catalogs.worlds.get_mut(&world).expect("the world").own.entry("recruits".into()).or_default().push(json::dict(&row).clone());
+        cx.gs_mut().party.roster.manifest.open_flag = String::new();
+        let member = cx.gs().party.active_members().first().map(|m| m.id.clone()).expect("an active member");
+        // a second active member (a copy of the first under a test id), so a Retire leaves someone to fight
+        let party = &mut cx.gs_mut().party;
+        let mut extra = party.member(&member).unwrap().clone();
+        extra.id = "zz_second".into();
+        party.members.push(extra);
+        party.active_ids = vec![member.clone(), "zz_second".into()];
+        party.max_active = party.max_active.max(2);
+        make_martyr(&mut cx, &member);
+        let fight = json::dict(&json!({"encounter": encounter, "source": "test"})).clone();
+        (cx, member, last, fight)
+    }
+
+    /// Member `id` becomes a Martyr of `TEMPLATE` with its fuse spent (one deployment of max 1).
+    fn make_martyr(cx: &mut Cx, id: &str) {
+        let world = cx.gs().world_id.clone();
+        let time = cx.gs().time;
+        let m = cx.gs_mut().party.member_mut(id).expect("a member");
+        m.template = format!("{world}:{TEMPLATE}");
+        m.fuse = Some(emberwake_world::state::MartyrFuse { deploys: 1, since: time, ..Default::default() });
+    }
+
+    /// Sets the `party_min` of `fight`'s encounter (the played world's own row) to `n`.
+    fn set_party_min(cx: &mut Cx, fight: &Dict, n: usize) {
+        let world = cx.gs().world_id.clone();
+        let id = s(fight, "encounter");
+        let data = std::sync::Arc::get_mut(&mut cx.app.data).expect("this test's own data");
+        let rows = data.catalogs.worlds.get_mut(&world).unwrap().own.get_mut("encounters").unwrap();
+        rows.iter_mut().find(|e| s(e, "id") == id).expect("the encounter").insert("party_min".into(), json!(n));
+    }
+
+    fn actives(cx: &Cx) -> usize {
+        cx.gs().party.active_members().len()
+    }
+
+    /// The screen the last navigation pushed (its id; "" for none).
+    fn pushed(cx: &Cx) -> String {
+        cx.nav.iter().rev().find_map(|n| match n {
+            Nav::Push(s) => Some(s.id().to_string()),
+            _ => None,
+        }).unwrap_or_default()
+    }
+
+    /// Opens the prompt as a fight start does and draws it once: (the prompt, the texts drawn).
+    fn opened(cx: &mut Cx, fight: &Dict) -> (Box<dyn Screen<GameCx>>, Vec<String>) {
+        try_fight(cx, fight, "map").expect("the start opens the prompt");
+        let Some(Nav::Push(mut prompt)) = cx.nav.pop() else { panic!("the prompt is pushed") };
+        cx.nav.clear();
+        let mut g = gfx();
+        let texts = frame(prompt.as_mut(), cx, &mut g, 1.0).into_iter().map(|t| t.text).collect();
+        (prompt, texts)
+    }
+
+    #[test]
+    fn a_spent_fuse_opens_the_prompt_with_the_martyr_portrait_and_both_choices() {
+        let (mut cx, member, _, fight) = martyr_cx();
+        let why = roster::fuse_refusal(&cx.data, cx.gs());
+        assert!(!why.is_empty(), "the scratch Martyr's fuse is spent");
+        // the kit's battle start refuses with the same reason (a headless runner), the screen asks instead
+        let d = cx.data.clone();
+        assert_eq!(emberwake_world::battle::begin_fight(&d, &mut cx.gs().clone(), &s(&fight, "encounter")).err(), Some(why.clone()));
+        let (prompt, texts) = opened(&mut cx, &fight);
+        assert_eq!(prompt.id(), "fuse_prompt");
+        let state = prompt.state(&cx);
+        assert_eq!((state["member"].as_str(), state["portrait"].as_str(), state["refusal"].as_str()), (Some(member.as_str()), Some(ART), Some(why.as_str())));
+        let ids: Vec<String> = prompt.widgets().iter().map(|w| s(json::dict(w), "id")).collect();
+        for id in ["fuse.portrait", "fuse.retire", "fuse.last_stand"] {
+            assert!(ids.iter().any(|w| w == id), "{id} in {ids:?}");
+        }
+        let first_word = why.split_whitespace().next().unwrap();
+        assert!(texts.iter().any(|t| t.contains(first_word)) && texts.iter().any(|t| t == "Retire") && texts.iter().any(|t| t == "Last Stand"), "{texts:?}");
+        // the portrait is the template's art under the member's name
+        let m = cx.gs().party.member(&member).unwrap().clone();
+        let (who, _) = crate::hub::member_portrait(&cx.data, cx.gs(), &m);
+        assert_eq!((who.file.as_str(), who.key.clone()), (ART, format!("member:{member}")));
+    }
+
+    #[test]
+    fn last_stand_deploys_with_the_last_passive_and_the_fight_goes_on() {
+        let (mut cx, member, last, fight) = martyr_cx();
+        let (mut prompt, _) = opened(&mut cx, &fight);
+        prompt.click_id(&mut cx, "fuse.last_stand").expect("the button");
+        let m = cx.gs().party.member(&member).expect("still a member until the settle");
+        assert!(m.fuse.as_ref().is_some_and(|f| f.last_stand));
+        assert!(roster::fuse_passives(&cx.data, m).contains(&last), "the last passive applies");
+        assert!(roster::fuse_refusal(&cx.data, cx.gs()).is_empty());
+        assert!(matches!(cx.nav.first(), Some(Nav::Pop)), "the prompt closes");
+        assert_ne!(pushed(&cx), "fuse_prompt", "the fight starts, no second prompt");
+    }
+
+    #[test]
+    fn retire_departs_the_martyr_and_a_closed_roster_keeps_the_prompt() {
+        let (mut cx, member, _, fight) = martyr_cx();
+        let (mut prompt, _) = opened(&mut cx, &fight);
+        // a closed roster refuses Retire: the reason shows, the prompt stays
+        let open = cx.gs().party.roster.manifest.open_flag.clone();
+        cx.gs_mut().party.roster.manifest.open_flag = "zz_closed".into();
+        prompt.click_id(&mut cx, "fuse.retire").expect("the button");
+        assert_eq!(prompt.state(&cx)["message"].as_str(), Some(roster::CLOSED_TEXT));
+        assert!(cx.nav.is_empty() && cx.gs().party.member(&member).is_some());
+        cx.gs_mut().party.roster.manifest.open_flag = open;
+        prompt.click_id(&mut cx, "fuse.retire").expect("the button");
+        assert!(cx.gs().party.member(&member).is_none());
+        assert_eq!(cx.gs().party.departed_of(&member).map(|r| r.life.as_str()), Some(roster::RETIRED));
+        assert!(matches!(cx.nav.first(), Some(Nav::Pop)));
+    }
+
+    #[test]
+    fn a_fight_refused_anyway_asks_nothing() {
+        // the start's other refusals come first: party_min above the active members refuses before any choice
+        let (mut cx, member, _, fight) = martyr_cx();
+        let n = actives(&cx);
+        set_party_min(&mut cx, &fight, n + 1);
+        let why = emberwake_world::battle::start_refusal(&cx.data, cx.gs(), &s(&fight, "encounter"));
+        assert!(!why.is_empty());
+        assert_eq!(try_fight(&mut cx, &fight, "map").err(), Some(why));
+        assert!(cx.nav.is_empty(), "no prompt for a refused fight");
+        assert!(cx.gs().party.member(&member).is_some_and(|m| m.fuse.as_ref().is_some_and(|f| !f.last_stand)));
+    }
+
+    #[test]
+    fn retire_is_refused_when_the_fight_would_then_be_short_of_heroes() {
+        // party_min equal to the active members: retiring one would refuse the fight, so the prompt refuses Retire
+        let (mut cx, member, _, fight) = martyr_cx();
+        let n = actives(&cx);
+        set_party_min(&mut cx, &fight, n);
+        let (mut prompt, _) = opened(&mut cx, &fight);
+        prompt.click_id(&mut cx, "fuse.retire").expect("the button");
+        let msg = prompt.state(&cx)["message"].as_str().unwrap_or("").to_string();
+        assert!(msg.contains("can't retire"), "{msg}");
+        assert!(cx.nav.is_empty() && cx.gs().party.member(&member).is_some(), "the prompt stays, nobody leaves");
+        // Last Stand still goes on
+        prompt.click_id(&mut cx, "fuse.last_stand").expect("the button");
+        assert!(matches!(cx.nav.first(), Some(Nav::Pop)));
+        assert_ne!(pushed(&cx), "fuse_prompt");
+    }
+
+    #[test]
+    fn two_spent_martyrs_prompt_one_after_another() {
+        let (mut cx, first, _, fight) = martyr_cx();
+        let second = cx.gs().party.active_members().get(1).map(|m| m.id.clone()).expect("the test's second active member");
+        make_martyr(&mut cx, &second);
+        let (mut prompt, _) = opened(&mut cx, &fight);
+        assert_eq!(prompt.state(&cx)["member"].as_str(), Some(first.as_str()));
+        prompt.click_id(&mut cx, "fuse.last_stand").expect("the button");
+        let Some(Nav::Push(mut next)) = cx.nav.pop() else { panic!("the next prompt is pushed") };
+        assert!(matches!(cx.nav.as_slice(), [Nav::Pop]));
+        cx.nav.clear();
+        assert_eq!((next.id(), next.state(&cx)["member"].as_str()), ("fuse_prompt", Some(second.as_str())));
+        assert!(!cx.log.iter().any(|l| l.starts_with("Fight: ")), "no fight log while a prompt is still open");
+        frame(next.as_mut(), &mut cx, &mut gfx(), 1.0);
+        next.click_id(&mut cx, "fuse.retire").expect("the button");
+        assert!(cx.gs().party.member(&second).is_none());
+        assert_ne!(pushed(&cx), "fuse_prompt", "both chosen: the fight starts");
+        assert!(cx.log.iter().any(|l| l.starts_with("Fight: ")));
+    }
+}
+
+/// PR7-36 (UX-28, ART-19): exits and points of interest draw a glyph per kind, amber while usable, iron once used.
+#[cfg(test)]
+mod glyph_tests {
+    use super::*;
+    use crate::hud::hud_tests::gfx;
+
+    #[test]
+    fn each_kind_has_its_glyph_and_people_keep_theirs() {
+        assert_eq!(glyph_of("exit", ""), Some(MapGlyph::Exit));
+        assert_eq!(glyph_of("chest", ""), Some(MapGlyph::Chest));
+        assert_eq!(glyph_of("point", "stash"), Some(MapGlyph::Chest), "a stash is a chest");
+        assert_eq!(glyph_of("point", "rest"), Some(MapGlyph::Rest));
+        assert_eq!(glyph_of("point", "crypts"), Some(MapGlyph::Vault));
+        assert_eq!(glyph_of("lore", ""), Some(MapGlyph::Lore));
+        assert_eq!(glyph_of("point", ""), Some(MapGlyph::Look), "a point with no use is looked at");
+        for kind in ["npc", "member", "encounter", "roamer"] {
+            assert_eq!(glyph_of(kind, ""), None, "{kind} keeps its sprite or art");
+        }
+        let all = [MapGlyph::Exit, MapGlyph::Chest, MapGlyph::Rest, MapGlyph::Vault, MapGlyph::Lore, MapGlyph::Look];
+        for (k, g) in all.iter().enumerate() {
+            assert!(glyph_rows(*g).iter().all(|r| r.len() == 8 && r.bytes().all(|c| c == b'#' || c == b'.')), "{g:?}: 8 x 8");
+            assert!(all[k + 1..].iter().all(|o| glyph_rows(*o) != glyph_rows(*g)), "{g:?}: its own picture");
+        }
+    }
+
+    #[test]
+    fn usable_is_amber_used_is_iron_locked_is_oxblood() {
+        assert_eq!(glyph_colour("exit", "present"), crate::tokens::exit(true));
+        assert_eq!(glyph_colour("exit", "locked"), crate::tokens::exit(false));
+        assert_eq!(glyph_colour("chest", "present"), crate::tokens::exit(true));
+        assert_eq!(glyph_colour("chest", "spent"), th().edge);
+        assert_eq!(glyph_colour("point", "spent"), th().edge);
+        assert_ne!(crate::tokens::exit(true), th().edge, "the two read apart");
+    }
+
+    /// Every `#` of the picture is filled in the glyph's colour inside the plate, nothing outside the plate.
+    #[test]
+    fn a_glyph_draws_its_cells_on_its_plate() {
+        let mut g = gfx();
+        let col = crate::tokens::exit(true);
+        let r = Rect::new(40, 40, mapview::ICON, mapview::ICON);
+        {
+            let mut ui: Ui<RAct> = Ui::new(&mut g, (-1, -1), true);
+            draw_map_glyph(&mut ui.p, r, MapGlyph::Exit, col);
+        }
+        let pr = g.view.rect(r);
+        let px = |x: i32, y: i32| {
+            let i = ((y * g.canvas.w + x) * 4) as usize;
+            [g.canvas.px[i], g.canvas.px[i + 1], g.canvas.px[i + 2]]
+        };
+        let lit = (pr.y..pr.y + pr.h).flat_map(|y| (pr.x..pr.x + pr.w).map(move |x| (x, y))).filter(|&(x, y)| px(x, y) == [col[0], col[1], col[2]]).count();
+        let cells = glyph_rows(MapGlyph::Exit).iter().map(|r| r.bytes().filter(|c| *c == b'#').count()).sum::<usize>();
+        let k = (g.view.rect(Rect::new(0, 0, 1, 1)).w).max(1) as usize;
+        assert!(lit >= cells * k * k, "every cell lit: {lit} px for {cells} cells");
+        let outside = Rect::new(pr.x + pr.w + 2, pr.y, 4, pr.h);
+        assert!((outside.y..outside.y + outside.h).all(|y| (outside.x..outside.x + outside.w).all(|x| px(x, y) == [0, 0, 0])), "nothing past the plate");
     }
 }

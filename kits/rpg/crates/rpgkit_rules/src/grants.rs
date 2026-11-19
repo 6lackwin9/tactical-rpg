@@ -83,9 +83,14 @@ pub enum Target {
     /// A base or derived stat under its context tag (`always` or the row's last `context` pair as `key:value`); the
     /// row's `percent` counts only on a derived stat id (DERIVE1 4.1).
     Stat { stat: String, tag: String, percent: f64 },
+    /// PK2-STAGE-PASSIVES (`PR6-2`): flat bonus/penalty summed into `damage::base_armor_rating` (`stat: "armor"`).
+    Armor,
+    /// PK2-STAGE-PASSIVES (`PR6-2`): flat bonus/penalty summed into `Unit::move_per_block` (`stat: "move_rate"`).
+    MoveRate,
     Resist { status: String },
     ApRegen,
-    SkillPotency(SkillSet),
+    /// `min_distance`: `0` = any attack distance; `1..=12` = applies only when attack distance `>= min_distance`.
+    SkillPotency { set: SkillSet, min_distance: i32 },
     StatusPotency,
     /// PR5-50 (FB-204), CLASSPASS1 (`PR5-62a`): the reach bonus of the skills that match the filters ("" / None =
     /// any; `rpgkit_data::SkillReach`; the retired `spell_reach` reads as kind `SPELL`, ranged None).
@@ -111,8 +116,10 @@ impl Target {
             Target::StaggerTaken { .. } => Combine::Product,
             Target::ForcedImmune(_) => Combine::OrFlag,
             Target::Stat { .. }
+            | Target::Armor
+            | Target::MoveRate
             | Target::ApRegen
-            | Target::SkillPotency(_)
+            | Target::SkillPotency { .. }
             | Target::StatusPotency
             | Target::SkillReach { .. }
             | Target::ForcedTiles
@@ -163,6 +170,9 @@ pub enum Grant {
     /// ACT1-HOOKS2 (FB-244 (4)): skill `skill` takes `delta` more blocks for its holder (`rpgkit_data::SKILL_BLOCK_COST`;
     /// worn items and passives; the deltas on one skill add up, `Unit::skill_blocks` clamps the sum to 1 block at least).
     SkillBlockCost { skill: String, delta: i32 },
+    /// `PR7-8` (`RELIC-SIG1`): the holder's gauge of unit meter `meter`, when it holds one, never goes below `floor`
+    /// (`rpgkit_data::METER_FLOOR`; worn items and passives; the largest floor counts; it gives no meter).
+    MeterFloor { meter: String, floor: i32 },
 }
 
 impl Grant {
@@ -186,7 +196,7 @@ impl Grant {
     pub fn band_ok(&self) -> bool {
         matches!(
             self,
-            Grant::Modifier(Modifier { target: Target::Stat { .. } | Target::Resist { .. } | Target::StaggerTaken { .. } | Target::SkillPotency(_) | Target::StatusPotency, .. })
+            Grant::Modifier(Modifier { target: Target::Stat { .. } | Target::Armor | Target::MoveRate | Target::Resist { .. } | Target::StaggerTaken { .. } | Target::SkillPotency { .. } | Target::StatusPotency, .. })
         )
     }
 
@@ -234,19 +244,26 @@ pub fn read_one(e: &Obj) -> Vec<Grant> {
     let int = |key: &str, default: i32| f64::from(value::int(e, key, default));
     match value::string(e, "type", "").as_str() {
         "stat" => {
-            let mut tag = "always".to_string();
-            if let Some(ctx) = value::obj(e, "context") {
-                for (k, v) in ctx {
-                    tag = format!("{}:{}", k, to_str(v));
+            let stat = value::string(e, "stat", "");
+            match stat.as_str() {
+                "armor" => vec![modifier(Target::Armor, int("value", 0))],
+                "move_rate" => vec![modifier(Target::MoveRate, int("value", 0))],
+                _ => {
+                    let mut tag = "always".to_string();
+                    if let Some(ctx) = value::obj(e, "context") {
+                        for (k, v) in ctx {
+                            tag = format!("{}:{}", k, to_str(v));
+                        }
+                    }
+                    vec![modifier(Target::Stat { stat, tag, percent: value::float(e, "percent", 0.0) }, int("value", 0))]
                 }
             }
-            vec![modifier(Target::Stat { stat: value::string(e, "stat", ""), tag, percent: value::float(e, "percent", 0.0) }, int("value", 0))]
         }
         "proficiency" => vec![Grant::Proficiency { gear: value::string(e, "gear", ""), levels: value::int(e, "levels", 0) }],
         "resist" => vec![modifier(Target::Resist { status: value::string(e, "status", "") }, int("value", 0))],
         "ap_regen" => vec![modifier(Target::ApRegen, int("value", 0))],
         "skill" => vec![Grant::GrantSkill(SkillGrant::Learn(value::string(e, "skill", "")))],
-        "skill_potency" => vec![modifier(Target::SkillPotency(skill_set(e)), value::float(e, "value", 0.0))],
+        "skill_potency" => vec![modifier(Target::SkillPotency { set: skill_set(e), min_distance: value::int(e, "min_distance", 0).clamp(0, 12) }, value::float(e, "value", 0.0))],
         "status_potency" => vec![modifier(Target::StatusPotency, int("value", 0))],
         rpgkit_data::SKILL_REACH | rpgkit_data::SPELL_REACH_ALIAS => {
             let r = rpgkit_data::SkillReach::from_effect(e).unwrap_or(rpgkit_data::SkillReach {
@@ -282,6 +299,7 @@ pub fn read_one(e: &Obj) -> Vec<Grant> {
         rpgkit_data::FORBID_HANDS => vec![Grant::ForbidHands { hands: value::int(e, "hands", 2) }],
         rpgkit_data::PIERCE_MELEE => vec![Grant::PierceMelee],
         rpgkit_data::SKILL_BLOCK_COST => vec![Grant::SkillBlockCost { skill: value::string(e, "skill", ""), delta: value::int(e, "delta", 0) }],
+        rpgkit_data::METER_FLOOR => vec![Grant::MeterFloor { meter: value::string(e, "meter", ""), floor: value::int(e, "floor", 0) }],
         _ => Vec::new(),
     }
 }

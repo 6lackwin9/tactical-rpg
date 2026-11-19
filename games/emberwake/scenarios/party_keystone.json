@@ -1,0 +1,87 @@
+{
+  "id": "party_keystone",
+  "title": "PR7-41 (PT-28): the playtest save after_vats (heroes at level 7 and 8); the party screen's Skills tab shows the hero's deck passives and its keystone slotted, with where they come from on the bucket headers",
+  "launch": {
+    "save": "after_vats"
+  },
+  "settings": {
+    "reduce_motion": true
+  },
+  "timeout_s": 300,
+  "steps": [
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "main_menu"
+      }
+    },
+    {
+      "step": "click",
+      "id": "menu.continue"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "notice"
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "step": "click",
+      "id": "notice.ok"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "region_map"
+      }
+    },
+    {
+      "step": "repeat",
+      "times": 6,
+      "until": {
+        "path": "state.dialogue",
+        "absent": true
+      },
+      "steps": [
+        {
+          "step": "pause",
+          "ms": 500
+        },
+        {
+          "step": "key",
+          "key": "1"
+        },
+        {
+          "step": "pause",
+          "ms": 300
+        },
+        {
+          "step": "key",
+          "key": "esc"
+        }
+      ]
+    },
+    {
+      "step": "click",
+      "id": "hud.party"
+    },
+    {
+      "step": "click",
+      "id": "character.tab.skills"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "widget": "skills.keystone.0"
+      }
+    },
+    {
+      "step": "shot",
+      "name": "party_skills_keystone"
+    }
+  ]
+}

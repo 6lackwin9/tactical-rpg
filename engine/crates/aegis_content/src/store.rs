@@ -124,6 +124,12 @@ pub fn contains(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: 
     raw_entries(&hooks.file_of(data_dir, world, kind)).iter().any(|e| sget(e, "id", "") == id)
 }
 
+/// TOOLS-HELP1 (ENGINE-15): the stored entry `id` of `kind` (in `world`, or the base catalog), as written, if any
+/// (`aegis content get`; `tools/fc.sh seed-from` builds a seed from it).
+pub fn get(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> Option<Dict> {
+    raw_entries(&hooks.file_of(data_dir, world, kind)).into_iter().find(|e| sget(e, "id", "") == id)
+}
+
 /// Removes the entry `id` of `kind` (kept only when it adds no blocking problem).
 pub fn remove(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> Result<Outcome, Vec<String>> {
     let file = hooks.file_of(data_dir, world, kind);

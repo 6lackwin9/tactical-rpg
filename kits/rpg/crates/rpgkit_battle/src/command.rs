@@ -402,7 +402,7 @@ impl Command {
                 }
                 if let (Carry::Engage(cell), Some(position)) = (self.carry, self.position) {
                     // Decision "Auto-fill keeps a flank": planned to stay, it hits from there while the tile still flanks
-                    if self.keep_flank && cell == w.pos(src) && tgt.is_some_and(|t| round_intent::keeps_flank(w, t, cell, diag)) {
+                    if self.keep_flank && cell == w.pos(src) && tgt.is_some_and(|t| round_intent::keeps_flank_by(w, t, src, cell, diag)) {
                         return String::new();
                     }
                     let (line, moved, protected) = carried_engage(w, rng, src, tgt, cell, position, self.carry_range, self.target_cell, diag);
@@ -449,7 +449,8 @@ impl Command {
             // INPUT1 MR16: a Support command on an ally chases it into its reach as an attack does
             CmdKind::Support { target, skill, .. } if self.follow > 0 => {
                 let (t, sk) = (*target, *skill);
-                if t == src || !w.units[t].is_active() || !w.units[src].is_active() || !w.has(t) || round_intent::hidden(w, t) || support_in_reach(w, src, t, sk) {
+                let alive_or_revive = w.units[t].is_active() || (w.cat.skills[sk].revive && w.can_revive(t));
+                if t == src || !alive_or_revive || !w.units[src].is_active() || w.grid.positions[t].is_none() || round_intent::hidden(w, t) || support_in_reach(w, src, t, sk) {
                     return String::new();
                 }
                 let (lo, hi) = skill::support_reach(&w.cat.skills[sk], &w.units[src]);
@@ -620,14 +621,14 @@ impl Command {
                 }
                 let mut parts = Vec::new();
                 // HOOKS1 8.4: a unit the area also strikes takes no redirect (rule triggers)
-                let inside: Vec<UnitId> = if self.ally.is_some() { cells.iter().filter_map(|c| w.occupant(*c)).collect() } else { Vec::new() };
-                for cell in cells {
-                    let Some(v) = w.occupant(cell) else { continue };
+                // BIGUNIT1 BU9: a unit is hit once however many of its cells the area covers
+                let inside: Vec<UnitId> = if self.ally.is_some() { w.occupants_once(&cells).into_iter().map(|(_, v)| v).collect() } else { Vec::new() };
+                for (cell, v) in w.occupants_once(&cells) {
                     if v == src || skill_mult <= 0.0 || !skill::affects_unit(affects, w.friends_of(src).contains(&v)) {
                         continue;
                     }
                     let ranged = w.units[src].attack_range > 1;
-                    let cover = cover_for(&w.grid, w.pos(src), cell, ranged);
+                    let cover = if w.size_of(v) > 1 || w.size_of(src) > 1 { cover_between(w, src, v, ranged) } else { cover_for(&w.grid, w.pos(src), cell, ranged) };
                     let flank = round_intent::flank_bonus(w, src, v);
                     let matched = skill::exploit_match_by(&self.exploit, &w.units[v], &[], flank, &w.ruleset);
                     // IR17: the hits off the primary target take `splash`
@@ -738,7 +739,7 @@ impl Command {
             }
             CmdKind::StatusBlock { status } => {
                 self.cue = Some(crate::event::EventKind::LostBlock { status: status.clone() });
-                self.log = format!("[Status] {src_name} is {status} and loses this block");
+                self.log = format!("[Status] {src_name} loses this block to {}", status::display_name(&status));
             }
             CmdKind::Support { target, skill, .. } => {
                 if let CmdKind::Support { last_heal, last_status, last_cleansed, .. } = &mut self.kind {
@@ -751,10 +752,19 @@ impl Command {
                     return;
                 }
                 if !w.units[target].is_active() {
-                    self.failed = true;
-                    self.cue = None;
-                    self.log = format!("[Support Failed] {src_name}'s {} has no target left.", self.name);
-                    return;
+                    let revivable = w.cat.skills[skill].revive && w.can_revive(target);
+                    if !revivable {
+                        self.failed = true;
+                        self.cue = None;
+                        self.log = format!("[Support Failed] {src_name}'s {} has no target left.", self.name);
+                        return;
+                    }
+                    if w.revive_cell(target).is_none() {
+                        self.failed = true;
+                        self.cue = None;
+                        self.log = format!("[Support Failed] {src_name}'s {}: Space is blocked.", self.name);
+                        return;
+                    }
                 }
                 if !support_in_reach(w, src, target, skill) {
                     self.failed = true;
@@ -762,6 +772,8 @@ impl Command {
                     self.log = format!("[Support Failed] {src_name} cannot reach {} with {}.", w.units[target].name, self.name);
                     return;
                 }
+                // PR7-41 (PT-26): the heal before the missing-HP cap, so a capped heal says so
+                let full_heal = if skill::heals(&w.cat.skills[skill]) && w.units[target].is_alive() { crate::world::heal_taken(heal_amount_on(w, src, target, skill), w.units[target].band_heal_taken) } else { 0 };
                 let done = support_apply(w, src, target, skill);
                 // RULESET1_INTENT IN6: intent-bound grants carry the holder's intent
                 let mut granted = done.extras.clone();
@@ -772,7 +784,7 @@ impl Command {
                 let t = &w.units[target];
                 let mut parts = Vec::new();
                 if skill::heals(s) {
-                    parts.push(format!("healed {} (HP {}/{})", done.healed, t.hp, t.max_hp));
+                    parts.push(format!("healed {} (HP {}/{})", heal_words(done.healed, full_heal), t.hp, t.max_hp));
                 }
                 if skill::cleanses(s) {
                     let names: Vec<String> = done.cleansed.iter().map(|st| status::display_name(st)).collect();
@@ -846,11 +858,21 @@ impl Command {
                 let (mut heal, mut dmg, mut boost) = (0, 0, 0.0);
                 if item.heal > 0 {
                     // A1.2-K3 (A1 section 1): the heal pipeline (the item's flat heal), capped at the missing HP
-                    let before = w.units[target].hp;
-                    w.heal(target, damage::item_heal(item.heal));
-                    let t = &w.units[target];
-                    heal = t.hp - before;
-                    parts.push(format!("healed {heal} (HP {}/{})", t.hp, t.max_hp));
+                    let amount = damage::item_heal(item.heal);
+                    if !w.units[target].is_alive() {
+                        if let Ok((_, hp)) = w.revive(target, amount) {
+                            heal = hp;
+                            let t = &w.units[target];
+                            parts.push(format!("revived (HP {}/{})", t.hp, t.max_hp));
+                        }
+                    } else {
+                        let before = w.units[target].hp;
+                        let full_heal = crate::world::heal_taken(amount, w.units[target].band_heal_taken);
+                        w.heal(target, amount);
+                        let t = &w.units[target];
+                        heal = t.hp - before;
+                        parts.push(format!("healed {} (HP {}/{})", heal_words(heal, full_heal), t.hp, t.max_hp));
+                    }
                 }
                 if item.damage > 0 {
                     // A1.2-K3 (A1 section 1, FB-55(2)): the damage pipeline (flat base, mitigation by the ruleset)
@@ -908,9 +930,9 @@ impl Command {
                 self.log = if w.units[src].is_withdrawn {
                     format!("[Withdrawal] {src_name} moved from {start} and safely WITHDREW through Exit!")
                 } else if moved == 0 && cut {
-                    format!("[Move Cut Short] {src_name} couldn't move from {start} (blocked by {blocker}).")
+                    format!("[Move Cut Short] {src_name} couldn't move from {start} ({}).", blocked_words(&blocker))
                 } else if cut {
-                    format!("[Move Cut Short] {src_name} stopped at {end} after {moved} of {} tiles (blocked by {blocker}).", path.len())
+                    format!("[Move Cut Short] {src_name} stopped at {end} after {moved} of {} tiles ({}).", path.len(), blocked_words(&blocker))
                 } else {
                     format!("[Move] {src_name} moved {moved} tile{} from {start} to {end}", if moved == 1 { "" } else { "s" })
                 };
@@ -958,7 +980,8 @@ impl Command {
                 round_intent::note_moved(w, src);
                 self.cue = Some(crate::event::EventKind::Move);
                 self.log = format!("[Disengage] {src_name} jumped {dist} tile{} from {from} to {dest}", if dist == 1 { "" } else { "s" });
-                for note in hazard_on_enter(w, rng, src, &[dest]) {
+                let landed = w.cells_of(src);
+                for note in hazard_on_enter(w, rng, src, &landed) {
                     self.log += &format!(" {note}");
                 }
             }
@@ -1023,8 +1046,8 @@ impl Command {
         let splash = if field { 1.0 } else { w.ruleset.numbers.splash_mult };
         let cells: Vec<V2> = skill::shape_cells(shape, from, centre).into_iter().filter(|c| w.grid.is_valid(*c) && *c != from).collect();
         let (mut total, mut struck, mut parts) = (0, Vec::new(), Vec::new());
-        for c in cells {
-            let Some(v) = w.occupant(c) else { continue };
+        // BIGUNIT1 BU9: once per unit
+        for (_, v) in w.occupants_once(&cells) {
             if v == src || !skill::affects_unit(affects, w.friends_of(src).contains(&v)) {
                 continue;
             }
@@ -1051,8 +1074,22 @@ impl Command {
     /// draw, then the damage. Returns the unit the hit lands on (`f`, or the holder of an intercept), the hit and the
     /// damage dealt to that unit.
     #[allow(clippy::too_many_arguments)]
-    fn land(&mut self, w: &mut World, rng: &mut GodotRng, src: UnitId, f: UnitId, ranged: bool, offhand: bool, mult: f64, cover: f64, skip: &[UnitId]) -> (UnitId, Hit, i32) {
+    fn land(&mut self, w: &mut World, rng: &mut GodotRng, src: UnitId, f: UnitId, ranged: bool, offhand: bool, mut mult: f64, cover: f64, skip: &[UnitId]) -> (UnitId, Hit, i32) {
         self.orb_override |= damage::attack_power(&w.units[src], ranged, offhand).stat_override;
+        let dist = if w.has(src) && w.has(f) { w.dist(src, f) } else { 0 };
+        let mut input_dist = 0;
+        if dist > 0 {
+            if let Some(s) = w.cat.skill(&self.skill) {
+                let base_pot = w.units[src].potency_for_skill(s);
+                // PR7-2 (N1): the hit's ranged flag lets a distance-gated `ranged` grant reach the basic attack too
+                let at_pot = w.units[src].potency_for_skill_at(s, ranged, dist);
+                if (at_pot - base_pot).abs() > 1e-12 && base_pot.abs() > 1e-12 {
+                    mult *= at_pot.max(0.0) / base_pot;
+                }
+            } else {
+                input_dist = dist;
+            }
+        }
         // PK2-S1: a member grant `pierce_melee` pierces with every melee hit
         let pierce = self.pierces_by_skill(w) || pierces_melee(w, src, ranged);
         let claim = match self.ally.as_mut() {
@@ -1064,12 +1101,12 @@ impl Command {
         let Some(r) = claim else {
             self.guard_bypassed |= self.ignore_guard && w.units[f].guard > 0.0;
             // one crit draw, then the damage (roll_hit_with's order)
-            let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, ..HitInput::default() };
+            let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, distance: input_dist, ..HitInput::default() };
             let hit = damage::compute(&w.units[src], &w.units[f], input);
             let taken = w.damage(f, hit.final_dmg, true);
             return (f, hit, taken);
         };
-        let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, ..HitInput::default() };
+        let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, distance: input_dist, ..HitInput::default() };
         let own = damage::compute(&w.units[src], &w.units[f], input);
         let h = r.holder;
         self.guard_bypassed |= self.ignore_guard && (w.units[f].guard > 0.0 || w.units[h].guard > 0.0);
@@ -1152,6 +1189,52 @@ impl Command {
             }
             _ => false,
         }
+    }
+
+    /// PR7-41 (PT-22): the foe a single-target attack of a hero turns on when its own target is gone, or out of its reach
+    /// and chase from where the hero stands: the nearest active, visible foe within the attack's reach band from the
+    /// hero's tile plus its chase (or dash) tiles; ties by unit order. Sets it as the attack's target and returns it;
+    /// None (nothing changed) when no foe qualifies or the command is no such attack (a Maneuver attack carrying its
+    /// own move to a tile by its target is none).
+    pub fn retarget(&mut self, w: &World) -> Option<UnitId> {
+        let (src, diag) = (self.source, self.diagonal);
+        if self.carry != Carry::None {
+            return None;
+        }
+        let CmdKind::Attack { target, follow_tiles, dash_tiles, min_range, max_range, .. } = &mut self.kind else { return None };
+        if !w.has(src) {
+            return None;
+        }
+        let band = reach_band(w, src, *min_range, *max_range);
+        let extra = (*follow_tiles).max(*dash_tiles).max(0);
+        let from = w.pos(src);
+        let (_, f) = w
+            .foes_of(src)
+            .iter()
+            .copied()
+            .filter(|&f| w.units[f].is_active() && w.has(f) && !round_intent::hidden(w, f))
+            .map(|f| (w.band_at(diag, src, from, f), f))
+            .filter(|&(d, _)| d >= band.0 && d <= band.1 + extra)
+            .min()?;
+        *target = Some(f);
+        Some(f)
+    }
+
+    /// PR7-41 (PT-22): whether this attack's target, active, is beyond its reach band plus its chase (or dash) tiles
+    /// from where its unit stands (it would end "cannot reach"); false for any other command (a carried Maneuver
+    /// attack too: its move takes it to its tile).
+    pub fn target_out_of_chase(&self, w: &World) -> bool {
+        if self.carry != Carry::None {
+            return false;
+        }
+        let CmdKind::Attack { follow_tiles, dash_tiles, min_range, max_range, .. } = &self.kind else { return false };
+        let Some(t) = self.acted_on(w) else { return false };
+        if !w.units[t].is_active() || !w.has(t) || !w.has(self.source) {
+            return false;
+        }
+        let band = reach_band(w, self.source, *min_range, *max_range);
+        let d = w.band_at(self.diagonal, self.source, w.pos(self.source), t);
+        d > band.1 + (*follow_tiles).max(*dash_tiles).max(0)
     }
 
     /// RULESET1_INTENT TG4: the command becomes Rest blocks (no AP, no stance, no move); its blocks stay booked.
@@ -1239,37 +1322,42 @@ fn in_reach(w: &World, src: UnitId, t: UnitId, band: (i32, i32), diag: bool) -> 
     if !w.has(src) || !w.has(t) {
         return false;
     }
-    let d = round_intent::band_dist(diag, w.pos(src), w.pos(t));
+    // BIGUNIT1 BU5: from the nearest cell of either square
+    let d = w.band_at(diag, src, w.pos(src), t);
     d >= band.0 && d <= band.1
 }
 
-/// Cells around `target` within the band that a unit could stand on (walkable, not an exit, not blocked; INPUT1 MR10:
-/// `diag` counts a diagonal neighbour as 1).
-fn band_goals(w: &World, target_pos: V2, band: (i32, i32), blocked: &Cells, diag: bool) -> Cells {
-    let mut goals = Cells::new();
-    let hi = band.1;
-    for dx in -hi..=hi {
-        for dy in -hi..=hi {
-            let cell = target_pos + V2::new(dx, dy);
-            let d = round_intent::band_dist(diag, target_pos, cell);
-            if d >= band.0 && d <= hi && w.grid.is_valid(cell) && w.grid.is_walkable(cell) && !w.grid.is_exit(cell) && !blocked.contains(&cell) {
-                goals.insert(cell);
-            }
-        }
-    }
-    goals
+/// Cells around `t` within the band that `src` could stand on (walkable, not an exit, not blocked; INPUT1 MR10:
+/// `diag` counts a diagonal neighbour as 1). BIGUNIT1 BU5, BU6: anchors whose whole square fits, by square distance.
+fn band_goals(w: &World, src: UnitId, t: UnitId, band: (i32, i32), blocked: &Cells, diag: bool) -> Cells {
+    w.stand_goals(src, w.pos(t), w.size_of(t), band, diag, blocked)
 }
 
+/// The cells of every other unit on the grid (BIGUNIT1 BU4: all of a big unit's cells).
 fn others_blocked(w: &World, src: UnitId, active_only: bool) -> Cells {
     let mut blocked = Cells::new();
     for (u, p) in w.grid.positions.iter().enumerate() {
         if let Some(p) = p {
             if u != src && (!active_only || w.units[u].is_active()) {
-                blocked.insert(*p);
+                blocked.extend(crate::grid::square_cells(*p, w.size_of(u)));
             }
         }
     }
     blocked
+}
+
+/// BIGUNIT1 BU7: the cells `c` newly covers stepping its anchor from `from` to `to` (`[to]` for a one-cell unit).
+pub fn newly_covered(w: &World, c: UnitId, from: V2, to: V2) -> Vec<V2> {
+    let n = w.size_of(c);
+    if n == 1 {
+        return vec![to];
+    }
+    crate::grid::square_cells(to, n).filter(|cell| !crate::grid::square_covers(from, n, *cell)).collect()
+}
+
+/// BIGUNIT1 BU7: the first trap among `cells` that springs on `c` (HOOKS1 GH6; a one-cell unit's own tile).
+fn springs_on(w: &mut World, c: UnitId, cells: &[V2]) -> Option<String> {
+    cells.iter().find_map(|&cell| crate::ground::springs(w, c, cell))
 }
 
 /// Gap-close: route to the nearest tile in reach within `dash_tiles` cost; hazards entered roll their status.
@@ -1283,21 +1371,25 @@ fn dash(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, ban
         return format!("[Dash Blocked] {name} is rooted and can't dash at {}.", w.units[t].name);
     }
     let from = w.pos(src);
+    let size = w.size_of(src);
     let blocked = others_blocked(w, src, true);
-    let goals = band_goals(w, w.pos(t), band, &blocked, false);
-    let route = path::find_path(&w.grid, from, &goals, &blocked, false, &Hooks::default());
-    if route.is_empty() || !dash_fits(&w.grid, from, &route, dash_tiles) {
-        let why = if route.is_empty() { "no route".to_string() } else { format!("{} tiles, move cost {}, dash covers {dash_tiles}", route.len(), path::path_cost(&w.grid, from, &route)) };
+    let goals = band_goals(w, src, t, band, &blocked, false);
+    let route = path::find_path_sized(&w.grid, from, &goals, &blocked, false, &Hooks::default(), size);
+    if route.is_empty() || !dash_fits_sized(&w.grid, from, &route, dash_tiles, size) {
+        let why = if route.is_empty() { "no route".to_string() } else { format!("{} tiles, move cost {}, dash covers {dash_tiles}", route.len(), path::path_cost_sized(&w.grid, from, &route, size)) };
         return format!("[Dash Blocked] {name} can't reach {} ({why}).", w.units[t].name);
     }
     let mut entered = Vec::new();
     for d in route {
+        let before = w.pos(src);
         if !w.move_unit(src, d) {
             break;
         }
-        entered.push(w.pos(src));
+        // BIGUNIT1 BU7: every cell newly covered rolls and may spring a trap
+        let new_cells = newly_covered(w, src, before, w.pos(src));
+        entered.extend(new_cells.iter().copied());
         // HOOKS1 GH6: a trap stops the dash on its tile (rule ground_hazards; never in classic)
-        if crate::ground::springs(w, src, w.pos(src)).is_some() {
+        if springs_on(w, src, &new_cells).is_some() {
             break;
         }
     }
@@ -1315,7 +1407,12 @@ fn dash(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, ban
 }
 
 pub fn dash_fits(grid: &Grid, from: V2, route: &[V2], dash_tiles: i32) -> bool {
-    dash_tiles > 0 && path::blocks_needed(grid, from, route, dash_tiles) <= 1
+    dash_fits_sized(grid, from, route, dash_tiles, 1)
+}
+
+/// BIGUNIT1 BU6: `dash_fits` for a walker of footprint `size`.
+pub fn dash_fits_sized(grid: &Grid, from: V2, route: &[V2], dash_tiles: i32, size: i32) -> bool {
+    dash_tiles > 0 && path::blocks_needed_sized(grid, from, route, dash_tiles, size) <= 1
 }
 
 /// The chase (AS1; INPUT1 MR16): `follow`, then its log line ("" when the unit did not move). With `root_stops_chase`
@@ -1325,7 +1422,7 @@ fn chase_line(w: &mut World, src: UnitId, t: UnitId, band: (i32, i32), diag: boo
         return String::new();
     }
     let from = w.pos(src);
-    let too_close = round_intent::band_dist(diag, from, w.pos(t)) < band.0;
+    let too_close = w.band_at(diag, src, from, t) < band.0;
     follow(w, src, t, band, diag, follow_tiles);
     let to = w.pos(src);
     if to == from {
@@ -1341,8 +1438,8 @@ fn follow(w: &mut World, src: UnitId, t: UnitId, band: (i32, i32), diag: bool, f
     let mut left = follow_tiles;
     while left > 0 && !in_reach(w, src, t, band, diag) {
         let blocked = others_blocked(w, src, false);
-        let goals = band_goals(w, w.pos(t), band, &blocked, diag);
-        let route = path::find_path(&w.grid, w.pos(src), &goals, &blocked, false, &Hooks::default());
+        let goals = band_goals(w, src, t, band, &blocked, diag);
+        let route = path::find_path_sized(&w.grid, w.pos(src), &goals, &blocked, false, &Hooks::default(), w.size_of(src));
         if route.is_empty() || !w.move_unit(src, route[0]) {
             return;
         }
@@ -1355,7 +1452,7 @@ fn follow(w: &mut World, src: UnitId, t: UnitId, band: (i32, i32), diag: bool, f
 }
 
 /// RULESET1_INTENT MV3: the power factor of a flank hit (`flank_power_mult`; 1.0 otherwise).
-fn flank_power(w: &World, flank: bool) -> f64 {
+pub(crate) fn flank_power(w: &World, flank: bool) -> f64 {
     if flank {
         w.ruleset.numbers.flank_power_mult
     } else {
@@ -1368,11 +1465,14 @@ fn flank_power(w: &World, flank: bool) -> f64 {
 fn step_along(w: &mut World, src: UnitId, route: &[V2]) -> Vec<V2> {
     let mut entered = Vec::new();
     for d in route {
+        let before = w.pos(src);
         if !w.move_unit(src, *d) {
             break;
         }
-        entered.push(w.pos(src));
-        if crate::ground::springs(w, src, w.pos(src)).is_some() {
+        // BIGUNIT1 BU7: the cells newly covered
+        let new_cells = newly_covered(w, src, before, w.pos(src));
+        entered.extend(new_cells.iter().copied());
+        if springs_on(w, src, &new_cells).is_some() {
             break;
         }
     }
@@ -1416,8 +1516,9 @@ fn carried_engage(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<Un
             return None;
         }
         let goals: Cells = [c].into_iter().collect();
-        let route = path::find_path(&w.grid, from, &goals, &blocked, false, &Hooks::default());
-        (!route.is_empty() && dash_fits(&w.grid, from, &route, budget)).then_some(route)
+        let size = w.size_of(src);
+        let route = path::find_path_sized(&w.grid, from, &goals, &blocked, false, &Hooks::default(), size);
+        (!route.is_empty() && dash_fits_sized(&w.grid, from, &route, budget, size)).then_some(route)
     };
     let mut tiles: Vec<(V2, Vec<V2>)> = open.preferred.iter().filter_map(|&c| in_budget(c).map(|r| (c, r))).collect();
     let preferred = !tiles.is_empty();
@@ -1437,7 +1538,7 @@ fn carried_engage(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<Un
     if dest == from {
         return none;
     }
-    let cost = path::path_cost(&w.grid, from, &route);
+    let cost = path::path_cost_sized(&w.grid, from, &route, w.size_of(src));
     let entered = step_along(w, src, &route);
     let to = w.pos(src);
     if to == from {
@@ -1471,7 +1572,7 @@ fn carried_retreat(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<U
     let from = w.pos(src);
     let blocked = others_blocked(w, src, true);
     let tp = tgt.filter(|t| w.has(*t)).map_or(from, |t| w.pos(t));
-    let mut tiles: Vec<(V2, Vec<V2>)> = round_intent::carry_tiles(w, from, dash_tiles, &blocked).into_iter().filter(|(c, _)| *c != from).collect();
+    let mut tiles: Vec<(V2, Vec<V2>)> = round_intent::carry_tiles_by(w, src, from, dash_tiles, &blocked).into_iter().filter(|(c, _)| *c != from).collect();
     round_intent::rank_tiles(w, src, tp, w.units[src].attack_range > 1, round_intent::Aim::Away, &mut tiles);
     let Some((_, route)) = round_intent::pick(cell, &tiles) else {
         return format!("[Retreat Blocked] {name} has nowhere to fall back.");
@@ -1510,8 +1611,9 @@ pub fn walk_preview(w: &World, src: UnitId, planned: &[V2], expected_start: V2) 
             }
             crate::world::StepTo::Enters(next) => {
                 tiles.push(next);
+                let new_cells = newly_covered(w, src, at, next);
                 at = next;
-                if crate::ground::springs(w, src, next).is_some() {
+                if new_cells.iter().any(|&cell| crate::ground::springs(w, src, cell).is_some()) {
                     break;
                 }
             }
@@ -1531,9 +1633,10 @@ fn walk(w: &mut World, rng: &mut GodotRng, src: UnitId, planned: &[V2], expected
     let route: Vec<V2> = if expected_start != NO_CELL && goal != NO_CELL && start != expected_start {
         let blocked = others_blocked(w, src, false);
         let goals: Cells = [goal].into_iter().collect();
-        let full = path::find_path(&w.grid, start, &goals, &blocked, w.grid.is_exit(goal), &Hooks::default());
-        let budget = w.units[src].move_per_block().max(path::path_cost(&w.grid, expected_start, planned));
-        path::fit_blocks(&w.grid, start, &full, budget, 1).into_iter().take(planned.len()).collect()
+        let size = w.size_of(src);
+        let full = path::find_path_sized(&w.grid, start, &goals, &blocked, w.grid.is_exit(goal), &Hooks::default(), size);
+        let budget = w.units[src].move_per_block().max(path::path_cost_sized(&w.grid, expected_start, planned, size));
+        path::fit_blocks_sized(&w.grid, start, &full, budget, 1, size).into_iter().take(planned.len()).collect()
     } else {
         planned.to_vec()
     };
@@ -1543,18 +1646,21 @@ fn walk(w: &mut World, rng: &mut GodotRng, src: UnitId, planned: &[V2], expected
     let mut trapped = String::new();
     let mut entered = Vec::new();
     for d in route {
-        let next = w.pos(src) + d;
+        let here = w.pos(src);
+        let next = here + d;
         if !w.units[src].is_active() || !w.move_unit(src, d) {
             cut = true;
-            blocked_by = describe_blocker(w, next);
+            blocked_by = describe_blocker_for(w, src, here, next);
             break;
         }
         moved += 1;
+        // BIGUNIT1 BU7: the cells newly covered roll their hazards and may spring a trap
+        let new_cells = newly_covered(w, src, here, next);
         if w.grid.pos(src).is_some() {
-            entered.push(next);
+            entered.extend(new_cells.iter().copied());
         }
         // HOOKS1 GH6: a trap stops the walk on its tile; the rest of the path is dropped (rule ground_hazards)
-        if let Some(trap) = crate::ground::springs(w, src, next) {
+        if let Some(trap) = springs_on(w, src, &new_cells) {
             trapped = format!("the {trap}");
             break;
         }
@@ -1575,6 +1681,21 @@ fn walk(w: &mut World, rng: &mut GodotRng, src: UnitId, planned: &[V2], expected
         }
     }
     (moved, cut, blocked_by, notes)
+}
+
+/// BIGUNIT1 BU6: `describe_blocker` for a step of `c` from `from` to the anchor `next`: the first newly covered cell
+/// that refuses a big unit (another unit, the edge, the terrain, an exit), else `next`.
+fn describe_blocker_for(w: &World, c: UnitId, from: V2, next: V2) -> String {
+    if w.size_of(c) == 1 {
+        return describe_blocker(w, next);
+    }
+    let cells = newly_covered(w, c, from, next);
+    let bad = cells.iter().copied().find(|&cell| w.occupant(cell).is_some_and(|o| o != c) || !w.grid.is_walkable(cell) || w.grid.is_exit(cell));
+    match bad {
+        Some(cell) if w.grid.is_exit(cell) && w.grid.is_walkable(cell) && w.occupant(cell).is_none() => "the exit (too big to leave through it)".into(),
+        Some(cell) => describe_blocker(w, cell),
+        None => describe_blocker(w, next),
+    }
 }
 
 /// WalkCommand._describe_blocker: the unit there, the arena edge, the terrain, else an obstacle.
@@ -1618,11 +1739,16 @@ pub fn cover_for(grid: &Grid, attacker: V2, target: V2, ranged: bool) -> f64 {
     best
 }
 
+/// BIGUNIT1 BU10: `cover_for` on each cell of `t` (from the cell of `a` nearest it) and the least applies (one-cell
+/// units: `cover_for` between their tiles).
 pub fn cover_between(w: &World, a: UnitId, t: UnitId, ranged: bool) -> f64 {
     if !w.has(a) || !w.has(t) {
         return 0.0;
     }
-    cover_for(&w.grid, w.pos(a), w.pos(t), ranged)
+    if w.size_of(a) == 1 && w.size_of(t) == 1 {
+        return cover_for(&w.grid, w.pos(a), w.pos(t), ranged);
+    }
+    w.cells_of(t).into_iter().map(|cell| cover_for(&w.grid, w.nearest_cell(a, cell), cell, ranged)).fold(f64::INFINITY, f64::min)
 }
 
 /// HazardRules.on_enter: each enter-hazard status of the entered cells rolls once (the first tile of a status wins).
@@ -1668,10 +1794,14 @@ pub fn hazard_round_end(w: &mut World, rng: &mut GodotRng, units: &[UnitId]) -> 
         if !w.units[u].is_active() || !w.has(u) {
             continue;
         }
-        let cell = w.pos(u);
-        let Some(h) = w.grid.hazard_at(cell).cloned() else { continue };
-        if h.on == "round_end" || h.on == "both" {
-            lines.extend(hazard_roll(w, rng, u, &h, cell));
+        // BIGUNIT1 BU7: a big unit rolls each round-end hazard status under it once (its first cell in reading order)
+        let mut seen: Vec<String> = Vec::new();
+        for cell in w.cells_of(u) {
+            let Some(h) = w.grid.hazard_at(cell).cloned() else { continue };
+            if (h.on == "round_end" || h.on == "both") && !seen.contains(&h.status) {
+                seen.push(h.status.clone());
+                lines.extend(hazard_roll(w, rng, u, &h, cell));
+            }
         }
     }
     lines
@@ -1688,7 +1818,7 @@ pub fn riposte_counter(w: &mut World, rng: &mut GodotRng, attacker: UnitId, defe
         return None;
     }
     // INPUT1 MR10, GD3: under `melee_diagonal` all the counter answers a diagonal melee hit too
-    if !w.has(attacker) || !w.has(defender) || round_intent::melee_dist(w, defender, None, w.pos(defender), w.pos(attacker)) != 1 {
+    if !w.has(attacker) || !w.has(defender) || w.band_at(round_intent::diagonal(w, defender, None), defender, w.pos(defender), attacker) != 1 {
         return None;
     }
     w.units[defender].riposted.push(attacker);
@@ -1742,6 +1872,11 @@ pub fn effective_heal(target: &Unit, amount: i32) -> i32 {
     crate::world::heal_taken(amount, target.band_heal_taken).clamp(0, target.max_hp - target.hp)
 }
 
+/// PK3: the HP restored when reviving a downed bleeding unit (`max(amount, 1)` after `heal_taken`, clamped to `1..=max_hp`).
+pub fn revive_heal(target: &Unit, amount: i32) -> i32 {
+    crate::world::heal_taken(amount, target.band_heal_taken).clamp(1, target.max_hp.max(1))
+}
+
 pub fn cleansable(target: &Unit, s: &rpgkit_data::SkillDef) -> Vec<&'static str> {
     skill::cleanse_list(s).into_iter().filter(|st| target.st.has_any(st)).collect()
 }
@@ -1790,7 +1925,14 @@ pub fn pierces_melee(w: &World, src: UnitId, ranged: bool) -> bool {
 /// "" when `target` is legal for `skill` cast by `caster` (distance aside).
 pub fn target_problem(w: &World, caster: UnitId, skill_id: SkillId, target: Option<UnitId>) -> String {
     let s = &w.cat.skills[skill_id];
-    let Some(t) = target.filter(|t| w.units[*t].is_active()) else { return "Choose a friendly unit.".into() };
+    let Some(t) = target else { return "Choose a friendly unit.".into() };
+    if !w.units[t].is_active() {
+        let revivable = s.revive && s.target_mode != "SELF" && w.can_revive(t) && w.friends_of(caster).contains(&t);
+        if !revivable {
+            return "Choose a friendly unit.".into();
+        }
+        return String::new();
+    }
     if t == caster {
         return if s.target_mode == "ALLY" { "only on another ally".into() } else { String::new() };
     }
@@ -1931,9 +2073,14 @@ fn item_problem(w: &World, src: UnitId, target: UnitId, item: &ItemDef) -> Strin
         return format!("{} can't act", w.units[src].name);
     }
     if !w.units[target].is_active() {
-        return format!("{} is down", w.units[target].name);
+        if !(item.revive && item.battle_reach() > 0 && w.can_revive(target) && !w.foes_of(src).contains(&target)) {
+            return format!("{} is down", w.units[target].name);
+        }
+        if w.revive_cell(target).is_none() {
+            return "Space is blocked".into();
+        }
     }
-    let in_reach = target == src || (w.has(src) && w.has(target) && w.dist(src, target) <= item.battle_reach());
+    let in_reach = target == src || (w.has(src) && w.grid.positions[target].is_some() && w.dist(src, target) <= item.battle_reach());
     if !in_reach {
         return format!("{} is out of reach", w.units[target].name);
     }
@@ -1947,7 +2094,7 @@ fn support_in_reach(w: &World, src: UnitId, target: UnitId, skill_id: SkillId) -
     if target == src {
         return true;
     }
-    if !w.has(src) || !w.has(target) {
+    if !w.has(src) || w.grid.positions[target].is_none() {
         return false;
     }
     let (lo, hi) = skill::support_reach(&w.cat.skills[skill_id], &w.units[src]);
@@ -1965,6 +2112,26 @@ struct Supported {
     unmarked: String,
 }
 
+/// PR7-41 (PT-34): what stopped a cut-short walk in words: "blocked by <what>", or "no way through" when no route was
+/// left (`walk`'s "no route").
+pub fn blocked_words(blocker: &str) -> String {
+    if blocker == "no route" {
+        "no way through".into()
+    } else {
+        format!("blocked by {blocker}")
+    }
+}
+
+/// PR7-41 (PT-26): the amount a heal line names: what it restored, and of how much when the missing HP capped it
+/// ("7 of 52": a full heal lost to the cap reads "0" as before).
+pub fn heal_words(healed: i32, full: i32) -> String {
+    if healed > 0 && healed < full {
+        format!("{healed} of {full}")
+    } else {
+        healed.to_string()
+    }
+}
+
 /// SupportRules.apply: cleanse, heal, grant, extra grants.
 fn support_apply(w: &mut World, caster: UnitId, target: UnitId, skill_id: SkillId) -> Supported {
     let s = w.cat.skills[skill_id].clone();
@@ -1977,9 +2144,15 @@ fn support_apply(w: &mut World, caster: UnitId, target: UnitId, skill_id: SkillI
     let mut healed = 0;
     if skill::heals(&s) {
         let amount = heal_amount_on(w, caster, target, skill_id);
-        let before = w.units[target].hp;
-        w.heal(target, amount);
-        healed = w.units[target].hp - before;
+        if !w.units[target].is_alive() {
+            if let Ok((_, hp)) = w.revive(target, amount) {
+                healed = hp;
+            }
+        } else {
+            let before = w.units[target].hp;
+            w.heal(target, amount);
+            healed = w.units[target].hp - before;
+        }
     }
     let name = w.units[caster].name.clone();
     if !s.grant_status.is_empty() {

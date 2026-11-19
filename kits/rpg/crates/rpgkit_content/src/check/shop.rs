@@ -1,5 +1,5 @@
 //! Shop rules of the world checks (ShopRules.shop_errors): keeper, stock, item loot for sale, the buy / sell
-//! multipliers, the supply price, the item types bought and the open flags.
+//! multipliers, the supply price (PR6-8: and its act multipliers), the item types bought and the open flags.
 
 use super::quest::condition_errors;
 use super::world::ref_errors;
@@ -43,6 +43,8 @@ pub fn shop_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors.extend(buys_errors(e.get("buys").unwrap_or(&empty)));
     errors.extend(condition_errors(e.get("requires_flags").unwrap_or(&empty), "Open when"));
     errors.extend(discount_errors(e.get(DISCOUNT).unwrap_or(&Value::Object(Dict::new()))));
+    // PR6-8 (B2): the supply price's act multipliers
+    errors.extend(super::facility::supply_mult_errors(e));
     errors
 }
 

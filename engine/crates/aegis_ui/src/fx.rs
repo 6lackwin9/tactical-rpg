@@ -15,6 +15,9 @@
 use crate::canvas::{Rect, Rgba};
 use crate::painter::Painter;
 
+/// The longest frame a clock moves by in one step (a stall or a window drag is not played back as a jump), ms.
+pub const MAX_FRAME_MS: u32 = 100;
+
 /// The most effects a live list holds (Godot `FxPresets.MAX_LIVE` was 24 tweens); a push past it drops the oldest.
 pub const MAX_LIVE: usize = 32;
 /// The engine's hard shake ceiling: no game's limits go past it.

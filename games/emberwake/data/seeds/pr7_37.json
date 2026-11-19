@@ -1,0 +1,223 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "locations",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "sluice_undercroft",
+    "name": "The Sluice Undercroft",
+    "description": "Node 00, the hub: a flooded undercroft with six bunks, a brazier, the Tinker's Hearth, the Apothecary's Slab and the Water-Lock Basin, below the Sunk Ward.",
+    "kind": "town",
+    "region": "sunk_ward_quarter",
+    "exits": [
+     {
+      "to": "drowned_runoff_grate",
+      "label": "the submerged sluice gate"
+     }
+    ],
+    "encounters": [],
+    "map": "sunk_ward_undercroft",
+    "boundary": "drain_brick",
+    "zone_bindings": {},
+    "markers": [
+     {
+      "id": "gate",
+      "kind": "exit",
+      "anchor": "gate",
+      "requires_flags": [],
+      "unless_flags": [],
+      "sets_flags": [],
+      "to": "drowned_runoff_grate",
+      "label": "Down the sluice gate",
+      "to_anchor": "sluice_in"
+     },
+     {
+      "id": "road",
+      "kind": "exit",
+      "anchor": "road",
+      "requires_flags": [],
+      "unless_flags": [],
+      "sets_flags": [],
+      "to": "world_map",
+      "label": "World map: the Sunk Ward"
+     },
+     {
+      "id": "sabina",
+      "kind": "npc",
+      "anchor": "npc_a",
+      "requires_flags": [],
+      "unless_flags": [],
+      "sets_flags": [],
+      "character": "sabina_kress"
+     },
+     {
+      "id": "berek",
+      "kind": "npc",
+      "anchor": "npc_b",
+      "requires_flags": [],
+      "unless_flags": [],
+      "sets_flags": [],
+      "character": "berek_dorn"
+     },
+     {
+      "id": "talia",
+      "kind": "npc",
+      "anchor": "npc_c",
+      "requires_flags": [],
+      "unless_flags": [],
+      "sets_flags": [],
+      "character": "talia_rusk"
+     },
+     {
+      "id": "varka",
+      "kind": "npc",
+      "anchor": "npc_d",
+      "requires_flags": [],
+      "unless_flags": [],
+      "sets_flags": [],
+      "character": "widow_varka"
+     },
+     {
+      "id": "ivo",
+      "kind": "npc",
+      "anchor": "lore_a",
+      "requires_flags": [
+       {
+        "key": "sunk_ward.ivo_rescued",
+        "value": true
+       }
+      ],
+      "unless_flags": [],
+      "sets_flags": [],
+      "character": "ivo"
+     },
+     {
+      "id": "chest_a",
+      "kind": "point",
+      "anchor": "chest_a",
+      "requires_flags": [],
+      "unless_flags": [],
+      "sets_flags": [],
+      "label": "Sabina's quarantine chest",
+      "note": "Lead-lined apothecary lockbox stamped with the old Siphon Ward wax seal.",
+      "use": "stash"
+     },
+     {
+      "id": "rest",
+      "kind": "point",
+      "anchor": "rest",
+      "requires_flags": [],
+      "unless_flags": [],
+      "sets_flags": [],
+      "label": "The hall coke-brazier",
+      "note": "Low anthracite embers in a cast pan, keeping the basin damp off the Hall slabs.",
+      "use": "rest"
+     },
+     {
+      "id": "crypts",
+      "kind": "point",
+      "anchor": "crypts",
+      "requires_flags": [],
+      "unless_flags": [],
+      "sets_flags": [],
+      "label": "The cold vaults",
+      "note": "Slate mortuary tables under iron bars. Nobody sleeps down in this wing.",
+      "use": "crypts"
+     }
+    ],
+    "map_pos": [
+     0.597,
+     0.972
+    ],
+    "rest": true,
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_varka",
+    "name": "Widow Varka at the Leaking Vat",
+    "speaker": "widow_varka",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "Behind a veil of waxed black crepe, Widow Varka lays a pair of brass salt-scales on the sluice rail. \"Everything has a price, dear. Mine are fair, and so is my memory.\"",
+      "choices": [
+       {
+        "text": "What do you sell?",
+        "to": "stock",
+        "requires": [
+         {
+          "key": "sunk_ward.ivo_rescued",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "open_shop",
+          "shop": "varka_trade"
+         }
+        ]
+       },
+       {
+        "text": "What do you sell?",
+        "to": "stock_shut",
+        "unless": [
+         {
+          "key": "sunk_ward.ivo_rescued",
+          "value": true
+         }
+        ]
+       },
+       {
+        "text": "Why open the Basin to us?",
+        "to": "ivo",
+        "requires": [
+         {
+          "key": "sunk_ward.ivo_rescued",
+          "value": true
+         }
+        ],
+        "unless": [
+         {
+          "key": "sunk_ward.varka_ivo_told",
+          "value": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "stock",
+      "text": "\"Rock Salt. Warded Tallow, by the day. Poultices. Whatever the Clerisy has sworn is not for sale, and is. I do not ask what you intend to burn.\"",
+      "next": "n0"
+     },
+     {
+      "id": "stock_shut",
+      "text": "She does not lift the veil. \"To you? Nothing yet, dear. My shelves open for friends of the Basin, and the Basin has not yet decided what you are.\"",
+      "next": "n0"
+     },
+     {
+      "id": "ivo",
+      "text": "\"The boy ran my messages before Talia hid him. A woman remembers who feeds a child. The Basin trades with whoever brought him home. That is all the sentiment I can afford.\"",
+      "next": "n0",
+      "effects": [
+       {
+        "effect": "set_flag",
+        "key": "sunk_ward.varka_ivo_told",
+        "value": true
+       }
+      ]
+     }
+    ],
+    "services": true,
+    "tags": []
+   }
+  }
+ ]
+}

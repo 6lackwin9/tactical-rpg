@@ -13,7 +13,7 @@
 use aegis_core::json::{self, Dict};
 use emberwake_world::explore::{self, Pos};
 use emberwake_world::state::PartyState;
-use emberwake_world::{new_game, Data, GameState};
+use emberwake_world::{bunks, new_game, Data, GameState};
 use serde_json::Value;
 use std::collections::{HashSet, VecDeque};
 use std::path::Path;
@@ -231,6 +231,17 @@ fn make_present(d: &Data, gs: &mut GameState, m: &Dict) {
             }
         }
     }
+    // PR7-41 (PT-15): a job's fight is offered once its job is accepted, so accept every quest naming the fight
+    let enc = json::s(m, "encounter");
+    if !enc.is_empty() {
+        for e in d.merged_entries(WORLD, "quests") {
+            let qid = json::s(e, "_qid");
+            let names = json::aget(&emberwake_world::quest::resolved(d, gs, &qid), "steps").iter().any(|s| json::s(json::dict(s), "encounter") == enc);
+            if names && !gs.quests.contains_key(&qid) {
+                gs.quests.insert(qid, serde_json::json!({"state": "active", "objective": 0}));
+            }
+        }
+    }
 }
 
 /// Walks `dirs` with `explore::step` from the party's tile; the last step is the use for a stepped-on target. Returns
@@ -437,8 +448,10 @@ fn indoor_zones_are_entered_on_foot_and_fade_their_own_roofs() {
     assert!(indoor > 0, "the Sunk Ward maps hold roofed indoor zones");
 }
 
-/// PR5-58 (1): the `38 x 24` 7-room `sluice_undercroft` hub carries indoor + wall_set room styles while keeping
-/// PR5-55's `npc_c` (`talia_rusk`) at `(16, 6)` and `lore_a` (`ivo`) reachable from both `spawn` and `gate_in`.
+/// PR5-58 (1), PR7-23 (HUB-LAYOUT1): the `38 x 24` 7-room `sluice_undercroft` hub carries indoor + wall_set room
+/// styles (the Art/UI layout `art_src/region_maps/sluice_undercroft.json`; PR7-36 / AI-23: basin, hearth, hall, entry and
+/// hollows in the `drain_brick` interior walls, the crypts in stone) with `npc_c`
+/// (`talia_rusk`) at `(15, 11)` and `lore_a` (`ivo`) at `(12, 11)` in the hall, all reachable from `spawn` and `gate_in`.
 #[test]
 fn hub_7_rooms_styles_talia_and_ivo_stay_reachable() {
     let d = data();
@@ -448,18 +461,18 @@ fn hub_7_rooms_styles_talia_and_ivo_stay_reachable() {
     assert_eq!(explore::size_of(&t), (38, 24));
     for (zone, want_set) in [
         ("slab", "interior_plaster"),
-        ("hollows", "interior_plaster"),
-        ("basin", "interior_stone"),
-        ("hearth", "interior_stone"),
-        ("hall", "interior_stone"),
-        ("entry", "interior_stone"),
+        ("hollows", "drain_brick"),
+        ("basin", "drain_brick"),
+        ("hearth", "drain_brick"),
+        ("hall", "drain_brick"),
+        ("entry", "drain_brick"),
         ("crypts", "interior_stone"),
     ] {
         assert!(explore::zone_indoor(&t, zone), "hub zone '{zone}' is indoor");
         assert_eq!(explore::zone_wall_set(&t, zone), want_set, "hub zone '{zone}' wall_set");
     }
-    assert_eq!(explore::anchor_pos(&t, "npc_c"), (16, 6), "PR5-55 Talia anchor preserved at (16, 6)");
-    assert_eq!(explore::anchor_pos(&t, "lore_a"), (14, 7), "Ivo pocket anchor preserved at (14, 7)");
+    assert_eq!(explore::anchor_pos(&t, "npc_c"), (15, 11), "PR7-23 Talia anchor in the hall at (15, 11)");
+    assert_eq!(explore::anchor_pos(&t, "lore_a"), (12, 11), "PR7-23 Ivo anchor in the hall at (12, 11)");
     let tgs = targets(&loc, &t);
     for anchor in ["spawn", "gate_in"] {
         for wanted in ["talia", "ivo", "chest_a", "rest", "crypts"] {
@@ -537,6 +550,12 @@ fn fb272_exits_danger_bindings_side_props_and_split_encounters() {
         let used_marker_anchors: HashSet<String> = explore::markers_of(&loc).iter().map(|m| json::s(m, "anchor")).filter(|s| !s.is_empty()).collect();
         for a in json::aget(&t, "anchors").iter().map(json::dict) {
             let aid = json::s(a, "id");
+            // BK9: `idle_*` anchors are the hub's idle spots (no marker uses them); each stands on an open cell
+            if aid.starts_with(bunks::IDLE_ANCHOR_PREFIX) {
+                let (ax, ay) = (json::i(a, "x", -1), json::i(a, "y", -1));
+                assert!(explore::is_open(&t, ax, ay), "{id}: idle anchor '{aid}' at ({ax}, {ay}) is open");
+                continue;
+            }
             let wired = aid == explore::SPAWN
                 || aid == "patrol_start"
                 || (id == "tallow_vats" && aid == "siphon_in")

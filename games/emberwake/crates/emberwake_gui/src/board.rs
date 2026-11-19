@@ -12,12 +12,25 @@ use aegis_core::json::{self, s, s_or, Dict};
 use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, H, RADIUS, SMALL, W};
+use aegis_ui::painter::Typeface;
 use aegis_ui::widget_plumbing;
 use emberwake_world::board;
 use serde_json::{json, Value};
 
 /// B6, B7, B10: deadline lines are Arterial Red (the art bible's `#e11d48`).
 pub const DEADLINE: Rgba = rgb(0xe1, 0x1d, 0x48);
+/// The role `detail_paras` names for the deadline line (drawn in `DEADLINE`, toned `foe` in the view-model).
+pub(crate) const DEADLINE_ROLE: &str = "deadline";
+
+/// A paragraph role of `detail_paras` as its colour.
+fn role_colour(role: &str) -> Rgba {
+    if role == DEADLINE_ROLE {
+        DEADLINE
+    } else {
+        th().role(role).unwrap_or(th().text)
+    }
+}
+
 /// B11: the section list's width at text size Normal (it grows with the text).
 const LIST_W: i32 = 240;
 /// The frame's inner margin and the gap between the list and the detail (the shop's).
@@ -48,6 +61,26 @@ pub struct BoardPane {
     pub errors: Vec<String>,
 }
 
+/// PR7-37 (PT-31): board view `view` with each locked row that says only "Locked" (or nothing) saying what opens it
+/// (`board::unlock_words`), where the kit can tell.
+pub fn with_unlock_words(d: &emberwake_world::Data, gs: &emberwake_world::GameState, mut view: Dict) -> Dict {
+    if let Some(Value::Array(secs)) = view.get_mut("sections") {
+        for sec in secs.iter_mut() {
+            let Some(Value::Array(rows)) = sec.get_mut("rows") else { continue };
+            for r in rows.iter_mut().filter_map(Value::as_object_mut) {
+                let line = s(r, "line");
+                if s(r, "status") == "locked" && (line.is_empty() || line == emberwake_world::dialogue::LOCKED_TEXT) {
+                    let words = emberwake_world::board::unlock_words(d, gs, &s(r, "quest"));
+                    if !words.is_empty() {
+                        r.insert("line".into(), words.into());
+                    }
+                }
+            }
+        }
+    }
+    view
+}
+
 /// Every row of a board view, in section order (each with its section id under `_section`).
 pub fn rows(view: &Dict) -> Vec<Dict> {
     let mut out = Vec::new();
@@ -63,7 +96,7 @@ pub fn rows(view: &Dict) -> Vec<Dict> {
 }
 
 /// Why Accept is off for a quest of `status` ("" when it is on: an available quest).
-fn accept_why(status: &str, line: &str) -> String {
+pub(crate) fn accept_why(status: &str, line: &str) -> String {
     match status {
         "available" => String::new(),
         "active" => "Already under way.".into(),
@@ -111,24 +144,25 @@ impl BoardPane {
 
     /// The detail's paragraphs (text, size, colour) of `det` (`board::detail`) for the picked row `row` (B7): the
     /// status and the row's line, the description, the steps (done, now, then), the rewards in the purse's name, the
-    /// loot picks, reputation, the node and the deadline.
-    fn detail_paras(cx: &Cx, det: &Dict, row: &Dict) -> Vec<(String, f32, Rgba)> {
+    /// loot picks, reputation, the node and the deadline. Each paragraph's colour is a theme role (`DEADLINE_ROLE`: the
+    /// deadline's Arterial Red), so the view-model (`board_view`, UISPLIT1-H) tones its lines as drawn.
+    pub(crate) fn detail_paras(cx: &Cx, det: &Dict, row: &Dict) -> Vec<(String, f32, &'static str)> {
         let d = &cx.data;
         let world = cx.game.as_ref().map(|g| g.gs.world_id.clone()).unwrap_or_default();
         let mut out = Vec::new();
         let status = s_or(det, "status", &s(row, "status"));
         let line = s(row, "line");
-        out.push((if line.is_empty() { status_text(&status).to_string() } else { format!("{}: {line}", status_text(&status)) }, SMALL, th().dim));
+        out.push((if line.is_empty() { status_text(&status).to_string() } else { format!("{}: {line}", status_text(&status)) }, SMALL, "dim"));
         let desc = s(det, "description");
         if !desc.is_empty() {
-            out.push((desc, BODY, th().text));
+            out.push((desc, BODY, "text"));
         }
         for st in json::aget(det, "steps") {
             let st = json::dict(st);
             let (mark, col) = match s(st, "state").as_str() {
-                "done" => ("Done", th().dim),
-                "current" => ("Now", th().good),
-                _ => ("Then", th().text),
+                "done" => ("Done", "dim"),
+                "current" => ("Now", "good"),
+                _ => ("Then", "text"),
             };
             out.push((format!("{mark}: {}", s(st, "text")), BODY, col));
         }
@@ -140,12 +174,12 @@ impl BoardPane {
             lines.push(format!("{gold} {}", purse_word(cx, PurseWord::Currency)));
         }
         if !lines.is_empty() {
-            out.push((format!("Rewards: {}", lines.join(", ")), BODY, th().text));
+            out.push((format!("Rewards: {}", lines.join(", ")), BODY, "text"));
         }
         let loot: Vec<String> = json::sget(det, "loot").iter().map(|l| s_or(d.resolve(&world, "loot", l), "name", l)).collect();
         let picks = json::i(det, "loot_picks", 0);
         if picks > 0 && !loot.is_empty() {
-            out.push((format!("Pick {picks} of: {}", loot.join(", ")), BODY, th().text));
+            out.push((format!("Pick {picks} of: {}", loot.join(", ")), BODY, "text"));
         }
         let rep: Vec<String> = json::dict(json::get(det, "reputation"))
             .iter()
@@ -153,15 +187,20 @@ impl BoardPane {
             .map(|(f, v)| format!("{} {:+}", s_or(d.resolve(&world, "factions", f), "name", f), json::to_int(v)))
             .collect();
         if !rep.is_empty() {
-            out.push((format!("Reputation: {}", rep.join(", ")), BODY, th().text));
+            out.push((format!("Reputation: {}", rep.join(", ")), BODY, "text"));
         }
         let node = s_or(det, "node_name", &s(row, "node_name"));
         if !node.is_empty() {
-            out.push((format!("Where: {node}"), BODY, th().info));
+            out.push((format!("Where: {node}"), BODY, "info"));
+        }
+        // PR7-42 (PT-17): the level the job is meant for
+        let lv = json::i(det, "rec_level", json::i(row, "rec_level", 0));
+        if lv > 0 {
+            out.push((format!("{}.", board::rec_level_text(lv)), BODY, "info"));
         }
         let due = json::dict(det.get("deadline").or_else(|| row.get("deadline")).unwrap_or(&Value::Null)).clone();
         if !due.is_empty() {
-            out.push((s(&due, "text"), BODY, DEADLINE));
+            out.push((s(&due, "text"), BODY, DEADLINE_ROLE));
         }
         out
     }
@@ -172,7 +211,9 @@ impl BoardPane {
     pub fn draw<A: Clone>(&mut self, ui: &mut Ui<A>, cx: &Cx, view: &Dict, det: &Dict, wrap: impl Fn(BoardAct) -> A) {
         let fr = crate::shop::frame_rect(&ui.p);
         let name = s_or(view, "name", "Board");
-        ui.p.panel(fr, th().panel, th().panel_edge, 4.0);
+        // PR7-36 (ART-02): a main panel, the ornate tier
+        ui.p.fill(fr, th().panel);
+        ui.frame_body("ornate", fr);
         ui.push("board", "panel", name.clone(), fr, true, false, None, Vec::new());
         let sc = ui.p.fonts.scale;
         let (lb, ls) = (ui.p.line_h(BODY).ceil() as i32, ui.p.line_h(SMALL).ceil() as i32);
@@ -181,7 +222,7 @@ impl BoardPane {
         let keeper = s(view, "keeper_name");
         let keeper_w = if keeper.is_empty() { 0.0 } else { ui.p.text_w(&keeper, BODY) + 12.0 };
         let head_h = ui.p.line_h(HEAD).ceil() as i32;
-        ui.p.text_fit(x0 as f32, fr.y as f32 + 5.0, &name, HEAD, inner as f32 - keeper_w, th().gold);
+        ui.p.text_fit_face(Typeface::Display, x0 as f32, fr.y as f32 + 5.0, &name, HEAD, inner as f32 - keeper_w, th().gold);
         if !keeper.is_empty() {
             ui.p.text_right(right as f32, (fr.y + 5 + head_h - lb) as f32, &keeper, BODY, th().dim);
         }
@@ -256,7 +297,14 @@ impl BoardPane {
                 let (tx, tw) = (rr.x as f32 + 4.0, (rr.w - 8) as f32);
                 let name = s(r, "name");
                 let mut ty = rr.y as f32 + 2.0;
-                ui.p.text_fit(tx, ty, &name, BODY, tw, if picked { th().gold } else { th().text });
+                // PR7-42 (PT-17): the recommended level at the name's right ("Lv 5")
+                let lv = json::i(r, "rec_level", 0);
+                let lv_text = if lv > 0 { format!("Lv {lv}") } else { String::new() };
+                let lw = if lv_text.is_empty() { 0.0 } else { ui.p.text_w(&lv_text, SMALL) + 6.0 };
+                if !lv_text.is_empty() {
+                    ui.p.text_right(tx + tw, ty + 1.0, &lv_text, SMALL, th().info);
+                }
+                ui.p.text_fit(tx, ty, &name, BODY, tw - lw, if picked { th().gold } else { th().text });
                 ty += lb as f32;
                 let node = s(r, "node_name");
                 let due = r.get("deadline").map(|v| s(json::dict(v), "text")).unwrap_or_default();
@@ -281,6 +329,9 @@ impl BoardPane {
                 if !due.is_empty() {
                     t.push((due.clone(), DEADLINE));
                 }
+                if lv > 0 {
+                    t.push((board::rec_level_text(lv), th().info));
+                }
                 ui.push(format!("board.row.{q}"), "row", name.clone(), rr, true, picked, Some(wrap(BoardAct::Pick(q.clone()))), t);
                 y += h + 1;
             }
@@ -303,7 +354,8 @@ impl BoardPane {
             lines.push((l, BODY + 1.0, th().gold));
         }
         let paras = Self::detail_paras(cx, det, row);
-        for (text, size, col) in paras {
+        for (text, size, role) in paras {
+            let col = role_colour(role);
             for l in ui.p.wrap(&text, size, tw) {
                 lines.push((l, size, col));
             }

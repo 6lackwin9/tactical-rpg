@@ -1,6 +1,6 @@
 ---
 name: planner
-description: The milestone and lane workflow run by the planner (desktop main session, or a cloud area thread for its area's tasks). Use when the user asks to plan, start, build or ship roadmap work. Turns approved specs into tasks in docs/TASKS.md, dispatches the logic-builder, asset-builder, design-brainstorm and balance agents in lanes, reviews, merges, updates docs and keeps agents busy. Load `planner-ops` (dispatch modes) and the environment file docs/workflow/desktop.md or docs/workflow/cloud.md.
+description: The milestone and lane workflow run by the planner (desktop main session, or the cloud Build thread). Use when the user asks to plan, start, build or ship roadmap work. Builds approved READY rows (Design writes them in docs/READY.md), dispatches the logic-builder, asset-builder, design-brainstorm and balance agents in lanes, reviews, merges, updates docs and keeps agents busy. Load `planner-ops` (dispatch modes) and the environment file docs/workflow/desktop.md or docs/workflow/cloud.md.
 ---
 
 # Planner workflow (shared by both environments)
@@ -34,7 +34,7 @@ Logic lane scope (decision "Logic lane scope", user 2026-10-27): dispatch `logic
 
 ## 2. Dispatch (parallel lanes)
 
-1. Set up the branch per the environment file (desktop: one worktree per concurrent builder plus a read-only `main` worktree for balance; cloud: a fresh branch per task from the latest `develop` in the area thread's checkout, subagents one after another). `git status` must be clean first. Give each agent its path, branch and spec.
+1. Set up the branch per the environment file (desktop: one worktree per concurrent builder plus a read-only `main` worktree for balance; cloud: a fresh branch per task from the latest `develop` in the Build thread's checkout, subagents one after another). `git status` must be clean first. Give each agent its path, branch and spec.
 2. Schema-first handshake: for a task with new schema, run the `logic-builder` on the schema slice first as its OWN run (brief: "slice 1 only, end the run with the report"), so the asset lane starts minutes, not a whole build, later; review and merge it quickly (small), then start the `asset-builder` (branching from the updated `main`) in parallel with the logic-builder's remaining behaviour work. They edit different folders, so merges stay clean. Merge order: schema slice, then logic, then data (or data first if its tests are generic); run the full check after each merge.
 3. Parallel limits: no hard cap on builders (logic + asset). Soft warning at more than 3 at once: tell the user how many would run, the merge/review load it creates (rebases, hub-file conflicts, planner serial merge time, usage limits, CPU contention) and whether to prioritise or slow down; tasks run in parallel only when their `Touches` (docs/TASKS.md) do not overlap, otherwise sequence them (merge the smaller or more foundational one first). Check overlap per the environment file (desktop: `tools/overlap.sh`; cloud: other areas' unmerged task branches). The shared hub files (`kits/rpg/crates/rpgkit_battle/src/{session,plan,command,ai}.rs`, `emberwake_world/src/{source,store,data}.rs`, `emberwake_data/src/lib.rs`, `emberwake_gui/src/battle.rs`, and the field tables in `kits/rpg/schema.json`) are the usual conflict points, so give two logic tasks that both need them a merge order up front.
 4. Keep agents busy: while builders run, `design-brainstorm` writes the next specs and the `balance` agent runs on frozen systems; reviewers run in the background on finished branches while the next task starts. Standing auto-dispatches (no user decision involved, docs only): a new balance report -> `design-brainstorm` options right away; a finished builder -> `change-reviewer` right away, while the planner drafts the docs delta in parallel.
@@ -53,14 +53,14 @@ Landing checklist: skill `task-landing` (which docs a change needs, with `docs_n
 
 ## Cleanup loop
 
-`housekeeper` (after a milestone that replaced an older idea, when `fc.sh docs --all` warns, or on request) -> `docs/specs/CLEANUP.md` candidates -> planner shows the user -> user confirms/rejects -> the planner itself adds the confirmed rows to `docs/TASKS.md` (and ROADMAP for large ones), marks rejected ones in CLEANUP.md and appends dropped ideas to HISTORY -> builders pick them up as separate tasks (never folded into feature work).
+`housekeeper` (after a milestone that replaced an older idea, when `fc.sh docs --all` warns, or on request) -> `docs/specs/CLEANUP.md` candidates -> planner shows the user -> user confirms/rejects -> the Design Session adds the confirmed rows to `docs/READY.md` (and ROADMAP for large ones; Build only proposes, through `docs/FEEDBACK.md`), marks rejected ones in CLEANUP.md and appends dropped ideas to HISTORY -> builders pick them up as separate tasks (never folded into feature work).
 
 ## Balance loop
 
-`balance` agent (own `main` worktree) -> `games/emberwake/docs/BALANCE_REPORT.md` -> `design-brainstorm` (options/spec) -> user decision -> new task in `docs/TASKS.md` and the same lanes.
+`balance` agent (on `develop`, review 2026-11-17) -> `games/emberwake/docs/BALANCE_REPORT.md` -> `design-brainstorm` (options/spec) -> user decision -> new READY row (Design) and the same lanes.
 
 ## Rules
 
 - Never skip the confirmation gate. Never commit on red. Never develop on `main`; `main` is always a clean build.
 - Parallel work only where file ownership does not overlap (see lane table); never two builders editing the same files.
-- Log everything in `docs/TASKS.md` so the state survives a restart.
+- Log state in the repo so it survives a restart: Build in `docs/FEEDBACK.md`, Design in `docs/READY.md` (`docs/TASKS.md` is a Design-owned reference map).

@@ -1,0 +1,127 @@
+{
+  "screen": "board",
+  "fields": {
+    "title": {
+      "text": "Notice board"
+    },
+    "keeper": {
+      "text": "The Clerk"
+    },
+    "intro": {
+      "text": "Work for anyone who can hold a blade. Take only what you can finish; the board remembers who failed it."
+    },
+    "main": {
+      "rows": [
+        {
+          "id": "sample:m1",
+          "label": "Clear the Old Mill",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "detail2": "By day 14 (6 left)",
+          "sub": "Old Mill",
+          "selected": true,
+          "tone2": "foe"
+        }
+      ]
+    },
+    "jobs": {
+      "rows": [
+        {
+          "id": "sample:j1",
+          "label": "Escort the Salt Cart",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "North Road"
+        },
+        {
+          "id": "sample:j2",
+          "label": "Hunt the Marsh Hounds",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "Fen Edge"
+        }
+      ]
+    },
+    "under_way": {
+      "rows": [
+        {
+          "id": "sample:u1",
+          "label": "Find the Lost Patrol",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "detail2": "By day 20 (12 left)",
+          "sub": "Watchtower",
+          "tone2": "foe",
+          "note": "Search the watchtower"
+        }
+      ]
+    },
+    "locked": {
+      "rows": [
+        {
+          "id": "sample:l1",
+          "label": "Storm the Keep",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "Keep",
+          "note": "Needs Clear the Old Mill (completed)"
+        }
+      ]
+    },
+    "closed": {
+      "rows": [
+        {
+          "id": "sample:c1",
+          "label": "Save the Ferryman",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "The ferry burned before you came."
+        }
+      ]
+    },
+    "detail_title": {
+      "text": "Clear the Old Mill"
+    },
+    "detail": {
+      "text": "On offer\nRaiders hold the old mill on the river. Drive them out before the grain carts come.\nThen: Reach the Old Mill\nThen: Drive out the raiders\nRewards: 40 XP, 25 gold\nWhere: Old Mill\nBy day 14 (6 left)",
+      "tone": [
+        "dim",
+        "",
+        "",
+        "",
+        "",
+        "info",
+        "foe"
+      ]
+    },
+    "accept_why": {
+      "text": ""
+    },
+    "errors": {
+      "text": ""
+    }
+  },
+  "actions": [
+    {
+      "id": "pick",
+      "label": "Pick",
+      "enabled": true
+    },
+    {
+      "id": "accept",
+      "label": "Accept",
+      "enabled": true
+    },
+    {
+      "id": "close",
+      "label": "Close",
+      "enabled": true
+    }
+  ]
+}

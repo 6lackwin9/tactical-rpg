@@ -19,9 +19,16 @@
 #![cfg_attr(not(feature = "dev_tools"), allow(dead_code, unused_imports))]
 
 mod battle;
+mod battle_view;
 mod board;
+mod board_view;
+mod bunks;
+mod controls_view;
 #[cfg(feature = "dev_tools")]
 mod dojo;
+mod epilogue;
+mod facility;
+mod facility_view;
 #[cfg(feature = "dev_tools")]
 mod forge;
 mod fx;
@@ -38,26 +45,30 @@ mod party;
 mod portraits;
 mod props;
 mod recipe;
+mod recipe_view;
 mod region;
 #[cfg(feature = "dev_tools")]
 mod runner;
 mod runover;
 mod screens;
 mod shop;
+mod save_view;
+mod shop_view;
+mod siege;
 mod stage;
 mod story;
 mod talk;
 mod timeline_view;
+mod tokens;
+mod transitions;
 mod tuning;
 mod viewkeys;
 #[cfg(target_arch = "wasm32")]
 mod web;
 mod worldmap;
 
-use aegis_content::manifest::{self, Manifest};
+use aegis_content::manifest;
 use aegis_ui::art;
-use aegis_ui::audio::Audio;
-use aegis_ui::screen::Settings;
 use aegis_ui::shell::headless::Headless;
 use aegis_ui::shell::Options;
 use aegis_ui::tuning::TuningFile;
@@ -77,6 +88,11 @@ pub const DEV_TOOLS: bool = cfg!(feature = "dev_tools");
 /// The debug build's dev keys (F5, F6, F7, F9, F10, F11; VIEWKEYS1, EXPLOREVIEW1, TURNFEEL1): a debug build with the
 /// dev tools. A release build takes the keys and does nothing, as before.
 pub(crate) const DEV_KEYS: bool = cfg!(all(debug_assertions, feature = "dev_tools"));
+
+/// PR7-37 (PT-01, PT-14, PT-33): a dev build (`DEV_KEYS`: a debug build with the dev tools) shows the developer
+/// surfaces a player never sees: the main menu's Tools, the test worlds on New game, the world map's Edit layout and
+/// the Settings rows for testing (the "(testing)" overlays, the Debug row). Any other build hides them.
+pub(crate) const DEV_BUILD: bool = DEV_KEYS;
 
 fn arg<'a>(args: &'a [(String, String)], k: &str) -> Option<&'a str> {
     args.iter().find(|(a, _)| a == k).map(|(_, v)| v.as_str())
@@ -152,35 +168,26 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
     let data_dir = arg(args, "data").map(PathBuf::from).or_else(|| emberwake_world::find_data_dir(&start)).context("data folder not found: pass data=<dir> (a data folder or a Godot export folder)")?;
     let (data, mut notices) = emberwake_world::Data::open(&data_dir).with_context(|| format!("loading the data in {}", data_dir.display()))?;
     let data = Arc::new(data);
-    let manifest = match game_dir.as_ref().map(|g| Manifest::read(&g.join(manifest::FILE))) {
-        Some(Ok(m)) => m,
-        found => {
-            notices.push(match found {
-                Some(Err(e)) => e,
-                _ => format!("Game folder games/{GAME_ID} (game.json) not found."),
-            });
-            Manifest { id: GAME_ID.into(), title: GAME_ID.into(), ..Manifest::default() }
-        }
-    };
-    let project = game_dir.clone().or_else(|| art::find_project(&start));
-    let home = game_dir.unwrap_or_else(|| PathBuf::from("."));
+    // ENGINE-11: the manifest, layers, saves and shots folders, settings, sound and the shell's options come from the
+    // engine's game start; the data, the tuning, the launch keys and the first screens are the game's.
     let engine = engine_dir.unwrap_or_else(|| PathBuf::from("."));
-    let save_dir = match arg(args, "saves") {
-        Some(dir) => PathBuf::from(dir),
-        None => {
-            if let Err(e) = aegis_save::adopt_shared(GAME_ID) {
-                notices.push(format!("Copying the saves into {}: {e}", aegis_save::user_dir(GAME_ID).display()));
-            }
-            aegis_save::user_dir(GAME_ID).join("saves")
+    let mut launch = aegis_ui::start::Start::new(GAME_ID, game_dir.clone(), &engine, args, headless);
+    notices.append(&mut launch.notice);
+    if arg(args, "saves").is_none() {
+        if let Err(e) = aegis_save::adopt_shared(GAME_ID) {
+            notices.push(format!("Copying the saves into {}: {e}", aegis_save::user_dir(GAME_ID).display()));
         }
-    };
-    let title = format!("Aegis - {}", manifest.title);
-    let (icon, canvas, window_sizes) = (manifest.icon.clone(), manifest.canvas.clone(), manifest.window_sizes.clone());
+    }
+    let project = game_dir.clone().or_else(|| art::find_project(&start));
+    if game_dir.is_none() {
+        launch.layers = project.as_ref().map(|p| aegis_core::assets::Layers::for_game(p)).unwrap_or_default();
+    }
+    let home = game_dir.unwrap_or_else(|| PathBuf::from("."));
     let game = GameCx {
         data,
-        manifest,
+        manifest: launch.manifest.clone(),
         game: None,
-        save_dir,
+        save_dir: launch.save_dir.clone(),
         tuning: TuningFile::new(Some(home.join("tuning.json"))),
         log: Vec::new(),
         encounter: launch_key(args, "scene", "encounter")?.unwrap_or("goblin_skirmish").to_string(),
@@ -188,29 +195,19 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
         debug: false,
         data_dir,
     };
-    let mut settings = Settings::load(aegis_save::user_dir(GAME_ID).join("settings.json"), default_settings());
+    let mut settings = launch.settings(default_settings());
     settings.keep_window_size(&screens::WINDOW_SIZES);
     force_shipped_views(&mut settings.v, arg(args, "screen"));
     // Playtest recordings are never on in the web build (WEBREL1 6.1, `vfs::dev::ON`), so its data is never hashed.
     let record = aegis_core::vfs::dev::ON && settings.v["record_playtests"].as_bool().unwrap_or(cfg!(debug_assertions));
     // The data fingerprint a recording carries; hashed only while recording is on.
     let content = if record { aegis_content::fingerprint::of(&game.data_dir) } else { serde_json::Value::Null };
-    let layers = project.as_ref().map(|p| aegis_core::assets::Layers::for_game(p)).unwrap_or_default();
+    let playtest = aegis_ui::playtest::Playtests::new(aegis_save::user_dir(GAME_ID).join("playtests"), record, content);
+    // ASSETORG2: sounds and music over the same layers as the art (game, kit, engine)
+    let audio = launch.audio();
+    launch.notice = notices;
     #[allow(unused_mut)]
-    let mut cx = Cx {
-        playtest: aegis_ui::playtest::Playtests::new(aegis_save::user_dir(GAME_ID).join("playtests"), record, content),
-        settings,
-        art: art::Art::new(project),
-        // ASSETORG2: sounds and music over the same layers as the art (game, kit, engine)
-        audio: if headless.is_some() { Audio::offline_layers(&layers) } else { Audio::of_layers(&layers) },
-        nav: Vec::new(),
-        notice: notices,
-        shot_dir: home.join(".shots"),
-        quit: false,
-        answers: Vec::new(),
-        held: Default::default(),
-        app: game,
-    };
+    let (mut cx, options) = launch.cx(settings, art::Art::new(project), audio, playtest, game);
     #[allow(unused_mut)]
     let mut stack: Vec<Box<dyn Screen<GameCx>>> = vec![Box::new(menus::MainMenu::default())];
     match arg(args, "screen") {
@@ -232,8 +229,6 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
         }
         _ => {}
     }
-    let port = arg(args, "port").and_then(|p| p.parse().ok()).unwrap_or(aegis_ui::bridge::DEFAULT_PORT);
-    let options = Options { title, font: engine.join("assets/fonts/OpenSans-SemiBold.ttf"), port, icon, canvas, window_sizes, headless };
     Ok((cx, stack, options))
 }
 
@@ -248,6 +243,34 @@ pub fn run_native() -> Result<()> {
     let roots = native_roots()?;
     let (cx, stack, options) = launch(&args, roots, ruleset, headless)?;
     aegis_ui::shell::run(cx, stack, options)
+}
+
+/// UIBOT (REPLAY-CI1): where the engine's UI bot (`aegis_ui::shell::bot`) starts, by name, with the launch keys of each
+/// (`screen=`, `ruleset=`); the bot walks on from there by pressing widgets.
+#[cfg(feature = "dev_tools")]
+pub const BOT_STARTS: &[(&str, &[(&str, &str)])] =
+    &[("menu", &[]), ("arena", &[("screen", "arena")]), ("arena_timeline", &[("screen", "arena"), ("ruleset", "timeline")]), ("runner", &[("screen", "runner")])];
+#[cfg(not(feature = "dev_tools"))]
+pub const BOT_STARTS: &[(&str, &[(&str, &str)])] = &[("menu", &[])];
+
+/// UIBOT: widgets the bot never presses: they write into the repo (Copy to repo), open an OS window (Open folder) or
+/// reach the OS clipboard, and the main menu's Quit (it ends the program, so the run would stop at its first steps; a key
+/// that quits still ends a run cleanly).
+pub const BOT_SKIP: &[&str] = &["recordings.copy", "recordings.open_folder", "recordings.note_view.copy", "menu.quit"];
+
+/// UIBOT: one bot run from the start `start` (a `BOT_STARTS` name) on the data folder `data` (a scratch copy: the dev
+/// tools write into it), saves under `scratch`. The user folder is wherever `APPDATA` points (the caller points it at a
+/// scratch folder first). `Err` when the game cannot start; a panic is in the run's report.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn bot_run(start: &str, data: &Path, scratch: &Path, bot: &aegis_ui::shell::bot::Bot) -> Result<aegis_ui::shell::bot::Run> {
+    let keys = BOT_STARTS.iter().find(|(name, _)| *name == start).map(|(_, k)| *k).with_context(|| format!("no bot start '{start}'"))?;
+    let mut args: Vec<(String, String)> = keys.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    args.push(("data".into(), data.display().to_string()));
+    args.push(("saves".into(), scratch.join("saves").display().to_string()));
+    let headless = Headless { size: bot.size, fps: aegis_ui::shell::headless::DEFAULT_FPS, dpr: 1.0, idle: aegis_core::clock::Duration::from_secs(aegis_ui::shell::headless::IDLE_EXIT_S), stepped: false };
+    let ruleset = arena_ruleset(&args)?;
+    let (cx, stack, options) = launch(&args, native_roots()?, ruleset, Some(headless))?;
+    Ok(aegis_ui::shell::bot::run(cx, stack, &options, bot))
 }
 
 #[cfg(test)]

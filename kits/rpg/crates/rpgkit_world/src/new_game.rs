@@ -84,7 +84,8 @@ pub fn create(d: &Data, world_id: &str, ids: &[String], seed: i64) -> Result<Gam
 }
 
 fn clock_seed() -> i64 {
-    let now = aegis_core::clock::SystemTime::now().duration_since(aegis_core::clock::UNIX_EPOCH).unwrap_or_default();
+    // ENGINE-17: the shot clock gives the same date in every run, so a scenario's new game has the same seed.
+    let now = aegis_core::clock::system_now().duration_since(aegis_core::clock::UNIX_EPOCH).unwrap_or_default();
     (now.as_millis() as i64 ^ now.subsec_micros() as i64) & SEED_MAX
 }
 
@@ -112,6 +113,17 @@ pub fn playable_worlds(d: &Data) -> Vec<String> {
 pub fn default_world(d: &Data) -> String {
     let playable = playable_worlds(d);
     d.start_worlds.iter().find(|w| playable.contains(w)).or(playable.first()).cloned().unwrap_or_default()
+}
+
+/// PR7-37 (PT-01): the worlds a player's New game offers: the manifest's `start_worlds` that are playable, in that
+/// order; every playable world when the manifest names none (a game with no start list, as before). The other playable
+/// worlds (test worlds) are the game's to show in a developer build only.
+pub fn player_worlds(d: &Data) -> Vec<String> {
+    let playable = playable_worlds(d);
+    if d.start_worlds.is_empty() {
+        return playable;
+    }
+    d.start_worlds.iter().filter(|w| playable.contains(w)).cloned().collect()
 }
 
 pub fn create_for_world(d: &Data, world_id: &str, seed: i64) -> Result<GameState, Vec<String>> {

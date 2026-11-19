@@ -340,7 +340,7 @@ fn text_hit<A: Clone>(ui: &mut Ui<A>, r: Rect, label: &str, hotkey: Option<char>
     if let Some(k) = hotkey {
         room -= ui.p.text_w(&k.to_uppercase().to_string(), m.small) + m.gutter as f32;
     }
-    let w = ui.p.text_w(label, size).min(room.max(0.0)).ceil() as i32;
+    let w = ui.p.text_w_face(Typeface::Display, label, size).min(room.max(0.0)).ceil() as i32;
     let margin = m.u(MENU_TEXT_MARGIN);
     Rect::new(r.x + m.padding - margin, r.y, w + 2 * margin, r.h)
 }
@@ -367,10 +367,12 @@ fn text_row<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, hit: Rect, label: &str,
         ui.p.text(hx, hy, &hk, m.small, th.dim);
         room -= w + m.gutter as f32;
     }
-    let y = r.y as f32 + (r.h as f32 - ui.p.line_h(size)) / 2.0;
-    let shown = ui.p.fit(label, size, room.max(0.0));
-    ui.p.text(r.x as f32 + pad + shadow, y + shadow, &shown, size, th.bg);
-    ui.p.text(r.x as f32 + pad, y, &shown, size, col);
+    // PR7-36 (ART-06): a menu over a picture is set in the display face, as its title is
+    let face = Typeface::Display;
+    let y = r.y as f32 + (r.h as f32 - ui.p.line_h_face(face, size)) / 2.0;
+    let shown = ui.p.fit_face(face, label, size, room.max(0.0));
+    ui.p.text_face(face, r.x as f32 + pad + shadow, y + shadow, &shown, size, th.bg);
+    ui.p.text_face(face, r.x as f32 + pad, y, &shown, size, col);
     if shown != label {
         ui.p.mark_cut(label);
     }
@@ -801,4 +803,361 @@ pub fn ask_key(no_default: bool, k: Key) -> Option<bool> {
         Key::Char('n') | Key::Char('N') | Key::Esc => Some(false),
         _ => None,
     }
+}
+
+// ---- PR7-36 (STYLE-PASS1 item 9): the shared building blocks (layout notes UX-01..07) ------------------------------
+//
+// One panel shell, one list row, a four-step type scale, the four colour roles, one tooltip and key hints in the footer.
+// Each draws only through the theme in force and names no game; `screen_layout`'s components draw through them, so a
+// UISPLIT1 layout that names `panel_shell`, `list_row` or `tooltip` gets them.
+
+/// UX-04: the type scale's four steps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeStep {
+    /// A screen's or panel's title: the display face, gold.
+    Title,
+    /// A section heading: the body face at the heading size, gold.
+    Heading,
+    /// Body text, `text`.
+    Body,
+    /// Secondary lines, notes and key hints: the small size, `dim`.
+    Small,
+}
+
+impl TypeStep {
+    pub const ALL: [TypeStep; 4] = [TypeStep::Title, TypeStep::Heading, TypeStep::Body, TypeStep::Small];
+
+    pub fn face(self) -> Typeface {
+        match self {
+            TypeStep::Title => Typeface::Display,
+            _ => Typeface::Body,
+        }
+    }
+
+    /// Its size on the grid of `m`.
+    pub fn size(self, m: &Metrics) -> f32 {
+        match self {
+            TypeStep::Title => m.head,
+            TypeStep::Heading => m.body + m.uf(1.0),
+            TypeStep::Body => m.body,
+            TypeStep::Small => m.small,
+        }
+    }
+
+    pub fn colour(self, t: &Theme) -> Rgba {
+        match self {
+            TypeStep::Title | TypeStep::Heading => ColourRole::Highlight.colour(t),
+            TypeStep::Body => ColourRole::Plain.colour(t),
+            TypeStep::Small => t.dim,
+        }
+    }
+}
+
+/// `s` at step `step` at (x, y), shortened with "..." to `max_w`; returns the line's height.
+#[allow(clippy::too_many_arguments)]
+pub fn type_text<A: Clone>(ui: &mut Ui<A>, step: TypeStep, x: f32, y: f32, s: &str, max_w: f32) -> f32 {
+    let (t, m) = (ui.t.clone(), ui.m());
+    let (face, size) = (step.face(), step.size(&m));
+    ui.p.text_fit_face(face, x, y, s, size, max_w, step.colour(&t));
+    ui.p.line_h_face(face, size)
+}
+
+/// UX-05: colour by meaning, four roles (the intent colours are a game's one allowed extra set, on chips only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColourRole {
+    /// Titles and the selected thing (`gold`).
+    Highlight,
+    /// The action to take and good news (`focus`, the amber of the primary button).
+    Action,
+    /// Danger and enemies (`foe`).
+    Danger,
+    /// Everything else (`text`; secondary lines `dim`).
+    Plain,
+}
+
+impl ColourRole {
+    pub const ALL: [ColourRole; 4] = [ColourRole::Highlight, ColourRole::Action, ColourRole::Danger, ColourRole::Plain];
+
+    pub fn colour(self, t: &Theme) -> Rgba {
+        match self {
+            ColourRole::Highlight => t.gold,
+            ColourRole::Action => t.focus,
+            ColourRole::Danger => t.foe,
+            ColourRole::Plain => t.text,
+        }
+    }
+
+    /// The theme role it reads.
+    pub fn role(self) -> &'static str {
+        match self {
+            ColourRole::Highlight => "gold",
+            ColourRole::Action => "focus",
+            ColourRole::Danger => "foe",
+            ColourRole::Plain => "text",
+        }
+    }
+}
+
+/// UX-02: how dark the scene under a panel shell goes (about 60 %).
+pub const SHELL_DIM: u8 = 153;
+/// UX-01: the shell's title row and footer row heights and the close box, in old units.
+pub const SHELL_TITLE_H: i32 = 18;
+pub const SHELL_FOOT_H: i32 = 18;
+pub const SHELL_CLOSE: i32 = 16;
+
+/// UX-01: what a panel shell shows around its body: the title, the close box, Back at the footer's left, the main
+/// action at its right (amber, the primary) and the key hints between them ("Q/E member, Esc close"; UX-07). A
+/// shell's frame role is `ornate` for a screen's main panel and `panel` for a small popup (the two frame tiers).
+#[derive(Debug, Clone, Default)]
+pub struct ShellView<'a> {
+    pub title: &'a str,
+    pub role: &'a str,
+    pub close: bool,
+    pub back: Option<&'a str>,
+    pub action: Option<(&'a str, bool)>,
+    pub hints: &'a str,
+}
+
+/// What a click on a shell's chrome is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShellAct {
+    Close,
+    Back,
+    Action,
+}
+
+impl ShellView<'_> {
+    fn footed(&self) -> bool {
+        self.back.is_some() || self.action.is_some() || !self.hints.is_empty()
+    }
+}
+
+/// UX-02: the rect of a shell whose body wants `body` (w, h) inside `area`: the body plus the frame's pad, the title
+/// row and the footer, centred, never larger than `area` less the margin.
+pub fn shell_rect<A: Clone>(ui: &Ui<A>, area: Rect, v: &ShellView, body: (i32, i32)) -> Rect {
+    let m = ui.m();
+    let role = if v.role.is_empty() { "panel" } else { v.role };
+    let probe = Rect::new(0, 0, m.u(400), m.u(400));
+    let inner = ui.frame_content(role, probe);
+    let (pad_w, pad_h) = (probe.w - inner.w, probe.h - inner.h);
+    let title = if v.title.is_empty() && !v.close { 0 } else { m.u(SHELL_TITLE_H) };
+    let foot = if v.footed() { m.u(SHELL_FOOT_H) + m.gutter } else { 0 };
+    let room = area.pad(Insets::all(m.margin));
+    let w = snap_up_on(body.0 + pad_w, m.grid).min(room.w);
+    let h = snap_up_on(body.1 + pad_h + title + foot, m.grid).min(room.h);
+    room.place(Anchor::Center, w, h)
+}
+
+/// UX-01, UX-02, UX-07: a panel shell over `area` sized to `body` (`shell_rect`), the scene under it dimmed
+/// (`SHELL_DIM`); returns its body rect. `act` maps a click on the chrome to the screen's action. Widget ids
+/// `<id>.close`, `<id>.back`, `<id>.action`, `<id>.hints`; the shell itself is a `shell` widget `<id>` (one shell a
+/// screen: a second replaces the first, so a test counts them with `shells_open`).
+pub fn panel_shell<A: Clone>(ui: &mut Ui<A>, id: &str, area: Rect, v: &ShellView, body: (i32, i32), act: impl Fn(ShellAct) -> A) -> Rect {
+    let r = shell_rect(ui, area, v, body);
+    let t = ui.t.clone();
+    let [sr, sg, sb, _] = t.scrim;
+    ui.p.fill(area, [sr, sg, sb, SHELL_DIM]);
+    shell_in(ui, id, r, v, act)
+}
+
+/// `panel_shell` in the given rect `r`, with no dim (a layout's region places it).
+pub fn shell_in<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, v: &ShellView, act: impl Fn(ShellAct) -> A) -> Rect {
+    let (t, m) = (ui.t.clone(), ui.m());
+    let role = if v.role.is_empty() { "panel" } else { v.role };
+    let [pr, pg, pb, _] = t.panel;
+    ui.p.fill(r, [pr, pg, pb, 255]);
+    let mut body = ui.frame_body(role, r);
+    ui.push(id, "shell", v.title, r, true, false, None, Vec::new());
+    if !v.title.is_empty() || v.close {
+        let head = body.cut_top(m.u(SHELL_TITLE_H).min(body.h));
+        let close_w = if v.close { m.u(SHELL_CLOSE) + m.gutter } else { 0 };
+        if !v.title.is_empty() {
+            let lh = ui.p.line_h_face(Typeface::Display, TypeStep::Title.size(&m));
+            type_text(ui, TypeStep::Title, head.x as f32, head.y as f32 + (head.h as f32 - lh) / 2.0, v.title, (head.w - close_w) as f32);
+        }
+        if v.close {
+            let c = head.place(Anchor::Right, m.u(SHELL_CLOSE), m.u(SHELL_CLOSE).min(head.h));
+            ui.close_x(&format!("{id}.close"), c, act(ShellAct::Close));
+        }
+    }
+    if v.footed() {
+        let mut foot = body.cut_bottom(m.u(SHELL_FOOT_H).min(body.h));
+        body.cut_bottom(m.gutter.min(body.h));
+        let size = TypeStep::Body.size(&m);
+        let half = foot.w / 2;
+        let bw = |ui: &mut Ui<A>, label: &str| (ui.p.text_w(label, size).ceil() as i32 + m.u(14)).min(half);
+        if let Some(label) = v.back {
+            let w = bw(ui, label);
+            let b = foot.cut_left(w);
+            ui.button_full(&format!("{id}.back"), b, label, act(ShellAct::Back), true, false, size, Vec::new());
+            foot.cut_left(m.gutter.min(foot.w));
+        }
+        if let Some((label, enabled)) = v.action {
+            let w = bw(ui, label);
+            let b = foot.cut_right(w);
+            ui.button_full(&format!("{id}.action"), b, label, act(ShellAct::Action), enabled, true, size, Vec::new());
+            foot.cut_right(m.gutter.min(foot.w));
+        }
+        if !v.hints.is_empty() {
+            key_hints(ui, &format!("{id}.hints"), foot, v.hints);
+        }
+    }
+    body
+}
+
+/// UX-07: a key hint line ("Q/E member, Esc close") centred in `r`, small and `dim`.
+pub fn key_hints<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, hints: &str) {
+    let m = ui.m();
+    let size = TypeStep::Small.size(&m);
+    let shown = ui.p.fit(hints, size, r.w as f32);
+    let (w, lh) = (ui.p.text_w(&shown, size), ui.p.line_h(size));
+    let dim = ui.t.dim;
+    ui.p.text(r.x as f32 + (r.w as f32 - w) / 2.0, r.y as f32 + (r.h as f32 - lh) / 2.0, &shown, size, dim);
+    ui.push(id, "label", hints, r, true, false, None, Vec::new());
+}
+
+/// How many panel shells a frame's widgets hold (UX-02: never more than one).
+pub fn shells_open<A>(widgets: &[crate::ui::Widget<A>]) -> usize {
+    widgets.iter().filter(|w| w.kind == "shell").count()
+}
+
+/// UX-03: the list row's icon, in old units (32 px at 1280 x 720).
+pub const ROW_ICON: i32 = 16;
+
+/// UX-03: what one list row shows: a 32 px icon tile (its picture, or `glyph` on an empty tile), the name, one grey
+/// sub-line and numbers right-aligned in the mono face.
+#[derive(Debug, Clone, Default)]
+pub struct RowLook<'a> {
+    pub icon: Option<&'a Image>,
+    /// What an empty tile shows ("" none: the bare tile, an empty slot).
+    pub glyph: &'a str,
+    pub name: &'a str,
+    pub sub: &'a str,
+    pub numbers: &'a [String],
+    pub selected: bool,
+    pub enabled: bool,
+    /// ENGINE-18: the numbers' column widths, one per number (empty: each as wide as its own text), so the numbers of
+    /// rows one above the other line up; each is right-aligned in its column.
+    pub columns: &'a [i32],
+    /// ENGINE-18: no icon tile at all (a row with no picture and no glyph in a list with none): the name starts at the left.
+    pub bare: bool,
+    /// ENGINE-19: the first number's colour (a theme role the view named), on or off; None the row's text colour.
+    pub tone: Option<Rgba>,
+    /// PR7-39 Stage B: the second number's colour, the same way.
+    pub tone2: Option<Rgba>,
+    /// PR7-39 Stage B: the numbers in the body face, not the mono one.
+    pub plain: bool,
+}
+
+/// A list row's height on the grid of `m`: the icon with the padding, or its two lines if taller.
+pub fn row_h_on(m: &Metrics, p: &Painter) -> i32 {
+    let lines = (p.line_h(m.body) + p.line_h(m.small)).ceil() as i32;
+    snap_up_on((m.u(ROW_ICON) + m.u(2)).max(lines + m.u(2)), m.grid)
+}
+
+/// UX-03 and the I2 tile: an icon in a slate tile over `r` (the `inset` frame role), else `glyph` on the empty tile.
+pub fn icon_tile<A: Clone>(ui: &mut Ui<A>, r: Rect, icon: Option<&Image>, glyph: &str) {
+    let body = ui.frame_body("inset", r);
+    match icon {
+        Some(img) => ui.image_in(img, if body.w >= r.w / 2 { r.pad(Insets::all(1)) } else { body }),
+        None if !glyph.is_empty() => {
+            let m = ui.m();
+            let dim = ui.t.dim;
+            let size = m.small;
+            let (w, lh) = (ui.p.text_w(glyph, size), ui.p.line_h(size));
+            ui.p.text(r.x as f32 + (r.w as f32 - w) / 2.0, r.y as f32 + (r.h as f32 - lh) / 2.0, glyph, size, dim);
+        }
+        None => {}
+    }
+}
+
+/// UX-03: one list row in `r`: hover and selection as `Ui::row` does, the icon tile at the left, the name over the
+/// sub-line, and the numbers right-aligned in the mono face. A widget of kind `row` (`id`), clickable with `action`.
+pub fn list_row<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, v: &RowLook, action: Option<A>, tip: Tip) {
+    let (t, m) = (ui.t.clone(), ui.m());
+    let live = action.is_some() && v.enabled;
+    let hover = live && ui.hover(r);
+    if v.selected || hover {
+        ui.p.panel(r, if v.selected { t.selected } else { t.card_hot }, if v.selected { t.focus } else { t.edge_hot }, m.radius);
+    }
+    let pad = m.u(1);
+    let x = if v.bare {
+        r.x + m.u(3)
+    } else {
+        let side = m.u(ROW_ICON).min(r.h - 2 * pad).max(0);
+        let tile = Rect::new(r.x + pad, r.y + (r.h - side) / 2, side, side);
+        icon_tile(ui, tile, v.icon, v.glyph);
+        tile.x + tile.w + m.u(3)
+    };
+    let mut right = r.x + r.w - m.u(4);
+    let mono = if v.plain { Typeface::Body } else { Typeface::Mono };
+    let fixed = v.columns.len() == v.numbers.len();
+    for (i, n) in v.numbers.iter().enumerate().rev() {
+        let w = ui.p.text_w_face(mono, n, m.body);
+        let y = r.y as f32 + (r.h as f32 - ui.p.line_h_face(mono, m.body)) / 2.0;
+        let col = match v.tone {
+            Some(c) if i == 0 => c,
+            _ if i == 1 && v.tone2.is_some() => v.tone2.unwrap_or(t.text),
+            _ if v.enabled => t.text,
+            _ => t.dim,
+        };
+        ui.p.text_face(mono, right as f32 - w, y, n, m.body, col);
+        right -= if fixed { v.columns[i] } else { w.ceil() as i32 } + m.gutter;
+    }
+    let room = (right - x).max(0) as f32;
+    let (lb, ls) = (ui.p.line_h(m.body), ui.p.line_h(m.small));
+    let both = if v.sub.is_empty() { lb } else { lb + ls };
+    let y = r.y as f32 + (r.h as f32 - both) / 2.0;
+    ui.p.text_fit(x as f32, y, v.name, m.body, room, if v.enabled { t.text } else { t.dim });
+    if !v.sub.is_empty() {
+        ui.p.text_fit(x as f32, y + lb, v.sub, m.small, room, t.dim);
+    }
+    ui.push(id, "row", v.name, r, v.enabled, v.selected, if live { action } else { None }, tip);
+}
+
+/// UX-06: a tooltip's most body lines.
+pub const TIP_LINES: usize = 3;
+
+/// UX-06: where a `size` tooltip goes for the pointer at `mouse` over `over` (the thing it explains) on a `canvas`:
+/// beside the pointer, past the thing's right edge (else its left), never over it, inside the canvas.
+pub fn tip_beside(over: Rect, mouse: (i32, i32), size: (i32, i32), canvas: (i32, i32), gap: i32) -> Rect {
+    let (w, h) = size;
+    let right = over.x + over.w + gap;
+    let x = if right + w <= canvas.0 - gap { right } else { (over.x - gap - w).max(gap) };
+    let y = (mouse.1 - h / 2).clamp(gap, (canvas.1 - gap - h).max(gap));
+    Rect::new(x, y, w, h)
+}
+
+/// UX-06: one tooltip at `r`: the `tip` frame (dark basalt, a 1 px iron line), the title in gold and at most
+/// `TIP_LINES` body lines (the last cut with "...").
+pub fn tooltip_box(p: &mut Painter, r: Rect, title: &str, body: &[String]) {
+    let t = crate::theme::th();
+    let m = Metrics::of(&t, p.v);
+    let (fill, edge, radius) = t.vector_in("tip", &m);
+    p.skin(t.frame("tip"), r, fill, edge, radius);
+    let (x, w) = (r.x as f32 + m.uf(5.0), (r.w - m.u(10)) as f32);
+    let mut y = r.y as f32 + m.uf(3.0);
+    if !title.is_empty() {
+        p.text_fit(x, y, title, m.body, w, t.gold);
+        y += p.line_h(m.body);
+    }
+    let lines: Vec<String> = body.iter().flat_map(|b| p.wrap(b, m.small, w)).collect();
+    for (i, l) in lines.iter().take(TIP_LINES).enumerate() {
+        let cut = i + 1 == TIP_LINES && lines.len() > TIP_LINES;
+        let shown = if cut { p.fit(&format!("{}...", l.trim_end()), m.small, w) } else { l.clone() };
+        p.text(x, y, &shown, m.small, t.text);
+        y += p.line_h(m.small);
+    }
+}
+
+/// `tooltip_box`'s size for `title` and `body` at most `max_w` wide (old units on the painter's grid).
+pub fn tooltip_size(p: &mut Painter, title: &str, body: &[String], max_w: i32) -> (i32, i32) {
+    let t = crate::theme::th();
+    let m = Metrics::of(&t, p.v);
+    let inner = (max_w - m.u(10)) as f32;
+    let lines: Vec<String> = body.iter().flat_map(|b| p.wrap(b, m.small, inner)).take(TIP_LINES).collect();
+    let head = p.text_w(title, m.body);
+    let w = lines.iter().map(|l| p.text_w(l, m.small)).fold(head, f32::max).min(inner);
+    let h = if title.is_empty() { 0.0 } else { p.line_h(m.body) } + lines.len() as f32 * p.line_h(m.small) + m.uf(6.0);
+    (w.ceil() as i32 + m.u(10), h.ceil() as i32)
 }

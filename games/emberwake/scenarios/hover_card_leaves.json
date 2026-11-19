@@ -1,0 +1,26 @@
+{
+  "id": "hover_card_leaves",
+  "title": "PR7-37 (PT-12): the playtest save cages_start enters The Crossroads Cages; a foe row's hover card shows while the pointer is on the row and is gone once the pointer moves to a party card (the playtest's card stayed because its pointer stayed on the row)",
+  "launch": {"save": "cages_start"},
+  "settings": {"reduce_motion": true},
+  "timeout_s": 300,
+  "steps": [
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
+    {"step": "click", "id": "menu.continue"},
+    {"step": "wait", "until": {"path": "screen", "eq": "region_map"}, "timeout_ms": 20000},
+    {"step": "repeat", "times": 4, "until": {"path": "screen", "eq": "battle"}, "steps": [
+      {"step": "click", "id": "here.cages"},
+      {"step": "pause", "ms": 1500}
+    ]},
+    {"step": "wait", "until": {"path": "screen", "eq": "battle"}, "timeout_ms": 40000},
+    {"step": "wait", "until": {"path": "state.beat", "absent": true}, "timeout_ms": 20000},
+    {"step": "click", "id": "dialogue.continue"},
+    {"step": "pause", "ms": 800},
+    {"step": "hover", "id": "foe.6"},
+    {"step": "pause", "ms": 600},
+    {"step": "shot", "name": "hover_on_foe_row"},
+    {"step": "hover", "id": "party.0"},
+    {"step": "pause", "ms": 600},
+    {"step": "shot", "name": "hover_moved_to_party"}
+  ]
+}

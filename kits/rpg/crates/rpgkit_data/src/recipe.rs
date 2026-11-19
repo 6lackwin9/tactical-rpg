@@ -37,14 +37,16 @@ pub const PROF_ROLES: [&str; 4] = ["main", "secondary", "third", "minor"];
 /// destroyed), `track` (moves the member's stage on a unit track), `max_hp_pct` (a permanent max HP offset, a percent of
 /// its max HP), `floor_offset` (added to the member's floor offset for its next battle), `train_proficiency` (one
 /// proficiency level in a family of the class role, up to `to`), `drill` (PK2-S4: `xp` mastery XP in a family the member
-/// may master, scaled by its proficiency rate), `doctrine` (a delta a later
-/// system reads; reserved, does nothing yet), `salvage` (breaks a stash item down: `gold`, plus the salvage item its
+/// may master, scaled by its proficiency rate), `doctrine` (PR6-6, `PK4_PK5_CAMPAIGN_HUB.md` 1, B5: `delta` on the
+/// played world's campaign gauge whose id is `axis`, data-configured; nothing outside a campaign world or when no gauge
+/// has that id; on any target), `salvage` (breaks a stash item down: `gold`, plus the salvage item its
 /// rarity names in `tiers` and the one its theme names in `themes`). PK2-FOLLOWUP (PR5-36, `PK2_GRAFTS.md` 5, 7):
 /// `repair` (a weapon instance back to full durability for a share of `gold` and of `count` salvage items, the share the
 /// missing durability's fraction (`repair_share`); the salvage item the weapon's theme names in `themes`, else the one
 /// its rarity names in `tiers`, else none: a basic weapon costs purse alone), `reforge` (a weapon instance back to full
 /// durability; `masterwork` also makes it masterwork, so a row with it needs `requires`), `forge_rite` (the member's
-/// forge rite, with mastery 3 in a family: its keystone opens). PR5-45: `craft` (adds `count` of catalog `item` to the
+/// forge rite of one family at mastery 3, the picked one or its only open one; with a masterwork main hand of that
+/// family its keystone opens, `PR7-2`). PR5-45: `craft` (adds `count` of catalog `item` to the
 /// party stash, default `CRAFT_COUNT_DEFAULT`; a weapon becomes a fresh instance while instances are active).
 pub const RECIPE_EFFECTS: [(&str, &[&str], &str); 13] = [
     (FX_INSTALL, &["item", "slot"], TARGET_MEMBER),
@@ -144,6 +146,9 @@ pub struct RecipeDef {
     pub target: String,
     /// The effect rows (`{effect, ...}`), applied in order.
     pub effects: Vec<Obj>,
+    /// PR6-6 (`PK4_PK5_CAMPAIGN_HUB.md` 1, B5): the ids a run carries to the campaign's recipe triggers
+    /// (`recipe_tags`); empty by default (the schema leaves it out of a row).
+    pub tags: Vec<String>,
 }
 
 impl RecipeDef {
@@ -157,7 +162,13 @@ impl RecipeDef {
             cost: obj(o, "cost").map(RecipeCost::from_obj).unwrap_or_default(),
             target: string(o, "target", TARGET_MEMBER),
             effects: array(o, "effects").iter().filter_map(Value::as_object).cloned().collect(),
+            tags: strings(o, "tags"),
         }
+    }
+
+    /// PR6-6 (B5): the summed delta of its `doctrine` effects.
+    pub fn doctrine(&self) -> i64 {
+        self.effects.iter().filter(|e| string(e, "effect", "") == FX_DOCTRINE).map(|e| i64::from(int(e, "delta", 0))).sum()
     }
 
     /// The effect names in order.

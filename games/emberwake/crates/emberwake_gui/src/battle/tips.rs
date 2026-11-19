@@ -4,7 +4,7 @@ use aegis_ui::theme::th;
 use super::board::with_alpha;
 use super::marks::{held_guard, meter_text, HELD, METER};
 use super::overlays::reach_text;
-use super::{ALLY, AP_ANIM_MS, AP_PIPS, POISE};
+use super::{AP_ANIM_MS, AP_PIPS, POISE};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::intent_text;
 use emberwake_battle::intent::Intent;
@@ -81,57 +81,6 @@ pub(super) fn intent_glyph(p: &mut Painter, cat: &emberwake_data::Catalog, i: Ro
     p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0, &letter, SMALL, th().text);
 }
 
-/// A tell line's kind as the command colour key (`kind_color`).
-fn tell_color(kind: &str) -> Rgba {
-    kind_color(match kind {
-        "attack" | "area" => "ATTACK",
-        "support" => "SUPPORT",
-        "guard" => "DEFEND",
-        "focus" => "FOCUS",
-        "rest" => "REST",
-        "move" | "flee" | "retreat" => "MOVE",
-        "switch" => "TARGET",
-        _ => "",
-    })
-}
-
-/// RULESET1 V1, V2 on a hostile card: a row of the round's blocks with an impact badge at each impact block (a hit red,
-/// anything else gold); a revealed plan (V2) also fills each action from its start to its impact in its kind's colour,
-/// its recovery blocks dim. Returns the row's tip (a title, then a line per badge).
-pub(super) fn draw_badge_row(p: &mut Painter, t: &Intent, row: Rect, blocks: i32) -> Tip {
-    use emberwake_battle::intent::HIT;
-    let cw = row.w as f32 / blocks as f32;
-    let cell = |b: i32| {
-        let x0 = row.x + ((b - 1) as f32 * cw).round() as i32;
-        Rect::new(x0, row.y, (row.x + (b as f32 * cw).round() as i32 - x0 - 1).max(1), row.h)
-    };
-    for b in 1..=blocks {
-        p.fill(cell(b), th().game("strip_cell", rgba(14, 20, 34, 255)));
-    }
-    if t.revealed {
-        for l in t.plan.iter().filter(|l| l.blocks.0 >= 1) {
-            for b in l.blocks.0..=l.blocks.1.min(blocks) {
-                p.fill(cell(b), with_alpha(tell_color(l.kind), 210));
-            }
-            for b in (l.blocks.1 + 1)..=(l.blocks.1 + l.recovery).min(blocks) {
-                p.fill(cell(b), rgba(120, 120, 140, 110));
-            }
-        }
-    }
-    let mut tip: Tip = vec![("Impacts this round".into(), th().gold)];
-    for &(b, k) in t.impacts.iter().filter(|(b, _)| (1..=blocks).contains(b)) {
-        let c = cell(b);
-        let col = if k == HIT { th().foe } else { th().gold };
-        p.fill(Rect::new(c.x + c.w / 2 - 2, c.y, 4, c.h), col);
-        p.fill(Rect::new(c.x + c.w / 2 - 1, c.y - 1, 2, c.h + 2), col);
-        tip.push((format!("B{b}: {}", if k == HIT { "a hit lands" } else { "an action lands" }), col));
-    }
-    if tip.len() == 1 {
-        tip.push(("Nothing lands this round".into(), th().dim));
-    }
-    tip
-}
-
 /// INPUT1-AP (AP10): the AP gauge's levels in pips (full, solid outline) moving from `from` to `to` over `AP_ANIM_MS`
 /// from `at`, for member `unit` in `round`, in the planning look or not.
 #[derive(Debug, Clone, Copy)]
@@ -154,14 +103,10 @@ impl ApAnim {
 
 // ---- VISCLAR1-D: the party card's AP pips (mock `party_ap`) -------------------------------------------------------
 
-/// The pips' one colour and a spent pip's socket; no plan colours here, the strip's gauge has those.
-pub(super) const AP_PIP: Rgba = rgb(110, 160, 235);
-pub(super) const AP_PIP_EMPTY: Rgba = rgb(36, 44, 60);
 /// How long a card's pips take to fall when a move pays AP and to rise when the round starts (ms of the FX clock: the
 /// animation speed and 0.5x apply; at once with skip animations or reduce motion).
 pub(super) const AP_DRAIN_MS: u64 = 240;
 pub(super) const AP_REFILL_MS: u64 = 480;
-const AP_PIP_H: i32 = 5;
 
 /// What one party card's pips show over time: a pure function of the FX clock, so no window is needed to test it.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -201,27 +146,6 @@ impl ApPips {
     }
 }
 
-/// How full pip `k` is at `level` AP, with `unit` AP a pip (0 empty, 1 full; the one between is falling or rising).
-pub(super) fn pip_fill(level: f32, unit: i32, k: i32) -> f32 {
-    (level / unit.max(1) as f32 - k as f32).clamp(0.0, 1.0)
-}
-
-/// The row of AP pips with its left end at (`x`, `y`), one size whatever the maximum (the engine gauge's slots, lower);
-/// each pip a socket and the part of it still held. Returns the row's rect.
-pub(super) fn draw_ap_pips(p: &mut Painter, x: i32, y: i32, level: f32, max: i32) -> Rect {
-    use aegis_ui::pips::{count, unit, PIP_GAP, PIP_W};
-    let per = unit(max, AP_PIPS);
-    let slots = count(max, per);
-    for k in 0..slots {
-        let r = Rect::new(x + k * (PIP_W + PIP_GAP), y, PIP_W, AP_PIP_H);
-        p.fill(r, AP_PIP_EMPTY);
-        let held = (pip_fill(level, per, k) * PIP_W as f32).round() as i32;
-        if held > 0 {
-            p.fill(Rect::new(r.x, r.y, held, r.h), AP_PIP);
-        }
-    }
-    Rect::new(x, y, aegis_ui::pips::pips_w(slots), AP_PIP_H)
-}
 
 // ---- Drawing ------------------------------------------------------------------------------------------------------
 
@@ -238,6 +162,27 @@ pub(crate) fn kind_color(kind: &str) -> Rgba {
         "DISENGAGE" => rgb(56, 116, 160),
         _ => rgb(60, 66, 84),
     }
+}
+
+/// PR7-36 (ART-12): the intent line's height on a skill icon (logical px).
+pub(super) const ICON_LINE: i32 = 2;
+
+/// PR7-36 (ART-12, STYLE_BIBLE 4): the intent colour as a thin line along the bottom of a skill icon's rect `icon`, the
+/// tile itself staying slate.
+pub(super) fn icon_line(p: &mut Painter, icon: Rect, col: Rgba, alpha: u8) {
+    let a = (col[3] as u16 * alpha as u16 / 255) as u8;
+    p.fill(Rect::new(icon.x, icon.y + icon.h - ICON_LINE, icon.w, ICON_LINE), rgba(col[0], col[1], col[2], a));
+}
+
+/// PR7-36 (ART-12): a command kind's intent line colour: its `kind_color` brightened by half (as the Field ring), so it
+/// reads over the icon and on the block of the same colour; None for Rest.
+pub(super) fn kind_line_color(kind: &str) -> Option<Rgba> {
+    if kind == "REST" {
+        return None;
+    }
+    let c = kind_color(kind);
+    let up = |v: u8| (v as u16 * 3 / 2).min(255) as u8;
+    Some(rgb(up(c[0]), up(c[1]), up(c[2])))
 }
 
 /// VISCLAR1-B: a strip block's icon square with its border, in old units (the 16-high block keeps 1 above and below).
@@ -300,7 +245,8 @@ pub(super) fn text_outlined(p: &mut Painter, x: f32, y: f32, s: &str, size: f32,
 /// VISCLAR1-B (mock C): a planned block's icon (`chain`, the first file the layers hold) with its thin light border and
 /// its name in near-white with a dark outline. A ghost shows them faded and its name dim; a dim Rest has no border and no
 /// outline. Returns what it drew for the agent link.
-pub(super) fn draw_block_label(ui: &mut aegis_ui::ui::Ui<super::Action>, art: &mut aegis_ui::art::Art, r: Rect, name: &str, chain: &[String], look: BlockLook) -> serde_json::Value {
+/// PR7-36 (ART-12): `line` is the intent colour of a thin bottom line over the icon (None: no line).
+pub(super) fn draw_block_label(ui: &mut aegis_ui::ui::Ui<super::Action>, art: &mut aegis_ui::art::Art, r: Rect, name: &str, chain: &[String], look: BlockLook, line: Option<Rgba>) -> serde_json::Value {
     let icon_rel = art.first_rel(chain);
     let px = (((BLOCK_ICON - 2 * BLOCK_ICON_EDGE) as f32) * ui.p.v.s).round().max(1.0) as i32;
     let img = icon_rel.as_deref().and_then(|rel| art.image(rel, px, px));
@@ -308,7 +254,11 @@ pub(super) fn draw_block_label(ui: &mut aegis_ui::ui::Ui<super::Action>, art: &m
     let label = block_label(r, img.is_some(), name_w);
     if let (Some(sq), Some(img)) = (label.icon, img) {
         let inner = Rect::new(sq.x + BLOCK_ICON_EDGE, sq.y + BLOCK_ICON_EDGE, sq.w - 2 * BLOCK_ICON_EDGE, sq.h - 2 * BLOCK_ICON_EDGE);
-        ui.p.image_alpha(img, inner, if look == BlockLook::Ghost { BLOCK_GHOST_ALPHA } else { 255 });
+        let alpha = if look == BlockLook::Ghost { BLOCK_GHOST_ALPHA } else { 255 };
+        ui.p.image_alpha(img, inner, alpha);
+        if let Some(col) = line.filter(|_| look != BlockLook::Rest) {
+            icon_line(&mut ui.p, inner, col, alpha);
+        }
         let edge = match look {
             BlockLook::Chosen => BLOCK_ICON_LIGHT,
             BlockLook::Ghost => with_alpha(BLOCK_ICON_LIGHT, BLOCK_GHOST_ALPHA),
@@ -529,7 +479,7 @@ pub(super) fn inspect_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[In
 /// AP a pip (AP6) "1 pip = <u> AP".
 pub(crate) fn ap_lines(f: &rip::ApForecast) -> Vec<String> {
     let mut lines = vec![
-        format!("AP {} of {}", f.now, f.max),
+        crate::intent_text::ap_text(f.now, f.max, " of "),
         format!("Plan: {} (picked {}, auto-filled {})", f.spent, f.picked, f.filled),
         format!("Left: {}", f.left),
         format!("Next round: +{} -> {} (Rest +{})", f.gain, f.next, f.rest_gain),
@@ -540,7 +490,7 @@ pub(crate) fn ap_lines(f: &rip::ApForecast) -> Vec<String> {
 
 /// AP6, AP9: "1 pip = <u> AP" when a pip of the AP gauge stands for more than one AP (`max_ap` above `AP_PIPS`).
 fn pip_line(max: i32) -> Option<String> {
-    let u = aegis_ui::pips::unit(max, AP_PIPS);
+    let u = rpgkit_ui::pips::unit(max, AP_PIPS);
     (u > 1).then(|| format!("1 pip = {u} AP"))
 }
 
@@ -549,8 +499,8 @@ pub(super) const AP_PAID: Rgba = rgb(96, 106, 128);
 
 /// INPUT2 (style D): the gauge's planned blocks from a member's plan entries `(AP, skill kind, ghost)`: one block an
 /// entry that costs AP, in its kind's colour (`kind_color`, the strip's), a ghost entry as a ghost block.
-pub(super) fn ap_blocks(entries: &[(i32, String, bool)]) -> Vec<aegis_ui::pips::PipBlock> {
-    entries.iter().filter(|e| e.0 > 0).map(|(ap, kind, ghost)| aegis_ui::pips::PipBlock { ap: *ap, colour: kind_color(kind), ghost: *ghost }).collect()
+pub(super) fn ap_blocks(entries: &[(i32, String, bool)]) -> Vec<rpgkit_ui::pips::PipBlock> {
+    entries.iter().filter(|e| e.0 > 0).map(|(ap, kind, ghost)| rpgkit_ui::pips::PipBlock { ap: *ap, colour: kind_color(kind), ghost: *ghost }).collect()
 }
 
 /// INPUT1-AP (AP6-AP10), INPUT2 (style D): the AP gauge of party member `u`. Planning (`f` its forecast, of the hovered
@@ -558,19 +508,19 @@ pub(super) fn ap_blocks(entries: &[(i32, String, bool)]) -> Vec<aegis_ui::pips::
 /// colour, free sockets up to its AP, crossed slots up to its max; red with "-<n>" after the slots for a hovered row it
 /// cannot pay (`short`); playback: what it paid since `start` as one block, its live AP as sockets. A debt shows "-<n>"
 /// before crossed slots. Its hover card: AP9's lines (playback: the live AP), "1 pip = <u> AP" above 12 AP.
-pub(super) fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, blocks: &[aegis_ui::pips::PipBlock], short: Option<i32>, start: i32) -> aegis_ui::pips::PipGauge {
-    use aegis_ui::pips::PipGauge;
+pub(super) fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, blocks: &[rpgkit_ui::pips::PipBlock], short: Option<i32>, start: i32) -> rpgkit_ui::pips::PipGauge {
+    use rpgkit_ui::pips::PipGauge;
     let unit = &w.units[u];
     match f {
         Some(f) => {
-            let g = PipGauge::planned(f.now, blocks, f.max, AP_PIPS).with_tip(ap_lines(f).into_iter().map(|l| (l, ALLY)).collect());
+            let g = PipGauge::planned(f.now, blocks, f.max, AP_PIPS).with_tip(ap_lines(f).into_iter().map(|l| (l, crate::tokens::ally())).collect());
             match short {
                 Some(n) => g.short(n),
                 None => g,
             }
         }
         None => {
-            let mut tip: Tip = vec![(format!("AP {} of {}", unit.ap, unit.max_ap), ALLY)];
+            let mut tip: Tip = vec![(crate::intent_text::ap_text(unit.ap, unit.max_ap, " of "), crate::tokens::ally())];
             if start > unit.ap {
                 tip.push((format!("Paid this round: {}", start - unit.ap), th().text));
             }
@@ -600,6 +550,18 @@ fn plan_lines(s: &Session, u: usize) -> Tip {
     t
 }
 
+/// PR7-41 (PT-20): the hits enemy `e`'s scheduled actions land on hero `h` this round (the kit's `intent::hits_on`),
+/// with the party's plan booked after them while it is still being planned (afterwards it is scheduled).
+pub(super) fn hits_on_hero(s: &Session, e: usize, h: usize) -> Vec<emberwake_battle::intent::HitOn> {
+    use emberwake_battle::intent;
+    let w = &s.w;
+    if s.phase == Phase::Planning && !s.plan_confirmed {
+        intent::hits_on(w, &intent::planned_schedule(w, &s.resolver.scheduled, &s.plan), e, h)
+    } else {
+        intent::hits_on(w, &s.resolver.scheduled, e, h)
+    }
+}
+
 /// IS2: a facing in words (the board's top is north); None for no facing.
 fn facing_name(f: V2) -> Option<&'static str> {
     match (f.x.signum(), f.y.signum()) {
@@ -621,13 +583,13 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     let u = &w.units[i];
     let ally = w.allies.contains(&i);
     let tells_shown = inspect.unwrap_or(true);
-    let mut t: Tip = vec![(u.name.clone(), if ally { ALLY } else { th().foe })];
+    let mut t: Tip = vec![(u.name.clone(), if ally { crate::tokens::ally() } else { th().foe })];
     let round = rounds.iter().find(|r| r.unit == i);
     let tell = tells.iter().find(|r| r.unit == i).or(round.filter(|_| !ally));
     if let Some((head, intent)) = round.filter(|_| u.is_active()).and_then(|r| Some((intent_text::round_head(w, r)?, r.round_intent?))) {
         t.push((head, intent_ink(intent)));
     }
-    t.push((format!("HP {}/{}   AP {}/{}   {}", u.hp, u.max_hp, u.ap, u.max_ap, stance_name(u)), th().text));
+    t.push((format!("HP {}/{}   {}   {}", u.hp, u.max_hp, crate::intent_text::ap_text(u.ap, u.max_ap, "/"), stance_name(u)), th().text));
     let level = match classes.get(i).filter(|c| !c.is_empty()) {
         Some(c) if u.tier.is_empty() => format!("Level {} {c}", u.stats.level),
         Some(c) => format!("Level {} {c} ({})", u.stats.level, u.tier),
@@ -657,6 +619,10 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     if let Some(g) = held_guard(s, i) {
         t.push((format!("Held guard {:.0}% through B{}", g.mitigation * 100.0, g.last_block), HELD));
     }
+    // PR7-3 (review N3): a dulled weapon and its penalty (rule durability)
+    for weapon in dulled_weapons(u) {
+        t.push((dulled_line(&weapon), th().foe));
+    }
     // RULESET1-U slice 3 (GD5): a stealthed unit that moved this round is lost to attacks locked on it
     if ri::hidden(w, i) {
         // good news on a hero, a warning on an enemy
@@ -671,11 +637,12 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     // IS3: an inspected party member's AP numbers, picks and plan (round intent)
     if ally && u.is_active() && inspect.is_some() && ri::on(w) {
         if s.phase == Phase::Planning && !s.plan_confirmed {
-            t.extend(ap_lines(&rip::ap_forecast(w, &s.plan, i)).into_iter().map(|l| (l, ALLY)));
+            t.extend(ap_lines(&rip::ap_forecast(w, &s.plan, i)).into_iter().map(|l| (l, crate::tokens::ally())));
         }
         t.extend(plan_lines(s, i));
     }
     if !ally && u.is_active() {
+        let mut hit_shown = false;
         match tell {
             Some(r) => {
                 // IS2: the tell's first action only while the tells show (I)
@@ -684,12 +651,14 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
                 }
                 // V1, V2: who reads the plan (a reader who fell stays listed), the enrage or the battle's plan reveal
                 if let Some(head) = intent_text::reveal_head(w, r, |p| s.w.cat.passives.get(p).map(|x| x.name.clone()).unwrap_or_else(|| p.to_string())) {
-                    t.push((head, ALLY));
+                    t.push((head, crate::tokens::ally()));
                     for l in &r.plan {
                         t.push((intent_text::plan_line(w, l), th().text));
                     }
                 }
-                if let Some(f) = sel.and_then(|h| intent_text::forecast(r, h)).filter(|_| tells_shown) {
+                // PR7-41 (PT-20): the hits on the selected hero, per hit at the block each lands, with its guard then
+                if let Some(f) = sel.filter(|_| tells_shown).and_then(|h| intent_text::forecast(r, h, &intent_text::forecast_hits(r, h, hits_on_hero(s, i, h)))) {
+                    hit_shown = f.starts_with("Targets you");
                     t.push((f, th().foe));
                 }
             }
@@ -699,13 +668,47 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
         }
         if let Some(h) = sel.filter(|h| w.units[*h].is_active()) {
             let strike = w.book().lowest(Kind::Attack);
-            t.push((format!("{} deals about {} with a Strike, takes about {}", w.units[h].name, expected(w, h, i, strike, None, 0.0, 1.0), expected(w, i, h, strike, None, 0.0, 1.0)), ALLY));
+            // PT-20: a Strike's hit each way; what the enemy has planned on the hero is the forecast line above
+            let deals = expected(w, h, i, strike, None, 0.0, 1.0);
+            t.push((if hit_shown { format!("{} deals about {deals} a hit with a Strike", w.units[h].name) } else { format!("{} deals about {deals} a hit with a Strike, takes about {} from its Strike", w.units[h].name, expected(w, i, h, strike, None, 0.0, 1.0)) }, crate::tokens::ally()));
         }
     }
-    if !u.is_alive() {
-        t.push(("Down".into(), th().dim));
+    if let Some(banner) = downed_banner(w, i) {
+        t.push(banner);
     } else if u.is_withdrawn {
         t.push(("Left the battle".into(), th().dim));
     }
     t
+}
+
+/// PR7-3 (review N3): the party card's badge text while a weapon is dulled.
+pub(super) const DULLED_BADGE: &str = "Dulled";
+
+/// PR7-3 (review N3): the names of unit `u`'s dulled weapons (a tracked weapon at 0 durability, `Unit::dulled`), main
+/// hand first; empty without the rule durability or tracked wear.
+pub(super) fn dulled_weapons(u: &emberwake_rules::unit::Unit) -> Vec<String> {
+    use emberwake_rules::gear::Slot;
+    [Slot::MainHand, Slot::OffHand].into_iter().filter(|s| u.dulled(*s)).map(|s| u.inventory.get(s).map_or_else(|| "Weapon".to_string(), |e| e.item.name.clone())).collect()
+}
+
+/// PR7-3 (review N3): the tip line of a dulled weapon ("Iron Sword dulled: -50% weapon power until repaired.").
+pub(super) fn dulled_line(weapon: &str) -> String {
+    format!("{weapon} dulled: {} until repaired.", crate::hub::dulled_penalty())
+}
+
+/// PK3: downed status banner and tone (`Dead`, `Bleeds out in {n} round(s)`, or classic `Down`).
+pub(super) fn downed_banner(w: &emberwake_battle::world::World, i: usize) -> Option<(String, Rgba)> {
+    let u = w.units.get(i)?;
+    if u.is_alive() {
+        return None;
+    }
+    if w.is_dead(i) {
+        Some(("Dead".into(), th().foe))
+    } else if let Some(n) = w.bleed_left(i) {
+        let col = if n == 1 { th().foe } else { th().dim };
+        let unit = if n == 1 { "round" } else { "rounds" };
+        Some((format!("Bleeds out in {n} {unit}"), col))
+    } else {
+        Some(("Down".into(), th().dim))
+    }
 }

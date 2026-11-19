@@ -3,11 +3,16 @@
 //!   aegis serve                                                                the game's command API over stdin / stdout
 //!   aegis link '<json>' ... [port=47800]                                       requests to a running GUI (agent link)
 //!   aegis replay <recording.json> ...                                          replay a playtest recording (see `replay`)
+//!   aegis record <requests.json | recording.json> [out=<dir>] [id=<id>]        record requests as a playtest recording (see `record`)
 //!   aegis content check | upsert | remove | world | apply | manifest | <sidecar op>  edit the data folder (see `content`)
 //!   aegis scenario check | run                                                 walk real screens from JSON files (see `scenario`)
-//!   aegis bundle <manifest.json> [out=<dir>]                                   pack a web build's bundle parts (see `bundle`)
+//!   aegis playtest start | do | run | stop | status                          an agent plays the real game (see `agentplay`)
+//!   aegis bundle <manifest.json> [out=<dir>]                                 pack a web build's bundle parts (see `bundle`)
 
+pub mod agentplay;
 pub mod bundle;
+pub mod golden;
+pub mod new_game;
 pub mod scenario;
 
 use aegis_content::file::stringify;
@@ -66,14 +71,27 @@ pub trait Game {
     fn host(&self, args: &Args) -> Result<Box<dyn FnMut(&Value) -> Value>>;
     /// A fresh command host as a replay drives it (`replay`: one per run).
     fn driver(&self, args: &Args) -> Result<Box<dyn aegis_host::Driver>>;
+    /// ENGINE-5: the screens a scenario's `launch.screen` (and `scenario shots screen=`) may name: the ids the game's
+    /// program takes as `screen=`. Default: the main menu only.
+    fn launch_screens(&self) -> &'static [&'static str] {
+        &["menu"]
+    }
+    /// The problems of a scenario's launch for this game (`scenario check`, `run`, `shots`); by default its screen is
+    /// one of `launch_screens`. A game adds its own rules (which screens take `scene` or `ruleset`).
+    fn launch_problems(&self, launch: &scenario::Launch) -> Vec<String> {
+        scenario::screen_problems(launch, self.launch_screens())
+    }
 }
 
 const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's command API)
 aegis replay <recording.json> [session=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
+aegis record <requests.json | recording.json> [out=<dir>] [id=<id>]   (play requests on fresh command hosts, save them as a recording)
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
-aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>]
+aegis content check | get <kind> <id> [world=<id>] | get @<list.json> | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>]
 aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]
-aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)";
+aegis playtest start [save=] [out=] [size=] [shots=each|off] [window=1] | do <command ...> | run <script | -> | stop | status   (an agent plays the real game, logged and screenshot per command)
+aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)
+aegis new game <id> [title=<title>] [root=<workspace>]   (a new game folder games/<id>/ on the engine alone: menu, play screen, host, test, scenario)";
 
 /// Runs the command line of the process: the game's commands first, then the shell's.
 pub fn run<G: Game>(game: &G) -> Result<()> {
@@ -86,8 +104,17 @@ pub fn run<G: Game>(game: &G) -> Result<()> {
         (Some("serve"), _) => serve(game, &args),
         (Some("link"), _) => link(&raw),
         (Some("replay"), Some(_)) => replay(game, &args),
+        (Some("record"), Some(_)) => record(game, &args),
         (Some("content"), Some(_)) => content(game, &args),
         (Some("bundle"), Some(manifest)) => bundle::command(manifest, &args.key("out", ".")),
+        (Some("new"), Some("game")) => new_game::command(&args),
+        (Some("playtest"), _) => {
+            let code = agentplay::command(game, &args, &raw).unwrap_or_else(|e| {
+                println!("§ could not start: {e:#}");
+                2
+            });
+            std::process::exit(code)
+        }
         (Some("scenario"), _) => {
             let code = scenario::command(game, &args).unwrap_or_else(|e| {
                 println!("§ could not start: {e:#}");
@@ -111,7 +138,8 @@ pub fn json_arg(raw: &str) -> Result<Value> {
     serde_json::from_str(&text).context("parsing the JSON argument")
 }
 
-/// One content step: {"op": "upsert", "kind", "entry", "world"?, "replace"?}, {"op": "remove", "kind", "id",
+/// One content step: {"op": "upsert", "kind", "entry", "world"?, "replace"?, "fields"? (ENGINE-20: only these top-level
+/// fields of the stored entry change, each to the entry's value or, left out of it, removed; the entry must exist)}, {"op": "remove", "kind", "id",
 /// "world"?, "if_exists"? (true: a missing entry is a no-op, PR5-51b)}, {"op": "world", "id", "fields", "full"?} (a world manifest, WORLDW1) or {"op": <a sidecar op of the
 /// game>, "name", "edits"?} (PR5-48, `Hooks::sidecar`).
 pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Result<String, Vec<String>> {
@@ -142,7 +170,11 @@ pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result
         }
         "upsert" => {
             let entry = step.get("entry").and_then(|e| e.as_object()).ok_or_else(|| vec!["upsert needs an entry object".to_string()])?;
-            let o = store::upsert(hooks, dir, world.as_deref(), &kind, entry, s("replace").as_deref())?;
+            let merged = match step.get("fields") {
+                None => None,
+                Some(f) => Some(only_fields(hooks, dir, world.as_deref(), &kind, entry, f)?),
+            };
+            let o = store::upsert(hooks, dir, world.as_deref(), &kind, merged.as_ref().unwrap_or(entry), s("replace").as_deref())?;
             (if o.replaced { "replaced" } else { "added" }, o)
         }
         other => {
@@ -152,6 +184,32 @@ pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result
     };
     let id = s("id").or_else(|| step.get("entry").and_then(|e| e.get("id")).and_then(|v| v.as_str()).map(String::from)).unwrap_or_default();
     Ok(format!("{verb} {kind} '{id}' in {}", outcome.file.display()))
+}
+
+/// ENGINE-20 (TOOLS-HELP3): the stored entry with only the named top-level `fields` taken from `entry` (one left out of
+/// it is removed), so a seed changes no more than it names and never undoes a later seed's other fields.
+fn only_fields(hooks: &impl Hooks, dir: &Path, world: Option<&str>, kind: &str, entry: &serde_json::Map<String, Value>, fields: &Value) -> std::result::Result<serde_json::Map<String, Value>, Vec<String>> {
+    let names: Vec<&str> = fields.as_array().map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+    if names.is_empty() || fields.as_array().map_or(true, |a| a.len() != names.len()) {
+        return Err(vec!["'fields' is a list of the entry's top-level field names".to_string()]);
+    }
+    if names.contains(&"id") {
+        return Err(vec!["'fields' never names 'id' (the entry's id picks it)".to_string()]);
+    }
+    let id = entry.get("id").and_then(Value::as_str).unwrap_or("");
+    let Some(mut stored) = store::get(hooks, dir, world, kind, id) else {
+        return Err(vec![format!("fields: no {kind} entry '{id}' to change (a new entry is a whole upsert)")]);
+    };
+    if let Some(extra) = entry.keys().find(|k| *k != "id" && !names.contains(&k.as_str())) {
+        return Err(vec![format!("fields: the entry holds '{extra}', which 'fields' does not name")]);
+    }
+    for n in names {
+        match entry.get(n) {
+            Some(v) => stored.insert(n.to_string(), v.clone()),
+            None => stored.remove(n),
+        };
+    }
+    Ok(stored)
 }
 
 /// `aegis content ...`: the data folder edited through the engine's writer (`aegis_content::store` with the game's
@@ -212,6 +270,33 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
             match content_step(&hooks, &dir, &step) {
                 Ok(line) => Ok(println!("{line}")),
                 Err(e) => fail(e),
+            }
+        }
+        Some("get") if args.pos(2).is_some_and(|a| a.starts_with('@')) => {
+            // ENGINE-20: many entries in one run, `get @<list.json>` of [{"kind", "id", "world"?}]: one JSON array line,
+            // null for an entry not stored (the seed order check, `tools/fc.sh seeds`)
+            let list = json_arg(args.pos(2).unwrap_or_default())?;
+            let out: Vec<Value> = list
+                .as_array()
+                .context("get @<file>: a list of {\"kind\", \"id\", \"world\"?}")?
+                .iter()
+                .map(|k| {
+                    let f = |n: &str| k.get(n).and_then(Value::as_str);
+                    match (f("kind"), f("id")) {
+                        (Some(kind), Some(id)) => aegis_content::store::get(&hooks, &dir, f("world"), kind, id).map_or(Value::Null, Value::Object),
+                        _ => Value::Null,
+                    }
+                })
+                .collect();
+            Ok(println!("{}", Value::Array(out)))
+        }
+        Some("get") => {
+            // ENGINE-15: the stored entry as JSON (one line), for a seed built from it (`tools/fc.sh seed-from`)
+            let (Some(kind), Some(id)) = (args.pos(2), args.pos(3)) else { bail!("usage: aegis content get <kind> <id> [world=<id>]") };
+            let world = args.keys.get("world").map(String::as_str);
+            match aegis_content::store::get(&hooks, &dir, world, kind, id) {
+                Some(e) => Ok(println!("{}", serde_json::Value::Object(e))),
+                None => bail!("no {kind} entry '{id}' in {}", hooks.file_of(&dir, world, kind).display()),
             }
         }
         Some("world") => {
@@ -355,6 +440,53 @@ pub fn replay_session_arg(args: &Args) -> Result<Option<usize>> {
         (None, None) => None,
     };
     raw.map(|k| k.parse()).transpose().context("session=K")
+}
+
+/// The sessions' requests `aegis record` plays: a list of requests (one session), a list of such lists, or a playtest
+/// recording (its sessions' requests, recorded again).
+pub fn record_sessions(input: &Value) -> Result<Vec<Vec<Value>>> {
+    use aegis_host::playtest::Recording;
+    if input["format"].is_string() {
+        let rec = Recording::from_json(input).map_err(anyhow::Error::msg)?;
+        return Ok(rec.sessions.into_iter().map(|s| s.requests).collect());
+    }
+    let list = input.as_array().context("record takes a list of requests, a list of such lists or a playtest recording")?;
+    let sessions: Vec<Vec<Value>> = if list.iter().all(Value::is_array) { list.iter().map(|s| s.as_array().cloned().unwrap_or_default()).collect() } else { vec![list.clone()] };
+    if sessions.is_empty() || sessions.iter().any(|s| s.is_empty() || s.iter().any(|r| !r["cmd"].is_string())) {
+        bail!("every session is a non-empty list of requests, each an object with a cmd");
+    }
+    Ok(sessions)
+}
+
+/// `aegis record <requests.json | recording.json> [out=<dir>] [id=<id>]` (REPLAY-CI1): plays each session's requests on a
+/// fresh command host and saves them, with the checkpoints the host took and the data folder's fingerprint, as a playtest
+/// recording (origin agent) `<out>/<id>.json` (out default `.`, id default the time stamp). A refused request stops with
+/// exit 1 and writes nothing. A recording given as input is recorded again on the data as it is now (a repro whose
+/// checkpoints an intended rule or data change moved).
+fn record<G: Game>(game: &G, args: &Args) -> Result<()> {
+    use aegis_host::playtest::{self, Recording, Session};
+    let path = args.pos(1).context("usage: aegis record <requests.json | recording.json>")?;
+    let sessions = record_sessions(&json_arg(&format!("@{path}"))?)?;
+    let dir = PathBuf::from(args.key("out", "."));
+    let content = aegis_content::fingerprint::of(&game.data_dir(args)?);
+    let id = args.keys.get("id").cloned().unwrap_or_else(|| playtest::new_id(&dir, playtest::now_secs()));
+    let mut rec = Recording::new(&id, "agent", content);
+    for (i, requests) in sessions.iter().enumerate() {
+        let mut host = game.driver(args)?;
+        for (k, req) in requests.iter().enumerate() {
+            let reply = host.send(req);
+            if reply["ok"] != json!(true) {
+                println!("§ session {i} refused request {k}: {}", reply["error"].as_str().unwrap_or("refused"));
+                std::process::exit(1);
+            }
+        }
+        let s = Session::of(host.as_ref());
+        println!("§ session {i}: {} requests, {} checkpoints, end {}", s.requests.len(), s.checkpoints.len(), s.result());
+        rec.sessions.push(s);
+    }
+    let p = rec.save(&dir).map_err(anyhow::Error::msg)?;
+    println!("§ wrote {}", p.display());
+    Ok(())
 }
 
 fn replay<G: Game>(game: &G, args: &Args) -> Result<()> {

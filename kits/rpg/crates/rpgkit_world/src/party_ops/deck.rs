@@ -77,6 +77,15 @@ fn order_intents(rs: &Ruleset) -> Vec<String> {
 }
 
 impl DeckTerms {
+    /// PR7-37 (PT-06): the intent family `f` plays as: its `intent_of`, else (a worn item's skill, in none of the
+    /// deck's lists) the skill's own (`round_intent::skill_intent` of its tier one); "" for a family the catalog lacks.
+    pub fn intent_for(&self, cat: &Catalog, f: &str) -> String {
+        match self.intent_of.get(f) {
+            Some(i) => i.clone(),
+            None => cat.tier_one(f).map(|s| rpgkit_battle::round_intent::skill_intent(s).to_string()).unwrap_or_default(),
+        }
+    }
+
     /// A4.2-K1b (IR15): the rows family `f` plays in (its `rows_of`, else its one intent).
     pub fn rows(&self, f: &str) -> Vec<String> {
         self.rows_of.get(f).cloned().unwrap_or_else(|| self.intent_of.get(f).cloned().into_iter().collect())
@@ -96,7 +105,8 @@ impl DeckTerms {
         let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
         let actives: Vec<String> = m.owned_families(d, world).into_iter().filter(|f| cat.tier_one(f).is_some() && !cat.is_basic_family(f) && !rule.basics.contains(f) && !cat.is_system(f)).collect();
         // FB-63 (2): the re-gathered list, as the equip check and validate read it
-        let owned_passives = progression::member_passives(d, m);
+        // PR7-41 (PT-28): with the base deck's passives and the keystone from its level (`owned_passives`)
+        let owned_passives = progression::owned_passives(d, m);
         let of_slot = |slot: &str| -> Vec<String> { owned_passives.iter().filter(|p| cat.passives.get(*p).is_some_and(|x| x.slot == slot)).cloned().collect() };
         let (passives, keystones) = (of_slot("passive"), of_slot("keystone"));
         let mut work = m.clone();
@@ -203,6 +213,11 @@ impl DeckTerms {
         let mut d = draft.clone();
         if d.active.is_empty() {
             d.active = self.auto_actives.clone();
+        }
+        // PR7-41 (PT-28): an empty keystone row plays as the automatic one (the build slots the class keystone into it,
+        // `Unit::grant_class_keystone`)
+        if d.keystone.is_empty() {
+            d.keystone = self.auto.keystone.clone();
         }
         d
     }

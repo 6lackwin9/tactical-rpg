@@ -968,7 +968,7 @@
 			"rarity": "COMMON",
 			"weight": 4.0,
 			"value": 40,
-			"description": "A garrison billhook, its hook notched by use: a two-handed pole-arm for holding a narrow corridor.",
+			"description": "A garrison billhook, its hook notched by use: a one-handed pole-arm for holding a narrow corridor.",
 			"damage_type": "pierce",
 			"icon_id": "",
 			"starter_stash": false,
@@ -2006,7 +2006,7 @@
 			"rarity": "RARE",
 			"weight": 1.5,
 			"value": 0,
-			"description": "Proctor Quell's marrow scalpel, its blade stained black-green.",
+			"description": "Proctor Quell's silver-grooved marrow scalpel, its blade stained black-green. Every melee hit inflicts bleed; from Act 2 each hit also vents 10 Strain from the wielder.",
 			"damage_type": "slash",
 			"icon_id": "",
 			"starter_stash": false,
@@ -2027,8 +2027,41 @@
 				{
 					"kind": "effect",
 					"effect": {
-						"type": "status_potency",
-						"value": 10
+						"type": "trigger",
+						"on": "hit_dealt",
+						"when": {
+							"melee": true
+						},
+						"limit": "none",
+						"effects": [
+							{
+								"type": "inflict",
+								"status": "bleed",
+								"potency": 70,
+								"rounds": 2,
+								"to": "other"
+							}
+						]
+					}
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "trigger",
+						"on": "hit_dealt",
+						"when": {
+							"melee": true,
+							"from_act": 2
+						},
+						"limit": "none",
+						"effects": [
+							{
+								"type": "meter",
+								"meter": "strain",
+								"delta": -10,
+								"to": "self"
+							}
+						]
 					}
 				}
 			],
@@ -2041,7 +2074,7 @@
 			"rarity": "RARE",
 			"weight": 7.0,
 			"value": 0,
-			"description": "Overseer Grendel's Slag-Hammer.",
+			"description": "Overseer Grendel's piston-weighted Slag-Hammer. Every melee hit sends a shockwave 2 tiles on past the target: each foe there takes 50% of the hit.",
 			"damage_type": "blunt",
 			"icon_id": "",
 			"starter_stash": false,
@@ -2063,6 +2096,24 @@
 					"kind": "requirement",
 					"stat": "STR",
 					"value": 15
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "trigger",
+						"on": "hit_dealt",
+						"when": {
+							"melee": true
+						},
+						"limit": "none",
+						"effects": [
+							{
+								"type": "shockwave",
+								"tiles": 2,
+								"pct_of_hit": 50
+							}
+						]
+					}
 				}
 			],
 			"tiers": []
@@ -2074,7 +2125,7 @@
 			"rarity": "RARE",
 			"weight": 0.3,
 			"value": 0,
-			"description": "A vertebra that hums with other people's dreams.",
+			"description": "A fossilised titan spine-ring torn from the Calcified Amalgam. While the wearer carries Strain (Inoculated): +30% damage on every attack. From Act 2 the wearer's Strain never falls below 20.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -2083,9 +2134,26 @@
 			"slot": "ACCESSORY_1",
 			"modifiers": [
 				{
-					"kind": "stat_bonus",
-					"stat": "KNOW",
-					"value": 1
+					"kind": "effect",
+					"effect": {
+						"type": "skill_potency",
+						"group": "attack",
+						"value": 0.3,
+						"when": {
+							"holds_meter": "strain"
+						}
+					}
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "meter_floor",
+						"meter": "strain",
+						"floor": 20,
+						"when": {
+							"from_act": 2
+						}
+					}
 				}
 			],
 			"tiers": []
@@ -2928,6 +2996,11 @@
 			"hand": "off",
 			"modifiers": [
 				{
+					"kind": "adjust",
+					"field": "mitigation",
+					"delta": 1
+				},
+				{
 					"kind": "requirement",
 					"stat": "STR",
 					"value": 10
@@ -3518,6 +3591,439 @@
 					"skill": "ks_geode_nova"
 				}
 			]
+		},
+		{
+			"id": "smelling_salts",
+			"name": "Brimstone Smelling Salts",
+			"family": "consumable",
+			"rarity": "COMMON",
+			"weight": 0.3,
+			"value": 15,
+			"description": "Sharp brimstone-and-vinegar ampoule that shocks a downed ally upright (+15 HP; revives the bleeding).",
+			"damage_type": "",
+			"icon_id": "smelling_salts",
+			"starter_stash": false,
+			"consumable_type": "HEALTH_POTION",
+			"heal": 15,
+			"revive": true,
+			"damage": 0,
+			"buff_pct": 0.0,
+			"duration": 0,
+			"use_blocks": 1,
+			"use_reach": 1,
+			"hazard": {},
+			"max_stack": 2
+		},
+		{
+			"id": "book_polearm",
+			"name": "Polearm Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering polearm forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_polearm",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "polearm",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_greatsword",
+			"name": "Greatsword Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering greatsword forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_greatsword",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "greatsword",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_sword",
+			"name": "Sword Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering sword forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_sword",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "sword",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_hammer",
+			"name": "Hammer Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering hammer forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_hammer",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "hammer",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_gauntlet",
+			"name": "Gauntlet Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering gauntlet forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_gauntlet",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "gauntlet",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_fist",
+			"name": "Fist Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering fist-weapon forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_fist",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "fist",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_crossbow",
+			"name": "Crossbow Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering crossbow forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_crossbow",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "crossbow",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_bow",
+			"name": "Bow Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering bow forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_bow",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "bow",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_knife",
+			"name": "Knife Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering knife forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_knife",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "knife",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_dagger",
+			"name": "Dagger Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering dagger forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_dagger",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "dagger",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_censer",
+			"name": "Censer Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering censer forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_censer",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "censer",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_bone_saw",
+			"name": "Bone-Saw Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering bone-saw forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_bone_saw",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "bone_saw",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_scourge",
+			"name": "Scourge Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering scourge forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_scourge",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "scourge",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_sprayer",
+			"name": "Sprayer Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering chemical sprayer forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_sprayer",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "sprayer",
+			"mastery_xp": 150
+		},
+		{
+			"id": "book_staff",
+			"name": "Staff Manual",
+			"family": "manual",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 65,
+			"description": "Illustrated field manual covering staff forms (+150 mastery XP, scaled by proficiency).",
+			"damage_type": "",
+			"icon_id": "book_staff",
+			"starter_stash": false,
+			"max_stack": 5,
+			"mastery_family": "staff",
+			"mastery_xp": 150
+		},
+		{
+			"id": "keepsake_tpl_warrior",
+			"name": "Shield Strap",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.1,
+			"value": 0,
+			"description": "A worn Watch shield strap. A recruit's keepsake.",
+			"damage_type": "",
+			"icon_id": "keepsake_tpl_warrior",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "CONS",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "stun",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_tpl_ranger",
+			"name": "Fletching Charm",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.1,
+			"value": 0,
+			"description": "A charm of bound fletching. A recruit's keepsake.",
+			"damage_type": "",
+			"icon_id": "keepsake_tpl_ranger",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "PERC",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "root",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_tpl_rogue",
+			"name": "Lockpick Ring",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.1,
+			"value": 0,
+			"description": "A ring set with a bent pick. A recruit's keepsake.",
+			"damage_type": "",
+			"icon_id": "keepsake_tpl_rogue",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "DEX",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "slow",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_tpl_priest",
+			"name": "Prayer Cord",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.1,
+			"value": 0,
+			"description": "A knotted prayer cord. A recruit's keepsake.",
+			"damage_type": "",
+			"icon_id": "keepsake_tpl_priest",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "KNOW",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "poison",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_tpl_brawler",
+			"name": "Knuckle Wrap",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.1,
+			"value": 0,
+			"description": "A blackened knuckle wrap. A recruit's keepsake.",
+			"damage_type": "",
+			"icon_id": "keepsake_tpl_brawler",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "STR",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "stagger",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_tpl_mage",
+			"name": "Ash Vial",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.1,
+			"value": 0,
+			"description": "A stoppered vial of ash. A recruit's keepsake.",
+			"damage_type": "",
+			"icon_id": "keepsake_tpl_mage",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "INT",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "burn",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
 		}
 	]
 }

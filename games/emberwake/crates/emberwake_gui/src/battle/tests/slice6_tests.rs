@@ -10,7 +10,7 @@ use aegis_ui::ui::{Gfx, H, W};
 use emberwake_battle::round_intent::{self as ri};
 use aegis_ui::art::Art;
 use serde_json::{json, Value};
-use std::time::Instant;
+use aegis_core::clock::Instant;
 use emberwake_rules::ruleset::TIMELINE;
 
 fn arena(ruleset: Option<&str>) -> (Cx, Gfx, BattleScreen) {
@@ -38,7 +38,7 @@ fn the_settings_list_every_overlay_group() {
     let ids: Vec<String> = st.widgets().iter().filter_map(|w| w["id"].as_str().filter(|i| i.starts_with("settings.overlay.")).map(String::from)).collect();
     assert_eq!(ids, OVERLAY_GROUPS.iter().map(|g| format!("settings.overlay.{}", g.0)).collect::<Vec<_>>());
     st.click_id(&mut cx, "settings.overlay.band").unwrap();
-    let draft = st.state(&cx)["draft"]["battle_overlays"].clone();
+    let draft = cx.settings.v["battle_overlays"].clone();
     assert_eq!(draft["band"], json!(false));
     assert!(!Layers::of(&draft).band && Layers::of(&draft).front, "the battle screen's reading of it");
 }

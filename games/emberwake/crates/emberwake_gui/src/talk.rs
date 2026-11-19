@@ -11,6 +11,7 @@
 use crate::board::{BoardAct, BoardPane};
 use crate::hud::{purse_word, PurseWord, HUD_H};
 use crate::portraits::{Faces, Who};
+use crate::facility::{FacilityAct, FacilityPane};
 use crate::recipe::{RecipeAct, RecipePane};
 use crate::screens::{Cx, GameCx, Key, Nav, Screen};
 use crate::shop::{ShopAct, ShopPane};
@@ -18,7 +19,7 @@ use aegis_core::json::{self, s, s_or, Dict};
 use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use aegis_ui::painter::Painter;
-use aegis_ui::ui::{Gfx, Ui, Widget, BODY, H, SMALL, W};
+use aegis_ui::ui::{Gfx, Tip, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use emberwake_world::dialogue::DialogueRunner;
 use emberwake_world::{quest, Data, GameState};
@@ -61,6 +62,8 @@ pub(crate) struct Reply {
     locked: bool,
     act: TalkAct,
     h: i32,
+    /// The row's hover card (none for a conversation's replies; the bunk card's choices carry their help).
+    tip: Tip,
 }
 
 /// The dialogue box measured for one frame (spec PLAYUI1 3.1): the box, its left column's width, the speaker's name
@@ -111,30 +114,37 @@ fn capped(mut lines: Vec<String>, n: usize) -> Vec<String> {
 /// text size, at most the canvas less 40), centred, `TALK_GAP` above the bottom; its height from the content, at least
 /// `TALK_MIN_H`, at most `TALK_MAX_PCT` % of the canvas (the replies, then the line, scroll when they do not fit).
 pub(crate) fn talk_layout(p: &mut Painter, view: &Dict) -> TalkBox {
+    let band_text = if s(view, "faction").is_empty() { String::new() } else { format!("{}: {}", s(view, "faction_name"), s(view, "band")) };
+    box_layout(p, &s(view, "speaker_name"), &band_text, &s(view, "text"), reply_rows(view))
+}
+
+/// The dialogue box's measure for any speaker (`talk_layout` for a conversation; HUB-POLISH1: the bunk card): the
+/// name and the DIM line under the portrait (`band_text`, "" none), the line at the right and the reply `rows` (widget
+/// id, text shown, locked, action; numbered 1-9 in order).
+pub(crate) fn box_layout(p: &mut Painter, speaker_name: &str, band_text: &str, line: &str, rows: Vec<(String, String, bool, TalkAct)>) -> TalkBox {
     let sc = p.fonts.scale;
     let bw = (W - 40).min((TALK_W as f32 * sc).round() as i32);
     let left = TALK_LEFT.max((TALK_LEFT as f32 * sc).round() as i32);
     let (lb, ls) = (p.line_h(BODY).ceil() as i32, p.line_h(SMALL).ceil() as i32);
-    let name = capped(p.wrap(&s(view, "speaker_name"), BODY, (left - 6) as f32), 2);
-    let band_text = if s(view, "faction").is_empty() { String::new() } else { format!("{}: {}", s(view, "faction_name"), s(view, "band")) };
-    let band = if band_text.is_empty() { Vec::new() } else { capped(p.wrap(&band_text, SMALL, (left - 6) as f32), 2) };
+    let name = capped(p.wrap(speaker_name, BODY, (left - 6) as f32), 2);
+    let band = if band_text.is_empty() { Vec::new() } else { capped(p.wrap(band_text, SMALL, (left - 6) as f32), 2) };
     let left_h = TALK_PAD + PORTRAIT + 3 + name.len() as i32 * lb + if band.is_empty() { 0 } else { 1 + band.len() as i32 * ls } + TALK_PAD;
     // the right part: the line on top, a 1 px divider, the replies below (3 px kept for a scroll bar)
     let rw = bw - left - 2 - TALK_PAD;
-    let text = p.wrap(&s(view, "text"), BODY, (rw - 5) as f32);
+    let text = p.wrap(line, BODY, (rw - 5) as f32);
     let text_h = text.len() as i32 * lb;
     let mut text_view_h = text_h.min(TALK_LINES * lb).max(lb);
     let num_w = p.text_w("8", BODY).ceil() as i32 + 6;
     let line_w = (rw - 4 - 5 - num_w - 4) as f32;
     let mut replies = Vec::new();
-    for (i, (id, shown, locked, act)) in reply_rows(view).into_iter().enumerate() {
+    for (i, (id, shown, locked, act)) in rows.into_iter().enumerate() {
         let lines = p.wrap(&shown, BODY, line_w);
         let h = REPLY_H.max(lines.len() as i32 * lb + 5);
         let (num, label) = match act {
             TalkAct::Choose(_) => (if i < 9 { (i + 1).to_string() } else { String::new() }, format!("{}  {shown}", i + 1)),
             TalkAct::Advance => (String::new(), shown.clone()),
         };
-        replies.push(Reply { id, num, label, lines, locked, act, h });
+        replies.push(Reply { id, num, label, lines, locked, act, h, tip: Vec::new() });
     }
     let rows_h: i32 = replies.iter().map(|r| r.h + 2).sum::<i32>() - if replies.is_empty() { 0 } else { 2 };
     let mut rows_view_h: i32 = replies.iter().take(TALK_ROWS).map(|r| r.h + 2).sum::<i32>() - if replies.is_empty() { 0 } else { 2 };
@@ -154,6 +164,25 @@ pub(crate) fn talk_layout(p: &mut Painter, view: &Dict) -> TalkBox {
     let text_view = Rect::new(rx, r.y + TALK_PAD, rw, text_view_h);
     let rows_view = Rect::new(rx, text_view.y + text_view.h + 9, rw, rows_view_h);
     TalkBox { r, left, name, band, text, text_view, replies, num_w, rows_view, rows_h }
+}
+
+impl TalkBox {
+    /// Gives reply row `id` the hover card `tip`.
+    pub(crate) fn set_tip(&mut self, id: &str, tip: Tip) {
+        if let Some(r) = self.replies.iter_mut().find(|r| r.id == id) {
+            r.tip = tip;
+        }
+    }
+
+    /// The portrait's well at the top of the left column.
+    pub(crate) fn portrait_rect(&self) -> Rect {
+        Rect::new(self.r.x + (self.left - PORTRAIT) / 2, self.r.y + TALK_PAD, PORTRAIT, PORTRAIT)
+    }
+
+    /// The reply rows' actions in order (the keys 1-9 pick them).
+    pub(crate) fn acts(&self) -> Vec<(TalkAct, bool)> {
+        self.replies.iter().map(|r| (r.act, !r.locked)).collect()
+    }
 }
 
 /// Text centred on `cx`, shortened to `max_w` (the audit keeps the full text).
@@ -176,18 +205,30 @@ fn text_center_fit(p: &mut Painter, cx: f32, y: f32, text: &str, size: f32, max_
 /// row's `TalkAct` to the screen's action.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_talk<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, gs: &GameState, faces: &mut Faces, view: &Dict, b: &TalkBox, busy: bool, act: fn(TalkAct) -> A) {
-    ui.p.panel(b.r, th().game("talk_box", rgba(14, 20, 34, 250)), th().panel_edge, 4.0);
-    ui.push("dialogue", "panel", s(view, "speaker_name"), b.r, true, false, None, Vec::new());
-    let pr = Rect::new(b.r.x + (b.left - PORTRAIT) / 2, b.r.y + TALK_PAD, PORTRAIT, PORTRAIT);
-    ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
     let d = cx.data.clone();
     let speaker = d.resolve(&gs.world_id, "characters", &s(view, "speaker"));
     let (who, look) = talk_portrait(&d, gs, speaker, view);
     faces.say(&who.key, &s(view, "expression"));
-    if !faces.draw(&mut ui.p, cx, &who, &look, "dialogue", pr) {
-        // the missing art goes to the playtest trail as before (nothing loads)
-        let _ = cx.art.first(&crate::screens::character_art(&d, speaker).2, 1, 1);
-    }
+    draw_box(ui, b, "dialogue", &s(view, "speaker_name"), busy, act, |p, pr| {
+        if !faces.draw(p, cx, &who, &look, "dialogue", pr) {
+            // the missing art goes to the playtest trail as before (nothing loads)
+            let _ = cx.art.first(&crate::screens::character_art(&d, speaker).2, 1, 1);
+        }
+    });
+}
+
+/// The dialogue box `b` for any speaker (`draw_talk`'s look; HUB-POLISH1: the bunk card): its frame (widget
+/// `panel_id`, named `label`), the portrait well with `portrait` drawing into it, the name and DIM line under it, the
+/// line and the numbered reply rows (`act` maps a row's action; all off while `busy`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_box<A: Clone>(ui: &mut Ui<A>, b: &TalkBox, panel_id: &str, label: &str, busy: bool, act: impl Fn(TalkAct) -> A, portrait: impl FnOnce(&mut Painter, Rect)) {
+    // PR7-36 (ART-02): a popup, the double-line tier over the box's fill
+    ui.p.fill(b.r, th().game("talk_box", rgba(14, 20, 34, 250)));
+    ui.frame_body("panel", b.r);
+    ui.push(panel_id, "panel", label.to_string(), b.r, true, false, None, Vec::new());
+    let pr = b.portrait_rect();
+    ui.p.fill(pr, crate::portraits::portrait_well());
+    portrait(&mut ui.p, pr);
     let mid = b.r.x as f32 + b.left as f32 / 2.0;
     let max_w = (b.left - 6) as f32;
     let (lb, ls) = (ui.p.line_h(BODY).ceil(), ui.p.line_h(SMALL).ceil());
@@ -226,7 +267,7 @@ pub(crate) fn draw_talk<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, gs: &GameState, f
         for (i, l) in rep.lines.iter().enumerate() {
             ui.p.text_fit((rr.x + 4 + b.num_w) as f32, ty + i as f32 * lb, l, BODY, (rr.w - 8 - b.num_w) as f32, if rep.locked { th().dim } else { th().text });
         }
-        ui.push(rep.id.clone(), "choice", rep.label.clone(), rr, on, false, Some(act(rep.act)), Vec::new());
+        ui.push(rep.id.clone(), "choice", rep.label.clone(), rr, on, false, Some(act(rep.act)), rep.tip.clone());
         ry += rep.h + 2;
     }
     ui.scroll_end();
@@ -296,6 +337,8 @@ pub enum SvcAct {
     Board(BoardAct),
     /// A click on the recipe pane (PK2-S3; its Close goes back to the conversation).
     Recipe(RecipeAct),
+    /// A click on the facility pane (PR6-8; its Close goes back to the conversation).
+    Facility(FacilityAct),
     TogglePick(String),
     PickRecipient(usize),
     ConfirmTurnIn,
@@ -315,6 +358,8 @@ pub struct Services {
     board: BoardPane,
     /// PK2-S3: the open recipe pane's picks and last run.
     recipe: RecipePane,
+    /// PR6-8: the open facility pane's last upgrade.
+    facility: FacilityPane,
     pending: Option<Dict>,
     /// CAMPAIGN1 W3: the choice waiting on the ask before its `rest` would end the run (a Yes picks it).
     rest_ask: Option<i64>,
@@ -347,6 +392,11 @@ impl Services {
         self.runner.as_ref().filter(|r| !r.closed).map(|r| r.recipe_npc.clone()).unwrap_or_default()
     }
 
+    /// PR6-8: the character whose facility pane is open ("" when none).
+    pub fn facility_npc(&self) -> String {
+        self.runner.as_ref().filter(|r| !r.closed).map(|r| r.facility_npc.clone()).unwrap_or_default()
+    }
+
     /// The character talked to last ("" when none).
     pub(crate) fn talked(&self) -> String {
         self.runner.as_ref().map(|r| r.character_qid.clone()).unwrap_or_default()
@@ -363,6 +413,12 @@ impl Services {
             return;
         }
         cx.log(format!("You speak with {}.", r.character_name));
+        cx.set_busy(true);
+        self.runner = Some(r);
+    }
+
+    /// BUNKS1 BK8: a prepared conversation (a bunk talk's scene) opens.
+    pub fn open_runner(&mut self, cx: &mut Cx, r: DialogueRunner) {
         cx.set_busy(true);
         self.runner = Some(r);
     }
@@ -386,6 +442,7 @@ impl Services {
         self.shop = ShopPane::default();
         self.board = BoardPane::default();
         self.recipe = RecipePane::default();
+        self.facility = FacilityPane::default();
         cx.set_busy(false);
     }
 
@@ -421,16 +478,19 @@ impl Services {
     pub(crate) fn draw<A: Clone + From<SvcAct>>(&mut self, ui: &mut Ui<A>, cx: &mut Cx, view: &Dict, b: &TalkBox, veil: Rect) {
         let d = cx.data.clone();
         let gs = cx.gs().clone();
-        let (shop_qid, board_qid, recipe_npc) = (self.shop_qid(), self.board_qid(), self.recipe_npc());
+        let (shop_qid, board_qid, recipe_npc, facility_npc) = (self.shop_qid(), self.board_qid(), self.recipe_npc(), self.facility_npc());
         if !shop_qid.is_empty() {
             ui.p.fill(veil, th().game("shop_veil", SHOP_DIM));
             self.shop.draw(ui, cx, &shop_qid, |a| A::from(SvcAct::Shop(a)));
         } else if !recipe_npc.is_empty() {
             ui.p.fill(veil, th().game("shop_veil", SHOP_DIM));
             self.recipe.draw(ui, cx, &recipe_npc, |a| A::from(SvcAct::Recipe(a)));
+        } else if !facility_npc.is_empty() {
+            ui.p.fill(veil, th().game("shop_veil", SHOP_DIM));
+            self.facility.draw(ui, cx, &facility_npc, |a| A::from(SvcAct::Facility(a)));
         } else if !board_qid.is_empty() {
             ui.p.fill(veil, th().game("shop_veil", SHOP_DIM));
-            let bv = emberwake_world::board::view(&d, &gs, &board_qid);
+            let bv = crate::board::with_unlock_words(&d, &gs, emberwake_world::board::view(&d, &gs, &board_qid));
             let pick = self.board.select(&bv);
             let det = if pick.is_empty() { Dict::new() } else { emberwake_world::board::detail(&d, &gs, &pick) };
             self.board.draw(ui, cx, &bv, &det, |a| A::from(SvcAct::Board(a)));
@@ -461,16 +521,19 @@ impl Services {
         if allowed > 0 {
             ui.p.text(fr.x as f32 + 10.0, y as f32, &format!("Choose {allowed} of:"), BODY, th().gold);
             y += 13;
-            for lq in offers {
+            for lq in offers.iter().cloned() {
                 let loot = d.resolve(&gs.world_id, "loot", &lq);
                 let on = self.picks.contains(&lq);
                 ui.checkbox(&format!("turn_in.pick.{lq}"), fr.x + 14, y, &s_or(loot, "name", &lq), on, A::from(SvcAct::TogglePick(lq.clone())), true);
                 y += 14;
             }
         }
-        let names: Vec<String> = gs.party.members.iter().map(|m| crate::hub::member_name(cx, m)).collect();
-        ui.p.text(fr.x as f32 + 10.0, y as f32 + 5.0, "Passive / skill rewards go to", BODY, th().dim);
-        ui.select("turn_in.recipient", Rect::new(fr.x + 150, y + 2, 120, 15), &names, self.recipient, |i| A::from(SvcAct::PickRecipient(i)), gs.party.members.len() > 1, Vec::new());
+        // PR7-41 (PT-35): the recipient only when a passive or skill reward (or a pickable one) needs one
+        if quest::needs_recipient(d, gs, json::dget(&q, "rewards"), &offers) {
+            let names: Vec<String> = gs.party.members.iter().map(|m| crate::hub::member_name(cx, m)).collect();
+            ui.p.text(fr.x as f32 + 10.0, y as f32 + 5.0, "Passive / skill rewards go to", BODY, th().dim);
+            ui.select("turn_in.recipient", Rect::new(fr.x + 150, y + 2, 120, 15), &names, self.recipient, |i| A::from(SvcAct::PickRecipient(i)), gs.party.members.len() > 1, Vec::new());
+        }
         ui.button("turn_in.cancel", Rect::new(fr.x + fr.w - 120, fr.y + fr.h - 24, 52, 16), "Cancel", A::from(SvcAct::CancelTurnIn), true);
         ui.button("turn_in.confirm", Rect::new(fr.x + fr.w - 62, fr.y + fr.h - 24, 52, 16), "Confirm", A::from(SvcAct::ConfirmTurnIn), self.picks.len() as i64 <= allowed);
     }
@@ -482,7 +545,7 @@ impl Services {
         if self.pending.is_some() {
             return Some(k == Key::Enter && self.act(cx, SvcAct::ConfirmTurnIn));
         }
-        if !r.shop_qid.is_empty() || !r.board_qid.is_empty() || !r.recipe_npc.is_empty() {
+        if !r.shop_qid.is_empty() || !r.board_qid.is_empty() || !r.recipe_npc.is_empty() || !r.facility_npc.is_empty() {
             return Some(false);
         }
         let view = r.view(&cx.data, cx.gs());
@@ -507,6 +570,8 @@ impl Services {
             SvcAct::CloseBoard
         } else if !self.recipe_npc().is_empty() {
             SvcAct::Recipe(RecipeAct::Close)
+        } else if !self.facility_npc().is_empty() {
+            SvcAct::Facility(FacilityAct::Close)
         } else if self.talking() {
             SvcAct::Farewell
         } else {
@@ -549,7 +614,7 @@ impl Services {
             return false;
         }
         for n in json::sget(&res, "notes") {
-            cx.log(n);
+            log_note(cx, n);
         }
         if let Some(g) = res.get("granted").and_then(Value::as_object) {
             let mut got = Vec::new();
@@ -656,6 +721,16 @@ impl Services {
                 let res = r.close_recipes(&d, cx.gs_mut());
                 self.dialogue_result(cx, res)
             }
+            // PR6-8: an upgrade stays on the pane; Close goes back to the conversation
+            SvcAct::Facility(a) => {
+                if self.facility_npc().is_empty() || !self.facility.act(cx, a) {
+                    return false;
+                }
+                self.facility = FacilityPane::default();
+                let Some(r) = self.runner.as_mut() else { return false };
+                let res = r.close_facilities(&d, cx.gs_mut());
+                self.dialogue_result(cx, res)
+            }
             SvcAct::Board(a) => match a {
                 BoardAct::Pick(q) => {
                     self.board.pick(q);
@@ -708,19 +783,66 @@ impl Services {
         }
     }
 
+    /// PR7-39 (UISPLIT1-G Stage A): the trade's agent reading with the shop's view-model (`shop_view::view`) under
+    /// `view`, the same fields a layout file draws.
+    /// The board pane's agent reading with its view-model under `view` (UISPLIT1-H Stage A: the pick as the pane
+    /// would draw it, on a copy so reading changes nothing).
+    fn board_state(&self, cx: &Cx, bq: &str) -> Value {
+        let (d, gs) = (&cx.data, cx.gs());
+        let bv = crate::board::with_unlock_words(d, gs, emberwake_world::board::view(d, gs, bq));
+        let mut pane = crate::board::BoardPane { selected: self.board.selected.clone(), errors: self.board.errors.clone() };
+        let pick = pane.select(&bv);
+        let det = if pick.is_empty() { Dict::new() } else { emberwake_world::board::detail(d, gs, &pick) };
+        let mut st = self.board.state();
+        st["view"] = crate::board_view::view(cx, &pane, &bv, &det).to_json();
+        st
+    }
+
+    /// ENGINE-23: the recipe pane's reading with its view-model under `view`.
+    fn recipe_state(&self, cx: &Cx) -> Value {
+        let mut st = self.recipe.state();
+        st["view"] = crate::recipe_view::view(cx, &self.recipe, &self.recipe_npc()).to_json();
+        st
+    }
+
+    /// ENGINE-23: the facility pane's reading with its view-model under `view`.
+    fn facility_state(&self, cx: &Cx) -> Value {
+        let mut st = self.facility.state();
+        st["view"] = crate::facility_view::view(cx, &self.facility, &self.facility_npc()).to_json();
+        st
+    }
+
+    fn shop_state(&self, cx: &Cx, sq: &str) -> Value {
+        let mut st = self.shop.state();
+        st["view"] = crate::shop_view::view(cx, &self.shop, sq).to_json();
+        st
+    }
+
     /// The agent link's reading, in the region map's key order: `dialogue` (the open conversation's view), `turn_in`,
-    /// `shop` (the trade), `board` (its qid), `board_pane` and `portraits` (PORTRAITFX1 4.11: the speaker's portrait
+    /// `shop` (the trade, its view-model under `view`), `board` (its qid), `board_pane` (its view-model under `view`), `recipe_pane` and `facility_pane` (the same) and `portraits` (PORTRAITFX1 4.11: the speaker's portrait
     /// while the talk box shows; the shop or the board hides it).
     pub fn state(&self, cx: &Cx) -> Value {
         let gs = cx.gs();
         let (shop_qid, board_qid) = (self.shop_qid(), self.board_qid());
         json!({"dialogue": self.runner.as_ref().filter(|r| !r.closed).map(|r| Value::Object(r.view(&cx.data, gs))),
             "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
-            "shop": if shop_qid.is_empty() { Value::Null } else { self.shop.state() }, "board": Some(board_qid.clone()).filter(|b| !b.is_empty()),
-            "board_pane": if board_qid.is_empty() { Value::Null } else { self.board.state() },
+            "shop": if shop_qid.is_empty() { Value::Null } else { self.shop_state(cx, &shop_qid) }, "board": Some(board_qid.clone()).filter(|b| !b.is_empty()),
+            "board_pane": if board_qid.is_empty() { Value::Null } else { self.board_state(cx, &board_qid) },
             "recipe": Some(self.recipe_npc()).filter(|n| !n.is_empty()),
-            "recipe_pane": if self.recipe_npc().is_empty() { Value::Null } else { self.recipe.state() },
-            "portraits": if self.talking() && shop_qid.is_empty() && board_qid.is_empty() && self.recipe_npc().is_empty() { self.faces.state() } else { json!([]) }})
+            "recipe_pane": if self.recipe_npc().is_empty() { Value::Null } else { self.recipe_state(cx) },
+            "facility": Some(self.facility_npc()).filter(|n| !n.is_empty()),
+            "facility_pane": if self.facility_npc().is_empty() { Value::Null } else { self.facility_state(cx) },
+            "portraits": if self.talking() && shop_qid.is_empty() && board_qid.is_empty() && self.recipe_npc().is_empty() && self.facility_npc().is_empty() { self.faces.state() } else { json!([]) }})
+    }
+}
+
+/// Logs a result note; PR7-41 (PT-36): a recruit's note ("<name> joins the party.") is followed by what the member
+/// arrives with (`dialogue::join_flags`: the bench, unspent points).
+pub(crate) fn log_note(cx: &mut Cx, n: String) {
+    let flags = emberwake_world::dialogue::join_note_member(&cx.data, cx.gs(), &n).map(|id| emberwake_world::dialogue::join_flags(&cx.data, cx.gs(), &id)).unwrap_or_default();
+    cx.log(n);
+    for f in flags {
+        cx.log(f);
     }
 }
 
@@ -1047,6 +1169,10 @@ mod tests {
         let host = open(&mut cx, &mut g, "talia_rusk", "board").expect("Talia's board reply");
         assert_eq!(host.state(&cx)["board"], json!(format!("{W}:talia_board")));
         assert!(has(&host, "board"), "the BoardPane draws");
+        // UISPLIT1-H Stage A: the agent link carries the board's view-model
+        let bv = &host.state(&cx)["board_pane"]["view"];
+        assert_eq!(bv["screen"], json!("board"));
+        assert!(bv["fields"]["main"]["rows"].is_array() && bv["actions"].as_array().is_some_and(|a| a.len() == 3), "{bv}");
         for (who, shop) in [("sabina_kress", "sabina_slab"), ("berek_dorn", "berek_hearth")] {
             let host = open(&mut cx, &mut g, who, "shop").unwrap_or_else(|| panic!("{who}'s shop reply"));
             assert!(host.state(&cx)["shop"].is_object() && has(&host, "shop"), "{shop}: the ShopPane opens");

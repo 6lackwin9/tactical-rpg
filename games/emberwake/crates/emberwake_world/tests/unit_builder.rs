@@ -66,6 +66,15 @@ fn old_member(d: &Data, state: &UnitState, world: &str, deck: Option<&DeckRule>)
             u.apply_passive(cat, p);
         }
     }
+    // PR7-41 (PT-28): under the deck rule a member also owns its base deck's passives and, from its class keystone's
+    // level, its keystone (`progression::deck_grants`); each applies only while slotted (an intended difference)
+    if deck.is_some() {
+        for id in progression::deck_grants(d, &work) {
+            if let Some(p) = cat.passives.get(&id) {
+                u.apply_passive(cat, p);
+            }
+        }
+    }
     for sk in &work.learned_skills {
         u.learn_skill_checked(cat, sk, false);
     }

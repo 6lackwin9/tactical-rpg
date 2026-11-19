@@ -1463,7 +1463,7 @@
 			],
 			"base": {
 				"main_1h": {
-					"power": 13,
+					"power": 15,
 					"range": 1,
 					"burden": 1,
 					"mitigation": 0
@@ -2051,6 +2051,22 @@
 			"level3_passive": "mastery_agile_step",
 			"art": "cloak",
 			"fx": "slash"
+		},
+		{
+			"id": "manual",
+			"name": "Field Manual",
+			"description": "Weapon-mastery manual studied out of battle to drill techniques.",
+			"item_type": "MASTERY_BOOK",
+			"off_hand_category": "",
+			"base": {},
+			"bands": {},
+			"adjustable": [],
+			"modifier_kinds": [],
+			"max_modifiers": 0,
+			"max_tiers": 0,
+			"engine_rules": [],
+			"damage_type": "",
+			"art": "manual"
 		}
 	]
 }

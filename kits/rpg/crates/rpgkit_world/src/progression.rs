@@ -67,10 +67,16 @@ pub fn award(d: &Data, state: &mut UnitState, xp: i64) -> Dict {
 
 /// Full encounter XP to every active member; member id -> award result + "xp".
 pub fn award_encounter(d: &Data, party: &mut PartyState, enemies: &[(i64, String)]) -> Dict {
+    award_encounter_pct(d, party, enemies, 100)
+}
+
+/// PR7-42 (PACE1): `award_encounter` paying `pct` percent of each member's XP (rounded down; 100 = all of it).
+pub fn award_encounter_pct(d: &Data, party: &mut PartyState, enemies: &[(i64, String)], pct: i64) -> Dict {
     let mut out = Dict::new();
     for i in party.active_indexes() {
         let m = &mut party.members[i];
-        let xp = encounter_xp(d, enemies, m.level(d));
+        let full = encounter_xp(d, enemies, m.level(d));
+        let xp = if pct >= 100 { full } else { full * pct.max(0) / 100 };
         let mut res = award(d, m, xp);
         res.insert("xp".into(), int(xp));
         out.insert(m.id.clone(), Value::Object(res));
@@ -129,8 +135,12 @@ pub fn character_of<'a>(d: &'a Data, state: &UnitState) -> &'a Dict {
     }
 }
 
-/// The member's name: its character's, else the base unit's, else its id.
+/// The member's name: its own (`name`, a procedural recruit's, ROSTER1 PG2), else its character's, else the base
+/// unit's, else its id.
 pub fn display_name(d: &Data, state: &UnitState) -> String {
+    if !state.name.is_empty() {
+        return state.name.clone();
+    }
     let c = character_of(d, state);
     let name = json::s(c, "name");
     if !c.is_empty() && !name.is_empty() {
@@ -219,7 +229,8 @@ pub(crate) fn build_unchecked(d: &Data, state: &UnitState, world: &str, auto_spe
     let growth = Growth {
         deck: work.deck.clone(),
         learned_skills: work.learned_skills.clone(),
-        equipment: work.equipment.iter().filter_map(|(slot, id)| Some((Slot::parse(slot)?, cat.items.get(id)?.clone()))).collect(),
+        // KS3: a worn keepsake instance builds as its template row renamed (`UnitState::item_def`)
+        equipment: work.equipment.iter().filter_map(|(slot, id)| Some((Slot::parse(slot)?, cat.items.get(id).cloned().or_else(|| work.keepsake(id).and_then(|k| k.item_def(d)))?))).collect(),
         pouch: work.pouch.iter().filter_map(|id| cat.items.get(id).cloned()).collect(),
         loadout: (!work.loadout_class.is_empty() || !work.loadout_extra.is_empty()).then(|| (work.loadout_class.clone(), work.loadout_extra.clone())),
         ranks: work.loadout_ranks.iter().map(|(k, v)| (k.clone(), *v as i32)).collect(),
@@ -236,11 +247,13 @@ pub(crate) fn build_unchecked(d: &Data, state: &UnitState, world: &str, auto_spe
         // main-hand instance opens the weapon's own technique
         mastery: work.mastery_xp.iter().map(|(k, v)| (k.clone(), rpgkit_data::mastery::level_of(*v))).filter(|(_, l)| *l > 0).collect(),
         masterwork: crate::weapons::masterwork_main(&work),
-        forge_rite: work.forge_rite,
+        forge_rites: work.forge_rites.clone(),
         // PK2-S5b: the durability of its wielded instances that wear (none without the rule durability)
         wear: crate::weapons::wear_of(d, &work, world),
     };
-    let over = Overrides { passives: member_passives(d, &work), ..Overrides::default() };
+    // PR7-41 (PT-28): under the deck rule the member also owns its base deck's passives and its keystone
+    let passives = if deck.is_some() { owned_passives(d, &work) } else { member_passives(d, &work) };
+    let over = Overrides { passives, ..Overrides::default() };
     // U3.2-S3: the gear is read under the world's ruleset's wield terms
     let wield = d.ruleset(world).numbers.wield();
     let b = build_from(cat, UnitBuild { row: &def, default_ap: 0, deck, wield, over, growth: Some(growth) });
@@ -256,12 +269,63 @@ pub(crate) fn build_unchecked(d: &Data, state: &UnitState, world: &str, auto_spe
 pub fn member_passives(d: &Data, state: &UnitState) -> Vec<String> {
     let world = aegis_content::split_qid(&state.lore_ref).map(|(w, _)| w).unwrap_or_default();
     let mut out = d.character_passives(character_of(d, state), &world);
-    for id in state.passives.iter().chain(&track_passives(d, state)) {
+    // PK3 3.1 (ROSTER1 TP2, FZ3, FZ4): a procedural member's saved temperament and origin (slotless), then its fuse's
+    // tier passives (cumulative) and, on a last stand, the last passive
+    let own: Vec<String> = [&state.temperament, &state.origin].into_iter().filter(|p| !p.is_empty()).cloned().chain(crate::roster::fuse_passives(d, state)).collect();
+    for id in own.iter().chain(&state.passives).chain(&track_passives(d, state)) {
         if !out.contains(id) {
             out.push(id.clone());
         }
     }
     out
+}
+
+/// PR7-41 (PT-28): under the deck rule, what a member owns to slot and apply: `member_passives`, then `deck_grants`
+/// (each once). Classic builds and saves keep `member_passives` alone.
+pub fn owned_passives(d: &Data, state: &UnitState) -> Vec<String> {
+    let mut out = member_passives(d, state);
+    for id in deck_grants(d, state) {
+        if !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    out
+}
+
+/// PR7-41 (PT-28): the slottable passives a member owns from its base unit's deck and its class: the deck's `passive`
+/// row from level 1 (`CAST1_FOUNDERS.md` "Deck at level 1"), and from its class keystone's level (CLASSKEY1, level 6)
+/// the deck's `keystone` row and the class keystone (`docs/sessions/U2_CLASS.md` "Class keystones"; a class without
+/// one: the deck's keystone from level 1). Each applies only while slotted (RULESET1 9 D3), so a deck that names
+/// another passive or keystone keeps it.
+pub fn deck_grants(d: &Data, state: &UnitState) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let level = state.level(d) as i32;
+    let class = d.cat.classes.get(&state.class_id(d)).and_then(|c| c.keystone.clone());
+    let keystone_level = keystone_level(d, state);
+    let mut add = |id: &String| {
+        if !out.contains(id) {
+            out.push(id.clone());
+        }
+    };
+    if let Some(base) = d.cat.units.get(&state.base_unit) {
+        for id in &base.deck.passive {
+            add(id);
+        }
+        if level >= keystone_level {
+            for id in &base.deck.keystone {
+                add(id);
+            }
+        }
+    }
+    if let Some(k) = class.filter(|_| level >= keystone_level) {
+        add(&k.id);
+    }
+    out
+}
+
+/// PR7-41 (PT-28): the level a member's keystone opens at (its class keystone's level; 1 when the class names none).
+pub fn keystone_level(d: &Data, state: &UnitState) -> i32 {
+    d.cat.classes.get(&state.class_id(d)).and_then(|c| c.keystone.as_ref()).map_or(1, |k| k.level.max(1))
 }
 
 /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the passives the member's unit tracks grant: per track row (catalog order)
@@ -368,6 +432,11 @@ pub fn is_rest_place(d: &Data, gs: &GameState, location_ref: &str) -> bool {
 
 /// HealRules.can_camp; in a campaign world the rest rule's refusal (CAMPAIGN1 R1, R2: `campaign::purse::rest_refusal`).
 pub fn can_camp(d: &Data, gs: &GameState) -> &'static str {
+    // PR6-9: no rest while a siege with `no_camp` runs
+    let siege = crate::siege::camp_refusal(d, gs);
+    if !siege.is_empty() {
+        return siege;
+    }
     if gs.campaign.is_some() {
         return crate::campaign::purse::rest_refusal(d, gs);
     }

@@ -309,6 +309,22 @@ fn a_two_handed_default_coming_back_clears_the_off_hand() {
     assert_eq!((worn(&p, "main_hand"), worn(&p, "off_hand").as_deref()), (None, Some("dagger")));
 }
 
+/// PR7-41 (PT-30): a stash copy of the item a slot's class default already is (worn, owned by nobody) is refused, so
+/// the copy is never used up; once another item is worn there the same item goes in and the worn one comes back.
+#[test]
+fn wearing_a_copy_of_the_class_default_is_refused_and_the_copy_stays() {
+    let d = world();
+    let mut m = UnitState::create("hero", "heavy");
+    let mut st = stash(&["maul", "sword"]);
+    let err = equip(&d, "w", &mut m, &mut st, "maul", Some("main_hand")).unwrap_err();
+    assert!(err.contains("already wears Maul"), "{err}");
+    assert_eq!((st["maul"], worn(&m, "main_hand")), (2, None), "nothing moved");
+    assert!(equip(&d, "w", &mut m, &mut st, "maul", None).is_err(), "the free-slot pick refuses it too");
+    equip(&d, "w", &mut m, &mut st, "sword", Some("main_hand")).unwrap();
+    equip(&d, "w", &mut m, &mut st, "maul", Some("main_hand")).unwrap();
+    assert_eq!((st["maul"], st["sword"], worn(&m, "main_hand").as_deref()), (1, 2, Some("maul")), "the sword came back");
+}
+
 #[test]
 fn the_classic_pouch_holds_its_size_and_a_dropped_item_replaces_its_place() {
     let d = world();
@@ -369,4 +385,21 @@ fn the_active_squad_holds_one_to_max_active_members() {
     roster::toggle_active(&mut party, &id(cap)).unwrap();
     assert_eq!(party.active_ids, vec![id(cap - 1), id(cap)]);
     assert_eq!(party.active_indexes().len() as i64, cap);
+}
+
+/// PR7-37 (PT-06): a family the deck lists plays as its `intent_of`; a worn item's skill (in none of the deck's lists)
+/// as its own (`round_intent`, else its kind's); a family the catalog lacks has none (the Skills tab then shows no
+/// empty brackets).
+#[test]
+fn a_worn_items_skill_shows_its_own_intent() {
+    let t = terms(DeckSlots { active: 3, passive: 1, keystone: 1 });
+    let cat = rpgkit_data::Catalog::from_value(&json!({"skills": [
+        {"id": "bash", "name": "Bash", "kind": "ATTACK", "level": 1, "blocks": 1, "round_intent": "maneuver"},
+        {"id": "brace", "name": "Brace", "kind": "DEFEND", "level": 1, "blocks": 1}
+    ]}));
+    assert_eq!(t.intent_for(&cat, "wall"), "guard", "the deck's own intent");
+    assert_eq!(t.intent_for(&cat, "bash"), "maneuver", "the skill's round intent");
+    assert_eq!(t.intent_for(&cat, "brace"), rpgkit_rules::ruleset::kind_intent("DEFEND"), "its kind's intent");
+    assert!(!t.intent_for(&cat, "brace").is_empty());
+    assert_eq!(t.intent_for(&cat, "missing"), "", "unknown: none");
 }

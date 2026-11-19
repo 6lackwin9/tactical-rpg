@@ -1,0 +1,272 @@
+{
+	"format": "fc_save",
+	"game_state": {
+		"autoplay": {
+			"heroes": {},
+			"on": false,
+			"party": "balanced"
+		},
+		"campaign": {
+			"act": 1,
+			"armed": [],
+			"checkpoints": {},
+			"fired": [],
+			"meters": {
+				"alert": {
+					"label": "",
+					"value": 4,
+					"visible": true
+				},
+				"doom_clock": {
+					"due": 42,
+					"label": "",
+					"running": true,
+					"visible": true
+				}
+			},
+			"pending": [],
+			"run": "0a32db62"
+		},
+		"explore": {
+			"last_rest": "sunk_ward:sluice_undercroft",
+			"last_safe": "sunk_ward:ash_crawl_crossroads",
+			"loc_steps": 24,
+			"next_at": 16,
+			"steps": 0
+		},
+		"flags": {
+			"board.talia_board.opened": true,
+			"quest.sunk_ward.q_hook_lock_ciphers.ready": true,
+			"sunk_ward.alleyway_junction_7.visited": true,
+			"sunk_ward.alleyway_junction_7.watch_patrol.done": true,
+			"sunk_ward.ash_crawl_crossroads.visited": true,
+			"sunk_ward.debate1_seen": true,
+			"sunk_ward.drain_flue.traversed": true,
+			"sunk_ward.drowned_runoff_grate.visited": true,
+			"sunk_ward.lock_ciphers_mapped": true,
+			"sunk_ward.sluice_gate.traversed": true,
+			"sunk_ward.sluice_undercroft.visited": true,
+			"sunk_ward.water_siphon.traversed": true
+		},
+		"location_id": "sunk_ward:ash_crawl_crossroads",
+		"loot_claimed": [
+			"sunk_ward:loot_poultices"
+		],
+		"party": {
+			"active_ids": [],
+			"gold": 131,
+			"members": [
+				{
+					"base_unit": "founder_kaelen",
+					"carried": [],
+					"equipment": {},
+					"hp_lost": 0,
+					"id": "kaelen",
+					"learned_skills": [],
+					"loadout": {
+						"class": [],
+						"extra": []
+					},
+					"lore_ref": "sunk_ward:kaelen",
+					"passives": [],
+					"pouch": [],
+					"spend": {
+						"STR": 6
+					},
+					"total_xp": 502
+				},
+				{
+					"base_unit": "founder_vesper",
+					"carried": [],
+					"equipment": {
+						"body": "soot_leathers"
+					},
+					"hp_lost": 0,
+					"id": "vesper",
+					"learned_skills": [],
+					"loadout": {
+						"class": [],
+						"extra": []
+					},
+					"lore_ref": "sunk_ward:vesper",
+					"passives": [],
+					"pouch": [],
+					"spend": {
+						"CONS": 1,
+						"DEX": 3,
+						"PERC": 1,
+						"STR": 1
+					},
+					"total_xp": 502
+				},
+				{
+					"base_unit": "founder_maren",
+					"carried": [],
+					"equipment": {},
+					"hp_lost": 0,
+					"id": "maren",
+					"learned_skills": [],
+					"loadout": {
+						"class": [],
+						"extra": []
+					},
+					"lore_ref": "sunk_ward:maren",
+					"passives": [],
+					"pouch": [],
+					"spend": {
+						"CONS": 1,
+						"INT": 1,
+						"KNOW": 3,
+						"PERC": 1
+					},
+					"total_xp": 502
+				},
+				{
+					"base_unit": "founder_hollis",
+					"carried": [],
+					"deck": {
+						"active": [
+							"poachers_quarrel",
+							"tripwire_snare",
+							"heavy_winch_sunder"
+						],
+						"order": {
+							"assault": [
+								"poachers_quarrel",
+								"strike",
+								"heavy_winch_sunder"
+							],
+							"field": [
+								"tripwire_snare"
+							],
+							"guard": [
+								"active_guard"
+							],
+							"maneuver": [
+								"disengage_step"
+							]
+						}
+					},
+					"equipment": {},
+					"hp_lost": 0,
+					"id": "hollis",
+					"learned_skills": [],
+					"loadout": {
+						"class": [],
+						"extra": []
+					},
+					"lore_ref": "sunk_ward:hollis",
+					"passives": [],
+					"pouch": [
+						"sulfur_poultice",
+						"sulfur_poultice",
+						"sulfur_poultice"
+					],
+					"pouch_packed": {
+						"sulfur_poultice": 3
+					},
+					"spend": {
+						"CONS": 1,
+						"DEX": 3,
+						"PERC": 1,
+						"STR": 1
+					},
+					"total_xp": 502
+				}
+			],
+			"stash": {
+				"caustic_gall_sac": 1,
+				"rock_salt": 1,
+				"sinew_braid": 2,
+				"sulfur_poultice": 3,
+				"watch_hookbill": 1
+			},
+			"supplies": 3,
+			"together": {
+				"hollis|kaelen": 12,
+				"hollis|maren": 12,
+				"hollis|vesper": 12,
+				"kaelen|maren": 12,
+				"kaelen|vesper": 13,
+				"maren|vesper": 12
+			}
+		},
+		"position": [
+			28,
+			16
+		],
+		"purses": {
+			"sunk_ward:enc_evt_01": 1,
+			"sunk_ward:enc_pro_0b": 1,
+			"sunk_ward:enc_pro_0c": 1,
+			"sunk_ward:enc_roam_wardens": 2,
+			"sunk_ward:enc_roam_watch": 5,
+			"sunk_ward:enc_scav_alley": 3
+		},
+		"quests": {
+			"sunk_ward:q_a1_corvo": {
+				"objective": 0,
+				"state": "active"
+			},
+			"sunk_ward:q_a1_m1": {
+				"objective": 0,
+				"state": "active"
+			},
+			"sunk_ward:q_a1_m2": {
+				"objective": 0,
+				"state": "active"
+			},
+			"sunk_ward:q_a1_red_pen": {
+				"objective": 0,
+				"state": "active"
+			},
+			"sunk_ward:q_hook_lock_ciphers": {
+				"objective": 1,
+				"state": "ready"
+			}
+		},
+		"reward_paid": {
+			"sunk_ward:enc_evt_01": [
+				"castellan_footman#0",
+				"castellan_footman#1",
+				"watch_crossbowman#0",
+				"footman_shieldbearer#0",
+				"footman_shieldbearer#1"
+			],
+			"sunk_ward:enc_pro_0b": [
+				"mortuary_flagellant#0",
+				"mortuary_flagellant#1",
+				"mortuary_flagellant#2"
+			],
+			"sunk_ward:enc_pro_0c": [
+				"footman_patrol#0",
+				"footman_patrol#1",
+				"footman_patrol#2",
+				"watch_crossbowman#0",
+				"objective"
+			]
+		},
+		"rng_seed": 1893611078,
+		"rolls": {
+			"explore": 20,
+			"loot": 34
+		},
+		"shops": {
+			"sunk_ward:berek_hearth": {
+				"soot_leathers": 1
+			}
+		},
+		"story": {
+			"seen": [
+				"sunk_ward:vg_open",
+				"sunk_ward:vg_meat_market",
+				"sunk_ward:vg_bridge_cart",
+				"sunk_ward:vg_debate_1"
+			]
+		},
+		"time": 7,
+		"world_id": "sunk_ward"
+	},
+	"saved_at": 1795043494,
+	"version": 13
+}

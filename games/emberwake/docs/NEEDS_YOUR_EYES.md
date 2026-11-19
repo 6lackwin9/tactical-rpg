@@ -2,6 +2,47 @@
 
 What only you can judge, with what to do. The planner keeps this current: new items go in when they land, and an item leaves when you've answered. Say "open the build" and the planner launches the latest one.
 
+## For the next session (Design keeps this list; updated 2026-11-19 15:35)
+
+Parked for your approval (golden re-records need your word):
+
+- [ ] Auto-plan fixes that move the timeline and sim goldens (`PR7-41` item 6, `PT-22`, patch
+  `/mnt/project-files/pr7-41/pt22_regrant_retarget.patch`): (a) auto-fill stops re-granting a multi-round self status
+  the unit already holds (ends Vesper's Fade loop; 6 of 18 timeline fights move); (b) a hero whose target is down or
+  out of reach retargets the nearest reachable foe instead of resting (8 fights move, sim golden run 21, one repro
+  re-recorded). Recommendation: approve both for heroes; enemies keep resting (TG4 unchanged).
+
+Mocks waiting for you, then provisional calls Design made while you were away, to confirm or change:
+
+- [ ] Enemy short names for the foe plates (`PR7-40`): Brawler, Berserker, Footman, Enforcer, Husk, Archer,
+  Crossbowman, Purifier, Shaman, Skirmisher (also the Tallow Dredger), Scout, Flagellant, Render-Beast, Ash-Crawler;
+  bosses by name.
+- [ ] Pacing (`PR7-42`): patrols every 40-60 steps, at most 2 per visit, no respawn until the next day; Cages offered
+  before The Sweep; Warded Tallow at the Candle-Maker for 5 Scrap; Make camp needs Tallow.
+- [x] Bunks (`PR7-43`): the hall's plank floor under the bunks with low timber screens and a step; the class blanket Superseded: you signed off take 8 (2026-11-19), built as `PR7-53`.
+  colours.
+- [ ] Mocks to sign off (images in the project files `art-ui/`; scripts on PR #67):
+  battle take 22, the boss fight (`battle_ux14/`, contract section 9); battle take 23, the full timeline view (T)
+  and playback controls; the screens for the victory report, story, character, shop, notice board and saves
+  (`screens_ai21/`). Build rows follow sign-off.
+- [ ] Party token size on maps (`FB-354`, ART-19): tokens are about 40 px beside 80-90 px props. Options:
+  (A) scale tokens to 32 px (blurs pixels), (B) shrink tall props, (C) leave, (D) redraw tokens at 32 px. Mock ready in
+  `art-ui/token_scale/` (`hub_sheet.png`, `region_sheet.png`, 2x zooms beside them). Recommendation: D (crisp pixels,
+  party at the bunks' scale; A looks uneven at 2x, B makes hub beds look toy-like).
+- [x] Status shown where it acts (`docs/specs/STATUSVIS1.md`): you approved take 33 with the take 34 changes
+  (19:39); built as `PR7-57`. A later kit row redraws the legacy status icons (`AI-24`).
+- [x] Boss UI mock (`docs/specs/BOSSUI1.md`): signed off through takes 26-32 (poise A; hero plus "Others", every member on hover);
+  built as `PR7-54` (take 31 shape). Once it lands, play a boss fight and check the feel of the boss intent rows. Your 19:15 note:
+  if the numbers feel too many in play, the fallback is to drop the per-block cells and keep only the totals (selected
+  hero, Others, party breakdown), with the skill strip above giving the timing.
+- [ ] Boss poise golden call (`PR7-54` data step, BU9): boss poise tuned so a same-level party breaks it first in
+  round 2-3, then about every 3 rounds; it moves the boss fights in the timeline and sim goldens. Recommendation:
+  approve once the sim numbers are in.
+- [ ] Image queue ready: say "process image queue" in Gemini (bunk props, class glyphs, bed keepsakes, battle
+  strips, Junction 7 houses; refs in `image_pipeline/refs/active`).
+- [ ] Gamepad on the PC (`FB-327`): repeat timing, dead zone, which button is Back (south Enter, east Back, west
+  Space, north Tab, bumpers page, Start Esc).
+
 ## Battle view: closes M1
 
 Scene Runner > Arena > `tl_flank`, with **Ruleset set to Timeline** on the Arena card (otherwise it may run on Classic, with no capsules or coloured strip). Plan a round, then confirm it.

@@ -923,7 +923,7 @@ fn the_gallery_ground_view_draws_every_view_and_zoom_clean() {
     for view in 0..TILE_VIEWS.len() {
         for zoom in 0..TILE_ZOOMS.len() {
             let mut k = Specimens::default();
-            k.act(KitAct::Page(6));
+            k.act(KitAct::Page(5));
             k.act(KitAct::TileGround);
             k.act(KitAct::TileView(view));
             k.act(KitAct::TileZoom(zoom));
@@ -946,7 +946,7 @@ fn the_gallery_ground_view_draws_every_view_and_zoom_clean() {
     }
     // Redrawing composes nothing; the other view composes once, then flipping back nothing.
     let mut k = Specimens::default();
-    k.act(KitAct::Page(6));
+    k.act(KitAct::Page(5));
     k.act(KitAct::TileGround);
     page(&k, &mut gfx(1.0));
     let c0 = ground::ground_composes();
@@ -1719,4 +1719,66 @@ fn patchy_layer_blends_organic_islands_over_under_layer_within_fraction() {
         }
     }
     assert!(saw_tex_under, "under_tex supplies under pixels when present");
+}
+
+/// PR7-36 (ART-20): a ground `contact` line between two lands.
+fn contact_grid(cols: i32, rows: i32) -> Vec<u8> {
+    (0..rows).flat_map(|_| (0..cols).map(move |x| u8::from(x >= cols / 2))).collect()
+}
+
+/// PR7-36 (ART-20): with `contact` on either ground, every pixel of the upper ground beside (4 ways) a pixel of the lower
+/// one, and only those, keeps `CONTACT_DIM` of its colour: one art px on the upper side; off, nothing changes.
+#[test]
+fn a_contact_line_is_one_dark_pixel_on_the_upper_side() {
+    let (cols, rows) = (8, 6);
+    let cells = contact_grid(cols, rows);
+    for cell in CELLS {
+        for (lo_on, up_on) in [(true, false), (false, true), (true, true)] {
+            let plain = [GroundLayer::flat(0, LOW), GroundLayer::flat(1, UP)];
+            let lined = [GroundLayer { contact: lo_on, ..GroundLayer::flat(0, LOW) }, GroundLayer { contact: up_on, ..GroundLayer::flat(1, UP) }];
+            let before = compose(5, cols, rows, cell, &cells, &plain);
+            let after = compose(5, cols, rows, cell, &cells, &lined);
+            assert_eq!((before.w, before.h), (after.w, after.h));
+            // the upper ground's pixels are its colour or a bite of the lower one; the lower ground's are its own colour
+            let upper = |x: i32, y: i32| {
+                let p = at(&before, x, y);
+                p == rgb3(UP) || p == by(LOW, 0.95)
+            };
+            let lower = |x: i32, y: i32| x >= 0 && y >= 0 && x < before.w && y < before.h && at(&before, x, y) == rgb3(LOW);
+            let mut lined_px = 0;
+            for y in 0..before.h {
+                for x in 0..before.w {
+                    let edge = upper(x, y) && (lower(x - 1, y) || lower(x + 1, y) || lower(x, y - 1) || lower(x, y + 1));
+                    let (b, a) = (at(&before, x, y), at(&after, x, y));
+                    if edge {
+                        lined_px += 1;
+                        assert_eq!(a, [(b[0] as f32 * ground::CONTACT_DIM + 0.5) as u8, (b[1] as f32 * ground::CONTACT_DIM + 0.5) as u8, (b[2] as f32 * ground::CONTACT_DIM + 0.5) as u8], "{cell:?} ({x}, {y}): on the line");
+                    } else {
+                        assert_eq!(a, b, "{cell:?} ({x}, {y}): off the line, as before");
+                    }
+                }
+            }
+            assert!(lined_px >= before.h, "{cell:?}: the line runs the whole boundary ({lined_px} px)");
+        }
+    }
+}
+
+/// PR7-36 (ART-20): no line against a sunken ground (water keeps its own rim), none on a one-ground map, and the flag is
+/// part of the key.
+#[test]
+fn a_contact_line_skips_water_and_keys_the_job() {
+    let (cols, rows) = (8, 6);
+    let cells = contact_grid(cols, rows);
+    let water = |contact: bool| [GroundLayer { sunken: true, contact, ..GroundLayer::flat(0, LOW) }, GroundLayer { contact, ..GroundLayer::flat(1, UP) }];
+    for cell in CELLS {
+        assert!(compose(5, cols, rows, cell, &cells, &water(true)) == compose(5, cols, rows, cell, &cells, &water(false)), "{cell:?}: none against water");
+        let one = [GroundLayer { contact: true, ..GroundLayer::flat(0, UP) }];
+        let flat = compose(5, cols, rows, cell, &vec![0; cells.len()], &one);
+        assert!(flat.px.chunks(4).all(|p| p[..3] == rgb3(UP)), "{cell:?}: one ground has no edge");
+    }
+    let blocked = vec![false; cells.len()];
+    let key = |layers: &[GroundLayer]| GroundKey::of("t", &GroundJob { seed: 5, cols, rows, cell: SQUARE, cells: &cells, blocked: &blocked, layers, placed: &[] });
+    let plain = [GroundLayer::flat(0, LOW), GroundLayer::flat(1, UP)];
+    let lined = [GroundLayer::flat(0, LOW), GroundLayer { contact: true, ..GroundLayer::flat(1, UP) }];
+    assert_ne!(key(&plain), key(&lined), "the flag is in the key");
 }

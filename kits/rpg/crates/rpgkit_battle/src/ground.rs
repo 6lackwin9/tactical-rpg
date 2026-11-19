@@ -378,10 +378,16 @@ fn meters(res: &mut Resolver, w: &mut World, block: i32) {
 
 /// GH5, GH6: the hazard on `cell` acts on `u`: its flat damage through guard (not armour), then its status roll (one
 /// draw, the placer as the source); a trap entered is removed. None when nothing happened (a resisted roll alone).
-/// PK1-S1 (3.6): a row's `meter` change on a holder waits for `settle` (or the round end's pass), with its own line.
+/// PK1-S1 (3.6): a row's `meter` change on a holder waits for `settle` (or the round end's pass), with its own line;
+/// PR6-7: that change alone makes a hit, and a row's `when_meter` gate spares a unit below it.
 fn apply(w: &mut World, rng: &mut GodotRng, u: UnitId, cell: V2, round_end: bool) -> Option<Hit> {
     let p = w.grid.ground.get(&cell)?.clone();
-    if let Some(d) = p.def.meter.as_ref().filter(|d| w.units[u].is_active() && crate::meter::value(w, u, &d.meter).is_some()) {
+    // PR6-7: a row's meter gate spares a unit below it (or holding no such meter)
+    if p.def.when_meter.as_ref().is_some_and(|g| !g.met(crate::meter::value(w, u, &g.id))) {
+        return None;
+    }
+    let metered = p.def.meter.as_ref().filter(|d| w.units[u].is_active() && crate::meter::value(w, u, &d.meter).is_some()).cloned();
+    if let Some(d) = &metered {
         w.ground.meters.push((u, d.clone(), p.def.name.clone()));
     }
     let mark = w.hp_journal.as_ref().map_or(0, |j| j.len());
@@ -405,7 +411,8 @@ fn apply(w: &mut World, rng: &mut GodotRng, u: UnitId, cell: V2, round_end: bool
         w.grid.ground.shift_remove(&cell);
     }
     let stop = p.def.stop_moves && !round_end;
-    if lost == 0 && landed.is_empty() && !trap && !stop {
+    // PR6-7: a meter change alone is an outcome too (the hit is recorded and logged; its `[Meter]` line follows)
+    if lost == 0 && landed.is_empty() && !trap && !stop && metered.is_none() {
         return None;
     }
     let name = &w.units[u].name;

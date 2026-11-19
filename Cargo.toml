@@ -6,20 +6,22 @@ members = [
     "games/*/crates/*",
 ]
 
-[workspace.package]
-version = "0.1.0"
-edition = "2021"
-authors = ["Antigravity & Agent Team"]
-license = "MIT OR Apache-2.0"
-
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
 indexmap = "2"
-thiserror = "1.0"
 anyhow = "1.0"
-rand = "0.8"
-rand_pcg = "0.3"
+
+# CI-HARDEN1 (ENGINE-4): a small deny set every crate takes (`[lints] workspace = true`). unsafe_code: the one Win32
+# call opts out where it stands; the clippy lints bite in `tools/fc.sh lints` (the gate), where clippy runs with only
+# these and the compiler's own lints on. Compiler warnings already fail the build (`tools/fc.sh build`).
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
 
 [profile.dev]
 opt-level = 1

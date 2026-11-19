@@ -7,6 +7,13 @@
 | [BALANCE_REPORT_2026-11A.md](../../../docs/archive/BALANCE_REPORT_2026-11A.md) | `PR5-27` .. `R1-BAL`, `INPUT1-MB`, `RULESET1`, `REWARD1-B`, `BAL4/5` (`2026-10-18 .. 2026-11-10`) | All pre-`U3_GEAR_REWORK` Channel Duel, `R4-CLOSE` (`61.0%` feel / `92%` party), `R1..R4`, and classic Ashlands balance runs |
 | [BALANCE_REPORT_2026-10.md](../../../docs/archive/BALANCE_REPORT_2026-10.md) | `2026-10-17` initial runs | Earliest October 2026 baseline snapshot |
 
+## 2026-11-19 PR7-42 pacing run (`FB-348`)
+
+- Feel (10 seeds, authored party), unchanged by PR7-42: Rooftop 100%, Corvo gate 90%, The Sweep 30%, The Cages 80%,
+  Bone-Mill 20%, Vats 50%, The Crucible 0%.
+- `sim bands` already out on develop: duel ranger 63, priest 32, brawler 64; party line clear 75 (band 80-95).
+  Tracked for `PR7-20` (BALANCE-TUNE1).
+
 ## Current Baselines & Open Issues (`U3_GEAR_REWORK`, `PR5-51b` .. `PR5-57`)
 
 - **`PR5-51b` (`30415b91`, `FB-268`) `sim party` / `sim feel` sweep**: `sim party` boss clear jumped to **`80%`** (target band **`30-50%`**), driven primarily by `mage` `orb` `power_stat_override` (`INT` substitution lifting boss damage `214 -> 396`), while `warrior` sustained tank pressure and output dip; `sim feel` `Crucible` (`world:sunk_ward/enc_evt_06`) remains **`0/10`** auto-sim wins and stays tuned for human play per `FB-253`.

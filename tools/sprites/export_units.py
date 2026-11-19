@@ -19,7 +19,8 @@
 #   X1 - X3, X5); --review adds windup_review's board and GIFs (X6). DASH1: a side `dash` row just before them and
 #   dash_<view> rows: not looped, rig.DASH_MS, adding no palette slot (check_dash, else exit).
 # Palette slots: a class body's are the rig palette's base colours (keys without a _lo / _hi shade suffix) that occur in
-# the sheet; a variant lists its own (shades included, the first key wins when two share a colour); at most 16
+# the sheet, then (S2 ramps, PR7-25) each base's _lo / _hi shade the sheet shows whose colour no slot has yet; a variant
+# lists its own (shades included, the first key wins when two share a colour); at most 16 bases, shades apart
 # (aegis_core::assets). A palette file may only name its body's slots (checked here and by content check A4).
 # Looks (WAR2H1, variants.LOOKS): a class base's looks are bodies of their own (units/<class>/1h_buckler/ and
 # units/<class>/2h_<family>/, kit); a look's clips.json palette is its body's, exactly (DIR4 L3; the export exits when a look adds a slot colour), and the
@@ -55,6 +56,7 @@ WORKSPACE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file
 LAYERS = {"kit": ("kits", "rpg", "assets"), "game": ("games", "emberwake", "assets")}
 LOOPING = {"idle", "walk", "idle_guarded", "dazed"} | set(rig.WINDUPS)
 SLOTS_MAX, MS_MIN, MS_MAX, FRAMES_MAX = rig.SLOTS_MAX, 16, 2000, 64
+SHADES = ("_lo", "_hi")
 STANDARD = {"idle", "walk", "hurt", "death", "defend", "idle_guarded", "hurt_guarded", "idle_focus"}
 # FX1-L1: the attack clips, each of which must mark its impact frame (rig.impact)
 ATTACKS = {"attack", "jab", "haymaker", "kick", "sweep_kick", "shield_bash", "spit"}
@@ -77,15 +79,24 @@ def token(frame: Image.Image) -> Image.Image:
 def palette_slots(key: str, pal: dict, keys, sheet: Image.Image) -> dict:
     present = {c[:3] for n, c in sheet.getcolors(maxcolors=1 << 20) if c[3] == 255}
     if keys is None:
-        slots = {k: hexc(v) for k, v in pal.items() if not k.endswith(("_lo", "_hi")) and tuple(v) in present}
+        slots = {k: hexc(v) for k, v in pal.items() if not k.endswith(SHADES) and tuple(v) in present}
+        # S2 ramps (PR7-25): each base's _lo / _hi shade the sheet shows, unless another slot has its colour
+        seen = {tuple(pal[k]) for k in slots}
+        for k in list(slots):
+            for sfx in SHADES:
+                c = pal.get(k + sfx)
+                if c is not None and tuple(c) in present and tuple(c) not in seen:
+                    slots[k + sfx] = hexc(c)
+                    seen.add(tuple(c))
     else:
         slots, seen = {}, set()
         for k in keys:
             if k in pal and tuple(pal[k]) in present and tuple(pal[k]) not in seen:
                 slots[k] = hexc(pal[k])
                 seen.add(tuple(pal[k]))
-    if len(slots) > SLOTS_MAX:
-        sys.exit("export_units: %s has %d palette slots (at most %d): %s" % (key, len(slots), SLOTS_MAX, ", ".join(slots)))
+    bases = [k for k in slots if not k.endswith(SHADES)]
+    if len(bases) > SLOTS_MAX:
+        sys.exit("export_units: %s has %d palette slots (at most %d, shades apart): %s" % (key, len(bases), SLOTS_MAX, ", ".join(bases)))
     return slots
 
 

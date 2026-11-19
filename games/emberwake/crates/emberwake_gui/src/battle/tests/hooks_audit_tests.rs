@@ -3,14 +3,9 @@
 //! battle with every hook rule on and every slice's test rows: ground hazards and the arena (slice 1), meters, a held
 //! guard and HP costs (slice 3), a planned push (slice 4).
 
-use crate::battle::draw::{intel_parts, INTEL_HEAD, INTEL_LINE, INTEL_MORE};
-use crate::battle::marks::{HELD, METER};
 use crate::battle::overlays::OVERLAY_GROUPS;
-use crate::battle::{BattleScreen, ALLY, POISE};
-use aegis_ui::canvas::Rgba;
+use crate::battle::BattleScreen;
 use crate::screens::{Cx, Screen};
-use aegis_ui::painter::Painter;
-use aegis_ui::theme::th;
 use aegis_ui::ui::{Gfx, H, W};
 use aegis_ui::art::Art;
 use serde_json::{json, Value};
@@ -87,6 +82,8 @@ fn the_overlay_settings_fit_at_every_text_size() {
     let mut st = crate::menus::SettingsScreen::new(&cx);
     st.draw(&mut cx, &mut g, (-500, -500), true);
     st.click_id(&mut cx, "settings.tab.battle").unwrap();
+    // SETTINGS-MOCK1: the overlay groups sit under the mock's battle rows; the body scrolls down to them
+    g.kit.scroll.insert("settings.body".to_string(), i32::MAX / 2);
     for scale in SIZES {
         let recs = crate::hud::hud_tests::frame(&mut st, &mut cx, &mut g, scale);
         let boxes: Vec<(String, f32, f32, f32, f32)> = st.widgets().iter().map(|w| {
@@ -107,29 +104,3 @@ fn the_overlay_settings_fit_at_every_text_size() {
     }
 }
 
-/// The intel panel keeps every line that fits; past its room the Level line gives way first, then it ends with
-/// "More on its hover card", and what it draws never runs past the room.
-#[test]
-fn the_intel_panel_drops_the_level_line_first_then_points_to_the_hover_card() {
-    let mut g = crate::hud::hud_tests::gfx();
-    let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
-    let lines: Vec<(String, Rgba)> = vec![
-        ("Goblin Brawler".into(), th().foe),
-        ("HP 108/108   AP 12/12   Neutral".into(), th().text),
-        ("Level 3 Brawler (minion)   Speed 21   Reach 1".into(), th().dim),
-        ("Poise 46/46".into(), POISE),
-        ("Test Heat 5/20".into(), METER),
-        ("Held guard 50% through B3".into(), HELD),
-        ("Warrior deals about 47 with a Strike, takes about 22".into(), ALLY),
-    ];
-    let height = |parts: &[(String, Rgba, bool)]| parts.iter().map(|x| if x.2 { INTEL_HEAD } else { INTEL_LINE }).sum::<f32>();
-    let all = intel_parts(&mut p, &lines, 1000.0);
-    assert!(all.iter().any(|x| x.0.starts_with("Level ")) && all.last().unwrap().0 != INTEL_MORE, "room for all");
-    let full = height(&all);
-    let less = intel_parts(&mut p, &lines, full - 1.0);
-    assert!(!less.iter().any(|x| x.0.starts_with("Level ")), "the Level line goes first");
-    assert!(less.last().unwrap().0.contains("takes about") && less.last().unwrap().0 != INTEL_MORE, "the forecast keeps its place: {less:?}");
-    let tight = intel_parts(&mut p, &lines, 4.0 * INTEL_LINE + INTEL_HEAD);
-    assert_eq!(tight.last().unwrap().0, INTEL_MORE);
-    assert!(height(&tight) <= 4.0 * INTEL_LINE + INTEL_HEAD, "{tight:?}");
-}

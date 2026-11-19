@@ -1,0 +1,182 @@
+{
+  "id": "hub_text_audit",
+  "title": "PR7-41 (PT-30, PT-34, PT-35, PT-36): the playtest save after_vats; the stash cards say what key items are for (recipes, story) with the pouch pips explained; the hub menu, the save slots with whole labels (place and time above, the whole party below) and Quit to main menu asking first",
+  "launch": {
+    "save": "after_vats"
+  },
+  "settings": {
+    "reduce_motion": true
+  },
+  "timeout_s": 300,
+  "steps": [
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "main_menu"
+      }
+    },
+    {
+      "step": "click",
+      "id": "menu.continue"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "notice"
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "step": "click",
+      "id": "notice.ok"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "region_map"
+      }
+    },
+    {
+      "step": "repeat",
+      "times": 6,
+      "until": {
+        "path": "state.dialogue",
+        "absent": true
+      },
+      "steps": [
+        {
+          "step": "pause",
+          "ms": 500
+        },
+        {
+          "step": "key",
+          "key": "1"
+        },
+        {
+          "step": "pause",
+          "ms": 300
+        },
+        {
+          "step": "key",
+          "key": "esc"
+        }
+      ]
+    },
+    {
+      "step": "click",
+      "id": "hud.party"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "character"
+      }
+    },
+    {
+      "step": "click",
+      "id": "character.tab.gear"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "widget": "gear.stash.inquisitor_marrow_valve"
+      }
+    },
+    {
+      "step": "hover",
+      "id": "gear.stash.inquisitor_marrow_valve"
+    },
+    {
+      "step": "shot",
+      "name": "gear_key_item_use"
+    },
+    {
+      "step": "hover",
+      "id": "gear.stash.quells_marrow_scalpel"
+    },
+    {
+      "step": "shot",
+      "name": "gear_unsold_weapon"
+    },
+    {
+      "step": "audit",
+      "scales": [
+        1.0
+      ],
+      "fail": [
+        "cut",
+        "spill"
+      ]
+    },
+    {
+      "step": "key",
+      "key": "esc"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "region_map"
+      }
+    },
+    {
+      "step": "key",
+      "key": "esc"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "hub"
+      }
+    },
+    {
+      "step": "shot",
+      "name": "hub_menu"
+    },
+    {
+      "step": "click",
+      "id": "hub.save"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "widget": "slots.back"
+      }
+    },
+    {
+      "step": "shot",
+      "name": "save_slots_labels"
+    },
+    {
+      "step": "click",
+      "id": "slots.back"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "hub"
+      }
+    },
+    {
+      "step": "click",
+      "id": "hub.quit"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "ask"
+      }
+    },
+    {
+      "step": "shot",
+      "name": "quit_question"
+    }
+  ]
+}

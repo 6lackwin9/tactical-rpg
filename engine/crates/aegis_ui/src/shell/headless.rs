@@ -3,8 +3,11 @@
 //! or audio device. Selected by `Options::headless`; a game reads it from its launch arguments (`Headless::from_args`).
 //!
 //! The pace is `pacing::Pacer`'s, with a low cap: a screen at rest draws at its own need and a resting one takes next to
-//! no CPU, and the link never forces a frame (in a window every request does). Time on screen is wall time, as in a window;
-//! nothing here fakes a clock. Two link requests exist only here: `frames` (frames now) and `clip` (a numbered sequence).
+//! no CPU, and the link never forces a frame (in a window every request does). Time on screen is wall time, as in a window,
+//! unless the launch asks for the shot clock (`clock=step`, ENGINE-17, which every scenario run with no window does):
+//! then the process clock is stepped (`aegis_core::clock::step_on`), no frame is drawn at the pace, and each frame a
+//! request draws moves time on by one frame step (1 / fps) first, so a run's frames, and its shots, are the same in every
+//! run of the build. Two link requests exist only here: `frames` (frames now) and `clip` (a numbered sequence).
 //! With no window to close, a run also ends when nothing has asked anything for a while (`Headless::idle`): a driver that
 //! was killed leaves no invisible game behind.
 //!
@@ -17,7 +20,7 @@ use aegis_core::clock::Duration;
 use anyhow::{bail, Context as _, Result};
 #[cfg(not(target_arch = "wasm32"))]
 use {
-    super::{blank_reason, save_png, text_scale_of, Shell},
+    super::{blank_reason, save_png, settings::text_scale_of, Shell},
     crate::bridge,
     crate::pacing::{Pace, Pacer},
     crate::screen::window_size_of,
@@ -42,6 +45,8 @@ pub const SIZE_MAX: (u32, u32) = (7680, 4320);
 pub const DPR_RANGE: (f32, f32) = (0.5, 4.0);
 /// The most frames one `frames` request draws.
 pub const FRAMES_MAX: u64 = 240;
+/// The most shot-clock time one `frames` `ms` or `since_open_ms` request moves on (ENGINE-17).
+pub const STEP_MS_MAX: u64 = 120_000;
 /// A clip's bounds: frames, time between frames and the whole clip as asked (`clip` holds the link's other requests until it
 /// is done); then what writing may stretch it to, and what it may put on disk. Past either it stops and fails.
 pub const CLIP_FRAMES_MAX: u64 = 120;
@@ -49,6 +54,9 @@ pub const CLIP_EVERY_MS: (u64, u64) = (10, 2000);
 pub const CLIP_MS_MAX: u64 = 15_000;
 pub const CLIP_WALL_MS_MAX: u64 = 30_000;
 pub const CLIP_BYTES_MAX: u64 = 256 << 20;
+/// A `perf` request's bounds (ENGINE-2): the frames timed and the frames drawn first, untimed.
+pub const PERF_FRAMES_MAX: u64 = 2000;
+pub const PERF_WARM_MAX: u64 = 600;
 #[cfg(not(target_arch = "wasm32"))]
 const CLIP_MAX_W: u64 = 1280;
 
@@ -62,6 +70,8 @@ pub struct Headless {
     pub dpr: f32,
     /// How long the run goes on with no link request.
     pub idle: Duration,
+    /// `clock=step`: the shot clock (time moves only by the frames requests draw).
+    pub stepped: bool,
 }
 
 impl Headless {
@@ -71,8 +81,8 @@ impl Headless {
     pub fn from_args(args: &[(String, String)]) -> Result<Option<Self>> {
         let arg = |k: &str| args.iter().find(|(a, _)| a == k).map(|(_, v)| v.as_str());
         let Some(text) = arg("headless") else {
-            if ["fps", "dpr", "idle_exit"].iter().any(|k| arg(k).is_some()) {
-                bail!("fps=, dpr= and idle_exit= come with headless=WxH");
+            if ["fps", "dpr", "idle_exit", "clock"].iter().any(|k| arg(k).is_some()) {
+                bail!("fps=, dpr=, idle_exit= and clock= come with headless=WxH");
             }
             return Ok(None);
         };
@@ -92,7 +102,12 @@ impl Headless {
             None => IDLE_EXIT_S,
             Some(t) => t.parse().ok().filter(|s| (IDLE_EXIT_RANGE_S.0..=IDLE_EXIT_RANGE_S.1).contains(s)).with_context(|| format!("idle_exit='{t}' is not a whole number of seconds from {} to {}", IDLE_EXIT_RANGE_S.0, IDLE_EXIT_RANGE_S.1))?,
         };
-        Ok(Some(Self { size, fps, dpr, idle: Duration::from_secs(idle_s) }))
+        let stepped = match arg("clock") {
+            None | Some("wall") => false,
+            Some("step") => true,
+            Some(t) => bail!("clock='{t}' is wall or step"),
+        };
+        Ok(Some(Self { size, fps, dpr, idle: Duration::from_secs(idle_s), stepped }))
     }
 }
 
@@ -103,8 +118,13 @@ struct Loop<G> {
     every: Duration,
     /// The settings last applied (None: not yet).
     applied: Option<Value>,
-    /// When the last link request was done, or the run started.
+    /// When the last link request was done, or the run started (wall time).
     asked_at: Instant,
+    /// The shot clock is on (`Headless::stepped`).
+    stepped: bool,
+    /// The top screen (stack depth and id) and when it opened, on the run's clock: `frames` `since_open_ms` reads it.
+    top: (usize, &'static str),
+    opened: Instant,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -112,11 +132,24 @@ impl<G: Context> Loop<G> {
     /// One frame, as a window's redraw: the shell's own step, then the settings. What a window does with the OS (the
     /// pointer, the surface) has no place here.
     fn draw(&mut self) {
-        let started = Instant::now();
+        if self.stepped {
+            aegis_core::clock::advance(self.every);
+        }
+        let started = Instant::wall();
         self.shell.frame();
         self.shell.pointer_req = None;
         self.apply_settings();
         self.pacer.framed(started, self.shell.frame_need());
+        self.note_top();
+    }
+
+    /// Notes when the top screen changed (a push, a pop or a swap), on the run's clock.
+    fn note_top(&mut self) {
+        let top = (self.shell.stack.len(), self.shell.stack.last().map_or("", |s| s.id()));
+        if top != self.top {
+            self.top = top;
+            self.opened = Instant::now();
+        }
     }
 
     /// The text size, and a window size picked in the game's settings: the canvas follows as a window would. The launch's
@@ -138,20 +171,41 @@ impl<G: Context> Loop<G> {
 
     /// A request, answered at once whatever the pace; it counts as a change a frame must show, as it does in a window.
     fn serve(&mut self, req: bridge::Request) {
-        self.pacer.touch(Instant::now());
+        self.pacer.touch(Instant::wall());
         let reply = match req.body["cmd"].as_str() {
             Some("frames") => self.frames(&req.body),
             Some("clip") => self.clip(&req.body),
+            Some("perf") => self.perf(&req.body),
             _ => self.shell.bridge(&req.body),
         };
         let _ = req.reply.send(reply);
-        self.asked_at = Instant::now();
+        self.note_top();
+        self.asked_at = Instant::wall();
     }
 
     /// `{"cmd": "frames", "frames": n}`, default 1: draws them now, before the reply, so what the last request changed is on
-    /// the canvas with no waiting for the pace. Clocks read wall time, so this does not move time on. Anything else a screen
+    /// the canvas with no waiting for the pace. On wall time this does not move time on; on the shot clock each frame moves
+    /// it one frame step. Two more forms (ENGINE-17), which move the shot clock on and draw a frame at each step: `ms`
+    /// (draws until that much time has passed) and `since_open_ms` (until the top screen has been open that long; none
+    /// when it already has). Their time is capped at `STEP_MS_MAX`; on wall time they are refused. Anything else a screen
     /// answers (a game's own `step`) goes through to it: a name here hides one of a screen's.
     fn frames(&mut self, body: &Value) -> Value {
+        for key in ["ms", "since_open_ms"] {
+            let Some(v) = body.get(key) else { continue };
+            let Some(ms) = v.as_u64().filter(|n| *n <= STEP_MS_MAX) else {
+                return json!({"ok": false, "error": format!("{key} is a whole number from 0 to {STEP_MS_MAX}")});
+            };
+            if !self.stepped {
+                return json!({"ok": false, "error": format!("{key} needs the shot clock (clock=step)")});
+            }
+            let until = if key == "ms" { Instant::now() } else { self.opened } + Duration::from_millis(ms);
+            let mut drawn = 0u64;
+            while Instant::now() < until {
+                self.draw();
+                drawn += 1;
+            }
+            return json!({"ok": true, "frame": self.shell.frames, "drawn": drawn});
+        }
         let frames = match body.get("frames") {
             None => 1,
             Some(n) => match n.as_u64().filter(|n| (1..=FRAMES_MAX).contains(n)) {
@@ -165,6 +219,37 @@ impl<G: Context> Loop<G> {
         json!({"ok": true, "frame": self.shell.frames})
     }
 
+    /// ENGINE-2 (PERF-STEP1): `{"cmd": "perf", "frames": n, "warm": w}`, defaults 300 and 60: draws `warm` frames untimed,
+    /// then times `frames` whole frames (`Shell::frame`, all a frame costs with no window: nothing is presented) one after
+    /// another, with the calibration workload (`perf::calib`) before and after. Replies with the frame numbers
+    /// (`perf::Stats`, ms), both calibrations, `steady` (`perf::steady`) and the canvas. Back to back, not at the pace:
+    /// the numbers are the frame's cost, not the frame rate.
+    fn perf(&mut self, body: &Value) -> Value {
+        let whole = |key: &str, default: u64, (low, high): (u64, u64)| match body.get(key) {
+            None => Ok(default),
+            Some(n) => n.as_u64().filter(|n| (low..=high).contains(n)).ok_or(format!("{key} is a whole number from {low} to {high}")),
+        };
+        let (frames, warm) = match (whole("frames", 300, (1, PERF_FRAMES_MAX)), whole("warm", 60, (0, PERF_WARM_MAX))) {
+            (Ok(f), Ok(w)) => (f, w),
+            (Err(e), _) | (_, Err(e)) => return json!({"ok": false, "error": e}),
+        };
+        for _ in 0..warm {
+            self.draw();
+        }
+        let calib_before = crate::perf::calib();
+        let mut ms = Vec::with_capacity(frames as usize);
+        for _ in 0..frames {
+            let t = Instant::wall();
+            self.draw();
+            ms.push(crate::perf::ms_since(t));
+        }
+        let calib_after = crate::perf::calib();
+        let r = |x: f64| (x * 1000.0).round() / 1000.0;
+        let canvas = [self.shell.gfx.canvas.w, self.shell.gfx.canvas.h];
+        json!({"ok": true, "stats": crate::perf::Stats::of(&ms).to_json(), "calib_before": r(calib_before), "calib_after": r(calib_after),
+            "steady": crate::perf::steady(calib_before, calib_after), "canvas": canvas, "build": if cfg!(debug_assertions) { "dev" } else { "release" }, "frame": self.shell.frames})
+    }
+
     /// `{"cmd": "clip", "dir": ..., "frames": n, "every_ms": m, "max_w": w}`: a numbered sequence (`frame_0001.png` on) of
     /// the screen as it runs, replying when it is done. Frames go on at the pace between two saves, so clocks stay on wall
     /// time. A blank frame leaves a gap in the numbers and its number under `blank`; a clip of nothing but those fails.
@@ -174,19 +259,27 @@ impl<G: Context> Loop<G> {
             Err(e) => return json!({"ok": false, "error": e}),
         };
         let started = Instant::now();
+        let wall = Instant::wall();
         let (mut saved, mut blank, mut ms, mut bytes) = (Vec::new(), Vec::new(), Vec::new(), 0u64);
         for i in 0..plan.frames {
             let due = started + plan.every * i as u32;
-            while Instant::now() + self.every < due {
-                std::thread::sleep(self.every);
-                self.draw();
+            if self.stepped {
+                // The shot clock: frames at each step up to the due time, then the one saved; no sleeping.
+                while Instant::now() + self.every < due {
+                    self.draw();
+                }
+            } else {
+                while Instant::now() + self.every < due {
+                    std::thread::sleep(self.every);
+                    self.draw();
+                }
+                std::thread::sleep(due.saturating_duration_since(Instant::now()));
             }
-            std::thread::sleep(due.saturating_duration_since(Instant::now()));
             self.draw();
             ms.push(started.elapsed().as_millis() as u64);
             if blank_reason(&self.shell.gfx.canvas).is_some() {
                 blank.push(i + 1);
-                if let Some(why) = clip_over(bytes, started.elapsed()) {
+                if let Some(why) = clip_over(bytes, wall.wall_elapsed()) {
                     return json!({"ok": false, "error": format!("the clip stopped at frame {}: {why}", i + 1), "saved": saved});
                 }
                 continue;
@@ -197,7 +290,7 @@ impl<G: Context> Loop<G> {
             }
             bytes += std::fs::metadata(&path).map_or(0, |m| m.len());
             saved.push(path.display().to_string());
-            if let Some(why) = clip_over(bytes, started.elapsed()) {
+            if let Some(why) = clip_over(bytes, wall.wall_elapsed()) {
                 return json!({"ok": false, "error": format!("the clip stopped at frame {}: {why}", i + 1), "saved": saved});
             }
         }
@@ -262,14 +355,29 @@ pub(super) fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options
     // The same notice over the first screen as a window, so the two walk the same screens.
     let icon_notice = crate::icon::window_icons(cx.art.layers(), &options.icon).err();
     let Some(link) = bridge::start(options.port, || {}) else { bail!("Agent link: port {} is busy.", options.port) };
+    if h.stepped {
+        // Before the first screen opens, so everything it stamps is on the shot clock.
+        aegis_core::clock::step_on();
+    }
     let shell = Shell::open(cx, stack, options, h.size, h.dpr, icon_notice);
     let every = Duration::from_micros(1_000_000 / u64::from(h.fps));
-    let mut game = Loop { shell, pacer: Pacer::default(), every, applied: None, asked_at: Instant::now() };
+    let mut game = Loop { shell, pacer: Pacer::default(), every, applied: None, asked_at: Instant::wall(), stepped: h.stepped, top: (0, ""), opened: Instant::now() };
+    if h.stepped {
+        // One frame at the start, as the pace would draw: the first `ui_tree` has a screen to read.
+        game.draw();
+    }
     loop {
         if let Ok(req) = link.try_recv() {
             game.serve(req);
         }
-        if !game.shell.cx.quit {
+        if game.stepped && !game.shell.cx.quit {
+            // No pace: frames come only with the requests that ask for them.
+            match link.recv_timeout(Duration::from_millis(250)) {
+                Ok(req) => game.serve(req),
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => std::thread::sleep(Duration::from_millis(250)),
+            }
+        } else if !game.shell.cx.quit {
             let now = Instant::now();
             match game.pacer.decide(now, Some(every)) {
                 Pace::Redraw => game.draw(),
@@ -285,7 +393,7 @@ pub(super) fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options
             game.shell.leave_all();
             return Ok(());
         }
-        if game.asked_at.elapsed() >= h.idle {
+        if game.asked_at.wall_elapsed() >= h.idle {
             // A request already waiting means its driver is still there.
             if let Ok(req) = link.try_recv() {
                 game.serve(req);

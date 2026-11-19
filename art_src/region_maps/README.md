@@ -49,13 +49,50 @@ After a re-cut, copy `target/review/propcut/games/emberwake/assets/props/sunk_wa
 
 ## Open, in order
 
+Process for every map, the hub included (Tushar, 2026-11-17): first a layout reference image of the whole map, then
+rebuild that look with terrain tiles and props, shown side by side with the reference (ART_UI_STUDIO 3.3). The
+reference comes from the design, never from a render: Drive `image_pipeline/flow/out/Region Maps` already holds the
+hub's (`Underground_vault_*`, two takes) and the Grate's (`Flooded_underground_drainage_*`, three takes).
+
+Reference picks (2026-11-17, checked against the layout JSON and `draft_markers`):
+
+- Hub: take `..._ce4b19f9` (has the two vault piers and a mooring post either side of the causeway). Leave out its
+  extras when mirroring: the bedroll on the dormitory floor (the design has six bunks), the stove in the east hall
+  and the barrel in the west hall. `REF_LOOK` in `render_map.py` holds the colours measured from it.
+- Grate: every take lacks the two street stairs (one ladder instead), the sluice tunnel north to the hub, the rubble
+  and the silt bank. Take `..._709b8751` is the base; an edit adding them is queued (`grate_layout_ref`).
+  The edit came back 2026-11-17: take 2 (`grate_layout_ref_q1794947468_2`, project files
+  `art-ui/region_refs/grate_ref_edit_take2.png`) has both stairs, the north tunnel arch, two rubble heaps and the
+  silt banks. Leave out when mirroring: the black slab east of the pool (no design meaning) and the footbridge's
+  water wheel (the design has a winch drum).
+- Hub prop sheet 2 (2026-11-17, `props_hub_vertical_1` take 2, project files `art-ui/props_hub_vertical_1/`): tall
+  side-wall pieces `tool_rack_tall`, `weapon_rack_tall`, `crates_tall`, `barrels_tall`, `bookcase_tall`, `chains_tall`
+  (take 1 was three-quarter isometric, off the front-on view). The bookcase is not placed yet.
+- BUNKS1 idle spots (AI-17): the hub layout's anchors `spot_seat_1..6` (the social tables' stools, then their near
+  side) and `spot_bunk_1..6` (each bunk's foot, in roster order), open and reachable so a new lead can stand up there.
+- Hub prop sheet 1 (2026-11-17, take 1, project files `art-ui/props_hub_mirror_1/`): `niche_bunk`, `nightstand`,
+  `wall_lantern`, `mooring_bollard`, `bar_run`, `cell_door` cut into `art_src/sunk_ward/props_cut/<name>/v0.png`.
+  The cuts and the sheet (`art_src/sunk_ward/sheets/props_hub_mirror_1_take1.png`) landed from the desktop 2026-11-18;
+  `previews/sluice_undercroft.png` is re-rendered with them (no magenta boxes).
+  The cell door is not placed (it would sit in the Crypts' doorway); the niche bunk draws the bed across, where the
+  reference has it head-to-wall.
+
 1. The hub's gate arch and bunks were drawn for a taller wall and look cramped in a one-tile face: redraw them for
    that height (a full sluice gate arch 4 wide; a single-tier bunk niche 2 wide), or make walls two tiles tall.
 2. Wall-mounted props on side walls: no art yet (the model draws them front-on). Try single-prop prompts that
    describe the top-down strip, or draw the openings in code.
-3. Per-room wall styles: `interior_plaster` and `interior_stone` are picked but the render uses the boundary brick
-   for every wall. Wire `draft_room_styles` into `render_map.py`.
+3. Per-room wall styles: done 2026-11-17. `render_map.py` `ROOM_WALLS` gives the Slab whitewashed plaster and the
+   Crypts cold stone (from `draft_room_styles`); every other room keeps the drain brick. A wall cell takes the set of
+   the room it faces. The new preview is in the project files (`art-ui/hub_room_walls.png`; Git LFS uploads are
+   blocked from the cloud), so `previews/sluice_undercroft.png` is still the 11-15 render until a desktop re-run.
 4. The Grate next, then the five mission maps, each broken into rooms like the hub.
 5. Place the cut props, tiles and picked textures in the game once the look is signed off (`PR5-54`, `PR5-55` import
    the layouts on placeholders first). The 11 single building images (S10) are not queued yet.
 6. Waiting on Design: Outbox `AO-07` to `AO-10`.
+
+Eight bunks (PR7-19 `HUBMAP-BUNKS1`, Design 2026-11-18): the Dry Hollows north wall holds `bunk_1`..`bunk_8`, four
+either side of the door with no gaps (the nightstands are gone, since the kiln bunk has its own candle). Bunks 1-6 are
+today's six, in the middle; `bunk_7` (west end, x 10) and `bunk_8` (east end, x 26) are the Timber Frames bunks, drawn
+empty until the cap rises. Idle anchors, renamed from `spot_*`: `idle_seat_1`..`idle_seat_8` at the two tables
+(stools, then the near side, then the far side) and `idle_bunk_1`..`idle_bunk_8` at each bunk's foot (y 17). Marked
+preview: `/mnt/project-files/art-ui/region_refs/hub_bunks8_v22.png`.

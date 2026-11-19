@@ -6,7 +6,7 @@
 
 use aegis_ui::pacing::{FrameNeed, SLOW_LIFE};
 use aegis_ui::theme::th;
-use aegis_ui::canvas::{rgb, rgba, Rect};
+use aegis_ui::canvas::{rgba, Rect};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
@@ -297,6 +297,15 @@ fn columns(ui: &mut Ui<PAct>, cols: &[(f32, &str)], gap: f32) -> Vec<(f32, f32)>
         out.push((x, x + ui.p.text_w(h, BODY + 1.0)));
     }
     out
+}
+
+/// PR7-37 (PT-06): a skill row's bracketed tag ("  [Assault]"), or nothing for an empty one (never "[]").
+pub(crate) fn tagged(tag: &str) -> String {
+    if tag.is_empty() {
+        String::new()
+    } else {
+        format!("  [{tag}]")
+    }
 }
 
 /// What a core stat does, for the detail pane (numbers from the rules: StatRules, DamageCalculator).
@@ -757,7 +766,10 @@ impl Screen<GameCx> for Character {
         let mut ui: Ui<PAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), th().game("popup_veil", rgba(0, 0, 0, 110)));
         let fr = Rect::new(16, 16, 608, 328);
-        ui.frame(fr, "Character", true);
+        // PR7-37 (PT-07): an opaque backing, so a screen under the window (the game menu it was opened from) never
+        // shows through its frame
+        ui.p.fill(fr, th().bg);
+        ui.frame_in("ornate", fr, "Character", true);
         ui.close_x("character.close", Rect::new(fr.x + fr.w - 26, fr.y + 8, 19, 18), PAct::Close);
         let unspent = m.unspent(&d);
         let pick = format!("{}  Lv {}{}", crate::hub::member_name(cx, &m), m.level(&d), if unspent > 0 { format!("  +{unspent}") } else { String::new() });
@@ -769,7 +781,6 @@ impl Screen<GameCx> for Character {
         // file)
         self.faces.begin();
         let pr = Rect::new(fr.x + 10, 44, PORTRAIT, PORTRAIT);
-        ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
         let (who, look) = crate::hub::member_portrait(&d, cx.gs(), &m);
         self.faces.draw(&mut ui.p, cx, &who, &look, "roster", pr);
         ui.push("character.portrait", "portrait", crate::hub::member_name(cx, &m), pr, true, false, None, Vec::new());
@@ -912,8 +923,33 @@ impl Screen<GameCx> for Character {
         out
     }
 
-    widget_plumbing!();
+    /// PR7-37 (PT-07): a stat row's card opens past the row's right end, off the numbers the rows show (the detail
+    /// pane holds the same text); any other card follows the mouse.
+    fn draw_tip(&self, p: &mut aegis_ui::painter::Painter, mouse: (i32, i32)) {
+        aegis_ui::ui::draw_tip_by(p, &self.w, mouse, |wd| tip_place(&wd.id, wd.rect, mouse));
+    }
+
+    widget_plumbing!(own_tip Cx);
 }
+
+/// PR7-37 (PT-07): where a Character row's hover card is placed (as for a mouse there), off the numbers: a derived
+/// row's (`stats.derived.`, `level.derived.`) just past the row's right end, at the mouse's height; a core stat row's
+/// (`stats.<STAT>`, left of the derived column) under the stat table; any other at the mouse.
+fn tip_place(id: &str, r: Rect, mouse: (i32, i32)) -> (i32, i32) {
+    if id.starts_with("stats.derived.") || id.starts_with("level.derived.") {
+        (r.x + r.w, mouse.1)
+    } else if id.strip_prefix("stats.").is_some_and(|st| STATS.contains(&st)) {
+        (mouse.0, STATS_TABLE_END)
+    } else {
+        mouse
+    }
+}
+
+/// PR7-37 (PT-07): the gap between the stat table's Total column and the derived list on the Stats tab.
+const DERIVED_GAP: f32 = 18.0;
+
+/// PR7-37 (PT-07): the y the Stats tab's stat table ends at (its six rows from 158, 15 apart).
+const STATS_TABLE_END: i32 = 158 + 6 * 15;
 
 impl Character {
     fn draw_stats(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
@@ -927,10 +963,11 @@ impl Character {
             let mark = "Wounded";
             let x = end + 12.0;
             let after = ui.p.text(x, 104.0, mark, BODY + 1.0, th().foe);
-            ui.p.text(after + 5.0, 104.0, &format!("HP {hp} / {max}"), BODY + 1.0, th().dim);
-            let w = ui.p.text_w(&format!("{mark} HP {hp} / {max}"), BODY + 1.0) + 5.0;
+            // PR7-41 (PT-34): the HP it takes the field with, named so beside the sheet's (rested) Max HP
+            ui.p.text(after + 5.0, 104.0, &format!("field HP {hp} / {max}"), BODY + 1.0, th().dim);
+            let w = ui.p.text_w(&format!("{mark} field HP {hp} / {max}"), BODY + 1.0) + 5.0;
             let lh = (ui.p.line_h(BODY + 1.0) + 2.0).ceil() as i32;
-            ui.push("stats.wounded", "row", format!("{mark} HP {hp} / {max}"), Rect::new(x as i32 - 2, 102, w as i32 + 4, lh), true, false, None, tip(mark, &crate::hub::wounded_tip(cx, m)));
+            ui.push("stats.wounded", "row", format!("{mark} field HP {hp} / {max}"), Rect::new(x as i32 - 2, 102, w as i32 + 4, lh), true, false, None, tip(mark, &crate::hub::wounded_tip(cx, m)));
         }
         let active = gs.party.active_members().iter().any(|a| a.id == m.id);
         let n = gs.party.active_members().len();
@@ -964,7 +1001,8 @@ impl Character {
             ui.push(format!("stats.{st}"), "row", format!("{st} {total}"), Rect::new(66, y as i32 - 2, (table_right - 62.0) as i32, 14), true, false, None, tip(st, &stat_desc(st)));
         }
         let rows = derived(d, &cx.gs().world_id, &party_ruleset(cx), m);
-        let label_x = 250f32.max(table_right + 6.0);
+        // PR7-37 (PT-07): a clear gap after the table's Total column, so the derived list reads as its own column
+        let label_x = 262f32.max(table_right + DERIVED_GAP);
         let value_x = 325f32.max(label_x + rows.iter().map(|r| ui.p.text_w(&r.label, BODY + 1.0)).fold(0.0, f32::max) + 8.0);
         // DERIVE1 4.4: the built-in rows keep their 15 px step; catalog rows past them close the step up to stay above
         // the detail pane (the last row starts at 263 at most)
@@ -986,13 +1024,14 @@ impl Character {
             ui.push("stats.pk2", "row", line, Rect::new(66, PK2_Y - 1, (label_x - 74.0) as i32, 256 - (PK2_Y - 1)), true, false, None, tip("Mastery and weapons", &card.join(" ")));
         }
         // the re-gathered list (FB-63 (2); a hero's temperament is not in the save)
-        let owned = progression::member_passives(d, m);
+        let owned: Vec<String> = progression::member_passives(d, m).into_iter().filter(|p| d.cat.passives.get(p).is_none_or(|x| x.slot.is_empty())).collect();
         let names: Vec<String> = owned.iter().map(|p| s_or(d.entry("passives", p), "name", p)).collect();
-        let line = format!("Passives: {}", if names.is_empty() { "none".into() } else { names.join(", ") });
+        // PR7-41 (PT-28): these apply with no slot; the slotted passives and the keystone sit on the Skills tab
+        let line = format!("Innate passives (no slot): {}", if names.is_empty() { "none".into() } else { names.join(", ") });
         ui.p.text_fit(68.0, 258.0, &line, BODY + 1.0, label_x - 78.0, th().dim);
         let about: Vec<String> = owned.iter().map(|p| format!("{}: {}", s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"))).collect();
         let line_h = (ui.p.line_h(BODY + 1.0) + 2.0).ceil().max(13.0) as i32;
-        ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, line_h), true, false, None, tip("Passives", &if about.is_empty() { "None yet: passives come from the hero's background, faction, disciplines and named items.".into() } else { about.join(" ") }));
+        ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, line_h), true, false, None, tip("Innate passives", &format!("{} Slotted passives and the keystone are on the Skills tab.", if about.is_empty() { "None yet: innate passives come from the hero's background, faction, disciplines and named items.".to_string() } else { about.join(" ") })));
     }
 
     fn draw_level(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
@@ -1046,7 +1085,7 @@ impl Character {
         ui.button("level.confirm", Rect::new(500, 312, 70, 18), "Confirm", PAct::ConfirmLevel, drafted > 0);
     }
 
-    fn draw_skills(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
+    fn draw_skills(&mut self, ui: &mut Ui<PAct>, cx: &mut Cx, m: &UnitState) {
         self.load_skills(cx);
         if let Some(t) = self.terms.clone() {
             return self.draw_deck(ui, cx, m, &t);
@@ -1156,7 +1195,7 @@ impl Character {
             ui.button(&format!("skills.slot.{f}"), Rect::new(310, y, 50, 16), if slotted { "Slotted" } else if full { "Full" } else { "Slot" }, PAct::Slot(f.clone()), !slotted && !full);
             let grade: String = cat.family_rows(f).first().map(|s| { let mut c = s.grade.chars(); c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default() }).unwrap_or_default();
             let desc = row.map(|s| emberwake_content::source::skill_description(&s.raw, stances)).unwrap_or_default();
-            ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}  [{}]  Rank {}", fam_name(f), grade, roman(top)), BODY, 238.0, th().text);
+            ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}{}  Rank {}", fam_name(f), tagged(&grade), roman(top)), BODY, 238.0, th().text);
             ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
             ui.push(format!("skills.family.{f}"), "row", fam_name(f), Rect::new(366, y, 238, 20), true, slotted, Some(PAct::Slot(f.clone())), tip(&fam_name(f), &desc));
             ui.draggable(format!("skill.{f}"));
@@ -1187,8 +1226,9 @@ impl Character {
     /// click or drag like today's slots, a right click takes one out) and the read-only Basics row. Right: the owned
     /// list or the order editor (one short list per intent of its actives and basics; drag to reorder, a click moves an
     /// entry one place up).
-    fn draw_deck(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState, t: &DeckTerms) {
-        let d = &cx.data;
+    fn draw_deck(&mut self, ui: &mut Ui<PAct>, cx: &mut Cx, m: &UnitState, t: &DeckTerms) {
+        let data = cx.data.clone();
+        let d = &*data;
         let cat = &d.cat;
         let rs = d.ruleset(&cx.gs().world_id);
         let built = progression::build_with(d, m, &cx.gs().world_id, false).map(|b| b.unit);
@@ -1199,7 +1239,8 @@ impl Character {
             let top = built.as_ref().and_then(|u| u.selectable_ranks(cat, f).last().copied()).unwrap_or(0);
             let row = cat.family_rows(f).into_iter().find(|s| s.tier == top).or_else(|| cat.tier_one(f));
             let name = cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
-            let intent = intent_name(t.intent_of.get(f).map(String::as_str).unwrap_or(""));
+            // PR7-37 (PT-06): a worn item's skill (in none of the deck's lists) shows its own intent
+            let intent = intent_name(&t.intent_for(cat, f));
             match row {
                 Some(s) => (name, intent, emberwake_battle::skill::ap_cost_by(s, built.as_ref(), &rs), top, emberwake_content::source::skill_description(&s.raw, rs.stances())),
                 None => (name, intent, 0, top, String::new()),
@@ -1207,6 +1248,7 @@ impl Character {
         };
         let passive_of = |p: &str| (s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"));
         let name_of = |kind: &str, id: &str| if kind == "active" { skill_of(id).0 } else { passive_of(id).0 };
+        let (level, key_level) = (m.level(d) as i32, progression::keystone_level(d, m));
         // Left: the buckets.
         let mut y = 104;
         for (kind, label, takes) in DECK_KINDS {
@@ -1215,6 +1257,9 @@ impl Character {
             ui.p.text(64.0, y as f32, &format!("{label} {} / {cap}", list.len()), BODY + 1.0, th().info);
             if kind == "active" {
                 ui.p.text(150.0, y as f32, if self.deck.is_empty() { "Automatic deck" } else { "Custom deck" }, BODY, th().dim);
+            } else {
+                // PR7-41 (PT-28): where this kind comes from, on the header
+                ui.p.text_fit(150.0, y as f32, &deck_source_hint(kind, level, key_level), BODY, 150.0, th().dim);
             }
             y += 11;
             for i in 0..cap {
@@ -1224,8 +1269,10 @@ impl Character {
                     None => {
                         ui.p.panel(r, th().game("slot_empty", rgba(20, 28, 46, 120)), th().game("slot_empty_edge", rgba(58, 78, 116, 120)), 2.0);
                         ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, "Empty", BODY, th().dim);
-                        let help = if t.owned(kind).is_empty() && kind != "active" {
-                            format!("Holds one of the hero's {takes}; none owned yet: they come from the hero's background, faction, disciplines and named items.")
+                        let help = if kind == "keystone" && level < key_level {
+                            format!("Holds one of the hero's {takes}. The class keystone opens at level {key_level} (the hero is level {level}); a Tier III graft or a mastery 3 masterwork can take the slot instead.")
+                        } else if t.owned(kind).is_empty() && kind != "active" {
+                            format!("Holds one of the hero's {takes}; none owned yet: they come from the hero's own deck, background, faction, disciplines and named items.")
                         } else {
                             format!("Holds one of the hero's {takes}: drag one here, or click it in the owned list.")
                         };
@@ -1385,10 +1432,13 @@ impl Character {
                 let y = 118 + (k - self.scroll) as i32 * 22;
                 let (name, intent, ap, _, desc) = skill_of(cat.family_of(id));
                 ui.button(&format!("skills.slot.worn.{id}"), Rect::new(310, y, 50, 16), "Worn", PAct::DeckView("owned"), false);
-                ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{name}  [{intent}]  {ap} AP  from worn gear"), BODY, 238.0, th().gold);
-                ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
-                let card = vec![(name.clone(), th().gold), (format!("{intent} skill from worn gear, {ap} AP"), th().info), (desc, th().text), ("Open while the item is worn: it takes no slot, and taking the item off removes it.".into(), th().dim)];
-                ui.push(format!("skills.worn.{id}"), "row", name, Rect::new(366, y, 238, 20), true, false, None, card);
+                // PR7-36 (ART-05): the skill's 32 px tile
+                skill_tile(ui, cx, Rect::new(OWNED_TILE_X, y + 2, ROW_TILE, ROW_TILE), cat.family_of(id), "active");
+                ui.p.text_fit(OWNED_TEXT_X as f32, y as f32 + 1.0, &format!("{name}{}  {ap} AP  from worn gear", tagged(&intent)), BODY, OWNED_TEXT_W as f32, th().gold);
+                ui.p.text_fit(OWNED_TEXT_X as f32, y as f32 + 10.0, &desc, SMALL, OWNED_TEXT_W as f32, th().dim);
+                let kind = if intent.is_empty() { "Skill".to_string() } else { format!("{intent} skill") };
+                let card = vec![(name.clone(), th().gold), (format!("{kind} from worn gear, {ap} AP"), th().info), (desc, th().text), ("Open while the item is worn: it takes no slot, and taking the item off removes it.".into(), th().dim)];
+                ui.push(format!("skills.worn.{id}"), "row", name, Rect::new(OWNED_TEXT_X, y, OWNED_TEXT_W, 20), true, false, None, card);
             }
             for (k, &(kind, ref id)) in owned.iter().skip(self.scroll).take(ROWS).enumerate() {
                 let y = 118 + k as i32 * 22;
@@ -1397,14 +1447,15 @@ impl Character {
                 ui.button(&format!("skills.slot.{kind}.{id}"), Rect::new(310, y, 50, 16), if slotted { "Slotted" } else if full { "Full" } else { "Slot" }, PAct::DeckSlot(kind, id.clone()), !slotted && !full);
                 let (name, line, desc) = if kind == "active" {
                     let (name, intent, ap, rank, desc) = skill_of(id);
-                    (name.clone(), format!("{name}  [{intent}]  Rank {}  {ap} AP", roman(rank)), desc)
+                    (name.clone(), format!("{name}{}  Rank {}  {ap} AP", tagged(&intent), roman(rank)), desc)
                 } else {
                     let (name, desc) = passive_of(id);
                     (name.clone(), format!("{name}  [{}]", title_case(kind)), desc)
                 };
-                ui.p.text_fit(366.0, y as f32 + 1.0, &line, BODY, 238.0, th().text);
-                ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
-                ui.push(format!("skills.owned.{kind}.{id}"), "row", name.clone(), Rect::new(366, y, 238, 20), true, slotted, Some(PAct::DeckSlot(kind, id.clone())), tip(&name, &desc));
+                skill_tile(ui, cx, Rect::new(OWNED_TILE_X, y + 2, ROW_TILE, ROW_TILE), id, kind);
+                ui.p.text_fit(OWNED_TEXT_X as f32, y as f32 + 1.0, &line, BODY, OWNED_TEXT_W as f32, th().text);
+                ui.p.text_fit(OWNED_TEXT_X as f32, y as f32 + 10.0, &desc, SMALL, OWNED_TEXT_W as f32, th().dim);
+                ui.push(format!("skills.owned.{kind}.{id}"), "row", name.clone(), Rect::new(OWNED_TEXT_X, y, OWNED_TEXT_W, 20), true, slotted, Some(PAct::DeckSlot(kind, id.clone())), tip(&name, &desc));
                 ui.draggable(format!("deck.own.{kind}.{id}"));
             }
         }
@@ -1443,9 +1494,10 @@ impl Character {
     /// GEARUI1: three columns like the Godot gear dojo: the hero's stats with this gear (and the change a hovered or
     /// dragged item would make), the equipped slots with the battle pouch under them, the party stash. Clicks and drag
     /// and drop both ways (stash to a slot or the pouch equips, a slot or pouch item to the stash takes it off).
-    fn draw_gear(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
+    fn draw_gear(&mut self, ui: &mut Ui<PAct>, cx: &mut Cx, m: &UnitState) {
         self.load_gear(cx);
-        let d = &cx.data;
+        let data = cx.data.clone();
+        let d = &*data;
         let (work, stash) = self.gear.clone().unwrap();
         // AUDIT-04 (PR5-40): the draft as it would wield once confirmed (its weapon instances synced)
         let wields = wielding(d, cx.gs(), &work, &stash);
@@ -1473,7 +1525,9 @@ impl Character {
                 (None, Some(item)) => item_tip(d, item, &format!("Class default gear: drag an item from the stash onto this slot to replace it.{note}")),
                 (None, None) => tip(&label, "Empty: drag an item from the stash onto this slot."),
             };
-            ui.row(&format!("gear.slot.{slot}"), Rect::new(mx, y, mw, 14), &label, if explicit.is_some() { th().text } else { th().dim }, explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())), false, card);
+            // PR7-36 (ART-05): the slot's tile (the item's icon, an empty-slot glyph) at the row's left
+            item_tile(ui, cx, Rect::new(mx, y, 14, 14), shown.as_deref());
+            ui.row(&format!("gear.slot.{slot}"), Rect::new(mx + 16, y, mw - 16, 14), &label, if explicit.is_some() { th().text } else { th().dim }, explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())), false, card);
             if let Some((b, _)) = &badge {
                 ui.p.text_right((mx + mw - 3) as f32, y as f32 + 2.0, b, SMALL, th().foe);
             }
@@ -1497,7 +1551,8 @@ impl Character {
                     Some(item) => item_tip(d, item, "Click or drag it to the stash to take it out; drag it onto another pouch slot to reorder."),
                     None => tip(&label, "Drag a consumable from the stash here; the hero can use it in battle."),
                 };
-                ui.row(&format!("gear.pouch.{i}"), Rect::new(mx, y, mw, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card);
+                item_tile(ui, cx, Rect::new(mx, y, 14, 14), item.map(String::as_str));
+                ui.row(&format!("gear.pouch.{i}"), Rect::new(mx + 16, y, mw - 16, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card);
                 if item.is_some() {
                     ui.draggable(format!("pouch.{i}"));
                 }
@@ -1538,6 +1593,9 @@ impl Character {
                 Some((_, n)) => format!("{help} {n}"),
                 None => help.to_string(),
             };
+            // PR7-41 (PT-30): what a kept item is for (recipes, story)
+            let note = crate::shop::item_use_note(d, cx.gs(), id);
+            let help = if note.is_empty() { help } else { format!("{help} {note}") };
             let y = 116 + row as i32 * 15;
             ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, y, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), th().text, act, false, item_tip(d, id, &help));
             if let Some((b, _)) = &badge {
@@ -1646,6 +1704,18 @@ impl Character {
             ui.button_full(&format!("gear.pouch.{i}.less"), Rect::new(bx, y + 1, BTN, 12), "-", PAct::PouchPack(item.clone(), packed - 1), packed > 1, false, SMALL, tip("Pack fewer", "Packs one copy less (a copy above the new count goes back to the stash now)."));
             ui.button_full(&format!("gear.pouch.{i}.more"), Rect::new(bx + BTN + 2, y + 1, BTN, 12), "+", PAct::PouchPack(item.clone(), packed + 1), packed < limit, false, SMALL, tip("Pack more", "Packs one copy more: auto-fill brings it from the stash when a fight starts or ends."));
         }
+        // PR7-41 (PT-30): the pips explained under the slots: a filled pip is a copy in the pouch, a hollow one a copy
+        // still to come from the stash (the stash keeps it until a fight starts)
+        if !slots.is_empty() {
+            let y = 224 + POUCH_MAX as i32 * 15 + 1;
+            let (cy, r) = (y as f32 + 5.0, 2.5);
+            ui.p.ellipse(mx as f32 + 5.0, cy, r, r, th().gold);
+            let x = ui.p.text(mx as f32 + 10.0, y as f32, "in pouch", SMALL, th().dim) + 6.0;
+            ui.p.ellipse_ring(x + 3.0, cy, r, r, th().gold);
+            ui.p.text_fit(x + 8.0, y as f32, "from the stash at the next fight", SMALL, (mx + mw) as f32 - x - 10.0, th().dim);
+            let legend = "Filled pip: a copy in the pouch. Hollow pip: a packed copy still in the stash; auto-fill moves it into the pouch when a fight starts, so the stash count changes then.";
+            ui.push("gear.pouch.legend", "label", legend, Rect::new(mx, y, mw, 11), true, false, None, tip("Pouch pips", legend));
+        }
     }
 
     /// The draft a hovered or dragged item would make (UIR-3B stat change): a drag over a target it can drop on, else
@@ -1673,6 +1743,29 @@ impl Character {
 /// GEAR-REWORK1 (PR5-51a pass 2): the gap between the off-hand slot's label and its Off-Hand chip, and the narrowest
 /// chip drawn (a narrower one would hold no text).
 const OFF_HAND_CHIP_GAP: i32 = 6;
+
+/// PR7-36 (ART-05): the Owned list's skill tile (32 px at 1280 x 720) and the text right of it.
+const ROW_TILE: i32 = 16;
+const OWNED_TILE_X: i32 = 363;
+const OWNED_TEXT_X: i32 = OWNED_TILE_X + ROW_TILE + 3;
+const OWNED_TEXT_W: i32 = 604 - OWNED_TEXT_X;
+
+/// PR7-36 (ART-05): skill `id`'s I2 tile in `r` (its family's icon, else its kind's; a passive or keystone shows its
+/// kind's first letter on the empty tile).
+fn skill_tile(ui: &mut Ui<PAct>, cx: &mut Cx, r: Rect, id: &str, kind: &str) {
+    let px = ui.icon_px(r);
+    let chain = if kind == "active" { crate::tokens::skill_icons(&cx.data, id) } else { vec![format!("skills/kinds/{kind}.png")] };
+    let img = cx.art.first(&chain, px, px).cloned();
+    let glyph = if kind == "active" { "" } else { &kind[..1] };
+    aegis_ui::panes::icon_tile(ui, r, img.as_ref(), &glyph.to_uppercase());
+}
+
+/// PR7-36 (ART-05): an item's I2 tile in `r`, or the empty-slot glyph for no item.
+fn item_tile(ui: &mut Ui<PAct>, cx: &mut Cx, r: Rect, item: Option<&str>) {
+    let px = ui.icon_px(r);
+    let img = item.and_then(|i| cx.art.first(&crate::tokens::item_icons(&cx.data, i), px, px).cloned());
+    aegis_ui::panes::icon_tile(ui, r, img.as_ref(), if item.is_none() { "-" } else { "" });
+}
 const OFF_HAND_CHIP_MIN: i32 = 12;
 
 /// GEAR-REWORK1 (PR5-51a pass 2, `docs/sessions/U3_GEAR_REWORK.md` 4): the Gear tab's Off-Hand chip text and card for
@@ -1699,6 +1792,16 @@ fn off_hand_preview(b: &emberwake_rules::unit::OffHandButton) -> (String, aegis_
 /// INPUT1 FL3: places a line in the follow-up editor, and the width of an order entry's follow-up toggle.
 const FOLLOW_PER: usize = 5;
 const FOLLOW_TOGGLE: i32 = 11;
+
+/// PR7-41 (PT-28): the dim line on a Passives or Keystone bucket's header: where that kind comes from, and for the
+/// keystone the level it opens at (`progression::keystone_level`) for a hero at `level`.
+pub(crate) fn deck_source_hint(kind: &str, level: i32, key_level: i32) -> String {
+    match kind {
+        "keystone" if level < key_level => format!("Opens at level {key_level}"),
+        "keystone" => format!("Class keystone, from level {key_level}"),
+        _ => "From the hero's deck and background".into(),
+    }
+}
 
 pub(crate) fn deck_json(d: &Deck) -> Value {
     let lists = |m: &IndexMap<String, Vec<String>>| Value::Object(m.iter().map(|(k, v)| (k.clone(), json!(v))).collect());
@@ -1834,6 +1937,13 @@ mod tests {
     use super::*;
     use emberwake_world::party_ops::intent_names;
     use emberwake_world::state::{item_fits_slot as fits, off_hand_ok};
+
+    /// PR7-37 (PT-06): a skill row never shows an empty "[]" tag.
+    #[test]
+    fn an_empty_tag_shows_no_brackets() {
+        assert_eq!(tagged(""), "");
+        assert_eq!(tagged("Assault"), "  [Assault]");
+    }
 
     fn setup() -> (Data, UnitState, Stash) {
         let dir = Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
@@ -2049,10 +2159,16 @@ mod tests {
             ids.first().map(|s| s.to_string())
         };
         let staff = wear(&m, "main_hand", &|i| i.two_handed && i.item_type == "WEAPON").expect("a 2H weapon a mage can wear");
-        let one = wear(&m, "main_hand", &|i| !i.two_handed && i.item_type == "WEAPON").expect("a 1H weapon a mage can wear");
+        // PR7-41 (PT-30): not the class default itself (a copy of the worn default is refused)
+        let default_main = m.default_item(&d, "", "main_hand");
+        let one = wear(&m, "main_hand", &|i| !i.two_handed && i.item_type == "WEAPON" && Some(&i.id) != default_main.as_ref()).expect("a 1H weapon a mage can wear");
         let focus = wear(&m, "off_hand", &|i| matches!(i.weapon_type.as_str(), "orb" | "tome")).expect("a focus");
         // the class default main hand may be two-handed: a one-handed weapon first frees the off hand for the focus
         drop_move(&d, "", &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
+        // PR7-41 (PT-30): a stash copy of the class default is refused, so the default off hand is emptied first
+        if m.default_item(&d, "", "off_hand").as_deref() == Some(focus.as_str()) {
+            m.equipment.insert("off_hand".into(), emberwake_data::NO_ITEM.into());
+        }
         drop_move(&d, "", &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand", false).unwrap();
         drop_move(&d, "", &mut m, &mut st, &format!("stash.{staff}"), "slot.main_hand", false).unwrap();
         assert!(!m.equipment.contains_key("off_hand"), "the focus is stowed");
@@ -2489,7 +2605,7 @@ mod tests {
             m.equipment.insert("main_hand".into(), "mw_blade".into());
             m.equipment.insert("off_hand".into(), NO_ITEM.into());
             m.mastery_xp.insert("sword".into(), *MASTERY_LEVEL_XP.last().unwrap());
-            m.forge_rite = true;
+            m.set_forge_rite("sword", true);
             gs.party.stash.insert("blade".into(), 1);
             gs.party.stash.shift_remove("mw_blade");
         }
@@ -2937,6 +3053,24 @@ mod tests {
         }
     }
 
+    /// PR7-41 (PT-28): the Passives and Keystone headers say where they come from, the keystone with the level it opens
+    /// at (`progression::keystone_level`); an empty keystone slot below that level says so on its card.
+    #[test]
+    fn the_deck_buckets_say_where_passives_and_the_keystone_come_from() {
+        assert_eq!(deck_source_hint("keystone", 3, 6), "Opens at level 6");
+        assert_eq!(deck_source_hint("keystone", 6, 6), "Class keystone, from level 6");
+        assert!(deck_source_hint("passive", 1, 6).contains("deck"));
+        let (mut cx, member) = deck_cx(true);
+        let m = cx.gs().party.member(&member).unwrap().clone();
+        let (level, key_level) = (m.level(&cx.data) as i32, progression::keystone_level(&cx.data, &m));
+        let mut c = Character::new(&cx, &member, "skills");
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        let slot = c.w.iter().find(|w| w.id == "skills.keystone.0").expect("the keystone slot");
+        if level < key_level && slot.text == "Empty" {
+            assert!(slot.tip.iter().any(|t| t.0.contains(&format!("opens at level {key_level}"))), "{:?}", slot.tip);
+        }
+    }
+
     /// D3-D6 end to end: the member owns a slottable passive and keystone (shipped rows picked by `slot`); slotting
     /// one, reordering an intent and Confirm save a deck the member's validation accepts; the battle build applies a
     /// slottable passive only while slotted; a right click on a filled slot takes it out.
@@ -3032,7 +3166,7 @@ mod tests {
         assert!(wounded && hp <= field);
         let t = texts(&crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0));
         assert!(t.contains(&format!("Bunks {}/6", cx.gs().party.members.len())), "{t:?}");
-        assert!(t.contains(&"Wounded".to_string()) && t.contains(&format!("HP {hp} / {field}")), "{t:?}");
+        assert!(t.contains(&"Wounded".to_string()) && t.contains(&format!("field HP {hp} / {field}")), "{t:?}");
         assert!(c.w.iter().any(|w| w.id == "stats.wounded"));
         for (size, scale) in aegis_ui::screen::TEXT_SIZES {
             let recs = crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, scale as f32);
@@ -3052,7 +3186,7 @@ mod portrait_tests {
     use crate::hud::hud_tests::{frame, game_cx, gfx};
     use crate::portraits::tests::{roster_cx, row};
     use aegis_ui::fx::Clock;
-    use aegis_ui::portrait_fx::EASE_MS;
+    use rpgkit_ui::portrait_fx::EASE_MS;
     use aegis_ui::screen::TEXT_SIZES;
 
     /// The shown member's portrait rect.
@@ -3295,5 +3429,173 @@ mod pouch_stack_tests {
         assert_eq!((work.pouch.len(), work.pouch_packed.len(), stash[&item]), (1, 0, 1), "one copy a click");
         frame(&mut c, &mut cx, &mut gfx(), 1.0);
         assert!(widget(&c, "gear.pouch.0").is_some() && widget(&c, "gear.pouch.0.pips").is_none(), "the classic rows");
+    }
+}
+
+/// PR7-26 (3) (`PLAYTEST-UI1`): the Character screen of a full party fits its frame at every text size: on every tab,
+/// for every member, no text or control leaves the frame and the text audit is clean (nothing cut off the canvas, no
+/// overlap, no spill).
+#[cfg(test)]
+mod fit_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+    use aegis_ui::screen::TEXT_SIZES;
+
+    /// The frame the screen draws in.
+    const SHEET_RECT: Rect = Rect::new(16, 16, 608, 328);
+
+    /// A game whose party is full, every extra member a copy of the first under its own id: `bunks` 0 fills the
+    /// world's party max; more gives the world a roster block of that many bunks (ROSTER1 BK1) and fills them, the
+    /// first copy wounded (its mark widens the rows).
+    pub(crate) fn full_party_cx(bunks: i64) -> Cx {
+        let mut cx = game_cx();
+        if bunks > 0 {
+            let max = cx.gs().party.roster.party_max;
+            cx.gs_mut().party.roster = emberwake_world::state::RosterCaps { party_max: max, manifest: emberwake_data::RosterManifest::from_obj(json!({"bunks": bunks, "bunks_max": bunks}).as_object().unwrap()) };
+        }
+        let cap = if bunks > 0 { emberwake_world::roster::bunk_cap(cx.gs()) } else { cx.gs().party.roster.party_max };
+        let max = cap.max(cx.gs().party.members.len() as i64) as usize;
+        let first = cx.gs().party.members[0].clone();
+        let gs = cx.gs_mut();
+        while gs.party.members.len() < max {
+            let mut m = first.clone();
+            m.id = format!("{}_copy{}", first.id, gs.party.members.len());
+            gs.party.members.push(m);
+        }
+        if bunks > 0 {
+            if let Some(m) = cx.gs_mut().party.members.get_mut(1) {
+                m.add_condition(emberwake_world::roster::WOUNDED);
+            }
+        }
+        cx
+    }
+
+    /// The problems of one frame of the hub: the text audit's counts, and every text or control outside its frame.
+    fn hub_problems(h: &crate::hub::Hub, recs: &[aegis_ui::painter::TextRec]) -> Vec<String> {
+        let w = h.widgets();
+        let boxes: Vec<(String, f32, f32, f32, f32)> = w.iter().map(|w| (w["id"].as_str().unwrap_or_default().to_string(), w["rect"][0].as_f64().unwrap() as f32, w["rect"][1].as_f64().unwrap() as f32, w["rect"][2].as_f64().unwrap() as f32, w["rect"][3].as_f64().unwrap() as f32)).collect();
+        let v = aegis_ui::text_audit::issues(recs, W as f32, H as f32, &boxes);
+        let mut out: Vec<String> = ["edge", "overlap", "spill"].iter().filter(|k| v["counts"][**k] != json!(0)).map(|k| format!("{k}: {}", v[*k])).collect();
+        let fr = crate::hub::HUB_RECT;
+        let inside = |x: f32, y: f32, w: f32, h: f32| x >= fr.x as f32 - 0.5 && y >= fr.y as f32 - 0.5 && x + w <= (fr.x + fr.w) as f32 + 0.5 && y + h <= (fr.y + fr.h) as f32 + 0.5;
+        for r in recs.iter().filter(|r| !r.clipped && !r.covered) {
+            if !inside(r.x, r.y, r.w, r.h) {
+                out.push(format!("text {:?} at {:?}", r.text, (r.x, r.y, r.w, r.h)));
+            }
+        }
+        for (id, x, y, w, h) in &boxes {
+            if !inside(*x, *y, *w, *h) {
+                out.push(format!("widget {id} at {:?}", (x, y, w, h)));
+            }
+        }
+        out
+    }
+
+    /// The hub's party list of a full party (the party max, and a roster of 8 bunks) fits the hub's frame at every
+    /// text size: no row, button or line pushed out, nothing overlapping.
+    #[test]
+    fn a_full_party_fits_the_hub_at_every_text_size() {
+        let mut bad = Vec::new();
+        for bunks in [0, 8] {
+            let mut cx = full_party_cx(bunks);
+            let mut g = gfx();
+            let n = cx.gs().party.members.len();
+            for (size, scale) in TEXT_SIZES {
+                let mut h = crate::hub::Hub::default();
+                let recs = frame(&mut h, &mut cx, &mut g, scale as f32);
+                for p in hub_problems(&h, &recs) {
+                    bad.push(format!("{n} members at {size}: {p}"));
+                }
+                // the window's measure (1280 x 720) runs a little wider: the controls stay inside there too
+                let mut big = gfx();
+                big.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+                big.view = aegis_ui::painter::View::fit(1280, 720);
+                frame(&mut h, &mut cx, &mut big, scale as f32);
+                for p in hub_problems(&h, &[]) {
+                    bad.push(format!("{n} members at {size}, 1280 x 720: {p}"));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{} problems:\n{}", bad.len(), bad.join("\n"));
+    }
+
+    /// The problems of one frame: the text audit's counts and every text or control outside the frame.
+    fn problems(c: &Character, recs: &[aegis_ui::painter::TextRec]) -> Vec<String> {
+        let mut out = Vec::new();
+        let boxes: Vec<(String, f32, f32, f32, f32)> = c.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+        let v = aegis_ui::text_audit::issues(recs, W as f32, H as f32, &boxes);
+        for k in ["edge", "overlap", "spill"] {
+            if v["counts"][k] != json!(0) {
+                out.push(format!("{k}: {}", v[k]));
+            }
+        }
+        let inside = |x: f32, y: f32, w: f32, h: f32| x >= SHEET_RECT.x as f32 - 0.5 && y >= SHEET_RECT.y as f32 - 0.5 && x + w <= (SHEET_RECT.x + SHEET_RECT.w) as f32 + 0.5 && y + h <= (SHEET_RECT.y + SHEET_RECT.h) as f32 + 0.5;
+        for r in recs.iter().filter(|r| !r.clipped && !r.covered) {
+            if !inside(r.x, r.y, r.w, r.h) {
+                out.push(format!("text {:?} at {:?}", r.text, (r.x, r.y, r.w, r.h)));
+            }
+        }
+        for w in &c.w {
+            if !inside(w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32) {
+                out.push(format!("widget {} at {:?}", w.id, w.rect));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_full_party_fits_the_frame_on_every_tab_at_every_text_size() {
+        let mut cx = full_party_cx(8);
+        let mut g = gfx();
+        let ids: Vec<String> = cx.gs().party.members.iter().map(|m| m.id.clone()).collect();
+        assert!(ids.len() as i64 >= cx.gs().party.roster.party_max, "the party is full");
+        let mut bad = Vec::new();
+        for id in &ids {
+            for (tab, _) in TABS {
+                let mut c = Character::new(&cx, id, tab);
+                for (size, scale) in TEXT_SIZES {
+                    let recs = frame(&mut c, &mut cx, &mut g, scale as f32);
+                    for p in problems(&c, &recs) {
+                        bad.push(format!("{id} {tab} at {size}: {p}"));
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{} problems:\n{}", bad.len(), bad.join("\n"));
+    }
+
+    /// The proof shots (only with `AEGIS_REVIEW_DIR` set): every tab of the full party's first member at Normal and
+    /// Extra large text and the hub's party list, 1280 x 720, as `party_<tab>_<size>.png` and `party_hub_<size>.png`.
+    #[test]
+    fn full_party_shots() {
+        let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") else { return };
+        let mut cx = full_party_cx(8);
+        let id = cx.gs().party.members[0].id.clone();
+        let mut g = gfx();
+        g.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+        g.view = aegis_ui::painter::View::fit(1280, 720);
+        for (tab, _) in TABS {
+            for (size, scale) in [("normal", 1.0f32), ("xl", 1.3)] {
+                let mut c = Character::new(&cx, &id, tab);
+                g.fonts.scale = scale;
+                c.draw(&mut cx, &mut g, (-500, -500), true);
+                let file = std::fs::File::create(std::path::Path::new(&out).join(format!("party_{tab}_{size}.png"))).unwrap();
+                let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
+                enc.set_color(png::ColorType::Rgba);
+                enc.set_depth(png::BitDepth::Eight);
+                enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
+            }
+        }
+        for (size, scale) in [("normal", 1.0f32), ("xl", 1.3)] {
+            let mut h = crate::hub::Hub::default();
+            g.fonts.scale = scale;
+            g.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+            h.draw(&mut cx, &mut g, (-500, -500), true);
+            let file = std::fs::File::create(std::path::Path::new(&out).join(format!("party_hub_{size}.png"))).unwrap();
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
+        }
     }
 }

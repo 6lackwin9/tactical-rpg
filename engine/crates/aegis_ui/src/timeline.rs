@@ -29,6 +29,8 @@ use crate::canvas::{rgb, rgba, Rect, Rgba};
 use crate::theme::th;
 use crate::ui::{tip, Tip, Ui, RADIUS};
 
+/// The ruler's label when the caller names none (`Timeline::ruler`).
+pub const RULER_LABEL: &str = "Block";
 /// Height of the block ruler, a section header and a track row (old units).
 pub const RULER_H: i32 = 13;
 pub const HEADER_H: i32 = 11;
@@ -148,6 +150,8 @@ pub struct Timeline {
     pub selected_block: Option<i32>,
     pub selected_track: Option<String>,
     pub sections: Vec<Section>,
+    /// The ruler's label (ENGINE-5: the caller's word for a block; "Block" when None).
+    pub ruler: Option<String>,
 }
 
 impl Timeline {
@@ -242,7 +246,7 @@ impl Timeline {
         let lane_w = (r.w - label_w - m.u(4)).max(m.u(self.blocks.max(1)));
         // The ruler: one tick per block, the playhead filled, the selected block outlined.
         ui.p.fill(Rect::new(r.x, r.y, r.w, m.u(RULER_H)), ui.t.ruler);
-        ui.p.text(r.x as f32 + m.uf(3.0), r.y as f32 + m.uf(2.5), "Block", m.small, ui.t.dim);
+        ui.p.text(r.x as f32 + m.uf(3.0), r.y as f32 + m.uf(2.5), self.ruler.as_deref().unwrap_or(RULER_LABEL), m.small, ui.t.dim);
         for b in 1..=self.blocks {
             let (x0, x1) = self.block_span(lane_x, lane_w, b);
             let cell = Rect::new(x0 + m.u(1), r.y + m.u(1), x1 - x0 - m.u(2), m.u(RULER_H - 2));
@@ -535,6 +539,7 @@ pub fn sample() -> Timeline {
         selected_block: Some(3),
         selected_track: Some("p1".into()),
         sections: vec![Section { title: "Party".into(), colour: ally, tracks: party }, Section { title: "Enemies".into(), colour: foe, tracks: enemies }],
+        ruler: None,
     }
 }
 

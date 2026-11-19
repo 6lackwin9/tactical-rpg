@@ -5,7 +5,7 @@
 //! after-moves use. Every function is inert unless the battle's ruleset has `round_intent` (flank bonuses also need
 //! `flank`), so classic never reaches it.
 
-use crate::command::{cover_for, dash_fits};
+use crate::command::{cover_for, dash_fits_sized};
 use crate::grid::{V2, NO_CELL, ZERO};
 use crate::path::{self, Cells, Hooks};
 use crate::skill::{self, Kind};
@@ -225,9 +225,27 @@ pub fn item_allows(w: &World, item: &ItemDef, intent: RoundIntent) -> bool {
     item_rows(w, item).contains(&intent.id())
 }
 
+/// PK3 (rule round_intent): whether a Support round of `c` may target downed bleeding ally `t`: `c` knows a
+/// revive SUPPORT skill (not SELF) or carries an offered revive pouch item with reach > 0.
+pub fn revive_round_target(w: &World, c: UnitId, t: UnitId) -> bool {
+    if !w.allies.contains(&c) || t == c || !w.friends_of(c).contains(&t) || !w.can_revive(t) || w.grid.positions[t].is_none() {
+        return false;
+    }
+    let cap = w.skill_cap_of(c);
+    let has_skill = w.book().available(crate::skill::Kind::Support, cap, Some(&w.units[c])).iter().any(|&sid| {
+        let s = &w.cat.skills[sid];
+        s.revive && s.target_mode != "SELF"
+    });
+    let has_item = w.units[c].inventory.pouch.iter().any(|i| i.revive && i.battle_reach() > 0 && i.offered_in_battle());
+    has_skill || has_item
+}
+
 /// RULESET1_INTENT PL2 (the intent table of section 2): "" when `target` fits `intent` for unit `c`, else the reason.
 pub fn target_problem(w: &World, c: UnitId, intent: RoundIntent, target: RoundTarget) -> String {
-    let unit_ok = |t: UnitId| w.units.get(t).is_some_and(|u| u.is_active()) && w.has(t);
+    let unit_ok = |t: UnitId| {
+        (w.units.get(t).is_some_and(|u| u.is_active()) && w.has(t))
+            || (intent == RoundIntent::Support && revive_round_target(w, c, t))
+    };
     let foe = |t: UnitId| w.foes_of(c).contains(&t);
     let friend = |t: UnitId| t == c || w.friends_of(c).contains(&t);
     match target {
@@ -247,7 +265,8 @@ pub fn target_problem(w: &World, c: UnitId, intent: RoundIntent, target: RoundTa
         // Stand round); without it a self item stays Support
         (RoundIntent::Support, RoundTarget::Myself) => !field_rows(w),
         // PR5-25: a turned ally is a Support target while an `unmark` (skill or item) of the unit reaches it
-        (RoundIntent::Support, RoundTarget::Unit(t)) => friend(t) || crate::mark::unmark_round_target(w, c, t),
+        // PK3: a downed bleeding ally is a Support target while a revive (skill or item) of the unit reaches it
+        (RoundIntent::Support, RoundTarget::Unit(t)) => friend(t) || crate::mark::unmark_round_target(w, c, t) || revive_round_target(w, c, t),
         (RoundIntent::Support, RoundTarget::Cell(_)) => false,
         (RoundIntent::Channel, _) => true,
         // INTENT2 IR2, IR5: Field aims at a tile (the source); a click on a unit means the unit
@@ -488,8 +507,10 @@ pub fn update_facing(w: &mut World, c: UnitId) {
     if !on(w) || !w.has(c) {
         return;
     }
-    let here = w.pos(c);
-    if let Some(p) = facing_point(w, c).filter(|p| *p != here) {
+    // BIGUNIT1 BU11: a big unit faces from the cell of its square nearest the point
+    let Some(p) = facing_point(w, c) else { return };
+    let here = w.nearest_cell(c, p);
+    if p != here {
         w.round_states.entry(c).or_default().facing = sign(p - here);
     }
 }
@@ -527,7 +548,8 @@ pub fn engaged_with(w: &World, t: UnitId) -> Option<UnitId> {
     }?;
     // INPUT1 MR10: under `melee_diagonal` all a diagonal neighbour is in the melee band
     let diag = w.ruleset.melee_diagonal() == MeleeDiagonal::All;
-    let d = if w.has(e) && w.units[e].is_active() { band_dist(diag, w.pos(t), w.pos(e)) } else { return None };
+    // BIGUNIT1 BU11: between the nearest cells of the two squares
+    let d = if w.has(e) && w.units[e].is_active() { w.band_at(diag, t, w.pos(t), e) } else { return None };
     (w.foes_of(t).contains(&e) && d >= 1 && d <= melee_reach(w, t)).then_some(e)
 }
 
@@ -537,7 +559,8 @@ pub fn in_front(w: &World, t: UnitId, cell: V2) -> bool {
     if f == ZERO || !w.has(t) {
         return false;
     }
-    let d = cell - w.pos(t);
+    // BIGUNIT1 BU11: from the cell of a big unit's square nearest `cell`
+    let d = cell - w.nearest_cell(t, cell);
     d.x * f.x + d.y * f.y > 0
 }
 
@@ -547,7 +570,9 @@ pub fn is_flank(w: &World, a: UnitId, t: UnitId) -> bool {
     if !on(w) || a == t || !w.has(a) || !w.has(t) || facing(w, t) == ZERO {
         return false;
     }
-    flank_at(w, a, w.pos(a), t)
+    // BIGUNIT1 BU11: a big attacker stands where its square is nearest `t`
+    let at = if w.size_of(a) > 1 { w.nearest_cell(a, w.nearest_cell(t, w.pos(a))) } else { w.pos(a) };
+    flank_at(w, a, at, t)
 }
 
 /// MV3 from `cell`: `t` is engaged with a unit other than `a` and `cell` lies outside `t`'s front.
@@ -585,7 +610,7 @@ pub fn threat(w: &World, c: UnitId, cell: V2) -> usize {
         .filter(|&&f| {
             let u = &w.units[f];
             let reach = skill::threat_reach(u, &w.ruleset);
-            u.is_active() && w.has(f) && w.pos(f).dist(cell) <= u.move_per_block() * 2 + reach
+            u.is_active() && w.has(f) && w.dist_at(c, cell, f) <= u.move_per_block() * 2 + reach
         })
         .count();
     if !w.ai_tactics() {
@@ -600,7 +625,7 @@ pub fn hold_rank(w: &World, c: UnitId, cell: V2) -> (i32, i32) {
     if !w.has_tactic(c, crate::world::UnitTactic::HoldLine) {
         return (0, 0);
     }
-    let beside = w.friends_of(c).iter().any(|&f| f != c && w.units[f].is_active() && w.has(f) && w.pos(f).dist(cell) == 1);
+    let beside = w.friends_of(c).iter().any(|&f| f != c && w.units[f].is_active() && w.has(f) && w.dist_at(c, cell, f) == 1);
     let free = crate::grid::DIRS
         .iter()
         .map(|d| cell + *d)
@@ -627,6 +652,15 @@ pub fn rank_tiles(w: &World, c: UnitId, target: V2, cover: bool, aim: Aim, cands
 /// Tiles `c` can reach from `from` in one carried move of `dash_tiles` (MV4: `dash_fits`), with their routes; `from`
 /// itself with an empty route. Blocked tiles, exits and unwalkable tiles are never ends.
 pub fn carry_tiles(w: &World, from: V2, dash_tiles: i32, blocked: &Cells) -> Vec<(V2, Vec<V2>)> {
+    carry_tiles_sized(w, 1, from, dash_tiles, blocked)
+}
+
+/// BIGUNIT1 BU6: `carry_tiles` for unit `c` (its footprint).
+pub fn carry_tiles_by(w: &World, c: UnitId, from: V2, dash_tiles: i32, blocked: &Cells) -> Vec<(V2, Vec<V2>)> {
+    carry_tiles_sized(w, w.size_of(c), from, dash_tiles, blocked)
+}
+
+fn carry_tiles_sized(w: &World, size: i32, from: V2, dash_tiles: i32, blocked: &Cells) -> Vec<(V2, Vec<V2>)> {
     let mut out = vec![(from, Vec::new())];
     if dash_tiles <= 0 {
         return out;
@@ -637,9 +671,13 @@ pub fn carry_tiles(w: &World, from: V2, dash_tiles: i32, blocked: &Cells) -> Vec
             if cell == from || cell.dist(from) > dash_tiles || !w.grid.is_walkable(cell) || w.grid.is_exit(cell) || blocked.contains(&cell) {
                 continue;
             }
+            // BIGUNIT1 BU6: a big unit's end must hold its whole square
+            if size > 1 && !crate::grid::square_cells(cell, size).all(|n| w.grid.is_walkable(n) && !w.grid.is_exit(n) && !blocked.contains(&n)) {
+                continue;
+            }
             let goals: Cells = [cell].into_iter().collect();
-            let route = path::find_path(&w.grid, from, &goals, blocked, false, &Hooks::default());
-            if !route.is_empty() && dash_fits(&w.grid, from, &route, dash_tiles) {
+            let route = path::find_path_sized(&w.grid, from, &goals, blocked, false, &Hooks::default(), size);
+            if !route.is_empty() && dash_fits_sized(&w.grid, from, &route, dash_tiles, size) {
                 out.push((cell, route));
             }
         }
@@ -752,39 +790,76 @@ pub fn positions(w: &World, t: UnitId, attacker: UnitId, position: Position, fro
         return out;
     }
     let tp = w.pos(t);
+    let (st, sa) = (w.size_of(t), w.size_of(attacker));
     let mut f = facing(w, t);
     if f == ZERO {
-        f = sign(from - tp);
+        f = sign(from - w.nearest_cell(t, from));
     }
     if f == ZERO {
         f = V2::new(1, 0);
     }
     let back = V2::new(-f.x, -f.y);
     for off in RING {
-        let n = tp + off;
-        let open = w.grid.is_valid(n) && w.grid.is_walkable(n) && !w.grid.is_exit(n) && w.occupant(n).is_none_or(|o| o == attacker) && !blocked.contains(&n);
-        if !open || (!diag && off.x != 0 && off.y != 0) {
+        if !diag && off.x != 0 && off.y != 0 {
             continue;
         }
-        match (ring_steps(off, back), position) {
-            (0, Position::Behind) | (2, Position::Flank) => out.preferred.push(n),
-            (1, _) => out.fallback.push(n),
-            _ => {}
+        // BIGUNIT1 BU11: around a big target each ring direction holds the cells along that side of its square; a big
+        // attacker's position is the anchor that puts the cell of its square nearest the target there
+        for n in ring_side(tp, st, off) {
+            let a = V2::new(n.x - if off.x < 0 { sa - 1 } else { 0 }, n.y - if off.y < 0 { sa - 1 } else { 0 });
+            let open = if sa == 1 {
+                w.grid.is_valid(a) && w.grid.is_walkable(a) && !w.grid.is_exit(a) && w.occupant(a).is_none_or(|o| o == attacker) && !blocked.contains(&a)
+            } else {
+                w.fits(attacker, a) && crate::grid::square_cells(a, sa).all(|cell| !blocked.contains(&cell))
+            };
+            if !open {
+                continue;
+            }
+            match (ring_steps(off, back), position) {
+                (0, Position::Behind) | (2, Position::Flank) => out.preferred.push(a),
+                (1, _) => out.fallback.push(a),
+                _ => {}
+            }
         }
     }
     out
+}
+
+/// BIGUNIT1 BU11: the cells next to the square of side `size` at `tp` in the ring direction `off` (one-cell: `tp + off`).
+fn ring_side(tp: V2, size: i32, off: V2) -> Vec<V2> {
+    let n = size.max(1);
+    let axis = |p: i32, o: i32| -> Vec<i32> {
+        match o.signum() {
+            1 => vec![p + n],
+            -1 => vec![p - 1],
+            _ => (p..p + n).collect(),
+        }
+    };
+    let ys = axis(tp.y, off.y);
+    axis(tp.x, off.x).into_iter().flat_map(|x| ys.iter().map(move |&y| V2::new(x, y))).collect()
 }
 
 /// Decision "Auto-fill keeps a flank": whether `cell` is a tile beside (k 2) or behind (k 0) `t` from which a positioned
 /// skill hits it (MR4's (1, 1), with diagonal melee `diag` per MR10). An auto-filled follow-up stays there rather than
 /// moving to its own position.
 pub fn keeps_flank(w: &World, t: UnitId, cell: V2, diag: bool) -> bool {
+    keeps_flank_sized(w, t, 1, cell, diag)
+}
+
+/// BIGUNIT1 BU11: `keeps_flank` for `attacker` anchored at `cell` (its square against the target's).
+pub fn keeps_flank_by(w: &World, t: UnitId, attacker: UnitId, cell: V2, diag: bool) -> bool {
+    keeps_flank_sized(w, t, w.size_of(attacker), cell, diag)
+}
+
+fn keeps_flank_sized(w: &World, t: UnitId, sa: i32, cell: V2, diag: bool) -> bool {
     if !w.has(t) {
         return false;
     }
     let tp = w.pos(t);
-    let off = cell - tp;
-    if !RING.contains(&off) || band_dist(diag, cell, tp) != 1 {
+    // BIGUNIT1 BU11: the direction from the target's square to the attacker's (anchor `cell`), touching only
+    let st = w.size_of(t);
+    let off = if st == 1 && sa == 1 { cell - tp } else { square_side(tp, st, cell, sa) };
+    if !RING.contains(&off) || crate::grid::square_band(diag, cell, sa, tp, st) != 1 {
         return false;
     }
     let mut f = facing(w, t);
@@ -792,6 +867,26 @@ pub fn keeps_flank(w: &World, t: UnitId, cell: V2, diag: bool) -> bool {
         f = sign(off);
     }
     matches!(ring_steps(off, V2::new(-f.x, -f.y)), 0 | 2)
+}
+
+/// BIGUNIT1 BU11: the ring direction from the square of side `ts` at `tp` to the square of side `cs` at `cell`: per axis
+/// +1 or -1 when it lies wholly to that side and touches, 0 when they overlap on the axis (ZERO when apart or overlapping).
+fn square_side(tp: V2, ts: i32, cell: V2, cs: i32) -> V2 {
+    let axis = |t0: i32, tn: i32, c0: i32, cn: i32| -> Option<i32> {
+        if c0 == t0 + tn {
+            Some(1)
+        } else if c0 + cn == t0 {
+            Some(-1)
+        } else if c0 + cn > t0 && c0 < t0 + tn {
+            Some(0)
+        } else {
+            None
+        }
+    };
+    match (axis(tp.x, ts.max(1), cell.x, cs.max(1)), axis(tp.y, ts.max(1), cell.y, cs.max(1))) {
+        (Some(x), Some(y)) => V2::new(x, y),
+        _ => ZERO,
+    }
 }
 
 /// INPUT1 MR4: the open position tiles of `c`'s skill `s` on `t` that `c` reaches from `from` within `budget` move cost
@@ -810,8 +905,9 @@ pub fn position_tiles(w: &World, c: UnitId, s: &SkillDef, t: UnitId, from: V2, b
             return None;
         }
         let goals: Cells = [cell].into_iter().collect();
-        let route = path::find_path(&w.grid, from, &goals, blocked, false, &Hooks::default());
-        (!route.is_empty() && dash_fits(&w.grid, from, &route, budget)).then_some(route)
+        let size = w.size_of(c);
+        let route = path::find_path_sized(&w.grid, from, &goals, blocked, false, &Hooks::default(), size);
+        (!route.is_empty() && dash_fits_sized(&w.grid, from, &route, budget, size)).then_some(route)
     };
     let tp = w.pos(t);
     let mut tiles: Vec<(V2, Vec<V2>)> = open.preferred.iter().filter_map(|&cell| reach(cell).map(|r| (cell, r))).collect();
@@ -843,7 +939,7 @@ pub fn engage_reach(w: &World, c: UnitId, s: &SkillDef, t: UnitId, from: V2, blo
         Some(n) => !position_tiles(w, c, s, t, from, n, w.units[c].has_status("root"), blocked).1.is_empty(),
         None => {
             let band = hit_band(w, c, s);
-            let d = melee_dist(w, c, Some(s), from, w.pos(t));
+            let d = w.band_at(diagonal(w, c, Some(s)), c, from, t);
             d >= band.0 && d <= band.1
         }
     }
@@ -854,7 +950,7 @@ pub fn engage_reach(w: &World, c: UnitId, s: &SkillDef, t: UnitId, from: V2, blo
 pub fn retreat_tiles(w: &World, c: UnitId, s: &SkillDef, t: UnitId, from: V2, blocked: &Cells) -> Vec<(V2, Vec<V2>)> {
     let tp = if w.has(t) { w.pos(t) } else { from };
     let n = dash_range(w, c, s).unwrap_or(s.dash_tiles);
-    let mut out: Vec<(V2, Vec<V2>)> = carry_tiles(w, from, n, blocked).into_iter().filter(|(cell, _)| *cell != from).collect();
+    let mut out: Vec<(V2, Vec<V2>)> = carry_tiles_by(w, c, from, n, blocked).into_iter().filter(|(cell, _)| *cell != from).collect();
     rank_tiles(w, c, tp, w.units[c].attack_range > 1, Aim::Away, &mut out);
     out
 }

@@ -17,6 +17,9 @@ pub const TRACK_DEPARTURES: [&str; 1] = ["lost"];
 pub const TRACK_STAGES_MAX: usize = 9;
 /// A stage row's keys.
 pub const TRACK_STAGE_KEYS: [&str; 3] = ["name", "passive", "departure"];
+/// PR6-6 (`docs/sessions/PK4_PK5_CAMPAIGN_HUB.md` 1, B5): a `signed` row's range is `-TRACK_SIGNED_MAX..=TRACK_SIGNED_MAX`
+/// (a lean either way, 0 = neutral and left out of a save); it holds no stages (no passive, no departure).
+pub const TRACK_SIGNED_MAX: i32 = 3;
 
 /// One stage of a track row.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -38,6 +41,9 @@ pub struct UnitTrackDef {
     /// The departure's cause id (the game's word; a save's departure accepts it beside `DEPART_CAUSES`).
     pub cause: String,
     pub stages: Vec<TrackStage>,
+    /// PR6-6 (B5): a signed lean (`-TRACK_SIGNED_MAX..=TRACK_SIGNED_MAX`, no stages) instead of stages 0..top. False
+    /// by default (the schema leaves it out of a row).
+    pub signed: bool,
 }
 
 impl UnitTrackDef {
@@ -47,17 +53,30 @@ impl UnitTrackDef {
             .filter_map(Value::as_object)
             .map(|s| TrackStage { name: string(s, "name", ""), passive: string(s, "passive", ""), departure: string(s, "departure", "") })
             .collect();
-        Self { id: string(o, "id", ""), name: string(o, "name", ""), mark: string(o, "mark", ""), cause: string(o, "cause", ""), stages }
+        Self { id: string(o, "id", ""), name: string(o, "name", ""), mark: string(o, "mark", ""), cause: string(o, "cause", ""), stages, signed: boolean(o, "signed", false) }
     }
 
-    /// The highest stage.
+    /// The highest stage (`TRACK_SIGNED_MAX` on a signed row).
     pub fn top(&self) -> i32 {
-        self.stages.len() as i32
+        if self.signed {
+            TRACK_SIGNED_MAX
+        } else {
+            self.stages.len() as i32
+        }
     }
 
-    /// `stage` held within the row (0..=top).
+    /// The lowest stage: 0, or `-TRACK_SIGNED_MAX` on a signed row (PR6-6).
+    pub fn bottom(&self) -> i32 {
+        if self.signed {
+            -TRACK_SIGNED_MAX
+        } else {
+            0
+        }
+    }
+
+    /// `stage` held within the row (bottom..=top).
     pub fn clamp(&self, stage: i64) -> i32 {
-        stage.clamp(0, i64::from(self.top())) as i32
+        stage.clamp(i64::from(self.bottom()), i64::from(self.top())) as i32
     }
 
     /// Stage `n` (1-based; None for 0 or past the top).

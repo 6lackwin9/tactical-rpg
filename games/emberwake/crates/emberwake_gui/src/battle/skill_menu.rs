@@ -7,7 +7,7 @@
 
 use super::board::with_alpha;
 use super::input::{Popup, Row};
-use super::tips::{intent_ring_color, text_outlined};
+use super::tips::{icon_line, intent_ring_color, text_outlined};
 use super::Action;
 use aegis_ui::art::Art;
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
@@ -192,7 +192,8 @@ pub(super) fn menu_place(cell: Rect, size: (i32, i32), view: Rect) -> (i32, i32)
 /// Draws the menu: panel, title, row names, and each row as a button or an icon, with its widget and hover card.
 pub(super) fn draw_menu(ui: &mut Ui<Action>, art: &mut Art, pop: &Popup, grid: &MenuGrid, row_h: i32) {
     let r = pop.rect(row_h);
-    ui.p.panel(r, th().game("popup_fill", rgba(14, 20, 34, 252)), th().gold, 3.0);
+    // BATTLE-UI2 contract 1: the menu wears frame A
+    crate::tokens::frame_a(&mut ui.p, r, th().game("popup_fill", rgba(14, 20, 34, 252)));
     // a near miss in a gap or the name column keeps the menu open
     ui.push("popup.panel", "panel", "", r, true, false, Some(Action::MenuGap), Vec::new());
     ui.p.text_fit(r.x as f32 + 5.0, r.y as f32 + 2.0, &pop.title, BODY, r.w as f32 - 10.0, th().gold);
@@ -228,6 +229,10 @@ pub(super) fn draw_menu(ui: &mut Ui<Action>, art: &mut Art, pop: &Popup, grid: &
                 let rel = art.first_rel(&row.icon);
                 if let Some(img) = rel.as_deref().and_then(|rel| art.image(rel, px, px)) {
                     ui.p.image_alpha(img, Rect::new(rr.x + 1, rr.y + 1, ICON - 2, ICON - 2), shows);
+                }
+                // PR7-36 (ART-12): the row's intent as a thin bottom line on the icon
+                if let Some(Slot::Intent(i)) = row.slot {
+                    icon_line(&mut ui.p, Rect::new(rr.x + 1, rr.y + 1, ICON - 2, ICON - 2), intent_ring_color(i), shows);
                 }
                 // the second cell of a skill with both Maneuver kinds: Disengage (its card says so)
                 if matches!(&row.act, super::input::RowAct::Pick(p) if matches!(p[..], [rip::Pick::Skill { kind: Some(ManeuverKind::Disengage), .. }])) {

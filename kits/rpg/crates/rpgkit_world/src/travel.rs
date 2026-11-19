@@ -433,6 +433,31 @@ pub fn quest_places(d: &Data, gs: &GameState) -> Vec<(String, String)> {
     out
 }
 
+/// PR7-37 (PT-31): every active quest a world map's legend lists, as (node qid, quest name, quest id) in quest order:
+/// each place of its current objective (`quest_places`), and a quest with none once with node "" (a flag step, a
+/// place in no road graph); a quest without a display name is left out.
+pub fn legend_quests(d: &Data, gs: &GameState) -> Vec<(String, String, String)> {
+    let targets = quest_targets_of(d, gs);
+    let mut out: Vec<(String, String, String)> = Vec::new();
+    for qid in quest::quests_with(d, gs, "active") {
+        let name = json::s(&quest::resolved(d, gs, &qid), "name");
+        if name.is_empty() {
+            continue;
+        }
+        let nodes: Vec<String> = targets.iter().filter(|(_, _, q)| *q == qid).map(|(n, _, _)| n.clone()).collect();
+        if nodes.is_empty() {
+            out.push((String::new(), name, qid));
+            continue;
+        }
+        for n in nodes {
+            if !out.iter().any(|(m, t, _)| *m == n && *t == name) {
+                out.push((n, name.clone(), qid.clone()));
+            }
+        }
+    }
+    out
+}
+
 /// The active quests' objective places: (node qid, objective text, quest id).
 fn quest_targets_of(d: &Data, gs: &GameState) -> Vec<(String, String, String)> {
     let mut out = Vec::new();
@@ -485,6 +510,95 @@ pub fn quest_steps_at(d: &Data, gs: &GameState, node: &str) -> Vec<String> {
         }
     }
     out
+}
+
+/// PR7-37 (PT-08, PT-31): one step of the way to a place with no road to it: a road leg on the world map to `to`, or a
+/// location's exit (in `at`, its marker label) into `to`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WayStep {
+    Road { to: String, known: bool },
+    Exit { at: String, label: String, to: String },
+}
+
+/// PR7-37 (PT-08, PT-31): the fewest steps from place `from` to place `to` over the open road legs (`legs`; each
+/// marked `known` when a trip can take it now, both ends known) and the
+/// present exits of the world's locations (an exit to the world map left out: it leads back to the place's own
+/// node); [] when `to` is `from` or cannot be reached. Breadth first, edges in road then location order, so the same
+/// save gives the same way.
+pub fn way_toward(d: &Data, gs: &GameState, from: &str, to: &str) -> Vec<WayStep> {
+    if from.is_empty() || to.is_empty() || from == to {
+        return Vec::new();
+    }
+    let w = gs.world_id.clone();
+    // every open road leg; `known` marks the places a trip can reach now (`path` plans over those only)
+    let known_nodes = known(d, gs);
+    let mut edges: Vec<(String, WayStep)> =
+        legs(d, gs, &w).into_iter().map(|(_, a, b)| (a.clone(), WayStep::Road { known: known_nodes.contains(&a) && known_nodes.contains(&b), to: b })).collect();
+    for loc in d.merged_entries(&w, "locations") {
+        let at = json::s(loc, "_qid");
+        for m in explore::markers_of(loc) {
+            if json::s(&m, "kind") != "exit" || json::s(&m, "to") == explore::WORLD_MAP || explore::presence(d, gs, &at, &m) != "present" {
+                continue;
+            }
+            let into = json::s(explore::resolve_location(d, gs, &json::s(&m, "to")), "_qid");
+            if !into.is_empty() && into != at {
+                edges.push((at.clone(), WayStep::Exit { at: at.clone(), label: json::s(&m, "label").trim().to_string(), to: into }));
+            }
+        }
+    }
+    let target = |st: &WayStep| match st {
+        WayStep::Road { to, .. } | WayStep::Exit { to, .. } => to.clone(),
+    };
+    let mut prev: std::collections::HashMap<String, (String, WayStep)> = std::collections::HashMap::new();
+    let mut queue = std::collections::VecDeque::from([from.to_string()]);
+    while let Some(cur) = queue.pop_front() {
+        if cur == to {
+            let mut out = Vec::new();
+            let mut c = cur;
+            while let Some((p, st)) = prev.get(&c) {
+                out.push(st.clone());
+                c = p.clone();
+            }
+            out.reverse();
+            return out;
+        }
+        for (a, st) in edges.iter().filter(|(a, _)| *a == cur) {
+            let n = target(st);
+            if n != from && !prev.contains_key(&n) {
+                prev.insert(n.clone(), (a.clone(), st.clone()));
+                queue.push_back(n);
+            }
+        }
+    }
+    Vec::new()
+}
+
+/// PR7-37 (PT-08): the next reachable step of `way` (`way_toward`) toward `to` as a sentence: the road legs a trip
+/// can take now as one "Travel to X", then the first step past them: a place's exit ("Travel to X, enter it and take
+/// West drains.", "Enter X and take West drains."), or a road that shows only once X is reached ("Travel to X first:
+/// the road on to Y shows from there."); with more beyond the first exit ", then on toward <place>"; "" for no way.
+/// `name` gives a place's name.
+pub fn way_words(way: &[WayStep], to: &str, name: &dyn Fn(&str) -> String) -> String {
+    let roads = way.iter().take_while(|st| matches!(st, WayStep::Road { known: true, .. })).count();
+    let reached = way[..roads].last().and_then(|st| match st {
+        WayStep::Road { to, .. } => Some(to.clone()),
+        WayStep::Exit { .. } => None,
+    });
+    let on = |into: &str| if into != to { format!(", then on toward {}", name(to)) } else { String::new() };
+    let text = match (reached, way.get(roads)) {
+        (None, None) => return String::new(),
+        (Some(x), None) => format!("Travel to {}", name(&x)),
+        (reached, Some(WayStep::Exit { at, label, to: into })) => {
+            let take = if label.is_empty() { format!("the way to {}", name(into)) } else { label.clone() };
+            match reached {
+                Some(x) => format!("Travel to {}, enter it and take {take}{}", name(&x), on(into)),
+                None => format!("Enter {} and take {take}{}", name(at), on(into)),
+            }
+        }
+        (Some(x), Some(WayStep::Road { to: into, .. })) => format!("Travel to {} first: the road on to {} shows from there", name(&x), name(into)),
+        (None, Some(WayStep::Road { .. })) => return String::new(),
+    };
+    format!("{text}.")
 }
 
 /// {ok, time, supplies} of the best known trip.

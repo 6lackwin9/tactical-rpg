@@ -53,6 +53,51 @@ impl Mul<i32> for V2 {
     }
 }
 
+// ---- BIGUNIT1: units that fill a square of `size` x `size` cells, anchored at the top-left cell ----------------------
+
+/// BIGUNIT1 BU2: the cells of the square of side `size` anchored at `anchor`, in reading order (the anchor alone for
+/// size 1).
+pub fn square_cells(anchor: V2, size: i32) -> impl Iterator<Item = V2> {
+    let n = size.max(1);
+    (0..n).flat_map(move |dy| (0..n).map(move |dx| V2::new(anchor.x + dx, anchor.y + dy)))
+}
+
+/// BIGUNIT1 BU4: whether the square of side `size` at `anchor` covers `cell` (size 1: `cell == anchor`).
+pub fn square_covers(anchor: V2, size: i32, cell: V2) -> bool {
+    let n = size.max(1);
+    cell.x >= anchor.x && cell.x < anchor.x + n && cell.y >= anchor.y && cell.y < anchor.y + n
+}
+
+/// BIGUNIT1 BU5: the gap on each axis between two squares (0 where they overlap on that axis).
+fn square_gap(a: V2, a_size: i32, b: V2, b_size: i32) -> V2 {
+    let axis = |a0: i32, an: i32, b0: i32, bn: i32| (b0 - (a0 + an.max(1) - 1)).max(a0 - (b0 + bn.max(1) - 1)).max(0);
+    V2::new(axis(a.x, a_size, b.x, b_size), axis(a.y, a_size, b.y, b_size))
+}
+
+/// BIGUNIT1 BU5: the least Manhattan distance between any cell of one square and any cell of the other (two single
+/// cells: `V2::dist`).
+pub fn square_dist(a: V2, a_size: i32, b: V2, b_size: i32) -> i32 {
+    let g = square_gap(a, a_size, b, b_size);
+    g.x + g.y
+}
+
+/// BIGUNIT1 BU5: `round_intent::band_dist` between two squares: their least distance, except that squares one step
+/// apart on each axis are 1 when `diag` (two single cells: `band_dist`).
+pub fn square_band(diag: bool, a: V2, a_size: i32, b: V2, b_size: i32) -> i32 {
+    let g = square_gap(a, a_size, b, b_size);
+    if diag && g.x == 1 && g.y == 1 {
+        1
+    } else {
+        g.x + g.y
+    }
+}
+
+/// BIGUNIT1 BU10, BU11: the cell of the square at `anchor` nearest `to` (clamped on each axis; the anchor for size 1).
+pub fn square_nearest(anchor: V2, size: i32, to: V2) -> V2 {
+    let n = size.max(1) - 1;
+    V2::new(to.x.clamp(anchor.x, anchor.x + n), to.y.clamp(anchor.y, anchor.y + n))
+}
+
 impl std::fmt::Display for V2 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}, {})", self.x, self.y)
@@ -366,6 +411,12 @@ impl Grid {
         } else {
             None
         }
+    }
+
+    /// BIGUNIT1 BU3, BU6: every cell of the square of side `size` at `anchor` is on the grid, walkable and not an exit
+    /// (units aside).
+    pub fn square_fits(&self, anchor: V2, size: i32) -> bool {
+        square_cells(anchor, size).all(|c| self.is_walkable(c) && !self.is_exit(c))
     }
 
     pub fn is_exit(&self, c: V2) -> bool {

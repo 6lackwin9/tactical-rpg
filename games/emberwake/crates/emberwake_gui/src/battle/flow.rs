@@ -181,6 +181,11 @@ impl BattleScreen {
         self.session().final_outcome()
     }
 
+    /// PR7-37 (PT-02, PT-24): the battle ended at its round limit (`Session::timed_out`): it reads "Out of time".
+    pub(super) fn timed_out(&self) -> bool {
+        self.host.session.as_ref().is_some_and(|s| s.timed_out())
+    }
+
     /// World battle over: the runner settles the fight from the battle's tally (REWARD1's foes and ENCOUNTER2 W1's
     /// party side: the kit's `battle::apply` settles the party first by `roster::settle_party`: the stay-behind `then`,
     /// the world's rule row, HP; then the rewards), the results popup opens.
@@ -201,14 +206,29 @@ impl BattleScreen {
         log_settled(cx, runner, &res);
         cx.autosave();
         let fight = fight.clone();
-        cx.nav.push(Nav::Pop);
-        cx.nav.push(Nav::Push(Box::new(crate::hub::Results::new(&res, &outcome, &fight))));
+        // TRANSITIONS1 T2 step 2: the results slide over the dimmed field (the battle stays under them until Continue,
+        // which fades out and closes both; a win here leaves the hub its arrival)
+        self.beat = None;
+        let before = if outcome == "won" && self.arrives { self.before.take() } else { None };
+        // PR7-37 (PT-02, PT-24): a fight that ran out of rounds says so, and what it leaves open (the log keeps the line)
+        let timed_out = self.timed_out();
+        let next = if timed_out || outcome != "won" { crate::hub::open_jobs_lines(cx, &s(&fight, "encounter")) } else { Vec::new() };
+        for l in &next {
+            cx.log(l.clone());
+        }
+        let results = crate::hub::Results::new(&res, &outcome, &fight).after_fight(timed_out, next).over_battle(cx.settings.reduce_motion(), before);
+        cx.nav.push(Nav::Push(Box::new(results)));
     }
 
     // ---- Actions (all mutations are command-API requests) -----------------------------------------------------
 
     /// A player's action (a click or a key): the playback controls click (SoundEvents ui_click), then `run`.
     pub(super) fn act(&mut self, cx: &mut Cx, a: Action) {
+        // TRANSITIONS1: during a beat any press skips it (T1: control starts; T2: the results open) and does nothing else
+        if self.beat.is_some() && !matches!(a, Action::Talk(_)) {
+            self.skip_beat(cx);
+            return;
+        }
         // ENCOUNTER2-C DT5: while a talk is open only its box acts
         if self.talk.is_some() != matches!(a, Action::Talk(_)) {
             return;
@@ -227,12 +247,34 @@ impl BattleScreen {
     pub(super) fn run(&mut self, cx: &mut Cx, a: Action) {
         match a {
             Action::Select(u) => {
-                // INPUT1 SL4, SL6 (round intent): a party card always selects; the selected hero's card selects nothing
+                // INPUT1 SL4, SL6 (round intent): a party card always selects; the selected hero's card selects nothing.
+                // PK3: a living hero selecting a downed bleeding party card targets it for revive instead of switching selection.
+                if let Some(s) = self.host.session.as_ref() {
+                    if !s.w.units[u].is_active() {
+                        let can_target = self.planning() && s.w.can_revive(u) && self.selected.is_some_and(|h| h != u && s.w.units[h].is_active());
+                        if can_target {
+                            self.unit_click(cx, u);
+                        } else if self.selected == Some(u) {
+                            self.selected = None;
+                            self.popup = None;
+                        }
+                        return;
+                    }
+                }
                 let again = self.selected == Some(u) && self.host.session.as_ref().is_some_and(|s| ri::on(&s.w));
                 self.selected = if again { None } else { Some(u) };
                 self.popup = None;
             }
             Action::UnitClick(u) => self.unit_click(cx, u),
+            Action::FoeGroup(key) => {
+                // contract 4: a click opens the group, a second click (on its header) closes it
+                match self.open_groups.iter().position(|k| *k == key) {
+                    Some(i) => {
+                        self.open_groups.remove(i);
+                    }
+                    None => self.open_groups.push(key),
+                }
+            }
             Action::TileClick(c) => self.tile_click(cx, c),
             Action::FillGhost => self.accept_ghost(cx, None),
             Action::GhostSlot(k) => self.accept_ghost(cx, Some(k)),
@@ -260,6 +302,7 @@ impl BattleScreen {
                     RowAct::SelectAlly(u) => {
                         self.selected = Some(u);
                     }
+                    RowAct::AllyMenu(a) => self.ally_menu_row(cx, a),
                     RowAct::Fill => self.accept_ghost(cx, None),
                     // PK1-S2c: the Channel toggle keeps the menu open (it re-lists for the new mode)
                     RowAct::Channel(on) => {
@@ -283,6 +326,7 @@ impl BattleScreen {
                         self.member_tactic.clear();
                         let picked: Vec<usize> = self.session().w.allies.iter().copied().filter(|&a| !rip::picks_of(&self.session().w, a).is_empty()).collect();
                         self.player_target.retain(|a| picked.contains(a));
+                        self.cleared.clear();
                         self.deferred.clear();
                         self.send(cx, json!({"cmd": "preset", "preset": TACTICS[t]}));
                         self.send_tactics(cx);
@@ -295,6 +339,7 @@ impl BattleScreen {
                             self.member_tactic.insert(h, t);
                             if ri::on(&self.session().w) {
                                 self.player_target.retain(|a| *a != h);
+                                self.cleared.retain(|a| *a != h);
                                 self.deferred.retain(|d| d.0 != h);
                                 if !rip::picks_of(&self.session().w, h).is_empty() {
                                     self.send(cx, json!({"cmd": "clear", "unit": h}));
@@ -313,6 +358,11 @@ impl BattleScreen {
             Action::SelfTarget => {
                 if let Some(h) = self.selected.filter(|_| self.planning() && ri::on(&self.session().w)) {
                     self.target_click(cx, h, RoundTarget::Myself);
+                }
+            }
+            Action::AllyTarget => {
+                if let Some(h) = self.selected.filter(|_| self.planning() && ri::on(&self.session().w)) {
+                    self.ally_list(h);
                 }
             }
             Action::ClosePopup => self.popup = None,
@@ -444,7 +494,13 @@ impl BattleScreen {
                 self.log_scroll = 0;
             }
             Action::Continue => self.settle(cx),
+            Action::SkipBeat => self.skip_beat(cx),
             Action::Leave => cx.nav.push(Nav::Pop),
+            Action::Settings => {
+                // PR7-41 (PT-32): a world battle's Menu offers Retreat while the fight allows it
+                let can = self.world_mode() && !self.viewing && self.session().can_retreat();
+                cx.nav.push(Nav::Push(Box::new(crate::menus::SettingsScreen::in_battle(cx, can))));
+            }
             Action::Talk(a) => self.talk_reply(cx, a),
             Action::Skip => {
                 if !self.can_skip() {

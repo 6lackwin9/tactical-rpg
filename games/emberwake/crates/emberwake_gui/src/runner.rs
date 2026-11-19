@@ -305,7 +305,7 @@ impl SceneRunner {
                 let home = cx.data_dir.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
                 let repo = vec![home.join("playtests/inbox"), home.join("playtests/repro")];
                 let launch: aegis_ui::recordings::Launch<GameCx> = |cx, session, take| Some(Box::new(crate::battle::BattleScreen::playback(cx, session, take)));
-                let r = aegis_ui::recordings::Recordings::new(cx, launch, |cx| aegis_content::fingerprint::of(&cx.data_dir), repo);
+                let r = aegis_ui::recordings::Recordings::new(cx, launch, |cx| aegis_content::fingerprint::of(&cx.data_dir), repo).labels(aegis_ui::recordings::SessionLabels { header: "BATTLE", count: "battles" });
                 cx.nav.push(Nav::Push(Box::new(r)));
             }
             SAct::Reload => {

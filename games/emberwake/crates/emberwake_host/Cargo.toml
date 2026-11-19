@@ -22,3 +22,6 @@ indexmap = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 rpgkit_host = { path = "../../../../kits/rpg/crates/rpgkit_host" }
+
+[lints]
+workspace = true

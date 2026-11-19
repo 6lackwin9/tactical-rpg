@@ -14,7 +14,7 @@ use emberwake_battle::round_intent_plan as rip;
 use emberwake_battle::session::{Phase, Session};
 use aegis_ui::art::Art;
 use serde_json::{json, Value};
-use std::time::Instant;
+use aegis_core::clock::Instant;
 use crate::timeline_view::{masked_note, track_key, unit_of};
 use aegis_ui::timeline::{Timeline, Track, HEADER_H, ROW_H, RULER_H};
 use emberwake_rules::ruleset::TIMELINE;

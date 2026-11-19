@@ -106,6 +106,9 @@ fn crit_channel_ranged_and_when_dual_wield_check_cleanly() {
 
     assert!(fx_errs(false, json!([{"type": "crit", "value": 8.0, "when": {"dual_wield": "1h_light"}}])).is_empty());
     assert!(fx_errs(false, json!([{"type": "skill_potency", "group": "channel", "value": 0.25}])).is_empty());
+    assert!(fx_errs(false, json!([{"type": "skill_potency", "group": "ranged", "min_distance": 4, "value": -0.15}])).is_empty());
+    assert!(fx_errs(false, json!([{"type": "skill_potency", "group": "ranged", "min_distance": 0, "value": 0.15}])).is_empty());
+    assert!(fx_errs(false, json!([{"type": "stat", "stat": "armor", "value": 2}, {"type": "stat", "stat": "move_rate", "value": -1}])).is_empty());
     assert!(fx_errs(false, json!([{"type": "skill_reach", "reach": 1, "ranged": true}])).is_empty());
 
     assert!(fx_errs(false, json!([{"type": "crit", "value": 0.0}])).iter().any(|e| e.contains("crit bonus")));
@@ -114,4 +117,9 @@ fn crit_channel_ranged_and_when_dual_wield_check_cleanly() {
     assert!(fx_errs(false, json!([{"type": "skill_reach", "reach": 1, "ranged": "yes"}])).iter().any(|e| e.contains("true or false")));
     assert!(fx_errs(false, json!([{"type": "crit", "value": 5.0, "when": {"dual_wield": "bad_rule"}}])).iter().any(|e| e.contains("bad_rule")));
     assert!(fx_errs(false, json!([{"type": "crit", "value": 5.0, "when": {"pct": 50}}])).iter().any(|e| e.contains("hp_below")));
+    assert!(fx_errs(false, json!([{"type": "skill_potency", "group": "ranged", "min_distance": -1, "value": -0.15}])).iter().any(|e| e.contains("min_distance")));
+    assert!(fx_errs(false, json!([{"type": "skill_potency", "group": "ranged", "min_distance": 13, "value": -0.15}])).iter().any(|e| e.contains("min_distance")));
+    assert!(fx_errs(false, json!([{"type": "skill_potency", "group": "ranged", "min_distance": 2.5, "value": -0.15}])).iter().any(|e| e.contains("min_distance")));
+    assert!(fx_errs(false, json!([{"type": "stat", "stat": "armor", "value": 2, "percent": 0.1}])).iter().any(|e| e.contains("derived stats only")));
+    assert!(fx_errs(false, json!([{"type": "stat", "stat": "move_rate", "value": -1, "context": {"biome": "x"}}])).iter().any(|e| e.contains("context is not supported")));
 }

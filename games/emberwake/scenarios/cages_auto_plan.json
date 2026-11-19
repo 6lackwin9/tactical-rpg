@@ -1,0 +1,25 @@
+{
+  "id": "cages_auto_plan",
+  "title": "PR7-41 (PT-16, PT-22): the playtest save cages_start enters The Crossroads Cages and Confirm takes the untouched auto-filled plan (no refusal); the round plays",
+  "launch": {"save": "cages_start"},
+  "settings": {"reduce_motion": true},
+  "timeout_s": 600,
+  "steps": [
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
+    {"step": "click", "id": "menu.continue"},
+    {"step": "wait", "until": {"path": "screen", "eq": "region_map"}, "timeout_ms": 20000},
+    {"step": "assert", "until": {"path": "state.location", "eq": "sunk_ward:ash_crawl_crossroads"}},
+    {"step": "repeat", "times": 4, "until": {"path": "screen", "eq": "battle"}, "steps": [
+      {"step": "click", "id": "here.cages"},
+      {"step": "pause", "ms": 1500}
+    ]},
+    {"step": "wait", "until": {"path": "screen", "eq": "battle"}, "timeout_ms": 40000},
+    {"step": "wait", "until": {"path": "state.beat", "absent": true}, "timeout_ms": 20000},
+    {"step": "click", "id": "dialogue.continue"},
+    {"step": "pause", "ms": 800},
+    {"step": "shot", "name": "cages_planning"},
+    {"step": "click", "id": "strip.confirm"},
+    {"step": "wait", "until": {"path": "state.playing", "eq": true}, "timeout_ms": 5000},
+    {"step": "shot", "name": "cages_round_plays"}
+  ]
+}

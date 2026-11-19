@@ -131,7 +131,7 @@ fn err(msg: impl Into<String>) -> Value {
 
 impl aegis_host::Commands for Battle {
     fn mutating(&self, cmd: &str) -> bool {
-        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "stay_pick" | "pick" | "unpick" | "accept_ghost" | "autofill" | "channel" | "tactics")
+        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "stay_pick" | "pick" | "unpick" | "accept_ghost" | "autofill" | "channel" | "tactics" | "retreat")
     }
 
     fn restarts(&self, cmd: &str) -> bool {
@@ -305,7 +305,7 @@ impl Battle {
                 if s.confirm_plan() {
                     json!({"ok": true, "actions": scheduled(s)})
                 } else {
-                    err("plan refused: fix the invalid steps (see plan_view)")
+                    err(refused(s))
                 }
             }
             "step" => {
@@ -313,7 +313,7 @@ impl Battle {
                     return e;
                 }
                 if s.phase == Phase::Planning && !s.plan_confirmed && !s.confirm_plan() {
-                    return err("plan refused");
+                    return err(refused(s));
                 }
                 let from = s.resolver.log.len();
                 s.step_next();
@@ -324,7 +324,7 @@ impl Battle {
                     return e;
                 }
                 if s.phase == Phase::Planning && !s.plan_confirmed && !s.confirm_plan() {
-                    return err("plan refused");
+                    return err(refused(s));
                 }
                 let from = s.resolver.log.len();
                 while s.phase != Phase::Replay {
@@ -332,6 +332,11 @@ impl Battle {
                 }
                 json!({"ok": true, "log": s.resolver.log[from..].to_vec(), "state": state_of(s)})
             }
+            // PR7-41 (PT-32): the party retreats while planning (`Session::retreat`: the battle ends as fled)
+            "retreat" => match s.retreat() {
+                Ok(()) => json!({"ok": true, "state": state_of(s)}),
+                Err(e) => err(e),
+            },
             "advance" => {
                 if !s.can_advance_round() {
                     return err(if s.combat_over { "the battle is over" } else { "finish the round first (resolve)" });
@@ -448,7 +453,8 @@ pub fn outcome_of(s: &Session) -> Value {
     let state = state_of(s);
     let keep = ["id", "hp", "ap", "pos", "stance", "statuses", "pending", "alive", "withdrawn"];
     // PR5-26 (audit B10): the PK1/PK2 keys a unit's state carries only when set (so other checkpoints keep their shape)
-    let set = ["channel", "meters", "marks", "skill_uses", "tracks"];
+    // PR7-3 (review N3): and the weapons' `wear` (only under the rule durability with tracked weapons)
+    let set = ["channel", "meters", "marks", "skill_uses", "tracks", "wear"];
     let units: Vec<Value> = state["units"]
         .as_array()
         .map(|a| {
@@ -512,7 +518,8 @@ pub fn state_of(s: &Session) -> Value {
 /// PR5-26 (audit B10): unit `i`'s PK1 / PK2 keys on its state row `v`, each only when set: `channel` (a holder of
 /// the channel meter: whether its round is a Channel round), `channeled` (its deck's marked actives), `meters` (meter id ->
 /// value), `marks` ([[mark, value]] this battle), `skill_uses` (skill id -> uses this battle), `tracks` (track id ->
-/// stage), `forbid_hands`, `pierce_melee`.
+/// stage), `forbid_hands`, `pierce_melee`; PR7-3: `wear` (slot -> {durability, worn, dulled}), `attacked` (weapon
+/// families attacked with).
 fn pk_state(s: &Session, i: UnitId, v: &mut Value) {
     let w = &s.w;
     let u = &w.units[i];
@@ -542,6 +549,20 @@ fn pk_state(s: &Session, i: UnitId, v: &mut Value) {
     }
     if u.pierce_melee {
         v["pierce_melee"] = json!(true);
+    }
+    // PR7-3 (review N3): the wear of each weapon the unit tracks (slot save key -> durability left, worn this battle,
+    // dulled: at 0, its weapon power at `DULLED_POWER_MULT`), the keys of the settle's `wear` rows
+    if !u.wear.is_empty() {
+        v["wear"] = Value::Object(u.wear.iter().map(|(slot, wr)| (slot.engine_name().to_lowercase(), json!({"durability": wr.left(), "worn": wr.spent, "dulled": wr.dulled()}))).collect());
+    }
+    // PR7-3 (review N3): the weapon families the unit attacked with this battle (the settle's mastery use)
+    if let Some(fams) = w.weapon_attacks.get(&i).filter(|f| !f.is_empty()) {
+        v["attacked"] = json!(fams);
+    }
+    if s.w.is_dead(i) {
+        v["dead"] = json!(true);
+    } else if let Some(rem) = s.w.bleed_left(i) {
+        v["bleed_remaining"] = json!(rem);
     }
 }
 
@@ -627,6 +648,9 @@ fn items_of(s: &Session, u: UnitId, target: Option<UnitId>) -> Vec<Value> {
         if con.armor_piercing {
             row["armor_piercing"] = json!(true);
         }
+        if con.revive {
+            row["revive"] = json!(true);
+        }
         out.push(row);
     }
     out
@@ -667,6 +691,9 @@ fn skills_of(cat: &Catalog, s: &Session, u: UnitId) -> Vec<Value> {
             if let Some(v) = rpgkit_battle::channel::version(w, u, sk).filter(|_| !rpgkit_battle::channel::only(sk)) {
                 row["channeled"] = json!({"cost": v.cost, "power": v.power, "pierce": v.pierce});
             }
+            if sk.revive {
+                row["revive"] = json!(true);
+            }
             out.push(row);
         }
     }
@@ -705,6 +732,8 @@ fn set_plan(s: &mut Session, req: &Value) -> Value {
         return err("not planning");
     }
     let Some(u) = unit_arg(s, req, "unit").filter(|u| s.w.allies.contains(u)) else { return err("plan needs a party unit") };
+    // PR7-41 (PT-16): a round set by hand is never redrafted at Confirm
+    s.hand_set(u);
     let steps = req.get("steps").and_then(Value::as_array).cloned().unwrap_or_default();
     s.plan.set_steps(u, Vec::new());
     let mut results = Vec::new();
@@ -716,6 +745,11 @@ fn set_plan(s: &mut Session, req: &Value) -> Value {
         results.push(if r.is_empty() { json!({"ok": true}) } else { json!({"ok": false, "error": r}) });
     }
     json!({"ok": true, "steps": results, "plan": plan_view(s, Some(u))})
+}
+
+/// PR7-41 (PT-16): a refused confirm in player words: "Plan refused: " and the session's cause (the hero and the step).
+fn refused(s: &Session) -> String {
+    format!("Plan refused: {}", s.plan_refusal().unwrap_or_else(|| "a step cannot be played.".into()))
 }
 
 fn plan_view(s: &Session, only: Option<UnitId>) -> Value {
@@ -781,6 +815,8 @@ fn edit_steps(s: &mut Session, req: &Value, op: &str) -> Value {
         return err("not planning");
     }
     let Some(u) = unit_arg(s, req, "unit").filter(|u| s.w.allies.contains(u)) else { return err("needs a party unit") };
+    // PR7-41 (PT-16): a round edited by hand is never redrafted at Confirm
+    s.hand_set(u);
     match op {
         "add" => {
             let step = match req.get("step").map(|v| step_from(s, v)) {

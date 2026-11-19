@@ -10,6 +10,10 @@ aegis_core = { path = "../aegis_core" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
+png = "0.17.13"
 
 [dev-dependencies]
 aegis_save = { path = "../aegis_save" }
+
+[lints]
+workspace = true

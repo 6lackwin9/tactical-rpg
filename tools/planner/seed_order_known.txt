@@ -1,0 +1,3 @@
+# ENGINE-20 (TOOLS-HELP3): seed order findings that pass. One per line: <last seed> <earlier seed> <kind> <id>.
+# Empty since ENGINE-22 (2026-11-19): the two findings found when the check landed were settled (classpass1_data.json
+# archived, cast1a3.json's bile_coat step narrowed with fields). Add a line only with Design's say-so.

@@ -17,9 +17,13 @@ use serde_json::Value;
 
 pub mod body_slot;
 pub mod dojo_preset;
+pub mod ending;
+pub mod facility;
 pub mod looks;
 pub mod mastery;
 pub mod recipe;
+pub mod siege;
+pub mod talk;
 pub mod terms;
 pub mod unit_budget;
 pub mod unit_template;
@@ -32,7 +36,7 @@ pub use dojo_preset::{DojoPresetDef, DOJO_PASSIVES_MAX, DOJO_POUCH_MAX, DOJO_PRE
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
 pub use unit_budget::ClassShares;
 pub use unit_template::{UnitTemplate, TEMPLATE_CLASS, TEMPLATE_FIELD, UNIT_TEMPLATES_KIND};
-pub use unit_track::{TrackStage, UnitTrackDef, TRACK_DEPARTURES, TRACK_STAGES_MAX, TRACK_STAGE_KEYS, UNIT_TRACKS_KIND};
+pub use unit_track::{TrackStage, UnitTrackDef, TRACK_DEPARTURES, TRACK_SIGNED_MAX, TRACK_STAGES_MAX, TRACK_STAGE_KEYS, UNIT_TRACKS_KIND};
 
 pub const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
@@ -116,6 +120,26 @@ pub struct ProfEntry {
     pub scaling: f64,
 }
 
+/// CLASSKEY1: the class row key of its keystone (`{id, level}`).
+pub const CLASS_KEYSTONE_KEY: &str = "keystone";
+
+/// CLASSKEY1 (`PR6-14`): a class's keystone: a passive with `slot: "keystone"`, slotted from `level` on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClassKeystone {
+    pub id: String,
+    pub level: i32,
+}
+
+impl ClassKeystone {
+    /// The row's `keystone` object; None when absent, not an object or without an id (the content check reports a bad
+    /// one). A missing level reads as 1.
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        let k = obj(o, CLASS_KEYSTONE_KEY)?;
+        let id = string(k, "id", "");
+        (!id.is_empty()).then(|| Self { id, level: int(k, "level", 1) })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ClassDef {
     pub id: String,
@@ -137,6 +161,9 @@ pub struct ClassDef {
     /// CLASSPASS1 (`PR5-62a`, `docs/sessions/U2_CLASS_DECKS.md`): always-on innate passives (`slot == ""`) granted to
     /// derived units of the class under the rule `deck` without spending a deck slot. Empty = none.
     pub passives: Vec<String>,
+    /// CLASSKEY1 (`PR6-14`, `docs/sessions/U2_CLASS.md` "Class keystones"): the class's keystone passive and the level a
+    /// unit of the class slots it at (when its own deck names no keystone; `rpgkit_rules::Unit::grant_class_keystone`).
+    pub keystone: Option<ClassKeystone>,
     /// Slot key (`main_hand` ...) -> item id; empty slots left out.
     pub loadout: IndexMap<String, String>,
     pub pouch: Vec<String>,
@@ -192,6 +219,7 @@ impl ClassDef {
             skill_path: int_map(o, "skill_path"),
             basics: strings(o, "basics"),
             passives: strings(o, "passives"),
+            keystone: ClassKeystone::from_obj(o),
             loadout,
             pouch: strings(o, "pouch"),
             remains: string(o, REMAINS_KEY, ""),
@@ -245,6 +273,9 @@ impl ClassDef {
 pub struct UnitDef {
     pub id: String,
     pub name: String,
+    /// BATTLE-UI2 (decision "Enemy short names"): the name on foe plates and the Hostiles list ("" = `name`); read it
+    /// through `plate_name`.
+    pub short_name: String,
     /// The body key (ASSETORG2: `<class>` or `<class>/<variant>`; "" = the class's).
     pub art: String,
     /// The palette the body wears (ASSETORG2; "" = none).
@@ -285,6 +316,9 @@ pub struct UnitDef {
     pub deck: Deck,
     /// RULESET1 5 P2 (rule poise): -1 = the derived Max Poise, 0 = no poise bar, above 0 = a fixed Max Poise.
     pub poise: i32,
+    /// BIGUNIT1 BU1: the cells the unit fills on the battle grid (1 = one cell, 2 = a 2 x 2 square anchored at its
+    /// top-left cell); any other written value reads as 1 (the content check reports it).
+    pub footprint: i32,
     /// RULESET1 TQ23 (a) (rule round_intent): the round intent the unit starts a battle in ("" = none).
     pub default_intent: String,
     /// HOOKS1 AT2 (rule ai_tactics): the unit's AI tactics (TACTICS ids, in order).
@@ -356,6 +390,7 @@ impl UnitDef {
         Self {
             id: string(o, "id", ""),
             name: string(o, "name", "New Unit"),
+            short_name: string(o, "short_name", ""),
             art: string(o, "art", ""),
             palette: string(o, "palette", ""),
             side: string(o, "side", "enemy"),
@@ -387,12 +422,27 @@ impl UnitDef {
             pouch: strings(o, "pouch"),
             deck: Deck::from_value(o.get("deck").unwrap_or(&Value::Null)),
             poise: int(o, "poise", -1),
+            footprint: if int(o, "footprint", 1) == 2 { 2 } else { 1 },
             default_intent: string(o, "default_intent", ""),
             tactics: strings(o, "tactics"),
             passives: strings(o, "passives"),
             dojo: string(o, UNIT_DOJO_KEY, ""),
         }
     }
+
+    /// BATTLE-UI2: the plate name, the short name or, when it has none, the full name.
+    pub fn plate_name(&self) -> &str {
+        plate_name(&self.short_name, &self.name)
+    }
+}
+
+/// BATTLE-UI2 (decision "Enemy short names"): the characters a foe plate's name row holds (about 93 px of the small
+/// font); the content check warns on an enemy with a longer name and no `short_name`.
+pub const PLATE_NAME_MAX_CHARS: usize = 15;
+
+/// BATTLE-UI2 (decision "Enemy short names"): a unit's plate name, `short` (trimmed) or, when blank, `name`.
+pub fn plate_name<'a>(short: &'a str, name: &'a str) -> &'a str {
+    if short.trim().is_empty() { name } else { short.trim() }
 }
 
 #[derive(Debug, Clone)]
@@ -496,6 +546,8 @@ pub struct SkillDef {
     /// PK2-S1 (PK1 3.7, FB-174 (6)): a SUPPORT skill's `unmark` `{mark}`, the consumable's effect as a skill: the mark id
     /// whose latest entry on the target this battle it removes ("" = none).
     pub unmark: String,
+    /// PK3: a SUPPORT heal skill that revives a downed bleeding ally on resolve (false = living allies only).
+    pub revive: bool,
     /// PK2-S1: how many times a unit may use the skill in one battle (0 = no limit).
     pub uses_per_battle: i32,
     /// PR5-33: the look key the game shows when the skill is used (`looks::FX_KEY`; "" = by kind and weapon).
@@ -589,6 +641,7 @@ impl SkillDef {
             requires_meter: obj(o, "requires_meter").and_then(MeterGate::from_obj),
             channel: obj(o, "channel").map(ChannelSpec::from_obj).unwrap_or_default(),
             unmark: obj(o, "unmark").map(|u| string(u, "mark", "")).unwrap_or_default(),
+            revive: boolean(o, "revive", false),
             uses_per_battle: int(o, "uses_per_battle", 0),
             fx: string(o, looks::FX_KEY, ""),
             clip: string(o, looks::CLIP_KEY, ""),
@@ -709,6 +762,8 @@ pub struct ItemDef {
     /// GEAR-REWORK1 (U3.3 4): the stat its family's item, worn in the off hand, lends a main-hand weapon's attack power
     /// when higher than the weapon's own scaling stat (`ITEM_FAMILY_POWER_STAT`; "" = none).
     pub power_stat_override: String,
+    /// PK3: a healing consumable that revives a downed bleeding ally on use (false = living targets only).
+    pub revive: bool,
     pub raw: Obj,
 }
 
@@ -969,6 +1024,7 @@ impl ItemDef {
             off_hand_skill: string(o, ITEM_FAMILY_OFF_HAND_SKILL, ""),
             empower_next: obj(o, ITEM_FAMILY_EMPOWER_NEXT).and_then(EmpowerNext::from_obj),
             power_stat_override: string(o, ITEM_FAMILY_POWER_STAT, ""),
+            revive: boolean(o, "revive", false),
             raw: o.clone(),
         }
     }
@@ -1371,14 +1427,19 @@ pub const METER_KINDS: [&str; 2] = ["gauge", "countdown"];
 pub const METER_TONES: [&str; 4] = ["calm", "warn", "danger", "fatal"];
 /// M5: the crossing direction of a meter rule (`up` the gauge default, `down` the countdown default).
 pub const RULE_DIRS: [&str; 2] = ["up", "down"];
-/// M3: what moves a gauge.
-pub const INPUT_ON: [&str; 3] = ["battle", "day", "leg"];
+/// M3: what moves a gauge (PR6-6, B5: `recipe`, a recipe run, by the recipe's tags).
+pub const INPUT_ON: [&str; 4] = ["battle", "day", "leg", "recipe"];
 /// A settled battle's outcomes (meter inputs, triggers).
 pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
-/// T1: the cause a trigger is checked after.
-pub const TRIGGER_ON: [&str; 5] = ["any", "day", "battle", "enter", "act"];
-/// F1: what an `end` effect ends the run as.
-pub const END_KINDS: [&str; 2] = ["fail", "bad_end"];
+/// T1: the cause a trigger is checked after (PR6-6, `PK4_PK5_CAMPAIGN_HUB.md` 1, B5: `recipe`, a recipe run).
+pub const TRIGGER_ON: [&str; 6] = ["any", "day", "battle", "enter", "act", "recipe"];
+/// PR6-6 (B5): the keys of a `hero` filter (a battle meter input's or a battle trigger's): each a minimum a fielded
+/// hero's battle end reaches (`rpgkit_world::roster::HeroEnd`: the channel meter's peak and last value, the commands
+/// started in a Channel round).
+pub const HERO_FILTER_KEYS: [&str; 3] = ["strain_peak", "strain_end", "channel_actions"];
+/// F1: what an `end` effect ends the run as (PR6-11: `ending`, the campaign finishes on an `endings` row,
+/// `ending::END_KIND_ENDING`).
+pub const END_KINDS: [&str; 3] = ["fail", "bad_end", ending::END_KIND_ENDING];
 /// R1: where the party may rest.
 pub const REST_WHERE: [&str; 3] = ["nodes", "rest_places", "none"];
 /// R4: what a lost battle does.
@@ -1390,11 +1451,11 @@ pub const CAMPAIGN_EFFECTS: [(&str, &[&str]); 9] = [
     ("meter_set", &["meter", "value"]),
     ("meter_show", &["meter", "visible"]),
     ("clock_start", &["meter", "days"]),
-    ("clock_set", &["meter", "days", "label"]),
+    ("clock_set", &["meter", "days", "label", "keep_longer"]),
     ("clock_stop", &["meter"]),
     ("set_act", &["act"]),
     ("rest", &[]),
-    ("end", &["kind", "card", "text"]),
+    ("end", &["kind", "card", "text", ending::END_ENDING_KEY]),
 ];
 /// ACT1-HOOKS2 (FB-244 (2)): the keys a meter rule's effect may carry besides its kind's: `when`, flag conditions
 /// (`{key, op, value}`, all holding when the effect is reached), and `else` (true: runs only when no effect of its chain
@@ -1761,6 +1822,135 @@ impl RosterManifest {
         let base = if self.bunks == 0 { party_max } else { self.bunks };
         (base + flag_value.max(0)).min(self.bunks_max.max(base))
     }
+
+    /// KS3: the procedural keepsake's display name: `keepsake_name` with `{name}` the member's name and `{item}` the
+    /// template item's name.
+    pub fn keepsake_display(&self, member: &str, item: &str) -> String {
+        self.keepsake_name.replace(KEEPSAKE_NAME_TOKENS[0], member).replace(KEEPSAKE_NAME_TOKENS[1], item)
+    }
+}
+
+// ---- Recruits, the pool, Living Martyrs (ROSTER1-P/-M, PK3 3, kit hook; engine-only, no Godot original) ----------
+
+/// PG1, 11.3: the world kind of procedural recruit templates (`recruits.json`).
+pub const RECRUITS_KIND: &str = "recruits";
+/// PO1, 11.3: the most pool entries one `rescue` adds (`count` 1..).
+pub const RESCUE_COUNT_MAX: i64 = 4;
+/// PO1, 11.3: the keys of the `rescue` effect besides `effect`.
+pub const RESCUE_KEYS: [&str; 4] = ["template", "character", "base_unit", "count"];
+/// PO2, PO4: the `recruit` effect's `pool` value that swears in the first waiting entry.
+pub const POOL_FIRST: &str = "first";
+/// PG2: the id prefix of a procedural member (`recruit_<n>`, n = 1 + the highest used).
+pub const RECRUIT_ID_PREFIX: &str = "recruit_";
+/// KS3: the id prefix of a procedural keepsake instance (`keepsake@<member>`).
+pub const KEEPSAKE_INSTANCE_PREFIX: &str = "keepsake@";
+/// PO1 (under-18 rescues are no pool entries): the lowest and highest age a template's `age_band` may name.
+pub const RECRUIT_AGE_MIN: i32 = 18;
+pub const RECRUIT_AGE_MAX: i32 = 99;
+/// FZ1: the keys of a template's `fuse` and of one of its tiers.
+pub const FUSE_KEYS: [&str; 5] = ["per_deploy", "stasis_days", "max", "tiers", "last_passive"];
+pub const FUSE_TIER_KEYS: [&str; 2] = ["at", "passive"];
+/// FZ1: the top of a fuse's `per_deploy`, `stasis_days` and `max`.
+pub const FUSE_NUMBER_MAX: i32 = 99;
+
+/// FZ3: one tier of a fuse: at `at` or more its passive applies (PK3 3.1: tiers are cumulative).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FuseTier {
+    pub at: i32,
+    pub passive: String,
+}
+
+/// FZ1 (`fuse`): a recruit template's Living Martyr fuse.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FuseDef {
+    /// FZ2: added per deployment.
+    pub per_deploy: i32,
+    /// FZ2: one more per this many days since the join (0 = no stasis ticking).
+    pub stasis_days: i32,
+    /// FZ4: at this value the member's next deployment is a retire or a last stand.
+    pub max: i32,
+    pub tiers: Vec<FuseTier>,
+    /// FZ4: the passive a last stand deploys with ("" = none).
+    pub last_passive: String,
+}
+
+impl FuseDef {
+    pub fn from_obj(o: &Obj) -> Self {
+        let tiers = objs(o, "tiers").iter().map(|t| FuseTier { at: int(t, "at", 0), passive: string(t, "passive", "") }).collect();
+        Self { per_deploy: int(o, "per_deploy", 0), stasis_days: int(o, "stasis_days", 0), max: int(o, "max", 0), tiers, last_passive: string(o, "last_passive", "") }
+    }
+
+    /// FZ2: `deploys x per_deploy + floor(days / stasis_days)` (`days` since the join, at least 0).
+    pub fn value(&self, deploys: i64, days: i64) -> i64 {
+        let stasis = if self.stasis_days > 0 { days.max(0) / i64::from(self.stasis_days) } else { 0 };
+        deploys.max(0) * i64::from(self.per_deploy) + stasis
+    }
+
+    /// FZ3, PK3 3.1: the passives of every tier at or below `value`, tier order (cumulative).
+    pub fn passives_at(&self, value: i64) -> Vec<String> {
+        self.tiers.iter().filter(|t| i64::from(t.at) <= value && !t.passive.is_empty()).map(|t| t.passive.clone()).collect()
+    }
+
+    /// FZ4: the fuse is spent (`value >= max`; a `max` of 0 never is).
+    pub fn spent(&self, value: i64) -> bool {
+        self.max > 0 && value >= i64::from(self.max)
+    }
+}
+
+/// PG1: a template's `level` text as the `recruit` effect's `level` value: "" (or absent) = Null (the default
+/// `highest`), a whole number "1".."20" = that int, any other text as it is.
+fn recruit_level(raw: Option<&Value>) -> Value {
+    let Some(raw) = raw.filter(|l| !l.is_null()) else { return Value::Null };
+    let text = to_str(raw);
+    match text.parse::<i64>() {
+        _ if text.is_empty() => Value::Null,
+        Ok(n) => Value::from(n),
+        Err(_) => Value::String(text),
+    }
+}
+
+/// PG1, PK3 3.1: one `world.recruits` template row, read with its defaults.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecruitDef {
+    pub id: String,
+    pub name: String,
+    /// The class every base unit of the template has.
+    pub class_id: String,
+    /// The party base units a recruit is drawn from (the `rescue` effect's `base_unit` picks one).
+    pub base_units: Vec<String>,
+    /// The display names drawn from (never one a member, pool entry or departed member holds).
+    pub names: Vec<String>,
+    /// The ages of its recruits `[lo, hi]` (flavour; empty = unstated).
+    pub age_band: Vec<i32>,
+    /// The recruits' portrait: a file under the game's assets ("" = the body's common portrait).
+    pub art: String,
+    /// Slotless origin passive ids, one drawn per recruit.
+    pub origins: Vec<String>,
+    /// Slotless temperament passive ids, one drawn per recruit.
+    pub temperaments: Vec<String>,
+    /// The join level (BK5's `level`: "highest", "average" or 1..20, stored as text; Null = the default `highest`).
+    pub level: Value,
+    /// FZ1: the Living Martyr fuse (None = an ordinary recruit, housed in a bunk).
+    pub fuse: Option<FuseDef>,
+}
+
+impl RecruitDef {
+    pub fn from_obj(o: &Obj) -> Self {
+        let fuse = obj(o, "fuse").filter(|f| !f.is_empty()).map(FuseDef::from_obj);
+        Self {
+            id: string(o, "id", ""),
+            name: string(o, "name", ""),
+            class_id: string(o, "class_id", ""),
+            base_units: strings(o, "base_units"),
+            names: strings(o, "names"),
+            age_band: array(o, "age_band").iter().map(|a| to_int(a, 0)).collect(),
+            art: string(o, "art", ""),
+            origins: strings(o, "origins"),
+            temperaments: strings(o, "temperaments"),
+            level: recruit_level(o.get("level")),
+            fuse,
+        }
+    }
 }
 
 // ---- Story (STORYUI1 4.1-4.8, kit hook; engine-only, no Godot original) ---------------------------------------------
@@ -1807,8 +1997,21 @@ pub const TOKEN_KINDS: [&str; 2] = ["flag", "member"];
 /// 4.3: a sequence holds 1..STEPS_MAX steps; an effects step 1..STEP_EFFECTS_MAX effects.
 pub const STEPS_MAX: usize = 40;
 pub const STEP_EFFECTS_MAX: usize = 8;
-/// 4.3: the step kinds.
-pub const STEP_KINDS: [&str; 5] = ["vignette", "fight", "effects", "enter", "end"];
+/// 4.3: the step kinds. PR6-10 (`PK6_PK7_BOSSES_ENDINGS.md` 3): `camp_prep`, the one-time camp before a point of no
+/// return (the story stage opens the game's prep screen; one free rest with no clock tick).
+pub const STEP_KINDS: [&str; 6] = ["vignette", "fight", "effects", "enter", "end", "camp_prep"];
+/// PR6-10: the prep step's warning when it sets no `text` (the game's prep screen shows it).
+pub const CAMP_PREP_TEXT: &str = "There is no way back past this point. Prepare first?";
+/// PR6-10: the most days a story fight's `retry_day_cost` charges per retry.
+pub const RETRY_DAY_COST_MAX: i64 = 30;
+/// PR6-10: a retried story fight with `echo_fallen` fields at most this many echo units on the enemy side.
+pub const ECHO_MAX: usize = 2;
+/// PR6-10: the enemy refs of the echo units (`"$echo_unit.1"`, `"$echo_unit.2"`): each mirrors a departed member whose
+/// life is one of `ECHO_LIVES`, the latest first. Never a roster enemy (no rewards).
+pub const ECHO_UNIT: &str = "$echo_unit";
+pub const ECHO_LIVES: [&str; 3] = KEEPSAKE_LIVES;
+/// PR6-10: an echo unit's name is this before the member's.
+pub const ECHO_NAME_PREFIX: &str = "Echo of ";
 /// 4.3: the step kinds that may only be the last step.
 pub const LAST_STEP_KINDS: [&str; 2] = ["enter", "end"];
 /// 4.3, Q5: what a lost or fled story fight does (`abort` the default).
@@ -1860,15 +2063,21 @@ pub const BOARD_INTRO_MAX: usize = 160;
 /// 4.7: the service line id of the board choice.
 pub const BOARD_SERVICE: &str = "board";
 
+/// PR7-37 (PT-03, PT-29): what a point of interest (a `point` marker's `use`) does when the party acts on it (E, or
+/// a click on its marker): "" says its note only; `rest` rests the party there (the campaign's rest rule, as Make
+/// camp); `crypts` says who lies in the crypt places; `stash` opens the party stash. Every point logs its line.
+pub const POINT_USES: [&str; 4] = ["", "rest", "crypts", "stash"];
+
 /// The keys a step of `kind` takes (`kind` included; an unknown kind takes only `kind`). STORYMUSIC1: every kind takes
 /// an optional `music` (as a vignette's: "" keeps the music playing).
 pub fn step_keys(kind: &str) -> &'static [&'static str] {
     match kind {
         "vignette" => &["kind", "vignette", "music"],
-        "fight" => &["kind", "encounter", "on_lost", "on_fled", "music"],
+        "fight" => &["kind", "encounter", "on_lost", "on_fled", "retry_day_cost", "echo_fallen", "music"],
         "effects" => &["kind", "effects", "music"],
         "enter" => &["kind", "location", "anchor", "music"],
         "end" => &["kind", "to", "music"],
+        "camp_prep" => &["kind", "text", "keeper", "music"],
         _ => &["kind"],
     }
 }
@@ -1911,13 +2120,17 @@ pub fn board_opened_flag(board: &str) -> String {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Step {
     Vignette { vignette: String },
-    /// `on_lost` and `on_fled`: one of FIGHT_OUTCOMES.
-    Fight { encounter: String, on_lost: String, on_fled: String },
+    /// `on_lost` and `on_fled`: one of FIGHT_OUTCOMES. PR6-10: `retry_day_cost` days pass on each retry (0 = none);
+    /// `echo_fallen`: a retry fields up to `ECHO_MAX` echo units of departed members (`ECHO_UNIT`).
+    Fight { encounter: String, on_lost: String, on_fled: String, retry_day_cost: i32, echo_fallen: bool },
     Effects { effects: Vec<Value> },
     /// `anchor` "" = the location's entry.
     Enter { location: String, anchor: String },
     /// `to`: one of END_TO.
     End { to: String },
+    /// PR6-10: the camp before a point of no return: `text` the warning ("" = `CAMP_PREP_TEXT`), `keeper` the
+    /// character whose services (shop, recipes) the prep screen opens ("" = none).
+    CampPrep { text: String, keeper: String },
 }
 
 impl Step {
@@ -1925,10 +2138,17 @@ impl Step {
     pub fn from_obj(o: &Obj) -> Option<Self> {
         Some(match string(o, "kind", "").as_str() {
             "vignette" => Step::Vignette { vignette: string(o, "vignette", "") },
-            "fight" => Step::Fight { encounter: string(o, "encounter", ""), on_lost: string(o, "on_lost", "abort"), on_fled: string(o, "on_fled", "abort") },
+            "fight" => Step::Fight {
+                encounter: string(o, "encounter", ""),
+                on_lost: string(o, "on_lost", "abort"),
+                on_fled: string(o, "on_fled", "abort"),
+                retry_day_cost: o.get("retry_day_cost").and_then(Value::as_i64).unwrap_or(0).clamp(0, RETRY_DAY_COST_MAX) as i32,
+                echo_fallen: o.get("echo_fallen").and_then(Value::as_bool).unwrap_or(false),
+            },
             "effects" => Step::Effects { effects: array(o, "effects").to_vec() },
             "enter" => Step::Enter { location: string(o, "location", ""), anchor: string(o, "anchor", "") },
             "end" => Step::End { to: string(o, "to", "map") },
+            "camp_prep" => Step::CampPrep { text: string(o, "text", ""), keeper: string(o, "keeper", "") },
             _ => return None,
         })
     }
@@ -1948,10 +2168,10 @@ pub const PORTRAIT_METER_TRIGGER: &str = "meter";
 pub const PORTRAIT_EVENTS: [&str; 11] = ["hit", "crit", "guard_hit", "heal", "break", "battle_start", "ambush", "round_start", "skill", "ally_down", "victory"];
 /// PORTRAITFX2 5.3: the event whose rows read `min_level` (the skill's level).
 pub const PORTRAIT_SKILL_EVENT: &str = "skill";
-/// 5.1: the kit's copy of the engine's portrait effect names (`aegis_ui::portrait_fx::EFFECTS`, same order; the kit
+/// 5.1: the kit's copy of the engine's portrait effect names (`rpgkit_ui::portrait_fx::EFFECTS`, same order; the kit
 /// crates do not depend on the UI, so a game test keeps the two equal). ASSETORG4: no other name is read.
 pub const PORTRAIT_EFFECTS: [&str; 12] = ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "lines", "point_glow", "particles_rise", "drift", "face"];
-/// 5.1: the jolt presets (`aegis_ui::portrait_fx::PORTRAIT_JOLTS`).
+/// 5.1: the jolt presets (`rpgkit_ui::portrait_fx::PORTRAIT_JOLTS`).
 pub const PORTRAIT_JOLTS: [&str; 2] = ["hit", "crit"];
 /// 5.1: the effects whose colour a row may set.
 pub const PORTRAIT_COLOR_EFFECTS: [&str; 7] = ["flash", "tint", "glow", "lines", "point_glow", "particles_rise", "drift"];
@@ -2067,9 +2287,9 @@ impl PortraitCue {
 /// read beside the catalog kinds); a row's id is the face it draws for (PORTRAITFX2 FL1: the rows name the game's
 /// faces; a `neutral` row carries only the plain face's motion).
 pub const PORTRAIT_EXPRESSIONS_KIND: &str = "portrait_expressions";
-/// The kit's copy of the engine's mark names (`aegis_ui::portrait_fx::MARKS`; a game test keeps the two equal).
+/// The kit's copy of the engine's mark names (`rpgkit_ui::portrait_fx::MARKS`; a game test keeps the two equal).
 pub const PORTRAIT_MARKS: [&str; 2] = ["vein", "sweat"];
-/// The boxes a mark's anchor is relative to (`aegis_ui::portrait_fx::MARK_BOXES`).
+/// The boxes a mark's anchor is relative to (`rpgkit_ui::portrait_fx::MARK_BOXES`).
 pub const PORTRAIT_MARK_BOXES: [&str; 2] = ["face", "eyes"];
 
 /// An expression-effect row (PORTRAITFX1-EX, kind `portrait_expressions`): what a portrait draws while a `face` cue
@@ -2204,8 +2424,10 @@ pub const TRIGGER_LIMITS: [&str; 3] = ["round", "battle", "none"];
 /// 1.3: the keys of a trigger row (a passive or item effect adds `type`; a rider takes `when` and `effects` only).
 pub const TRIGGER_KEYS: [&str; 4] = ["on", "when", "effects", "limit"];
 pub const RIDER_KEYS: [&str; 2] = ["when", "effects"];
-/// 8.2: the condition keys of a trigger's or rider's `when`.
-pub const WHEN_KEYS: [&str; 11] = [
+/// 8.2: the condition keys of a trigger's or rider's `when` (also a passive's or worn item's effect row `when`).
+/// `PR7-8` (`RELIC-SIG1`): `from_act` (the holder's campaign act is at least this, `WHEN_FROM_ACT`; a unit outside a
+/// campaign is act 0) and `holds_meter` (the holder holds that unit meter through a passive's `meter` effect) join.
+pub const WHEN_KEYS: [&str; 13] = [
     "pct",
     "range",
     "ranged",
@@ -2217,12 +2439,19 @@ pub const WHEN_KEYS: [&str; 11] = [
     "intent",
     "meter",
     "dual_wield",
+    WHEN_FROM_ACT_KEY,
+    WHEN_HOLDS_METER,
 ];
+/// `PR7-8`: the `when` key gating on the holder's campaign act, and its range (a whole number).
+pub const WHEN_FROM_ACT_KEY: &str = "from_act";
+pub const WHEN_FROM_ACT: (i64, i64) = (1, 9);
+/// `PR7-8`: the `when` key gating on a unit meter the holder holds (a passive's `meter` effect gives it).
+pub const WHEN_HOLDS_METER: &str = "holds_meter";
 /// 8.2: the trigger effects and their keys besides `type` (`to`: self or other, where the effect takes it). ROLLTABLE1:
 /// `roll_table` picks one of its `rows` by weight on the battle RNG and runs that row's effects. PK1-S1: `ap` takes
 /// `set` (with `rounds`) instead of `value`, `damage` takes `pct_of_hit` instead of `value`, and `strike_nearest` and
 /// `mark` join.
-pub const TRIGGER_EFFECTS: [(&str, &[&str]); 18] = [
+pub const TRIGGER_EFFECTS: [(&str, &[&str]); 19] = [
     ("ap", &["value", "set", "rounds", "to"]),
     ("grant", &["status", "rounds", "magnitude", "until", "to"]),
     ("inflict", &["status", "potency", "rounds", "magnitude", "to"]),
@@ -2241,7 +2470,20 @@ pub const TRIGGER_EFFECTS: [(&str, &[&str]); 18] = [
     (STRIKE_NEAREST, &["power", "then_status", "then_rounds"]),
     (MARK, &["mark", "value", "to"]),
     (RATING_SET, &["rating", "value", "rounds", "to"]),
+    (SHOCKWAVE, &["tiles", "pct_of_hit"]),
 ];
+/// `PR7-8` (`RELIC-SIG1`): a hit carried on in a line `{tiles, pct_of_hit}` (a hit event only: `hit_dealt`, `kill`):
+/// each foe of the holder standing on the `tiles` tiles past the struck unit, along the holder-to-target direction
+/// (snapped to the 8 directions), takes `pct_of_hit` percent of the hit (at least 1 HP, unmitigated, raising no event:
+/// depth 1). Its ranges.
+pub const SHOCKWAVE: &str = "shockwave";
+pub const SHOCKWAVE_TILES: (i64, i64) = (1, 3);
+pub const SHOCKWAVE_PCT: (i64, i64) = (1, 100);
+/// `PR7-8` (`RELIC-SIG1`): the effect `{type: meter_floor, meter, floor}` (worn items and passives): while held, the
+/// holder's gauge of unit meter `meter`, when it holds one, never goes below `floor` (the largest such floor and the
+/// meter's own count; clamped to the row's min..max); it gives no meter. Its keys besides `when`.
+pub const METER_FLOOR: &str = "meter_floor";
+pub const METER_FLOOR_KEYS: [&str; 3] = ["type", "meter", "floor"];
 /// PK1-KITFIX (b, FB-184 A): a rating held at a value `{rating, value, rounds}` (rounds 1-5 or -1 the rest of the
 /// battle): while it holds, the rating is the value whatever the statuses raising or lowering it add (a later set of
 /// the same rating replaces it).
@@ -2377,10 +2619,10 @@ pub const HEAL_TAKEN: &str = "heal_taken";
 /// AH2: the directions of an arena hazard's push.
 pub const ARENA_DIRS: [&str; 4] = ["east", "west", "north", "south"];
 /// AH1: the keys of an arena hazard row and of its `effect`.
-pub const ARENA_HAZARD_KEYS: [&str; 9] = ["id", "name", "cells", "columns", "rows", "rounds", "blocks", "effect", "line"];
+pub const ARENA_HAZARD_KEYS: [&str; 10] = ["id", "name", "cells", "columns", "rows", "rounds", "every_rounds", "blocks", "effect", "line"];
 /// PK1-S1 (3.6): `meter` `{meter, delta}` changes that unit meter of each struck holder (the ground hazard row's `meter`
 /// field too).
-pub const ARENA_EFFECT_KEYS: [&str; 9] = ["damage", "damage_pct", "stagger", "status", "potency", "magnitude", "status_rounds", "push", "meter"];
+pub const ARENA_EFFECT_KEYS: [&str; 10] = ["damage", "damage_pct", "stagger", "status", "potency", "magnitude", "status_rounds", "push", "meter", "when_meter"];
 /// PK1-S1 (3.6): the keys of a hazard's `meter` (arena effect and ground hazard row).
 pub const HAZARD_METER_KEYS: [&str; 2] = ["meter", "delta"];
 
@@ -2583,6 +2825,8 @@ pub struct HazardDef {
     pub glyph: String,
     /// PK1-S1 (3.6): the unit meter change it makes on each holder of that meter it acts on (None = none).
     pub meter: Option<MeterDelta>,
+    /// PR6-7: it acts only on units holding this meter at its `at_least` or more (None = every unit it affects).
+    pub when_meter: Option<Threshold>,
 }
 
 impl HazardDef {
@@ -2607,7 +2851,100 @@ impl HazardDef {
             tint: string(o, "tint", "#808080"),
             glyph: string(o, "glyph", "*"),
             meter: MeterDelta::of_hazard(o),
+            when_meter: Threshold::of(o, WHEN_METER),
         }
+    }
+}
+
+/// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 1): an arena hazard effect's or a ground hazard row's meter gate: it acts only on a
+/// unit holding the unit meter `id` at `at_least` or more (rule unit_meters; a unit holding no such meter is spared).
+pub const WHEN_METER: &str = "when_meter";
+/// PR6-7: an arena hazard row's periodic cadence: it strikes every N rounds (rounds N, 2N, ...), added to its `rounds`.
+pub const EVERY_ROUNDS: &str = "every_rounds";
+/// PR6-7: the most rounds `every_rounds` expands into (past any battle's last round).
+pub const EVERY_ROUNDS_HORIZON: i32 = 99;
+/// PR6-7: the battle-start meter grants of a world region or encounter row.
+pub const START_METER: &str = "start_meter";
+/// PR6-7: a world encounter's ref for the captive unit: built from the latest departed record whose life is `captured`
+/// and cause `stayed` (`party.departed`), else the encounter's `captive_fallback` character.
+pub const CAPTIVE_UNIT: &str = "$captive_unit";
+/// PR6-7: the world encounter field naming the character `CAPTIVE_UNIT` plays when no departed record qualifies.
+pub const CAPTIVE_FALLBACK: &str = "captive_fallback";
+/// PR6-7: the departed record's life and cause `CAPTIVE_UNIT` reads (`DEPART_LIVES`, `DEPART_CAUSES`).
+pub const CAPTIVE_LIFE: &str = "captured";
+pub const CAPTIVE_CAUSE: &str = "stayed";
+
+/// PR6-10: echo unit `i`'s ref (1-based, `ECHO_UNIT`).
+pub fn echo_ref(i: usize) -> String {
+    format!("{ECHO_UNIT}.{i}")
+}
+
+/// PR6-10: the 1-based index an echo ref names (`echo_ref`), None for any other ref.
+pub fn echo_index(r: &str) -> Option<usize> {
+    r.strip_prefix(ECHO_UNIT)?.strip_prefix('.')?.parse().ok().filter(|i| *i >= 1)
+}
+
+/// PR6-7: an `{id, at_least}` gate (`when_meter` on a unit meter, `requires_track` on a unit track).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Threshold {
+    pub id: String,
+    pub at_least: i32,
+}
+
+impl Threshold {
+    /// The object's keys.
+    pub const KEYS: [&'static str; 2] = ["id", "at_least"];
+
+    /// None for an empty object or one without an id.
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        Some(Self { id: string(o, "id", ""), at_least: int(o, "at_least", 0) }).filter(|t| !t.id.is_empty())
+    }
+
+    /// The gate under `key` of `o` (None when absent, empty or without an id).
+    pub fn of(o: &Obj, key: &str) -> Option<Self> {
+        obj(o, key).and_then(Self::from_obj)
+    }
+
+    /// Whether `value` (None: the unit holds none) passes.
+    pub fn met(&self, value: Option<i32>) -> bool {
+        value.is_some_and(|v| v >= self.at_least)
+    }
+}
+
+/// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 1): one `start_meter` entry of a world region or encounter: at the battle start
+/// each holder of unit meter `meter` (rule unit_meters) whose unit track `requires_track.id` is at `at_least` or more
+/// (none = every holder) gains `value` (clamped to its floor..max), after the holders' own start and floor. The world
+/// filters the entries by `unless_flag` (a set flag skips it) and `requires_flags` (conditions that must all hold).
+#[derive(Debug, Clone, PartialEq)]
+pub struct StartMeter {
+    pub meter: String,
+    pub value: i32,
+    pub requires_track: Option<Threshold>,
+    pub unless_flag: String,
+    pub requires_flags: Vec<Value>,
+}
+
+impl StartMeter {
+    /// The entry's keys.
+    pub const KEYS: [&'static str; 5] = ["meter", "value", "requires_track", "unless_flag", "requires_flags"];
+    /// The largest `value` magnitude.
+    pub const VALUE_MAX: i32 = 100;
+
+    /// None for an entry without a meter id or with value 0.
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        let s = Self {
+            meter: string(o, "meter", ""),
+            value: int(o, "value", 0).clamp(-Self::VALUE_MAX, Self::VALUE_MAX),
+            requires_track: Threshold::of(o, "requires_track"),
+            unless_flag: string(o, "unless_flag", ""),
+            requires_flags: array(o, "requires_flags").to_vec(),
+        };
+        (!s.meter.is_empty() && s.value != 0).then_some(s)
+    }
+
+    /// A row's `start_meter` entries (the ones that read).
+    pub fn list(o: &Obj) -> Vec<Self> {
+        array(o, START_METER).iter().filter_map(Value::as_object).filter_map(Self::from_obj).collect()
     }
 }
 

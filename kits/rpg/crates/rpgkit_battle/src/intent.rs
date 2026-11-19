@@ -425,3 +425,321 @@ pub fn trace(w: &World, intents: &[Intent]) -> serde_json::Value {
             .collect(),
     )
 }
+
+/// PR7-41 (PT-20): the round as it will run: the scheduled actions `sched` (the enemies', drafted first) with `plan`'s
+/// entries booked after them, as `Plan::commit` books them on confirm (planning reads the plan, not the resolver).
+pub fn planned_schedule(w: &World, sched: &[ScheduledAction], plan: &Plan) -> Vec<ScheduledAction> {
+    let mut res = crate::resolver::Resolver::new(w.total_blocks, 0);
+    res.scheduled = sched.to_vec();
+    plan.commit(w, &mut res);
+    res.scheduled
+}
+
+/// PT-20: the guard mitigation `c` has at `block`, as `Resolver::prepare_block` raises it: the largest of each live
+/// Defend that has started by then (S1.2-S4: held from the wind-up start to the round's end; a broken guard gives
+/// none) and the held guard or `guard` status (`trigger::held_at`). Read only.
+pub fn guard_at(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32) -> f64 {
+    let running = sched.iter().filter(|a| a.unit == c && !a.cancelled && a.start <= block).filter_map(|a| match &a.command.kind {
+        CmdKind::Defend { mitigation, guard_broken: false, .. } => Some(*mitigation),
+        _ => None,
+    });
+    running.fold(crate::trigger::held_at(w, c, block).unwrap_or(0.0), f64::max)
+}
+
+/// PT-20: the stance `c` holds when a hit lands at `block`, as the resolver changes it: each live action's start stance
+/// from its start block on (`Resolver::begin_actions`), each end stance (a flow) once its impact has passed
+/// (`apply_combo`); else the stance it holds now.
+pub fn stance_at(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32) -> rpgkit_rules::unit::Stance {
+    let mut changes: Vec<(i32, i32, rpgkit_rules::unit::Stance)> = Vec::new();
+    for a in actions_of(c, sched) {
+        if let Some(st) = a.command.stance_on_start.filter(|_| a.start <= block) {
+            changes.push((a.start, 0, st));
+        }
+        if let Some(st) = a.command.stance_on_end.filter(|_| a.impact < block) {
+            changes.push((a.impact, 1, st));
+        }
+    }
+    changes.sort_by_key(|x| (x.0, x.1));
+    changes.last().map_or(w.units[c].stance, |x| x.2)
+}
+
+/// PT-20: one hit a scheduled action lands on a unit, forecast by the one convention every damage number on the battle
+/// screen follows: per hit, at the block it lands, with the target's guard at that block (no crit roll).
+#[derive(Debug, Clone, PartialEq)]
+pub struct HitOn {
+    /// The action's tell name (`skill_name`).
+    pub skill: String,
+    /// The block the hit lands (the action's impact).
+    pub block: i32,
+    pub damage: i32,
+    /// The target guards at that block (a guard-bypassing hit counts it as unguarded).
+    pub guarded: bool,
+    /// The action's place among its unit's live actions in block order (`actions_of`; 0 = its first, the tell's
+    /// line), so a screen can keep an unrevealed plan's later actions hidden; `hit_on` leaves it 0.
+    pub nth: usize,
+}
+
+/// PT-20, PT-17: where `c` stands when a hit lands at `block`: the end tile of its last live move that lands earlier
+/// (`command::walk_preview`), else where it stands now. `sched` is the round as it will run (`planned_schedule` while
+/// planning), so a party member's planned moves count.
+pub fn position_at(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32) -> V2 {
+    let mut at = w.grid.pos(c).unwrap_or(NO_CELL);
+    for a in actions_of(c, sched).into_iter().filter(|a| a.impact < block) {
+        if let CmdKind::Walk { path, .. } = &a.command.kind {
+            // each move steps on from where the earlier ones end (the preview's start is the chain's tile)
+            if let Some(end) = crate::command::walk_preview(w, c, path, at).last() {
+                at = *end;
+            }
+        }
+    }
+    at
+}
+
+/// PR7-41 (PT-17): the tiles scheduled area action `a` strikes when it lands, the one area its tell marks. A tile
+/// area (no target) strikes the tiles fixed when it was planned; a shaped Assault row (IR5, IR7, IR17: locked on its
+/// target) is centred where the target stands at the impact, read from where its user stands then (`position_at`, as
+/// `Command::execute` re-reads it). Its planned tiles when the target is gone or off the grid; empty for any other
+/// action. Read only.
+pub fn area_cells(w: &World, sched: &[ScheduledAction], a: &ScheduledAction) -> Vec<V2> {
+    let CmdKind::Area { cells, target, shape, .. } = &a.command.kind else { return Vec::new() };
+    let Some(t) = target.filter(|&t| w.units.get(t).is_some_and(|u| u.is_active()) && w.has(t)) else { return cells.clone() };
+    let (from, to) = (position_at(w, sched, a.unit, a.impact), position_at(w, sched, t, a.impact));
+    if from == NO_CELL || to == NO_CELL {
+        return cells.clone();
+    }
+    crate::skill::shape_cells(*shape, from, to).into_iter().filter(|c| w.grid.is_valid(*c) && *c != from).collect()
+}
+
+/// PT-20: the hit scheduled action `a` lands on `t` (an Attack on it, or an Area whose tiles hold it or that is
+/// locked on it), forecast as `HitOn`; None for any other action or a target it misses. The damage follows the
+/// resolver's hit (`Command::land`): the command's power, the flank and exploit factors, the distance potency and cover
+/// from the tile the attacker stands on then (`position_at`), both units' stances then (`stance_at`), armour
+/// piercing and `guard_at` the impact (left out for a guard-bypassing hit). `sched` is the round as it will run
+/// (`planned_schedule` while planning).
+pub fn hit_on(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: UnitId) -> Option<HitOn> {
+    hit_on_with(w, sched, a, t, false)
+}
+
+/// `hit_on`, the hit forced to crit when `crit` (BATTLE-UI2: the foe card's crit star; `HitInput::force_crit`).
+fn hit_on_with(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: UnitId, crit: bool) -> Option<HitOn> {
+    use rpgkit_rules::damage::{self, HitInput};
+    let src = a.unit;
+    if a.cancelled || src == t || !w.has(t) {
+        return None;
+    }
+    let from = position_at(w, sched, src, a.impact);
+    let (mult, offhand, ranged) = match &a.command.kind {
+        CmdKind::Attack { target, skill_mult, use_offhand, .. } if target.or(w.units[src].active_target) == Some(t) && *skill_mult > 0.0 => (*skill_mult, *use_offhand, w.units[src].attack_range > 1 && !use_offhand),
+        CmdKind::Area { skill_mult, target, splash, affects, .. } if *skill_mult > 0.0 && crate::skill::affects_unit(*affects, w.friends_of(src).contains(&t)) => {
+            // PT-17: the tiles it strikes when it lands, the target where it stands then (BIGUNIT1 BU9: any of its cells)
+            let struck = area_cells(w, sched, a);
+            let at = position_at(w, sched, t, a.impact);
+            if !w.cells_at(t, at).iter().any(|c| struck.contains(c)) {
+                return None;
+            }
+            (*skill_mult * if target.is_none_or(|p| p == t) { 1.0 } else { *splash }, false, w.units[src].attack_range > 1)
+        }
+        _ => return None,
+    };
+    let flank = round_intent::flank_bonus_from(w, src, from, t);
+    let exploit = crate::skill::exploit_match_by(&a.command.exploit, &w.units[t], &[], flank, &w.ruleset).1;
+    let mut mult = mult * exploit * crate::command::flank_power(w, flank);
+    let dist = if from != NO_CELL { w.dist_at(src, from, t) } else { 0 };
+    let mut distance = 0;
+    if dist > 0 {
+        match w.cat.skill(&a.command.skill) {
+            Some(s) => {
+                let (base, at) = (w.units[src].potency_for_skill(s), w.units[src].potency_for_skill_at(s, ranged, dist));
+                if (at - base).abs() > 1e-12 && base.abs() > 1e-12 {
+                    mult *= at.max(0.0) / base;
+                }
+            }
+            None => distance = dist,
+        }
+    }
+    let cover = if from == NO_CELL { 0.0 } else { crate::command::cover_for(&w.grid, from, position_at(w, sched, t, a.impact), ranged) };
+    let guard = if a.command.ignore_guard { 0.0 } else { guard_at(w, sched, t, a.impact) };
+    let mut target = w.units[t].clone();
+    target.stance = stance_at(w, sched, t, a.impact);
+    // the guard joins the cover in the one guard-and-cover term (`damage::compute` adds them before its cap)
+    let input = HitInput { ranged, offhand, skill_mult: mult, cover: cover + guard, include_guard: false, ignore_armor: a.command.pierces(w), distance, attacker_stance: Some(stance_at(w, sched, src, a.impact)), force_crit: crit, ..HitInput::default() };
+    let damage = damage::compute(&w.units[src], &target, input).final_dmg;
+    Some(HitOn { skill: skill_name(w, &a.command), block: a.impact, damage, guarded: guard > 0.0, nth: 0 })
+}
+
+/// PT-20: every hit `attacker`'s live scheduled actions land on `t` this round, in block order (`hit_on`), each with
+/// its action's place (`HitOn::nth`).
+pub fn hits_on(w: &World, sched: &[ScheduledAction], attacker: UnitId, t: UnitId) -> Vec<HitOn> {
+    actions_of(attacker, sched).into_iter().enumerate().filter_map(|(n, a)| hit_on(w, sched, a, t).map(|h| HitOn { nth: n, ..h })).collect()
+}
+
+/// BATTLE-UI2 (`SCREEN_CONTRACT_BATTLE.md` 5, the docked foe card): one hit a party unit's live action lands on a foe,
+/// read from the round as it will run (never a separate forecast list): its skill and blocks as booked, the damage by
+/// the one convention (`hit_on`), the pips it breaks (each hit settles on its own, `poise::forecast_hits`) and the
+/// status it applies.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CardHit {
+    pub unit: UnitId,
+    /// The command's skill id (its icon) and tell name.
+    pub skill: String,
+    pub name: String,
+    /// The action's first block and the block it lands (`ScheduledAction::start`, `impact`).
+    pub start: i32,
+    pub impact: i32,
+    pub damage: i32,
+    /// The same hit as a crit (x `CRIT_MULT`) and the chance it crits (0 to 1, its unit's `crit_chance`).
+    pub crit_damage: i32,
+    pub crit_chance: f64,
+    /// The pips it breaks (0 to the per-hit cap; 0 without a bar).
+    pub pips: i32,
+    /// It empties the bar (the split shield in place of its pips).
+    pub breaks: bool,
+    /// The bar is already broken when it lands (shown dimmed).
+    pub on_broken: bool,
+    /// The status it applies (none, or the command's `status_effect`).
+    pub statuses: Vec<String>,
+    /// It lands after the forecast KO block (the soft "after KO" tag).
+    pub after_ko: bool,
+}
+
+/// BATTLE-UI2 (`SCREEN_CONTRACT_BATTLE.md` 6, the heal preview): the HP the round's planned heals restore on `unit`
+/// over `sched` (the round as it will run): each live Support action of its side aimed at it (`heal_amount_on`),
+/// summed, after its `heal_taken` and within its missing HP now (`effective_heal`). 0 without one. Read only.
+pub fn heal_on(w: &World, sched: &[ScheduledAction], unit: UnitId) -> i32 {
+    let Some(u) = w.units.get(unit) else { return 0 };
+    let side = |c: UnitId| w.allies.contains(&c);
+    let total: i32 = sched
+        .iter()
+        .filter(|a| !a.cancelled && side(a.unit) == side(unit))
+        .filter_map(|a| match &a.command.kind {
+            CmdKind::Support { target, skill, .. } if *target == unit => Some(crate::command::heal_amount_on(w, a.unit, unit, *skill)),
+            _ => None,
+        })
+        .sum();
+    if total <= 0 { 0 } else { crate::command::effective_heal(u, total) }
+}
+
+/// BATTLE-UI2: the foe card's read of the round on foe `foe` (`foe_card`).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct FoeCard {
+    pub hp: i32,
+    pub max_hp: i32,
+    /// Every planned party hit on the foe, in block order (then start, then booking order).
+    pub hits: Vec<CardHit>,
+    /// The block the base damage (no crits) takes it to 0 HP; None when the plan does not.
+    pub ko_block: Option<i32>,
+    /// The block a hit empties its poise bar; None when none does.
+    pub break_block: Option<i32>,
+    /// The crit star: the earliest block before `ko_block` by which the foe is down with a chance of 50 % or more over
+    /// every crit outcome of the planned hits (each crits on its own); None otherwise (and without a KO block).
+    pub crit_star: Option<i32>,
+    /// The bar: the pip threshold T, the pips now and the pips of a full bar (all 0 without a bar).
+    pub threshold: i32,
+    pub pips: i32,
+    pub max_pips: i32,
+}
+
+impl FoeCard {
+    /// The total base damage of `unit`'s hits (None: every party unit's).
+    pub fn total(&self, unit: Option<UnitId>) -> i32 {
+        self.hits.iter().filter(|h| unit.is_none_or(|u| h.unit == u)).map(|h| h.damage).sum()
+    }
+
+    /// The blocks the hits land in, in order, each with its hits (the card's rows with no hero selected).
+    pub fn by_block(&self) -> Vec<(i32, Vec<&CardHit>)> {
+        let mut out: Vec<(i32, Vec<&CardHit>)> = Vec::new();
+        for h in &self.hits {
+            match out.last_mut() {
+                Some(row) if row.0 == h.impact => row.1.push(h),
+                _ => out.push((h.impact, vec![h])),
+            }
+        }
+        out
+    }
+}
+
+/// The chance `hp` HP of base hits `hits` (each `(damage, crit damage, crit chance)`) are all taken, over every crit
+/// outcome (each hit crits on its own): an exact distribution of the damage so far, capped at `hp`.
+fn down_chance(hp: i32, hits: &[(i32, i32, f64)]) -> f64 {
+    let cap = hp.max(0) as usize;
+    let mut dist = vec![0.0f64; cap + 1];
+    dist[0] = 1.0;
+    for &(base, crit, p) in hits {
+        let p = p.clamp(0.0, 1.0);
+        let mut next = vec![0.0f64; cap + 1];
+        for (d, &q) in dist.iter().enumerate() {
+            if q == 0.0 {
+                continue;
+            }
+            if d == cap {
+                next[cap] += q;
+                continue;
+            }
+            next[(d + base.max(0) as usize).min(cap)] += q * (1.0 - p);
+            next[(d + crit.max(0) as usize).min(cap)] += q * p;
+        }
+        dist = next;
+    }
+    dist[cap]
+}
+
+/// BATTLE-UI2 (`SCREEN_CONTRACT_BATTLE.md` 5): the foe card of `foe` over `sched`, the round as it will run
+/// (`planned_schedule` while planning, so the rows are the live plan's: the same skills, blocks and booking): each
+/// party unit's live hit on it (`hit_on`, its crit too), the pips each breaks on the bar the earlier ones leave
+/// (`poise::forecast_hits`), the KO and BREAK blocks, the after-KO tags and the crit star. Read only.
+pub fn foe_card(w: &World, sched: &[ScheduledAction], foe: UnitId) -> FoeCard {
+    use crate::poise;
+    let Some(u) = w.units.get(foe) else { return FoeCard::default() };
+    let mut card = FoeCard { hp: u.hp, max_hp: u.max_hp, ..FoeCard::default() };
+    let n = &w.ruleset.numbers;
+    let bar = poise::state(w, foe).filter(|st| st.max > 0).copied();
+    if let Some(st) = bar {
+        (card.threshold, card.pips, card.max_pips) = (poise::threshold(n, st.max), poise::pips_now(n, &st), n.poise_pips);
+    }
+    let mut acts: Vec<(usize, &ScheduledAction)> = sched.iter().enumerate().filter(|(_, a)| !a.cancelled && a.unit != foe && w.allies.contains(&a.unit)).collect();
+    acts.sort_by_key(|(k, a)| (a.impact, a.start, *k));
+    let landed: Vec<(&ScheduledAction, HitOn, i32)> = acts
+        .into_iter()
+        .filter_map(|(_, a)| {
+            let h = hit_on(w, sched, a, foe)?;
+            let crit = hit_on_with(w, sched, a, foe, true).map_or(h.damage, |c| c.damage);
+            Some((a, h, crit))
+        })
+        .collect();
+    let planned: Vec<poise::PlannedHit> = landed
+        .iter()
+        .map(|(a, _, _)| {
+            let flank = round_intent::flank_bonus_from(w, a.unit, position_at(w, sched, a.unit, a.impact), foe);
+            poise::PlannedHit { target: foe, block: a.impact, impact: a.command.impact, blocks: a.command.block_cost, flank, ignore_guard: a.command.ignore_guard }
+        })
+        .collect();
+    let fcs = if bar.is_some() { poise::forecast_hits(w, sched, &planned) } else { Vec::new() };
+    let mut broken = bar.is_some_and(|st| st.broken);
+    let mut taken = 0;
+    for (k, (a, h, crit)) in landed.iter().enumerate() {
+        let fc = fcs.get(k).copied().flatten();
+        let breaks = fc.is_some_and(|f| matches!(f.verdict, poise::Verdict::Breaks(_)));
+        let on_broken = broken || fc.is_some_and(|f| f.verdict == poise::Verdict::AlreadyBroken);
+        let pips = if on_broken || breaks { 0 } else { fc.map_or(0, |f| (f.pips_before - f.pips_after).max(0)) };
+        if breaks && card.break_block.is_none() {
+            card.break_block = Some(a.impact);
+        }
+        broken |= breaks;
+        let after_ko = card.ko_block.is_some_and(|b| a.impact > b);
+        taken += h.damage;
+        if card.ko_block.is_none() && card.hp > 0 && taken >= card.hp {
+            card.ko_block = Some(a.impact);
+        }
+        let statuses = if a.command.status_effect.is_empty() { Vec::new() } else { vec![a.command.status_effect.clone()] };
+        let chance = (rpgkit_rules::damage::crit_chance(&w.units[a.unit]) / 100.0).clamp(0.0, 1.0);
+        card.hits.push(CardHit { unit: a.unit, skill: a.command.skill.clone(), name: h.skill.clone(), start: a.start, impact: a.impact, damage: h.damage, crit_damage: *crit, crit_chance: chance, pips, breaks, on_broken, statuses, after_ko });
+    }
+    if let Some(ko) = card.ko_block {
+        let blocks: Vec<i32> = card.by_block().into_iter().map(|(b, _)| b).filter(|b| *b < ko).collect();
+        card.crit_star = blocks.into_iter().find(|&b| {
+            let by: Vec<(i32, i32, f64)> = card.hits.iter().filter(|h| h.impact <= b).map(|h| (h.damage, h.crit_damage, h.crit_chance)).collect();
+            down_chance(card.hp, &by) >= 0.5
+        });
+    }
+    card
+}

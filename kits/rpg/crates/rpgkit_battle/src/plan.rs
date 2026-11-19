@@ -3,7 +3,7 @@
 //! command at the lowest free block. Like Godot, compiling may write a chosen approach or landing tile back into
 //! the step (`PlanStep::cell`), and steps are shared by reference.
 
-use crate::command::{self, cover_for, dash_fits, Carry, CmdKind, Command};
+use crate::command::{self, cover_for, Carry, CmdKind, Command};
 use crate::grid::{V2, DIRS, NO_CELL, ZERO};
 use crate::path::{self, Cells, Hooks};
 use crate::resolver::Resolver;
@@ -481,7 +481,7 @@ impl Plan {
     }
 
     pub fn fits_move(&self, w: &World, c: UnitId, from: V2, route: &[V2]) -> bool {
-        path::blocks_needed(&w.grid, from, route, w.units[c].move_per_block()) <= MAX_MOVE_BLOCKS
+        path::blocks_needed_sized(&w.grid, from, route, w.units[c].move_per_block(), w.size_of(c)) <= MAX_MOVE_BLOCKS
     }
 
     // ---- Sequence editing ---------------------------------------------------------------------------------------
@@ -817,10 +817,14 @@ impl Plan {
         if !side.is_empty() {
             return side;
         }
-        if !w.units[target].is_active() || w.grid.positions[target].is_none() {
+        let reviving = !w.units[target].is_alive() && !w.units[target].is_withdrawn && con.revive && con.battle_reach() > 0 && w.can_revive(target);
+        if (!w.units[target].is_active() && !reviving) || w.grid.positions[target].is_none() {
             return format!("{} is not on the field.", w.units[target].name);
         }
-        if target != c && st.pos.dist(w.pos(target)) > con.battle_reach() {
+        if reviving && w.revive_cell(target).is_none() {
+            return "Space is blocked".into();
+        }
+        if target != c && w.dist_at(c, st.pos, target) > con.battle_reach() {
             return format!("Out of reach for {item_name}.");
         }
         let Some(sid) = w.book().find(&skill::item_skill_id(&con.id)) else {
@@ -846,7 +850,11 @@ impl Plan {
         let tu = &w.units[target];
         if con.heal > 0 {
             // PK1-KITFIX (d): the item's heal after the target's `heal_taken`, as `World::heal` applies it
-            st.entries[last].est_heal = crate::world::heal_taken(con.heal, tu.band_heal_taken).min((tu.max_hp - tu.hp).max(0));
+            st.entries[last].est_heal = if reviving {
+                command::revive_heal(tu, damage::item_heal(con.heal))
+            } else {
+                crate::world::heal_taken(con.heal, tu.band_heal_taken).min((tu.max_hp - tu.hp).max(0))
+            };
         }
         if con.damage > 0 {
             // A1.2-K3: the item damage pipeline's value (the flat damage unless the ruleset mitigates item damage)
@@ -869,7 +877,7 @@ impl Plan {
         if !w.grid.is_valid(cell) {
             return "Aim inside the arena.".into();
         }
-        if st.pos.dist(cell) > command::item_field_reach(con) {
+        if w.dist_at_cell(c, st.pos, cell) > command::item_field_reach(con) {
             return format!("Out of reach for {}.", con.name);
         }
         let Some(sid) = w.book().find(&skill::item_skill_id(&con.id)) else {
@@ -931,17 +939,20 @@ impl Plan {
         let mut route = Vec::new();
         for _ in 0..step.tiles {
             cell = cell + step.direction;
-            if !w.grid.is_valid(cell) {
-                return "The arena edge blocks that move.".into();
-            }
-            if w.grid.is_exit(cell) {
-                return "Use Withdraw to leave through the exit.".into();
-            }
-            if !w.grid.is_walkable(cell) {
-                return "Terrain blocks that move.".into();
-            }
-            if blocked.contains(&cell) {
-                return "Another unit blocks that move.".into();
+            // BIGUNIT1 BU6: every cell of a big unit's square at the step
+            for n in w.cells_at(c, cell) {
+                if !w.grid.is_valid(n) {
+                    return "The arena edge blocks that move.".into();
+                }
+                if w.grid.is_exit(n) {
+                    return if w.size_of(c) > 1 { "Too big to leave through the exit.".into() } else { "Use Withdraw to leave through the exit.".into() };
+                }
+                if !w.grid.is_walkable(n) {
+                    return "Terrain blocks that move.".into();
+                }
+                if blocked.contains(&n) {
+                    return "Another unit blocks that move.".into();
+                }
             }
             route.push(step.direction);
         }
@@ -959,10 +970,11 @@ impl Plan {
         }
         let blocked = self.blocked_cells(w, c);
         let dest = step.cell.get();
-        if !w.grid.is_valid(dest) || !w.grid.is_walkable(dest) || w.grid.is_exit(dest) {
+        // BIGUNIT1 BU6: a big unit's whole square at the destination
+        if w.cells_at(c, dest).iter().any(|&n| !w.grid.is_valid(n) || !w.grid.is_walkable(n) || w.grid.is_exit(n)) {
             return "That tile can't be moved to.".into();
         }
-        if blocked.contains(&dest) {
+        if w.cells_at(c, dest).iter().any(|n| blocked.contains(n)) {
             return "Another unit is (or will be) standing there.".into();
         }
         if st.pos == dest {
@@ -972,7 +984,7 @@ impl Plan {
         if route.is_empty() {
             return "No path to that tile.".into();
         }
-        let need = path::blocks_needed(&w.grid, st.pos, &route, w.units[c].move_per_block());
+        let need = path::blocks_needed_sized(&w.grid, st.pos, &route, w.units[c].move_per_block(), w.size_of(c));
         let cap = if step.after { step.tiles.max(1) as usize } else { MAX_MOVE_BLOCKS };
         if need > cap.max(MAX_MOVE_BLOCKS) {
             return self.too_far();
@@ -1055,10 +1067,9 @@ impl Plan {
             return self.apply_dash(w, c, st, sid, foe, index);
         }
         let band = skill::reach_by(s, &w.units[c], &w.ruleset);
-        let foe_pos = w.pos(foe);
         // INPUT1 MR10: diagonal melee counts a diagonal neighbour as 1
         let diag = round_intent::diagonal(w, c, Some(s));
-        let d = round_intent::band_dist(diag, st.pos, foe_pos);
+        let d = w.band_at(diag, c, st.pos, foe);
         if d < band.0 || d > band.1 {
             let p = self.move_problem(w, c, st);
             if !p.is_empty() {
@@ -1067,12 +1078,12 @@ impl Plan {
             let route;
             let stored = step.cell.get();
             if stored != NO_CELL {
-                let sd = round_intent::band_dist(diag, stored, foe_pos);
+                let sd = w.band_at(diag, c, stored, foe);
                 if sd < band.0 || sd > band.1 {
                     return "The planned approach no longer reaches it.".into();
                 }
                 let blocked = self.blocked_cells(w, c);
-                if blocked.contains(&stored) {
+                if blocked.contains(&stored) || (w.size_of(c) > 1 && !w.clear_at(c, stored, &blocked)) {
                     return "The planned approach tile is taken.".into();
                 }
                 route = self.route(w, c, st.pos, &[stored].into_iter().collect(), &blocked, false);
@@ -1119,7 +1130,7 @@ impl Plan {
     fn apply_dash(&self, w: &World, c: UnitId, st: &mut SimState, sid: SkillId, foe: UnitId, index: i32) -> String {
         let s = &w.cat.skills[sid];
         let band = skill::reach_by(s, &w.units[c], &w.ruleset);
-        let d = st.pos.dist(w.pos(foe));
+        let d = w.dist_at(c, st.pos, foe);
         if d >= band.0 && d <= band.1 {
             return "Already in reach.".into();
         }
@@ -1135,7 +1146,7 @@ impl Plan {
         if route.is_empty() {
             return "No route to get within reach.".into();
         }
-        if !dash_fits(&w.grid, st.pos, &route, s.dash_tiles) {
+        if !command::dash_fits_sized(&w.grid, st.pos, &route, s.dash_tiles, w.size_of(c)) {
             return "Too far for the dash.".into();
         }
         if st.lock.is_some_and(|l| l != foe) && w.ruleset.switch_target_step() {
@@ -1173,13 +1184,12 @@ impl Plan {
     fn apply_carried(&self, w: &World, c: UnitId, st: &mut SimState, step: &Step, sid: SkillId, foe: UnitId, index: i32) -> String {
         let s = &w.cat.skills[sid];
         let band = round_intent::hit_band(w, c, s);
-        let foe_pos = w.pos(foe);
         let beyond = || format!("{} is beyond {}'s range.", w.units[foe].name, s.name);
         let blocked = self.blocked_cells(w, c);
         let mut keep_flank = false;
         let (dest, route, carry) = if round_intent::maneuver_of(w, c) == ManeuverKind::Disengage {
             // MR14: the hit from the unit's tile (adjacent, diagonal per MR10), then the retreat within the range
-            let d = round_intent::melee_dist(w, c, Some(s), st.pos, foe_pos);
+            let d = w.band_at(round_intent::diagonal(w, c, Some(s)), c, st.pos, foe);
             if d < band.0 || d > band.1 {
                 return format!("Disengage needs {} within reach of {}.", w.units[foe].name, s.name);
             }
@@ -1199,7 +1209,7 @@ impl Plan {
             let (open, mut tiles) = engage(st.pos);
             let stored = step.cell.get();
             // Decision "Auto-fill keeps a flank": an auto-filled follow-up stays on its flank or behind tile
-            keep_flank = step.stay.get() && stored == st.pos && round_intent::keeps_flank(w, foe, st.pos, round_intent::diagonal(w, c, Some(s)));
+            keep_flank = step.stay.get() && stored == st.pos && round_intent::keeps_flank_by(w, foe, c, st.pos, round_intent::diagonal(w, c, Some(s)));
             if open.protected() && !keep_flank {
                 // MR5: no open position tile: the Engage is not planned
                 return round_intent::FLANK_PROTECTED.into();
@@ -1251,7 +1261,7 @@ impl Plan {
         for y in 0..crate::grid::GRID_H {
             for x in 0..crate::grid::GRID_W {
                 let cell = V2::new(x, y);
-                if cell == from || cell.dist(from) > limit || cell.dist(foe_pos) > n + 2 || !w.grid.is_walkable(cell) || w.grid.is_exit(cell) || blocked.contains(&cell) {
+                if cell == from || cell.dist(from) > limit || w.dist_at(c, cell, foe) > n + 2 || !w.clear_at(c, cell, blocked) {
                     continue;
                 }
                 let route = self.route(w, c, from, &[cell].into_iter().collect(), blocked, false);
@@ -1283,7 +1293,7 @@ impl Plan {
             let mut best = 1 << 20;
             for &f in w.foes_of(c) {
                 if w.units[f].is_active() && w.has(f) {
-                    let d = st.pos.dist(w.pos(f));
+                    let d = w.dist_at(c, st.pos, f);
                     if d < best {
                         best = d;
                         threat = Some(f);
@@ -1292,32 +1302,33 @@ impl Plan {
             }
         }
         let Some(threat) = threat.filter(|t| w.units[*t].is_active() && w.has(*t) && w.foes_of(c).contains(t)) else { return "No enemy to jump away from.".into() };
-        let threat_pos = w.pos(threat);
-        let here = st.pos.dist(threat_pos);
+        // BIGUNIT1 BU5, BU6: distances from the jumper's square; a big jumper lands only where its square is clear
+        let here = w.dist_at(c, st.pos, threat);
         let blocked = self.blocked_cells(w, c);
         let reachable = self.jump_tiles_from(w, st.pos, s.jump_tiles);
         let mut dest = NO_CELL;
         let mut dest_steps = 0;
         let chosen = step.cell.get();
+        let big = w.size_of(c) > 1;
         if chosen != NO_CELL {
-            if !reachable.contains_key(&chosen) || blocked.contains(&chosen) {
+            if !reachable.contains_key(&chosen) || blocked.contains(&chosen) || (big && !w.clear_at(c, chosen, &blocked)) {
                 return "Can't jump there.".into();
             }
-            if chosen.dist(threat_pos) <= here {
+            if w.dist_at(c, chosen, threat) <= here {
                 return "Not away from the enemy.".into();
             }
             dest = chosen;
             dest_steps = reachable[&chosen];
         } else {
             for (&cell, &steps) in &reachable {
-                if blocked.contains(&cell) {
+                if blocked.contains(&cell) || (big && !w.clear_at(c, cell, &blocked)) {
                     continue;
                 }
-                let d = cell.dist(threat_pos);
+                let d = w.dist_at(c, cell, threat);
                 if d <= here {
                     continue;
                 }
-                if dest == NO_CELL || better_jump(cell, d, steps, dest, dest.dist(threat_pos), dest_steps) {
+                if dest == NO_CELL || better_jump(cell, d, steps, dest, w.dist_at(c, dest, threat), dest_steps) {
                     dest = cell;
                     dest_steps = steps;
                 }
@@ -1396,13 +1407,16 @@ impl Plan {
             return p;
         }
         let ally = ally.unwrap();
-        if !w.has(ally) {
+        let reviving = !w.units[ally].is_alive() && !w.units[ally].is_withdrawn && s.revive && w.can_revive(ally);
+        if w.grid.positions[ally].is_none() || (!w.units[ally].is_active() && !reviving) {
             return "Not on the field.".into();
+        }
+        if reviving && w.revive_cell(ally).is_none() {
+            return "Space is blocked".into();
         }
         let band = skill::support_reach(s, &w.units[c]);
         let near = band.0.max(1);
-        let ally_pos = w.pos(ally);
-        let d = st.pos.dist(ally_pos);
+        let d = w.dist_at(c, st.pos, ally);
         if d < near || d > band.1 {
             let p = self.move_problem(w, c, st);
             if !p.is_empty() {
@@ -1411,12 +1425,12 @@ impl Plan {
             let route;
             let stored = step.cell.get();
             if stored != NO_CELL {
-                let sd = stored.dist(ally_pos);
+                let sd = w.dist_at(c, stored, ally);
                 if sd < near || sd > band.1 {
                     return "The planned approach no longer reaches it.".into();
                 }
                 let blocked = self.blocked_cells(w, c);
-                if blocked.contains(&stored) {
+                if blocked.contains(&stored) || (w.size_of(c) > 1 && !w.clear_at(c, stored, &blocked)) {
                     return "The planned approach tile is taken.".into();
                 }
                 route = self.route(w, c, st.pos, &[stored].into_iter().collect(), &blocked, false);
@@ -1439,7 +1453,8 @@ impl Plan {
         }
         let p = self.add_entry(w, c, st, sid, index, Some(ally), &[], 0, &[]);
         if p.is_empty() {
-            let heal = command::effective_heal(&w.units[ally], command::heal_amount_on(w, c, ally, sid));
+            let raw = command::heal_amount_on(w, c, ally, sid);
+            let heal = if reviving { command::revive_heal(&w.units[ally], raw) } else { command::effective_heal(&w.units[ally], raw) };
             let e = st.entries.last_mut().unwrap();
             e.est_heal = heal;
             // INPUT1 MR16, CLN-45: a Support skill on an ally chases it up to 1 tile with `chase` every_skill
@@ -1529,21 +1544,12 @@ impl Plan {
 
     /// Steps from `from` to the nearest tile at distance near..far of `foe` (defaults: the basic attack band).
     pub fn approach_path(&self, w: &World, c: UnitId, from: V2, foe: UnitId, near: i32, far: i32) -> Vec<V2> {
-        let foe_pos = w.pos(foe);
         let basic = skill::reach_by(&w.cat.skills[w.book().lowest(Kind::Attack)], &w.units[c], &w.ruleset);
         let lo = if near > 0 { near } else { basic.0 };
         let hi = if far > 0 { far } else { basic.1 };
         let blocked = self.blocked_cells(w, c);
-        let mut goals = Cells::new();
-        for dx in -hi..=hi {
-            for dy in -hi..=hi {
-                let d = dx.abs() + dy.abs();
-                let cell = foe_pos + V2::new(dx, dy);
-                if d >= lo && d <= hi && w.grid.is_valid(cell) && w.grid.is_walkable(cell) && !w.grid.is_exit(cell) && !blocked.contains(&cell) {
-                    goals.insert(cell);
-                }
-            }
-        }
+        // BIGUNIT1 BU13: anchors whose square is in the band of any cell of the foe's
+        let goals = w.stand_goals(c, w.pos(foe), w.size_of(foe), (lo, hi), false, &blocked);
         self.route(w, c, from, &goals, &blocked, false)
     }
 
@@ -1557,14 +1563,14 @@ impl Plan {
             penalty: if self.path_penalties.contains(&c) { Some(&penalty) } else { None },
             prefer: if shooters.is_some() { Some(&prefer) } else { None },
         };
-        path::find_path(&w.grid, from, goals, blocked, goals_are_exits, &hooks)
+        path::find_path_sized(&w.grid, from, goals, blocked, goals_are_exits, &hooks, w.size_of(c))
     }
 
     /// One Move entry per cost-chunked block (1 AP per tile).
     fn add_move(&self, w: &World, c: UnitId, st: &mut SimState, dirs: &[V2], chase: Option<UnitId>, index: i32) -> String {
         let mv = w.book().lowest(Kind::Move);
         let goal = dirs.iter().fold(st.pos, |a, d| a + *d);
-        for part in path::chunk(&w.grid, st.pos, dirs, w.units[c].move_per_block()) {
+        for part in path::chunk_sized(&w.grid, st.pos, dirs, w.units[c].move_per_block(), w.size_of(c)) {
             let p = self.add_entry(w, c, st, mv, index, chase, &part, 1, &[]);
             if !p.is_empty() {
                 return p;
@@ -1661,6 +1667,13 @@ impl Plan {
 
     /// Expected hit: attack power x Focus x skill x exploit x stance x armor x cover; no crit, no guard.
     pub fn estimate_damage(&self, w: &World, c: UnitId, sid: SkillId, stance: Stance, foe: UnitId, from: V2, consumed: &[String]) -> i32 {
+        self.estimate_damage_guarded(w, c, sid, stance, foe, from, consumed, 0.0)
+    }
+
+    /// PR7-41 (PT-20): `estimate_damage` with the foe guarding at `guard` mitigation (it joins the cover in the one
+    /// guard-and-cover term, as `damage::compute` reads it); 0.0 is `estimate_damage`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn estimate_damage_guarded(&self, w: &World, c: UnitId, sid: SkillId, stance: Stance, foe: UnitId, from: V2, consumed: &[String], guard: f64) -> i32 {
         let s = &w.cat.skills[sid];
         if !skill::deals_damage(s) {
             return 0;
@@ -1669,12 +1682,28 @@ impl Plan {
         let exploit_mult = skill::exploit_match_by(&s.exploit, &w.units[foe], consumed, false, &w.ruleset).1;
         // PK1-S2b: a channeled version's armour piercing counts in the estimate (the AI's Channel row compares them)
         let version = crate::channel::version(w, c, s);
-        let hit = expected_with(w, c, foe, sid, Some(stance), self.estimate_cover(w, c, sid, foe, from), exploit_mult, version.as_ref().is_some_and(|v| v.pierce));
+        let hit = expected_from(w, c, foe, sid, Some(stance), from, self.estimate_cover(w, c, sid, foe, from) + guard, exploit_mult, version.as_ref().is_some_and(|v| v.pierce));
         // PK1-S2a: a channeled version's power factor (none outside a Channel round)
         match version.map(|v| v.power).filter(|p| *p != 1.0) {
             Some(p) => (hit as f64 * p).round() as i32,
             None => hit,
         }
+    }
+
+    /// PR7-41 (PT-20): the damage the battle screen shows for planned entry `e` of `c` (its `est_damage`), by the one
+    /// forecast convention: per hit, at the block it lands, with the target's guard then (`intent::guard_at` over the
+    /// round's scheduled actions `sched`). A single-target attack on a foe that guards at its impact is estimated again
+    /// with that guard; anything else keeps `est_damage`.
+    pub fn forecast_entry(&self, w: &World, sched: &[crate::resolver::ScheduledAction], c: UnitId, e: &PlanEntry) -> i32 {
+        let s = &w.cat.skills[e.skill];
+        let Some(foe) = e.target.filter(|&f| f != c && e.item.is_none() && skill::kind(s) == Kind::Attack && !skill::is_area(s)) else { return e.est_damage };
+        let guard = if command::ignores_guard(w, s) { 0.0 } else { crate::intent::guard_at(w, sched, foe, e.end_block(w)) };
+        if guard <= 0.0 || e.est_damage <= 0 {
+            return e.est_damage;
+        }
+        let from = e.path.iter().fold(e.pos_before, |a, d| a + *d);
+        let stance = if w.ruleset.stances() { skill::stance_during(s, e.stance_before) } else { e.stance_before };
+        self.estimate_damage_guarded(w, c, e.skill, stance, foe, from, &[], guard)
     }
 
     fn estimate_hit(&self, w: &World, c: UnitId, st: &mut SimState, sid: SkillId, stance: Stance, foe: UnitId, from: V2) -> i32 {
@@ -1696,7 +1725,12 @@ impl Plan {
             return 0.0;
         }
         let at = if from != NO_CELL { from } else { w.pos(c) };
-        cover_for(&w.grid, at, w.pos(foe), expected_is_ranged(w, c, sid))
+        let ranged = expected_is_ranged(w, c, sid);
+        // BIGUNIT1 BU10: the least cover over the foe's cells
+        if w.size_of(c) > 1 || w.size_of(foe) > 1 {
+            return w.cells_of(foe).into_iter().map(|cell| cover_for(&w.grid, crate::grid::square_nearest(at, w.size_of(c), cell), cell, ranged)).fold(f64::INFINITY, f64::min);
+        }
+        cover_for(&w.grid, at, w.pos(foe), ranged)
     }
 
     // ---- Occupancy ------------------------------------------------------------------------------------------------
@@ -1738,19 +1772,21 @@ impl Plan {
             if other == c || !w.has(other) {
                 continue;
             }
+            // BIGUNIT1 BU4: a big unit blocks every cell of its square
             let start = w.pos(other);
+            let n = w.size_of(other);
             match moves.get(&other).filter(|_| friends.contains(&other)) {
                 Some(m) => {
                     if m.to != NO_CELL {
-                        blocked.insert(m.to);
+                        blocked.extend(crate::grid::square_cells(m.to, n));
                     }
                     let leaves_first = m.leave == 1 && w.units[other].initiative_rating() > w.units[c].initiative_rating();
                     if !leaves_first {
-                        blocked.insert(start);
+                        blocked.extend(crate::grid::square_cells(start, n));
                     }
                 }
                 None => {
-                    blocked.insert(start);
+                    blocked.extend(crate::grid::square_cells(start, n));
                 }
             }
         }
@@ -1781,7 +1817,7 @@ impl Plan {
                 let friends = w.friends_of(unit);
                 for (other, cell) in &pinned {
                     if *other != unit && friends.contains(other) {
-                        blocked.insert(*cell);
+                        blocked.extend(crate::grid::square_cells(*cell, w.size_of(*other)));
                     }
                 }
             }
@@ -1900,16 +1936,25 @@ pub fn expected(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<
 /// skill's own; either counts only under the rule pierce, as the resolver reads it.
 #[allow(clippy::too_many_arguments)]
 pub fn expected_with(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<Stance>, cover: f64, power_scale: f64, pierce: bool) -> i32 {
+    expected_from(w, c, foe, sid, stance, w.grid.pos(c).unwrap_or(NO_CELL), cover, power_scale, pierce)
+}
+
+/// PK2-STAGE-PASSIVES (`PR6-2`): `expected_with` evaluated with `c` standing on `from` (so planner forecasts after a
+/// move step evaluate `min_distance` potency grants accurately).
+#[allow(clippy::too_many_arguments)]
+pub fn expected_from(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<Stance>, from: V2, cover: f64, power_scale: f64, pierce: bool) -> i32 {
     let s = &w.cat.skills[sid];
     let u = &w.units[c];
     let ranged = expected_is_ranged(w, c, sid);
+    let dist = if from != NO_CELL && w.has(foe) { w.dist_at(c, from, foe) } else { 0 };
+    let skill_mult = if dist > 0 { u.power_for_at(s, ranged, dist) } else { u.power_for(s) } * power_scale;
     damage::compute(
         u,
         &w.units[foe],
         HitInput {
             ranged,
             offhand: skill::is_off_hand(s),
-            skill_mult: u.power_for(s) * power_scale,
+            skill_mult,
             attacker_stance: stance,
             include_guard: false,
             cover,

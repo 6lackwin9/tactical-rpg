@@ -2,7 +2,7 @@
 //! portraits, their state holds and the step events at FX1's impacts. Cue rows are this module's fixtures (the shipped
 //! table's shape), portraits scratch layers where pixels are read.
 
-use crate::battle::{Action, BattleScreen, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X};
+use crate::battle::{Action, BattleScreen, PANEL_SURFACE};
 use aegis_ui::canvas::Rect;
 use crate::portraits::Faces;
 use aegis_ui::fx::Clock;
@@ -11,10 +11,10 @@ use aegis_ui::ui::{Gfx, Ui, H, W};
 use emberwake_battle::session::Phase;
 use aegis_ui::art::Art;
 use serde_json::{json, Value};
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 use crate::portraits::tests::{layer, row};
 use aegis_core::assets::Layers;
-use aegis_ui::portrait_fx::{PortraitOpts, EASE_MS};
+use rpgkit_ui::portrait_fx::{PortraitOpts, EASE_MS};
 use emberwake_data::PortraitCue;
 use emberwake_rules::ruleset::TIMELINE;
 
@@ -82,34 +82,32 @@ fn flash_of(event: &str) -> [u8; 3] {
     [c[0], c[1], c[2]]
 }
 
-/// P1 (6.2 row 3, TEXTFIT1): at the four text sizes, classic and timeline, both panels draw a 32 px portrait at
-/// their top-left (inset 4); every text beside it starts 40 px in, none crosses it, and no text of either panel
-/// spills or leaves the canvas.
+/// P1 (6.2 row 3, TEXTFIT1; BATTLE-UI2 contract 5): at the four text sizes, classic and timeline, the docked foe card
+/// draws its portrait at its top-left; every text beside it starts right of it, none crosses it, and no text of the
+/// card spills or leaves the canvas.
 #[test]
 fn p1_the_panels_draw_their_portraits_and_the_lines_beside_start_40_in() {
     for ruleset in [None, Some(TIMELINE)] {
         let (mut cx, mut g, mut b) = arena(ruleset);
         for (_, scale) in aegis_ui::screen::TEXT_SIZES {
             let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, scale as f32);
-            for (panel, portrait) in [("hero", "hero.portrait"), ("intel", "intel.portrait")] {
-                let r = b.panels.iter().find(|p| p.0 == panel).unwrap_or_else(|| panic!("{ruleset:?}: the {panel} panel")).1;
-                let pr = rect_of(&b, portrait);
-                assert_eq!(pr, Rect::new(r.x + PANEL_INSET, r.y + PANEL_INSET, PANEL_PORTRAIT, PANEL_PORTRAIT), "{ruleset:?} {scale}: the {panel} portrait");
-                for t in recs.iter().filter(|t| !t.covered && t.x >= r.x as f32 && t.x < (r.x + r.w) as f32 && t.y >= r.y as f32 && t.y < (r.y + r.h) as f32) {
-                    let inside = t.x >= pr.x as f32 && t.x + t.w <= (pr.x + pr.w) as f32 && t.y >= pr.y as f32 && t.y + t.h <= (pr.y + pr.h) as f32;
-                    if inside {
-                        assert_eq!(t.text.chars().count(), 1, "{ruleset:?} {scale}: only the initial letter inside the portrait: {:?}", t.text);
-                        continue;
-                    }
-                    let rows_beside = t.y < (pr.y + pr.h) as f32 && t.y + t.h > pr.y as f32;
-                    if rows_beside {
-                        assert!(t.x >= (r.x + PANEL_TEXT_X) as f32 - 0.5, "{ruleset:?} {scale}: {:?} beside the {panel} portrait starts 40 px in (x {})", t.text, t.x);
-                    }
+            let r = b.panels.iter().find(|p| p.0 == "intel").unwrap_or_else(|| panic!("{ruleset:?}: the foe card")).1;
+            let pr = rect_of(&b, "intel.portrait");
+            assert_eq!((pr.x, pr.y), (r.x + 5, r.y + 4), "{ruleset:?} {scale}: the card's portrait at its top-left");
+            for t in recs.iter().filter(|t| !t.covered && t.x >= r.x as f32 && t.x < (r.x + r.w) as f32 && t.y >= r.y as f32 && t.y < (r.y + r.h) as f32) {
+                let inside = t.x >= pr.x as f32 && t.x + t.w <= (pr.x + pr.w) as f32 && t.y >= pr.y as f32 && t.y + t.h <= (pr.y + pr.h) as f32;
+                if inside {
+                    assert_eq!(t.text.chars().count(), 1, "{ruleset:?} {scale}: only the initial letter inside the portrait: {:?}", t.text);
+                    continue;
+                }
+                let rows_beside = t.y < (pr.y + pr.h) as f32 && t.y + t.h > pr.y as f32;
+                if rows_beside {
+                    assert!(t.x >= (pr.x + pr.w) as f32 - 0.5, "{ruleset:?} {scale}: {:?} beside the card's portrait starts right of it (x {})", t.text, t.x);
                 }
             }
             let boxes: Vec<(String, f32, f32, f32, f32)> = b.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
             let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
-            let ours = |e: &Value| e["widget"].as_str().is_some_and(|w| w.starts_with("hero.") || w.starts_with("intel."));
+            let ours = |e: &Value| e["widget"].as_str().is_some_and(|w| w.starts_with("hero.") || w.starts_with("intel.") || w.starts_with("card."));
             let spills: Vec<&Value> = v["spill"].as_array().unwrap().iter().filter(|e| ours(e)).collect();
             assert!(spills.is_empty(), "{ruleset:?} {scale}: {spills:?}");
             let panel_rects: Vec<Rect> = b.panels.iter().filter(|p| p.0 == "hero" || p.0 == "intel").map(|p| p.1).collect();
@@ -214,7 +212,7 @@ fn settled(cx: &Cx, b: &mut BattleScreen, art: &mut Art, g: &mut Gfx, u: usize, 
         let (who, look) = b.unit_portrait(cx, u);
         let mut ui: Ui<Action> = Ui::new(g, (-500, -500), true);
         b.panel_faces.begin();
-        assert!(b.panel_faces.draw_parts(&mut ui.p, art, &rows, &who, &look, PANEL_SURFACE, Rect::new(4, 4, PANEL_PORTRAIT, PANEL_PORTRAIT), &opts));
+        assert!(b.panel_faces.draw_parts(&mut ui.p, art, &rows, &who, &look, PANEL_SURFACE, Rect::new(4, 4, crate::battle::plates::PORTRAIT, crate::battle::plates::PORTRAIT), &opts));
     }
     let key = b.unit_portrait(cx, u).0.key;
     let img = b.panel_faces.get(&key).and_then(|f| f.composed()).expect("composed").clone();

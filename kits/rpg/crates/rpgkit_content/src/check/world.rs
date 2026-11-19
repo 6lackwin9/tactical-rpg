@@ -9,7 +9,7 @@ use aegis_core::json::{self, gstr, Dict};
 use serde_json::Value;
 
 /// WorldSchema.KINDS, then CAMPAIGN1's and STORYUI1's kinds (the loader's list).
-pub const KINDS: [&str; 19] = crate::source::WORLD_KINDS;
+pub const KINDS: [&str; 24] = crate::source::WORLD_KINDS;
 const TUNING_KEYS: [&str; 5] = ["hp_pct", "power", "armor", "speed", "ap"];
 const ITEM_TUNING_KEYS: [&str; 3] = ["power", "mitigation", "burden"];
 const STANCES: [&str; 4] = ["ally", "rival", "enemy", "neutral"];
@@ -42,6 +42,11 @@ pub fn ref_errors(v: &View, w: &str, label: &str, ref_kind: &str, r: &str) -> Ve
 /// qualified id of an ancestor or connected world) that resolves and passes the field's filter.
 fn check_ref(v: &View, w: &str, f: &Dict, ref_kind: &str, r: &str) -> Vec<String> {
     let label = json::s(f, "label");
+    // PR6-7: the captive unit ref stands for an enemy in an encounter's enemies and phase waves (its fallback is
+    // checked by `captive_problems`)
+    if r == rpgkit_data::CAPTIVE_UNIT && ref_kind == "characters" && matches!(json::s(f, "key").as_str(), "enemies" | "wave_units") {
+        return Vec::new();
+    }
     if let Some(base_kind) = ref_kind.strip_prefix("base:") {
         let target = v.get(base_kind, r);
         return if target.is_empty() {
@@ -113,7 +118,14 @@ pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &
         }
         "encounters" => errors.extend(encounter_errors(v, w, &e)),
         "loot" => errors.extend(quest::loot_entry_errors(v, &e)),
-        "dialogues" => errors.extend(dialogue::tree_errors(v, w, &e)),
+        "dialogues" => {
+            // BUNKS1 BK7: a template talk's dialogue may name the two members ({a}, {b})
+            let mut tree = dialogue::tree_errors(v, w, &e);
+            if super::talks::template_dialogue(v, w, &id) {
+                tree.retain(|x| !super::talks::name_token_error(x));
+            }
+            errors.extend(tree);
+        }
         "shops" => errors.extend(shop::shop_errors(v, w, &e)),
         "routes" => errors.extend(travel::route_errors(v, w, &e)),
         "meters" => errors.extend(campaign::meter_errors(v, w, &e)),
@@ -122,6 +134,11 @@ pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &
         "vignettes" => errors.extend(story::vignette_errors(v, w, &e)),
         "sequences" => errors.extend(story::sequence_errors(v, w, &e)),
         "boards" => errors.extend(board::board_errors(&e)),
+        rpgkit_data::RECRUITS_KIND => errors.extend(recruit_errors(v, &e)),
+        rpgkit_data::facility::FACILITIES_KIND => errors.extend(super::facility::facility_errors(v, &e)),
+        rpgkit_data::ending::ENDINGS_KIND => errors.extend(super::endings::ending_errors(v, w, &e)),
+        rpgkit_data::talk::TALKS_KIND => errors.extend(super::talks::talk_errors(v, w, &e)),
+        rpgkit_data::siege::SIEGES_KIND => errors.extend(super::sieges::siege_errors(v, w, &e)),
         _ => {}
     }
     // CAMPAIGN1 11.4: reserved flag keys in the entry's conditions and flag lists
@@ -218,6 +235,21 @@ fn shape_errors(kind: &str, e: &Dict) -> Vec<String> {
         "vignettes" => list_errors(&mut errors, &["cards"]),
         "sequences" => list_errors(&mut errors, &["steps"]),
         "boards" => list_errors(&mut errors, &["requires_flags"]),
+        // PR6-8: the json field of the facilities
+        rpgkit_data::facility::FACILITIES_KIND => list_errors(&mut errors, &["levels"]),
+        // PR6-11: the json fields of the endings
+        rpgkit_data::ending::ENDINGS_KIND => list_errors(&mut errors, &["requires_flags", "requires_meter", "epilogue_paragraphs", "world_outcomes"]),
+        // BUNKS1 BK5: the json field of the talks
+        rpgkit_data::talk::TALKS_KIND => list_errors(&mut errors, &["requires_flags"]),
+        // PR6-9: the json fields of the sieges
+        rpgkit_data::siege::SIEGES_KIND => list_errors(&mut errors, &["rooms", "win_effects", "loss_effects"]),
+        // PK3 3.1: the json fields of the recruit templates
+        rpgkit_data::RECRUITS_KIND => {
+            list_errors(&mut errors, &["age_band"]);
+            if !json::get(e, "fuse").is_object() {
+                errors.push("Fuse must be an object {per_deploy, stasis_days, max, tiers, last_passive} ({} = none).".into());
+            }
+        }
         "encounters" => {
             if json::aget(e, "party").len() as i64 > PARTY_MAX {
                 errors.push("The party holds at most 4 members.".into());
@@ -302,6 +334,8 @@ fn override_errors(v: &View, w: &str, kind: &str, e: &Dict) -> Vec<String> {
 }
 
 fn region_errors(v: &View, w: &str, e: &Dict, id: &str) -> Vec<String> {
+    // PR6-7: the battle-start meters of the region's battles
+    let mut errors = super::hooks::start_meter_errors(e, &v.ids(rpgkit_data::UNIT_METERS_KIND), &v.ids(rpgkit_data::UNIT_TRACKS_KIND));
     let mut seen = vec![id.to_string()];
     let mut cursor = json::s(e, "parent");
     while !cursor.is_empty() {
@@ -311,12 +345,13 @@ fn region_errors(v: &View, w: &str, e: &Dict, id: &str) -> Vec<String> {
         }
         let hit_id = json::s(hit, "id");
         if seen.contains(&hit_id) {
-            return vec!["The region hierarchy is circular.".into()];
+            errors.push("The region hierarchy is circular.".into());
+            break;
         }
         seen.push(hit_id);
         cursor = json::s(hit, "parent");
     }
-    Vec::new()
+    errors
 }
 
 fn location_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
@@ -506,6 +541,22 @@ fn quest_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
 
 /// PHASEFX1: the battle side of world character `r` (Data.character_unit_entry: its role when `party` or `enemy`, else its
 /// base unit's side); None when it does not resolve or has no base unit.
+/// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 2): an encounter naming the captive unit (`rpgkit_data::CAPTIVE_UNIT`, in its
+/// enemies or a phase wave) needs a `captive_fallback` character (the entry ref check resolves it), and lists it once.
+fn captive_problems(e: &Dict) -> Vec<String> {
+    let token = rpgkit_data::CAPTIVE_UNIT;
+    let uses = json::sget(e, "enemies").iter().chain(encounter::reserved_refs(e).iter()).filter(|r| *r == token).count();
+    let fallback = json::s(e, rpgkit_data::CAPTIVE_FALLBACK);
+    let mut errors = Vec::new();
+    if uses > 1 {
+        errors.push(format!("The captive unit {token} is listed {uses} times (once at most)."));
+    }
+    if uses > 0 && fallback.is_empty() {
+        errors.push(format!("The captive unit {token} needs a Captive fallback character (it plays when no member was captured)."));
+    }
+    errors
+}
+
 fn character_side(v: &View, w: &str, r: &str) -> Option<String> {
     let c = v.worlds.resolve(w, "characters", r);
     if c.is_empty() {
@@ -539,6 +590,9 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     }
     errors.extend(encounter::arrival_errors(e));
     errors.extend(encounter::phase_problems(e, &|r: &str| check_ref(v, w, encounter::wave_field(true), "characters", r).is_empty(), &|r: &str| character_side(v, w, r)));
+    // PR6-7: the captive unit's fallback, and the battle-start meters
+    errors.extend(captive_problems(e));
+    errors.extend(super::hooks::start_meter_errors(e, &v.ids(rpgkit_data::UNIT_METERS_KIND), &v.ids(rpgkit_data::UNIT_TRACKS_KIND)));
     // ENCOUNTER2-C 5.2: the talks' trees and speakers, and the broken trigger's poise rule
     errors.extend(encounter::world_talk_problems(v, w, e));
     errors.extend(encounter::objective_problems(v, e, &|r: &str| guest_ok(v, w, r)));
@@ -564,6 +618,11 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
         _ => errors.push("Exit tiles must be a list of [x, y] pairs.".into()),
     }
     errors.extend(encounter::rows_problems(v, e));
+    // BIGUNIT1 BU3: the 2 x 2 units deploy where they fit (a character plays as its base unit)
+    errors.extend(encounter::footprint_problems(v, e, &|r: &str| {
+        let c = v.worlds.resolve(w, "characters", r);
+        if c.is_empty() { r.to_string() } else { json::s(c, "base_unit") }
+    }));
     // ENCOUNTER2 S1 and section 6: unkillable refs and the stay-behind block (flag and then are a world encounter's)
     errors.extend(encounter::unkillable_problems(e));
     errors.extend(encounter::stay_behind_problems(v, e, true));
@@ -876,6 +935,118 @@ pub fn roster_errors(v: &View, w: &str, m: &Dict) -> Vec<String> {
         }
         if rest.contains('{') || rest.contains('}') {
             errors.push(format!("{label}: name takes only the tokens {}.", KEEPSAKE_NAME_TOKENS.join(" and ")));
+        }
+    }
+    errors
+}
+
+/// PG1, 11.3 (`docs/sessions/PK3_ROSTER_LIFECYCLE.md` 3.1): the problems of a `recruits` template row beyond its field
+/// table (refs resolve there): its class and party base units of that class (one or more), its names (one or more, each
+/// once), `age_band` `[lo, hi]` within the adult ages, a portrait file that is there, slotless origins and temperaments,
+/// the join level (BK5) and the fuse (FZ1).
+pub fn recruit_errors(v: &View, e: &Dict) -> Vec<String> {
+    use campaign::{int_in, int_key, unknown_keys};
+    use rpgkit_data::{FUSE_KEYS, FUSE_NUMBER_MAX, FUSE_TIER_KEYS, RECRUIT_AGE_MAX, RECRUIT_AGE_MIN, RECRUIT_LEVELS, RECRUIT_LEVEL_MAX};
+    let mut errors = Vec::new();
+    let class = json::s(e, "class_id");
+    if class.is_empty() {
+        errors.push("Recruits: choose a class.".into());
+    }
+    let units = json::sget(e, "base_units");
+    if units.is_empty() {
+        errors.push("Recruits: base units need at least one party unit.".into());
+    }
+    for id in &units {
+        let unit = v.get("units", id);
+        if unit.is_empty() {
+            continue; // the field table's ref error
+        }
+        if json::s(unit, "side") != "party" || json::s_or(unit, "stat_mode", "derived") != "derived" {
+            errors.push(format!("Recruits: base unit '{id}' must be a class-derived party unit."));
+        } else if !class.is_empty() && json::s(unit, "class_id") != class {
+            errors.push(format!("Recruits: base unit '{id}' is a {}, not a {class}.", json::s(unit, "class_id")));
+        }
+    }
+    let names = json::sget(e, "names");
+    if names.iter().all(|n| n.trim().is_empty()) {
+        errors.push("Recruits: names need at least one name.".into());
+    }
+    for (i, n) in names.iter().enumerate() {
+        if n.trim().is_empty() || n.chars().count() > 24 {
+            errors.push(format!("Recruits: name {} must be 1-24 characters.", i + 1));
+        } else if names[..i].contains(n) {
+            errors.push(format!("Recruits: name '{n}' is listed twice."));
+        }
+    }
+    let band = json::aget(e, "age_band");
+    let (lo, hi) = (i64::from(RECRUIT_AGE_MIN), i64::from(RECRUIT_AGE_MAX));
+    if !band.is_empty() && !(band.len() == 2 && band.iter().all(|a| int_in(a, lo, hi)) && json::to_int(&band[0]) <= json::to_int(&band[1])) {
+        errors.push(format!("Recruits: age band must be [lo, hi], whole numbers {lo}..{hi} with lo <= hi."));
+    }
+    let art = json::s(e, "art");
+    if !art.is_empty() && !v.assets.roots.is_empty() && !v.assets.has(&art) {
+        errors.push(format!("Recruits: portrait '{art}' isn't a file in the game, kit or engine assets."));
+    }
+    let slotless = |id: &str, label: &str, errors: &mut Vec<String>| {
+        if let Some(p) = v.typed.passives.get(id).filter(|p| !p.slot.is_empty()) {
+            errors.push(format!("Recruits: {label} '{id}' is slottable ({}); it must be always on (slot \"\").", p.slot));
+        }
+    };
+    for (key, label) in [("origins", "origin"), ("temperaments", "temperament")] {
+        for id in json::sget(e, key) {
+            slotless(&id, label, &mut errors);
+        }
+    }
+    let level = json::s(e, "level");
+    let whole = level.parse::<i64>().is_ok_and(|n| (1..=RECRUIT_LEVEL_MAX).contains(&n));
+    if !(level.is_empty() || RECRUIT_LEVELS.contains(&level.as_str()) || whole) {
+        errors.push(format!("Recruits: level '{level}' must be empty, {} or a whole number 1..{RECRUIT_LEVEL_MAX}.", RECRUIT_LEVELS.join(", ")));
+    }
+    let Some(fuse) = e.get("fuse").and_then(Value::as_object).filter(|f| !f.is_empty()) else { return errors };
+    let label = "Recruits fuse";
+    let top = i64::from(FUSE_NUMBER_MAX);
+    errors.extend(unknown_keys(fuse, &FUSE_KEYS, label));
+    for key in ["per_deploy", "stasis_days", "max"] {
+        if !fuse.contains_key(key) {
+            errors.push(format!("{label}: {key} is required."));
+        }
+    }
+    errors.extend(int_key(fuse, "per_deploy", 0, top, label));
+    errors.extend(int_key(fuse, "stasis_days", 0, top, label));
+    errors.extend(int_key(fuse, "max", 1, top, label));
+    let max = fuse.get("max").filter(|m| int_in(m, 1, top)).map_or(top, json::to_int);
+    match fuse.get("tiers").map(Value::as_array) {
+        None => {}
+        Some(None) => errors.push(format!("{label}: tiers must be a list of {{at, passive}}.")),
+        Some(Some(tiers)) => {
+            let mut last = 0;
+            for (i, t) in tiers.iter().enumerate() {
+                let tl = format!("{label} tier {}", i + 1);
+                let Some(t) = t.as_object() else {
+                    errors.push(format!("{tl}: must be an object {{at, passive}}."));
+                    continue;
+                };
+                errors.extend(unknown_keys(t, &FUSE_TIER_KEYS, &tl));
+                match t.get("at").filter(|a| int_in(a, 1, max)) {
+                    None => errors.push(format!("{tl}: at must be a whole number 1..{max}.")),
+                    Some(a) if json::to_int(a) <= last => errors.push(format!("{tl}: at must rise tier by tier.")),
+                    Some(a) => last = json::to_int(a),
+                }
+                let passive = json::s(t, "passive");
+                if !v.has("passives", &passive) {
+                    errors.push(format!("{tl}: unknown passive '{passive}'."));
+                } else {
+                    slotless(&passive, "fuse passive", &mut errors);
+                }
+            }
+        }
+    }
+    let last_passive = json::s(fuse, "last_passive");
+    if !last_passive.is_empty() {
+        if !v.has("passives", &last_passive) {
+            errors.push(format!("{label}: unknown last passive '{last_passive}'."));
+        } else {
+            slotless(&last_passive, "last passive", &mut errors);
         }
     }
     errors

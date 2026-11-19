@@ -187,6 +187,21 @@ pub fn battle_mods(d: &Data, gs: &GameState) -> BattleMods {
     BattleMods { start_ap: ap, note: format!("No {}: {ap} AP", p.upkeep.name) }
 }
 
+/// PR7-42 (PACE1): the start-AP change a fight would bring with the party's upkeep at `left` (`at_zero.start_ap` when
+/// `left` is 0 or less, else 0); 0 outside a campaign world. Read only: the map shows it on a route that empties the
+/// purse and in its legend while the purse is empty.
+pub fn starved_ap(d: &Data, gs: &GameState, left: i64) -> i64 {
+    if gs.campaign.is_none() || left > 0 {
+        return 0;
+    }
+    (purse(d, &gs.world_id).start_ap as i64).min(0)
+}
+
+/// PR7-42 (PACE1): the upkeep the party holds after a trip spending `upkeep` (never below 0).
+pub fn upkeep_after(gs: &GameState, upkeep: i64) -> i64 {
+    (gs.party.supplies - upkeep.max(0)).max(0)
+}
+
 /// P3: a party unit's AP at the battle's start after `mods` (never below 0).
 pub fn start_ap(ap: i64, mods: &BattleMods) -> i64 {
     (ap + mods.start_ap).max(0)
@@ -198,6 +213,11 @@ pub fn start_ap(ap: i64, mods: &BattleMods) -> i64 {
 /// never), nobody hurt, and too little upkeep when `needs_upkeep`. Outside a campaign world: today's Camp
 /// (`progression::can_camp`).
 pub fn rest_refusal(d: &Data, gs: &GameState) -> &'static str {
+    // PR6-9: no rest while a siege with `no_camp` runs
+    let siege = crate::siege::camp_refusal(d, gs);
+    if !siege.is_empty() {
+        return siege;
+    }
     if gs.campaign.is_none() {
         return progression::can_camp(d, gs);
     }
@@ -219,17 +239,24 @@ pub fn rest_refusal(d: &Data, gs: &GameState) -> &'static str {
     if !progression::hurt(&gs.party) {
         return progression::REFUSE_RESTED;
     }
-    if rule.needs_upkeep && gs.party.supplies < rule.cost as i64 {
+    if rule.needs_upkeep && gs.party.supplies < rest_cost(d, gs) {
         return REFUSE_UPKEEP;
     }
     ""
 }
 
+/// R1 `cost` with PR6-8's facility `rest_upkeep` deltas in force (`facility::rest_upkeep_delta`), never below 0: the
+/// upkeep a campaign rest spends now.
+pub fn rest_cost(d: &Data, gs: &GameState) -> i64 {
+    (rest_rule(d, &gs.world_id).cost as i64 + crate::facility::rest_upkeep_delta(d, gs)).max(0)
+}
+
 /// R2's body without the tick: every member back to full (ROSTER1 W3: `progression::rest` clears the wounded), the
-/// rule's `cost` spent (never below 0) and its `days` added to the clock. Returns (spent, restored, days).
+/// rest's cost (`rest_cost`) spent (never below 0) and the rule's `days` added to the clock. Returns (spent, restored,
+/// days).
 fn rest_body(d: &Data, gs: &mut GameState) -> (i64, i64, i64) {
     let rule = rest_rule(d, &gs.world_id);
-    let spent = gs.party.spend_supplies(rule.cost as i64);
+    let spent = gs.party.spend_supplies(rest_cost(d, gs));
     let restored = progression::rest(d, &mut gs.party, &gs.world_id.clone());
     let days = (rule.days as i64).max(0);
     gs.time += days;

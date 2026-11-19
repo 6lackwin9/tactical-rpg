@@ -1,0 +1,42 @@
+{
+  "screen": "battle",
+  "fields": {
+    "round": {"text": "Round 1 of 8"},
+    "goal": {"text": "Rout them"},
+    "protect": {"text": "Protect Hollis"},
+    "ap": {"text": "AP 10/12 -6"},
+    "ap_ghost": {"text": "(-2)"},
+    "party": {"rows": [
+      {"id": "0", "label": "Kaelen", "detail": "242/242", "detail2": "4/12", "sub": "Bleed: 2 rounds", "enabled": true},
+      {"id": "1", "label": "Vesper", "detail": "150/190", "detail2": "8/12", "enabled": true}
+    ]},
+    "guests": {"rows": [
+      {"id": "4", "label": "Hollis", "detail": "120/160", "enabled": true}
+    ]},
+    "hostiles": {"text": "Hostiles 4"},
+    "reinforce": {"text": "+2 round 3"},
+    "foes": {"rows": [
+      {"id": "5", "label": "Footman", "detail": "64/144", "enabled": true},
+      {"id": "6", "label": "Footman", "detail": "144/144", "enabled": true},
+      {"id": "7,8,9", "label": "Ash-Crawler x3", "detail": "60/80 80/80 80/80", "enabled": true}
+    ]},
+    "card_name": {"text": "Castellan Footman"},
+    "card_title": {"text": ""},
+    "card_hp": {"meter": [64, 144]},
+    "card_ko": {"text": "KO in block 5"},
+    "card_break": {"text": "BREAK in block 4"},
+    "card_rows": {"rows": [
+      {"id": "0", "label": "Pommel Strike", "detail": "-34", "detail2": "2 pips", "enabled": true},
+      {"id": "1", "label": "Heavy Thrust", "detail": "-12", "detail2": "0 pips", "sub": "after KO", "enabled": true}
+    ]}
+  },
+  "actions": [
+    {"id": "party_tactic", "label": "Party tactic", "enabled": true},
+    {"id": "hero_tactic", "label": "Hero tactic", "enabled": true},
+    {"id": "auto", "label": "Auto", "enabled": true},
+    {"id": "clear", "label": "Clear", "enabled": true},
+    {"id": "confirm", "label": "Confirm", "enabled": true},
+    {"id": "select", "label": "Select", "enabled": true},
+    {"id": "pin", "label": "Pin", "enabled": true}
+  ]
+}

@@ -19,6 +19,7 @@ use crate::refusal::Reason;
 use crate::round_intent::{self, Aim, ManeuverKind, Opener, RoundIntent, RoundTarget};
 use crate::skill::{self, Kind, SkillId};
 use crate::world::{UnitId, World};
+use aegis_core::switches;
 use rpgkit_data::{Deck, SkillDef};
 use std::rc::Rc;
 
@@ -212,7 +213,7 @@ pub fn proposed_target(w: &World, c: UnitId, intent: RoundIntent) -> Option<Roun
                 return Some(t);
             }
             let here = w.pos(c);
-            w.foes_of(c).iter().copied().filter(|&f| valid(RoundTarget::Unit(f))).min_by_key(|&f| (w.pos(f).dist(here), f)).map(RoundTarget::Unit)
+            w.foes_of(c).iter().copied().filter(|&f| valid(RoundTarget::Unit(f))).min_by_key(|&f| (w.dist_at(c, here, f), f)).map(RoundTarget::Unit)
         }
         RoundIntent::Field => {
             let on_field = |f: UnitId| w.units[f].is_active() && w.has(f) && !round_intent::hidden(w, f);
@@ -220,7 +221,7 @@ pub fn proposed_target(w: &World, c: UnitId, intent: RoundIntent) -> Option<Roun
                 return Some(RoundTarget::Cell(w.pos(t)));
             }
             let here = w.pos(c);
-            w.foes_of(c).iter().copied().filter(|&f| on_field(f)).min_by_key(|&f| (w.pos(f).dist(here), f)).map(|f| RoundTarget::Cell(w.pos(f)))
+            w.foes_of(c).iter().copied().filter(|&f| on_field(f)).min_by_key(|&f| (w.dist_at(c, here, f), f)).map(|f| RoundTarget::Cell(w.pos(f)))
         }
         _ => Some(RoundTarget::Myself),
     }
@@ -539,6 +540,24 @@ impl<'a> Builder<'a> {
         }
     }
 
+    /// BIGUNIT1 BU5: the distance from `c` anchored at `from` to `goal`: to the round target's whole square when `goal`
+    /// is that unit's tile, else to the cell (`from.dist(goal)` for one-cell units).
+    fn gap(&self, from: V2, goal: V2) -> i32 {
+        match self.target {
+            RoundTarget::Unit(t) if t != self.c && self.w.has(t) && self.w.pos(t) == goal => self.w.dist_at(self.c, from, t),
+            _ => self.w.dist_at_cell(self.c, from, goal),
+        }
+    }
+
+    /// BIGUNIT1 BU5: `gap` under the band test of skill `s` (diagonal melee, MR10).
+    fn band_gap(&self, s: &SkillDef, from: V2, goal: V2) -> i32 {
+        let diag = round_intent::diagonal(self.w, self.c, Some(s));
+        match self.target {
+            RoundTarget::Unit(t) if t != self.c && self.w.has(t) && self.w.pos(t) == goal => self.w.band_at(diag, self.c, from, t),
+            _ => crate::grid::square_band(diag, from, self.w.size_of(self.c), goal, 1),
+        }
+    }
+
     fn target_pos(&self, st: &SimState) -> V2 {
         match self.target {
             RoundTarget::Unit(t) => self.w.pos(t),
@@ -599,13 +618,17 @@ impl<'a> Builder<'a> {
         for y in 0..GRID_H {
             for x in 0..GRID_W {
                 let cell = V2::new(x, y);
-                let d = cell.dist(goal);
+                let d = self.gap(cell, goal);
                 if cell == from || d < lo || d > hi || cell.dist(from) > mpb * max_blocks as i32 || !w.grid.is_walkable(cell) || w.grid.is_exit(cell) || blocked.contains(&cell) {
+                    continue;
+                }
+                // BIGUNIT1 BU6: a big unit's whole square
+                if w.size_of(self.c) > 1 && !w.clear_at(self.c, cell, &blocked) {
                     continue;
                 }
                 let goals: Cells = [cell].into_iter().collect();
                 let route = plan.route(w, self.c, from, &goals, &blocked, false);
-                if !route.is_empty() && path::blocks_needed(&w.grid, from, &route, mpb) <= max_blocks {
+                if !route.is_empty() && path::blocks_needed_sized(&w.grid, from, &route, mpb, w.size_of(self.c)) <= max_blocks {
                     out.push((cell, route));
                 }
             }
@@ -637,7 +660,17 @@ impl<'a> Builder<'a> {
             return Err(format!("{} has no {} skill.", self.w.units[self.c].name, self.intent.label(&self.w.cat)));
         }
         let mut first: Option<String> = None;
-        for &sid in &self.order {
+        let mut blocked = false;
+        // PR7-41 (PT-22): a skill that would only re-grant a held status, or only cover friends with none near, opens
+        // after the others (still the opener when nothing else fits); the re-grant part behind the test-only switch
+        // `regrant` (FB-334)
+        let at = match self.target {
+            RoundTarget::Cell(cell) => cell,
+            _ => self.w.pos(self.c),
+        };
+        let idle = |sid: SkillId| (switches::on("regrant") && regrants(self.w, self.c, self.skill(sid), std::iter::empty())) || !covers_a_friend(self.w, plan, self.c, self.skill(sid), at);
+        let (useful, rest): (Vec<SkillId>, Vec<SkillId>) = self.order.iter().copied().partition(|&sid| !idle(sid));
+        for &sid in useful.iter().chain(&rest) {
             // MV8: a DISENGAGE skill (a jump) belongs to Disengage rounds, and there goes last while a Maneuver attack
             // can open
             if k_is_jump(self.skill(sid)) && (!self.disengage() || self.order.iter().any(|&o| !k_is_jump(self.skill(o)))) {
@@ -646,9 +679,15 @@ impl<'a> Builder<'a> {
             match self.try_opener(plan, &Opener::Skill(sid)) {
                 Ok(()) => return Ok(Opener::Skill(sid)),
                 Err(e) => {
+                    if e == "Space is blocked" {
+                        blocked = true;
+                    }
                     first.get_or_insert(e);
                 }
             }
+        }
+        if blocked {
+            return Err("Space is blocked".into());
         }
         Err(match self.target {
             // INPUT1 MR5: every Engage that could open found the target's flank protected
@@ -700,9 +739,17 @@ impl<'a> Builder<'a> {
                         if self_only {
                             return Err(format!("{} acts only on its user.", s.name));
                         }
+                        if !w.units[t].is_active() {
+                            if !(s.revive && w.can_revive(t)) {
+                                return Err("Target is down.".into());
+                            }
+                            if w.revive_cell(t).is_none() {
+                                return Err("Space is blocked".into());
+                            }
+                        }
                         let step = PlanStep::ally(sid, t);
                         let band = skill::support_reach(s, u);
-                        let (lo, d) = (band.0.max(1), st.pos.dist(w.pos(t)));
+                        let (lo, d) = (band.0.max(1), w.dist_at(self.c, st.pos, t));
                         if d < lo || d > band.1 {
                             let tile = self.approach_tile(plan, st.pos, w.pos(t), lo, band.1).ok_or("No path to get within reach.")?;
                             step.cell.set(tile);
@@ -730,7 +777,7 @@ impl<'a> Builder<'a> {
         }
         let a = skill::area(s);
         let band = if skill::from_user(a) { (1, 1) } else { skill::field_reach(s, &w.units[self.c], &w.ruleset) };
-        let d = st.pos.dist(source);
+        let d = self.gap(st.pos, source);
         let mut steps = Vec::new();
         let near = if matches!(a, skill::Area::Arc | skill::Area::Cone) { source != st.pos && (source.x - st.pos.x).abs() <= 1 && (source.y - st.pos.y).abs() <= 1 } else { d >= band.0 && d <= band.1 };
         if !near {
@@ -748,7 +795,7 @@ impl<'a> Builder<'a> {
         let maneuver = self.intent == RoundIntent::Maneuver;
         let band = skill::reach_by(s, u, &w.ruleset);
         let goal = self.target_pos(st);
-        let d = st.pos.dist(goal);
+        let d = self.gap(st.pos, goal);
         if skill::is_area(s) {
             let mut steps = Vec::new();
             if d < band.0 || d > band.1 {
@@ -780,8 +827,8 @@ impl<'a> Builder<'a> {
         // AS2: a ranged unit with its target in the target's melee band kites first, to the farthest band tile
         if !maneuver && u.attack_range > 1 && d <= round_intent::melee_reach(w, foe) {
             let cands = self.walk_tiles(plan, st.pos, goal, band.0, band.1, 1);
-            let far = cands.iter().map(|(cell, _)| cell.dist(goal)).max().ok_or("No tile to kite to.")?;
-            let tile = self.best(goal, Aim::Away, cands.into_iter().filter(|(cell, _)| cell.dist(goal) == far).collect()).ok_or("No tile to kite to.")?;
+            let far = cands.iter().map(|(cell, _)| self.gap(*cell, goal)).max().ok_or("No tile to kite to.")?;
+            let tile = self.best(goal, Aim::Away, cands.into_iter().filter(|(cell, _)| self.gap(*cell, goal) == far).collect()).ok_or("No tile to kite to.")?;
             return Ok(vec![tagged(PlanStep::go_to(self.mv(), tile), KITE_IN_MELEE, ""), tagged(PlanStep::engage(sid, foe), OPENER, "")]);
         }
         let step = PlanStep::engage(sid, foe);
@@ -816,7 +863,7 @@ impl<'a> Builder<'a> {
                 return Err(format!("{} needs a unit to aim at.", item.name));
             }
             let reach = command::item_field_reach(item);
-            if st.pos.dist(source) > reach {
+            if self.gap(st.pos, source) > reach {
                 let tile = self.approach_tile(plan, st.pos, source, 1, reach.max(1)).ok_or("No path to get within reach.")?;
                 steps.push(tagged(PlanStep::go_to(self.mv(), tile), APPROACH, ""));
             }
@@ -824,8 +871,16 @@ impl<'a> Builder<'a> {
             return Ok(steps);
         }
         let Some(t) = self.target_unit() else { return Err(format!("{} needs a unit to aim at.", item.name)) };
+        if !w.units[t].is_active() {
+            if !(item.revive && item.battle_reach() > 0 && w.can_revive(t) && !w.foes_of(self.c).contains(&t)) {
+                return Err("Target is down.".into());
+            }
+            if w.revive_cell(t).is_none() {
+                return Err("Space is blocked".into());
+            }
+        }
         let reach = item.battle_reach();
-        if t != self.c && st.pos.dist(w.pos(t)) > reach {
+        if t != self.c && w.dist_at(self.c, st.pos, t) > reach {
             let tile = self.approach_tile(plan, st.pos, w.pos(t), 1, reach.max(1)).ok_or("No path to get within reach.")?;
             steps.push(tagged(PlanStep::go_to(self.mv(), tile), APPROACH, ""));
         }
@@ -861,11 +916,11 @@ impl<'a> Builder<'a> {
         let (end, goal) = (st.pos, w.pos(foe));
         let f = &w.units[foe];
         let foe_reach = skill::threat_reach(f, &w.ruleset);
-        if end.dist(goal) > f.move_per_block() * 2 + foe_reach {
+        if self.gap(end, goal) > f.move_per_block() * 2 + foe_reach {
             return Reserve::default();
         }
-        let here = end.dist(goal);
-        let cands: Vec<(V2, Vec<V2>)> = self.walk_tiles(plan, end, goal, band.0, band.1, 1).into_iter().filter(|(cell, _)| cell.dist(goal) > here).collect();
+        let here = self.gap(end, goal);
+        let cands: Vec<(V2, Vec<V2>)> = self.walk_tiles(plan, end, goal, band.0, band.1, 1).into_iter().filter(|(cell, _)| self.gap(*cell, goal) > here).collect();
         let Some((cell, route)) = ({
             let mut c2 = cands;
             round_intent::rank_tiles(w, self.c, goal, true, Aim::Away, &mut c2);
@@ -965,6 +1020,17 @@ impl<'a> Builder<'a> {
                 }
                 // A4.2-K1b (IR10 `field_fill_once`): in a Field round the fill places each family once
                 if self.intent == RoundIntent::Field && st.entries.iter().any(|e| e.step_index >= 0 && self.skill(e.skill).family_id() == s.family_id()) {
+                    continue;
+                }
+                // PR7-41 (PT-22): a status the unit grants itself is granted once: the fill places no skill granting a
+                // status the unit holds or an earlier step of the round grants (a re-grant adds nothing). Behind the
+                // test-only switch `regrant` until the golden ruling (FB-334); off, the fill as before
+                if switches::on("regrant") && regrants(w, self.c, s, st.entries.iter().map(|e| e.skill)) {
+                    continue;
+                }
+                // PR7-41 (PT-22): a guard that only covers friends (its every trigger is an `ally_hit`) is not filled
+                // with no active friend within its trigger range
+                if !covers_a_friend(w, plan, self.c, s, st.pos) {
                     continue;
                 }
                 let mut why = String::new();
@@ -1738,7 +1804,7 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
                     return Err(fail(format!("{} is rooted this round and can't move.", w.units[c].name)));
                 }
                 let route = move_route(w, plan, c, st.pos, *cell).map_err(fail)?;
-                let need = path::blocks_needed(&w.grid, st.pos, &route, w.units[c].move_per_block()) as i32;
+                let need = path::blocks_needed_sized(&w.grid, st.pos, &route, w.units[c].move_per_block(), w.size_of(c)) as i32;
                 let cap = w.ruleset.numbers.move_after_blocks;
                 if need > cap {
                     return Err(fail(format!("Too far: {need} move blocks > {cap}")));
@@ -1865,7 +1931,7 @@ fn replace_last_fill(w: &World, plan: &mut Plan, c: UnitId, mark: usize, cell: V
         let st = plan.compile(w, c);
         let free = free_blocks(&st, st.total_blocks);
         let steps = plan.steps_of(c);
-        let need = move_route(w, plan, c, st.pos, cell).ok().map(|r| (path::blocks_needed(&w.grid, st.pos, &r, w.units[c].move_per_block()) as i32, r.len() as i32));
+        let need = move_route(w, plan, c, st.pos, cell).ok().map(|r| (path::blocks_needed_sized(&w.grid, st.pos, &r, w.units[c].move_per_block(), w.size_of(c)) as i32, r.len() as i32));
         let fits = need.is_some_and(|(n, tiles)| n <= w.ruleset.numbers.move_after_blocks && n <= free && (!pays || tiles <= st.ap_left));
         if fits || steps.len() <= mark {
             removed.reverse();
@@ -1923,7 +1989,8 @@ fn place(w: &World, plan: &mut Plan, c: UnitId, steps: Vec<Step>, may_move: bool
 
 /// ET3: the route of a plain move from `from` to the empty tile `cell`: "No path", "Claimed by <ally>'s move".
 fn move_route(w: &World, plan: &Plan, c: UnitId, from: V2, cell: V2) -> Result<Vec<V2>, String> {
-    if !w.grid.is_valid(cell) || !w.grid.is_walkable(cell) || w.grid.is_exit(cell) {
+    // BIGUNIT1 BU6: a big unit's whole square
+    if w.cells_at(c, cell).iter().any(|&n| !w.grid.is_valid(n) || !w.grid.is_walkable(n) || w.grid.is_exit(n)) {
         return Err("That tile can't be moved to.".into());
     }
     if cell == from {
@@ -1940,6 +2007,30 @@ fn move_route(w: &World, plan: &Plan, c: UnitId, from: V2, cell: V2) -> Result<V
         return Err("No path".into());
     }
     Ok(route)
+}
+
+/// PR7-41 (PT-22): whether skill `s` would only re-grant: it grants its user a status for more than this round
+/// (`grant_status` with `status_rounds` 2 or more, a stealth; not a riposte readied for the round) that unit `c` holds
+/// now or that one of the skills `earlier` (the round's steps so far) grants.
+pub fn regrants(w: &World, c: UnitId, s: &SkillDef, earlier: impl IntoIterator<Item = SkillId>) -> bool {
+    let g = s.grant_status.as_str();
+    !g.is_empty() && s.status_rounds >= 2 && (w.units[c].has_status(g) || earlier.into_iter().any(|e| w.cat.skills.get(e).is_some_and(|k| k.grant_status == g)))
+}
+
+/// PR7-41 (PT-22): whether skill `s` has a friend of `c` to cover from tile `at`: false only for a skill whose every
+/// trigger is an `ally_hit` (it does nothing but cover friends) when no other active friend stands, or is planned to
+/// end its round, within the trigger's `when.range` (default 1) of `at`.
+pub fn covers_a_friend(w: &World, plan: &Plan, c: UnitId, s: &SkillDef, at: V2) -> bool {
+    if s.triggers.is_empty() || s.triggers.iter().any(|t| t.on != "ally_hit") {
+        return true;
+    }
+    let range = s.triggers.iter().map(|t| aegis_core::value::int(&t.when, "range", 1).max(1)).max().unwrap_or(1);
+    w.friends_of(c).iter().any(|&f| {
+        f != c && w.units[f].is_active() && w.has(f) && {
+            let end = if plan.sequences.contains_key(&f) { plan.planned_position(w, f) } else { w.pos(f) };
+            w.dist_at_cell(f, w.pos(f), at) <= range || w.dist_at_cell(f, end, at) <= range
+        }
+    })
 }
 
 /// PK2-S1: the planned steps of `st` that run skill `sid` (`mark::uses_problem`'s `planned`).
@@ -1996,7 +2087,7 @@ impl Builder<'_> {
                     return Ok(self.skill_opener(plan, st, *sid)?);
                 }
                 // decision "Auto-fill keeps a flank": what the ghost showed on its flank tile, accepted, needs no position
-                let keeps = accepted && carries(w, s) && self.kind != ManeuverKind::Disengage && self.target_unit().is_some_and(|t| round_intent::keeps_flank(w, t, st.pos, round_intent::diagonal(w, self.c, Some(s))));
+                let keeps = accepted && carries(w, s) && self.kind != ManeuverKind::Disengage && self.target_unit().is_some_and(|t| round_intent::keeps_flank_by(w, t, self.c, st.pos, round_intent::diagonal(w, self.c, Some(s))));
                 if let Some(e) = self.reach_problem(plan, st, p).filter(|_| !keeps) {
                     return Err(e.into());
                 }
@@ -2046,10 +2137,10 @@ impl Builder<'_> {
         let out = match p {
             Pick::Item(id) => {
                 if let RoundTarget::Cell(_) = self.target {
-                    command::pouch_item(w, self.c, id).is_some_and(|i| st.pos.dist(goal) > command::item_field_reach(i))
+                    command::pouch_item(w, self.c, id).is_some_and(|i| self.gap(st.pos, goal) > command::item_field_reach(i))
                 } else {
                     let t = self.target_unit()?;
-                    t != self.c && command::pouch_item(w, self.c, id).is_some_and(|i| st.pos.dist(goal) > i.battle_reach())
+                    t != self.c && command::pouch_item(w, self.c, id).is_some_and(|i| self.gap(st.pos, goal) > i.battle_reach())
                 }
             }
             Pick::Skill { skill: sid, .. } => {
@@ -2063,14 +2154,14 @@ impl Builder<'_> {
                             goal == st.pos || (goal.x - st.pos.x).abs() > 1 || (goal.y - st.pos.y).abs() > 1
                         } else {
                             let band = if skill::from_user(a) { (1, 1) } else { skill::field_reach(s, &w.units[self.c], &w.ruleset) };
-                            let d = st.pos.dist(goal);
+                            let d = self.gap(st.pos, goal);
                             d < band.0 || d > band.1
                         }
                     }
                     RoundIntent::Support => match self.target {
                         RoundTarget::Unit(t) if t != self.c => {
                             let band = skill::support_reach(s, &w.units[self.c]);
-                            let d = st.pos.dist(goal);
+                            let d = self.gap(st.pos, goal);
                             d < band.0.max(1) || d > band.1
                         }
                         _ => false,
@@ -2082,7 +2173,7 @@ impl Builder<'_> {
                         }
                         _ => {
                             let band = round_intent::hit_band(w, self.c, s);
-                            let d = round_intent::melee_dist(w, self.c, Some(s), st.pos, goal);
+                            let d = self.band_gap(s, st.pos, goal);
                             d < band.0 || d > band.1
                         }
                     },
@@ -2104,7 +2195,7 @@ impl Builder<'_> {
             Pick::Item(id) => {
                 let field = matches!(self.target, RoundTarget::Cell(_));
                 let reach = command::pouch_item(w, self.c, id).map_or(1, |i| if field { command::item_field_reach(i) } else { i.battle_reach() });
-                (0, reach, st.pos.dist(goal))
+                (0, reach, self.gap(st.pos, goal))
             }
             Pick::Skill { skill: sid, .. } => {
                 let s = self.skill(*sid);
@@ -2118,7 +2209,7 @@ impl Builder<'_> {
                     return format!("Out of range: {near} > {n}");
                 }
                 let band = if skill::kind(s) == Kind::Support { skill::support_reach(s, u) } else { round_intent::hit_band(w, self.c, s) };
-                (band.0, band.1, round_intent::melee_dist(w, self.c, Some(s), st.pos, goal))
+                (band.0, band.1, self.band_gap(s, st.pos, goal))
             }
             _ => (0, 0, 0),
         };
@@ -2601,6 +2692,10 @@ pub fn move_tiles(w: &World, plan: &Plan, c: UnitId) -> Vec<MoveTile> {
         for x in 0..GRID_W {
             let cell = V2::new(x, y);
             if cell == from || cell.dist(from) > reach || !w.grid.is_walkable(cell) || w.grid.is_exit(cell) || w.occupant(cell).is_some() {
+                continue;
+            }
+            // BIGUNIT1 BU6, BU15: a big unit's move tiles are anchors its whole square fits
+            if w.size_of(c) > 1 && !w.fits(c, cell) {
                 continue;
             }
             let o = option_of(w, plan, c, vec![if held { Pick::StepAfter(cell) } else { Pick::MoveHere(cell) }], RoundTarget::Cell(cell), base);

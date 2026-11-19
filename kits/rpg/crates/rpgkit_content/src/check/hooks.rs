@@ -118,6 +118,11 @@ impl Ctx {
         self.meters.iter().find(|m| m.0 == id).map(|m| (m.1, m.2))
     }
 
+    /// PR7-8: unit meter `id`'s min..max (None for an unknown meter; a `meter_floor` effect reads it).
+    pub fn meter_range(&self, id: &str) -> Option<(i64, i64)> {
+        self.meter(id)
+    }
+
     /// U1.2-S5: the range of a `meter` effect's delta on meter `id` (its row's `delta_max` either way; the default
     /// METER_DELTA when the row sets none).
     fn meter_delta(&self, id: &str) -> (i64, i64) {
@@ -548,6 +553,13 @@ pub fn when_errors(raw: &Value, ctx: &Ctx, at: &str, event: Option<&str>) -> Vec
     }
     enum_key(o, "intent", &ruleset::INTENTS, false, &at, &mut out);
     enum_key(o, "dual_wield", &SLOT_RULES, false, &at, &mut out);
+    // PR7-8 (RELIC-SIG1): the holder's campaign act and a meter it holds
+    whole_key(o, rpgkit_data::WHEN_FROM_ACT_KEY, rpgkit_data::WHEN_FROM_ACT, false, &at, &mut out);
+    if let Some(h) = o.get(rpgkit_data::WHEN_HOLDS_METER) {
+        if !h.as_str().is_some_and(|id| ctx.meter(id).is_some()) {
+            out.push(format!("{at}: {}: unknown unit meter '{}'.", rpgkit_data::WHEN_HOLDS_METER, gstr(h)));
+        }
+    }
     if let Some(m) = o.get("meter") {
         match m.as_object() {
             Some(m) => {
@@ -593,6 +605,10 @@ pub fn effects_errors(raw: &Value, ctx: &Ctx, at: &str, event: Option<&str>, met
         // PK1-S1 (3.2): a rider's effect acts on the unit it landed on unless it says `to: self`; recoil is the holder's
         if t == "damage" && o.contains_key("pct_of_hit") && event.is_none() && !o.contains_key("to") {
             out.push(format!("{at}: pct_of_hit is recoil on the holder: a rider sets to: self."));
+        }
+        // PR7-8 (RELIC-SIG1): a shockwave carries a hit the holder dealt (or the hit a rider rode on)
+        if t == rpgkit_data::SHOCKWAVE && event.is_some_and(|e| !e.is_empty() && !matches!(e, "hit_dealt" | "kill")) {
+            out.push(format!("{at}: shockwave needs a hit_dealt or kill trigger (or a rider)."));
         }
         if t == "redirect" {
             redirects += 1;
@@ -756,6 +772,11 @@ fn effect_errors(o: &Dict, t: &str, ctx: &Ctx, at: &str, meter_set: bool) -> Vec
             }
         }
         "reveal" => whole_key(o, "rounds", (1, 1), false, at, &mut out),
+        // PR7-8 (RELIC-SIG1): a share of the hit carried on along the line past the struck unit
+        rpgkit_data::SHOCKWAVE => {
+            whole_key(o, "tiles", rpgkit_data::SHOCKWAVE_TILES, true, at, &mut out);
+            whole_key(o, "pct_of_hit", rpgkit_data::SHOCKWAVE_PCT, true, at, &mut out);
+        }
         ROLL_TABLE => out.extend(roll_table_errors(o, ctx, at, meter_set)),
         _ => {}
     }
@@ -917,6 +938,70 @@ pub fn hazard_meter_errors(raw: Option<&Value>, meters: Option<&[String]>, at: &
     out
 }
 
+/// PR6-7: the `at_least` range of a `when_meter` gate (a unit meter value) and of a `requires_track` gate (a unit
+/// track stage; a signed track may sit below 0).
+pub const WHEN_METER_AT_LEAST: (i64, i64) = (0, 100);
+pub const REQUIRES_TRACK_AT_LEAST: (i64, i64) = (-99, 99);
+/// PR6-7: the most `start_meter` entries a region or encounter holds.
+pub const START_METER_MAX: usize = 4;
+
+/// PR6-7: an `{id, at_least}` gate under `label` ({} or absent = none): id required and (with `ids`) known as a
+/// `noun`, at_least whole in `range`.
+fn threshold_errors(raw: Option<&Value>, ids: Option<&[String]>, noun: &str, range: (i64, i64), label: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(raw) = raw.filter(|v| !v.is_null()) else { return out };
+    let Some(o) = set_object(raw, label, &mut out) else { return out };
+    unknown_keys(o, &rpgkit_data::Threshold::KEYS, label, &mut out);
+    let id = json::s(o, "id");
+    if id.is_empty() {
+        out.push(format!("{label}: id is required (a {noun} id)."));
+    } else if ids.is_some_and(|m| !m.contains(&id)) {
+        out.push(format!("{label}: unknown {noun} '{id}'."));
+    }
+    whole_key(o, "at_least", range, true, label, &mut out);
+    out
+}
+
+/// PR6-7: an arena hazard effect's or a ground hazard row's `when_meter` (`at`: the owner's label).
+pub fn when_meter_errors(raw: Option<&Value>, meters: Option<&[String]>, at: &str) -> Vec<String> {
+    threshold_errors(raw, meters, "unit meter", WHEN_METER_AT_LEAST, &format!("{at} when_meter"))
+}
+
+/// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 1): a world region's or encounter's `start_meter`: at most `START_METER_MAX`
+/// objects, each a known unit meter, a value -100..100 not 0, an optional `requires_track` gate on a known unit track,
+/// an optional `unless_flag` flag key and optional `requires_flags` conditions.
+pub fn start_meter_errors(e: &Dict, meters: &[String], tracks: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    let list = list_of(json::get(e, rpgkit_data::START_METER), "Battle-start meters", START_METER_MAX, &mut out);
+    for (i, item) in list.iter().enumerate() {
+        let at = format!("Battle-start meter {}", i + 1);
+        let Some(o) = item.as_object() else {
+            out.push(format!("{at} must be an object {{meter, value, requires_track, unless_flag, requires_flags}}."));
+            continue;
+        };
+        unknown_keys(o, &rpgkit_data::StartMeter::KEYS, &at, &mut out);
+        let meter = json::s(o, "meter");
+        if !meters.contains(&meter) {
+            out.push(format!("{at}: unknown unit meter '{meter}'."));
+        }
+        let value = json::get(o, "value");
+        let cap = i64::from(rpgkit_data::StartMeter::VALUE_MAX);
+        if !whole_in(value, (-cap, cap)) || json::to_int(value) == 0 {
+            out.push(format!("{at}: value must be a whole number {}..{cap}, not 0.", -cap));
+        }
+        out.extend(threshold_errors(o.get("requires_track"), Some(tracks), "unit track", REQUIRES_TRACK_AT_LEAST, &format!("{at} requires_track")));
+        if let Some(f) = o.get("unless_flag") {
+            if !f.as_str().is_some_and(|f| f.is_empty() || super::quest::flag_key_ok(f)) {
+                out.push(format!("{at}: unless_flag must be a flag key (a-z, 0-9, _ and .)."));
+            }
+        }
+        if let Some(c) = o.get("requires_flags") {
+            out.extend(super::quest::condition_errors(c, &format!("{at}: requires_flags")));
+        }
+    }
+    out
+}
+
 /// AH1: an encounter's `arena_hazards` (catalog and world encounters); `meters` the unit meter ids (PK1-S1: an
 /// effect's `meter`).
 pub fn arena_hazards_errors(e: &Dict, meters: &[String]) -> Vec<String> {
@@ -965,6 +1050,8 @@ pub fn arena_hazards_errors(e: &Dict, meters: &[String]) -> Vec<String> {
         if json::arr(json::get(o, "rounds")).iter().any(|x| !whole_in(x, (1, max_rounds))) {
             out.push(format!("{at}: rounds are whole numbers 1-{max_rounds} ([] = every round)."));
         }
+        // PR6-7: the periodic cadence (rounds N, 2N, ...)
+        whole_key(o, rpgkit_data::EVERY_ROUNDS, (1, max_rounds), false, &at, &mut out);
         let blocks = json::arr(json::get(o, "blocks"));
         if blocks.is_empty() || blocks.iter().any(|x| !whole_in(x, (1, max_block))) {
             out.push(format!("{at}: blocks lists at least one whole number 1-{max_block}."));
@@ -1016,6 +1103,7 @@ fn arena_effect_errors(raw: &Value, at: &str, meters: &[String]) -> Vec<String> 
         }
     }
     out.extend(hazard_meter_errors(o.get("meter"), Some(meters), &at));
+    out.extend(when_meter_errors(o.get(rpgkit_data::WHEN_METER), Some(meters), &at));
     let meter = o.get("meter").is_some_and(|m| m.as_object().is_some_and(|m| !m.is_empty()));
     if !positive("damage") && !positive("damage_pct") && !positive("stagger") && st.is_empty() && push.is_none() && !meter {
         out.push(format!("{at}: set at least one of damage, damage_pct, stagger, status, push or meter."));

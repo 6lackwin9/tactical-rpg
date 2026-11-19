@@ -1,8 +1,9 @@
-//! LAYOUT720-E4, T3 (docs/specs/LAYOUT720.md section 5): every pane, the pip gauge, the timeline and the desk drawn on the
+//! LAYOUT720-E4, T3 (docs/specs/LAYOUT720.md section 5): every pane, the timeline and the desk drawn on the
 //! native grid with their numbers doubled are their old pictures. `Same` is to the bit; `Near` allows one grid unit
 //! (`shot_diff`) where a text height, a measured width or a whole-number division rounds on a different unit (spec 6.3). The
 //! recorded rects are checked too: twice as much, each edge within one old unit. T1 (`theme.rs`, `theme_panes.rs`) holds the
-//! old pictures to their recorded hashes, and the sweeps here hold the old numbers on sizes those pages never draw.
+//! old pictures to their recorded hashes, and the sweeps here hold the old numbers on sizes those pages never draw. The pip
+//! gauge's entries moved to the kit with it (ENGINE-5: `rpgkit_ui/tests/pips_native.rs`).
 //!
 //! `AEGIS_SHOT_DIR=<folder>` writes each entry's old and native shots there. `AEGIS_THEME_GAME=<game folder>` runs the table on
 //! that game's theme too (its real frames), so that this file names no game.
@@ -12,11 +13,10 @@ use aegis_layout::{Insets, Stack};
 use aegis_ui::canvas::{Canvas, Image, Rect, Rgba};
 use aegis_ui::painter::{nine_content_rect, Fonts, Grid, View};
 use aegis_ui::panes::{self, AskView, Corner, MenuItem, MenuStyle, SlotView};
-use aegis_ui::pips::{self, PipBlock, PipGauge};
 use aegis_ui::shot_diff::shot_diff;
 use aegis_ui::theme::{self, Frame, Metrics, Nine, NineFill, Theme};
 use aegis_ui::timeline::{self, Timeline};
-use aegis_ui::ui::{tip, Gfx, Glyph, Kit, Ui};
+use aegis_ui::ui::{Gfx, Glyph, Kit, Ui};
 use aegis_ui::window::{Desk, Frac, Grab, Layout, Win};
 use std::path::Path;
 use std::sync::Arc;
@@ -138,9 +138,6 @@ fn table() -> Vec<Entry> {
         ("ask cut", Near, (-1, -1), |ui, u| { let q = LONG.repeat(12); ask(ui, u.r(100, 60, 300, 170), &AskView { ornate: true, ..AskView::new("A title much too long to fit on one line of a dialog this small, however it is drawn", &q) }); }),
         ("ask hovered", Near, (340, 200), |ui, u| { ask(ui, u.r(0, 0, 640, 360), &AskView::new("A title", "Is this the question?")); }),
         ("ask answers too wide", Same, (-1, -1), |ui, u| { ask(ui, u.r(0, 0, 640, 360), &AskView { yes: "A very long way of saying yes that runs on and on for a while", no: "And a very long way of saying no, longer still than that one", ..AskView::new("", "Yes or no?") }); }),
-        ("pips samples", Near, (-1, -1), |ui, u| { for (k, (name, gauge)) in pips::samples().into_iter().enumerate() { let r = gauge.draw(ui, name, u.n(20), u.n(20 + 14 * k as i32)); assert_eq!(gauge.width(ui), r.w, "{name}"); } }),
-        ("pips animating", Near, (-1, -1), |ui, u| { let t = ui.t.clone(); let g = PipGauge { spent: 3.5, edge: 6.3, ..PipGauge::planned(10, &[PipBlock::new(3, t.foe), PipBlock::ghost(2, t.info)], 12, 12) }; g.draw(ui, "g", u.n(20), u.n(20)); }),
-        ("pips hovered", Near, (30, 20), |ui, u| { let t = ui.t.clone(); let g = PipGauge::planned(10, &[PipBlock::new(3, t.foe)], 12, 12).with_tip(tip("A title", "A hover card")); g.draw(ui, "g", u.n(20), u.n(20)); }),
         // 624 wide: the lane is a whole number of units per block on either grid.
         ("timeline", Near, (-1, -1), |ui, u| { tl(ui, &even_marks(), u.r(10, 10, 624, 340)); }),
         ("timeline hovered bar", Near, (250, 45), |ui, u| { tl(ui, &even_marks(), u.r(10, 10, 624, 340)); }),
@@ -316,11 +313,6 @@ fn the_answers_on_a_grid_are_the_old_ones_in_its_units() {
     theme::set_theme(Theme::default());
     let (old, native) = (Metrics::of(&Theme::default(), View::fit(1280, 720)), Metrics::of(&Theme::default(), View::fit(1280, 720).for_grid(Grid::Native)));
     let twice = |r: Rect| Rect::new(2 * r.x, 2 * r.y, 2 * r.w, 2 * r.h);
-    for slots in [-1, 0, 1, 12] {
-        assert_eq!(pips::pips_w_on(slots, 2), 2 * pips::pips_w(slots));
-        assert_eq!(pips::pips_w_on(slots, 1), pips::pips_w(slots));
-    }
-    assert_eq!(pips::pip_rect_on(40, 80, 3, 2), twice(pips::pip_rect(20, 40, 3)));
     let row = Rect::new(10, 20, 300, timeline::ROW_H);
     assert_eq!(timeline::icon_rect_on(twice(row), 2), twice(timeline::icon_rect(row)));
     let t = timeline::sample();
@@ -463,7 +455,6 @@ fn a_metrics_key_changes_a_native_pane_and_no_old_one() {
         panes::tab_rail(ui, "t", u.r(200, 20, 400, 100), &["One", "Two"], 0, |_| ());
         card(ui, "s", u.r(20, 130, 400, 90), None, &[], "A stamp", false, 1);
         ask(ui, u.r(20, 230, 500, 130), &AskView::new("", "Is this the question?"));
-        pips::samples()[0].1.draw(ui, "p", u.n(450), u.n(150));
         tl(ui, &timeline::sample(), u.r(430, 160, 200, 60));
     };
     let pic = |t: &Theme, grid: Grid, d: &mut dyn FnMut(&mut Ui<()>, U)| {

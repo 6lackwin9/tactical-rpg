@@ -140,6 +140,9 @@ pub fn stage_set(d: &Data, world_id: &str) -> String {
     d.lineage(world_id).iter().rev().map(|w| json::s(d.manifest(w), "stage_set")).find(|s| !s.is_empty()).unwrap_or_default()
 }
 
+/// PR7-41 (PT-35): the service line said after a turn-in (no kit default: a world names it in `service_lines`).
+pub const TURNED_IN: &str = "turned_in";
+
 /// The base line with the manifest `service_lines` merged along the lineage (nearest wins).
 pub fn service_line(d: &Data, world_id: &str, id: &str) -> String {
     let mut text = d.service_text(id);
@@ -280,6 +283,11 @@ pub const OPEN_RECIPES: &str = "open_recipes";
 /// PK2-S3: the refusal of a step while the recipe pane is open, and of the service once nothing is offered.
 pub const RECIPES_BUSY_TEXT: &str = "Close the recipes first.";
 pub const RECIPES_NONE_TEXT: &str = "Nothing is offered now.";
+/// PR6-8: the runner's own effect of the facility service choice (never authored: the dialogue checks refuse it), the
+/// refusal of a step while the facility pane is open, and of the service once the character keeps none.
+pub const OPEN_FACILITIES: &str = "open_facilities";
+pub const FACILITIES_BUSY_TEXT: &str = "Close the facilities first.";
+pub const FACILITIES_NONE_TEXT: &str = "No facility is kept here.";
 
 pub const LOCKED_TEXT: &str = "Locked";
 pub const NOT_NOW_TEXT: &str = "Not now";
@@ -410,6 +418,8 @@ pub struct DialogueRunner {
     pub board_qid: String,
     /// PK2-S3: the character whose recipe pane is open over the conversation ("" = none), like `shop_qid`.
     pub recipe_npc: String,
+    /// PR6-8: the character whose facility pane is open over the conversation ("" = none), like `recipe_npc`.
+    pub facility_npc: String,
     tree_speaker: String,
     nodes: IndexMap<String, Dict>,
     /// Turn-in waiting for confirm: (quest qid, trailing effects, to).
@@ -417,10 +427,16 @@ pub struct DialogueRunner {
     shop_to: String,
     board_to: String,
     recipe_to: String,
+    facility_to: String,
     pub notes: Vec<String>,
     /// CAMPAIGN1 W1: the campaign events of the effects applied since the last result (a node's effects when the
     /// conversation opens included); the next result carries them as `campaign`.
     pub campaign_events: Vec<Value>,
+    /// BUNKS1 BK7: extra `{token}` values of the texts (a template talk's `{a}` and `{b}`; empty = none).
+    pub tokens_extra: IndexMap<String, String>,
+    /// PR7-41 (PT-35): a one-off line shown in the node's place until the conversation moves on (the world's
+    /// `turned_in` service line after a turn-in; "" = the node's own text).
+    pub said: String,
 }
 
 fn res_ok() -> Dict {
@@ -534,6 +550,7 @@ impl DialogueRunner {
     }
 
     fn show(&mut self, d: &Data, gs: &mut GameState, id: &str) {
+        self.said.clear();
         self.node_id = id.into();
         let fx = effects_of(&self.node(d, gs, id));
         self.apply(d, gs, &fx);
@@ -606,6 +623,15 @@ impl DialogueRunner {
                 ("_service", rpgkit_data::RECIPE_SERVICE.into()),
             ]));
         }
+        // PR6-8: the facility pane, after the recipes, while the character keeps a facility
+        if !crate::facility::kept_by(d, gs, &self.character_qid).is_empty() {
+            out.push(json::obj([
+                ("text", self.line(d, gs, rpgkit_data::facility::FACILITY_SERVICE).into()),
+                ("to", "".into()),
+                ("effects", Value::Array(vec![Value::Object(json::obj([("effect", OPEN_FACILITIES.into())]))])),
+                ("_service", rpgkit_data::facility::FACILITY_SERVICE.into()),
+            ]));
+        }
         out.push(json::obj([("text", self.line(d, gs, "farewell").into()), ("to", "".into()), ("_service", "farewell".into())]));
         out
     }
@@ -629,6 +655,9 @@ impl DialogueRunner {
         let mut values = IndexMap::new();
         values.insert("npc".to_string(), self.character_name.clone());
         values.insert("gold".to_string(), gs.party.gold.to_string());
+        for (k, v) in &self.tokens_extra {
+            values.insert(k.clone(), v.clone());
+        }
         let qid = json::s(extra, "_quest");
         if !qid.is_empty() {
             values.insert("quest".into(), json::s_or(&quest::resolved(d, gs, &qid), "name", &qid));
@@ -687,7 +716,7 @@ impl DialogueRunner {
             ("speaker", speaker.clone().into()),
             ("speaker_name", json::s(d.resolve(&gs.world_id, "characters", &speaker), "name").into()),
             ("node", self.node_id.clone().into()),
-            ("text", fill(&json::s(&node, "text"), &self.tokens(d, gs, &node)).into()),
+            ("text", if self.said.is_empty() { fill(&json::s(&node, "text"), &self.tokens(d, gs, &node)) } else { self.said.clone() }.into()),
             ("choices", Value::Array(choices)),
             ("end", Value::Bool(self.closed || json::b(&node, "end", false))),
             ("next", Value::Bool(!self.closed && !json::s(&node, "next").is_empty())),
@@ -703,6 +732,10 @@ impl DialogueRunner {
         // PK2-S3: only while the recipe pane is open
         if !self.recipe_npc.is_empty() {
             out.insert(rpgkit_data::RECIPE_SERVICE.into(), self.recipe_npc.clone().into());
+        }
+        // PR6-8: only while the facility pane is open
+        if !self.facility_npc.is_empty() {
+            out.insert(rpgkit_data::facility::FACILITY_SERVICE.into(), self.facility_npc.clone().into());
         }
         // PORTRAITFX1 7: the speaker's face for this node, only when the node names one (a Godot node never did)
         let expression = json::s(&node, "expression");
@@ -723,6 +756,8 @@ impl DialogueRunner {
             Some(board::BUSY_TEXT)
         } else if !self.recipe_npc.is_empty() {
             Some(RECIPES_BUSY_TEXT)
+        } else if !self.facility_npc.is_empty() {
+            Some(FACILITIES_BUSY_TEXT)
         } else {
             None
         }
@@ -803,6 +838,14 @@ impl DialogueRunner {
                 self.recipe_to = if to.is_empty() { self.node_id.clone() } else { to };
                 let mut out = res_ok();
                 out.insert(rpgkit_data::RECIPE_SERVICE.into(), self.recipe_npc.clone().into());
+                out
+            }
+            // PR6-8: the facility pane opens over the conversation, like the recipes
+            OPEN_FACILITIES => {
+                self.facility_npc = self.character_qid.clone();
+                self.facility_to = if to.is_empty() { self.node_id.clone() } else { to };
+                let mut out = res_ok();
+                out.insert(rpgkit_data::facility::FACILITY_SERVICE.into(), self.facility_npc.clone().into());
                 out
             }
             // STORYUI1 4.7: the sequence started (in `apply`); the conversation closes and the game shows the story
@@ -912,6 +955,11 @@ impl DialogueRunner {
                         out.push(RECIPES_NONE_TEXT.into());
                     }
                 }
+                OPEN_FACILITIES => {
+                    if crate::facility::kept_by(d, gs, &self.character_qid).is_empty() {
+                        out.push(FACILITIES_NONE_TEXT.into());
+                    }
+                }
                 "fight" => {
                     let enc = json::s(fx, "encounter");
                     if d.resolve(&gs.world_id, "encounters", &enc).is_empty() {
@@ -943,6 +991,18 @@ impl DialogueRunner {
                     let why = crate::campaign::purse::rest_refusal(d, gs);
                     if !why.is_empty() {
                         out.push(why.into());
+                    }
+                }
+                // ROSTER1 PO2 (PK3 3.1): swearing in a pool entry: the roster is open and the entry waits (its home is
+                // checked when it runs: a Martyr needs a crypt place, anyone else a bunk)
+                "recruit" if fx.contains_key("pool") => {
+                    let pool = json::s(fx, "pool");
+                    if !roster::is_open(gs) {
+                        out.push(roster::CLOSED_TEXT.into());
+                    } else if pool == rpgkit_data::POOL_FIRST && gs.party.pool.is_empty() {
+                        out.push("No one waits to join.".into());
+                    } else if pool != rpgkit_data::POOL_FIRST && !gs.party.pool.iter().any(|p| p.id == pool) {
+                        out.push(format!("'{pool}' is not waiting to join."));
                     }
                 }
                 "recruit" => {
@@ -1004,6 +1064,16 @@ impl DialogueRunner {
         self.campaign_events.extend(events);
         self.pending = None;
         let mut moved = self.move_to(d, gs, &to);
+        // PR7-41 (PT-35): the world's `turned_in` line (its quest giver's thanks) stands in the node's place once
+        if !self.closed {
+            let line = service_line(d, &gs.world_id, TURNED_IN);
+            if !line.trim().is_empty() {
+                let mut values = self.tokens(d, gs, &Dict::new());
+                values.insert("quest".into(), json::s_or(&quest::resolved(d, gs, &qid), "name", &qid));
+                self.said = fill(&line, &values);
+                moved.insert("said".into(), self.said.clone().into());
+            }
+        }
         moved.insert("granted".into(), res.get("granted").cloned().unwrap_or(Value::Null));
         moved.insert("notes".into(), res.get("notes").cloned().unwrap_or(Value::Array(Vec::new())));
         self.with_notes(moved)
@@ -1073,6 +1143,25 @@ impl DialogueRunner {
                 out
             } else {
                 let to = self.recipe_to.clone();
+                self.move_to(d, gs, &to)
+            }
+        };
+        self.with_notes(res)
+    }
+
+    /// PR6-8: closes the facility pane back to the conversation (the node the choice led to), like `close_recipes`.
+    pub fn close_facilities(&mut self, d: &Data, gs: &mut GameState) -> Dict {
+        self.notes.clear();
+        let res = if self.facility_npc.is_empty() {
+            json::fail("No facilities are open.")
+        } else {
+            self.facility_npc.clear();
+            if self.facility_to == self.node_id {
+                let mut out = res_ok();
+                out.insert("node".into(), self.node_id.clone().into());
+                out
+            } else {
+                let to = self.facility_to.clone();
                 self.move_to(d, gs, &to)
             }
         };
@@ -1179,7 +1268,20 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
         "take" => {
             quest::take(d, gs, json::get(fx, "items"), json::i(fx, "gold", 0));
         }
+        // ROSTER1 PO2 (PK3 3.1): `pool` swears in a pooled recruit (a refusal is a note)
+        "recruit" if fx.contains_key("pool") => match roster::swear_in(d, gs, &json::s(fx, "pool"), fx.get("level").unwrap_or(&Value::Null)) {
+            Ok(id) => {
+                let name = gs.party.member(&id).map(|m| progression::display_name(d, m)).unwrap_or(id);
+                notes.push(format!("{name} joins the party."));
+            }
+            Err(why) => notes.push(why),
+        },
         "recruit" => recruit(d, gs, &json::s(fx, "character"), fx.get("level").unwrap_or(&Value::Null), notes),
+        // ROSTER1 PO1 (PK3 3.1): pool entries from a recruit template or a named character
+        "rescue" => {
+            let (_, said) = roster::rescue(d, gs, fx);
+            notes.extend(said);
+        }
         // ACT1-HOOKS2 (FB-244 (1)): a graft into the body of the member a flag names (the recipe's install path)
         rpgkit_data::INSTALL_EFFECT => install(d, gs, fx, notes),
         // T1.2-S2 (FB-54b): the choice-time roll and its note
@@ -1198,6 +1300,17 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
         "open_board" => board::mark_opened(d, gs, &json::s(fx, "board")),
         // PK2-S3: the runner opens the recipe pane (a service choice only; no authored effect)
         OPEN_RECIPES => {}
+        // PR6-8: the runner opens the facility pane (a service choice only; no authored effect)
+        OPEN_FACILITIES => {}
+        // PR6-9: a siege opens (its first room is the game's to start; a refusal is a note)
+        rpgkit_data::siege::START_SIEGE => {
+            let why = crate::siege::start(d, gs, &json::s(fx, "siege"));
+            if why.is_empty() {
+                events.push(Value::Object(json::obj([("event", "siege_started".into()), ("siege", json::s(fx, "siege").into())])));
+            } else {
+                notes.push(why);
+            }
+        }
         // CAMPAIGN1 R2, R3: the rest and its note; its days run at the tick after the list (inert outside a campaign)
         "rest" => {
             let note = crate::campaign::purse::rest_effect(d, gs);
@@ -1296,6 +1409,30 @@ fn recruit(d: &Data, gs: &mut GameState, who: &str, level: &Value, notes: &mut V
     }
     gs.party.members.push(hero);
     notes.push(format!("{name} joins the party."));
+}
+
+/// PR7-41 (PT-36): what a new member arrives with, one line each: on the bench (the squad was full) and unspent
+/// points (to spend on the party screen); none for a member fielded with nothing to spend. The screens log these
+/// after a "joins the party." note (the effect's notes stay as they were: `join_note_member`).
+pub fn join_flags(d: &Data, gs: &GameState, id: &str) -> Vec<String> {
+    let Some(m) = gs.party.member(id) else { return Vec::new() };
+    let name = progression::display_name(d, m);
+    let mut out = Vec::new();
+    if !gs.party.active_ids.is_empty() && !gs.party.active_ids.iter().any(|a| a == id) {
+        out.push(format!("{name} waits on the bench: the squad is full."));
+    }
+    let points = m.unspent(d);
+    if points > 0 {
+        out.push(format!("{name} has {points} unspent point{} (Party screen).", if points == 1 { "" } else { "s" }));
+    }
+    out
+}
+
+/// PR7-41 (PT-36): the member a recruit note ("<name> joins the party.") names, by its display name; None for any
+/// other note.
+pub fn join_note_member(d: &Data, gs: &GameState, note: &str) -> Option<String> {
+    let name = note.strip_suffix(" joins the party.")?;
+    gs.party.members.iter().find(|m| progression::display_name(d, m) == name).map(|m| m.id.clone())
 }
 
 /// After a dialogue fight: BattleBridge.apply (REWARD1: `tally` from the battle, None = settled without one), plus the

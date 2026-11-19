@@ -43,12 +43,12 @@
 				{
 					"id": "a_suspicious",
 					"at": "suspicious",
-					"warn": "PLACEHOLDER: The Inquisition is Suspicious: gates are watched. Quiet jobs and bribes at Talia lower Alert."
+					"warn": "The Inquisition is Suspicious: the ward gates are watched. Loud fights raise Alert most; a toll paid to Bailiff Corvo at the Third Ward gate lowers it."
 				},
 				{
 					"id": "a_lockdown",
 					"at": "lockdown",
-					"warn": "PLACEHOLDER: Lockdown: hunter packs roam the main roads."
+					"warn": "Lockdown: Inquisition hunter packs and Castellan Watch sweeps hold the main roads."
 				},
 				{
 					"id": "a_last",
@@ -56,7 +56,7 @@
 					"acts": [
 						1
 					],
-					"warn": "PLACEHOLDER: One more loud job and they find the grate. The run would end."
+					"warn": "One more loud job and the Inquisition finds the grate. The run would end."
 				},
 				{
 					"id": "a_breach_1",
@@ -162,7 +162,7 @@
 				{
 					"id": "d_week",
 					"at": 7,
-					"warn": "PLACEHOLDER: Seven days to the Red Tithing."
+					"warn": "Seven days to the Red Tithing."
 				},
 				{
 					"id": "d_zero",

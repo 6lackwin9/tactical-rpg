@@ -106,10 +106,10 @@ pub const FROM_ACT_MAX: i64 = 9;
 /// (or false) the roads hold still.
 pub const WORLD_MAP_LANTERN_FLICKER: &str = "world_map_lantern_flicker";
 /// ASSETORG4 (FB-227): the optional game manifest switch of the engine's opt-in portrait overlay layer
-/// (`aegis_ui::portrait_overlays`: glow, lines, point glow, particles rise, drift over the portraits of talk boxes,
+/// (`rpgkit_ui::portrait_overlays`: glow, lines, point glow, particles rise, drift over the portraits of talk boxes,
 /// vignettes, party cards and timeline icons), `true` or `false`; the player's setting can still turn it off. Without it
 /// (or false) portraits draw their base life, states, reactions and expressions only, so a game opts in. The kit's
-/// copy of the engine's settings key `aegis_ui::portrait_overlays::SETTING` (a GUI test keeps them equal).
+/// copy of the engine's settings key `rpgkit_ui::portrait_overlays::SETTING` (a GUI test keeps them equal).
 pub const PORTRAIT_OVERLAYS: &str = "portrait_overlays";
 /// The game manifest keys the kit registers (E2.2-S2: checked by `aegis content manifest` and the data check), in the
 /// order a write keeps them.
@@ -243,10 +243,16 @@ pub const BODY_SLOTS_KIND: &str = crate::check::body_slot::KIND;
 /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 4): the recipe rows, loaded into the catalog beside CATALOG_KINDS after the body
 /// slots (they name items, body slots and unit tracks; Godot had no such kind).
 pub const RECIPES_KIND: &str = crate::check::recipe::KIND;
-/// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2) and STORYUI1's `vignettes`,
-/// `sequences` and `boards` (4.1-4.4; Godot had no such kinds).
-pub const WORLD_KINDS: [&str; 19] = [
+/// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2), STORYUI1's `vignettes`,
+/// `sequences` and `boards` (4.1-4.4), ROSTER1-P's `recruits` (PK3 3.1), PR6-8's `facilities` (PK5 4), PR6-11's
+/// `endings` (PK7 4), BUNKS1's `talks` (BK5) and PR6-9's `sieges` (PK5 5; Godot had no such kinds).
+pub const WORLD_KINDS: [&str; 24] = [
     "regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops", "routes", "meters", "checkpoints", "triggers", "vignettes", "sequences", "boards",
+    rpgkit_data::RECRUITS_KIND,
+    rpgkit_data::facility::FACILITIES_KIND,
+    rpgkit_data::ending::ENDINGS_KIND,
+    rpgkit_data::talk::TALKS_KIND,
+    rpgkit_data::siege::SIEGES_KIND,
 ];
 
 const SCHEMA_TEXT: &str = include_str!("../../../schema.json");

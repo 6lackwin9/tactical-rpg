@@ -13,7 +13,7 @@ use aegis_core::value::{self, to_int, to_str, Obj};
 use emberwake_data::{Catalog, ClassDef, PassiveDef, TriggerRow};
 use emberwake_rules::grants::{self, Combine, Grant, Immunity, Modifier, SkillGrant, SkillSet, Target};
 use emberwake_rules::stats::{Proficiency, StatModifier};
-use emberwake_rules::unit::{BandApplied, ForcedTraits, HeldMeter, HeldTrigger, HitSource, StaggerTaken, FORESIGHT_RANGE_MAX, STAGGER_TAKEN_MULT_MAX};
+use emberwake_rules::unit::{BandApplied, DistancePotency, ForcedTraits, HeldMeter, HeldTrigger, HitSource, StaggerTaken, FORESIGHT_RANGE_MAX, STAGGER_TAKEN_MULT_MAX};
 use emberwake_rules::unit::gear_effect_source;
 use emberwake_rules::{build_unit, Unit};
 use indexmap::IndexMap;
@@ -110,20 +110,39 @@ fn old_apply_effects(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &st
         }
         match t.as_str() {
             "stat" => {
-                let mut tag = "always".to_string();
-                if let Some(ctx) = value::obj(e, "context") {
-                    for (k, v) in ctx {
-                        tag = format!("{}:{}", k, to_str(v));
+                let stat = value::string(e, "stat", "");
+                let val = value::int(e, "value", 0);
+                match stat.as_str() {
+                    "armor" => {
+                        if gear {
+                            u.gear_armor += val;
+                        } else {
+                            u.passive_armor += val;
+                        }
+                    }
+                    "move_rate" => {
+                        if gear {
+                            u.gear_move_rate += val;
+                        } else {
+                            u.passive_move_rate += val;
+                        }
+                    }
+                    _ => {
+                        let mut tag = "always".to_string();
+                        if let Some(ctx) = value::obj(e, "context") {
+                            for (k, v) in ctx {
+                                tag = format!("{}:{}", k, to_str(v));
+                            }
+                        }
+                        // AUDIT-05 (on purpose): the gear source names its item (`gear_effect:<source>`)
+                        let source = if gear { gear_effect_source(&id) } else { format!("passive:{id}") };
+                        let mut m = StatModifier::permanent(&stat, val, &source, &tag);
+                        if cat.derived_stats.contains_key(&stat) {
+                            m.percent = value::float(e, "percent", 0.0);
+                        }
+                        u.stats.modifiers.push(m);
                     }
                 }
-                let stat = value::string(e, "stat", "");
-                // AUDIT-05 (on purpose): the gear source names its item (`gear_effect:<source>`)
-                let source = if gear { gear_effect_source(&id) } else { format!("passive:{id}") };
-                let mut m = StatModifier::permanent(&stat, value::int(e, "value", 0), &source, &tag);
-                if cat.derived_stats.contains_key(&stat) {
-                    m.percent = value::float(e, "percent", 0.0);
-                }
-                u.stats.modifiers.push(m);
             }
             "proficiency" if !gear => u.stats.proficiency.add_bonus(&value::string(e, "gear", ""), value::int(e, "levels", 0)),
             "resist" => {
@@ -142,10 +161,14 @@ fn old_apply_effects(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &st
             "skill" => u.learn_skill(cat, &value::string(e, "skill", "")),
             "skill_potency" => {
                 let v = value::float(e, "value", 0.0);
+                let min_distance = value::int(e, "min_distance", 0).clamp(0, 12);
                 let group = value::string(e, "group", "");
                 let set = if group.is_empty() { SkillSet::Family(value::string(e, "family", "")) } else { SkillSet::Group(group.clone()) };
-                old_record(u, &id, gear, Target::SkillPotency(set), v);
-                if !group.is_empty() {
+                old_record(u, &id, gear, Target::SkillPotency { set: set.clone(), min_distance }, v);
+                if min_distance > 0 {
+                    let held = if gear { &mut u.gear_distance_potency } else { &mut u.distance_potency };
+                    held.push(DistancePotency { set, min_distance, value: v });
+                } else if !group.is_empty() {
                     let g = if gear { &mut u.gear_potency_group } else { &mut u.potency_group };
                     *g.entry(group).or_insert(0.0) += v;
                 } else {
@@ -235,6 +258,7 @@ fn old_apply_effects(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &st
 fn old_apply_band(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &str) -> BandApplied {
     let resist = u.status_resist.clone();
     let (fam, group) = (u.potency_bonus.clone(), u.potency_group.clone());
+    let (armor, move_rate, dist_n) = (u.passive_armor, u.passive_move_rate, u.distance_potency.len());
     let (potency, stagger) = (u.passive_status_potency, u.stagger_taken.len());
     let mut crit = 0.0;
     let kinds = ["stat", "resist", "stagger_taken", "skill_potency", "status_potency"];
@@ -265,6 +289,9 @@ fn old_apply_band(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &str) 
         resist_new: u.status_resist.keys().filter(|k| !resist.contains_key(*k)).cloned().collect(),
         potency_family: diff_f(&u.potency_bonus, &fam),
         potency_group: diff_f(&u.potency_group, &group),
+        distance_potency: u.distance_potency[dist_n..].to_vec(),
+        armor: u.passive_armor - armor,
+        move_rate: u.passive_move_rate - move_rate,
         status_potency: u.passive_status_potency - potency,
         stagger: u.stagger_taken[stagger..].to_vec(),
         crit,

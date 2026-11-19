@@ -67,7 +67,15 @@ pub struct Widget<A> {
     pub drop: Option<String>,
 }
 
+/// A paragraph's line pitch, as a multiple of its text size (`Ui::para`).
+pub const PARA_LINE: f32 = 1.35;
+
 impl<A> Widget<A> {
+    /// The same widget with its action through `f` (`Ui::nest`).
+    pub fn map<B>(self, f: impl Fn(A) -> B) -> Widget<B> {
+        Widget { id: self.id, kind: self.kind, text: self.text, rect: self.rect, enabled: self.enabled, active: self.active, action: self.action.map(f), tip: self.tip, drag: self.drag, drop: self.drop }
+    }
+
     pub fn info(&self) -> Value {
         let mut info = json!({"id": self.id, "kind": self.kind, "text": self.text, "rect": [self.rect.x, self.rect.y, self.rect.w, self.rect.h],
             "enabled": self.enabled, "active": self.active, "clickable": self.action.is_some() || self.kind == "select", "tip": self.tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>()});
@@ -215,6 +223,8 @@ pub struct Ui<'a, A> {
     device: Device,
     /// One corner size for what this frame still draws (`Ui::corner_size`).
     corner: Option<f32>,
+    /// ENGINE-18: the kit's own offsets, for `scroll_to` (a list keeping its focused row in view); None in a test's Ui.
+    scroll_out: Option<&'a mut std::collections::HashMap<String, i32>>,
 }
 
 /// What a frame draws of the text field being edited: its id, text, caret and selection anchor (not its history).
@@ -236,7 +246,41 @@ impl<'a, A: Clone> Ui<'a, A> {
         g.canvas.clip = None;
         let t = theme::th();
         g.fonts.sync(&t);
-        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None, clips: Vec::new(), scroll, scrolls: 0, edit, t, focus, device, corner: None }
+        let scroll_out = live.then_some(&mut g.kit.scroll);
+        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None, clips: Vec::new(), scroll, scrolls: 0, edit, t, focus, device, corner: None, scroll_out }
+    }
+
+    /// CONTROLS-UI1: draws a part whose widgets carry another action type (a `screen_layout` view's `Act` inside a screen
+    /// of its own actions): `f` gets a Ui over the same canvas, clip, scroll offsets, theme and input state; its widgets
+    /// join this one's, each action through `map`.
+    pub fn nest<B: Clone, R>(&mut self, map: impl Fn(B) -> A, f: impl FnOnce(&mut Ui<'_, B>) -> R) -> R {
+        let (out, widgets) = {
+            let mut sub: Ui<'_, B> = Ui {
+                p: Painter { c: &mut *self.p.c, v: self.p.v, fonts: &mut *self.p.fonts },
+                widgets: Vec::new(),
+                mouse: self.mouse,
+                live: self.live,
+                open: self.open.clone(),
+                drag: self.drag.clone(),
+                clip: self.clip,
+                clips: Vec::new(),
+                scroll: self.scroll.clone(),
+                scrolls: 0,
+                edit: self.edit.clone(),
+                t: self.t.clone(),
+                focus: self.focus.clone(),
+                device: self.device,
+                corner: self.corner,
+                scroll_out: self.scroll_out.as_deref_mut(),
+            };
+            let out = f(&mut sub);
+            (out, std::mem::take(&mut sub.widgets))
+        };
+        // the part's clips are its own: this one's comes back
+        let clip = self.clip;
+        self.p.clip(clip);
+        self.widgets.extend(widgets.into_iter().map(|w| w.map(&map)));
+        out
     }
 
     /// The layout's tokens for this screen's grid (LAYOUT720 6.2, 14): text sizes, gaps, small control heights and `u`, the
@@ -466,6 +510,25 @@ impl<'a, A: Clone> Ui<'a, A> {
         self.push_clip(view);
         self.scrolls += 1;
         at
+    }
+
+    /// ENGINE-18: sets the offset of scroll area `id`, this frame on and kept (a list keeping its focused row in view).
+    /// Call it before that area's `scroll_begin`. Only the live screen keeps it.
+    pub fn scroll_to(&mut self, id: &str, offset: i32) {
+        self.scroll.insert(id.to_string(), offset);
+        if let Some(out) = self.scroll_out.as_deref_mut() {
+            out.insert(id.to_string(), offset);
+        }
+    }
+
+    /// A scroll area's offset as this frame has it (0 when none was set).
+    pub fn scroll_of(&self, id: &str) -> i32 {
+        self.scroll.get(id).copied().unwrap_or(0)
+    }
+
+    /// The widget with a visible keyboard focus (the keys or a pad moved it), if any.
+    pub fn focus_id(&self) -> Option<&str> {
+        self.focus.as_deref()
     }
 
     /// Closes the scroll area `scroll_begin` opened (the clip before it comes back).
@@ -723,8 +786,13 @@ impl<'a, A: Clone> Ui<'a, A> {
     /// A modal frame with a gold title (the display face; frame role `panel`); returns the content top y
     /// (`Metrics::frame_title_h` below the top).
     pub fn frame(&mut self, r: Rect, title: &str, centered: bool) -> i32 {
+        self.frame_in("panel", r, title, centered)
+    }
+
+    /// `frame` in frame role `role`: a screen's main panel takes `ornate`, a small popup `panel` (the two tiers).
+    pub fn frame_in(&mut self, role: &str, r: Rect, title: &str, centered: bool) -> i32 {
         let (t, m) = (self.t.clone(), self.m());
-        self.draw_role(&t, "panel", r, t.panel, t.panel_edge, m.frame_radius);
+        self.draw_role(&t, role, r, t.panel, t.panel_edge, m.frame_radius);
         if !title.is_empty() {
             if centered {
                 self.p.text_center_face(Typeface::Display, r.x as f32 + r.w as f32 / 2.0, r.y as f32 + m.uf(6.0), title, m.head, t.gold);
@@ -738,7 +806,7 @@ impl<'a, A: Clone> Ui<'a, A> {
     /// Wrapped text; returns the y below it.
     pub fn para(&mut self, x: i32, y: i32, w: i32, text: &str, size: f32, col: Rgba) -> i32 {
         let mut yy = y as f32;
-        let step = size * 1.35;
+        let step = size * PARA_LINE;
         for line in self.p.wrap(text, size, w as f32) {
             self.p.text(x as f32, yy, &line, size, col);
             yy += step;
@@ -929,10 +997,21 @@ fn faded(img: &Image, a: f32) -> Image {
 
 /// The hover card of the topmost hovered widget that has one.
 pub fn draw_tip<A>(p: &mut Painter, widgets: &[Widget<A>], mouse: (i32, i32)) {
-    let Some(wd) = widgets.iter().rev().find(|wd| wd.rect.contains(mouse.0, mouse.1) && (!wd.tip.is_empty() || wd.kind == "backdrop")) else { return };
-    if wd.tip.is_empty() {
-        return;
-    }
+    draw_tip_by(p, widgets, mouse, |_| mouse);
+}
+
+/// The widget whose hover card shows with the mouse at `mouse`: the topmost hovered one with a card (None under a
+/// backdrop without one).
+pub fn tip_widget<A>(widgets: &[Widget<A>], mouse: (i32, i32)) -> Option<&Widget<A>> {
+    let wd = widgets.iter().rev().find(|wd| wd.rect.contains(mouse.0, mouse.1) && (!wd.tip.is_empty() || wd.kind == "backdrop"))?;
+    (!wd.tip.is_empty()).then_some(wd)
+}
+
+/// `draw_tip` with the card placed as for a mouse at `at(widget)` (the hovered widget): a screen moves a row's card
+/// off what the row shows (beside the row instead of over the numbers next to it).
+pub fn draw_tip_by<A>(p: &mut Painter, widgets: &[Widget<A>], mouse: (i32, i32), at: impl Fn(&Widget<A>) -> (i32, i32)) {
+    let Some(wd) = tip_widget(widgets, mouse) else { return };
+    let mouse = at(wd);
     let t = theme::th();
     let m = Metrics::of(&t, p.v);
     let max_w = m.uf(160.0);

@@ -120,7 +120,7 @@ pub const WINDOW_SIZES: [&str; 8] = ["960x540", "1024x576", "1152x648", "1280x72
 pub const FPS_CAPS: [&str; 5] = ["Unlimited", "30", "60", "120", "144"];
 /// Text size levels (Godot TEXT_LEVELS): label and font factor.
 pub const TEXT_SIZES: [(&str, f64); 4] = [("Small", 0.85), ("Normal", 1.0), ("Large", 1.15), ("Extra large", 1.3)];
-/// Typewriter speeds (STORYUI1-E, setting `text_speed`; `vignette::TextSpeed`): 30, 60, 120 characters a second, or
+/// Typewriter speeds (STORYUI1-E, setting `text_speed`; the kit's `vignette::TextSpeed`): 30, 60, 120 characters a second, or
 /// all at once.
 pub const TEXT_SPEEDS: [&str; 4] = ["slow", "normal", "fast", "instant"];
 
@@ -141,6 +141,45 @@ impl WindowShow {
             (false, true) => Self::Borderless,
             (false, false) => Self::Windowed,
         }
+    }
+}
+
+/// The web's Fullscreen checkbox (DISPLAY1 rule 8): what the shell does about the browser's fullscreen, from the
+/// setting (`want`), the value it last acted on (`asked`, None before the first) and the canvas's real state (`real`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WebFullscreen {
+    /// Ask the browser to enter (true) or leave (false) fullscreen: the setting changed and the page is not there yet.
+    Ask(bool),
+    /// The browser changed it by itself (Esc, its own controls, a refused ask): the setting follows the page.
+    Follow(bool),
+    /// Nothing to do.
+    Keep,
+}
+
+impl WebFullscreen {
+    /// A changed setting asks (only when the page differs, so no needless request); an unchanged one follows the page.
+    /// The shell asks when the settings change (a click on Apply, the user gesture browsers require) and follows only
+    /// when the canvas resized, so an ask still on its way is not undone.
+    pub fn step(want: bool, asked: Option<bool>, real: bool) -> Self {
+        match (asked == Some(want), real == want) {
+            (false, false) => Self::Ask(want),
+            (true, false) => Self::Follow(real),
+            (_, true) => Self::Keep,
+        }
+    }
+}
+
+/// This build runs in a browser (the web build, WEBREL1).
+pub const ON_WEB: bool = cfg!(target_arch = "wasm32");
+
+/// The display settings keys a Settings screen offers (DISPLAY1), in row order. The desktop: window show, size, sync,
+/// frame-rate cap and text size. The web (rule 8): Fullscreen (session only, the browser's) and text size; the page
+/// owns the canvas size and the browser the frame rate, so the other rows would do nothing there.
+pub fn display_keys(web: bool) -> &'static [&'static str] {
+    if web {
+        &["fullscreen", "text_scale"]
+    } else {
+        &["fullscreen", "borderless", "window_size", "vsync", "fps_cap", "text_scale"]
     }
 }
 
@@ -215,13 +254,17 @@ pub fn window_centred(monitor: ScreenRect, usable: ScreenRect, outer: (u32, u32)
     window_kept_in(usable, (middle(monitor.x, monitor.w, outer.0), middle(monitor.y, monitor.h, outer.1)), outer)
 }
 
+/// The shared reduce-motion settings key (`Settings::reduce_motion`).
+pub const REDUCE_MOTION: &str = "reduce_motion";
+
 impl Settings {
-    /// The engine's keys and their defaults. STORYUI1-E: `text_speed` (the vignette player's typewriter) and
-    /// `reduce_motion` (no drifting or shaking effects; shared with FX1); ASSETORG4: `portrait_overlays` (the player's
-    /// switch of the portrait overlay layer a game mounts, `portrait_overlays::SETTING`; on).
+    /// The engine's keys and their defaults. STORYUI1-E: `text_speed` (a typewriter's speed, the kit's vignette player)
+    /// and `reduce_motion` (`REDUCE_MOTION`: no drifting or shaking effects; shared with FX1); ASSETORG4:
+    /// `portrait_overlays` (the player's switch of a portrait overlay layer, the kit's `portrait_overlays::SETTING`; on).
     pub fn engine_defaults() -> Value {
-        json!({"mute": false, "master": 100, "music": 80, "effects": 80, "interface": 80, "fullscreen": false, "borderless": false, "window_size": "1280x720",
-            "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0, "record_playtests": cfg!(debug_assertions), "text_speed": "normal", "reduce_motion": false, "portrait_overlays": true})
+        json!({"mute": false, "master": 100, "music": 80, "effects": 80, "interface": 80, "ambience": 80, "fullscreen": false, "borderless": false, "window_size": "1280x720",
+            "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0, "record_playtests": cfg!(debug_assertions), "text_speed": "normal", "reduce_motion": false, "portrait_overlays": true,
+            crate::audio::MUTE_IN_BACKGROUND: true})
     }
 
     /// Every default: the engine's keys, then the game's own (`game_defaults`).
@@ -235,10 +278,15 @@ impl Settings {
         v
     }
 
-    /// The shared reduce-motion setting (STORYUI1-E's key `vignette::REDUCE_MOTION`; false when missing): no camera or
-    /// token shakes (FX1), no drifting ash; effects and hit-stop still show.
+    /// The file the settings are saved to (the game's user folder; its `logs/` holds the run's log, ROBUST1).
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    /// The shared reduce-motion setting (`REDUCE_MOTION`; false when missing): no camera or token shakes (FX1), no
+    /// drifting effects; effects and hit-stop still show.
     pub fn reduce_motion(&self) -> bool {
-        self.v[crate::vignette::REDUCE_MOTION].as_bool().unwrap_or(false)
+        self.v[REDUCE_MOTION].as_bool().unwrap_or(false)
     }
 
     /// The saved settings over the defaults (keys the file lacks keep their default). A file from before DISPLAY2 has
@@ -412,6 +460,11 @@ pub trait Screen<G> {
     fn click_id(&mut self, cx: &mut Cx<G>, id: &str) -> Result<(), String>;
     fn widget_rect(&self, id: &str) -> Option<(Rect, Vec<String>)>;
     fn key(&mut self, _cx: &mut Cx<G>, _k: Key) {}
+    /// CONTROLS-UI1: a raw key or pad button, before the control map, the focus keys and `key` (a rebind waiting for
+    /// its input). True: taken, it goes no further.
+    fn capture(&mut self, _cx: &mut Cx<G>, _input: crate::controls::Input) -> bool {
+        false
+    }
     /// Whether the arrow keys move the keyboard focus (PORT-FOCUS); a screen that walks or steers with them says no
     /// (Tab and Shift+Tab still move it).
     fn arrow_focus(&self) -> bool {
@@ -475,6 +528,12 @@ pub trait Screen<G> {
     fn music(&self, _cx: &Cx<G>) -> Option<String> {
         None
     }
+    /// The ambience loop this screen wants (AMBIENCE1; a path under the game's audio folder, `ambience/<key>.ogg`),
+    /// chosen as the music is: the topmost screen's wish plays, None lets the screen below choose, and `Some("")` is
+    /// silence (a battle over a region, say).
+    fn ambience(&self, _cx: &Cx<G>) -> Option<String> {
+        None
+    }
     /// Drag and drop (UIKIT2): whether payload `from` (`Ui::draggable`) may be dropped on the target `to`
     /// (`Ui::drop_target`); valid targets are outlined while dragging.
     fn can_drop(&self, _cx: &Cx<G>, _from: &str, _to: &str) -> bool {
@@ -505,12 +564,10 @@ macro_rules! widget_plumbing {
     () => {
         $crate::widget_plumbing!(Cx);
     };
-    ($cx:ty) => {
+    // A screen that draws its own hover card (`fn draw_tip`, e.g. through `ui::draw_tip_by`): the rest of the plumbing.
+    (own_tip $cx:ty) => {
         fn widgets(&self) -> Vec<serde_json::Value> {
             self.w.iter().map(|w| w.info()).collect()
-        }
-        fn draw_tip(&self, p: &mut $crate::painter::Painter, mouse: (i32, i32)) {
-            $crate::ui::draw_tip(p, &self.w, mouse)
         }
         fn click(&mut self, cx: &mut $cx, pos: (i32, i32)) -> bool {
             match $crate::ui::hit(&self.w, pos) {
@@ -529,6 +586,12 @@ macro_rules! widget_plumbing {
         fn widget_rect(&self, id: &str) -> Option<($crate::canvas::Rect, Vec<String>)> {
             self.w.iter().find(|w| w.id == id).map(|w| (w.rect, w.tip.iter().map(|t| t.0.clone()).collect()))
         }
+    };
+    ($cx:ty) => {
+        fn draw_tip(&self, p: &mut $crate::painter::Painter, mouse: (i32, i32)) {
+            $crate::ui::draw_tip(p, &self.w, mouse)
+        }
+        $crate::widget_plumbing!(own_tip $cx);
     };
 }
 
@@ -669,8 +732,8 @@ pub fn show_errors<G: 'static>(cx: &mut Cx<G>, errors: Vec<String>) {
     }
 }
 
-/// A centred screen title.
+/// A centred screen title, in the theme's display face (PR7-36: every screen title in one face).
 pub fn title(ui: &mut Ui<impl Clone>, text: &str, y: i32) {
     let gold = ui.t.gold;
-    ui.p.text_center(W as f32 / 2.0, y as f32, text, ui::HEAD + 4.0, gold);
+    ui.p.text_center_face(crate::painter::Typeface::Display, W as f32 / 2.0, y as f32, text, ui::HEAD + 4.0, gold);
 }

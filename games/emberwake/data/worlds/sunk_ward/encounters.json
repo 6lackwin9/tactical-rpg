@@ -42,8 +42,8 @@
 				"kaelen"
 			],
 			"enemies": [
-				"footman_patrol",
-				"footman_patrol"
+				"footman_curfew",
+				"footman_curfew"
 			],
 			"phases": [
 				{
@@ -74,7 +74,7 @@
 			"objective_rounds": 3,
 			"objective_unit": "",
 			"objective_count": 1,
-			"objective_text": "Strike while they wind up: a quick Pommel Strike breaks a slow blow.",
+			"objective_text": "Click a foe and pick Pommel Strike: a quick hit breaks a slow blow.",
 			"unkillable": [],
 			"timeout_outcome": "fled",
 			"stay_behind": {},
@@ -100,12 +100,7 @@
 			"location": "meat_market_rooftops",
 			"zone": "rooftops",
 			"arena": "CLOSED",
-			"exits": [
-				[
-					11,
-					4
-				]
-			],
+			"exits": [],
 			"rows": [
 				"oooooooooooo",
 				"oo#ooooo##oo",
@@ -159,7 +154,7 @@
 			"objective_rounds": 3,
 			"objective_unit": "",
 			"objective_count": 1,
-			"objective_text": "Follow the smoke: hide, guard each other, slip away.",
+			"objective_text": "Use Vesper's smoke: hide, guard each other, drive them off.",
 			"unkillable": [],
 			"timeout_outcome": "fled",
 			"stay_behind": {},
@@ -1250,68 +1245,6 @@
 			"guests": [],
 			"party_min": 0,
 			"protect": [],
-			"flag_skills": [
-				{
-					"member_from_flag": "sunk_ward.sabina_dose_to",
-					"skill": "marrow_lash",
-					"requires_flags": [
-						{
-							"key": "sunk_ward.sabina_dose_to",
-							"value": "kaelen"
-						}
-					]
-				},
-				{
-					"member_from_flag": "sunk_ward.sabina_dose_to",
-					"skill": "marrow_lash",
-					"requires_flags": [
-						{
-							"key": "sunk_ward.sabina_dose_to",
-							"value": "vesper"
-						}
-					]
-				},
-				{
-					"member_from_flag": "sunk_ward.sabina_dose_to",
-					"skill": "marrow_lash",
-					"requires_flags": [
-						{
-							"key": "sunk_ward.sabina_dose_to",
-							"value": "maren"
-						}
-					]
-				},
-				{
-					"member_from_flag": "sunk_ward.sabina_dose_to",
-					"skill": "marrow_lash",
-					"requires_flags": [
-						{
-							"key": "sunk_ward.sabina_dose_to",
-							"value": "hollis"
-						}
-					]
-				},
-				{
-					"member_from_flag": "sunk_ward.sabina_dose_to",
-					"skill": "marrow_lash",
-					"requires_flags": [
-						{
-							"key": "sunk_ward.sabina_dose_to",
-							"value": "dunstan"
-						}
-					]
-				},
-				{
-					"member_from_flag": "sunk_ward.sabina_dose_to",
-					"skill": "marrow_lash",
-					"requires_flags": [
-						{
-							"key": "sunk_ward.sabina_dose_to",
-							"value": "elyse"
-						}
-					]
-				}
-			],
 			"tags": [
 				"main"
 			]

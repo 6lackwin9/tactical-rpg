@@ -1,0 +1,201 @@
+{
+	"kind": "recruits",
+	"version": 1,
+	"entries": [
+		{
+			"id": "cohort_levy",
+			"name": "Turncoat Watch Levy",
+			"class_id": "warrior",
+			"base_units": [
+				"warrior"
+			],
+			"names": [
+				"Tobin",
+				"Rennick",
+				"Aldous",
+				"Garrow",
+				"Hesk",
+				"Wend",
+				"Cade"
+			],
+			"age_band": [
+				18,
+				24
+			],
+			"art": "portraits/common/warrior_cohort_levy.png",
+			"origins": [
+				"orig_watch_shield"
+			],
+			"temperaments": [
+				"temper_steady",
+				"temper_wary"
+			],
+			"level": "",
+			"fuse": {},
+			"tags": []
+		},
+		{
+			"id": "cohort_bolt",
+			"name": "Outwall Bolt-Man",
+			"class_id": "ranger",
+			"base_units": [
+				"ranger"
+			],
+			"names": [
+				"Fenn",
+				"Orrin",
+				"Sela",
+				"Brannoch",
+				"Tamsin",
+				"Jory",
+				"Lisk"
+			],
+			"age_band": [
+				18,
+				24
+			],
+			"art": "portraits/common/ranger_cohort_bolt.png",
+			"origins": [
+				"orig_crag_eye"
+			],
+			"temperaments": [
+				"temper_wary",
+				"temper_steady",
+				"temper_quiet"
+			],
+			"level": "",
+			"fuse": {},
+			"tags": []
+		},
+		{
+			"id": "cohort_flue",
+			"name": "Ash-Crawl Flue-Runner",
+			"class_id": "rogue",
+			"base_units": [
+				"rogue"
+			],
+			"names": [
+				"Pip",
+				"Nettle",
+				"Sootie",
+				"Kestrel",
+				"Ravi",
+				"Dree",
+				"Mott"
+			],
+			"age_band": [
+				18,
+				24
+			],
+			"art": "portraits/common/rogue_cohort_flue.png",
+			"origins": [
+				"orig_soot_step"
+			],
+			"temperaments": [
+				"temper_reckless",
+				"temper_quiet",
+				"temper_wary"
+			],
+			"level": "",
+			"fuse": {},
+			"tags": []
+		},
+		{
+			"id": "cohort_novice",
+			"name": "Apostate Charnel-Novice",
+			"class_id": "priest",
+			"base_units": [
+				"priest"
+			],
+			"names": [
+				"Anselm",
+				"Ysolde",
+				"Merrow",
+				"Cato",
+				"Wren",
+				"Linnet",
+				"Osric"
+			],
+			"age_band": [
+				18,
+				24
+			],
+			"art": "portraits/common/priest_cohort_novice.png",
+			"origins": [
+				"orig_mortuary_calm"
+			],
+			"temperaments": [
+				"temper_steady",
+				"temper_wary"
+			],
+			"level": "",
+			"fuse": {},
+			"tags": []
+		},
+		{
+			"id": "cohort_breaker",
+			"name": "Kiln Chain-Breaker",
+			"class_id": "brawler",
+			"base_units": [
+				"brawler"
+			],
+			"names": [
+				"Brack",
+				"Odell",
+				"Grisk",
+				"Harl",
+				"Dagna",
+				"Torv",
+				"Mace"
+			],
+			"age_band": [
+				18,
+				24
+			],
+			"art": "portraits/common/brawler_cohort_breaker.png",
+			"origins": [
+				"orig_slag_grip"
+			],
+			"temperaments": [
+				"temper_reckless",
+				"temper_steady"
+			],
+			"level": "",
+			"fuse": {},
+			"tags": []
+		},
+		{
+			"id": "cohort_vat",
+			"name": "Vat-Still Saboteur",
+			"class_id": "mage",
+			"base_units": [
+				"mage"
+			],
+			"names": [
+				"Quillon",
+				"Settra",
+				"Ilya",
+				"Corwin",
+				"Pell",
+				"Vesna",
+				"Thane"
+			],
+			"age_band": [
+				18,
+				24
+			],
+			"art": "portraits/common/mage_cohort_vat.png",
+			"origins": [
+				"orig_alum_nose"
+			],
+			"temperaments": [
+				"temper_quiet",
+				"temper_reckless",
+				"temper_steady"
+			],
+			"level": "",
+			"fuse": {},
+			"tags": []
+		}
+	]
+}

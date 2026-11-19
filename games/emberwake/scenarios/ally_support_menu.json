@@ -1,0 +1,28 @@
+{
+  "id": "ally_support_menu",
+  "title": "PR7-41 (PT-23): the playtest save cages_start enters The Crossroads Cages; with Hollis selected the hero panel's Ally button lists the members he can use his Sulfur Poultice on, and a row opens his skill menu on that member",
+  "launch": {"save": "cages_start"},
+  "settings": {"reduce_motion": true},
+  "timeout_s": 600,
+  "steps": [
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
+    {"step": "click", "id": "menu.continue"},
+    {"step": "wait", "until": {"path": "screen", "eq": "region_map"}, "timeout_ms": 20000},
+    {"step": "repeat", "times": 4, "until": {"path": "screen", "eq": "battle"}, "steps": [
+      {"step": "click", "id": "here.cages"},
+      {"step": "pause", "ms": 1500}
+    ]},
+    {"step": "wait", "until": {"path": "screen", "eq": "battle"}, "timeout_ms": 40000},
+    {"step": "wait", "until": {"path": "state.beat", "absent": true}, "timeout_ms": 20000},
+    {"step": "click", "id": "dialogue.continue"},
+    {"step": "pause", "ms": 800},
+    {"step": "key", "key": "4"},
+    {"step": "wait", "until": {"widget": "hero.ally"}},
+    {"step": "click", "id": "hero.ally"},
+    {"step": "wait", "until": {"path": "state.popup.title", "has": "use on an ally"}},
+    {"step": "shot", "name": "ally_list"},
+    {"step": "click", "id": "popup.0"},
+    {"step": "wait", "until": {"path": "state.popup.title", "has": "Hollis ->"}},
+    {"step": "shot", "name": "ally_skill_menu"}
+  ]
+}

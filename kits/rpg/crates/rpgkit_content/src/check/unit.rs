@@ -343,6 +343,7 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
     errors.extend(path_errors(v, json::get(e, "skill_path")));
     errors.extend(class_basics_errors(v, e));
     errors.extend(class_passives_errors(v, e));
+    errors.extend(class_keystone_errors(v, e));
     let class = ClassDef::from_obj(e);
     errors.extend(loadout_errors(v, e));
     errors.extend(strict_class_loadout_errors(v, e, &class));
@@ -432,6 +433,32 @@ fn class_passives_errors(v: &View, e: &Dict) -> Vec<String> {
         if !p.slot.is_empty() {
             errors.push(format!("Class passives: '{id}' has slot '{}' (must be always-on with slot empty).", p.slot));
         }
+    }
+    errors
+}
+
+/// CLASSKEY1 (`PR6-14`): a class's optional `keystone` is `{id, level}`: `id` a passive with `slot: "keystone"`, `level`
+/// a whole number of 1 or more; absent or `{}` = none.
+fn class_keystone_errors(v: &View, e: &Dict) -> Vec<String> {
+    let Some(raw) = e.get(rpgkit_data::CLASS_KEYSTONE_KEY) else { return Vec::new() };
+    let Some(k) = raw.as_object() else { return vec!["Class keystone must be an object {id, level}.".into()] };
+    if k.is_empty() {
+        return Vec::new();
+    }
+    let mut errors = Vec::new();
+    if let Some(extra) = k.keys().find(|key| !["id", "level"].contains(&key.as_str())) {
+        errors.push(format!("Class keystone: unknown key '{extra}' (keys: id, level)."));
+    }
+    let id = k.get("id").and_then(Value::as_str).unwrap_or_default().to_string();
+    match v.typed.passives.get(&id) {
+        _ if id.is_empty() => errors.push("Class keystone: id must name a passive.".into()),
+        None => errors.push(format!("Class keystone: unknown passive '{id}'.")),
+        Some(p) if p.slot != "keystone" => errors.push(format!("Class keystone: '{id}' has slot '{}' (must be keystone).", p.slot)),
+        Some(_) => {}
+    }
+    let level = json::get(k, "level");
+    if !level.as_i64().is_some_and(|l| l >= 1) {
+        errors.push(format!("Class keystone: level must be a whole number of 1 or more (got {level})."));
     }
     errors
 }
@@ -943,6 +970,26 @@ pub fn unit_warnings(v: &View, e: &Dict) -> Vec<String> {
         main.clear();
     }
     role_warnings(v, &role, path_has_support(v, &families), &main, json::b(e, "reckless", false))
+}
+
+/// BATTLE-UI2 (decision "Enemy short names"): an enemy with no short name whose name is longer than a foe plate's name
+/// room (`rpgkit_data::PLATE_NAME_MAX_CHARS`) is a warning (the plate cuts it with "..."), as is a short name longer
+/// than that room.
+pub fn plate_name_warnings(e: &Dict) -> Vec<String> {
+    let (name, short) = (json::s(e, "name"), json::s(e, "short_name"));
+    let max = rpgkit_data::PLATE_NAME_MAX_CHARS;
+    if json::s_or(e, "side", "enemy") != "enemy" {
+        return Vec::new();
+    }
+    let short = short.trim();
+    if !short.is_empty() {
+        // PR7-40 part 2: a short name past the plate is cut as well
+        return if short.chars().count() > max { vec![format!("Short name '{short}' is longer than a foe plate holds ({max} characters): the plate cuts it.")] } else { Vec::new() };
+    }
+    if name.chars().count() <= max {
+        return Vec::new();
+    }
+    vec![format!("Name '{name}' is longer than a foe plate holds ({} characters) and the unit has no short name: the plate cuts it.", rpgkit_data::PLATE_NAME_MAX_CHARS)]
 }
 
 fn role_warnings(v: &View, role: &str, has_support_skill: bool, main_hand: &str, reckless: bool) -> Vec<String> {

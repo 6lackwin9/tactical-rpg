@@ -3,7 +3,7 @@
 
 use aegis_layout::{frac, resolve, Anchor, Insets, Stack};
 use aegis_ui::theme::th;
-use aegis_ui::audio::Bus;
+use aegis_ui::audio::{Bus, MUTE_IN_BACKGROUND};
 use aegis_ui::canvas::{rgba, Rect};
 use crate::music;
 use crate::portraits::{Faces, Who};
@@ -14,11 +14,12 @@ use aegis_ui::panes::{self, MenuItem, MenuStyle};
 use emberwake_battle::portrait::Look;
 use aegis_ui::ui::{tip, Gfx, Glyph, Ui, Widget, BODY, H, W};
 use crate::screens::WINDOW_SIZES;
-use aegis_ui::screen::{Settings, WindowShow, FPS_CAPS, TEXT_SIZES, TEXT_SPEEDS};
-use aegis_ui::vignette::{TextSpeed, REDUCE_MOTION, TEXT_SPEED};
-use aegis_ui::portrait_overlays;
+use aegis_ui::screen::{display_keys, Settings, WindowShow, FPS_CAPS, ON_WEB, TEXT_SIZES, TEXT_SPEEDS};
+use aegis_core::clock::{Duration, Instant};
+use rpgkit_ui::vignette::{TextSpeed, REDUCE_MOTION, TEXT_SPEED};
+use rpgkit_ui::portrait_overlays;
 use aegis_ui::widget_plumbing;
-use aegis_core::json::{self, s, s_or};
+use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_world::{new_game, progression, save};
 use serde_json::{json, Value};
 
@@ -96,6 +97,20 @@ fn peek_when(gs: &emberwake_world::state::GameState) -> String {
     format!("Day {}", gs.time + 1)
 }
 
+/// PR7-36 (ART-08): the dimmed title backdrop (about 60 %) with an `ornate` main panel over `r`, for the screens the title
+/// opens in place (slots, New game).
+fn menu_panel<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, r: Rect) {
+    let area = ui.screen();
+    let picture = if cx.art.has(TITLE_ART) { TITLE_ART } else { MENU_ART };
+    let img = cx.art.size_of(picture).and_then(|(w, h)| cx.art.image(picture, w, h));
+    panes::backdrop(&mut ui.p, img, area, MENU_DIM, MENU_VIGNETTE);
+    ui.p.fill(r, th().panel);
+    ui.frame_body("ornate", r);
+}
+
+/// How far the title backdrop dims under a panel (about 60 %).
+const MENU_DIM: u8 = 153;
+
 /// What Continue's peek shows of the newest save.
 struct Peek {
     location: String,
@@ -142,7 +157,15 @@ impl MainMenu {
                     load_slot(cx, slot);
                 }
             }
-            MenuAct::NewGame => cx.nav.push(Nav::Push(Box::new(NewGameScreen::new(cx)))),
+            // PR7-37 (PT-01): a player's New game starts the game's one start world at once (the world picker, with the
+            // test worlds, in a dev build or when the game offers more than one)
+            MenuAct::NewGame => match new_game_worlds(&cx.data).as_slice() {
+                [only] if !crate::DEV_BUILD => {
+                    let only = only.clone();
+                    start_new_game(cx, &only);
+                }
+                _ => cx.nav.push(Nav::Push(Box::new(NewGameScreen::new(cx)))),
+            },
             MenuAct::Load => cx.nav.push(Nav::Push(Box::new(Slots::new(false)))),
             MenuAct::Settings => cx.nav.push(Nav::Push(Box::new(SettingsScreen::new(cx)))),
             #[cfg(feature = "dev_tools")]
@@ -311,14 +334,17 @@ impl Screen<GameCx> for MainMenu {
             MenuItem::new("settings", "Settings", None, MenuAct::Settings),
         ]);
         // WEBREL1-G1: the dev tools (the Scene Runner) only in a build with them (`crate::DEV_TOOLS`)
+        // PR7-37 (PT-14): and only in a dev build (`crate::DEV_BUILD`); a player never sees it
         #[cfg(feature = "dev_tools")]
-        items.push(MenuItem::new("tools", "Tools (Forge, Dojo, Test Arena)", None, MenuAct::Tools));
+        if crate::DEV_BUILD {
+            items.push(MenuItem::new("tools", "Tools (Forge, Dojo, Test Arena)", None, MenuAct::Tools));
+        }
         // WEBREL1 6.2 (`FB-157`): no Quit on the web, where a page cannot close its own tab
         #[cfg(not(target_arch = "wasm32"))]
         items.push(MenuItem::new("quit", "Quit", None, MenuAct::Quit));
         // The column widens leftward at the larger text sizes so its longest label is never cut (only the labels take
         // the mouse: `MenuStyle::Text`).
-        let widest = items.iter().map(|i| ui.p.text_w(&i.label, m.title)).fold(0.0, f32::max);
+        let widest = items.iter().map(|i| ui.p.text_w_face(Typeface::Display, &i.label, m.title)).fold(0.0, f32::max);
         let w = resolve(&[frac(MENU_W)], area.w)[0].max(panes::snap_up_on(widest.ceil() as i32 + 2 * m.padding, m.grid));
         let (column, peek_room) = cut_column(area, w, m.u(PEEK_GAP));
         let hovered = panes::menu_column_styled(&mut ui, "menu", column.x, column.y, column.w, m.u(MENU_H), m.u(MENU_STEP), &items, MenuStyle::Text);
@@ -451,21 +477,37 @@ impl NewGameScreen {
                     return;
                 }
                 let world = self.selected.clone();
-                let head = save::peek(&cx.data, &cx.save_dir, save::AUTOSAVE_SLOT);
-                if json::b(&head, "ok", false) {
-                    let at = json::i(&head, "saved_at", 0);
-                    let q = format!(
-                        "Starting a new game replaces your autosave ({}, {}, {}). Continue?",
-                        cx.world_name(&s(&head, "world_id")),
-                        cx.location_name(&s(&head, "world_id"), &s(&head, "location_id")),
-                        if at > 0 { datetime(at) } else { "unknown time".into() }
-                    );
-                    cx.ask_no(q, move |cx| start_world(cx, &world));
-                } else {
-                    start_world(cx, &world);
-                }
+                start_new_game(cx, &world);
             }
         }
+    }
+}
+
+/// PR7-37 (PT-01): the worlds New game offers: in a dev build every playable world (the test worlds too), else the
+/// game's start worlds (`new_game::player_worlds`).
+pub fn new_game_worlds(d: &emberwake_world::Data) -> Vec<String> {
+    if crate::DEV_BUILD {
+        new_game::playable_worlds(d)
+    } else {
+        new_game::player_worlds(d)
+    }
+}
+
+/// A new game in `world`: asks first when it would replace the autosave.
+fn start_new_game(cx: &mut Cx, world: &str) {
+    let world = world.to_string();
+    let head = save::peek(&cx.data, &cx.save_dir, save::AUTOSAVE_SLOT);
+    if json::b(&head, "ok", false) {
+        let at = json::i(&head, "saved_at", 0);
+        let q = format!(
+            "Starting a new game replaces your autosave ({}, {}, {}). Continue?",
+            cx.world_name(&s(&head, "world_id")),
+            cx.location_name(&s(&head, "world_id"), &s(&head, "location_id")),
+            if at > 0 { datetime(at) } else { "unknown time".into() }
+        );
+        cx.ask_no(q, move |cx| start_world(cx, &world));
+    } else {
+        start_world(cx, &world);
     }
 }
 
@@ -489,9 +531,11 @@ impl Screen<GameCx> for NewGameScreen {
     }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<NgAct> = Ui::new(g, mouse, live);
+        // PR7-36 (ART-08): a main panel over the dimmed title backdrop
+        menu_panel(&mut ui, cx, Rect::new(56, 8, 528, 312));
         title(&mut ui, "New game", 26);
         let mut y = 54;
-        for w in new_game::playable_worlds(&cx.data) {
+        for w in new_game_worlds(&cx.data) {
             let m = cx.data.manifest(&w);
             let lines = vec![(s_or(m, "name", &w), th().text), (s(m, "tagline"), th().text), (party_line(&Self::party_of(cx, &w)), th().text)];
             ui.card(&format!("world.{w}"), Rect::new(70, y, 500, 44), &lines, Some(NgAct::Pick(w.clone())), w == self.selected, true, Vec::new());
@@ -527,6 +571,9 @@ pub enum SlotAct {
 pub struct Slots {
     saving: bool,
     w: Vec<Widget<SlotAct>>,
+    /// PR7-36 (ART-08): each filled slot's lead and day, read once per save (keyed by slot and its `saved_at`).
+    leads: std::collections::BTreeMap<(i64, i64), Option<Peek>>,
+    faces: Faces,
 }
 
 /// What a slot row offers (PLAYUI1 section 1): the row's click (or why there is none, its hover card) and the icons in
@@ -568,7 +615,7 @@ pub fn slot_row(saving: bool, slot: i64, exists: bool, ok: bool, locked: bool, n
 
 impl Slots {
     pub fn new(saving: bool) -> Self {
-        Self { saving, w: Vec::new() }
+        Self { saving, w: Vec::new(), leads: std::collections::BTreeMap::new(), faces: Faces::default() }
     }
 
     fn describe(cx: &Cx, slot: i64) -> String {
@@ -648,6 +695,46 @@ impl Slots {
     }
 }
 
+/// A slot row's first line (its name and, for a readable save, the world, the place and the time) and its second (the
+/// whole party, or why it can't load, or "Empty"); PR7-41 (PT-35). The day of the save's lead follows from `slot_when`.
+pub(crate) fn slot_text(cx: &Cx, slot: i64, head: &Dict) -> (String, String) {
+    let (exists, ok) = (json::b(head, "exists", false), json::b(head, "ok", false));
+    let mut label = if slot == 0 { "Autosave".to_string() } else { format!("Slot {slot}") };
+    // PR7-41 (PT-35): the place and time on the slot's line, the whole party on its own line (no cut names)
+    let status = if ok {
+        let world = s(head, "world_id");
+        let party: Vec<String> = json::aget(head, "party")
+            .iter()
+            .map(|m| {
+                let m = json::dict(m);
+                // the member's character name in the saved world, else its base unit's
+                let unit = s_or(cx.data.entry("units", &s(m, "base_unit")), "name", &s(m, "base_unit"));
+                format!("{} Lv {}", s_or(cx.data.resolve(&world, "characters", &s(m, "id")), "name", &unit), json::i(m, "level", 0))
+            })
+            .collect();
+        let at = json::i(head, "saved_at", 0);
+        label = format!("{label} · {}, {}{}", cx.world_name(&world), cx.location_name(&world, &s(head, "location_id")), if at > 0 { format!(" · {}", datetime(at)) } else { String::new() });
+        party.join(", ")
+    } else if exists {
+        format!("Can't load ({})", s(head, "error"))
+    } else {
+        "Empty".into()
+    };
+    (label, status)
+}
+
+/// The day line of a readable save's lead (the Continue peek's), None when it does not load.
+pub(crate) fn slot_when(cx: &Cx, slot: i64) -> Option<String> {
+    Peek::read(cx, slot).map(|p| p.when)
+}
+
+impl Slots {
+    /// Why the running game can't be saved now (`no_save`), for the view-model.
+    pub(crate) fn no_save_now(cx: &Cx) -> &'static str {
+        Self::no_save(cx)
+    }
+}
+
 fn save_now(cx: &mut Cx, slot: i64) {
     if cx.game.as_ref().is_some_and(|g| g.sample) {
         return show_errors(cx, vec!["The UI Gallery's sample game is not saved.".into()]);
@@ -677,39 +764,44 @@ impl Screen<GameCx> for Slots {
     }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<SlotAct> = Ui::new(g, mouse, live);
+        self.faces.begin();
+        // PR7-36 (ART-08): a main panel over the dimmed title backdrop, as Settings sits over the menu
+        menu_panel(&mut ui, cx, Rect::new(56, 8, 528, 312));
         title(&mut ui, if self.saving { "Save game" } else { "Load game" }, 26);
         for slot in save::AUTOSAVE_SLOT..=save::LAST_SLOT {
-            let r = Rect::new(70, 54 + slot as i32 * 36, 500, 31);
+            let mut r = Rect::new(70, 54 + slot as i32 * 36, 500, 31);
             let head = save::peek(&cx.data, &cx.save_dir, slot);
             let exists = json::b(&head, "exists", false);
             let ok = json::b(&head, "ok", false);
-            let label = if slot == 0 { "Autosave".to_string() } else { format!("Slot {slot}") };
-            let status = if ok {
-                let world = s(&head, "world_id");
-                let party: Vec<String> = json::aget(&head, "party")
-                    .iter()
-                    .map(|m| {
-                        let m = json::dict(m);
-                        format!("{} Lv {}", s_or(cx.data.entry("units", &s(m, "base_unit")), "name", &s(m, "base_unit")), json::i(m, "level", 0))
-                    })
-                    .collect();
-                let at = json::i(&head, "saved_at", 0);
-                format!("{}, {} · {} · {}", cx.world_name(&world), cx.location_name(&world, &s(&head, "location_id")), party.join(", "), if at > 0 { datetime(at) } else { String::new() })
-            } else if exists {
-                format!("Can't load ({})", s(&head, "error"))
+            let lead = if ok {
+                let key = (slot, json::i(&head, "saved_at", 0));
+                self.leads.retain(|k, _| k.0 != slot || *k == key);
+                self.leads.entry(key).or_insert_with(|| Peek::read(cx, slot)).as_ref().map(|p| (p.when.clone(), p.party.first().cloned()))
             } else {
-                "Empty".into()
+                None
             };
+            let (mut label, status) = slot_text(cx, slot, &head);
             // The whole row is the click (PLAYUI1 section 1); lock and delete are icons in its top-right corner.
             let locked = save::is_locked(&cx.save_dir, slot);
             let row = slot_row(self.saving, slot, exists, ok, locked, Self::no_save(cx));
             let hover = row.action.is_some() && ui.hover(r);
             ui.p.panel(r, if hover { th().card_hot } else { th().game("menu_row", rgba(26, 36, 58, 250)) }, if hover { th().gold } else { th().edge }, 2.0);
+            let card = r;
+            // the lead's portrait at the row's left and the day on its first line
+            if let Some((when, lead)) = &lead {
+                if let Some((_, _, who, look)) = lead {
+                    let pr = Rect::new(r.x + 2, r.y + 2, r.h - 4, r.h - 4);
+                    self.faces.draw(&mut ui.p, cx, who, look, "roster", pr);
+                    r.x += r.h;
+                    r.w -= r.h;
+                }
+                label = format!("{label} · {when}");
+            }
             let text_w = (r.w - 8 - if row.delete { 40 } else { 0 }) as f32;
             ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &label, BODY, text_w, if ok { th().text } else { th().dim });
-            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 16.0, &status, BODY, text_w, if ok { th().info } else { th().dim });
+            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 16.0, &status, BODY, text_w, th().dim);
             let enabled = row.action.is_some();
-            ui.push(format!("slot.{slot}"), "card", format!("{label}: {status}"), r, enabled, false, row.action, tip(&label, &row.why));
+            ui.push(format!("slot.{slot}"), "card", format!("{label}: {status}"), card, enabled, false, row.action, tip(&label, &row.why));
             let del = Rect::new(r.x + r.w - 4 - 16, r.y + 4, 16, 16);
             let px = ui.icon_px(del);
             if row.lock {
@@ -731,10 +823,20 @@ impl Screen<GameCx> for Slots {
         ui.button("slots.back", Rect::new(70, 292, 70, 18), "Back", SlotAct::Back, true);
         self.w = ui.widgets;
     }
+    /// The agent link's reading: the screen's view-model (UISPLIT1-H Stage A, `save_view`).
+    fn state(&self, cx: &Cx) -> Value {
+        json!({"saving": self.saving, "view": crate::save_view::view(cx, self.saving).to_json()})
+    }
     widget_plumbing!();
 }
 
 // ---- Settings ------------------------------------------------------------------------------------------------
+//
+// SETTINGS-MOCK1 (PR7-21): the approved mock `tools/mock_ui/js/04_settings.js` (ART_UI_STUDIO screen 3, decision
+// "Display settings DISPLAY1"): a tab rail (Display, Sound, Gameplay, Battle, Controls, each with a subtitle), one
+// help line per row, every change written at once except Display Mode and Resolution, which wait for Apply and then
+// a 15 s keep-or-revert confirm; closing with a staged display change asks first. Opened in game (the hub) it is the
+// decluttered popup: smaller, no help lines or tab subtitles, and a Return to title button.
 
 #[derive(Debug, Clone)]
 pub enum SetAct {
@@ -742,42 +844,52 @@ pub enum SetAct {
     Toggle(&'static str),
     /// A slider value (volumes 0-100, speeds and scales 0.5-2.0).
     Set(&'static str, f64),
-    /// A choice from CHOICES by index.
+    /// A choice row's option by index (`SettingsScreen::options`).
     Pick(&'static str, usize),
+    /// A choice row's arrows: one option back (-1) or on (+1), wrapping round.
+    Step(&'static str, i32),
     /// RULESET1-U slice 6: a battle overlay group switched (the settings key `battle_overlays`).
     Overlay(&'static str),
+    /// Writes the staged Display Mode and Resolution and opens the keep-or-revert confirm.
     Apply,
+    /// Drops the staged display change.
+    Reset,
+    /// The confirm's Keep changes.
+    Keep,
+    /// The confirm's Revert (also its X, Esc, right click and the timer running out).
+    Revert,
     Defaults,
     Close,
+    /// The popup's Return to title.
+    Title,
+    /// PR7-41 (PT-32): the battle Menu's Retreat (asks first).
+    Retreat,
+    /// The close guard's three answers.
+    GuardStay,
+    GuardDiscard,
+    GuardApply,
+    /// CONTROLS-UI1 (PR7-44): an action of the Controls tab's view (`controls_view`).
+    View(aegis_ui::screen_layout::Act),
 }
 
-pub struct SettingsScreen {
-    tab: usize,
-    draft: Value,
-    w: Vec<Widget<SetAct>>,
-}
-
-const TABS: [&str; 5] = ["Sound", "Display", "Gameplay", "Battle", "Controls"];
-/// The display choices: the game's window sizes, the engine's frame-rate caps (aegis_ui::screen).
-const CHOICES: [(&str, &[&str]); 2] = [("window_size", &WINDOW_SIZES), ("fps_cap", &FPS_CAPS)];
+/// The settings keys Display Mode and Resolution stage until Apply (DISPLAY2's `fullscreen` and `borderless`, and
+/// `window_size`).
+pub const STAGED: [&str; 3] = ["fullscreen", "borderless", "window_size"];
+/// How long the keep-or-revert confirm waits before it puts the previous display back.
+pub const CONFIRM_SECS: u64 = 15;
+/// The rail: each tab and its subtitle (the popup shows no subtitles).
+pub const TABS: [(&str, &str); 5] = [("Display", "Mode, size & text"), ("Sound", "Volume & audio mix"), ("Gameplay", "Dialogue & map pacing"), ("Battle", "Timeline & speed"), ("Controls", "Keybindings")];
+/// The desktop's Display Mode choices (Design 2026-11-18: windowed, borderless, fullscreen; the web keeps its
+/// Fullscreen row) and each one's help line.
+pub const DISPLAY_MODES: [(WindowShow, &str, &str); 3] = [
+    (WindowShow::Windowed, "Windowed", "A framed desktop window at the chosen resolution"),
+    (WindowShow::Borderless, "Borderless", "A frameless window at the resolution, centred"),
+    (WindowShow::Fullscreen, "Fullscreen", "Covers the whole monitor; the resolution rests"),
+];
+/// The animation speeds the Battle tab steps through.
+const ANIM_SPEEDS: [f64; 7] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 /// PLAYUI1-M: the region map's marker names (value, label); the first is the default.
 pub const MAP_NAMES: [(&str, &str); 2] = [("hover", "On hover"), ("always", "Always")];
-pub(crate) const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
-    (
-        "Menus",
-        &[
-            ("Confirm / press the focused button", "Enter, Space"),
-            ("Back / close the top panel", "Escape"),
-            ("Focus the next / previous control", "Tab, Shift+Tab"),
-            ("Move focus", "Arrow keys (not on the map)"),
-            ("Step a focused slider", "Left, Right"),
-            ("Back / close (mouse)", "Right click"),
-        ],
-    ),
-    ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Run", "Hold Shift"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
-    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Select party member 1-4", "1-4"), ("Skills of the selected hero (timeline)", "Shift+1-9"), ("Accept the selected hero's auto-fill (timeline)", "F"), ("Support an ally while only the auto-fill shows (timeline)", "Ctrl+click"), ("Target self (timeline)", "S"), ("Inspect a unit (timeline)", "Right click"), ("Clear inspect, deselect (timeline)", "Escape"), ("Full timeline view, open / close (timeline)", "T, Escape"), ("Playback speed: 1x, 0.5x, block by block (timeline)", "P"), ("Next block (timeline)", "N"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every bar, arrow and hazard mark (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
-];
-
 /// A volume slider's sample and bus (scripts/audio/volume_preview.gd: the master sample plays on the interface bus).
 fn preview_of(key: &str) -> Option<(Bus, &'static str)> {
     match key {
@@ -785,19 +897,266 @@ fn preview_of(key: &str) -> Option<(Bus, &'static str)> {
         "music" => Some((Bus::Music, "sfx/ui_confirm.wav")),
         "effects" => Some((Bus::Sfx, "sfx/hit.wav")),
         "interface" => Some((Bus::Ui, "sfx/ui_click.wav")),
+        "ambience" => Some((Bus::Ambience, "sfx/ui_confirm.wav")),
         _ => None,
     }
 }
 
+/// The staged keys of `v` in the form Display Mode writes them.
+fn staged_of(v: &Value) -> Value {
+    let show = WindowShow::of(v);
+    json!({"fullscreen": show == WindowShow::Fullscreen, "borderless": show == WindowShow::Borderless, "window_size": v["window_size"]})
+}
+
+/// What the close guard leads to once answered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Leave {
+    Close,
+    Title,
+}
+
+/// The keep-or-revert confirm after Apply: the display before it, and when it reverts by itself.
+struct Confirm {
+    before: Value,
+    until: Instant,
+}
+
+pub struct SettingsScreen {
+    tab: usize,
+    /// The decluttered in-game popup (opened from the hub), else the full screen (the main menu).
+    popup: bool,
+    /// The web build's rows (DISPLAY1 rule 8, WEBFIX1): Fullscreen and Text size of the display keys.
+    web: bool,
+    /// The staged Display Mode and Resolution (`STAGED`).
+    pending: Value,
+    confirm: Option<Confirm>,
+    guard: Option<Leave>,
+    /// PR7-41 (PT-32): opened from a world battle whose fight allows a retreat: the footer offers Retreat.
+    retreat: bool,
+    /// CONTROLS-UI1 (PR7-44): the Controls tab's rebind in progress, and the layouts its view draws with.
+    rebind: aegis_ui::controls::Rebind,
+    layouts: aegis_ui::screen_layout::Layouts,
+    w: Vec<Widget<SetAct>>,
+}
+
+/// PR7-41 (PT-32): the answer tag of the battle Menu's Retreat question (Yes: the battle screen sends `retreat`).
+pub const RETREAT_ASK: &str = "battle.retreat";
+
+/// The rows a tab lists, top to bottom.
+#[derive(Clone, Copy)]
+enum Row {
+    /// Resolution and Display Mode with Apply (the desktop).
+    Video,
+    Choice(&'static str, &'static str, &'static str),
+    Toggle(&'static str, &'static str, &'static str),
+    Volume(&'static str, &'static str, &'static str),
+    /// Animation speed with its Skip switch.
+    Anim,
+    /// The battle overlay groups (and the debug row in a debug build).
+    Overlays,
+    Controls,
+    /// A section header over the rows after it (FB-308: the Battle tab's "Advanced").
+    Heading(&'static str),
+}
+
+/// The row help lines' text size.
+const HELP: f32 = BODY - 1.0;
+/// A tab body's heading size.
+const HEAD: f32 = BODY + 2.0;
+/// The gap between rows.
+const GAP: i32 = 3;
+
 impl SettingsScreen {
+    /// The full screen (the main menu, the gallery).
     pub fn new(cx: &Cx) -> Self {
-        Self { tab: 0, draft: cx.settings.v.clone(), w: Vec::new() }
+        Self::open(cx, false)
+    }
+
+    /// The decluttered in-game popup (the hub's Settings).
+    pub fn in_game(cx: &Cx) -> Self {
+        Self::open(cx, true)
+    }
+
+    fn open(cx: &Cx, popup: bool) -> Self {
+        let layouts = aegis_ui::screen_layout::Layouts::new(cx.art.layers().clone());
+        Self { tab: 0, popup, web: ON_WEB, pending: staged_of(&cx.settings.v), confirm: None, guard: None, retreat: false, rebind: Default::default(), layouts, w: Vec::new() }
+    }
+
+    /// PR7-41 (PT-32): the in-game popup as a world battle's Menu: Retreat in the footer when `can_retreat` (the
+    /// fight allows it now, `Session::can_retreat`).
+    pub fn in_battle(cx: &Cx, can_retreat: bool) -> Self {
+        let mut s = Self::open(cx, true);
+        s.retreat = can_retreat;
+        s
+    }
+
+    /// The web build's rows on any build (tests).
+    #[cfg(test)]
+    pub(crate) fn as_web(mut self) -> Self {
+        self.web = true;
+        self
+    }
+
+    /// A Display Mode or Resolution change waits for Apply.
+    pub fn display_dirty(&self, cx: &Cx) -> bool {
+        let now = &cx.settings.v;
+        WindowShow::of(&self.pending) != WindowShow::of(now) || self.pending["window_size"] != now["window_size"]
+    }
+
+    /// Seconds left on the keep-or-revert confirm at `now` (None: it is not open).
+    pub fn confirm_left(&self, now: Instant) -> Option<u64> {
+        self.confirm.as_ref().map(|c| {
+            let left = c.until.saturating_duration_since(now);
+            left.as_secs() + u64::from(left.subsec_nanos() > 0)
+        })
+    }
+
+    /// The confirm's timer at `now`: past its end the previous display comes back.
+    pub fn tick_at(&mut self, cx: &mut Cx, now: Instant) {
+        if self.confirm.as_ref().is_some_and(|c| now >= c.until) {
+            self.act(cx, SetAct::Revert);
+        }
+    }
+
+    fn save(cx: &mut Cx) {
+        if let Err(e) = cx.settings.save() {
+            show_errors(cx, vec![format!("Settings could not be saved: {e}")]);
+        }
+    }
+
+    /// A change that applies at once: written and saved.
+    fn commit(cx: &mut Cx, k: &str, v: Value) {
+        cx.settings.v[k] = v;
+        Self::save(cx);
+    }
+
+    /// A choice row's option labels and the current one.
+    fn options(&self, cx: &Cx, k: &str) -> (Vec<String>, usize) {
+        let d = &cx.settings.v;
+        let labels = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        match k {
+            "display_mode" => {
+                let show = WindowShow::of(&self.pending);
+                (DISPLAY_MODES.iter().map(|m| m.1.to_string()).collect(), DISPLAY_MODES.iter().position(|m| m.0 == show).unwrap_or(0))
+            }
+            "window_size" => (labels(&WINDOW_SIZES), WINDOW_SIZES.iter().position(|s| self.pending["window_size"].as_str() == Some(*s)).unwrap_or(0)),
+            "fps_cap" => (labels(&FPS_CAPS), FPS_CAPS.iter().position(|s| d["fps_cap"].as_str() == Some(*s)).unwrap_or(0)),
+            // The engine's four levels (Godot TEXT_LEVELS); a saved value off the levels shows the nearest one.
+            "text_scale" => {
+                let ts = d["text_scale"].as_f64().unwrap_or(1.0);
+                let at = TEXT_SIZES.iter().enumerate().min_by(|a, b| (a.1 .1 - ts).abs().total_cmp(&(b.1 .1 - ts).abs())).map(|(i, _)| i).unwrap_or(1);
+                (TEXT_SIZES.iter().map(|t| t.0.to_string()).collect(), at)
+            }
+            TEXT_SPEED => (TEXT_SPEEDS.iter().map(|v| TextSpeed::parse(v).label().to_string()).collect(), TEXT_SPEEDS.iter().position(|v| d[TEXT_SPEED].as_str() == Some(*v)).unwrap_or(1)),
+            "map_names" => (MAP_NAMES.iter().map(|m| m.1.to_string()).collect(), MAP_NAMES.iter().position(|m| d["map_names"].as_str() == Some(m.0)).unwrap_or(0)),
+            // REGIONVIEW1: the region map's zoom
+            "map_zoom" => (crate::mapview::zoom_steps().map(|z| format!("{z}x")).collect(), (crate::mapview::zoom_of(&d["map_zoom"]) - crate::mapview::ZOOM_QUARTERS.0) as usize),
+            "see_through" => (crate::stage::SEE_THROUGH.iter().map(|v| v.1.to_string()).collect(), crate::stage::SEE_THROUGH.iter().position(|v| d["see_through"].as_str() == Some(v.0)).unwrap_or(0)),
+            crate::battle::PLAYBACK_SPEED => {
+                let speeds = &crate::battle::PLAYBACK_SPEEDS;
+                (speeds.iter().map(|v| v.1.to_string()).collect(), speeds.iter().position(|v| d[crate::battle::PLAYBACK_SPEED].as_str() == Some(v.0)).unwrap_or(0))
+            }
+            "anim_speed" => {
+                let a = d["anim_speed"].as_f64().unwrap_or(1.0);
+                let at = ANIM_SPEEDS.iter().enumerate().min_by(|x, y| (x.1 - a).abs().total_cmp(&(y.1 - a).abs())).map(|(i, _)| i).unwrap_or(2);
+                (ANIM_SPEEDS.iter().map(|s| format!("{s}x")).collect(), at)
+            }
+            _ => (Vec::new(), 0),
+        }
+    }
+
+    fn pick(&mut self, cx: &mut Cx, k: &'static str, i: usize) {
+        match k {
+            "display_mode" => {
+                if let Some((show, _, _)) = DISPLAY_MODES.get(i) {
+                    self.pending["fullscreen"] = json!(*show == WindowShow::Fullscreen);
+                    self.pending["borderless"] = json!(*show == WindowShow::Borderless);
+                }
+            }
+            "window_size" => {
+                if let Some(v) = WINDOW_SIZES.get(i) {
+                    self.pending["window_size"] = json!(v);
+                }
+            }
+            "fps_cap" => {
+                if let Some(v) = FPS_CAPS.get(i) {
+                    Self::commit(cx, k, json!(v));
+                }
+            }
+            "text_scale" => {
+                if let Some(t) = TEXT_SIZES.get(i) {
+                    Self::commit(cx, k, json!(t.1));
+                }
+            }
+            TEXT_SPEED => {
+                if let Some(v) = TEXT_SPEEDS.get(i) {
+                    Self::commit(cx, k, json!(v));
+                }
+            }
+            "map_names" => {
+                if let Some((v, _)) = MAP_NAMES.get(i) {
+                    Self::commit(cx, k, json!(v));
+                }
+            }
+            "map_zoom" => {
+                if let Some(v) = crate::mapview::zoom_steps().nth(i) {
+                    Self::commit(cx, k, json!(v));
+                }
+            }
+            "see_through" => {
+                if let Some((v, _)) = crate::stage::SEE_THROUGH.get(i) {
+                    Self::commit(cx, k, json!(v));
+                }
+            }
+            crate::battle::PLAYBACK_SPEED => {
+                if let Some((v, _, _)) = crate::battle::PLAYBACK_SPEEDS.get(i) {
+                    Self::commit(cx, k, json!(v));
+                }
+            }
+            "anim_speed" => {
+                if let Some(v) = ANIM_SPEEDS.get(i) {
+                    Self::commit(cx, k, json!(v));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Leaving (X, Esc, right click, Return to title): with a staged display change the guard asks first.
+    fn leave(&mut self, cx: &mut Cx, to: Leave) {
+        if self.display_dirty(cx) {
+            self.guard = Some(to);
+        } else {
+            Self::finish(cx, to);
+        }
+    }
+
+    fn finish(cx: &mut Cx, to: Leave) {
+        match to {
+            Leave::Close => cx.nav.push(Nav::Pop),
+            Leave::Title => crate::hub::quit_to_title(cx),
+        }
     }
 
     fn act(&mut self, cx: &mut Cx, a: SetAct) {
         match a {
-            SetAct::Tab(t) => self.tab = t,
-            SetAct::Toggle(k) => self.draft[k] = Value::Bool(!self.draft[k].as_bool().unwrap_or(false)),
+            SetAct::Tab(t) => {
+                self.tab = t.min(TABS.len() - 1);
+                self.rebind.cancel();
+            }
+            SetAct::View(a) => {
+                if crate::controls_view::act(&mut self.rebind, &mut cx.settings.v, &a) {
+                    Self::save(cx);
+                }
+            }
+            SetAct::Toggle(k) => {
+                let on = !cx.settings.v[k].as_bool().unwrap_or(false);
+                Self::commit(cx, k, Value::Bool(on));
+                // the web's Fullscreen applies at once: nothing stays staged
+                if STAGED.contains(&k) {
+                    self.pending = staged_of(&cx.settings.v);
+                }
+            }
             SetAct::Set(k, v) => {
                 let (lo, hi) = if k.ends_with("speed") || k.ends_with("scale") {
                     (0.5, 2.0)
@@ -807,223 +1166,310 @@ impl SettingsScreen {
                     (0.0, 100.0)
                 };
                 let v = v.clamp(lo, hi);
-                self.draft[k] = if lo == 0.0 { json!(v.round() as i64) } else { json!((v * 100.0).round() / 100.0) };
+                Self::commit(cx, k, if lo == 0.0 { json!(v.round() as i64) } else { json!((v * 100.0).round() / 100.0) });
                 if let Some((bus, sample)) = preview_of(k) {
-                    cx.audio.set_levels(&self.draft);
+                    cx.audio.set_levels(&cx.settings.v);
                     cx.audio.preview(bus, sample);
                 }
             }
-            SetAct::Pick("map_names", i) => {
-                if let Some((v, _)) = MAP_NAMES.get(i) {
-                    self.draft["map_names"] = json!(v);
-                }
-            }
-            SetAct::Pick("map_zoom", i) => {
-                if let Some(v) = crate::mapview::zoom_steps().nth(i) {
-                    self.draft["map_zoom"] = json!(v);
-                }
-            }
-            SetAct::Pick("see_through", i) => {
-                if let Some((v, _)) = crate::stage::SEE_THROUGH.get(i) {
-                    self.draft["see_through"] = json!(v);
-                }
-            }
-            SetAct::Pick(TEXT_SPEED, i) => {
-                if let Some(v) = TEXT_SPEEDS.get(i) {
-                    self.draft[TEXT_SPEED] = json!(v);
-                }
-            }
-            SetAct::Pick(crate::battle::PLAYBACK_SPEED, i) => {
-                if let Some((v, _, _)) = crate::battle::PLAYBACK_SPEEDS.get(i) {
-                    self.draft[crate::battle::PLAYBACK_SPEED] = json!(v);
-                }
-            }
-            SetAct::Pick(k, i) => {
-                if let Some(o) = choices(k).get(i) {
-                    self.draft[k] = json!(o);
+            SetAct::Pick(k, i) => self.pick(cx, k, i),
+            SetAct::Step(k, d) => {
+                let (labels, at) = self.options(cx, k);
+                let n = labels.len() as i32;
+                if n > 0 {
+                    self.pick(cx, k, (at as i32 + d).rem_euclid(n) as usize);
                 }
             }
             SetAct::Overlay(k) => {
-                let on = self.draft["battle_overlays"][k].as_bool().unwrap_or_else(|| crate::battle::overlay_default(k));
-                if !self.draft["battle_overlays"].is_object() {
-                    self.draft["battle_overlays"] = json!({});
+                let mut v = cx.settings.v["battle_overlays"].clone();
+                let on = v[k].as_bool().unwrap_or_else(|| crate::battle::overlay_default(k));
+                if !v.is_object() {
+                    v = json!({});
                 }
-                self.draft["battle_overlays"][k] = Value::Bool(!on);
+                v[k] = Value::Bool(!on);
+                Self::commit(cx, "battle_overlays", v);
             }
             SetAct::Apply => {
-                cx.settings.v = self.draft.clone();
-                if let Err(e) = cx.settings.save() {
-                    show_errors(cx, vec![format!("Settings could not be saved: {e}")]);
+                if self.display_dirty(cx) {
+                    let before = staged_of(&cx.settings.v);
+                    for k in STAGED {
+                        cx.settings.v[k] = self.pending[k].clone();
+                    }
+                    Self::save(cx);
+                    self.confirm = Some(Confirm { before, until: Instant::now() + Duration::from_secs(CONFIRM_SECS) });
                 }
             }
-            SetAct::Defaults => self.draft = Settings::defaults(default_settings()),
-            SetAct::Close => cx.nav.push(Nav::Pop),
+            SetAct::Reset => self.pending = staged_of(&cx.settings.v),
+            SetAct::Keep => self.confirm = None,
+            SetAct::Revert => {
+                if let Some(c) = self.confirm.take() {
+                    for k in STAGED {
+                        cx.settings.v[k] = c.before[k].clone();
+                    }
+                    Self::save(cx);
+                    self.pending = staged_of(&cx.settings.v);
+                }
+            }
+            SetAct::Defaults => {
+                // Every row at once, but the display: its defaults are staged for Apply like any display change. The web
+                // stages nothing (PR7-26): its Fullscreen is the browser's, so the display keys stay as they are.
+                let mut d = Settings::defaults(default_settings());
+                self.rebind.cancel();
+                self.pending = staged_of(if self.web { &cx.settings.v } else { &d });
+                for k in STAGED {
+                    d[k] = cx.settings.v[k].clone();
+                }
+                cx.settings.v = d;
+                Self::save(cx);
+            }
+            SetAct::Close => self.leave(cx, Leave::Close),
+            SetAct::Title => self.leave(cx, Leave::Title),
+            SetAct::Retreat => {
+                cx.nav.push(Nav::Pop);
+                cx.ask_tag_no("Retreat from this fight? The party falls back to where it came from. Foes already beaten still pay; the rest pay nothing, and the fight is not won.", RETREAT_ASK);
+            }
+            SetAct::GuardStay => self.guard = None,
+            SetAct::GuardDiscard => {
+                self.pending = staged_of(&cx.settings.v);
+                if let Some(to) = self.guard.take() {
+                    Self::finish(cx, to);
+                }
+            }
+            SetAct::GuardApply => {
+                self.guard = None;
+                self.act(cx, SetAct::Apply);
+            }
         }
     }
-}
 
-impl Screen<GameCx> for SettingsScreen {
-    /// Nothing here moves by itself.
-    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
-        FrameNeed::Idle
-    }
-    fn id(&self) -> &'static str {
-        "settings"
-    }
-    fn overlay(&self) -> bool {
-        true
-    }
-    fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
-        // The draft levels play while the popup is open; the shell puts the saved ones back each frame.
-        cx.audio.set_levels(&self.draft);
-        let mut ui: Ui<SetAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), th().game("settings_veil", rgba(0, 0, 0, 140)));
-        let r = Rect::new(95, 25, 450, 310);
-        ui.frame(r, "Settings", false);
-        ui.close_x("settings.close", Rect::new(r.x + r.w - 28, r.y + 9, 19, 18), SetAct::Close);
-        let mut tx = r.x + 12;
-        for (i, t) in TABS.iter().enumerate() {
-            // At least 44 wide; wider when the label needs it (larger text sizes).
-            let tw = 44.max(ui.p.text_w(t, BODY).ceil() as i32 + 10);
-            ui.tab(&format!("settings.tab.{}", t.to_lowercase()), Rect::new(tx, r.y + 36, tw, 16), t, SetAct::Tab(i), self.tab == i);
-            tx += tw + 2;
-        }
-        let body = Rect::new(r.x + 9, r.y + 55, r.w - 18, 222);
-        ui.p.panel(body, th().game("settings_body", rgba(24, 26, 32, 255)), th().game("settings_body", rgba(24, 26, 32, 255)), 1.0);
-        let (x, mut y) = (body.x + 5, body.y + 6);
-        let d = self.draft.clone();
-        let pct = |k: &str| d[k].as_f64().unwrap_or(0.0);
+    /// The rows of the open tab.
+    fn rows(&self, cx: &Cx) -> Vec<Row> {
+        let shown = |k: &str| display_keys(self.web).contains(&k);
         match self.tab {
             0 => {
-                ui.checkbox("settings.mute", x + 3, y, "Mute", d["mute"].as_bool().unwrap_or(false), SetAct::Toggle("mute"), true);
-                y += 20;
-                for (k, label) in [("master", "Master volume"), ("music", "Music volume"), ("effects", "Effects volume"), ("interface", "Interface volume")] {
-                    ui.p.text(x as f32, y as f32 + 2.0, label, BODY, th().text);
-                    let key = static_key(k);
-                    ui.slider(&format!("settings.{k}"), Rect::new(x + 125, y, 200, 13), (pct(k) / VOLUME_STEP).round() as usize, 21, &format!("{}%", pct(k)), |i| SetAct::Set(key, i as f64 * VOLUME_STEP), true);
-                    y += 18;
+                let mut r = Vec::new();
+                if shown("window_size") {
+                    r.push(Row::Video);
+                } else {
+                    // DISPLAY1 rule 8: the browser's fullscreen, at once (the click is the gesture it needs)
+                    r.push(Row::Toggle("fullscreen", "Fullscreen", "The browser's fullscreen, for this session"));
                 }
-            }
-            1 => {
-                let show = WindowShow::of(&d);
-                ui.checkbox("settings.fullscreen", x + 3, y, "Fullscreen", show == WindowShow::Fullscreen, SetAct::Toggle("fullscreen"), true);
-                y += 18;
-                ui.checkbox("settings.borderless", x + 3, y, "Borderless", d["borderless"].as_bool().unwrap_or(false), SetAct::Toggle("borderless"), true);
-                y += 20;
-                ui.p.text(x as f32, y as f32 + 3.0, "Resolution", BODY, th().text);
-                choice(&mut ui, "window_size", Rect::new(x + 125, y, 150, 16), d["window_size"].as_str().unwrap_or(""), show != WindowShow::Fullscreen);
-                y += 22;
-                ui.p.text(x as f32, y as f32, "In use", BODY, th().text);
-                let size = d["window_size"].as_str().unwrap_or("");
-                let in_use = match show {
-                    WindowShow::Fullscreen => "Fullscreen".to_string(),
-                    WindowShow::Borderless => format!("Borderless {size}"),
-                    WindowShow::Windowed => format!("Windowed {size}"),
-                };
-                ui.p.text(x as f32 + 125.0, y as f32, &in_use, BODY, th().dim);
-                y += 18;
-                ui.checkbox("settings.vsync", x + 3, y, "Vertical sync", d["vsync"].as_bool().unwrap_or(true), SetAct::Toggle("vsync"), true);
-                y += 20;
-                ui.p.text(x as f32, y as f32 + 3.0, "Frame rate cap", BODY, th().text);
-                choice(&mut ui, "fps_cap", Rect::new(x + 125, y, 150, 16), d["fps_cap"].as_str().unwrap_or(""), true);
-                y += 24;
-                ui.p.text(x as f32, y as f32 + 3.0, "Text size", BODY, th().text);
-                // The engine's four levels (Godot TEXT_LEVELS); a saved value off the levels shows the nearest one.
-                let ts = pct("text_scale");
-                let labels: Vec<String> = TEXT_SIZES.iter().map(|t| t.0.to_string()).collect();
-                let at = TEXT_SIZES.iter().enumerate().min_by(|a, b| (a.1 .1 - ts).abs().total_cmp(&(b.1 .1 - ts).abs())).map(|(i, _)| i).unwrap_or(1);
-                ui.select("settings.text_scale", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Set("text_scale", TEXT_SIZES[i].1), true, Vec::new());
-            }
-            2 => {
-                ui.p.text(x as f32, y as f32 + 2.0, "Animation speed", BODY, th().text);
-                let a = pct("anim_speed");
-                ui.slider("settings.anim_speed", Rect::new(x + 125, y, 200, 13), ((a - 0.5) / SCALE_STEP).round() as usize, 7, &format!("{a:.2}x"), |i| SetAct::Set("anim_speed", 0.5 + i as f64 * SCALE_STEP), true);
-                ui.checkbox("settings.skip_anim", x + 300, y + 1, "Skip animations", d["skip_anim"].as_bool().unwrap_or(false), SetAct::Toggle("skip_anim"), true);
-                y += 22;
-                ui.checkbox("settings.show_tells", x + 3, y, "Show enemy tells", d["show_tells"].as_bool().unwrap_or(true), SetAct::Toggle("show_tells"), true);
-                y += 18;
-                ui.checkbox("settings.warn_missing", x + 3, y, "Warn about missing actions", d["warn_missing"].as_bool().unwrap_or(true), SetAct::Toggle("warn_missing"), true);
-                y += 18;
-                // INPUT1 GH7: the planner fills a hero's free blocks after its picks (timeline battles)
-                ui.checkbox("settings.auto_fill", x + 3, y, "Auto-fill the rest", d["auto_fill"].as_bool().unwrap_or(true), SetAct::Toggle("auto_fill"), true);
-                if let Some(wd) = ui.widgets.last_mut() {
-                    wd.tip = tip("Auto-fill the rest", "After your picks the planner fills the round's free blocks with follow-ups (ghost blocks you can replace). Off: the free blocks Rest.");
+                r.push(Row::Choice("text_scale", "Text Size", "Scale of dialogue, tooltips and readouts (85%-130%)"));
+                // PR7-15 (b), FB-287 Option A: the Gameplay tab's Map zoom row also here, on the web too (the web has no
+                // window size to make the map bigger)
+                r.push(Row::Choice("map_zoom", "Map Camera Zoom", "Camera zoom on street and hub maps"));
+                if shown("fps_cap") {
+                    r.push(Row::Choice("fps_cap", "Frame Rate Cap", "The most frames drawn each second"));
                 }
-                y += 18;
-                // VISCLAR1-D: after a round plays the battle goes to the next round by itself
-                ui.checkbox("settings.auto_confirm", x + 3, y, "Auto-confirm next round", d[crate::battle::AUTO_CONFIRM].as_bool().unwrap_or(true), SetAct::Toggle(crate::battle::AUTO_CONFIRM), true);
-                if let Some(wd) = ui.widgets.last_mut() {
-                    wd.tip = tip("Auto-confirm next round", "Timeline battles: after a round plays, the battle goes to the next round's planning by itself; your plan still waits for your Confirm. Off: press Next round (Space) to go on. A recording you watch always waits.");
+                if shown("vsync") {
+                    r.push(Row::Toggle("vsync", "Vertical Sync (VSync)", "Prevents frame tearing"));
                 }
-                y += 20;
-                ui.p.text(x as f32, y as f32 + 3.0, "Map names", BODY, th().text);
-                let labels: Vec<String> = MAP_NAMES.iter().map(|m| m.1.to_string()).collect();
-                let at = MAP_NAMES.iter().position(|m| d["map_names"].as_str() == Some(m.0)).unwrap_or(0);
-                let t = tip("Map names", "On hover: a marker's name shows while you point at it, its legend row, or face it. Always: every person and exit is named.");
-                ui.select("settings.map_names", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("map_names", i), true, t);
-                y += 22;
-                // REGIONVIEW1: the region map's zoom
-                ui.p.text(x as f32, y as f32 + 3.0, "Map zoom", BODY, th().text);
-                let labels: Vec<String> = crate::mapview::zoom_steps().map(|z| format!("{z}x")).collect();
-                let at = (crate::mapview::zoom_of(&d["map_zoom"]) - crate::mapview::ZOOM_QUARTERS.0) as usize;
-                ui.select("settings.map_zoom", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("map_zoom", i), true, tip("Map zoom", crate::mapview::ZOOM_TIP));
-                y += 22;
-                // STAGE1-O: when units hidden behind others or cover are outlined in battle (the Flat view is a Scene
-                // Runner debug setting since STAGE1-C, not a player choice).
-                ui.p.text(x as f32, y as f32 + 3.0, "Units behind", BODY, th().text);
-                let labels: Vec<String> = crate::stage::SEE_THROUGH.iter().map(|v| v.1.to_string()).collect();
-                let at = crate::stage::SEE_THROUGH.iter().position(|v| d["see_through"].as_str() == Some(v.0)).unwrap_or(0);
-                ui.select("settings.see_through", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("see_through", i), true, tip("Units behind", crate::stage::SEE_THROUGH_TIP));
-                y += 22;
-                // STORYUI1 4.8: the story cards' typewriter speed and the shared reduce-motion switch (engine keys)
-                ui.p.text(x as f32, y as f32 + 3.0, "Text speed", BODY, th().text);
-                let labels: Vec<String> = TEXT_SPEEDS.iter().map(|v| TextSpeed::parse(v).label().to_string()).collect();
-                let at = TEXT_SPEEDS.iter().position(|v| d[TEXT_SPEED].as_str() == Some(*v)).unwrap_or(1);
-                let t = tip("Text speed", "How fast story captions type out: Slow, Normal, Fast, or Instant (the whole text at once). A click shows the rest at any speed.");
-                ui.select("settings.text_speed", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick(TEXT_SPEED, i), true, t);
-                y += 22;
-                ui.checkbox("settings.reduce_motion", x + 3, y, "Reduce motion", d[REDUCE_MOTION].as_bool().unwrap_or(false), SetAct::Toggle(REDUCE_MOTION), true);
-                // ASSETORG4: the player's switch of the portrait overlays (engine key), beside reduce motion; only for
-                // a game whose manifest mounts them
+                r.push(Row::Toggle(REDUCE_MOTION, "Reduce Motion", "No camera shake or drifting ash"));
+                // ASSETORG4: only for a game whose manifest mounts the portrait overlays
                 if cx.data.portrait_overlays {
-                    let on = d[portrait_overlays::SETTING].as_bool().unwrap_or(true);
-                    ui.checkbox("settings.portrait_overlays", x + 125, y, "Portrait effects", on, SetAct::Toggle(portrait_overlays::SETTING), true);
-                    if let Some(wd) = ui.widgets.last_mut() {
-                        wd.tip = tip("Portrait effects", "The glows, growing lines, specks and haze over character portraits in talk boxes, scenes, party cards and the timeline. Off: plain portraits; blinks, breathing and expressions stay.");
-                    }
+                    r.push(Row::Toggle(portrait_overlays::SETTING, "Portrait Effects", "Glows, lines and haze over character portraits"));
+                }
+                r
+            }
+            1 => vec![
+                Row::Volume("master", "Master Volume", "Overall game audio output"),
+                Row::Volume("music", "Music Volume", "Orchestral and hurdy-gurdy ward score"),
+                Row::Volume("effects", "Effects Volume", "Combat steel clashes, billhooks and chains"),
+                Row::Volume("interface", "Interface Volume", "Menu chimes, card clicks and roll ticks"),
+                // PR7-34 (AMBIENCE1): the settings mock's row
+                Row::Volume("ambience", "Ward Ambience", "Canal rain, distant bells and furnace rumble"),
+            ],
+            // PR7-37 (PT-33): Map Camera Zoom on the Display tab only (PR7-15 had it here too)
+            2 => vec![
+                Row::Choice(TEXT_SPEED, "Text Speed", "How fast story captions and dialogue lines reveal"),
+                Row::Choice("map_names", "Map Labels & Names", "Person and exit names on street and hub maps"),
+            ],
+            3 => vec![
+                Row::Choice(crate::battle::PLAYBACK_SPEED, "Playback Speed", "How a timeline round plays: 1x, 0.5x or by block"),
+                Row::Anim,
+                Row::Toggle("auto_fill", "Auto-Fill Remaining Blocks", "Fill a hero's free blocks with follow-ups"),
+                Row::Toggle(crate::battle::AUTO_CONFIRM, "Auto-Confirm Next Round", "Go on to the next round's planning by itself"),
+                Row::Toggle("show_tells", "Show Enemy Tells", "Enemy intent arcs and targets"),
+                Row::Toggle("warn_missing", "Warn Missing Actions", "Ask before confirming with actions unspent"),
+                // FB-308 (Design, READY section 4): the rows past the mock's six sit under an Advanced header
+                Row::Heading("Advanced"),
+                Row::Choice("see_through", "Units Behind", "When units hidden behind others are outlined"),
+                Row::Overlays,
+            ],
+            _ => vec![Row::Controls],
+        }
+    }
+
+    /// The row height: the label and its help line (the popup: the label only).
+    fn row_h(&self, ui: &Ui<SetAct>) -> i32 {
+        let lh = ui.p.line_h(BODY);
+        if self.popup {
+            ((lh + 8.0).ceil() as i32).max(20)
+        } else {
+            ((lh + ui.p.line_h(HELP) + 7.0).ceil() as i32).max(26)
+        }
+    }
+
+    fn row_height(&self, ui: &mut Ui<SetAct>, cx: &Cx, row: Row, w: i32) -> i32 {
+        let rh = self.row_h(ui);
+        match row {
+            Row::Video => rh * 2 + 4,
+            Row::Overlays => {
+                let head = ui.p.line_h(BODY + 1.0).ceil() as i32 + 4;
+                let groups = crate::battle::settings_overlay_groups().len().div_ceil(2) as i32 * OVERLAY_PITCH;
+                head + groups + if crate::DEV_BUILD { OVERLAY_PITCH + 4 } else { 0 }
+            }
+            // CONTROLS-UI1: the default takes its whole height (the body scrolls it); a layout file places its own
+            Row::Controls => aegis_ui::screen_layout::default_height(ui, &crate::controls_view::view(&cx.settings.v, &self.rebind), w),
+            Row::Heading(_) => ui.p.line_h(HEAD).ceil() as i32 + 8,
+            _ => rh,
+        }
+    }
+
+    /// A row's card, its label and (the full screen) its help line, left of a control `ctrl_w` wide.
+    fn label(&self, ui: &mut Ui<SetAct>, r: Rect, label: &str, help: &str, ctrl_w: i32, enabled: bool) {
+        let t = th();
+        ui.p.panel(r, t.card, t.edge, 2.0);
+        let lh = ui.p.line_h(BODY);
+        let room = (r.w - ctrl_w - 16) as f32;
+        let col = if enabled { t.text } else { t.dim };
+        if self.popup || help.is_empty() {
+            ui.p.text_fit(r.x as f32 + 6.0, r.y as f32 + (r.h as f32 - lh) / 2.0, label, BODY, room, col);
+        } else {
+            let hh = ui.p.line_h(HELP);
+            let y = r.y as f32 + (r.h as f32 - lh - hh) / 2.0;
+            ui.p.text_fit(r.x as f32 + 6.0, y, label, BODY, room, col);
+            ui.p.text_fit(r.x as f32 + 6.0, y + lh, help, HELP, room, t.dim);
+        }
+    }
+
+    /// The width of choice row `k`'s control: the arrows and a list wide enough for its longest option.
+    fn choice_w(&self, ui: &mut Ui<SetAct>, cx: &Cx, k: &str) -> i32 {
+        let (labels, _) = self.options(cx, k);
+        let widest = labels.iter().map(|l| ui.p.text_w(l, BODY).ceil() as i32).max().unwrap_or(0);
+        (widest + 20 + 30).max(if self.popup { 110 } else { 124 })
+    }
+
+    /// The choice control: back arrow, the list, on arrow.
+    fn choice(&self, ui: &mut Ui<SetAct>, cx: &Cx, k: &'static str, r: Rect, enabled: bool, t: aegis_ui::ui::Tip) {
+        let (labels, at) = self.options(cx, k);
+        let aw = 13;
+        ui.button(&format!("settings.{k}.prev"), Rect::new(r.x, r.y, aw, r.h), "<", SetAct::Step(k, -1), enabled);
+        ui.select(&format!("settings.{k}"), Rect::new(r.x + aw + 2, r.y, r.w - 2 * aw - 4, r.h), &labels, at, |i| SetAct::Pick(k, i), enabled, t);
+        ui.button(&format!("settings.{k}.next"), Rect::new(r.x + r.w - aw, r.y, aw, r.h), ">", SetAct::Step(k, 1), enabled);
+    }
+
+    fn toggle(ui: &mut Ui<SetAct>, id: &str, r: Rect, text: &str, on: bool, a: SetAct, t: aegis_ui::ui::Tip) {
+        ui.button_full(id, r, text, a, true, on, BODY, t);
+    }
+
+    fn draw_row(&self, ui: &mut Ui<SetAct>, cx: &Cx, row: Row, r: Rect) {
+        let d = cx.settings.v.clone();
+        let ch = 14;
+        let cy = r.y + (self.row_h(ui) - ch) / 2;
+        let on_w = |ui: &mut Ui<SetAct>| (ui.p.text_w("Off", BODY).ceil() as i32 + 16).max(40);
+        match row {
+            Row::Video => {
+                let t = th();
+                let dirty = self.display_dirty(cx);
+                ui.p.panel(r, t.card, if dirty { t.gold } else { t.edge }, 2.0);
+                let rh = self.row_h(ui);
+                let cw = self.choice_w(ui, cx, "window_size").max(self.choice_w(ui, cx, "display_mode"));
+                let side = (ui.p.text_w("In sync", HELP).ceil() as i32).max(ui.p.text_w("Apply", BODY).ceil() as i32 + 12).max(48);
+                let inner = Rect::new(r.x, r.y, r.w - side - 10, r.h);
+                let show = WindowShow::of(&self.pending);
+                let res = Rect::new(inner.x, inner.y, inner.w, rh);
+                self.label_bare(ui, res, "Resolution", "Window size, staged until you press Apply", cw);
+                self.choice(ui, cx, "window_size", Rect::new(res.x + res.w - cw - 6, res.y + (rh - ch) / 2, cw, ch), show != WindowShow::Fullscreen, Vec::new());
+                ui.p.fill(Rect::new(inner.x + 4, r.y + rh + 1, inner.w - 6, 1), t.edge);
+                let mode = Rect::new(inner.x, inner.y + rh + 2, inner.w, rh);
+                let help = DISPLAY_MODES.iter().find(|m| m.0 == show).map_or("", |m| m.2);
+                self.label_bare(ui, mode, "Display Mode", help, cw);
+                self.choice(ui, cx, "display_mode", Rect::new(mode.x + mode.w - cw - 6, mode.y + (rh - ch) / 2, cw, ch), true, tip("Display Mode", "Windowed, Borderless or Fullscreen. A change waits for Apply; then keep it or it reverts by itself."));
+                let sx = r.x + r.w - side - 6;
+                ui.p.fill(Rect::new(sx - 4, r.y + 4, 1, r.h - 8), t.edge);
+                let bh = 16;
+                let by = r.y + r.h / 2 - bh - 1;
+                ui.button_full("settings.apply", Rect::new(sx, by, side, bh), "Apply", SetAct::Apply, true, dirty, BODY, tip("Apply", "Switch to the chosen Display Mode and Resolution; keep them within 15 s or they revert."));
+                if dirty {
+                    ui.button("settings.reset", Rect::new(sx, by + bh + 3, side, 14), "Reset", SetAct::Reset, true);
+                } else {
+                    let w = ui.p.text_w("In sync", HELP);
+                    ui.p.text(sx as f32 + (side as f32 - w) / 2.0, (by + bh + 5) as f32, "In sync", HELP, t.dim);
                 }
             }
-            3 => {
-                // RULESET1-U slice 6 (preference "Battle overlays and the clarity pass", user 2026-10-30): every
-                // overlay group of a timeline battle, on by default; the clarity pass (VISCLAR1) decides later what
-                // the game view keeps.
+            Row::Choice(k, label, help) => {
+                let cw = self.choice_w(ui, cx, k);
+                self.label(ui, r, label, help, cw, true);
+                let t = match k {
+                    "map_names" => tip("Map Labels & Names", "On hover: a marker's name shows while you point at it, its legend row, or face it. Always: every person and exit is named."),
+                    "map_zoom" => tip("Map Camera Zoom", crate::mapview::ZOOM_TIP),
+                    "see_through" => tip("Units Behind", crate::stage::SEE_THROUGH_TIP),
+                    TEXT_SPEED => tip("Text Speed", "How fast story captions type out: Slow, Normal, Fast, or Instant (the whole text at once). A click shows the rest at any speed."),
+                    crate::battle::PLAYBACK_SPEED => tip("Playback Speed", "How a timeline battle plays its round: 1x; 0.5x (every walk, clip, float and pause twice as long); Block (it waits after each block until N or Next block). P cycles it in battle."),
+                    _ => Vec::new(),
+                };
+                self.choice(ui, cx, k, Rect::new(r.x + r.w - cw - 6, cy, cw, ch), true, t);
+            }
+            Row::Toggle(k, label, help) => {
+                let w = on_w(ui);
+                self.label(ui, r, label, help, w, true);
+                let default = !matches!(k, "fullscreen") && k != REDUCE_MOTION;
+                let on = if k == "fullscreen" { WindowShow::of(&d) == WindowShow::Fullscreen } else { d[k].as_bool().unwrap_or(default) };
+                let t = match k {
+                    "auto_fill" => tip("Auto-Fill Remaining Blocks", "After your picks the planner fills the round's free blocks with follow-ups (ghost blocks you can replace). Off: the free blocks Rest."),
+                    crate::battle::AUTO_CONFIRM => tip("Auto-Confirm Next Round", "Timeline battles: after a round plays, the battle goes to the next round's planning by itself; your plan still waits for your Confirm. Off: press Next round (Space) to go on. A recording you watch always waits."),
+                    portrait_overlays::SETTING => tip("Portrait Effects", "The glows, growing lines, specks and haze over character portraits in talk boxes, scenes, party cards and the timeline. Off: plain portraits; blinks, breathing and expressions stay."),
+                    _ => Vec::new(),
+                };
+                let id = if k == portrait_overlays::SETTING { "settings.portrait_overlays".to_string() } else { format!("settings.{k}") };
+                Self::toggle(ui, &id, Rect::new(r.x + r.w - w - 6, cy, w, ch), if on { "On" } else { "Off" }, on, SetAct::Toggle(k), t);
+            }
+            Row::Volume(k, label, help) => {
+                let vw = if self.popup { 150 } else { 170 };
+                self.label(ui, r, label, help, vw, true);
+                let pct = d[k].as_f64().unwrap_or(0.0);
+                let key = static_key(k);
+                let x = r.x + r.w - vw - 6;
+                ui.button(&format!("settings.{k}.down"), Rect::new(x, cy, 13, ch), "<", SetAct::Set(key, pct - VOLUME_STEP), true);
+                ui.slider(&format!("settings.{k}"), Rect::new(x + 15, cy, vw - 30, ch), (pct / VOLUME_STEP).round() as usize, 21, &format!("{pct}%"), |i| SetAct::Set(key, i as f64 * VOLUME_STEP), true);
+                ui.button(&format!("settings.{k}.up"), Rect::new(x + vw - 13, cy, 13, ch), ">", SetAct::Set(key, pct + VOLUME_STEP), true);
+            }
+            Row::Anim => {
+                let skip = d["skip_anim"].as_bool().unwrap_or(false);
+                let sw = (ui.p.text_w("Skip: Off", BODY).ceil() as i32 + 12).max(46);
+                let cw = self.choice_w(ui, cx, "anim_speed");
+                self.label(ui, r, "Animation Speed", "Unit movement stride and attack cadence", cw + sw + 4, true);
+                let x = r.x + r.w - cw - sw - 10;
+                self.choice(ui, cx, "anim_speed", Rect::new(x, cy, cw, ch), !skip, Vec::new());
+                Self::toggle(ui, "settings.skip_anim", Rect::new(x + cw + 4, cy, sw, ch), if skip { "Skip: On" } else { "Skip: Off" }, skip, SetAct::Toggle("skip_anim"), Vec::new());
+            }
+            Row::Heading(label) => {
+                let t = th();
+                let lh = ui.p.line_h(HEAD).ceil() as i32;
+                ui.p.text((r.x + 2) as f32, (r.y + 3) as f32, label, HEAD, t.gold);
+                ui.p.fill(Rect::new(r.x + 2, r.y + 3 + lh + 2, r.w - 4, 1), t.edge);
+                ui.push(format!("settings.heading.{}", label.to_lowercase()), "label", label, Rect::new(r.x, r.y, r.w, r.h), true, false, None, Vec::new());
+            }
+            Row::Overlays => {
+                // RULESET1-U slice 6 (preference "Battle overlays and the clarity pass", user 2026-10-30): every overlay
+                // group of a timeline battle; not in the mock, kept under its rows.
+                let (x, mut y) = (r.x + 2, r.y + 2);
                 ui.p.text(x as f32, y as f32, "Battle overlays (timeline battles)", BODY + 1.0, th().gold);
-                // INPUT1 PB3: the playback speed (the battle's chips and key P set it too) at the heading row's end
-                let speeds = &crate::battle::PLAYBACK_SPEEDS;
-                let labels: Vec<String> = speeds.iter().map(|v| v.1.to_string()).collect();
-                let at = speeds.iter().position(|v| d[crate::battle::PLAYBACK_SPEED].as_str() == Some(v.0)).unwrap_or(0);
-                let sr = Rect::new(body.x + body.w - 5 - 64, y - 2, 64, 14);
-                let label = "Playback speed";
-                let lw = ui.p.text_w(label, BODY);
-                ui.p.text(sr.x as f32 - 4.0 - lw, y as f32, label, BODY, th().text);
-                let t = tip("Playback speed", "How a timeline battle plays its round: 1x; 0.5x (every walk, clip, float and pause twice as long); Block (it waits after each block until N or Next block). P cycles it in battle.");
-                ui.select("settings.playback_speed", sr, &labels, at, |i| SetAct::Pick(crate::battle::PLAYBACK_SPEED, i), true, t);
-                y += 14;
-                let col_w = (body.w - 10) / 2;
-                // VISCLAR1-A, INPUT1-PB, VISCLAR1-B: 12 rows of two at a 14 px pitch, so the debug row fits under them
-                let groups = &crate::battle::OVERLAY_GROUPS;
+                y += ui.p.line_h(BODY + 1.0).ceil() as i32 + 2;
+                let col_w = r.w / 2;
+                let groups = crate::battle::settings_overlay_groups();
                 for (k, (id, label, help, default)) in groups.iter().enumerate() {
-                    let (cx_, cy_) = (x + 3 + (k as i32 % 2) * col_w, y + (k as i32 / 2) * OVERLAY_PITCH);
+                    let (gx, gy) = (x + 3 + (k as i32 % 2) * col_w, y + (k as i32 / 2) * OVERLAY_PITCH);
                     let on = d["battle_overlays"][*id].as_bool().unwrap_or(*default);
-                    ui.checkbox(&format!("settings.overlay.{id}"), cx_, cy_, label, on, SetAct::Overlay(id), true);
+                    ui.checkbox(&format!("settings.overlay.{id}"), gx, gy, label, on, SetAct::Overlay(id), true);
                     if let Some(wd) = ui.widgets.last_mut() {
                         wd.tip = tip(label, help);
                     }
                 }
-                // VISCLAR1 VC4, VC5: the debug-build-only Party foresight off (never in a release build), a row under the
-                // groups: the heading, the checkbox in the second column
-                #[cfg(debug_assertions)]
-                {
+                // VISCLAR1 VC4, VC5: the debug-build-only row (never in a release build); PR7-37 (PT-33): a dev build's
+                // only (`crate::DEV_BUILD`)
+                if crate::DEV_BUILD {
                     let y = y + groups.len().div_ceil(2) as i32 * OVERLAY_PITCH + 2;
                     ui.p.text(x as f32, y as f32, "Debug", BODY + 1.0, th().gold);
                     // VIEWKEYS1: the walk's base step time (a release build uses the default), beside the heading
@@ -1032,37 +1478,273 @@ impl Screen<GameCx> for SettingsScreen {
                     ui.p.text(x as f32 + 36.0, y as f32, "Walk step", BODY, th().text);
                     let steps = ((most - least) / WALK_STEP_STEP) as usize + 1;
                     ui.slider("settings.debug.walk_step", Rect::new(x + 84, y, col_w - 92, 13), ((base - least) / WALK_STEP_STEP).round() as usize, steps, &format!("{base:.0} ms"), |i| SetAct::Set(crate::mapview::WALK_STEP_KEY, least + i as f64 * WALK_STEP_STEP), true);
-                    let at = x + 3 + col_w;
-                    ui.checkbox("settings.debug.party_foresight_off", at, y, "Party foresight off", d[crate::battle::FORESIGHT_OFF].as_bool().unwrap_or(false), SetAct::Toggle(crate::battle::FORESIGHT_OFF), true);
+                    ui.checkbox("settings.debug.party_foresight_off", x + 3 + col_w, y, "Party foresight off", d[crate::battle::FORESIGHT_OFF].as_bool().unwrap_or(false), SetAct::Toggle(crate::battle::FORESIGHT_OFF), true);
                     if let Some(wd) = ui.widgets.last_mut() {
                         wd.tip = tip("Party foresight off", "Debug: every enemy plan a party foresight passive reveals (Hawk Eye) is drawn as unrevealed. Enrage and the battle's plan reveal still show. Display only.");
                     }
                 }
             }
-            _ => {
-                // The list scrolls inside the panel (the wheel over it) once it outgrows it.
-                let content: i32 = CONTROLS.iter().map(|(_, rows)| 14 + rows.len() as i32 * 11 + 3).sum::<i32>() + 6;
-                let off = ui.scroll_begin("settings.controls", body, content);
-                y -= off;
-                for (head, rows) in CONTROLS {
-                    ui.p.text(x as f32, y as f32, head, BODY + 2.0, th().gold);
-                    y += 14;
-                    for (what, keys) in rows {
-                        ui.p.text(x as f32, y as f32, what, BODY, th().text);
-                        ui.p.text(x as f32 + 195.0, y as f32, keys, BODY, th().dim);
-                        y += 11;
-                    }
-                    y += 3;
-                }
-                ui.scroll_end();
+            // drawn by `draw` through its view (CONTROLS-UI1)
+            Row::Controls => {}
+        }
+    }
+
+    /// `label` without its own card (the video card's two halves).
+    fn label_bare(&self, ui: &mut Ui<SetAct>, r: Rect, label: &str, help: &str, ctrl_w: i32) {
+        let t = th();
+        let lh = ui.p.line_h(BODY);
+        let room = (r.w - ctrl_w - 16) as f32;
+        if self.popup {
+            ui.p.text_fit(r.x as f32 + 6.0, r.y as f32 + (r.h as f32 - lh) / 2.0, label, BODY, room, t.text);
+        } else {
+            let hh = ui.p.line_h(HELP);
+            let y = r.y as f32 + (r.h as f32 - lh - hh) / 2.0;
+            ui.p.text_fit(r.x as f32 + 6.0, y, label, BODY, room, t.text);
+            // the mock: the Display Mode's line in gold, the Resolution's dim
+            ui.p.text_fit(r.x as f32 + 6.0, y + lh, help, HELP, room, if label == "Display Mode" { t.gold } else { t.dim });
+        }
+    }
+
+    /// The modal box of the confirm or the guard: a frame `w` wide around the title, the wrapped text and the buttons
+    /// (id, label, action, primary) from the right.
+    fn modal(ui: &mut Ui<SetAct>, title: &str, lines: &[(String, f32, aegis_ui::canvas::Rgba)], buttons: &[(&str, String, SetAct, bool)], close: SetAct) {
+        let w = 300;
+        let bh = 16;
+        let mut text_h = 0.0;
+        let mut wrapped = Vec::new();
+        for (s, size, col) in lines {
+            let ls = ui.p.wrap(s, *size, (w - 24) as f32);
+            text_h += ls.len() as f32 * ui.p.line_h(*size) + 3.0;
+            wrapped.push((ls, *size, *col));
+        }
+        let head = ui.p.line_h_face(Typeface::Display, ui.m().head).ceil() as i32;
+        let h = 10 + head + 8 + text_h.ceil() as i32 + 8 + bh + 10;
+        let r = Rect::new((W - w) / 2, (H - h) / 2, w, h);
+        let t = th();
+        ui.p.fill(Rect::new(0, 0, W, H), t.game("settings_veil", rgba(0, 0, 0, 140)));
+        // the box hides the screen under it (the panel's fill lets a little through)
+        let [pr, pg, pb, _] = t.panel;
+        ui.p.fill(r, rgba(pr, pg, pb, 255));
+        // the mock's reduced corner-only frame (theme role `ornate`)
+        ui.frame_body("ornate", r);
+        let head_size = ui.m().head;
+        ui.p.text_face(Typeface::Display, r.x as f32 + 12.0, r.y as f32 + 8.0, title, head_size, t.gold);
+        ui.close_x("settings.modal.close", Rect::new(r.x + r.w - 26, r.y + 7, 17, 16), close);
+        let mut y = (r.y + 10 + head + 4) as f32;
+        for (ls, size, col) in wrapped {
+            for l in ls {
+                ui.p.text((r.x + 12) as f32, y, &l, size, col);
+                y += ui.p.line_h(size);
+            }
+            y += 3.0;
+        }
+        let mut x = r.x + r.w - 12;
+        for (id, label, a, primary) in buttons {
+            let bw = ui.p.text_w(label, BODY).ceil() as i32 + 14;
+            x -= bw;
+            ui.button_full(id, Rect::new(x, r.y + r.h - bh - 10, bw, bh), label, a.clone(), true, *primary, BODY, Vec::new());
+            x -= 6;
+        }
+    }
+}
+
+impl Screen<GameCx> for SettingsScreen {
+    /// Nothing here moves by itself but the confirm's countdown.
+    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
+        if self.confirm.is_some() {
+            FrameNeed::Within(Duration::from_millis(250))
+        } else {
+            FrameNeed::Idle
+        }
+    }
+    fn id(&self) -> &'static str {
+        "settings"
+    }
+    fn overlay(&self) -> bool {
+        true
+    }
+    fn tick(&mut self, cx: &mut Cx) {
+        self.tick_at(cx, Instant::now());
+    }
+    /// CONTROLS-UI1: while a rebind waits (or asks to swap), the raw key or pad button is its input.
+    fn capture(&mut self, cx: &mut Cx, input: aegis_ui::controls::Input) -> bool {
+        if self.tab != TABS.len() - 1 || !self.rebind.capturing() {
+            return false;
+        }
+        if self.rebind.input(&crate::controls_view::ACTIONS, &mut cx.settings.v, input) == aegis_ui::controls::Outcome::Bound {
+            Self::save(cx);
+        }
+        true
+    }
+    /// Right click and Esc: a rebind cancels, the confirm reverts, the guard stays, else the screen closes (asking first
+    /// when a display change is staged).
+    fn back(&mut self, cx: &mut Cx) {
+        if self.rebind.capturing() {
+            self.rebind.cancel();
+            return;
+        }
+        let a = if self.confirm.is_some() {
+            SetAct::Revert
+        } else if self.guard.is_some() {
+            SetAct::GuardStay
+        } else {
+            SetAct::Close
+        };
+        self.act(cx, a);
+    }
+    /// Enter answers the open box: Keep changes, or Apply display.
+    fn key(&mut self, cx: &mut Cx, k: Key) {
+        if k == Key::Enter {
+            if self.confirm.is_some() {
+                self.act(cx, SetAct::Keep);
+            } else if self.guard.is_some() {
+                self.act(cx, SetAct::GuardApply);
             }
         }
-        ui.button("settings.defaults", Rect::new(r.x + r.w - 160, r.y + r.h - 25, 80, 17), "Restore defaults", SetAct::Defaults, true);
-        ui.button("settings.apply", Rect::new(r.x + r.w - 75, r.y + r.h - 25, 66, 17), "Apply", SetAct::Apply, true);
+    }
+    fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        let modal = self.confirm.is_some() || self.guard.is_some();
+        let mut ui: Ui<SetAct> = Ui::new(g, if modal { (-500, -500) } else { mouse }, live);
+        let t = th();
+        ui.p.fill(Rect::new(0, 0, W, H), t.game("settings_veil", rgba(0, 0, 0, 140)));
+        let popup = self.popup;
+        let r = if popup { Rect::new(85, 50, 470, 260) } else { Rect::new(32, 18, 576, 324) };
+        // the mock's full ornate frame (theme role `ornate_full`; the vector panel without its art)
+        ui.frame_body("ornate_full", r);
+        let m = ui.m();
+        ui.p.text_face(Typeface::Display, r.x as f32 + 9.0, r.y as f32 + 6.0, "Settings", m.head, t.gold);
+        let top = r.y + m.frame_title_h;
+        ui.close_x("settings.close", Rect::new(r.x + r.w - 28, r.y + 9, 19, 18), SetAct::Close);
+        // the footer: the note and Restore defaults (and the popup's Return to title)
+        let fh = 16;
+        let fy = r.y + r.h - 9 - fh;
+        let mut bx = r.x + r.w - 10;
+        let mut foot = vec![("settings.defaults", "Restore defaults", SetAct::Defaults)];
+        if popup {
+            foot.insert(0, ("settings.title", "Return to title", SetAct::Title));
+        }
+        if popup && self.retreat {
+            foot.insert(0, ("settings.retreat", "Retreat", SetAct::Retreat));
+        }
+        for (id, label, a) in foot {
+            let bw = ui.p.text_w(label, BODY).ceil() as i32 + 14;
+            bx -= bw;
+            ui.button(id, Rect::new(bx, fy, bw, fh), label, a, true);
+            bx -= 6;
+        }
+        if !popup {
+            let note = "Changes apply at once; Display Mode and Resolution wait for Apply";
+            let room = (bx - r.x - 14) as f32;
+            if ui.p.text_w(note, HELP) <= room {
+                ui.p.text((r.x + 12) as f32, fy as f32 + (fh as f32 - ui.p.line_h(HELP)) / 2.0, note, HELP, t.dim);
+            }
+        }
+        let area = Rect::new(r.x + 10, top + 2, r.w - 20, fy - 5 - (top + 2));
+        // the rail
+        let rail_w = if popup { 92 } else { 120 };
+        let lh = ui.p.line_h(BODY + 1.0);
+        let tab_h = if popup { ((lh + 8.0).ceil() as i32).max(20) } else { ((lh + ui.p.line_h(HELP) + 8.0).ceil() as i32).max(27) };
+        for (i, (name, sub)) in TABS.iter().enumerate() {
+            let tr = Rect::new(area.x, area.y + i as i32 * (tab_h + 4), rail_w, tab_h);
+            let open = self.tab == i;
+            let hover = ui.hover(tr);
+            ui.p.panel(tr, if open { t.selected } else if hover { t.card_hot } else { t.card }, if open { t.focus } else if hover { t.edge_hot } else { t.edge }, 2.0);
+            let col = if open { t.gold } else { t.text };
+            let room = (rail_w - 20) as f32;
+            if popup {
+                ui.p.text_fit((tr.x + 7) as f32, tr.y as f32 + (tab_h as f32 - lh) / 2.0, name, BODY + 1.0, room, col);
+            } else {
+                let y = tr.y as f32 + (tab_h as f32 - lh - ui.p.line_h(HELP)) / 2.0;
+                ui.p.text_fit((tr.x + 7) as f32, y, name, BODY + 1.0, room, col);
+                let sub = if i == 0 && self.web { "Fullscreen & text" } else { sub };
+                ui.p.text_fit((tr.x + 7) as f32, y + lh, sub, HELP, room, t.dim);
+            }
+            aegis_ui::ui::draw_glyph(&mut ui.p, Glyph::ChevronRight, Rect::new(tr.x + tr.w - 14, tr.y + (tab_h - 8) / 2, 8, 8), if open { crate::tokens::accent() } else { t.dim });
+            ui.push(format!("settings.tab.{}", name.to_lowercase()), "tab", *name, tr, true, open, Some(SetAct::Tab(i)), Vec::new());
+        }
+        // the tab body: its heading (and the Display badge or Sound's Mute all), then its rows, scrolling when taller
+        let outer = Rect::new(area.x + rail_w + 7, area.y, area.w - rail_w - 7, area.h);
+        let fill = t.game("settings_body", rgba(24, 26, 32, 255));
+        ui.p.panel(outer, fill, t.edge, 2.0);
+        let body = outer.pad(Insets::all(6));
+        let heads = ["Display & Text", "Audio & Soundscape", "Gameplay & Exploration", "Battle & Timeline Planner", "Controls & Keybindings"];
+        let hh = (ui.p.line_h_face(Typeface::Display, HEAD).ceil() as i32).max(16);
+        ui.p.text_face(Typeface::Display, body.x as f32, body.y as f32, heads[self.tab], HEAD, t.gold);
+        let d = cx.settings.v.clone();
+        if self.tab == 0 && !self.web {
+            let size = d["window_size"].as_str().unwrap_or("");
+            let badge = match WindowShow::of(&d) {
+                WindowShow::Fullscreen => "Active: Fullscreen".to_string(),
+                WindowShow::Borderless => format!("Active: Borderless · {size}"),
+                WindowShow::Windowed => format!("Active: Windowed · {size}"),
+            };
+            let bw = ui.p.text_w(&badge, HELP).ceil() as i32 + 10;
+            let br = Rect::new(body.x + body.w - bw, body.y + 1, bw, (ui.p.line_h(HELP).ceil() as i32 + 3).min(hh));
+            ui.p.panel(br, t.selected, t.focus, 1.0);
+            ui.p.text((br.x + 5) as f32, br.y as f32 + 1.5, &badge, HELP, t.text);
+        }
+        if self.tab == 1 {
+            // the mock's header pair: Mute in Background (PR7-26; the engine's key, on by default) left of Mute all
+            let mute = d["mute"].as_bool().unwrap_or(false);
+            let label = if mute { "Mute all: On" } else { "Mute all: Off" };
+            let bw = ui.p.text_w("Mute all: Off", BODY).ceil() as i32 + 14;
+            Self::toggle(&mut ui, "settings.mute", Rect::new(body.x + body.w - bw, body.y, bw, 14), label, mute, SetAct::Toggle("mute"), Vec::new());
+            let away = d[MUTE_IN_BACKGROUND].as_bool().unwrap_or(true);
+            let label = if away { "Mute in Background: On" } else { "Mute in Background: Off" };
+            let aw = ui.p.text_w("Mute in Background: Off", BODY).ceil() as i32 + 14;
+            let help = tip("Mute in Background", "Silences every sound while the game's window is not in focus; the volumes stay as set.");
+            Self::toggle(&mut ui, "settings.mute_in_background", Rect::new(body.x + body.w - bw - 6 - aw, body.y, aw, 14), label, away, SetAct::Toggle(MUTE_IN_BACKGROUND), help);
+        }
+        let view = Rect::new(body.x, body.y + hh + 3, body.w, body.h - hh - 3);
+        let rows = self.rows(cx);
+        let inner_w = view.w - 5;
+        // CONTROLS-UI1: the Controls tab's view and its layout (None: the default); a layout's problems go to the notice
+        let controls = matches!(rows.first(), Some(Row::Controls)).then(|| crate::controls_view::view(&cx.settings.v, &self.rebind));
+        let layout = controls.as_ref().and_then(|v| self.layouts.get(v).cloned());
+        cx.notice.extend(self.layouts.take_problems());
+        let heights: Vec<i32> = rows.iter().map(|row| if layout.is_some() && matches!(row, Row::Controls) { view.h } else { self.row_height(&mut ui, cx, *row, inner_w) }).collect();
+        let content = heights.iter().sum::<i32>() + GAP * (rows.len() as i32 - 1).max(0);
+        let off = ui.scroll_begin("settings.body", view, content);
+        let mut y = view.y - off;
+        for (row, h) in rows.iter().zip(&heights) {
+            let r = Rect::new(view.x, y, inner_w, *h);
+            match (row, &controls) {
+                (Row::Controls, Some(v)) => {
+                    let art = &mut cx.art;
+                    ui.nest(SetAct::View, |sub| aegis_ui::screen_layout::draw(sub, art, layout.as_ref(), v, r));
+                }
+                _ => self.draw_row(&mut ui, cx, *row, r),
+            }
+            y += h + GAP;
+        }
+        ui.scroll_end();
+        // the keep-or-revert confirm and the close guard draw over the screen and take its input
+        if modal {
+            ui.widgets.clear();
+            ui.mouse = mouse;
+            let size = |v: &Value| v["window_size"].as_str().unwrap_or("").to_string();
+            let named = |v: &Value| match WindowShow::of(v) {
+                WindowShow::Fullscreen => "Fullscreen".to_string(),
+                WindowShow::Borderless => format!("Borderless · {}", size(v)),
+                WindowShow::Windowed => format!("Windowed · {}", size(v)),
+            };
+            if let Some(left) = self.confirm_left(Instant::now()) {
+                let lines = [(format!("Display switched to {}.", named(&d)), BODY, t.text), (format!("Reverting to the previous display in {left} s."), BODY, t.foe)];
+                Self::modal(&mut ui, "Keep Display Settings?", &lines, &[("settings.confirm.keep", "Keep changes [Enter]".into(), SetAct::Keep, true), ("settings.confirm.revert", "Revert".into(), SetAct::Revert, false)], SetAct::Revert);
+            } else if self.guard.is_some() {
+                let lines = [
+                    (format!("You chose {} without pressing Apply.", named(&self.pending)), BODY, t.text),
+                    ("All other settings apply at once. Apply or discard the display change before closing?".to_string(), HELP, t.dim),
+                ];
+                let buttons = [("settings.guard.apply", "Apply display [Enter]".to_string(), SetAct::GuardApply, true), ("settings.guard.discard", "Discard & close".to_string(), SetAct::GuardDiscard, false), ("settings.guard.stay", "Stay".to_string(), SetAct::GuardStay, false)];
+                Self::modal(&mut ui, "Unapplied Display Changes?", &lines, &buttons, SetAct::GuardStay);
+            }
+        }
         self.w = ui.widgets;
     }
-    fn state(&self, _cx: &Cx) -> Value {
-        json!({"tab": TABS[self.tab], "draft": self.draft})
+    fn state(&self, cx: &Cx) -> Value {
+        json!({"tab": TABS[self.tab].0, "popup": self.popup, "settings": cx.settings.v, "pending": self.pending, "display_dirty": self.display_dirty(cx),
+            "confirm_left": self.confirm_left(Instant::now()), "guard": self.guard.map(|g| format!("{g:?}").to_lowercase()), "rebind": crate::controls_view::state(&self.rebind)})
     }
     widget_plumbing!();
 }
@@ -1071,26 +1753,13 @@ impl Screen<GameCx> for SettingsScreen {
 /// row).
 const OVERLAY_PITCH: i32 = 14;
 
-/// Volume sliders move in steps of 5 (0-100); speed and text-size sliders in quarters (0.5-2.0).
+/// Volume sliders move in steps of 5 (0-100).
 const VOLUME_STEP: f64 = 5.0;
-const SCALE_STEP: f64 = 0.25;
 /// The debug Walk step slider's step, ms.
-#[cfg(debug_assertions)]
 const WALK_STEP_STEP: f64 = 10.0;
 
-fn choices(k: &str) -> &'static [&'static str] {
-    CHOICES.iter().find(|c| c.0 == k).map(|c| c.1).unwrap_or(&[])
-}
-
-/// A settings choice (CHOICES) as a select with its option list.
-fn choice(ui: &mut Ui<SetAct>, k: &'static str, r: Rect, current: &str, enabled: bool) {
-    let opts: Vec<String> = choices(k).iter().map(|o| o.to_string()).collect();
-    let at = opts.iter().position(|o| o == current).unwrap_or(0);
-    ui.select(&format!("settings.{k}"), r, &opts, at, |i| SetAct::Pick(k, i), enabled, Vec::new());
-}
-
 fn static_key(k: &str) -> &'static str {
-    ["master", "music", "effects", "interface"].into_iter().find(|x| *x == k).unwrap_or("master")
+    ["master", "music", "effects", "interface", "ambience"].into_iter().find(|x| *x == k).unwrap_or("master")
 }
 
 #[cfg(test)]
@@ -1184,6 +1853,69 @@ mod tests {
         ask.draw(cx, g, (-1, -1), true);
         ask.click_id(cx, "ask.yes").unwrap();
         cx.nav.clear();
+    }
+
+    /// UISPLIT1-H Stage A (`save_view`): the slot list's view says what the drawn rows say: a row per slot, on exactly
+    /// when its card takes a click, its note the card's line, lock or unlock and delete as buttons where the icons show
+    /// (delete off while locked); the agent link carries it; a view click maps to the screen's own act.
+    #[test]
+    fn the_slots_view_matches_the_drawn_rows() {
+        use crate::save_view::{slot_act, view, BACK, DELETE, LOCK, OPEN, UNLOCK};
+        use aegis_ui::screen_layout::{Act, Field};
+        let dir = aegis_core::scratch::Scratch::vacant("emberwake_slots_view");
+        let mut cx = cx(dir.to_path_buf());
+        let mut g = gfx();
+        assert!(save::write(&cx.data, &dir, cx.gs(), 2, 0).is_empty() && save::write(&cx.data, &dir, cx.gs(), 3, 0).is_empty());
+        save::set_locked(&dir, 3, true).unwrap();
+        for saving in [true, false] {
+            let mut s = Slots::new(saving);
+            let w = frame(&mut s, &mut cx, &mut g);
+            let v = view(&cx, saving);
+            assert_eq!(s.state(&cx)["view"], v.to_json(), "the agent link's view");
+            let Some(Field::Rows(rows)) = v.get("slots") else { panic!("slots") };
+            assert_eq!(rows.len() as i64, save::LAST_SLOT - save::AUTOSAVE_SLOT + 1);
+            for r in rows {
+                let card = get(&w, &format!("slot.{}", r.id)).unwrap();
+                assert_eq!(card["enabled"].as_bool(), Some(r.enabled), "{saving} slot {}", r.id);
+                assert_eq!(card["tip"][1].as_str(), Some(r.note.as_str()), "{saving} slot {}", r.id);
+                let has = |a: &str| r.buttons.iter().find(|b| b.action == a);
+                assert_eq!(get(&w, &format!("slot.{}.lock", r.id)).is_some(), has(LOCK).or(has(UNLOCK)).is_some(), "slot {}", r.id);
+                assert_eq!(get(&w, &format!("slot.{}.delete", r.id)).is_some(), has(DELETE).is_some(), "slot {}", r.id);
+            }
+            let three = rows.iter().find(|r| r.id == "3").unwrap();
+            assert!(three.buttons.iter().any(|b| b.action == UNLOCK) && three.buttons.iter().any(|b| b.action == DELETE && !b.enabled), "locked: unlock, delete off");
+            assert!(!rows[0].detail.is_empty() || !json::b(&save::peek(&cx.data, &dir, 0), "ok", false), "a readable save shows its day");
+            assert!(!rows.iter().find(|r| r.id == "2").unwrap().detail.is_empty(), "slot 2's day");
+            let act = |a: &str, arg: Option<&str>| slot_act(saving, &Act { action: a.into(), arg: arg.map(str::to_string) });
+            assert_eq!(act(OPEN, Some("2")), Some(if saving { SlotAct::Save(2) } else { SlotAct::Load(2) }));
+            assert_eq!((act(LOCK, Some("2")), act(UNLOCK, Some("3")), act(DELETE, Some("2")), act(BACK, None)), (Some(SlotAct::Lock(2, true)), Some(SlotAct::Lock(3, false)), Some(SlotAct::Delete(2)), Some(SlotAct::Back)));
+            assert_eq!((act(OPEN, None), act("nope", Some("1"))), (None, None));
+        }
+    }
+
+    /// US6: the fixture has the view's shape (field names and kinds, action ids).
+    #[test]
+    fn the_slots_fixture_has_the_view_shape() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let layers = aegis_core::assets::Layers::of(vec![root]);
+        let fixture = aegis_ui::screen_layout::load_fixture(&layers, crate::save_view::SCREEN).expect("the fixture file").expect("it parses");
+        let dir = aegis_core::scratch::Scratch::vacant("emberwake_slots_fixture");
+        let cx = cx(dir.to_path_buf());
+        let shape = |v: &aegis_ui::screen_layout::View| (v.screen.clone(), v.fields.iter().map(|(n, f)| (n.clone(), f.kind())).collect::<Vec<_>>(), v.actions.iter().map(|a| a.id.clone()).collect::<Vec<_>>());
+        assert_eq!(shape(&fixture), shape(&crate::save_view::view(&cx, true)));
+    }
+
+    /// Writes the fixture (by hand: `cargo test -p emberwake_gui write_slots_fixture -- --ignored`): the save screen with
+    /// a save in slot 2 and a locked one in slot 3.
+    #[test]
+    #[ignore]
+    fn write_slots_fixture() {
+        let dir = aegis_core::scratch::Scratch::vacant("emberwake_slots_write");
+        let cx = cx(dir.to_path_buf());
+        assert!(save::write(&cx.data, &dir, cx.gs(), 2, 0).is_empty() && save::write(&cx.data, &dir, cx.gs(), 3, 0).is_empty());
+        save::set_locked(&dir, 3, true).unwrap();
+        let v = crate::save_view::view(&cx, true).to_json();
+        std::fs::write(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/ui/views/slots.view.json"), serde_json::to_string_pretty(&v).unwrap() + "\n").unwrap();
     }
 
     /// PLAYUI1 section 1 acceptance over the screen's widgets (the agent link's ids): `slot.2` saves an empty slot at
@@ -2078,5 +2810,524 @@ mod tests {
         assert_eq!(NewGameScreen::new(&cx).state(&cx)["selected"], json!(want), "the first playable start world");
         std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").start_worlds.clear();
         assert_eq!(NewGameScreen::new(&cx).state(&cx)["selected"], json!(playable[0]), "no list: the first playable world");
+    }
+}
+
+/// SETTINGS-MOCK1 (PR7-21): the settings screen's audit: the tab rail, the staged display change, the keep-or-revert
+/// timer, the close guard, the web's rows and the fit of every tab at the four text sizes, full screen and popup. With
+/// `AEGIS_REVIEW_DIR` set it writes the review shots there.
+#[cfg(test)]
+mod settings_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx, rect};
+    use aegis_ui::canvas::Canvas;
+    use aegis_ui::painter::View;
+
+    fn saved(cx: &Cx, key: &str) -> Value {
+        let text = std::fs::read_to_string(cx.shot_dir.join("settings.json")).expect("the settings file");
+        serde_json::from_str::<Value>(&text).expect("json")[key].clone()
+    }
+
+    fn redraw(s: &mut SettingsScreen, cx: &mut Cx, g: &mut Gfx) -> Vec<Value> {
+        s.draw(cx, g, (-500, -500), true);
+        s.widgets()
+    }
+
+    fn has(w: &[Value], id: &str) -> bool {
+        w.iter().any(|x| x["id"] == id)
+    }
+
+    /// Picks Display Mode `mode` by its arrows (staged only).
+    fn stage_mode(s: &mut SettingsScreen, cx: &mut Cx, g: &mut Gfx, mode: WindowShow) {
+        for _ in 0..DISPLAY_MODES.len() {
+            if WindowShow::of(&s.state(cx)["pending"]) == mode {
+                return;
+            }
+            redraw(s, cx, g);
+            s.click_id(cx, "settings.display_mode.next").expect("the arrow");
+        }
+        assert_eq!(WindowShow::of(&s.state(cx)["pending"]), mode);
+    }
+
+    /// The rail lists the five tabs in the mock's order (Display first), each with its subtitle on the full screen and
+    /// none in the popup; a click opens a tab, and every tab sits left of the body.
+    #[test]
+    fn the_rail_lists_the_five_tabs_with_subtitles_on_the_full_screen() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        for popup in [false, true] {
+            let mut s = if popup { SettingsScreen::in_game(&cx) } else { SettingsScreen::new(&cx) };
+            let recs = frame(&mut s, &mut cx, &mut g, 1.0);
+            let w = s.widgets();
+            let tabs: Vec<&Value> = w.iter().filter(|x| x["kind"] == "tab").collect();
+            assert_eq!(tabs.iter().map(|t| t["text"].as_str().unwrap()).collect::<Vec<_>>(), TABS.iter().map(|t| t.0).collect::<Vec<_>>());
+            let body = w.iter().find(|x| x["id"] == "settings.body").expect("the body");
+            for t in &tabs {
+                assert!(rect(t).0 + rect(t).2 < rect(body).0, "{t} left of the body");
+            }
+            for (name, sub) in TABS {
+                assert_eq!(recs.iter().any(|r| r.text == sub), !popup, "{name}'s subtitle (popup {popup})");
+            }
+            for (i, (name, _)) in TABS.iter().enumerate() {
+                s.click_id(&mut cx, &format!("settings.tab.{}", name.to_lowercase())).expect("the tab");
+                assert_eq!(s.state(&cx)["tab"], json!(name));
+                let w = redraw(&mut s, &mut cx, &mut g);
+                let open: Vec<&Value> = w.iter().filter(|x| x["kind"] == "tab" && x["active"] == json!(true)).collect();
+                assert_eq!(open.len(), 1);
+                assert_eq!(open[0]["text"], json!(TABS[i].0));
+            }
+            // the popup is the decluttered one: smaller, with Return to title; the full screen has none
+            assert_eq!(has(&s.widgets(), "settings.title"), popup);
+        }
+    }
+
+    /// Display Mode and Resolution are staged until Apply (the card's Reset drops them); every other row writes and
+    /// saves at once.
+    #[test]
+    fn display_changes_wait_for_apply_and_the_rest_apply_at_once() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut s = SettingsScreen::new(&cx);
+        redraw(&mut s, &mut cx, &mut g);
+        let before = (cx.settings.v["fullscreen"].clone(), cx.settings.v["borderless"].clone(), cx.settings.v["window_size"].clone());
+        stage_mode(&mut s, &mut cx, &mut g, WindowShow::Borderless);
+        redraw(&mut s, &mut cx, &mut g);
+        s.click_id(&mut cx, "settings.window_size.next").expect("the arrow");
+        assert!(s.display_dirty(&cx));
+        assert_eq!((cx.settings.v["fullscreen"].clone(), cx.settings.v["borderless"].clone(), cx.settings.v["window_size"].clone()), before, "staged only");
+        let w = redraw(&mut s, &mut cx, &mut g);
+        assert!(has(&w, "settings.reset"), "Reset shows while a change is staged");
+        assert_eq!(w.iter().find(|x| x["id"] == "settings.apply").unwrap()["active"], json!(true), "Apply is lit");
+        s.click_id(&mut cx, "settings.reset").expect("reset");
+        assert!(!s.display_dirty(&cx), "Reset drops the staged change");
+        assert!(!has(&redraw(&mut s, &mut cx, &mut g), "settings.reset"));
+        // Apply with nothing staged does nothing
+        s.click_id(&mut cx, "settings.apply").expect("apply");
+        assert_eq!(s.state(&cx)["confirm_left"], Value::Null);
+        // the rest: at once, saved
+        let vsync = cx.settings.v["vsync"].as_bool().unwrap();
+        s.click_id(&mut cx, "settings.vsync").expect("vsync");
+        assert_eq!(cx.settings.v["vsync"], json!(!vsync));
+        assert_eq!(saved(&cx, "vsync"), json!(!vsync), "saved at once");
+        s.click_id(&mut cx, "settings.text_scale.next").expect("text size");
+        assert_eq!(saved(&cx, "text_scale"), json!(TEXT_SIZES[2].1), "Normal steps to Large");
+        s.click_id(&mut cx, "settings.tab.sound").expect("sound");
+        redraw(&mut s, &mut cx, &mut g);
+        let master = cx.settings.v["master"].as_f64().unwrap();
+        s.click_id(&mut cx, "settings.master.down").expect("the arrow");
+        assert_eq!(saved(&cx, "master").as_f64(), Some(master - VOLUME_STEP));
+        s.click_id(&mut cx, "settings.mute").expect("mute all");
+        assert_eq!(saved(&cx, "mute"), json!(true));
+        assert!(!s.display_dirty(&cx), "nothing on the Sound tab stages");
+    }
+
+    /// Apply writes the staged display and opens the 15 s confirm: before its end the change holds, at its end (or on
+    /// Revert, Esc, the box's X) the previous display comes back; Keep (or Enter) commits it and no timer reverts it.
+    #[test]
+    fn the_confirm_reverts_when_its_time_runs_out_and_keep_commits() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        for how in ["timer", "revert", "esc", "x", "keep", "enter"] {
+            let mut s = SettingsScreen::new(&cx);
+            redraw(&mut s, &mut cx, &mut g);
+            let prev = staged_of(&cx.settings.v);
+            let want = if WindowShow::of(&prev) == WindowShow::Fullscreen { WindowShow::Windowed } else { WindowShow::Fullscreen };
+            stage_mode(&mut s, &mut cx, &mut g, want);
+            redraw(&mut s, &mut cx, &mut g);
+            s.click_id(&mut cx, "settings.apply").expect("apply");
+            let t0 = Instant::now();
+            assert_eq!(WindowShow::of(&cx.settings.v), want, "{how}: applied");
+            assert_eq!(WindowShow::of(&json!({"fullscreen": saved(&cx, "fullscreen"), "borderless": saved(&cx, "borderless")})), want, "{how}: saved");
+            assert_eq!(s.confirm_left(t0), Some(CONFIRM_SECS), "{how}: the countdown starts at 15 s");
+            assert_eq!(s.frame_need(&cx), FrameNeed::Within(Duration::from_millis(250)), "the countdown redraws");
+            let w = redraw(&mut s, &mut cx, &mut g);
+            assert!(has(&w, "settings.confirm.keep") && has(&w, "settings.confirm.revert"), "{how}: the confirm");
+            assert!(!has(&w, "settings.tab.display") && !has(&w, "settings.apply"), "{how}: the box takes the input");
+            s.tick_at(&mut cx, t0 + Duration::from_secs(CONFIRM_SECS - 1));
+            assert_eq!(WindowShow::of(&cx.settings.v), want, "{how}: still on before the end");
+            assert_eq!(s.confirm_left(t0 + Duration::from_secs(CONFIRM_SECS - 1)), Some(1));
+            match how {
+                "timer" => s.tick_at(&mut cx, t0 + Duration::from_secs(CONFIRM_SECS + 1)),
+                "revert" => s.click_id(&mut cx, "settings.confirm.revert").expect("revert"),
+                "esc" => s.back(&mut cx),
+                "x" => s.click_id(&mut cx, "settings.modal.close").expect("the X"),
+                "keep" => s.click_id(&mut cx, "settings.confirm.keep").expect("keep"),
+                _ => s.key(&mut cx, Key::Enter),
+            }
+            let kept = matches!(how, "keep" | "enter");
+            assert_eq!(s.confirm_left(t0), None, "{how}: the box closed");
+            assert!(cx.nav.is_empty(), "{how}: the screen stays open");
+            s.tick_at(&mut cx, t0 + Duration::from_secs(CONFIRM_SECS * 4));
+            let now = WindowShow::of(&cx.settings.v);
+            let file = WindowShow::of(&json!({"fullscreen": saved(&cx, "fullscreen"), "borderless": saved(&cx, "borderless")}));
+            if kept {
+                assert_eq!((now, file), (want, want), "{how}: kept, and no timer reverts it");
+                // back to the start for the next case
+                stage_mode(&mut s, &mut cx, &mut g, WindowShow::of(&prev));
+                s.act(&mut cx, SetAct::Apply);
+                s.act(&mut cx, SetAct::Keep);
+            } else {
+                assert_eq!((now, file), (WindowShow::of(&prev), WindowShow::of(&prev)), "{how}: the previous display is back");
+                assert_eq!(cx.settings.v["window_size"], prev["window_size"]);
+                assert!(!s.display_dirty(&cx), "{how}: nothing staged after a revert");
+            }
+            assert_eq!(s.frame_need(&cx), FrameNeed::Idle);
+        }
+    }
+
+    /// Closing with a staged display change (X, Esc, right click, Return to title) asks first: Stay keeps the screen
+    /// and the change, Discard & close drops it and goes on, Apply display applies it (the confirm) and stays. With
+    /// nothing staged the screen closes at once.
+    #[test]
+    fn the_close_guard_asks_before_dropping_a_staged_display_change() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut s = SettingsScreen::in_game(&cx);
+        redraw(&mut s, &mut cx, &mut g);
+        s.click_id(&mut cx, "settings.close").expect("the X");
+        assert!(matches!(cx.nav.pop(), Some(Nav::Pop)), "nothing staged: it closes");
+        let applied = WindowShow::of(&cx.settings.v);
+        let other = if applied == WindowShow::Borderless { WindowShow::Windowed } else { WindowShow::Borderless };
+        for how in ["x", "esc", "title"] {
+            stage_mode(&mut s, &mut cx, &mut g, other);
+            redraw(&mut s, &mut cx, &mut g);
+            match how {
+                "x" => s.click_id(&mut cx, "settings.close").expect("the X"),
+                "esc" => s.back(&mut cx),
+                _ => s.click_id(&mut cx, "settings.title").expect("Return to title"),
+            }
+            assert!(cx.nav.is_empty(), "{how}: the guard holds the screen");
+            assert_eq!(s.state(&cx)["guard"], json!(if how == "title" { "title" } else { "close" }));
+            let w = redraw(&mut s, &mut cx, &mut g);
+            for id in ["settings.guard.stay", "settings.guard.discard", "settings.guard.apply"] {
+                assert!(has(&w, id), "{how}: {id}");
+            }
+            assert!(!has(&w, "settings.close"), "the box takes the input");
+            // Stay (and Esc on the box) keep the screen and the staged change
+            s.back(&mut cx);
+            assert_eq!(s.state(&cx)["guard"], Value::Null);
+            assert!(cx.nav.is_empty() && s.display_dirty(&cx), "{how}: Esc on the guard stays");
+            s.act(&mut cx, if how == "title" { SetAct::Title } else { SetAct::Close });
+            redraw(&mut s, &mut cx, &mut g);
+            s.click_id(&mut cx, "settings.guard.stay").expect("stay");
+            assert!(cx.nav.is_empty() && s.display_dirty(&cx));
+        }
+        // Discard & close: the staged change goes and the screen closes; the display never changed
+        s.act(&mut cx, SetAct::Close);
+        redraw(&mut s, &mut cx, &mut g);
+        s.click_id(&mut cx, "settings.guard.discard").expect("discard");
+        assert!(matches!(cx.nav.pop(), Some(Nav::Pop)));
+        assert!(!s.display_dirty(&cx) && WindowShow::of(&cx.settings.v) == applied);
+        // Return to title with Discard: back to the title (a clean game asks nothing)
+        stage_mode(&mut s, &mut cx, &mut g, other);
+        s.act(&mut cx, SetAct::Title);
+        redraw(&mut s, &mut cx, &mut g);
+        s.click_id(&mut cx, "settings.guard.discard").expect("discard");
+        assert!(cx.nav.iter().any(|n| matches!(n, Nav::Reset(_))) || cx.nav.iter().any(|n| matches!(n, Nav::Push(_))), "to the title, or its unsaved-progress question");
+        cx.nav.clear();
+        // Apply display: the change applies, the confirm opens, the screen stays
+        let mut s = SettingsScreen::new(&cx);
+        stage_mode(&mut s, &mut cx, &mut g, other);
+        s.act(&mut cx, SetAct::Close);
+        redraw(&mut s, &mut cx, &mut g);
+        s.key(&mut cx, Key::Enter);
+        assert!(cx.nav.is_empty());
+        assert_eq!(WindowShow::of(&cx.settings.v), other);
+        assert_eq!(s.confirm_left(Instant::now()).map(|l| l <= CONFIRM_SECS), Some(true), "the confirm is open");
+    }
+
+    /// WEBFIX1, DISPLAY1 rule 8: the web's Display tab keeps Fullscreen (at once: the click is the browser's gesture) and
+    /// Text size of the display rows; no Display Mode, Resolution, VSync or Frame rate cap.
+    #[test]
+    fn the_web_keeps_fullscreen_and_text_size_only() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut s = SettingsScreen::new(&cx).as_web();
+        let w = redraw(&mut s, &mut cx, &mut g);
+        assert!(has(&w, "settings.fullscreen") && has(&w, "settings.text_scale"));
+        for id in ["settings.display_mode", "settings.window_size", "settings.vsync", "settings.fps_cap", "settings.apply"] {
+            assert!(!has(&w, id), "{id} is not on the web");
+        }
+        let was = WindowShow::of(&cx.settings.v) == WindowShow::Fullscreen;
+        s.click_id(&mut cx, "settings.fullscreen").expect("fullscreen");
+        assert_eq!(WindowShow::of(&cx.settings.v) == WindowShow::Fullscreen, !was, "at once");
+        assert!(!s.display_dirty(&cx) && s.confirm_left(Instant::now()).is_none(), "no staging, no confirm");
+    }
+
+    /// PR7-15 (b) (FB-287 Option A): Map Camera Zoom is on the Display tab, desktop and web, full screen and popup;
+    /// PR7-37 (PT-33): on that tab only (no longer on Gameplay); a pick applies at once (no display staging).
+    #[test]
+    fn map_zoom_is_on_the_display_tab_only() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        for web in [false, true] {
+            for popup in [false, true] {
+                let base = if popup { SettingsScreen::in_game(&cx) } else { SettingsScreen::new(&cx) };
+                let mut s = if web { base.as_web() } else { base };
+                let w = redraw(&mut s, &mut cx, &mut g);
+                assert!(has(&w, "settings.map_zoom"), "Display has Map zoom (web {web}, popup {popup})");
+                s.click_id(&mut cx, "settings.tab.gameplay").expect("the Gameplay tab");
+                let w = redraw(&mut s, &mut cx, &mut g);
+                assert!(!has(&w, "settings.map_zoom"), "Gameplay has no Map zoom (web {web}, popup {popup})");
+            }
+        }
+        let mut s = SettingsScreen::new(&cx);
+        let w = redraw(&mut s, &mut cx, &mut g);
+        let row = w.iter().find(|x| x["id"] == "settings.map_zoom").expect("the row").clone();
+        let next = crate::mapview::zoom_steps().map(|z| format!("{z}x")).find(|z| Some(z.as_str()) != row["text"].as_str()).expect("another step");
+        g.kit.open = Some("settings.map_zoom".to_string());
+        redraw(&mut s, &mut cx, &mut g);
+        let at = crate::mapview::zoom_steps().position(|z| format!("{z}x") == next).unwrap();
+        s.click_id(&mut cx, &format!("settings.map_zoom.opt.{at}")).expect("the option");
+        g.kit.open = None;
+        assert!(!s.display_dirty(&cx) && s.confirm_left(Instant::now()).is_none(), "no staging, no confirm");
+        let picked = cx.settings.v["map_zoom"].clone();
+        assert_eq!(format!("{}x", picked.as_f64().unwrap()), next, "applied at once");
+        let w = redraw(&mut s, &mut cx, &mut g);
+        assert_eq!(w.iter().find(|x| x["id"] == "settings.map_zoom").expect("the row")["text"], json!(next), "the row shows the pick");
+    }
+
+    /// Restore defaults resets every row at once but stages the default display for Apply.
+    #[test]
+    fn restore_defaults_stages_the_default_display() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        cx.settings.v["fullscreen"] = json!(true);
+        cx.settings.v["show_tells"] = json!(false);
+        let mut s = SettingsScreen::new(&cx);
+        redraw(&mut s, &mut cx, &mut g);
+        s.click_id(&mut cx, "settings.defaults").expect("defaults");
+        let d = Settings::defaults(default_settings());
+        assert_eq!(cx.settings.v["show_tells"], d["show_tells"], "at once");
+        assert_eq!(WindowShow::of(&cx.settings.v), WindowShow::Fullscreen, "the display waits");
+        assert_eq!(WindowShow::of(&s.state(&cx)["pending"]), WindowShow::of(&d), "staged");
+        assert!(s.display_dirty(&cx));
+    }
+
+    /// PR7-26 (5): the Sound tab's Mute in Background is on by default and toggles the engine's key; with it on a
+    /// lost focus silences the audio and a regained one restores it; off, the focus changes nothing; the saved
+    /// volumes never change.
+    #[test]
+    fn mute_in_background_is_on_by_default_and_follows_the_focus() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        assert_eq!(Settings::defaults(default_settings())[MUTE_IN_BACKGROUND], json!(true), "on by default");
+        let mut s = SettingsScreen::in_game(&cx);
+        redraw(&mut s, &mut cx, &mut g);
+        s.click_id(&mut cx, "settings.tab.sound").expect("sound");
+        let w = redraw(&mut s, &mut cx, &mut g);
+        assert!(has(&w, "settings.mute_in_background") && has(&w, "settings.mute"), "the header pair");
+        assert_eq!(cx.settings.v[MUTE_IN_BACKGROUND], json!(true));
+        let volumes = |cx: &Cx| ["master", "music", "effects", "interface"].map(|k| cx.settings.v[k].clone());
+        let before = volumes(&cx);
+        cx.audio.set_levels(&cx.settings.v);
+        let full = cx.audio.level(Bus::Music);
+        assert!(full > 0.0);
+        cx.audio.set_focused(false, &cx.settings.v);
+        assert_eq!(cx.audio.level(Bus::Music), 0.0, "on: a lost focus mutes");
+        cx.audio.set_focused(true, &cx.settings.v);
+        assert_eq!(cx.audio.level(Bus::Music), full, "the focus back: restored");
+        s.click_id(&mut cx, "settings.mute_in_background").expect("the toggle");
+        assert_eq!(cx.settings.v[MUTE_IN_BACKGROUND], json!(false), "toggled off");
+        cx.audio.set_focused(false, &cx.settings.v);
+        assert_eq!(cx.audio.level(Bus::Music), full, "off: a lost focus keeps the sound");
+        cx.audio.set_focused(true, &cx.settings.v);
+        assert_eq!(volumes(&cx), before, "the saved volumes never change");
+    }
+
+    /// PR7-34 (AMBIENCE1): the Sound tab's Ward Ambience slider sits below Interface Volume, full screen and popup; its
+    /// arrow saves the `ambience` key at once and the ambience bus plays at the new level, the music's untouched.
+    #[test]
+    fn the_sound_tab_has_a_ward_ambience_slider_on_its_own_bus() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        assert_eq!(Settings::defaults(default_settings())["ambience"], json!(80), "a default beside the other volumes");
+        for popup in [false, true] {
+            let mut s = if popup { SettingsScreen::in_game(&cx) } else { SettingsScreen::new(&cx) };
+            redraw(&mut s, &mut cx, &mut g);
+            s.click_id(&mut cx, "settings.tab.sound").expect("sound");
+            let w = redraw(&mut s, &mut cx, &mut g);
+            let y = |id: &str| w.iter().find(|x| x["id"] == id).and_then(|x| x["rect"][1].as_i64()).unwrap_or_else(|| panic!("{id} drawn (popup {popup})"));
+            assert!(y("settings.interface") < y("settings.ambience"), "popup {popup}: below Interface Volume");
+            assert!(has(&w, "settings.ambience.down") && has(&w, "settings.ambience.up"));
+        }
+        let mut s = SettingsScreen::new(&cx);
+        redraw(&mut s, &mut cx, &mut g);
+        s.click_id(&mut cx, "settings.tab.sound").expect("sound");
+        redraw(&mut s, &mut cx, &mut g);
+        cx.audio.set_levels(&cx.settings.v);
+        let (music, bed) = (cx.audio.level(Bus::Music), cx.audio.level(Bus::Ambience));
+        let was = cx.settings.v["ambience"].as_f64().unwrap();
+        s.click_id(&mut cx, "settings.ambience.down").expect("the arrow");
+        assert_eq!(saved(&cx, "ambience").as_f64(), Some(was - VOLUME_STEP), "saved at once");
+        cx.audio.set_levels(&cx.settings.v);
+        assert!(cx.audio.level(Bus::Ambience) < bed, "the ambience bus follows");
+        assert_eq!(cx.audio.level(Bus::Music), music, "the music does not");
+    }
+
+    /// FB-308 (PR7-26 row): the Battle tab's rows past the mock's six (Units Behind, the overlay groups, the debug row)
+    /// sit under an "Advanced" header, below Warn Missing Actions and above Units Behind, full screen and popup.
+    #[test]
+    fn the_battle_tab_puts_units_behind_and_the_overlays_under_advanced() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        for popup in [false, true] {
+            let mut s = if popup { SettingsScreen::in_game(&cx) } else { SettingsScreen::new(&cx) };
+            redraw(&mut s, &mut cx, &mut g);
+            s.click_id(&mut cx, "settings.tab.battle").expect("battle");
+            let w = redraw(&mut s, &mut cx, &mut g);
+            let y = |id: &str| w.iter().find(|x| x["id"] == id).and_then(|x| x["rect"][1].as_i64()).unwrap_or_else(|| panic!("{id} drawn (popup {popup})"));
+            let head = y("settings.heading.advanced");
+            assert!(y("settings.warn_missing") < head && head < y("settings.see_through"), "popup {popup}: Advanced sits between the mock's rows and Units Behind");
+            let first_overlay = w.iter().find(|x| x["id"].as_str().is_some_and(|i| i.starts_with("settings.overlay."))).and_then(|x| x["rect"][1].as_i64()).expect("an overlay group");
+            assert!(head < first_overlay, "popup {popup}: the overlay groups are under it");
+        }
+    }
+
+    /// PR7-26: on the web Restore defaults leaves the display keys as they are: nothing staged, no close guard.
+    #[test]
+    fn restore_defaults_on_the_web_stages_no_display_change() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let d = Settings::defaults(default_settings());
+        let other = !d["fullscreen"].as_bool().unwrap_or(false);
+        cx.settings.v["fullscreen"] = json!(other);
+        cx.settings.v["show_tells"] = json!(false);
+        let mut s = SettingsScreen::in_game(&cx).as_web();
+        redraw(&mut s, &mut cx, &mut g);
+        s.click_id(&mut cx, "settings.defaults").expect("defaults");
+        assert_eq!(cx.settings.v["show_tells"], d["show_tells"], "the other rows reset at once");
+        assert_eq!(cx.settings.v["fullscreen"], json!(other), "the display keys are untouched");
+        assert!(!s.display_dirty(&cx), "nothing staged");
+        s.click_id(&mut cx, "settings.close").expect("close");
+        assert!(matches!(cx.nav.last(), Some(Nav::Pop)) && s.state(&cx)["guard"].is_null(), "closes with no guard: {}", s.state(&cx));
+    }
+
+    /// CONTROLS-UI1 (PR7-44): the Controls tab lists every action with its key and pad button; a click on a row waits
+    /// for the raw input (`capture`), a key rebinds and the file is saved; right click (and Esc) cancel; a clash asks and
+    /// Swap trades the two; Reset to defaults drops the map; the map read back from the saved file is the one shown.
+    #[test]
+    fn the_controls_tab_rebinds_saves_and_resets() {
+        use aegis_ui::controls::{Controls, Input};
+        use crate::controls_view::{binding_text, ACTIONS};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        for popup in [false, true] {
+            let mut s = if popup { SettingsScreen::in_game(&cx) } else { SettingsScreen::new(&cx) };
+            redraw(&mut s, &mut cx, &mut g);
+            s.click_id(&mut cx, "settings.tab.controls").expect("the tab");
+            let w = redraw(&mut s, &mut cx, &mut g);
+            let row = |i: usize| format!("settings_controls.f_bindings.{i}");
+            for (i, a) in ACTIONS.iter().enumerate() {
+                let r = w.iter().find(|x| x["id"] == json!(row(i))).unwrap_or_else(|| panic!("{}'s row", a.id));
+                assert!(r["text"].as_str().unwrap().contains(a.label), "{r}");
+            }
+            let at = |id: &str| ACTIONS.iter().position(|a| a.id == id).unwrap();
+            // idle: a key goes on to the screen
+            assert!(!s.capture(&mut cx, Input::Key(Key::Char('r'))));
+            s.click_id(&mut cx, &row(at("journal"))).expect("the row");
+            assert_eq!(s.state(&cx)["rebind"], json!({"step": "waiting", "action": "journal"}));
+            assert!(s.capture(&mut cx, Input::Key(Key::Char('k'))));
+            assert_eq!(saved(&cx, "controls")["keys"]["k"], json!("j"), "saved at once");
+            // the file read again gives the same map and the row shows it
+            let back = Settings::load(cx.shot_dir.join("settings.json"), default_settings());
+            let c = Controls::from_settings(&back.v).0;
+            assert_eq!(c, Controls::from_settings(&cx.settings.v).0);
+            assert_eq!(c.key_for(Key::Char('j')), Some(Key::Char('k')));
+            assert!(binding_text(&c, &ACTIONS[at("journal")]).starts_with("K · "));
+            // right click cancels a waiting rebind and keeps the screen open
+            s.click_id(&mut cx, &row(at("journal"))).expect("the row");
+            s.back(&mut cx);
+            assert_eq!(s.state(&cx)["rebind"], json!({"step": "idle"}));
+            assert!(cx.nav.is_empty(), "the screen stays");
+            // a clash asks; Swap trades
+            s.click_id(&mut cx, &row(at("interact"))).expect("the row");
+            assert!(s.capture(&mut cx, Input::Key(Key::Char('z'))));
+            assert_eq!(s.state(&cx)["rebind"]["with"], json!("undo"));
+            // the question fits at every text size (GUI audit)
+            for &(_, scale) in TEXT_SIZES.iter() {
+                let recs = frame(&mut s, &mut cx, &mut g, scale as f32);
+                let boxes: Vec<(String, f32, f32, f32, f32)> = s.widgets().iter().filter(|w| w["kind"] != "scroll" && rect(w).2 > 0 && rect(w).3 > 0).map(|w| {
+                    let r = rect(w);
+                    (w["id"].as_str().unwrap_or("").to_string(), r.0 as f32, r.1 as f32, r.2 as f32, r.3 as f32)
+                }).collect();
+                let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+                assert_eq!(v["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "popup {popup} scale {scale}: {v}");
+                assert!(recs.iter().any(|r| r.text.contains("taken")), "the asked row says so");
+            }
+            redraw(&mut s, &mut cx, &mut g);
+            s.click_id(&mut cx, "settings_controls.swap").expect("Swap");
+            let c = Controls::from_settings(&cx.settings.v).0;
+            assert_eq!((c.key_for(Key::Char('e')), c.key_for(Key::Char('z'))), (Some(Key::Char('z')), Some(Key::Char('e'))));
+            // Reset to defaults: the saved file has no map
+            redraw(&mut s, &mut cx, &mut g);
+            s.click_id(&mut cx, "settings_controls.reset").expect("Reset");
+            assert_eq!(saved(&cx, "controls"), Value::Null);
+            assert_eq!(Controls::from_settings(&cx.settings.v).0, Controls::default());
+        }
+    }
+
+    /// Every tab, the confirm and the guard fit at the four text sizes, full screen and popup: no text spills out of
+    /// its widget, is cut, runs off the canvas or collides with another.
+    #[test]
+    fn every_tab_and_box_fits_at_every_text_size() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        g.canvas = Canvas::new(1280, 720);
+        g.view = View::fit(1280, 720);
+        for popup in [false, true] {
+            for &(_, scale) in TEXT_SIZES.iter() {
+                for view in 0..TABS.len() + 2 {
+                    let mut s = if popup { SettingsScreen::in_game(&cx) } else { SettingsScreen::new(&cx) };
+                    s.act(&mut cx, SetAct::Tab(if view < TABS.len() { view } else { 0 }));
+                    if view >= TABS.len() {
+                        let other = if WindowShow::of(&cx.settings.v) == WindowShow::Borderless { WindowShow::Windowed } else { WindowShow::Borderless };
+                        stage_mode(&mut s, &mut cx, &mut g, other);
+                        s.act(&mut cx, if view == TABS.len() { SetAct::Apply } else { SetAct::Close });
+                    }
+                    let recs = frame(&mut s, &mut cx, &mut g, scale as f32);
+                    // (a row scrolled out of the body keeps its widget, clipped to nothing: no holder for any text)
+                    let boxes: Vec<(String, f32, f32, f32, f32)> = s.widgets().iter().filter(|w| w["kind"] != "scroll" && rect(w).2 > 0 && rect(w).3 > 0).map(|w| {
+                        let r = rect(w);
+                        (w["id"].as_str().unwrap_or("").to_string(), r.0 as f32, r.1 as f32, r.2 as f32, r.3 as f32)
+                    }).collect();
+                    let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+                    assert_eq!(v["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "popup {popup} scale {scale} view {view}: {v}");
+                    if view == TABS.len() {
+                        s.act(&mut cx, SetAct::Revert);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Review shots (only with `AEGIS_REVIEW_DIR` set): each tab at Normal and Extra large text, full screen and popup,
+    /// the keep-or-revert confirm and the close guard, at 1280 x 720 with the game's theme.
+    #[test]
+    fn review_shots() {
+        let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") else { return };
+        std::fs::create_dir_all(&out).unwrap();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut cx = game_cx();
+        cx.art = aegis_ui::art::Art::new(Some(root.to_path_buf()));
+        aegis_ui::theme::set_theme(aegis_ui::theme::load(cx.art.layers()).expect("the game's theme"));
+        let mut g = gfx();
+        g.canvas = Canvas::new(1280, 720);
+        g.view = View::fit(1280, 720);
+        let shot = |s: &mut SettingsScreen, cx: &mut Cx, g: &mut Gfx, name: &str, scale: f32| {
+            g.canvas.clear([22, 20, 26, 255]);
+            frame(s, cx, g, scale);
+            let file = std::fs::File::create(format!("{out}/{name}.png")).unwrap();
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
+        };
+        for (popup, kind) in [(false, "full"), (true, "popup")] {
+            for (scale, size) in [(1.0, "normal"), (1.3, "xl")] {
+                for (i, (name, _)) in TABS.iter().enumerate() {
+                    let mut s = if popup { SettingsScreen::in_game(&cx) } else { SettingsScreen::new(&cx) };
+                    s.act(&mut cx, SetAct::Tab(i));
+                    shot(&mut s, &mut cx, &mut g, &format!("settings_{kind}_{}_{size}", name.to_lowercase()), scale);
+                }
+                let mut s = if popup { SettingsScreen::in_game(&cx) } else { SettingsScreen::new(&cx) };
+                stage_mode(&mut s, &mut cx, &mut g, WindowShow::Borderless);
+                s.act(&mut cx, SetAct::Step("window_size", 1));
+                shot(&mut s, &mut cx, &mut g, &format!("settings_{kind}_display_staged_{size}"), scale);
+                s.act(&mut cx, SetAct::Close);
+                shot(&mut s, &mut cx, &mut g, &format!("settings_{kind}_close_guard_{size}"), scale);
+                s.act(&mut cx, SetAct::GuardApply);
+                shot(&mut s, &mut cx, &mut g, &format!("settings_{kind}_revert_confirm_{size}"), scale);
+                s.act(&mut cx, SetAct::Revert);
+            }
+        }
+        aegis_ui::theme::set_theme(aegis_ui::theme::Theme::default());
     }
 }

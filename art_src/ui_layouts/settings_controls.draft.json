@@ -1,0 +1,95 @@
+{
+  "screen": "settings_controls",
+  "note": "AI-27 (the rows keep the default region id f_bindings: scenarios and tests click settings_controls.f_bindings.N): the Settings Controls tab. The swap question on top with Swap and Cancel beside it, the rebindable actions as rows (a click rebinds; key and pad button on the right), the fixed inputs as a short list beside them (the rows need the full height: the live game lists 12+ actions); at text scale 1.2 and up the two lists stack, full width, so no label is cut, Reset to defaults alone in the footer.",
+  "regions": [
+    {
+      "id": "shell",
+      "component": "panel_shell",
+      "anchor": "center",
+      "w": "96%",
+      "h": "94%"
+    },
+    {
+      "id": "prompt",
+      "in": "shell",
+      "component": "text_block",
+      "bind": {
+        "text": "prompt"
+      },
+      "anchor": "top_left",
+      "w": "70%",
+      "h": 6
+    },
+    {
+      "id": "ask",
+      "in": "shell",
+      "component": "button_bar",
+      "bind": {
+        "actions": [
+          "swap",
+          "cancel"
+        ]
+      },
+      "anchor": "top_right",
+      "w": "28%",
+      "h": 5
+    },
+    {
+      "id": "f_bindings",
+      "in": "shell",
+      "component": "list_row",
+      "bind": {
+        "rows": "bindings",
+        "select": "bindings"
+      },
+      "anchor": "top_left",
+      "w": "49%",
+      "h": "84%",
+      "y": 8,
+      "when": [
+        {
+          "text_scale_min": 1.2,
+          "anchor": "top",
+          "w": "fill",
+          "h": "56%",
+          "y": 8
+        }
+      ]
+    },
+    {
+      "id": "fixed",
+      "in": "shell",
+      "component": "stat_block",
+      "bind": {
+        "stats": "fixed"
+      },
+      "anchor": "top_right",
+      "w": "49%",
+      "h": "60%",
+      "y": 8,
+      "when": [
+        {
+          "text_scale_min": 1.2,
+          "anchor": "top_left",
+          "w": "80%",
+          "h": "30%",
+          "y": 56
+        }
+      ]
+    },
+    {
+      "id": "foot",
+      "in": "shell",
+      "component": "button_bar",
+      "bind": {
+        "actions": [
+          "reset"
+        ]
+      },
+      "anchor": "bottom_right",
+      "w": 30,
+      "h": 5,
+      "y": -1
+    }
+  ]
+}

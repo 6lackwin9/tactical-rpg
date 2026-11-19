@@ -45,9 +45,20 @@ fn seed_entries(name: &str) -> Vec<Dict> {
     seed_rows(name, ruleset::KIND)
 }
 
+/// The seed file `name`: in `data/seeds/`, or in `data/seeds/archive/` once it no longer applies to today's rules
+/// (ENGINE-22, SEED-ARCHIVE1: the replay here still reads it as written).
+fn seed_path(name: &str) -> std::path::PathBuf {
+    let live = data_dir().join("seeds").join(name);
+    if live.is_file() {
+        live
+    } else {
+        data_dir().join("seeds").join("archive").join(name)
+    }
+}
+
 /// The rows of kind `kind` the seed `name` upserts, as given.
 fn seed_rows(name: &str, kind: &str) -> Vec<Dict> {
-    let text = std::fs::read_to_string(data_dir().join("seeds").join(name)).expect("the seed");
+    let text = std::fs::read_to_string(seed_path(name)).expect("the seed");
     let seed: Value = serde_json::from_str(&text).expect("seed JSON");
     json::arr(&seed["steps"]).iter().map(json::dict).filter(|s| json::s(s, "kind") == kind).map(|s| json::dget(s, "entry").clone()).collect()
 }
@@ -60,6 +71,11 @@ const DERIVED_ORDERS_SEED: &str = "w24k1b.json";
 /// R2-W2b CLASS-BASICS: the seed that moved the role basics to the classes; it re-orders some decks the derived-row
 /// seed set, so those units ship with its deck.
 const CLASS_BASICS_SEED: &str = "classbasics.json";
+
+/// PR7-41 (PT-22): the seed that fills the founders' third active slot (and puts the skill in its intent's order).
+const PR7_41_DECKS_SEED: &str = "pr7_41_decks.json";
+/// PR7-40 (BATTLE-UI2): the enemies' short plate names.
+const PR7_40_SEED: &str = "pr7_40.json";
 
 /// R4-1 slice 2 (FB-144): the seed that set `template` on the caster units (after the class-basics seed).
 const TEMPLATES_SEED: &str = "r41s2.json";
@@ -94,12 +110,18 @@ const CLASSPASS1_SEED: &str = "classpass1_data.json";
 /// onto the 3 aberrant Sunk Ward enemy units (after the CLASSPASS1-DATA seed; no ruleset row changes).
 const TECHNIQUES_GRAFTS_SEED: &str = "techniques_grafts_data.json";
 
+/// PR6-5 (ACT2-DROPS-PK2-FLAGS): the seed that added `slot_*` organ drops, `rock_salt`, and `titan_marrow_core`
+/// onto 7 Sunk Ward catalog enemies (after the TECHNIQUES-GRAFTS-DATA seed; no ruleset row changes).
+const PR6_5_SEED: &str = "pr6_5_act2_drops_flags.json";
+/// PR7-12 (BIGUNIT1 BU16): `footprint: 2` on the Amalgam.
+const PR7_12_SEED: &str = "pr7_12.json";
+
 /// What the class-basics seed dropped from the `timeline` basics (now the Rogue's class basic).
 const CLASS_BASICS_DROPPED: &str = "flank_cut";
 
 /// Every step of the seed `name` as (kind, entry), in its order.
 fn seed_steps(name: &str) -> Vec<(String, Dict)> {
-    let text = std::fs::read_to_string(data_dir().join("seeds").join(name)).expect("the seed");
+    let text = std::fs::read_to_string(seed_path(name)).expect("the seed");
     let seed: Value = serde_json::from_str(&text).expect("seed JSON");
     json::arr(&seed["steps"]).iter().map(json::dict).map(|s| (json::s(s, "kind"), json::dget(s, "entry").clone())).collect()
 }
@@ -158,11 +180,12 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     let reordered = seed_rows(DERIVED_ORDERS_SEED, "units");
     assert!(!reordered.is_empty(), "the derived-row seed re-orders unit decks");
     let class_basics = seed_steps(CLASS_BASICS_SEED);
+    let pr7_41 = seed_rows(PR7_41_DECKS_SEED, "units");
     let last_unit = |id: &str| class_basics.iter().rev().find(|(k, e)| k == "units" && json::s(e, "id") == id).map(|(_, e)| e);
     for u in &reordered {
         let id = json::s(u, "id");
         let mut e = shipped_units.get("units", &id).clone();
-        let last = last_unit(&id).unwrap_or(u);
+        let last = pr7_41.iter().find(|e| json::s(e, "id") == id).or_else(|| last_unit(&id)).unwrap_or(u);
         assert_eq!(e.get("deck"), last.get("deck"), "unit '{id}' ships with the deck the last seed leaves");
         if let Some(Value::Object(deck)) = e.get_mut("deck") {
             deck.shift_remove("order");
@@ -336,6 +359,33 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("TECHNIQUES-GRAFTS unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the TECHNIQUES-GRAFTS-DATA units steps leave the shipped ruleset rows");
+    // PR6-5 (ACT2-DROPS-PK2-FLAGS): the seed's units steps over TECHNIQUES-GRAFTS-DATA's
+    let pr6_5 = seed_rows(PR6_5_SEED, "units");
+    assert!(seed_entries(PR6_5_SEED).is_empty(), "the PR6-5 seed changes no ruleset row");
+    for e in &pr6_5 {
+        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("PR6-5 unit '{}': {err:?}", json::s(e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the PR6-5 units steps leave the shipped ruleset rows");
+    // PR7-12 (BIGUNIT1 BU16): the seed's units step puts `footprint: 2` on the Amalgam
+    let pr7_12 = seed_rows(PR7_12_SEED, "units");
+    assert!(seed_entries(PR7_12_SEED).is_empty(), "the PR7-12 seed changes no ruleset row");
+    for e in &pr7_12 {
+        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("PR7-12 unit '{}': {err:?}", json::s(e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the PR7-12 units step leaves the shipped ruleset rows");
+    // PR7-41 (PT-22): the seed's units steps fill the founders' third active slot
+    assert!(seed_entries(PR7_41_DECKS_SEED).is_empty(), "the PR7-41 seed changes no ruleset row");
+    for e in &pr7_41 {
+        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("PR7-41 unit '{}': {err:?}", json::s(e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the PR7-41 units steps leave the shipped ruleset rows");
+    // PR7-40 (BATTLE-UI2): the seed's units steps set the enemies' short plate names
+    let pr7_40 = seed_rows(PR7_40_SEED, "units");
+    assert!(seed_entries(PR7_40_SEED).is_empty(), "the PR7-40 seed changes no ruleset row");
+    for e in &pr7_40 {
+        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("PR7-40 unit '{}': {err:?}", json::s(e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the PR7-40 units steps leave the shipped ruleset rows");
     // PR5-52 (RULESET-MODES1): the seed removes the classic row and re-saves timeline under modes: the shipped rows
     let text = std::fs::read_to_string(data_dir().join("seeds").join(RULESETMODES1_SEED)).expect("the RULESET-MODES1 seed");
     let seed: Value = serde_json::from_str(&text).expect("seed JSON");
@@ -358,7 +408,11 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         .chain(act1fix1.iter().map(|e| json::s(e, "id")))
         .chain(gear)
         .chain(classpass1.iter().map(|e| json::s(e, "id")))
-        .chain(techniques_grafts.iter().map(|e| json::s(e, "id")));
+        .chain(techniques_grafts.iter().map(|e| json::s(e, "id")))
+        .chain(pr6_5.iter().map(|e| json::s(e, "id")))
+        .chain(pr7_12.iter().map(|e| json::s(e, "id")))
+        .chain(pr7_41.iter().map(|e| json::s(e, "id")))
+        .chain(pr7_40.iter().map(|e| json::s(e, "id")));
     for id in units {
         assert_eq!(seeded.get("units", &id), shipped_units.get("units", &id), "unit '{id}' as shipped");
     }

@@ -334,3 +334,134 @@ fn a_party_unit_id_is_never_a_roster_word() {
     one(found, "Id 'living' is a roster read word", "a party unit");
     drop_scratch(&data);
 }
+
+// ---- PK3 3.1 (PR6-4): the `recruits` world kind, the `rescue` effect and `recruit {pool}` -----------------------------
+
+/// A recruit template written to PK3 3.1's shape (fixture class, unit and passives).
+fn levy() -> Value {
+    json!({"id": "levy", "name": "Levy", "class_id": "drill", "base_units": ["hero"], "names": ["Ash", "Bryn"], "age_band": [18, 24], "art": "",
+        "origins": ["orig_a"], "temperaments": ["temper_a"], "level": "",
+        "fuse": {"per_deploy": 1, "stasis_days": 7, "max": 6, "tiers": [{"at": 2, "passive": "tier_a"}, {"at": 4, "passive": "tier_b"}], "last_passive": "last_a"}})
+}
+
+/// `roster_world` plus slotless passives, a slotted one, a second-class party unit and the `levy` template.
+fn recruit_world(tag: &str) -> PathBuf {
+    let data = roster_world(tag, 4);
+    write_catalog(&data, "classes", json!([
+        {"id": "drill", "name": "Drill", "base_stats": {"STR": 13, "DEX": 10, "INT": 6, "CONS": 13, "PERC": 10, "KNOW": 10}, "growth": {"STR": 2}},
+        {"id": "seer", "name": "Seer", "base_stats": {"STR": 8, "DEX": 10, "INT": 13, "CONS": 10, "PERC": 10, "KNOW": 13}, "growth": {"INT": 2}}]));
+    write_catalog(&data, "units", json!([{"id": "hero", "name": "Hero", "side": "party", "class_id": "drill", "level": 1},
+        {"id": "brute", "name": "Brute", "side": "enemy", "class_id": "drill", "level": 1}, {"id": "oracle", "name": "Oracle", "side": "party", "class_id": "seer", "level": 1}]));
+    let p = |id: &str, slot: &str| json!({"id": id, "name": id, "slot": slot, "effects": [{"type": "resist", "status": "burn", "value": 5}]});
+    write_catalog(&data, "passives", json!([p("orig_a", ""), p("temper_a", ""), p("tier_a", ""), p("tier_b", ""), p("last_a", ""), p("slotted", "passive")]));
+    write_kind(&data, "recruits", json!([levy()]));
+    data
+}
+
+#[test]
+fn the_schema_carries_the_recruits_kind() {
+    let schema = source::schema();
+    let field = |key: &str| fields(schema, "world", rpgkit_data::RECRUITS_KIND).iter().map(json::dict).find(|f| json::s(f, "key") == key).cloned().unwrap_or_else(|| panic!("world.recruits.{key}"));
+    for (key, ty) in [("class_id", "ref"), ("base_units", "refs"), ("names", "strings"), ("age_band", "json"), ("art", "string"), ("origins", "refs"), ("temperaments", "refs"), ("level", "string"), ("fuse", "json")] {
+        assert_eq!(json::s(&field(key), "type"), ty, "{key}");
+    }
+    assert_eq!(json::get(&field("fuse"), "default"), &json!({}), "{{}} = no fuse");
+    assert!(source::WORLD_KINDS.contains(&rpgkit_data::RECRUITS_KIND) && check::world::KINDS.contains(&rpgkit_data::RECRUITS_KIND), "a loaded and checked world kind");
+    let data = recruit_world("recruit_schema");
+    let src = source::load(&data);
+    let row = &src.worlds[W]["own"][rpgkit_data::RECRUITS_KIND][0];
+    let def = rpgkit_data::RecruitDef::from_obj(row.as_object().unwrap());
+    assert_eq!((def.class_id.as_str(), def.base_units.clone(), def.names.len(), def.age_band.clone(), def.level.clone()), ("drill", vec!["hero".to_string()], 2, vec![18, 24], Value::Null));
+    let fuse = def.fuse.expect("a fuse");
+    assert_eq!((fuse.per_deploy, fuse.stasis_days, fuse.max, fuse.tiers.len(), fuse.last_passive.as_str()), (1, 7, 6, 2, "last_a"));
+    // FZ2, FZ3 on the typed row: deploys x per_deploy + floor(days / stasis_days); cumulative tiers; spent at max
+    assert_eq!((fuse.value(3, 13), fuse.value(0, 6), fuse.value(2, -4)), (3 + 13 / 7, 0, 2));
+    assert_eq!((fuse.passives_at(1), fuse.passives_at(2), fuse.passives_at(5)), (vec![], vec!["tier_a".to_string()], vec!["tier_a".to_string(), "tier_b".to_string()]));
+    assert!(!fuse.spent(5) && fuse.spent(6));
+    let none = rpgkit_data::RecruitDef::from_obj(&dict(json!({"id": "x", "fuse": {}})));
+    assert!(none.fuse.is_none(), "{{}} is no fuse");
+    let level = |l: Value| rpgkit_data::RecruitDef::from_obj(&dict(json!({"id": "x", "level": l}))).level;
+    assert_eq!((level(json!("3")), level(json!("average")), level(json!(""))), (json!(3), json!("average"), Value::Null), "the join level text reads as BK5's value");
+    drop_scratch(&data);
+}
+
+#[test]
+fn a_recruit_template_checks_clean_and_each_bad_field_is_one_error() {
+    let data = recruit_world("recruit_rows");
+    let v = store::view(&data);
+    let good = levy();
+    let found = errors_of(&v, rpgkit_data::RECRUITS_KIND, &good);
+    assert!(found.is_empty(), "{found:?}");
+    let cases: Vec<(&str, Value, &str)> = vec![
+        ("no class", with(&good, &["class_id"], json!("")), "choose a class"),
+        ("no base units", with(&good, &["base_units"], json!([])), "base units need at least one party unit"),
+        ("an enemy unit", with(&good, &["base_units"], json!(["brute"])), "must be a class-derived party unit"),
+        ("another class", with(&good, &["base_units"], json!(["oracle"])), "is a seer, not a drill"),
+        ("no names", with(&good, &["names"], json!([])), "names need at least one name"),
+        ("a name twice", with(&good, &["names"], json!(["Ash", "Ash"])), "name 'Ash' is listed twice"),
+        ("a long name", with(&good, &["names", "1"], json!("A name far longer than twenty-four")), "name 2 must be 1-24 characters"),
+        ("a minor", with(&good, &["age_band"], json!([16, 24])), "age band must be [lo, hi]"),
+        ("a band upside down", with(&good, &["age_band"], json!([24, 18])), "age band must be [lo, hi]"),
+        ("a slotted origin", with(&good, &["origins"], json!(["slotted"])), "origin 'slotted' is slottable"),
+        ("a slotted temperament", with(&good, &["temperaments"], json!(["slotted"])), "temperament 'slotted' is slottable"),
+        ("a bad level", with(&good, &["level"], json!("lowest")), "level 'lowest' must be empty, highest, average"),
+        ("a level past 20", with(&good, &["level"], json!("21")), "level '21' must be empty, highest, average"),
+        ("no max", with(&good, &["fuse"], json!({"per_deploy": 1, "stasis_days": 7})), "max is required"),
+        ("max 0", with(&good, &["fuse", "max"], json!(0)), "max must be a whole number 1..99"),
+        ("an unknown fuse key", with(&good, &["fuse", "rate"], json!(1)), "unknown key 'rate'"),
+        ("a tier past max", with(&good, &["fuse", "tiers", "1", "at"], json!(7)), "at must be a whole number 1..6"),
+        ("tiers not rising", with(&good, &["fuse", "tiers", "1", "at"], json!(2)), "at must rise tier by tier"),
+        ("an unknown tier passive", with(&good, &["fuse", "tiers", "0", "passive"], json!("ghost")), "unknown passive 'ghost'"),
+        ("a slotted last passive", with(&good, &["fuse", "last_passive"], json!("slotted")), "last passive 'slotted' is slottable"),
+    ];
+    for (tag, bad, needle) in cases {
+        one(added(&v, rpgkit_data::RECRUITS_KIND, &good, &bad), needle, tag);
+    }
+    // the json fields' shapes block a write
+    let blocking = check::world::blocking_errors(&v, W, rpgkit_data::RECRUITS_KIND, &dict(with(&good, &["fuse"], json!([1]))), "levy");
+    assert!(blocking.iter().any(|e| e.starts_with("Fuse must be an object")), "{blocking:?}");
+    drop_scratch(&data);
+}
+
+#[test]
+fn the_rescue_effect_and_recruit_pool_are_checked() {
+    let data = recruit_world("rescue_fx");
+    let v = store::view(&data);
+    let scene = |fx: Value| json!({"id": "smith", "name": "Smith", "start": "start", "services": false, "nodes": [{"id": "start", "text": "Well?", "choices": [{"text": "Go.", "to": "", "effects": [fx]}]}]});
+    let found = |fx: Value| errors_of(&v, "dialogues", &scene(fx));
+    for ok in [json!({"effect": "rescue", "template": "levy"}), json!({"effect": "rescue", "template": "levy", "base_unit": "hero", "count": 4}),
+        json!({"effect": "rescue", "character": "kestrel"}), json!({"effect": "recruit", "pool": "first"}), json!({"effect": "recruit", "pool": "recruit_2", "level": 3})] {
+        assert!(found(ok.clone()).is_empty(), "{ok}: {:?}", found(ok.clone()));
+    }
+    let cases: Vec<(Value, &str)> = vec![
+        (json!({"effect": "rescue"}), "rescue takes exactly one of template and character"),
+        (json!({"effect": "rescue", "template": "levy", "character": "kestrel"}), "rescue takes exactly one of template and character"),
+        (json!({"effect": "rescue", "template": "ghost"}), "unknown recruit template 'ghost'"),
+        (json!({"effect": "rescue", "template": "levy", "base_unit": "oracle"}), "base unit 'oracle' is not one of the template's base units"),
+        (json!({"effect": "rescue", "template": "levy", "count": 5}), "count '5' must be a whole number 1..4"),
+        (json!({"effect": "rescue", "character": "innkeeper"}), "needs role party"),
+        (json!({"effect": "rescue", "template": "levy", "who": "x"}), "unknown key 'who'"),
+        (json!({"effect": "recruit", "pool": "first", "character": "kestrel"}), "give a character or a pool entry, not both"),
+        (json!({"effect": "recruit", "pool": "Bad Id"}), "pool must be a pool entry id or first"),
+    ];
+    for (fx, needle) in cases {
+        one(found(fx.clone()), needle, &fx.to_string());
+    }
+    drop_scratch(&data);
+}
+
+#[test]
+fn the_writer_stores_a_recruit_template_and_resaves_it_byte_for_byte() {
+    let data = recruit_world("recruit_writer");
+    fs::remove_file(store::file_of(&data, Some(W), rpgkit_data::RECRUITS_KIND)).unwrap();
+    store::upsert(&data, Some(W), rpgkit_data::RECRUITS_KIND, &dict(levy()), None).expect("a recruit template");
+    let file = store::file_of(&data, Some(W), rpgkit_data::RECRUITS_KIND);
+    assert!(file.ends_with("recruits.json"), "{file:?}");
+    let stored = fs::read_to_string(&file).unwrap();
+    assert_eq!(store::resave_text(&data, Some(W), rpgkit_data::RECRUITS_KIND).unwrap(), stored, "a re-save without changes is byte-identical");
+    let problems: Vec<String> = store::check(&data).into_iter().filter(|p| p.contains("recruits")).collect();
+    assert!(problems.is_empty(), "{problems:?}");
+    let refused = store::upsert(&data, Some(W), rpgkit_data::RECRUITS_KIND, &dict(with(&levy(), &["fuse"], json!([1]))), None).err().expect("a shape problem blocks");
+    assert!(refused.iter().any(|e| e.contains("Fuse must be an object")), "{refused:?}");
+    drop_scratch(&data);
+}

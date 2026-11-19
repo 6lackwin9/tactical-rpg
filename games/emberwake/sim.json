@@ -248,7 +248,11 @@
 						"standard"
 					]
 				],
-				"wave": []
+				"wave": [],
+				"enemy_mastery": {
+					"warrior": 1,
+					"rogue": 1
+				}
 			},
 			{
 				"id": "wave",

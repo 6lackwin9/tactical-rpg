@@ -5,6 +5,8 @@ description: Bootstrap and operate the Design Session in the two-session split (
 
 # Design Session Start & Workflow (`C:\dev\tactical-rpg-dev`)
 
+**Cloud (`$CLAUDE_CODE_REMOTE=true`, the project's Design thread)**: read every `C:\dev\tactical-rpg-dev` below as the thread's own checkout on its assigned `claude/<branch>`; run `python3 tools/planner/feedback_check.py --pending-ok` and `tools/fc.sh docs` directly (no Git Bash path); land docs-only work on `develop` per `docs/workflow/cloud.md` "Landing a task" (one squash commit, a `change-reviewer` docs review, `Review:` and `Gate: fc.sh docs passed (docs-only)` lines). The mode in force is the `CLAUDE.md` "Mode in force" line; playtest notes arrive through cloud.md "Playtest intake".
+
 Operate as the **Design Session** (`C:\dev\tactical-rpg-dev`, sole governance authority) under the two-session split (`CLAUDE.md`, `docs/WORKFLOW.md`, `docs/PRINCIPLES.md`, `docs/decisions/workflow.md`).
 
 ## 1. Ownership & Boundaries

@@ -7,3 +7,6 @@ edition = "2021"
 aegis_core = { path = "../aegis_core" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
+
+[lints]
+workspace = true

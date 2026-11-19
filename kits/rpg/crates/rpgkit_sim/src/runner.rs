@@ -192,6 +192,8 @@ pub struct Runner<'a> {
     pub party_tactic: Option<String>,
     /// RULESET1-G2 (4.3): the feel mode's party driver (auto: the battle screen's autoplay; timed: the tell reader).
     pub driver: crate::timed::Driver,
+    /// PR6-1: per-class main-hand weapon mastery applied to generated enemies (`&[]` = none).
+    pub enemy_mastery: &'static [(&'static str, i32)],
 }
 
 impl<'a> Runner<'a> {
@@ -220,6 +222,7 @@ impl<'a> Runner<'a> {
             feel: None,
             party_tactic: None,
             driver: crate::timed::Driver::Auto,
+            enemy_mastery: &[],
         }
     }
 
@@ -413,6 +416,19 @@ impl<'a> Runner<'a> {
             let allies = s.w.allies.clone();
             rpgkit_battle::sim::apply_mastery(&mut s.w, &allies, n);
         }
+        // PR6-1: generated encounter `enemy_mastery` opens per-class enemy main-hand techniques (`*` = all)
+        for &(class_id, level) in self.enemy_mastery {
+            if level > 0 {
+                let matched: Vec<_> = s
+                    .w
+                    .enemies
+                    .iter()
+                    .copied()
+                    .filter(|&e| class_id == "*" || self.units.get(&s.w.units[e].catalog_id).is_some_and(|u| u.class_id == class_id))
+                    .collect();
+                rpgkit_battle::sim::apply_mastery(&mut s.w, &matched, level);
+            }
+        }
         self.prepare(&mut s, jitter);
         for &a in &s.w.allies.clone() {
             if let Some(&hp) = self.start_hp.get(&s.w.units[a].name) {
@@ -511,7 +527,8 @@ impl<'a> Runner<'a> {
             match fate {
                 Fate::Killed => rec.slain += 1,
                 Fate::Surrendered => rec.surrendered += 1,
-                Fate::Fled => rec.fled += 1,
+                // PR6-9: a retreat's withdrawn unit counts with the fled (the record keeps its fields)
+                Fate::Fled | Fate::Withdrawn => rec.fled += 1,
                 Fate::Standing => continue,
             }
             rec.weight += weight;

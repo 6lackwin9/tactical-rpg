@@ -50,3 +50,6 @@ __pycache__/
 
 # The web build (tools/fc.sh web, WEBREL1-G1)
 /out/
+
+# PR7-22 agent playtest runs (tools/fc.sh playtest): logs and shots, copied out to hand off
+/playtests/agent/

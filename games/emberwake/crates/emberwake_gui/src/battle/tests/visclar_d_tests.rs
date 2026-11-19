@@ -5,12 +5,12 @@
 //! watching a recording, under a setting. Fixtures are the catalog's encounters under the timeline ruleset; expectations
 //! come from these rules, never shipped numbers.
 
-use crate::battle::draw::card_rows;
+use crate::battle::plates::party_poise_row;
 use crate::battle::flow::next_round_by_itself;
-use crate::battle::marks::{pip_view, poise_number, poise_pip_rect, poise_pips, PipView, POISE_PIPS};
+use crate::battle::marks::{pip_view, poise_pip_rect, poise_pips, PipView, POISE_PIPS};
 use crate::battle::playback::{round_banner_alpha, ROUND_BANNER_MS};
-use crate::battle::tips::{intent_ring_color, pip_fill, ring_intent, ApPips, AP_DRAIN_MS, AP_PIP, AP_PIP_EMPTY, AP_REFILL_MS, REST_BLOCK};
-use crate::battle::{Action, BattleScreen, AP_PIPS, AUTO_CONFIRM, CONFIRM_GUARD_MS, GRID_X, GRID_Y, POISE, TILE};
+use crate::battle::tips::{intent_ring_color, ring_intent, ApPips, AP_DRAIN_MS, AP_REFILL_MS, REST_BLOCK};
+use crate::battle::{Action, BattleScreen, AUTO_CONFIRM, CONFIRM_GUARD_MS, GRID_X, GRID_Y, POISE, TILE};
 use crate::screens::{Cx, Key, Screen};
 use aegis_ui::canvas::{Rect, Rgba};
 use aegis_ui::theme::th;
@@ -21,7 +21,7 @@ use emberwake_battle::round_intent::RoundIntent;
 use emberwake_battle::session::{Phase, Session};
 use emberwake_rules::ruleset::{PoiseMode, TIMELINE};
 use serde_json::{json, Value};
-use std::time::Instant;
+use aegis_core::clock::Instant;
 
 fn arena_in(view: &str, adjust: impl FnOnce(&mut Cx)) -> (Cx, Gfx, BattleScreen) {
     let mut cx = crate::hud::hud_tests::game_cx();
@@ -294,10 +294,6 @@ fn the_pips_are_a_pure_function_of_time() {
     assert_eq!(refill.level(t0 + AP_REFILL_MS), 12.0);
     assert!(AP_REFILL_MS > AP_DRAIN_MS, "the refill is the one to watch");
     assert_eq!(start.follow(3.0, t0, true).level(t0), 3.0, "skip animations and reduce motion land at once");
-    // one pip holds `unit` AP; the one the level ends in is part full
-    assert_eq!((pip_fill(5.0, 1, 4), pip_fill(5.0, 1, 5)), (1.0, 0.0));
-    assert_eq!(pip_fill(4.5, 1, 4), 0.5);
-    assert_eq!((pip_fill(5.0, 2, 1), pip_fill(5.0, 2, 2), pip_fill(5.0, 2, 3)), (1.0, 0.5, 0.0));
 }
 
 /// On the real round: whenever a move pays AP its member's pips fall from what they showed to the unit's AP over the drain
@@ -384,32 +380,23 @@ fn the_pips_land_at_once_without_animation() {
     }
 }
 
-/// The pips on the card: one colour, as many lit as the unit has AP (a pip per AP up to the cap, `ceil` above it); the
-/// numbers stand beside their rows.
+/// BATTLE-UI2 (contract 3, take 21): the plate's AP is one bar, the balance after the plan beside it ("4/12"), and
+/// the HP numbers sit on the plate, inside it.
 #[test]
-fn a_card_shows_one_colour_of_pips_and_the_numbers_beside_the_rows() {
+fn a_plate_shows_the_ap_balance_and_the_hp_numbers_inside_it() {
     let (mut cx, mut g, mut b) = arena();
     cx.settings.v["skip_anim"] = json!(true);
     b.tick(&mut cx);
     let a = b.selected.unwrap();
-    let max = s(&b).w.units[a].max_ap;
-    let per = aegis_ui::pips::unit(max, AP_PIPS);
-    let slots = aegis_ui::pips::count(max, per);
-    let lit = slots / 2;
-    b.host.session.as_mut().unwrap().w.units[a].ap = lit * per;
     let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
-    let rows = card_rows(widget_rect(&b, &format!("party.{a}")), 0.0);
-    for k in 0..slots {
-        let pip = aegis_ui::pips::pip_rect(rows.ap.x, rows.ap.y + rows.ap.h / 2, k);
-        let (x, y) = (pip.x + pip.w / 2, rows.ap.y + rows.ap.h / 2);
-        assert_eq!(px(&g, x, y)[..3], if k < lit { AP_PIP } else { AP_PIP_EMPTY }[..3], "pip {k} of {slots}, {lit} lit");
-    }
-    // every number sits to the right of its row, on the row's line, inside the card
+    let plate = widget_rect(&b, &format!("party.{a}"));
     let u = &s(&b).w.units[a];
-    let st = emberwake_battle::poise::state(&s(&b).w, a).copied().expect("the timeline ruleset has poise");
-    for (text, row) in [(format!("{}/{}", u.hp, u.max_hp), rows.hp), (poise_number(&s(&b).w.ruleset.numbers, &st), rows.poise), (format!("{}/{}", u.ap, u.max_ap), rows.ap)] {
-        let t = recs.iter().find(|t| t.text == text && t.x >= (row.x + row.w) as f32 && t.x < rows.right as f32 && (t.y - row.y as f32).abs() < 8.0).unwrap_or_else(|| panic!("no {text} beside its row"));
-        assert!(t.x + t.w <= rows.right as f32 + 0.5, "{text} stays inside the card");
+    let left = card(&b, &cx, a)["ap_left"].as_i64().expect("the balance") as i32;
+    let f = emberwake_battle::round_intent_plan::ap_forecast(&s(&b).w, &s(&b).plan, a);
+    assert_eq!(left, (f.now - f.spent).max(0), "the balance after the plan");
+    for text in [format!("{}/{}", u.hp, u.max_hp), format!("{left}/{}", u.max_ap)] {
+        let t = recs.iter().find(|t| t.text == text).unwrap_or_else(|| panic!("no {text} on the plate"));
+        assert!(t.x >= plate.x as f32 && t.x + t.w <= (plate.x + plate.w) as f32 + 0.5 && t.y >= plate.y as f32 && t.y < (plate.y + plate.h) as f32, "{text} inside the plate");
     }
 }
 
@@ -455,12 +442,12 @@ fn the_card_draws_the_poise_pips() {
     b.host.session.as_mut().unwrap().w.poise.get_mut(&a).unwrap().value = value;
     let (before, _) = (b.host.history.len(), ());
     draw(&mut cx, &mut g, &mut b);
-    let rows = card_rows(widget_rect(&b, &format!("party.{a}")), 0.0);
+    let row = party_poise_row(widget_rect(&b, &format!("party.{a}")));
     let lit = poise_pips(value, st.max, false);
     assert!((1..5).contains(&lit), "half the poise is some of the pips: {lit}");
     assert_eq!(card(&b, &cx, a)["poise_pips"], json!(lit));
     for k in 0..POISE_PIPS {
-        let pip = poise_pip_rect(rows.poise, k, POISE_PIPS);
+        let pip = poise_pip_rect(row, k, POISE_PIPS);
         let on = px(&g, pip.x + pip.w / 2, pip.y + pip.h / 2)[..3] == POISE[..3];
         assert_eq!(on, k < lit, "pip {k}, {lit} lit");
     }
@@ -478,7 +465,6 @@ fn pips_mode_draws_the_bar_s_own_pips() {
     assert_eq!(pip_view(&n, &st(2, false)), PipView { lit: 2, total: full, bonus: false, pips: true }, "the value says full, the pips say 2");
     assert_eq!(pip_view(&n, &st(full + 2, false)), PipView { lit: full, total: full, bonus: true, pips: true }, "windup bonus pips above poise_pips");
     assert_eq!(pip_view(&n, &st(3, true)).lit, 0, "broken this round");
-    assert_eq!(poise_number(&n, &st(3, false)), format!("3/{full}"));
     n.poise_pips = 7;
     assert_eq!(pip_view(&n, &st(7, false)).total, 7, "the row follows poise_pips");
     let bar = emberwake_rules::ruleset::Numbers::default();
@@ -495,16 +481,14 @@ fn pips_mode_draws_the_bar_s_own_pips() {
     (bar_now.pips, bar_now.broken) = (2, false);
     let st = *bar_now;
     let before = b.host.history.len();
-    let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
-    let rows = card_rows(widget_rect(&b, &format!("party.{a}")), 0.0);
+    crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
+    let row = party_poise_row(widget_rect(&b, &format!("party.{a}")));
     assert_eq!(card(&b, &cx, a)["poise_pips"], json!(2));
     for k in 0..full {
-        let pip = poise_pip_rect(rows.poise, k, full);
+        let pip = poise_pip_rect(row, k, full);
         let on = px(&g, pip.x + pip.w / 2, pip.y + pip.h / 2)[..3] == POISE[..3];
         assert_eq!(on, k < 2, "pip {k} of {full}, 2 lit");
     }
-    let text = format!("2/{full}");
-    assert!(recs.iter().any(|t| t.text == text && (t.y - rows.poise.y as f32).abs() < 8.0), "the number {text} beside the row");
     assert_eq!(*emberwake_battle::poise::state(&s(&b).w, a).unwrap(), st, "display only");
     assert_eq!(b.host.history.len(), before, "no request");
 }
@@ -826,8 +810,8 @@ fn classic_keeps_its_old_flow() {
     assert_eq!(requests(&b, "confirm"), confirms + 1, "Enter confirms at once");
 }
 
-/// The party cards at every text size: no two texts overlap, none passes the card or is cut, a long name included; the
-/// Normal size keeps the card's height (plus a meter row for a member showing a meter).
+/// The party plates at every text size: no two texts overlap, none passes the plate or is cut, a long name included
+/// (it falls back to the small font, then "..."); the plate keeps its height.
 #[test]
 fn the_card_numbers_fit_at_every_text_size() {
     for scale in [1.0, 1.15, 1.3] {
@@ -842,10 +826,8 @@ fn the_card_numbers_fit_at_every_text_size() {
         for a in s(&b).w.allies.clone() {
             let card = widget_rect(&b, &format!("party.{a}"));
             if scale == 1.0 {
-                // HOOKS1-UI slice 3 (UM7): a member showing a meter (GEAR-REWORK1, PR5-51b: an ammunition off-hand's pips)
-                // has a meter row 4 px high under the card's rows
-                let meter_row = if emberwake_battle::meter::shown(&s(&b).w, a).is_empty() { 0 } else { 4 };
-                assert_eq!(card.h, 30 + meter_row, "Normal keeps its height");
+                // BATTLE-UI2 (contract 3): a plate is 84 px at every size; a meter row draws inside it
+                assert_eq!(card.h, crate::battle::plates::PLATE_H, "Normal keeps its height");
             }
             let inside: Vec<_> = recs.iter().filter(|t| t.x >= card.x as f32 && t.x < (card.x + card.w) as f32 && t.y + t.h / 2.0 >= card.y as f32 && t.y + t.h / 2.0 < (card.y + card.h) as f32).cloned().collect();
             assert!(inside.len() >= 4, "{scale}: the name and three numbers: {}", inside.len());

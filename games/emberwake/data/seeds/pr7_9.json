@@ -1,0 +1,236 @@
+{
+ "steps": [
+  {
+   "op": "world",
+   "id": "sunk_ward",
+   "fields": {
+    "classes": {
+     "warrior": {
+      "name": "Vanguard",
+      "description": "Former garrison infantry in dented plate: billhook and halberd men who hold narrow corridors and break poise with one-handed polearms.",
+      "skill_path": {}
+     },
+     "rogue": {
+      "name": "Gutter-Stalker",
+      "description": "Rooftop couriers and curfew runners: they strike the staggered and the pinned and leave before the Watch arrives.",
+      "skill_path": {}
+     },
+     "priest": {
+      "name": "Heretic Acolyte",
+      "description": "Defrocked scribes and apostate embalmers: battlefield surgery with hot iron and sutures.",
+      "skill_path": {}
+     },
+     "ranger": {
+      "name": "Arbalestier",
+      "description": "Crag poachers and ridge scouts with winch arbalests and wire snares: they break windups from range.",
+      "skill_path": {}
+     },
+     "brawler": {
+      "name": "Slag-Brute",
+      "description": "Escaped kiln stokers and foundry breakers: bare hands, shackle cestuses and broken walls; the squad's stagger engine.",
+      "skill_path": {}
+     },
+     "mage": {
+      "name": "Ichor Alchemist",
+      "description": "Tenement hedge chemists and tallow distillers: phosphorus fire, flash-powder and caustic sprays.",
+      "skill_path": {}
+     }
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_evt_05",
+    "name": "The Awakening Fissure",
+    "description": "Causal Interlude: the marrow back-surge ruptures into the Sluice Undercroft.",
+    "intro": "Raw condensate has found the drain-vault. The floor splits.",
+    "location": "sluice_undercroft",
+    "zone": "undercroft",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      0,
+      4
+     ]
+    ],
+    "rows": [
+     "############",
+     "##...p....##",
+     "#..#.....#.#",
+     "#.....pp...#",
+     "...........#",
+     "#.....pp...#",
+     "#.#.....#..#",
+     "##....p...##",
+     "############"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 10,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen",
+     "vesper",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "calcified_amalgam",
+     "ash_crawler",
+     "ash_crawler",
+     "ash_crawler",
+     "calcified_husk",
+     "calcified_husk"
+    ],
+    "phases": [
+     {
+      "id": "surge_breach",
+      "name": "The vault ruptures",
+      "trigger": {
+       "kind": "round",
+       "round": 1
+      },
+      "effects": [
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_int_surge",
+        "speaker": "kaelen"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "bells",
+      "name": "The bells toll",
+      "trigger": {
+       "kind": "round",
+       "round": 2
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "The cathedral bells toll. The Amalgam shudders in answer."
+       },
+       {
+        "type": "shake",
+        "preset": "toll"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "bloom",
+      "name": "Bone Bloom",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "calcified_amalgam",
+       "pct": 30
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "Bone spires split the floor."
+       },
+       {
+        "type": "enrage",
+        "unit": "calcified_amalgam",
+        "power": 25
+       },
+       {
+        "type": "deck",
+        "unit": "calcified_amalgam",
+        "add": [
+         "ossification_bloom"
+        ],
+        "order": {
+         "assault": [
+          "ossification_bloom",
+          "ossified_spine_volley"
+         ],
+         "guard": [
+          "tendril_flail"
+         ]
+        }
+       }
+      ],
+      "pause_autoplay": true
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "rout",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 1,
+    "objective_text": "Drive the marrow surge back into the fissure.",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {},
+    "key_loot": [
+     {
+      "loot": "loot_marrow_core",
+      "kill": "calcified_amalgam"
+     }
+    ],
+    "objective_reward": {
+     "loot": "loot_dreamers_vertebra",
+     "once": true
+    },
+    "guests": [],
+    "party_min": 0,
+    "protect": [],
+    "flag_skills": [],
+    "tags": [
+     "main"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "notched_billhook",
+    "name": "Notched Billhook",
+    "family": "polearm",
+    "rarity": "COMMON",
+    "weight": 4,
+    "value": 40,
+    "description": "A garrison billhook, its hook notched by use: a one-handed pole-arm for holding a narrow corridor.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "technique": {
+     "skill": "halberd_sweep",
+     "grip": "1h"
+    },
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 12
+     }
+    ],
+    "tiers": []
+   }
+  }
+ ]
+}

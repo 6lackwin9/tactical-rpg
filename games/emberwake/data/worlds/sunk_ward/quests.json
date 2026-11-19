@@ -34,7 +34,8 @@
 			"board": "talia_board",
 			"track": "main",
 			"show_locked": true,
-			"closed_text": ""
+			"closed_text": "",
+			"rec_level": 5
 		},
 		{
 			"id": "q_a1_m2",
@@ -66,7 +67,8 @@
 			"board": "talia_board",
 			"track": "main",
 			"show_locked": true,
-			"closed_text": ""
+			"closed_text": "",
+			"rec_level": 4
 		},
 		{
 			"id": "q_a1_m3",
@@ -164,7 +166,7 @@
 		},
 		{
 			"id": "q_a1_m5",
-			"name": "The Drowned Sluice",
+			"name": "The Crucible",
 			"description": "Inquisitor-Prelate Nemeth holds the Crucible Watchpost and the Slag Gate behind it. Open the gate. One of you holds the winch.",
 			"giver": "",
 			"faction": "",
@@ -321,7 +323,7 @@
 					"value": true
 				}
 			],
-			"reward": "Slag Plating, 60 xp and 10 gold, and cheaper coals at Berek's Hearth (-20%).",
+			"reward": "Slag Plating, 60 xp and 10 Scrap, and cheaper coals at Berek's Hearth (-20%).",
 			"template": "a1_flag_job_plating",
 			"turn_in": "talia_rusk",
 			"requires_flags": [
@@ -405,7 +407,7 @@
 					"value": true
 				}
 			],
-			"reward": "60 xp, 20 gold, and Maren's clue to St. Lyra's flue, for Act 2.",
+			"reward": "60 xp, 20 Scrap, and Maren's clue to St. Lyra's flue, for Act 2.",
 			"template": "a1_flag_job",
 			"turn_in": "talia_rusk",
 			"requires_flags": [
@@ -447,7 +449,7 @@
 					"value": true
 				}
 			],
-			"reward": "Hollis's Lever-Winch (Heavy Winch Sunder costs 1 block less), 60 xp and 20 gold, and a gate wave that arrives a round late.",
+			"reward": "Hollis's Lever-Winch (Winch Sunder costs 1 block less), 60 xp and 20 Scrap, and a gate wave that arrives a round late.",
 			"template": "a1_flag_job_winch",
 			"turn_in": "talia_rusk",
 			"requires_flags": [
@@ -526,7 +528,7 @@
 					"value": true
 				}
 			],
-			"reward": "Five days of Warded Tallow, 60 xp and 20 gold, and a Snapped Alum Inhaler.",
+			"reward": "Five days of Warded Tallow, 60 xp and 20 Scrap, and a Snapped Alum Inhaler.",
 			"template": "a1_flag_job_tallow",
 			"turn_in": "talia_rusk",
 			"requires_flags": [

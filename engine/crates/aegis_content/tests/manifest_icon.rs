@@ -21,7 +21,7 @@ fn a_manifest_without_an_icon_writes_no_key() {
 
 #[test]
 fn the_icon_keeps_its_place_and_round_trips() {
-    let m = Manifest { canvas: json!({"policy": "fixed"}), window_sizes: json!(["1280x720"]), ..manifest("ui/mark.png") };
+    let m = Manifest { canvas: json!({"policy": "fixed"}), window_sizes: json!(["1280x720"]), cli: "demo_tool".into(), ..manifest("ui/mark.png") };
     let d = m.to_dict();
     let back = Manifest::from_dict(&d);
     assert_eq!((back.icon.as_str(), &back.canvas, &back.window_sizes), ("ui/mark.png", &m.canvas, &m.window_sizes));

@@ -118,10 +118,20 @@ fn trip_cost(cx: &Cx, gs: &emberwake_world::GameState, trip: &serde_json::Map<St
     cost_text(cx, gs, json::i(trip, "time", 0), json::i(trip, "supplies", 0))
 }
 
-/// `time` and `supplies` as the tips say them ("2 days, 2 Tallow" in a campaign world).
+/// `time` and `supplies` as the tips say them ("2 days, 2 Tallow" in a campaign world); PR7-42 (PT-19): a trip that
+/// empties the upkeep adds the fight penalty it brings ("1 day, 1 Tallow, -2 AP").
 fn cost_text(cx: &Cx, gs: &emberwake_world::GameState, time: i64, supplies: i64) -> String {
     let length = if gs.campaign.is_some() { crate::runover::days(time) } else { format!("{time} time") };
-    format!("{length}, {supplies} {}", purse_word(cx, PurseWord::Upkeep))
+    let ap = emberwake_world::campaign::purse::starved_ap(&cx.data, gs, emberwake_world::campaign::purse::upkeep_after(gs, supplies));
+    let penalty = if ap < 0 { format!(", {ap} AP") } else { String::new() };
+    format!("{length}, {supplies} {}{penalty}", purse_word(cx, PurseWord::Upkeep))
+}
+
+/// PR7-42 (PT-19): the legend's line while the upkeep holds `left` and that costs AP in a fight ("No Tallow: fights
+/// -2 AP"); None otherwise.
+fn starved_line(cx: &Cx, gs: &emberwake_world::GameState, left: i64) -> Option<String> {
+    let ap = emberwake_world::campaign::purse::starved_ap(&cx.data, gs, left);
+    (ap < 0).then(|| format!("No {}: fights {ap} AP", purse_word(cx, PurseWord::Upkeep)))
 }
 
 /// CAMPAIGN1-TM: the mode button's tip: the mode's own tip, its days a leg and the road-fight change, and how to switch.
@@ -852,7 +862,7 @@ impl WorldMap {
     fn side_panel(&mut self, ui: &mut Ui<WAct>, cx: &mut Cx, d: &emberwake_world::Data, gs: &emberwake_world::GameState, here: &str, ways: &[travel::TravelPath], peek: Option<usize>) {
         let sx = 504;
         let mut y = 28;
-        ui.p.text(sx as f32, y as f32, "World map", BODY, th().info);
+        ui.p.text_face(aegis_ui::painter::Typeface::Display, sx as f32, y as f32, "World map", BODY, th().gold);
         ui.p.text_right(W as f32 - 6.0, y as f32, &format!("Time {}", gs.time), BODY, th().text);
         y += 14;
         // CAMPAIGN1-TM: the travel mode button (only in a campaign world with modes)
@@ -868,6 +878,11 @@ impl WorldMap {
                 Some(way) => {
                     // CAMPAIGN1 W5: the arrival day and the days left in a campaign world; MAP-HOOKS1: of the chosen way
                     let mut text = format!("{}. Roads can be ambushed.", cost_text(cx, &gs, way.days, way.supplies));
+                    // PR7-42 (PT-19): a trip that empties the upkeep says what the fights after it cost
+                    let left = emberwake_world::campaign::purse::upkeep_after(&gs, way.supplies);
+                    if let Some(line) = starved_line(cx, &gs, left) {
+                        text = format!("{text} On arrival: {line}.");
+                    }
                     if let Some(m) = &mode {
                         text = format!("{}: {text}", m.name);
                     }
@@ -897,7 +912,15 @@ impl WorldMap {
                 }
                 None => {
                     ui.p.text_fit(sx as f32, y as f32 + 3.0, &format!("No open road to {name}."), SMALL, 130.0, th().foe);
-                    y += 20;
+                    y += 12;
+                    // PR7-37 (PT-08): the next reachable step toward it (a road, then a place's exit)
+                    let hint = way_hint(cx, gs, here, &self.selected);
+                    for part in ui.p.wrap(&hint, SMALL, 130.0) {
+                        ui.p.text(sx as f32, y as f32 + 1.0, &part, SMALL, th().text);
+                        y += 8;
+                    }
+                    ui.push("world_map.way_hint", "label", hint.clone(), Rect::new(sx, y - 8, 130, 8), true, false, None, Vec::new());
+                    y += 8;
                 }
             }
         }
@@ -906,7 +929,8 @@ impl WorldMap {
         // CAMPAIGN1 P1, R1: the rest's cost in the upkeep's name ("Make camp (3 supplies)" in the Ashlands) and its days
         let camp = progression::can_camp(&d, &gs);
         let rule = emberwake_world::campaign::purse::rest_rule(&d, &gs.world_id);
-        let camp_label = format!("Make camp ({} {})", rule.cost, purse_word(cx, PurseWord::Upkeep));
+        // PR6-8: the cost after the facilities' rest upkeep deltas (`rest_cost`; the rule's cost without them)
+        let camp_label = format!("Make camp ({} {})", emberwake_world::campaign::purse::rest_cost(&d, &gs), purse_word(cx, PurseWord::Upkeep));
         let camp_tip = match (camp.is_empty(), rule.days) {
             (false, _) => camp.to_string(),
             (true, n) if n > 0 => format!("Rest every hero to full HP. Takes {}.", crate::runover::days(n as i64)),
@@ -936,6 +960,64 @@ impl WorldMap {
         }
         crate::region::log_events(cx, json::aget(&res, "events"));
         crate::runover::take(cx, &res);
+    }
+}
+
+/// PR7-37 (PT-31): the road legs open now (`travel::legs`), as sorted route qids.
+fn open_roads(d: &emberwake_world::Data, gs: &emberwake_world::GameState) -> Vec<String> {
+    let mut out: Vec<String> = travel::legs(d, gs, &gs.world_id).iter().map(|(r, _, _)| s(r, "_qid")).filter(|q| !q.is_empty()).collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// PR7-37 (PT-31): a road that opened since the player was last told (`Game::roads_seen`) gets a log line and a notice
+/// naming its two places ("New road open: A to B."); the first look only learns the roads open then. True when it told.
+pub fn note_new_roads(cx: &mut Cx) -> bool {
+    let Some(g) = cx.game.as_ref() else { return false };
+    let (d, gs) = (cx.data.clone(), g.gs.clone());
+    let open = open_roads(&d, &gs);
+    let Some(seen) = g.roads_seen.clone() else {
+        if let Some(g) = cx.game.as_mut() {
+            g.roads_seen = Some(open);
+        }
+        return false;
+    };
+    if open == seen {
+        return false;
+    }
+    let fresh: Vec<String> = open.iter().filter(|q| !seen.contains(q)).cloned().collect();
+    if let Some(g) = cx.game.as_mut() {
+        g.roads_seen = Some(open);
+    }
+    if fresh.is_empty() {
+        return false;
+    }
+    let legs = travel::legs(&d, &gs, &gs.world_id);
+    let lines: Vec<String> = fresh
+        .iter()
+        .filter_map(|q| legs.iter().find(|(r, _, _)| s(r, "_qid") == *q))
+        .map(|(_, a, b)| format!("New road open: {} to {}.", cx.location_name(&gs.world_id, a), cx.location_name(&gs.world_id, b)))
+        .collect();
+    for l in &lines {
+        cx.log(l.clone());
+    }
+    cx.notice.extend(lines);
+    true
+}
+
+/// PR7-37 (PT-08): the hint when no way to a place is known.
+const NO_WAY: &str = "No way there is known yet.";
+
+/// PR7-37 (PT-08, PT-31): the next reachable step from `here` toward place `to` (`travel::way_toward`, in
+/// `travel::way_words`' words), else `NO_WAY`.
+fn way_hint(cx: &Cx, gs: &emberwake_world::GameState, here: &str, to: &str) -> String {
+    let way = travel::way_toward(&cx.data, gs, here, to);
+    let words = travel::way_words(&way, to, &|q: &str| cx.location_name(&gs.world_id, q));
+    if words.is_empty() {
+        NO_WAY.to_string()
+    } else {
+        format!("Next: {words}")
     }
 }
 
@@ -998,8 +1080,10 @@ fn padlock(ui: &mut Ui<WAct>, r: Rect, open: bool, col: Rgba) {
     ui.p.line(rr, top - lift, rr, if open { top + 0.5 } else { cy }, col, 0.0);
 }
 
-/// The cyan of the party's ring.
-const PARTY: Rgba = [34, 211, 238, 255];
+/// The party's ring (PR7-36, ART-22: off cyan; the theme's `party_ring`).
+fn party_ring() -> Rgba {
+    th().game("party_ring", [34, 211, 238, 255])
+}
 
 impl Screen<GameCx> for WorldMap {
     fn id(&self) -> &'static str {
@@ -1128,11 +1212,12 @@ impl Screen<GameCx> for WorldMap {
         let glow = pulse(ms, reduce);
         for m in &marks {
             if m.is_here {
-                // the party's cyan ring: beside a landmark's foot, around a pin
+                // the party's ring: beside a landmark's foot, around a pin
                 let (rx, ry, rad) = if m.landmark { (m.r.x as f32 + 1.0, m.y - 3.0, 7.0) } else { (m.x, m.y, 10.0) };
-                ui.p.ellipse(rx, ry, rad + 1.5, rad + 1.5, rgba(6, 182, 212, 50));
-                ui.p.ellipse(rx, ry, rad, rad, rgba(6, 182, 212, 64));
-                ui.p.ellipse_ring(rx, ry, rad, rad, PARTY);
+                let ring = party_ring();
+                ui.p.ellipse(rx, ry, rad + 1.5, rad + 1.5, [ring[0], ring[1], ring[2], 50]);
+                ui.p.ellipse(rx, ry, rad, rad, [ring[0], ring[1], ring[2], 64]);
+                ui.p.ellipse_ring(rx, ry, rad, rad, party_ring());
                 if m.landmark {
                     if let Some(img) = cx.art.image(&emberwake_content::art::pin("here"), 10, 10) {
                         ui.p.image(img, Rect::new(rx as i32 - 5, ry as i32 - 5, 10, 10));
@@ -1162,9 +1247,10 @@ impl Screen<GameCx> for WorldMap {
                 ui.p.panel(l, rgba(10, 11, 16, 240), rgb(217, 119, 6), 0.0);
                 ui.p.text(tx, ty, &m.name, SMALL, th().gold);
             } else {
-                // faint: a nearly clear strip, dim text with a soft shadow, no border
+                // PR7-36 (ART-22): a dark label plate so the name reads on the picture; dim text with a soft shadow, no border
                 let fade = if m.locked { 0.8 } else { 1.0 };
-                ui.p.fill(l, rgba(10, 11, 16, (71.0 * fade) as u8));
+                let plate = th().game("label_plate", rgba(10, 11, 16, 71));
+                ui.p.fill(l, [plate[0], plate[1], plate[2], (plate[3] as f32 * fade) as u8]);
                 ui.p.text(tx + 0.5, ty + 0.5, &m.name, SMALL, rgba(0, 0, 0, (200.0 * fade) as u8));
                 ui.p.text(tx, ty, &m.name, SMALL, rgba(217, 203, 180, (189.0 * fade) as u8));
             }
@@ -1182,6 +1268,11 @@ impl Screen<GameCx> for WorldMap {
                 t.push((format!("Trip: {}", trip_cost(cx, &gs, &trip)), th().info));
             } else {
                 t.push(("No open road yet.".into(), th().dim));
+                // PR7-37 (PT-08): the way there, when there is one
+                let hint = way_hint(cx, &gs, &here, &m.qid);
+                if !hint.starts_with(NO_WAY) {
+                    t.push((hint, th().info));
+                }
             }
             for step in travel::quest_steps_at(&d, &gs, &m.qid) {
                 t.push((format!("Quest: {step}"), th().gold));
@@ -1202,10 +1293,14 @@ impl Screen<GameCx> for WorldMap {
         }
         self.hits = hits;
         // -- the Legend (AO-01 (5), AO-02): the district's quests and the party, floating over the map
+        // PR7-37 (PT-31): every active quest, also one whose place the map does not show (or that has none); the row
+        // says where it is and the way there
         let mut rows: Vec<(String, String)> = Vec::new();
-        for (node, name) in travel::quest_places(&d, &gs) {
-            if nodes.iter().any(|n| s(n, "qid") == node) && !rows.iter().any(|(_, t)| *t == name) {
+        let mut quest_of: Vec<String> = Vec::new();
+        for (node, name, qid) in travel::legend_quests(&d, &gs) {
+            if !rows.iter().any(|(_, t)| *t == name) {
                 rows.push((node, name));
+                quest_of.push(qid);
             }
         }
         for n in &nodes {
@@ -1218,8 +1313,11 @@ impl Screen<GameCx> for WorldMap {
         let row_h = (ui.p.line_h(SMALL) + 1.0).ceil() as i32;
         let head = "Active quests";
         let head_w = ui.p.text_w(head, SMALL + 1.0) + 2.0 * PANEL_BTN as f32 + 8.0;
-        let widest = rows.iter().map(|(_, t)| ui.p.text_w(t, SMALL)).fold(head_w, f32::max);
-        let size = (((widest + 18.0).ceil() as i32).clamp(96, 150), 4 + row_h + 2 + row_h * rows.len().max(1) as i32 + 3 + row_h + 3);
+        // PR7-42 (PT-19): with the upkeep at 0, the legend's last row says what that costs in a fight
+        let starved = starved_line(cx, &gs, gs.party.supplies);
+        let widest = rows.iter().map(|(_, t)| ui.p.text_w(t, SMALL)).fold(head_w, f32::max).max(starved.as_ref().map_or(0.0, |t| ui.p.text_w(t, SMALL)));
+        let extra = if starved.is_some() { row_h } else { 0 };
+        let size = (((widest + 18.0).ceil() as i32).clamp(96, 150), 4 + row_h + 2 + row_h * rows.len().max(1) as i32 + 3 + row_h + extra + 3);
         let chip = ((ui.p.text_w("Legend", SMALL + 1.0) + 18.0).ceil() as i32, row_h + 4);
         let taken: Vec<Rect> = marks.iter().flat_map(|m| [m.r, m.label]).collect();
         let held = ui.dragging() == Some(LEGEND_DRAG);
@@ -1288,9 +1386,18 @@ impl Screen<GameCx> for WorldMap {
                 if let Some(img) = cx.art.image(&crate::region::service_icon("board"), 7, 7) {
                     ui.p.image(img, b);
                 }
-                ui.p.text(r.x as f32 + 12.0, r.y as f32, text, SMALL, if on { th().gold } else { th().text });
+                let shown = nodes.iter().any(|n| s(n, "qid") == *node);
+                ui.p.text(r.x as f32 + 12.0, r.y as f32, text, SMALL, if on { th().gold } else if shown { th().text } else { th().dim });
                 let place = cx.location_name(&gs.world_id, node);
-                ui.push(format!("world_map.legend.quest.{i}"), "row", text.clone(), r, true, on, Some(WAct::Node(node.clone())), tip(text, &format!("At {place}. Click to pick it.")));
+                let about = match (shown, node.is_empty()) {
+                    (true, _) => format!("At {place}. Click to pick it."),
+                    (false, false) => format!("At {place}, not on the map yet. {}", way_hint(cx, &gs, &here, node)),
+                    (false, true) => {
+                        let now = quest_of.get(i).map(|q| s(&emberwake_world::quest::current_objective(&d, &gs, q), "text")).unwrap_or_default();
+                        if now.is_empty() { "No place to travel to for it.".to_string() } else { format!("No place to travel to: {now}") }
+                    }
+                };
+                ui.push(format!("world_map.legend.quest.{i}"), "row", text.clone(), r, true, on, shown.then(|| WAct::Node(node.clone())), tip(text, &about));
                 y += row_h;
             }
             ui.p.fill(Rect::new(p.x + 3, y + 1, p.w - 6, 1), th().edge);
@@ -1299,11 +1406,18 @@ impl Screen<GameCx> for WorldMap {
                 ui.p.panel(r, rgba(44, 34, 30, 180), rgb(217, 119, 6), 0.0);
             }
             let (rx, ry) = (r.x as f32 + 5.5, r.y as f32 + row_h as f32 / 2.0);
-            ui.p.ellipse(rx, ry, 3.5, 3.5, rgba(6, 182, 212, 64));
-            ui.p.ellipse_ring(rx, ry, 3.5, 3.5, PARTY);
+            let ring = party_ring();
+            ui.p.ellipse(rx, ry, 3.5, 3.5, [ring[0], ring[1], ring[2], 64]);
+            ui.p.ellipse_ring(rx, ry, 3.5, 3.5, party_ring());
             ui.p.text(r.x as f32 + 12.0, r.y as f32, "Your party", SMALL, th().text);
             let party_place = cx.location_name(&gs.world_id, &here);
-            ui.push("world_map.legend.party", "row", "Your party", r, true, false, Some(WAct::Node(here.clone())), tip("Your party", &format!("At {party_place}, marked by the cyan ring.")));
+            ui.push("world_map.legend.party", "row", "Your party", r, true, false, Some(WAct::Node(here.clone())), tip("Your party", &format!("At {party_place}, marked by the gold ring.")));
+            if let Some(line) = &starved {
+                let r = Rect::new(p.x + 2, r.y + row_h, p.w - 4, row_h);
+                ui.p.text_fit(r.x as f32 + 4.0, r.y as f32, line, SMALL, (r.w - 6) as f32, th().foe);
+                let word = purse_word(cx, PurseWord::Upkeep);
+                ui.push("world_map.legend.upkeep", "label", line.clone(), r, true, false, None, tip(&format!("No {word}"), &format!("{line}. Travel still works; buy more {word} to fight at full AP.")));
+            }
         }
         // -- HUD bar (PLAYUI1-H): Back and the location name; gold, supplies and the icon buttons at the right
         let back_w = (ui.p.text_w("Back", BODY) + 8.0).ceil().max(26.0) as i32;
@@ -1403,6 +1517,10 @@ impl Screen<GameCx> for WorldMap {
             self.travel(cx);
             return;
         }
+        // PR7-37 (PT-31): a road opened since the last look says so
+        if note_new_roads(cx) {
+            return;
+        }
         if cx.take_answer(crate::runover::ASK_REST) {
             self.camp(cx);
             return;
@@ -1414,6 +1532,11 @@ impl Screen<GameCx> for WorldMap {
 
     fn music(&self, cx: &Cx) -> Option<String> {
         music::game_track(cx, music::TRAVEL)
+    }
+
+    /// AMBIENCE1: the road's ambient loop.
+    fn ambience(&self, cx: &Cx) -> Option<String> {
+        music::game_ambience(cx, music::TRAVEL)
     }
 
     widget_plumbing!();
@@ -2369,7 +2492,28 @@ mod tests {
         assert_eq!(wm.state(&cx)["selected"], json!(node), "the row picks its place");
     }
 
-    // ---- PR5-48 (MAP-LAYOUT-ED) -----------------------------------------------------------------------------------
+    /// PR7-42 (PT-19): at zero upkeep the legend's last row names the fights' AP change; a trip that empties the purse
+    /// says it in its cost; with upkeep left and a short trip, neither shows.
+    #[test]
+    fn zero_upkeep_shows_its_ap_penalty_in_the_legend_and_the_trip_cost() {
+        let mut cx = ward_hub(&[], &[], false);
+        let d = cx.data.clone();
+        let ap = emberwake_world::campaign::purse::purse(&d, SW).start_ap as i64;
+        assert!(ap < 0, "the ward's fights start with less AP at zero upkeep");
+        let (mut wm, mut g) = (WorldMap::new(), gfx());
+        cx.gs_mut().party.supplies = 3;
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        assert!(!wm.widgets().iter().any(|w| w["id"] == json!("world_map.legend.upkeep")), "no row with upkeep left");
+        let gs = cx.gs().clone();
+        assert!(!cost_text(&cx, &gs, 1, 1).contains("AP"), "a trip that leaves some: {}", cost_text(&cx, &gs, 1, 1));
+        assert!(cost_text(&cx, &gs, 3, 3).ends_with(&format!(", {ap} AP")), "a trip that empties it: {}", cost_text(&cx, &gs, 3, 3));
+        cx.gs_mut().party.supplies = 0;
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let row = wm.widgets().into_iter().find(|w| w["id"] == json!("world_map.legend.upkeep")).expect("the legend's upkeep row at 0");
+        assert!(row["text"].as_str().is_some_and(|t| t.ends_with(&format!("{ap} AP"))), "{row:?}");
+    }
+
+    // ---- PR5-48 (MAP-LAYOUT-ED)-----------------------------------------------------------------------------------
 
     fn game_layers() -> Layers {
         Layers::for_game(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))

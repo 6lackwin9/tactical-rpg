@@ -12,10 +12,12 @@
 //! queued in `pending` and handed on through `pending_head` / `pop_pending` (the GUI plays it; `{vignette}` items at
 //! the head move to the story queue through `story::pull_pending`, which `story::next_scene` calls, STORYUI1-W; a
 //! `{battle}` item is `trigger::fight`). Every effect list (meter rules, checkpoints, triggers) runs through the one
-//! shared effect body, `dialogue::apply_effects`. CAMPAIGN1-U: the HUD view (`view.rs`, W4) the game draws.
+//! shared effect body, `dialogue::apply_effects`. CAMPAIGN1-U: the HUD view (`view.rs`, W4) the game draws. PR6-11: an
+//! `end` of kind `ending` completes the run on an `endings` row (`ending.rs`: the ordered branch and the epilogue cards).
 
 pub mod checkpoint;
 pub mod clock;
+pub mod ending;
 pub mod meter;
 pub mod preview;
 pub mod purse;
@@ -43,7 +45,8 @@ use std::sync::Arc;
 /// left of them waits for the next cause.
 pub const REENTRIES_MAX: usize = 8;
 /// 11.5: the keys of the saved campaign block (CAMPAIGN1-TM: `mode`, written only when not the default).
-pub const BLOCK_KEYS: [&str; 8] = ["act", "run", "meters", "fired", "armed", "checkpoints", "pending", "mode"];
+/// PR6-6 (B3): `checkpoint_armed_at`, written only when not empty.
+pub const BLOCK_KEYS: [&str; 9] = ["act", "run", "meters", "fired", "armed", "checkpoints", "pending", "mode", "checkpoint_armed_at"];
 
 /// CAMPAIGN1-TM2: the load note of a saved mode `id` the world no longer has (the save loads in the default mode).
 pub fn mode_dropped_text(id: &str) -> String {
@@ -118,6 +121,30 @@ pub struct RunOver {
     pub text: String,
     /// The `run_over` event was reported (later ticks do nothing).
     pub told: bool,
+    /// PR6-11: the `endings` row a kind `ending` end finished on ("" = none, or another kind; `ending::pick`).
+    pub ending: String,
+}
+
+impl RunOver {
+    /// A run over of kind `kind` with its card and text (no ending).
+    pub fn new(kind: &str, card: &str, text: &str) -> Self {
+        Self { kind: kind.into(), card: card.into(), text: text.into(), told: false, ending: String::new() }
+    }
+
+    /// PR6-11: the campaign was completed (an end of kind `ending`), not lost.
+    pub fn completed(&self) -> bool {
+        self.kind == rpgkit_data::ending::END_KIND_ENDING
+    }
+
+    /// The `run_over` event `{event, kind, card, text}`; a completed run adds `completed: true` and its `ending`.
+    pub fn event(&self) -> Value {
+        let mut e = json::obj([("event", "run_over".into()), ("kind", self.kind.clone().into()), ("card", self.card.clone().into()), ("text", self.text.clone().into())]);
+        if self.completed() {
+            e.insert("completed".into(), Value::Bool(true));
+            e.insert("ending".into(), self.ending.clone().into());
+        }
+        Value::Object(e)
+    }
 }
 
 /// `gs.campaign` (11.5), saved as the key `campaign` only in a campaign world (X3).
@@ -134,6 +161,9 @@ pub struct Campaign {
     pub armed: Vec<String>,
     /// Checkpoint id -> "met" or "missed" (CAMPAIGN1-C).
     pub checkpoints: IndexMap<String, String>,
+    /// PR6-6 (`PK4_PK5_CAMPAIGN_HUB.md` 2, B3): `after_flag` checkpoint id -> the day it was armed (its deadline is
+    /// that day plus its `offset_days`); saved only when not empty.
+    pub checkpoint_armed_at: IndexMap<String, i64>,
     /// Queued `then` items, head first (T2).
     pub pending: Vec<Dict>,
     /// CAMPAIGN1-TM: the travel mode the party picked ("" = the world's default; saved only when set).
@@ -157,7 +187,7 @@ pub struct Campaign {
 /// Equal when the saved parts are (the runtime parts follow from them or are never saved).
 impl PartialEq for Campaign {
     fn eq(&self, o: &Self) -> bool {
-        self.act == o.act && self.run == o.run && self.meters == o.meters && self.fired == o.fired && self.armed == o.armed && self.checkpoints == o.checkpoints && self.pending == o.pending && self.mode == o.mode
+        self.act == o.act && self.run == o.run && self.meters == o.meters && self.fired == o.fired && self.armed == o.armed && self.checkpoints == o.checkpoints && self.checkpoint_armed_at == o.checkpoint_armed_at && self.pending == o.pending && self.mode == o.mode
     }
 }
 
@@ -178,6 +208,7 @@ impl Campaign {
             fired: Vec::new(),
             armed: Vec::new(),
             checkpoints: IndexMap::new(),
+            checkpoint_armed_at: IndexMap::new(),
             pending: Vec::new(),
             mode: String::new(),
             over: None,
@@ -232,6 +263,10 @@ impl Campaign {
         if let (Value::Object(o), false) = (&mut out, self.mode.is_empty()) {
             o.insert("mode".into(), Value::String(self.mode.clone()));
         }
+        // PR6-6 (B3): no armed checkpoint writes nothing, so saves stay as before
+        if let (Value::Object(o), false) = (&mut out, self.checkpoint_armed_at.is_empty()) {
+            o.insert("checkpoint_armed_at".into(), Value::Object(self.checkpoint_armed_at.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
+        }
         out
     }
 
@@ -270,7 +305,7 @@ impl Campaign {
                 }
             }
         };
-        let (meters, checkpoints) = (object("meters"), object("checkpoints"));
+        let (meters, checkpoints, armed_at) = (object("meters"), object("checkpoints"), object("checkpoint_armed_at"));
         for (id, st) in meters {
             match c.defs.get(id) {
                 Some(def) => {
@@ -296,6 +331,14 @@ impl Campaign {
                     c.checkpoints.insert(id.clone(), st.to_string());
                 }
                 None => problems.push(format!("campaign.checkpoints.{id} must be met or missed.")),
+            }
+        }
+        // PR6-6 (B3): an absent key is no armed checkpoint (older saves)
+        for (id, v) in armed_at {
+            if json::is_int(v) {
+                c.checkpoint_armed_at.insert(id.clone(), json::to_int(v));
+            } else {
+                problems.push(format!("campaign.checkpoint_armed_at.{id} must be a whole number (a day)."));
             }
         }
         // CAMPAIGN1-TM: an absent mode is the default (older saves); CAMPAIGN1-TM2 (decision "Saves and data edits"): a
@@ -365,6 +408,11 @@ impl Campaign {
                 errors.push(format!("campaign.checkpoints.{id} must be met or missed."));
             }
         }
+        for (id, day) in &self.checkpoint_armed_at {
+            if id.is_empty() || *day < 1 {
+                errors.push(format!("campaign.checkpoint_armed_at.{id} must be a day, 1 or more."));
+            }
+        }
         for item in &self.pending {
             let kinds: Vec<&str> = THEN_KINDS.iter().copied().filter(|k| item.contains_key(*k)).collect();
             let ok = kinds.len() == 1
@@ -410,8 +458,12 @@ pub enum Cause {
     Days { n: i64, why: String },
     /// One travel leg on a route carrying `route_tags`, in travel mode `mode` ("" = none; CAMPAIGN1-TM) (leg inputs).
     Leg { route_tags: Vec<String>, mode: String },
-    /// A settled battle: the encounter's qid and tags, the outcome (won, lost, fled).
-    Battle { encounter: String, tags: Vec<String>, outcome: String },
+    /// A settled battle: the encounter's qid and tags, the outcome (won, lost, fled) and (PR6-6, B5) each fielded
+    /// hero's battle telemetry (`HeroTally`; empty for a fight settled without a party side).
+    Battle { encounter: String, tags: Vec<String>, outcome: String, heroes: Vec<HeroTally> },
+    /// PR6-6 (`PK4_PK5_CAMPAIGN_HUB.md` 1, B5): a recipe run (`recipe::run`): the recipe's id and tags and the sum of
+    /// its `doctrine` deltas (recipe triggers, T1).
+    Recipe { recipe: String, tags: Vec<String>, doctrine: i64 },
     /// The party entered the location with this qid (`explore::enter`; enter triggers, T1).
     Enter { location: String },
     /// A dialogue choice, a trigger or a rule applied effects.
@@ -419,6 +471,61 @@ pub enum Cause {
     /// The act changed to `n` (act triggers, T1): after an effect list that set it, and after a tick whose rules,
     /// checkpoints or triggers set it.
     Act(i64),
+}
+
+/// PR6-6 (`PK4_PK5_CAMPAIGN_HUB.md` 1, B5): one fielded hero's battle telemetry, as a battle cause carries it
+/// (`roster::HeroEnd`'s `strain_peak`, `strain_end`, `channel_actions`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct HeroTally {
+    pub strain_peak: i64,
+    pub strain_end: i64,
+    pub channel_actions: i64,
+}
+
+impl HeroTally {
+    pub fn of(e: &crate::roster::HeroEnd) -> Self {
+        Self { strain_peak: e.strain_peak, strain_end: e.strain_end, channel_actions: e.channel_actions }
+    }
+
+    /// The value of `HERO_FILTER_KEYS` key `key` (0 for another key).
+    pub fn get(&self, key: &str) -> i64 {
+        match key {
+            "strain_peak" => self.strain_peak,
+            "strain_end" => self.strain_end,
+            "channel_actions" => self.channel_actions,
+            _ => 0,
+        }
+    }
+}
+
+/// PR6-6 (B5): a `hero` filter (a battle meter input's, a battle trigger's): the minimum each named key
+/// (`rpgkit_data::HERO_FILTER_KEYS`) of a hero's battle end must reach. Empty = no filter.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct HeroFilter {
+    pub min: Vec<(String, i64)>,
+}
+
+impl HeroFilter {
+    /// From a row's `hero` object (absent, not an object or without a known key = empty).
+    pub fn from_value(v: &Value) -> Self {
+        let o = json::dict(v);
+        let min = rpgkit_data::HERO_FILTER_KEYS.iter().filter_map(|k| o.get(*k).filter(|x| json::is_int(x)).map(|x| ((*k).to_string(), json::to_int(x)))).collect();
+        Self { min }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.min.is_empty()
+    }
+
+    /// Hero `h` reaches every minimum (always with an empty filter).
+    pub fn meets(&self, h: &HeroTally) -> bool {
+        self.min.iter().all(|(k, m)| h.get(k) >= *m)
+    }
+
+    /// How many of `heroes` reach every minimum.
+    pub fn count(&self, heroes: &[HeroTally]) -> i64 {
+        heroes.iter().filter(|h| self.meets(h)).count() as i64
+    }
 }
 
 /// A `meter_warning` event (W1).
@@ -477,6 +584,8 @@ fn tick_all(d: &Data, gs: &mut GameState, causes: Vec<Cause>) -> Vec<Value> {
             queue.push_back(Cause::Act(c.act));
         }
     }
+    // ROSTER1 FZ2 (PK3 3.1): a Living Martyr's fuse ticks in stasis on the campaign's days (members without one: no-op)
+    crate::roster::refresh_fuses(d, gs);
     events
 }
 
@@ -507,7 +616,7 @@ fn tick_once(d: &Data, gs: &mut GameState, cause: &Cause) -> Vec<Value> {
     let Some(c) = gs.campaign.as_mut() else { return events };
     if let Some(o) = c.over.as_mut().filter(|o| !o.told) {
         o.told = true;
-        events.push(Value::Object(json::obj([("event", "run_over".into()), ("kind", o.kind.clone().into()), ("card", o.card.clone().into()), ("text", o.text.clone().into())])));
+        events.push(o.event());
     }
     c.sync(time);
     // days a `rest` effect passed inside this tick are not ticked yet: the follow-up days(n, rest) tick sees them pass
@@ -520,14 +629,58 @@ fn tick_once(d: &Data, gs: &mut GameState, cause: &Cause) -> Vec<Value> {
     events
 }
 
+/// PR6-6 (`PK4_PK5_CAMPAIGN_HUB.md` 1, B5; review: narrowed): the campaign step after a recipe run (`recipe::run`), not a
+/// full tick: the recipe meter inputs (`on: recipe`, by the recipe's tags) and the triggers `on: recipe` only (no `any`
+/// trigger, no checkpoint step, no fuse, no time change, no follow-up tick; a repeatable trigger's re-arm waits for the
+/// next tick). Only when the run's `doctrine` moved a gauge (`moved`), an input moved one or a trigger fired do the meter
+/// rules run, the baseline of the meters move and quest flag steps refresh. Returns the events (none outside a
+/// campaign world or once the run is over).
+pub fn recipe_tick(d: &Data, gs: &mut GameState, cause: &Cause, moved: bool) -> Vec<Value> {
+    let mut events = Vec::new();
+    if !matches!(cause, Cause::Recipe { .. }) || gs.campaign.as_ref().is_none_or(Campaign::is_over) {
+        return events;
+    }
+    let before: IndexMap<String, i64> = gs.campaign.as_ref().map(|c| c.meters.iter().map(|(id, st)| (id.clone(), st.value)).collect()).unwrap_or_default();
+    inputs(gs, cause);
+    let input_moved = gs.campaign.as_ref().is_some_and(|c| c.meters.iter().any(|(id, st)| before.get(id) != Some(&st.value)));
+    let fired = trigger::step(d, gs, cause, &mut events);
+    if !(moved || input_moved || fired) {
+        return events;
+    }
+    rule_passes(d, gs, &mut events);
+    let time = gs.time;
+    let Some(c) = gs.campaign.as_mut() else { return events };
+    if let Some(o) = c.over.as_mut().filter(|o| !o.told) {
+        o.told = true;
+        events.push(o.event());
+    }
+    // the meters' baseline only (the clock's `last_time` is the last tick's: checkpoints count days from it)
+    let values: IndexMap<String, i64> = c.meters.keys().map(|id| (id.clone(), c.value(id, time))).collect();
+    c.last = values;
+    if !c.is_over() {
+        quest::refresh(d, gs);
+    }
+    events
+}
+
 /// M3: the cause's inputs move the gauges (clamped, M4).
 fn inputs(gs: &mut GameState, cause: &Cause) {
     let Some(c) = gs.campaign.as_mut() else { return };
     let defs = c.defs.clone();
     for (id, def) in defs.iter() {
         let delta = match cause {
-            Cause::Battle { tags, outcome, .. } => def.input_delta("battle", c.act, |x| tags_match(&x.tags, tags) && (x.outcomes.is_empty() || x.outcomes.contains(outcome))),
+            // PR6-6 (B5): an input with a `hero` filter moves by its delta once per fielded hero that meets it
+            Cause::Battle { tags, outcome, heroes, .. } => def.input_sum("battle", c.act, |x| {
+                let hit = tags_match(&x.tags, tags) && (x.outcomes.is_empty() || x.outcomes.contains(outcome));
+                match (hit, x.hero.is_empty()) {
+                    (false, _) => 0,
+                    (true, true) => 1,
+                    (true, false) => x.hero.count(heroes),
+                }
+            }),
             Cause::Days { n, .. } => def.input_delta("day", c.act, |_| true) * n,
+            // PR6-6 (B5): a recipe run's inputs by its tags
+            Cause::Recipe { tags, .. } => def.input_delta("recipe", c.act, |x| tags_match(&x.tags, tags)),
             Cause::Leg { route_tags, mode } => def.input_delta("leg", c.act, |x| tags_match(&x.route_tags, route_tags) && (x.modes.is_empty() || x.modes.contains(mode))),
             _ => 0,
         };
@@ -651,6 +804,12 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, events: &mut Vec<Va
         purse::rest_effect(d, gs);
         return true;
     }
+    // PR6-11: the ending an end of kind `ending` finishes on, picked before the campaign is borrowed (the gates read it)
+    let ending = if effect == "end" && json::s(fx, "kind") == rpgkit_data::ending::END_KIND_ENDING && gs.campaign.as_ref().is_some_and(|c| !c.is_over()) {
+        ending::pick(d, gs, &json::s(fx, rpgkit_data::ending::END_ENDING_KEY))
+    } else {
+        String::new()
+    };
     let time = gs.time;
     let Some(c) = gs.campaign.as_mut() else { return is_campaign_effect(&effect) };
     if c.is_over() {
@@ -700,7 +859,7 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, events: &mut Vec<Va
         }
         "end" => {
             if c.over.is_none() {
-                c.over = Some(RunOver { kind: json::s_or(fx, "kind", "fail"), card: json::s(fx, "card"), text: json::s(fx, "text"), told: false });
+                c.over = Some(RunOver { ending, ..RunOver::new(&json::s_or(fx, "kind", "fail"), &json::s(fx, "card"), &json::s(fx, "text")) });
             }
         }
         _ => return false,

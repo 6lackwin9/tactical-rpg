@@ -12,5 +12,6 @@ pub mod rng;
 pub mod scratch;
 pub mod sha256;
 pub mod sort;
+pub mod switches;
 pub mod value;
 pub mod vfs;

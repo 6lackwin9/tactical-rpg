@@ -16,6 +16,26 @@ pub const WON: &str = "won";
 pub const LOST: &str = "lost";
 pub const FLED: &str = "fled";
 
+/// PR6-9 (`PK4_PK5_CAMPAIGN_HUB.md` 5, B6): the objective `retreat`: the battle is won once the `objective_unit` is out
+/// of the fight or down to its `hp_floor` percent of max HP, at which it withdraws (fate `withdrawn`); damage never takes
+/// it below that floor (the phase guard: no one-turn kill), and defeating every enemy still wins.
+pub const RETREAT: &str = "retreat";
+/// The objective ids (OBJ1's four, then PR6-9's `retreat`); another id reads as `rout`.
+pub const OBJECTIVES: [&str; 5] = ["rout", "hold", "escape", "slay", RETREAT];
+/// PR6-9: an encounter's `hp_floor` (percent of max HP) default and range.
+pub const HP_FLOOR_DEFAULT: i32 = 25;
+pub const HP_FLOOR_RANGE: (i32, i32) = (1, 99);
+
+/// PR6-9: encounter `o`'s `hp_floor` (the default when absent, held in range).
+pub fn hp_floor_of(o: &Obj) -> i32 {
+    value::int(o, "hp_floor", HP_FLOOR_DEFAULT).clamp(HP_FLOOR_RANGE.0, HP_FLOOR_RANGE.1)
+}
+
+/// PR6-9: the HP at which a retreat unit of max HP `max_hp` withdraws: max_hp x pct / 100 rounded down, at least 1.
+pub fn floor_hp(max_hp: i32, pct: i32) -> i32 {
+    (max_hp.max(1) * pct / 100).max(1)
+}
+
 // ---- Objectives ----------------------------------------------------------------------------------------------
 
 pub const RING: [V2; 2] = [V2 { x: 5, y: 4 }, V2 { x: 6, y: 4 }];
@@ -34,12 +54,14 @@ pub struct Objectives {
     pub note: String,
     /// ENCOUNTER2 H4: the heroes holding a hold tile when a hold escape was won (empty otherwise).
     pub stayed: Vec<UnitId>,
+    /// PR6-9: the retreat's floor in percent of max HP (`hp_floor`, read for `retreat` only).
+    pub hp_floor: i32,
 }
 
 impl Objectives {
     pub fn create(o: &Obj) -> Self {
         let raw = value::string(o, "objective", "rout");
-        let objective = if ["rout", "hold", "escape", "slay"].contains(&raw.as_str()) { raw } else { "rout".into() };
+        let objective = if OBJECTIVES.contains(&raw.as_str()) { raw } else { "rout".into() };
         let mut tiles: Vec<V2> = value::array(o, "objective_tiles")
             .iter()
             .filter_map(|p| p.as_array().filter(|p| p.len() == 2).map(|p| V2::new(value::to_int(&p[0], 0), value::to_int(&p[1], 0))))
@@ -56,7 +78,14 @@ impl Objectives {
             held: 0,
             note: String::new(),
             stayed: Vec::new(),
+            hp_floor: hp_floor_of(o),
         }
+    }
+
+    /// PR6-9: the retreat unit `t` is to withdraw now: alive and at or below its floor.
+    pub fn retreat_due(&self, w: &World, t: UnitId) -> bool {
+        let u = &w.units[t];
+        self.objective == RETREAT && u.is_alive() && !u.is_withdrawn && u.hp <= floor_hp(u.max_hp, self.hp_floor)
     }
 
     /// Rule 3: "", won, lost or fled after a block (first match wins). Hold counting happens at a round end.
@@ -113,12 +142,43 @@ impl Objectives {
                     }
                 }
             }
+            // PR6-9: the retreat clears the room once its unit is out of the fight or down to its floor
+            RETREAT => {
+                if let Some(t) = target {
+                    if self.retreat_due(w, t) {
+                        self.note = format!("{} withdraws.", u(t).name);
+                        return WON.into();
+                    }
+                    if !u(t).is_active() {
+                        return WON.into();
+                    }
+                }
+            }
             _ => {}
         }
         if !hero_active && withdrew > 0 {
             return FLED.into();
         }
         String::new()
+    }
+
+    /// BATTLE-UI2 (`SCREEN_CONTRACT_BATTLE.md` 2): the objective's short goal for the battle's top bar ("Rout them",
+    /// "Survive 3 rounds", "Reach the exit", "Defeat Wolf", "Drive Wolf back"); the protect targets are the second line
+    /// (`protect_of`). `name_of(ref)` names units.
+    pub fn goal_of(o: &Obj, name_of: impl Fn(&str) -> String) -> String {
+        match value::string(o, "objective", "rout").as_str() {
+            "hold" => format!("Survive {} rounds", value::int(o, "objective_rounds", 3)),
+            "escape" => "Reach the exit".to_string(),
+            "slay" => format!("Defeat {}", name_of(&value::string(o, "objective_unit", ""))),
+            RETREAT => format!("Drive {} back", name_of(&value::string(o, "objective_unit", ""))),
+            _ => "Rout them".to_string(),
+        }
+    }
+
+    /// BATTLE-UI2: the top bar's protect line ("Protect A", "Protect A and B"; "" without a protect target).
+    pub fn protect_of(o: &Obj, name_of: impl Fn(&str) -> String) -> String {
+        let names: Vec<String> = value::strings(o, "protect").iter().map(|r| name_of(r)).collect();
+        if names.is_empty() { String::new() } else { format!("Protect {}", names.join(" and ")) }
     }
 
     /// Rule 9: the objective line: `objective_text` when set, else the generated text. `name_of(ref)` names units.
@@ -131,6 +191,11 @@ impl Objectives {
             "hold" => format!("Hold the ring for {} rounds, or defeat every enemy.", value::int(o, "objective_rounds", 3)),
             "escape" => format!("Get {} out by the exit, or defeat every enemy.", value::int(o, "objective_count", 1)),
             "slay" => format!("Defeat {}.", name_of(&value::string(o, "objective_unit", ""))),
+            RETREAT => format!(
+                "Drive {} back to {}% HP, or defeat every enemy.",
+                name_of(&value::string(o, "objective_unit", "")),
+                hp_floor_of(o)
+            ),
             _ => "Defeat every enemy.".to_string(),
         };
         let names: Vec<String> = value::strings(o, "protect").iter().map(|r| name_of(r)).collect();
@@ -278,6 +343,8 @@ pub enum PartyFate {
     Stood,
     /// At 0 HP.
     Downed,
+    /// PK3: bled out to 0 rounds during battle (permanently dead, departs regardless of outcome).
+    Dead,
     /// Still on the field.
     Standing,
 }
@@ -289,6 +356,7 @@ impl PartyFate {
             PartyFate::Stayed => "stayed",
             PartyFate::Stood => "stood",
             PartyFate::Downed => "downed",
+            PartyFate::Dead => "dead",
             PartyFate::Standing => "standing",
         }
     }
@@ -342,7 +410,7 @@ pub fn side_id(to: &str) -> Option<&'static str> {
 }
 /// PHASEFX1 (ACTS23 PK6 hook m): the phase effect that replaces a unit in place by another unit row (`unit` an
 /// encounter ref, `to` a unit ref) on the same cell, keeping its side; `hp` = `keep_pct` (the same share of the new max
-/// HP, the default) or `full`. One cell per unit (2 x 2 footprints are hook n).
+/// HP, the default) or `full`. A 2 x 2 unit (BIGUNIT1) takes a square holding the old cell (`World::grow_into_place`).
 pub const SWAP_EFFECT: &str = "swap";
 pub const SWAP_EFFECT_KEYS: [&str; 4] = ["type", "unit", "to", "hp"];
 pub const SWAP_KEEP_PCT: &str = "keep_pct";
@@ -591,6 +659,19 @@ impl Phases {
 
     pub fn units_of(&self, id: &str) -> Vec<UnitId> {
         self.wave_units.get(id).cloned().unwrap_or_default()
+    }
+
+    /// BATTLE-UI2 (`SCREEN_CONTRACT_BATTLE.md` 4, the "+2 round 3" tag): the next reinforcement known by its round: the
+    /// first phase not fired or dropped whose trigger names a round and that brings units, as (units, round). Read only.
+    pub fn next_reinforcement(&self) -> Option<(usize, i32)> {
+        self.phases
+            .iter()
+            .filter(|p| !self.fired.contains_key(&p.id) && !self.dropped.contains(&p.id))
+            .filter_map(|p| {
+                let (round, n) = (value::int(&p.trigger, "round", 0), self.units_of(&p.id).len());
+                (round > 0 && n > 0).then_some((n, round))
+            })
+            .min_by_key(|x| x.1)
     }
 
     /// Rule 1: hp_below phases become due (or drop when their unit is out) after a block.

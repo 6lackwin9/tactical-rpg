@@ -1,5 +1,5 @@
 //! Portraits (PORTRAITFX1-G, docs/specs/PORTRAITFX1.md 6.1 and 6.4; engine-only, Godot had no portrait effects): the
-//! game's binding of the engine's portrait effects (`aegis_ui::portrait_fx`) to its units and the kit's cue rows
+//! game's binding of the engine's portrait effects (`rpgkit_ui::portrait_fx`) to its units and the kit's cue rows
 //! (`emberwake_battle::portrait`, the catalog kind `portrait_cues`).
 //!
 //! - `Who`: whose portrait it is (the map key, the portrait tier, the id and body of `face_chain`, the name for the
@@ -22,8 +22,8 @@ use aegis_ui::art::Art;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::fx::Clock;
 use aegis_ui::painter::Painter;
-use aegis_ui::portrait_fx::{idle_cues, Budget, Cue, ExpressionFx, Mark, MarkBox, Motion, PortraitFx, PortraitOpts};
-use aegis_ui::portrait_overlays::Mount;
+use rpgkit_ui::portrait_fx::{idle_cues, Budget, Cue, ExpressionFx, Mark, MarkBox, Motion, PortraitFx, PortraitOpts};
+use rpgkit_ui::portrait_overlays::Mount;
 use aegis_ui::screen::Settings;
 use aegis_ui::ui::{SMALL};
 use emberwake_battle::portrait::{self, Look};
@@ -50,6 +50,11 @@ pub const HUES: [(&str, &str, Rgba); 8] = [
     ("Cinder Ash", "ash, smoke", rgb(0x6b, 0x72, 0x80)),
     ("Bleached Linen", "the hit flash", rgb(0xd9, 0xcb, 0xb4)),
 ];
+
+/// The portrait well (theme `portrait_well`): the dark ground every portrait draws on, inside its F2 frame.
+pub fn portrait_well() -> Rgba {
+    th().game("portrait_well", rgb(22, 30, 48))
+}
 
 /// The art-bible name of colour `#rrggbb` ("" when it is none of `HUES`).
 pub fn hue_name(hex: &str) -> &'static str {
@@ -287,7 +292,7 @@ pub struct Faces {
     pub reduce: Option<bool>,
     /// PORTRAITFX1-TL: the richest tier these portraits draw at (`PortraitOpts::tier_cap`; the timeline icons:
     /// minimal); None: the drawn side decides.
-    pub tier_cap: Option<aegis_ui::portrait_fx::Tier>,
+    pub tier_cap: Option<rpgkit_ui::portrait_fx::Tier>,
     /// PORTRAITFX1-EX: the expression effects every portrait draws (`draw` reads them from the data each frame).
     pub expressions: Vec<ExpressionFx>,
     /// PORTRAITFX2 FL2: the plain face's motion every portrait draws (`draw` reads the `neutral` row each frame).
@@ -296,7 +301,7 @@ pub struct Faces {
 
 impl Faces {
     /// PORTRAITFX1-TL: a screen's portraits that never draw richer than `cap` (`tier_cap`).
-    pub fn capped(cap: aegis_ui::portrait_fx::Tier) -> Faces {
+    pub fn capped(cap: rpgkit_ui::portrait_fx::Tier) -> Faces {
         Faces { tier_cap: Some(cap), ..Faces::default() }
     }
 
@@ -312,7 +317,7 @@ impl Faces {
     /// The clock moves by the wall time since the last call (at most `vignette::MAX_FRAME_MS`).
     pub fn tick(&mut self) {
         let now = aegis_core::clock::Instant::now();
-        let ms = self.last_wall.map_or(0.0, |l| (now.duration_since(l).as_secs_f64() * 1000.0).min(aegis_ui::vignette::MAX_FRAME_MS as f64));
+        let ms = self.last_wall.map_or(0.0, |l| (now.duration_since(l).as_secs_f64() * 1000.0).min(rpgkit_ui::vignette::MAX_FRAME_MS as f64));
         self.last_wall = Some(now);
         self.clock.advance(ms, 1.0);
     }
@@ -342,7 +347,7 @@ impl Faces {
     pub fn say(&mut self, key: &str, expression: &str) {
         let line = (!expression.is_empty()).then(|| Cue::parse("face", "")).flatten();
         match line {
-            Some(c) => self.lines.insert(key.to_string(), c.with_expression(expression).with_priority(aegis_ui::vignette::CARD_FACE_PRIORITY).with_key(LINE_FACE_KEY)),
+            Some(c) => self.lines.insert(key.to_string(), c.with_expression(expression).with_priority(rpgkit_ui::vignette::CARD_FACE_PRIORITY).with_key(LINE_FACE_KEY)),
             None => self.lines.remove(key),
         };
     }
@@ -360,7 +365,7 @@ impl Faces {
         self.draw_parts(p, &mut cx.art, &data.cat.portrait_cues, who, look, surface, r, &opts)
     }
 
-    /// `draw` over explicit parts: the holds are the sidecar's `idle`, the state rows of `rows` that hold for `look`
+    /// `draw` over explicit parts (PR7-25: on the portrait well, inside the F2 frame, `portrait_fx::draw_frame`): the holds are the sidecar's `idle`, the state rows of `rows` that hold for `look`
     /// on `surface`, the key's pins and its line's face (`say`); the file is the first of `who`'s chain for the
     /// expression that wins; the expression effects are `self.expressions`, the plain face's motion `self.base_motion`.
     #[allow(clippy::too_many_arguments)]
@@ -391,11 +396,15 @@ impl Faces {
             }
             expression = fx.expression(now).to_string();
         }
+        let well = portrait_well();
+        p.fill(r, well);
         let drawn = found.is_some_and(|rel| fx.draw(p, art, &rel, face.as_ref(), r, now, opts, &mut self.budget));
         if !drawn {
             let size = (r.h as f32 * 0.32).clamp(SMALL, 20.0);
             p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - p.line_h(size)) / 2.0, &who.initial(), size, th().gold);
         }
+        // PR7-25 (style F2): the one portrait frame, over the picture's own painted border
+        rpgkit_ui::portrait_fx::draw_frame(p, r, if drawn { rpgkit_ui::portrait_fx::painted_border(face.as_ref(), r) } else { 0 }, well);
         drawn
     }
 
@@ -496,11 +505,11 @@ pub(crate) mod tests {
     /// G5: the kit's copy of the effect names (and jolt presets) is the engine's.
     #[test]
     fn the_kit_effect_names_are_the_engines() {
-        assert_eq!(emberwake_data::PORTRAIT_EFFECTS, aegis_ui::portrait_fx::EFFECTS);
-        assert_eq!(emberwake_data::PORTRAIT_JOLTS, aegis_ui::portrait_fx::PORTRAIT_JOLTS);
+        assert_eq!(emberwake_data::PORTRAIT_EFFECTS, rpgkit_ui::portrait_fx::EFFECTS);
+        assert_eq!(emberwake_data::PORTRAIT_JOLTS, rpgkit_ui::portrait_fx::PORTRAIT_JOLTS);
         // PORTRAITFX1-EX: the marks and their boxes
-        assert_eq!(emberwake_data::PORTRAIT_MARKS, aegis_ui::portrait_fx::MARKS);
-        assert_eq!(emberwake_data::PORTRAIT_MARK_BOXES, aegis_ui::portrait_fx::MARK_BOXES);
+        assert_eq!(emberwake_data::PORTRAIT_MARKS, rpgkit_ui::portrait_fx::MARKS);
+        assert_eq!(emberwake_data::PORTRAIT_MARK_BOXES, rpgkit_ui::portrait_fx::MARK_BOXES);
     }
 
     /// An expression-effect row from its non-default keys (the loader's typed row).
@@ -558,7 +567,7 @@ pub(crate) mod tests {
         let img = faces.get("ida").and_then(|f| f.composed()).expect("composed").clone();
         let (cx, cy) = (fb[0] + fb[2] / 2, fb[1] + fb[3] / 2);
         let i = ((cy * img.w + cx) * 4) as usize;
-        let want = aegis_ui::portrait_fx::tinted([120, 90, 70, 255], rgb(0xe1, 0x1d, 0x48), 0.4);
+        let want = rpgkit_ui::portrait_fx::tinted([120, 90, 70, 255], rgb(0xe1, 0x1d, 0x48), 0.4);
         assert_eq!(&img.px[i..i + 4], &want[..], "the face box centre at the row's strength");
         let state = faces.get("ida").unwrap().state(faces.now());
         assert_eq!(state["expression_fx"], json!(["tint", "mark"]), "{state}");
@@ -621,7 +630,7 @@ pub(crate) mod tests {
         let mut faces = Faces::default();
         let who = Who { key: "ida".into(), tier: "npc".into(), id: "ida".into(), name: "Ida".into(), ..Who::default() };
         // the idle hold eases in over EASE_MS from its first draw
-        for ms in [1000.0, aegis_ui::portrait_fx::EASE_MS as f64] {
+        for ms in [1000.0, rpgkit_ui::portrait_fx::EASE_MS as f64] {
             faces.clock.advance(ms, 1.0);
             faces.begin();
             // Emberwake mounts the overlay layer (game.json `portrait_overlays`)
@@ -636,29 +645,29 @@ pub(crate) mod tests {
     /// sidecars' overlays; the player's setting (on by default) turns them off, leaving the base portrait (its blink).
     #[test]
     fn emberwake_mounts_the_portrait_overlays_and_the_player_can_turn_them_off() {
-        assert_eq!(emberwake_content::source::PORTRAIT_OVERLAYS, aegis_ui::portrait_overlays::SETTING);
+        assert_eq!(emberwake_content::source::PORTRAIT_OVERLAYS, rpgkit_ui::portrait_overlays::SETTING);
         let dir = Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
         let (data, _) = Data::open(&dir).expect("data");
         assert!(data.portrait_overlays, "Emberwake's game.json sets portrait_overlays: true");
         let mut settings = Settings::load(std::env::temp_dir().join("emberwake_portrait_overlays_none.json"), Settings::defaults(crate::screens::default_settings()));
-        assert_eq!(settings.v[aegis_ui::portrait_overlays::SETTING], json!(true), "the player's switch is on by default");
+        assert_eq!(settings.v[rpgkit_ui::portrait_overlays::SETTING], json!(true), "the player's switch is on by default");
         let faces = Faces::default();
         assert_eq!(faces.opts(&settings, data.portrait_overlays).overlays, Mount::Mounted);
         assert_eq!(faces.opts(&settings, false).overlays, Mount::Unmounted, "a game that does not mount the layer draws none");
-        settings.v[aegis_ui::portrait_overlays::SETTING] = json!(false);
+        settings.v[rpgkit_ui::portrait_overlays::SETTING] = json!(false);
         assert_eq!(faces.opts(&settings, data.portrait_overlays).overlays, Mount::Unmounted, "the player turned them off");
         // the same sidecar drawn under each: the overlay only when mounted, the blink either way
         let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "idle": [{"effect": "point_glow", "color": "#c084fc", "intensity": 0.8}]});
         let root = layer("mount", "portraits/npcs/ida.png", 96, [90, 70, 60], Some(face));
         let who = Who { key: "ida".into(), tier: "npc".into(), id: "ida".into(), name: "Ida".into(), ..Who::default() };
         for (game, on) in [(true, false), (true, true), (false, true)] {
-            settings.v[aegis_ui::portrait_overlays::SETTING] = json!(on);
+            settings.v[rpgkit_ui::portrait_overlays::SETTING] = json!(on);
             let opts = Faces::default().opts(&settings, game);
             let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
             let mut g = gfx();
             let mut ui: Ui<()> = Ui::new(&mut g, (-500, -500), true);
             let mut faces = Faces::default();
-            for ms in [1000.0, aegis_ui::portrait_fx::EASE_MS as f64] {
+            for ms in [1000.0, rpgkit_ui::portrait_fx::EASE_MS as f64] {
                 faces.clock.advance(ms, 1.0);
                 faces.begin();
                 assert!(faces.draw_parts(&mut ui.p, &mut art, &[], &who, &Look::default(), "dialogue", Rect::new(10, 10, 96, 96), &opts));
@@ -725,11 +734,11 @@ pub(crate) mod tests {
         let who = Who { key: "amber".into(), tier: "npc".into(), id: "amber".into(), name: "Amber".into(), ..Who::default() };
         let opts = faces.opts(&Settings::load(std::env::temp_dir().join("emberwake_portraits_none.json"), crate::screens::default_settings()), true);
         assert_eq!(opts.rim_default, Some(RIM));
-        let seed = aegis_ui::portrait_fx::seed_of("amber");
+        let seed = rpgkit_ui::portrait_fx::seed_of("amber");
         // two clock times whose flicker factors differ
         let times: Vec<u64> = (0..200u64).map(|k| k * 100).collect();
         let a = times[0];
-        let b = *times.iter().find(|&&t| (aegis_ui::portrait_fx::rim_factor(seed, t) - aegis_ui::portrait_fx::rim_factor(seed, a)).abs() > 0.05).expect("the rim flickers");
+        let b = *times.iter().find(|&&t| (rpgkit_ui::portrait_fx::rim_factor(seed, t) - rpgkit_ui::portrait_fx::rim_factor(seed, a)).abs() > 0.05).expect("the rim flickers");
         let mut centre = Vec::new();
         for t in [a, b] {
             faces.clock = Clock { ms: t as f64, hold: 0.0 };
@@ -879,7 +888,7 @@ pub(crate) mod tests {
         assert_eq!(f.expression(faces.now()), "sad");
         assert_eq!(drawn_fill(&faces, &who.key), Some(NEUTRAL_FILL), "no sad frame: the neutral frame");
         let side = f.composed().expect("composed").w as i32;
-        assert_eq!(f.motion(faces.now()).dy, aegis_ui::portrait_fx::motion_px(rest.0 as f32, side), "sunk by the rest offset at side {side}");
+        assert_eq!(f.motion(faces.now()).dy, rpgkit_ui::portrait_fx::motion_px(rest.0 as f32, side), "sunk by the rest offset at side {side}");
     }
 
     /// PORTRAITFX2 6.2 (the shape of FA's rows): `face_victory` (priority 90) wins over the low-HP hold `face_low_hp`
@@ -954,5 +963,44 @@ pub(crate) mod tests {
         assert!(portrait::holds(&rows, &look_of_member(&d, &gs, &m), "roster").is_empty());
         let character = progression::character_of(&d, &m).clone();
         assert_eq!(look_of_character(&d, &gs, &character).unspent, 0, "a world character has none");
+    }
+
+    /// PR7-26 (`PLAYTEST-UI1` 4): the proof clip (only with `AEGIS_REVIEW_DIR` set): the first hero portrait with a
+    /// sidecar, composed at 240 px at 10 moments of a breath cycle, side by side in `portrait_clip.png` (the breath an
+    /// even scale, the rim eased).
+    #[test]
+    fn pr7_26_portrait_clip_shot() {
+        let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") else { return };
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/portraits/heroes");
+        let mut pngs: Vec<PathBuf> = std::fs::read_dir(&dir).expect("the heroes folder").filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|x| x == "png")).collect();
+        pngs.sort();
+        let png = pngs.iter().find(|p| p.with_extension("face.json").exists()).expect("a hero portrait with a sidecar");
+        let src = aegis_ui::art::load_png(png).expect("the portrait decodes");
+        let face = std::fs::read_to_string(png.with_extension("face.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()).and_then(|v| aegis_core::assets::parse_face(&v).ok());
+        let side = 240;
+        let frames = 10;
+        let mut strip = aegis_ui::canvas::Canvas::new(side * frames, side);
+        let mut g = gfx();
+        g.canvas = aegis_ui::canvas::Canvas::new(640, 360);
+        let mut fx = rpgkit_ui::portrait_fx::PortraitFx::new("pr7_26_clip");
+        let period = rpgkit_ui::portrait_fx::breath_period(fx.seed) as u64;
+        for k in 0..frames {
+            let now = 10_000 + k as u64 * period / frames as u64;
+            let mut p = aegis_ui::painter::Painter { c: &mut g.canvas, v: aegis_ui::painter::View::fit(640, 360), fonts: &mut g.fonts };
+            fx.draw_image(&mut p, &src, "clip", face.as_ref(), aegis_ui::canvas::Rect::new(0, 0, side, side), now, &rpgkit_ui::portrait_fx::PortraitOpts::default(), &mut rpgkit_ui::portrait_fx::Budget::default());
+            let img = fx.composed().expect("composed").clone();
+            for y in 0..img.h.min(side) {
+                for x in 0..img.w.min(side) {
+                    let i = ((y * img.w + x) * 4) as usize;
+                    let o = ((y * strip.w + k * side + x) * 4) as usize;
+                    strip.px[o..o + 4].copy_from_slice(&img.px[i..i + 4]);
+                }
+            }
+        }
+        let file = std::fs::File::create(std::path::Path::new(&out).join("portrait_clip.png")).unwrap();
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(file), strip.w as u32, side as u32);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&strip.px).unwrap();
     }
 }
