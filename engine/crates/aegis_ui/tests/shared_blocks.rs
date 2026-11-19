@@ -94,7 +94,7 @@ fn a_list_row_has_its_icon_name_sub_line_and_numbers_right_aligned_in_mono() {
     let mut r = Rect::new(10, 10, 300, 0);
     let w = draw(&mut g, (-1, -1), |ui: &mut Ui<()>| {
         r.h = panes::row_h_on(&ui.m(), &ui.p);
-        panes::list_row(ui, "row", r, &RowLook { icon: Some(&icon), glyph: "", name: "Pommel Strike", sub: "Assault, Snap", numbers: &numbers, selected: false, enabled: true }, Some(()), Vec::new());
+        panes::list_row(ui, "row", r, &RowLook { icon: Some(&icon), glyph: "", name: "Pommel Strike", sub: "Assault, Snap", numbers: &numbers, selected: false, enabled: true, ..Default::default() }, Some(()), Vec::new());
     });
     assert!(r.h >= m.u(panes::ROW_ICON), "the row holds its 32 px icon");
     assert_eq!(get(&w, "row").kind, "row");
