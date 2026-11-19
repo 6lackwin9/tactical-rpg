@@ -21,6 +21,7 @@
 mod battle;
 mod battle_view;
 mod board;
+mod board_view;
 mod bunks;
 mod controls_view;
 #[cfg(feature = "dev_tools")]
@@ -49,6 +50,7 @@ mod runner;
 mod runover;
 mod screens;
 mod shop;
+mod save_view;
 mod shop_view;
 mod siege;
 mod stage;
