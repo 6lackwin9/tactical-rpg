@@ -307,8 +307,9 @@ assetlib() {  # PR7-35 (ASSETLIB1): the kit asset library check (tools/assetlib/
 
 layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crates name no game and have no path into games/
   local id ids=() hits bad=0
-  for id in games/*/; do [ -d "$id" ] && ids+=("$(basename "$id")"); done
-  # G1: every folder name under games/ is a game id; a case-insensitive hit in an engine or kit file (tracked or new, not
+  # the engine's sample game `hello` is exempt (ENGINE-11, FB-315 (a)): engine docs and code may point at games/hello/
+  for id in games/*/; do [ -d "$id" ] && [ "$(basename "$id")" != hello ] && ids+=("$(basename "$id")"); done
+  # G1: every folder name under games/ but the sample game is a game id; a case-insensitive hit in an engine or kit file (tracked or new, not
   # ignored) fails. Whole word, with `_` as a separator so crate names (<id>_rules) and prefixed ids count as well.
   for id in "${ids[@]}"; do
     if hits=$(git grep --untracked -n -I -i -E -e "(^|[^[:alnum:]])$(printf '%s' "$id" | sed 's/[^[:alnum:]_-]/\\&/g')([^[:alnum:]]|\$)" \
@@ -395,8 +396,14 @@ gate() {
   echo "[gate] ALL CHECKS PASSED"
 }
 
+game_cli() {  # ENGINE-11: a game's command line program, from its game.json (`cli`; `<id>_cli` when it names none)
+  local d="$1" name; name=$(sed -n 's/^[[:space:]]*"cli":[[:space:]]*"\([^"]*\)".*/\1/p' "$d/game.json" | head -n 1)
+  echo "${name:-$(basename "$d")_cli}"
+}
+
 playtest_smoke() {  # PR7-22: the agent playtest harness plays a fresh save to the hub (games/emberwake/playtests/agent/smoke.play)
-  local cli="${CARGO_TARGET_DIR:-$PWD/target}/debug/aegis" out log
+  local cli out log
+  cli="${CARGO_TARGET_DIR:-$PWD/target}/debug/$(game_cli games/emberwake)"
   [ -x "$cli" ] || [ -x "$cli.exe" ] || { echo "[playtest] FAIL: no dev build of the CLI at $cli"; status=1; return; }
   out=$(mktemp -d); log="$out/run.txt"
   if "$cli" playtest run games/emberwake/playtests/agent/smoke.play out="$out" > "$log" 2>&1; then
@@ -408,12 +415,12 @@ playtest_smoke() {  # PR7-22: the agent playtest harness plays a fresh save to t
 }
 
 scenarios_all() {  # PR7-4: every scenario of each game, no window, dev build; golden shots compare against their baselines
-  # every games/<id>/ with a scenarios/ folder, through its CLI: Emberwake's is `aegis`, any other game's `<id>_cli`
-  # (the sample game, ENGINE-1; a game made by `aegis new game`, ENGINE-6), beside its game program `<id>`
+  # every games/<id>/ with a scenarios/ folder, through the CLI its game.json names (`cli`: Emberwake's `aegis`; else
+  # `<id>_cli`, ENGINE-11: the sample game, a game made by `aegis new game`), beside its game program `<id>`
   local bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" cli name out log d
   for d in games/*/; do
     name=$(basename "$d"); [ -f "$d/game.json" ] && [ -d "$d/scenarios" ] || continue
-    cli="$bin/${name}_cli"; [ "$name" = emberwake ] && cli="$bin/aegis"
+    cli="$bin/$(game_cli "$d")"
     [ -x "$cli" ] || [ -x "$cli.exe" ] || { echo "[scenarios] FAIL: no dev build of $cli"; status=1; continue; }
     out=$(mktemp -d); log="$out/run.txt"
     if "$cli" scenario run all out="$out" > "$log" 2>&1; then

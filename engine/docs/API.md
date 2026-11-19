@@ -48,9 +48,13 @@ A screen can keep its layout out of code: build a `screen_layout::View` and let 
 
 ### Launch
 
-`launch` builds the `Cx`, the first screen and `shell::Options` (title, font, link port, icon, canvas, window sizes,
-`headless`); `run_native` reads launch keys (`headless=WxH` opens no window) and calls `shell::run`. The asset layers
-come from the game folder: `Layers::for_game(dir)` stacks the game's `assets/`, its kit's and the engine's.
+`launch` builds the `Cx`, the first screen and `shell::Options` through the engine's game start
+(`aegis_ui::start::Start::new(id, game folder, engine folder, launch keys, headless)`): it reads `game.json`, stacks the
+asset layers (`Layers::for_game(dir)`: the game's `assets/`, its kit's and the engine's), picks the saves folder
+(`saves=`), the link port (`port=`) and the options (title, font, icon, canvas, window sizes); `settings`, `audio` and
+`cx` finish the context around the game's own state. `run_native` reads launch keys (`headless=WxH` opens no window)
+and calls `shell::run`. The game's command line program is named in `game.json` (`cli`; `<id>_cli` when missing), and
+`tools/fc.sh` runs scenarios and playtests through it.
 
 ### The command host
 

@@ -56,6 +56,7 @@ pub mod screen_layout;
 pub mod shell;
 pub mod shot_diff;
 pub mod specimens;
+pub mod start;
 pub mod strings;
 pub mod text_audit;
 pub mod theme;

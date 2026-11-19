@@ -6,6 +6,7 @@
 	"version": "0.1.0",
 	"kit": "rpg",
 	"engine": ">=0.1",
+	"cli": "aegis",
 	"worlds": [
 		"ashlands",
 		"iron_reaches",
