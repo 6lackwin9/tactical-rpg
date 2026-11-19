@@ -54,6 +54,23 @@ impl Pad {
     pub fn name(self) -> &'static str {
         PADS.iter().find(|(p, _)| *p == self).map(|(_, n)| *n).unwrap_or("?")
     }
+    /// The button as the player reads it, by the Xbox pad's names (`[PROVISIONAL]`, FB-327).
+    pub fn label(self) -> &'static str {
+        match self {
+            Pad::South => "Pad A",
+            Pad::East => "Pad B",
+            Pad::West => "Pad X",
+            Pad::North => "Pad Y",
+            Pad::LeftBumper => "LB",
+            Pad::RightBumper => "RB",
+            Pad::Select => "View",
+            Pad::Start => "Menu",
+            Pad::DUp => "D-pad Up",
+            Pad::DDown => "D-pad Down",
+            Pad::DLeft => "D-pad Left",
+            Pad::DRight => "D-pad Right",
+        }
+    }
 }
 
 /// What each button does with no setting: confirm, back, Space, Tab; the bumpers page; Select and Start are Shift+Tab
@@ -76,6 +93,33 @@ pub const PAD_DEFAULTS: [(Pad, Key); 12] = [
 /// The keys the shell keeps for itself and a binding may not take or give (F8 note, F12 shot are not `Key`s at all).
 fn bindable(k: Key) -> bool {
     !matches!(k, Key::CtrlEnter)
+}
+
+/// CONTROLS-UI1: the keys a rebind may take: not Esc (it cancels the rebind), not the shell's own, the debug
+/// function keys or Shift with a digit (a screen's own chord).
+pub fn capturable(k: Key) -> bool {
+    bindable(k) && !matches!(k, Key::Esc | Key::Fn(_) | Key::ShiftDigit(_))
+}
+
+/// A key as the player reads it: "Enter", "Shift+Tab", "Page Up", "E", "?".
+pub fn key_label(k: Key) -> String {
+    match k {
+        Key::Up => "Up".into(),
+        Key::Down => "Down".into(),
+        Key::Left => "Left".into(),
+        Key::Right => "Right".into(),
+        Key::Enter => "Enter".into(),
+        Key::Space => "Space".into(),
+        Key::Esc => "Esc".into(),
+        Key::Tab => "Tab".into(),
+        Key::BackTab => "Shift+Tab".into(),
+        Key::PageUp => "Page Up".into(),
+        Key::PageDown => "Page Down".into(),
+        Key::CtrlEnter => "Ctrl+Enter".into(),
+        Key::ShiftDigit(d) => format!("Shift+{d}"),
+        Key::Fn(n) => format!("F{n}"),
+        Key::Char(c) => c.to_uppercase().collect(),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -148,6 +192,191 @@ impl Controls {
         let keys: Map<String, Value> = self.keys.iter().map(|(f, t)| (f.name(), json!(t.name()))).collect();
         let pad: Map<String, Value> = self.pad.iter().map(|(p, k)| (p.name().to_string(), json!(k.name()))).collect();
         json!({"keys": keys, "pad": pad})
+    }
+
+    /// CONTROLS-UI1: the pressed key that gives the screens `action` (a rebound one first, else the key itself unless it
+    /// was rebound away). None: no key gives it.
+    pub fn key_for(&self, action: Key) -> Option<Key> {
+        self.keys.iter().find(|(_, t)| *t == action).map(|(f, _)| *f).or_else(|| (self.key(action) == action).then_some(action))
+    }
+
+    /// The first pad button (in `PADS` order) that gives `action`.
+    pub fn pad_for(&self, action: Key) -> Option<Pad> {
+        PADS.iter().map(|(p, _)| *p).find(|p| self.pad(*p) == action)
+    }
+
+    fn set_key(&mut self, from: Key, to: Key) {
+        self.keys.retain(|(f, _)| *f != from);
+        if from != to {
+            self.keys.push((from, to));
+        }
+        self.keys.sort_by_key(|(f, _)| f.name());
+    }
+
+    /// Key `new` gives `action` from now on; the key that gave it takes what `new` gave (a swap, so no input is lost and
+    /// none gives two things).
+    pub fn bind_key(&mut self, action: Key, new: Key) {
+        let (cur, displaced) = (self.key_for(action), self.key(new));
+        if displaced == action {
+            return;
+        }
+        self.set_key(new, action);
+        if let Some(c) = cur.filter(|c| *c != new) {
+            self.set_key(c, displaced);
+        }
+    }
+
+    /// Button `new` gives `action` from now on; the button that gave it takes what `new` gave.
+    pub fn bind_pad(&mut self, action: Key, new: Pad) {
+        let (cur, displaced) = (self.pad_for(action), self.pad(new));
+        if displaced == action {
+            return;
+        }
+        if let Some(slot) = self.pad.iter_mut().find(|(p, _)| *p == new) {
+            slot.1 = action;
+        }
+        if let Some(c) = cur.filter(|c| *c != new) {
+            if let Some(slot) = self.pad.iter_mut().find(|(p, _)| *p == c) {
+                slot.1 = displaced;
+            }
+        }
+    }
+
+    /// What `input` gives the screens now.
+    pub fn gives(&self, input: Input) -> Key {
+        match input {
+            Input::Key(k) => self.key(k),
+            Input::Pad(p) => self.pad(p),
+        }
+    }
+}
+
+/// CONTROLS-UI1: a raw input, before the map: what a rebind captures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Input {
+    Key(Key),
+    Pad(Pad),
+}
+
+/// One action a game lists for rebinding: its id (widget and view row ids), the player's label, and the key its screens
+/// read (`Key`). A game's actions name distinct keys.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Action {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub key: Key,
+}
+
+/// Where a rebind is: nothing asked, waiting for the input of action `at` (an index into the game's list), or asking
+/// whether `input` may move from action `with` to `at` (a swap).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Step {
+    #[default]
+    Idle,
+    Waiting(usize),
+    Clash { at: usize, input: Input, with: usize },
+}
+
+/// What an input did to a rebind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Outcome {
+    /// No rebind is open: the input goes on to the screen.
+    Ignored,
+    /// Taken, nothing changed (a key a rebind may not take, or a key the swap question does not answer).
+    Held,
+    Cancelled,
+    /// The input is another action's: the swap question is open.
+    Asked,
+    /// The binding changed (or was already so); the settings hold the new map.
+    Bound,
+}
+
+/// CONTROLS-UI1: the rebinding flow over the settings key `controls`, game-agnostic: a game lists its actions (`Action`)
+/// and labels; a click starts a rebind, the next raw key or pad button binds it (Esc cancels), an input that is another
+/// action's asks first and then swaps the two; Reset drops the player's map.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Rebind {
+    pub step: Step,
+}
+
+impl Rebind {
+    pub fn start(&mut self, at: usize) {
+        self.step = Step::Waiting(at);
+    }
+
+    pub fn cancel(&mut self) {
+        self.step = Step::Idle;
+    }
+
+    /// A rebind is open: the shell's raw input comes here first.
+    pub fn capturing(&self) -> bool {
+        self.step != Step::Idle
+    }
+
+    /// The listed action other than `at` that `input` gives now, if any.
+    pub fn clash(c: &Controls, actions: &[Action], at: usize, input: Input) -> Option<usize> {
+        let d = c.gives(input);
+        actions.iter().enumerate().find(|(i, a)| *i != at && a.key == d).map(|(i, _)| i)
+    }
+
+    /// A raw input while a rebind is open (see `Outcome`); `settings` is the whole settings object.
+    pub fn input(&mut self, actions: &[Action], settings: &mut Value, input: Input) -> Outcome {
+        let c = Controls::from_settings(settings).0;
+        match self.step {
+            Step::Idle => Outcome::Ignored,
+            Step::Waiting(_) if input == Input::Key(Key::Esc) => {
+                self.cancel();
+                Outcome::Cancelled
+            }
+            Step::Waiting(_) if matches!(input, Input::Key(k) if !capturable(k)) => Outcome::Held,
+            Step::Waiting(at) if at >= actions.len() => {
+                self.cancel();
+                Outcome::Cancelled
+            }
+            Step::Waiting(at) => match Self::clash(&c, actions, at, input) {
+                Some(with) => {
+                    self.step = Step::Clash { at, input, with };
+                    Outcome::Asked
+                }
+                None => self.bind(actions, settings, at, input),
+            },
+            // The question takes Enter (or what gives Enter: the pad's confirm) as Swap, Esc (or the pad's back) as Cancel.
+            Step::Clash { .. } => match c.gives(input) {
+                Key::Enter => self.swap(actions, settings),
+                Key::Esc => {
+                    self.cancel();
+                    Outcome::Cancelled
+                }
+                _ => Outcome::Held,
+            },
+        }
+    }
+
+    /// The swap question's Yes: the input moves to the action asked for, the other action takes its old one.
+    pub fn swap(&mut self, actions: &[Action], settings: &mut Value) -> Outcome {
+        match self.step {
+            Step::Clash { at, input, .. } if at < actions.len() => self.bind(actions, settings, at, input),
+            _ => Outcome::Held,
+        }
+    }
+
+    fn bind(&mut self, actions: &[Action], settings: &mut Value, at: usize, input: Input) -> Outcome {
+        let mut c = Controls::from_settings(settings).0;
+        match input {
+            Input::Key(k) => c.bind_key(actions[at].key, k),
+            Input::Pad(p) => c.bind_pad(actions[at].key, p),
+        }
+        settings[SETTINGS_KEY] = c.to_json();
+        self.cancel();
+        Outcome::Bound
+    }
+
+    /// Reset to defaults: the player's map is dropped (the defaults are what no setting gives).
+    pub fn reset(&mut self, settings: &mut Value) {
+        self.cancel();
+        if let Some(o) = settings.as_object_mut() {
+            o.remove(SETTINGS_KEY);
+        }
     }
 }
 

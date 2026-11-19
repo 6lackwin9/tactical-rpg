@@ -2990,4 +2990,86 @@ mod tests {
         assert_eq!(s.bridge(&json!({"cmd": "pad", "button": "south"}))["key"], json!("enter"));
         assert!(s.cx.notice.iter().any(|n| n.contains("'nowhere' is not a button")) || s.stack.len() > 1, "{:?}", s.cx.notice);
     }
+
+    /// A screen with a rebind (CONTROLS-UI1): its `capture` takes raw input while the rebind is open.
+    #[derive(Default)]
+    struct Rebinder {
+        rebind: crate::controls::Rebind,
+        log: KeyLog,
+    }
+
+    const REBIND_ACTIONS: [crate::controls::Action; 2] = [crate::controls::Action { id: "use", label: "Use", key: Key::Char('e') }, crate::controls::Action { id: "undo", label: "Undo", key: Key::Char('z') }];
+
+    impl Screen<App> for Rebinder {
+        fn id(&self) -> &'static str {
+            "rebinder"
+        }
+        fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            self.log.draw(cx, g, mouse, live);
+        }
+        /// `1` and `2` open the rebind of Use and Undo (as a click on their row would); every key is logged.
+        fn key(&mut self, cx: &mut Cx, k: Key) {
+            match k {
+                Key::Char('1') => self.rebind.start(0),
+                Key::Char('2') => self.rebind.start(1),
+                _ => {}
+            }
+            self.log.key(cx, k);
+        }
+        fn state(&self, _cx: &Cx) -> Value {
+            json!({"capturing": self.rebind.capturing()})
+        }
+        fn capture(&mut self, cx: &mut Cx, input: crate::controls::Input) -> bool {
+            self.rebind.capturing() && {
+                self.rebind.input(&REBIND_ACTIONS, &mut cx.settings.v, input);
+                true
+            }
+        }
+        fn widgets(&self) -> Vec<Value> {
+            self.log.widgets()
+        }
+        fn draw_tip(&self, p: &mut Painter, mouse: (i32, i32)) {
+            self.log.draw_tip(p, mouse);
+        }
+        fn click(&mut self, cx: &mut Cx, pos: (i32, i32)) -> bool {
+            self.log.click(cx, pos)
+        }
+        fn click_id(&mut self, cx: &mut Cx, id: &str) -> Result<(), String> {
+            self.log.click_id(cx, id)
+        }
+        fn widget_rect(&self, id: &str) -> Option<(Rect, Vec<String>)> {
+            self.log.widget_rect(id)
+        }
+    }
+
+    /// CONTROLS-UI1: through the link, a key or pad button reaches a waiting rebind raw (before the map, the focus keys
+    /// and the screen's `key`); Esc cancels it; the map it writes is the one the next key goes through.
+    #[test]
+    fn a_waiting_rebind_takes_the_raw_key_and_pad_button() {
+        let mut s = shell();
+        s.stack = vec![Box::new(Rebinder::default())];
+        s.frame();
+        let press = |s: &mut Shell<App>, cmd: &str, arg: &str| {
+            let k = if cmd == "key" { "key" } else { "button" };
+            assert_eq!(s.bridge(&json!({"cmd": cmd, k: arg}))["ok"], json!(true), "{cmd} {arg}");
+        };
+        let capturing = |s: &Shell<App>| s.stack.last().unwrap().state(&s.cx)["capturing"] == json!(true);
+        press(&mut s, "key", "1");
+        assert!(capturing(&s));
+        press(&mut s, "key", "tab");
+        assert!(!capturing(&s), "Tab bound, not a focus move");
+        assert_eq!(s.cx.app.log, ["1"], "the screen got no Tab");
+        press(&mut s, "key", "tab");
+        assert_eq!(s.cx.app.log, ["1", "e"], "Tab gives Use now");
+        press(&mut s, "key", "2");
+        press(&mut s, "key", "esc");
+        assert!(!capturing(&s), "Esc cancels");
+        assert_eq!(s.cx.app.log, ["1", "e", "2"], "Esc reached no screen while the rebind waited");
+        press(&mut s, "key", "2");
+        press(&mut s, "pad", "west");
+        press(&mut s, "pad", "west");
+        assert_eq!(s.cx.app.log, ["1", "e", "2", "2", "z"], "Pad X gives Undo now");
+        assert_eq!(s.cx.settings.v["controls"]["pad"]["west"], json!("z"));
+        assert_eq!(s.cx.settings.v["controls"]["keys"]["tab"], json!("e"));
+    }
 }

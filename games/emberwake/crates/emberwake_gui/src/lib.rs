@@ -21,6 +21,7 @@
 mod battle;
 mod board;
 mod bunks;
+mod controls_view;
 #[cfg(feature = "dev_tools")]
 mod dojo;
 mod epilogue;
