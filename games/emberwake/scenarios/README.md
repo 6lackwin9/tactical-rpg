@@ -4,6 +4,7 @@ The format and the commands are in `engine/docs/authoring/scenarios.md`. These a
 2026-11-05 (HEADLESS1) with none. A run has no window by default; none here needs one. The gate runs them all (PR7-4); a baseline change for a golden shot
 needs the user's approval (`engine/docs/authoring/scenarios.md` "Golden shots"). `saves/hub_start/` was made with the agent
 playtest harness (`tools/fc.sh playtest`) after the prologue; make it again the same way when a save change breaks it.
+`saves/m3_stuck/` is the agent systems playtest's save of 2026-11-18 (PT-15), kept as found: it must load through the repair.
 
 ## The scenarios
 
@@ -15,6 +16,7 @@ playtest harness (`tools/fc.sh playtest`) after the prologue; make it again the 
 | `screens_menus` | Review shots (PR7-4; golden once the user approves the baselines): main menu, new game, load, the five settings tabs, the Scene Runner | 3 s |
 | `screens_hub` | Review shots from the save `saves/hub_start` (the hub right after the prologue): region map, talk box, notice board, shop, party (stats, skills, gear), world map | 25 s |
 | `screens_battle` | Review shot: `tl_flank` seed 7 at its start, planning | 4 s |
+| `job_fight_repair` | PR7-41 (PT-15): the save `saves/m3_stuck` (The Bone-Mill Raid won before it was taken) loads with the repair notice and the job ready; travel to the hub, turn it in to Talia | 6 s |
 
 The three screen scenarios also time frames (`perf`, ENGINE-2, numbers only, no budget): the main menu, the region map and
 battle planning. Measured 2026-11-18 at 1280x720 in a dev build with no window: p50 4.6 ms, 29.5 ms and 20.2 ms.

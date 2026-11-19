@@ -191,6 +191,8 @@ pub fn decode_with(d: &Data, text: &str, deck_aliases: &[KeyAlias]) -> Result<Lo
     if !errors.is_empty() {
         return Err(errors);
     }
+    // PR7-41 (PT-15): an active quest stuck on a fight already won (won before its job was accepted) is repaired
+    warnings.extend(crate::quest::repair_won_fights(d, &mut state));
     warnings.extend(crate::roster::load_warnings(&state));
     Ok(Loaded { state, warnings, saved_at: json::i(&envelope, "saved_at", 0) })
 }

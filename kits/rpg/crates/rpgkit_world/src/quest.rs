@@ -309,15 +309,124 @@ pub fn picks_allowed(d: &Data, gs: &GameState, r: &str) -> i64 {
     json::i(&resolved(d, gs, r), "loot_picks", 0).min(offers(d, gs, r).len() as i64)
 }
 
+/// PR7-41 (PT-15): accepting a quest whose first objectives are fights already won marks them met at once (`catch_up`),
+/// so a job taken after its fight is ready to turn in.
 pub fn start(d: &Data, gs: &mut GameState, r: &str) -> Vec<String> {
     let st = status(d, gs, r);
     if st != "available" {
         return vec![format!("Quest '{r}' can't start (it is {st}).")];
     }
     let qid = json::s(entry(d, gs, r), "_qid");
-    gs.quests.insert(qid, Value::Object(json::obj([("state", "active".into()), ("objective", int(0))])));
+    gs.quests.insert(qid.clone(), Value::Object(json::obj([("state", "active".into()), ("objective", int(0))])));
+    catch_up(d, gs, &qid);
     refresh(d, gs);
     Vec::new()
+}
+
+// ---- PR7-41 (PT-15): a job's fight waits for the job; a fight won before is a met objective -------------------
+
+/// The encounter qids of a quest's `win_encounter` objectives, in step order ("" for any other objective kind).
+fn step_encounters(d: &Data, gs: &GameState, e: &Dict) -> Vec<String> {
+    let home = world_of(d, gs, e);
+    let q = resolve_quest(d, gs, e);
+    let steps = json::aget(&q, "steps");
+    json::aget(&q, "objectives")
+        .iter()
+        .enumerate()
+        .map(|(i, o)| {
+            if json::s(json::dict(o), "kind") != "win_encounter" {
+                return String::new();
+            }
+            let step = steps.get(i).map(json::dict).unwrap_or_else(|| json::empty());
+            json::s(d.resolve(&home, "encounters", &json::s(step, "encounter")), "_qid")
+        })
+        .collect()
+}
+
+/// Whether the fight `encounter_qid` waits for its job: some job (a board quest) has it as a `win_encounter` step and
+/// no quest naming it has been accepted yet (none has a stored state). A fight no job names never waits.
+pub fn fight_waits_for_job(d: &Data, gs: &GameState, encounter_qid: &str) -> bool {
+    if encounter_qid.is_empty() {
+        return false;
+    }
+    let mut waits = false;
+    for e in scope(d, gs) {
+        if !runnable(d, e) || !step_encounters(d, gs, e).iter().any(|x| x == encounter_qid) {
+            continue;
+        }
+        if !json::s(stored(gs, &json::s(e, "_qid")), "state").is_empty() {
+            return false;
+        }
+        waits |= crate::board::on_a_board(e);
+    }
+    waits
+}
+
+/// Whether the encounter `encounter_qid` has been won in this save, read from what a win leaves behind (no state of
+/// its own): the done flag of a `once` marker placed with it, its paid `once` objective reward (`reward_paid`), or a
+/// fired `once` campaign trigger on winning it.
+pub fn encounter_won(d: &Data, gs: &GameState, encounter_qid: &str) -> bool {
+    if encounter_qid.is_empty() {
+        return false;
+    }
+    if json::aget(&gs.reward_paid, encounter_qid).iter().any(|k| json::gstr(k) == "objective") {
+        return true;
+    }
+    for loc in d.merged_entries(&gs.world_id, "locations") {
+        let (home, loc_qid) = (json::s_or(loc, "_world", &gs.world_id), json::s(loc, "_qid"));
+        for m in crate::explore::markers_of(loc) {
+            let kind = json::s(&m, "kind");
+            if (kind == "encounter" || kind == "roamer")
+                && json::b(&m, "once", true)
+                && json::s(d.resolve(&home, "encounters", &json::s(&m, "encounter")), "_qid") == encounter_qid
+                && gs.flag_true(&crate::explore::done_flag(&loc_qid, &json::s(&m, "id")))
+            {
+                return true;
+            }
+        }
+    }
+    let Some(c) = gs.campaign.as_ref() else {
+        return false;
+    };
+    crate::campaign::trigger::defs(d, &gs.world_id)
+        .iter()
+        .any(|t| t.on == "battle" && t.once && t.encounter == encounter_qid && t.outcome == "won" && c.fired.contains(&t.fired_key()))
+}
+
+/// An active quest whose current objectives are fights already won (`encounter_won`) moves past them; true when it
+/// moved (a `refresh` then turns a finished one ready).
+pub fn catch_up(d: &Data, gs: &mut GameState, qid: &str) -> bool {
+    let mut moved = false;
+    for _ in 0..=MAX_OBJECTIVES {
+        let cur = current_objective(d, gs, qid);
+        if json::s(&cur, "kind") != "win_encounter" || !encounter_won(d, gs, &json::s(&cur, "target")) {
+            break;
+        }
+        advance(gs, qid);
+        moved = true;
+    }
+    moved
+}
+
+/// PR7-41 (PT-15), repair on load: every active quest stuck on a fight already won (a save from before the job gate)
+/// catches up (a finished one turns ready); one load warning in player words per repaired quest, by its name.
+pub fn repair_won_fights(d: &Data, gs: &mut GameState) -> Vec<String> {
+    let moved: Vec<String> = quests_with(d, gs, "active").into_iter().filter(|qid| catch_up(d, gs, qid)).collect();
+    if moved.is_empty() {
+        return Vec::new();
+    }
+    refresh(d, gs);
+    moved
+        .iter()
+        .map(|qid| {
+            let name = json::s_or(&resolved(d, gs, qid), "name", qid);
+            if status(d, gs, qid) == "ready" {
+                format!("{name}: its fight was already won, so it is ready to turn in.")
+            } else {
+                format!("{name}: a fight it needs was already won, so that step is done.")
+            }
+        })
+        .collect()
 }
 
 pub fn abandon(d: &Data, gs: &mut GameState, r: &str) -> Vec<String> {

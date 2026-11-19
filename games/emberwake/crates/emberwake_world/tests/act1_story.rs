@@ -752,7 +752,11 @@ fn m5_with_the_overlook_opens_the_gate_and_the_pk2_recipes() {
     assert!(gs.flag_true(&flag("hollis_overlook")));
     assert_eq!(explore::presence(&d, &gs, &q("crucible_watchpost"), &overlook), "absent", "the overlook is used once");
     assert_eq!(quest_encounter(&d, &gs, "q_a1_m5"), q("enc_evt_06_overlook"), "the hollis_overlook variant picks the overlook fight");
-    let shown: Vec<String> = encounter_markers(&d, &gs).into_iter().map(|(_, e)| e).collect();
+    // PR7-41 (PT-15): the job's fight waits until M5 is taken, then the Crucible shows the overlook fight only
+    assert!(encounter_markers(&d, &gs).is_empty(), "no M5 fight before M5 is taken");
+    let mut taken = gs.clone();
+    assert_eq!(quest::start(&d, &mut taken, &q("q_a1_m5")), Vec::<String>::new());
+    let shown: Vec<String> = encounter_markers(&d, &taken).into_iter().map(|(_, e)| e).collect();
     assert_eq!(shown, [q("enc_evt_06_overlook")], "the Crucible shows the overlook fight only");
     for npc in ["sabina_kress", "berek_dorn"] {
         assert!(offered(&d, &gs, npc).is_empty(), "{npc}: no PK2 recipe before M5");
