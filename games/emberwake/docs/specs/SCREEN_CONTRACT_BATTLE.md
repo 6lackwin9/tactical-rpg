@@ -141,6 +141,11 @@ screen at 1280x720, 1:1.
   - Riposte: the chip reads "Riposte" with no number; hover gives the likely return on the selected hero.
   - Loadout passives: two 16 px icons under the portrait, apart from the status column; hover names them. Steadfast
     as a status stays first in the column. Icons are placeholders until a passive icon set exists.
+  - User 2026-11-19 19:39: take 33 approved in principle (riposte, locks and taunt good; the legacy status icons are
+    to be reworked later). Take 34 (`art_src/style/battle_take34_status_mock.py`): a hovered number gets no frame,
+    only the breakdown hover; the loadout passives sit in two dedicated 18 px sockets centred under the portrait (an
+    empty one stays a dim socket), each with its own hover (name and effect); passives never enter the status column,
+    which is for statuses that last a few rounds.
 
 ## 7. Skill menu (on a strip block)
 
@@ -156,6 +161,11 @@ screen at 1280x720, 1:1.
 
 - Victory and defeat report (UX-19; provisional mock in `screens_ai21_mock.py`). The full timeline view (T) and
   playback controls: mocked as take 23 (`battle_take23_timeline_mock.py`, `[PROVISIONAL]`), awaiting his review.
+  Purpose (for the player, not a log): T opens the whole round at once, every unit's moves by block and where each
+  blow lands, to check the plan before Confirm and to follow playback. User 2026-11-19 19:39: fine at a glance but busy
+  (too much red, icons not prominent). Take 34 calms it: move tiles are a dark tint of their kind colour (30 %) with
+  a 3 px kind band on top and a kind rim, the skill icon 24 px; solid red is left only on the blow ticks; locks keep
+  their hatch (`battle_take34_status_2x.png`, `battle_take34_timeline_calm_720p.png`).
 - Boss fight variant (Tushar 2026-11-18 23:19, low priority, current layout stays for now): a boss bar across the top
   of the board (full name and title, a long HP bar with phase marks, poise, statuses, the next phase or enrage cue);
   the boss leaves the foe panel, mobs keep their plates. Mocked as take 22 (`battle_take22_boss_mock.py`), awaiting
