@@ -198,6 +198,10 @@ pub enum Action {
     /// INPUT2: a click on a strip block showing a ghost entry (the entry's index in the plan): the ghost up to it becomes
     /// picks, so that command is the hero's latest pick.
     GhostSlot(usize),
+    /// BATTLE-UI2 (battle contract 7, FB-358): a click on an empty or a picked strip block (its number): the selected
+    /// hero's skill menu opens under it (a ghost block's click accepts the ghost; its right click and the menu key open
+    /// the menu there).
+    StripMenu(i32),
     /// TRANSITIONS1: a click anywhere during a beat skips it (T1: control starts; T2: the results open).
     SkipBeat,
     /// BATTLE-UI2 contract 4 (PR7-40 part 2): a click on a foe group (its catalog unit) opens it into compact plates; a
@@ -780,6 +784,13 @@ impl Screen<GameCx> for BattleScreen {
         !self.field_aiming()
     }
 
+    /// BATTLE-UI2 (battle contract 7, FB-358): Tab and the pad's north button are the skill menu key while planning
+    /// (`menu_key`); any other time they move the keyboard focus as before.
+    fn capture(&mut self, _cx: &mut Cx, input: aegis_ui::controls::Input) -> bool {
+        use aegis_ui::controls::{Input, Pad};
+        matches!(input, Input::Key(Key::Tab) | Input::Pad(Pad::North)) && self.menu_key()
+    }
+
     /// FPSCAP1: a battle waiting for the player moves slowly (idle clips, portraits, status loops); any other time every
     /// frame. `REST_AFTER` lets the last clips and reactions of a playback run at full rate.
     fn frame_need(&self, _cx: &Cx) -> FrameNeed {
@@ -1045,6 +1056,9 @@ impl Screen<GameCx> for BattleScreen {
             self.message = "Move cancelled.".into();
         } else if self.show_log {
             self.show_log = false;
+        } else if let Some((b, true)) = self.strip_block_under_mouse().filter(|_| self.host.session.is_some() && self.planning()) {
+            // BATTLE-UI2 (battle contract 7, FB-358): a right click on a ghost block opens the skill menu there
+            self.strip_menu(b);
         } else if let Some(u) = self.unit_under_mouse() {
             self.inspect_unit(u);
         } else if self.host.session.is_some() && self.planning() {

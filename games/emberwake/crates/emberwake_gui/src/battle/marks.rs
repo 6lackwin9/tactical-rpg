@@ -542,10 +542,7 @@ fn ground_mark(w: &World, cell: V2, p: &emberwake_battle::ground::Placed) -> Gro
 /// PR7-40 part 2 (contract 8): a ground hazard shows its icon (its status's kit icon; the glyph without one) and its
 /// rounds left in the plate's top left.
 pub(super) fn draw_hook_marks(p: &mut Painter, art: &mut aegis_ui::art::Art, m: &HookMarks, geo: &Geom) {
-    let plate_of = |c: V2| match geo.view {
-        View::Stage => inset2(geo.cell_rect(c), 1, 1),
-        View::Flat => geo.cell_rect(c).inset(1),
-    };
+    let plate_of = |c: V2| ground_plate(geo, c);
     for g in m.ground.iter().filter(|_| m.show_ground) {
         let r = plate_of(g.cell);
         let (fill, edge) = if g.hidden { (36, 120) } else { (70, 200) };
@@ -578,6 +575,15 @@ pub(super) fn draw_hook_marks(p: &mut Painter, art: &mut aegis_ui::art::Art, m: 
         for k in [5.0, 9.0] {
             p.line(x1 - k, y1, x1, y1 - k * 0.6, with_alpha(ARENA, 200), 1.0);
         }
+    }
+}
+
+/// PR7-40 part 3 (contract 8, FB-358): the plate a ground mark takes on tile `c` in either view, one rect for the
+/// hazard plates and a push's landing tile, so the two line up on the same tile.
+pub(super) fn ground_plate(geo: &Geom, c: V2) -> Rect {
+    match geo.view {
+        View::Stage => inset2(geo.cell_rect(c), 1, 1),
+        View::Flat => geo.cell_rect(c).inset(1),
     }
 }
 
@@ -770,10 +776,11 @@ pub(super) fn draw_pushes(p: &mut Painter, list: &[emberwake_battle::forced::For
         if f.to != f.from {
             // PR7-40 part 2 (contract 8): a dashed gold arrow to a dashed landing tile
             let gold = th().gold;
-            let land = geo.cell_rect(f.to).inset(1);
-            let (x0, y0, x1, y1) = (land.x as f32, land.y as f32, (land.x + land.w) as f32, (land.y + land.h) as f32);
+            // PR7-40 part 3: the hazard plates' rect in both views (`ground_plate`), its edge dashed as the arrow
+            let land = ground_plate(geo, f.to);
+            let (x0, y0, x1, y1) = (land.x as f32, land.y as f32, (land.x + land.w - 1) as f32, (land.y + land.h - 1) as f32);
             for (a, b, c, d) in [(x0, y0, x1, y0), (x0, y1, x1, y1), (x0, y0, x0, y1), (x1, y0, x1, y1)] {
-                p.line(a, b, c, d, gold, 2.0);
+                stage::wide_line(p, a, b, c, d, gold, 1.0, 2.0);
             }
             stage::wide_line(p, fx, fy, tx, ty, gold, 1.5, 3.0);
             let (dx, dy) = (tx - fx, ty - fy);

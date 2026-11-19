@@ -476,6 +476,8 @@ pub fn view(m: &BattleModel) -> View {
         .iter()
         .map(|f| match f {
             FoeEntry::Full(p) | FoeEntry::Compact(p) => plate_row(p),
+            // PR7-40 part 3 (FB-358): an open group is its header alone; its members are the compact rows after it
+            FoeEntry::Group { key, name, open: true, .. } => RowView { id: key.clone(), label: name.clone(), ..RowView::default() },
             FoeEntry::Group { name, plates, .. } => RowView { id: plates.iter().map(|p| p.unit.to_string()).collect::<Vec<_>>().join(","), label: name.clone(), detail: plates.iter().map(hp_text).collect::<Vec<_>>().join(" "), ..RowView::default() },
         })
         .collect();
