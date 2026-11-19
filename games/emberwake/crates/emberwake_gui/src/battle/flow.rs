@@ -282,6 +282,7 @@ impl BattleScreen {
                     RowAct::SelectAlly(u) => {
                         self.selected = Some(u);
                     }
+                    RowAct::AllyMenu(a) => self.ally_menu_row(cx, a),
                     RowAct::Fill => self.accept_ghost(cx, None),
                     // PK1-S2c: the Channel toggle keeps the menu open (it re-lists for the new mode)
                     RowAct::Channel(on) => {
@@ -335,6 +336,11 @@ impl BattleScreen {
             Action::SelfTarget => {
                 if let Some(h) = self.selected.filter(|_| self.planning() && ri::on(&self.session().w)) {
                     self.target_click(cx, h, RoundTarget::Myself);
+                }
+            }
+            Action::AllyTarget => {
+                if let Some(h) = self.selected.filter(|_| self.planning() && ri::on(&self.session().w)) {
+                    self.ally_list(h);
                 }
             }
             Action::ClosePopup => self.popup = None,

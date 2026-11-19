@@ -1191,7 +1191,8 @@ impl UnitState {
         let mut kept = Deck::default();
         let owned = self.owned_families_anywhere(d);
         // U3.2-S3 (FB-63 (2)): the passives it owns as a build gathers them (character sources now, then saved ids)
-        let owned_passives = progression::member_passives(d, self);
+        // PR7-41 (PT-28): the deck rule's list (the base deck's passives and the keystone from its level as well)
+        let owned_passives = progression::owned_passives(d, self);
         let mut bad = twice("active", &self.deck.active, &mut Vec::new(), &mut errors);
         for (i, fam) in self.deck.active.iter().enumerate() {
             let before = errors.len();

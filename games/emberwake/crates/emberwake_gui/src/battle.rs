@@ -176,6 +176,9 @@ pub enum Action {
     /// INPUT1 SL4 (round intent): the hero panel's Self button and key S: the selected hero targets itself (the self
     /// menu).
     SelfTarget,
+    /// PR7-41 (PT-23): the hero panel's Ally button: a list of the other members the selected hero can use a skill or
+    /// pouch item on; a row opens the skill menu on that member (what Ctrl+click on its token does).
+    AllyTarget,
     /// ENCOUNTER2 H1: the hero picked to hold a hold escape's tiles.
     StayPick(usize),
     /// ENCOUNTER2-C DT9: a reply or Continue in the open battle talk's box.

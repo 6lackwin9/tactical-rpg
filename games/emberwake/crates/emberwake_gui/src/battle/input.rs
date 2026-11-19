@@ -32,6 +32,8 @@ pub(super) enum RowAct {
     /// PK1-S2c (PK1 4.3 item 1): the Channel toggle of the neutral row: sets the menu's hero's round to Channel (true)
     /// or back to Cold Steel (false) through the host's `channel` (the plan converts; it never locks).
     Channel(bool),
+    /// PR7-41 (PT-23): a row of the Ally button's list: opens the selected hero's skill menu on that member.
+    AllyMenu(usize),
 }
 
 /// INPUT1 GH2, IN6 timing (decision "INPUT1 answers, part 4" Q18): a member's ghost that waits for Confirm because its
@@ -693,6 +695,62 @@ impl BattleScreen {
         }
     }
 
+    /// PR7-41 (PT-23): the other members `h` can use a skill or pouch item on this round (a living member on the field,
+    /// or a downed one it can revive), each with how many of its skill-menu picks are open on it (the kit's
+    /// `menu_options`; a cell for another target does not count).
+    pub(super) fn ally_reach(&self, h: usize) -> Vec<(usize, usize)> {
+        let s = self.session();
+        let w = &s.w;
+        w.allies
+            .iter()
+            .copied()
+            .filter(|&a| a != h && ((w.units[a].is_active() && w.has(a)) || w.can_revive(a)))
+            .map(|a| {
+                let at = RoundTarget::Unit(a);
+                (a, rip::menu_options(w, &s.plan, h, at).iter().filter(|o| o.problem.is_none() && o.at == at && o.picks.iter().any(|p| p.holds_target())).count())
+            })
+            .filter(|(_, n)| *n > 0)
+            .collect()
+    }
+
+    /// PR7-41 (PT-23): the Ally button: the members `h` can use a skill or pouch item on, one row each (a click opens the
+    /// skill menu on that member), or a message naming why there is none.
+    pub(super) fn ally_list(&mut self, h: usize) {
+        let reach = self.ally_reach(h);
+        let w = &self.session().w;
+        let name = w.units[h].name.clone();
+        if reach.is_empty() {
+            self.popup = None;
+            self.message = format!("{name} has no skill or pouch item to use on an ally this round.");
+            return;
+        }
+        let rows: Vec<Row> = reach
+            .iter()
+            .map(|&(a, n)| {
+                let who = w.units[a].name.clone();
+                let detail = format!("{n} pick{}", if n == 1 { "" } else { "s" });
+                let tip: Tip = vec![(who.clone(), th().gold), (format!("Opens {name}'s skill menu on {who} (the same as Ctrl+click on {who})."), th().text)];
+                Row { label: who, detail, valid: true, act: RowAct::AllyMenu(a), tip, warn: false, ap_short: None, slot: None, icon: Vec::new(), at: None, count: None }
+            })
+            .collect();
+        self.open_popup(format!("{name}: use on an ally"), rows);
+        // beside the hero panel (the button's panel), not at the mouse
+        let row_h = self.menu_row;
+        if let (Some(p), Some((_, r))) = (self.popup.as_mut(), self.panels.iter().find(|(k, _)| *k == "hero")) {
+            let h = p.rect(row_h).h;
+            p.x = (r.x + r.w + 4).clamp(2, (W - p.w - 2).max(2));
+            p.y = r.y.clamp(2, (H - h - 2).max(2));
+        }
+    }
+
+    /// PR7-41 (PT-23): a row of the Ally list: the selected hero targets member `a` and its skill menu opens there.
+    pub(super) fn ally_menu_row(&mut self, cx: &Cx, a: usize) {
+        self.popup = None;
+        if let Some(h) = self.selected.filter(|_| self.planning() && ri::on(&self.session().w)) {
+            self.target_click(cx, h, RoundTarget::Unit(a));
+        }
+    }
+
     /// Whether the selected hero is planning a Field round on a tile (the arrows aim it then).
     pub(super) fn field_aiming(&self) -> bool {
         let Some(s) = self.host.session.as_ref() else { return false };
@@ -861,7 +919,10 @@ impl BattleScreen {
                 let picks = o.picks.clone();
                 self.choose_pick(cx, h, at, &picks, &name);
             }
-            Some(o) => self.message = format!("{name}: {}", o.problem.as_deref().map(|_| intent_text::menu_refusal_text(&o.reasons)).unwrap_or_default()),
+            Some(o) => {
+                let how = intent_text::target_control(&o.reasons).map(|h| format!(" {h}")).unwrap_or_default();
+                self.message = format!("{name}: {}{how}", o.problem.as_deref().map(|_| intent_text::menu_refusal_text(&o.reasons)).unwrap_or_default());
+            }
             None => self.message = format!("{name} can't act on {} this round.", target_name(w, at)),
         }
     }
@@ -877,6 +938,7 @@ impl BattleScreen {
                 self.popup = None;
             }
             (RowAct::Channel(on), Some((h, at))) => self.set_channel(cx, h, at, on),
+            (RowAct::AllyMenu(a), _) => self.ally_menu_row(cx, a),
             _ => {}
         }
     }
@@ -1193,6 +1255,10 @@ fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
     }
     if o.problem.is_some() {
         tip.push((intent_text::menu_refusal_text(&o.reasons), th().foe));
+        // PR7-41 (PT-23): the control that gives it the target it needs
+        if let Some(how) = intent_text::target_control(&o.reasons) {
+            tip.push((how.to_string(), th().dim));
+        }
     }
     if !o.drops.is_empty() {
         tip.push((format!("Changing loses {}.", o.drops.join(", ")), th().foe));
