@@ -35,12 +35,14 @@ fn foe_of(b: &BattleScreen) -> usize {
     s(b).w.enemies.iter().copied().find(|&e| s(b).w.units[e].is_active() && s(b).w.has(e)).expect("a foe on the field")
 }
 
-/// The colours on block `start`'s top row of pixels, between its rounded corners (the icon and name sit lower).
+/// The colours on block `start`'s top row of pixels, between its rounded corners (the icon and name sit lower), off
+/// the effect chips riding on its top edge (BATTLE-UI2 contract 2).
 pub(super) fn top_row(g: &Gfx, b: &BattleScreen, start: i32) -> Vec<[u8; 3]> {
     let r = b.w.iter().find(|x| x.id == format!("strip.block{start}")).unwrap().rect;
+    let chips: Vec<_> = b.w.iter().filter(|x| x.id.starts_with("strip.effects.")).map(|x| x.rect).collect();
     let y = g.view.y(r.y as f32);
     let (x0, x1) = (g.view.x(r.x as f32 + 3.0), g.view.x((r.x + r.w) as f32 - 3.0));
-    let mut out: Vec<[u8; 3]> = (x0..x1).map(|x| {
+    let mut out: Vec<[u8; 3]> = (x0..x1).filter(|&x| !chips.iter().any(|c| x >= g.view.x(c.x as f32) - 1 && x <= g.view.x((c.x + c.w) as f32) + 1)).map(|x| {
         let i = ((y * g.canvas.w + x) * 4) as usize;
         [g.canvas.px[i], g.canvas.px[i + 1], g.canvas.px[i + 2]]
     }).collect();
@@ -77,8 +79,12 @@ fn blocks_are_one_solid_colour_and_a_ghost_only_fades() {
     let session = s(&b);
     let spans: Vec<(i32, i32, String)> = session.plan.entries_for(&session.w, h).iter().map(|e| (e.start_block, e.end_block(&session.w), session.w.cat.skills[e.skill].kind.clone())).collect();
     assert!(spans.iter().any(|x| x.1 > x.0 && x.2 != "REST"), "a span of several blocks: {spans:?}");
-    for (start, _, kind) in spans.iter().filter(|x| x.2 != "REST") {
-        assert_eq!(top_row(&g, &b, *start), [[kind_color(kind)[0], kind_color(kind)[1], kind_color(kind)[2]]], "{kind} at block {start}");
+    // BATTLE-UI2 contract 2: the latest pick (the selected tile) wears the 2 px gold rim; the others their kind's colour
+    let picks: Vec<&(i32, i32, String)> = spans.iter().filter(|x| x.2 != "REST").collect();
+    let gold = aegis_ui::theme::th().gold;
+    for (k, (start, _, kind)) in picks.iter().enumerate() {
+        let want = if k + 1 == picks.len() { [gold[0], gold[1], gold[2]] } else { [kind_color(kind)[0], kind_color(kind)[1], kind_color(kind)[2]] };
+        assert_eq!(top_row(&g, &b, *start), [want], "{kind} at block {start}");
     }
 }
 

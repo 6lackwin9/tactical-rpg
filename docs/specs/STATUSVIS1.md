@@ -1,6 +1,6 @@
 # STATUSVIS1: show a status where it acts
 
-Status: draft, Design 2026-11-19, from the user's principle (2026-11-19 18:05). Art/UI mocks it (`AI-34`); Build
+Status: accepted (user 2026-11-19 19:39 on take 33, take 34 as amended; build row `PR7-57`); drafted by Design 2026-11-19, from the user's principle (2026-11-19 18:05). Art/UI mocks it (`AI-34`); Build
 rows follow the user's sign-off of the mock. Layer: kit (the mapping reads each status's `primitives`, `rating`,
 `targeting` and `fx` in `kits/rpg/crates/rpgkit_rules/src/statuses.json`, never a status id), drawn by the battle
 screen (game).
@@ -72,3 +72,19 @@ the icon framed on the first locked block, the only patterned fill on the strip.
   not leaves it.
 - SV12. Passive icons: the loadout passives need their own icon set (kit, generic, `kits/rpg/assets/passives/`), asked
   of Art/UI (`AI-39`); placeholder skill icons until then.
+- SV13. Take 34 (user 19:39): hovered numbers have no frame, only the breakdown; the 2 loadout passives sit in two
+  dedicated sockets centred under the portrait (an empty one dim), each with its own hover (name and description);
+  passives never enter the status column (it is for timed statuses). The full timeline view (T) is calmer (kind
+  tints, 24 px icons, red only for blow ticks); kept for players and the log as is.
+- SV14. Full timeline view, one target per row (user 2026-11-19 19:44, take 35): each row names its unit's one target
+  for the round after the name; no per-blow target faces or red ticks. The rules agree (TG1, `ACTS23.md`: the first
+  skill after the opener fixes the round's one target; `switch_target_step` is off by default). Cases: an area skill
+  keeps its main target in the row with a small area mark; a Maneuver or Rest-only row shows a dim dash; a Support
+  row shows the ally. If the parked auto-plan retarget after a KO (`PR7-41` item 6 (b), awaiting the user) is
+  approved, the row adds the new target after an arrow at the block where it switches.
+- SV15. Take 36 (user 2026-11-19 19:45, 19:46). Locked blocks are grey blocks with the status icon, no hatch (replaces
+  the hatch of SV5 and section 4), on the top strip and in the full timeline view: stun one continuous grey block,
+  stagger two separate one-block grey blocks. Targets in a T view row: an enemy in a crimson frame; an ally or self in
+  a teal frame with a teal arrow; an area skill's main target with a small amber ring on the face corner; a ground
+  tile (field spells) as a 3x3 floor patch with the target tile lit, whose hover rings that tile on the board; a
+  dim dash for Maneuver or Rest only.

@@ -28,6 +28,7 @@ mod controls_view;
 mod dojo;
 mod epilogue;
 mod facility;
+mod facility_view;
 #[cfg(feature = "dev_tools")]
 mod forge;
 mod fx;
@@ -44,6 +45,7 @@ mod party;
 mod portraits;
 mod props;
 mod recipe;
+mod recipe_view;
 mod region;
 #[cfg(feature = "dev_tools")]
 mod runner;

@@ -50,3 +50,13 @@ fn an_enemy_whose_long_name_has_no_short_name_is_warned() {
     assert!(plate_name_warnings(&row(&"W".repeat(PLATE_NAME_MAX_CHARS), None, "enemy")).is_empty(), "a name that fits");
     assert!(plate_name_warnings(&row(&long, None, "party")).is_empty(), "heroes have their own plates");
 }
+
+#[test]
+fn an_enemy_short_name_longer_than_the_plate_is_warned() {
+    let long = long_name();
+    let warned = plate_name_warnings(&row("Grey Wolf", Some(&long), "enemy"));
+    assert_eq!(warned.len(), 1, "{warned:?}");
+    assert!(warned[0].contains(&long) && warned[0].contains("Short name"), "{warned:?}");
+    assert!(plate_name_warnings(&row("Grey Wolf", Some(&"W".repeat(PLATE_NAME_MAX_CHARS)), "enemy")).is_empty(), "a short name that fits");
+    assert!(plate_name_warnings(&row("Grey Wolf", Some(&long), "party")).is_empty(), "heroes have their own plates");
+}

@@ -798,6 +798,20 @@ impl Services {
         st
     }
 
+    /// ENGINE-23: the recipe pane's reading with its view-model under `view`.
+    fn recipe_state(&self, cx: &Cx) -> Value {
+        let mut st = self.recipe.state();
+        st["view"] = crate::recipe_view::view(cx, &self.recipe, &self.recipe_npc()).to_json();
+        st
+    }
+
+    /// ENGINE-23: the facility pane's reading with its view-model under `view`.
+    fn facility_state(&self, cx: &Cx) -> Value {
+        let mut st = self.facility.state();
+        st["view"] = crate::facility_view::view(cx, &self.facility, &self.facility_npc()).to_json();
+        st
+    }
+
     fn shop_state(&self, cx: &Cx, sq: &str) -> Value {
         let mut st = self.shop.state();
         st["view"] = crate::shop_view::view(cx, &self.shop, sq).to_json();
@@ -805,7 +819,7 @@ impl Services {
     }
 
     /// The agent link's reading, in the region map's key order: `dialogue` (the open conversation's view), `turn_in`,
-    /// `shop` (the trade, its view-model under `view`), `board` (its qid), `board_pane` (its view-model under `view`) and `portraits` (PORTRAITFX1 4.11: the speaker's portrait
+    /// `shop` (the trade, its view-model under `view`), `board` (its qid), `board_pane` (its view-model under `view`), `recipe_pane` and `facility_pane` (the same) and `portraits` (PORTRAITFX1 4.11: the speaker's portrait
     /// while the talk box shows; the shop or the board hides it).
     pub fn state(&self, cx: &Cx) -> Value {
         let gs = cx.gs();
@@ -815,9 +829,9 @@ impl Services {
             "shop": if shop_qid.is_empty() { Value::Null } else { self.shop_state(cx, &shop_qid) }, "board": Some(board_qid.clone()).filter(|b| !b.is_empty()),
             "board_pane": if board_qid.is_empty() { Value::Null } else { self.board_state(cx, &board_qid) },
             "recipe": Some(self.recipe_npc()).filter(|n| !n.is_empty()),
-            "recipe_pane": if self.recipe_npc().is_empty() { Value::Null } else { self.recipe.state() },
+            "recipe_pane": if self.recipe_npc().is_empty() { Value::Null } else { self.recipe_state(cx) },
             "facility": Some(self.facility_npc()).filter(|n| !n.is_empty()),
-            "facility_pane": if self.facility_npc().is_empty() { Value::Null } else { self.facility.state() },
+            "facility_pane": if self.facility_npc().is_empty() { Value::Null } else { self.facility_state(cx) },
             "portraits": if self.talking() && shop_qid.is_empty() && board_qid.is_empty() && self.recipe_npc().is_empty() && self.facility_npc().is_empty() { self.faces.state() } else { json!([]) }})
     }
 }

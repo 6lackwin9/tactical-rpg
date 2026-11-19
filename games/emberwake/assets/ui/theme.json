@@ -55,6 +55,13 @@
   "game_colors": {
     "ally": "#d9cbb4",
     "ap": "#5b6f8c",
+    "boss_gold": "#fbbf24",
+    "frame_a_inner": "#4b5563",
+    "frame_a_outer": "#74543c",
+    "frame_a_top": "#991b1b",
+    "guest": "#45857c",
+    "oxblood": "#991b1b",
+    "planned": "#d97706",
     "hp": "#5f7a4a",
     "move_edge": "#d9cbb455",
     "move_fill": "#d9cbb41c",

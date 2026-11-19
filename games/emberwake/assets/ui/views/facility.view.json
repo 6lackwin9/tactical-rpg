@@ -1,0 +1,54 @@
+{
+  "screen": "facility",
+  "fields": {
+    "title": {
+      "text": "Smith"
+    },
+    "facilities": {
+      "rows": [
+        {
+          "id": "ward:forge",
+          "label": "The Forge",
+          "detail": "Level 1 of 3",
+          "picture": null,
+          "enabled": true,
+          "detail2": "Cost: 40 gold",
+          "sub": "No effects yet.",
+          "note": "Next: level 2 Warm Hearth: Shop prices -15%",
+          "buttons": [
+            {
+              "action": "upgrade",
+              "label": "Upgrade",
+              "enabled": true
+            }
+          ]
+        },
+        {
+          "id": "ward:shed",
+          "label": "Shed",
+          "detail": "Level 1 of 1",
+          "picture": null,
+          "enabled": false,
+          "sub": "No effects yet.",
+          "tone": "good",
+          "note": "Highest level reached."
+        }
+      ]
+    },
+    "line": {
+      "text": ""
+    }
+  },
+  "actions": [
+    {
+      "id": "upgrade",
+      "label": "Upgrade",
+      "enabled": true
+    },
+    {
+      "id": "close",
+      "label": "Close",
+      "enabled": true
+    }
+  ]
+}
