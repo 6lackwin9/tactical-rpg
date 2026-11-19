@@ -4,6 +4,7 @@
 #                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), every scenario of each game with no window (PR7-4; the sample game games/hello too, ENGINE-1), a new game from the templates (ENGINE-6),
 #                                the layer check, the screen layout check, the lints, docs --all, tooltests, plannertests, assetlib
 #                                (`auto` is accepted and runs everything)
+#   tools/fc.sh step <name>      one gate step alone, by its name in tools/gate_steps.txt (the list both gates run, ENGINE-12)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
 #                                engine and kit crates (src, tests), schema.json and kit.json name no lore word, any case
 #                                (world ids, games/<id>/lore_words.txt);
@@ -374,25 +375,41 @@ layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crat
   if [ $bad -eq 0 ]; then echo "[layers] ok: engine and kit crates name no game (${ids[*]}) and have no path into games/; engine and kit code name no lore word, kit code no class id"; else echo "[layers] FAIL: engine and kit code must not name a game or a lore word, kit code no class id (CLAUDE.md Layers)"; status=1; fi
 }
 
-gate() {
-  build; [ $status -ne 0 ] && return
-  cargo_test; [ $status -ne 0 ] && return
-  repro; [ $status -ne 0 ] && return
-  playtest_smoke; [ $status -ne 0 ] && return
-  scenarios_all; [ $status -ne 0 ] && return
-  newgame; [ $status -ne 0 ] && return
-  layers_check; [ $status -ne 0 ] && return
-  layouts; [ $status -ne 0 ] && return
-  lints; [ $status -ne 0 ] && return
-  # the whole docs check; the size warnings, which are many, as one count (tools/fc.sh docs --all lists them)
+gate_docs() {  # the gate's docs step: the whole docs check; the size warnings, which are many, as one count (docs --all lists them)
   local out
   out=$(docs_check --all) || status=1
   echo "$out" | grep -v '^\[docs\] WARN'
   [ "$(echo "$out" | grep -c '^\[docs\] WARN')" -eq 0 ] || echo "[docs] $(echo "$out" | grep -c '^\[docs\] WARN') size warning(s)"
-  [ $status -ne 0 ] && return
-  tooltests; [ $status -ne 0 ] && return
-  plannertests; [ $status -ne 0 ] && return
-  assetlib; [ $status -ne 0 ] && return
+}
+
+gate_step() {  # GATE-PARITY1 (ENGINE-12): one gate step by its name in tools/gate_steps.txt
+  case "$1" in
+    build) build ;;
+    test) cargo_test ;;
+    repro) repro ;;
+    playtest) playtest_smoke ;;
+    scenarios) scenarios_all ;;
+    newgame) newgame ;;
+    layers) layers_check ;;
+    layouts) layouts ;;
+    lints) lints ;;
+    docs) gate_docs ;;
+    tooltests) tooltests ;;
+    plannertests) plannertests ;;
+    assetlib) assetlib ;;
+    *) echo "[gate] FAIL: no gate step '$1' (tools/gate_steps.txt names it, tools/fc.sh gate_step has no such step)"; status=1 ;;
+  esac
+}
+
+gate_steps() {  # the step names of tools/gate_steps.txt, in order
+  grep -vE '^[[:space:]]*(#|$)' tools/gate_steps.txt | awk '{ print $1 }'
+}
+
+gate() {  # every step of tools/gate_steps.txt in order (the desktop's check_project.ps1 reads the same list); the first failure stops
+  local name
+  for name in $(gate_steps); do
+    gate_step "$name"; [ $status -ne 0 ] && return
+  done
   echo "[gate] ALL CHECKS PASSED"
 }
 
@@ -559,6 +576,7 @@ case "$1" in
     [ -z "${CI:-}" ] && [ -f "$heavy" ] && { source "$heavy"; heavy_start "fc.sh gate"; }
     gate ;;
   build) build ;;
+  step) [ -n "${2:-}" ] || { echo "usage: tools/fc.sh step <name>   (a gate step of tools/gate_steps.txt: $(gate_steps | tr '\n' ' '))"; status=2; }; [ -n "${2:-}" ] && gate_step "$2" ;;
   test) cargo_test "${@:2}" ;;
   clippy) cargo clippy --workspace --all-targets 2>&1 | grep -E "^(warning|error)" -A4 | head -80 ;;
   docs)
