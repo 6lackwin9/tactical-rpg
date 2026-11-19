@@ -1,6 +1,6 @@
 //! UISPLIT1-G (PR7-39): the shop's view-model, now the kit's (`rpgkit_ui::shop_view`, KIT-UI1 KU2), on the game's
-//! context. Drawn by today's code until Stage B switches the shop to its layout; its fixture is
-//! `ui/views/shop.view.json` (`tests::the_fixture_has_the_view_shape`).
+//! context, drawn through the kit's layout `ui/layouts/shop.json` (Stage B); its fixture is `ui/views/shop.view.json`
+//! (`tests::the_fixture_has_the_view_shape`).
 
 use crate::screens::Cx;
 use crate::shop::ShopPane;

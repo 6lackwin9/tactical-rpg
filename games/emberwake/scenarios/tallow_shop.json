@@ -18,7 +18,7 @@
     {"step": "shot", "name": "chandler_shop"},
     {"step": "assert", "until": {"path": "state.party.supplies", "source": "game", "eq": 8}},
     {"step": "click", "id": "shop.row.supplies"},
-    {"step": "click", "id": "trade.confirm"},
+    {"step": "click", "id": "shop.confirm"},
     {"step": "wait", "until": {"path": "state.party.supplies", "source": "game", "eq": 9}},
     {"step": "assert", "until": {"path": "state.party.gold", "source": "game", "eq": 71}},
     {"step": "shot", "name": "chandler_bought"}

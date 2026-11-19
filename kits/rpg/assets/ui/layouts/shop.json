@@ -1,0 +1,24 @@
+{
+  "screen": "shop",
+  "note": "PR7-39 Stage B (UISPLIT1-G): the kit's shop, the three-column trade (shop, trade, stash) in the frame the game centres under its HUD. A game's own ui/layouts/shop.json replaces it.",
+  "regions": [
+    {"id": "frame", "component": "panel_shell", "bind": {"title": "title"}, "anchor": "center", "w": "fill", "h": "fill"},
+    {"id": "band", "in": "frame", "component": "text_block", "bind": {"text": "band"}, "anchor": "top_right", "w": "40%", "h": 4, "y": -5},
+    {"id": "shop_head", "in": "frame", "component": "heading", "text": "Shop", "anchor": "top_left", "w": "37%", "h": 4},
+    {"id": "trade_head", "in": "frame", "component": "heading", "text": "Trade", "anchor": "top", "w": "24%", "h": 4},
+    {"id": "stash_head", "in": "frame", "component": "heading", "text": "Stash", "anchor": "top_right", "w": "37%", "h": 4},
+    {"id": "col_shop", "in": "frame", "component": "panel_shell", "style": "popup", "anchor": "top_left", "w": "37%", "h": "74%", "y": 5},
+    {"id": "col_trade", "in": "frame", "component": "panel_shell", "style": "popup", "anchor": "top", "w": "24%", "h": "74%", "y": 5},
+    {"id": "col_stash", "in": "frame", "component": "panel_shell", "style": "popup", "anchor": "top_right", "w": "37%", "h": "74%", "y": 5},
+    {"id": "offers", "in": "col_shop", "component": "list_row", "row_ids": true, "bind": {"rows": "offers", "select": "buy"}, "anchor": "top_left", "w": "fill", "h": "fill"},
+    {"id": "hint", "in": "col_trade", "component": "text_block", "bind": {"text": "hint"}, "anchor": "top_left", "w": "fill", "h": 5},
+    {"id": "trade", "in": "col_trade", "component": "list_row", "row_ids": "trade.row", "bind": {"rows": "trade", "select": "return"}, "anchor": "top_left", "w": "fill", "h": "80%"},
+    {"id": "total", "in": "col_trade", "component": "text_block", "bind": {"text": "total"}, "anchor": "bottom_left", "w": "fill", "h": 4, "y": -4},
+    {"id": "purse", "in": "col_trade", "component": "text_block", "bind": {"text": "purse"}, "anchor": "bottom_left", "w": "fill", "h": 4},
+    {"id": "stash", "in": "col_stash", "component": "list_row", "row_ids": "stash.row", "bind": {"rows": "stash", "select": "sell", "then": "others"}, "anchor": "top_left", "w": "fill", "h": "fill"},
+    {"id": "detail", "in": "frame", "component": "detail_line", "bind": {"text": "detail"}, "anchor": "bottom_left", "w": "fill", "h": 4, "y": -9},
+    {"id": "errors", "in": "frame", "component": "text_block", "bind": {"text": "errors"}, "anchor": "bottom_left", "w": "fill", "h": 4, "y": -5},
+    {"id": "bar_left", "in": "frame", "component": "button_bar", "bind": {"actions": ["close"]}, "anchor": "bottom_left", "w": "12%", "h": 5},
+    {"id": "bar", "in": "frame", "component": "button_bar", "bind": {"actions": ["clear", "confirm"]}, "anchor": "bottom_right", "w": "28%", "h": 5}
+  ]
+}

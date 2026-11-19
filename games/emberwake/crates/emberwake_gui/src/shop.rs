@@ -194,6 +194,17 @@ mod tests {
         opened
     }
 
+    /// Row `id` of the shop view's rows field `list` (the agent link's `shop.view`).
+    fn view_row(map: &ServiceScreen, cx: &Cx, list: &str, id: &str) -> Value {
+        let v = map.state(cx)["shop"]["view"]["fields"][list]["rows"].clone();
+        v.as_array().into_iter().flatten().find(|r| r["id"] == id).cloned().unwrap_or(Value::Null)
+    }
+
+    /// Text field `name` of the shop view.
+    fn view_text(map: &ServiceScreen, cx: &Cx, name: &str) -> String {
+        map.state(cx)["shop"]["view"]["fields"][name]["text"].as_str().unwrap_or("").to_string()
+    }
+
     fn buys(map: &ServiceScreen, cx: &Cx) -> Vec<(String, String, i64)> {
         let b = map.state(cx)["shop"]["buys"].clone();
         b.as_array().into_iter().flatten().map(|b| (b[0].as_str().unwrap_or("").to_string(), b[1].as_str().unwrap_or("").to_string(), b[2].as_i64().unwrap_or(0))).collect()
@@ -219,25 +230,25 @@ mod tests {
                 let n = (json::i(&o, "left", 0) != shop::UNLIMITED).then_some(cap);
                 map.click_id(cx, &format!("shop.row.{id}")).expect("the row");
                 map.click_id(cx, &format!("shop.row.{id}")).expect("the row again");
-                map.click_id(cx, &format!("shop.add5.{id}")).expect("+5");
+                map.click_id(cx, &format!("shop.row.{id}.buy5")).expect("+5");
                 frame(map, cx, g, 1.0);
                 let x = 7.min(cap);
                 assert_eq!(buys(map, cx).last().cloned(), Some((kind.clone(), id.clone(), x)), "{id}");
-                let text = widget(map, &format!("shop.row.{id}")).expect("the row")["text"].as_str().unwrap_or("").to_string();
-                assert!(text.ends_with(&format!(", {}", of_text(x, n))), "{id}: '{text}' reads {}", of_text(x, n));
-                while on(map, &format!("shop.add10.{id}")) {
-                    map.click_id(cx, &format!("shop.add10.{id}")).expect("+10");
+                let count = view_row(map, cx, "offers", &id)["detail2"].as_str().unwrap_or("").to_string();
+                assert_eq!(count, of_text(x, n), "{id}: the row reads {}", of_text(x, n));
+                while on(map, &format!("shop.row.{id}.buy10")) {
+                    map.click_id(cx, &format!("shop.row.{id}.buy10")).expect("+10");
                     frame(map, cx, g, 1.0);
                 }
                 assert_eq!(buys(map, cx).last().map(|b| b.2), Some(cap), "{id}: +10 stops at the cap");
-                assert!(!on(map, &format!("shop.row.{id}")) && !on(map, &format!("shop.add5.{id}")), "{id}: off at the cap");
+                assert!(!on(map, &format!("shop.row.{id}")) && !on(map, &format!("shop.row.{id}.buy5")), "{id}: off at the cap");
                 assert!(map.click_id(cx, &format!("shop.row.{id}")).is_err());
             }
             for r in shop::sell_list(&d, cx.gs(), q).into_iter().take(3) {
                 let (item, owned) = (s(&r, "item"), json::i(&r, "count", 0));
                 map.click_id(cx, &format!("stash.row.{item}")).expect("the stash row");
                 if owned > 1 {
-                    map.click_id(cx, &format!("stash.add10.{item}")).expect("+10");
+                    map.click_id(cx, &format!("stash.row.{item}.sell10")).expect("+10");
                 }
                 frame(map, cx, g, 1.0);
                 assert_eq!(sells(map, cx).last().cloned(), Some((item.clone(), owned)), "{item}: at most what is owned");
@@ -246,7 +257,7 @@ mod tests {
             // loot is one at a time, without `+5` / `+10`
             for o in shop::offers(&d, cx.gs(), q).into_iter().filter(|o| s(o, "kind") == "loot") {
                 let id = s(&o, "id");
-                assert!(widget(map, &format!("shop.add5.{id}")).is_none(), "{id}: no +5 on loot");
+                assert!(widget(map, &format!("shop.row.{id}.buy5")).is_none(), "{id}: no +5 on loot");
                 map.click_id(cx, &format!("shop.row.{id}")).expect("the loot row");
                 frame(map, cx, g, 1.0);
                 assert!(!on(map, &format!("shop.row.{id}")), "{id}: one at most");
@@ -271,14 +282,14 @@ mod tests {
             map.click_id(cx, &format!("shop.row.{id}")).expect("row");
             map.click_id(cx, &format!("stash.row.{item}")).expect("stash row");
             frame(map, cx, g, 1.0);
-            map.click_id(cx, &format!("trade.buy.{id}")).expect("the buy line");
+            map.click_id(cx, &format!("trade.row.buy.{id}")).expect("the buy line");
             frame(map, cx, g, 1.0);
             assert!(buys(map, cx).is_empty() && sells(map, cx).len() == 1, "the whole buy line went back");
-            assert!(widget(map, &format!("trade.buy.{id}")).is_none());
-            map.click_id(cx, &format!("trade.sell.{item}")).expect("the sale line");
+            assert!(widget(map, &format!("trade.row.buy.{id}")).is_none());
+            map.click_id(cx, &format!("trade.row.sell.{item}")).expect("the sale line");
             frame(map, cx, g, 1.0);
             assert!(sells(map, cx).is_empty());
-            assert!(!on(map, "trade.confirm") && !on(map, "trade.clear"), "an empty trade: Confirm and Clear off");
+            assert!(!on(map, "shop.confirm") && !on(map, "shop.clear"), "an empty trade: Confirm and Clear off");
             checked = true;
             false
         });
@@ -312,7 +323,7 @@ mod tests {
             assert!(has(&total) && has(&format!("Gold: 1000 -> {}", 1_000 + net)), "{total}: {:?}", recs.iter().map(|r| r.text.clone()).collect::<Vec<_>>());
             let mut want = cx.gs().clone();
             assert!(json::b(&shop::trade(&d, &mut want, q, &buys(map, cx), &sells(map, cx)), "ok", false));
-            map.click_id(cx, "trade.confirm").expect("confirm");
+            map.click_id(cx, "shop.confirm").expect("confirm");
             frame(map, cx, g, 1.0);
             assert!(*cx.gs() == want, "Confirm is shop::trade");
             assert!(buys(map, cx).is_empty() && sells(map, cx).is_empty(), "the trade clears");
@@ -338,9 +349,9 @@ mod tests {
             let (id, price) = (s(&o, "id"), json::i(&o, "price", 0));
             map.click_id(cx, &format!("shop.row.{id}")).expect("a row above the gold left still adds");
             frame(map, cx, g, 1.0);
-            assert!(!on(map, "trade.confirm"), "0 gold, a purchase: Confirm off");
-            let card = widget(map, "trade.confirm").expect("confirm")["tip"].to_string();
-            assert!(card.contains(&format!("Not enough gold: {price} more needed.")), "{card}");
+            assert!(!on(map, "shop.confirm"), "0 gold, a purchase: Confirm off");
+            let why = view_text(map, cx, "errors");
+            assert!(why.contains(&format!("Not enough gold: {price} more needed.")), "{why}");
             // sell enough of the dearest item the shop buys to cover it
             let r = shop::sell_list(&d, cx.gs(), q).into_iter().max_by_key(|r| json::i(r, "price", 0)).expect("something the shop buys");
             let worth = json::i(&r, "price", 1).max(1);
@@ -352,8 +363,8 @@ mod tests {
                 map.click_id(cx, &format!("stash.row.{}", s(&r, "item"))).expect("stash row");
             }
             frame(map, cx, g, 1.0);
-            assert!(on(map, "trade.confirm"), "the sales pay for the purchase");
-            map.click_id(cx, "trade.confirm").expect("confirm");
+            assert!(on(map, "shop.confirm"), "the sales pay for the purchase");
+            map.click_id(cx, "shop.confirm").expect("confirm");
             assert!(cx.gs().party.gold == need * worth - price && buys(map, cx).is_empty());
             checked = true;
             false
@@ -374,7 +385,7 @@ mod tests {
             let item = shop::sell_list(&d, cx.gs(), q).first().map(|r| s(r, "item")).expect("something the shop buys");
             map.click_id(cx, &format!("stash.row.{item}")).expect("stash row");
             frame(map, cx, g, 1.0);
-            map.click_id(cx, "trade.clear").expect("clear");
+            map.click_id(cx, "shop.clear").expect("clear");
             frame(map, cx, g, 1.0);
             assert!(sells(map, cx).is_empty(), "Clear empties the trade");
             map.click_id(cx, &format!("stash.row.{item}")).expect("stash row");
