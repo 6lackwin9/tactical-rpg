@@ -33,3 +33,18 @@ turtling, by the AI and by players.
   shipped fight's win rate drops more than 10 points at its intended level. Tune the steps (EN2) inside that band.
 - The rule moves the timeline and sim goldens of every fight that reaches round 6. The user asked for the mechanic,
   so the re-record is an intended change: name it in the commit and a `HISTORY.md` row.
+
+## 4. Round cap and lethality (user 2026-11-19 18:13)
+
+User: "It's good to have a cap, but ideally we should not be hitting the cap ... then either we need to tune up the
+damage numbers or tone down the defense numbers ... or HP numbers". The cap (`max_rounds`, 8 today) stays.
+
+- EN6. The `PR7-55` sim also reports, per tier mix (mob, elite, boss) with the rule on: the share of fights that reach
+  the cap, and the won-fight median rounds against the PACE1 bands (decision "PACE1 round targets": mob 3 (2-4), elite
+  5 (4-6), boss 8 (7-9)).
+- EN7. Targets: at most 5 % of mob and elite fights reach the cap; boss fights stay in their band. Note: a boss band of
+  7-9 does not fit an 8-round cap, so a boss encounter needs `max_rounds` of at least 10 (or the boss band moves to
+  6-8 with the enrage); the run reports which, and Design picks (`[PROVISIONAL]`: boss `max_rounds` 10).
+- EN8. If a tier misses, tune lethality in this order, one step per rerun, at most two reruns: enemy attack power up,
+  then enemy defence (armour, guard) down, then enemy HP down; party numbers stay. Report each step in
+  `BALANCE_REPORT.md`; the steps share the one intended re-record of section 3.
