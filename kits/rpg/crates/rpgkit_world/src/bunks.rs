@@ -3,8 +3,9 @@
 //! `roster` block is a hub: each bunk prop, in number order, is bound to the next member housed in a bunk or a crypt
 //! (roster order; `crypt_only` members take none), and shows the member's state. Members idle in the hub: active
 //! members (not the lead) at the social tables (the map's `idle_*` anchors, then the open cells around its `table*`
-//! props), benched members in front of their bunks; crypt members are not shown. Passing the lead trades places: the
-//! new lead stands up from their spot and the old lead takes it; no one else moves.
+//! props); benched members sleep in their bunks (HUB-BUNKS2: drawn on the bed, not idling); crypt members are not
+//! shown. Passing the lead trades places: the new lead stands up from their spot and the old lead takes it; no one else
+//! moves.
 
 use crate::data::Data;
 use crate::explore::{self, Pos};
@@ -60,7 +61,8 @@ pub struct Bunk {
 }
 
 impl Bunk {
-    /// BK9: the cell in front of the bunk (south of its footprint's left cell), where its benched member idles.
+    /// BK9: the cell in front of the bunk (south of its footprint's left cell; HUB-BUNKS2: its benched member sleeps in
+    /// the bunk instead of idling there).
     pub fn spot(&self) -> Pos {
         (self.foot.0, self.foot.1 + self.foot.3)
     }
@@ -178,8 +180,8 @@ pub fn table_spots(loc: &Dict, t: &Dict) -> Vec<Pos> {
 }
 
 /// BK9, BK12: where each member idles with `leader` leading: the active bunk members (roster order, the lead left out)
-/// on the table spots in order, the benched ones in front of their bunks; crypt members, `crypt_only` members and
-/// members past the spots or the bunk props are not shown.
+/// on the table spots in order; benched members sleep in their bunks (HUB-BUNKS2, `sleepers`), so they idle nowhere;
+/// crypt members, `crypt_only` members and members past the spots are not shown.
 pub fn place(gs: &GameState, loc: &Dict, t: &Dict, leader: &str) -> Spots {
     let mut out = Spots::new();
     let tables = table_spots(loc, t);
@@ -190,12 +192,13 @@ pub fn place(gs: &GameState, loc: &Dict, t: &Dict, leader: &str) -> Spots {
             out.push((m.id.clone(), p));
         }
     }
-    for b in bunks(gs, t).iter().filter(|b| b.state == BunkState::Benched && b.member != leader) {
-        if explore::is_open(t, b.spot().0, b.spot().1) {
-            out.push((b.member.clone(), b.spot()));
-        }
-    }
     out
+}
+
+/// HUB-BUNKS2 (4): the bunks of map `t` whose member sleeps there: a benched member in the hub rests in their bunk
+/// (state `Benched`), in bunk order.
+pub fn sleepers(gs: &GameState, t: &Dict) -> Vec<Bunk> {
+    bunks(gs, t).into_iter().filter(|b| b.state == BunkState::Benched).collect()
 }
 
 /// What `place` depends on (members, housing, who is active, the lead): a change re-places everyone.
