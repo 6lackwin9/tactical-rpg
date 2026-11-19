@@ -13,7 +13,7 @@
     {"step": "repeat", "times": 40, "until": {"path": "screen", "ne": "vignette"}, "steps": [{"step": "key", "key": "space"}]},
     {"step": "wait", "until": {"path": "screen", "eq": "battle"}, "timeout_ms": 20000},
     {"step": "assert", "until": {"path": "state.beat.kind", "eq": "intro"}},
-    {"step": "shot", "name": "t1_battle_beat"},
+    {"step": "shot", "name": "t1_battle_beat", "t": 1.0},
     {"step": "wait", "until": {"path": "state.beat", "absent": true}, "timeout_ms": 10000},
     {"step": "shot", "name": "t1_control"},
     {"step": "link", "body": {"cmd": "autoplay"}},

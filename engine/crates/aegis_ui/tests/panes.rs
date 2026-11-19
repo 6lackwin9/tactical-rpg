@@ -548,14 +548,14 @@ fn backdrop_frame_times() {
         let mut g = gfx_at(ww, wh, 1.0);
         let mut ui: Ui<()> = Ui::new(&mut g, (-1, -1), true);
         let time = |ui: &mut Ui<()>, f: &dyn Fn(&mut Ui<()>)| {
-            let t = std::time::Instant::now();
+            let t = aegis_core::clock::Instant::now();
             for _ in 0..20 {
                 f(ui);
             }
             t.elapsed().as_secs_f64() * 1000.0 / 20.0
         };
         let live = time(&mut ui, &|ui| panes::backdrop_live(&mut ui.p, Some(&img), r, 0, 0.4));
-        let t = std::time::Instant::now();
+        let t = aegis_core::clock::Instant::now();
         panes::backdrop(&mut ui.p, Some(&img), r, 0, 0.4);
         let compose = t.elapsed().as_secs_f64() * 1000.0;
         let blit = time(&mut ui, &|ui| panes::backdrop(&mut ui.p, Some(&img), r, 0, 0.4));

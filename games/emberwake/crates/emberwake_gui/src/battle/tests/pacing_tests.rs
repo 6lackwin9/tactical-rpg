@@ -5,7 +5,7 @@ use crate::screens::{Cx, Screen};
 use aegis_ui::art::Art;
 use aegis_ui::pacing::{FrameNeed, SLOW_LIFE};
 use serde_json::json;
-use std::time::Instant;
+use aegis_core::clock::Instant;
 
 fn arena() -> (Cx, BattleScreen) {
     let mut cx = crate::hud::hud_tests::game_cx();

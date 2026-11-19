@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
 #   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test (the UI bot's
-#                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), every scenario of each game with no window (PR7-4; the sample game games/hello too, ENGINE-1), a new game from the templates (ENGINE-6),
+#                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), every scenario of each game with no window (PR7-4; the sample game games/hello too, ENGINE-1), every scenario again with each shot byte for byte the same (ENGINE-17), a new game from the templates (ENGINE-6),
 #                                the layer check, the screen layout check, the lints, docs --all, tooltests, plannertests, assetlib
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh step <name>      one gate step alone, by its name in tools/gate_steps.txt (the list both gates run, ENGINE-12)
@@ -400,6 +400,7 @@ gate_step() {  # GATE-PARITY1 (ENGINE-12): one gate step by its name in tools/ga
     repro) repro ;;
     playtest) playtest_smoke ;;
     scenarios) scenarios_all ;;
+    shotsexact) shots_exact ;;
     newgame) newgame ;;
     layers) layers_check ;;
     layouts) layouts ;;
@@ -445,7 +446,7 @@ playtest_smoke() {  # PR7-22: the agent playtest harness plays a fresh save to t
 scenarios_all() {  # PR7-4: every scenario of each game, no window, dev build; golden shots compare against their baselines
   # every games/<id>/ with a scenarios/ folder, through the CLI its game.json names (`cli`: Emberwake's `aegis`; else
   # `<id>_cli`, ENGINE-11: the sample game, a game made by `aegis new game`), beside its game program `<id>`
-  local bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" cli name out log d
+  local bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" cli name out log d py keep="${CARGO_TARGET_DIR:-$PWD/target}/fc_shots"
   for d in games/*/; do
     name=$(basename "$d"); [ -f "$d/game.json" ] && [ -d "$d/scenarios" ] || continue
     cli="$bin/$(game_cli "$d")"
@@ -453,9 +454,35 @@ scenarios_all() {  # PR7-4: every scenario of each game, no window, dev build; g
     out=$(mktemp -d); log="$out/run.txt"
     if "$cli" scenario run all out="$out" > "$log" 2>&1; then
       echo "[scenarios] $name: $(tail -n 1 "$log" | sed 's/^§ scenario run: //')"
+      # ENGINE-17: the shots kept for the next step (shotsexact), which runs them again and wants them byte for byte
+      if py=$(python_with "pass"); then rm -rf "$keep/$name"; "$py" tools/planner/shots_all.py collect "$out" "$keep/$name" > /dev/null || true; fi
       rm -rf "$out"
     else
       grep -vE "PASS;" "$log" | head -n 20; echo "[scenarios] FAIL: a scenario of $name failed (bundles, diff images among them, under $out)"; status=1
+    fi
+  done
+}
+
+shots_exact() {  # ENGINE-17 (SHOT-CLOCK1): every scenario run again; each shot must be byte for byte the scenarios step's
+  # (the shot clock); with no shots kept (the step run alone) the scenarios step runs first
+  local bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" keep="${CARGO_TARGET_DIR:-$PWD/target}/fc_shots" cli name out d py
+  py=$(python_with "pass") || { echo "[shotsexact] SKIP: no Python 3 found"; return 0; }
+  for d in games/*/; do
+    name=$(basename "$d"); [ -f "$d/game.json" ] && [ -d "$d/scenarios" ] || continue
+    if [ ! -f "$keep/$name/index.txt" ]; then scenarios_all; [ $status -eq 0 ] || return; fi
+  done
+  for d in games/*/; do
+    name=$(basename "$d"); [ -f "$keep/$name/index.txt" ] || continue
+    cli="$bin/$(game_cli "$d")"
+    out=$(mktemp -d)
+    if ! "$cli" scenario run all out="$out/bundles" > "$out/run.txt" 2>&1; then
+      grep -vE "PASS;" "$out/run.txt" | head -n 20; echo "[shotsexact] FAIL: a scenario of $name failed on its second run (bundles under $out)"; status=1; continue
+    fi
+    "$py" tools/planner/shots_all.py collect "$out/bundles" "$out/shots" > /dev/null
+    if "$py" tools/planner/shots_all.py compare "$keep/$name" "$out/shots" tolerance=0 pixels=0 strict=1 > "$out/compare.txt"; then
+      echo "[shotsexact] $name: $(grep -c . "$keep/$name/index.txt") shot(s) the same byte for byte in two runs"; rm -rf "$out"
+    else
+      cat "$out/compare.txt"; echo "[shotsexact] FAIL: $name's shots differ between two runs of one build (a clock or a seed outside aegis_core::clock; both runs under $keep/$name and $out/shots)"; status=1
     fi
   done
 }

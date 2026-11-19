@@ -42,7 +42,7 @@ impl Stats {
 
 /// Milliseconds since `t`, as a fraction.
 pub fn ms_since(t: Instant) -> f64 {
-    t.elapsed().as_secs_f64() * 1000.0
+    t.wall_elapsed().as_secs_f64() * 1000.0
 }
 
 /// Rounds of the calibration workload: a few ms in a release build.
@@ -53,7 +53,7 @@ pub const CALIB_ROUNDS: u64 = 2_000_000;
 pub fn calib() -> f64 {
     (0..3)
         .map(|_| {
-            let t = Instant::now();
+            let t = Instant::wall();
             let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
             for i in 0..black_box(CALIB_ROUNDS) {
                 x ^= x << 13;
@@ -93,7 +93,7 @@ pub fn bench(ttf: &[u8], w: i32, h: i32, runs: usize) -> Vec<Bench> {
     let mut time = |name: &'static str, canvas: &mut Canvas, fonts: &mut Fonts, f: &dyn Fn(&mut Painter)| {
         let mut ms = Vec::with_capacity(runs);
         for _ in 0..runs {
-            let t = Instant::now();
+            let t = Instant::wall();
             f(&mut Painter { c: canvas, v: view, fonts });
             ms.push(ms_since(t));
         }

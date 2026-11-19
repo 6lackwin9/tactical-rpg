@@ -29,6 +29,11 @@ pub const SLOW_MAX: u32 = 20;
 pub const WAIT_MS_DEFAULT: u64 = 10_000;
 /// Frames a driver waits for after an action: the link replies before the frame is drawn, so the second one is whole.
 pub const SETTLE_FRAMES: u64 = 2;
+/// The latest a shot's `t` may ask for, in seconds after its screen opened (ENGINE-17).
+pub const SHOT_T_MAX_S: f64 = 60.0;
+/// Frames a `wait` draws between two looks in a run with no window (ENGINE-17): on the shot clock time moves only by
+/// the frames asked for, so a wait asks for them, a fixed number each look, and the run is the same every time.
+pub const WAIT_FRAMES: u64 = 1;
 /// How long the frames may take to come (times `slow`) before the window counts as stalled.
 pub const SETTLE_MS: u64 = 10_000;
 /// How long a new window may take to answer on the link, and to reach the asked size (a capped size never does).
@@ -133,7 +138,8 @@ pub enum Step {
     Wait { until: Cond, timeout_ms: u64 },
     Assert { until: Cond },
     /// `golden`: compared against the committed baseline (`crate::golden`), with this tolerance.
-    Shot { name: String, max_w: u64, golden: Option<crate::golden::Tolerance> },
+    /// `t` (ENGINE-17): the shot waits until the top screen has been open that long, in ms, on the shot clock (0: at once).
+    Shot { name: String, max_w: u64, golden: Option<crate::golden::Tolerance>, t_ms: u64 },
     Clip { name: String, frames: u64, every_ms: u64, max_w: u64 },
     /// ENGINE-2: frame times with no window (`perf` link request); `budget` fails the step when a number is over it on a
     /// steady machine.
@@ -408,8 +414,19 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
             Step::Assert { until: cond("until", problems) }
         }
         "shot" => {
-            keys(&["name", "max_w", "golden"], problems);
+            keys(&["name", "max_w", "golden", "t"], problems);
             let name = text_of(o, "name", place, problems);
+            // ENGINE-17: `"t": <s>`, seconds after the top screen opened (0 to SHOT_T_MAX_S; 0, the default, is at once).
+            let t_ms = match o.get("t") {
+                None => 0,
+                Some(v) => match v.as_f64().filter(|t| (0.0..=SHOT_T_MAX_S).contains(t)) {
+                    Some(t) => (t * 1000.0).round() as u64,
+                    None => {
+                        problems.push(format!("{place}: 't' is a number of seconds from 0 to {SHOT_T_MAX_S}"));
+                        0
+                    }
+                },
+            };
             if !name.is_empty() && !plain_name(&name) {
                 problems.push(format!("{place}: 'name' becomes a file: letters, digits, _ and - only, at most 80"));
             }
@@ -428,7 +445,7 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
                     None
                 }
             };
-            Step::Shot { name, max_w: int_of(o, "max_w", Some(1920), (1, u64::from(SIZE_MAX.0)), place, problems), golden }
+            Step::Shot { name, max_w: int_of(o, "max_w", Some(1920), (1, u64::from(SIZE_MAX.0)), place, problems), golden, t_ms }
         }
         "clip" => {
             keys(&["name", "frames", "every_ms", "max_w"], problems);
@@ -1013,6 +1030,15 @@ impl Run<'_> {
         Ok(tree)
     }
 
+    /// A `frames` request to a game with no window, whose reply must say `ok`.
+    fn frames(&mut self, step: &str, body: Value) -> std::result::Result<(), Failure> {
+        let reply = self.ask(step, &body)?;
+        if reply["ok"] != json!(true) {
+            return Err(Failure { step: step.to_string(), message: format!("the frames asked for ({body}): {}", reply["error"]), gone: false });
+        }
+        Ok(())
+    }
+
     /// A request whose reply must not say `ok` false, and the frames after it.
     fn act(&mut self, step: &str, body: Value) -> std::result::Result<(), Failure> {
         let reply = self.ask(step, &body)?;
@@ -1056,8 +1082,16 @@ impl Run<'_> {
                     if let Some(fail) = self.over_time(label, by, &why) {
                         return Err(fail);
                     }
-                    std::thread::sleep(if self.headless { POLL_HEADLESS } else { POLL });
+                    if self.headless {
+                        self.frames(label, json!({"cmd": "frames", "frames": WAIT_FRAMES}))?;
+                    } else {
+                        std::thread::sleep(POLL);
+                    }
                 }
+            }
+            Step::Pause { ms } if self.headless => {
+                // The shot clock: the pause is that much game time, drawn at once.
+                self.frames(label, json!({"cmd": "frames", "ms": ms}))?;
             }
             Step::Pause { ms } => {
                 let by = Instant::now() + Duration::from_millis(*ms);
@@ -1075,8 +1109,14 @@ impl Run<'_> {
                     return Err(Failure { step: label.to_string(), message: format!("assert: {why}"), gone: false });
                 }
             }
-            Step::Shot { name, max_w, golden } => {
+            Step::Shot { name, max_w, golden, t_ms } => {
                 self.settle(label)?;
+                if *t_ms > 0 {
+                    if !self.headless {
+                        return Err(Failure { step: label.to_string(), message: "a shot's t is taken in a run with no window (the shot clock)".to_string(), gone: false });
+                    }
+                    self.frames(label, json!({"cmd": "frames", "since_open_ms": t_ms}))?;
+                }
                 let path = self.bundle.join(format!("{name}.png"));
                 let reply = self.ask(label, &json!({"cmd": "screenshot", "path": path.display().to_string(), "max_w": max_w}))?;
                 if reply["ok"] != json!(true) {
@@ -1209,7 +1249,8 @@ fn cut(text: &str, max: usize) -> String {
 
 /// Asks until the window is ready: the link names the process that was started, frames come, and it has reached the size
 /// (or will not: a capped size stays smaller). `Err(retry)` says whether another port may help.
-fn ready(link: &mut dyn Link, game: &mut dyn Process, want: (u32, u32), sized_ms: u64, slow: u64, poll: Duration) -> std::result::Result<(Value, Value), StartFailure> {
+fn ready(link: &mut dyn Link, game: &mut dyn Process, want: (u32, u32), sized_ms: u64, slow: u64, headless: bool) -> std::result::Result<(Value, Value), StartFailure> {
+    let poll = if headless { POLL_HEADLESS } else { POLL };
     let fail = |reason: String, retry: bool| StartFailure { reason, retry };
     let first = link.ask(&json!({"cmd": "ui_tree"})).map_err(|e| fail(format!("the link: {e}"), false))?;
     if first["pid"] != json!(game.pid()) {
@@ -1231,7 +1272,15 @@ fn ready(link: &mut dyn Link, game: &mut dyn Process, want: (u32, u32), sized_ms
         if let Some(how) = game.exited() {
             return Err(fail(format!("the game ended while starting: {how}"), false));
         }
-        std::thread::sleep(poll);
+        if headless {
+            // The shot clock (ENGINE-17): no frame comes unless asked for; the same frames in every run.
+            let reply = link.ask(&json!({"cmd": "frames", "frames": SETTLE_FRAMES})).map_err(|e| fail(format!("the link: {e}"), false))?;
+            if reply["ok"] != json!(true) {
+                return Err(fail(format!("the frames asked for: {}", reply["error"]), false));
+            }
+        } else {
+            std::thread::sleep(poll);
+        }
     }
 }
 
@@ -1292,7 +1341,6 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
     }
     let started = Instant::now();
     let headless = !(s.window || o.window);
-    let poll = if headless { POLL_HEADLESS } else { POLL };
     let mut record = json!({"id": s.id, "title": s.title, "size": format!("{}x{}", size.0, size.1), "slow": slow, "window": !headless});
     for attempt in 1..=PORT_TRIES {
         let port = match free_port() {
@@ -1307,6 +1355,9 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
         let mut plan = plan(s, size, &o.game_id, &o.exe, o.data.as_deref(), port, &scratch);
         if headless {
             plan.args.extend(headless_args(size, o));
+            // ENGINE-17: a scenario is always on the shot clock, so two runs of a build draw the same frames (the agent
+            // playtest, which shares the arguments above, stays on real time).
+            plan.args.push("clock=step".to_string());
         }
         if let Err(e) = write_scratch(&plan) {
             out.message = format!("the scratch folder {}: {e}", scratch.display());
@@ -1341,7 +1392,7 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
             }
         };
         record["port"] = json!(port);
-        let readiness = ready(link.as_mut(), game.as_mut(), size, o.sized_ms, slow, poll);
+        let readiness = ready(link.as_mut(), game.as_mut(), size, o.sized_ms, slow, headless);
         let (px, canvas) = match readiness {
             Ok(both) => both,
             Err(f) => {

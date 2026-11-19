@@ -10,7 +10,7 @@ use aegis_ui::ui::{Gfx, H, W};
 use emberwake_battle::round_intent::{self as ri};
 use aegis_ui::art::Art;
 use serde_json::{json, Value};
-use std::time::Instant;
+use aegis_core::clock::Instant;
 use emberwake_rules::ruleset::TIMELINE;
 
 fn arena(ruleset: Option<&str>) -> (Cx, Gfx, BattleScreen) {
