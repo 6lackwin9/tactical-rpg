@@ -108,6 +108,9 @@ screen at 1280x720, 1:1.
 - Order: the soonest to run out first, ties to the one applied first; statuses a planned move adds come last.
 - The full list (hover "+N" or press the plate): icon, name, a one-line effect, rounds left as a number ("new" for a
   planned one).
+- Proposed, take 26, awaiting sign-off (`BOSSUI1` BU6, user 2026-11-19 18:09 "the no number look is probably better"):
+  tabs on plates and on the boss bar are the icon only, no pips or digits; the rounds left show only in the full list.
+  If signed off, this supersedes the pip line above (kept here as history).
 
 ## 7. Skill menu (on a strip block)
 
@@ -127,6 +130,24 @@ screen at 1280x720, 1:1.
   of the board (full name and title, a long HP bar with phase marks, poise, statuses, the next phase or enrage cue);
   the boss leaves the foe panel, mobs keep their plates. Mocked as take 22 (`battle_take22_boss_mock.py`), awaiting
   his review.
+- Proposed, take 26 (`battle_take26_boss_mock.py`, `BOSSUI1`, `ENRAGE2` EN5), awaiting sign-off; replaces take 22 and
+  24's continuous bar. The boss bar sits in the HUD frame (`hud`, double line), 84 px tall, inset over the board top:
+  - Row 1: portrait with the crown; the phase markers (one diamond per phase, at most 4: done filled gold, current
+    lit, coming hollow iron) left of the title; the title is the phase's name or form, else the unit's name and
+    title; the boss passive tags right-aligned (one per passive, display name; hover or focus shows its description
+    in a HUD-frame tip). No phase-change cue and no enrage tag.
+  - Row 2: the current phase's HP span as a full bar with the planned impact; the number beside it is the span left
+    ("160/450"). It refills when the next phase starts; a phase that brings a different boss unit swaps the bar to
+    that unit (portrait, name, HP, poise, passives).
+  - Row 3: poise as the unit's `poise_pips` (10 for bosses, about 9 x 5 px each), the per-pip tag, icon-only status
+    tabs, then the intent and its impact as in take 24.
+  - Phase change (inside the existing phase transition, about 0.9 s): the span drains to 0; a 0.1 s gold flash on the
+    bar while the marker fills and the new tags and statuses swap in; the portrait (new unit only) and title crossfade
+    (0.3 s); the bar refills left to right (0.4 s).
+  - Rejected option B: a segment strip under the bar instead of the diamonds (reads as a second HP bar).
+  - Enrage (`ENRAGE2`): the round counter in the top bar warns a round ahead ("Enrage next round", amber, under the
+    objective) and from the enrage round reads "Foes enraged +n"; an enraged unit's plate takes a 10 % amber tint and
+    rim with an "up +10%" chip by its name, and its numbers show raised (`STATUSVIS1` attack_power row).
 - Not expressed yet: collision stagger from push or pull on the card row, hazard damage in the HP preview and the
   block ruler, reactions (riposte, counters) as a "returns -n" note, flank, guard, cover and windup modifiers in the
   skill hover, channel rounds, unit meters, weapon wear.
