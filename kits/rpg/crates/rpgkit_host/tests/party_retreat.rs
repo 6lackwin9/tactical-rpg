@@ -65,3 +65,23 @@ fn a_fight_whose_limit_is_a_defeat_or_a_confirmed_round_refuses_it() {
     ok(&h.handle(&json!({"cmd": "confirm"})));
     refused(&h.handle(&json!({"cmd": "retreat"})), "Retreat only while planning");
 }
+
+/// PR7-37 (PT-02, PT-24): a fight that runs to its round limit ends with no verdict of its own: `timed_out` (it reads
+/// "Out of time", whatever its `timeout_outcome` settles it as); a retreat is a verdict, never a time out.
+#[test]
+fn the_round_limit_is_a_time_out_and_a_retreat_is_not() {
+    for (enc, settles) in [("t_free", "fled"), ("t_stand", "lost")] {
+        let mut h = Host::new(Battle::new(catalog()));
+        ok(&h.handle(&json!({"cmd": "new", "encounter": enc})));
+        assert!(!h.commands.session.as_ref().unwrap().timed_out(), "{enc}: under way");
+        ok(&h.handle(&json!({"cmd": "autoplay"})));
+        let s = h.commands.session.as_ref().unwrap();
+        assert_eq!(s.final_outcome(), settles, "{enc}: the 4000 HP sides outlast the round limit");
+        assert!(s.timed_out() && s.outcome.is_empty(), "{enc}: the limit ended it");
+    }
+    let mut h = Host::new(Battle::new(catalog()));
+    ok(&h.handle(&json!({"cmd": "new", "encounter": "t_free"})));
+    ok(&h.handle(&json!({"cmd": "retreat"})));
+    let s = h.commands.session.as_ref().unwrap();
+    assert!(s.final_outcome() == "fled" && !s.timed_out(), "a retreat is fled, not out of time");
+}

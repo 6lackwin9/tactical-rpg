@@ -48,6 +48,26 @@ pub struct BoardPane {
     pub errors: Vec<String>,
 }
 
+/// PR7-37 (PT-31): board view `view` with each locked row that says only "Locked" (or nothing) saying what opens it
+/// (`board::unlock_words`), where the kit can tell.
+pub fn with_unlock_words(d: &emberwake_world::Data, gs: &emberwake_world::GameState, mut view: Dict) -> Dict {
+    if let Some(Value::Array(secs)) = view.get_mut("sections") {
+        for sec in secs.iter_mut() {
+            let Some(Value::Array(rows)) = sec.get_mut("rows") else { continue };
+            for r in rows.iter_mut().filter_map(Value::as_object_mut) {
+                let line = s(r, "line");
+                if s(r, "status") == "locked" && (line.is_empty() || line == emberwake_world::dialogue::LOCKED_TEXT) {
+                    let words = emberwake_world::board::unlock_words(d, gs, &s(r, "quest"));
+                    if !words.is_empty() {
+                        r.insert("line".into(), words.into());
+                    }
+                }
+            }
+        }
+    }
+    view
+}
+
 /// Every row of a board view, in section order (each with its section id under `_section`).
 pub fn rows(view: &Dict) -> Vec<Dict> {
     let mut out = Vec::new();

@@ -8,6 +8,7 @@ share one, use the Scene Runner's **Playtests**, then **Copy to repo**: the reco
 | --- | --- |
 | `inbox/<id>/` | user recordings copied here (`<id>.json` with its `note_<n>.jpg` images beside it) |
 | `repro/` | regression recordings (`<id>.json`, or a folder like the inbox), replayed by `tools/fc.sh gate` (`repro/README.md`) |
+| `agent/` | agent playtest scripts: `smoke.play`, the dev-build walk the gate runs (with the world picker), and `smoke_player.play`, the same walk in a player build (`profile=release`: New game starts the one start world, no picker, no Tools) |
 
 Both folders are listed in the Playtests browser with the badge `repo`. Replay one headless with
 `aegis replay games/emberwake/playtests/inbox/<id>/<id>.json` (`engine/README.md`, "Playtest recordings and replay").

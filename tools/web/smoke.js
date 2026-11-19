@@ -7,16 +7,17 @@
 //          close its tab); both bundle parts are fetched
 //   no GL  in a browser without WebGL the renderer fails: the loop stops and the page says why (no frames, no canvas)
 //   query  ?screen=runner&port=1 opens the Scene Runner; port= is dropped with a console line
-//   (a)    Tools > Combat Arena (goblin_skirmish, the runner's default fight) plays on the battle's own autoplay (A) to
-//          the results banner (an outcome, the Leave button); Leave goes back to the runner
-//   (b)    New game > Start plays the opening as a player would (WEBFIX2): the story scene (Space through its cards), the
-//          battle beat into the first fight, the fight on the battle's own autoplay (A), the results' Continue, and on
-//          through the prologue's scenes and fights to the first region screen in the world the new game screen selected
+//   (a)    ?screen=runner > Combat Arena (goblin_skirmish, the runner's default fight) plays on the battle's own
+//          autoplay (A) to the results banner (an outcome, the Leave button); Leave goes back to the runner
+//   (b)    New game plays the opening as a player would (WEBFIX2; a release build starts its one start world, no
+//          picker): the story scene (Space through its cards), the battle beat into the first fight, the fight on the
+//          battle's own autoplay (A), the results' Continue, and on through the prologue's scenes and fights to the
+//          first region screen of the start world
 //   (c)    a step on the map, Game menu > Save game > slot 1 (the save lands in localStorage under aegis/), reload the
 //          page, Continue restores the slot: the same location and position, nothing unsaved
 //   cap    (WEBFIX2 (d)) a 9000 x 5000 page (past the 8192 px texture of headless Chromium's WebGL; its emulated pixel
 //          ratio does not grow the buffer, so the size itself is large): the canvas's drawing buffer stays within the GPU's
-//          largest texture, smaller than the page, and a click still lands (New game opens)
+//          largest texture, smaller than the page, and a click still lands (New game leaves the menu)
 // boot and (b), (c) run at every page size (default 1280x720, 1600x1000, 2560x1440), the rest at the first. Every page
 // must run without a console error or page error. Usage: node tools/web/smoke.js <out/web> [WxH ...]. Needs
 // Playwright (`require('playwright')`) and its Chromium (or CHROMIUM=<path to the executable>). Exit 0 when all passed.
@@ -42,6 +43,8 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'applic
 const fetched = [];
 const server = http.createServer((req, res) => {
   const rel = path.normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^([/\\])+/, '') || 'index.html';
+  // PR7-37: a full Chrome (CHROMIUM=) asks for the favicon, which the build has none of: not a missing part
+  if (rel === 'favicon.ico') { res.writeHead(204); res.end(); return; }
   fs.readFile(path.join(dir, rel), (err, data) => {
     fetched.push([rel, err ? 404 : 200]);
     if (err) { res.writeHead(404); res.end(); return; }
@@ -150,7 +153,9 @@ async function boot(context, base) {
   const t0 = Date.now();
   const menu = await g.screen('main_menu', 60000);
   check(!!menu, `the test build boots to the main menu (${Date.now() - t0} ms)`);
-  check(!!g.widget(menu, 'menu.tools'), 'the test build has the Tools entry (dev tools on)');
+  // PR7-37 (PT-14): the web test build is a release build, which is a player build: no Tools entry (the Scene Runner
+  // opens by the URL query, as `query` and `arena` do)
+  check(!!menu && !g.widget(menu, 'menu.tools'), 'the release test build has no Tools entry (a player build)');
   check(!!menu && !g.widget(menu, 'menu.quit'), `the web main menu has no Quit (${menu && menu.widgets.filter((w) => w.id.startsWith('menu.')).map((w) => w.id).join(' ')})`);
   const loading = await g.page.evaluate(() => [window.__loading, !!document.getElementById('aegis-loading')]);
   check(loading[0].seen && !loading[1], `the loading bar showed (last "${loading[0].text}") and is gone at the menu`);
@@ -172,12 +177,11 @@ async function query(context, base) {
 }
 
 async function arena(context, base) {
-  console.log('-- (a) Tools > Combat Arena, goblin_skirmish to the results');
-  const g = await open(context, base);
-  await g.screen('main_menu', 60000);
-  await g.click('menu.tools');
-  const runner = await g.screen('scene_runner');
-  check(!!runner, 'Tools opens the Scene Runner');
+  console.log('-- (a) ?screen=runner > Combat Arena, goblin_skirmish to the results');
+  // PR7-37 (PT-14): a release build has no Tools entry; the URL query opens the Scene Runner
+  const g = await open(context, base, '?screen=runner');
+  const runner = await g.screen('scene_runner', 60000);
+  check(!!runner, '?screen=runner opens the Scene Runner');
   const picked = g.widget(runner, 'runner.arena.encounter');
   check(!!picked && /goblin skirmish/i.test(picked.text), `the arena's fight is Goblin Skirmish ("${picked && picked.text}")`);
   await g.click('runner.arena');
@@ -200,13 +204,10 @@ async function newGameSaveContinue(context, base) {
   console.log('-- (b) New game: the story scene, the first fight and the prologue to the first region screen');
   const g = await open(context, base);
   await g.screen('main_menu', 60000);
+  // PR7-37 (PT-01): a player build has one start world, so New game starts it at once (no world picker)
   await g.click('menu.new_game');
-  const ng = await g.screen('new_game');
-  const world = ng && ng.state && ng.state.selected;
-  check(!!world, `the new game screen selects a world (${world})`);
-  await g.click('new_game.start');
   const scene = await g.screen('vignette', 30000);
-  check(!!scene, 'Start opens the story scene');
+  check(!!scene, 'New game opens the story scene at once (no world picker in a player build)');
   if (!scene) return;
   const fight = await prologue(g, (p) => p.screen === 'battle', 60000);
   check(!!fight, `Space through the scene reaches the first fight (${fight ? fight.screen : 'no fight'})`);
@@ -219,7 +220,8 @@ async function newGameSaveContinue(context, base) {
   const results = await prologue(g, (p) => p.screen === 'battle_results', 30000);
   check(!!results, 'the results show');
   const region = await prologue(g, (p) => p.screen === 'region_map' && p.game && p.game.location && !(p.state && p.state.arrival), 600000);
-  check(!!region && region.game.world === world, `the prologue reaches the region map in ${world} (${region && region.game.location})`);
+  const world = region && region.game.world;
+  check(!!world, `the prologue reaches the region map in ${world} (${region && region.game.location})`);
   if (!region) return;
 
   console.log('-- (c) save, reload the page, Continue');
@@ -237,7 +239,7 @@ async function newGameSaveContinue(context, base) {
   await g.click('hub.save');
   await g.screen('save_slots');
   await g.click('slot.1');
-  const saved = await g.until((p) => p.game && p.game.dirty === false && /^Slot 1: /.test((g.widget(p, 'slot.1') || {}).text || '') && !/Empty/.test(g.widget(p, 'slot.1').text), 10000);
+  const saved = await g.until((p) => p.game && p.game.dirty === false && /^Slot 1( ·|:) /.test((g.widget(p, 'slot.1') || {}).text || '') && !/Empty/.test(g.widget(p, 'slot.1').text), 10000);
   check(!!saved, `slot 1 holds the game (${saved && g.widget(saved, 'slot.1').text})`);
   const keys = await g.page.evaluate(() => Object.keys(localStorage));
   check(keys.some((k) => k.startsWith('aegis/') && k.includes('/saves/')), `the save is in localStorage (${keys.filter((k) => k.includes('/saves/')).join(', ')})`);
@@ -295,7 +297,7 @@ async function cap(browser, base) {
     check(max > 0 && w <= max && h <= max, `the drawing buffer ${w} x ${h} is within the largest texture ${max} (asked ${asked[0]} x ${asked[1]})`);
     check(Math.max(...asked) <= max || Math.max(w, h) === max, `the buffer is capped to the limit, not further (${w} x ${h})`);
     await g.click('menu.new_game');
-    check(!!(await g.screen('new_game')), 'a click lands on the capped buffer (New game opens)');
+    check(!!(await g.until((p) => p.screen !== 'main_menu', 30000)), 'a click lands on the capped buffer (New game leaves the menu)');
     g.noErrors('cap');
   } finally {
     await context.close();

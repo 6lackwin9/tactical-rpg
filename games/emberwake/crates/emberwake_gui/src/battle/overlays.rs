@@ -127,6 +127,12 @@ pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 24] = [
     ("tracers", "Impact tracers", "A short line from each actor to what its action hit, during playback.", true),
 ];
 
+/// PR7-37 (PT-33): the groups the Settings Battle tab lists: every group in a dev build (`crate::DEV_BUILD`), else
+/// all but the boards' marks for testing (`test_` ids, off by default; Alt still draws them).
+pub(crate) fn settings_overlay_groups() -> Vec<(&'static str, &'static str, &'static str, bool)> {
+    OVERLAY_GROUPS.iter().copied().filter(|g| crate::DEV_BUILD || !g.0.starts_with("test_")).collect()
+}
+
 /// VISCLAR1 VC6: a group's default (`OVERLAY_GROUPS`; an unknown id is on).
 pub(crate) fn overlay_default(id: &str) -> bool {
     OVERLAY_GROUPS.iter().find(|g| g.0 == id).is_none_or(|g| g.3)

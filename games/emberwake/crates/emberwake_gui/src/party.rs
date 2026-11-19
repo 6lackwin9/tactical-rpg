@@ -299,6 +299,15 @@ fn columns(ui: &mut Ui<PAct>, cols: &[(f32, &str)], gap: f32) -> Vec<(f32, f32)>
     out
 }
 
+/// PR7-37 (PT-06): a skill row's bracketed tag ("  [Assault]"), or nothing for an empty one (never "[]").
+pub(crate) fn tagged(tag: &str) -> String {
+    if tag.is_empty() {
+        String::new()
+    } else {
+        format!("  [{tag}]")
+    }
+}
+
 /// What a core stat does, for the detail pane (numbers from the rules: StatRules, DamageCalculator).
 fn stat_desc(st: &str) -> String {
     use emberwake_rules::damage::{CRIT_PER_PERC, CRIT_PERC_FLOOR};
@@ -757,6 +766,9 @@ impl Screen<GameCx> for Character {
         let mut ui: Ui<PAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), th().game("popup_veil", rgba(0, 0, 0, 110)));
         let fr = Rect::new(16, 16, 608, 328);
+        // PR7-37 (PT-07): an opaque backing, so a screen under the window (the game menu it was opened from) never
+        // shows through its frame
+        ui.p.fill(fr, th().bg);
         ui.frame(fr, "Character", true);
         ui.close_x("character.close", Rect::new(fr.x + fr.w - 26, fr.y + 8, 19, 18), PAct::Close);
         let unspent = m.unspent(&d);
@@ -911,8 +923,33 @@ impl Screen<GameCx> for Character {
         out
     }
 
-    widget_plumbing!();
+    /// PR7-37 (PT-07): a stat row's card opens past the row's right end, off the numbers the rows show (the detail
+    /// pane holds the same text); any other card follows the mouse.
+    fn draw_tip(&self, p: &mut aegis_ui::painter::Painter, mouse: (i32, i32)) {
+        aegis_ui::ui::draw_tip_by(p, &self.w, mouse, |wd| tip_place(&wd.id, wd.rect, mouse));
+    }
+
+    widget_plumbing!(own_tip Cx);
 }
+
+/// PR7-37 (PT-07): where a Character row's hover card is placed (as for a mouse there), off the numbers: a derived
+/// row's (`stats.derived.`, `level.derived.`) just past the row's right end, at the mouse's height; a core stat row's
+/// (`stats.<STAT>`, left of the derived column) under the stat table; any other at the mouse.
+fn tip_place(id: &str, r: Rect, mouse: (i32, i32)) -> (i32, i32) {
+    if id.starts_with("stats.derived.") || id.starts_with("level.derived.") {
+        (r.x + r.w, mouse.1)
+    } else if id.strip_prefix("stats.").is_some_and(|st| STATS.contains(&st)) {
+        (mouse.0, STATS_TABLE_END)
+    } else {
+        mouse
+    }
+}
+
+/// PR7-37 (PT-07): the gap between the stat table's Total column and the derived list on the Stats tab.
+const DERIVED_GAP: f32 = 18.0;
+
+/// PR7-37 (PT-07): the y the Stats tab's stat table ends at (its six rows from 158, 15 apart).
+const STATS_TABLE_END: i32 = 158 + 6 * 15;
 
 impl Character {
     fn draw_stats(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
@@ -964,7 +1001,8 @@ impl Character {
             ui.push(format!("stats.{st}"), "row", format!("{st} {total}"), Rect::new(66, y as i32 - 2, (table_right - 62.0) as i32, 14), true, false, None, tip(st, &stat_desc(st)));
         }
         let rows = derived(d, &cx.gs().world_id, &party_ruleset(cx), m);
-        let label_x = 250f32.max(table_right + 6.0);
+        // PR7-37 (PT-07): a clear gap after the table's Total column, so the derived list reads as its own column
+        let label_x = 262f32.max(table_right + DERIVED_GAP);
         let value_x = 325f32.max(label_x + rows.iter().map(|r| ui.p.text_w(&r.label, BODY + 1.0)).fold(0.0, f32::max) + 8.0);
         // DERIVE1 4.4: the built-in rows keep their 15 px step; catalog rows past them close the step up to stay above
         // the detail pane (the last row starts at 263 at most)
@@ -1157,7 +1195,7 @@ impl Character {
             ui.button(&format!("skills.slot.{f}"), Rect::new(310, y, 50, 16), if slotted { "Slotted" } else if full { "Full" } else { "Slot" }, PAct::Slot(f.clone()), !slotted && !full);
             let grade: String = cat.family_rows(f).first().map(|s| { let mut c = s.grade.chars(); c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default() }).unwrap_or_default();
             let desc = row.map(|s| emberwake_content::source::skill_description(&s.raw, stances)).unwrap_or_default();
-            ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}  [{}]  Rank {}", fam_name(f), grade, roman(top)), BODY, 238.0, th().text);
+            ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}{}  Rank {}", fam_name(f), tagged(&grade), roman(top)), BODY, 238.0, th().text);
             ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
             ui.push(format!("skills.family.{f}"), "row", fam_name(f), Rect::new(366, y, 238, 20), true, slotted, Some(PAct::Slot(f.clone())), tip(&fam_name(f), &desc));
             ui.draggable(format!("skill.{f}"));
@@ -1200,7 +1238,8 @@ impl Character {
             let top = built.as_ref().and_then(|u| u.selectable_ranks(cat, f).last().copied()).unwrap_or(0);
             let row = cat.family_rows(f).into_iter().find(|s| s.tier == top).or_else(|| cat.tier_one(f));
             let name = cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
-            let intent = intent_name(t.intent_of.get(f).map(String::as_str).unwrap_or(""));
+            // PR7-37 (PT-06): a worn item's skill (in none of the deck's lists) shows its own intent
+            let intent = intent_name(&t.intent_for(cat, f));
             match row {
                 Some(s) => (name, intent, emberwake_battle::skill::ap_cost_by(s, built.as_ref(), &rs), top, emberwake_content::source::skill_description(&s.raw, rs.stances())),
                 None => (name, intent, 0, top, String::new()),
@@ -1392,9 +1431,10 @@ impl Character {
                 let y = 118 + (k - self.scroll) as i32 * 22;
                 let (name, intent, ap, _, desc) = skill_of(cat.family_of(id));
                 ui.button(&format!("skills.slot.worn.{id}"), Rect::new(310, y, 50, 16), "Worn", PAct::DeckView("owned"), false);
-                ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{name}  [{intent}]  {ap} AP  from worn gear"), BODY, 238.0, th().gold);
+                ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{name}{}  {ap} AP  from worn gear", tagged(&intent)), BODY, 238.0, th().gold);
                 ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
-                let card = vec![(name.clone(), th().gold), (format!("{intent} skill from worn gear, {ap} AP"), th().info), (desc, th().text), ("Open while the item is worn: it takes no slot, and taking the item off removes it.".into(), th().dim)];
+                let kind = if intent.is_empty() { "Skill".to_string() } else { format!("{intent} skill") };
+                let card = vec![(name.clone(), th().gold), (format!("{kind} from worn gear, {ap} AP"), th().info), (desc, th().text), ("Open while the item is worn: it takes no slot, and taking the item off removes it.".into(), th().dim)];
                 ui.push(format!("skills.worn.{id}"), "row", name, Rect::new(366, y, 238, 20), true, false, None, card);
             }
             for (k, &(kind, ref id)) in owned.iter().skip(self.scroll).take(ROWS).enumerate() {
@@ -1404,7 +1444,7 @@ impl Character {
                 ui.button(&format!("skills.slot.{kind}.{id}"), Rect::new(310, y, 50, 16), if slotted { "Slotted" } else if full { "Full" } else { "Slot" }, PAct::DeckSlot(kind, id.clone()), !slotted && !full);
                 let (name, line, desc) = if kind == "active" {
                     let (name, intent, ap, rank, desc) = skill_of(id);
-                    (name.clone(), format!("{name}  [{intent}]  Rank {}  {ap} AP", roman(rank)), desc)
+                    (name.clone(), format!("{name}{}  Rank {}  {ap} AP", tagged(&intent), roman(rank)), desc)
                 } else {
                     let (name, desc) = passive_of(id);
                     (name.clone(), format!("{name}  [{}]", title_case(kind)), desc)
@@ -1866,6 +1906,13 @@ mod tests {
     use super::*;
     use emberwake_world::party_ops::intent_names;
     use emberwake_world::state::{item_fits_slot as fits, off_hand_ok};
+
+    /// PR7-37 (PT-06): a skill row never shows an empty "[]" tag.
+    #[test]
+    fn an_empty_tag_shows_no_brackets() {
+        assert_eq!(tagged(""), "");
+        assert_eq!(tagged("Assault"), "  [Assault]");
+    }
 
     fn setup() -> (Data, UnitState, Stash) {
         let dir = Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");

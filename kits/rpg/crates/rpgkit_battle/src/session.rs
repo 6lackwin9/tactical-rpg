@@ -2130,6 +2130,12 @@ impl Session {
         String::new()
     }
 
+    /// PR7-37 (PT-02, PT-24): the battle ended at its round limit: no verdict of its own, so `final_outcome` is the
+    /// encounter's `timeout_outcome` (a retreat or a rout is a verdict, never this).
+    pub fn timed_out(&self) -> bool {
+        self.outcome.is_empty() && !self.final_outcome().is_empty()
+    }
+
     /// ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the combat log as a reader sees it: the resolver log from line
     /// `from`, with the encounter's own lines (`encounter_lines`) from entry `lines_from` placed where they were said
     /// (one said before resolver line `from` comes first). Without encounter lines it is the resolver log exactly.

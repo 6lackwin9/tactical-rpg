@@ -51,12 +51,15 @@ pub struct Game {
     /// TRANSITIONS1 T2 step 4: the arrival a won fight left for the hub (the region map shows it as it comes back on top;
     /// the story stage drops it when a vignette plays next).
     pub arrival: Option<crate::transitions::Arrival>,
+    /// PR7-37 (PT-31): the open road legs the player was last told about (route qids; None until first looked at,
+    /// `worldmap::note_new_roads`), so a road a story beat opens gets a notice. Not saved.
+    pub roads_seen: Option<Vec<String>>,
 }
 
 impl Game {
     pub fn new(gs: GameState, slot: i64, sample: bool) -> Self {
         let clean = gs.to_value();
-        Self { gs, slot, clean, busy: false, sample, notices: Vec::new(), arrival: None }
+        Self { gs, slot, clean, busy: false, sample, notices: Vec::new(), arrival: None, roads_seen: None }
     }
 }
 
@@ -197,6 +200,8 @@ pub fn enter_game(cx: &mut Cx, gs: GameState, slot: i64, warnings: Vec<String>) 
     let story = emberwake_world::story::is_running(&gs);
     cx.game = Some(Game::new(gs, slot, false));
     cx.log.clear();
+    // PR7-37 (PT-31): the roads open as the game starts are known (only later ones get a notice)
+    crate::worldmap::note_new_roads(cx);
     if !warnings.is_empty() {
         cx.notice = warnings;
     }

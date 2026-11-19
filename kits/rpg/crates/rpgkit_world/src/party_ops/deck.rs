@@ -77,6 +77,15 @@ fn order_intents(rs: &Ruleset) -> Vec<String> {
 }
 
 impl DeckTerms {
+    /// PR7-37 (PT-06): the intent family `f` plays as: its `intent_of`, else (a worn item's skill, in none of the
+    /// deck's lists) the skill's own (`round_intent::skill_intent` of its tier one); "" for a family the catalog lacks.
+    pub fn intent_for(&self, cat: &Catalog, f: &str) -> String {
+        match self.intent_of.get(f) {
+            Some(i) => i.clone(),
+            None => cat.tier_one(f).map(|s| rpgkit_battle::round_intent::skill_intent(s).to_string()).unwrap_or_default(),
+        }
+    }
+
     /// A4.2-K1b (IR15): the rows family `f` plays in (its `rows_of`, else its one intent).
     pub fn rows(&self, f: &str) -> Vec<String> {
         self.rows_of.get(f).cloned().unwrap_or_else(|| self.intent_of.get(f).cloned().into_iter().collect())

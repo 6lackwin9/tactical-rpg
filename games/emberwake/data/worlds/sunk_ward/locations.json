@@ -98,7 +98,8 @@
 					"unless_flags": [],
 					"sets_flags": [],
 					"label": "Sabina's quarantine chest",
-					"note": "Lead-lined apothecary lockbox stamped with the old Siphon Ward wax seal."
+					"note": "Lead-lined apothecary lockbox stamped with the old Siphon Ward wax seal.",
+					"use": "stash"
 				},
 				{
 					"id": "rest",
@@ -108,7 +109,8 @@
 					"unless_flags": [],
 					"sets_flags": [],
 					"label": "The hall coke-brazier",
-					"note": "Low anthracite embers in a cast pan, keeping the basin damp off the Hall slabs."
+					"note": "Low anthracite embers in a cast pan, keeping the basin damp off the Hall slabs.",
+					"use": "rest"
 				},
 				{
 					"id": "crypts",
@@ -118,7 +120,8 @@
 					"unless_flags": [],
 					"sets_flags": [],
 					"label": "The cold vaults",
-					"note": "Slate mortuary tables under iron bars. Nobody sleeps down in this wing."
+					"note": "Slate mortuary tables under iron bars. Nobody sleeps down in this wing.",
+					"use": "crypts"
 				}
 			],
 			"map_pos": [

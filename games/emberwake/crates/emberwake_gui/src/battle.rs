@@ -43,7 +43,7 @@ pub(crate) use marks::{party_foresight_off, seen_intents};
 // VISCLAR1: only the debug-build settings row and the tests read it
 #[allow(unused_imports)]
 pub(crate) use marks::FORESIGHT_OFF;
-pub(crate) use overlays::{overlay_default, Layers, OVERLAY_GROUPS};
+pub(crate) use overlays::{overlay_default, settings_overlay_groups, Layers, OVERLAY_GROUPS};
 pub(crate) use tips::{action_rows, ap_lines, channel_action, channel_block, channel_fill, channeled_word, kind_color};
 pub(crate) use input::skill_text;
 pub(crate) use skill_menu::CHANNEL_TINT;
@@ -1083,6 +1083,7 @@ impl Screen<GameCx> for BattleScreen {
         let mut out = json!({"message": self.message, "playing": self.playing, "auto": self.auto, "log_open": self.show_log, "world": self.world_mode(),
             "fx": self.fx_state(), "tokens": self.tokens.state(),
             "outcome": if self.host.session.is_some() { self.outcome() } else { String::new() },
+            "timed_out": self.timed_out(),
             "popup": self.popup.as_ref().map(|p| json!({"title": p.title, "rows": p.rows.iter().map(|r| json!({"label": r.label, "detail": r.detail, "valid": r.valid})).collect::<Vec<_>>()}))});
         // TRANSITIONS1: the running beat (key only while one runs), with T1's banner
         if let Some(b) = self.beat {

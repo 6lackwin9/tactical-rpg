@@ -454,7 +454,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
 
     // -- Left: party cards and the selected hero.
     crate::hud::hud_panel(&mut ui, Rect::new(2, 28, 124, 290), th().game("battle_panel", PANEL), th().edge, RADIUS);
-    let alive = w.allies.iter().filter(|a| w.units[**a].is_active()).count();
+    // PR7-37 (PT-02): the heroes still standing: on their feet, on the field or gone out by an exit (not downed)
+    let alive = w.allies.iter().filter(|a| w.units[**a].is_alive()).count();
     ui.p.text(8.0, 32.0, &format!("Party {alive}/{}", w.allies.len()), TITLE, ALLY);
     let mut y = 44;
     // UI5: the party member the mouse is over (its card or its token) fills the threat intel panel
@@ -991,6 +992,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         ui.p.panel(r, th().game("outcome_fill", rgba(10, 14, 22, 240)), th().gold, 4.0);
         let (title, col) = match outcome.as_str() {
             "won" => ("Victory", th().good),
+            // PR7-37 (PT-02): the round limit ran out (nobody fled)
+            _ if g.timed_out() => (crate::hub::OUT_OF_TIME, th().gold),
             "lost" => ("Defeat", th().foe),
             "fled" => ("Fled", th().gold),
             _ => ("Battle over", th().gold),
