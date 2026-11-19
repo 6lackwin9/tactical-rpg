@@ -1782,9 +1782,9 @@
 				"#........#..................#........#",
 				"#........#..................#.##..####",
 				"#.......##..................#.......##",
-				"#.......###....#......#....##.......##",
-				"###.....###.#............#..##.......#",
-				"#........##.#............#..#........#",
+				"#.......##.....#...#..#.....#.......##",
+				"###.....#####............#####.......#",
+				"#........####............####........#",
 				"######################################"
 			],
 			"zones": [
@@ -1930,12 +1930,12 @@
 				},
 				{
 					"id": "idle_bunk_7",
-					"x": 14,
+					"x": 13,
 					"y": 22
 				},
 				{
 					"id": "idle_bunk_8",
-					"x": 27,
+					"x": 24,
 					"y": 22
 				},
 				{
@@ -2300,7 +2300,7 @@
 				},
 				{
 					"id": "bunk_1",
-					"art": "kiln_bunk",
+					"art": "niche_bunk",
 					"x": 10,
 					"y": 15,
 					"w": 3,
@@ -2311,7 +2311,7 @@
 				},
 				{
 					"id": "bunk_2",
-					"art": "kiln_bunk",
+					"art": "niche_bunk",
 					"x": 13,
 					"y": 15,
 					"w": 2,
@@ -2322,7 +2322,7 @@
 				},
 				{
 					"id": "bunk_3",
-					"art": "kiln_bunk",
+					"art": "niche_bunk",
 					"x": 15,
 					"y": 15,
 					"w": 3,
@@ -2333,7 +2333,7 @@
 				},
 				{
 					"id": "bunk_4",
-					"art": "kiln_bunk",
+					"art": "niche_bunk",
 					"x": 20,
 					"y": 15,
 					"w": 3,
@@ -2344,7 +2344,7 @@
 				},
 				{
 					"id": "bunk_5",
-					"art": "kiln_bunk",
+					"art": "niche_bunk",
 					"x": 23,
 					"y": 15,
 					"w": 2,
@@ -2355,7 +2355,7 @@
 				},
 				{
 					"id": "bunk_6",
-					"art": "kiln_bunk",
+					"art": "niche_bunk",
 					"x": 25,
 					"y": 15,
 					"w": 3,
@@ -2366,10 +2366,10 @@
 				},
 				{
 					"id": "bunk_7",
-					"art": "timber_bunk",
-					"x": 12,
+					"art": "cot",
+					"x": 10,
 					"y": 21,
-					"w": 1,
+					"w": 3,
 					"h": 2,
 					"layer": "sort",
 					"variant": -1,
@@ -2377,19 +2377,19 @@
 				},
 				{
 					"id": "bunk_8",
-					"art": "timber_bunk",
+					"art": "cot",
 					"x": 25,
 					"y": 21,
-					"w": 1,
+					"w": 3,
 					"h": 2,
 					"layer": "sort",
 					"variant": -1,
-					"flip": false
+					"flip": true
 				},
 				{
 					"id": "stove",
 					"art": "hearth_stove",
-					"x": 27,
+					"x": 19,
 					"y": 20,
 					"w": 1,
 					"h": 1,
@@ -2415,17 +2415,6 @@
 					"y": 20,
 					"w": 1,
 					"h": 1,
-					"layer": "sort",
-					"variant": -1,
-					"flip": false
-				},
-				{
-					"id": "stores",
-					"art": "barrels_tall",
-					"x": 10,
-					"y": 20,
-					"w": 1,
-					"h": 3,
 					"layer": "sort",
 					"variant": -1,
 					"flip": false
@@ -2495,6 +2484,54 @@
 					"layer": "sort",
 					"variant": -1,
 					"flip": false
+				},
+				{
+					"id": "spare_timber",
+					"art": "bed_timber_stack",
+					"x": 10,
+					"y": 22,
+					"w": 2,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false,
+					"until_bunk": "bunk_7"
+				},
+				{
+					"id": "spare_pallet",
+					"art": "rolled_pallet",
+					"x": 12,
+					"y": 22,
+					"w": 1,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false,
+					"until_bunk": "bunk_7"
+				},
+				{
+					"id": "spare_pallet_2",
+					"art": "rolled_pallet",
+					"x": 25,
+					"y": 22,
+					"w": 1,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false,
+					"until_bunk": "bunk_8"
+				},
+				{
+					"id": "spare_crates",
+					"art": "crate_stack",
+					"x": 26,
+					"y": 22,
+					"w": 2,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false,
+					"until_bunk": "bunk_8"
 				}
 			],
 			"ground": [
