@@ -266,6 +266,15 @@ impl BattleScreen {
                 self.popup = None;
             }
             Action::UnitClick(u) => self.unit_click(cx, u),
+            Action::FoeGroup(key) => {
+                // contract 4: a click opens the group, a second click (on its header) closes it
+                match self.open_groups.iter().position(|k| *k == key) {
+                    Some(i) => {
+                        self.open_groups.remove(i);
+                    }
+                    None => self.open_groups.push(key),
+                }
+            }
             Action::TileClick(c) => self.tile_click(cx, c),
             Action::FillGhost => self.accept_ghost(cx, None),
             Action::GhostSlot(k) => self.accept_ghost(cx, Some(k)),

@@ -200,6 +200,9 @@ pub enum Action {
     GhostSlot(usize),
     /// TRANSITIONS1: a click anywhere during a beat skips it (T1: control starts; T2: the results open).
     SkipBeat,
+    /// BATTLE-UI2 contract 4 (PR7-40 part 2): a click on a foe group (its catalog unit) opens it into compact plates; a
+    /// click on the open group's header closes it.
+    FoeGroup(String),
 }
 
 /// ASSETORG2: a fielded member's body and palette in world `world` (the kit's `begin_world_with` art callback): its
@@ -364,6 +367,8 @@ pub struct BattleScreen {
     cleared: Vec<usize>,
     /// GH2 a: each member's hero tactic (an index of `TACTICS`; none = the party tactic).
     member_tactic: std::collections::HashMap<usize, usize>,
+    /// BATTLE-UI2 contract 4: the foe groups the player opened (their catalog units).
+    open_groups: Vec<String>,
     /// GH2 a, IN6 (decision "INPUT1 answers, part 4" Q18): members whose ghost would change their intent and drop
     /// intent-bound buffs: the change that realizes it waits for Confirm, the ghost shows on copies meanwhile.
     deferred: Vec<(usize, Deferred)>,
@@ -525,6 +530,7 @@ impl BattleScreen {
             player_target: Vec::new(),
             cleared: Vec::new(),
             member_tactic: Default::default(),
+            open_groups: Vec::new(),
             deferred: Vec::new(),
             ghosted: 0,
             preview: None,

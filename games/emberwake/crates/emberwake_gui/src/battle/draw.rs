@@ -29,6 +29,53 @@ use emberwake_battle::world::World;
 use serde_json::{json, Value};
 use aegis_core::clock::Instant;
 
+/// BATTLE-UI2 contract 2 (PR7-40 part 2): a tactic button's width (44 px), and Auto's.
+pub(super) const TACTIC_W: i32 = 22;
+
+/// Contract 2: a tactic button in `r`: the portraits of `faces` (the party's first two, or the selected hero), a gold
+/// pennant at the top right and a chevron at the bottom right; its widget is the old dropdown's (`label` the tactic).
+#[allow(clippy::too_many_arguments)]
+fn tactic_button(ui: &mut Ui<Action>, cx: &mut Cx, small: &mut Faces, looks: &super::plates::Looks, id: &str, r: Rect, faces: &[usize], label: &str, action: Action, enabled: bool, tip: Tip) {
+    let hover = enabled && ui.hover(r);
+    ui.p.panel(r, if hover { th().card_hot } else { th().field }, if hover { th().focus } else { th().edge_live }, RADIUS);
+    let side = r.h - 4;
+    for (k, u) in faces.iter().enumerate().rev() {
+        if let Some(l) = looks.get(*u) {
+            small.draw(&mut ui.p, cx, &l.0, &l.1, super::TIMELINE_SURFACE, Rect::new(r.x + 2 + k as i32 * 4, r.y + 2, side, side));
+        }
+    }
+    // the pennant: a mast and a gold flag
+    let (px, py) = (r.x + r.w - 7, r.y + 2);
+    ui.p.fill(Rect::new(px, py, 1, 8), th().text);
+    for k in 0..3 {
+        ui.p.fill(Rect::new(px + 1, py + k, 5 - k * 2 + 1, 1), th().gold);
+        ui.p.fill(Rect::new(px + 1, py + 4 - k, 5 - k * 2 + 1, 1), th().gold);
+    }
+    let col = if enabled { th().text } else { th().dim };
+    let (cxm, cym) = ((r.x + r.w - 4) as f32, (r.y + r.h - 3) as f32);
+    ui.p.line(cxm - 2.0, cym - 1.0, cxm, cym + 1.0, col, 0.0);
+    ui.p.line(cxm, cym + 1.0, cxm + 2.0, cym - 1.0, col, 0.0);
+    if !enabled {
+        ui.p.fill(r.inset(1), rgba(10, 11, 16, 110));
+    }
+    ui.push(id, "dropdown", label, r, enabled, false, Some(action), tip);
+}
+
+/// Contract 2: Auto as a play button in `r` (a triangle and an "AUTO" tag under it); lit while autoplay runs.
+fn auto_button(ui: &mut Ui<Action>, r: Rect, enabled: bool, on: bool, tip: Tip) {
+    let hover = enabled && ui.hover(r);
+    let fill = if on { th().selected } else if hover { th().card_hot } else { th().card };
+    ui.p.panel(r, fill, if on || hover { th().focus } else if enabled { th().edge_live } else { th().edge }, RADIUS);
+    let col = if !enabled { th().dim } else if on { th().gold } else { th().text };
+    let (tx, ty) = (r.x + r.w / 2 - 3, r.y + 2);
+    for k in 0..4 {
+        ui.p.fill(Rect::new(tx + k, ty + k, 1, 8 - 2 * k), col);
+    }
+    let lw = ui.p.text_w("AUTO", SMALL);
+    ui.p.text(r.x as f32 + (r.w as f32 - lw) / 2.0, (r.y + r.h) as f32 - ui.p.line_h(SMALL) - 0.5, "AUTO", SMALL, if enabled { crate::tokens::planned() } else { th().dim });
+    ui.push("strip.auto", "button", "Auto", r, enabled, on, Some(Action::Autoplay), tip);
+}
+
 pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), live: bool) {
     let now = Instant::now();
     let tuning = cx.tuning.value.clone();
@@ -166,6 +213,25 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         Some(u) if w.units[u].is_active() => compiled.iter().flat_map(|st| st.entries.iter()).map(|e| e.item.is_none() && channel_block(pw, u, &w.cat.skills[e.skill])).collect(),
         _ => Vec::new(),
     };
+    // BATTLE-UI2 contract 2 (PR7-40 part 2): each planned span's effect chips: a heal's moss heart, then each status
+    // the move applies or grants (planning only)
+    let effects: Vec<(bool, Vec<String>)> = match sel {
+        Some(u) if timeline && planning && w.units[u].is_active() => compiled
+            .iter()
+            .flat_map(|st| st.entries.iter())
+            .map(|e| {
+                let sk = &w.cat.skills[e.skill];
+                let statuses: Vec<String> = [sk.status_effect.clone(), sk.grant_status.clone()].into_iter().filter(|x| !x.is_empty()).fold(Vec::new(), |mut v, x| {
+                    if !v.contains(&x) {
+                        v.push(x);
+                    }
+                    v
+                });
+                (e.item.is_none() && emberwake_battle::skill::heals(sk), if e.item.is_none() { statuses } else { Vec::new() })
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
     // PR5-26 (audit B8): each span's Channel line (the Channel Rest, a marrow version's terms) for its hover card
     let channel_notes: Vec<Option<String>> = match sel {
         Some(u) if s.plan_confirmed => s.resolver.scheduled.iter().filter(|a| a.unit == u).map(|a| action_channel_note(w, a)).collect(),
@@ -230,7 +296,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     let hovered_plate = if live && g.popup.is_none() { g.w.iter().filter(|x| x.rect.contains(mouse.0, mouse.1)).find_map(|x| x.id.strip_prefix("foe.").and_then(|n| n.parse::<usize>().ok())) } else { None };
     let sel_target = sel.and_then(|h| w.round_states.get(&h)).and_then(|r| r.target).is_some_and(|t| matches!(t, ri::RoundTarget::Unit(u) if w.enemies.contains(&u)));
     let first_foe = w.enemies.iter().copied().find(|e| w.units[*e].is_active() && w.grid.pos(*e).is_some());
-    let card_foe = pinned.filter(|p| w.enemies.contains(p)).or(hovered_plate).or(if sel_target { None } else { first_foe });
+    // contract 5 (PR7-40 part 2): while a hero is planning, the card shows its target and stays there (a hovered plate or
+    // a pin does not move it); else the pin, the hover, the first foe
+    let card_foe = if planning && sel_target { None } else { pinned.filter(|p| w.enemies.contains(p)).or(hovered_plate).or(if sel_target { None } else { first_foe }) };
     let round_ap: Vec<(usize, i32)> = if g.round_ap.0 == s.current_round { g.round_ap.1.clone() } else { Vec::new() };
     let data = cx.data.clone();
     let world_id = g.class_world.clone();
@@ -251,7 +319,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
     };
     let intent_of = |u: usize| round_of(u).filter(|_| w.allies.contains(&u) || show_tells);
-    let model = crate::battle_view::model(s, &crate::battle_view::Inputs { sel, card_foe, round_ap: &round_ap, plate_name: &plate_name, full_name: &full_name, intent_of: &intent_of });
+    let model = crate::battle_view::model(s, &crate::battle_view::Inputs { sel, card_foe, round_ap: &round_ap, plate_name: &plate_name, full_name: &full_name, intent_of: &intent_of, open_groups: &g.open_groups });
     // BATTLE-UI2 contract 2: the selected hero's portrait, then "Round 1 of 8" in the display face's gold, the goal and
     // the protect line (gold) under it; UI5: the hero's intent glyph at the title's end
     let mut tx = 8;
@@ -310,8 +378,12 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         (if s.combat_over { "Battle over" } else if s.phase == Phase::Replay { "Round limit" } else { "Resolving" }, Action::NextRound, false)
     };
     let mut fit_w = |text: &str, pad: f32, min: i32| ((ui.p.text_w(text, BODY) + pad).ceil() as i32).max(min);
-    let (mut party_w, mut hero_w) = (fit_w(&party_label, 18.0, 82), fit_w(&hero_label, 18.0, 80));
-    let (auto_w, clear_w, confirm_w) = (fit_w("Auto", 10.0, 34), fit_w("Clear", 10.0, 34), fit_w(label, 12.0, 60));
+    // BATTLE-UI2 contract 2 (PR7-40 part 2): under the round intent the tactics are portrait-and-pennant buttons and
+    // Auto a play button with its "AUTO" tag (classic keeps the text menus)
+    // during playback the speed chips take the tactics' place at their old widths
+    let buttons = timeline && !(aids && !planning);
+    let (mut party_w, mut hero_w) = if buttons { (TACTIC_W, TACTIC_W) } else { (fit_w(&party_label, 18.0, 82), fit_w(&hero_label, 18.0, 80)) };
+    let (auto_w, clear_w, confirm_w) = (if timeline { TACTIC_W } else { fit_w("Auto", 10.0, 34) }, fit_w("Clear", 10.0, 34), fit_w(label, 12.0, 60));
     let bx = 92;
     let blocks = s.def.total_blocks.max(1);
     // INPUT1-AP (AP6): under the round intent the blocks leave the AP gauge its 12 pips and a label ("-<n>") at their
@@ -321,7 +393,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // AP6: with the gauge the blocks give up width down to 20 each (their span labels cut, TEXTFIT1) before the menus
     let bw = ((room - party_w - hero_w) / blocks).clamp(if timeline { 20 } else { 26 }, 34);
     let mut over = blocks * bw + party_w + hero_w - room;
-    while over > 0 && (party_w > 82 || hero_w > 80) {
+    while over > 0 && !buttons && (party_w > 82 || hero_w > 80) {
         let (big, floor) = if party_w - 82 >= hero_w - 80 { (&mut party_w, 82) } else { (&mut hero_w, 80) };
         let cut = over.min(*big - floor);
         *big -= cut;
@@ -467,6 +539,49 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         for b in model.top.impacts.iter().filter(|b| (1..=blocks).contains(*b)) {
             ui.p.fill(Rect::new(bx + (b - 1) * bw, 22, bw - 1, 2), th().foe);
         }
+        // PR7-40 part 2: the selected tile's 2 px gold rim: the hero's latest pick (the one Undo takes back)
+        let picked = if planning { entries.iter().enumerate().rev().find(|(k, e)| !ghosts.get(*k).copied().unwrap_or(false) && e.3 != "REST").map(|(k, _)| k) } else { None };
+        if let Some(e) = picked.and_then(|k| entries.get(k)) {
+            let r = Rect::new(bx + (e.0 - 1) * bw, 6, (e.1 - e.0 + 1) * bw - 1, 16);
+            for edge in [Rect::new(r.x, r.y, r.w, 1), Rect::new(r.x, r.y + r.h - 1, r.w, 1), Rect::new(r.x, r.y, 1, r.h), Rect::new(r.x + r.w - 1, r.y, 1, r.h)] {
+                ui.p.fill(edge, th().gold);
+            }
+        }
+        // contract 2: the effect chips on each span's top edge, centred, half above it (a heal's moss heart, then a chip
+        // per status the move applies)
+        for (k, e) in entries.iter().enumerate() {
+            let Some((heal, statuses)) = effects.get(k) else { continue };
+            let n = *heal as i32 + statuses.len() as i32;
+            if n == 0 {
+                continue;
+            }
+            let r = Rect::new(bx + (e.0 - 1) * bw, 6, (e.1 - e.0 + 1) * bw - 1, 16);
+            const CHIP: i32 = 6;
+            let shown = n.min(((r.w + 1) / (CHIP + 1)).max(1));
+            let mut cx0 = r.x + (r.w - (shown * (CHIP + 1) - 1)) / 2;
+            let cy = r.y - CHIP / 2;
+            let mut tip: Tip = vec![(e.2.clone(), th().gold)];
+            let mut left = shown;
+            if *heal {
+                let cr = Rect::new(cx0, cy, CHIP, CHIP);
+                ui.p.fill(cr, rgba(10, 12, 16, 235));
+                super::plates::heal_heart(&mut ui, cx, cr.inset(1));
+                tip.push(("Heals".into(), crate::tokens::moss()));
+                cx0 += CHIP + 1;
+                left -= 1;
+            }
+            for st in statuses.iter().take(left.max(0) as usize) {
+                let cr = Rect::new(cx0, cy, CHIP, CHIP);
+                let rim = if emberwake_rules::status::is_buff(st) { th().gold } else { crate::tokens::oxblood() };
+                ui.p.panel(cr, rgba(10, 12, 16, 235), rim, 0.0);
+                if !super::plates::icon(&mut ui, cx, &emberwake_content::art::status_icon(st), cr.inset(1), 255) {
+                    ui.p.fill(cr.inset(2), rim);
+                }
+                cx0 += CHIP + 1;
+            }
+            tip.extend(statuses.iter().map(|st| (format!("Applies {}", emberwake_rules::status::label_with_magnitude(st, 0)), th().text)));
+            ui.push(format!("strip.effects.{k}"), "badge", tip.iter().skip(1).map(|t| t.0.clone()).collect::<Vec<_>>().join("; "), Rect::new(r.x + (r.w - (shown * (CHIP + 1) - 1)) / 2, cy, shown * (CHIP + 1) - 1, CHIP), true, false, None, tip);
+        }
     }
     // INPUT1 PB2: a 1 px GOLD frame around the resolving block's column, over the spans
     if let Some(b) = cursor.filter(|b| (1..=blocks).contains(b)) {
@@ -519,12 +634,26 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
         x = end + 2;
     } else {
-        ui.dropdown("strip.party", Rect::new(x, 6, party_w, 16), &party_label, Action::PartyMenu, planning && open, vec![("Party tactic".into(), th().gold), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), th().text)]);
-        x += party_w + 2;
-        ui.dropdown("strip.hero", Rect::new(x, 6, hero_w, 16), &hero_label, Action::HeroMenu, planning && sel.is_some() && open, vec![("Hero tactic".into(), th().gold), ("AI-drafts the selected hero only.".into(), th().text)]);
+        let party_tip: Tip = vec![("Party tactic".into(), th().gold), (party_label.clone(), th().text), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), th().text)];
+        let hero_tip: Tip = vec![("Hero tactic".into(), th().gold), (hero_label.clone(), th().text), ("AI-drafts the selected hero only.".into(), th().text)];
+        if timeline {
+            let party_faces: Vec<usize> = model.party.iter().map(|p| p.unit).take(2).collect();
+            tactic_button(&mut ui, cx, &mut g.mini_faces, &looks, "strip.party", Rect::new(x, 6, party_w, 16), &party_faces, &party_label, Action::PartyMenu, planning && open, party_tip);
+            x += party_w + 2;
+            tactic_button(&mut ui, cx, &mut g.mini_faces, &looks, "strip.hero", Rect::new(x, 6, hero_w, 16), &sel.into_iter().collect::<Vec<_>>(), &hero_label, Action::HeroMenu, planning && sel.is_some() && open, hero_tip);
+        } else {
+            ui.dropdown("strip.party", Rect::new(x, 6, party_w, 16), &party_label, Action::PartyMenu, planning && open, party_tip);
+            x += party_w + 2;
+            ui.dropdown("strip.hero", Rect::new(x, 6, hero_w, 16), &hero_label, Action::HeroMenu, planning && sel.is_some() && open, hero_tip);
+        }
         x += hero_w + 2;
     }
-    ui.button_full("strip.auto", Rect::new(x, 6, auto_w, 16), "Auto", Action::Autoplay, !s.combat_over && open, g.auto, BODY, vec![("Autoplay".into(), th().gold), ("Drafts with the party tactic, confirms and plays rounds until the battle ends. Click again to stop.".into(), th().text)]);
+    let auto_tip: Tip = vec![("Autoplay".into(), th().gold), ("Drafts with the party tactic, confirms and plays rounds until the battle ends. Click again to stop.".into(), th().text)];
+    if timeline {
+        auto_button(&mut ui, Rect::new(x, 6, auto_w, 16), !s.combat_over && open, g.auto, auto_tip);
+    } else {
+        ui.button_full("strip.auto", Rect::new(x, 6, auto_w, 16), "Auto", Action::Autoplay, !s.combat_over && open, g.auto, BODY, auto_tip);
+    }
     x += auto_w + 2;
     ui.button_full("strip.clear", Rect::new(x, 6, clear_w, 16), "Clear", Action::Clear, planning && sel.is_some() && open, false, BODY, vec![(if timeline { "Clears the selected hero's picks (the planner fills the round again); with no picks, empties its auto-filled round (the hero rests)." } else { "Clears the selected hero's steps." }.into(), th().text)]);
     x += clear_w + 2;
@@ -915,11 +1044,17 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                 let tip = unit_tip(s, e, sel, &tells, &rounds, &classes);
                 ui.push(format!("foe.{e}"), "card", format!("{} {}/{} {}", u.name, u.hp, u.max_hp, next), r, true, hover, Some(Action::UnitClick(e)), tip);
             }
-            crate::battle_view::FoeEntry::Group { name, plates } => {
-                super::plates::group_row(&mut ui, cx, &mut g.mini_faces, &looks, name, plates, r);
-                let first = plates.first().map_or(0, |p| p.unit);
-                let tip: Tip = std::iter::once((name.clone(), th().foe)).chain(plates.iter().map(|p| (format!("{} {}/{}", p.name, p.hp, p.max_hp), th().text))).collect();
-                ui.push(format!("foe.group.{k}"), "card", name.clone(), r, true, hover, Some(Action::UnitClick(first)), tip);
+            crate::battle_view::FoeEntry::Group { key, name, plates, open } => {
+                // contract 4 (PR7-40 part 2): a click opens the group into compact plates; the open group's header closes it
+                let mut tip: Tip = std::iter::once((name.clone(), th().foe)).chain(plates.iter().map(|p| (format!("{} {}/{}", p.name, p.hp, p.max_hp), th().text))).collect();
+                if *open {
+                    super::plates::group_header(&mut ui, name, r);
+                    tip.push(("Click: close the group".into(), th().dim));
+                } else {
+                    super::plates::group_row(&mut ui, cx, &mut g.mini_faces, &looks, name, plates, r);
+                    tip.push(("Click: open the group".into(), th().dim));
+                }
+                ui.push(format!("foe.group.{k}"), "card", name.clone(), r, true, hover, Some(Action::FoeGroup(key.clone())), tip);
             }
         }
         y += h + super::plates::PLATE_GAP;
