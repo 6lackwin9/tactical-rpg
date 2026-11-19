@@ -1656,6 +1656,12 @@ pub fn ground_patch_full(p: &Dict) -> Dict {
 pub const PROP_KEYS: [&str; 9] = ["id", "art", "x", "y", "w", "h", "layer", "variant", "flip"];
 /// REVEAL1 1.2: a roof prop's indoor zone (`layer` "roof"); stored after `PROP_KEYS` only when set (`omit_default`).
 pub const PROP_ROOF_OF: &str = "roof_of";
+/// BUNKS1: the id prefix of a hub's bunk prop (`bunk_1`, `bunk_2`, ...).
+pub const BUNK_PROP_PREFIX: &str = "bunk_";
+/// BUNKS-UPGRADE-PROPS1: the bunk prop of the same map a prop holds the place of (`bunk_<n>`; "" = none): the prop
+/// shows only while that bunk is past the hub's bunk cap, and the bunk only once the cap reaches it (the reverse of the
+/// bunk's cap gate); it may share that bunk's tiles. Stored after `PROP_KEYS` only when set.
+pub const PROP_UNTIL_BUNK: &str = "until_bunk";
 /// REVEAL1 1.1: a zone legend entry's optional keys beside `id` and `kind`, with their defaults, stored only when set.
 pub const ZONE_INDOOR: &str = "indoor";
 pub const ZONE_WALL_SET: &str = "wall_set";
@@ -1696,6 +1702,9 @@ pub fn map_without_reveal_defaults(t: &mut Dict) {
             if let Value::Object(o) = p {
                 if o.get(PROP_ROOF_OF).is_some_and(|v| v.as_str() == Some("")) {
                     o.shift_remove(PROP_ROOF_OF);
+                }
+                if o.get(PROP_UNTIL_BUNK).is_some_and(|v| v.as_str() == Some("")) {
+                    o.shift_remove(PROP_UNTIL_BUNK);
                 }
             }
         }

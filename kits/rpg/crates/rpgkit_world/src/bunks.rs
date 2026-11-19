@@ -13,7 +13,9 @@ use crate::state::{GameState, UnitState};
 use aegis_core::json::{self, Dict};
 
 /// The id prefix of a bunk prop (`bunk_1`, `bunk_2`, ...).
-pub const BUNK_PROP_PREFIX: &str = "bunk_";
+pub const BUNK_PROP_PREFIX: &str = rpgkit_content::source::BUNK_PROP_PREFIX;
+/// BUNKS-UPGRADE-PROPS1: a prop's key naming the bunk prop whose place it holds until the bunk cap reaches it.
+pub const UNTIL_BUNK: &str = rpgkit_content::source::PROP_UNTIL_BUNK;
 /// The id prefix of a social table prop.
 pub const TABLE_PROP_PREFIX: &str = "table";
 /// The id prefix of a map anchor that is an idle spot at the tables (before the cells around the tables).
@@ -106,6 +108,41 @@ pub fn bunks(gs: &GameState, t: &Dict) -> Vec<Bunk> {
             Bunk { prop: json::s(&p, "id"), art: json::s(&p, "art"), foot, member, state }
         })
         .collect()
+}
+
+/// BUNKS-UPGRADE-PROPS1: the ids of the bunk props of map `t` the hub's bunk cap reaches (the first `bunk_cap`, in
+/// number order).
+pub fn open_bunk_ids(gs: &GameState, t: &Dict) -> Vec<String> {
+    let cap = crate::roster::bunk_cap(gs).max(0) as usize;
+    bunk_props(t).iter().take(cap).map(|p| json::s(p, "id")).collect()
+}
+
+/// BUNKS-UPGRADE-PROPS1: whether prop `p` of map `t` shows for game `gs`: in a hub, a prop holding a bunk's place
+/// (`until_bunk`) only while that bunk is past the bunk cap, and a bunk past the cap whose place a prop holds not yet
+/// (the cap's upgrade swaps them); every other prop, and every prop outside a hub, shows.
+pub fn prop_shown(gs: &GameState, t: &Dict, p: &Dict) -> bool {
+    if !is_hub(gs, t) {
+        return true;
+    }
+    let open = open_bunk_ids(gs, t);
+    let held = json::s(p, UNTIL_BUNK);
+    if !held.is_empty() {
+        return !open.contains(&held);
+    }
+    let id = json::s(p, "id");
+    let is_held = json::aget(t, "props").iter().filter_map(|o| o.as_object()).any(|o| json::s(o, UNTIL_BUNK) == id);
+    !(is_held && id.starts_with(BUNK_PROP_PREFIX) && !open.contains(&id))
+}
+
+/// BUNKS-UPGRADE-PROPS1: map `t` with only the props that show (`prop_shown`); None when every prop shows.
+pub fn shown_props(gs: &GameState, t: &Dict) -> Option<Dict> {
+    let props = json::aget(t, "props");
+    let kept: Vec<serde_json::Value> = props.iter().filter(|p| p.as_object().is_none_or(|o| prop_shown(gs, t, o))).cloned().collect();
+    (kept.len() != props.len()).then(|| {
+        let mut out = t.clone();
+        out.insert("props".into(), serde_json::Value::Array(kept));
+        out
+    })
 }
 
 /// BK3: the condition words of the hover and the card.
