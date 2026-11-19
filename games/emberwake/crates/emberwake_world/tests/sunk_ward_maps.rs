@@ -449,7 +449,8 @@ fn indoor_zones_are_entered_on_foot_and_fade_their_own_roofs() {
 }
 
 /// PR5-58 (1), PR7-23 (HUB-LAYOUT1): the `38 x 24` 7-room `sluice_undercroft` hub carries indoor + wall_set room
-/// styles (the Art/UI layout `art_src/region_maps/sluice_undercroft.json`: the hollows dormitory in stone) with `npc_c`
+/// styles (the Art/UI layout `art_src/region_maps/sluice_undercroft.json`; PR7-36 / AI-23: basin, hearth, hall, entry and
+/// hollows in the `drain_brick` interior walls, the crypts in stone) with `npc_c`
 /// (`talia_rusk`) at `(15, 11)` and `lore_a` (`ivo`) at `(12, 11)` in the hall, all reachable from `spawn` and `gate_in`.
 #[test]
 fn hub_7_rooms_styles_talia_and_ivo_stay_reachable() {
@@ -460,11 +461,11 @@ fn hub_7_rooms_styles_talia_and_ivo_stay_reachable() {
     assert_eq!(explore::size_of(&t), (38, 24));
     for (zone, want_set) in [
         ("slab", "interior_plaster"),
-        ("hollows", "interior_stone"),
-        ("basin", "interior_stone"),
-        ("hearth", "interior_stone"),
-        ("hall", "interior_stone"),
-        ("entry", "interior_stone"),
+        ("hollows", "drain_brick"),
+        ("basin", "drain_brick"),
+        ("hearth", "drain_brick"),
+        ("hall", "drain_brick"),
+        ("entry", "drain_brick"),
         ("crypts", "interior_stone"),
     ] {
         assert!(explore::zone_indoor(&t, zone), "hub zone '{zone}' is indoor");

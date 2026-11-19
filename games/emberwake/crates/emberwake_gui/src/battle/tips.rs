@@ -242,6 +242,27 @@ pub(crate) fn kind_color(kind: &str) -> Rgba {
     }
 }
 
+/// PR7-36 (ART-12): the intent line's height on a skill icon (logical px).
+pub(super) const ICON_LINE: i32 = 2;
+
+/// PR7-36 (ART-12, STYLE_BIBLE 4): the intent colour as a thin line along the bottom of a skill icon's rect `icon`, the
+/// tile itself staying slate.
+pub(super) fn icon_line(p: &mut Painter, icon: Rect, col: Rgba, alpha: u8) {
+    let a = (col[3] as u16 * alpha as u16 / 255) as u8;
+    p.fill(Rect::new(icon.x, icon.y + icon.h - ICON_LINE, icon.w, ICON_LINE), rgba(col[0], col[1], col[2], a));
+}
+
+/// PR7-36 (ART-12): a command kind's intent line colour: its `kind_color` brightened by half (as the Field ring), so it
+/// reads over the icon and on the block of the same colour; None for Rest.
+pub(super) fn kind_line_color(kind: &str) -> Option<Rgba> {
+    if kind == "REST" {
+        return None;
+    }
+    let c = kind_color(kind);
+    let up = |v: u8| (v as u16 * 3 / 2).min(255) as u8;
+    Some(rgb(up(c[0]), up(c[1]), up(c[2])))
+}
+
 /// VISCLAR1-B: a strip block's icon square with its border, in old units (the 16-high block keeps 1 above and below).
 pub(super) const BLOCK_ICON: i32 = 14;
 const BLOCK_ICON_EDGE: i32 = 1;
@@ -302,7 +323,8 @@ pub(super) fn text_outlined(p: &mut Painter, x: f32, y: f32, s: &str, size: f32,
 /// VISCLAR1-B (mock C): a planned block's icon (`chain`, the first file the layers hold) with its thin light border and
 /// its name in near-white with a dark outline. A ghost shows them faded and its name dim; a dim Rest has no border and no
 /// outline. Returns what it drew for the agent link.
-pub(super) fn draw_block_label(ui: &mut aegis_ui::ui::Ui<super::Action>, art: &mut aegis_ui::art::Art, r: Rect, name: &str, chain: &[String], look: BlockLook) -> serde_json::Value {
+/// PR7-36 (ART-12): `line` is the intent colour of a thin bottom line over the icon (None: no line).
+pub(super) fn draw_block_label(ui: &mut aegis_ui::ui::Ui<super::Action>, art: &mut aegis_ui::art::Art, r: Rect, name: &str, chain: &[String], look: BlockLook, line: Option<Rgba>) -> serde_json::Value {
     let icon_rel = art.first_rel(chain);
     let px = (((BLOCK_ICON - 2 * BLOCK_ICON_EDGE) as f32) * ui.p.v.s).round().max(1.0) as i32;
     let img = icon_rel.as_deref().and_then(|rel| art.image(rel, px, px));
@@ -310,7 +332,11 @@ pub(super) fn draw_block_label(ui: &mut aegis_ui::ui::Ui<super::Action>, art: &m
     let label = block_label(r, img.is_some(), name_w);
     if let (Some(sq), Some(img)) = (label.icon, img) {
         let inner = Rect::new(sq.x + BLOCK_ICON_EDGE, sq.y + BLOCK_ICON_EDGE, sq.w - 2 * BLOCK_ICON_EDGE, sq.h - 2 * BLOCK_ICON_EDGE);
-        ui.p.image_alpha(img, inner, if look == BlockLook::Ghost { BLOCK_GHOST_ALPHA } else { 255 });
+        let alpha = if look == BlockLook::Ghost { BLOCK_GHOST_ALPHA } else { 255 };
+        ui.p.image_alpha(img, inner, alpha);
+        if let Some(col) = line.filter(|_| look != BlockLook::Rest) {
+            icon_line(&mut ui.p, inner, col, alpha);
+        }
         let edge = match look {
             BlockLook::Chosen => BLOCK_ICON_LIGHT,
             BlockLook::Ghost => with_alpha(BLOCK_ICON_LIGHT, BLOCK_GHOST_ALPHA),

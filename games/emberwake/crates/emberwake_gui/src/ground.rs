@@ -72,6 +72,8 @@ impl Picture {
                 under_colour: self.under_colours[i].unwrap_or([0, 0, 0, 0]),
                 clamp_water: def.is_water(),
                 stone_rim: def.is_water(),
+                // PR7-36 (ART-20): a 1 px dark line where two floor types meet (water keeps its stone rim)
+                contact: !def.is_water(),
                 marks: Vec::new(),
                 marks_per_100: 0,
             })
@@ -323,6 +325,7 @@ mod tests {
         assert!(close(layers[0].wear, 0.0) && close(layers[0].tone, 0.04), "the water's");
         assert_eq!(layers[0].colour, [0x10, 0x20, 0x30, 255], "opaque");
         assert!(layers[0].clamp_water && layers[0].stone_rim && !layers[1].clamp_water && !layers[1].stone_rim);
+        assert!(!layers[0].contact && layers[1].contact, "PR7-36 (ART-20): land draws the contact line, water its rim");
         assert!(close(layers[1].patchy, 0.0) && layers[1].under_tex.is_none() && layers[1].under_colour[3] == 0);
     }
 
