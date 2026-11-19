@@ -425,3 +425,145 @@ pub fn trace(w: &World, intents: &[Intent]) -> serde_json::Value {
             .collect(),
     )
 }
+
+/// PR7-41 (PT-20): the round as it will run: the scheduled actions `sched` (the enemies', drafted first) with `plan`'s
+/// entries booked after them, as `Plan::commit` books them on confirm (planning reads the plan, not the resolver).
+pub fn planned_schedule(w: &World, sched: &[ScheduledAction], plan: &Plan) -> Vec<ScheduledAction> {
+    let mut res = crate::resolver::Resolver::new(w.total_blocks, 0);
+    res.scheduled = sched.to_vec();
+    plan.commit(w, &mut res);
+    res.scheduled
+}
+
+/// PT-20: the guard mitigation `c` has at `block`, as `Resolver::prepare_block` raises it: the largest of each live
+/// Defend that has started by then (S1.2-S4: held from the wind-up start to the round's end; a broken guard gives
+/// none) and the held guard or `guard` status (`trigger::held_at`). Read only.
+pub fn guard_at(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32) -> f64 {
+    let running = sched.iter().filter(|a| a.unit == c && !a.cancelled && a.start <= block).filter_map(|a| match &a.command.kind {
+        CmdKind::Defend { mitigation, guard_broken: false, .. } => Some(*mitigation),
+        _ => None,
+    });
+    running.fold(crate::trigger::held_at(w, c, block).unwrap_or(0.0), f64::max)
+}
+
+/// PT-20: the stance `c` holds when a hit lands at `block`, as the resolver changes it: each live action's start stance
+/// from its start block on (`Resolver::begin_actions`), each end stance (a flow) once its impact has passed
+/// (`apply_combo`); else the stance it holds now.
+pub fn stance_at(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32) -> rpgkit_rules::unit::Stance {
+    let mut changes: Vec<(i32, i32, rpgkit_rules::unit::Stance)> = Vec::new();
+    for a in actions_of(c, sched) {
+        if let Some(st) = a.command.stance_on_start.filter(|_| a.start <= block) {
+            changes.push((a.start, 0, st));
+        }
+        if let Some(st) = a.command.stance_on_end.filter(|_| a.impact < block) {
+            changes.push((a.impact, 1, st));
+        }
+    }
+    changes.sort_by_key(|x| (x.0, x.1));
+    changes.last().map_or(w.units[c].stance, |x| x.2)
+}
+
+/// PT-20: one hit a scheduled action lands on a unit, forecast by the one convention every damage number on the battle
+/// screen follows: per hit, at the block it lands, with the target's guard at that block (no crit roll).
+#[derive(Debug, Clone, PartialEq)]
+pub struct HitOn {
+    /// The action's tell name (`skill_name`).
+    pub skill: String,
+    /// The block the hit lands (the action's impact).
+    pub block: i32,
+    pub damage: i32,
+    /// The target guards at that block (a guard-bypassing hit counts it as unguarded).
+    pub guarded: bool,
+    /// The action's place among its unit's live actions in block order (`actions_of`; 0 = its first, the tell's
+    /// line), so a screen can keep an unrevealed plan's later actions hidden; `hit_on` leaves it 0.
+    pub nth: usize,
+}
+
+/// PT-20, PT-17: where `c` stands when a hit lands at `block`: the end tile of its last live move that lands earlier
+/// (`command::walk_preview`), else where it stands now. `sched` is the round as it will run (`planned_schedule` while
+/// planning), so a party member's planned moves count.
+pub fn position_at(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32) -> V2 {
+    let mut at = w.grid.pos(c).unwrap_or(NO_CELL);
+    for a in actions_of(c, sched).into_iter().filter(|a| a.impact < block) {
+        if let CmdKind::Walk { path, .. } = &a.command.kind {
+            // each move steps on from where the earlier ones end (the preview's start is the chain's tile)
+            if let Some(end) = crate::command::walk_preview(w, c, path, at).last() {
+                at = *end;
+            }
+        }
+    }
+    at
+}
+
+/// PR7-41 (PT-17): the tiles scheduled area action `a` strikes when it lands, the one area its tell marks. A tile
+/// area (no target) strikes the tiles fixed when it was planned; a shaped Assault row (IR5, IR7, IR17: locked on its
+/// target) is centred where the target stands at the impact, read from where its user stands then (`position_at`, as
+/// `Command::execute` re-reads it). Its planned tiles when the target is gone or off the grid; empty for any other
+/// action. Read only.
+pub fn area_cells(w: &World, sched: &[ScheduledAction], a: &ScheduledAction) -> Vec<V2> {
+    let CmdKind::Area { cells, target, shape, .. } = &a.command.kind else { return Vec::new() };
+    let Some(t) = target.filter(|&t| w.units.get(t).is_some_and(|u| u.is_active()) && w.has(t)) else { return cells.clone() };
+    let (from, to) = (position_at(w, sched, a.unit, a.impact), position_at(w, sched, t, a.impact));
+    if from == NO_CELL || to == NO_CELL {
+        return cells.clone();
+    }
+    crate::skill::shape_cells(*shape, from, to).into_iter().filter(|c| w.grid.is_valid(*c) && *c != from).collect()
+}
+
+/// PT-20: the hit scheduled action `a` lands on `t` (an Attack on it, or an Area whose tiles hold it or that is
+/// locked on it), forecast as `HitOn`; None for any other action or a target it misses. The damage follows the
+/// resolver's hit (`Command::land`): the command's power, the flank and exploit factors, the distance potency and cover
+/// from the tile the attacker stands on then (`position_at`), both units' stances then (`stance_at`), armour
+/// piercing and `guard_at` the impact (left out for a guard-bypassing hit). `sched` is the round as it will run
+/// (`planned_schedule` while planning).
+pub fn hit_on(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: UnitId) -> Option<HitOn> {
+    use rpgkit_rules::damage::{self, HitInput};
+    let src = a.unit;
+    if a.cancelled || src == t || !w.has(t) {
+        return None;
+    }
+    let from = position_at(w, sched, src, a.impact);
+    let (mult, offhand, ranged) = match &a.command.kind {
+        CmdKind::Attack { target, skill_mult, use_offhand, .. } if target.or(w.units[src].active_target) == Some(t) && *skill_mult > 0.0 => (*skill_mult, *use_offhand, w.units[src].attack_range > 1 && !use_offhand),
+        CmdKind::Area { skill_mult, target, splash, affects, .. } if *skill_mult > 0.0 && crate::skill::affects_unit(*affects, w.friends_of(src).contains(&t)) => {
+            // PT-17: the tiles it strikes when it lands, the target where it stands then (BIGUNIT1 BU9: any of its cells)
+            let struck = area_cells(w, sched, a);
+            let at = position_at(w, sched, t, a.impact);
+            if !w.cells_at(t, at).iter().any(|c| struck.contains(c)) {
+                return None;
+            }
+            (*skill_mult * if target.is_none_or(|p| p == t) { 1.0 } else { *splash }, false, w.units[src].attack_range > 1)
+        }
+        _ => return None,
+    };
+    let flank = round_intent::flank_bonus_from(w, src, from, t);
+    let exploit = crate::skill::exploit_match_by(&a.command.exploit, &w.units[t], &[], flank, &w.ruleset).1;
+    let mut mult = mult * exploit * crate::command::flank_power(w, flank);
+    let dist = if from != NO_CELL { w.dist_at(src, from, t) } else { 0 };
+    let mut distance = 0;
+    if dist > 0 {
+        match w.cat.skill(&a.command.skill) {
+            Some(s) => {
+                let (base, at) = (w.units[src].potency_for_skill(s), w.units[src].potency_for_skill_at(s, ranged, dist));
+                if (at - base).abs() > 1e-12 && base.abs() > 1e-12 {
+                    mult *= at.max(0.0) / base;
+                }
+            }
+            None => distance = dist,
+        }
+    }
+    let cover = if from == NO_CELL { 0.0 } else { crate::command::cover_for(&w.grid, from, position_at(w, sched, t, a.impact), ranged) };
+    let guard = if a.command.ignore_guard { 0.0 } else { guard_at(w, sched, t, a.impact) };
+    let mut target = w.units[t].clone();
+    target.stance = stance_at(w, sched, t, a.impact);
+    // the guard joins the cover in the one guard-and-cover term (`damage::compute` adds them before its cap)
+    let input = HitInput { ranged, offhand, skill_mult: mult, cover: cover + guard, include_guard: false, ignore_armor: a.command.pierces(w), distance, attacker_stance: Some(stance_at(w, sched, src, a.impact)), ..HitInput::default() };
+    let damage = damage::compute(&w.units[src], &target, input).final_dmg;
+    Some(HitOn { skill: skill_name(w, &a.command), block: a.impact, damage, guarded: guard > 0.0, nth: 0 })
+}
+
+/// PT-20: every hit `attacker`'s live scheduled actions land on `t` this round, in block order (`hit_on`), each with
+/// its action's place (`HitOn::nth`).
+pub fn hits_on(w: &World, sched: &[ScheduledAction], attacker: UnitId, t: UnitId) -> Vec<HitOn> {
+    actions_of(attacker, sched).into_iter().enumerate().filter_map(|(n, a)| hit_on(w, sched, a, t).map(|h| HitOn { nth: n, ..h })).collect()
+}

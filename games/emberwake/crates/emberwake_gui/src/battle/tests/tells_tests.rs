@@ -206,3 +206,41 @@ fn classic_cards_and_intel_are_unchanged() {
     assert!(b.w.iter().all(|x| !x.id.ends_with(".badges") && x.id != "intel.unit"));
     assert_eq!(widget(&b, "strip.title").rect.w, 80);
 }
+
+/// PR7-41 (PT-20): the forecast line names the blocks the hits land (never a move's block) and each hit by the kit's
+/// one convention (`intent::hits_on`: per hit, at the block it lands, with guard); an unrevealed plan names its first
+/// hit only; a first action on the hero with no hit reads "Heads for you".
+#[test]
+fn the_forecast_names_the_landing_block_and_each_hit() {
+    use emberwake_battle::intent::HitOn;
+    let (_cx, _g, b) = arena(Some(TIMELINE), false);
+    let w = &s(&b).w;
+    let mut t = s(&b).enemy_intents().into_iter().next().expect("a tell");
+    let h = w.allies[0];
+    t.line.target = Some(h);
+    t.line.blocks = (1, 2);
+    let hit = |block: i32, damage: i32, guarded: bool| HitOn { skill: "Thrust".into(), block, damage, guarded, nth: 1 };
+    let nth = |h: HitOn, nth: usize| HitOn { nth, ..h };
+    assert_eq!(intent_text::forecast(&t, h, &[]).as_deref(), Some("Heads for you in B1-2"));
+    assert_eq!(intent_text::forecast(&t, h, &[hit(4, 23, true)]).as_deref(), Some("Targets you in B4: Thrust, about 23 (guarded)"));
+    assert_eq!(intent_text::forecast(&t, h, &[hit(3, 22, false), hit(5, 22, false)]).as_deref(), Some("Targets you in B3, B5: Thrust, about 22 a hit"));
+    assert_eq!(intent_text::forecast(&t, h, &[hit(3, 22, false), hit(5, 30, true)]).as_deref(), Some("Targets you in B3, B5: B3 Thrust about 22; B5 Thrust about 30 (guarded)"));
+    assert_eq!(intent_text::forecast(&t, w.enemies[0], &[]), None, "not the record's target, no hit");
+    t.revealed = false;
+    assert_eq!(intent_text::forecast_hits(&t, h, vec![hit(3, 22, false), nth(hit(5, 22, false), 2)]), vec![hit(3, 22, false)], "an unrevealed plan names the blow its move leads to");
+    // review: action 2 hits someone else, action 3 hits the hero: the hidden later action stays hidden
+    assert!(intent_text::forecast_hits(&t, h, vec![nth(hit(5, 22, false), 2)]).is_empty(), "a hit of a later action stays hidden");
+    assert_eq!(intent_text::forecast_hits(&t, w.enemies[0], vec![nth(hit(2, 22, false), 0), hit(3, 22, false)]), vec![nth(hit(2, 22, false), 0)], "off-target: the first action's own hit");
+    assert!(intent_text::forecast_hits(&t, w.enemies[0], vec![hit(3, 22, false)]).is_empty(), "off-target: the next action's hit stays hidden");
+    t.revealed = true;
+    assert_eq!(intent_text::forecast_hits(&t, h, vec![hit(3, 22, false), nth(hit(5, 22, false), 2)]).len(), 2, "revealed: every hit");
+    // the hover card's line on the live round: the blocks the kit's hits land
+    for r in s(&b).enemy_intents() {
+        let Some(target) = r.line.target.filter(|x| w.allies.contains(x)) else { continue };
+        let hits = intent_text::forecast_hits(&r, target, crate::battle::tips::hits_on_hero(s(&b), r.unit, target));
+        let line = intent_text::forecast(&r, target, &hits).unwrap();
+        for x in &hits {
+            assert!(line.contains(&format!("B{}", x.block)) && x.block >= r.line.blocks.0, "{line} {hits:?}");
+        }
+    }
+}

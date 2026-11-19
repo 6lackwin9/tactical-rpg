@@ -172,7 +172,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                 let chain = if e.item.is_some() { vec![kind_icon("ITEM")] } else { emberwake_content::art::skill_icon_chain(sk.family_id(), &sk.kind) };
                 // PK1-S2c (PK1 4.3 item 6): a marrow version's name with the marrow mark
                 let name = if e.item.is_some() { sk.name.clone() } else { skill_text(pw, u, e.skill) };
-                ((e.start_block, e.end_block(pw), name, sk.kind.clone(), e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), e.total_ap(), e.est_damage), chain)
+                ((e.start_block, e.end_block(pw), name, sk.kind.clone(), e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), e.total_ap(), pplan.forecast_entry(pw, &s.resolver.scheduled, u, e)), chain)
             })
             .unzip(),
         _ => (Vec::new(), Vec::new()),
