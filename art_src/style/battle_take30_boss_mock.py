@@ -117,10 +117,9 @@ def intent_rows(img, x0, x1, y, sel="kaelen", span_left=160, pips=6, next_span=4
     d.text((sx, y + 3), "Total", font=T12.TINY, fill=DIM)
     d.text((sx, r1 + 1), f"-{mine_tot}", font=B.MONO, fill=B.IMPACT)
     d.text((sx, r2 + 1), f"-{party_tot - (mine_tot if others else 0)}", font=B.MONO, fill=B.IMPACT)
-    if others:
-        d.text((sx + 46, r1 + 3), f"Party -{party_tot}", font=T12.TINY, fill=B.PARCH)
+    # user 18:59: no party total here (the boss bar's planned loss already says it)
     if ended is None:
-        d.text((sx + 46, r2 + 3), f"{left} to phase 2", font=T12.TINY, fill=B.GOLD)
+        pass                                   # user 18:59: no "N to phase 2" (the HP bar shows it)
     else:
         d.text((sx + 46, r1 + 3 if not others else r2 - 8), f"Ends block {ended + 1}", font=T12.TINY, fill=B.GOLD)
         d.text((sx + 46, r2 + 3), "Ph. 2 next round", font=T12.TINY, fill=B.GOLD)
