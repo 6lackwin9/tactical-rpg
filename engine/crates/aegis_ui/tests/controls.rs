@@ -154,3 +154,36 @@ fn the_rebind_flow_asks_before_a_swap() {
     r.reset(&mut s);
     assert_eq!((s, r.capturing()), (json!({"volume": 3}), false));
 }
+
+/// A pad button for an action with no button is refused when another listed action holds it (a swap would leave that
+/// one with none): the rebind keeps waiting and nothing is written. Two actions that both have buttons ask and swap.
+#[test]
+fn a_pad_swap_needs_a_button_to_trade() {
+    let (mut r, mut s) = (Rebind::default(), json!({}));
+    r.start(1);
+    assert_eq!(r.input(&ACTIONS, &mut s, Input::Pad(Pad::South)), Outcome::Refused, "Undo has no button; Pad A is Confirm's");
+    assert_eq!((r.step, r.refused), (Step::Waiting(1), Some(2)));
+    assert_eq!(s, json!({}));
+    assert_eq!(r.input(&ACTIONS, &mut s, Input::Pad(Pad::West)), Outcome::Bound, "Pad X gives no listed action: taken");
+    assert_eq!(Controls::from_settings(&s).0.pad(Pad::West), Key::Char('z'));
+    // Undo now has Pad X: Pad A is a swap with Confirm, asked first
+    r.start(1);
+    assert_eq!(r.input(&ACTIONS, &mut s, Input::Pad(Pad::South)), Outcome::Asked);
+    assert_eq!(r.step, Step::Clash { at: 1, input: Input::Pad(Pad::South), with: 2 });
+    assert_eq!(r.swap(&ACTIONS, &mut s), Outcome::Bound);
+    let c = Controls::from_settings(&s).0;
+    assert_eq!((c.pad(Pad::South), c.pad(Pad::West)), (Key::Char('z'), Key::Enter));
+}
+
+/// In the swap question a raw Esc cancels even when the map makes Esc something else; Reset keeps the other settings'
+/// order.
+#[test]
+fn raw_esc_cancels_the_question_and_reset_keeps_the_order() {
+    let mut s = json!({"a": 1, "controls": {"keys": {"esc": "q"}}, "b": 2, "c": 3});
+    let mut r = Rebind::default();
+    r.start(0);
+    assert_eq!(r.input(&ACTIONS, &mut s, Input::Key(Key::Char('z'))), Outcome::Asked);
+    assert_eq!(r.input(&ACTIONS, &mut s, Input::Key(Key::Esc)), Outcome::Cancelled);
+    r.reset(&mut s);
+    assert_eq!(s.as_object().unwrap().keys().collect::<Vec<_>>(), ["a", "b", "c"]);
+}

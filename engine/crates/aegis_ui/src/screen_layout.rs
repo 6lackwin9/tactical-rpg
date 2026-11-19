@@ -950,7 +950,7 @@ fn default_field<A: Clone>(ui: &mut Ui<A>, view: &View, name: &str, f: &Field, w
     match f {
         Field::Text(_) | Field::Number(_) | Field::Flag(_) => {
             let lines = f.as_text().map_or(1, |t| ui.p.wrap(&t, m.body, w as f32).len().max(1));
-            (Component::TextBlock { text: name }, line + ((lines - 1) as f32 * m.body * 1.35).ceil() as i32)
+            (Component::TextBlock { text: name }, line + ((lines - 1) as f32 * m.body * crate::ui::PARA_LINE).ceil() as i32)
         }
         Field::Picture(_) => (Component::Portrait { picture: name }, m.u(32)),
         Field::Meter { .. } => (Component::BarMeter { meter: name, label: None }, m.u(5)),

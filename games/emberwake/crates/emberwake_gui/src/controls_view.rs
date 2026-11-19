@@ -82,7 +82,10 @@ pub fn view(settings: &Value, rebind: &Rebind) -> View {
     let label = |i: usize| ACTIONS.get(i).map_or("", |a| a.label);
     let prompt = match rebind.step {
         Step::Idle => "Click an action, then press its new key or pad button. Esc cancels.".to_string(),
-        Step::Waiting(at) => format!("Press the new key or pad button for {}. Esc cancels.", label(at)),
+        Step::Waiting(at) => match rebind.refused {
+            Some(with) => format!("{} has no pad button to trade; rebind {} first. Press a key, or Esc to cancel.", label(at), label(with)),
+            None => format!("Press the new key or pad button for {}. Esc cancels.", label(at)),
+        },
         Step::Clash { at, input, with } => format!("{} is already {}. Swap it to {}? Enter swaps, Esc cancels.", input_label(input), label(with), label(at)),
     };
     let rows = ACTIONS
@@ -138,7 +141,10 @@ pub fn state(rebind: &Rebind) -> Value {
     let id = |i: usize| ACTIONS.get(i).map_or("", |a| a.id);
     match rebind.step {
         Step::Idle => json!({"step": "idle"}),
-        Step::Waiting(at) => json!({"step": "waiting", "action": id(at)}),
+        Step::Waiting(at) => match rebind.refused {
+            Some(with) => json!({"step": "waiting", "action": id(at), "refused": id(with)}),
+            None => json!({"step": "waiting", "action": id(at)}),
+        },
         Step::Clash { at, input, with } => json!({"step": "clash", "action": id(at), "with": id(with), "input": input_label(input)}),
     }
 }
@@ -202,10 +208,14 @@ mod tests {
         assert!(r.capturing());
         assert_eq!(r.input(&ACTIONS, &mut s, Input::Key(Key::Esc)), Outcome::Cancelled);
         assert_eq!((s.clone(), r.capturing()), (before, false));
-        // a pad button: Pad Y gives Interact; Next control takes Interact's old (no) button
+        // a pad button for Interact (no button to trade): Pad Y is Next control's, so it is refused and the rebind waits
         click(&mut r, &mut s, REBIND, Some("interact"));
-        assert_eq!(r.input(&ACTIONS, &mut s, Input::Pad(Pad::North)), Outcome::Asked, "Pad Y gives Tab (Next control) by default");
-        assert_eq!(state(&r)["with"], json!("focus_next"));
+        let before = s.clone();
+        assert_eq!(r.input(&ACTIONS, &mut s, Input::Pad(Pad::North)), Outcome::Refused, "Pad Y gives Tab (Next control) by default");
+        assert_eq!(state(&r), json!({"step": "waiting", "action": "interact", "refused": "focus_next"}));
+        assert!(matches!(view(&s, &r).get("prompt"), Some(Field::Text(t)) if t.contains("no pad button to trade") && t.contains("Next control")));
+        assert_eq!(s, before, "nothing written");
+        assert_eq!(r.input(&ACTIONS, &mut s, Input::Key(Key::Esc)), Outcome::Cancelled);
     }
 
     /// An input another action holds asks first; Swap moves it and the other action takes the old one; Cancel leaves the

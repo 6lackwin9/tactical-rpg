@@ -284,6 +284,9 @@ pub enum Outcome {
     Ignored,
     /// Taken, nothing changed (a key a rebind may not take, or a key the swap question does not answer).
     Held,
+    /// Taken and refused: a pad button another listed action holds, for an action with no button to trade
+    /// (`Rebind::refused` names that action); the rebind still waits.
+    Refused,
     Cancelled,
     /// The input is another action's: the swap question is open.
     Asked,
@@ -297,15 +300,20 @@ pub enum Outcome {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Rebind {
     pub step: Step,
+    /// The listed action whose pad button the last input asked for and could not take (the action waiting has no
+    /// button to give it in trade); cleared by the next input, start or cancel.
+    pub refused: Option<usize>,
 }
 
 impl Rebind {
     pub fn start(&mut self, at: usize) {
         self.step = Step::Waiting(at);
+        self.refused = None;
     }
 
     pub fn cancel(&mut self) {
         self.step = Step::Idle;
+        self.refused = None;
     }
 
     /// A rebind is open: the shell's raw input comes here first.
@@ -322,6 +330,9 @@ impl Rebind {
     /// A raw input while a rebind is open (see `Outcome`); `settings` is the whole settings object.
     pub fn input(&mut self, actions: &[Action], settings: &mut Value, input: Input) -> Outcome {
         let c = Controls::from_settings(settings).0;
+        if self.step != Step::Idle {
+            self.refused = None;
+        }
         match self.step {
             Step::Idle => Outcome::Ignored,
             Step::Waiting(_) if input == Input::Key(Key::Esc) => {
@@ -334,6 +345,11 @@ impl Rebind {
                 Outcome::Cancelled
             }
             Step::Waiting(at) => match Self::clash(&c, actions, at, input) {
+                // a swap would leave `with` with no pad button: refused, rebind `with` first
+                Some(with) if matches!(input, Input::Pad(_)) && c.pad_for(actions[at].key).is_none() => {
+                    self.refused = Some(with);
+                    Outcome::Refused
+                }
                 Some(with) => {
                     self.step = Step::Clash { at, input, with };
                     Outcome::Asked
@@ -341,6 +357,11 @@ impl Rebind {
                 None => self.bind(actions, settings, at, input),
             },
             // The question takes Enter (or what gives Enter: the pad's confirm) as Swap, Esc (or the pad's back) as Cancel.
+            // A raw Esc always cancels, as the prompt says.
+            Step::Clash { .. } if input == Input::Key(Key::Esc) => {
+                self.cancel();
+                Outcome::Cancelled
+            }
             Step::Clash { .. } => match c.gives(input) {
                 Key::Enter => self.swap(actions, settings),
                 Key::Esc => {
@@ -375,7 +396,8 @@ impl Rebind {
     pub fn reset(&mut self, settings: &mut Value) {
         self.cancel();
         if let Some(o) = settings.as_object_mut() {
-            o.remove(SETTINGS_KEY);
+            // the file keeps its order (preserve_order: `remove` would swap the last key in)
+            o.shift_remove(SETTINGS_KEY);
         }
     }
 }

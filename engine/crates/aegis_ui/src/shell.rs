@@ -2998,7 +2998,12 @@ mod tests {
         log: KeyLog,
     }
 
-    const REBIND_ACTIONS: [crate::controls::Action; 2] = [crate::controls::Action { id: "use", label: "Use", key: Key::Char('e') }, crate::controls::Action { id: "undo", label: "Undo", key: Key::Char('z') }];
+    const REBIND_ACTIONS: [crate::controls::Action; 4] = [
+        crate::controls::Action { id: "use", label: "Use", key: Key::Char('e') },
+        crate::controls::Action { id: "undo", label: "Undo", key: Key::Char('z') },
+        crate::controls::Action { id: "press", label: "Press", key: Key::Space },
+        crate::controls::Action { id: "ok", label: "Confirm", key: Key::Enter },
+    ];
 
     impl Screen<App> for Rebinder {
         fn id(&self) -> &'static str {
@@ -3012,6 +3017,7 @@ mod tests {
             match k {
                 Key::Char('1') => self.rebind.start(0),
                 Key::Char('2') => self.rebind.start(1),
+                Key::Char('4') => self.rebind.start(3),
                 _ => {}
             }
             self.log.key(cx, k);
@@ -3065,11 +3071,21 @@ mod tests {
         press(&mut s, "key", "esc");
         assert!(!capturing(&s), "Esc cancels");
         assert_eq!(s.cx.app.log, ["1", "e", "2"], "Esc reached no screen while the rebind waited");
+        // Undo has no pad button to trade for Pad X (Press's): refused, the rebind still waits, nothing written
         press(&mut s, "key", "2");
         press(&mut s, "pad", "west");
+        assert!(capturing(&s), "refused, still waiting");
+        assert_eq!(s.cx.settings.v["controls"]["pad"]["west"], json!("space"), "Pad X still presses");
+        press(&mut s, "key", "esc");
+        // Confirm (Pad A) to Pad X asks; Enter swaps: Pad X confirms, Pad A presses
+        press(&mut s, "key", "4");
         press(&mut s, "pad", "west");
-        assert_eq!(s.cx.app.log, ["1", "e", "2", "2", "z"], "Pad X gives Undo now");
-        assert_eq!(s.cx.settings.v["controls"]["pad"]["west"], json!("z"));
+        assert!(capturing(&s), "the swap question");
+        press(&mut s, "key", "enter");
+        assert!(!capturing(&s));
+        press(&mut s, "pad", "west");
+        press(&mut s, "pad", "south");
+        assert_eq!(s.cx.app.log, ["1", "e", "2", "2", "4", "enter", "space"], "the pad's two buttons traded");
         assert_eq!(s.cx.settings.v["controls"]["keys"]["tab"], json!("e"));
     }
 }

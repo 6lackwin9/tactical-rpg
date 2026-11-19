@@ -27,7 +27,7 @@ playtest harness (`tools/fc.sh playtest`) after the prologue; make it again the 
 | `party_keystone` | PR7-41 (PT-28): the save `saves/after_vats`; the party screen's Skills tab shows the deck passives and the keystone slotted, with where they come from | about 5 s |
 | `battle_menu_retreat` | PR7-41 (PT-32, PT-25): the save `saves/cages_start` enters The Crossroads Cages; the strip is disabled under the intro talk, the bar has no Restart or Step while planning, Menu offers Retreat; Yes ends the fight as fled and the results count the captives | about 10 s |
 | `hub_text_audit` | PR7-41 (PT-30, PT-34, PT-35, PT-36): the save `saves/after_vats`; the stash cards say what key items are for, the hub menu, the save slots' whole labels and Quit to main menu asking first | about 6 s |
-| `controls_rebind` | PR7-44 (CONTROLS-UI1): Settings > Controls; a row click then `k` rebinds Walk up, Esc cancels, `z` asks to swap with Undo and Swap trades, Pad Y rebinds Help, Reset to defaults drops the map; shots and the text audit of the tab and the question | about 3 s |
+| `controls_rebind` | PR7-44 (CONTROLS-UI1): Settings > Controls; a row click then `k` rebinds Walk up, Esc cancels, `z` asks to swap with Undo and Swap trades, Pad Y for Help is refused (no button to trade), Confirm and Back swap Pad A and Pad B, Reset to defaults drops the map; shots and the text audit of the tab and the question | about 3 s |
 | `tallow_shop` | PR7-42 (PT-19): the save `saves/sweep_start`; the Candle-Maker's first choice opens his window selling Warded Tallow at 5 Scrap, and one is bought | about 5 s |
 
 The three screen scenarios also time frames (`perf`, ENGINE-2, numbers only, no budget): the main menu, the region map and

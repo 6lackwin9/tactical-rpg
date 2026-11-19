@@ -67,6 +67,9 @@ pub struct Widget<A> {
     pub drop: Option<String>,
 }
 
+/// A paragraph's line pitch, as a multiple of its text size (`Ui::para`).
+pub const PARA_LINE: f32 = 1.35;
+
 impl<A> Widget<A> {
     /// The same widget with its action through `f` (`Ui::nest`).
     pub fn map<B>(self, f: impl Fn(A) -> B) -> Widget<B> {
@@ -780,7 +783,7 @@ impl<'a, A: Clone> Ui<'a, A> {
     /// Wrapped text; returns the y below it.
     pub fn para(&mut self, x: i32, y: i32, w: i32, text: &str, size: f32, col: Rgba) -> i32 {
         let mut yy = y as f32;
-        let step = size * 1.35;
+        let step = size * PARA_LINE;
         for line in self.p.wrap(text, size, w as f32) {
             self.p.text(x as f32, yy, &line, size, col);
             yy += step;
