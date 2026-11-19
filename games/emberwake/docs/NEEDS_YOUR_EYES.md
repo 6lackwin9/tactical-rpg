@@ -29,6 +29,9 @@ Mocks waiting for you, then provisional calls Design made while you were away, t
   (A) scale tokens to 32 px (blurs pixels), (B) shrink tall props, (C) leave, (D) redraw tokens at 32 px. Mock ready in
   `art-ui/token_scale/` (`hub_sheet.png`, `region_sheet.png`, 2x zooms beside them). Recommendation: D (crisp pixels,
   party at the bunks' scale; A looks uneven at 2x, B makes hub beds look toy-like).
+- [ ] Status shown where it acts (`docs/specs/STATUSVIS1.md`, your note 2026-11-19 18:05): Design mapped each
+  status kind to its place (locks on the timeline, ticks on the HP bar, attack and armour changes in the numbers, move
+  changes on the grid) and the plate order (statuses with no other home first). Mock from Art/UI (`AI-34`) to sign off.
 - [ ] Image queue ready: say "process image queue" in Gemini (bunk props, class glyphs, bed keepsakes, battle
   strips, Junction 7 houses; refs in `image_pipeline/refs/active`).
 - [ ] Gamepad on the PC (`FB-327`): repeat timing, dead zone, which button is Back (south Enter, east Back, west
