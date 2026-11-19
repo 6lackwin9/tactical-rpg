@@ -15,6 +15,8 @@ use serde_json::Value;
 pub const WON: &str = "won";
 pub const LOST: &str = "lost";
 pub const FLED: &str = "fled";
+/// ENRAGE2 EN9, EN12: a random fight's verdict at its round cap: the foes slipped away (no rewards, damage kept).
+pub const ESCAPED: &str = "escaped";
 
 /// PR6-9 (`PK4_PK5_CAMPAIGN_HUB.md` 5, B6): the objective `retreat`: the battle is won once the `objective_unit` is out
 /// of the fight or down to its `hp_floor` percent of max HP, at which it withdraws (fate `withdrawn`); damage never takes
@@ -213,7 +215,8 @@ impl Objectives {
 // ---- Stay-behind (ENCOUNTER2 3; not in Godot) ---------------------------------------------------------------------
 
 /// ENCOUNTER2 S2: the verdicts `timeout_outcome` may name (the first is the default, today's rule).
-pub const TIMEOUT_OUTCOMES: [&str; 2] = [FLED, LOST];
+/// ENRAGE2 EN12 adds `escaped`.
+pub const TIMEOUT_OUTCOMES: [&str; 3] = [FLED, LOST, ESCAPED];
 /// ENCOUNTER2 section 6: the `stay_behind` modes (hold: 3.1; stand: 3.2, ENCOUNTER2-L).
 pub const STAY_HOLD: &str = "hold";
 pub const STAY_STAND: &str = "stand";
@@ -227,7 +230,7 @@ pub const STAY_THEN: [&str; 3] = ["none", "capture", "kill"];
 pub const DEFAULT_TILES_LABEL: &str = "the line";
 pub const DEFAULT_RESULT_LINE: &str = "{name} stayed behind.";
 
-/// ENCOUNTER2 S2: an encounter's `timeout_outcome` (fled unless it names lost).
+/// ENCOUNTER2 S2: an encounter's `timeout_outcome` (fled unless it names lost or, ENRAGE2, escaped).
 pub fn timeout_outcome(o: &Obj) -> String {
     let raw = value::string(o, "timeout_outcome", FLED);
     if TIMEOUT_OUTCOMES.contains(&raw.as_str()) {
@@ -431,6 +434,11 @@ pub fn swap_hp(hp: i32, max: i32, new_max: i32, mode: &str) -> i32 {
 /// "" or a character ref) and its keys. No rule reads it: the session only lists its cue (`Session::talks`).
 pub const TALK_EFFECT: &str = "talk";
 pub const TALK_EFFECT_KEYS: [&str; 3] = ["type", "dialogue", "speaker"];
+/// PHASEBREAK1 (PR7-56, BOSSUI1 BU17): the phase effect that plays a world vignette over the board in the phase's
+/// transition (after its talk, before its banner; skippable), and its keys. No rule reads it: the session only lists
+/// its cue (`Session::vignettes`).
+pub const VIGNETTE_EFFECT: &str = "vignette";
+pub const VIGNETTE_EFFECT_KEYS: [&str; 2] = ["type", "id"];
 /// ENCOUNTER2-C PT2, PT3: the event triggers (a unit name's `count`-th unit down; a unit of the name broken, rule poise)
 /// and their keys. PT1: a `round` trigger's `block` (0 = the round start).
 pub const DOWNED: &str = "downed";
@@ -450,6 +458,16 @@ pub struct TalkCue {
     pub phase: String,
     pub dialogue: String,
     pub speaker: String,
+    pub round: i32,
+    pub block: i32,
+}
+
+/// PHASEBREAK1 (BU17): a vignette a phase raised: the phase id, the vignette ref and when the phase fired. The GUI
+/// plays it after the phase's talk; sims, autoplay and the host never wait for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VignetteCue {
+    pub phase: String,
+    pub vignette: String,
     pub round: i32,
     pub block: i32,
 }
@@ -585,6 +603,10 @@ pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
                             out.insert("unit".into(), Value::from(value::string(fx, "unit", "")));
                             out.insert("to".into(), Value::from(value::string(fx, "to", "")));
                             out.insert("hp".into(), Value::from(value::string(fx, "hp", SWAP_KEEP_PCT)));
+                        }
+                        // PHASEBREAK1: kept for the battle screen's vignette player; no rule reads it
+                        VIGNETTE_EFFECT => {
+                            out.insert("id".into(), Value::from(value::string(fx, "id", "")));
                         }
                         // ENCOUNTER2-C DT1: kept for the battle screen's talk box; no rule reads it
                         TALK_EFFECT => {

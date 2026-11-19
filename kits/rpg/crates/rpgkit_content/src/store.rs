@@ -72,7 +72,7 @@ fn class_storage(full: &Dict) -> Dict {
 fn ruleset_storage(full: &Dict) -> Dict {
     let by_rules = |key: &str, v: &Value| rpgkit_rules::ruleset::BY_RULES_FIELDS.contains(&key) && gstr(v).is_empty();
     let channel_default = |key: &str, v: &Value| {
-        RULESET_CHANNEL_FIELDS.contains(&key) && fields("content", source::RULESET_KIND).iter().map(json::dict).any(|f| json::s(f, "key") == key && json::deep_equal(json::get(f, "default"), v))
+        (RULESET_CHANNEL_FIELDS.contains(&key) || RULESET_ENRAGE_FIELDS.contains(&key)) && fields("content", source::RULESET_KIND).iter().map(json::dict).any(|f| json::s(f, "key") == key && json::deep_equal(json::get(f, "default"), v))
     };
     to_storage(source::schema(), "content", source::RULESET_KIND, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || by_rules(key, v) || channel_default(key, v))
 }
@@ -80,6 +80,9 @@ fn ruleset_storage(full: &Dict) -> Dict {
 /// PK1-S2a (PK1 4.1): the ruleset row fields of the rule `channel`, stored only when set off their defaults.
 /// PR5-20 adds `channel_ai_edge` (FB-179).
 pub const RULESET_CHANNEL_FIELDS: [&str; 6] = ["channel_meter", "channel_power", "channel_cost", "channeled_actives", "channel_rest", "channel_ai_edge"];
+
+/// ENRAGE2 (PR7-55): the baseline enrage numbers, stored like the Channel numbers only when set off their defaults.
+pub const RULESET_ENRAGE_FIELDS: [&str; 3] = ["enrage_from_round", "enrage_step", "enrage_max_stacks"];
 
 /// P1.2-S1 (FB-51): a terrain row stores `walkable` and `stops_forced_move` only when it gives them (`entry`, the
 /// stored shape); a row without them reads their fallbacks (`source::TERRAIN_FALLBACK_KEYS`), so it re-saves byte for

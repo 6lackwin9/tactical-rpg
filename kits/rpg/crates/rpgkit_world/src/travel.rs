@@ -967,6 +967,15 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
             // CAMPAIGN1 T1: the arrival's enter tick events follow the battle's
             woke_campaign = json::aget(&entered, "campaign").to_vec();
         }
+        // ENRAGE2 EN9: the foes slipped away, so the way is clear: the leg completes (no scripted event is done)
+        crate::battle::ESCAPED => {
+            let entered = complete_leg(d, gs, &rq, &json::s(fight, "to"));
+            if !json::b(&entered, "ok", false) {
+                return base(false, &json::sget(&entered, "errors"), events, applied["xp"].clone(), applied["advanced"].clone());
+            }
+            events.extend(json::aget(&entered, "events").iter().cloned());
+            woke_campaign = json::aget(&entered, "campaign").to_vec();
+        }
         "lost" => {
             let woke = explore::wake(d, gs, &json::s(fight, "from"));
             events.extend(json::aget(&woke, "events").iter().cloned());

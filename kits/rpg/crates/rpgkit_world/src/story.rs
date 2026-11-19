@@ -545,7 +545,8 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
     let (rule, retry_days, echo_fallen) = match current(d, gs) {
         Some(Step::Fight { on_lost, on_fled, retry_day_cost, echo_fallen, .. }) => match outcome {
             "won" => ("continue".to_string(), 0, false),
-            "fled" => (on_fled, retry_day_cost as i64, echo_fallen),
+            // ENRAGE2 EN9: foes that slipped away read as a flight
+            "fled" | crate::battle::ESCAPED => (on_fled, retry_day_cost as i64, echo_fallen),
             _ => (on_lost, retry_day_cost as i64, echo_fallen),
         },
         // not at a fight step (nothing runs): the dialogue fight's loss path

@@ -46,9 +46,9 @@ impl Waiting {
 }
 
 /// BK6: after a battle with `outcome`, each pair of the members `home` (fielded and still in the party) counts one
-/// battle together; only a won (`won`) or withdrawn (`fled`) battle counts.
+/// battle together; only a won (`won`), withdrawn (`fled`) or slipped (`escaped`, ENRAGE2) battle counts.
 pub fn count_together(gs: &mut GameState, outcome: &str, home: &[String]) {
-    if outcome != "won" && outcome != "fled" {
+    if !["won", "fled", crate::battle::ESCAPED].contains(&outcome) {
         return;
     }
     for (i, a) in home.iter().enumerate() {

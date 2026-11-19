@@ -1154,6 +1154,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         ui.p.panel(r, th().game("outcome_fill", rgba(10, 14, 22, 240)), th().gold, 4.0);
         let (title, col) = match outcome.as_str() {
             "won" => ("Victory", th().good),
+            // ENRAGE2 EN9: a random fight's foes slipped away at its round cap
+            emberwake_world::battle::ESCAPED => (crate::hub::SLIPPED_AWAY, th().gold),
             // PR7-37 (PT-02): the round limit ran out (nobody fled)
             _ if g.timed_out() => (crate::hub::OUT_OF_TIME, th().gold),
             "lost" => ("Defeat", th().foe),

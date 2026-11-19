@@ -277,10 +277,10 @@
         "boss                  0 X   30-50       -      1.5/4      0.24      0.34",
         "  unit (per fight)        dealt  rng%  taken  dot   ff atk_r   heal   ovh heal_r  cln buffs/rds debuf/rds  area c/f/a kills surv% hpend minhp saves  dist  adj% hold% taunt%",
         "  simp_priest_3              14     0    155    0    0   3.0    278    24     38  0.0  6.0/11.5  0.0/0.0  0.0/0.0/0.0  0.00    50  0.44  0.25  0.50  1.80    23   100     0",
-        "  simp_warrior_1            177     0    425    0   44  12.0      0     0    168  0.0  4.0/7.0   3.5/5.5  0.0/0.0/0.0  0.50    50  0.10  0.00  0.00  1.09    91    31    57",
+        "  simp_warrior_1            173     0    425    0   44  12.0      0     0    168  0.0  4.0/7.0   3.5/5.5  0.0/0.0/0.0  0.50    50  0.10  0.00  0.00  1.09    91    31    57",
         "  simp_mage_4               368    98    256    0    0   9.5      0     0     72  0.0  0.0/0.0   6.0/6.0  7.0/17.0/2.5  1.00     0  0.00  0.00  0.00  1.37    78    68     0",
         "  simp_ranger_2             691    96    100    0    0   4.5      0     0      0  0.0  0.0/0.0   3.5/7.0  0.0/0.0/0.0  2.50    50  0.50  0.50  0.00  2.29    25    41     0",
-        "  sime_brawler_boss_1       606     0    631    0    0  24.5      0     0     54  0.0  1.0/3.0   3.0/6.0  0.0/0.0/0.0  2.00   100  0.35  0.33  0.00  1.31    71    24     0",
+        "  sime_brawler_boss_1       606     0    627    0    0  24.5      0     0     54  0.0  1.0/3.0   3.0/6.0  0.0/0.0/0.0  2.00   100  0.36  0.34  0.00  1.31    71    24     0",
         "  sime_ranger_standard_2    239   100    183    0    0   8.0      0     0     15  0.0  0.0/0.0   1.0/2.0  0.0/0.0/0.0  0.50     0  0.00  0.00  0.00  2.74     0   100     0",
         "  sime_priest_standard_3     64     0    208    0    0   6.0     34     0     34  0.0  2.0/3.0   0.0/0.0  0.0/0.0/0.0  0.00     0  0.00  0.00  0.00  1.19    81    52     0",
         "  sime_ranger_minion_4       27   100    113    0    0   8.5      0     0     29  0.0  0.0/0.0   0.0/0.0  0.0/0.0/0.0  0.00     0  0.00  0.00  0.00  2.08    38    77     0",
@@ -483,12 +483,12 @@
       "lines": [
         "ARGS mode campaign, level 5, seeds 1, cap 10, loadout default, spend class, preset balanced, distance default, score both, quick off, metrics off, band 30-70, jitter on, comp warrior,priest,mage, heal rally",
         "CAMPAIGN party level 5 (foes at authored levels), heal rally, 1 seeds, 1 parties; story order arms: courtyard_skirmish > pass_ambush > wagon_raid > ashmaw_stand | gate: courtyard_skirmish > pass_ambush > wagon_raid > ashmaw_stand_barred",
-        "  warrior,priest,mage steel arms seed 11: survived 4/4, cleared the campaign, party hp% after each battle [87, 88, 88, 63]",
-        "warrior,priest,mage      steel arms survived 4.0/4, campaign cleared 1/1, fell: never, mean party hp% after: [87, 88, 88, 63]",
-        "  warrior,priest,mage steel gate seed 11: survived 4/4, cleared the campaign, party hp% after each battle [87, 88, 88, 68]",
-        "warrior,priest,mage      steel gate survived 4.0/4, campaign cleared 1/1, fell: never, mean party hp% after: [87, 88, 88, 68]",
-        "warrior,priest,mage      TRIO summary (both steel choices): survived 4.0 of 4.0 battles per run",
-        "metric checks: 410 over 8 fights, 0 METRIC FAIL",
+        "  warrior,priest,mage steel arms seed 11: survived 3/4, fell at battle 4 (ashmaw_stand), party hp% after each battle [87, 88, 88, 67]",
+        "warrior,priest,mage      steel arms survived 3.0/4, campaign cleared 0/1, fell: b4 x1, mean party hp% after: [87, 88, 88, 67]",
+        "  warrior,priest,mage steel gate seed 11: survived 4/4, cleared the campaign, party hp% after each battle [87, 88, 88, 72]",
+        "warrior,priest,mage      steel gate survived 4.0/4, campaign cleared 1/1, fell: never, mean party hp% after: [87, 88, 88, 72]",
+        "warrior,priest,mage      TRIO summary (both steel choices): survived 3.5 of 4.0 battles per run",
+        "metric checks: 408 over 8 fights, 0 METRIC FAIL",
         "plan checks: 0 PLAN FAIL over 8 fights",
         "plan skips: 0 PLAN SKIP fights (jitter, unreachable target; skipped, not failed)"
       ]
@@ -503,7 +503,7 @@
         "  warrior,ranger,rogue steel gate seed 11: survived 3/5, fell at battle 4 (ashmaw_stand_barred), party hp% after each battle [90, 81, 91, 0]",
         "warrior,ranger,rogue     steel gate survived 3.0/5, campaign cleared 0/1, fell: b4 x1, mean party hp% after: [90, 81, 91, 0]",
         "warrior,ranger,rogue     TRIO summary (both steel choices): survived 3.0 of 5.0 battles per run",
-        "metric checks: 468 over 10 fights, 0 METRIC FAIL",
+        "metric checks: 461 over 10 fights, 0 METRIC FAIL",
         "plan checks: 0 PLAN FAIL over 10 fights",
         "plan skips: 0 PLAN SKIP fights (jitter, unreachable target; skipped, not failed)"
       ]

@@ -34,6 +34,9 @@
     "tunable channeled_actives int default=1 range=0..3 needs=channel",
     "tunable channel_rest string default=\"normal\" needs=channel",
     "tunable channel_ai_edge float default=1.2 range=1.0..3.0 needs=channel",
+    "tunable enrage_from_round int default=0 range=0..20",
+    "tunable enrage_step json default={}",
+    "tunable enrage_max_stacks int default=4 range=1..10",
     "tunable bleed_pct row-only default=0.06 range=0.01..0.25 (no schema entry)",
     "tunable counter_mult row-only default=0.5 range=0.1..1.5 (no schema entry)",
     "tunable debt_stagger row-only default=3 range=1..10 (no schema entry)",
@@ -138,6 +141,7 @@
     "promoted CHANNEL_POWER -> channel_power",
     "promoted CHANNEL_COST -> channel_cost",
     "promoted CHANNEL_ACTIVES -> channeled_actives",
-    "promoted CHANNEL_AI_EDGE -> channel_ai_edge"
+    "promoted CHANNEL_AI_EDGE -> channel_ai_edge",
+    "promoted ENRAGE_MAX_STACKS -> enrage_max_stacks"
   ]
 }
