@@ -862,7 +862,7 @@ impl WorldMap {
     fn side_panel(&mut self, ui: &mut Ui<WAct>, cx: &mut Cx, d: &emberwake_world::Data, gs: &emberwake_world::GameState, here: &str, ways: &[travel::TravelPath], peek: Option<usize>) {
         let sx = 504;
         let mut y = 28;
-        ui.p.text(sx as f32, y as f32, "World map", BODY, th().info);
+        ui.p.text_face(aegis_ui::painter::Typeface::Display, sx as f32, y as f32, "World map", BODY, th().gold);
         ui.p.text_right(W as f32 - 6.0, y as f32, &format!("Time {}", gs.time), BODY, th().text);
         y += 14;
         // CAMPAIGN1-TM: the travel mode button (only in a campaign world with modes)
@@ -1080,8 +1080,10 @@ fn padlock(ui: &mut Ui<WAct>, r: Rect, open: bool, col: Rgba) {
     ui.p.line(rr, top - lift, rr, if open { top + 0.5 } else { cy }, col, 0.0);
 }
 
-/// The cyan of the party's ring.
-const PARTY: Rgba = [34, 211, 238, 255];
+/// The party's ring (PR7-36, ART-22: off cyan; the theme's `party_ring`).
+fn party_ring() -> Rgba {
+    th().game("party_ring", [34, 211, 238, 255])
+}
 
 impl Screen<GameCx> for WorldMap {
     fn id(&self) -> &'static str {
@@ -1210,11 +1212,12 @@ impl Screen<GameCx> for WorldMap {
         let glow = pulse(ms, reduce);
         for m in &marks {
             if m.is_here {
-                // the party's cyan ring: beside a landmark's foot, around a pin
+                // the party's ring: beside a landmark's foot, around a pin
                 let (rx, ry, rad) = if m.landmark { (m.r.x as f32 + 1.0, m.y - 3.0, 7.0) } else { (m.x, m.y, 10.0) };
-                ui.p.ellipse(rx, ry, rad + 1.5, rad + 1.5, rgba(6, 182, 212, 50));
-                ui.p.ellipse(rx, ry, rad, rad, rgba(6, 182, 212, 64));
-                ui.p.ellipse_ring(rx, ry, rad, rad, PARTY);
+                let ring = party_ring();
+                ui.p.ellipse(rx, ry, rad + 1.5, rad + 1.5, [ring[0], ring[1], ring[2], 50]);
+                ui.p.ellipse(rx, ry, rad, rad, [ring[0], ring[1], ring[2], 64]);
+                ui.p.ellipse_ring(rx, ry, rad, rad, party_ring());
                 if m.landmark {
                     if let Some(img) = cx.art.image(&emberwake_content::art::pin("here"), 10, 10) {
                         ui.p.image(img, Rect::new(rx as i32 - 5, ry as i32 - 5, 10, 10));
@@ -1244,9 +1247,10 @@ impl Screen<GameCx> for WorldMap {
                 ui.p.panel(l, rgba(10, 11, 16, 240), rgb(217, 119, 6), 0.0);
                 ui.p.text(tx, ty, &m.name, SMALL, th().gold);
             } else {
-                // faint: a nearly clear strip, dim text with a soft shadow, no border
+                // PR7-36 (ART-22): a dark label plate so the name reads on the picture; dim text with a soft shadow, no border
                 let fade = if m.locked { 0.8 } else { 1.0 };
-                ui.p.fill(l, rgba(10, 11, 16, (71.0 * fade) as u8));
+                let plate = th().game("label_plate", rgba(10, 11, 16, 71));
+                ui.p.fill(l, [plate[0], plate[1], plate[2], (plate[3] as f32 * fade) as u8]);
                 ui.p.text(tx + 0.5, ty + 0.5, &m.name, SMALL, rgba(0, 0, 0, (200.0 * fade) as u8));
                 ui.p.text(tx, ty, &m.name, SMALL, rgba(217, 203, 180, (189.0 * fade) as u8));
             }
@@ -1402,11 +1406,12 @@ impl Screen<GameCx> for WorldMap {
                 ui.p.panel(r, rgba(44, 34, 30, 180), rgb(217, 119, 6), 0.0);
             }
             let (rx, ry) = (r.x as f32 + 5.5, r.y as f32 + row_h as f32 / 2.0);
-            ui.p.ellipse(rx, ry, 3.5, 3.5, rgba(6, 182, 212, 64));
-            ui.p.ellipse_ring(rx, ry, 3.5, 3.5, PARTY);
+            let ring = party_ring();
+            ui.p.ellipse(rx, ry, 3.5, 3.5, [ring[0], ring[1], ring[2], 64]);
+            ui.p.ellipse_ring(rx, ry, 3.5, 3.5, party_ring());
             ui.p.text(r.x as f32 + 12.0, r.y as f32, "Your party", SMALL, th().text);
             let party_place = cx.location_name(&gs.world_id, &here);
-            ui.push("world_map.legend.party", "row", "Your party", r, true, false, Some(WAct::Node(here.clone())), tip("Your party", &format!("At {party_place}, marked by the cyan ring.")));
+            ui.push("world_map.legend.party", "row", "Your party", r, true, false, Some(WAct::Node(here.clone())), tip("Your party", &format!("At {party_place}, marked by the gold ring.")));
             if let Some(line) = &starved {
                 let r = Rect::new(p.x + 2, r.y + row_h, p.w - 4, row_h);
                 ui.p.text_fit(r.x as f32 + 4.0, r.y as f32, line, SMALL, (r.w - 6) as f32, th().foe);

@@ -97,6 +97,20 @@ fn peek_when(gs: &emberwake_world::state::GameState) -> String {
     format!("Day {}", gs.time + 1)
 }
 
+/// PR7-36 (ART-08): the dimmed title backdrop (about 60 %) with an `ornate` main panel over `r`, for the screens the title
+/// opens in place (slots, New game).
+fn menu_panel<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, r: Rect) {
+    let area = ui.screen();
+    let picture = if cx.art.has(TITLE_ART) { TITLE_ART } else { MENU_ART };
+    let img = cx.art.size_of(picture).and_then(|(w, h)| cx.art.image(picture, w, h));
+    panes::backdrop(&mut ui.p, img, area, MENU_DIM, MENU_VIGNETTE);
+    ui.p.fill(r, th().panel);
+    ui.frame_body("ornate", r);
+}
+
+/// How far the title backdrop dims under a panel (about 60 %).
+const MENU_DIM: u8 = 153;
+
 /// What Continue's peek shows of the newest save.
 struct Peek {
     location: String,
@@ -330,7 +344,7 @@ impl Screen<GameCx> for MainMenu {
         items.push(MenuItem::new("quit", "Quit", None, MenuAct::Quit));
         // The column widens leftward at the larger text sizes so its longest label is never cut (only the labels take
         // the mouse: `MenuStyle::Text`).
-        let widest = items.iter().map(|i| ui.p.text_w(&i.label, m.title)).fold(0.0, f32::max);
+        let widest = items.iter().map(|i| ui.p.text_w_face(Typeface::Display, &i.label, m.title)).fold(0.0, f32::max);
         let w = resolve(&[frac(MENU_W)], area.w)[0].max(panes::snap_up_on(widest.ceil() as i32 + 2 * m.padding, m.grid));
         let (column, peek_room) = cut_column(area, w, m.u(PEEK_GAP));
         let hovered = panes::menu_column_styled(&mut ui, "menu", column.x, column.y, column.w, m.u(MENU_H), m.u(MENU_STEP), &items, MenuStyle::Text);
@@ -517,6 +531,8 @@ impl Screen<GameCx> for NewGameScreen {
     }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<NgAct> = Ui::new(g, mouse, live);
+        // PR7-36 (ART-08): a main panel over the dimmed title backdrop
+        menu_panel(&mut ui, cx, Rect::new(56, 8, 528, 312));
         title(&mut ui, "New game", 26);
         let mut y = 54;
         for w in new_game_worlds(&cx.data) {
@@ -555,6 +571,9 @@ pub enum SlotAct {
 pub struct Slots {
     saving: bool,
     w: Vec<Widget<SlotAct>>,
+    /// PR7-36 (ART-08): each filled slot's lead and day, read once per save (keyed by slot and its `saved_at`).
+    leads: std::collections::BTreeMap<(i64, i64), Option<Peek>>,
+    faces: Faces,
 }
 
 /// What a slot row offers (PLAYUI1 section 1): the row's click (or why there is none, its hover card) and the icons in
@@ -596,7 +615,7 @@ pub fn slot_row(saving: bool, slot: i64, exists: bool, ok: bool, locked: bool, n
 
 impl Slots {
     pub fn new(saving: bool) -> Self {
-        Self { saving, w: Vec::new() }
+        Self { saving, w: Vec::new(), leads: std::collections::BTreeMap::new(), faces: Faces::default() }
     }
 
     fn describe(cx: &Cx, slot: i64) -> String {
@@ -705,12 +724,22 @@ impl Screen<GameCx> for Slots {
     }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<SlotAct> = Ui::new(g, mouse, live);
+        self.faces.begin();
+        // PR7-36 (ART-08): a main panel over the dimmed title backdrop, as Settings sits over the menu
+        menu_panel(&mut ui, cx, Rect::new(56, 8, 528, 312));
         title(&mut ui, if self.saving { "Save game" } else { "Load game" }, 26);
         for slot in save::AUTOSAVE_SLOT..=save::LAST_SLOT {
-            let r = Rect::new(70, 54 + slot as i32 * 36, 500, 31);
+            let mut r = Rect::new(70, 54 + slot as i32 * 36, 500, 31);
             let head = save::peek(&cx.data, &cx.save_dir, slot);
             let exists = json::b(&head, "exists", false);
             let ok = json::b(&head, "ok", false);
+            let lead = if ok {
+                let key = (slot, json::i(&head, "saved_at", 0));
+                self.leads.retain(|k, _| k.0 != slot || *k == key);
+                self.leads.entry(key).or_insert_with(|| Peek::read(cx, slot)).as_ref().map(|p| (p.when.clone(), p.party.first().cloned()))
+            } else {
+                None
+            };
             let mut label = if slot == 0 { "Autosave".to_string() } else { format!("Slot {slot}") };
             // PR7-41 (PT-35): the place and time on the slot's line, the whole party on its own line (no cut names)
             let status = if ok {
@@ -737,11 +766,22 @@ impl Screen<GameCx> for Slots {
             let row = slot_row(self.saving, slot, exists, ok, locked, Self::no_save(cx));
             let hover = row.action.is_some() && ui.hover(r);
             ui.p.panel(r, if hover { th().card_hot } else { th().game("menu_row", rgba(26, 36, 58, 250)) }, if hover { th().gold } else { th().edge }, 2.0);
+            let card = r;
+            // the lead's portrait at the row's left and the day on its first line
+            if let Some((when, lead)) = &lead {
+                if let Some((_, _, who, look)) = lead {
+                    let pr = Rect::new(r.x + 2, r.y + 2, r.h - 4, r.h - 4);
+                    self.faces.draw(&mut ui.p, cx, who, look, "roster", pr);
+                    r.x += r.h;
+                    r.w -= r.h;
+                }
+                label = format!("{label} · {when}");
+            }
             let text_w = (r.w - 8 - if row.delete { 40 } else { 0 }) as f32;
             ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &label, BODY, text_w, if ok { th().text } else { th().dim });
-            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 16.0, &status, BODY, text_w, if ok { th().info } else { th().dim });
+            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 16.0, &status, BODY, text_w, th().dim);
             let enabled = row.action.is_some();
-            ui.push(format!("slot.{slot}"), "card", format!("{label}: {status}"), r, enabled, false, row.action, tip(&label, &row.why));
+            ui.push(format!("slot.{slot}"), "card", format!("{label}: {status}"), card, enabled, false, row.action, tip(&label, &row.why));
             let del = Rect::new(r.x + r.w - 4 - 16, r.y + 4, 16, 16);
             let px = ui.icon_px(del);
             if row.lock {
@@ -1609,7 +1649,7 @@ impl Screen<GameCx> for SettingsScreen {
                 let sub = if i == 0 && self.web { "Fullscreen & text" } else { sub };
                 ui.p.text_fit((tr.x + 7) as f32, y + lh, sub, HELP, room, t.dim);
             }
-            aegis_ui::ui::draw_glyph(&mut ui.p, Glyph::ChevronRight, Rect::new(tr.x + tr.w - 14, tr.y + (tab_h - 8) / 2, 8, 8), if open { t.gold } else { t.dim });
+            aegis_ui::ui::draw_glyph(&mut ui.p, Glyph::ChevronRight, Rect::new(tr.x + tr.w - 14, tr.y + (tab_h - 8) / 2, 8, 8), if open { crate::tokens::accent() } else { t.dim });
             ui.push(format!("settings.tab.{}", name.to_lowercase()), "tab", *name, tr, true, open, Some(SetAct::Tab(i)), Vec::new());
         }
         // the tab body: its heading (and the Display badge or Sound's Mute all), then its rows, scrolling when taller

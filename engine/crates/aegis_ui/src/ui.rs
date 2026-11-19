@@ -723,8 +723,13 @@ impl<'a, A: Clone> Ui<'a, A> {
     /// A modal frame with a gold title (the display face; frame role `panel`); returns the content top y
     /// (`Metrics::frame_title_h` below the top).
     pub fn frame(&mut self, r: Rect, title: &str, centered: bool) -> i32 {
+        self.frame_in("panel", r, title, centered)
+    }
+
+    /// `frame` in frame role `role`: a screen's main panel takes `ornate`, a small popup `panel` (the two tiers).
+    pub fn frame_in(&mut self, role: &str, r: Rect, title: &str, centered: bool) -> i32 {
         let (t, m) = (self.t.clone(), self.m());
-        self.draw_role(&t, "panel", r, t.panel, t.panel_edge, m.frame_radius);
+        self.draw_role(&t, role, r, t.panel, t.panel_edge, m.frame_radius);
         if !title.is_empty() {
             if centered {
                 self.p.text_center_face(Typeface::Display, r.x as f32 + r.w as f32 / 2.0, r.y as f32 + m.uf(6.0), title, m.head, t.gold);

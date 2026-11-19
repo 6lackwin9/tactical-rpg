@@ -52,6 +52,7 @@ mod stage;
 mod story;
 mod talk;
 mod timeline_view;
+mod tokens;
 mod transitions;
 mod tuning;
 mod viewkeys;

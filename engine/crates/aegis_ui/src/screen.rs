@@ -721,8 +721,8 @@ pub fn show_errors<G: 'static>(cx: &mut Cx<G>, errors: Vec<String>) {
     }
 }
 
-/// A centred screen title.
+/// A centred screen title, in the theme's display face (PR7-36: every screen title in one face).
 pub fn title(ui: &mut Ui<impl Clone>, text: &str, y: i32) {
     let gold = ui.t.gold;
-    ui.p.text_center(W as f32 / 2.0, y as f32, text, ui::HEAD + 4.0, gold);
+    ui.p.text_center_face(crate::painter::Typeface::Display, W as f32 / 2.0, y as f32, text, ui::HEAD + 4.0, gold);
 }

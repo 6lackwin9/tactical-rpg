@@ -138,7 +138,7 @@ const TACTIC_INTENT_HELP: [&str; 6] = [
 ];
 
 const PANEL: Rgba = rgba(22, 32, 54, 245);
-const ALLY: Rgba = rgb(110, 170, 255);
+pub(crate) use crate::tokens::ally;
 /// RULESET1-U slice 5: the poise bar's colour (a pale steel blue, apart from HP green and red).
 const POISE: Rgba = rgb(150, 190, 235);
 /// RULESET1-U slice 4: the enemy facing chevron (pale, so it reads apart from the red tell arrows).

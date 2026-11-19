@@ -769,7 +769,7 @@ impl Screen<GameCx> for Character {
         // PR7-37 (PT-07): an opaque backing, so a screen under the window (the game menu it was opened from) never
         // shows through its frame
         ui.p.fill(fr, th().bg);
-        ui.frame(fr, "Character", true);
+        ui.frame_in("ornate", fr, "Character", true);
         ui.close_x("character.close", Rect::new(fr.x + fr.w - 26, fr.y + 8, 19, 18), PAct::Close);
         let unspent = m.unspent(&d);
         let pick = format!("{}  Lv {}{}", crate::hub::member_name(cx, &m), m.level(&d), if unspent > 0 { format!("  +{unspent}") } else { String::new() });
@@ -1085,7 +1085,7 @@ impl Character {
         ui.button("level.confirm", Rect::new(500, 312, 70, 18), "Confirm", PAct::ConfirmLevel, drafted > 0);
     }
 
-    fn draw_skills(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
+    fn draw_skills(&mut self, ui: &mut Ui<PAct>, cx: &mut Cx, m: &UnitState) {
         self.load_skills(cx);
         if let Some(t) = self.terms.clone() {
             return self.draw_deck(ui, cx, m, &t);
@@ -1226,8 +1226,9 @@ impl Character {
     /// click or drag like today's slots, a right click takes one out) and the read-only Basics row. Right: the owned
     /// list or the order editor (one short list per intent of its actives and basics; drag to reorder, a click moves an
     /// entry one place up).
-    fn draw_deck(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState, t: &DeckTerms) {
-        let d = &cx.data;
+    fn draw_deck(&mut self, ui: &mut Ui<PAct>, cx: &mut Cx, m: &UnitState, t: &DeckTerms) {
+        let data = cx.data.clone();
+        let d = &*data;
         let cat = &d.cat;
         let rs = d.ruleset(&cx.gs().world_id);
         let built = progression::build_with(d, m, &cx.gs().world_id, false).map(|b| b.unit);
@@ -1431,11 +1432,13 @@ impl Character {
                 let y = 118 + (k - self.scroll) as i32 * 22;
                 let (name, intent, ap, _, desc) = skill_of(cat.family_of(id));
                 ui.button(&format!("skills.slot.worn.{id}"), Rect::new(310, y, 50, 16), "Worn", PAct::DeckView("owned"), false);
-                ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{name}{}  {ap} AP  from worn gear", tagged(&intent)), BODY, 238.0, th().gold);
-                ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
+                // PR7-36 (ART-05): the skill's 32 px tile
+                skill_tile(ui, cx, Rect::new(OWNED_TILE_X, y + 2, ROW_TILE, ROW_TILE), cat.family_of(id), "active");
+                ui.p.text_fit(OWNED_TEXT_X as f32, y as f32 + 1.0, &format!("{name}{}  {ap} AP  from worn gear", tagged(&intent)), BODY, OWNED_TEXT_W as f32, th().gold);
+                ui.p.text_fit(OWNED_TEXT_X as f32, y as f32 + 10.0, &desc, SMALL, OWNED_TEXT_W as f32, th().dim);
                 let kind = if intent.is_empty() { "Skill".to_string() } else { format!("{intent} skill") };
                 let card = vec![(name.clone(), th().gold), (format!("{kind} from worn gear, {ap} AP"), th().info), (desc, th().text), ("Open while the item is worn: it takes no slot, and taking the item off removes it.".into(), th().dim)];
-                ui.push(format!("skills.worn.{id}"), "row", name, Rect::new(366, y, 238, 20), true, false, None, card);
+                ui.push(format!("skills.worn.{id}"), "row", name, Rect::new(OWNED_TEXT_X, y, OWNED_TEXT_W, 20), true, false, None, card);
             }
             for (k, &(kind, ref id)) in owned.iter().skip(self.scroll).take(ROWS).enumerate() {
                 let y = 118 + k as i32 * 22;
@@ -1449,9 +1452,10 @@ impl Character {
                     let (name, desc) = passive_of(id);
                     (name.clone(), format!("{name}  [{}]", title_case(kind)), desc)
                 };
-                ui.p.text_fit(366.0, y as f32 + 1.0, &line, BODY, 238.0, th().text);
-                ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
-                ui.push(format!("skills.owned.{kind}.{id}"), "row", name.clone(), Rect::new(366, y, 238, 20), true, slotted, Some(PAct::DeckSlot(kind, id.clone())), tip(&name, &desc));
+                skill_tile(ui, cx, Rect::new(OWNED_TILE_X, y + 2, ROW_TILE, ROW_TILE), id, kind);
+                ui.p.text_fit(OWNED_TEXT_X as f32, y as f32 + 1.0, &line, BODY, OWNED_TEXT_W as f32, th().text);
+                ui.p.text_fit(OWNED_TEXT_X as f32, y as f32 + 10.0, &desc, SMALL, OWNED_TEXT_W as f32, th().dim);
+                ui.push(format!("skills.owned.{kind}.{id}"), "row", name.clone(), Rect::new(OWNED_TEXT_X, y, OWNED_TEXT_W, 20), true, slotted, Some(PAct::DeckSlot(kind, id.clone())), tip(&name, &desc));
                 ui.draggable(format!("deck.own.{kind}.{id}"));
             }
         }
@@ -1490,9 +1494,10 @@ impl Character {
     /// GEARUI1: three columns like the Godot gear dojo: the hero's stats with this gear (and the change a hovered or
     /// dragged item would make), the equipped slots with the battle pouch under them, the party stash. Clicks and drag
     /// and drop both ways (stash to a slot or the pouch equips, a slot or pouch item to the stash takes it off).
-    fn draw_gear(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
+    fn draw_gear(&mut self, ui: &mut Ui<PAct>, cx: &mut Cx, m: &UnitState) {
         self.load_gear(cx);
-        let d = &cx.data;
+        let data = cx.data.clone();
+        let d = &*data;
         let (work, stash) = self.gear.clone().unwrap();
         // AUDIT-04 (PR5-40): the draft as it would wield once confirmed (its weapon instances synced)
         let wields = wielding(d, cx.gs(), &work, &stash);
@@ -1520,7 +1525,9 @@ impl Character {
                 (None, Some(item)) => item_tip(d, item, &format!("Class default gear: drag an item from the stash onto this slot to replace it.{note}")),
                 (None, None) => tip(&label, "Empty: drag an item from the stash onto this slot."),
             };
-            ui.row(&format!("gear.slot.{slot}"), Rect::new(mx, y, mw, 14), &label, if explicit.is_some() { th().text } else { th().dim }, explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())), false, card);
+            // PR7-36 (ART-05): the slot's tile (the item's icon, an empty-slot glyph) at the row's left
+            item_tile(ui, cx, Rect::new(mx, y, 14, 14), shown.as_deref());
+            ui.row(&format!("gear.slot.{slot}"), Rect::new(mx + 16, y, mw - 16, 14), &label, if explicit.is_some() { th().text } else { th().dim }, explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())), false, card);
             if let Some((b, _)) = &badge {
                 ui.p.text_right((mx + mw - 3) as f32, y as f32 + 2.0, b, SMALL, th().foe);
             }
@@ -1544,7 +1551,8 @@ impl Character {
                     Some(item) => item_tip(d, item, "Click or drag it to the stash to take it out; drag it onto another pouch slot to reorder."),
                     None => tip(&label, "Drag a consumable from the stash here; the hero can use it in battle."),
                 };
-                ui.row(&format!("gear.pouch.{i}"), Rect::new(mx, y, mw, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card);
+                item_tile(ui, cx, Rect::new(mx, y, 14, 14), item.map(String::as_str));
+                ui.row(&format!("gear.pouch.{i}"), Rect::new(mx + 16, y, mw - 16, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card);
                 if item.is_some() {
                     ui.draggable(format!("pouch.{i}"));
                 }
@@ -1735,6 +1743,29 @@ impl Character {
 /// GEAR-REWORK1 (PR5-51a pass 2): the gap between the off-hand slot's label and its Off-Hand chip, and the narrowest
 /// chip drawn (a narrower one would hold no text).
 const OFF_HAND_CHIP_GAP: i32 = 6;
+
+/// PR7-36 (ART-05): the Owned list's skill tile (32 px at 1280 x 720) and the text right of it.
+const ROW_TILE: i32 = 16;
+const OWNED_TILE_X: i32 = 363;
+const OWNED_TEXT_X: i32 = OWNED_TILE_X + ROW_TILE + 3;
+const OWNED_TEXT_W: i32 = 604 - OWNED_TEXT_X;
+
+/// PR7-36 (ART-05): skill `id`'s I2 tile in `r` (its family's icon, else its kind's; a passive or keystone shows its
+/// kind's first letter on the empty tile).
+fn skill_tile(ui: &mut Ui<PAct>, cx: &mut Cx, r: Rect, id: &str, kind: &str) {
+    let px = ui.icon_px(r);
+    let chain = if kind == "active" { crate::tokens::skill_icons(&cx.data, id) } else { vec![format!("skills/kinds/{kind}.png")] };
+    let img = cx.art.first(&chain, px, px).cloned();
+    let glyph = if kind == "active" { "" } else { &kind[..1] };
+    aegis_ui::panes::icon_tile(ui, r, img.as_ref(), &glyph.to_uppercase());
+}
+
+/// PR7-36 (ART-05): an item's I2 tile in `r`, or the empty-slot glyph for no item.
+fn item_tile(ui: &mut Ui<PAct>, cx: &mut Cx, r: Rect, item: Option<&str>) {
+    let px = ui.icon_px(r);
+    let img = item.and_then(|i| cx.art.first(&crate::tokens::item_icons(&cx.data, i), px, px).cloned());
+    aegis_ui::panes::icon_tile(ui, r, img.as_ref(), if item.is_none() { "-" } else { "" });
+}
 const OFF_HAND_CHIP_MIN: i32 = 12;
 
 /// GEAR-REWORK1 (PR5-51a pass 2, `docs/sessions/U3_GEAR_REWORK.md` 4): the Gear tab's Off-Hand chip text and card for

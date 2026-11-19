@@ -383,7 +383,8 @@ pub(super) fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
         View::Flat => geo.cell_rect(c).inset(1),
     };
     for c in &o.band {
-        plate(p, plate_of(*c), rgba(110, 170, 255, 22), rgba(110, 170, 255, 70));
+        let (fill, edge) = crate::tokens::move_tile();
+        plate(p, plate_of(*c), fill, edge);
     }
     for c in &o.front {
         plate(p, plate_of(*c), rgba(240, 100, 92, 46), rgba(240, 100, 92, 110));
@@ -424,7 +425,7 @@ pub(super) fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
     }
     // INPUT1 MR13: the hovered Engage row's open position tiles: a GOLD ring plate (preferred), a DIM one (fallback)
     for (c, preferred) in &o.positions {
-        let col = if *preferred { th().gold } else { th().dim };
+        let col = if *preferred { th().gold } else { th().parchment };
         plate(p, plate_of(*c), with_alpha(col, 36), col);
     }
     for c in o.target.iter().chain(&o.target_more) {

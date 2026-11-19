@@ -626,14 +626,21 @@ pub(super) fn hold_pick_ids(s: &Session) -> Vec<usize> {
     s.w.hold.as_ref().map(|g| g.heroes.iter().copied().filter(|&c| s.w.has(c)).collect()).unwrap_or_default()
 }
 
-/// An exit's sign: EXIT (green) without a hold escape or with the `gate` layer off; else SHUT (red) or OPEN (green).
+/// An exit's sign: EXIT (amber, drawn as an arrow marker: `exit_glyph`) without a hold escape or with the `gate` layer
+/// off; else SHUT (oxblood) or OPEN (amber). PR7-36 (ART-17): the theme's exit tokens, not green and red.
 pub(super) fn exit_sign(hold: Option<&HoldMarks>) -> (&'static str, Rgba, Rgba) {
-    let green = (rgba(70, 200, 90, 230), rgba(200, 255, 210, 255));
+    let open = (with_alpha(crate::tokens::exit(true), 230), th().gold);
     match hold.filter(|h| h.show_gate) {
-        Some(h) if !h.open => ("SHUT", rgba(200, 60, 56, 235), rgba(255, 210, 200, 255)),
-        Some(_) => ("OPEN", green.0, green.1),
-        None => ("EXIT", green.0, green.1),
+        Some(h) if !h.open => ("SHUT", with_alpha(crate::tokens::exit(false), 235), th().text),
+        Some(_) => ("OPEN", open.0, open.1),
+        None => ("EXIT", open.0, open.1),
     }
+}
+
+/// What an exit's sign shows on the board: a plain exit is an arrow marker like the map's exits; a hold escape's
+/// gate keeps its word.
+pub(super) fn exit_glyph(word: &'static str) -> &'static str {
+    if word == "EXIT" { ">" } else { word }
 }
 
 /// H7: each hold tile with a gold objective ring and a plate with the label's first letter ("W" for the winch).
