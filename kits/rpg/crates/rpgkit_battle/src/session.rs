@@ -1874,7 +1874,7 @@ impl Session {
                 // the round intent only (classic logs as before)
                 if round_intent::on(&self.w) {
                     self.mark_log(self.current_round, LOG_ROUND_END);
-                    let sum = round_intent::round_summary(&self.w, &self.resolver.scheduled);
+                    let sum = self.round_summary();
                     self.resolver.log.push(round_intent::summary_line(self.current_round, &sum));
                 }
                 self.combat_over = over;
@@ -2200,6 +2200,36 @@ impl Session {
                 (c, fate)
             })
             .collect()
+    }
+
+    /// PR7-41 (PT-34): the current round's summary (`round_intent::round_summary`), its breaks at least the `[Break]`
+    /// lines the round logged (a break by a trigger, a rider or a collision is no scheduled hit's), so the summary never
+    /// says "no breaks" under a logged break.
+    pub fn round_summary(&self) -> round_intent::RoundSummary {
+        let mut sum = round_intent::round_summary(&self.w, &self.resolver.scheduled);
+        let from = self.log_marks.iter().find(|m| m.1 == self.current_round).map_or(0, |m| m.0).min(self.resolver.log.len());
+        let logged = self.resolver.log[from..].iter().filter(|l| l.starts_with("[Break]")).count() as i32;
+        sum.breaks = sum.breaks.max(logged);
+        sum
+    }
+
+    /// PR7-41 (PT-32): whether the party may retreat now: while a round is planned (nothing confirmed) in a battle that
+    /// goes on and whose round limit ends in a flight (`timeout_outcome` fled: running out of rounds is no defeat).
+    pub fn can_retreat(&self) -> bool {
+        self.outcome.is_empty() && !self.combat_over && self.phase == Phase::Planning && !self.plan_confirmed && self.timeout_outcome == encounter::FLED
+    }
+
+    /// PR7-41 (PT-32): the party retreats (`can_retreat`): the battle ends now as fled, nothing of the round resolved;
+    /// the log says so. Refused (with the reason) when the battle does not allow it.
+    pub fn retreat(&mut self) -> Result<(), String> {
+        if !self.can_retreat() {
+            return Err(if self.timeout_outcome != encounter::FLED { "This fight allows no retreat." } else { "Retreat only while planning a round." }.into());
+        }
+        self.resolver.log.push("[Retreat] The party retreats from the fight.".into());
+        self.outcome = encounter::FLED.into();
+        self.combat_over = true;
+        self.phase = Phase::Replay;
+        Ok(())
     }
 
     /// ENCOUNTER2 H1: a hold escape still waits for its holder (planning cannot be confirmed).

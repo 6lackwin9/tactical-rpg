@@ -106,7 +106,8 @@ const ADD_DELTA_MAX: i64 = 100;
 const ITEM_COUNT_MAX: i64 = 99;
 const MAX_ITEM_KEYS: usize = 8;
 /// ServiceCatalog's line ids, then STORYUI1's `board` (4.7), PK2-S3's `recipe` and PR6-8's `facility`.
-const SERVICE_IDS: [&str; 10] = ["greeting", "offer", "accept", "decline", "turn_in", "shop", "farewell", rpgkit_data::BOARD_SERVICE, rpgkit_data::RECIPE_SERVICE, rpgkit_data::facility::FACILITY_SERVICE];
+/// PR7-41 (PT-35): `turned_in` (the line after a turn-in) is a manifest line only (no service row, no kit default).
+const SERVICE_IDS: [&str; 11] = ["greeting", "offer", "accept", "decline", "turn_in", "shop", "farewell", rpgkit_data::BOARD_SERVICE, rpgkit_data::RECIPE_SERVICE, rpgkit_data::facility::FACILITY_SERVICE, "turned_in"];
 const TOKENS: [&str; 4] = ["npc", "quest", "shop", "gold"];
 const TEXT_TOKENS: [&str; 2] = ["npc", "gold"];
 

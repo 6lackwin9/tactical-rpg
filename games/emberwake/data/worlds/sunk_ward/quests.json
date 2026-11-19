@@ -447,7 +447,7 @@
 					"value": true
 				}
 			],
-			"reward": "Hollis's Lever-Winch (Heavy Winch Sunder costs 1 block less), 60 xp and 20 Scrap, and a gate wave that arrives a round late.",
+			"reward": "Hollis's Lever-Winch (Winch Sunder costs 1 block less), 60 xp and 20 Scrap, and a gate wave that arrives a round late.",
 			"template": "a1_flag_job_winch",
 			"turn_in": "talia_rusk",
 			"requires_flags": [

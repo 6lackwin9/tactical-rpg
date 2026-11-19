@@ -46,6 +46,11 @@ pub fn equip(d: &Data, world: &str, work: &mut UnitState, stash: &mut Stash, ite
             return Err(format!("{} needs both hands: the off hand stays empty with it.", main.name));
         }
     }
+    // PR7-41 (PT-30): the same item as the slot's class default (worn already, owned by nobody) would only use up the
+    // stash copy: refused, the copy stays in the stash
+    if work.equipment.get(slot).is_none() && work.default_item(d, world, slot).as_deref() == Some(item) {
+        return Err(format!("{} already wears {} (standard kit): keep the copy in the stash or sell it.", progression::display_name(d, work), def.name));
+    }
     // PR5-26 (audit B2): an emptied slot (`NO_ITEM`) gives nothing back
     if let Some(old) = work.equipment.insert(slot.to_string(), item.to_string()).filter(|o| o != NO_ITEM) {
         give_one(stash, old);

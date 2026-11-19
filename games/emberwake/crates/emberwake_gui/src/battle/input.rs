@@ -455,7 +455,7 @@ impl BattleScreen {
     /// round.
     fn tactic_ghost(&self, m: usize) -> bool {
         let w = &self.session().w;
-        ri::on(w) && w.allies.contains(&m) && w.units[m].is_active() && w.has(m) && rip::picks_of(w, m).is_empty() && !self.player_target.contains(&m)
+        ri::on(w) && w.allies.contains(&m) && w.units[m].is_active() && w.has(m) && rip::picks_of(w, m).is_empty() && !self.player_target.contains(&m) && !self.cleared.contains(&m)
     }
 
     /// GH2 a: drafts `m`'s ghost with its tactic (`preset`). A draft whose intent change would drop intent-bound buffs
@@ -483,6 +483,7 @@ impl BattleScreen {
     pub(super) fn plan_start(&mut self, cx: &Cx) {
         self.ghosted = self.session().current_round;
         self.player_target.clear();
+        self.cleared.clear();
         self.deferred.clear();
         let on = cx.settings.v["auto_fill"].as_bool().unwrap_or(true);
         if !on || self.session().w.autofill != on {
@@ -682,6 +683,8 @@ impl BattleScreen {
             return;
         }
         self.deferred.retain(|d| d.0 != h);
+        // PR7-41 (PT-32): a pick by hand ends a Clear's "stay empty": clearing the picks again lets the planner fill the round
+        self.cleared.retain(|c| *c != h);
         let name = self.session().w.units[h].name.clone();
         let shown = label.split_once(' ').filter(|(d, _)| d.len() == 1 && d.chars().all(|c| c.is_ascii_digit())).map_or(label, |(_, rest)| rest);
         if let Some(d) = r["dropped"].as_array().and_then(|a| a.first()) {
@@ -814,6 +817,19 @@ impl BattleScreen {
             return;
         }
         if rip::picks_of(&self.session().w, h).is_empty() {
+            // PR7-41 (PT-32): Clear on an auto-filled round empties it (the hero rests; no ghost drafts it again this
+            // round); Undo has nothing of the player's to take back
+            if all && !self.session().plan.steps_of(h).is_empty() {
+                let r = self.send(cx, json!({"cmd": "clear", "unit": h}));
+                if r["ok"] == json!(true) {
+                    self.deferred.retain(|d| d.0 != h);
+                    if !self.cleared.contains(&h) {
+                        self.cleared.push(h);
+                    }
+                    self.message = format!("{name}: auto plan cleared (the hero rests; pick steps or a tactic to plan again).");
+                }
+                return;
+            }
             self.message = format!("{name}: no pick to {}.", if all { "clear" } else { "undo" });
             return;
         }

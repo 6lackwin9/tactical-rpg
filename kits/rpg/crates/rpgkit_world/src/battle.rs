@@ -411,13 +411,16 @@ fn guest_of(d: &Data, world: &str, r: &str, unit: &str) -> bool {
 
 /// ACT1-HOOKS1 (FB-241 c): the encounter's `survivors` flag set (on every outcome) to how many guests of its `unit`
 /// lived; nothing when the encounter names no flag or the tally does not know its guests.
-fn record_survivors(d: &Data, gs: &mut GameState, enc: &Dict, tally: &Tally) {
+/// PR7-41 (PT-25): returns (lived, of) for the results screen, None when nothing was recorded.
+fn record_survivors(d: &Data, gs: &mut GameState, enc: &Dict, tally: &Tally) -> Option<(i64, i64)> {
     let block = json::dget(enc, SURVIVORS);
     let flag = json::s(block, "flag");
-    let Some(guests) = tally.guests.as_ref().filter(|_| !flag.is_empty()) else { return };
+    let guests = tally.guests.as_ref().filter(|_| !flag.is_empty())?;
     let (world, unit) = (json::s_or(enc, "_world", &gs.world_id), json::s(block, "unit"));
-    let n = guests.iter().filter(|g| g.alive && guest_of(d, &world, &g.unit_ref, &unit)).count() as i64;
+    let counted: Vec<&GuestEnd> = guests.iter().filter(|g| guest_of(d, &world, &g.unit_ref, &unit)).collect();
+    let n = counted.iter().filter(|g| g.alive).count() as i64;
     quest::set_flag(d, gs, &flag, int(n));
+    Some((n, counted.len() as i64))
 }
 
 impl Tally {
@@ -514,7 +517,7 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     // 1. the party side first (ROSTER1 3.2 and L5, ENCOUNTER2 W1-W4): before the XP, the quest hook and the tick
     let (party_keys, party_notes) = settle_party_side(d, gs, &enc, encounter_qid, outcome, tally);
     // ACT1-HOOKS1 (FB-241 c): the guests that lived, on every outcome
-    record_survivors(d, gs, &enc, tally);
+    let survivors = record_survivors(d, gs, &enc, tally);
     let roster = roster_at(d, &world, encounter_qid, world_stage(gs));
     let (fates, mut notes) = tally.fates_of(&roster);
     notes.extend(party_notes);
@@ -611,6 +614,11 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
         ("objective", Value::Object(objective)),
         ("notes", json::strs(&notes)),
     ]);
+    let mut rewards = rewards;
+    // PR7-41 (PT-25): an encounter counting its guests (`survivors`) tells how many lived (the key only then)
+    if let Some((lived, of)) = survivors {
+        rewards.insert("survivors".into(), serde_json::json!({"lived": lived, "of": of}));
+    }
     let mut out = done(true, &[], xp, &advanced);
     out.insert("rewards".into(), Value::Object(rewards));
     out.extend(party_keys);

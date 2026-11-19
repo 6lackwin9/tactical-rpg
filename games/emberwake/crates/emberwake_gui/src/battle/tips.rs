@@ -529,7 +529,7 @@ pub(super) fn inspect_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[In
 /// AP a pip (AP6) "1 pip = <u> AP".
 pub(crate) fn ap_lines(f: &rip::ApForecast) -> Vec<String> {
     let mut lines = vec![
-        format!("AP {} of {}", f.now, f.max),
+        crate::intent_text::ap_text(f.now, f.max, " of "),
         format!("Plan: {} (picked {}, auto-filled {})", f.spent, f.picked, f.filled),
         format!("Left: {}", f.left),
         format!("Next round: +{} -> {} (Rest +{})", f.gain, f.next, f.rest_gain),
@@ -570,7 +570,7 @@ pub(super) fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, bloc
             }
         }
         None => {
-            let mut tip: Tip = vec![(format!("AP {} of {}", unit.ap, unit.max_ap), ALLY)];
+            let mut tip: Tip = vec![(crate::intent_text::ap_text(unit.ap, unit.max_ap, " of "), ALLY)];
             if start > unit.ap {
                 tip.push((format!("Paid this round: {}", start - unit.ap), th().text));
             }
@@ -639,7 +639,7 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     if let Some((head, intent)) = round.filter(|_| u.is_active()).and_then(|r| Some((intent_text::round_head(w, r)?, r.round_intent?))) {
         t.push((head, intent_ink(intent)));
     }
-    t.push((format!("HP {}/{}   AP {}/{}   {}", u.hp, u.max_hp, u.ap, u.max_ap, stance_name(u)), th().text));
+    t.push((format!("HP {}/{}   {}   {}", u.hp, u.max_hp, crate::intent_text::ap_text(u.ap, u.max_ap, "/"), stance_name(u)), th().text));
     let level = match classes.get(i).filter(|c| !c.is_empty()) {
         Some(c) if u.tier.is_empty() => format!("Level {} {c}", u.stats.level),
         Some(c) => format!("Level {} {c} ({})", u.stats.level, u.tier),

@@ -122,7 +122,12 @@ pub fn state_props(t: &Dict, bunks: &[Bunk], mut has: impl FnMut(&str, i64, i64)
 pub fn bunk_tip(d: &Data, gs: &GameState, b: &Bunk) -> (String, String) {
     match gs.party.member(&b.member) {
         None => ("Empty bunk".into(), String::new()),
-        Some(m) => (progression::display_name(d, m), kit::condition(d, gs, m).to_string()),
+        // PR7-41 (PT-36): a member with unspent points says so on its bunk (a benched recruit too)
+        Some(m) => {
+            let pts = m.unspent(d);
+            let word = kit::condition(d, gs, m).to_string();
+            (progression::display_name(d, m), if pts > 0 { format!("{word} · {pts} point{} to spend", if pts == 1 { "" } else { "s" }) } else { word })
+        }
     }
 }
 
@@ -504,11 +509,14 @@ pub(crate) mod tests {
         map.draw(&mut cx, &mut g, (r.0 + r.2 / 2, r.1 + r.3 / 2), true);
         let w = map.widgets().into_iter().find(|w| w["id"] == format!("{BUNK_PREFIX}bunk_3")).unwrap();
         let name = progression::display_name(&cx.data, cx.gs().party.member(&ids[2]).unwrap());
-        assert_eq!(w["tip"], json!([name, kit::RESTING]), "benched and well: resting");
+        // PR7-41 (PT-36): unspent points follow the condition word
+        let pts = cx.gs().party.member(&ids[2]).unwrap().unspent(&cx.data);
+        let word = if pts > 0 { format!("{} · {pts} point{} to spend", kit::RESTING, if pts == 1 { "" } else { "s" }) } else { kit::RESTING.to_string() };
+        assert_eq!(w["tip"], json!([name, word]), "benched and well: resting");
         cx.gs_mut().party.members[2].add_condition(roster::WOUNDED);
         map.draw(&mut cx, &mut g, (r.0 + r.2 / 2, r.1 + r.3 / 2), true);
         let w = map.widgets().into_iter().find(|w| w["id"] == format!("{BUNK_PREFIX}bunk_3")).unwrap();
-        assert_eq!(w["tip"][1], json!(kit::WOUNDED_WORD));
+        assert!(w["tip"][1].as_str().unwrap_or_default().starts_with(kit::WOUNDED_WORD), "{}", w["tip"]);
     }
 
     #[test]

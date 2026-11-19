@@ -358,6 +358,8 @@ pub struct BattleScreen {
     cutscene: i32,
     /// INPUT1 GH2 b: the members whose round target the player set this round (their ghost is the auto plan on it).
     player_target: Vec<usize>,
+    /// PR7-41 (PT-32): members whose auto-filled round Clear emptied this round (no ghost is drafted for them again).
+    cleared: Vec<usize>,
     /// GH2 a: each member's hero tactic (an index of `TACTICS`; none = the party tactic).
     member_tactic: std::collections::HashMap<usize, usize>,
     /// GH2 a, IN6 (decision "INPUT1 answers, part 4" Q18): members whose ghost would change their intent and drop
@@ -515,6 +517,7 @@ impl BattleScreen {
             talk_node: String::new(),
             cutscene: 0,
             player_target: Vec::new(),
+            cleared: Vec::new(),
             member_tactic: Default::default(),
             deferred: Vec::new(),
             ghosted: 0,
@@ -859,6 +862,12 @@ impl Screen<GameCx> for BattleScreen {
         }
         if self.host.session.is_none() {
             return;
+        }
+        // PR7-41 (PT-32): Yes to the Menu's Retreat: the battle ends as fled (host `retreat`, recorded)
+        if cx.take_answer(crate::menus::RETREAT_ASK) && self.session().can_retreat() {
+            self.auto = false;
+            self.send(cx, json!({"cmd": "retreat"}));
+            self.message = "The party retreats.".into();
         }
         // TRANSITIONS1 T1: the battle beat holds the battle (its talks, a scripted round, autoplay) until control starts
         if self.intro_tick(cx, now) {

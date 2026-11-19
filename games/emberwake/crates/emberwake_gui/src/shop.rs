@@ -12,7 +12,7 @@ use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::painter::Painter;
 use aegis_ui::ui::{tip, Ui, BODY, RADIUS, SMALL, W, H};
-use emberwake_world::shop;
+use emberwake_world::{shop, Data, GameState};
 use emberwake_world::terms::{CURRENCY, UPKEEP};
 use serde_json::{json, Value};
 
@@ -136,8 +136,52 @@ pub fn item_line(cx: &Cx, item: &str) -> String {
     if !desc.is_empty() {
         parts.push(desc);
     }
-    parts.push(format!("{} · Owned {owned}", s_or(e, "item_type", "ITEM").to_lowercase()));
+    // PR7-41 (PT-30): Owned counts the stash; who already wears it (bought copy or standard kit) is named apart
+    let wearers = cx.game.as_ref().map(|g| worn_by(&cx.data, &g.gs, item)).unwrap_or_default();
+    let worn = if wearers.is_empty() { String::new() } else { format!(" · Worn by {}", wearers.join(", ")) };
+    parts.push(format!("{} · Owned {owned}{worn}", s_or(e, "item_type", "ITEM").to_lowercase()));
+    if let Some(g) = cx.game.as_ref() {
+        let note = item_use_note(&cx.data, &g.gs, item);
+        if !note.is_empty() {
+            parts.push(note);
+        }
+    }
     parts.join(" · ")
+}
+
+/// PR7-41 (PT-30): the party members wearing `item` now: in a slot, or as the slot's class default (standard kit).
+pub fn worn_by(d: &Data, gs: &GameState, item: &str) -> Vec<String> {
+    gs.party
+        .members
+        .iter()
+        .filter(|m| {
+            emberwake_world::state::LOADOUT_SLOTS.iter().any(|slot| match m.equipment.get(*slot) {
+                Some(i) => i == item,
+                None => m.default_item(d, &gs.world_id, slot).as_deref() == Some(item),
+            })
+        })
+        .map(|m| emberwake_world::progression::display_name(d, m))
+        .collect()
+}
+
+/// PR7-41 (PT-30): what a kept item is for, for its hover cards (stash, shop): the recipes whose cost takes it
+/// (`recipe::uses_of`, at most 3 named), a story item kept for the story, an item no shop buys; "" for gear and
+/// consumables with nothing to add.
+pub fn item_use_note(d: &Data, gs: &GameState, item: &str) -> String {
+    let e = d.entry("items", item);
+    let uses = emberwake_world::recipe::uses_of(d, gs, item);
+    let mut out = Vec::new();
+    if !uses.is_empty() {
+        let more = uses.len().saturating_sub(3);
+        let named = uses.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+        out.push(format!("Used for: {named}{}.", if more > 0 { format!(" and {more} more") } else { String::new() }));
+    }
+    if s(e, "item_type") == "QUEST" {
+        out.push("Key item: kept for the story; no shop buys it.".to_string());
+    } else if json::i(e, "value", 0) <= 0 && !e.is_empty() {
+        out.push("No shop buys it.".to_string());
+    }
+    out.join(" ")
 }
 
 /// The frame at the current text size: 600 x 300 at Normal, grown with the text (never shrunk), centred under the HUD.
@@ -403,7 +447,9 @@ impl ShopPane {
         let content = (rows.len() + others.len()) as i32 * step + divider + 2;
         let off = ui.scroll_begin(&format!("{side}.list"), area, content);
         // the parts' widths from the texts at this size
-        let price_w = rows.iter().map(|r| ui.p.text_w(&format!("{}g", r.price), BODY)).fold(0.0f32, f32::max).ceil() as i32;
+        // PR7-41 (PT-30): prices in the world's currency ("30 Scrap")
+        let cur = term_short(cx, CURRENCY);
+        let price_w = rows.iter().map(|r| ui.p.text_w(&format!("{} {cur}", r.price), BODY)).fold(0.0f32, f32::max).ceil() as i32;
         let count_w = rows.iter().map(|r| ui.p.text_w(&of_text(r.cap, r.n), BODY)).fold(0.0f32, f32::max).ceil() as i32;
         let (b5, b10) = (ui.p.text_w("+5", BODY).ceil() as i32 + 8, ui.p.text_w("+10", BODY).ceil() as i32 + 8);
         let full_w = area.w - 5;
@@ -424,7 +470,7 @@ impl ShopPane {
                 self.detail = Some(r.item.clone());
             }
             let ty = rr.y as f32 + (rh as f32 - ui.p.line_h(BODY)) / 2.0;
-            let price = format!("{}g", r.price);
+            let price = format!("{} {cur}", r.price);
             let price_col = if gold_left.is_some_and(|g| r.price > g) { th().foe } else if on { th().gold } else { th().dim };
             let count = of_text(r.x, r.n);
             let name_x = rr.x + 2 + ICON + 3;

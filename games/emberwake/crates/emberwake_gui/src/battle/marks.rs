@@ -1056,5 +1056,5 @@ pub(super) fn round_summary_text(s: &Session, layers: &Layers) -> Option<String>
     if !ri::on(&s.w) || !layers.summary {
         return None;
     }
-    Some(ri::summary_text(&ri::round_summary(&s.w, &s.resolver.scheduled)))
+    Some(ri::summary_text(&s.round_summary()))
 }

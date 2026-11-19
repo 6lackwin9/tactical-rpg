@@ -1,0 +1,153 @@
+{
+  "id": "battle_menu_retreat",
+  "title": "PR7-41 (PT-32, PT-25, PT-27): the playtest save cages_start enters The Crossroads Cages; the bar has no Restart and no Step while planning; Menu offers Retreat (the fight's round limit is a flight); Yes ends it as fled and the results say how many captives got out",
+  "launch": {
+    "save": "cages_start"
+  },
+  "settings": {
+    "reduce_motion": true
+  },
+  "timeout_s": 600,
+  "steps": [
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "main_menu"
+      }
+    },
+    {
+      "step": "click",
+      "id": "menu.continue"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "region_map"
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "step": "repeat",
+      "times": 4,
+      "until": {
+        "path": "screen",
+        "eq": "battle"
+      },
+      "steps": [
+        {
+          "step": "click",
+          "id": "here.cages"
+        },
+        {
+          "step": "pause",
+          "ms": 1500
+        }
+      ]
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "battle"
+      },
+      "timeout_ms": 40000
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "state.beat",
+        "absent": true
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "step": "shot",
+      "name": "intro_talk_strip_disabled"
+    },
+    {
+      "step": "click",
+      "id": "dialogue.continue"
+    },
+    {
+      "step": "pause",
+      "ms": 800
+    },
+    {
+      "step": "shot",
+      "name": "battle_bar_planning"
+    },
+    {
+      "step": "click",
+      "id": "bar.menu"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "widget": "settings.retreat"
+      }
+    },
+    {
+      "step": "shot",
+      "name": "battle_menu_retreat"
+    },
+    {
+      "step": "click",
+      "id": "settings.retreat"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "ask"
+      }
+    },
+    {
+      "step": "shot",
+      "name": "retreat_question"
+    },
+    {
+      "step": "key",
+      "key": "y"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "state.outcome",
+        "eq": "fled"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "step": "wait",
+      "until": {
+        "widget": "banner.continue"
+      }
+    },
+    {
+      "step": "shot",
+      "name": "retreat_fled_banner"
+    },
+    {
+      "step": "click",
+      "id": "banner.continue"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "battle_results"
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "step": "pause",
+      "ms": 800
+    },
+    {
+      "step": "shot",
+      "name": "results_captives"
+    }
+  ]
+}

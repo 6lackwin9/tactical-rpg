@@ -25,6 +25,8 @@ playtest harness (`tools/fc.sh playtest`) after the prologue; make it again the 
 | `fight1_pommel_hint` | PR7-41 (PT-21): a new game's first fight; the untouched auto plan's Pommel Strike breaks a Heavy Thrust before it lands (the round 1 log) | about 25 s |
 | `ally_support_menu` | PR7-41 (PT-23): the save `saves/cages_start` enters The Crossroads Cages; with Hollis selected the hero panel's Ally button lists the members he can use his pouch item on, and a row opens his skill menu on one | about 10 s |
 | `party_keystone` | PR7-41 (PT-28): the save `saves/after_vats`; the party screen's Skills tab shows the deck passives and the keystone slotted, with where they come from | about 5 s |
+| `battle_menu_retreat` | PR7-41 (PT-32, PT-25): the save `saves/cages_start` enters The Crossroads Cages; the strip is disabled under the intro talk, the bar has no Restart or Step while planning, Menu offers Retreat; Yes ends the fight as fled and the results count the captives | about 10 s |
+| `hub_text_audit` | PR7-41 (PT-30, PT-34, PT-35, PT-36): the save `saves/after_vats`; the stash cards say what key items are for, the hub menu, the save slots' whole labels and Quit to main menu asking first | about 6 s |
 
 The three screen scenarios also time frames (`perf`, ENGINE-2, numbers only, no budget): the main menu, the region map and
 battle planning. Measured 2026-11-18 at 1280x720 in a dev build with no window: p50 4.6 ms, 29.5 ms and 20.2 ms.

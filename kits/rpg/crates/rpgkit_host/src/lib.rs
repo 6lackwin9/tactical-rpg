@@ -131,7 +131,7 @@ fn err(msg: impl Into<String>) -> Value {
 
 impl aegis_host::Commands for Battle {
     fn mutating(&self, cmd: &str) -> bool {
-        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "stay_pick" | "pick" | "unpick" | "accept_ghost" | "autofill" | "channel" | "tactics")
+        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "stay_pick" | "pick" | "unpick" | "accept_ghost" | "autofill" | "channel" | "tactics" | "retreat")
     }
 
     fn restarts(&self, cmd: &str) -> bool {
@@ -332,6 +332,11 @@ impl Battle {
                 }
                 json!({"ok": true, "log": s.resolver.log[from..].to_vec(), "state": state_of(s)})
             }
+            // PR7-41 (PT-32): the party retreats while planning (`Session::retreat`: the battle ends as fled)
+            "retreat" => match s.retreat() {
+                Ok(()) => json!({"ok": true, "state": state_of(s)}),
+                Err(e) => err(e),
+            },
             "advance" => {
                 if !s.can_advance_round() {
                     return err(if s.combat_over { "the battle is over" } else { "finish the round first (resolve)" });

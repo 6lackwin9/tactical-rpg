@@ -648,6 +648,15 @@ pub fn claim_loot(gs: &mut GameState, qid: &str) -> String {
     String::new()
 }
 
+/// PR7-41 (PT-35): whether a turn-in asks who receives: its `rewards` name a passive or a skill, or one of its loot
+/// `offers` (loot refs in the played world) is a passive or skill reward (`reward_apply` gives those to a recipient).
+pub fn needs_recipient(d: &Data, gs: &GameState, rewards: &Dict, offers: &[String]) -> bool {
+    let r = json::normalize_dict(rewards);
+    !json::sget(&r, "passives").is_empty()
+        || !json::sget(&r, "skills").is_empty()
+        || offers.iter().any(|lq| matches!(json::s_or(d.resolve(&gs.world_id, "loot", lq), "reward_kind", "item").as_str(), "passive" | "skill"))
+}
+
 /// `rewards` {xp, items, passives, skills, gold, supplies} plus resolved loot entries. {ok, errors, granted, notes};
 /// `granted.supplies` only when the rewards name some (ACT1-HOOKS1).
 /// Content validation of the reward block (QuestRules.rewards_errors) is not ported: shipped data is valid.
