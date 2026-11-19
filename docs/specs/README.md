@@ -16,6 +16,7 @@ To prevent context bloat and outdated-spec noise in both the Design and Build se
 | `UISPLIT1.md` | Screen behaviour (view-models) apart from layout files and theme (`PR7-38`, `PR7-39`) | active (2026-11-18) |
 | `STATUSVIS1.md` | Show a status where it acts (timeline, HP bar, numbers, grid, targeting) and plate priority by primitive (`AI-34` mock first) | draft (2026-11-19) |
 | `BOSSUI1.md` | Boss bar: HP refilled per phase, phase markers and names, passive tags, icon-only status tabs, boss `poise_pips` (`AI-35` mock first) | draft (2026-11-19) |
+| `ENRAGE2.md` | Baseline enrage for every enemy from round 6, steps by tier, ruleset fields, balance band (`PR7-55`) | active (2026-11-19) |
 | `MASTERPLAN1_ROWS.md` | Mapping of all historical task rows onto the 186 masterplan tasks | active reference map |
 | `SILOS1.md` | Silo boundaries (`WORLDFIGHT1`, `SERVICES1`, `KITIDS1`) | active (Q1-Q3 closed 2026-11-07) |
 | `AGENTROLES1.md` | Lane scopes, `integration` agent, `aegis scenario`, `SKILLS1` | active (`X6`) |

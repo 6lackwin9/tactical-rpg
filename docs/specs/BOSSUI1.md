@@ -27,8 +27,9 @@ screen.
 - BU3. Name per phase. The bar's title is the phase's `name` when it has one (a form or state, for example "the
   Foundry Master, Unbound"), else the boss unit's name and title. When a phase brings a different boss unit (a wave
   effect whose unit is the encounter's boss for that phase), the bar follows that unit: its name, HP and poise.
-- BU4. Passive tags. Under the title, one tag per boss passive (the unit's `passives`, by display name) plus the
-  enrage cue as a tag; hover or focus shows the passive's description. No other text on the bar.
+- BU4. Passive tags. Under the title, one tag per boss passive (the unit's `passives`, by display name); hover or
+  focus shows the passive's description. No phase change or enrage tags (user 2026-11-19 18:12: the header shows the
+  phase; enrage is the baseline rule of `ENRAGE2.md` for every enemy). No other text on the bar.
 - BU5. The attack impact row stays as mocked in take 24.
 - BU6. Status tabs on the bar and on plates are icon only, no pips or numbers; the expanded list shows the rounds
   left as a number (supersedes the pip line of `SCREEN_CONTRACT_BATTLE` section 6 once signed off).
