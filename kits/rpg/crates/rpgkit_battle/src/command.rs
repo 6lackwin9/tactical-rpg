@@ -739,7 +739,7 @@ impl Command {
             }
             CmdKind::StatusBlock { status } => {
                 self.cue = Some(crate::event::EventKind::LostBlock { status: status.clone() });
-                self.log = format!("[Status] {src_name} is {status} and loses this block");
+                self.log = format!("[Status] {src_name} loses this block to {}", status::display_name(&status));
             }
             CmdKind::Support { target, skill, .. } => {
                 if let CmdKind::Support { last_heal, last_status, last_cleansed, .. } = &mut self.kind {
@@ -772,6 +772,8 @@ impl Command {
                     self.log = format!("[Support Failed] {src_name} cannot reach {} with {}.", w.units[target].name, self.name);
                     return;
                 }
+                // PR7-41 (PT-26): the heal before the missing-HP cap, so a capped heal says so
+                let full_heal = if skill::heals(&w.cat.skills[skill]) && w.units[target].is_alive() { crate::world::heal_taken(heal_amount_on(w, src, target, skill), w.units[target].band_heal_taken) } else { 0 };
                 let done = support_apply(w, src, target, skill);
                 // RULESET1_INTENT IN6: intent-bound grants carry the holder's intent
                 let mut granted = done.extras.clone();
@@ -782,7 +784,7 @@ impl Command {
                 let t = &w.units[target];
                 let mut parts = Vec::new();
                 if skill::heals(s) {
-                    parts.push(format!("healed {} (HP {}/{})", done.healed, t.hp, t.max_hp));
+                    parts.push(format!("healed {} (HP {}/{})", heal_words(done.healed, full_heal), t.hp, t.max_hp));
                 }
                 if skill::cleanses(s) {
                     let names: Vec<String> = done.cleansed.iter().map(|st| status::display_name(st)).collect();
@@ -865,10 +867,11 @@ impl Command {
                         }
                     } else {
                         let before = w.units[target].hp;
+                        let full_heal = crate::world::heal_taken(amount, w.units[target].band_heal_taken);
                         w.heal(target, amount);
                         let t = &w.units[target];
                         heal = t.hp - before;
-                        parts.push(format!("healed {heal} (HP {}/{})", t.hp, t.max_hp));
+                        parts.push(format!("healed {} (HP {}/{})", heal_words(heal, full_heal), t.hp, t.max_hp));
                     }
                 }
                 if item.damage > 0 {
@@ -927,9 +930,9 @@ impl Command {
                 self.log = if w.units[src].is_withdrawn {
                     format!("[Withdrawal] {src_name} moved from {start} and safely WITHDREW through Exit!")
                 } else if moved == 0 && cut {
-                    format!("[Move Cut Short] {src_name} couldn't move from {start} (blocked by {blocker}).")
+                    format!("[Move Cut Short] {src_name} couldn't move from {start} ({}).", blocked_words(&blocker))
                 } else if cut {
-                    format!("[Move Cut Short] {src_name} stopped at {end} after {moved} of {} tiles (blocked by {blocker}).", path.len())
+                    format!("[Move Cut Short] {src_name} stopped at {end} after {moved} of {} tiles ({}).", path.len(), blocked_words(&blocker))
                 } else {
                     format!("[Move] {src_name} moved {moved} tile{} from {start} to {end}", if moved == 1 { "" } else { "s" })
                 };
@@ -1403,7 +1406,7 @@ fn follow(w: &mut World, src: UnitId, t: UnitId, band: (i32, i32), diag: bool, f
 }
 
 /// RULESET1_INTENT MV3: the power factor of a flank hit (`flank_power_mult`; 1.0 otherwise).
-fn flank_power(w: &World, flank: bool) -> f64 {
+pub(crate) fn flank_power(w: &World, flank: bool) -> f64 {
     if flank {
         w.ruleset.numbers.flank_power_mult
     } else {
@@ -2061,6 +2064,26 @@ struct Supported {
     extras: Vec<String>,
     /// PK2-S1: the `unmark` log part ("" = the skill has none or found nothing to undo).
     unmarked: String,
+}
+
+/// PR7-41 (PT-34): what stopped a cut-short walk in words: "blocked by <what>", or "no way through" when no route was
+/// left (`walk`'s "no route").
+pub fn blocked_words(blocker: &str) -> String {
+    if blocker == "no route" {
+        "no way through".into()
+    } else {
+        format!("blocked by {blocker}")
+    }
+}
+
+/// PR7-41 (PT-26): the amount a heal line names: what it restored, and of how much when the missing HP capped it
+/// ("7 of 52": a full heal lost to the cap reads "0" as before).
+pub fn heal_words(healed: i32, full: i32) -> String {
+    if healed > 0 && healed < full {
+        format!("{healed} of {full}")
+    } else {
+        healed.to_string()
+    }
 }
 
 /// SupportRules.apply: cleanse, heal, grant, extra grants.

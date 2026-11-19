@@ -1467,10 +1467,12 @@
 			"deck": {
 				"active": [
 					"hamstring_sever",
-					"ash_cloud_fade"
+					"ash_cloud_fade",
+					"throat_carver"
 				],
 				"order": {
 					"assault": [
+						"throat_carver",
 						"strike"
 					],
 					"guard": [
@@ -1539,11 +1541,13 @@
 			"deck": {
 				"active": [
 					"poachers_quarrel",
-					"tripwire_snare"
+					"tripwire_snare",
+					"heavy_winch_sunder"
 				],
 				"order": {
 					"assault": [
 						"poachers_quarrel",
+						"heavy_winch_sunder",
 						"strike"
 					],
 					"guard": [
@@ -2418,12 +2422,14 @@
 			"deck": {
 				"active": [
 					"shackle_pummel_slam",
-					"slag_slam_throw"
+					"slag_slam_throw",
+					"foundry_shatter"
 				],
 				"order": {
 					"assault": [
 						"slag_slam_throw",
 						"shackle_pummel_slam",
+						"foundry_shatter",
 						"strike"
 					],
 					"guard": [
@@ -2487,11 +2493,13 @@
 			"deck": {
 				"active": [
 					"pommel_strike",
-					"intercepting_hook"
+					"intercepting_hook",
+					"billhook_sunder"
 				],
 				"order": {
 					"assault": [
 						"pommel_strike",
+						"billhook_sunder",
 						"strike"
 					],
 					"guard": [
@@ -2628,7 +2636,8 @@
 			"deck": {
 				"active": [
 					"phosphorus_pot",
-					"magnesium_flash_bomb"
+					"magnesium_flash_bomb",
+					"choke_gas"
 				],
 				"order": {
 					"assault": [
@@ -2639,7 +2648,8 @@
 						"active_guard"
 					],
 					"field": [
-						"phosphorus_pot"
+						"phosphorus_pot",
+						"choke_gas"
 					]
 				},
 				"passive": [

@@ -61,8 +61,8 @@ pub(super) fn is_gesture(ev: &WindowEvent) -> bool {
     }
 }
 
-/// The movement key (arrows, W A S D) a logical key is, if it is one.
-pub(super) fn walk_key(k: &WKey) -> Option<Key> {
+/// The key an arrow or character key is, before the control map (`Shell::walk_key` maps it and keeps the movement keys).
+pub(super) fn raw_walk_key(k: &WKey) -> Option<Key> {
     let key = match k {
         WKey::Named(NamedKey::ArrowUp) => Key::Up,
         WKey::Named(NamedKey::ArrowDown) => Key::Down,
@@ -71,7 +71,7 @@ pub(super) fn walk_key(k: &WKey) -> Option<Key> {
         WKey::Character(c) => Key::Char(c.chars().next()?.to_ascii_lowercase()),
         _ => return None,
     };
-    key.dir().map(|_| key)
+    Some(key)
 }
 
 /// The digit of a top-row or keypad digit key.
@@ -661,5 +661,36 @@ impl<G: Context> Shell<G> {
         let cx = &mut self.cx;
         self.stack.last_mut().unwrap().back(cx);
         self.settle();
+    }
+}
+
+impl<G: Context> Shell<G> {
+    /// INPUT-MAP1: the control map of the settings in force; re-read (problems to the notice) when they change.
+    pub(super) fn controls(&mut self) -> &crate::controls::Controls {
+        let now = self.cx.settings.v.get(crate::controls::SETTINGS_KEY).cloned();
+        if self.controls.1.as_ref() != Some(&now) {
+            let (map, problems) = crate::controls::Controls::from_settings(&self.cx.settings.v);
+            self.cx.notice.extend(problems);
+            self.controls = (map, Some(now));
+        }
+        &self.controls.0
+    }
+
+    /// The movement key (arrows, W A S D, or what the control map makes of a key) a logical key is, if it is one.
+    pub(super) fn walk_key(&mut self, k: &WKey) -> Option<Key> {
+        let k = raw_walk_key(k)?;
+        Some(self.controls().key(k)).filter(|k| k.dir().is_some())
+    }
+
+    /// A pressed key, through the control map, to the top screen.
+    pub(super) fn press(&mut self, k: Key) {
+        let k = self.controls().key(k);
+        self.key(k);
+    }
+
+    /// A pad button, through the control map, to the top screen.
+    pub(super) fn pad(&mut self, p: crate::controls::Pad) {
+        let k = self.controls().pad(p);
+        self.key(k);
     }
 }

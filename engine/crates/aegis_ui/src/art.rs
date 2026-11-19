@@ -241,8 +241,7 @@ impl Art {
         }
         if !palette.is_empty() {
             if let Some(slots) = assets::read_json(&self.layers, &assets::body_file(key, &format!("palettes/{palette}.json"))).and_then(|v| assets::parse_palette(&v).ok()) {
-                let pairs: Vec<([u8; 3], [u8; 3])> = slots.iter().filter_map(|(slot, to)| clips.palette.get(slot).map(|from| (*from, *to))).collect();
-                sheet.swap_colours(&pairs);
+                sheet.swap_colours(&assets::palette_pairs(&clips.palette, &slots));
             }
         }
         Some(Body { sheet, clips })

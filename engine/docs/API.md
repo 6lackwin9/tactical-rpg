@@ -10,7 +10,8 @@ save. Nothing here is a stable, versioned API yet; the engine changes with its g
 | --- | --- |
 | `aegis_core` | the asset layers (`assets::Layers`), the clock (`clock`, never `std::time`), files (`vfs`, never `std::fs` in runtime code), the deterministic RNG, JSON helpers (`json::Dict`), temp folders in tests (`scratch::Scratch`) |
 | `aegis_layout` | rects on whole grid units: `Rect::place(Anchor, w, h)`, `cut_top` / `cut_left` / ..., `pad(Insets)`, `split_x`, `Part` (fractions, ratios, fills) |
-| `aegis_ui` | the window shell (`shell::run`), screens (`screen`), widgets (`ui::Ui`), the painter, the theme, art and audio, panes, screen layouts (`screen_layout`) |
+| `aegis_ui` | the window shell (`shell::run`), screens (`screen`), widgets (`ui::Ui`), the painter, the theme, art and audio, panes, screen layouts (`screen_layout`), the game start (`start`), a world camera (`world_camera`: follow, bounds, zoom steps, screen and world points) and a tile layer (`tilemap`: cells on view, autotile corners) |
+| `aegis_grid` | grid cells and neighbours (`DIRS4`, `DIRS8`), the cost search (`search`: uniform cost or A*, ties in direction order then the caller's `better`), `reach` within a budget, `line` of cells; no dependencies |
 | `aegis_host` | the command API: one JSON request in, one reply out, every change recorded for replays (`Host`, `Commands`) |
 | `aegis_save` | versioned save slots with migrations, the per-game user folder (`user_dir(id)`) |
 | `aegis_content` | the manifest (`manifest::Manifest`, `game.json`), the data store and its writer (`store::Hooks`) |
@@ -48,9 +49,13 @@ A screen can keep its layout out of code: build a `screen_layout::View` and let 
 
 ### Launch
 
-`launch` builds the `Cx`, the first screen and `shell::Options` (title, font, link port, icon, canvas, window sizes,
-`headless`); `run_native` reads launch keys (`headless=WxH` opens no window) and calls `shell::run`. The asset layers
-come from the game folder: `Layers::for_game(dir)` stacks the game's `assets/`, its kit's and the engine's.
+`launch` builds the `Cx`, the first screen and `shell::Options` through the engine's game start
+(`aegis_ui::start::Start::new(id, game folder, engine folder, launch keys, headless)`): it reads `game.json`, stacks the
+asset layers (`Layers::for_game(dir)`: the game's `assets/`, its kit's and the engine's), picks the saves folder
+(`saves=`), the link port (`port=`) and the options (title, font, icon, canvas, window sizes); `settings`, `audio` and
+`cx` finish the context around the game's own state. `run_native` reads launch keys (`headless=WxH` opens no window)
+and calls `shell::run`. The game's command line program is named in `game.json` (`cli`; `<id>_cli` when missing), and
+`tools/fc.sh` runs scenarios and playtests through it.
 
 ### The command host
 
@@ -63,6 +68,30 @@ and `replay` drive it. Keep rules here, not in screens, so they test and replay 
 A second program (`<id>_cli`) implements `aegis_cli::Game` (`USAGE`, `run` for the game's own commands, `data_dir`,
 `manifest_path`, `content` (the `store::Hooks` of its data kinds), `host`, `driver`) and calls `aegis_cli::run`. Keep it
 apart from the game program: the file and clock lints exempt only the CLI crate.
+
+### Controls
+
+Screens read `Key`s. Every key, and every gamepad button, passes through the control map first (`aegis_ui::controls`,
+settings key `controls`: `{"keys": {"i": "up"}, "pad": {"south": "enter"}}`), so a player can rebind keys and a pad
+drives the same screens; bad entries are shown and keep their defaults. Pad defaults: south Enter, east Esc (Back), west
+Space, north Tab, the bumpers Page Up / Down, Select Shift+Tab, Start Esc, the d-pad and left stick the arrows (held, they
+repeat after 350 ms every 110 ms and set `Held::dir`). The pad is read on Windows; anywhere, and with no window, the link
+requests `{"cmd": "pad", "button": "south"}` and `{"cmd": "controls"}` press a button and show the map.
+
+### Words on screen
+
+Put a screen's words in `assets/strings/<language>.json` (a flat object, `"menu.start": "Start"`, `{name}` filled by
+`tr_with`) and draw `aegis_ui::strings::tr("menu.start")`. Tables layer like every asset (engine, kit, game; each sets
+only the keys it names). The language is the settings key `language` (default `en`); a key missing in it falls back to
+`en`, then shows as the key. The gate (`tools/fc.sh layouts`) wants every language to hold the keys of `en`, with the
+same `{name}`s, and no more. The scaffold's menu already reads its words this way.
+
+### Log and crash report
+
+A windowed native run writes `game.log` (the run before kept as `game.1.log`) in `logs/` beside the player's settings,
+with every screen change and notice; `aegis_ui::crashlog::line` adds to it. A panic writes `crash-<unix seconds>.txt`
+there (message, place, backtrace, the last 200 log lines; the newest 5 are kept) and then goes on as before. The web and
+a run with no window write none.
 
 ## Checks and tools
 

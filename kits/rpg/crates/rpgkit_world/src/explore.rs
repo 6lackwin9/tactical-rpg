@@ -259,12 +259,30 @@ fn is_done(gs: &GameState, loc_qid: &str, m: &Dict) -> bool {
     gs.flag_true(&done_flag(loc_qid, &json::s(m, "id")))
 }
 
+/// PR7-41 (PT-34): a locked marker's words: its `locked_text` after "Locked: ", or the text alone when it already
+/// says so ("Locked" gives "Locked.", never "Locked: Locked").
+pub fn locked_words(text: &str) -> String {
+    let t = text.trim();
+    let bare = t.trim_end_matches(['.', '!']);
+    if bare.is_empty() || bare.eq_ignore_ascii_case("locked") {
+        "Locked.".into()
+    } else if t.to_lowercase().starts_with("locked") {
+        t.to_string()
+    } else {
+        format!("Locked: {t}")
+    }
+}
+
 /// "present", "locked" or "absent".
 pub fn presence(d: &Data, gs: &GameState, loc_qid: &str, m: &Dict) -> &'static str {
     let req_ok = quest::all_hold(gs, json::get(m, "requires_flags"));
     let unless_ok = !quest::any_holds(gs, json::get(m, "unless_flags"));
     let kind = json::s(m, "kind");
     if (kind == "encounter" || kind == "roamer") && json::b(m, "once", true) && is_done(gs, loc_qid, m) {
+        return "absent";
+    }
+    // PR7-41 (PT-15): a job's fight is offered only once its job is accepted
+    if (kind == "encounter" || kind == "roamer") && quest::fight_waits_for_job(d, gs, &json::s(d.resolve(&gs.world_id, "encounters", &json::s(m, "encounter")), "_qid")) {
         return "absent";
     }
     if kind == "exit" && !req_ok && unless_ok {
@@ -336,7 +354,7 @@ pub fn marker_view(d: &Data, gs: &GameState, loc: &Dict, m: &Dict) -> Dict {
         "exit" => {
             let to = json::s(&mk, "to");
             let lbl = if to == WORLD_MAP { "World map".into() } else { format!("To {}", json::s_or(resolve_location(d, gs, &to), "name", &to)) };
-            let verb = if state == "locked" { format!("Locked: {}", json::s(&mk, "locked_text")) } else { "Walk onto it".into() };
+            let verb = if state == "locked" { locked_words(&json::s(&mk, "locked_text")) } else { "Walk onto it".into() };
             (lbl, verb)
         }
         "encounter" | "roamer" => (

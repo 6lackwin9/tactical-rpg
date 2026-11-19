@@ -359,6 +359,10 @@ pub struct Session {
     /// PK1-S1 (3.7): the guests and the protected guests at the battle start (a calmed unit takes its start role back).
     start_guests: Vec<UnitId>,
     start_protected: Vec<UnitId>,
+    /// PR7-41 (PT-16): the party members whose round this round is the auto draft, with the tactic it was drafted with
+    /// (a preset, the battle's tactics); `redraft_broken` drafts such a round again when a later member's draft broke
+    /// it. Cleared at each round start; a member leaves it on any edit of its round by hand (`hand_set`).
+    drafted: IndexMap<UnitId, String>,
 }
 
 impl Session {
@@ -615,6 +619,7 @@ impl Session {
             spawned_enemies: enemies.clone(),
             start_guests,
             start_protected,
+            drafted: IndexMap::new(),
         };
         // PR6-9: a retreat's unit (the first of its ref) and the HP damage never takes it below
         if s.objective.objective == encounter::RETREAT {
@@ -645,6 +650,8 @@ impl Session {
     }
 
     fn begin_round(&mut self, round: i32) {
+        // PR7-41 (PT-16): no round of the new round is drafted yet
+        self.drafted.clear();
         self.mark_log(round, LOG_ROUND_START);
         if round > 1 {
             self.resolver.finish_round(&mut self.w);
@@ -786,8 +793,71 @@ impl Session {
         }
         let allies = self.w.allies.clone();
         let presets: Vec<(UnitId, String)> = allies.iter().map(|&a| (a, self.preset_for(a, self.def.tactics.of(&self.hero_key(a))))).collect();
+        self.drafted.extend(presets.iter().cloned());
         let lines = ai::plan_party_intents(&mut self.w, &mut self.plan, &presets);
         self.events.extend(lines);
+        self.redraft_broken();
+    }
+
+    /// PR7-41 (PT-16): the auto-filled plan is always valid. Under `round_intent` a member's drafted round (one with no
+    /// pick of the player's) that a later member's draft broke (its approach tile taken, its path cut) is drafted
+    /// again with the tactic it was drafted with, until none changes; a round still broken after that rests (the
+    /// planner's `rest_fallback`). Rounds holding the player's picks are never touched.
+    pub fn redraft_broken(&mut self) {
+        if self.phase != Phase::Planning || self.script_lock || !round_intent::on(&self.w) {
+            return;
+        }
+        let broken = |s: &Session| -> Vec<(UnitId, String)> {
+            s.w.allies
+                .iter()
+                .copied()
+                .filter(|&a| s.w.units[a].is_active() && crate::round_intent_plan::picks_of(&s.w, a).is_empty() && !s.plan.is_valid(&s.w, a))
+                .filter_map(|a| s.drafted.get(&a).map(|t| (a, t.clone())))
+                .collect()
+        };
+        for _ in 0..self.w.allies.len() {
+            let again = broken(self);
+            if again.is_empty() {
+                return;
+            }
+            let lines = ai::plan_party_intents(&mut self.w, &mut self.plan, &again);
+            self.events.extend(lines);
+        }
+        for (a, _) in broken(self) {
+            ai::rest_fallback(&self.w, &mut self.plan, a);
+        }
+    }
+
+    /// PR7-41 (PT-16): member `c`'s round was edited by hand (its steps, intent, target, Maneuver kind, Channel toggle or
+    /// picks): it is no longer the auto draft, so Confirm never redrafts it (a broken one is refused, `plan_refusal`).
+    /// The host's step edits call it; the session's own edit requests do.
+    pub fn hand_set(&mut self, c: UnitId) {
+        self.drafted.shift_remove(&c);
+    }
+
+    /// PR7-41 (PT-16): why `confirm_plan` refuses the party's plan, in player words: the first member whose round does
+    /// not compile, with the step and its cause (`{name}, step 2 (Strike): No path to get within reach.`); a hold
+    /// escape still waiting for its holder; None when the plan confirms.
+    pub fn plan_refusal(&self) -> Option<String> {
+        if self.phase != Phase::Planning {
+            return Some("The round is not being planned.".into());
+        }
+        if self.needs_stay_pick() {
+            return Some("Pick who stays behind first.".into());
+        }
+        let w = &self.w;
+        let a = w.allies.iter().copied().find(|&a| w.units[a].is_active() && !self.plan.is_valid(w, a))?;
+        let st = self.plan.compile(w, a);
+        let steps = self.plan.steps_of(a);
+        let step = usize::try_from(st.error_index).ok().and_then(|i| steps.get(i).map(|p| (i, p)));
+        let cause = if st.error_text.is_empty() { "this round cannot be played.".to_string() } else { st.error_text.clone() };
+        Some(match step {
+            Some((i, p)) => {
+                let what = p.skill.and_then(|sid| w.cat.skills.get(sid)).map(|s| s.name.clone()).unwrap_or_else(|| "Move".into());
+                format!("{}, step {} ({what}): {cause}", w.units[a].name, i + 1)
+            }
+            None => format!("{}: {cause}", w.units[a].name),
+        })
     }
 
     /// CombatEncounter.hero_key: a party unit's stable key across battles (the member id, else the world character it
@@ -1505,8 +1575,10 @@ impl Session {
         // RULESET1_INTENT AI5 (RULESET1-AI): under round_intent a tactic picks each member's intent and target
         if round_intent::on(&self.w) {
             let presets: Vec<(UnitId, String)> = allies.iter().map(|&a| (a, self.preset_for(a, preset))).collect();
+            self.drafted.extend(presets.iter().cloned());
             let lines = ai::plan_party_intents(&mut self.w, &mut self.plan, &presets);
             self.events.extend(lines);
+            self.redraft_broken();
             return;
         }
         for &a in &allies {
@@ -1536,8 +1608,11 @@ impl Session {
             return;
         }
         if round_intent::on(&self.w) {
+            // PR7-41 (PT-16): the members this draft broke are drafted again (the battle screen's ghosts draft one at a time)
+            self.drafted.insert(actor, preset.to_string());
             let lines = ai::plan_party_intents(&mut self.w, &mut self.plan, &[(actor, preset.to_string())]);
             self.events.extend(lines);
+            self.redraft_broken();
             return;
         }
         let p = self.w.profile_of(actor).with_preset(preset);
@@ -1550,6 +1625,8 @@ impl Session {
         if self.phase != Phase::Planning || self.plan_confirmed {
             return Err("The intent changes only at a round start, while planning.".into());
         }
+        // PR7-41 (PT-16): an edit by hand: the round is no longer the auto draft
+        self.hand_set(c);
         let Some(i) = round_intent::RoundIntent::parse(intent) else { return Err(format!("Unknown intent '{intent}'.")) };
         let lines = crate::round_intent_plan::change_intent(&mut self.w, &mut self.plan, c, i)?;
         self.events.extend(lines.iter().cloned());
@@ -1563,6 +1640,8 @@ impl Session {
         if self.phase != Phase::Planning || self.plan_confirmed {
             return Err("The intent changes only at a round start, while planning.".into());
         }
+        // PR7-41 (PT-16): an edit by hand: the round is no longer the auto draft
+        self.hand_set(c);
         let (w0, seq0) = (self.w.clone(), self.plan.sequences.clone());
         match crate::round_intent_plan::set_round(&mut self.w, &mut self.plan, c, set) {
             Ok(done) => {
@@ -1582,6 +1661,8 @@ impl Session {
         if self.phase != Phase::Planning || self.plan_confirmed {
             return Err("The target is set while planning.".into());
         }
+        // PR7-41 (PT-16): an edit by hand: the round is no longer the auto draft
+        self.hand_set(c);
         round_intent::set_target(&mut self.w, c, target)
     }
 
@@ -1590,6 +1671,8 @@ impl Session {
         if self.phase != Phase::Planning || self.plan_confirmed {
             return Err("The Maneuver kind is set while planning.".into());
         }
+        // PR7-41 (PT-16): an edit by hand: the round is no longer the auto draft
+        self.hand_set(c);
         round_intent::set_maneuver(&mut self.w, c, kind)
     }
 
@@ -1601,6 +1684,8 @@ impl Session {
         if self.phase != Phase::Planning || self.plan_confirmed {
             return (Err("Picks are made while planning.".into()), Vec::new());
         }
+        // PR7-41 (PT-16): an edit by hand: the round is no longer the auto draft
+        self.hand_set(c);
         pick_on(&mut self.w, &mut self.plan, &mut self.events, c, at, picks)
     }
 
@@ -1611,6 +1696,8 @@ impl Session {
         if self.phase != Phase::Planning || self.plan_confirmed {
             return (Err("The Channel toggle is set while planning.".into()), Vec::new());
         }
+        // PR7-41 (PT-16): an edit by hand: the round is no longer the auto draft
+        self.hand_set(c);
         let out = crate::round_intent_plan::set_channel(&mut self.w, &mut self.plan, c, on);
         if let Ok(lines) = &out.0 {
             self.events.extend(lines.iter().cloned());
@@ -1655,6 +1742,10 @@ impl Session {
         // ENCOUNTER2-C SR5: a locked round was confirmed at its start (confirm answers ok)
         if self.script_lock {
             return true;
+        }
+        // PR7-41 (PT-16): an auto-filled round a later edit broke is drafted again first (the player's picks stay)
+        if self.phase == Phase::Planning && !self.plan_is_valid() {
+            self.redraft_broken();
         }
         // ENCOUNTER2 H1: a hold escape is not planned before someone holds
         if self.phase != Phase::Planning || !self.plan_is_valid() || self.needs_stay_pick() {
@@ -1783,7 +1874,7 @@ impl Session {
                 // the round intent only (classic logs as before)
                 if round_intent::on(&self.w) {
                     self.mark_log(self.current_round, LOG_ROUND_END);
-                    let sum = round_intent::round_summary(&self.w, &self.resolver.scheduled);
+                    let sum = self.round_summary();
                     self.resolver.log.push(round_intent::summary_line(self.current_round, &sum));
                 }
                 self.combat_over = over;
@@ -2109,6 +2200,36 @@ impl Session {
                 (c, fate)
             })
             .collect()
+    }
+
+    /// PR7-41 (PT-34): the current round's summary (`round_intent::round_summary`), its breaks at least the `[Break]`
+    /// lines the round logged (a break by a trigger, a rider or a collision is no scheduled hit's), so the summary never
+    /// says "no breaks" under a logged break.
+    pub fn round_summary(&self) -> round_intent::RoundSummary {
+        let mut sum = round_intent::round_summary(&self.w, &self.resolver.scheduled);
+        let from = self.log_marks.iter().find(|m| m.1 == self.current_round).map_or(0, |m| m.0).min(self.resolver.log.len());
+        let logged = self.resolver.log[from..].iter().filter(|l| l.starts_with("[Break]")).count() as i32;
+        sum.breaks = sum.breaks.max(logged);
+        sum
+    }
+
+    /// PR7-41 (PT-32): whether the party may retreat now: while a round is planned (nothing confirmed) in a battle that
+    /// goes on and whose round limit ends in a flight (`timeout_outcome` fled: running out of rounds is no defeat).
+    pub fn can_retreat(&self) -> bool {
+        self.outcome.is_empty() && !self.combat_over && self.phase == Phase::Planning && !self.plan_confirmed && self.timeout_outcome == encounter::FLED
+    }
+
+    /// PR7-41 (PT-32): the party retreats (`can_retreat`): the battle ends now as fled, nothing of the round resolved;
+    /// the log says so. Refused (with the reason) when the battle does not allow it.
+    pub fn retreat(&mut self) -> Result<(), String> {
+        if !self.can_retreat() {
+            return Err(if self.timeout_outcome != encounter::FLED { "This fight allows no retreat." } else { "Retreat only while planning a round." }.into());
+        }
+        self.resolver.log.push("[Retreat] The party retreats from the fight.".into());
+        self.outcome = encounter::FLED.into();
+        self.combat_over = true;
+        self.phase = Phase::Replay;
+        Ok(())
     }
 
     /// ENCOUNTER2 H1: a hold escape still waits for its holder (planning cannot be confirmed).

@@ -671,16 +671,12 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                         plate(&mut ui.p, geo.cell_rect(c), rgba(255, 255, 255, 30), rgba(255, 255, 255, 160));
                     }
                 }
-                // INTENT1 area tells: the tiles an enemy's area attack will hit.
+                // INTENT1 area tells: the tiles an enemy's area attack will hit. PR7-41 (PT-17): the tiles it strikes when it
+                // lands (the kit's `intent::area_cells`: a shaped Assault row follows its target, the party's plan
+                // counted), for its first action and, once its plan is revealed, every later area too
                 if show_tells {
-                    for r in tells.iter().filter(|r| r.line.kind == "area") {
-                        let cells = s.resolver.scheduled.iter().find_map(|a| match &a.command.kind {
-                            CmdKind::Area { cells, aim, .. } if a.unit == r.unit && *aim == r.line.cell => Some(cells.clone()),
-                            _ => None,
-                        });
-                        for c in cells.unwrap_or_default().into_iter().filter(|c| w.grid.is_valid(*c)) {
-                            plate(&mut ui.p, geo.cell_rect(c).inset(1), rgba(240, 100, 92, 70), rgba(240, 100, 92, 230));
-                        }
+                    for c in area_tell_cells(s, tells) {
+                        plate(&mut ui.p, geo.cell_rect(c).inset(1), rgba(240, 100, 92, 70), rgba(240, 100, 92, 230));
                     }
                 }
                 if let Some(o) = &shown {
@@ -940,4 +936,27 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
         ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), widget_rect(t), true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
     }
     board_hover
+}
+
+/// PR7-41 (PT-17): the tiles the enemies' area tells mark: each live area action of a record's unit that is its first
+/// action, or any once the record is revealed, at the tiles it strikes when it lands (`intent::area_cells`, over the
+/// round as it will run: the party's plan booked while planning). Valid tiles, each once.
+pub(super) fn area_tell_cells(s: &Session, tells: &[Intent]) -> Vec<V2> {
+    use emberwake_battle::intent;
+    let w = &s.w;
+    let round = if s.phase == emberwake_battle::session::Phase::Planning && !s.plan_confirmed { intent::planned_schedule(w, &s.resolver.scheduled, &s.plan) } else { s.resolver.scheduled.clone() };
+    let mut out: Vec<V2> = Vec::new();
+    for r in tells {
+        for (k, a) in intent::actions_of(r.unit, &round).into_iter().enumerate() {
+            if !matches!(a.command.kind, CmdKind::Area { .. }) || !(k == 0 || r.revealed) {
+                continue;
+            }
+            for c in intent::area_cells(w, &round, a) {
+                if w.grid.is_valid(c) && !out.contains(&c) {
+                    out.push(c);
+                }
+            }
+        }
+    }
+    out
 }

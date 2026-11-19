@@ -131,6 +131,14 @@ fn the_hub_map_has_a_bunk_prop_for_each_bunk() {
     let loc = explore::resolve_location(&d, &gs, &hub);
     let t = explore::template_of(&d, loc);
     assert!(bunks::is_hub(&gs, t), "the retreat hub {hub} is a hub");
-    assert_eq!(bunks::bunk_props(t).len() as i64, roster::bunk_cap(&gs), "as many bunk props as the bunk cap");
+    // PR7-19 / PR7-23: a bunk prop for every bunk the cap can reach (`bunks_max`, the two Timber Frames bunks
+    // included), so the props past today's cap stand empty until the cap rises
+    let props = bunks::bunk_props(t).len() as i64;
+    let max = gs.party.roster.manifest.bunks_max as i64;
+    let cap = roster::bunk_cap(&gs);
+    assert_eq!(props, max, "as many bunk props as the highest bunk cap");
+    assert!(cap <= props, "every bunk of today's cap {cap} has a prop");
+    let built = bunks::bunks(&gs, t);
+    assert!(built[cap as usize..].iter().all(|b| b.member.is_empty() && b.state == bunks::BunkState::Empty), "the bunks past the cap are empty: {built:?}");
     assert!(!bunks::table_spots(loc, t).is_empty(), "the hub has table spots");
 }

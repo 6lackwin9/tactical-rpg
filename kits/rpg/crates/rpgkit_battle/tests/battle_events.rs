@@ -105,7 +105,7 @@ fn describes(kind: &EventKind, line: &str, s: &Session) -> bool {
         EventKind::Dodged => tag(line) == "Dodged",
         EventKind::Status { status, landed } if status.is_empty() => tag(line) == "Status" && !landed && !line.contains("(inflicts ") && !line.contains("(resisted "),
         EventKind::Status { status, landed } => tag(line) == "Status" && line.contains(&format!("({} {status})", if *landed { "inflicts" } else { "resisted" })),
-        EventKind::LostBlock { status } => tag(line) == "Status" && line.contains(&format!(" is {status} and loses this block")),
+        EventKind::LostBlock { status } => tag(line) == "Status" && line.contains(&format!(" loses this block to {}", rpgkit_rules::status::display_name(status))),
         EventKind::Guard { broken } => tag(line) == "Defend" && line.contains("guard was broken") == *broken,
         EventKind::Focus => tag(line) == "Focus",
         EventKind::Support => tag(line) == "Support",

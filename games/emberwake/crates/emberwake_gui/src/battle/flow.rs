@@ -282,6 +282,7 @@ impl BattleScreen {
                     RowAct::SelectAlly(u) => {
                         self.selected = Some(u);
                     }
+                    RowAct::AllyMenu(a) => self.ally_menu_row(cx, a),
                     RowAct::Fill => self.accept_ghost(cx, None),
                     // PK1-S2c: the Channel toggle keeps the menu open (it re-lists for the new mode)
                     RowAct::Channel(on) => {
@@ -305,6 +306,7 @@ impl BattleScreen {
                         self.member_tactic.clear();
                         let picked: Vec<usize> = self.session().w.allies.iter().copied().filter(|&a| !rip::picks_of(&self.session().w, a).is_empty()).collect();
                         self.player_target.retain(|a| picked.contains(a));
+                        self.cleared.clear();
                         self.deferred.clear();
                         self.send(cx, json!({"cmd": "preset", "preset": TACTICS[t]}));
                         self.send_tactics(cx);
@@ -317,6 +319,7 @@ impl BattleScreen {
                             self.member_tactic.insert(h, t);
                             if ri::on(&self.session().w) {
                                 self.player_target.retain(|a| *a != h);
+                                self.cleared.retain(|a| *a != h);
                                 self.deferred.retain(|d| d.0 != h);
                                 if !rip::picks_of(&self.session().w, h).is_empty() {
                                     self.send(cx, json!({"cmd": "clear", "unit": h}));
@@ -335,6 +338,11 @@ impl BattleScreen {
             Action::SelfTarget => {
                 if let Some(h) = self.selected.filter(|_| self.planning() && ri::on(&self.session().w)) {
                     self.target_click(cx, h, RoundTarget::Myself);
+                }
+            }
+            Action::AllyTarget => {
+                if let Some(h) = self.selected.filter(|_| self.planning() && ri::on(&self.session().w)) {
+                    self.ally_list(h);
                 }
             }
             Action::ClosePopup => self.popup = None,
@@ -468,7 +476,11 @@ impl BattleScreen {
             Action::Continue => self.settle(cx),
             Action::SkipBeat => self.skip_beat(cx),
             Action::Leave => cx.nav.push(Nav::Pop),
-            Action::Settings => cx.nav.push(Nav::Push(Box::new(crate::menus::SettingsScreen::in_game(cx)))),
+            Action::Settings => {
+                // PR7-41 (PT-32): a world battle's Menu offers Retreat while the fight allows it
+                let can = self.world_mode() && !self.viewing && self.session().can_retreat();
+                cx.nav.push(Nav::Push(Box::new(crate::menus::SettingsScreen::in_battle(cx, can))));
+            }
             Action::Talk(a) => self.talk_reply(cx, a),
             Action::Skip => {
                 if !self.can_skip() {

@@ -37,9 +37,8 @@ fn a_session_names_its_scene_by_scene_then_the_old_key() {
     assert_eq!(session_scene(&Session { requests: Vec::new(), checkpoints: Vec::new(), end: Value::Null }), "?");
 }
 
-/// The words are the pane's drawn text from before the rename; `theme_panes` pins their pixels, so a change here is a
-/// theme re-record, named.
+/// The engine's own words name no genre (ENGINE-5); a game passes its own (`Recordings::labels`, the RPG's "BATTLE").
 #[test]
-fn the_drawn_session_words_are_the_pinned_ones() {
-    assert_eq!((SESSION_LABELS.header, SESSION_LABELS.count), ("BATTLE", "battles"));
+fn the_engine_session_words_name_no_genre() {
+    assert_eq!((SESSION_LABELS.header, SESSION_LABELS.count), ("SESSION", "sessions"));
 }

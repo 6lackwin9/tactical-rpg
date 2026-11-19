@@ -13,6 +13,7 @@ const FILES: &[(&str, &str, &str)] = &[
     ("gitignore", ".gitignore", include_str!("../templates/new_game/gitignore")),
     ("data/README.md", "data/README.md", include_str!("../templates/new_game/data/README.md")),
     ("assets/keep", "assets/.gitkeep", include_str!("../templates/new_game/assets/keep")),
+    ("assets/strings/en.json", "assets/strings/en.json", include_str!("../templates/new_game/assets/strings/en.json")),
     ("scenarios/start.json", "scenarios/__ID___start.json", include_str!("../templates/new_game/scenarios/start.json")),
     ("crates/game/Cargo.toml.tmpl", "crates/__ID___game/Cargo.toml", include_str!("../templates/new_game/crates/game/Cargo.toml.tmpl")),
     ("crates/game/src/lib.rs", "crates/__ID___game/src/lib.rs", include_str!("../templates/new_game/crates/game/src/lib.rs")),

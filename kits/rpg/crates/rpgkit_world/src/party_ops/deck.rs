@@ -96,7 +96,8 @@ impl DeckTerms {
         let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
         let actives: Vec<String> = m.owned_families(d, world).into_iter().filter(|f| cat.tier_one(f).is_some() && !cat.is_basic_family(f) && !rule.basics.contains(f) && !cat.is_system(f)).collect();
         // FB-63 (2): the re-gathered list, as the equip check and validate read it
-        let owned_passives = progression::member_passives(d, m);
+        // PR7-41 (PT-28): with the base deck's passives and the keystone from its level (`owned_passives`)
+        let owned_passives = progression::owned_passives(d, m);
         let of_slot = |slot: &str| -> Vec<String> { owned_passives.iter().filter(|p| cat.passives.get(*p).is_some_and(|x| x.slot == slot)).cloned().collect() };
         let (passives, keystones) = (of_slot("passive"), of_slot("keystone"));
         let mut work = m.clone();
@@ -203,6 +204,11 @@ impl DeckTerms {
         let mut d = draft.clone();
         if d.active.is_empty() {
             d.active = self.auto_actives.clone();
+        }
+        // PR7-41 (PT-28): an empty keystone row plays as the automatic one (the build slots the class keystone into it,
+        // `Unit::grant_class_keystone`)
+        if d.keystone.is_empty() {
+            d.keystone = self.auto.keystone.clone();
         }
         d
     }

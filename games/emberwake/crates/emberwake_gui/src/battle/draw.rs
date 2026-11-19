@@ -9,7 +9,7 @@ use super::playback::PlaySpeed;
 use super::{Action, BattleScreen, ALLY, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, POISE, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
 use super::skill_menu::CHANNEL_TINT;
 use super::tips::{action_channel_note, ap_blocks, ap_gauge_of, ap_held_text, channel_action, channel_block, channel_fill, downed_banner, planned_channel_note, class_names, committed, committed_icon_chains, derived_line, derived_rows, draw_ap_pips, draw_badge_row, draw_block_label, dulled_line, dulled_weapons, inspect_tip, intent_glyph, kind_color, kind_icon, next_action, short_name, stance_name, unit_tip, ApAnim, ApPips, BlockLook, AP_PIP, DULLED_BADGE, REST_BLOCK};
-use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
+use aegis_ui::canvas::{rgba, Rect, Rgba};
 use crate::intent_text;
 use crate::portraits::{Faces, Who};
 use crate::talk;
@@ -172,7 +172,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                 let chain = if e.item.is_some() { vec![kind_icon("ITEM")] } else { emberwake_content::art::skill_icon_chain(sk.family_id(), &sk.kind) };
                 // PK1-S2c (PK1 4.3 item 6): a marrow version's name with the marrow mark
                 let name = if e.item.is_some() { sk.name.clone() } else { skill_text(pw, u, e.skill) };
-                ((e.start_block, e.end_block(pw), name, sk.kind.clone(), e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), e.total_ap(), e.est_damage), chain)
+                ((e.start_block, e.end_block(pw), name, sk.kind.clone(), e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), e.total_ap(), pplan.forecast_entry(pw, &s.resolver.scheduled, u, e)), chain)
             })
             .unzip(),
         _ => (Vec::new(), Vec::new()),
@@ -246,6 +246,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     let hero_label = format!("Hero: {}", TACTIC_LABELS[sel.map_or(g.hero_tactic, |u| if timeline { g.tactic_of(u) } else { g.hero_tactic })]);
     // ENCOUNTER2-C4: a locked round still to play: Skip in Confirm's place (the rest of the round at once)
     let skip = g.can_skip();
+    // PR7-41 (PT-32): while a talk is up (the intro's too) only its box takes clicks, so the strip reads disabled
+    let open = !g.talk_due();
     let (label, action, enabled) = if planning {
         // ENCOUNTER2 H1: planning cannot be confirmed before the holder is picked
         ("Confirm round", Action::Confirm, !s.needs_stay_pick())
@@ -264,7 +266,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     let blocks = s.def.total_blocks.max(1);
     // INPUT1-AP (AP6): under the round intent the blocks leave the AP gauge its 12 pips and a label ("-<n>") at their
     // end, kept whether or not a hero is selected, so the strip does not shift
-    let gauge_w = if timeline { aegis_ui::pips::pips_w(AP_PIPS) + aegis_ui::pips::LABEL_GAP + aegis_ui::pips::label_w(&mut ui, "-00") } else { 0 };
+    let gauge_w = if timeline { rpgkit_ui::pips::pips_w(AP_PIPS) + rpgkit_ui::pips::LABEL_GAP + rpgkit_ui::pips::label_w(&mut ui, "-00") } else { 0 };
     let room = W - 6 - bx - 6 - 8 - auto_w - clear_w - confirm_w - if timeline { gauge_w + 2 } else { 0 };
     // AP6: with the gauge the blocks give up width down to 20 each (their span labels cut, TEXTFIT1) before the menus
     let bw = ((room - party_w - hero_w) / blocks).clamp(if timeline { 20 } else { 26 }, 34);
@@ -435,19 +437,19 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
         x = end + 2;
     } else {
-        ui.dropdown("strip.party", Rect::new(x, 6, party_w, 16), &party_label, Action::PartyMenu, planning, vec![("Party tactic".into(), th().gold), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), th().text)]);
+        ui.dropdown("strip.party", Rect::new(x, 6, party_w, 16), &party_label, Action::PartyMenu, planning && open, vec![("Party tactic".into(), th().gold), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), th().text)]);
         x += party_w + 2;
-        ui.dropdown("strip.hero", Rect::new(x, 6, hero_w, 16), &hero_label, Action::HeroMenu, planning && sel.is_some(), vec![("Hero tactic".into(), th().gold), ("AI-drafts the selected hero only.".into(), th().text)]);
+        ui.dropdown("strip.hero", Rect::new(x, 6, hero_w, 16), &hero_label, Action::HeroMenu, planning && sel.is_some() && open, vec![("Hero tactic".into(), th().gold), ("AI-drafts the selected hero only.".into(), th().text)]);
         x += hero_w + 2;
     }
-    ui.button_full("strip.auto", Rect::new(x, 6, auto_w, 16), "Auto", Action::Autoplay, !s.combat_over, g.auto, BODY, vec![("Autoplay".into(), th().gold), ("Drafts with the party tactic, confirms and plays rounds until the battle ends. Click again to stop.".into(), th().text)]);
+    ui.button_full("strip.auto", Rect::new(x, 6, auto_w, 16), "Auto", Action::Autoplay, !s.combat_over && open, g.auto, BODY, vec![("Autoplay".into(), th().gold), ("Drafts with the party tactic, confirms and plays rounds until the battle ends. Click again to stop.".into(), th().text)]);
     x += auto_w + 2;
-    ui.button_full("strip.clear", Rect::new(x, 6, clear_w, 16), "Clear", Action::Clear, planning && sel.is_some(), false, BODY, vec![(if timeline { "Clears the selected hero's picks (the planner fills the round again)." } else { "Clears the selected hero's steps." }.into(), th().text)]);
+    ui.button_full("strip.clear", Rect::new(x, 6, clear_w, 16), "Clear", Action::Clear, planning && sel.is_some() && open, false, BODY, vec![(if timeline { "Clears the selected hero's picks (the planner fills the round again); with no picks, empties its auto-filled round (the hero rests)." } else { "Clears the selected hero's steps." }.into(), th().text)]);
     x += clear_w + 2;
     if skip {
-        ui.button_full("battle.skip", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled, true, BODY, vec![("Skip".into(), th().gold), ("Resolves the rest of this scripted round at once.".into(), th().text)]);
+        ui.button_full("battle.skip", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled && open, true, BODY, vec![("Skip".into(), th().gold), ("Resolves the rest of this scripted round at once.".into(), th().text)]);
     } else {
-        ui.button_full("strip.confirm", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled, planning, BODY, vec![(label.into(), th().gold)]);
+        ui.button_full("strip.confirm", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled && open, planning, BODY, vec![(label.into(), th().gold)]);
     }
 
     // -- Left: party cards and the selected hero.
@@ -528,7 +530,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             ui.p.panel(r.inset(1), rgba(0, 0, 0, 0), HELD, RADIUS);
         }
         let tip = unit_tip(s, a, sel, &tells, &rounds, &classes);
-        ui.push(format!("party.{a}"), "card", format!("{} HP {}/{} AP {}/{}", u.name, u.hp, u.max_hp, u.ap, u.max_ap), r, true, is_sel, Some(Action::Select(a)), tip);
+        ui.push(format!("party.{a}"), "card", format!("{} HP {}/{} {}", u.name, u.hp, u.max_hp, crate::intent_text::ap_text(u.ap, u.max_ap, "/")), r, true, is_sel, Some(Action::Select(a)), tip);
         y += r.h + 3;
     }
     g.cards_shown = cards_shown;
@@ -555,6 +557,11 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             let tip = vec![("Self (S)".into(), th().gold), (format!("{} targets itself: its Guard and self skills.", u.name), th().text)];
             let bw = ((ui.p.text_w("Self", SMALL) + 10.0).ceil() as i32).max(30);
             ui.button_full("hero.self", Rect::new(tx, row3, bw, 11), "Self", Action::SelfTarget, planning, false, SMALL, tip);
+            // PR7-41 (PT-23): the Ally button beside it: the members the hero can use a skill or pouch item on
+            let others = w.allies.iter().any(|&a| a != h && ((w.units[a].is_active() && w.has(a)) || w.can_revive(a)));
+            let tip = vec![("Ally".into(), th().gold), (format!("{} uses a skill or pouch item on another member: pick the member, then the skill (Ctrl+click on a member does the same).", u.name), th().text)];
+            let aw = ((ui.p.text_w("Ally", SMALL) + 10.0).ceil() as i32).max(30);
+            ui.button_full("hero.ally", Rect::new(tx + bw + 3, row3, aw, 11), "Ally", Action::AllyTarget, planning && others, false, SMALL, tip);
             row3 + 13
         } else {
             row3
@@ -914,12 +921,17 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
 
     // -- Bottom bar: playback, round and status, the last log line.
     crate::hud::hud_panel(&mut ui, Rect::new(2, 322, W - 4, 36), th().game("battle_panel", PANEL), th().edge, RADIUS);
-    ui.button_full("bar.restart", Rect::new(6, 325, 40, 14), "Restart", Action::Restart, !g.world_mode(), false, BODY, vec![("Restart the battle (R)".into(), th().text)]);
-    ui.button_full("bar.step", Rect::new(48, 325, 34, 14), "Step", Action::Step, !planning || s.plan_confirmed, false, BODY, vec![("Resolve one action (Space)".into(), th().text)]);
+    // PR7-41 (PT-32): Restart and Step show only when they work (a world battle never restarts; Step once a round runs)
+    if !g.world_mode() {
+        ui.button_full("bar.restart", Rect::new(6, 325, 40, 14), "Restart", Action::Restart, true, false, BODY, vec![("Restart the battle (R)".into(), th().text)]);
+    }
+    if !planning {
+        ui.button_full("bar.step", Rect::new(48, 325, 34, 14), "Step", Action::Step, true, false, BODY, vec![("Resolve one action (Space)".into(), th().text)]);
+    }
     // Test Arena only: leave at any time (Esc does the same); a world battle is left only through its end, and its Menu
     // (PR7-26; Esc with nothing open does the same) opens the in-game Settings popup in the same place.
     if g.world_mode() {
-        ui.button_full("bar.menu", Rect::new(84, 325, 30, 14), "Menu", Action::Settings, true, false, BODY, vec![("Menu (Esc)".into(), th().gold), ("Settings, and Return to title once the fight is over.".into(), th().text)]);
+        ui.button_full("bar.menu", Rect::new(84, 325, 30, 14), "Menu", Action::Settings, true, false, BODY, vec![("Menu (Esc)".into(), th().gold), ("Settings, Retreat where the fight allows it, and Return to title once the fight is over.".into(), th().text)]);
     } else {
         ui.button_full("bar.exit", Rect::new(84, 325, 30, 14), "Exit", Action::Leave, true, false, BODY, vec![("Back to the screen you came from (Esc)".into(), th().text)]);
     }
@@ -940,6 +952,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         Some((prompt, summary)) => summary_and_prompt(summary, prompt, room, |t| ui.p.text_w(t, BODY)),
         None => g.message.clone(),
     };
+    // PR7-41 (PT-34): the phase word leads the bar already ("Round 2/8  Round over"), so the message does not repeat it
+    let shown_message = without_phase(&shown_message, phase);
     ui.p.text_fit((200 + ox) as f32, 326.0, &shown_message, BODY, room, th().text);
     ui.push("bar.status", "label", format!("Round {} {phase}: {shown_message}", s.current_round), Rect::new(88 + ox, 325, 540 - ox - chip_w, 12), true, false, None, Vec::new());
     if let Some(chip) = chip {
@@ -1002,7 +1016,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let mut wrapped: Vec<(String, Rgba, f32, bool)> = Vec::new();
         let wrap_line = |p: &mut Painter, out: &mut Vec<(String, Rgba, f32, bool)>, l: &str, indent: f32| {
             let col = if l.starts_with("[Phase]") { th().gold } else if l.starts_with("[Kill]") { th().foe } else if l.starts_with("[Attack]") { th().text } else if l.starts_with("[Support]") { th().good } else if l.contains("Failed") || l.contains("Out of Range") { th().foe } else { th().dim };
-            for (k, part) in p.wrap(l, SMALL, (r.w - 22) as f32 - indent).into_iter().enumerate() {
+            for (k, part) in p.wrap(&crate::intent_text::plain(l), SMALL, (r.w - 22) as f32 - indent).into_iter().enumerate() {
                 out.push((if k == 0 { part } else { format!("   {part}") }, col, indent, false));
             }
         };
@@ -1197,6 +1211,14 @@ pub(super) fn summary_and_prompt(summary: &str, prompt: &str, room: f32, mut wid
     }
 }
 
+/// PR7-41 (PT-34): `message` without a lead that repeats the bar's `phase` word ("Round over: 1 break" -> "1 break").
+pub(super) fn without_phase(message: &str, phase: &str) -> String {
+    match message.strip_prefix(phase) {
+        Some(rest) if rest.starts_with(':') || rest.starts_with('.') => rest[1..].trim_start().to_string(),
+        _ => message.to_string(),
+    }
+}
+
 /// The new round's name on a ribbon, centred in the upper part of `board`, at `alpha` (`round_banner_alpha`). Transient for
 /// the text audit: it passes over the board by design.
 pub(super) fn draw_round_banner(p: &mut Painter, board: Rect, round: i32, alpha: u8) {
@@ -1247,7 +1269,6 @@ pub(super) fn log_groups_json(groups: &[emberwake_battle::session::LogGroup]) ->
 #[allow(clippy::too_many_arguments)]
 fn panel_portrait(ui: &mut Ui<Action>, cx: &mut Cx, faces: &mut Faces, who: &Who, look: &emberwake_battle::portrait::Look, r: Rect, id: &str) -> Rect {
     let pr = Rect::new(r.x + PANEL_INSET, r.y + PANEL_INSET, PANEL_PORTRAIT, PANEL_PORTRAIT);
-    ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
     faces.draw(&mut ui.p, cx, who, look, PANEL_SURFACE, pr);
     ui.push(id, "portrait", who.name.clone(), pr, true, false, None, Vec::new());
     pr
@@ -1270,8 +1291,7 @@ fn plain_look(look: &emberwake_battle::portrait::Look) -> emberwake_battle::port
 /// `timeline.icon.<track>`), on the panels' dark backing, with `look`'s state rows on surface `timeline` through
 /// `faces` (capped at the minimal tier); the initial letter without a file.
 fn timeline_portrait(ui: &mut Ui<Action>, cx: &mut Cx, faces: &mut Faces, who: &Who, look: &emberwake_battle::portrait::Look, sq: Rect) {
-    ui.p.panel(sq, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
-    faces.draw(&mut ui.p, cx, who, look, TIMELINE_SURFACE, Rect::new(sq.x + 1, sq.y + 1, sq.w - 2, sq.h - 2));
+    faces.draw(&mut ui.p, cx, who, look, TIMELINE_SURFACE, sq);
 }
 
 // ---- HOOKS1-UI slice 5: the intel panel fits its lines ------------------------------------------------------------

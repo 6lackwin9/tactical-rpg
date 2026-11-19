@@ -74,9 +74,10 @@ pub enum Status {
     Waiting(String),
 }
 
-/// How the game starts (`launch` in the file): `scene` is the game's id of what the screen opens on, `ruleset` the
-/// game's id of the ruleset it plays by (only with `screen` arena); both reach the game as the launch keys `scene=` and
-/// `ruleset=`.
+/// How the game starts (`launch` in the file): `screen` is any screen id the game opens on (ENGINE-5: the game's list,
+/// `Game::launch_screens`, checked by `check`, `run` and `shots`; `menu` when the file names none), `scene` the game's
+/// id of what the screen opens on, `ruleset` the game's id of the ruleset it plays by; both reach the game as the launch
+/// keys `scene=` and `ruleset=`, and the game says which screens take them (`Game::launch_problems`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Launch {
     pub screen: String,
@@ -591,8 +592,8 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
                 unknown_keys(l, &known, "launch", p);
                 match l.get("screen").map(|s| s.as_str()) {
                     None => {}
-                    Some(Some(s @ ("menu" | "arena" | "runner"))) => launch.screen = s.to_string(),
-                    Some(_) => p.push("launch: 'screen' is menu, arena or runner".into()),
+                    Some(Some(s)) if plain_name(s) => launch.screen = s.to_string(),
+                    Some(_) => p.push("launch: 'screen' is a screen id: letters, digits, _ and - only".into()),
                 }
                 launch.scene = aliased_text(l, "scene", p);
                 if l.contains_key("seed") {
@@ -659,9 +660,6 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
     if let Some(kind) = no_window_step(&steps).filter(|_| window) {
         p.push(format!("scenario: a '{kind}' is taken in a run with no window, and this one has 'window' true"));
     }
-    if launch.ruleset.is_some() && launch.screen != "arena" {
-        p.push("launch: 'ruleset' comes with 'screen' arena".into());
-    }
     let counted = steps_counted(&steps);
     if counted > STEPS_MAX {
         p.push(format!("scenario: {counted} steps after repeat, at most {STEPS_MAX}"));
@@ -689,6 +687,16 @@ pub fn load(path: &Path) -> std::result::Result<Scenario, Vec<String>> {
 /// The `*.json` files of a scenarios folder by name (none when it does not exist).
 pub fn files_in(dir: &Path) -> Vec<PathBuf> {
     files_with(dir, "json")
+}
+
+/// The launch's problems for a game that opens on `screens` (ENGINE-5; `Game::launch_problems`' default): the screen is
+/// one of them.
+pub fn screen_problems(launch: &Launch, screens: &[&str]) -> Vec<String> {
+    if screens.contains(&launch.screen.as_str()) {
+        Vec::new()
+    } else {
+        vec![format!("launch: 'screen' {} is not one this game opens on ({})", launch.screen, screens.join(", "))]
+    }
 }
 
 /// Every problem of the files, each naming its file; empty when all parse. What `check` and a game's parse test call.
@@ -1587,27 +1595,28 @@ fn game_folder<G: crate::Game>(game: &G, args: &Args) -> Result<PathBuf> {
 }
 
 const RUN_USAGE: &str = "aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X] [record=1]";
-const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [ruleset=<id>] [seed=N] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
+const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=<id>] [scene=<id>] [ruleset=<id>] [seed=N] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
 
 /// `aegis scenario ...`; returns the exit code.
 pub fn command<G: crate::Game>(game: &G, args: &Args) -> Result<i32> {
     let folder = game_folder(game, args)?;
     let scenarios = folder.join("scenarios");
+    let launch = |l: &Launch| game.launch_problems(l);
     match args.pos(1) {
-        Some("check") => Ok(check(&scenarios, args.pos(2).unwrap_or("all"))),
+        Some("check") => Ok(check(&scenarios, args.pos(2).unwrap_or("all"), &launch)),
         Some("run") => {
             let Some(what) = args.pos(2) else {
                 println!("usage: {RUN_USAGE}");
                 return Ok(2);
             };
-            run(&folder, &scenarios, what, args)
+            run(&folder, &scenarios, what, args, &launch)
         }
         Some("shots") => {
             let Some(name) = args.pos(2) else {
                 println!("usage: {SHOTS_USAGE}");
                 return Ok(2);
             };
-            shots(&folder, name, args)
+            shots(&folder, name, args, &launch)
         }
         _ => {
             println!("usage: aegis scenario check [<file> | all]\n       {RUN_USAGE}\n       {SHOTS_USAGE}");
@@ -1616,9 +1625,18 @@ pub fn command<G: crate::Game>(game: &G, args: &Args) -> Result<i32> {
     }
 }
 
-fn check(scenarios: &Path, what: &str) -> i32 {
+/// What the game says of a launch (`Game::launch_problems`).
+type LaunchCheck<'a> = dyn Fn(&Launch) -> Vec<String> + 'a;
+
+/// A loaded scenario's problems as the game sees its launch, each naming the scenario.
+fn game_problems(s: &Scenario, launch: &LaunchCheck) -> Vec<String> {
+    launch(&s.launch).into_iter().map(|p| format!("{}: {p}", s.id)).collect()
+}
+
+fn check(scenarios: &Path, what: &str, launch: &LaunchCheck) -> i32 {
     let files = if what == "all" { files_in(scenarios) } else { vec![PathBuf::from(what)] };
-    let problems = check_files(&files);
+    let mut problems = check_files(&files);
+    problems.extend(files.iter().filter_map(|f| load(f).ok()).flat_map(|s| game_problems(&s, launch)));
     for p in &problems {
         println!("§ {p}");
     }
@@ -1711,9 +1729,12 @@ pub fn shots_scenario(name: &str, args: &Args) -> std::result::Result<Scenario, 
 
 /// `aegis scenario shots`: a named fight or screen, driven and photographed with no scenario file. The bundle is a
 /// scenario's; the pictures are listed.
-fn shots(folder: &Path, name: &str, args: &Args) -> Result<i32> {
+fn shots(folder: &Path, name: &str, args: &Args, launch: &LaunchCheck) -> Result<i32> {
     let options = options_of(folder, args, ".agent/shots")?;
-    let s = match shots_scenario(name, args) {
+    let s = match shots_scenario(name, args).and_then(|s| match game_problems(&s, launch) {
+        p if p.is_empty() => Ok(s),
+        p => Err(p),
+    }) {
         Ok(s) => s,
         Err(problems) => {
             problems.iter().for_each(|p| println!("§ {p}"));
@@ -1752,7 +1773,7 @@ fn print_outcome(r: &Outcome) {
     }
 }
 
-fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args) -> Result<i32> {
+fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args, launch: &LaunchCheck) -> Result<i32> {
     let options = options_of(folder, args, ".agent/scenario")?;
     let slow = options.slow;
     let files = match what {
@@ -1763,7 +1784,10 @@ fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args) -> Result<i32> 
     let mut worst = 0;
     let mut loaded = Vec::new();
     for f in &files {
-        match load(f) {
+        match load(f).and_then(|s| match game_problems(&s, launch) {
+            p if p.is_empty() => Ok(s),
+            p => Err(p),
+        }) {
             Ok(s) => loaded.push(s),
             Err(problems) => {
                 problems.iter().for_each(|p| println!("§ {p}"));

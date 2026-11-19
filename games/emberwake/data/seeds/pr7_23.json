@@ -1,0 +1,786 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "maps",
+   "entry": {
+    "id": "sunk_ward_undercroft",
+    "name": "Sunk Ward: the Sluice Undercroft",
+    "rows": [
+     "######################################",
+     "#.###...##..#~~~~~..~~~~~#.##.###.#..#",
+     "#...........#~~~~~..~~~~~#....###...##",
+     "##...###....#~~~~~..~~~~~#..........##",
+     "##...###..#.#~~~~~..~~~~~#...#......##",
+     "##..........#~~~~~..~~~~~#........##.#",
+     "#...........#....#..#....#.##.....##.#",
+     "#...........#............#...........#",
+     "#####..###########..##########..######",
+     "#####..###########..##########..######",
+     "#........##..##............##........#",
+     "#........##...........#....##........#",
+     "#....................................#",
+     "#....................................#",
+     "####..############..############..####",
+     "####..############..############..####",
+     "#.#......#########..#########........#",
+     "#........#..................#........#",
+     "#........#..................#.##..####",
+     "#.......##..................#.......##",
+     "#.......###....#......#....##.......##",
+     "###.....###.................##.......#",
+     "#........##.................#........#",
+     "######################################"
+    ],
+    "zones": [
+     "--------------------------------------",
+     "-aaaaaaaaaaa-wwwwwwwwwwww-ttttttttttt-",
+     "-aaaaaaaaaaa-wwwwwwwwwwww-ttttttttttt-",
+     "-aaaaaaaaaaa-wwwwwwwwwwww-ttttttttttt-",
+     "-aaaaaaaaaaa-wwwwwwwwwwww-ttttttttttt-",
+     "-aaaaaaaaaaa-wwwwwwwwwwww-ttttttttttt-",
+     "-aaaaaaaaaaa-wwwwwwwwwwww-ttttttttttt-",
+     "-aaaaaaaaaaa-wwwwwwwwwwww-ttttttttttt-",
+     "-----aa-----------ww----------tt------",
+     "-----aa-----------ww----------tt------",
+     "-cccccccccccccccccccccccccccccccccccc-",
+     "-cccccccccccccccccccccccccccccccccccc-",
+     "-cccccccccccccccccccccccccccccccccccc-",
+     "-cccccccccccccccccccccccccccccccccccc-",
+     "----ee------------bb------------yy----",
+     "----ee------------bb------------yy----",
+     "-eeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
+     "-eeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
+     "-eeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
+     "-eeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
+     "-eeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
+     "-eeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
+     "-eeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
+     "--------------------------------------"
+    ],
+    "zone_legend": {
+     "a": {
+      "id": "slab",
+      "kind": "safe",
+      "indoor": true,
+      "wall_set": "interior_plaster"
+     },
+     "w": {
+      "id": "basin",
+      "kind": "safe",
+      "indoor": true,
+      "wall_set": "interior_stone"
+     },
+     "t": {
+      "id": "hearth",
+      "kind": "safe",
+      "indoor": true,
+      "wall_set": "interior_stone"
+     },
+     "c": {
+      "id": "hall",
+      "kind": "safe",
+      "indoor": true,
+      "wall_set": "interior_stone"
+     },
+     "e": {
+      "id": "entry",
+      "kind": "safe",
+      "indoor": true,
+      "wall_set": "interior_stone"
+     },
+     "b": {
+      "id": "hollows",
+      "kind": "safe",
+      "indoor": true,
+      "wall_set": "interior_stone"
+     },
+     "y": {
+      "id": "crypts",
+      "kind": "safe",
+      "indoor": true,
+      "wall_set": "interior_stone"
+     }
+    },
+    "anchors": [
+     {
+      "id": "idle_seat_1",
+      "x": 14,
+      "y": 20
+     },
+     {
+      "id": "idle_seat_2",
+      "x": 16,
+      "y": 20
+     },
+     {
+      "id": "idle_seat_3",
+      "x": 21,
+      "y": 20
+     },
+     {
+      "id": "idle_seat_4",
+      "x": 23,
+      "y": 20
+     },
+     {
+      "id": "idle_seat_5",
+      "x": 15,
+      "y": 21
+     },
+     {
+      "id": "idle_seat_6",
+      "x": 22,
+      "y": 21
+     },
+     {
+      "id": "idle_seat_7",
+      "x": 15,
+      "y": 19
+     },
+     {
+      "id": "idle_seat_8",
+      "x": 22,
+      "y": 19
+     },
+     {
+      "id": "idle_bunk_1",
+      "x": 12,
+      "y": 17
+     },
+     {
+      "id": "idle_bunk_2",
+      "x": 14,
+      "y": 17
+     },
+     {
+      "id": "idle_bunk_3",
+      "x": 16,
+      "y": 17
+     },
+     {
+      "id": "idle_bunk_4",
+      "x": 20,
+      "y": 17
+     },
+     {
+      "id": "idle_bunk_5",
+      "x": 22,
+      "y": 17
+     },
+     {
+      "id": "idle_bunk_6",
+      "x": 24,
+      "y": 17
+     },
+     {
+      "id": "idle_bunk_7",
+      "x": 10,
+      "y": 17
+     },
+     {
+      "id": "idle_bunk_8",
+      "x": 26,
+      "y": 17
+     },
+     {
+      "id": "spawn",
+      "x": 6,
+      "y": 17
+     },
+     {
+      "id": "road",
+      "x": 7,
+      "y": 16
+     },
+     {
+      "id": "gate",
+      "x": 18,
+      "y": 1
+     },
+     {
+      "id": "gate_in",
+      "x": 19,
+      "y": 2
+     },
+     {
+      "id": "npc_a",
+      "x": 6,
+      "y": 5
+     },
+     {
+      "id": "npc_b",
+      "x": 31,
+      "y": 3
+     },
+     {
+      "id": "npc_c",
+      "x": 15,
+      "y": 11
+     },
+     {
+      "id": "npc_d",
+      "x": 22,
+      "y": 6
+     },
+     {
+      "id": "lore_a",
+      "x": 12,
+      "y": 11
+     },
+     {
+      "id": "chest_a",
+      "x": 10,
+      "y": 6
+     },
+     {
+      "id": "rest",
+      "x": 22,
+      "y": 12
+     },
+     {
+      "id": "crypts",
+      "x": 32,
+      "y": 15
+     }
+    ],
+    "paths": {},
+    "props": [
+     {
+      "id": "sluice_gate",
+      "art": "portcullis",
+      "x": 17,
+      "y": 0,
+      "w": 4,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "post_w",
+      "art": "mooring_bollard",
+      "x": 17,
+      "y": 6,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "post_e",
+      "art": "mooring_bollard",
+      "x": 20,
+      "y": 6,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "skiff",
+      "art": "varka_skiff",
+      "x": 20,
+      "y": 3,
+      "w": 4,
+      "h": 2,
+      "layer": "ground",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "retorts",
+      "art": "retort_shelf",
+      "x": 2,
+      "y": 1,
+      "w": 3,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "side_shelf",
+      "art": "retort_shelf_side",
+      "x": 1,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "herb_rack",
+      "art": "herb_rack",
+      "x": 8,
+      "y": 1,
+      "w": 2,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "slab_lamp",
+      "art": "wall_lantern",
+      "x": 6,
+      "y": 0,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "slab",
+      "art": "apothecary_slab",
+      "x": 5,
+      "y": 3,
+      "w": 3,
+      "h": 2,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "candles",
+      "art": "candle_stand",
+      "x": 10,
+      "y": 4,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "hearth",
+      "art": "tinker_hearth",
+      "x": 30,
+      "y": 1,
+      "w": 3,
+      "h": 2,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "tool_shelf",
+      "art": "goods_shelf",
+      "x": 27,
+      "y": 1,
+      "w": 2,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "anvil",
+      "art": "anvil",
+      "x": 29,
+      "y": 4,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "scrap",
+      "art": "scrap_heap",
+      "x": 34,
+      "y": 5,
+      "w": 2,
+      "h": 2,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "crates",
+      "art": "crate_stack",
+      "x": 27,
+      "y": 6,
+      "w": 2,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "weapon_rack",
+      "art": "weapon_rack_tall",
+      "x": 36,
+      "y": 2,
+      "w": 1,
+      "h": 3,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "hearth_lamp",
+      "art": "wall_lantern",
+      "x": 35,
+      "y": 0,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "tool_rack",
+      "art": "tool_rack_tall",
+      "x": 34,
+      "y": 1,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "brazier",
+      "art": "brazier",
+      "x": 22,
+      "y": 11,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "board",
+      "art": "mission_board",
+      "x": 13,
+      "y": 10,
+      "w": 2,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "pier_w",
+      "art": "vault_pillar",
+      "x": 9,
+      "y": 10,
+      "w": 2,
+      "h": 2,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "pier_e",
+      "art": "vault_pillar",
+      "x": 27,
+      "y": 10,
+      "w": 2,
+      "h": 2,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "ladder",
+      "art": "iron_ladder",
+      "x": 7,
+      "y": 15,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "entry_crates",
+      "art": "crate_stack",
+      "x": 1,
+      "y": 21,
+      "w": 2,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "entry_stack",
+      "art": "crates_tall",
+      "x": 8,
+      "y": 19,
+      "w": 1,
+      "h": 3,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "ladder_lamp",
+      "art": "wall_lantern",
+      "x": 6,
+      "y": 15,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "entry_lamp",
+      "art": "lantern_pole",
+      "x": 2,
+      "y": 16,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "bunk_1",
+      "art": "kiln_bunk",
+      "x": 12,
+      "y": 15,
+      "w": 2,
+      "h": 2,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "bunk_2",
+      "art": "kiln_bunk",
+      "x": 14,
+      "y": 15,
+      "w": 2,
+      "h": 2,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "bunk_3",
+      "art": "kiln_bunk",
+      "x": 16,
+      "y": 15,
+      "w": 2,
+      "h": 2,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "bunk_4",
+      "art": "kiln_bunk",
+      "x": 20,
+      "y": 15,
+      "w": 2,
+      "h": 2,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "bunk_5",
+      "art": "kiln_bunk",
+      "x": 22,
+      "y": 15,
+      "w": 2,
+      "h": 2,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "bunk_6",
+      "art": "kiln_bunk",
+      "x": 24,
+      "y": 15,
+      "w": 2,
+      "h": 2,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "bunk_7",
+      "art": "kiln_bunk",
+      "x": 10,
+      "y": 15,
+      "w": 2,
+      "h": 2,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "bunk_8",
+      "art": "kiln_bunk",
+      "x": 26,
+      "y": 15,
+      "w": 2,
+      "h": 2,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "stove",
+      "art": "hearth_stove",
+      "x": 27,
+      "y": 20,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "table",
+      "art": "table_stools",
+      "x": 15,
+      "y": 20,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "table_2",
+      "art": "table_stools",
+      "x": 22,
+      "y": 20,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "stores",
+      "art": "barrels_tall",
+      "x": 10,
+      "y": 20,
+      "w": 1,
+      "h": 3,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "crypt_bars",
+      "art": "bar_run",
+      "x": 29,
+      "y": 15,
+      "w": 3,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "crypt_bars_2",
+      "art": "bar_run",
+      "x": 34,
+      "y": 15,
+      "w": 3,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "stasis_1",
+      "art": "stasis_slab",
+      "x": 30,
+      "y": 18,
+      "w": 2,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "stasis_2",
+      "art": "stasis_slab",
+      "x": 34,
+      "y": 18,
+      "w": 2,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "crypt_candles",
+      "art": "candle_stand",
+      "x": 29,
+      "y": 21,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "crypt_chains",
+      "art": "chains_tall",
+      "x": 36,
+      "y": 18,
+      "w": 1,
+      "h": 3,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     }
+    ],
+    "ground": [
+     "ffffffffffffffffffffffffffffffffffffff",
+     "fffffffffffffwwwwwffwwwwwfsssssssssssf",
+     "fffffffffffffwwwwwffwwwwwfsssssssssssf",
+     "fffffffffffffwwwwwffwwwwwfsssssssssssf",
+     "fffffffffffffwwwwwffwwwwwfsssssssssssf",
+     "fffffffffffffwwwwwffwwwwwfsssssssssssf",
+     "ffffffffffffffffffffffffffsssssssssssf",
+     "ffffffffffffffffffffffffffsssssssssssf",
+     "ffffffffffffffffffffffffffffffssffffff",
+     "ffffffffffffffffffffffffffffffssffffff",
+     "ffffffffffffffffffffffffffffffffffffff",
+     "ffffffffffffffffffffffffffffffffffffff",
+     "ffffffffffffffffffffffffffffffffffffff",
+     "ffffffffffffffffffffffffffffffffffffff",
+     "ffffssffffffffffffbbffffffffffffooffff",
+     "ffffssffffffffffffbbffffffffffffooffff",
+     "fssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
+     "fssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
+     "fssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
+     "fssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
+     "fssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
+     "fssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
+     "fssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
+     "ffffffffffffffffffffffffffffffffffffff"
+    ],
+    "ground_legend": {
+     "s": "soot_yard",
+     "f": "flagstone",
+     "o": "moss",
+     "w": "water",
+     "b": "floorboards"
+    },
+    "ground_patches": [],
+    "wall_storeys": [],
+    "tags": [
+     "sunk_ward"
+    ]
+   }
+  }
+ ]
+}

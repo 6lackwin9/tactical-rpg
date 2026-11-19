@@ -1,7 +1,8 @@
 //! UISPLIT1 (PR7-38): screen layout files from the command line, with no game running.
 //!
 //!   ui_layout check <game folder> ...           every layout and fixture of each game's asset layers parses, and every
-//!                                               layout fits its fixture (exit 1 on a problem; `tools/fc.sh layouts`, in the gate)
+//!                                               layout fits its fixture; every string table holds the keys of `en`
+//!                                               (ROBUST1) (exit 1 on a problem; `tools/fc.sh layouts`, in the gate)
 //!   ui_layout shot <game folder> <screen> [size=1280x720] [out=<file.png>] [default=1]
 //!                                               the fixture drawn through the layout (or the default) to a PNG, for review
 
@@ -20,11 +21,12 @@ fn main() -> ExitCode {
             for game in &pos[1..] {
                 let layers = Layers::for_game(Path::new(game.as_str()));
                 let screens = screen_layout::screens(&layers);
-                let problems = screen_layout::check_layers(&layers);
+                let mut problems = screen_layout::check_layers(&layers);
+                problems.extend(aegis_ui::strings::check_layers(&layers));
                 for p in &problems {
                     println!("{game}: {p}");
                 }
-                println!("{game}: {} screen(s) with a layout or a fixture, {} problem(s)", screens.len(), problems.len());
+                println!("{game}: {} screen(s) with a layout or a fixture, {} language(s), {} problem(s)", screens.len(), aegis_ui::strings::languages(&layers).len(), problems.len());
                 bad += problems.len();
             }
             if bad == 0 {

@@ -176,6 +176,9 @@ pub enum Action {
     /// INPUT1 SL4 (round intent): the hero panel's Self button and key S: the selected hero targets itself (the self
     /// menu).
     SelfTarget,
+    /// PR7-41 (PT-23): the hero panel's Ally button: a list of the other members the selected hero can use a skill or
+    /// pouch item on; a row opens the skill menu on that member (what Ctrl+click on its token does).
+    AllyTarget,
     /// ENCOUNTER2 H1: the hero picked to hold a hold escape's tiles.
     StayPick(usize),
     /// ENCOUNTER2-C DT9: a reply or Continue in the open battle talk's box.
@@ -355,6 +358,8 @@ pub struct BattleScreen {
     cutscene: i32,
     /// INPUT1 GH2 b: the members whose round target the player set this round (their ghost is the auto plan on it).
     player_target: Vec<usize>,
+    /// PR7-41 (PT-32): members whose auto-filled round Clear emptied this round (no ghost is drafted for them again).
+    cleared: Vec<usize>,
     /// GH2 a: each member's hero tactic (an index of `TACTICS`; none = the party tactic).
     member_tactic: std::collections::HashMap<usize, usize>,
     /// GH2 a, IN6 (decision "INPUT1 answers, part 4" Q18): members whose ghost would change their intent and drop
@@ -504,7 +509,7 @@ impl BattleScreen {
             auto_after_talk: false,
             faces: Faces::default(),
             panel_faces: Faces::default(),
-            timeline_faces: Faces::capped(aegis_ui::portrait_fx::Tier::Minimal),
+            timeline_faces: Faces::capped(rpgkit_ui::portrait_fx::Tier::Minimal),
             portrait_start: false,
             portrait_round: 0,
             portrait_outcome: String::new(),
@@ -512,6 +517,7 @@ impl BattleScreen {
             talk_node: String::new(),
             cutscene: 0,
             player_target: Vec::new(),
+            cleared: Vec::new(),
             member_tactic: Default::default(),
             deferred: Vec::new(),
             ghosted: 0,
@@ -856,6 +862,12 @@ impl Screen<GameCx> for BattleScreen {
         }
         if self.host.session.is_none() {
             return;
+        }
+        // PR7-41 (PT-32): Yes to the Menu's Retreat: the battle ends as fled (host `retreat`, recorded)
+        if cx.take_answer(crate::menus::RETREAT_ASK) && self.session().can_retreat() {
+            self.auto = false;
+            self.send(cx, json!({"cmd": "retreat"}));
+            self.message = "The party retreats.".into();
         }
         // TRANSITIONS1 T1: the battle beat holds the battle (its talks, a scripted round, autoplay) until control starts
         if self.intro_tick(cx, now) {

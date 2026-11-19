@@ -14,7 +14,7 @@ use aegis_ui::art::Art;
 use serde_json::{json, Value};
 use crate::portraits::tests::{layer, row};
 use aegis_core::assets::Layers;
-use aegis_ui::portrait_fx::{Tier, EASE_MS};
+use rpgkit_ui::portrait_fx::{Tier, EASE_MS};
 use aegis_ui::timeline::ROW_H;
 use emberwake_data::PortraitCue;
 use emberwake_rules::ruleset::TIMELINE;
@@ -43,7 +43,7 @@ fn flash_of(event: &str) -> [u8; 3] {
 /// The first catalog encounter under the timeline ruleset on the stage view (its steps wait for their impacts),
 /// the fixture rows, a scratch portrait for every unit (layers named after `tag`: one per test, as they run side
 /// by side), the timeline view open, drawn once.
-fn battle(tag: &str) -> (Cx, Gfx, BattleScreen) {
+pub(super) fn battle(tag: &str) -> (Cx, Gfx, BattleScreen) {
     let mut cx = crate::hud::hud_tests::game_cx();
     std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").edit_cat(|c| c.portrait_cues = rows());
     cx.settings.v["battle_view"] = json!("stage");

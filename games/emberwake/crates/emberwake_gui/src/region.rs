@@ -150,6 +150,8 @@ pub struct RegionMap {
     hub: crate::bunks::HubState,
     /// BUNKS1 BK2, BK8: the bunks drawn last frame (agent link `state.bunks`, tests).
     bunks_drawn: Vec<Value>,
+    /// HUB-BUNKS2 (5): the niche bunks' nook floor runs drawn last frame.
+    nooks: Vec<Rect>,
     /// TRANSITIONS1 T2 step 4: the arrival card showing since when, and whether it opened the ticker for its change
     /// lines (closed again when the card goes).
     arrival: Option<(crate::transitions::Arrival, Instant)>,
@@ -314,7 +316,6 @@ impl Screen<GameCx> for FusePrompt {
         };
         self.faces.begin();
         let pr = Rect::new(r.x + 10, r.y + 24, FUSE_PORTRAIT, FUSE_PORTRAIT);
-        ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
         let (who, look) = crate::hub::member_portrait(&d, &gs, m);
         self.faces.draw(&mut ui.p, cx, &who, &look, "roster", pr);
         let name = emberwake_world::progression::display_name(&d, m);
@@ -362,6 +363,15 @@ pub fn fight_now(cx: &mut Cx, fight: &Dict, runner: &str) {
     begin_fight(cx, fight, runner);
 }
 
+/// PR7-41 (PT-34): a hub bunk's widget label: its member's name (never the id), or "Empty bunk".
+fn bunk_label(d: &emberwake_world::Data, gs: &emberwake_world::GameState, member: &str) -> String {
+    match gs.party.member(member) {
+        Some(m) => emberwake_world::progression::display_name(d, m),
+        None if member.is_empty() => "Empty bunk".into(),
+        None => member.to_string(),
+    }
+}
+
 /// Event lines for the log; `autosave` writes the autosave.
 pub fn log_events(cx: &mut Cx, events: &[Value]) {
     for e in events {
@@ -370,14 +380,19 @@ pub fn log_events(cx: &mut Cx, events: &[Value]) {
             "entered" => {
                 let loc = s(e, "location");
                 let name = cx.location_name(&cx.gs().world_id.clone(), &loc);
-                cx.log(format!("Entered {name}."));
+                // PR7-41 (PT-34): one arrival line: a travel's arrival enters the place, and the world map's Enter
+                // enters it again; the second "Entered" line is dropped while it is the last one logged
+                let line = format!("Entered {name}.");
+                if cx.log.iter().rev().find(|l| l.starts_with("Entered ")) != Some(&line) {
+                    cx.log(line);
+                }
                 for q in json::sget(e, "advanced") {
                     let qn = s_or(&quest::resolved(&cx.data, cx.gs(), &q), "name", &q);
                     cx.log(format!("Quest updated: {qn}."));
                 }
             }
             "rested" => cx.log(format!("The party rests (+{} HP).", json::i(e, "restored", 0))),
-            "locked" => cx.log(format!("Locked: {}", s(e, "text"))),
+            "locked" => cx.log(explore::locked_words(&s(e, "text"))),
             // CAMPAIGN1 P1: the purse's names (the Ashlands lines are today's); R2: a rest's days
             "camped" => {
                 let days = json::i(e, "days", 0);
@@ -454,6 +469,7 @@ impl RegionMap {
             roofs: crate::props::RoofFade::default(),
             hub: crate::bunks::HubState::default(),
             bunks_drawn: Vec::new(),
+            nooks: Vec::new(),
             arrival: None,
             ticker_forced: false,
         }
@@ -910,6 +926,7 @@ impl Screen<GameCx> for RegionMap {
         let lead_now = leader_id(cx);
         self.hub.sync(&d, cx.gs_mut(), &lead_now);
         self.bunks_drawn.clear();
+        self.nooks.clear();
         let gs = cx.gs().clone();
         // the open conversation; a new node starts its line and its replies scrolled to the top; PORTRAITFX1-D: a
         // portrait left out of the last frame (the conversation ended or hid) is dropped
@@ -1121,7 +1138,7 @@ impl Screen<GameCx> for RegionMap {
                 let hit = p.rect.intersect(map_area);
                 let (name, word) = if ui.hover(hit) { crate::bunks::bunk_tip(&d, &gs, b) } else { (String::new(), String::new()) };
                 let act = (!b.member.is_empty()).then(|| RAct::Member(b.member.clone()));
-                ui.push(format!("{}{}", crate::bunks::BUNK_PREFIX, b.prop), "bunk", b.member.clone(), hit, true, false, act, if name.is_empty() { Vec::new() } else { tip(&name, &word) });
+                ui.push(format!("{}{}", crate::bunks::BUNK_PREFIX, b.prop), "bunk", bunk_label(&d, &gs, &b.member), hit, true, false, act, if name.is_empty() { Vec::new() } else { tip(&name, &word) });
             }
             let steps = gs.explore_int("loc_steps");
             // PLAYUI1-R: the people in the conversation turn to the party; the clock the sprites play at
@@ -1273,19 +1290,47 @@ impl Screen<GameCx> for RegionMap {
             let idle = ClipPlayer::default();
             let mut sprites = Vec::new();
             let mut party_frame = None;
+            // HUB-BUNKS2: the hub bunks' drawn rects (a plate keeps to the room its neighbours leave) and the niche bunks'
+            // nooks (drawn once, before the first bunk)
+            let bunk_fits: Vec<(Rect, String)> = props
+                .iter()
+                .filter(|p| hub_bunks.iter().any(|b| b.prop == p.id))
+                .map(|p| {
+                    let art = prop_art_of(&prop_arts, &geo, p).unwrap_or("").to_string();
+                    (prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles).0.unwrap_or(p.rect), art)
+                })
+                .collect();
+            let fit_rects: Vec<Rect> = bunk_fits.iter().map(|(r, _)| *r).collect();
+            let mut nooks_drawn = false;
             for item in &order {
                 match *item {
                     Item::Prop(i) => {
                         let p = &props[i];
                         let (fit, mounted) = prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles);
+                        let bunk = hub_bunks.iter().find(|b| b.prop == p.id);
+                        if bunk.is_some() && !nooks_drawn {
+                            nooks_drawn = true;
+                            let niches: Vec<Rect> = bunk_fits.iter().filter(|(_, art)| !crate::bunks::bed_art(art).head_south).map(|(r, _)| *r).collect();
+                            self.nooks = crate::bunks::draw_nooks(&mut ui, cx, &lineage, &niches);
+                        }
                         draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
-                        // HUB-POLISH1 (1): an occupied bunk wears its member's name plate (with the bunk, in depth)
-                        if let Some(m) = hub_bunks.iter().find(|b| b.prop == p.id && !b.member.is_empty()).and_then(|b| gs.party.member(&b.member)) {
-                            let (name, class) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m));
-                            let plate = crate::bunks::plate_rect(&mut ui.p, fit.unwrap_or(p.rect), &name);
-                            crate::bunks::draw_plate(&mut ui.p, plate, &name, &class);
-                            if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
-                                e["plate"] = json!({"name": name, "class": class, "rect": [plate.x, plate.y, plate.w, plate.h]});
+                        // HUB-BUNKS2 (2)-(4): an occupied bunk's dressing and its brass plate (with the bunk, in depth)
+                        if let Some(b) = bunk.filter(|b| !b.member.is_empty()) {
+                            let r = fit.unwrap_or(p.rect);
+                            let bed = crate::bunks::bed_art(prop_art_of(&prop_arts, &geo, p).unwrap_or(&b.art));
+                            let dressed = crate::bunks::dress(&mut ui, cx, &lineage, b, &bed, r);
+                            if let Some(m) = gs.party.member(&b.member) {
+                                let (name, class, class_id) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m), m.class_id(&d));
+                                let room = crate::bunks::plate_room(r, &fit_rects);
+                                let plate = crate::bunks::plate_rect(&mut ui.p, r, &bed, &name, room);
+                                let full = crate::bunks::plate_need(&mut ui.p, &name) <= plate.w;
+                                let shown = crate::bunks::plate_name(&mut ui.p, &name, plate.w);
+                                crate::bunks::draw_plate(&mut ui, cx, plate, &name, &class_id, &class);
+                                if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
+                                    e["plate"] = json!({"name": name, "shown": shown, "class": class, "class_id": class_id, "rect": [plate.x, plate.y, plate.w, plate.h], "full": full, "wall": !bed.head_south, "room": room});
+                                    e["drawn"] = json!([r.x, r.y, r.w, r.h]);
+                                    e["dressed"] = json!({"blanket": dressed.blanket, "gear": dressed.gear, "keepsake": dressed.keepsake, "asleep": dressed.asleep});
+                                }
                             }
                         }
                     }
@@ -1570,7 +1615,8 @@ impl Screen<GameCx> for RegionMap {
             // REVEAL1 1.3: each roofed indoor zone's roof opacity (0 gone, 1 opaque)
             "roofs": self.roofs.state(),
             // BUNKS1: in a hub, where each member idles and each bunk's member, state and candle (null elsewhere)
-            "hub": self.hub.state(), "bunks": (!self.bunks_drawn.is_empty()).then(|| self.bunks_drawn.clone())})
+            "hub": self.hub.state(), "bunks": (!self.bunks_drawn.is_empty()).then(|| self.bunks_drawn.clone()),
+            "nooks": (!self.nooks.is_empty()).then(|| self.nooks.iter().map(|r| json!([r.x, r.y, r.w, r.h])).collect::<Vec<_>>())})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
@@ -3609,7 +3655,7 @@ mod portrait_tests {
     use aegis_core::assets::Layers;
     use aegis_ui::art::Art;
     use aegis_ui::fx::Clock;
-    use aegis_ui::portrait_fx::{blink_phase, blink_starts, seed_of, tq, BLINK_MS, EASE_MS};
+    use rpgkit_ui::portrait_fx::{blink_phase, blink_starts, seed_of, tq, BLINK_MS, EASE_MS};
     use aegis_ui::screen::TEXT_SIZES;
     use emberwake_data::PortraitCue;
 
@@ -6127,7 +6173,7 @@ mod ground_tests {
                 for (reduce, z) in [(false, 1.0), (true, 1.0), (false, 2.0), (true, 2.0)] {
                     let (mut cx, mut g) = (BIG.cx(view), gfx_at(1280, 720));
                     cx.settings.v["map_zoom"] = json!(z);
-                    cx.settings.v[aegis_ui::vignette::REDUCE_MOTION] = json!(reduce);
+                    cx.settings.v[rpgkit_ui::vignette::REDUCE_MOTION] = json!(reduce);
                     let mut map = RegionMap::new(&mut cx);
                     cx.gs_mut().position = (60, 40);
                     let t0 = Instant::now();

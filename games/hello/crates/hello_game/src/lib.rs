@@ -7,10 +7,10 @@ pub mod save;
 pub mod screens;
 pub mod walk;
 
-use aegis_ui::screen::{Context, Cx, Screen, Settings};
+use aegis_ui::screen::{Context, Cx, Screen};
 use aegis_ui::shell::headless::Headless;
 use aegis_ui::shell::Options;
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
@@ -67,37 +67,19 @@ fn arg<'a>(args: &'a [(String, String)], k: &str) -> Option<&'a str> {
 /// The context, the first screen and the shell's options for launch keys `args` (`port=`, `saves=`, `screen=`; the
 /// rest are the shell's) in game folder `game`.
 pub fn launch(args: &[(String, String)], game: &Path, headless: Option<Headless>) -> Result<(Cx<Hello>, Vec<Box<dyn Screen<Hello>>>, Options)> {
-    let manifest = aegis_content::manifest::Manifest::read(&game.join(aegis_content::manifest::FILE)).map_err(anyhow::Error::msg).with_context(|| format!("reading the manifest in {}", game.display()))?;
-    let layers = aegis_core::assets::Layers::for_game(game);
-    let mut notice = layers.notices.clone();
-    if let Some(screen) = arg(args, "screen").filter(|s| *s != "menu") {
-        notice.push(format!("screen={screen}: this game opens on its menu only."));
+    // ENGINE-11: the engine assembles what every game shares (manifest, layers, saves, settings, sound, options).
+    let engine = aegis_core::assets::Layers::for_game(game).roots.last().and_then(|r| r.parent()).map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("engine"));
+    let mut start = aegis_ui::start::Start::new(GAME_ID, Some(game.to_path_buf()), &engine, args, headless);
+    if let Some(problem) = start.notice.first() {
+        anyhow::bail!("reading the manifest in {}: {problem}", game.display());
     }
-    let save_dir = arg(args, "saves").map(PathBuf::from).unwrap_or_else(|| aegis_save::user_dir(GAME_ID).join("saves"));
-    let engine = layers.roots.last().and_then(|r| r.parent()).map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("engine"));
-    let cx = Cx {
-        settings: Settings::load(aegis_save::user_dir(GAME_ID).join("settings.json"), json!({})),
-        audio: if headless.is_some() { aegis_ui::audio::Audio::offline_layers(&layers) } else { aegis_ui::audio::Audio::of_layers(&layers) },
-        art: aegis_ui::art::Art::layered(layers),
-        nav: Vec::new(),
-        notice,
-        shot_dir: game.join(".shots"),
-        quit: false,
-        answers: Vec::new(),
-        playtest: aegis_ui::playtest::Playtests::off(),
-        held: Default::default(),
-        app: Hello { walk: walk::Walk::default(), save_dir, last_sound: String::new(), log: Vec::new() },
-    };
-    let port = arg(args, "port").and_then(|p| p.parse().ok()).unwrap_or(aegis_ui::bridge::DEFAULT_PORT);
-    let options = Options {
-        title: format!("Aegis - {}", manifest.title),
-        font: engine.join("assets/fonts/OpenSans-SemiBold.ttf"),
-        port,
-        icon: manifest.icon.clone(),
-        canvas: manifest.canvas.clone(),
-        window_sizes: manifest.window_sizes.clone(),
-        headless,
-    };
+    start.notice = start.layers.notices.clone();
+    if let Some(screen) = arg(args, "screen").filter(|s| *s != "menu") {
+        start.notice.push(format!("screen={screen}: this game opens on its menu only."));
+    }
+    let (settings, audio, art) = (start.settings(json!({})), start.audio(), aegis_ui::art::Art::layered(start.layers.clone()));
+    let app = Hello { walk: walk::Walk::default(), save_dir: start.save_dir.clone(), last_sound: String::new(), log: Vec::new() };
+    let (cx, options) = start.cx(settings, art, audio, aegis_ui::playtest::Playtests::off(), app);
     Ok((cx, vec![Box::new(screens::Menu::default())], options))
 }
 

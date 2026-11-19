@@ -140,6 +140,9 @@ pub fn stage_set(d: &Data, world_id: &str) -> String {
     d.lineage(world_id).iter().rev().map(|w| json::s(d.manifest(w), "stage_set")).find(|s| !s.is_empty()).unwrap_or_default()
 }
 
+/// PR7-41 (PT-35): the service line said after a turn-in (no kit default: a world names it in `service_lines`).
+pub const TURNED_IN: &str = "turned_in";
+
 /// The base line with the manifest `service_lines` merged along the lineage (nearest wins).
 pub fn service_line(d: &Data, world_id: &str, id: &str) -> String {
     let mut text = d.service_text(id);
@@ -431,6 +434,9 @@ pub struct DialogueRunner {
     pub campaign_events: Vec<Value>,
     /// BUNKS1 BK7: extra `{token}` values of the texts (a template talk's `{a}` and `{b}`; empty = none).
     pub tokens_extra: IndexMap<String, String>,
+    /// PR7-41 (PT-35): a one-off line shown in the node's place until the conversation moves on (the world's
+    /// `turned_in` service line after a turn-in; "" = the node's own text).
+    pub said: String,
 }
 
 fn res_ok() -> Dict {
@@ -544,6 +550,7 @@ impl DialogueRunner {
     }
 
     fn show(&mut self, d: &Data, gs: &mut GameState, id: &str) {
+        self.said.clear();
         self.node_id = id.into();
         let fx = effects_of(&self.node(d, gs, id));
         self.apply(d, gs, &fx);
@@ -709,7 +716,7 @@ impl DialogueRunner {
             ("speaker", speaker.clone().into()),
             ("speaker_name", json::s(d.resolve(&gs.world_id, "characters", &speaker), "name").into()),
             ("node", self.node_id.clone().into()),
-            ("text", fill(&json::s(&node, "text"), &self.tokens(d, gs, &node)).into()),
+            ("text", if self.said.is_empty() { fill(&json::s(&node, "text"), &self.tokens(d, gs, &node)) } else { self.said.clone() }.into()),
             ("choices", Value::Array(choices)),
             ("end", Value::Bool(self.closed || json::b(&node, "end", false))),
             ("next", Value::Bool(!self.closed && !json::s(&node, "next").is_empty())),
@@ -1057,6 +1064,16 @@ impl DialogueRunner {
         self.campaign_events.extend(events);
         self.pending = None;
         let mut moved = self.move_to(d, gs, &to);
+        // PR7-41 (PT-35): the world's `turned_in` line (its quest giver's thanks) stands in the node's place once
+        if !self.closed {
+            let line = service_line(d, &gs.world_id, TURNED_IN);
+            if !line.trim().is_empty() {
+                let mut values = self.tokens(d, gs, &Dict::new());
+                values.insert("quest".into(), json::s_or(&quest::resolved(d, gs, &qid), "name", &qid));
+                self.said = fill(&line, &values);
+                moved.insert("said".into(), self.said.clone().into());
+            }
+        }
         moved.insert("granted".into(), res.get("granted").cloned().unwrap_or(Value::Null));
         moved.insert("notes".into(), res.get("notes").cloned().unwrap_or(Value::Array(Vec::new())));
         self.with_notes(moved)
@@ -1392,6 +1409,30 @@ fn recruit(d: &Data, gs: &mut GameState, who: &str, level: &Value, notes: &mut V
     }
     gs.party.members.push(hero);
     notes.push(format!("{name} joins the party."));
+}
+
+/// PR7-41 (PT-36): what a new member arrives with, one line each: on the bench (the squad was full) and unspent
+/// points (to spend on the party screen); none for a member fielded with nothing to spend. The screens log these
+/// after a "joins the party." note (the effect's notes stay as they were: `join_note_member`).
+pub fn join_flags(d: &Data, gs: &GameState, id: &str) -> Vec<String> {
+    let Some(m) = gs.party.member(id) else { return Vec::new() };
+    let name = progression::display_name(d, m);
+    let mut out = Vec::new();
+    if !gs.party.active_ids.is_empty() && !gs.party.active_ids.iter().any(|a| a == id) {
+        out.push(format!("{name} waits on the bench: the squad is full."));
+    }
+    let points = m.unspent(d);
+    if points > 0 {
+        out.push(format!("{name} has {points} unspent point{} (Party screen).", if points == 1 { "" } else { "s" }));
+    }
+    out
+}
+
+/// PR7-41 (PT-36): the member a recruit note ("<name> joins the party.") names, by its display name; None for any
+/// other note.
+pub fn join_note_member(d: &Data, gs: &GameState, note: &str) -> Option<String> {
+    let name = note.strip_suffix(" joins the party.")?;
+    gs.party.members.iter().find(|m| progression::display_name(d, m) == name).map(|m| m.id.clone())
 }
 
 /// After a dialogue fight: BattleBridge.apply (REWARD1: `tally` from the battle, None = settled without one), plus the

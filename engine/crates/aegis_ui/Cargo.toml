@@ -31,6 +31,7 @@ web_probe = []
 [dependencies]
 aegis_host = { path = "../aegis_host" }
 aegis_core = { path = "../aegis_core" }
+aegis_content = { path = "../aegis_content" }
 aegis_save = { path = "../aegis_save" }
 aegis_layout = { path = "../aegis_layout" }
 serde_json = { workspace = true }
@@ -59,6 +60,8 @@ web-sys = { version = "0.3.106", features = ["console", "Document", "Element", "
 # DISPLAY2: the monitor's work area (GetMonitorInfoW); winit reports only the whole monitor. The version winit uses.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52.0", features = ["Win32_Foundation", "Win32_Graphics_Gdi"] }
+# INPUT-MAP1 (ENGINE-7): the gamepad on Windows (Windows.Gaming.Input); elsewhere the link's `pad` request stands in
+gilrs = "0.11.2"
 
 [lints]
 workspace = true

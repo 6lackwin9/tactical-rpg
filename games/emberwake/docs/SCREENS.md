@@ -295,3 +295,10 @@ A battle beyond classic only (classic plays, paces and logs as before; no `playb
 - Agent link: `playback` {speed, waiting, block}, `overlay.tracers` [{from, to, alpha, dashed}], `log_groups`
   [{round, block, lines}]; widget ids `playback.speed.1`, `playback.speed.half`, `playback.speed.block`,
   `playback.next`, `settings.playback_speed`, `settings.overlay.tracers`.
+
+## Updates 2026-11-19 (PR7-41)
+
+- Battle selection: the hero panel's Ally button lists the members the hero can use a skill or pouch item on; a row
+  opens the skill menu there (as Ctrl+click). A cell refused for its target names the control in its card.
+- Party Skills tab: the Passives and Keystone headers say where they come from and the keystone's level; the Stats tab
+  lists innate passives.

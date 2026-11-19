@@ -1,6 +1,6 @@
 //! The story stage (STORYUI1-U1, docs/specs/STORYUI1.md 5.2-5.4; engine-only, no Godot original): the screen a running
 //! story sequence shows (`StoryStage`), playing the kit's steps (`emberwake_world::story`): a `vignette` step through
-//! the engine's vignette player (`aegis_ui::vignette::VignetteScreen`), a `fight` step as a world fight with runner
+//! the engine's vignette player (`rpgkit_ui::vignette::VignetteScreen`), a `fight` step as a world fight with runner
 //! `story`, the `enter` and `end` steps by leaving for the region map or the main menu; queued vignettes play first
 //! (Q9). On the maps, `map_tick` hands over to the stage while a sequence runs and plays the vignette queue (W2). The
 //! card text takes the theme's colours (`palette`). Story-free: it names no place, person or flag (KIT2-UI moves the
@@ -12,7 +12,7 @@ use aegis_core::json::{self, s, s_or, Dict};
 use aegis_ui::canvas::{rgb, Rect};
 use aegis_ui::theme::th;
 use aegis_ui::ui::{Gfx, Ui, Widget, BODY, H, W};
-use aegis_ui::vignette::{self, Card, Ended, Palette, Reel, VignetteScreen};
+use rpgkit_ui::vignette::{self, Card, Ended, Palette, Reel, VignetteScreen};
 use aegis_ui::widget_plumbing;
 use emberwake_data::Step;
 use emberwake_world::{story, Data};
@@ -124,7 +124,7 @@ pub fn map_tick(cx: &mut Cx) -> bool {
 /// Logs the notes of a story result (effects, "Try again.") and takes its campaign events (CAMPAIGN1 W1).
 fn log_notes(cx: &mut Cx, res: &Dict) {
     for n in json::sget(res, "notes") {
-        cx.log(n);
+        crate::talk::log_note(cx, n);
     }
     crate::runover::take(cx, res);
 }

@@ -3,10 +3,26 @@
 //! slice 4 (UI5, V2): the round intent's head ("Assault: Wolf"), the card line that leads with it and the reveal head.
 
 use emberwake_battle::grid::NO_CELL;
-use emberwake_battle::intent::{Intent, Line, ARRIVING, IDLE};
+use emberwake_battle::intent::{HitOn, Intent, Line, ARRIVING, IDLE};
 use emberwake_battle::refusal::Reason;
 use emberwake_battle::round_intent::{ManeuverKind, RoundTarget};
 use emberwake_battle::world::World;
+
+/// PR7-41 (PT-27): a unit's AP as the screen shows it: never below 0; AP debt (the kit's rule: a chase or follow may
+/// spend past 0, owed at the next round start) is named apart: "AP 0/10 (1 owed)".
+pub fn ap_text(ap: i32, max: i32, sep: &str) -> String {
+    if ap < 0 {
+        format!("AP 0{sep}{max} ({} owed)", -ap)
+    } else {
+        format!("AP {ap}{sep}{max}")
+    }
+}
+
+/// PR7-41 (PT-34): a kit log or event line in player words (the kit's wording stays in its goldens): "new tactics"
+/// reads "fights differently", a log cell's "blocked by no route" reads "no way through".
+pub fn plain(line: &str) -> String {
+    line.replace("new tactics", "fights differently").replace("blocked by no route", "no way through")
+}
 
 /// "B1" or "B1-2" for a (start, end) block pair.
 pub fn block_text(blocks: (i32, i32)) -> String {
@@ -60,9 +76,39 @@ pub fn read_by(w: &World, i: &Intent, passive_name: impl Fn(&str) -> String) -> 
     format!("Read by {}{passive}", names.join(", "))
 }
 
-/// The forecast line when `hero` is the target of the record's first action: "Targets you in B1" (None otherwise).
-pub fn forecast(i: &Intent, hero: usize) -> Option<String> {
-    (i.line.target == Some(hero)).then(|| format!("Targets you in {}", block_text(i.line.blocks)))
+/// The forecast line when `hero` is the target of the record's first action or a hit lands on it (None otherwise).
+/// PR7-41 (PT-20): it names the blocks the hits land, not the first action's, and each hit by the one forecast
+/// convention (`hits`, the kit's `intent::hits_on`: per hit, at the block it lands, with the hero's guard then; an area
+/// whose tiles hold the hero counts): "Targets you in B3: Heavy Thrust, about 23 (guarded)", "Targets you in B3, B5:
+/// Shackle Drag, about 22 a hit", or each hit in turn when they differ ("Targets you in B3, B5: B3 Bash about 30; B5
+/// Shackle Drag about 22"). `forecast_hits` keeps what an unrevealed plan may show; a first action on the hero with no
+/// hit (a move toward it): "Heads for you in B1".
+pub fn forecast(i: &Intent, hero: usize, hits: &[HitOn]) -> Option<String> {
+    let Some(first) = hits.first() else { return (i.line.target == Some(hero)).then(|| format!("Heads for you in {}", block_text(i.line.blocks))) };
+    let blocks = hits.iter().map(|h| format!("B{}", h.block)).collect::<Vec<_>>().join(", ");
+    let guarded = |h: &HitOn| if h.guarded { " (guarded)" } else { "" };
+    let same = hits.iter().all(|h| h.skill == first.skill && h.damage == first.damage && h.guarded == first.guarded);
+    Some(if hits.len() == 1 {
+        format!("Targets you in {blocks}: {}, about {}{}", first.skill, first.damage, guarded(first))
+    } else if same {
+        format!("Targets you in {blocks}: {}, about {} a hit{}", first.skill, first.damage, guarded(first))
+    } else {
+        format!("Targets you in {blocks}: {}", hits.iter().map(|h| format!("B{} {} about {}{}", h.block, h.skill, h.damage, guarded(h))).collect::<Vec<_>>().join("; "))
+    })
+}
+
+/// PT-20: the hits on `hero` a record's forecast names (the tells never name an unrevealed later action): all of them
+/// when its plan is revealed; else only the first action's own hit (an attack on the hero, an area whose tiles hold
+/// it) or, when that first action aims at the hero (a move toward it), the hit of the action right after it, the blow
+/// the move leads to; never a hit of any later action (`HitOn::nth`).
+pub fn forecast_hits(i: &Intent, hero: usize, mut hits: Vec<HitOn>) -> Vec<HitOn> {
+    if i.revealed {
+        return hits;
+    }
+    let next = if i.line.target == Some(hero) { 1 } else { 0 };
+    hits.retain(|h| h.nth <= next);
+    hits.truncate(1);
+    hits
 }
 
 /// RULESET1_INTENT UI5: a record's round intent, Maneuver kind and round target: "Assault: Wolf", "Maneuver (Engage):
@@ -139,6 +185,19 @@ pub fn menu_refusal_text(reasons: &[Reason]) -> String {
         r => refusal_text(std::slice::from_ref(r)),
     };
     reasons.iter().map(one).collect::<Vec<_>>().join(emberwake_battle::round_intent_plan::REASONS_JOIN)
+}
+
+/// PR7-41 (PT-23): how to give a skill-menu cell the target it asks for, in the battle screen's controls, for the
+/// kit's "Target ... to use this" refusals that need yourself or an ally (None for any other reason: an enemy or a
+/// tile is clicked on the board, as the menu was).
+pub fn target_control(reasons: &[Reason]) -> Option<&'static str> {
+    let text = reasons.iter().map(|r| r.to_string()).find(|t| t.starts_with("Target ") && t.ends_with(" to use this"))?;
+    match (text.contains("yourself"), text.contains("an ally")) {
+        (true, true) => Some("Self button (key S) for yourself; Ally button (or Ctrl+click a member) for an ally."),
+        (false, true) => Some("Ally button in the hero panel, or Ctrl+click a member."),
+        (true, false) => Some("Self button in the hero panel (key S)."),
+        _ => None,
+    }
 }
 
 /// INPUT1 MR4: a skill's range in words for its menu row tip and hover card: "Range 2: dash to a flank, then hit" or

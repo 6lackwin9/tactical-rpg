@@ -1,0 +1,6 @@
+{
+  "menu.start": "Start",
+  "menu.quit": "Quit",
+  "play.back": "Back",
+  "play.body": "The game starts here: replace this screen (crates/__ID___game/src/screens.rs)."
+}

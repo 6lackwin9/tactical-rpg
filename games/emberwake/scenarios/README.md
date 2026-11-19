@@ -4,6 +4,10 @@ The format and the commands are in `engine/docs/authoring/scenarios.md`. These a
 2026-11-05 (HEADLESS1) with none. A run has no window by default; none here needs one. The gate runs them all (PR7-4); a baseline change for a golden shot
 needs the user's approval (`engine/docs/authoring/scenarios.md` "Golden shots"). `saves/hub_start/` was made with the agent
 playtest harness (`tools/fc.sh playtest`) after the prologue; make it again the same way when a save change breaks it.
+`saves/m3_stuck/` is the agent systems playtest's save of 2026-11-18 (PT-15), kept as found: it must load through the repair.
+`saves/cages_start/` is the same playtest's save at the Ash-Crawl Crossroads (PT-16), kept as found: its fight's first auto-filled plan was refused.
+`saves/sweep_start/` is the same playtest's save at Alleyway Junction 7 before The Sweep (PT-17, PT-20), kept as found.
+`saves/after_vats/` is the same playtest's save after The Tallow Vats, heroes at level 7 and 8 (PT-28), kept as found: it loads with the repair notice and Elyse's recruit talk.
 
 ## The scenarios
 
@@ -15,6 +19,14 @@ playtest harness (`tools/fc.sh playtest`) after the prologue; make it again the 
 | `screens_menus` | Review shots (PR7-4; golden once the user approves the baselines): main menu, new game, load, the five settings tabs, the Scene Runner | 3 s |
 | `screens_hub` | Review shots from the save `saves/hub_start` (the hub right after the prologue): region map, talk box, notice board, shop, party (stats, skills, gear), world map | 25 s |
 | `screens_battle` | Review shot: `tl_flank` seed 7 at its start, planning | 4 s |
+| `job_fight_repair` | PR7-41 (PT-15): the save `saves/m3_stuck` (The Bone-Mill Raid won before it was taken) loads with the repair notice and the job ready; travel to the hub, turn it in to Talia | 6 s |
+| `cages_auto_plan` | PR7-41 (PT-16, PT-22): the save `saves/cages_start` enters The Crossroads Cages; Confirm takes the untouched auto-filled plan and the round plays | about 10 s |
+| `sweep_telegraph` | PR7-41 (PT-17, PT-20): the save `saves/sweep_start` enters The Sweep; with Vesper selected the Footman's card names the block its Heavy Thrust lands; round 2 marks Gilded Sunder's tiles | about 25 s |
+| `fight1_pommel_hint` | PR7-41 (PT-21): a new game's first fight; the untouched auto plan's Pommel Strike breaks a Heavy Thrust before it lands (the round 1 log) | about 25 s |
+| `ally_support_menu` | PR7-41 (PT-23): the save `saves/cages_start` enters The Crossroads Cages; with Hollis selected the hero panel's Ally button lists the members he can use his pouch item on, and a row opens his skill menu on one | about 10 s |
+| `party_keystone` | PR7-41 (PT-28): the save `saves/after_vats`; the party screen's Skills tab shows the deck passives and the keystone slotted, with where they come from | about 5 s |
+| `battle_menu_retreat` | PR7-41 (PT-32, PT-25): the save `saves/cages_start` enters The Crossroads Cages; the strip is disabled under the intro talk, the bar has no Restart or Step while planning, Menu offers Retreat; Yes ends the fight as fled and the results count the captives | about 10 s |
+| `hub_text_audit` | PR7-41 (PT-30, PT-34, PT-35, PT-36): the save `saves/after_vats`; the stash cards say what key items are for, the hub menu, the save slots' whole labels and Quit to main menu asking first | about 6 s |
 
 The three screen scenarios also time frames (`perf`, ENGINE-2, numbers only, no budget): the main menu, the region map and
 battle planning. Measured 2026-11-18 at 1280x720 in a dev build with no window: p50 4.6 ms, 29.5 ms and 20.2 ms.

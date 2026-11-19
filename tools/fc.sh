@@ -4,6 +4,9 @@
 #                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), every scenario of each game with no window (PR7-4; the sample game games/hello too, ENGINE-1), a new game from the templates (ENGINE-6),
 #                                the layer check, the screen layout check, the lints, docs --all, tooltests, plannertests, assetlib
 #                                (`auto` is accepted and runs everything)
+#   tools/fc.sh step <name>      one gate step alone, by its name in tools/gate_steps.txt (the list both gates run, ENGINE-12)
+#   tools/fc.sh golden-bisect <golden> <switch> [--keep DIR] | list   record a golden with a test-only switch
+#                                (aegis_core::switches) off and on, list the fights or runs that move; fixtures restored (ENGINE-14)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
 #                                engine and kit crates (src, tests), schema.json and kit.json name no lore word, any case
 #                                (world ids, games/<id>/lore_words.txt);
@@ -307,8 +310,9 @@ assetlib() {  # PR7-35 (ASSETLIB1): the kit asset library check (tools/assetlib/
 
 layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crates name no game and have no path into games/
   local id ids=() hits bad=0
-  for id in games/*/; do [ -d "$id" ] && ids+=("$(basename "$id")"); done
-  # G1: every folder name under games/ is a game id; a case-insensitive hit in an engine or kit file (tracked or new, not
+  # the engine's sample game `hello` is exempt (ENGINE-11, FB-315 (a)): engine docs and code may point at games/hello/
+  for id in games/*/; do [ -d "$id" ] && [ "$(basename "$id")" != hello ] && ids+=("$(basename "$id")"); done
+  # G1: every folder name under games/ but the sample game is a game id; a case-insensitive hit in an engine or kit file (tracked or new, not
   # ignored) fails. Whole word, with `_` as a separator so crate names (<id>_rules) and prefixed ids count as well.
   for id in "${ids[@]}"; do
     if hits=$(git grep --untracked -n -I -i -E -e "(^|[^[:alnum:]])$(printf '%s' "$id" | sed 's/[^[:alnum:]_-]/\\&/g')([^[:alnum:]]|\$)" \
@@ -373,30 +377,52 @@ layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crat
   if [ $bad -eq 0 ]; then echo "[layers] ok: engine and kit crates name no game (${ids[*]}) and have no path into games/; engine and kit code name no lore word, kit code no class id"; else echo "[layers] FAIL: engine and kit code must not name a game or a lore word, kit code no class id (CLAUDE.md Layers)"; status=1; fi
 }
 
-gate() {
-  build; [ $status -ne 0 ] && return
-  cargo_test; [ $status -ne 0 ] && return
-  repro; [ $status -ne 0 ] && return
-  playtest_smoke; [ $status -ne 0 ] && return
-  scenarios_all; [ $status -ne 0 ] && return
-  newgame; [ $status -ne 0 ] && return
-  layers_check; [ $status -ne 0 ] && return
-  layouts; [ $status -ne 0 ] && return
-  lints; [ $status -ne 0 ] && return
-  # the whole docs check; the size warnings, which are many, as one count (tools/fc.sh docs --all lists them)
+gate_docs() {  # the gate's docs step: the whole docs check; the size warnings, which are many, as one count (docs --all lists them)
   local out
   out=$(docs_check --all) || status=1
   echo "$out" | grep -v '^\[docs\] WARN'
   [ "$(echo "$out" | grep -c '^\[docs\] WARN')" -eq 0 ] || echo "[docs] $(echo "$out" | grep -c '^\[docs\] WARN') size warning(s)"
-  [ $status -ne 0 ] && return
-  tooltests; [ $status -ne 0 ] && return
-  plannertests; [ $status -ne 0 ] && return
-  assetlib; [ $status -ne 0 ] && return
+}
+
+gate_step() {  # GATE-PARITY1 (ENGINE-12): one gate step by its name in tools/gate_steps.txt
+  case "$1" in
+    build) build ;;
+    test) cargo_test ;;
+    repro) repro ;;
+    playtest) playtest_smoke ;;
+    scenarios) scenarios_all ;;
+    newgame) newgame ;;
+    layers) layers_check ;;
+    layouts) layouts ;;
+    lints) lints ;;
+    docs) gate_docs ;;
+    tooltests) tooltests ;;
+    plannertests) plannertests ;;
+    assetlib) assetlib ;;
+    *) echo "[gate] FAIL: no gate step '$1' (tools/gate_steps.txt names it, tools/fc.sh gate_step has no such step)"; status=1 ;;
+  esac
+}
+
+gate_steps() {  # the step names of tools/gate_steps.txt, in order
+  grep -vE '^[[:space:]]*(#|$)' tools/gate_steps.txt | awk '{ print $1 }'
+}
+
+gate() {  # every step of tools/gate_steps.txt in order (the desktop's check_project.ps1 reads the same list); the first failure stops
+  local name
+  for name in $(gate_steps); do
+    gate_step "$name"; [ $status -ne 0 ] && return
+  done
   echo "[gate] ALL CHECKS PASSED"
 }
 
+game_cli() {  # ENGINE-11: a game's command line program, from its game.json (`cli`; `<id>_cli` when it names none)
+  local d="$1" name; name=$(sed -n 's/^[[:space:]]*"cli":[[:space:]]*"\([^"]*\)".*/\1/p' "$d/game.json" | head -n 1)
+  echo "${name:-$(basename "$d")_cli}"
+}
+
 playtest_smoke() {  # PR7-22: the agent playtest harness plays a fresh save to the hub (games/emberwake/playtests/agent/smoke.play)
-  local cli="${CARGO_TARGET_DIR:-$PWD/target}/debug/aegis" out log
+  local cli out log
+  cli="${CARGO_TARGET_DIR:-$PWD/target}/debug/$(game_cli games/emberwake)"
   [ -x "$cli" ] || [ -x "$cli.exe" ] || { echo "[playtest] FAIL: no dev build of the CLI at $cli"; status=1; return; }
   out=$(mktemp -d); log="$out/run.txt"
   if "$cli" playtest run games/emberwake/playtests/agent/smoke.play out="$out" > "$log" 2>&1; then
@@ -408,12 +434,12 @@ playtest_smoke() {  # PR7-22: the agent playtest harness plays a fresh save to t
 }
 
 scenarios_all() {  # PR7-4: every scenario of each game, no window, dev build; golden shots compare against their baselines
-  # every games/<id>/ with a scenarios/ folder, through its CLI: Emberwake's is `aegis`, any other game's `<id>_cli`
-  # (the sample game, ENGINE-1; a game made by `aegis new game`, ENGINE-6), beside its game program `<id>`
+  # every games/<id>/ with a scenarios/ folder, through the CLI its game.json names (`cli`: Emberwake's `aegis`; else
+  # `<id>_cli`, ENGINE-11: the sample game, a game made by `aegis new game`), beside its game program `<id>`
   local bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" cli name out log d
   for d in games/*/; do
     name=$(basename "$d"); [ -f "$d/game.json" ] && [ -d "$d/scenarios" ] || continue
-    cli="$bin/${name}_cli"; [ "$name" = emberwake ] && cli="$bin/aegis"
+    cli="$bin/$(game_cli "$d")"
     [ -x "$cli" ] || [ -x "$cli.exe" ] || { echo "[scenarios] FAIL: no dev build of $cli"; status=1; continue; }
     out=$(mktemp -d); log="$out/run.txt"
     if "$cli" scenario run all out="$out" > "$log" 2>&1; then
@@ -552,7 +578,9 @@ case "$1" in
     [ -z "${CI:-}" ] && [ -f "$heavy" ] && { source "$heavy"; heavy_start "fc.sh gate"; }
     gate ;;
   build) build ;;
+  step) [ -n "${2:-}" ] || { echo "usage: tools/fc.sh step <name>   (a gate step of tools/gate_steps.txt: $(gate_steps | tr '\n' ' '))"; status=2; }; [ -n "${2:-}" ] && gate_step "$2" ;;
   test) cargo_test "${@:2}" ;;
+  golden-bisect) py=$(python_with "pass") || { echo "[golden-bisect] no Python 3 found"; status=1; }; [ $status -eq 0 ] && { "$py" tools/planner/golden_bisect.py "${@:2}" || status=$?; } ;;
   clippy) cargo clippy --workspace --all-targets 2>&1 | grep -E "^(warning|error)" -A4 | head -80 ;;
   docs)
     case "${2:-}" in

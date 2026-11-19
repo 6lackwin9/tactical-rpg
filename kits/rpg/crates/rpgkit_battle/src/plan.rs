@@ -1667,6 +1667,13 @@ impl Plan {
 
     /// Expected hit: attack power x Focus x skill x exploit x stance x armor x cover; no crit, no guard.
     pub fn estimate_damage(&self, w: &World, c: UnitId, sid: SkillId, stance: Stance, foe: UnitId, from: V2, consumed: &[String]) -> i32 {
+        self.estimate_damage_guarded(w, c, sid, stance, foe, from, consumed, 0.0)
+    }
+
+    /// PR7-41 (PT-20): `estimate_damage` with the foe guarding at `guard` mitigation (it joins the cover in the one
+    /// guard-and-cover term, as `damage::compute` reads it); 0.0 is `estimate_damage`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn estimate_damage_guarded(&self, w: &World, c: UnitId, sid: SkillId, stance: Stance, foe: UnitId, from: V2, consumed: &[String], guard: f64) -> i32 {
         let s = &w.cat.skills[sid];
         if !skill::deals_damage(s) {
             return 0;
@@ -1675,12 +1682,28 @@ impl Plan {
         let exploit_mult = skill::exploit_match_by(&s.exploit, &w.units[foe], consumed, false, &w.ruleset).1;
         // PK1-S2b: a channeled version's armour piercing counts in the estimate (the AI's Channel row compares them)
         let version = crate::channel::version(w, c, s);
-        let hit = expected_from(w, c, foe, sid, Some(stance), from, self.estimate_cover(w, c, sid, foe, from), exploit_mult, version.as_ref().is_some_and(|v| v.pierce));
+        let hit = expected_from(w, c, foe, sid, Some(stance), from, self.estimate_cover(w, c, sid, foe, from) + guard, exploit_mult, version.as_ref().is_some_and(|v| v.pierce));
         // PK1-S2a: a channeled version's power factor (none outside a Channel round)
         match version.map(|v| v.power).filter(|p| *p != 1.0) {
             Some(p) => (hit as f64 * p).round() as i32,
             None => hit,
         }
+    }
+
+    /// PR7-41 (PT-20): the damage the battle screen shows for planned entry `e` of `c` (its `est_damage`), by the one
+    /// forecast convention: per hit, at the block it lands, with the target's guard then (`intent::guard_at` over the
+    /// round's scheduled actions `sched`). A single-target attack on a foe that guards at its impact is estimated again
+    /// with that guard; anything else keeps `est_damage`.
+    pub fn forecast_entry(&self, w: &World, sched: &[crate::resolver::ScheduledAction], c: UnitId, e: &PlanEntry) -> i32 {
+        let s = &w.cat.skills[e.skill];
+        let Some(foe) = e.target.filter(|&f| f != c && e.item.is_none() && skill::kind(s) == Kind::Attack && !skill::is_area(s)) else { return e.est_damage };
+        let guard = if command::ignores_guard(w, s) { 0.0 } else { crate::intent::guard_at(w, sched, foe, e.end_block(w)) };
+        if guard <= 0.0 || e.est_damage <= 0 {
+            return e.est_damage;
+        }
+        let from = e.path.iter().fold(e.pos_before, |a, d| a + *d);
+        let stance = if w.ruleset.stances() { skill::stance_during(s, e.stance_before) } else { e.stance_before };
+        self.estimate_damage_guarded(w, c, e.skill, stance, foe, from, &[], guard)
     }
 
     fn estimate_hit(&self, w: &World, c: UnitId, st: &mut SimState, sid: SkillId, stance: Stance, foe: UnitId, from: V2) -> i32 {

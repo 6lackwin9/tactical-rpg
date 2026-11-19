@@ -1,0 +1,1068 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "billhook_sunder",
+    "name": "Billhook Sunder",
+    "kind": "ATTACK",
+    "level": 2,
+    "ap_cost": 4,
+    "blocks": 3,
+    "description": "Assault, Heavy: {name}, {power} power, {stagger} stagger; exposes the target for {rounds} rounds.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "weapon_types": [
+     "polearm"
+    ],
+    "min_proficiency": 1,
+    "power_mult": 1.8,
+    "status_effect": "expose",
+    "status_potency": 90,
+    "status_magnitude": 8,
+    "status_rounds": 3,
+    "stagger": 18
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "seventh_ward_bulwark",
+    "name": "Ward Bulwark",
+    "kind": "DEFEND",
+    "level": 3,
+    "ap_cost": 3,
+    "blocks": 3,
+    "description": "Guard, Heavy: {name}, -{mitigation} damage; taunts enemies and fortifies you for 2 rounds.",
+    "learned_only": true,
+    "round_intent": "guard",
+    "status_rounds": 2,
+    "grant_status": "taunt",
+    "extra_grants": [
+     {
+      "status": "fortify",
+      "magnitude": 6,
+      "rounds": 2
+     }
+    ],
+    "mitigation": 0.35
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "throat_carver",
+    "name": "Throat-Carver",
+    "kind": "ATTACK",
+    "level": 2,
+    "ap_cost": 4,
+    "blocks": 2,
+    "description": "Assault, Standard: {name}, {power} power; strikes harder at a staggered, pinned or nearly dead foe.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "weapon_types": [
+     "dagger",
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 2.2,
+    "exploit": [
+     {
+      "status": "stagger",
+      "power_mult": 1.5
+     },
+     {
+      "status": "root",
+      "power_mult": 1.5
+     },
+     {
+      "hp_below": 35,
+      "power_mult": 2
+     }
+    ],
+    "stagger": 8
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "orlovs_retribution",
+    "name": "Retribution",
+    "kind": "ATTACK",
+    "level": 2,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "Maneuver, Standard: {name}, {power} power; dash {dash} tiles after the strike; harder on a staggered or pinned foe.",
+    "learned_only": true,
+    "round_intent": "maneuver",
+    "weapon_types": [
+     "dagger",
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 2.0,
+    "dash_tiles": 2,
+    "exploit": [
+     {
+      "status": "stagger",
+      "power_mult": 1.5
+     },
+     {
+      "status": "root",
+      "power_mult": 1.5
+     }
+    ],
+    "stagger": 8
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "brimstone_cauterize",
+    "name": "Cauterize",
+    "kind": "SUPPORT",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "Support, Snap: {name}, heals {heal} and cleanses bleed, poison and burn. A friendly unit or yourself.",
+    "learned_only": true,
+    "round_intent": "support",
+    "reach_max": 2,
+    "heal_stat": "KNOW",
+    "heal_base": 10,
+    "heal_mult": 1.2,
+    "cleanse_statuses": [
+     "bleed",
+     "poison",
+     "burn"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "tourniquet_tonic",
+    "name": "Tourniquet",
+    "kind": "SUPPORT",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "Support, Standard: {name}, heals {heal} and hastes the target; an ally broken this round holds a guard for the rest of it.",
+    "learned_only": true,
+    "round_intent": "support",
+    "reach_max": 2,
+    "heal_stat": "KNOW",
+    "heal_base": 25,
+    "heal_mult": 2.0,
+    "grant_status": "haste",
+    "riders": [
+     {
+      "when": {
+       "other_broken": true
+      },
+      "effects": [
+       {
+        "type": "guard",
+        "mitigation": 0.5,
+        "blocks": 0
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "poachers_quarrel",
+    "name": "Barbed Quarrel",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "Assault, Standard: {name}, {power} power, {stagger} stagger; bleeds the target.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "weapon_types": [
+     "crossbow"
+    ],
+    "min_proficiency": 1,
+    "power_mult": 0.95,
+    "status_effect": "bleed",
+    "status_potency": 70,
+    "status_rounds": 2,
+    "stagger": 8
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "heavy_winch_sunder",
+    "name": "Winch Sunder",
+    "kind": "ATTACK",
+    "level": 2,
+    "ap_cost": 5,
+    "blocks": 4,
+    "description": "Assault, Heavy: {name}, {power} power, {stagger} stagger; breaks a windup outright, exposes and knocks the target back 2 tiles.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "weapon_types": [
+     "crossbow"
+    ],
+    "min_proficiency": 1,
+    "power_mult": 2.1,
+    "status_effect": "expose",
+    "status_potency": 90,
+    "status_magnitude": 6,
+    "status_rounds": 2,
+    "stagger": 12,
+    "sure_break": true,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 2,
+     "collide_mult": 0.5,
+     "collide_stagger": 6
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "shackle_pummel_slam",
+    "name": "Shackle Slam",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "Assault, Snap: {name}, {power} power, {stagger} stagger; shoves the foe 1 tile and breaks it against a wall or a unit.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "weapon_types": [
+     "fist",
+     "gauntlet",
+     "unarmed"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.95,
+    "stagger": 18,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 1,
+     "collide_mult": 0.95,
+     "collide_break": true
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "slag_slam_throw",
+    "name": "Slag Slam",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "Assault, Standard: {name}, {power} power, {stagger} stagger; throws the foe 2 tiles into whatever stands behind it.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "weapon_types": [
+     "fist",
+     "gauntlet",
+     "unarmed"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.2,
+    "stagger": 12,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 2,
+     "collide_mult": 1.2,
+     "collide_stagger": 12
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "magnesium_flash_bomb",
+    "name": "Flash-Bomb",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 1,
+    "description": "Assault, Snap: {name}, {power} power, {stagger} stagger; may stagger everything in the burst.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 2,
+    "reach_max": 3,
+    "area": "BURST",
+    "power_mult": 0.2,
+    "status_effect": "stagger",
+    "status_potency": 60,
+    "stagger": 10
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "choke_gas",
+    "name": "Choke-Gas",
+    "kind": "ATTACK",
+    "level": 2,
+    "ap_cost": 4,
+    "blocks": 3,
+    "description": "Assault, Heavy: {name}, {power} power; poisons, and the gas lingers 2 rounds.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 2,
+    "reach_max": 4,
+    "area": "BURST",
+    "power_mult": 0.4,
+    "status_effect": "poison",
+    "status_potency": 80,
+    "status_magnitude": 6,
+    "status_rounds": 3,
+    "hazard": {
+     "id": "choke_gas",
+     "shape": "SKILL",
+     "at": "target",
+     "rounds": 2
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "heavy_bill_thrust",
+    "name": "Heavy Thrust",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 3,
+    "recovery_blocks": 1,
+    "description": "Assault, Heavy: {name}, {power} power, {stagger} stagger.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "power_mult": 1.5,
+    "stagger": 10
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "crushing_judgment",
+    "name": "Judgment",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 4,
+    "recovery_blocks": 1,
+    "description": "Assault, Heavy: {name}, a sweep of {power} power, {stagger} stagger that cannot be broken; may stun.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 1,
+    "area": "ARC",
+    "power_mult": 2.2,
+    "status_effect": "stun",
+    "status_potency": 50,
+    "stagger": 20,
+    "unbreakable": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "iron_shackle_drag",
+    "name": "Shackle Drag",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 2,
+    "recovery_blocks": 1,
+    "description": "Assault, Standard: {name}, {power} power; roots the target and drags it 2 tiles toward the Bailiff.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 3,
+    "power_mult": 0.5,
+    "status_effect": "root",
+    "status_potency": 80,
+    "stagger": 6,
+    "forced_move": {
+     "kind": "pull",
+     "tiles": 2
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "pyre_nozzle_sweep",
+    "name": "Nozzle Sweep",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 2,
+    "recovery_blocks": 2,
+    "description": "Assault, Standard: {name}, {power} power; burns, and Phosphorus Fire stays on the ground for 2 rounds.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "weapon_types": [
+     "sprayer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 3,
+    "area": "BURST",
+    "power_mult": 0.7,
+    "status_effect": "burn",
+    "status_potency": 80,
+    "status_magnitude": 5,
+    "status_rounds": 2,
+    "stagger": 4,
+    "hazard": {
+     "id": "phosphorus_fire",
+     "shape": "SKILL",
+     "at": "target",
+     "rounds": 2
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "brand_of_the_heretic",
+    "name": "Heretic's Brand",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 1,
+    "description": "Assault, Snap: {name}, {power} power; exposes the target and ends its guard.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.5,
+    "status_effect": "expose",
+    "status_potency": 80,
+    "status_magnitude": 4,
+    "status_rounds": 2,
+    "stagger": 4,
+    "riders": [
+     {
+      "when": {},
+      "effects": [
+       {
+        "type": "end_guard"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "scalding_grease_pot",
+    "name": "Grease Pot",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 2,
+    "recovery_blocks": 1,
+    "description": "Assault, Standard: {name}, {power} power; slows, and Scalding Grease stays on the ground for 2 rounds.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 2,
+    "reach_max": 3,
+    "area": "PLUS",
+    "power_mult": 0.4,
+    "status_effect": "slow",
+    "status_potency": 80,
+    "status_rounds": 2,
+    "hazard": {
+     "id": "grease",
+     "shape": "SKILL",
+     "at": "target",
+     "rounds": 2
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "boning_knife_flurry",
+    "name": "Knife Flurry",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 1,
+    "description": "Maneuver, Snap: {name}, dash up to {dash} tiles, {power} power; bleeds; hits harder on a flanked foe.",
+    "learned_only": true,
+    "round_intent": "maneuver",
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.55,
+    "dash_tiles": 2,
+    "status_effect": "bleed",
+    "status_potency": 60,
+    "exploit": [
+     {
+      "status": "flanked",
+      "power_mult": 1.3
+     }
+    ],
+    "stagger": 4
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "throat_clamp_pounce",
+    "name": "Throat-Clamp",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 1,
+    "recovery_blocks": 1,
+    "description": "Maneuver, Snap: {name}, dash up to {dash} tiles, {power} power, {stagger} stagger; roots the target.",
+    "learned_only": true,
+    "round_intent": "maneuver",
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.8,
+    "dash_tiles": 2,
+    "status_effect": "root",
+    "status_potency": 80,
+    "stagger": 10
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "gilded_billhook_sunder",
+    "name": "Gilded Sunder",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 3,
+    "recovery_blocks": 2,
+    "description": "Assault, Heavy: {name}, a sweep of {power} power, {stagger} stagger; exposes, and pushes 1 tile.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "weapon_types": [
+     "polearm"
+    ],
+    "min_proficiency": 1,
+    "area": "ARC",
+    "power_mult": 2.0,
+    "status_effect": "expose",
+    "status_potency": 90,
+    "status_magnitude": 8,
+    "status_rounds": 2,
+    "stagger": 15,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 1,
+     "collide_mult": 0.5,
+     "collide_stagger": 6
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "execution_wall",
+    "name": "Execution Wall",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 4,
+    "recovery_blocks": 1,
+    "description": "Assault, Heavy: {name}, a line of {power} power, {stagger} stagger; roots.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 1,
+    "area": "LINE",
+    "power_mult": 1.4,
+    "status_effect": "root",
+    "status_potency": 80,
+    "stagger": 12
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "sanctified_vivisection",
+    "name": "Vivisection",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 2,
+    "recovery_blocks": 2,
+    "description": "Assault, Standard: {name}, {power} power, {stagger} stagger; pierces armour and bleeds.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "weapon_types": [
+     "bone_saw"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.4,
+    "status_effect": "bleed",
+    "status_potency": 80,
+    "status_rounds": 2,
+    "stagger": 12,
+    "armor_piercing": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "transfusion_pulse",
+    "name": "Transfusion Pulse",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 1,
+    "recovery_blocks": 2,
+    "description": "Assault, Snap: {name}, a burst of {power} power, {stagger} stagger.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 2,
+    "area": "BURST",
+    "power_mult": 0.9,
+    "stagger": 6
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "pneumatic_hammer_strike",
+    "name": "Hammer Strike",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 3,
+    "recovery_blocks": 2,
+    "description": "Assault, Heavy: {name}, a sweep of {power} power, {stagger} stagger; knocks adjacent units down (Staggered).",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 1,
+    "area": "ARC",
+    "power_mult": 2.2,
+    "status_effect": "stagger",
+    "status_potency": 60,
+    "stagger": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "coal_shovel_jab",
+    "name": "Shovel Jab",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 1,
+    "recovery_blocks": 1,
+    "description": "Assault, Snap: {name}, {power} power, {stagger} stagger; burns.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.6,
+    "status_effect": "burn",
+    "status_potency": 60,
+    "status_magnitude": 3,
+    "status_rounds": 2,
+    "stagger": 8
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "bone_mill_pulverizer",
+    "name": "Pulverizer",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 4,
+    "recovery_blocks": 1,
+    "description": "Assault, Heavy: {name}, a burst of {power} power, {stagger} stagger that cannot be broken.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 3,
+    "area": "BURST",
+    "power_mult": 1.6,
+    "stagger": 15,
+    "unbreakable": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "pressurized_lard_spray",
+    "name": "Lard Spray",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 2,
+    "recovery_blocks": 2,
+    "description": "Assault, Standard: {name}, a burst of {power} power, {stagger} stagger; burns.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 2,
+    "reach_max": 4,
+    "area": "BURST",
+    "power_mult": 0.9,
+    "status_effect": "burn",
+    "status_potency": 80,
+    "status_magnitude": 5,
+    "status_rounds": 2,
+    "stagger": 6
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "flensing_hook_drag",
+    "name": "Hook Drag",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 2,
+    "recovery_blocks": 1,
+    "description": "Assault, Standard: {name}, {power} power, {stagger} stagger; exposes the target.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 3,
+    "power_mult": 0.9,
+    "status_effect": "expose",
+    "status_potency": 80,
+    "status_magnitude": 6,
+    "status_rounds": 2,
+    "stagger": 8
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "scalding_cataclysm",
+    "name": "Cataclysm",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 3,
+    "recovery_blocks": 2,
+    "description": "Assault, Heavy: {name}, a burst of {power} power, {stagger} stagger; bleeds and pulls 1 tile.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 2,
+    "area": "BURST",
+    "power_mult": 1.8,
+    "status_effect": "bleed",
+    "status_potency": 80,
+    "status_rounds": 2,
+    "stagger": 15,
+    "forced_move": {
+     "kind": "pull",
+     "tiles": 1
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "ossified_spine_volley",
+    "name": "Spine Volley",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 2,
+    "recovery_blocks": 2,
+    "description": "Assault, Standard: {name}, a burst of {power} power, {stagger} stagger; bleeds, allies too.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 3,
+    "area": "BURST",
+    "status_effect": "bleed",
+    "status_potency": 70,
+    "status_rounds": 2,
+    "stagger": 10
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "tendril_flail",
+    "name": "Tendril Flail",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 2,
+    "recovery_blocks": 1,
+    "description": "Stand, Standard: {name}, a ring of {power} power, {stagger} stagger around you.",
+    "learned_only": true,
+    "reach_min": 1,
+    "reach_max": 1,
+    "area": "RING",
+    "power_mult": 0.9,
+    "stagger": 10
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "ossification_bloom",
+    "name": "Bone Bloom",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 4,
+    "recovery_blocks": 1,
+    "description": "Assault, Heavy: {name}, a burst of {power} power, {stagger} stagger that cannot be broken; roots.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_max": 3,
+    "area": "BURST",
+    "power_mult": 1.5,
+    "status_effect": "root",
+    "status_potency": 80,
+    "stagger": 15,
+    "unbreakable": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "sanctified_decapitation",
+    "name": "Decapitation",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 3,
+    "recovery_blocks": 2,
+    "description": "Assault, Heavy: {name}, {power} power, {stagger} stagger; cannot be broken and ignores guard.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 2.4,
+    "stagger": 15,
+    "unbreakable": true,
+    "ignore_guard": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "meters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "alert",
+    "name": "Inquisition Alert",
+    "description": "How closely the Iron Inquisition watches the Sunk Ward.",
+    "kind": "gauge",
+    "min": 0,
+    "max": 100,
+    "start": 0,
+    "unit": "%",
+    "visible": true,
+    "scope": "campaign",
+    "bands": [
+     {
+      "id": "guarded",
+      "name": "Guarded",
+      "from": 0,
+      "tone": "calm"
+     },
+     {
+      "id": "suspicious",
+      "name": "Suspicious",
+      "from": 31,
+      "tone": "warn"
+     },
+     {
+      "id": "lockdown",
+      "name": "Lockdown",
+      "from": 71,
+      "tone": "danger"
+     },
+     {
+      "id": "breach",
+      "name": "Breach",
+      "from": 100,
+      "tone": "fatal"
+     }
+    ],
+    "rules": [
+     {
+      "id": "a_suspicious",
+      "at": "suspicious",
+      "warn": "The Inquisition is Suspicious: the ward gates are watched. Loud fights raise Alert most; a toll paid to Bailiff Corvo at the Third Ward gate lowers it."
+     },
+     {
+      "id": "a_lockdown",
+      "at": "lockdown",
+      "warn": "Lockdown: Inquisition hunter packs and Castellan Watch sweeps hold the main roads."
+     },
+     {
+      "id": "a_last",
+      "at": 90,
+      "acts": [
+       1
+      ],
+      "warn": "One more loud job and the Inquisition finds the grate. The run would end."
+     },
+     {
+      "id": "a_breach_1",
+      "at": "breach",
+      "acts": [
+       1
+      ],
+      "effects": [
+       {
+        "effect": "end",
+        "kind": "fail",
+        "card": "extinguished_breach"
+       }
+      ]
+     }
+    ],
+    "inputs": [
+     {
+      "on": "battle",
+      "tags": [
+       "loud"
+      ],
+      "outcomes": [
+       "won"
+      ],
+      "delta": 8
+     },
+     {
+      "on": "battle",
+      "tags": [
+       "loud"
+      ],
+      "outcomes": [
+       "lost",
+       "fled"
+      ],
+      "delta": 4
+     },
+     {
+      "on": "battle",
+      "tags": [
+       "quiet"
+      ],
+      "outcomes": [
+       "won"
+      ],
+      "delta": 2
+     }
+    ],
+    "modifiers": [
+     {
+      "bands": [
+       "lockdown"
+      ],
+      "road_pct": 150
+     }
+    ],
+    "floors": [
+     {
+      "from_act": 2,
+      "min": 30
+     }
+    ],
+    "hud": {
+     "short": "Alert",
+     "icon": "ui/hud/alert.png",
+     "order": 2
+    },
+    "tags": []
+   }
+  },
+  {
+   "op": "world",
+   "id": "sunk_ward",
+   "fields": {
+    "service_lines": {
+     "turned_in": "{npc} scratches a notch off the cipher rod. \"{quest}: done. Read the board again.\""
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "quests",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "q_hook_overlook",
+    "name": "The Crag-Sight Overlook",
+    "description": "Hollis wants the chimney sightlines above the Crucible and the outer counterweight cut. The Prelate's reinforcements arrive a round late.",
+    "giver": "",
+    "faction": "",
+    "region": "sunk_ward_quarter",
+    "requires": [],
+    "steps": [
+     {
+      "text": "Secure the Crag-Sight Overlook above the Crucible",
+      "flag": "sunk_ward.hollis_overlook",
+      "value": true
+     }
+    ],
+    "reward": "Hollis's Lever-Winch (Winch Sunder costs 1 block less), 60 xp and 20 Scrap, and a gate wave that arrives a round late.",
+    "template": "a1_flag_job_winch",
+    "turn_in": "talia_rusk",
+    "requires_flags": [
+     {
+      "key": "sunk_ward.interlude_done",
+      "value": true
+     }
+    ],
+    "complete_flags": [],
+    "auto_start": false,
+    "links": {},
+    "variants": [],
+    "loot_pool": [],
+    "loot_picks": 1,
+    "reputation": {},
+    "tags": [],
+    "board": "talia_board",
+    "track": "side",
+    "show_locked": true,
+    "closed_text": "Something under the Undercroft must be answered first."
+   }
+  }
+ ]
+}

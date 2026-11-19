@@ -1,7 +1,8 @@
 //! A game's manifest, `games/<id>/game.json` (docs/specs/SPLIT1.md section 5): the stable `id` (folder, crate prefix,
 //! save folder, qualified ids), the display `title` and `subtitle` (window title, main menu), the version, the kit and
 //! engine it needs, its worlds and start worlds, and the games it references. Written through `aegis content
-//! manifest` (`set`), never by hand. `icon` (ICON1, optional): the window icon, a PNG path over the asset layers.
+//! manifest` (`set`), never by hand. `icon` (ICON1, optional): the window icon, a PNG path over the asset layers. `cli` (ENGINE-11, optional): the game's
+//! command line program, `<id>_cli` when missing (`Manifest::cli_name`).
 //! `canvas` and `window_sizes` (LAYOUT720-E5, optional): how the game's canvas relates to the window and the window sizes
 //! it offers; held as written, as the shell reads them (a bad value is a notice there and the default).
 //! Extra keys (FB-110, E2.2-S2): keys beyond `KEYS` that the game's content hooks register (`store::Hooks::
@@ -17,7 +18,7 @@ use std::path::{Path, PathBuf};
 
 pub const FILE: &str = "game.json";
 /// The manifest's keys, in the order the file holds them.
-pub const KEYS: [&str; 12] = ["id", "title", "subtitle", "icon", "canvas", "window_sizes", "version", "kit", "engine", "worlds", "start_worlds", "references"];
+pub const KEYS: [&str; 13] = ["id", "title", "subtitle", "icon", "canvas", "window_sizes", "version", "kit", "engine", "cli", "worlds", "start_worlds", "references"];
 
 #[derive(Debug, Clone, Default)]
 pub struct Manifest {
@@ -33,6 +34,9 @@ pub struct Manifest {
     pub version: String,
     pub kit: String,
     pub engine: String,
+    /// ENGINE-11 (GAME-START1): the game's command line program (scenarios, playtests, content); "" means `<id>_cli`,
+    /// and the file then has no such key.
+    pub cli: String,
     pub worlds: Vec<String>,
     pub start_worlds: Vec<String>,
     /// [{"game": "<id>", "version": "<semver range>"}] (reserved; read by nothing yet).
@@ -55,10 +59,20 @@ impl Manifest {
             version: json::s(d, "version"),
             kit: json::s(d, "kit"),
             engine: json::s(d, "engine"),
+            cli: json::s(d, "cli"),
             worlds: json::sget(d, "worlds"),
             start_worlds: json::sget(d, "start_worlds"),
             references: json::aget(d, "references").to_vec(),
             extra: d.iter().filter(|(k, v)| !KEYS.contains(&k.as_str()) && !v.is_null()).map(|(k, v)| (k.clone(), json::normalize(v))).collect(),
+        }
+    }
+
+    /// The game's command line program: `cli`, else `<id>_cli`.
+    pub fn cli_name(&self) -> String {
+        if self.cli.is_empty() {
+            format!("{}_cli", self.id)
+        } else {
+            self.cli.clone()
         }
     }
 
@@ -78,6 +92,9 @@ impl Manifest {
         d.insert("version".into(), self.version.clone().into());
         d.insert("kit".into(), self.kit.clone().into());
         d.insert("engine".into(), self.engine.clone().into());
+        if !self.cli.is_empty() {
+            d.insert("cli".into(), self.cli.clone().into());
+        }
         d.insert("worlds".into(), json::strs(&self.worlds));
         d.insert("start_worlds".into(), json::strs(&self.start_worlds));
         d.insert("references".into(), Value::Array(self.references.clone()));
@@ -108,6 +125,9 @@ impl Manifest {
         }
         if !self.icon.is_empty() && (self.icon.starts_with(['/', '\\']) || self.icon.contains(':') || self.icon.split(['/', '\\']).any(|part| part == "..") || !self.icon.ends_with(".png")) {
             out.push(format!("game.json: icon '{}' must be a .png path inside the asset layers.", self.icon));
+        }
+        if !self.cli.is_empty() && !self.cli.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            out.push(format!("game.json: cli '{}' must be a program name (letters, digits, _ and -).", self.cli));
         }
         for w in self.worlds.iter().filter(|w| !is_id(w)) {
             out.push(format!("game.json: world '{w}' is not a world id."));
@@ -237,7 +257,7 @@ mod tests {
         let back = Manifest::read(&path).unwrap();
         assert_eq!(back.to_dict(), m.to_dict());
         // Every key but the optional ones, which this manifest does not set.
-        assert_eq!(back.to_dict().keys().cloned().collect::<Vec<_>>(), KEYS.iter().filter(|k| !["icon", "canvas", "window_sizes"].contains(*k)).copied().collect::<Vec<_>>());
+        assert_eq!(back.to_dict().keys().cloned().collect::<Vec<_>>(), KEYS.iter().filter(|k| !["icon", "canvas", "window_sizes", "cli"].contains(*k)).copied().collect::<Vec<_>>());
         assert_eq!(find_game_dir(&game.join("data"), "demo").as_deref(), Some(game.as_path()));
         assert_eq!(find_game_dir(&root, "demo").as_deref(), Some(game.as_path()));
         assert_eq!(find_game_dir(&root, "other"), None);

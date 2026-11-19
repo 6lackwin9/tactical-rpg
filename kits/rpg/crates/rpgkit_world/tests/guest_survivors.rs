@@ -167,3 +167,24 @@ fn a_fled_guest_counts_and_a_guest_turned_hostile_does_not() {
     });
     assert_eq!(gs.flag(ALL), Some(&json::int(all - 1)), "turned hostile: not a survivor of the party's side");
 }
+
+/// PR7-41 (PT-25): the settle's rewards say how many counted guests lived (`survivors` {lived, of}) for the results
+/// screen, only when the encounter counts its guests.
+#[test]
+fn the_rewards_tell_how_many_counted_guests_lived() {
+    let d = data();
+    let of_kind = GUESTS.iter().filter(|g| g.starts_with("cap")).count() as i64;
+    let settle = |enc: &str, dead: &str| {
+        let mut gs = state(&d);
+        let mut f = battle::begin_world(&d, &mut gs, &fight(enc)).unwrap();
+        for c in f.session.units_of_ref(dead) {
+            f.session.w.units[c].hp = 0;
+        }
+        let tally = f.tally();
+        battle::finish_world(&d, &mut gs, trigger::FIGHT_SOURCE, &fight(enc), "won", Some(&tally))
+    };
+    let res = settle("rescue", "cap_a");
+    assert_eq!(json::dget(&res, "rewards").get("survivors"), Some(&json!({"lived": of_kind - 1, "of": of_kind})), "{res:?}");
+    let res = settle("plain", "aide");
+    assert!(json::dget(&res, "rewards").get("survivors").is_none(), "no field, no key");
+}

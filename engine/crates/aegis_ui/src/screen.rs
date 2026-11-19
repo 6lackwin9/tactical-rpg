@@ -120,7 +120,7 @@ pub const WINDOW_SIZES: [&str; 8] = ["960x540", "1024x576", "1152x648", "1280x72
 pub const FPS_CAPS: [&str; 5] = ["Unlimited", "30", "60", "120", "144"];
 /// Text size levels (Godot TEXT_LEVELS): label and font factor.
 pub const TEXT_SIZES: [(&str, f64); 4] = [("Small", 0.85), ("Normal", 1.0), ("Large", 1.15), ("Extra large", 1.3)];
-/// Typewriter speeds (STORYUI1-E, setting `text_speed`; `vignette::TextSpeed`): 30, 60, 120 characters a second, or
+/// Typewriter speeds (STORYUI1-E, setting `text_speed`; the kit's `vignette::TextSpeed`): 30, 60, 120 characters a second, or
 /// all at once.
 pub const TEXT_SPEEDS: [&str; 4] = ["slow", "normal", "fast", "instant"];
 
@@ -254,10 +254,13 @@ pub fn window_centred(monitor: ScreenRect, usable: ScreenRect, outer: (u32, u32)
     window_kept_in(usable, (middle(monitor.x, monitor.w, outer.0), middle(monitor.y, monitor.h, outer.1)), outer)
 }
 
+/// The shared reduce-motion settings key (`Settings::reduce_motion`).
+pub const REDUCE_MOTION: &str = "reduce_motion";
+
 impl Settings {
-    /// The engine's keys and their defaults. STORYUI1-E: `text_speed` (the vignette player's typewriter) and
-    /// `reduce_motion` (no drifting or shaking effects; shared with FX1); ASSETORG4: `portrait_overlays` (the player's
-    /// switch of the portrait overlay layer a game mounts, `portrait_overlays::SETTING`; on).
+    /// The engine's keys and their defaults. STORYUI1-E: `text_speed` (a typewriter's speed, the kit's vignette player)
+    /// and `reduce_motion` (`REDUCE_MOTION`: no drifting or shaking effects; shared with FX1); ASSETORG4:
+    /// `portrait_overlays` (the player's switch of a portrait overlay layer, the kit's `portrait_overlays::SETTING`; on).
     pub fn engine_defaults() -> Value {
         json!({"mute": false, "master": 100, "music": 80, "effects": 80, "interface": 80, "fullscreen": false, "borderless": false, "window_size": "1280x720",
             "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0, "record_playtests": cfg!(debug_assertions), "text_speed": "normal", "reduce_motion": false, "portrait_overlays": true,
@@ -275,10 +278,15 @@ impl Settings {
         v
     }
 
-    /// The shared reduce-motion setting (STORYUI1-E's key `vignette::REDUCE_MOTION`; false when missing): no camera or
-    /// token shakes (FX1), no drifting ash; effects and hit-stop still show.
+    /// The file the settings are saved to (the game's user folder; its `logs/` holds the run's log, ROBUST1).
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    /// The shared reduce-motion setting (`REDUCE_MOTION`; false when missing): no camera or token shakes (FX1), no
+    /// drifting effects; effects and hit-stop still show.
     pub fn reduce_motion(&self) -> bool {
-        self.v[crate::vignette::REDUCE_MOTION].as_bool().unwrap_or(false)
+        self.v[REDUCE_MOTION].as_bool().unwrap_or(false)
     }
 
     /// The saved settings over the defaults (keys the file lacks keep their default). A file from before DISPLAY2 has

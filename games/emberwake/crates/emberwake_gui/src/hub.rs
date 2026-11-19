@@ -160,7 +160,7 @@ impl Hub {
 }
 
 /// Back to the title (the hub's Quit to main menu, the in-game Settings' Return to title): not while a fight,
-/// conversation or shop is open; unsaved progress asks first (No is the default).
+/// conversation or shop is open; it always asks first (No is the default), unsaved progress with the warning.
 pub(crate) fn quit_to_title(cx: &mut Cx) {
     if cx.busy() {
         show_errors(cx, vec!["Finish the fight, conversation or shop first.".into()]);
@@ -170,10 +170,11 @@ pub(crate) fn quit_to_title(cx: &mut Cx) {
         cx.end_game();
         cx.nav.push(Nav::Reset(Box::new(crate::menus::MainMenu::default())));
     };
+    // PR7-41 (PT-35): always asked (a clean game asks too, without the warning)
     if cx.is_dirty() {
         cx.ask_no("Quit to the main menu without saving? Progress since your last save is lost.", go);
     } else {
-        go(cx);
+        cx.ask_no("Quit to the main menu? Your game is saved.", go);
     }
 }
 
@@ -274,7 +275,7 @@ impl Screen<GameCx> for Hub {
             (HubAct::Save, "hub.save", "Save game".into(), "Save to one of the manual slots."),
             (HubAct::Load, "hub.load", "Load game".into(), "Load a save; unsaved progress here is lost (you are asked first)."),
             (HubAct::Settings, "hub.settings", "Settings".into(), "Sound, display, gameplay and controls."),
-            (HubAct::Quit, "hub.quit", "Quit to main menu".into(), "Back to the title; unsaved progress is lost (you are asked first)."),
+            (HubAct::Quit, "hub.quit", "Quit to main menu".into(), "Back to the title (you are asked first; unsaved progress is lost)."),
         ];
         let top = below + 10;
         let mut detail = "Roster, level up, skills and gear.".to_string();
@@ -637,6 +638,11 @@ pub fn reward_text(rewards: &Dict, outcome: &str, currency: &str, name: &dyn Fn(
         _ => "",
     };
     let mut lines = Vec::new();
+    // PR7-41 (PT-25): a fight that counts the captives it frees says how many got out (the kit's `survivors`)
+    if let Some(sv) = rewards.get("survivors").and_then(Value::as_object) {
+        let (lived, of) = (json::i(sv, "lived", 0), json::i(sv, "of", 0));
+        lines.push(if lived == 0 { format!("Captives saved: none of {of}.") } else { format!("Captives saved: {lived} of {of}.") });
+    }
     let gold = json::i(rewards, "gold", 0);
     if gold > 0 {
         lines.push(format!("{currency} +{gold}"));
@@ -1227,7 +1233,7 @@ mod portrait_tests {
     use crate::hud::hud_tests::{frame, game_cx, gfx};
     use crate::portraits::tests::{roster_cx, row};
     use aegis_ui::fx::Clock;
-    use aegis_ui::portrait_fx::EASE_MS;
+    use rpgkit_ui::portrait_fx::EASE_MS;
     use aegis_ui::screen::TEXT_SIZES;
     use emberwake_world::state::RosterCaps;
 

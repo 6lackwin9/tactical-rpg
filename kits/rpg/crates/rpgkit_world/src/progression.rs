@@ -245,7 +245,9 @@ pub(crate) fn build_unchecked(d: &Data, state: &UnitState, world: &str, auto_spe
         // PK2-S5b: the durability of its wielded instances that wear (none without the rule durability)
         wear: crate::weapons::wear_of(d, &work, world),
     };
-    let over = Overrides { passives: member_passives(d, &work), ..Overrides::default() };
+    // PR7-41 (PT-28): under the deck rule the member also owns its base deck's passives and its keystone
+    let passives = if deck.is_some() { owned_passives(d, &work) } else { member_passives(d, &work) };
+    let over = Overrides { passives, ..Overrides::default() };
     // U3.2-S3: the gear is read under the world's ruleset's wield terms
     let wield = d.ruleset(world).numbers.wield();
     let b = build_from(cat, UnitBuild { row: &def, default_ap: 0, deck, wield, over, growth: Some(growth) });
@@ -270,6 +272,54 @@ pub fn member_passives(d: &Data, state: &UnitState) -> Vec<String> {
         }
     }
     out
+}
+
+/// PR7-41 (PT-28): under the deck rule, what a member owns to slot and apply: `member_passives`, then `deck_grants`
+/// (each once). Classic builds and saves keep `member_passives` alone.
+pub fn owned_passives(d: &Data, state: &UnitState) -> Vec<String> {
+    let mut out = member_passives(d, state);
+    for id in deck_grants(d, state) {
+        if !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    out
+}
+
+/// PR7-41 (PT-28): the slottable passives a member owns from its base unit's deck and its class: the deck's `passive`
+/// row from level 1 (`CAST1_FOUNDERS.md` "Deck at level 1"), and from its class keystone's level (CLASSKEY1, level 6)
+/// the deck's `keystone` row and the class keystone (`docs/sessions/U2_CLASS.md` "Class keystones"; a class without
+/// one: the deck's keystone from level 1). Each applies only while slotted (RULESET1 9 D3), so a deck that names
+/// another passive or keystone keeps it.
+pub fn deck_grants(d: &Data, state: &UnitState) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let level = state.level(d) as i32;
+    let class = d.cat.classes.get(&state.class_id(d)).and_then(|c| c.keystone.clone());
+    let keystone_level = keystone_level(d, state);
+    let mut add = |id: &String| {
+        if !out.contains(id) {
+            out.push(id.clone());
+        }
+    };
+    if let Some(base) = d.cat.units.get(&state.base_unit) {
+        for id in &base.deck.passive {
+            add(id);
+        }
+        if level >= keystone_level {
+            for id in &base.deck.keystone {
+                add(id);
+            }
+        }
+    }
+    if let Some(k) = class.filter(|_| level >= keystone_level) {
+        add(&k.id);
+    }
+    out
+}
+
+/// PR7-41 (PT-28): the level a member's keystone opens at (its class keystone's level; 1 when the class names none).
+pub fn keystone_level(d: &Data, state: &UnitState) -> i32 {
+    d.cat.classes.get(&state.class_id(d)).and_then(|c| c.keystone.as_ref()).map_or(1, |k| k.level.max(1))
 }
 
 /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the passives the member's unit tracks grant: per track row (catalog order)

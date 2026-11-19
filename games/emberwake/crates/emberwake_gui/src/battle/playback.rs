@@ -114,7 +114,7 @@ impl BattleScreen {
         portrait.extend(emberwake_battle::portrait::victory_events(self.session(), &outcome_before));
         let (n, last) = { let s = self.session(); (s.events.len(), s.events.last().cloned()) };
         if n > self.events_seen {
-            self.message = last.unwrap_or_default();
+            self.message = crate::intent_text::plain(&last.unwrap_or_default());
             self.events_seen = n;
         }
         self.phase_shakes(cx);

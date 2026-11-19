@@ -252,7 +252,7 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
             if timeline && planning && unit.is_active() {
                 tip.extend(ap_lines(&rip::ap_forecast(pw, plan, u)).into_iter().map(|l| (l, ALLY)));
             } else {
-                tip.push((format!("AP {} of {}", unit.ap, unit.max_ap), ALLY));
+                tip.push((crate::intent_text::ap_text(unit.ap, unit.max_ap, " of "), ALLY));
             }
             if !unit.is_alive() {
                 tip.push(("Down".into(), FOE));
@@ -304,6 +304,7 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
         selected_block: o.block,
         selected_track: o.selected.filter(|u| w.allies.contains(u)).map(track_key),
         sections: vec![Section { title: "Party".into(), colour: ALLY, tracks: party }, Section { title: "Enemies".into(), colour: FOE, tracks: enemies }],
+        ruler: None,
     }
 }
 

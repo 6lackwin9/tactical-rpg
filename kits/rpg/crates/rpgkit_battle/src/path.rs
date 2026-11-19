@@ -1,13 +1,10 @@
 //! GridPath (scripts/combat/arena/grid_path.gd): cost-weighted routes. Uniform-cost search with Godot's packed heap
-//! keys (cost, steps, insertion order), so equal routes resolve exactly as in the reference.
+//! keys (cost, steps, insertion order), so equal routes resolve exactly as in the reference; the search itself is the
+//! engine's grid primitive (`aegis_grid::search`, WORLD-PRIM1), this module the arena's step costs and goal ties.
 
-use crate::grid::{square_cells, square_covers, Grid, V2, DIRS, NO_CELL};
-use std::collections::{HashMap, HashSet};
-
-const SEQ_BITS: i64 = 20;
-const STEP_BITS: i64 = 10;
-const SEQ_MASK: i64 = (1 << SEQ_BITS) - 1;
-const STEP_MASK: i64 = (1 << STEP_BITS) - 1;
+use crate::grid::{square_cells, square_covers, Grid, V2, DIRS};
+use aegis_grid::{Cell, Search};
+use std::collections::HashSet;
 
 pub type Cells = HashSet<V2>;
 
@@ -29,6 +26,8 @@ pub fn approx_eq(a: f64, b: f64) -> bool {
 
 /// Cheapest unit steps from `start` to any goal (empty when on a goal or unreachable). Ties: fewer steps, then the
 /// preferred destination, then the one nearest the arena centre, then DIRS order. Exits are entered only as goals.
+/// WORLD-PRIM1 (ENGINE-9): the search is the engine's (`aegis_grid::search`, the same ranks and order); this says what a
+/// step costs, what a goal is and which goal is better.
 pub fn find_path(grid: &Grid, start: V2, goals: &Cells, blocked: &Cells, goals_are_exits: bool, hooks: &Hooks) -> Vec<V2> {
     find_path_sized(grid, start, goals, blocked, goals_are_exits, hooks, 1)
 }
@@ -39,81 +38,43 @@ pub fn find_path_sized(grid: &Grid, start: V2, goals: &Cells, blocked: &Cells, g
     if size > 1 {
         return find_square_path(grid, start, goals, blocked, hooks, size);
     }
-    let mut steps = Vec::new();
-    if goals.contains(&start) {
-        return steps;
-    }
-    let mut came_from: HashMap<V2, V2> = HashMap::new();
-    came_from.insert(start, start);
-    let mut best: HashMap<V2, i64> = HashMap::new();
-    best.insert(start, 0);
-    let mut closed: HashSet<V2> = HashSet::new();
-    let mut heap: Vec<i64> = Vec::new();
-    let mut cells: Vec<V2> = Vec::new();
-    push(&mut heap, 0, 0);
-    cells.push(start);
-    let mut found = NO_CELL;
-    let mut found_key: i64 = -1;
-    let mut found_pref = 0.0;
-    while !heap.is_empty() {
-        let key = pop(&mut heap);
-        let cur = cells[(key & SEQ_MASK) as usize];
-        let rank = key >> SEQ_BITS;
-        if closed.contains(&cur) || best.get(&cur).copied().unwrap_or(0) != rank {
-            continue;
+    let step = |_: Cell, to: Cell| -> Option<i64> {
+        let nxt = v2(to);
+        if !grid.is_valid(nxt) {
+            return None;
         }
-        if found_key >= 0 && rank > found_key {
-            break;
+        if goals.contains(&nxt) {
+            if !goals_are_exits && (blocked.contains(&nxt) || !grid.is_walkable(nxt)) {
+                return None;
+            }
+        } else if blocked.contains(&nxt) || !grid.is_walkable(nxt) || grid.is_exit(nxt) {
+            return None;
         }
-        closed.insert(cur);
-        if goals.contains(&cur) && cur != start {
-            let pref = hooks.prefer.map(|f| f(cur)).unwrap_or(0.0);
-            if found == NO_CELL || pref > found_pref || (approx_eq(pref, found_pref) && Grid::centre_distance(cur) < Grid::centre_distance(found)) {
-                found = cur;
-                found_key = rank;
-                found_pref = pref;
-            }
-            continue;
-        }
-        let cur_cost = rank >> STEP_BITS;
-        let cur_steps = rank & STEP_MASK;
-        for d in DIRS {
-            let nxt = cur + d;
-            if closed.contains(&nxt) || !grid.is_valid(nxt) {
-                continue;
-            }
-            if goals.contains(&nxt) {
-                if !goals_are_exits && (blocked.contains(&nxt) || !grid.is_walkable(nxt)) {
-                    continue;
-                }
-            } else if blocked.contains(&nxt) || !grid.is_walkable(nxt) || grid.is_exit(nxt) {
-                continue;
-            }
-            let mut enter = enter_cost(grid, nxt) as i64;
-            if let Some(p) = hooks.penalty {
-                enter += p(nxt).max(0) as i64;
-            }
-            let nxt_rank = ((cur_cost + enter) << STEP_BITS) + cur_steps + 1;
-            if best.get(&nxt).is_some_and(|b| *b <= nxt_rank) {
-                continue;
-            }
-            best.insert(nxt, nxt_rank);
-            came_from.insert(nxt, cur);
-            push(&mut heap, nxt_rank, cells.len() as i64);
-            cells.push(nxt);
-        }
-    }
-    if found == NO_CELL {
-        return steps;
-    }
-    let mut cell = found;
-    while cell != start {
-        let prev = came_from[&cell];
-        steps.push(cell - prev);
-        cell = prev;
-    }
-    steps.reverse();
-    steps
+        Some(enter_cost(grid, nxt) as i64 + hooks.penalty.map_or(0, |p| p(nxt).max(0) as i64))
+    };
+    route(start, goals, hooks, &step)
+}
+
+/// The engine's search from `start` over `step` to the nearest of `goals`, ties to the preferred goal, then the one
+/// nearest the arena centre (empty when on a goal or unreachable).
+fn route(start: V2, goals: &Cells, hooks: &Hooks, step: &dyn Fn(Cell, Cell) -> Option<i64>) -> Vec<V2> {
+    let better = |a: Cell, b: Cell| {
+        let (a, b) = (v2(a), v2(b));
+        let (pa, pb) = (hooks.prefer.map(|f| f(a)).unwrap_or(0.0), hooks.prefer.map(|f| f(b)).unwrap_or(0.0));
+        pa > pb || (approx_eq(pa, pb) && Grid::centre_distance(a) < Grid::centre_distance(b))
+    };
+    let goal = |c: Cell| goals.contains(&v2(c));
+    let dirs = DIRS.map(cell);
+    let found = aegis_grid::search(cell(start), &Search { dirs: &dirs, step, goal: &goal, heuristic: None, better: Some(&better) });
+    found.unwrap_or_default().into_iter().map(v2).collect()
+}
+
+fn cell(v: V2) -> Cell {
+    Cell::new(v.x, v.y)
+}
+
+fn v2(c: Cell) -> V2 {
+    V2 { x: c.x, y: c.y }
 }
 
 /// BIGUNIT1 BU6: `find_path` for a square walker of side `n`: the route moves its anchor; a step is open only
@@ -121,75 +82,19 @@ pub fn find_path_sized(grid: &Grid, start: V2, goals: &Cells, blocked: &Cells, g
 /// leaves by an exit); a step costs the highest enter cost among the cells it newly covers (the penalty hook likewise).
 /// Same ranks and tie-breaks as `find_path`.
 fn find_square_path(grid: &Grid, start: V2, goals: &Cells, blocked: &Cells, hooks: &Hooks, n: i32) -> Vec<V2> {
-    let mut steps = Vec::new();
-    if goals.contains(&start) {
-        return steps;
-    }
     let open = |a: V2| square_cells(a, n).all(|c| grid.is_walkable(c) && !grid.is_exit(c) && !blocked.contains(&c));
-    let mut came_from: HashMap<V2, V2> = HashMap::new();
-    came_from.insert(start, start);
-    let mut best: HashMap<V2, i64> = HashMap::new();
-    best.insert(start, 0);
-    let mut closed: HashSet<V2> = HashSet::new();
-    let mut heap: Vec<i64> = Vec::new();
-    let mut cells: Vec<V2> = Vec::new();
-    push(&mut heap, 0, 0);
-    cells.push(start);
-    let mut found = NO_CELL;
-    let mut found_key: i64 = -1;
-    let mut found_pref = 0.0;
-    while !heap.is_empty() {
-        let key = pop(&mut heap);
-        let cur = cells[(key & SEQ_MASK) as usize];
-        let rank = key >> SEQ_BITS;
-        if closed.contains(&cur) || best.get(&cur).copied().unwrap_or(0) != rank {
-            continue;
+    let step = |from: Cell, to: Cell| -> Option<i64> {
+        let (cur, nxt) = (v2(from), v2(to));
+        if !open(nxt) {
+            return None;
         }
-        if found_key >= 0 && rank > found_key {
-            break;
+        let mut enter = square_step_cost(grid, cur, nxt, n) as i64;
+        if let Some(p) = hooks.penalty {
+            enter += square_cells(nxt, n).filter(|c| !square_covers(cur, n, *c)).map(|c| p(c).max(0)).max().unwrap_or(0) as i64;
         }
-        closed.insert(cur);
-        if goals.contains(&cur) && cur != start {
-            let pref = hooks.prefer.map(|f| f(cur)).unwrap_or(0.0);
-            if found == NO_CELL || pref > found_pref || (approx_eq(pref, found_pref) && Grid::centre_distance(cur) < Grid::centre_distance(found)) {
-                found = cur;
-                found_key = rank;
-                found_pref = pref;
-            }
-            continue;
-        }
-        let cur_cost = rank >> STEP_BITS;
-        let cur_steps = rank & STEP_MASK;
-        for d in DIRS {
-            let nxt = cur + d;
-            if closed.contains(&nxt) || !open(nxt) {
-                continue;
-            }
-            let mut enter = square_step_cost(grid, cur, nxt, n) as i64;
-            if let Some(p) = hooks.penalty {
-                enter += square_cells(nxt, n).filter(|c| !square_covers(cur, n, *c)).map(|c| p(c).max(0)).max().unwrap_or(0) as i64;
-            }
-            let nxt_rank = ((cur_cost + enter) << STEP_BITS) + cur_steps + 1;
-            if best.get(&nxt).is_some_and(|b| *b <= nxt_rank) {
-                continue;
-            }
-            best.insert(nxt, nxt_rank);
-            came_from.insert(nxt, cur);
-            push(&mut heap, nxt_rank, cells.len() as i64);
-            cells.push(nxt);
-        }
-    }
-    if found == NO_CELL {
-        return steps;
-    }
-    let mut cell = found;
-    while cell != start {
-        let prev = came_from[&cell];
-        steps.push(cell - prev);
-        cell = prev;
-    }
-    steps.reverse();
-    steps
+        Some(enter)
+    };
+    route(start, goals, hooks, &step)
 }
 
 /// BIGUNIT1 BU6: the cost of a square of side `size` stepping its anchor from `from` to `to`: the highest enter cost
@@ -270,45 +175,4 @@ pub fn fit_blocks(grid: &Grid, start: V2, dirs: &[V2], budget: i32, blocks: usiz
 /// BIGUNIT1 BU6: `fit_blocks` for a walker of footprint `size`.
 pub fn fit_blocks_sized(grid: &Grid, start: V2, dirs: &[V2], budget: i32, blocks: usize, size: i32) -> Vec<V2> {
     chunk_sized(grid, start, dirs, budget, size).into_iter().take(blocks).flatten().collect()
-}
-
-fn push(heap: &mut Vec<i64>, rank: i64, seq: i64) {
-    heap.push((rank << SEQ_BITS) | seq);
-    let mut i = heap.len() - 1;
-    while i > 0 {
-        let parent = (i - 1) >> 1;
-        if heap[parent] <= heap[i] {
-            break;
-        }
-        heap.swap(parent, i);
-        i = parent;
-    }
-}
-
-fn pop(heap: &mut Vec<i64>) -> i64 {
-    let top = heap[0];
-    let last = heap.pop().unwrap();
-    if heap.is_empty() {
-        return top;
-    }
-    heap[0] = last;
-    let n = heap.len();
-    let mut i = 0;
-    loop {
-        let l = 2 * i + 1;
-        let r = l + 1;
-        let mut m = i;
-        if l < n && heap[l] < heap[m] {
-            m = l;
-        }
-        if r < n && heap[r] < heap[m] {
-            m = r;
-        }
-        if m == i {
-            break;
-        }
-        heap.swap(m, i);
-        i = m;
-    }
-    top
 }

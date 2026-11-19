@@ -1,0 +1,16 @@
+# GATE-PARITY1 (ENGINE-12): the gate's steps, in order; `tools/fc.sh gate` and `check_project.ps1` both run exactly
+# these, so the cloud gate and the desktop gate cannot drift. One step a line: its name (`tools/fc.sh step <name>` runs
+# it alone), then what it checks. A new step goes here and in the `gate_step` table of tools/fc.sh; nowhere else.
+build         every crate and target builds; a compiler warning fails
+test          every test of the workspace (the engine goldens among them)
+repro         every repro recording replays with its checkpoints matching
+playtest      the agent playtest smoke plays a fresh save to the hub
+scenarios     every scenario of each game, with no window
+newgame       a game made by `aegis new game` builds, tests and plays its scenario
+layers        engine and kit code name no game, no lore word, kit code no class id
+layouts       every screen layout fits its fixture; every string table holds the keys of en
+lints         the deny set under clippy; no unused dependency
+docs          the whole docs check (markdown lint; size warnings as one count)
+tooltests     the tools/tiles tests
+plannertests  the tools/planner tests
+assetlib      the kit asset library check and its tests

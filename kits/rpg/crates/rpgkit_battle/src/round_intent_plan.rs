@@ -660,7 +660,15 @@ impl<'a> Builder<'a> {
         }
         let mut first: Option<String> = None;
         let mut blocked = false;
-        for &sid in &self.order {
+        // PR7-41 (PT-22): a skill that would only cover friends with none near opens after the others (still the
+        // opener when nothing else fits)
+        let at = match self.target {
+            RoundTarget::Cell(cell) => cell,
+            _ => self.w.pos(self.c),
+        };
+        let idle = |sid: SkillId| !covers_a_friend(self.w, plan, self.c, self.skill(sid), at);
+        let (useful, rest): (Vec<SkillId>, Vec<SkillId>) = self.order.iter().copied().partition(|&sid| !idle(sid));
+        for &sid in useful.iter().chain(&rest) {
             // MV8: a DISENGAGE skill (a jump) belongs to Disengage rounds, and there goes last while a Maneuver attack
             // can open
             if k_is_jump(self.skill(sid)) && (!self.disengage() || self.order.iter().any(|&o| !k_is_jump(self.skill(o)))) {
@@ -1010,6 +1018,11 @@ impl<'a> Builder<'a> {
                 }
                 // A4.2-K1b (IR10 `field_fill_once`): in a Field round the fill places each family once
                 if self.intent == RoundIntent::Field && st.entries.iter().any(|e| e.step_index >= 0 && self.skill(e.skill).family_id() == s.family_id()) {
+                    continue;
+                }
+                // PR7-41 (PT-22): a guard that only covers friends (its every trigger is an `ally_hit`) is not filled
+                // with no active friend within its trigger range
+                if !covers_a_friend(w, plan, self.c, s, st.pos) {
                     continue;
                 }
                 let mut why = String::new();
@@ -1986,6 +1999,22 @@ fn move_route(w: &World, plan: &Plan, c: UnitId, from: V2, cell: V2) -> Result<V
         return Err("No path".into());
     }
     Ok(route)
+}
+
+/// PR7-41 (PT-22): whether skill `s` has a friend of `c` to cover from tile `at`: false only for a skill whose every
+/// trigger is an `ally_hit` (it does nothing but cover friends) when no other active friend stands, or is planned to
+/// end its round, within the trigger's `when.range` (default 1) of `at`.
+pub fn covers_a_friend(w: &World, plan: &Plan, c: UnitId, s: &SkillDef, at: V2) -> bool {
+    if s.triggers.is_empty() || s.triggers.iter().any(|t| t.on != "ally_hit") {
+        return true;
+    }
+    let range = s.triggers.iter().map(|t| aegis_core::value::int(&t.when, "range", 1).max(1)).max().unwrap_or(1);
+    w.friends_of(c).iter().any(|&f| {
+        f != c && w.units[f].is_active() && w.has(f) && {
+            let end = if plan.sequences.contains_key(&f) { plan.planned_position(w, f) } else { w.pos(f) };
+            w.dist_at_cell(f, w.pos(f), at) <= range || w.dist_at_cell(f, end, at) <= range
+        }
+    })
 }
 
 /// PK2-S1: the planned steps of `st` that run skill `sid` (`mark::uses_problem`'s `planned`).

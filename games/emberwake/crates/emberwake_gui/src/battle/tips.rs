@@ -209,7 +209,7 @@ pub(super) fn pip_fill(level: f32, unit: i32, k: i32) -> f32 {
 /// The row of AP pips with its left end at (`x`, `y`), one size whatever the maximum (the engine gauge's slots, lower);
 /// each pip a socket and the part of it still held. Returns the row's rect.
 pub(super) fn draw_ap_pips(p: &mut Painter, x: i32, y: i32, level: f32, max: i32) -> Rect {
-    use aegis_ui::pips::{count, unit, PIP_GAP, PIP_W};
+    use rpgkit_ui::pips::{count, unit, PIP_GAP, PIP_W};
     let per = unit(max, AP_PIPS);
     let slots = count(max, per);
     for k in 0..slots {
@@ -220,7 +220,7 @@ pub(super) fn draw_ap_pips(p: &mut Painter, x: i32, y: i32, level: f32, max: i32
             p.fill(Rect::new(r.x, r.y, held, r.h), AP_PIP);
         }
     }
-    Rect::new(x, y, aegis_ui::pips::pips_w(slots), AP_PIP_H)
+    Rect::new(x, y, rpgkit_ui::pips::pips_w(slots), AP_PIP_H)
 }
 
 // ---- Drawing ------------------------------------------------------------------------------------------------------
@@ -529,7 +529,7 @@ pub(super) fn inspect_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[In
 /// AP a pip (AP6) "1 pip = <u> AP".
 pub(crate) fn ap_lines(f: &rip::ApForecast) -> Vec<String> {
     let mut lines = vec![
-        format!("AP {} of {}", f.now, f.max),
+        crate::intent_text::ap_text(f.now, f.max, " of "),
         format!("Plan: {} (picked {}, auto-filled {})", f.spent, f.picked, f.filled),
         format!("Left: {}", f.left),
         format!("Next round: +{} -> {} (Rest +{})", f.gain, f.next, f.rest_gain),
@@ -540,7 +540,7 @@ pub(crate) fn ap_lines(f: &rip::ApForecast) -> Vec<String> {
 
 /// AP6, AP9: "1 pip = <u> AP" when a pip of the AP gauge stands for more than one AP (`max_ap` above `AP_PIPS`).
 fn pip_line(max: i32) -> Option<String> {
-    let u = aegis_ui::pips::unit(max, AP_PIPS);
+    let u = rpgkit_ui::pips::unit(max, AP_PIPS);
     (u > 1).then(|| format!("1 pip = {u} AP"))
 }
 
@@ -549,8 +549,8 @@ pub(super) const AP_PAID: Rgba = rgb(96, 106, 128);
 
 /// INPUT2 (style D): the gauge's planned blocks from a member's plan entries `(AP, skill kind, ghost)`: one block an
 /// entry that costs AP, in its kind's colour (`kind_color`, the strip's), a ghost entry as a ghost block.
-pub(super) fn ap_blocks(entries: &[(i32, String, bool)]) -> Vec<aegis_ui::pips::PipBlock> {
-    entries.iter().filter(|e| e.0 > 0).map(|(ap, kind, ghost)| aegis_ui::pips::PipBlock { ap: *ap, colour: kind_color(kind), ghost: *ghost }).collect()
+pub(super) fn ap_blocks(entries: &[(i32, String, bool)]) -> Vec<rpgkit_ui::pips::PipBlock> {
+    entries.iter().filter(|e| e.0 > 0).map(|(ap, kind, ghost)| rpgkit_ui::pips::PipBlock { ap: *ap, colour: kind_color(kind), ghost: *ghost }).collect()
 }
 
 /// INPUT1-AP (AP6-AP10), INPUT2 (style D): the AP gauge of party member `u`. Planning (`f` its forecast, of the hovered
@@ -558,8 +558,8 @@ pub(super) fn ap_blocks(entries: &[(i32, String, bool)]) -> Vec<aegis_ui::pips::
 /// colour, free sockets up to its AP, crossed slots up to its max; red with "-<n>" after the slots for a hovered row it
 /// cannot pay (`short`); playback: what it paid since `start` as one block, its live AP as sockets. A debt shows "-<n>"
 /// before crossed slots. Its hover card: AP9's lines (playback: the live AP), "1 pip = <u> AP" above 12 AP.
-pub(super) fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, blocks: &[aegis_ui::pips::PipBlock], short: Option<i32>, start: i32) -> aegis_ui::pips::PipGauge {
-    use aegis_ui::pips::PipGauge;
+pub(super) fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, blocks: &[rpgkit_ui::pips::PipBlock], short: Option<i32>, start: i32) -> rpgkit_ui::pips::PipGauge {
+    use rpgkit_ui::pips::PipGauge;
     let unit = &w.units[u];
     match f {
         Some(f) => {
@@ -570,7 +570,7 @@ pub(super) fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, bloc
             }
         }
         None => {
-            let mut tip: Tip = vec![(format!("AP {} of {}", unit.ap, unit.max_ap), ALLY)];
+            let mut tip: Tip = vec![(crate::intent_text::ap_text(unit.ap, unit.max_ap, " of "), ALLY)];
             if start > unit.ap {
                 tip.push((format!("Paid this round: {}", start - unit.ap), th().text));
             }
@@ -600,6 +600,18 @@ fn plan_lines(s: &Session, u: usize) -> Tip {
     t
 }
 
+/// PR7-41 (PT-20): the hits enemy `e`'s scheduled actions land on hero `h` this round (the kit's `intent::hits_on`),
+/// with the party's plan booked after them while it is still being planned (afterwards it is scheduled).
+pub(super) fn hits_on_hero(s: &Session, e: usize, h: usize) -> Vec<emberwake_battle::intent::HitOn> {
+    use emberwake_battle::intent;
+    let w = &s.w;
+    if s.phase == Phase::Planning && !s.plan_confirmed {
+        intent::hits_on(w, &intent::planned_schedule(w, &s.resolver.scheduled, &s.plan), e, h)
+    } else {
+        intent::hits_on(w, &s.resolver.scheduled, e, h)
+    }
+}
+
 /// IS2: a facing in words (the board's top is north); None for no facing.
 fn facing_name(f: V2) -> Option<&'static str> {
     match (f.x.signum(), f.y.signum()) {
@@ -627,7 +639,7 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     if let Some((head, intent)) = round.filter(|_| u.is_active()).and_then(|r| Some((intent_text::round_head(w, r)?, r.round_intent?))) {
         t.push((head, intent_ink(intent)));
     }
-    t.push((format!("HP {}/{}   AP {}/{}   {}", u.hp, u.max_hp, u.ap, u.max_ap, stance_name(u)), th().text));
+    t.push((format!("HP {}/{}   {}   {}", u.hp, u.max_hp, crate::intent_text::ap_text(u.ap, u.max_ap, "/"), stance_name(u)), th().text));
     let level = match classes.get(i).filter(|c| !c.is_empty()) {
         Some(c) if u.tier.is_empty() => format!("Level {} {c}", u.stats.level),
         Some(c) => format!("Level {} {c} ({})", u.stats.level, u.tier),
@@ -680,6 +692,7 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
         t.extend(plan_lines(s, i));
     }
     if !ally && u.is_active() {
+        let mut hit_shown = false;
         match tell {
             Some(r) => {
                 // IS2: the tell's first action only while the tells show (I)
@@ -693,7 +706,9 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
                         t.push((intent_text::plan_line(w, l), th().text));
                     }
                 }
-                if let Some(f) = sel.and_then(|h| intent_text::forecast(r, h)).filter(|_| tells_shown) {
+                // PR7-41 (PT-20): the hits on the selected hero, per hit at the block each lands, with its guard then
+                if let Some(f) = sel.filter(|_| tells_shown).and_then(|h| intent_text::forecast(r, h, &intent_text::forecast_hits(r, h, hits_on_hero(s, i, h)))) {
+                    hit_shown = f.starts_with("Targets you");
                     t.push((f, th().foe));
                 }
             }
@@ -703,7 +718,9 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
         }
         if let Some(h) = sel.filter(|h| w.units[*h].is_active()) {
             let strike = w.book().lowest(Kind::Attack);
-            t.push((format!("{} deals about {} with a Strike, takes about {}", w.units[h].name, expected(w, h, i, strike, None, 0.0, 1.0), expected(w, i, h, strike, None, 0.0, 1.0)), ALLY));
+            // PT-20: a Strike's hit each way; what the enemy has planned on the hero is the forecast line above
+            let deals = expected(w, h, i, strike, None, 0.0, 1.0);
+            t.push((if hit_shown { format!("{} deals about {deals} a hit with a Strike", w.units[h].name) } else { format!("{} deals about {deals} a hit with a Strike, takes about {} from its Strike", w.units[h].name, expected(w, i, h, strike, None, 0.0, 1.0)) }, ALLY));
         }
     }
     if let Some(banner) = downed_banner(w, i) {

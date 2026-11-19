@@ -309,6 +309,22 @@ fn a_two_handed_default_coming_back_clears_the_off_hand() {
     assert_eq!((worn(&p, "main_hand"), worn(&p, "off_hand").as_deref()), (None, Some("dagger")));
 }
 
+/// PR7-41 (PT-30): a stash copy of the item a slot's class default already is (worn, owned by nobody) is refused, so
+/// the copy is never used up; once another item is worn there the same item goes in and the worn one comes back.
+#[test]
+fn wearing_a_copy_of_the_class_default_is_refused_and_the_copy_stays() {
+    let d = world();
+    let mut m = UnitState::create("hero", "heavy");
+    let mut st = stash(&["maul", "sword"]);
+    let err = equip(&d, "w", &mut m, &mut st, "maul", Some("main_hand")).unwrap_err();
+    assert!(err.contains("already wears Maul"), "{err}");
+    assert_eq!((st["maul"], worn(&m, "main_hand")), (2, None), "nothing moved");
+    assert!(equip(&d, "w", &mut m, &mut st, "maul", None).is_err(), "the free-slot pick refuses it too");
+    equip(&d, "w", &mut m, &mut st, "sword", Some("main_hand")).unwrap();
+    equip(&d, "w", &mut m, &mut st, "maul", Some("main_hand")).unwrap();
+    assert_eq!((st["maul"], st["sword"], worn(&m, "main_hand").as_deref()), (1, 2, Some("maul")), "the sword came back");
+}
+
 #[test]
 fn the_classic_pouch_holds_its_size_and_a_dropped_item_replaces_its_place() {
     let d = world();
