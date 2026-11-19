@@ -16,11 +16,12 @@ the files are frozen in `legacy/data/seeds/` (and in git history). The tables be
 These seeds no longer apply to today's rules: each one, applied alone to the shipped data, is refused with the reason
 shown. Their effect is in the data. They moved to `archive/` so the seed order check (`tools/fc.sh seeds`) and a
 re-run of the folder only meet seeds that still apply. The engine's ruleset switch tests still read some of them
-from there. `cast1a3.json` stays here: its `bile_coat` step now names its `fields`, so a re-run keeps the shipped
-wording and status that `empower1.json` set.
+from there. `cast1a3.json` went too (its `bile_coat` step undid `empower1.json`, and any edit to an old seed
+moves it last in the commit order the check uses).
 
 | Seed | Last commit | Refused with |
 | --- | --- | --- |
+| `cast1a3.json` | `3d0ea5b8` | not refused: archived as stale (its `bile_coat` step undid `empower1.json`) |
 | `cln45.json` | `767ef4e` | units:founder_hollis: Deck order: 'field' is not an intent (one of assault, guard, support, maneuver). |
 | `attacklock1.json` | `391fafe` | units:founder_hollis: Deck order: 'field' is not an intent (one of assault, guard, support, maneuver). |
 | `cast1a4.json` | `391fafe` | units:founder_hollis: Deck order assault: 'tripwire_snare' is of intent field. |

@@ -11,7 +11,8 @@ those fields, so it undoes nothing outside them. A field the last seed leaves ou
 or a field added later).
 
 Findings listed in `tools/planner/seed_order_known.txt` (one `<last> <earlier> <kind> <id>` per line, `#` comments)
-are reported as known and pass; any other finding fails (exit 1). `--all` lists every finding, known ones too.
+are reported as known and pass; any other finding fails (exit 1). Editing a seed moves it last in the order: an old seed that no
+longer fits goes to `data/seeds/archive/` (never scanned) instead of being edited in place. `--all` lists every finding, known ones too.
 The data is only read: the stored entries come through the game's CLI (`content get`).
 """
 import json
