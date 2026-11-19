@@ -42,9 +42,13 @@ damage numbers or tone down the defense numbers ... or HP numbers". The cap (`ma
 - EN6. The `PR7-55` sim also reports, per tier mix (mob, elite, boss) with the rule on: the share of fights that reach
   the cap, and the won-fight median rounds against the PACE1 bands (decision "PACE1 round targets": mob 3 (2-4), elite
   5 (4-6), boss 8 (7-9)).
-- EN7. Targets: at most 5 % of mob and elite fights reach the cap; boss fights stay in their band. Note: a boss band of
-  7-9 does not fit an 8-round cap, so a boss encounter needs `max_rounds` of at least 10 (or the boss band moves to
-  6-8 with the enrage); the run reports which, and Design picks (`[PROVISIONAL]`: boss `max_rounds` 10).
+- EN7. Targets (decision "Fight length in minutes and round caps", user 2026-11-19 18:16): round caps by encounter
+  tier, mob 6, elite 8, boss 12 (`max_rounds`); at most 5 % of mob and elite fights reach their cap; won-fight medians
+  mob 3, elite 5, boss 8-11. Minutes per fight: mob 1-2, elite 7-8, boss up to 15.
+- EN7b. Minutes are estimated per fight as rounds x (planning time + playback time): playback from the timeline's
+  blocks at the default speed; planning `[PROVISIONAL]` 10 s per hero per round plus 5 s per round, calibrated against
+  the PC playtest input log (`C:\dev\playtest_live\live.log`) when the user next plays. The sim reports estimated
+  minutes next to rounds per tier.
 - EN8. If a tier misses, tune lethality in this order, one step per rerun, at most two reruns: enemy attack power up,
   then enemy defence (armour, guard) down, then enemy HP down; party numbers stay. Report each step in
   `BALANCE_REPORT.md`; the steps share the one intended re-record of section 3.
