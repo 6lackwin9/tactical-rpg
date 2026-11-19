@@ -223,6 +223,8 @@ pub struct Ui<'a, A> {
     device: Device,
     /// One corner size for what this frame still draws (`Ui::corner_size`).
     corner: Option<f32>,
+    /// ENGINE-18: the kit's own offsets, for `scroll_to` (a list keeping its focused row in view); None in a test's Ui.
+    scroll_out: Option<&'a mut std::collections::HashMap<String, i32>>,
 }
 
 /// What a frame draws of the text field being edited: its id, text, caret and selection anchor (not its history).
@@ -244,7 +246,8 @@ impl<'a, A: Clone> Ui<'a, A> {
         g.canvas.clip = None;
         let t = theme::th();
         g.fonts.sync(&t);
-        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None, clips: Vec::new(), scroll, scrolls: 0, edit, t, focus, device, corner: None }
+        let scroll_out = live.then_some(&mut g.kit.scroll);
+        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None, clips: Vec::new(), scroll, scrolls: 0, edit, t, focus, device, corner: None, scroll_out }
     }
 
     /// CONTROLS-UI1: draws a part whose widgets carry another action type (a `screen_layout` view's `Act` inside a screen
@@ -268,6 +271,7 @@ impl<'a, A: Clone> Ui<'a, A> {
                 focus: self.focus.clone(),
                 device: self.device,
                 corner: self.corner,
+                scroll_out: self.scroll_out.as_deref_mut(),
             };
             let out = f(&mut sub);
             (out, std::mem::take(&mut sub.widgets))
@@ -506,6 +510,25 @@ impl<'a, A: Clone> Ui<'a, A> {
         self.push_clip(view);
         self.scrolls += 1;
         at
+    }
+
+    /// ENGINE-18: sets the offset of scroll area `id`, this frame on and kept (a list keeping its focused row in view).
+    /// Call it before that area's `scroll_begin`. Only the live screen keeps it.
+    pub fn scroll_to(&mut self, id: &str, offset: i32) {
+        self.scroll.insert(id.to_string(), offset);
+        if let Some(out) = self.scroll_out.as_deref_mut() {
+            out.insert(id.to_string(), offset);
+        }
+    }
+
+    /// A scroll area's offset as this frame has it (0 when none was set).
+    pub fn scroll_of(&self, id: &str) -> i32 {
+        self.scroll.get(id).copied().unwrap_or(0)
+    }
+
+    /// The widget with a visible keyboard focus (the keys or a pad moved it), if any.
+    pub fn focus_id(&self) -> Option<&str> {
+        self.focus.as_deref()
     }
 
     /// Closes the scroll area `scroll_begin` opened (the clip before it comes back).

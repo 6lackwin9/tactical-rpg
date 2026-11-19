@@ -29,7 +29,7 @@ each field is an object with one key, its kind:
 | text, number, flag | `{"text": "..."}`, `{"number": 3}`, `{"flag": true}` | `text_block`, `tooltip` |
 | picture | `{"picture": "ui/help.png"}` (an asset path) | `portrait` |
 | meter | `{"meter": [7, 20]}` (value, max) | `bar_meter` |
-| rows | `{"rows": [{"id", "label", "detail", "picture", "enabled"}]}` | `list_row` |
+| rows | `{"rows": [{"id", "label", "detail", "detail2", "sub", "picture", "enabled"}]}` | `list_row` |
 | stats | `{"stats": [["Weight", "3"]]}` | `stat_block` |
 | tabs | `{"tabs": {"labels": [...], "open": 0}}` | `tab_rail` |
 | slots | `{"slots": [{"id", "title", "lines", "stamp", "picture"}]}` | `slot_card` |
@@ -55,7 +55,8 @@ buttons and `<screen>.<region>.<i>` for the items of a region, so agents and sce
 - `x`, `y`: an offset in grid tokens after anchoring, on the screen's axes (`y: -6` moves a `bottom` region up).
 - `in`: an earlier region; the region is placed inside its content (a panel shell's body, a tab rail's page).
 - `when`: overrides of the place keys from a text scale up (`text_scale_min`), the last matching one wins.
-- `style`: `main` (the `ornate` frame) or `popup` (the `panel` frame), for a `panel_shell` only. `note`: free text.
+- `style`: `main` (the `ornate` frame) or `popup` (the `panel` frame) for a `panel_shell`; `muted` (both columns
+  dim) for a `stat_block`. `text`: a `heading`'s own words (a heading only). `note`: free text.
 
 | Component | Binds (required, then optional) |
 | --- | --- |
@@ -63,6 +64,7 @@ buttons and `<screen>.<region>.<i>` for the items of a region, so agents and sce
 | `text_block`, `tooltip` | `text` |
 | `stat_block` | `stats` |
 | `list_row` | `rows` (`select`) |
+| `heading` | none: its `text` key is the heading (gold, display face, one line) |
 | `tab_rail` | `tabs`, `select` |
 | `slot_card` | `slots` (`select`) |
 | `menu_column`, `button_bar` | `actions`: a list of action ids, or `"all"` |
@@ -70,6 +72,12 @@ buttons and `<screen>.<region>.<i>` for the items of a region, so agents and sce
 | `icon_grid` | `icons` (`select`) |
 | `bar_meter` | `meter` (`label`) |
 | `custom` | `slot`: a name; the region's rect goes back to screen code (`Drawn::custom`), for a board or a map |
+
+A `list_row` region may be shorter than its list (ENGINE-18): the rows scroll inside it (the wheel; the keys and a pad
+keep the focused row and one row each side in view), with a scroll bar, and every row stays a widget whether it shows
+or not, so `<screen>.<region>.<n>` resolves for any row. A list whose rows have no picture draws no icon tiles. Rows
+with a `detail2` show two numbers columns (`detail`, then `detail2` at the right end), each as wide as its widest
+entry in the list, so they line up. The default layout gives a list its whole height, so it never scrolls.
 
 A tab rail lower than 24 units draws as a horizontal strip, and a region `in` it goes below the strip. A region id
 may not also be an action id (their widget ids would clash). A list, tab, slot or icon whose `select` action is missing

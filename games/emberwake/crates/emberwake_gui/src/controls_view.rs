@@ -98,7 +98,7 @@ pub fn view(settings: &Value, rebind: &Rebind) -> View {
                 Step::Clash { at, input, .. } if at == i => format!("{} taken · Enter swaps", input_label(input)),
                 _ => binding_text(&c, a),
             };
-            RowView { id: a.id.to_string(), label: a.label.to_string(), detail, sub: String::new(), picture: None, enabled: true }
+            RowView { id: a.id.to_string(), label: a.label.to_string(), detail, detail2: String::new(), sub: String::new(), picture: None, enabled: true }
         })
         .collect();
     let asking = matches!(rebind.step, Step::Clash { .. });

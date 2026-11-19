@@ -1036,6 +1036,11 @@ pub struct RowLook<'a> {
     pub numbers: &'a [String],
     pub selected: bool,
     pub enabled: bool,
+    /// ENGINE-18: the numbers' column widths, one per number (empty: each as wide as its own text), so the numbers of
+    /// rows one above the other line up; each is right-aligned in its column.
+    pub columns: &'a [i32],
+    /// ENGINE-18: no icon tile at all (a row with no picture and no glyph in a list with none): the name starts at the left.
+    pub bare: bool,
 }
 
 /// A list row's height on the grid of `m`: the icon with the padding, or its two lines if taller.
@@ -1070,18 +1075,23 @@ pub fn list_row<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, v: &RowLook, action
         ui.p.panel(r, if v.selected { t.selected } else { t.card_hot }, if v.selected { t.focus } else { t.edge_hot }, m.radius);
     }
     let pad = m.u(1);
-    let side = m.u(ROW_ICON).min(r.h - 2 * pad).max(0);
-    let tile = Rect::new(r.x + pad, r.y + (r.h - side) / 2, side, side);
-    icon_tile(ui, tile, v.icon, v.glyph);
+    let x = if v.bare {
+        r.x + m.u(3)
+    } else {
+        let side = m.u(ROW_ICON).min(r.h - 2 * pad).max(0);
+        let tile = Rect::new(r.x + pad, r.y + (r.h - side) / 2, side, side);
+        icon_tile(ui, tile, v.icon, v.glyph);
+        tile.x + tile.w + m.u(3)
+    };
     let mut right = r.x + r.w - m.u(4);
     let mono = Typeface::Mono;
-    for n in v.numbers.iter().rev() {
+    let fixed = v.columns.len() == v.numbers.len();
+    for (i, n) in v.numbers.iter().enumerate().rev() {
         let w = ui.p.text_w_face(mono, n, m.body);
         let y = r.y as f32 + (r.h as f32 - ui.p.line_h_face(mono, m.body)) / 2.0;
         ui.p.text_face(mono, right as f32 - w, y, n, m.body, if v.enabled { t.text } else { t.dim });
-        right -= w.ceil() as i32 + m.gutter;
+        right -= if fixed { v.columns[i] } else { w.ceil() as i32 } + m.gutter;
     }
-    let x = tile.x + tile.w + m.u(3);
     let room = (right - x).max(0) as f32;
     let (lb, ls) = (ui.p.line_h(m.body), ui.p.line_h(m.small));
     let both = if v.sub.is_empty() { lb } else { lb + ls };
