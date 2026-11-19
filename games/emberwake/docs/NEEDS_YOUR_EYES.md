@@ -33,7 +33,7 @@ Mocks waiting for you, then provisional calls Design made while you were away, t
   status kind to its place (locks on the timeline, ticks on the HP bar, attack and armour changes in the numbers, move
   changes on the grid) and the plate order (statuses with no other home first). Mock ready: battle take 25
   (`art-ui/battle_ux14/battle_take25_status_where_2x.png`), one frame per kind. Recommendation: approve.
-- [x] Boss UI mock (`docs/specs/BOSSUI1.md`): signed off through takes 26-30 (you picked poise A and party row P1);
+- [x] Boss UI mock (`docs/specs/BOSSUI1.md`): signed off through takes 26-30 (poise A; hero plus "Others", every member on hover);
   built as `PR7-54`.
 - [ ] Boss poise golden call (`PR7-54` data step, BU9): boss poise tuned so a same-level party breaks it first in
   round 2-3, then about every 3 rounds; it moves the boss fights in the timeline and sim goldens. Recommendation:
