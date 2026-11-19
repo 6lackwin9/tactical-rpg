@@ -72,6 +72,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-39` (`UISPLIT1-G`) Stage B | done (tools lane); the battle report half waits for `PR7-32` | `develop` (squash `PR7-39` Stage B) | The shop draws through the kit's layout `kits/rpg/assets/ui/layouts/shop.json`; new widget ids; no per-row hover cards. FB-359 |
 | `PR7-39` (`UISPLIT1-G`) Stage B fix | done (tools lane) | `develop` (squash `PR7-39` Stage B fix) | The shop's layout matches the hand-drawn look: body-face numbers, thin column boxes, muted headings and title at the old inset, totals spaced as before (new layout styles). FB-361 |
 | `PR7-34` (`AMBIENCE1`) | done (tools lane) | `develop` (squash `PR7-34`) | An ambience bus and loop channel in the engine beside the music; region, hub and road screens play `ambience/<key>.ogg` by the music's keys; a Ward Ambience slider on the Sound tab; placeholder loops in the kit. FB-363 |
+| `ENGINE-12` PC gate fix | done (tools lane) | `develop` | The PC gate failed at step 4 (playtest): in the desktop's main checkout `tools/fc.sh` looked for binaries in `$PWD/target` while cargo built into `.cargo/config.toml`'s target-dir. `fc.sh` now exports that target-dir when `CARGO_TARGET_DIR` is unset (off Linux), as linked worktrees already did. The PC re-run is next. |
 
 ## 2. Feedback Items (Append-Only)
 
