@@ -2,9 +2,13 @@
 //! the party drafts always confirms (a drafted round a later change broke is drafted again at Confirm; a round the
 //! player set stays refused, and the refusal names the hero and the step); a guard that only covers friends opens
 //! only with a friend near; Focus Weakest takes the weakest foe it lands an attack on this round over a weaker one it
-//! can only close in on. Expectations come from the rules, not from printed numbers. (The re-grant and retarget rules
-//! of PT-22 and their tests wait for a Design ruling: `/mnt/project-files/pr7-41/pt22_regrant_retarget.patch`.)
+//! can only close in on; a Guard round grants a status once, not every block; a hero whose target falls mid-round
+//! turns on a foe it reaches instead of resting. Expectations come from the rules, not from printed numbers. The last
+//! two rules wait for a golden ruling (FB-334) behind the test-only switches `regrant` and `retarget`
+//! (`aegis_core::switches`, read once per process); their tests skip with the switch off and run with
+//! `AEGIS_SWITCHES=regrant,retarget`.
 
+use aegis_core::switches;
 use indexmap::IndexMap;
 use rpgkit_battle::ai;
 use rpgkit_battle::grid::{GRID_W, TERRAIN_IDS, V2};
@@ -13,6 +17,7 @@ use rpgkit_battle::round_intent::RoundTarget;
 use rpgkit_battle::session::{EncounterDef, Session};
 use rpgkit_battle::world::{Tactic, UnitId, World};
 use rpgkit_data::Catalog;
+use rpgkit_rules::status;
 use rpgkit_rules::ruleset::{Ruleset, AP_COST, ENEMY_MOVES, ROUND_INTENT, TIMELINE};
 use serde_json::json;
 use std::sync::Arc;
@@ -83,6 +88,32 @@ fn guard_round(w: &mut World, c: UnitId) -> Plan {
     let p = w.profile_of(c);
     ai::plan_round_intent(w, &mut plan, c, &p, Tactic::GuardCounter);
     plan
+}
+
+/// PT-22: a Guard round opened by a skill that grants its user a status (stealth) does not grant it again in the fill:
+/// the later blocks take the next guard of the order. A hero already holding the status opens with the other guard.
+#[test]
+fn a_guard_round_grants_its_status_once() {
+    if !switches::on("regrant") {
+        eprintln!("skipped: switch `regrant` off (AEGIS_SWITCHES=regrant runs it)");
+        return;
+    }
+    let mut s = session();
+    let w = &mut s.w;
+    place(w, HERO, 3, 4);
+    place(w, FOE, 9, 4);
+    let plan = guard_round(w, HERO);
+    let skills = round_skills(w, &plan, HERO);
+    assert_eq!(skills.first().map(String::as_str), Some("t_fade"), "the order's first guard opens: {skills:?}");
+    assert_eq!(skills.iter().filter(|s| *s == "t_fade").count(), 1, "the status is granted once: {skills:?}");
+    assert!(skills.iter().any(|s| s == "active_guard"), "the fill guards with the next skill: {skills:?}");
+    assert!(plan.compile(w, HERO).ap_left > 0, "the round does not spend every AP on re-grants: {skills:?}");
+
+    status::grant_now(&mut w.units[HERO], "stealth", 2, 0, "test");
+    let plan = guard_round(w, HERO);
+    let skills = round_skills(w, &plan, HERO);
+    assert!(!skills.iter().any(|s| s == "t_fade"), "a held status is not re-granted: {skills:?}");
+    assert_eq!(skills.first().map(String::as_str), Some("active_guard"));
 }
 
 /// PT-22: a guard whose every trigger is an `ally_hit` (it only covers friends) opens a Guard round only with an active
@@ -212,4 +243,38 @@ fn a_hand_edited_round_is_refused_not_redrafted() {
     s.plan_apply_preset(HERO, "focus_weakest");
     s.plan_apply_preset(MATE, "aggressive");
     assert!(s.plan_is_valid(), "a draft after the hand edit is the auto draft again: {:?}", s.plan_refusal());
+}
+
+/// PT-22: a hero whose target falls before its next attack starts turns on the foe it reaches ("[Retarget]") instead
+/// of resting the rest of the round (TG4's Rest stays for a hero with no foe in reach).
+#[test]
+fn a_hero_whose_target_falls_retargets() {
+    if !switches::on("retarget") {
+        eprintln!("skipped: switch `retarget` off (AEGIS_SWITCHES=retarget runs it)");
+        return;
+    }
+    let mut s = session();
+    place(&mut s.w, HERO, 4, 4);
+    place(&mut s.w, FOE, 5, 4);
+    place(&mut s.w, FOE2, 4, 5);
+    place(&mut s.w, MATE, 0, 9);
+    let mut plan_ok = false;
+    s.plan_apply_preset_all("aggressive");
+    let first = s.plan.compile(&s.w, HERO).entries.iter().find_map(|e| e.target).expect("the hero attacks");
+    let other = if first == FOE { FOE2 } else { FOE };
+    let attacks = s.plan.compile(&s.w, HERO).entries.iter().filter(|e| e.target == Some(first)).count();
+    assert!(attacks >= 2, "the fixture: more than one attack on the target");
+    // the target dies to the first hit
+    s.w.units[first].hp = 1;
+    if s.confirm_plan() {
+        plan_ok = true;
+    }
+    assert!(plan_ok);
+    let hp_other = s.w.units[other].hp;
+    s.resolve_round();
+    let lines: Vec<String> = s.resolver.log.clone();
+    assert!(!s.w.units[first].is_active(), "the target fell: {lines:#?}");
+    assert!(lines.iter().any(|l| l.starts_with("[Retarget] p_hero's target")), "the hero turns on the other foe: {lines:#?}");
+    assert!(!lines.iter().any(|l| l.starts_with("[Rest] p_hero has lost")), "no TG4 rest: {lines:#?}");
+    assert!(s.w.units[other].hp < hp_other, "the other foe is hit: {lines:#?}");
 }

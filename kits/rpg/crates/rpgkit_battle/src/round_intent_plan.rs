@@ -19,6 +19,7 @@ use crate::refusal::Reason;
 use crate::round_intent::{self, Aim, ManeuverKind, Opener, RoundIntent, RoundTarget};
 use crate::skill::{self, Kind, SkillId};
 use crate::world::{UnitId, World};
+use aegis_core::switches;
 use rpgkit_data::{Deck, SkillDef};
 use std::rc::Rc;
 
@@ -660,13 +661,14 @@ impl<'a> Builder<'a> {
         }
         let mut first: Option<String> = None;
         let mut blocked = false;
-        // PR7-41 (PT-22): a skill that would only cover friends with none near opens after the others (still the
-        // opener when nothing else fits)
+        // PR7-41 (PT-22): a skill that would only re-grant a held status, or only cover friends with none near, opens
+        // after the others (still the opener when nothing else fits); the re-grant part behind the test-only switch
+        // `regrant` (FB-334)
         let at = match self.target {
             RoundTarget::Cell(cell) => cell,
             _ => self.w.pos(self.c),
         };
-        let idle = |sid: SkillId| !covers_a_friend(self.w, plan, self.c, self.skill(sid), at);
+        let idle = |sid: SkillId| (switches::on("regrant") && regrants(self.w, self.c, self.skill(sid), std::iter::empty())) || !covers_a_friend(self.w, plan, self.c, self.skill(sid), at);
         let (useful, rest): (Vec<SkillId>, Vec<SkillId>) = self.order.iter().copied().partition(|&sid| !idle(sid));
         for &sid in useful.iter().chain(&rest) {
             // MV8: a DISENGAGE skill (a jump) belongs to Disengage rounds, and there goes last while a Maneuver attack
@@ -1018,6 +1020,12 @@ impl<'a> Builder<'a> {
                 }
                 // A4.2-K1b (IR10 `field_fill_once`): in a Field round the fill places each family once
                 if self.intent == RoundIntent::Field && st.entries.iter().any(|e| e.step_index >= 0 && self.skill(e.skill).family_id() == s.family_id()) {
+                    continue;
+                }
+                // PR7-41 (PT-22): a status the unit grants itself is granted once: the fill places no skill granting a
+                // status the unit holds or an earlier step of the round grants (a re-grant adds nothing). Behind the
+                // test-only switch `regrant` until the golden ruling (FB-334); off, the fill as before
+                if switches::on("regrant") && regrants(w, self.c, s, st.entries.iter().map(|e| e.skill)) {
                     continue;
                 }
                 // PR7-41 (PT-22): a guard that only covers friends (its every trigger is an `ally_hit`) is not filled
@@ -1999,6 +2007,14 @@ fn move_route(w: &World, plan: &Plan, c: UnitId, from: V2, cell: V2) -> Result<V
         return Err("No path".into());
     }
     Ok(route)
+}
+
+/// PR7-41 (PT-22): whether skill `s` would only re-grant: it grants its user a status for more than this round
+/// (`grant_status` with `status_rounds` 2 or more, a stealth; not a riposte readied for the round) that unit `c` holds
+/// now or that one of the skills `earlier` (the round's steps so far) grants.
+pub fn regrants(w: &World, c: UnitId, s: &SkillDef, earlier: impl IntoIterator<Item = SkillId>) -> bool {
+    let g = s.grant_status.as_str();
+    !g.is_empty() && s.status_rounds >= 2 && (w.units[c].has_status(g) || earlier.into_iter().any(|e| w.cat.skills.get(e).is_some_and(|k| k.grant_status == g)))
 }
 
 /// PR7-41 (PT-22): whether skill `s` has a friend of `c` to cover from tile `at`: false only for a skill whose every
