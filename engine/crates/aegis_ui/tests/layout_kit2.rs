@@ -132,10 +132,10 @@ fn a_list_with_room_does_not_scroll_and_the_new_parts_parse_or_are_refused() {
     assert!(!ui.widgets.iter().any(|x| x.kind == "scroll"), "all rows fit: no scroll area");
     drop(ui);
     let bad = |r: serde_json::Value| Layout::from_json(&json!({"screen": "s", "regions": [r]})).err().unwrap_or_default().join(" | ");
-    assert!(bad(json!({"id": "h", "component": "heading"})).contains("a heading needs it"));
+    assert!(bad(json!({"id": "h", "component": "heading"})).contains("a heading needs its own 'text' or a bound text field"));
     assert!(bad(json!({"id": "t", "component": "text_block", "bind": {"text": "t"}, "text": "x"})).contains("'text' is a heading's own text"));
     assert!(bad(json!({"id": "s", "component": "stat_block", "bind": {"stats": "s"}, "style": "loud"})).contains("muted, not 'loud'"));
-    assert!(bad(json!({"id": "s", "component": "text_block", "bind": {"text": "s"}, "style": "muted"})).contains("'style' is for"));
+    assert!(bad(json!({"id": "s", "component": "tooltip", "bind": {"text": "s"}, "style": "muted"})).contains("'style' is for"));
     assert_eq!(bad(json!({"id": "s", "component": "stat_block", "bind": {"stats": "s"}, "style": "muted"})), "");
     // detail2 goes out and back
     let v2 = View::from_json(&v.to_json()).unwrap();

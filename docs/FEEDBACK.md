@@ -70,8 +70,20 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-19` (`LAYOUT-KIT3`) | done (tools lane) | `develop` (squash `ENGINE-19`) | `list_row` row buttons, selected rows, toned `detail`, a dimmed `then` section, view row ids (`row_ids`), and a `detail_line` component that follows the hot row. FB-355 |
 | `ENGINE-8` (`KIT-UI1`) KU2 | shop done (tools lane); next screens wait for their UISPLIT1 split | `develop` (squash `ENGINE-8` KU2) | The shop and its view-model moved to `rpgkit_ui` (`shop`, `shop_view`, hosted by `ShopGame`); the game keeps its texts and tests. No behaviour change. FB-357 |
 | `PR7-39` (`UISPLIT1-G`) Stage B | done (tools lane); the battle report half waits for `PR7-32` | `develop` (squash `PR7-39` Stage B) | The shop draws through the kit's layout `kits/rpg/assets/ui/layouts/shop.json`; new widget ids; no per-row hover cards. FB-359 |
+| `PR7-39` (`UISPLIT1-G`) Stage B fix | done (tools lane) | `develop` (squash `PR7-39` Stage B fix) | The shop's layout matches the hand-drawn look: body-face numbers, thin column boxes, muted headings and title at the old inset, totals spaced as before (new layout styles). FB-361 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-361: PR7-39 Stage B look fix; the shop's layout now matches the hand-drawn look
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-39` Stage B fix (Design's review of FB-359, points a-d) (@squash `PR7-39` Stage B fix)
+- **Built** (`aegis_ui::screen_layout`, `panes`): (a) `list_row` `style: plain` draws the numbers in the body face; row `tone2` colours `detail2` (the shop's counts in `info`, as before). (b) `panel_shell` `style: box` with a region `fill` (a theme colour token: role or game colour) draws a plain box with one thin `edge` line and no frame file; the shop's columns use `fill: column` (the game's existing `column` colour). (c) `heading` `style: muted` (small dim body text) and `style: title` (the display face at the old 10-unit size); a heading may bind a text field (`bind: {text}`) instead of its own `text`, so the shop's title is a heading at the old inset. (d) `text_block` `\n` starts a new line one body line down, and `style: muted` / `right` were added; the totals are one `totals` field ("Total ...\nScrap ...") under the trade list, spaced as before. Row buttons are 8 old units wider than their label, 2 apart, as before.
+- **Layout**: `kits/rpg/assets/ui/layouts/shop.json` now places everything from the frame's edge as the hand drawing did (7-unit margins rounded to the 4-unit grid, columns 38 : 25 : 33 percent, heading line, detail and refusal lines, bar). The band is right-aligned.
+- **Check**: before and after are in `/mnt/project-files/pr7-39/stageB/` (`before_over_after.png`: before on top). The shop shot differs from the hand-drawn one in 2.1% of its pixels (19,304 of 921,600 above a small threshold). The differences are offsets of 1 to 2 units from the 4-unit grid, the equal-width Clear and Confirm buttons, and the totals in plain text colour (the hand drawing coloured a negative total red; text blocks take no tone). The dropped hover cards and the refusal line are as in FB-359. I did not run `shots-all compare=` across every scenario, only the shop's shots. No other screen uses these styles.
+- **Tests**: `aegis_ui/tests/layout_kit3.rs` gains the styles test (parse, refusals, the box widget, two text lines). Two older tests now expect the new problem wording: a heading with neither or both texts, and a style on a text_block. The shop's GUI tests and text audits pass.
+- **Guesses**: (1) The `box` fill is named by the layout as a theme token, as `tone` is, so the engine names no game colour. (2) Totals not coloured by sign is acceptable; a toned text field could come later.
+- **Docs delta**: none beyond the engine authoring page. `HISTORY.md`: none.
 
 ### FB-359: PR7-39 Stage B, the shop now draws through its layout; widget ids moved
 

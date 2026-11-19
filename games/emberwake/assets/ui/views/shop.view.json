@@ -15,7 +15,8 @@
           "detail": "5 Scrap",
           "detail2": "3",
           "enabled": true,
-          "note": "Supplies: an item."
+          "note": "Supplies: an item.",
+          "tone2": "info"
         },
         {
           "id": "potion",
@@ -37,7 +38,8 @@
               "label": "+10",
               "enabled": true
             }
-          ]
+          ],
+          "tone2": "info"
         },
         {
           "id": "iron_sword",
@@ -46,7 +48,8 @@
           "detail2": "0 of 1",
           "enabled": true,
           "note": "Iron Sword: an item.",
-          "tone": "foe"
+          "tone": "foe",
+          "tone2": "info"
         },
         {
           "id": "loot_0",
@@ -55,7 +58,8 @@
           "detail2": "1 of 1",
           "enabled": false,
           "note": "Old Buckle x2: an item.",
-          "tone": "dim"
+          "tone": "dim",
+          "tone2": "info"
         }
       ]
     },
@@ -94,6 +98,9 @@
     "hint": {
       "text": ""
     },
+    "totals": {
+      "text": "Total: -111 Scrap\nScrap: 240 -> 129"
+    },
     "total": {
       "text": "Total: -111 Scrap"
     },
@@ -108,7 +115,8 @@
           "detail": "12 Scrap",
           "detail2": "2 of 2",
           "enabled": false,
-          "selected": true
+          "selected": true,
+          "tone2": "info"
         },
         {
           "id": "herb",
@@ -127,7 +135,8 @@
               "label": "+10",
               "enabled": true
             }
-          ]
+          ],
+          "tone2": "info"
         }
       ]
     },

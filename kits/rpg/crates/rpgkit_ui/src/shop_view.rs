@@ -71,7 +71,7 @@ pub fn view_with<G: ShopGame>(cx: &G, pane: &ShopPane, sq: &str, pick: &mut dyn 
             let on = cap - x > 0;
             let tone = if price > after { "foe" } else if on { "gold" } else { "dim" };
             let buttons = if kind != "loot" && cap > 1 { more(&BUY, on) } else { Vec::new() };
-            RowView { id, label, detail: format!("{price} {cur}"), detail2: of_text(x, n), picture: picture(&item), enabled: on, selected: x > 0, tone: tone.into(), note: note(&item), buttons, ..Default::default() }
+            RowView { id, label, detail: format!("{price} {cur}"), detail2: of_text(x, n), picture: picture(&item), enabled: on, selected: x > 0, tone: tone.into(), tone2: "info".into(), note: note(&item), buttons, ..Default::default() }
         })
         .collect();
     let mut lines = Vec::new();
@@ -92,7 +92,7 @@ pub fn view_with<G: ShopGame>(cx: &G, pane: &ShopPane, sq: &str, pick: &mut dyn 
             let (owned, x) = (json::i(r, "count", 0), trade.sold(&item));
             let on = owned - x > 0;
             let buttons = if owned > 1 { more(&SELL, on) } else { Vec::new() };
-            RowView { id: item.clone(), label: d.item_name(&item), detail: format!("{} {cur}", json::i(r, "price", 0)), detail2: of_text(x, Some(owned)), picture: picture(&item), enabled: on, selected: x > 0, tone: if on { "gold" } else { "dim" }.into(), note: note(&item), buttons, ..Default::default() }
+            RowView { id: item.clone(), label: d.item_name(&item), detail: format!("{} {cur}", json::i(r, "price", 0)), detail2: of_text(x, Some(owned)), picture: picture(&item), enabled: on, selected: x > 0, tone: if on { "gold" } else { "dim" }.into(), tone2: "info".into(), note: note(&item), buttons, ..Default::default() }
         })
         .collect();
     let others: Vec<RowView> = gs
@@ -104,6 +104,7 @@ pub fn view_with<G: ShopGame>(cx: &G, pane: &ShopPane, sq: &str, pick: &mut dyn 
         .collect();
     let net = earned - spent;
     let total = if net == 0 { format!("Total: 0 {cur_word}") } else { format!("Total: {net:+} {cur_word}") };
+    let purse = format!("{cur}: {} -> {after}", gs.party.gold);
     let empty = trade.is_empty();
     // the refusal line: the last refusal, else why Confirm is off with lines in the trade
     let errors = if !pane.errors.is_empty() {
@@ -119,8 +120,9 @@ pub fn view_with<G: ShopGame>(cx: &G, pane: &ShopPane, sq: &str, pick: &mut dyn 
         .field(OFFERS, Field::Rows(offer_rows))
         .field(TRADE, Field::Rows(lines))
         .field("hint", Field::Text(if empty { "Click a row to add it.".into() } else { String::new() }))
+        .field("totals", Field::Text(format!("{total}\n{purse}")))
         .field("total", Field::Text(total))
-        .field("purse", Field::Text(format!("{cur}: {} -> {after}", gs.party.gold)))
+        .field("purse", Field::Text(purse))
         .field(STASH, Field::Rows(stash_rows))
         .field(OTHERS, Field::Rows(others))
         .field("detail", Field::Text(pane.detail.clone().unwrap_or_default()))
