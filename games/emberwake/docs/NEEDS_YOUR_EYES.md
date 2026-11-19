@@ -2,7 +2,7 @@
 
 What only you can judge, with what to do. The planner keeps this current: new items go in when they land, and an item leaves when you've answered. Say "open the build" and the planner launches the latest one.
 
-## For the next session (Design keeps this list; updated 2026-11-18 23:45)
+## For the next session (Design keeps this list; updated 2026-11-19 15:30)
 
 Parked for your approval (golden re-records need your word):
 
@@ -25,6 +25,9 @@ Mocks waiting for you, then provisional calls Design made while you were away, t
   battle take 22, the boss fight (`battle_ux14/`, contract section 9); battle take 23, the full timeline view (T)
   and playback controls; the screens for the victory report, story, character, shop, notice board and saves
   (`screens_ai21/`). Build rows follow sign-off.
+- [ ] Party token size on maps (`FB-354`, ART-19): tokens are about 40 px beside 80-90 px props. Options:
+  (A) scale tokens to 32 px (blurs pixels), (B) shrink tall props, (C) leave, (D) redraw tokens at 32 px. Mock in
+  `art-ui/token_scale/` once Art/UI posts it (`AI-29`). Recommendation: D (crisp pixels, readable party).
 - [ ] Image queue ready: say "process image queue" in Gemini (bunk props, class glyphs, bed keepsakes, battle
   strips, Junction 7 houses; refs in `image_pipeline/refs/active`).
 - [ ] Gamepad on the PC (`FB-327`): repeat timing, dead zone, which button is Back (south Enter, east Back, west
