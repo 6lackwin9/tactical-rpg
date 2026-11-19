@@ -1824,31 +1824,31 @@
 					"id": "basin",
 					"kind": "safe",
 					"indoor": true,
-					"wall_set": "interior_stone"
+					"wall_set": "drain_brick"
 				},
 				"t": {
 					"id": "hearth",
 					"kind": "safe",
 					"indoor": true,
-					"wall_set": "interior_stone"
+					"wall_set": "drain_brick"
 				},
 				"c": {
 					"id": "hall",
 					"kind": "safe",
 					"indoor": true,
-					"wall_set": "interior_stone"
+					"wall_set": "drain_brick"
 				},
 				"e": {
 					"id": "entry",
 					"kind": "safe",
 					"indoor": true,
-					"wall_set": "interior_stone"
+					"wall_set": "drain_brick"
 				},
 				"b": {
 					"id": "hollows",
 					"kind": "safe",
 					"indoor": true,
-					"wall_set": "interior_stone"
+					"wall_set": "drain_brick"
 				},
 				"y": {
 					"id": "crypts",

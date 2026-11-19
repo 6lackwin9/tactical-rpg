@@ -2,11 +2,11 @@
 //! in near-white with a dark outline, the first-move chips are gone, and classic keeps its strip and its chips. Fixtures
 //! are the catalog's encounters and the kit's kind icons; expectations come from the rules, never shipped numbers.
 
-use crate::battle::tips::{block_label, committed_icon_chains, draw_block_label, kind_color, BlockLook, BLOCK_ICON};
+use crate::battle::tips::{block_label, committed_icon_chains, draw_block_label, kind_color, kind_line_color, BlockLook, BLOCK_ICON, ICON_LINE};
 use crate::battle::{Action, BattleScreen, GRID_X, GRID_Y, TILE};
 use crate::screens::{Cx, Screen};
 use aegis_ui::art::Art;
-use aegis_ui::canvas::Rect;
+use aegis_ui::canvas::{Rect, Rgba};
 use aegis_ui::ui::{Gfx, Ui};
 use emberwake_battle::session::Session;
 use emberwake_rules::ruleset::TIMELINE;
@@ -82,7 +82,7 @@ fn the_looks_read_as_chosen_ghost_and_rest() {
             let mut ui: Ui<Action> = Ui::new(&mut g, (-1, -1), true);
             let r = Rect::new(100, 6, 120, 16);
             ui.p.fill(r, kind_color("MOVE"));
-            draw_block_label(&mut ui, art, r, "Shield Wall", &chain, look)
+            draw_block_label(&mut ui, art, r, "Shield Wall", &chain, look, None)
         };
         (g, value)
     };
@@ -106,10 +106,49 @@ fn the_looks_read_as_chosen_ghost_and_rest() {
     let v = {
         let mut ui: Ui<Action> = Ui::new(&mut g, (-1, -1), true);
         ui.p.fill(r, kind_color("MOVE"));
-        draw_block_label(&mut ui, &mut art, r, "Shield Wall", &["skills/kinds/no_such_kind.png".to_string()], BlockLook::Chosen)
+        draw_block_label(&mut ui, &mut art, r, "Shield Wall", &["skills/kinds/no_such_kind.png".to_string()], BlockLook::Chosen, None)
     };
     assert_eq!((v["icon"].clone(), v["shows_name"].clone()), (Value::Null, json!(true)));
     assert!(pixels(&g, r, light) > 0 && pixels(&g, r, dark) > 0, "near-white text with its dark outline");
+}
+
+/// PR7-36 (ART-12): the intent colour is a thin line along the icon's bottom (`ICON_LINE` rows of the icon square, inside
+/// its border), the rest of the icon as without it; a Rest block and a Rest kind have none.
+#[test]
+fn an_icon_carries_its_intent_as_a_bottom_line() {
+    let mut art = game_art();
+    let chain = vec!["skills/kinds/attack.png".to_string()];
+    let r = Rect::new(100, 6, 120, 16);
+    let col = kind_line_color("ATTACK").expect("an attack has a line");
+    assert_eq!(kind_line_color("REST"), None);
+    let render = |art: &mut Art, look: BlockLook, line: Option<Rgba>| {
+        let mut g = crate::hud::hud_tests::gfx();
+        let icon = {
+            let mut ui: Ui<Action> = Ui::new(&mut g, (-1, -1), true);
+            ui.p.fill(r, kind_color("MOVE"));
+            draw_block_label(&mut ui, art, r, "Shield Wall", &chain, look, line);
+            block_label(r, true, ui.p.text_w("Shield Wall", aegis_ui::ui::SMALL)).icon.expect("the icon shows")
+        };
+        (g, icon)
+    };
+    let (plain, icon) = render(&mut art, BlockLook::Chosen, None);
+    let (lined, _) = render(&mut art, BlockLook::Chosen, Some(col));
+    let is_col = |c: &[u8]| c[..3] == col[..3];
+    assert!(pixels(&lined, icon, is_col) > pixels(&plain, icon, is_col), "the line is in the intent colour");
+    // what differs lies in the icon's bottom rows: the line and the border's last row under it
+    let bottom = Rect::new(icon.x, icon.y + icon.h - ICON_LINE - 1, icon.w, ICON_LINE + 1);
+    let (pr, br) = (plain.view.rect(r), plain.view.rect(bottom));
+    for y in pr.y..pr.y + pr.h {
+        for x in pr.x..pr.x + pr.w {
+            let i = ((y * plain.canvas.w + x) * 4) as usize;
+            if plain.canvas.px[i..i + 4] != lined.canvas.px[i..i + 4] {
+                assert!(y >= br.y - 1 && y < br.y + br.h + 1 && x >= br.x - 1 && x < br.x + br.w + 1, "({x}, {y}) changed outside the icon's bottom line");
+            }
+        }
+    }
+    let (rest_lined, _) = render(&mut art, BlockLook::Rest, Some(col));
+    let (rest_plain, _) = render(&mut art, BlockLook::Rest, None);
+    assert!(rest_lined.canvas.px == rest_plain.canvas.px, "a Rest block has no line");
 }
 
 /// A real fight: every span of the selected hero gets a label; at the start they are the planner's ghost or Rest; a
@@ -199,7 +238,7 @@ fn a_name_only_block_reports_a_cut() {
     let label = |art: &mut Art, r: Rect, name: &str, chain: &[String]| {
         let mut g = crate::hud::hud_tests::gfx();
         let mut ui: Ui<Action> = Ui::new(&mut g, (-1, -1), true);
-        draw_block_label(&mut ui, art, r, name, chain, BlockLook::Chosen)
+        draw_block_label(&mut ui, art, r, name, chain, BlockLook::Chosen, None)
     };
     let tight = Rect::new(100, 6, 40, 16);
     let v = label(&mut art, tight, long, &chain);

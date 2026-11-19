@@ -1300,7 +1300,7 @@ impl Screen<GameCx> for RegionMap {
                     npc = Some(NpcDraw { body, sprite, palette, initial: s(who, "name").chars().next().unwrap_or('?').to_string(), face, offset: idle_offset(&s(who, "id")) });
                 }
                 // 2.2: the first service is the badge (turn_in and offer are today's `ready` and `quest`)
-                marks.push(MarkDraw { id: id.clone(), r, top: top.y, kind: kind.clone(), state: state.clone(), npc, badge: services.first().copied() });
+                marks.push(MarkDraw { id: id.clone(), r, top: top.y, kind: kind.clone(), state: state.clone(), npc, badge: services.first().copied(), glyph: glyph_of(&kind, &explore::point_use(&m)) });
                 // EXPLOREVIEW1 3.5: a person's click area is their cell, so the cell north of them still walks (a tall
                 // sprite's head takes no click); tilted, an icon's is the cell and the icon standing on it
                 let hit = if tilted && kind != "npc" { mapview::union(r, top) } else { r };
@@ -1334,7 +1334,7 @@ impl Screen<GameCx> for RegionMap {
                 if waiting.iter().any(|w| w.has(&id)) {
                     talk_marks.push((r, top.y));
                 }
-                marks.push(MarkDraw { id: key.clone(), r, top: top.y, kind: "member".into(), state: String::new(), npc: Some(NpcDraw { body, sprite, palette, initial: name.chars().next().unwrap_or('?').to_string(), face: Facing::default(), offset: idle_offset(&id) }), badge: None });
+                marks.push(MarkDraw { id: key.clone(), r, top: top.y, kind: "member".into(), state: String::new(), npc: Some(NpcDraw { body, sprite, palette, initial: name.chars().next().unwrap_or('?').to_string(), face: Facing::default(), offset: idle_offset(&id) }), badge: None, glyph: None });
                 let name_rect = Rect::new(r.x, top.y, r.w, r.h);
                 let named = !names_always && !modal && !tilted && ui.hover(r);
                 if named || names_always {
@@ -1832,9 +1832,11 @@ impl RegionMap {
                 ui.p.panel(r, th().card_hot, th().edge_hot, 3.0);
             }
             let ir = Rect::new(r.x + 4, r.y + (rh - ICON) / 2, ICON, ICON);
-            match cx.art.image(&emberwake_content::art::marker(marker_icon(&kind, &state)), px, px) {
-                Some(img) => ui.p.image(img, ir),
-                None => ui.p.fill(Rect::new(ir.x + 2, ir.y + 2, ICON - 4, ICON - 4), Self::marker_style(&kind, &state).0),
+            // PR7-36 (UX-28): an exit, chest or lore row shows the map's glyph (points have no legend row)
+            match (glyph_of(&kind, ""), cx.art.image(&emberwake_content::art::marker(marker_icon(&kind, &state)), px, px)) {
+                (Some(g), _) => draw_map_glyph(&mut ui.p, ir, g, glyph_colour(&kind, &state)),
+                (None, Some(img)) => ui.p.image(img, ir),
+                (None, None) => ui.p.fill(Rect::new(ir.x + 2, ir.y + 2, ICON - 4, ICON - 4), Self::marker_style(&kind, &state).0),
             }
             let sw = services.len() as i32 * (SERVICE + 1);
             let tx = ir.x + ICON + 4;
@@ -1917,6 +1919,8 @@ struct MarkDraw {
     state: String,
     npc: Option<NpcDraw>,
     badge: Option<&'static str>,
+    /// PR7-36 (UX-28): the drawn glyph of an exit or point of interest (`glyph_of`).
+    glyph: Option<MapGlyph>,
 }
 
 /// A marker's click area and name, taken before the sorted pass (EXPLOREVIEW1 3.5): its id, label, the area, its feet,
@@ -2151,6 +2155,10 @@ fn draw_marker(ui: &mut Ui<RAct>, cx: &mut Cx, m: &MarkDraw, ts: i32, idle: &Cli
             Some(img) => ui.p.image(img, tok),
             None => ui.p.text_center(cx_, cy_ - 4.0, &n.initial, BODY, rgb(20, 20, 20)),
         }
+        return None;
+    }
+    if let Some(g) = m.glyph {
+        draw_map_glyph(&mut ui.p, r, g, glyph_colour(&m.kind, &m.state));
         return None;
     }
     let px = ui.icon_px(Rect::new(0, 0, ts + 4, ts + 4));
@@ -2972,6 +2980,67 @@ fn marker_icon(kind: &str, state: &str) -> &'static str {
         ("npc", _) => "npc",
         ("point", _) => "poi",
         _ => "objective",
+    }
+}
+
+/// PR7-36 (UX-28, ART-19): what an exit or point of interest shows on the region map and its legend: a small glyph per
+/// kind, drawn by the game in the theme's colours (`glyph_colour`) over the kit's generic marker art.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MapGlyph {
+    Exit,
+    Chest,
+    Rest,
+    Vault,
+    Lore,
+    Look,
+}
+
+/// The glyph of a marker of `kind` (a point's by its `use`: `explore::point_use`); None: the marker keeps its art.
+pub(crate) fn glyph_of(kind: &str, point_use: &str) -> Option<MapGlyph> {
+    Some(match (kind, point_use) {
+        ("exit", _) => MapGlyph::Exit,
+        ("chest", _) | ("point", "stash") => MapGlyph::Chest,
+        ("lore", _) => MapGlyph::Lore,
+        ("point", "rest") => MapGlyph::Rest,
+        ("point", "crypts") => MapGlyph::Vault,
+        ("point", _) => MapGlyph::Look,
+        _ => return None,
+    })
+}
+
+/// A glyph's colour: amber while it can be used (`tokens::exit`), iron once used (`state` "spent"), a locked exit
+/// oxblood.
+pub(crate) fn glyph_colour(kind: &str, state: &str) -> Rgba {
+    match (kind, state) {
+        ("exit", "locked") => crate::tokens::exit(false),
+        (_, "spent") => th().edge,
+        _ => crate::tokens::exit(true),
+    }
+}
+
+/// A glyph's 8 x 8 picture, `#` drawn.
+fn glyph_rows(g: MapGlyph) -> [&'static str; 8] {
+    match g {
+        MapGlyph::Exit => ["...#....", "...##...", "...###..", "#######.", "#######.", "...###..", "...##...", "...#...."],
+        MapGlyph::Chest => ["........", ".######.", ".#....#.", "########", "###..###", "########", ".######.", "........"],
+        MapGlyph::Rest => ["...#....", "...##...", "..###...", "..####..", ".#####..", ".######.", "..####..", "#.####.#"],
+        MapGlyph::Vault => ["..####..", ".#....#.", "#.#..#.#", "#.#..#.#", "#.#..#.#", "#.#..#.#", "########", "........"],
+        MapGlyph::Lore => ["........", ".##..##.", "#..##..#", "#..##..#", "#..##..#", "###..###", "...##...", "........"],
+        MapGlyph::Look => ["........", "...##...", "..#..#..", ".#.##.#.", ".#.##.#.", "..#..#..", "...##...", "........"],
+    }
+}
+
+/// Draws glyph `g` in `col` on a dark plate filling `r` (a marker icon's rect), its cells whole logical px.
+pub(crate) fn draw_map_glyph(p: &mut aegis_ui::painter::Painter, r: Rect, g: MapGlyph, col: Rgba) {
+    p.panel(r, th().panel, rgba(col[0], col[1], col[2], 150), 2.0);
+    let k = ((r.w.min(r.h) - 4) / 8).max(1);
+    let (x0, y0) = (r.x + (r.w - 8 * k) / 2, r.y + (r.h - 8 * k) / 2);
+    for (y, row) in glyph_rows(g).iter().enumerate() {
+        for (x, c) in row.bytes().enumerate() {
+            if c == b'#' {
+                p.fill(Rect::new(x0 + x as i32 * k, y0 + y as i32 * k, k, k), col);
+            }
+        }
     }
 }
 
@@ -7586,5 +7655,64 @@ mod fuse_prompt_tests {
         assert!(cx.gs().party.member(&second).is_none());
         assert_ne!(pushed(&cx), "fuse_prompt", "both chosen: the fight starts");
         assert!(cx.log.iter().any(|l| l.starts_with("Fight: ")));
+    }
+}
+
+/// PR7-36 (UX-28, ART-19): exits and points of interest draw a glyph per kind, amber while usable, iron once used.
+#[cfg(test)]
+mod glyph_tests {
+    use super::*;
+    use crate::hud::hud_tests::gfx;
+
+    #[test]
+    fn each_kind_has_its_glyph_and_people_keep_theirs() {
+        assert_eq!(glyph_of("exit", ""), Some(MapGlyph::Exit));
+        assert_eq!(glyph_of("chest", ""), Some(MapGlyph::Chest));
+        assert_eq!(glyph_of("point", "stash"), Some(MapGlyph::Chest), "a stash is a chest");
+        assert_eq!(glyph_of("point", "rest"), Some(MapGlyph::Rest));
+        assert_eq!(glyph_of("point", "crypts"), Some(MapGlyph::Vault));
+        assert_eq!(glyph_of("lore", ""), Some(MapGlyph::Lore));
+        assert_eq!(glyph_of("point", ""), Some(MapGlyph::Look), "a point with no use is looked at");
+        for kind in ["npc", "member", "encounter", "roamer"] {
+            assert_eq!(glyph_of(kind, ""), None, "{kind} keeps its sprite or art");
+        }
+        let all = [MapGlyph::Exit, MapGlyph::Chest, MapGlyph::Rest, MapGlyph::Vault, MapGlyph::Lore, MapGlyph::Look];
+        for (k, g) in all.iter().enumerate() {
+            assert!(glyph_rows(*g).iter().all(|r| r.len() == 8 && r.bytes().all(|c| c == b'#' || c == b'.')), "{g:?}: 8 x 8");
+            assert!(all[k + 1..].iter().all(|o| glyph_rows(*o) != glyph_rows(*g)), "{g:?}: its own picture");
+        }
+    }
+
+    #[test]
+    fn usable_is_amber_used_is_iron_locked_is_oxblood() {
+        assert_eq!(glyph_colour("exit", "present"), crate::tokens::exit(true));
+        assert_eq!(glyph_colour("exit", "locked"), crate::tokens::exit(false));
+        assert_eq!(glyph_colour("chest", "present"), crate::tokens::exit(true));
+        assert_eq!(glyph_colour("chest", "spent"), th().edge);
+        assert_eq!(glyph_colour("point", "spent"), th().edge);
+        assert_ne!(crate::tokens::exit(true), th().edge, "the two read apart");
+    }
+
+    /// Every `#` of the picture is filled in the glyph's colour inside the plate, nothing outside the plate.
+    #[test]
+    fn a_glyph_draws_its_cells_on_its_plate() {
+        let mut g = gfx();
+        let col = crate::tokens::exit(true);
+        let r = Rect::new(40, 40, mapview::ICON, mapview::ICON);
+        {
+            let mut ui: Ui<RAct> = Ui::new(&mut g, (-1, -1), true);
+            draw_map_glyph(&mut ui.p, r, MapGlyph::Exit, col);
+        }
+        let pr = g.view.rect(r);
+        let px = |x: i32, y: i32| {
+            let i = ((y * g.canvas.w + x) * 4) as usize;
+            [g.canvas.px[i], g.canvas.px[i + 1], g.canvas.px[i + 2]]
+        };
+        let lit = (pr.y..pr.y + pr.h).flat_map(|y| (pr.x..pr.x + pr.w).map(move |x| (x, y))).filter(|&(x, y)| px(x, y) == [col[0], col[1], col[2]]).count();
+        let cells = glyph_rows(MapGlyph::Exit).iter().map(|r| r.bytes().filter(|c| *c == b'#').count()).sum::<usize>();
+        let k = (g.view.rect(Rect::new(0, 0, 1, 1)).w).max(1) as usize;
+        assert!(lit >= cells * k * k, "every cell lit: {lit} px for {cells} cells");
+        let outside = Rect::new(pr.x + pr.w + 2, pr.y, 4, pr.h);
+        assert!((outside.y..outside.y + outside.h).all(|y| (outside.x..outside.x + outside.w).all(|x| px(x, y) == [0, 0, 0])), "nothing past the plate");
     }
 }
