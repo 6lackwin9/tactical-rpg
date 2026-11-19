@@ -86,7 +86,7 @@ fn session_with(rules: &[&str], foe: V2, row_extra: Value) -> Session {
     let mut def = EncounterDef::from_obj(row.as_object().unwrap());
     def.ruleset = ruleset(rules);
     let mut cat = catalog();
-    cat.passives.insert("trait0".into(), PassiveDef { id: "trait0".into(), name: "Trait".into(), effects: vec![json!({"type": "meter", "meter": "tension"})], slot: String::new() });
+    cat.passives.insert("trait0".into(), PassiveDef { id: "trait0".into(), name: "Trait".into(), effects: vec![json!({"type": "meter", "meter": "tension"})], slot: String::new(), icon: String::new() });
     let mut s = Session::start(Arc::new(cat), def, &Holders);
     for (c, cell) in [(HERO, V2::new(4, 4)), (ALLY, V2::new(4, 5)), (FOE, foe)] {
         s.w.grid.positions[c] = Some(cell);

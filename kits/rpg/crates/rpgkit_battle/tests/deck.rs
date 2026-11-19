@@ -204,7 +204,7 @@ fn the_slot_gate_holds_for_granted_passives() {
     let cat = catalog();
     let s = session(ruleset(&[DECK], json!({"active": 3, "passive": 1, "keystone": 1})));
     let mut u = s.w.units[AUTO].clone();
-    let innate = rpgkit_data::PassiveDef { id: "d_innate".into(), name: "Innate".into(), effects: Vec::new(), slot: String::new() };
+    let innate = rpgkit_data::PassiveDef { id: "d_innate".into(), name: "Innate".into(), effects: Vec::new(), slot: String::new(), icon: String::new() };
     u.apply_passive(&cat, &innate);
     u.apply_passive(&cat, &cat.passives["d_braced"]);
     assert_eq!(u.passives, strings(&["d_innate"]), "the unslotted d_braced stays off");

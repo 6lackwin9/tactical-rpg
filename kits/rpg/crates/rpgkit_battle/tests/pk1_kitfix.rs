@@ -95,7 +95,7 @@ fn session(meters: &'static [&'static str]) -> Session {
     let mut cat = catalog();
     for m in ["strain", "tension"] {
         let id = format!("m_{m}");
-        cat.passives.insert(id.clone(), PassiveDef { id, name: m.into(), effects: vec![json!({"type": "meter", "meter": m})], slot: String::new() });
+        cat.passives.insert(id.clone(), PassiveDef { id, name: m.into(), effects: vec![json!({"type": "meter", "meter": m})], slot: String::new(), icon: String::new() });
     }
     let mut s = Session::start(Arc::new(cat), def, &Holders { meters });
     for (c, cell) in [(HERO, V2::new(4, 4)), (ALLY, V2::new(4, 5)), (FOE, V2::new(8, 8))] {

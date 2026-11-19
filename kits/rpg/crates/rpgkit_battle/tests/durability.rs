@@ -107,7 +107,7 @@ fn session(durability: bool, channel_on: bool, start: Option<i32>) -> Session {
     let mut def = EncounterDef::from_obj(row.as_object().unwrap());
     def.ruleset = rules(durability, channel_on);
     let mut cat = catalog();
-    cat.passives.insert("inoculated".into(), PassiveDef { id: "inoculated".into(), name: "Inoculated".into(), effects: vec![json!({"type": "meter", "meter": "strain"})], slot: String::new() });
+    cat.passives.insert("inoculated".into(), PassiveDef { id: "inoculated".into(), name: "Inoculated".into(), effects: vec![json!({"type": "meter", "meter": "strain"})], slot: String::new(), icon: String::new() });
     let mut s = Session::start(Arc::new(cat), def, &Heroes);
     s.w.grid.positions[HERO] = Some(V2::new(4, 4));
     s.w.grid.positions[FOE] = Some(V2::new(5, 4));

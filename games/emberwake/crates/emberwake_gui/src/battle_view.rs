@@ -84,6 +84,34 @@ pub struct Lands {
     pub impact: i32,
 }
 
+/// PASSIVE-ICON1 (ENGINE-24, STATUSVIS1 SV10): a slotted passive of a hero's loadout, shown under the portrait: the
+/// passive, its name and its archetype's icon file.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlatePassive {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+}
+
+/// SV10: the loadout's passive slots shown under a plate's portrait.
+pub const PLATE_PASSIVES: usize = 2;
+
+/// SV10: hero `u`'s slotted passives (its deck's, under the rule deck; none for a guest or a foe), at most
+/// `PLATE_PASSIVES`, each with its archetype's icon (`passive_icon::of`).
+pub fn plate_passives(w: &World, u: UnitId) -> Vec<PlatePassive> {
+    let unit = &w.units[u];
+    if unit.deck_rule.is_none() {
+        return Vec::new();
+    }
+    unit.deck
+        .passive
+        .iter()
+        .filter_map(|id| w.cat.passives.get(id))
+        .take(PLATE_PASSIVES)
+        .map(|p| PlatePassive { id: p.id.clone(), name: p.name.clone(), icon: emberwake_data::passive_icon::path(&emberwake_data::passive_icon::of(p)) })
+        .collect()
+}
+
 /// One plate (contract 3, 4): a party member, a guest or a foe.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Plate {
@@ -108,6 +136,8 @@ pub struct Plate {
     pub active: bool,
     pub selected: bool,
     pub lands: Option<Lands>,
+    /// SV10: the loadout's slotted passives (a party hero's; empty otherwise).
+    pub passives: Vec<PlatePassive>,
 }
 
 /// One row of the foe panel (contract 4).
@@ -361,6 +391,7 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
             active: unit.is_active(),
             selected: inp.sel == Some(u),
             lands: if ally { None } else { lands_of(w, &sched, u) },
+            passives: if ally && !guest { plate_passives(w, u) } else { Vec::new() },
         }
     };
     for &a in &w.allies {

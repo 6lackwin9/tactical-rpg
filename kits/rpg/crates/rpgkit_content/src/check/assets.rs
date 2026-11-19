@@ -60,6 +60,25 @@ pub fn icon_errors(v: &View, item: &Dict, family: &Dict) -> Vec<String> {
     }
 }
 
+/// A21 (PASSIVE-ICON1, ENGINE-24): a passive's `icon` must be a kit archetype with its file `passives/<key>.png` in the
+/// game, kit or engine assets ("" passes: the archetype its effects derive, which falls back to a skill icon when its
+/// file is not there).
+pub fn passive_icon_errors(v: &View, passive: &Dict) -> Vec<String> {
+    let key = json::s(passive, "icon");
+    if key.is_empty() {
+        return Vec::new();
+    }
+    if !rpgkit_data::passive_icon::known(&key) {
+        return vec![format!("Icon '{key}' isn't a passive icon archetype ({}).", rpgkit_data::passive_icon::ARCHETYPES.join(", "))];
+    }
+    let file = rpgkit_data::passive_icon::path(&key);
+    if v.assets.roots.is_empty() || v.assets.has(&file) {
+        Vec::new()
+    } else {
+        vec![format!("Icon '{key}' has no file {file} (game, kit or engine).")]
+    }
+}
+
 /// A3, A4 and A5 of a unit (`character` empty) or a world character on base unit `unit`.
 pub fn portrait_and_palette_warnings(v: &View, character: &Dict, unit: &Dict) -> Vec<String> {
     let mut out = Vec::new();

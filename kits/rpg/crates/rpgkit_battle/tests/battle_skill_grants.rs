@@ -44,7 +44,7 @@ fn catalog() -> Catalog {
         ],
         "unit_meters": [{"id": "strain", "name": "Strain", "short": "St", "min": 0, "max": 100, "start": 0, "show": "bar"}],
     }));
-    cat.passives.insert("carrier".into(), PassiveDef { id: "carrier".into(), name: "Carrier".into(), effects: vec![json!({"type": "meter", "meter": "strain"})], slot: String::new() });
+    cat.passives.insert("carrier".into(), PassiveDef { id: "carrier".into(), name: "Carrier".into(), effects: vec![json!({"type": "meter", "meter": "strain"})], slot: String::new(), icon: String::new() });
     cat
 }
 
