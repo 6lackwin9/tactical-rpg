@@ -76,3 +76,9 @@ the icon framed on the first locked block, the only patterned fill on the strip.
   dedicated sockets centred under the portrait (an empty one dim), each with its own hover (name and description);
   passives never enter the status column (it is for timed statuses). The full timeline view (T) is calmer (kind
   tints, 24 px icons, red only for blow ticks); kept for players and the log as is.
+- SV14. Full timeline view, one target per row (user 2026-11-19 19:44, take 35): each row names its unit's one target
+  for the round after the name; no per-blow target faces or red ticks. The rules agree (TG1, `ACTS23.md`: the first
+  skill after the opener fixes the round's one target; `switch_target_step` is off by default). Cases: an area skill
+  keeps its main target in the row with a small area mark; a Maneuver or Rest-only row shows a dim dash; a Support
+  row shows the ally. If the parked auto-plan retarget after a KO (`PR7-41` item 6 (b), awaiting the user) is
+  approved, the row adds the new target after an arrow at the block where it switches.
