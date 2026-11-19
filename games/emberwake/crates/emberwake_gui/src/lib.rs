@@ -19,6 +19,7 @@
 #![cfg_attr(not(feature = "dev_tools"), allow(dead_code, unused_imports))]
 
 mod battle;
+mod battle_view;
 mod board;
 mod bunks;
 mod controls_view;

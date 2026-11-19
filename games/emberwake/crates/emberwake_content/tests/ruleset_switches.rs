@@ -63,6 +63,8 @@ const CLASS_BASICS_SEED: &str = "classbasics.json";
 
 /// PR7-41 (PT-22): the seed that fills the founders' third active slot (and puts the skill in its intent's order).
 const PR7_41_DECKS_SEED: &str = "pr7_41_decks.json";
+/// PR7-40 (BATTLE-UI2): the enemies' short plate names.
+const PR7_40_SEED: &str = "pr7_40.json";
 
 /// R4-1 slice 2 (FB-144): the seed that set `template` on the caster units (after the class-basics seed).
 const TEMPLATES_SEED: &str = "r41s2.json";
@@ -366,6 +368,13 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("PR7-41 unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the PR7-41 units steps leave the shipped ruleset rows");
+    // PR7-40 (BATTLE-UI2): the seed's units steps set the enemies' short plate names
+    let pr7_40 = seed_rows(PR7_40_SEED, "units");
+    assert!(seed_entries(PR7_40_SEED).is_empty(), "the PR7-40 seed changes no ruleset row");
+    for e in &pr7_40 {
+        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("PR7-40 unit '{}': {err:?}", json::s(e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the PR7-40 units steps leave the shipped ruleset rows");
     // PR5-52 (RULESET-MODES1): the seed removes the classic row and re-saves timeline under modes: the shipped rows
     let text = std::fs::read_to_string(data_dir().join("seeds").join(RULESETMODES1_SEED)).expect("the RULESET-MODES1 seed");
     let seed: Value = serde_json::from_str(&text).expect("seed JSON");
@@ -391,7 +400,8 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         .chain(techniques_grafts.iter().map(|e| json::s(e, "id")))
         .chain(pr6_5.iter().map(|e| json::s(e, "id")))
         .chain(pr7_12.iter().map(|e| json::s(e, "id")))
-        .chain(pr7_41.iter().map(|e| json::s(e, "id")));
+        .chain(pr7_41.iter().map(|e| json::s(e, "id")))
+        .chain(pr7_40.iter().map(|e| json::s(e, "id")));
     for id in units {
         assert_eq!(seeded.get("units", &id), shipped_units.get("units", &id), "unit '{id}' as shipped");
     }

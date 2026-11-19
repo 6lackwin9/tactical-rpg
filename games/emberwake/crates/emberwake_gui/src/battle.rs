@@ -26,12 +26,14 @@
 
 mod beats;
 mod board;
+mod card;
 mod draw;
 mod flow;
 mod input;
 mod marks;
 mod overlays;
 mod playback;
+mod plates;
 mod skill_menu;
 mod talks;
 mod tips;
@@ -81,11 +83,7 @@ use aegis_core::clock::{Duration, Instant};
 
 /// The Flat view's cell (and the grid panel's: 12 x 9 cells of `TILE` at (`GRID_X`, `GRID_Y`)).
 const TILE: i32 = 32;
-/// PORTRAITFX1-P (6.2 row 3): the hero and intel panels' portrait side, its inset from the panel's top-left, where the
-/// text lines beside it start (from the panel's left edge) and the cue rows' surface.
-const PANEL_PORTRAIT: i32 = 32;
-const PANEL_INSET: i32 = 4;
-const PANEL_TEXT_X: i32 = 40;
+/// PORTRAITFX1-P (6.2 row 3): the panel portraits' cue rows' surface (BATTLE-UI2: the plates' and the foe card's).
 const PANEL_SURFACE: &str = "panel";
 /// PORTRAITFX1-TL (6.2 row 4): the full timeline view's track icons draw on the cue rows' `timeline` surface.
 const TIMELINE_SURFACE: &str = "timeline";
@@ -347,6 +345,10 @@ pub struct BattleScreen {
     /// as the panels and reacting at the same impacts, capped at the minimal tier (4.6: flash, tints, fade; no jolt,
     /// no breath) however large the window scales them.
     timeline_faces: Faces,
+    /// BATTLE-UI2: the docked foe card's portrait (uncapped) and the plates' and card's small faces (a blow's target,
+    /// a block's hitters, a group's stack; capped at the minimal tier), each a portrait apart from the plates'.
+    card_faces: Faces,
+    mini_faces: Faces,
     /// PORTRAITFX2 5.3: the battle's own portrait events: `battle_start` (and `ambush`) still to fire on the first
     /// frame, the round and outcome the last change left (`round_start`, `victory`) and the last popped action whose
     /// `skill` fired.
@@ -407,6 +409,8 @@ pub struct BattleScreen {
     /// round banner's round with the FX clock ms it started at.
     card_ap: Vec<(usize, ApPips)>,
     cards_shown: Vec<Value>,
+    /// BATTLE-UI2 (UISPLIT1 US1): the last frame's view-model as a `screen_layout` view (the agent link's `view`).
+    view_json: Value,
     /// PK1-S2c (placeholder): the units drawn with the Channel tint last frame (the agent link's `channel_units`).
     channel_units: Vec<usize>,
     banner: Option<(i32, u64)>,
@@ -510,6 +514,8 @@ impl BattleScreen {
             faces: Faces::default(),
             panel_faces: Faces::default(),
             timeline_faces: Faces::capped(rpgkit_ui::portrait_fx::Tier::Minimal),
+            card_faces: Faces::default(),
+            mini_faces: Faces::capped(rpgkit_ui::portrait_fx::Tier::Minimal),
             portrait_start: false,
             portrait_round: 0,
             portrait_outcome: String::new(),
@@ -541,6 +547,7 @@ impl BattleScreen {
             waiting: None,
             card_ap: Vec::new(),
             cards_shown: Vec::new(),
+            view_json: Value::Null,
             channel_units: Vec::new(),
             banner: None,
             round_note: None,
@@ -1115,6 +1122,7 @@ impl Screen<GameCx> for BattleScreen {
             out["strip_labels"] = json!(self.strip_labels);
             // VISCLAR1-D: the party cards as last drawn and the round banner showing (null: none)
             out["party_cards"] = json!(self.cards_shown);
+            out["view"] = self.view_json.clone();
             // PK1-S2c: the units wearing the Channel tint (key only under the rule channel)
             if emberwake_battle::channel::on(w) {
                 out["channel_units"] = json!(self.channel_units);

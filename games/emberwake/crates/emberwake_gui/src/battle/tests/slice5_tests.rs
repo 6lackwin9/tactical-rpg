@@ -291,7 +291,8 @@ fn card_and_token_glyphs_agree_in_playback() {
         let Some(i) = r.round_intent else { continue };
         let card = b.w.iter().find(|x| x.id == format!("foe.{}", r.unit)).unwrap().rect;
         let letter = &i.name()[..1];
-        let in_card = recs.iter().any(|t| t.text == letter && t.x >= card.x as f32 && t.x <= (card.x + 13) as f32 && t.y >= card.y as f32 && t.y <= (card.y + 12) as f32);
+        // BATTLE-UI2 (contract 4): the plate's intent is the badge on the portrait's lower right corner
+        let in_card = recs.iter().any(|t| t.text == letter && t.x >= card.x as f32 && t.x <= (card.x + card.w) as f32 && t.y >= card.y as f32 && t.y <= (card.y + card.h) as f32);
         let at = s(&b).w.pos(r.unit);
         let tile = cell_rect(at);
         let on_token = recs.iter().any(|t| t.text == letter && t.x >= (tile.x + TILE - 12) as f32 && t.x <= (tile.x + TILE) as f32 && t.y >= tile.y as f32 && t.y <= (tile.y + 12) as f32);

@@ -273,6 +273,9 @@ impl ClassDef {
 pub struct UnitDef {
     pub id: String,
     pub name: String,
+    /// BATTLE-UI2 (decision "Enemy short names"): the name on foe plates and the Hostiles list ("" = `name`); read it
+    /// through `plate_name`.
+    pub short_name: String,
     /// The body key (ASSETORG2: `<class>` or `<class>/<variant>`; "" = the class's).
     pub art: String,
     /// The palette the body wears (ASSETORG2; "" = none).
@@ -387,6 +390,7 @@ impl UnitDef {
         Self {
             id: string(o, "id", ""),
             name: string(o, "name", "New Unit"),
+            short_name: string(o, "short_name", ""),
             art: string(o, "art", ""),
             palette: string(o, "palette", ""),
             side: string(o, "side", "enemy"),
@@ -425,6 +429,20 @@ impl UnitDef {
             dojo: string(o, UNIT_DOJO_KEY, ""),
         }
     }
+
+    /// BATTLE-UI2: the plate name, the short name or, when it has none, the full name.
+    pub fn plate_name(&self) -> &str {
+        plate_name(&self.short_name, &self.name)
+    }
+}
+
+/// BATTLE-UI2 (decision "Enemy short names"): the characters a foe plate's name row holds (about 93 px of the small
+/// font); the content check warns on an enemy with a longer name and no `short_name`.
+pub const PLATE_NAME_MAX_CHARS: usize = 15;
+
+/// BATTLE-UI2 (decision "Enemy short names"): a unit's plate name, `short` (trimmed) or, when blank, `name`.
+pub fn plate_name<'a>(short: &'a str, name: &'a str) -> &'a str {
+    if short.trim().is_empty() { name } else { short.trim() }
 }
 
 #[derive(Debug, Clone)]
