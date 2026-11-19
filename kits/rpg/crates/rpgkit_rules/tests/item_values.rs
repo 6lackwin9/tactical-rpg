@@ -36,12 +36,15 @@ fn the_item_switches_are_plain_tunables() {
     }
 }
 
+/// ENRAGE2 (PR7-55, EN2): the cap is 80 so a boss's four enrage steps (+80 %) fit; an authored magnitude still tops
+/// out at 50 (`magnitude_max`, the content checks).
 #[test]
-fn empower_caps_at_fifty() {
-    assert_eq!(status::cap_of("empower"), 50);
+fn empower_caps_at_eighty() {
+    assert_eq!(status::cap_of("empower"), 80);
+    assert_eq!(status::row_of("empower").unwrap().magnitude_max, 50, "an item or skill buff is at most 50 %");
     assert_eq!(status::stack(0, 0, 2, 50, "empower"), (2, 50), "a 50 % item buff is not clipped");
     assert_eq!(status::stack(0, 0, 3, 30, "empower"), (3, 30), "a 30 % item buff is not clipped");
-    assert_eq!(status::stack(0, 0, 2, 80, "empower").1, 50, "above the cap clips to it");
+    assert_eq!(status::stack(0, 0, 2, 100, "empower").1, 80, "above the cap clips to it");
 }
 
 #[test]

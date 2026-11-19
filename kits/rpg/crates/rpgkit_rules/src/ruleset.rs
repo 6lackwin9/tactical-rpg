@@ -13,6 +13,8 @@
 
 use crate::status;
 use aegis_core::value::{self, Obj};
+use indexmap::IndexMap;
+use serde_json::Value;
 use rpgkit_data::Catalog;
 use std::collections::HashSet;
 use std::sync::{Mutex, OnceLock};
@@ -701,7 +703,17 @@ pub struct Numbers {
     /// PR5-20 (`channel_ai_edge`, FB-179): the factor by which the AI's Channel round must beat its Standard round's
     /// value for the AI to keep it (`ai::channel_row`).
     pub channel_ai_edge: f64,
+    /// ENRAGE2 EN1, EN4 (`enrage_from_round`): the round from which every enemy unit on the board enrages (0 = off).
+    pub enrage_from_round: i32,
+    /// ENRAGE2 EN2 (`enrage_step`): the attack power % an enemy gains per step, by its unit tier (a tier not named
+    /// gains none).
+    pub enrage_step: IndexMap<String, i32>,
+    /// ENRAGE2 EN2 (`enrage_max_stacks`): the most steps (one per round from `enrage_from_round`).
+    pub enrage_max_stacks: i32,
 }
+
+/// ENRAGE2 EN2: the default of `enrage_max_stacks`.
+pub const ENRAGE_MAX_STACKS: i32 = 4;
 
 impl Default for Numbers {
     fn default() -> Self {
@@ -751,6 +763,9 @@ impl Default for Numbers {
             channeled_actives: CHANNEL_ACTIVES,
             channel_rest: CHANNEL_REST_NORMAL.to_string(),
             channel_ai_edge: CHANNEL_AI_EDGE,
+            enrage_from_round: 0,
+            enrage_step: IndexMap::new(),
+            enrage_max_stacks: ENRAGE_MAX_STACKS,
         }
     }
 }
@@ -843,7 +858,21 @@ impl Numbers {
             channeled_actives: value::int(o, "channeled_actives", d.channeled_actives),
             channel_rest: Some(value::string(o, "channel_rest", "")).filter(|v| !v.is_empty()).unwrap_or(d.channel_rest),
             channel_ai_edge: value::float(o, "channel_ai_edge", d.channel_ai_edge),
+            enrage_from_round: value::int(o, "enrage_from_round", d.enrage_from_round),
+            enrage_step: enrage_step_of(o),
+            enrage_max_stacks: value::int(o, "enrage_max_stacks", d.enrage_max_stacks),
         }
+    }
+
+    /// ENRAGE2 EN1, EN2: the attack power % baseline enrage gives a unit of `tier` in `round` (0: the rule is off, the
+    /// round is before `enrage_from_round`, or the tier has no step): its step times the rounds since
+    /// `enrage_from_round` (that round counts one), at most `enrage_max_stacks`.
+    pub fn enrage_power(&self, tier: &str, round: i32) -> i32 {
+        if self.enrage_from_round <= 0 || round < self.enrage_from_round {
+            return 0;
+        }
+        let stacks = (round - self.enrage_from_round + 1).min(self.enrage_max_stacks.max(0));
+        self.enrage_step.get(tier).copied().unwrap_or(0).max(0) * stacks
     }
 
     /// PK1-S2a: the channel meter a channeled version of `ap` AP pays by `channel_cost` (0 AP pays none, 3 or more the
@@ -884,10 +913,23 @@ impl Numbers {
             "channel_cost_1" => self.channel_cost[0] = whole(v)?,
             "channel_cost_2" => self.channel_cost[1] = whole(v)?,
             "channel_cost_3" => self.channel_cost[2] = whole(v)?,
+            // ENRAGE2 (PR7-55): the baseline enrage numbers, for the rule-off and rule-on balance runs
+            "enrage_from_round" => self.enrage_from_round = whole(v)?,
+            "enrage_max_stacks" => self.enrage_max_stacks = whole(v)?,
+            _ if key.starts_with("enrage_step_") => {
+                self.enrage_step.insert(key["enrage_step_".len()..].to_string(), whole(v)?);
+            }
             _ => return Err(format!("'{key}' is not a ruleset tuning number")),
         }
         Ok(())
     }
+}
+
+/// ENRAGE2 EN4: a row's `enrage_step` (tier -> whole %; a value that is not a whole number is left out, the row
+/// check reports it).
+pub fn enrage_step_of(o: &Obj) -> IndexMap<String, i32> {
+    let Some(m) = o.get("enrage_step").and_then(Value::as_object) else { return IndexMap::new() };
+    m.iter().filter_map(|(k, v)| v.as_f64().filter(|f| f.fract() == 0.0).map(|f| (k.clone(), f as i32))).collect()
 }
 
 /// PK1-S2a: a row's `channel_cost` (three whole numbers; None when absent or not that shape, so the default holds and
@@ -1358,7 +1400,7 @@ pub const LOCKED: [Locked; 49] = [
 ];
 
 /// Numeric `pub const`s promoted to data: the default of a ruleset row field (name, field).
-pub const PROMOTED: [(&str, &str); 16] = [
+pub const PROMOTED: [(&str, &str); 17] = [
     ("FIXED_AP", "flank_protected_ap"),
     ("MOVE_AFTER_BLOCKS", "move_after_blocks"),
     ("BLEED_PCT", "bleed_pct"),
@@ -1375,6 +1417,7 @@ pub const PROMOTED: [(&str, &str); 16] = [
     ("CHANNEL_COST", "channel_cost"),
     ("CHANNEL_ACTIVES", "channeled_actives"),
     ("CHANNEL_AI_EDGE", "channel_ai_edge"),
+    ("ENRAGE_MAX_STACKS", "enrage_max_stacks"),
 ];
 
 impl Numbers {
@@ -1436,6 +1479,9 @@ impl Numbers {
             "channeled_actives" => self.channeled_actives.to_string(),
             "channel_rest" => self.channel_rest.clone(),
             "channel_ai_edge" => self.channel_ai_edge.to_string(),
+            "enrage_from_round" => self.enrage_from_round.to_string(),
+            "enrage_step" => self.enrage_step.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(","),
+            "enrage_max_stacks" => self.enrage_max_stacks.to_string(),
             _ => return None,
         })
     }

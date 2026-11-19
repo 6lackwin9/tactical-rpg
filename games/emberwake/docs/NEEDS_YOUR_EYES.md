@@ -2,7 +2,7 @@
 
 What only you can judge, with what to do. The planner keeps this current: new items go in when they land, and an item leaves when you've answered. Say "open the build" and the planner launches the latest one.
 
-## For the next session (Design keeps this list; updated 2026-11-19 15:35)
+## For the next session (Design keeps this list; updated 2026-11-19 23:05)
 
 Parked for your approval (golden re-records need your word):
 
@@ -11,6 +11,12 @@ Parked for your approval (golden re-records need your word):
   the unit already holds (ends Vesper's Fade loop; 6 of 18 timeline fights move); (b) a hero whose target is down or
   out of reach retargets the nearest reachable foe instead of resting (8 fights move, sim golden run 21, one repro
   re-recorded). Recommendation: approve both for heroes; enemies keep resting (TG4 unchanged).
+- [ ] Fight length after the enrage and caps landed (`PR7-55`, `FB-377`; numbers coming from a report-only sim run,
+  `ENGINE-26`): (a) random fights end in 1 round against your 3. Recommendation: raise those foes' HP (or add a foe) to the
+  smallest step that gives 2-3 rounds; it re-records the sim golden. (b) Elites take about 3-4 minutes by the estimate
+  against your 7-8, while the 5-round target fits; the estimate assumes 10 s planning per hero. Recommendation: keep
+  the rounds and recheck the minutes from your next PC playtest log. (c) Boss win rates at the authored level: The
+  Bone-Mill Raid 28 %, The Sweep 53 % (the approved boss band is 20-40 %). Recommendation: no change before you play one.
 
 Mocks waiting for you, then provisional calls Design made while you were away, to confirm or change:
 

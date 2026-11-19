@@ -13,7 +13,9 @@ use rpgkit_battle::encounter::{PartyFate, StayBehind};
 use rpgkit_battle::session::{EncounterDef, Fate, Prebuilt, Session, StartGrant};
 use serde_json::Value;
 
-pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
+/// ENRAGE2 EN9 adds `escaped`: a random fight's foes slipped away at its round cap.
+pub const OUTCOMES: [&str; 4] = ["won", "lost", "fled", ESCAPED];
+pub use rpgkit_battle::encounter::ESCAPED;
 
 /// GameEncounter / WorldEncounter: the battle of encounter row `entry` resolved in `world`, with the ruleset of that
 /// world (RULESET1 3.1.2: a battle plays by the world that owns the encounter; ENCOUNTER2's linked rooms too).
@@ -511,9 +513,13 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
         out
     };
     if !OUTCOMES.contains(&outcome) {
-        return done(false, &[format!("Unknown battle outcome '{outcome}' (use won, lost or fled).")], Dict::new(), &[]);
+        return done(false, &[format!("Unknown battle outcome '{outcome}' (use won, lost, fled or escaped).")], Dict::new(), &[]);
     }
     let won = outcome == "won";
+    // ENRAGE2 EN9: an escape settles the party (damage, statuses, fates) and the campaign tick as a flight, and pays
+    // nothing: no foe counts as defeated for XP, the purse share or loot
+    let escaped = outcome == ESCAPED;
+    let outcome = if escaped { rpgkit_battle::encounter::FLED } else { outcome };
     let world = gs.world_id.clone();
     let enc = d.resolve(&world, "encounters", encounter_qid).clone();
     let enc_world = json::s_or(&enc, "_world", &world);
@@ -524,7 +530,7 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     let roster = roster_at(d, &world, encounter_qid, world_stage(gs));
     let (fates, mut notes) = tally.fates_of(&roster);
     notes.extend(party_notes);
-    let defeated: Vec<bool> = fates.iter().map(|f| f.defeated()).collect();
+    let defeated: Vec<bool> = fates.iter().map(|f| f.defeated() && !escaped).collect();
     // 2. XP for the defeated enemies only (none: no award at all). A won fight whose roster does not resolve from the
     // party's world (a road fight on another world's route) gives every member a 0 award, as before REWARD1 (Godot).
     let levels: Vec<(i64, String)> = roster.iter().zip(&defeated).filter(|(_, d)| **d).map(|(f, _)| (f.level, f.tier.clone())).collect();

@@ -187,6 +187,23 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
             out.push("Channel cost by AP must be three whole numbers 0-100 (for 1, 2 and 3+ AP).".into());
         }
     }
+    // ENRAGE2 EN4 (PR7-55): `enrage_step` maps unit tiers (the units schema's `tier` options) to whole % 0-100
+    if let Some(raw) = e.get("enrage_step") {
+        let tiers: Vec<String> = crate::source::fields("content", "units").iter().map(json::dict).filter(|f| json::s(f, "key") == "tier").flat_map(|f| json::aget(f, "options").iter().map(gstr).collect::<Vec<_>>()).collect();
+        match raw.as_object() {
+            None => out.push("Enrage step by tier must be an object of unit tier -> whole % (for example {\"boss\": 20}).".into()),
+            Some(m) => {
+                for (tier, v) in m {
+                    if !tiers.iter().any(|t| t == tier) {
+                        out.push(format!("Enrage step by tier: '{tier}' is not a unit tier ({}).", tiers.join(", ")));
+                    }
+                    if !v.as_f64().is_some_and(|x| x.fract() == 0.0 && (0.0..=100.0).contains(&x)) {
+                        out.push(format!("Enrage step by tier: {tier} must be a whole % 0-100."));
+                    }
+                }
+            }
+        }
+    }
     let meter = json::s(e, "channel_meter");
     if !meter.is_empty() && !is_id(&meter) {
         out.push(format!("Channel meter: '{meter}' must be a unit meter id (lowercase snake_case)."));

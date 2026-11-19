@@ -1387,12 +1387,12 @@ fn debate_3_and_the_recruit_hints_read_as_fixed() {
     }
 }
 
-/// PR5-44: M1 and M2 last up to 10 rounds; the Skerrit trade's new items are in the catalog with the row's numbers.
+/// PR5-44: M1 and M2 last up to 10 rounds (ENRAGE2 EN7, PR7-55: 12, the boss cap); the Skerrit trade's new items are in the catalog with the row's numbers.
 #[test]
 fn m1_m2_rounds_and_the_skerrit_items() {
     let d = data();
     for enc in ["enc_evt_01", "enc_evt_02"] {
-        assert_eq!(json::i(entry(&d, "encounters", enc), "max_rounds", 0), 10, "{enc}: 10 rounds");
+        assert_eq!(json::i(entry(&d, "encounters", enc), "max_rounds", 0), 12, "{enc}: 12 rounds (the boss cap)");
     }
     let cestus = d.entry("items", "barbed_bone_cestus");
     assert_eq!((json::s(cestus, "family"), json::s(cestus, "hand"), json::i(cestus, "value", 0), json::f(cestus, "weight", 0.0)), ("fist".into(), "main_1h".into(), 65, 1.5));

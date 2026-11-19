@@ -22,6 +22,8 @@ pub const TACTICS: [(&str, &str); 6] =
 pub const FEEL_KEYS: [&str; 4] = ["tactic", "party", "armor", "tune"];
 /// SIMCOUNT1: the feel key `usage` does not list (see `FEEL_COUNTS_USAGE`); any other mode refuses it too.
 pub const FEEL_COUNTS_KEY: &str = "counts";
+/// ENRAGE2 (PR7-55, EN6-EN7b): the feel key that adds the pace block (by encounter tier).
+pub const FEEL_PACE_KEY: &str = "pace";
 /// SIMCOUNT1: the help of the `counts=` key, printed apart from `usage` (`sim help`, a refused feel line): `sim_golden` holds
 /// `usage`.
 pub const FEEL_COUNTS_USAGE: &str = "       feel only: counts=on|off (off): each block and FEEL_JSON add per side the rule counts (feel::RULE_COUNTERS), protected share, Rest blocks a round, items by id; the hook counts (feel::HOOK_COUNTERS), skills landed, intents by unit, and per encounter arena strikes, windup breaks by skill, phases fired and fights with each count";
@@ -47,7 +49,10 @@ pub const MASTERY_USAGE: &str = "       mastery=0-3 (none): each ally holds that
 pub const ARMOR_MAX: i32 = 200;
 /// RULESET1-G2: the ruleset numbers `tune=` may set (RULESET1_TASKS 1.2), by key prefix; ranges from the kit schema.
 /// PR5-26 (FB-191 (f)): `channel_` (the Channel rule's `channel_power` and `channel_ai_edge`).
-pub const TUNE_PREFIXES: [&str; 5] = ["stagger_", "flank_", "break_chance_", "rest_", "channel_"];
+/// ENRAGE2 (PR7-55) adds `enrage_` (the rule-off and rule-on balance runs).
+pub const TUNE_PREFIXES: [&str; 6] = ["stagger_", "flank_", "break_chance_", "rest_", "channel_", "enrage_"];
+/// ENRAGE2: the `enrage_step` entries by unit tier as `tune=` keys (`enrage_step_<tier>`, 0..100 %).
+pub const ENRAGE_STEP_KEYS: [&str; 4] = ["enrage_step_minion", "enrage_step_standard", "enrage_step_elite", "enrage_step_boss"];
 /// PR5-26 (FB-191 (f)): the `tune=` keys of the ruleset's `channel_cost` (a list in the schema): the cost by AP 1, 2 and
 /// 3+, each a whole number 0-`CHANNEL_COST_MAX`.
 pub const CHANNEL_COST_KEYS: [&str; 3] = ["channel_cost_1", "channel_cost_2", "channel_cost_3"];
@@ -165,6 +170,8 @@ pub struct SimArgs {
     pub drivers: Vec<crate::timed::Driver>,
     /// SIMCOUNT1 (feel only): print the rule counts (`counts=on|off`; off).
     pub counts: bool,
+    /// ENRAGE2 EN6-EN7b (feel only): print the pace block by encounter tier (`pace=on|off`; off).
+    pub pace: bool,
     /// RULESET1-G2 (feel only): unit id -> the armour it fights with in this run (`armor=<unit>:<0-200>`).
     pub armor: IndexMap<String, i32>,
     /// RULESET1-G2 (feel only): ruleset number -> its value in this run (`tune=<key>:<value>`), applied to `ruleset`.
@@ -235,6 +242,7 @@ impl Default for SimArgs {
             tactic: "balanced".into(),
             drivers: vec![crate::timed::Driver::Auto],
             counts: false,
+            pace: false,
             armor: IndexMap::new(),
             tune: IndexMap::new(),
             feel_keys: Vec::new(),
@@ -547,7 +555,7 @@ impl SimArgs {
     fn key(&mut self, d: &Data, key: &str, value: &str) -> Result<(), String> {
         let ids = self.game.classes.ids;
         let classes = godot_list(ids);
-        if (FEEL_KEYS.contains(&key) || key == FEEL_COUNTS_KEY) && !self.feel_keys.iter().any(|k| k == key) {
+        if (FEEL_KEYS.contains(&key) || key == FEEL_COUNTS_KEY || key == FEEL_PACE_KEY) && !self.feel_keys.iter().any(|k| k == key) {
             self.feel_keys.push(key.to_string());
         }
         if DEADLINE_KEYS.contains(&key) && !self.deadline_keys.iter().any(|k| k == key) {
@@ -580,6 +588,12 @@ impl SimArgs {
                     return Err(format!("counts must be on or off (got '{value}')"));
                 }
                 self.counts = value == "on";
+            }
+            "pace" => {
+                if value != "on" && value != "off" {
+                    return Err(format!("pace must be on or off (got '{value}')"));
+                }
+                self.pace = value == "on";
             }
             "armor" => {
                 for part in list(value) {
@@ -1055,7 +1069,7 @@ pub fn feel_roster(d: &Data, id: &str) -> Vec<String> {
 
 /// RULESET1-G2: the `tune=` keys: the kit schema's numeric ruleset fields with a TUNE_PREFIXES prefix.
 pub fn tune_keys() -> Vec<String> {
-    tune_fields().map(|f| aegis_core::json::s(f, "key")).chain(CHANNEL_COST_KEYS.iter().map(|k| k.to_string())).collect()
+    tune_fields().map(|f| aegis_core::json::s(f, "key")).chain(CHANNEL_COST_KEYS.iter().chain(&ENRAGE_STEP_KEYS).map(|k| k.to_string())).collect()
 }
 
 /// RULESET1-G2: the schema range (min, max) of the `tune=` number `key` (None: not one). PR5-26: a `channel_cost` key's
@@ -1063,6 +1077,9 @@ pub fn tune_keys() -> Vec<String> {
 pub fn tune_range(key: &str) -> Option<(f64, f64)> {
     if CHANNEL_COST_KEYS.contains(&key) {
         return Some((0.0, CHANNEL_COST_MAX));
+    }
+    if ENRAGE_STEP_KEYS.contains(&key) {
+        return Some((0.0, 100.0));
     }
     let f = tune_fields().find(|f| aegis_core::json::s(f, "key") == key)?;
     Some((f.get("min")?.as_f64()?, f.get("max")?.as_f64()?))

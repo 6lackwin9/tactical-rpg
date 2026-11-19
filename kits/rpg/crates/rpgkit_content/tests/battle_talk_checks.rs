@@ -144,6 +144,7 @@ fn worlds(data: &Path) {
         "characters": [ch("hero_c", "party", "hero"), ch("mate_c", "party", "mate"), ch("brute_c", "enemy", "brute"), ch("guard_c", "enemy", "guard")],
         "dialogues": [ok, bad],
         "encounters": [talky],
+        "vignettes": [{"id": "vg_turn", "name": "The Turn", "skippable": true, "once": false, "cards": [{"style": "title", "title": "The Turn", "hold_ms": 1000}]}],
     });
     write_world(data, "vale", json!({"id": "vale", "name": "Vale", "version": 1}), &kinds);
     write_world(data, "ridge", json!({"id": "ridge", "name": "Ridge", "ruleset": "timeline", "version": 1}), &kinds);
@@ -201,5 +202,23 @@ fn a_world_broken_trigger_needs_the_poise_rule() {
     assert_eq!(world_errors(&v, "vale", json!({"kind": "downed", "unit": "party:mate_c"}), line()), Vec::<String>::new(), "downed needs no rule");
     assert_eq!(world_errors(&v, "vale", json!({"kind": "downed", "unit": "guard_c", "count": 2}), line()), Vec::<String>::new());
     one(world_errors(&v, "vale", json!({"kind": "downed", "unit": "guard_c", "count": 3}), line()), "Phase 'turn': count must be 1..2.");
+    drop_scratch(&data);
+}
+
+/// PHASEBREAK1 (PR7-56, BOSSUI1 BU17): a phase `vignette` (keys `type, id`; one per phase; world encounters only) names
+/// a vignette of the world.
+#[test]
+fn a_phase_vignette_resolves_in_its_world() {
+    let (_scratch, data) = scratch("vignette");
+    catalog(&data);
+    worlds(&data);
+    let v = store::view(&data);
+    let vig = |id: &str| json!({"type": "vignette", "id": id});
+    assert_eq!(world_errors(&v, "vale", Value::Null, json!([{"type": "line", "text": "Now."}, vig("vg_turn")])), Vec::<String>::new());
+    let unknown = world_errors(&v, "vale", Value::Null, json!([vig("vg_none")]));
+    assert!(unknown.len() == 1 && unknown[0].starts_with("Phase 'turn': vignette") && unknown[0].contains("vg_none"), "{unknown:?}");
+    one(world_errors(&v, "vale", Value::Null, json!([vig("")])), "Phase 'turn': a vignette needs an id.");
+    one(world_errors(&v, "vale", Value::Null, json!([vig("vg_turn"), vig("vg_turn")])), "Phase 'turn': one vignette per phase.");
+    one(catalog_errors(&v, Value::Null, json!([vig("vg_turn")])), "A vignette needs a world encounter (vignettes live in worlds).");
     drop_scratch(&data);
 }

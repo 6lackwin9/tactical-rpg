@@ -25,7 +25,9 @@ const OLD: [Old; 18] = [
     ("poison", false, true, 3, StackPotency, 30, "Poisoned", "", 1, 15, false, "flat"),
     ("burn", false, true, 2, RefreshMaxDuration, 10, "Burning", "", 1, 10, false, "pct_max_hp"),
     // A1.2-K3 (FB-55(1)): the empower cap and magnitude ceiling raised from 25 to 50 (item buffs 50 % and 30 % unclipped)
-    ("empower", true, false, 2, RefreshMaxDuration, 50, "Empowered", "support", 1, 50, false, "pct"),
+    // PR7-55 ENRAGE2 (FB-377): the empower cap raised from 50 to 80 so the baseline enrage can stack over item buffs; the
+    // magnitude ceiling stays 50
+    ("empower", true, false, 2, RefreshMaxDuration, 80, "Empowered", "support", 1, 50, false, "pct"),
     ("steadfast", true, false, 1, RefreshMaxDuration, 0, "Steadfast", "support", 0, 0, false, "pct"),
     ("stealth", true, false, 2, RefreshMaxDuration, 0, "Stealthed", "defend", 0, 0, true, "pct"),
     ("guard", true, false, 1, RefreshMaxDuration, 90, "Guarded", "", 10, 90, false, "pct"),
