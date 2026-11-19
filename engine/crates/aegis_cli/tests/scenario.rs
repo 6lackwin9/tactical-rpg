@@ -967,11 +967,13 @@ fn a_run_opens_no_window_unless_the_file_or_the_flag_asks() {
 fn the_rate_and_the_device_scale_reach_a_game_with_no_window_alone() {
     let out = temp("rate");
     let o = Options { fps: Some(30), dpr: Some("1.5".into()), ..no_window(&out) };
-    assert_eq!(scenario::headless_args((1280, 720), &o), ["headless=1280x720", "clock=step", "fps=30", "dpr=1.5"]);
-    assert_eq!(scenario::headless_args((1280, 720), &no_window(&out)), ["headless=1280x720", "clock=step"]);
+    assert_eq!(scenario::headless_args((1280, 720), &o), ["headless=1280x720", "fps=30", "dpr=1.5"]);
+    assert_eq!(scenario::headless_args((1280, 720), &no_window(&out)), ["headless=1280x720"]);
     let mut l = launcher();
     assert_eq!(scenario::run_size(&scenario_of(json!([{"step": "back"}])), (1280, 720), &o, &mut l).code, 0);
     assert!(l.plans[0].args.contains(&"fps=30".to_string()));
+    // ENGINE-17: a scenario's game is on the shot clock (the agent playtest shares headless_args and is not).
+    assert!(l.plans[0].args.contains(&"clock=step".to_string()));
     std::fs::remove_dir_all(&out).unwrap();
 }
 
@@ -1253,9 +1255,6 @@ fn a_shot_takes_a_time_after_its_screen_opened_on_the_shot_clock() {
     assert!(problems_of(minimal(json!([{"step": "shot", "name": "a", "t": -1}]))).contains("'t' is a number of seconds"));
     assert!(problems_of(minimal(json!([{"step": "shot", "name": "a", "t": 61}]))).contains("'t' is a number of seconds"));
     assert!(problems_of(minimal(json!([{"step": "shot", "name": "a", "t": "soon"}]))).contains("'t' is a number of seconds"));
-    // Every run with no window is on the shot clock.
-    let o = scenario::Options { fps: None, dpr: None, ..no_window(&temp("shot_clock")) };
-    assert!(scenario::headless_args((1280, 720), &o).contains(&"clock=step".to_string()));
 }
 
 #[test]

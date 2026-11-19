@@ -902,8 +902,7 @@ pub fn write_scratch(p: &Plan) -> std::io::Result<()> {
 
 /// What a game with no window is told: the size, and the rate and device scale when asked.
 pub fn headless_args(size: (u32, u32), o: &Options) -> Vec<String> {
-    // ENGINE-17: always on the shot clock, so two runs of a build draw the same frames.
-    let mut args = vec![format!("headless={}x{}", size.0, size.1), "clock=step".to_string()];
+    let mut args = vec![format!("headless={}x{}", size.0, size.1)];
     args.extend(o.fps.map(|n| format!("fps={n}")));
     args.extend(o.dpr.as_ref().map(|d| format!("dpr={d}")));
     args
@@ -1356,6 +1355,9 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
         let mut plan = plan(s, size, &o.game_id, &o.exe, o.data.as_deref(), port, &scratch);
         if headless {
             plan.args.extend(headless_args(size, o));
+            // ENGINE-17: a scenario is always on the shot clock, so two runs of a build draw the same frames (the agent
+            // playtest, which shares the arguments above, stays on real time).
+            plan.args.push("clock=step".to_string());
         }
         if let Err(e) = write_scratch(&plan) {
             out.message = format!("the scratch folder {}: {e}", scratch.display());
