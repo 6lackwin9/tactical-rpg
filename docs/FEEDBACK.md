@@ -68,8 +68,21 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-18` (`LAYOUT-KIT2`) | done (tools lane) | `develop` (squash `ENGINE-18`) | `list_row` scrolls inside a short region (every row a widget, the focused row kept in view), no icon tiles without pictures, `detail2` second numbers column, `stat_block` `style: muted`, `heading` component with fixed `text`. FB-351 |
 | `PR7-39` (`UISPLIT1-G`) | Stage A done (tools lane); Stage B waits for `ENGINE-19` | `develop` (squash `PR7-39` Stage A) | Shop view-model `shop_view.rs`, its actions through `ShopPane::act`, fixture `ui/views/shop.view.json`, tests; today's drawing kept. FB-353 |
 | `ENGINE-19` (`LAYOUT-KIT3`) | done (tools lane) | `develop` (squash `ENGINE-19`) | `list_row` row buttons, selected rows, toned `detail`, a dimmed `then` section, view row ids (`row_ids`), and a `detail_line` component that follows the hot row. FB-355 |
+| `ENGINE-8` (`KIT-UI1`) KU2 | shop done (tools lane); next screens wait for their UISPLIT1 split | `develop` (squash `ENGINE-8` KU2) | The shop and its view-model moved to `rpgkit_ui` (`shop`, `shop_view`, hosted by `ShopGame`); the game keeps its texts and tests. No behaviour change. FB-357 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-357: ENGINE-8 KU2, the shop moved into the kit (rpgkit_ui); no behaviour change
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-8` (KIT-UI1) KU2-KU5, the shop first (@squash `ENGINE-8` KU2)
+- **Built**: `kits/rpg/crates/rpgkit_ui/src/shop.rs` holds the trade (`Trade`, `ShopAct`, `buy_cap`, `of_text`, `ShopPane` with its `act` and today's drawing, `frame_rect(p, hud_h)`, `item_tile`). `rpgkit_ui/src/shop_view.rs` holds the view-model and its actions. Both run on the engine's `aegis_ui::Cx<G>` for any game half `G: ShopGame`. The trait gives the data, the game state, the purse words, an item's detail line, its icon files, the log line and the HUD height. `rpgkit_ui` now depends on `rpgkit_world` (the shop rules). The kit files name no game.
+- **Game side**: `emberwake_gui/src/shop.rs` keeps `item_line`, `worn_by`, `item_use_note` (the game's texts), implements `ShopGame for GameCx`, re-exports `ShopAct`, `ShopPane` and `DISCARD`, and keeps `frame_rect(p)` for the board, recipe and facility panes. `shop_view.rs` is a wrapper (`view(&Cx, ..)`). All of their tests stay in the game, unchanged apart from imports. `item_line` now takes `&GameCx` (callers pass `&Cx` as before).
+- **KU5**: no behaviour change. The gate passes with no golden or shot change, and the shop's GUI tests and audits are unchanged.
+- **Tests**: a kit unit test for the trade's caps and sums, with no game (`rpgkit_ui` `shop::tests`).
+- **Guesses**: (1) The kit keeps the shop's English UI words ("Click a row to add it.", "Discard this trade?", "Confirm trade"); the game-specific words (the purse terms, an item's detail line) come from the game. (2) The game keeps its tests rather than moving them into the kit, because they run on the game's world.
+- **For main Build**: shop code now lives in `rpgkit_ui`; rebase if you touch `emberwake_gui/src/shop.rs`.
+- **Docs delta**: `docs/STRUCTURE.md`: `rpgkit_ui` gains `shop.rs` and `shop_view.rs` (the trade screen and its view-model, hosted through `ShopGame`); `emberwake_gui/src/shop.rs` becomes the host (`ShopGame for GameCx`, the item texts) and `shop_view.rs` a wrapper. `HISTORY.md`: none.
 
 ### FB-355: ENGINE-19 layout parts for a shop-like screen landed; PR7-39 Stage B can go ahead
 
