@@ -1,0 +1,21 @@
+{
+ "id": "slum_alley_houses",
+ "kind": "backdrops",
+ "style": "tallow_iron",
+ "size": [
+  384,
+  52
+ ],
+ "palette": "p3",
+ "tags": [
+  "alley",
+  "slum",
+  "houses",
+  "night",
+  "street"
+ ],
+ "status": "placeholder",
+ "source": "gemini_web",
+ "request": null,
+ "license": "generated for this project (Gemini web), owner-held"
+}

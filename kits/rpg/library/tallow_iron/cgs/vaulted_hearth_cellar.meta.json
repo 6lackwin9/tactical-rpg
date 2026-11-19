@@ -1,0 +1,21 @@
+{
+ "id": "vaulted_hearth_cellar",
+ "kind": "cgs",
+ "style": "tallow_iron",
+ "size": [
+  1120,
+  472
+ ],
+ "palette": "p3",
+ "tags": [
+  "cellar",
+  "vaults",
+  "hearth",
+  "fire",
+  "interior"
+ ],
+ "status": "placeholder",
+ "source": "gemini_web",
+ "request": null,
+ "license": "generated for this project (Gemini web), owner-held"
+}
