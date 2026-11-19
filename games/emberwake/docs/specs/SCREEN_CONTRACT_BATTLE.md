@@ -192,6 +192,12 @@ screen at 1280x720, 1:1.
   ringed gold with the next phase's diamond; the blocks after it are hatched and their numbers struck (they do not
   run, no AP spent); totals count only what lands and read "Ends block N" and "Ph. 2 next round". The take 27 carry
   line above is superseded by BU16 if this is signed off.
+- Proposed, take 30 (`battle_take30_boss_mock.py`, user 2026-11-19 18:43), awaiting sign-off; amends take 29:
+  boss poise without the 5 + 5 split, recommended A: one 80 px bar with a faint tick per pip and the count ("6/10"),
+  read like the plate AP bar (B: ten even pips with the count); a cell writes poise as one shield glyph and the pips
+  taken as a number ("2"), and shows at most one status chip and "+N"; party row, recommended P1: the whole party in
+  one row, hover or press it for one line per member in the same block columns (P2: the selected hero and "Others",
+  the rest summed, with the party total beside the totals).
 - Not expressed yet: collision stagger from push or pull on the card row, hazard damage in the HP preview and the
   block ruler, reactions (riposte, counters) as a "returns -n" note, flank, guard, cover and windup modifiers in the
   skill hover, channel rounds, unit meters, weapon wear.
