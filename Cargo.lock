@@ -57,6 +57,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "aegis_grid"
+version = "0.1.0"
+
+[[package]]
 name = "aegis_host"
 version = "0.1.0"
 dependencies = [
@@ -1108,6 +1112,7 @@ dependencies = [
  "aegis_cli",
  "aegis_content",
  "aegis_core",
+ "aegis_grid",
  "aegis_host",
  "aegis_save",
  "aegis_ui",
@@ -2220,6 +2225,7 @@ name = "rpgkit_battle"
 version = "0.1.0"
 dependencies = [
  "aegis_core",
+ "aegis_grid",
  "indexmap",
  "rpgkit_data",
  "rpgkit_rules",

@@ -1,0 +1,10 @@
+[package]
+name = "aegis_grid"
+version = "0.1.0"
+edition = "2021"
+
+# WORLD-PRIM1 (ENGINE-9): grid primitives with no dependencies, so any game, kit or tool can route on a grid.
+[dependencies]
+
+[lints]
+workspace = true

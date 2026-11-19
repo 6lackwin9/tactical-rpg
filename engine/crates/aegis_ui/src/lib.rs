@@ -60,10 +60,12 @@ pub mod start;
 pub mod strings;
 pub mod text_audit;
 pub mod theme;
+pub mod tilemap;
 pub mod timeline;
 pub mod tuning;
 pub mod ui;
 pub mod vignette;
 pub mod window;
+pub mod world_camera;
 
 pub use screen::{Context, Cx, Held, Key, Nav, PointerPhase, Screen};

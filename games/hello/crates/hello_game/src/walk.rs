@@ -42,6 +42,20 @@ impl Walk {
         true
     }
 
+    /// The steps (dx, dy) of the shortest walk to tile `to` through free tiles (the engine's grid search, WORLD-PRIM1;
+    /// ties go right, up, left, down); empty when already there, None when `to` is blocked or cut off.
+    pub fn route(&self, to: (i64, i64)) -> Option<Vec<(i64, i64)>> {
+        use aegis_grid::{search, Cell, Search, DIRS4};
+        if blocked(to.0, to.1) {
+            return None;
+        }
+        let free = |_: Cell, c: Cell| (!blocked(i64::from(c.x), i64::from(c.y))).then_some(1);
+        let goal = Cell::new(to.0 as i32, to.1 as i32);
+        let near = move |c: Cell| i64::from(c.manhattan(goal));
+        let steps = search(Cell::new(self.x as i32, self.y as i32), &Search { dirs: &DIRS4, step: &free, goal: &|c| c == goal, heuristic: Some(&near), better: None })?;
+        Some(steps.into_iter().map(|d| (i64::from(d.x), i64::from(d.y))).collect())
+    }
+
     /// The saved and reported form.
     pub fn to_value(self) -> Value {
         json!({"x": self.x, "y": self.y, "steps": self.steps})

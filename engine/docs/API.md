@@ -10,7 +10,8 @@ save. Nothing here is a stable, versioned API yet; the engine changes with its g
 | --- | --- |
 | `aegis_core` | the asset layers (`assets::Layers`), the clock (`clock`, never `std::time`), files (`vfs`, never `std::fs` in runtime code), the deterministic RNG, JSON helpers (`json::Dict`), temp folders in tests (`scratch::Scratch`) |
 | `aegis_layout` | rects on whole grid units: `Rect::place(Anchor, w, h)`, `cut_top` / `cut_left` / ..., `pad(Insets)`, `split_x`, `Part` (fractions, ratios, fills) |
-| `aegis_ui` | the window shell (`shell::run`), screens (`screen`), widgets (`ui::Ui`), the painter, the theme, art and audio, panes, screen layouts (`screen_layout`) |
+| `aegis_ui` | the window shell (`shell::run`), screens (`screen`), widgets (`ui::Ui`), the painter, the theme, art and audio, panes, screen layouts (`screen_layout`), the game start (`start`), a world camera (`world_camera`: follow, bounds, zoom steps, screen and world points) and a tile layer (`tilemap`: cells on view, autotile corners) |
+| `aegis_grid` | grid cells and neighbours (`DIRS4`, `DIRS8`), the cost search (`search`: uniform cost or A*, ties in direction order then the caller's `better`), `reach` within a budget, `line` of cells; no dependencies |
 | `aegis_host` | the command API: one JSON request in, one reply out, every change recorded for replays (`Host`, `Commands`) |
 | `aegis_save` | versioned save slots with migrations, the per-game user folder (`user_dir(id)`) |
 | `aegis_content` | the manifest (`manifest::Manifest`, `game.json`), the data store and its writer (`store::Hooks`) |
