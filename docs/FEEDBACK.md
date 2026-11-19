@@ -65,8 +65,20 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-16` (`TOOLS-HELP2`) | done (tools lane) | `develop` (squash `ENGINE-16`) | `tools/fc.sh scenario shots-all out=<dir> [compare=<before>]` (every scenario's shots in one flat folder; changed, new and gone shots with pixel counts) and `tools/fc.sh rename <old> <new>` (an identifier across Rust and JSON; strings and comments left unless asked). FB-347 |
 | `ENGINE-17` (`SHOT-CLOCK1`) | done (tools lane) | `develop` (squash `ENGINE-17`) | The shot clock: `aegis_core::clock::Instant` is stepped in every scenario run with no window (`clock=step`), time moving only by the frames the driver asks for; shot step `t`; new game seed from `clock::system_now`; gate step `shotsexact` (every scenario twice, 71 shots byte for byte). FB-349 |
 | `ENGINE-18` (`LAYOUT-KIT2`) | done (tools lane) | `develop` (squash `ENGINE-18`) | `list_row` scrolls inside a short region (every row a widget, the focused row kept in view), no icon tiles without pictures, `detail2` second numbers column, `stat_block` `style: muted`, `heading` component with fixed `text`. FB-351 |
+| `PR7-39` (`UISPLIT1-G`) | Stage A done (tools lane); Stage B waits for `ENGINE-19` | `develop` (squash `PR7-39` Stage A) | Shop view-model `shop_view.rs`, its actions through `ShopPane::act`, fixture `ui/views/shop.view.json`, tests; today's drawing kept. FB-353 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-353: PR7-39 Stage A, the shop's view-model landed; ENGINE-8 KU2 can take the shop
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-39` (UISPLIT1-G) Stage A (@squash `PR7-39` Stage A)
+- **Built** (`emberwake_gui/src/shop_view.rs`): the view `shop` with every field today's drawing shows. Texts `title`, `band`, `total`, `purse`, `detail` and `errors`. Row lists `offers` (row id the offer id; `detail` the price, `detail2` "X of N", off at the cap), `trade` (`buy.<offer id>` and `sell.<item>`, `detail` the signed gold), `stash` (row id the item) and `others` (stash items the shop does not buy, always off). Actions `buy`, `buy5`, `buy10`, `sell`, `sell5`, `sell10` and `return` take the row id as arg; `clear`, `confirm` and `close` take none. `act` maps each to today's `ShopAct` and runs `ShopPane::act`, so the rules stay in one place. The fixture is `games/emberwake/assets/ui/views/shop.view.json`.
+- **No visible change**: `ShopPane::draw` is untouched, so the widget tree and every shot stay the same. The agent link's `shop` state gains a `view` key with the view-model (`talk::ServiceScreen::state`), so a scenario or agent can read the same fields a layout will draw.
+- **Tests**: `shop_view::tests` (3) on a debug game of the first playable world, every open shop. The rows follow `shop::offers` and `shop::sell_list` in order. Buy, `+5`, `+10` up to the cap, a line put back whole, sell up to what is owned, Clear, and Confirm paying the purse. The fixture has the view's shape.
+- **Guesses**: (1) a row's picture is the first file of the item's icon chain (supplies have none); the layout falls back as the drawing does once ENGINE-19 is in. (2) `shop_act` and `act` carry `allow(dead_code)` outside tests until Stage B's layout draw clicks through them. (3) The tests use the debug game, as the shop's own tests do, rather than a recorded save.
+- **For ENGINE-8 KU2**: the shop now has a view-model, so the tools lane takes it next (move to `rpgkit_ui`, today's drawing kept, KU5 no behaviour change).
+- **Docs delta**: none. `HISTORY.md`: none.
 
 ### FB-351: ENGINE-18 layout parts for long lists landed; AI-27 can go ahead
 

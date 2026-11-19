@@ -48,6 +48,7 @@ mod runner;
 mod runover;
 mod screens;
 mod shop;
+mod shop_view;
 mod siege;
 mod stage;
 mod story;
