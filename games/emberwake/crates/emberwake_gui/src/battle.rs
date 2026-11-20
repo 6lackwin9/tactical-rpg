@@ -1209,7 +1209,9 @@ impl Screen<GameCx> for BattleScreen {
             if let Some(gate) = &sess.w.hold {
                 let cell = |c: &V2| json!([c.x, c.y]);
                 out["hold"] = json!({"label": gate.label, "tiles": gate.tiles.iter().map(cell).collect::<Vec<_>>(), "holder": gate.holder, "open": gate.is_open(&sess.w),
-                    "needs_pick": sess.needs_stay_pick(), "note": sess.gate_note(), "pick": hold_pick_ids(sess)});
+                    "needs_pick": sess.needs_stay_pick(), "note": sess.gate_note(), "pick": hold_pick_ids(sess),
+                    // ESCAPE-PLAN1: the heroes out through an exit, and the hold pick's suggestion
+                    "out": gate.heroes.iter().copied().filter(|&c| sess.w.units[c].is_withdrawn).collect::<Vec<_>>(), "suggested": sess.stay_pick_suggestion()});
             }
         }
         // HOOKS1-UI slice 4: the selected hero's push forecasts as drawn (key only while forced_move is on)

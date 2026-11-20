@@ -7,6 +7,40 @@
 | [BALANCE_REPORT_2026-11A.md](../../../docs/archive/BALANCE_REPORT_2026-11A.md) | `PR5-27` .. `R1-BAL`, `INPUT1-MB`, `RULESET1`, `REWARD1-B`, `BAL4/5` (`2026-10-18 .. 2026-11-10`) | All pre-`U3_GEAR_REWORK` Channel Duel, `R4-CLOSE` (`61.0%` feel / `92%` party), `R1..R4`, and classic Ashlands balance runs |
 | [BALANCE_REPORT_2026-10.md](../../../docs/archive/BALANCE_REPORT_2026-10.md) | `2026-10-17` initial runs | Earliest October 2026 baseline snapshot |
 
+## 2026-11-20 PR7-60 ESCAPE-PLAN1 the Crucible replayed by hand after the planner fixes (`FB-405`)
+
+Report only. The level-7 saves of `ENGINE-30` on the `PR7-60` build: a hand move may end on an open exit, a pick never
+drops another hero's, hand moves pass through friends, the hold pick suggests the nearest hero (Vesper here) and can
+change until round 1 is confirmed, and a hero's Withdraw spends no AP it lacks. Three tries of each fight, every
+escape picked by hand onto an exit tile except in the Auto tries. Logs and shots: project files `tools-lane/pr760/`.
+
+| Try | Fight | Plan | Result | Downs (round, cause) | Out |
+| --- | --- | --- | --- | --- | --- |
+| base 1 | `enc_evt_06` | `ENGINE-30`'s winning plan; Maren stops beside the exit in round 3 (AP 5 of 6 for the exit) | **won, round 6** | none (Vesper ends 25/222) | Maren r4, Hollis r4, Kaelen r6 |
+| base 2 | `enc_evt_06` | Kaelen holds and rushes the top lane through Vesper's tile | lost | Hollis r3 (Decapitation, 305); a Purifier walls Kaelen off the winch | none by then |
+| base 3 | `enc_evt_06` | Auto every round, Vesper the suggested holder | fled, round 5 | Maren r2, Hollis r4 (Decapitation, 348), Vesper r5 | Kaelen r2 |
+| Overlook 1 | `enc_evt_06_overlook` | `ENGINE-30`'s winning Overlook plan; Maren stops beside the exit in round 3 | lost | Kaelen r5 (Purifier 2 blocks the lower exits, then Nemeth 174 crit) | Maren r4, Hollis r4 |
+| Overlook 2 | `enc_evt_06_overlook` | Maren rests in rounds 1-2 to keep AP and leaves in round 3; Kaelen breaks through the gap | fled, round 6 | Vesper r6, Kaelen r6 (walking the top lane) | Maren r3, Hollis r4 |
+| Overlook 3 | `enc_evt_06_overlook` | Auto every round, Vesper the suggested holder | fled, round 4 | Maren r2, Vesper r4 | Kaelen r2, Hollis r4 |
+
+What changed against `ENGINE-30`:
+
+1. Hand exit picks work: every hand-planned escape left through the exit tile picked (seven escapes), with no Auto or
+   preset, and the refused picks named their reason (`AP 5 < 6`, `Claimed by Vesper's move`, `No path` onto a
+   friend's start tile). No pick dropped another hero's.
+2. Withdraw within AP costs a round. `ENGINE-30`'s round-3 auto Withdraw spent Maren to -1 AP to leave; now she stops
+   one tile short and leaves in round 4. In the base fight the plan still wins (round 6). In the Overlook the extra
+   round lets Purifier 2 follow her to the lower exits and wall Kaelen off; `ENGINE-30`'s Overlook win does not repeat.
+3. Auto still loses both fights: Kaelen, now free of the formation, walks out in round 2 and leaves the others to fall.
+4. The suggested holder (Vesper) is the one the wins used; the Change chip let the pick move from Kaelen to Vesper.
+
+Answer: **a careful player still wins the base fight at level 7 with no margin; the Overlook is lost on this build in
+three tries**, chiefly because a hero's Withdraw can no longer run AP into debt. `objective_count` 2 would most likely
+have turned Overlook 1 into a win (two out in round 4, Vesper still holding when Kaelen fell in round 5); Overlook 2 and
+3 lost the holder in the round the last hero fell, so the rule's verdict there is not certain; the base losses had at
+most one out. A lever for the Overlook alone is AP: Maren with 6 AP in round 3 leaves on time (Overlook 2 did, then
+lost Kaelen on the long walk).
+
 ## 2026-11-20 ENGINE-31 SIM-JITTER1 start jitter on and off (`FB-401`)
 
 Report only: no code, data or golden change. The feel sim already jitters start tiles by default (`jitter=on`: each

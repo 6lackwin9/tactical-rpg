@@ -107,6 +107,25 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 
 ## 2. Feedback Items (Append-Only)
 
+### FB-405: PR7-60 ESCAPE-PLAN1 Crucible rerun: the base fight is still won by hand, the Overlook now lost
+
+- **Status**: report only (tools lane), `develop`. `BALANCE_REPORT.md` "2026-11-20 PR7-60 ESCAPE-PLAN1 the Crucible
+  replayed by hand after the planner fixes"; logs and shots in project files `tools-lane/pr760/`.
+- **Spec**: `docs/READY.md` row `0k7` (`PR7-60`): "rerun your hand play of the Crucible, three tries of each fight".
+- **Findings**: base fight 1 win (round 6, no downs, every escape picked by hand onto an exit), 1 loss, 1 Auto flight;
+  Overlook 0 wins in 3 (`ENGINE-30`'s winning Overlook plan now loses Kaelen in round 5; a variant fled in round 6; Auto
+  fled in round 4). The hand exit picks and the no-drop rule worked in every try; the change that decides the Overlook
+  is (4): Maren's round-3 Withdraw used to run to -1 AP and leave, now she stops one tile short, leaves a round later,
+  and Purifier 2 follows her to the lower exits and walls Kaelen off.
+- **For the user** (with the Crucible item Design holds): keep (4) and accept a harder Overlook; or keep (4) and ease
+  the Overlook (one more AP for the founders there, or `objective_count` 2, which most likely saves Overlook 1); or
+  let Withdraw draw up to 1 AP of debt as before. Recommendation: keep (4) (hand moves and Withdraw follow one AP rule)
+  and weigh `objective_count` 2 for both fights, as Design planned.
+- **Scenario**: `games/emberwake/scenarios/crucible_exit_pick.json` (save `crucible_l7`): the suggested holder, the
+  pick changed through the holder chip, rounds 1-4 hand-planned, Maren and Hollis out through hand-picked exit tiles.
+  The battle screen's `hold` state now lists `out` (heroes out) and `suggested`.
+- **Docs delta**: none beyond `FB-403`.
+
 ### FB-403: PR7-60 ESCAPE-PLAN1 built; three goldens wait on the user behind a test-only switch
 
 - **Status**: built (tools lane), `develop`. The Crucible hand-play rerun the row asks for follows as its own item.
