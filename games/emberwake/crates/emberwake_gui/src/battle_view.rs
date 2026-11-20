@@ -726,7 +726,9 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
                 .filter(|(_, x)| x.unit == h)
                 .map(|(k, x)| {
                     let r = read_of(k);
-                    CardRow { skill: x.skill.clone(), name: x.name.clone(), start: x.start, impact: x.impact, units: vec![h], damage: x.damage, pips: vec![(x.pips, x.breaks, x.on_broken)], statuses: x.statuses.clone(), after_ko: x.after_ko, ko: false, sign: r.map_or(0, |r| r.parts.sign()), parts: r.map(|r| parts_lines(&r.parts)).unwrap_or_default(), riposte: r.and_then(|r| r.counter).map(|n| vec![(h, n)]).unwrap_or_default() }
+                    // HITCALC1 (PR7-45): a hit that fails at its impact says how after its name
+                    let name = x.fails.map_or_else(|| x.name.clone(), |f| format!("{} ({})", x.name, crate::intent_text::fail_words(Some(w), f)));
+                    CardRow { skill: x.skill.clone(), name, start: x.start, impact: x.impact, units: vec![h], damage: x.damage, pips: vec![(x.pips, x.breaks, x.on_broken)], statuses: x.statuses.clone(), after_ko: x.after_ko, ko: false, sign: r.map_or(0, |r| r.parts.sign()), parts: r.map(|r| parts_lines(&r.parts)).unwrap_or_default(), riposte: r.and_then(|r| r.counter).map(|n| vec![(h, n)]).unwrap_or_default() }
                 })
                 .collect(),
             None => {
@@ -817,7 +819,13 @@ pub fn planned_loss_view(w: &World, sched: &[ScheduledAction], u: UnitId) -> (i3
     let mut lines: Vec<NumLine> = Vec::new();
     for (k, (_, h)) in pl.hits.iter().enumerate() {
         let sign = parts.get(k).map_or(0, |p| p.sign());
-        lines.push(NumLine::new(format!("B{} {}: -{}", h.block, h.skill, h.damage), sign));
+        // HITCALC1 (PR7-45): a hit that fails at its impact says how
+        let amount = match h.fails {
+            None => format!("-{}", h.damage),
+            Some(f @ emberwake_battle::intent::HitFail::Intercepted { pct, .. }) if pct < 100 => format!("-{} ({})", h.damage, crate::intent_text::fail_words(Some(w), f)),
+            Some(f) => crate::intent_text::fail_words(Some(w), f),
+        };
+        lines.push(NumLine::new(format!("B{} {}: {amount}", h.block, h.skill), sign));
     }
     for t in &pl.ticks {
         let name = emberwake_rules::status::display_name(&t.status);

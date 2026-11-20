@@ -136,7 +136,7 @@ fn the_intent_rows_show_only_while_planning() {
 
 /// A card hit of `unit` landing in `block` for `damage` (pips, statuses as given).
 fn hit(unit: usize, block: i32, damage: i32, pips: i32, status: &str) -> CardHit {
-    CardHit { unit, skill: String::new(), name: String::new(), start: block, impact: block, damage, crit_damage: damage, crit_chance: 0.0, pips, breaks: false, on_broken: false, statuses: if status.is_empty() { Vec::new() } else { vec![status.to_string()] }, after_ko: false }
+    CardHit { unit, skill: String::new(), name: String::new(), start: block, impact: block, damage, crit_damage: damage, crit_chance: 0.0, pips, breaks: false, on_broken: false, statuses: if status.is_empty() { Vec::new() } else { vec![status.to_string()] }, after_ko: false, fails: None }
 }
 
 fn names() -> Vec<(usize, String)> {

@@ -591,6 +591,18 @@ pub fn flank_bonus_from(w: &World, a: UnitId, cell: V2, t: UnitId) -> bool {
     w.ruleset.has(ruleset::FLANK) && on(w) && a != t && w.has(a) && w.has(t) && facing(w, t) != ZERO && flank_at(w, a, cell, t)
 }
 
+/// HITCALC1 (PR7-45): `flank_bonus` with `a` anchored at `from` (where it stands at the impact; `flank_bonus` when it
+/// is its tile now): a big attacker strikes from the cell of its square nearest `t` (BIGUNIT1 BU11, as `is_flank`).
+/// The target's front and engagement are read as they are now. The one flank read of `command::hit_terms`.
+pub fn flank_bonus_at(w: &World, a: UnitId, from: V2, t: UnitId) -> bool {
+    if !w.ruleset.has(ruleset::FLANK) || !on(w) || a == t || !w.has(a) || !w.has(t) || facing(w, t) == ZERO || from == crate::grid::NO_CELL {
+        return false;
+    }
+    let size = w.size_of(a);
+    let at = if size > 1 { crate::grid::square_nearest(from, size, w.nearest_cell(t, from)) } else { from };
+    flank_at(w, a, at, t)
+}
+
 // ---- Tiles (MV5, MV6, PL4) -----------------------------------------------------------------------------------------
 
 /// Where a ranked move goes: nearer the target (an approach, an Engage) or away from it (a kite step, a retreat).

@@ -15,7 +15,7 @@ use crate::command;
 use crate::grid::{V2, GRID_H, GRID_W};
 use crate::path::{self, Cells};
 use crate::plan::{carries, Mode, Plan, PlanStep, SimState, Step};
-use crate::refusal::Reason;
+use crate::refusal::{Reason, TargetNeed};
 use crate::round_intent::{self, Aim, ManeuverKind, Opener, RoundIntent, RoundTarget};
 use crate::skill::{self, Kind, SkillId};
 use crate::world::{UnitId, World};
@@ -2618,15 +2618,16 @@ pub fn menu_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
         let (intent, kind) = row_meta(w, c, at, std::slice::from_ref(&p));
         let intent = want.or(intent);
         let (problem, reasons) = why.map(|o| (o.problem.unwrap_or_default(), o.reasons)).unwrap_or_else(|| {
-            let text = match want {
-            Some(RoundIntent::Field) => "Target a tile (or an enemy's tile) to use this".to_string(),
-            Some(RoundIntent::Assault) => "Target an enemy to use this".to_string(),
-            // INTENT2-U: an item's Stand cell is used on yourself, its Support cell on an ally
-            Some(RoundIntent::Guard) => "Target yourself to use this".to_string(),
-            Some(RoundIntent::Support) => "Target an ally to use this".to_string(),
-            _ => target_hint(w, c, &p),
+            // HITCALC1 (PR7-45): the kind of target it needs travels as a field (`Reason::NeedsTarget`), its words as before
+            let need = match want {
+                Some(RoundIntent::Field) => TargetNeed::Tile { or_foe_tile: true },
+                Some(RoundIntent::Assault) => TargetNeed::Enemy,
+                // INTENT2-U: an item's Stand cell is used on yourself, its Support cell on an ally
+                Some(RoundIntent::Guard) => TargetNeed::Yourself,
+                Some(RoundIntent::Support) => TargetNeed::Ally,
+                _ => target_hint(w, c, &p),
             };
-            (text.clone(), vec![Reason::Text(text)])
+            (Reason::NeedsTarget(need).to_string(), vec![Reason::NeedsTarget(need)])
         });
         PickOption { picks: vec![p], intent, kind, ap: 0, blocks: 0, problem: Some(problem), reasons, ap_short: None, drops: Vec::new(), at }
     };
@@ -2686,25 +2687,24 @@ pub fn menu_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
 }
 
 /// VISCLAR1-D (decision "Intent framework answers"): what a cell greyed for the kind of target needs.
-fn target_hint(w: &World, c: UnitId, p: &Pick) -> String {
-    let needs = match p {
+fn target_hint(w: &World, c: UnitId, p: &Pick) -> TargetNeed {
+    match p {
         Pick::Skill { skill, .. } => {
             let s = &w.cat.skills[*skill];
             match round_intent::skill_primary(w, s) {
-                i if i == RoundIntent::Field.id() => "a tile",
-                i if i == RoundIntent::Guard.id() || self_only(s) => "yourself",
-                i if i == RoundIntent::Support.id() && s.target_mode == "ALLY" => "an ally",
-                i if i == RoundIntent::Support.id() => "yourself or an ally",
-                _ if skill::is_area(s) => "an enemy or a tile",
-                _ => "an enemy",
+                i if i == RoundIntent::Field.id() => TargetNeed::Tile { or_foe_tile: false },
+                i if i == RoundIntent::Guard.id() || self_only(s) => TargetNeed::Yourself,
+                i if i == RoundIntent::Support.id() && s.target_mode == "ALLY" => TargetNeed::Ally,
+                i if i == RoundIntent::Support.id() => TargetNeed::YourselfOrAlly,
+                _ if skill::is_area(s) => TargetNeed::EnemyOrTile,
+                _ => TargetNeed::Enemy,
             }
         }
-        Pick::Item(id) if command::pouch_item(w, c, id).is_some_and(|i| command::item_area_on(w, i)) => "an enemy or a tile",
-        Pick::Item(id) if command::pouch_item(w, c, id).is_some_and(|i| i.aims_at_foes()) => "an enemy",
-        Pick::Item(_) => "yourself or an ally",
-        _ => "a tile",
-    };
-    format!("Target {needs} to use this")
+        Pick::Item(id) if command::pouch_item(w, c, id).is_some_and(|i| command::item_area_on(w, i)) => TargetNeed::EnemyOrTile,
+        Pick::Item(id) if command::pouch_item(w, c, id).is_some_and(|i| i.aims_at_foes()) => TargetNeed::Enemy,
+        Pick::Item(_) => TargetNeed::YourselfOrAlly,
+        _ => TargetNeed::Tile { or_foe_tile: false },
+    }
 }
 
 /// VISCLAR1-D: one tile the menu's Move can go to now, what it takes.

@@ -1282,7 +1282,9 @@ impl Character {
                 ui.p.text(150.0, y as f32, if self.deck.is_empty() { "Automatic deck" } else { "Custom deck" }, BODY, th().dim);
             } else {
                 // PR7-41 (PT-28): where this kind comes from, on the header
-                ui.p.text_fit(150.0, y as f32, &deck_source_hint(kind, level, key_level), BODY, 150.0, th().dim);
+                // HITCALC1 (PR7-45): the keystone's header names where the slotted one comes from (class, deck or graft)
+                let source = if kind == "keystone" { list.first().and_then(|k| progression::keystone_source(d, m, k)) } else { None };
+                ui.p.text_fit(150.0, y as f32, &deck_source_hint(kind, level, key_level, source), BODY, 150.0, th().dim);
             }
             y += 11;
             for i in 0..cap {
@@ -1776,11 +1778,16 @@ const FOLLOW_PER: usize = 5;
 const FOLLOW_TOGGLE: i32 = 11;
 
 /// PR7-41 (PT-28): the dim line on a Passives or Keystone bucket's header: where that kind comes from, and for the
-/// keystone the level it opens at (`progression::keystone_level`) for a hero at `level`.
-pub(crate) fn deck_source_hint(kind: &str, level: i32, key_level: i32) -> String {
-    match kind {
-        "keystone" if level < key_level => format!("Opens at level {key_level}"),
-        "keystone" => format!("Class keystone, from level {key_level}"),
+/// keystone the level it opens at (`progression::keystone_level`) for a hero at `level`. HITCALC1 (PR7-45, FB-338): the
+/// keystone line names the slotted keystone's `source` ("Deck keystone, from level 6", "Graft keystone"); an empty slot
+/// names the class keystone it will hold.
+pub(crate) fn deck_source_hint(kind: &str, level: i32, key_level: i32, source: Option<progression::KeystoneSource>) -> String {
+    use progression::KeystoneSource;
+    match (kind, source) {
+        ("keystone", Some(KeystoneSource::Graft)) => "Graft keystone".into(),
+        ("keystone", _) if level < key_level => format!("Opens at level {key_level}"),
+        ("keystone", Some(s)) => format!("{} keystone, from level {key_level}", s.label()),
+        ("keystone", None) => format!("Class keystone, from level {key_level}"),
         _ => "From the hero's deck and background".into(),
     }
 }
@@ -3132,9 +3139,14 @@ mod tests {
     /// at (`progression::keystone_level`); an empty keystone slot below that level says so on its card.
     #[test]
     fn the_deck_buckets_say_where_passives_and_the_keystone_come_from() {
-        assert_eq!(deck_source_hint("keystone", 3, 6), "Opens at level 6");
-        assert_eq!(deck_source_hint("keystone", 6, 6), "Class keystone, from level 6");
-        assert!(deck_source_hint("passive", 1, 6).contains("deck"));
+        use progression::KeystoneSource;
+        assert_eq!(deck_source_hint("keystone", 3, 6, None), "Opens at level 6");
+        assert_eq!(deck_source_hint("keystone", 6, 6, None), "Class keystone, from level 6");
+        // HITCALC1 (PR7-45): the header names the slotted keystone's source
+        assert_eq!(deck_source_hint("keystone", 6, 6, Some(KeystoneSource::Class)), "Class keystone, from level 6");
+        assert_eq!(deck_source_hint("keystone", 6, 6, Some(KeystoneSource::Deck)), "Deck keystone, from level 6");
+        assert_eq!(deck_source_hint("keystone", 3, 6, Some(KeystoneSource::Graft)), "Graft keystone", "a graft holds the slot below the level");
+        assert!(deck_source_hint("passive", 1, 6, None).contains("deck"));
         let (mut cx, member) = deck_cx(true);
         let m = cx.gs().party.member(&member).unwrap().clone();
         let (level, key_level) = (m.level(&cx.data) as i32, progression::keystone_level(&cx.data, &m));

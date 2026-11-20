@@ -221,13 +221,23 @@ fn the_forecast_names_the_landing_block_and_each_hit() {
     let h = w.allies[0];
     t.line.target = Some(h);
     t.line.blocks = (1, 2);
-    let hit = |block: i32, damage: i32, guarded: bool| HitOn { skill: "Thrust".into(), block, damage, guarded, nth: 1 };
+    let hit = |block: i32, damage: i32, guarded: bool| HitOn { skill: "Thrust".into(), block, damage, guarded, nth: 1, fails: None };
     let nth = |h: HitOn, nth: usize| HitOn { nth, ..h };
     assert_eq!(intent_text::forecast(&t, h, &[]).as_deref(), Some("Heads for you in B1-2"));
     assert_eq!(intent_text::forecast(&t, h, &[hit(4, 23, true)]).as_deref(), Some("Targets you in B4: Thrust, about 23 (guarded)"));
     assert_eq!(intent_text::forecast(&t, h, &[hit(3, 22, false), hit(5, 22, false)]).as_deref(), Some("Targets you in B3, B5: Thrust, about 22 a hit"));
     assert_eq!(intent_text::forecast(&t, h, &[hit(3, 22, false), hit(5, 30, true)]).as_deref(), Some("Targets you in B3, B5: B3 Thrust about 22; B5 Thrust about 30 (guarded)"));
     assert_eq!(intent_text::forecast(&t, w.enemies[0], &[]), None, "not the record's target, no hit");
+    // HITCALC1 (PR7-45): a hit that fails at its impact is shown as such, not as a number
+    use emberwake_battle::intent::HitFail;
+    let fails = |block: i32, f: HitFail| HitOn { damage: 0, fails: Some(f), ..hit(block, 0, false) };
+    assert_eq!(intent_text::forecast(&t, h, &[fails(4, HitFail::Dodged)]).as_deref(), Some("Targets you in B4: Thrust, dodged"));
+    assert_eq!(intent_text::forecast(&t, h, &[hit(3, 22, false), fails(5, HitFail::OutOfReach)]).as_deref(), Some("Targets you in B3, B5: B3 Thrust about 22; B5 Thrust out of reach"));
+    assert_eq!(intent_text::forecast(&t, h, &[fails(4, HitFail::FlankProtected)]).as_deref(), Some("Targets you in B4: Thrust, misses (flank protected)"));
+    let ally = w.allies.iter().copied().find(|&a| a != h).unwrap_or(h);
+    assert_eq!(intent_text::hit_amount(&fails(4, HitFail::Intercepted { by: ally, pct: 100 }), Some(w)), format!("taken by {}", w.units[ally].name));
+    let part = HitOn { damage: 14, ..fails(4, HitFail::Intercepted { by: ally, pct: 40 }) };
+    assert_eq!(intent_text::hit_amount(&part, None), "about 14 (40% taken by an ally)");
     t.revealed = false;
     assert_eq!(intent_text::forecast_hits(&t, h, vec![hit(3, 22, false), nth(hit(5, 22, false), 2)]), vec![hit(3, 22, false)], "an unrevealed plan names the blow its move leads to");
     // review: action 2 hits someone else, action 3 hits the hero: the hidden later action stays hidden
@@ -245,4 +255,40 @@ fn the_forecast_names_the_landing_block_and_each_hit() {
             assert!(line.contains(&format!("B{}", x.block)) && x.block >= r.line.blocks.0, "{line} {hits:?}");
         }
     }
+}
+
+/// HITCALC1 (PR7-45, FB-336): once the round is over an enemy's hover card reads this round's line ("This round:
+/// <first action>") and drops the forecast of its landed hits; while planning the same tell reads "Intent:" with it.
+#[test]
+fn the_round_over_hover_reads_this_rounds_line() {
+    use crate::battle::tips::ROUND_OVER_HEAD;
+    use emberwake_battle::session::Phase;
+    let (cx, _g, mut b) = arena(Some(TIMELINE), false);
+    let h = b.selected.unwrap();
+    let tells = s(&b).enemy_intents();
+    let planned: Vec<(usize, String)> = tells.iter().map(|r| (r.unit, intent_text::first_line(&s(&b).w, &r.line))).collect();
+    for (e, line) in &planned {
+        let tip = unit_tip(s(&b), *e, Some(h), &tells, &s(&b).round_intents(), &[]);
+        assert!(tip.iter().any(|t| t.0 == format!("Intent: {line}")), "planning: {tip:?}");
+    }
+    let r = b.send(&cx, json!({"cmd": "confirm"}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    for _ in 0..64 {
+        if s(&b).phase == Phase::Replay || s(&b).combat_over {
+            break;
+        }
+        b.send(&cx, json!({"cmd": "step"}));
+    }
+    let sess = s(&b);
+    assert!(sess.phase == Phase::Replay && !sess.combat_over, "the round is over: {:?}", sess.phase);
+    let rounds = sess.round_intents();
+    let mut seen = 0;
+    for r in rounds.iter().filter(|r| sess.w.enemies.contains(&r.unit) && sess.w.units[r.unit].is_active()) {
+        let tip = unit_tip(sess, r.unit, Some(h), &sess.enemy_intents(), &rounds, &[]);
+        let head = format!("{ROUND_OVER_HEAD} {}", intent_text::first_line(&sess.w, &r.line));
+        assert!(tip.iter().any(|t| t.0 == head), "{head}: {tip:?}");
+        assert!(tip.iter().all(|t| !t.0.starts_with("Intent:") && !t.0.starts_with("Targets you") && !t.0.starts_with("Heads for you")), "{tip:?}");
+        seen += 1;
+    }
+    assert!(seen > 0, "an enemy stands at the round's end");
 }
