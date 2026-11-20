@@ -19,7 +19,7 @@ use crate::screens::Cx;
 use emberwake_battle::intent::Intent;
 use aegis_ui::painter::Painter;
 use aegis_ui::ui::{Gfx, Tip, Ui, BODY, H, RADIUS, SMALL, TITLE, W};
-use emberwake_battle::grid::{GRID_H, GRID_W};
+use emberwake_battle::grid::{V2, GRID_H, GRID_W};
 use emberwake_battle::round_intent::{self as ri, RoundIntent};
 use emberwake_battle::round_intent_plan as rip;
 use emberwake_battle::session::{Phase, Session};
@@ -109,12 +109,18 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     if let Some(pop) = g.popup.as_mut() {
         // VISCLAR1-D: the skill menu beside its tile, in this frame's view of the board
         let geo = Geom::new(View::of_setting(&cx.settings.v["battle_view"]), &tuning);
-        let tile = pop.anchor.map(|c| geo.cell_rect(c));
+        // PR7-59: on the board as the last frame shifted it under the boss bar
+        let lift = g.board_lift;
+        let lifted = |c: V2| {
+            let r = geo.cell_rect(c);
+            Rect::new(r.x, r.y + lift, r.w, r.h)
+        };
+        let tile = pop.anchor.map(lifted);
         // PR7-54 (FB-364 (1), contract 7): clear of the docked card or boss bar and the foe panel (last frame's
         // panels) and the menu's target tile
         let mut keep: Vec<Rect> = g.panels.iter().filter(|p| p.0 == "intel" || p.0 == "hostiles").map(|p| p.1).collect();
         if let (Some(s), Some((_, emberwake_battle::round_intent::RoundTarget::Unit(t)))) = (g.host.session.as_ref(), pop.menu) {
-            keep.extend(s.w.grid.pos(t).filter(|c| Some(*c) != pop.anchor).map(|c| geo.cell_rect(c)));
+            keep.extend(s.w.grid.pos(t).filter(|c| Some(*c) != pop.anchor).map(lifted));
         }
         pop.fit_grid(&mut ui.p, menu_row, tile, Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4), &keep, MENU_LEFT);
     }
@@ -1011,19 +1017,29 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // own flag, an enemy's through its round record while the tells show
     let channel_units: Vec<usize> = (0..w.units.len()).filter(|&i| if w.allies.contains(&i) { emberwake_battle::channel::is_channel(w, i) } else { show_tells && rounds.iter().any(|r| r.unit == i && r.channel) }).collect();
     g.channel_units = channel_units.clone();
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some() || talk_view.is_some(), anim_ms: g.clock.ms, sel, talker, planning, tells: &tells, show_tells, card_hover, inspect: pinned, focus: &focus, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref(), channel: &channel_units };
+    // BOSSUI1 BU11, BU12 (PR7-59): the Stage board shifts down until the boss bar covers none of its units and
+    // targetable tiles; its passes draw shifted and its widgets (tiles, units) are moved with them
+    let lift = if model.boss.is_some() && !g.timeline_view_open() { super::boss_bar::board_lift(w, &Geom::new(view, &tuning)) } else { 0 };
+    g.board_lift = lift;
+    let widgets_from = ui.widgets.len();
+    ui.mouse.1 -= lift;
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some() || talk_view.is_some(), anim_ms: g.clock.ms, sel, talker, planning, tells: &tells, show_tells, card_hover, inspect: pinned, focus: &focus, fx: &g.fx, shift: (shift.0, shift.1 + lift), sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref(), channel: &channel_units };
     let (board_hover, flat_hover) = match view {
         View::Stage => (draw_stage(board, &stage_set, &mut ui, cx, &tuning, now), None),
         View::Flat => (None, draw_flat(board, &mut ui, cx, &tuning, now)),
     };
+    ui.mouse.1 += lift;
+    for wd in &mut ui.widgets[widgets_from..] {
+        wd.rect.y += lift;
+    }
     g.focus_shown = focus_set(w, sel, board_hover.or(flat_hover).or(card_hover), pinned);
     // INPUT1 PB1: the impact tracers above the tokens (group `tracers`), shaken with the board, inside its panel
     if aids && layers.tracers && !g.tracers.is_empty() {
         let geo = Geom::new(view, &tuning);
         ui.p.clip(Some(Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4)));
-        ui.p.shift(shift.0, shift.1);
+        ui.p.shift(shift.0, shift.1 + lift);
         draw_tracers(&mut ui.p, &g.tracers, &geo, g.clock.now(), cx.settings.reduce_motion());
-        ui.p.shift(-shift.0, -shift.1);
+        ui.p.shift(-shift.0, -shift.1 - lift);
         ui.p.clip(None);
     }
     // ENCOUNTER2 H1: the hold pick over the board while round 1 waits for it
@@ -1125,7 +1141,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         // target, then top left
         let mut r = Rect::new(BOARD.x + BOARD.w - 3 - super::card::CARD_W, card_top, super::card::CARD_W, h.min(BOARD.h - 6));
         let geo = Geom::new(View::of_setting(&cx.settings.v["battle_view"]), &tuning);
-        let keep: Vec<Rect> = card_keep_clear(w, sel).into_iter().map(|c| geo.cell_rect(c)).collect();
+        let keep: Vec<Rect> = card_keep_clear(w, sel).into_iter().map(|c| geo.cell_rect(c)).map(|r| Rect::new(r.x, r.y + lift, r.w, r.h)).collect();
         if keep.iter().any(|k| super::skill_menu::overlaps(r, *k)) {
             r.x = BOARD.x + 3;
         }

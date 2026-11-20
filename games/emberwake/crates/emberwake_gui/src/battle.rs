@@ -301,6 +301,9 @@ pub struct BattleScreen {
     /// The panels of the last frame by name (UIGALLERY1: the UI Gallery shows each one on its own), named from
     /// `PANELS`.
     pub panels: Vec<(&'static str, Rect)>,
+    /// BOSSUI1 BU11, BU12 (PR7-59): how far the last frame shifted the Stage board down to keep the boss bar off its
+    /// units and targetable tiles (`boss_bar::board_lift`; 0 without a bar); the board's widgets were drawn shifted.
+    pub board_lift: i32,
     /// (requests, checkpoints) of the session at its last save.
     saved: (usize, usize),
     /// Playtest trail events of the battle (plan edits, confirms, the end), handed to the hub on the next tick.
@@ -499,6 +502,7 @@ impl BattleScreen {
             log_seen: 0,
             slot: None,
             panels: Vec::new(),
+            board_lift: 0,
             saved: (0, 0),
             parked: Vec::new(),
             trail_out: Vec::new(),

@@ -420,7 +420,8 @@ pub const BOSS_PIPS_MAX: i32 = 10;
 #[derive(Debug, Clone, PartialEq)]
 pub struct BossBar {
     pub unit: UnitId,
-    /// The title (the phase's name, else the unit's full name) and the character's title ("" none).
+    /// The title (the unit's full name; BU3b, PR7-59: "<name>, <form>" when the phase sets a `form`) and the
+    /// character's title ("" none, or under a form).
     pub name: String,
     pub title: String,
     pub marks: Vec<PhaseMark>,
@@ -778,8 +779,10 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
         let planned_statuses: Vec<String> = rows.party.total.statuses.clone();
         m.boss = Some(BossBar {
             unit: b,
-            name: if pb.name.is_empty() { full } else { pb.name.clone() },
-            title: if pb.name.is_empty() { title } else { String::new() },
+            // BU3b (PR7-59): the unit's name and title, never the phase's name (the phase banner shows it); a phase's
+            // `form` takes the title's place ("<name>, <form>")
+            name: if pb.form.is_empty() { full } else { format!("{full}, {}", pb.form) },
+            title: if pb.form.is_empty() { title } else { String::new() },
             marks: pb.marks.clone(),
             current: pb.current,
             span_left,

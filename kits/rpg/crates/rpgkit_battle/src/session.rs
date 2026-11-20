@@ -258,8 +258,11 @@ pub struct PhaseBar {
     pub marks: Vec<PhaseMark>,
     /// The current phase (0-based).
     pub current: usize,
-    /// The current phase's name ("" = none: the unit's name and title).
+    /// The current phase's name ("" = none). BU3b (PR7-59): the phase banner shows it, never the bar.
     pub name: String,
+    /// BU3b (PR7-59): the current phase's `form` ("" = none: the bar shows the unit's name and title; else the unit's
+    /// name and the form).
+    pub form: String,
     /// The current phase's HP span: it starts at `top` and ends at `floor` (the next `hp_below` threshold on the
     /// unit; 0 for the last phase).
     pub top: i32,
@@ -2142,7 +2145,7 @@ impl Session {
         &self.breaks
     }
 
-    /// BOSSUI1 BU1-BU3 (PR7-54): the boss bar's phase read, None without a boss on the field (an active enemy of the
+    /// BOSSUI1 BU1-BU3 (PR7-54; BU3b PR7-59: the current phase's `form`): the boss bar's phase read, None without a boss on the field (an active enemy of the
     /// `boss` tier, placed). The bar follows the boss the next `hp_below` phase names when it is on the field, else the
     /// boss that came last (a phase's new boss unit). The phases are the first plus one per `hp_below` phase (round
     /// and arrival phases are cues, not phases of the bar); a fired one is beaten. The span runs from the threshold of
@@ -2161,13 +2164,14 @@ impl Session {
         let current = fired.len().min(total - 1);
         let marks = (0..total).map(|k| if k < current { PhaseMark::Beaten } else if k == current { PhaseMark::Current } else { PhaseMark::Coming }).collect();
         let name = fired.last().map_or_else(String::new, |p| p.name.clone());
+        let form = fired.last().map_or_else(String::new, |p| p.form.trim().to_string());
         let threshold = |p: &encounter::PhaseDef| value::int(&p.trigger, "pct", 0) * u.max_hp / 100;
         let on_unit = |p: &&&encounter::PhaseDef| self.first_of_ref(&value::string(&p.trigger, "unit", "")) == Some(unit);
         let top = fired.iter().filter(on_unit).map(|p| threshold(p)).min().unwrap_or(u.max_hp).clamp(0, u.max_hp);
         let next: Option<i32> = hp_phases.iter().filter(|p| open(p) && on_unit(p)).map(|p| threshold(p)).filter(|t| *t >= 1 && *t < top).max();
         let floor = next.unwrap_or(0);
         let broken = hp_phases.iter().any(|p| self.phases.due.contains(&p.id) && on_unit(&p)) || (floor > 0 && u.hp <= floor);
-        Some(PhaseBar { unit, marks, current, name, top, floor, broken })
+        Some(PhaseBar { unit, marks, current, name, form, top, floor, broken })
     }
 
     /// CatalogEncounter.on_block_start: a due phase fires first, then one morale break line, then the arrival (the

@@ -35,6 +35,7 @@ fn session() -> Session {
         json!({"id": "stunned", "name": "Stunned", "kind": "STATUS", "level": 1, "blocks": 1, "system": true}),
         json!({"id": "rest", "name": "Rest", "kind": "REST", "level": 1, "blocks": 1, "system": true, "basic": true, "recover_ap": 2}),
         json!({"id": "c_hit", "name": "Hit", "kind": "ATTACK", "level": 1, "blocks": 2, "ap_cost": 2, "power_mult": 1.0, "target_mode": "ENEMY"}),
+        json!({"id": "c_arc", "name": "Arc", "kind": "ATTACK", "level": 1, "blocks": 2, "ap_cost": 2, "power_mult": 1.0, "area": "ARC", "affects": "enemies", "target_mode": "ENEMY"}),
         json!({"id": "c_mend", "name": "Mend", "kind": "SUPPORT", "round_intent": "support", "level": 1, "blocks": 2, "ap_cost": 2, "heal_base": 30, "heal_mult": 0.3, "target_mode": "ALLY_OR_SELF"}),
     ];
     let unit = |id: &str, side: &str, speed: i32| json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 500, "power": 100, "armor": 10, "speed": speed, "attack_range": 1, "skill_cap": 5});
@@ -202,7 +203,58 @@ fn a_riposte_draws_a_counter_from_a_melee_hit_only() {
     // a ranged attacker draws none
     s.w.units[HERO].attack_range = 3;
     let a = sched.iter().find(|a| a.unit == HERO).expect("the hit");
-    assert_eq!(sv::counter_on(&s.w, a, FOE), None);
+    assert_eq!(sv::counter_on(&s.w, &sched, a, FOE), None);
+}
+
+/// FB-370: the counter follows the riposte rule (`command::riposte_answers_at`), not the skill kind: a melee area
+/// skill's hit draws it; a ranged hit, a flank (rule `flank`) and a hit from a tile not adjacent draw none; an attacker
+/// draws it once per round however many hits it plans.
+#[test]
+fn the_counter_follows_the_riposte_rule_not_the_skill_kind() {
+    use rpgkit_battle::command::CmdKind;
+    use rpgkit_battle::round_intent::{self, RoundIntent, RoundTarget};
+    use rpgkit_rules::ruleset::{FLANK, ROUND_INTENT};
+    let mut s = session();
+    give(&mut s.w, FOE, "riposte", 0);
+    let want = sv::counter_return(&s.w, FOE, HERO).expect("the riposte's return");
+    // a melee area skill (an Attack with an ARC area) draws it
+    let mut plan = Plan::new();
+    assert_eq!(plan.add_step(&s.w, HERO, PlanStep::engage(sid(&s.w, "c_arc"), FOE), true), "", "the hero sweeps the foe");
+    let sched = intent::planned_schedule(&s.w, &[], &plan);
+    let a = sched.iter().find(|a| a.unit == HERO && matches!(a.command.kind, CmdKind::Area { .. })).expect("an area hit");
+    assert!(intent::hit_on(&s.w, &sched, a, FOE).is_some(), "the arc strikes the foe");
+    assert_eq!(sv::counter_on(&s.w, &sched, a, FOE), Some(want), "a melee area hit draws the counter");
+    assert_eq!(sv::loss_reads(&s.w, &sched, FOE)[0].counter, Some(want));
+    // once per attacker: two hits in the round, the counter on the first only
+    let mut plan = Plan::new();
+    for _ in 0..2 {
+        assert_eq!(plan.add_step(&s.w, HERO, PlanStep::engage(sid(&s.w, "c_hit"), FOE), true), "", "the hero hits twice");
+    }
+    let sched = intent::planned_schedule(&s.w, &[], &plan);
+    let reads = sv::loss_reads(&s.w, &sched, FOE);
+    assert_eq!(reads.len(), 2, "two hits");
+    assert_eq!(reads.iter().map(|r| r.counter).collect::<Vec<_>>(), vec![Some(want), None], "answered once");
+    // ranged: none
+    let sched = hit_round(&s.w);
+    let a = sched.iter().find(|a| a.unit == HERO).expect("the hit").clone();
+    let mut ranged = s.w.clone();
+    ranged.units[HERO].attack_range = 3;
+    assert_eq!(sv::counter_on(&ranged, &sched, &a, FOE), None, "a ranged hit");
+    // not adjacent at the impact (the foe two tiles off): none
+    let mut far = s.w.clone();
+    far.grid.positions[FOE] = Some(V2::new(9, 4));
+    assert_eq!(sv::counter_on(&far, &sched, &a, FOE), None, "not adjacent");
+    // a flank (the foe engaged with the ally on its far side, the hero behind it): none under the rule, the counter
+    // without it
+    for (rules, draws) in [(vec![ROUND_INTENT, FLANK], false), (vec![ROUND_INTENT], true)] {
+        let mut w = s.w.clone();
+        w.ruleset = Ruleset::from_row(json!({"id": TIMELINE, "name": "Timeline", "rules": rules}).as_object().unwrap());
+        w.grid.positions[ALLY] = Some(V2::new(8, 4));
+        round_intent::set_intent(&mut w, FOE, RoundIntent::Assault).expect("intent");
+        round_intent::set_target(&mut w, FOE, RoundTarget::Unit(ALLY)).expect("target");
+        assert_eq!(round_intent::flank_bonus_from(&w, HERO, V2::new(6, 4), FOE), !draws, "{rules:?}: the flank");
+        assert_eq!(sv::counter_on(&w, &sched, &a, FOE).is_some(), draws, "{rules:?}");
+    }
 }
 
 #[test]

@@ -371,6 +371,9 @@ impl PartyFate {
 pub struct PhaseDef {
     pub id: String,
     pub name: String,
+    /// BOSSUI1 BU3b (PR7-59): the boss's form or state in this phase ("Unbound"; "" = none), shown on the boss bar after
+    /// the unit's name in place of its title. No rule reads it.
+    pub form: String,
     /// kind, unit, pct, or_round | round, block | round, block (arrival) | unit, count (downed) | unit (broken)
     pub trigger: Obj,
     /// Parsed effects with their defaults.
@@ -618,7 +621,7 @@ pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
                     out
                 })
                 .collect();
-            PhaseDef { id: value::string(src, "id", ""), name: value::string(src, "name", ""), trigger, effects }
+            PhaseDef { id: value::string(src, "id", ""), name: value::string(src, "name", ""), form: value::string(src, "form", ""), trigger, effects }
         })
         .collect()
 }
