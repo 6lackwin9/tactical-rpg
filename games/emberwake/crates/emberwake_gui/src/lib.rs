@@ -63,6 +63,7 @@ mod siege_view;
 mod stage;
 mod story;
 mod talk;
+mod talk_view;
 mod timeline_view;
 mod tokens;
 mod transitions;
