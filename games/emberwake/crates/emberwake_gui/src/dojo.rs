@@ -11,7 +11,7 @@ use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_ui::window::{Desk, Frac, Layout, Win};
 use emberwake_world::party_ops::{DeckTerms, DECK_KINDS};
-use emberwake_battle::dojo::{stance_label, DojoSession, Fx, PlanSetup, PlanView, Tone, SLOTS};
+use emberwake_battle::dojo::{stance_label, DojoSession, Entry, Fx, PlanSetup, PlanView, Tone, SLOTS};
 use emberwake_battle::grid::{V2, GRID_H, GRID_W};
 use emberwake_battle::round_intent::{ManeuverKind, RoundIntent};
 use emberwake_data::Deck;
@@ -24,8 +24,8 @@ use aegis_core::clock::{Duration, Instant};
 const SCREEN_ID: &str = "gear_dojo";
 /// The desk under the two toolbar rows.
 const AREA: Rect = Rect::new(0, 30, W, 330);
-const LOG_FILTERS: [&str; 5] = ["ALL", "ATTACK", "DEFEND", "BUFF", "EVENT"];
-const STASH_FILTERS: [(&str, &str); 5] = [("all", "All"), ("weapon", "Weapons"), ("armor", "Armor"), ("accessory", "Acc."), ("consumable", "Items")];
+pub(crate) const LOG_FILTERS: [&str; 5] = ["ALL", "ATTACK", "DEFEND", "BUFF", "EVENT"];
+pub(crate) const STASH_FILTERS: [(&str, &str); 5] = [("all", "All"), ("weapon", "Weapons"), ("armor", "Armor"), ("accessory", "Acc."), ("consumable", "Items")];
 const BENCH: [usize; 3] = [10, 100, 1000];
 const FX_LIFE: Duration = Duration::from_millis(1400);
 
@@ -224,7 +224,7 @@ impl Dojo {
         self.plan = self.plan_now();
     }
 
-    fn act(&mut self, cx: &mut Cx, a: DAct) {
+    pub(crate) fn act(&mut self, cx: &mut Cx, a: DAct) {
         self.rev += 1;
         let s = &mut self.s;
         match a {
@@ -350,7 +350,101 @@ impl Dojo {
         }
     }
 
-    fn stash_rows(&self) -> Vec<(String, usize)> {
+    /// ENGINE-25: the session, the filters and the picked log entry, as the dojo's view reads them.
+    pub(crate) fn session(&self) -> &DojoSession {
+        &self.s
+    }
+
+    pub(crate) fn filters(&self) -> (&'static str, &'static str) {
+        (self.stash_filter, self.log_filter)
+    }
+
+    pub(crate) fn picked(&self) -> Option<usize> {
+        self.picked
+    }
+
+    /// The hero's line on its party card ("HP a/b  AP c/d  Stance").
+    pub(crate) fn hero_line(h: &emberwake_rules::Unit) -> String {
+        format!("HP {}/{}  AP {}/{}  {}", h.hp, h.max_hp, h.ap, h.max_ap, stance_label(h.stance))
+    }
+
+    /// The carry line over the carry bar, and whether it is overloaded (`foe`).
+    pub(crate) fn carry_line(&self) -> (String, bool) {
+        let c = self.s.carry_now();
+        (format!("Carry {:.0} / {}  {}", c.load, c.capacity, c.tier.label()), c.overload_penalty > 0)
+    }
+
+    /// A gear slot's label ("main hand: Name", "... empty") and a pouch slot's ("1. Name", "1. Empty").
+    pub(crate) fn slot_label(key: &str, worn: Option<&emberwake_data::ItemDef>) -> String {
+        format!("{}: {}", key.replace('_', " "), worn.map(|w| w.name.clone()).unwrap_or_else(|| "empty".into()))
+    }
+
+    pub(crate) fn pouch_label(i: usize, item: Option<&emberwake_data::ItemDef>) -> String {
+        format!("{}. {}", i + 1, item.map(|i| i.name.clone()).unwrap_or_else(|| "Empty".into()))
+    }
+
+    /// A stash row's hover line (the item's numbers, its wear lock or wield penalty, the click).
+    pub(crate) fn stash_help(&self, item: &emberwake_data::ItemDef) -> String {
+        // PR5-57 (FB-267(2)): show hard lock or stat-deficit wield note in stash tooltip
+        let lock = if item.is_equipment() { emberwake_rules::gear::wear_lock(&self.s.hero().stats, item).map(|l| format!(" {}", l.text(&self.s.hero().name, &item.name))) } else { None };
+        let pen = emberwake_rules::gear::Equipment::new(item).wield_penalty(&self.s.hero().stats);
+        let pen_note = if lock.is_none() && item.is_equipment() && pen.deficit > 0 { format!(" Wield penalty: x{:.2} power and armour.", pen.factor()) } else { String::new() };
+        let note = lock.unwrap_or(pen_note);
+        format!("{}{note} Click to wear it in its first free slot (or load the pouch), or drag it.", item_line(item))
+    }
+
+    /// Whether a stash item can be worn or pouched (a dim row otherwise).
+    pub(crate) fn usable(item: &emberwake_data::ItemDef) -> bool {
+        item.item_type == "CONSUMABLE" || SLOTS.iter().any(|(k, _)| item_fits_slot(item, k))
+    }
+
+    /// The log entries the filter shows, and an entry's two lines ("#n title" and "detail  [outcome] value").
+    pub(crate) fn log_entries(&self) -> Vec<&Entry> {
+        self.s.log.iter().filter(|e| self.log_filter == "ALL" || e.category == self.log_filter).collect()
+    }
+
+    pub(crate) fn log_lines(e: &Entry) -> (String, String) {
+        (format!("#{} {}{}", e.n, if e.by_dummy { "< " } else { "" }, e.title), format!("{}  [{}] {}", e.detail, e.outcome, if e.value != 0 { e.value.to_string() } else { String::new() }))
+    }
+
+    /// The picked entry's breakdown (its title and detail when it has none).
+    pub(crate) fn breakdown(e: &Entry) -> String {
+        if e.breakdown.is_empty() {
+            format!("{}: {}", e.title, e.detail)
+        } else {
+            e.breakdown.clone()
+        }
+    }
+
+    /// The poise bar of the hero (0) or the dummy (1) under rule poise: (now, full).
+    fn poise_bar(&self, i: usize) -> Option<(i32, i32)> {
+        if !self.s.poise_on() {
+            return None;
+        }
+        let p = if i == 0 { self.s.poise() } else { self.s.dummy_poise };
+        // S2.2-S3 (FB-71): the bar's own pips under poise_mode pips
+        let n = &self.s.ruleset.numbers;
+        Some(if emberwake_battle::poise::pips_mode(n) { (p.pips, n.poise_pips.max(1)) } else { (p.value, p.max) })
+    }
+
+    /// The stage's second line under the HP of the hero (0: AP and stance) or the dummy (1: stance and guard), with the
+    /// poise (or pips) under rule poise.
+    pub(crate) fn stage_line(&self, i: usize) -> String {
+        let u = if i == 0 { self.s.hero() } else { &self.s.dummy };
+        if !self.s.poise_on() {
+            return if i == 0 { format!("AP {}/{}  {}", u.ap, u.max_ap, stance_label(u.stance)) } else { format!("{}  guard {:.0}%", stance_label(u.stance), u.guard * 100.0) };
+        }
+        let p = if i == 0 { self.s.poise() } else { self.s.dummy_poise };
+        let word = if emberwake_battle::poise::pips_mode(&self.s.ruleset.numbers) { "pips" } else { "poise" };
+        let (now, full) = self.poise_bar(i).unwrap_or_default();
+        let mut line = format!("{}  {word} {now}/{full}{}", if i == 0 { format!("AP {}/{}", u.ap, u.max_ap) } else { format!("guard {:.0}%", u.guard * 100.0) }, if p.broken { " BROKEN" } else { "" });
+        if i == 1 && self.s.dummy_windup {
+            line += "  windup";
+        }
+        line
+    }
+
+    pub(crate) fn stash_rows(&self) -> Vec<(String, usize)> {
         let mut rows: Vec<(String, usize)> = Vec::new();
         for id in &self.s.stash {
             let Some(item) = self.s.cat.items.get(id) else { continue };
@@ -378,12 +472,13 @@ impl Dojo {
     fn draw_party(&self, ui: &mut Ui<DAct>, b: Rect) {
         let mut y = b.y + 2;
         for (i, h) in self.s.heroes.iter().enumerate() {
-            let lines = [(h.name.clone(), if i == self.s.active { th().gold } else { th().text }), (format!("HP {}/{}  AP {}/{}  {}", h.hp, h.max_hp, h.ap, h.max_ap, stance_label(h.stance)), th().dim)];
+            let lines = [(h.name.clone(), if i == self.s.active { th().gold } else { th().text }), (Self::hero_line(h), th().dim)];
             ui.card(&format!("dojo.hero.{i}"), Rect::new(b.x + 2, y, b.w - 4, 24), &lines, Some(DAct::Hero(i)), i == self.s.active, true, tip(&h.name, "Make this hero the active one."));
             y += 27;
         }
         let c = self.s.carry_now();
-        ui.p.text(b.x as f32 + 3.0, y as f32 + 2.0, &format!("Carry {:.0} / {}  {}", c.load, c.capacity, c.tier.label()), SMALL, if c.overload_penalty > 0 { th().foe } else { th().text });
+        let (carry, over) = self.carry_line();
+        ui.p.text(b.x as f32 + 3.0, y as f32 + 2.0, &carry, SMALL, if over { th().foe } else { th().text });
         let bar = Rect::new(b.x + 3, y + 11, b.w - 6, 4);
         let col = match c.tier {
             emberwake_rules::carry::Tier::Light => th().good,
@@ -492,7 +587,7 @@ impl Dojo {
         let mut y = b.y + 2;
         for (key, slot) in SLOTS {
             let worn = inv.get(slot).map(|e| e.item.clone());
-            let label = format!("{}: {}", key.replace('_', " "), worn.as_ref().map(|w| w.name.clone()).unwrap_or_else(|| "empty".into()));
+            let label = Self::slot_label(key, worn.as_ref());
             // While a stash item is dragged, the slots it fits are named in gold.
             let fits = dragging.as_deref().and_then(|d| d.strip_prefix("stash.")).is_some_and(|id| self.s.eligible(key).iter().any(|e| e == id));
             // R1-BAL (FB-80): the worn item's wield penalty (untrained or a stat deficit), as on the party screen
@@ -516,7 +611,7 @@ impl Dojo {
         y += 9;
         for i in 0..inv.max_pouch_slots {
             let item = inv.pouch.get(i);
-            let label = format!("{}. {}", i + 1, item.map(|i| i.name.clone()).unwrap_or_else(|| "Empty".into()));
+            let label = Self::pouch_label(i, item);
             ui.row(&format!("dojo.pouch.{i}"), Rect::new(b.x + 1, y, b.w - 26, 12), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| DAct::Pouch(i)), false, tip(&label, "Click to use it on the dummy or hero; drag it to the stash to unload."));
             if item.is_some() {
                 ui.draggable(format!("pouch.{i}"));
@@ -547,14 +642,9 @@ impl Dojo {
         let off = ui.scroll_begin("dojo.stash.rows", view, rows.len() as i32 * 12 + 2);
         for (i, (id, n)) in rows.iter().enumerate() {
             let Some(item) = self.s.cat.items.get(id) else { continue };
-            let usable = item.item_type == "CONSUMABLE" || SLOTS.iter().any(|(k, _)| item_fits_slot(item, k));
+            let usable = Self::usable(item);
             let r = Rect::new(view.x + 1, view.y + 1 - off + i as i32 * 12, view.w - 5, 12);
-            // PR5-57 (FB-267(2)): show hard lock or stat-deficit wield note in stash tooltip
-            let lock = if item.is_equipment() { emberwake_rules::gear::wear_lock(&self.s.hero().stats, item).map(|l| format!(" {}", l.text(&self.s.hero().name, &item.name))) } else { None };
-            let pen = emberwake_rules::gear::Equipment::new(item).wield_penalty(&self.s.hero().stats);
-            let pen_note = if lock.is_none() && item.is_equipment() && pen.deficit > 0 { format!(" Wield penalty: x{:.2} power and armour.", pen.factor()) } else { String::new() };
-            let note = lock.unwrap_or(pen_note);
-            let help = format!("{}{note} Click to wear it in its first free slot (or load the pouch), or drag it.", item_line(item));
+            let help = self.stash_help(item);
             ui.row(&format!("dojo.stash.{id}"), r, &format!("{} x{n}", item.name), if usable { th().text } else { th().dim }, Some(DAct::StashClick(id.clone())), false, tip(&item.name, &help));
             ui.draggable(format!("stash.{id}"));
         }
@@ -569,20 +659,11 @@ impl Dojo {
             ui.p.text_fit(x as f32, b.y as f32 + 2.0, &u.name, BODY, w as f32, if i == 0 { th().gold } else { th().foe });
             hp_bar(ui, Rect::new(x, b.y + 13, w, 5), u.hp, u.max_hp, if i == 0 { th().good } else { th().foe });
             ui.p.text(x as f32, b.y as f32 + 20.0, &format!("HP {}/{}", u.hp, u.max_hp), SMALL, th().text);
-            let mut line2 = if i == 0 { format!("AP {}/{}  {}", u.ap, u.max_ap, stance_label(u.stance)) } else { format!("{}  guard {:.0}%", stance_label(u.stance), u.guard * 100.0) };
             // RULESET1 5 (rule poise): the poise bar under the HP bar
-            if self.s.poise_on() {
-                let p = if i == 0 { self.s.poise() } else { self.s.dummy_poise };
-                // S2.2-S3 (FB-71): the bar's own pips under poise_mode pips
-                let n = &self.s.ruleset.numbers;
-                let (now, full, word) = if emberwake_battle::poise::pips_mode(n) { (p.pips, n.poise_pips.max(1), "pips") } else { (p.value, p.max, "poise") };
+            if let Some((now, full)) = self.poise_bar(i) {
                 hp_bar(ui, Rect::new(x, b.y + 18, w, 2), now, full, th().gold);
-                line2 = format!("{}  {word} {now}/{full}{}", if i == 0 { format!("AP {}/{}", u.ap, u.max_ap) } else { format!("guard {:.0}%", u.guard * 100.0) }, if p.broken { " BROKEN" } else { "" });
-                if i == 1 && self.s.dummy_windup {
-                    line2 += "  windup";
-                }
             }
-            ui.p.text(x as f32, b.y as f32 + 28.0, &line2, SMALL, th().dim);
+            ui.p.text(x as f32, b.y as f32 + 28.0, &self.stage_line(i), SMALL, th().dim);
             let mut effects: Vec<String> = u.st.active.iter().map(|s| emberwake_rules::status::display_name(s)).collect();
             effects.extend(u.st.pending.iter().map(|s| format!("{} next", emberwake_rules::status::display_name(s))));
             if !effects.is_empty() {
@@ -951,7 +1032,7 @@ impl Dojo {
             x += w + 2;
         }
         let top = y + 12 - b.y;
-        let entries: Vec<_> = self.s.log.iter().filter(|e| self.log_filter == "ALL" || e.category == self.log_filter).collect();
+        let entries = self.log_entries();
         let picked = self.picked.and_then(|n| self.s.log.iter().find(|e| e.n == n));
         let detail_h = if picked.is_some() { (b.h - top) / 2 } else { 0 };
         let view = Rect::new(b.x, b.y + top, b.w, b.h - top - detail_h);
@@ -961,8 +1042,8 @@ impl Dojo {
         for (i, e) in entries.iter().enumerate() {
             let r = Rect::new(view.x + 1, view.y + 1 - off + i as i32 * 18, view.w - 5, 17);
             let sel = self.picked == Some(e.n);
-            let head = format!("#{} {}{}", e.n, if e.by_dummy { "< " } else { "" }, e.title);
-            let lines = [(head, category_colour(e.category)), (format!("{}  [{}] {}", e.detail, e.outcome, if e.value != 0 { e.value.to_string() } else { String::new() }), th().dim)];
+            let (head, sub) = Self::log_lines(e);
+            let lines = [(head, category_colour(e.category)), (sub, th().dim)];
             ui.push(format!("dojo.log.{}", e.n), "row", lines[0].0.clone(), r, true, sel, Some(DAct::LogPick(e.n)), Vec::new());
             if sel || ui.hover(r) {
                 ui.p.panel(r, if sel { th().game("dojo_pick", rgba(86, 68, 22, 200)) } else { th().game("dojo_idle", rgba(34, 50, 82, 200)) }, if sel { th().gold } else { th().edge }, 2.0);
@@ -974,7 +1055,7 @@ impl Dojo {
         if let Some(e) = picked {
             let pane = Rect::new(b.x, b.y + b.h - detail_h, b.w, detail_h);
             ui.p.fill(Rect::new(pane.x, pane.y, pane.w, 1), th().edge);
-            let text = if e.breakdown.is_empty() { format!("{}: {}", e.title, e.detail) } else { e.breakdown.clone() };
+            let text = Self::breakdown(e);
             let h = ui.p.rich_height(&text, SMALL, (pane.w - 10) as f32).ceil() as i32 + 4;
             let off = ui.scroll_begin("dojo.log.detail", Rect::new(pane.x, pane.y + 2, pane.w, pane.h - 2), h);
             ui.p.rich(pane.x as f32 + 3.0, (pane.y + 3 - off) as f32, (pane.w - 10) as f32, &text, SMALL, th().text);
@@ -1122,6 +1203,8 @@ impl Screen<GameCx> for Dojo {
     fn state(&self, _cx: &Cx) -> Value {
         let h = self.s.hero();
         let mut out = json!({
+            // ENGINE-25 (UISPLIT1-J Stage A): the dojo's view-model
+            "view": crate::dojo_view::view(self).to_json(),
             "hero": h.name, "hp": h.hp, "ap": h.ap, "stance": stance_label(h.stance),
             "dummy_hp": self.s.dummy.hp, "round": self.s.round, "skill": self.s.skill, "dummy_skill": self.s.dummy_skill,
             "force_crit": self.s.force_crit, "counter": self.s.dummy_counter, "stash": self.s.stash.len(),

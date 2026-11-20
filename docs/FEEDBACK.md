@@ -91,8 +91,17 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-23` (`UISPLIT1-I`) party loadout | Stage A done (tools lane); the world map still waits for `PR7-47` | `develop` (squash `ENGINE-23` A2) | View-model, actions, fixture and tests for the party loadout (the Character window's Gear tab the footlockers open); today's drawing kept. FB-379 |
 | `ENGINE-26` (`BALANCE-WHATIF1`) | done (tools lane); the data change waits for the user | `develop` (squash `ENGINE-26`) | What-if sim keys `foe_hp=`, `foes=`, `foe_level=` (feel mode, report only); random, elite and boss what-if runs in `BALANCE_REPORT.md`. FB-381 |
 | `ENGINE-25` (`UISPLIT1-J`) forge, siege, epilogue | Stage A done for three screens (tools lane); the dojo next; the hub talk held for main Build's `PR7-46` | `develop` (squash `ENGINE-25` A1) | View-models, actions, fixtures and tests for the Content and World Forge viewers, the siege screen and the epilogue; today's drawing kept. FB-383 |
+| `ENGINE-25` (`UISPLIT1-J`) dojo | Stage A done for the dojo (tools lane); four of five screens done, the hub talk held for main Build's `PR7-46` | `develop` (squash `ENGINE-25` A2) | View-model, actions, fixture and tests for the dojo; today's drawing kept. FB-385 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-385: ENGINE-25 UISPLIT1-J Stage A for the dojo
+
+- **Status**: done (tools lane) on `develop`; four of the five screens are done. The hub talk (`talk.rs`) stays held until main Build finishes `PR7-46` item 3; the tools lane asks main Build before starting it.
+- **Spec**: `READY.md` `ENGINE-25` (UISPLIT1 US1, US6, US8).
+- **Finding**: `emberwake_gui/src/dojo_view.rs` (view `dojo`): `title`, `heroes` (the active hero selected, "HP / AP / stance" as the sub), `carry` (`foe` when overloaded), `stage` (stats: the hero and the dummy, HP and their second stage line, names toned `gold` / `foe`), `round`, `gear` (a row per slot, on while worn), `pouch` (an Unload row button), `stash_tabs`, `stash` (the hover line as the note, dim when neither wearable nor pouchable), `log_tabs`, `log` (the category as the tone, the picked entry selected), `breakdown`. Actions `hero`, `strike` (arg main, offhand, ranged or dual), `use_skill`, `pouch`, `unpouch`, `unequip`, `stash_use`, `stash_filter`, `log_filter`, `log_pick`, `log_clear`, `next_round`, `stance`, `heal_hero`, `heal_dummy`, `exit`; `dojo_view::dojo_act` maps them to the dojo's own clicks and refuses an arg the dojo does not hold. Fixture `ui/views/dojo.view.json` (shape test plus an `#[ignore]` writer); the view is on the agent link. The drawn texts (hero line, carry line, slot and pouch labels, stash hover line, log lines, breakdown, the stage's poise line) moved into shared fns, so the drawing is unchanged (825 GUI tests pass).
+- **Guess** (minor, made provisionally): the console's setup controls (the skill, dummy skill and ruleset pickers, the Counter / Force crit / guard / windup toggles, the bench, the dummy power, the presets, the planner and deck windows) are not in the Stage A view; they are dev tuning, and Stage B can add them when the studio's dojo layout needs them.
+- **Docs delta**: `STRUCTURE.md`: `emberwake_gui/src/dojo_view.rs` (view-model, ENGINE-25). `HISTORY.md`: none.
 
 ### FB-383: ENGINE-25 UISPLIT1-J Stage A for the forge viewers, the siege and the epilogue
 
