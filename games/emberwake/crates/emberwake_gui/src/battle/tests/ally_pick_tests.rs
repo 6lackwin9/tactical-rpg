@@ -166,10 +166,13 @@ fn a_cell_that_needs_an_ally_or_yourself_names_the_control() {
     for r in cells {
         assert!(r.tip.iter().any(|t| t.0.contains("Ally button") || t.0.contains("Self button")), "the card names the control: {:?}", r.tip);
     }
-    // the words, read from the kit's refusal fields
-    let reason = |t: &str| vec![emberwake_battle::refusal::Reason::Text(t.into())];
-    assert!(intent_text::target_control(&reason("Target an ally to use this")).is_some_and(|h| h.contains("Ally button") && h.contains("Ctrl+click")));
-    assert!(intent_text::target_control(&reason("Target yourself to use this")).is_some_and(|h| h.contains("Self button")));
-    assert!(intent_text::target_control(&reason("Target yourself or an ally to use this")).is_some_and(|h| h.contains("Self") && h.contains("Ally")));
-    assert_eq!(intent_text::target_control(&reason("Target an enemy to use this")), None, "an enemy is clicked on the board");
+    // the words, read from the kit's refusal field (HITCALC1: `Reason::NeedsTarget`, never its text)
+    use emberwake_battle::refusal::{Reason, TargetNeed};
+    let reason = |n: TargetNeed| vec![Reason::NeedsTarget(n)];
+    assert!(intent_text::target_control(&reason(TargetNeed::Ally)).is_some_and(|h| h.contains("Ally button") && h.contains("Ctrl+click")));
+    assert!(intent_text::target_control(&reason(TargetNeed::Yourself)).is_some_and(|h| h.contains("Self button")));
+    assert!(intent_text::target_control(&reason(TargetNeed::YourselfOrAlly)).is_some_and(|h| h.contains("Self") && h.contains("Ally")));
+    assert_eq!(intent_text::target_control(&reason(TargetNeed::Enemy)), None, "an enemy is clicked on the board");
+    // the kit's text alone names no control
+    assert_eq!(intent_text::target_control(&[Reason::Text("Target an ally to use this".into())]), None);
 }

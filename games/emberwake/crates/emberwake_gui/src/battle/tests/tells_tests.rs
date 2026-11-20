@@ -221,13 +221,23 @@ fn the_forecast_names_the_landing_block_and_each_hit() {
     let h = w.allies[0];
     t.line.target = Some(h);
     t.line.blocks = (1, 2);
-    let hit = |block: i32, damage: i32, guarded: bool| HitOn { skill: "Thrust".into(), block, damage, guarded, nth: 1 };
+    let hit = |block: i32, damage: i32, guarded: bool| HitOn { skill: "Thrust".into(), block, damage, guarded, nth: 1, fails: None };
     let nth = |h: HitOn, nth: usize| HitOn { nth, ..h };
     assert_eq!(intent_text::forecast(&t, h, &[]).as_deref(), Some("Heads for you in B1-2"));
     assert_eq!(intent_text::forecast(&t, h, &[hit(4, 23, true)]).as_deref(), Some("Targets you in B4: Thrust, about 23 (guarded)"));
     assert_eq!(intent_text::forecast(&t, h, &[hit(3, 22, false), hit(5, 22, false)]).as_deref(), Some("Targets you in B3, B5: Thrust, about 22 a hit"));
     assert_eq!(intent_text::forecast(&t, h, &[hit(3, 22, false), hit(5, 30, true)]).as_deref(), Some("Targets you in B3, B5: B3 Thrust about 22; B5 Thrust about 30 (guarded)"));
     assert_eq!(intent_text::forecast(&t, w.enemies[0], &[]), None, "not the record's target, no hit");
+    // HITCALC1 (PR7-45): a hit that fails at its impact is shown as such, not as a number
+    use emberwake_battle::intent::HitFail;
+    let fails = |block: i32, f: HitFail| HitOn { damage: 0, fails: Some(f), ..hit(block, 0, false) };
+    assert_eq!(intent_text::forecast(&t, h, &[fails(4, HitFail::Dodged)]).as_deref(), Some("Targets you in B4: Thrust, dodged"));
+    assert_eq!(intent_text::forecast(&t, h, &[hit(3, 22, false), fails(5, HitFail::OutOfReach)]).as_deref(), Some("Targets you in B3, B5: B3 Thrust about 22; B5 Thrust out of reach"));
+    assert_eq!(intent_text::forecast(&t, h, &[fails(4, HitFail::FlankProtected)]).as_deref(), Some("Targets you in B4: Thrust, misses (flank protected)"));
+    let ally = w.allies.iter().copied().find(|&a| a != h).unwrap_or(h);
+    assert_eq!(intent_text::hit_amount(&fails(4, HitFail::Intercepted { by: ally, pct: 100 }), Some(w)), format!("taken by {}", w.units[ally].name));
+    let part = HitOn { damage: 14, ..fails(4, HitFail::Intercepted { by: ally, pct: 40 }) };
+    assert_eq!(intent_text::hit_amount(&part, None), "about 14 (40% taken by an ally)");
     t.revealed = false;
     assert_eq!(intent_text::forecast_hits(&t, h, vec![hit(3, 22, false), nth(hit(5, 22, false), 2)]), vec![hit(3, 22, false)], "an unrevealed plan names the blow its move leads to");
     // review: action 2 hits someone else, action 3 hits the hero: the hidden later action stays hidden

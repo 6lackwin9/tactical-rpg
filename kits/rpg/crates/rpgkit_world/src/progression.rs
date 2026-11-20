@@ -328,6 +328,40 @@ pub fn keystone_level(d: &Data, state: &UnitState) -> i32 {
     d.cat.classes.get(&state.class_id(d)).and_then(|c| c.keystone.as_ref()).map_or(1, |k| k.level.max(1))
 }
 
+/// HITCALC1 (PR7-45, FB-338): where a member's keystone `id` comes from, for the Skills tab's header.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeystoneSource {
+    /// Its class's keystone (CLASSKEY1).
+    Class,
+    /// Its base unit's deck `keystone` row (`deck_grants`).
+    Deck,
+    /// A unit track stage it is on (PK2 grafts, `track_passives`).
+    Graft,
+}
+
+impl KeystoneSource {
+    /// "Class", "Deck", "Graft".
+    pub fn label(self) -> &'static str {
+        match self {
+            KeystoneSource::Class => "Class",
+            KeystoneSource::Deck => "Deck",
+            KeystoneSource::Graft => "Graft",
+        }
+    }
+}
+
+/// HITCALC1 (PR7-45): where keystone `id` of member `state` comes from: its class's keystone first, then its base
+/// unit's deck, then its unit tracks (grafts); None for any other source (a masterwork, a hand-built deck's id).
+pub fn keystone_source(d: &Data, state: &UnitState, id: &str) -> Option<KeystoneSource> {
+    if d.cat.classes.get(&state.class_id(d)).and_then(|c| c.keystone.as_ref()).is_some_and(|k| k.id == id) {
+        return Some(KeystoneSource::Class);
+    }
+    if d.cat.units.get(&state.base_unit).is_some_and(|b| b.deck.keystone.iter().any(|k| k == id)) {
+        return Some(KeystoneSource::Deck);
+    }
+    track_passives(d, state).iter().any(|k| k == id).then_some(KeystoneSource::Graft)
+}
+
 /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the passives the member's unit tracks grant: per track row (catalog order)
 /// the member is on, every stage's passive up to its stage (`UnitTrackDef::passives_to`).
 pub fn track_passives(d: &Data, state: &UnitState) -> Vec<String> {

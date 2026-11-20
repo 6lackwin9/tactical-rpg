@@ -1725,19 +1725,22 @@ impl Plan {
     }
 
     /// PR7-41 (PT-20): the damage the battle screen shows for planned entry `e` of `c` (its `est_damage`), by the one
-    /// forecast convention: per hit, at the block it lands, with the target's guard then (`intent::guard_at` over the
-    /// round's scheduled actions `sched`). A single-target attack on a foe that guards at its impact is estimated again
-    /// with that guard; anything else keeps `est_damage`.
+    /// forecast convention: per hit, at the block it lands, with the target's guard and stance then. HITCALC1
+    /// (PR7-45): the hit of `forecast_hit` (0 when it fails at its impact); anything else keeps `est_damage`.
     pub fn forecast_entry(&self, w: &World, sched: &[crate::resolver::ScheduledAction], c: UnitId, e: &PlanEntry) -> i32 {
+        self.forecast_hit(w, sched, c, e).map_or(e.est_damage, |h| h.damage)
+    }
+
+    /// HITCALC1 (PR7-45): the hit planned entry `e` of `c` lands on its foe, read from the round as it will run (the
+    /// scheduled actions `sched` with this plan booked, `intent::planned_schedule`) by the resolver's own hit builder
+    /// (`intent::hit_on`): None for anything but a damaging single-target attack on a foe, or when the entry is not
+    /// booked.
+    pub fn forecast_hit(&self, w: &World, sched: &[crate::resolver::ScheduledAction], c: UnitId, e: &PlanEntry) -> Option<crate::intent::HitOn> {
         let s = &w.cat.skills[e.skill];
-        let Some(foe) = e.target.filter(|&f| f != c && e.item.is_none() && skill::kind(s) == Kind::Attack && !skill::is_area(s)) else { return e.est_damage };
-        let guard = if command::ignores_guard(w, s) { 0.0 } else { crate::intent::guard_at(w, sched, foe, e.end_block(w)) };
-        if guard <= 0.0 || e.est_damage <= 0 {
-            return e.est_damage;
-        }
-        let from = e.path.iter().fold(e.pos_before, |a, d| a + *d);
-        let stance = if w.ruleset.stances() { skill::stance_during(s, e.stance_before) } else { e.stance_before };
-        self.estimate_damage_guarded(w, c, e.skill, stance, foe, from, &[], guard)
+        let foe = e.target.filter(|&f| f != c && e.item.is_none() && skill::kind(s) == Kind::Attack && !skill::is_area(s) && e.est_damage > 0)?;
+        let round = crate::intent::planned_schedule(w, sched, self);
+        let a = round.iter().find(|a| a.unit == c && a.start == e.start_block && !a.cancelled && a.command.skill == s.id)?;
+        crate::intent::hit_on(w, &round, a, foe)
     }
 
     fn estimate_hit(&self, w: &World, c: UnitId, st: &mut SimState, sid: SkillId, stance: Stance, foe: UnitId, from: V2) -> i32 {

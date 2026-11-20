@@ -220,17 +220,21 @@ pub fn counter_return(w: &World, defender: UnitId, attacker: UnitId) -> Option<i
 /// Area on `t` that is not ranged nor a flank, from a tile adjacent to `t`, both read where they stand at its impact
 /// (the plan's moves first; when both are planned onto one tile, `t` where it stands now). None otherwise. Once per attacker is the caller's (`loss_reads`).
 pub fn counter_on(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: UnitId) -> Option<i32> {
-    intent::hit_on(w, sched, a, t)?;
+    // HITCALC1: a hit that fails at its impact (or that a friend takes) draws no counter from `t`
+    if intent::hit_on(w, sched, a, t)?.fails.is_some() {
+        return None;
+    }
     let src = &w.units[a.unit];
     let ranged = match &a.command.kind {
         CmdKind::Attack { use_offhand, .. } => src.attack_range > 1 && !use_offhand,
         CmdKind::Area { .. } => src.attack_range > 1,
         _ => return None,
     };
-    let from = intent::position_at(w, sched, a.unit, a.impact);
+    // HITCALC1: the tile it strikes from as its hit reads it (`intent::scene_at`)
+    let from = intent::scene_at(w, sched, a, t).from;
     // both planned onto one tile (a forecast clash: one of them stops short when the round runs): `t` where it stands
     let at = Some(intent::position_at(w, sched, t, a.impact)).filter(|p| *p != from).unwrap_or_else(|| w.grid.pos(t).unwrap_or(crate::grid::NO_CELL));
-    let flank = crate::round_intent::flank_bonus_from(w, a.unit, from, t);
+    let flank = crate::round_intent::flank_bonus_at(w, a.unit, from, t);
     if !crate::command::riposte_answers_at(w, a.unit, from, t, at, ranged || flank) {
         return None;
     }
