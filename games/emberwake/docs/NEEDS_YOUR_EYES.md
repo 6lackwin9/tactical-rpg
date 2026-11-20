@@ -2,7 +2,7 @@
 
 What only you can judge, with what to do. The planner keeps this current: new items go in when they land, and an item leaves when you've answered. Say "open the build" and the planner launches the latest one.
 
-## For the next session (Design keeps this list; updated 2026-11-20 03:20)
+## For the next session (Design keeps this list; updated 2026-11-20 04:25)
 
 Parked for your approval (golden re-records need your word):
 
@@ -18,14 +18,12 @@ Parked for your approval (golden re-records need your word):
   the estimate; 7-8 minutes at 5 rounds would mean about 19-22 s of planning per hero per round (the estimate uses
   10 s). Recommendation: keep the targets and measure your planning time at the next PC playtest. (c) Bosses (band
   20-40 % won): the Bone-Mill Raid 28 % is in band; the Sweep 53, the Tallow Vats 56, the Fissure 56 and the Cages 84
-  are above; both Crucible fights are never won. The check (`FB-389`) found no bug: the escape needs all three
-  non-holders out, a founder falls in round 1 at level 1, and at level 4 the round-3 wave blocks the exit lane (the
-  Overlook, wave on round 4, wins 75 %). Options: (a) tune for a named party level; (b) move the wave to round 4; (c)
-  two must escape (changes canon). Recommendation: (b), tuned for the level a new campaign sim gives at the Crucible
-  (`ENGINE-28`, which plays Act 1 in order with XP): the founders reach the Crucible at level 7. The sim cannot
-  judge the Crucible (`FB-399`: its earlier wins were one fixed start; with starts varied it wins 0-6 % at every
-  level), so an agent is playing it by hand through the real game at level 7 (`ENGINE-30`). Recommendation: decide
-  (b) after that report and, ideally, one try of your own; then the other bosses after you play one boss fight.
+  are above; both Crucible fights are never won by the sim. An agent played it by hand at level 7 (`FB-401`): base fight lost 2, fled 2,
+  won 1 (round 6, no downs); the Overlook fled 1, won 1; Auto alone loses. Winnable, with no margin: one founder down
+  ends the win. Two escapers instead of three (changes canon) would have turned 3 of the 6 losses into wins. The play
+  also found planner bugs (a hand move can't step onto an exit, a later pick drops an earlier one, the keeper defaults
+  to the founder farthest from the winch), now queued (`PR7-60`). Recommendation: keep "one holds, three get out";
+  fix the planner, rerun the hand play, and only then weigh a data change; then the other bosses after you play one.
 - [ ] Enemy short names for the foe plates (`PR7-40`): Brawler, Berserker, Footman, Enforcer, Husk, Archer,
   Crossbowman, Purifier, Shaman, Skirmisher (also the Tallow Dredger), Scout, Flagellant, Render-Beast, Ash-Crawler;
   bosses by name.

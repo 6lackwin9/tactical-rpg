@@ -62,3 +62,4 @@ Standing script/test hygiene rules: never hand-edit JSON (use `ContentCatalog.up
 | 2026-11-20 | The game menu's two-column button grid and corner Return to map; story title cards between two rules | replaced (`PR7-30`, MENURAIL1) | A left rail with Resume; the banner card | LOOK1 M2; no golden re-recorded |
 | 2026-11-20 | `FB-389`'s Crucible figures at levels 4-5 (75-84 % won) | withdrawn (`ENGINE-29`) | With starts jittered by one tile the auto driver wins 0-6 % at levels 3-8 | One fixed start had stood for every seed; report only |
 | 2026-11-20 | Plate status round pips; the boss's plate and foe card | replaced (`PR7-54`, BOSS-UI1) | Icon-only tabs (rounds in the expanded list, BU6); the boss bar | BOSSUI1; no golden re-recorded |
+| 2026-11-20 | The Crucible as unwinnable (sim 0-6 %) | revised (`ENGINE-30`) | Won by hand at level 7 (base round 6, Overlook round 5) with no downs; Auto alone loses | Agent hand play through the real game; report only |
