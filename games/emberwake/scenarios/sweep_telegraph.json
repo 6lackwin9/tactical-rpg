@@ -1,6 +1,6 @@
 {
   "id": "sweep_telegraph",
-  "title": "PR7-41 (PT-17, PT-20): the playtest save sweep_start enters The Sweep; the enemy area tiles mark where each area lands, and with Vesper selected the Footman's card names the block its Heavy Thrust lands (not its move's)",
+  "title": "PR7-41 (PT-17, PT-20): the playtest save sweep_start enters The Sweep; the enemy area tiles mark where each area lands, and with Vesper selected the boss bar's intent rows name the block its Heavy Thrust lands (not its move's; retargeted by PR7-54)",
   "launch": {"save": "sweep_start"},
   "settings": {"reduce_motion": true},
   "timeout_s": 600,
