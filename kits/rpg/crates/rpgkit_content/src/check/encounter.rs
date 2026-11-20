@@ -223,8 +223,8 @@ const DEFAULT_ENRAGE_POWER: i64 = 20;
 /// PHASEFX1 `side` and `swap`).
 /// PHASEBREAK1 adds `vignette`.
 const EFFECTS: [&str; 12] = ["line", "wave", "status", "ai", "enrage", rpgkit_data::DECK_EFFECT, rpgkit_data::SHAKE_EFFECT, KILL_EFFECT, TALK_EFFECT, SIDE_EFFECT, SWAP_EFFECT, VIGNETTE_EFFECT];
-/// ENCOUNTER2 P2 adds `group`.
-const PHASE_KEYS: [&str; 6] = ["id", "name", "trigger", "effects", "pause_autoplay", "group"];
+/// ENCOUNTER2 P2 adds `group`; BOSSUI1 BU3b (PR7-59) `form`.
+const PHASE_KEYS: [&str; 7] = ["id", "name", "trigger", "effects", "pause_autoplay", "group", "form"];
 /// ENCOUNTER2 P2: a group is 1 to 24 characters a-z, 0-9 or _.
 const MAX_GROUP: usize = 24;
 const AI_ROLES: [&str; 4] = ["AGGRESSOR", "SKIRMISHER", "SNIPER", "SUPPORT"];
@@ -341,6 +341,13 @@ pub fn phase_problems(e: &Dict, ref_ok: &dyn Fn(&str) -> bool, unit_side: &dyn F
         }
         if phase.get("pause_autoplay").is_some_and(|b| !b.is_boolean()) {
             errors.push(format!("Phase '{tag}': pause_autoplay must be true or false."));
+        }
+        // BOSSUI1 BU3b (PR7-59): a form, when set, is a non-empty text of at most MAX_NAME characters
+        if let Some(f) = phase.get("form") {
+            let ok = f.as_str().map(str::trim).is_some_and(|s| !s.is_empty() && s.chars().count() <= MAX_NAME);
+            if !ok {
+                errors.push(format!("Phase '{tag}': the form is a text of 1 to {MAX_NAME} characters (omit it for none)."));
+            }
         }
         if let Some(g) = phase.get("group") {
             let ok = g.as_str().is_some_and(|s| (1..=MAX_GROUP).contains(&s.len()) && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'));

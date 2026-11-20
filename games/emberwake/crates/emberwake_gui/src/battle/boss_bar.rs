@@ -1,7 +1,8 @@
 //! BOSSUI1 (PR7-54, `games/emberwake/docs/specs/SCREEN_CONTRACT_BATTLE.md` 9.1 and 9.2, take 32): the boss bar across
 //! the board's top, drawn from the view-model's `BossBar` (the kit's `Session::phase_bar` and `intent::foe_card` over
 //! the live plan, cut at a phase break by `intent::phase_cut`). Row 1: the portrait with the crown, the phase markers,
-//! the phase's name (else the unit's name and title) and the passive tags (hover: the description). Row 2: the phase's
+//! the unit's name and title (BU3b, PR7-59: "<name>, <form>" under a phase `form`; a phase's name shows only in the
+//! phase banner) and the passive tags (hover: the description). Row 2: the phase's
 //! HP span with the planned loss and "160/450". Row 3: poise as one bar with a tick per pip and "6/10", the per-pip
 //! tag, icon-only status tabs, then the boss's own next blow. While planning, the two intent rows (the selected hero,
 //! "Others") by block with totals; hovering them lists every member with a Total column and a "Party" line. Every impact
@@ -43,9 +44,39 @@ const NAME_W: i32 = 36;
 const POISE_BAR_W: i32 = 40;
 /// The hover panel: its line pitch.
 const LINE_H: i32 = 9;
-/// The poise glyph and the broken-poise glyph (placeholders drawn in code until Art/UI's badges land).
+/// The poise glyph and the broken-poise glyph: the kit's badge files (`AI-40`, `kits/rpg/assets/ui/badges/`); a missing
+/// file falls back to the shape drawn in code (PR7-59).
 const POISE_GLYPH: &str = "ui/badges/poise.png";
 const BROKEN_POISE: &str = "ui/badges/broken_poise.png";
+
+/// BU11, BU12 (PR7-59): the most the Stage board shifts down under the bar: the front face and its drop shadow under
+/// the near edge, which leave the board's clip first (no row of cells leaves it).
+pub(super) const MAX_LIFT: i32 = crate::stage::FACE_H + 8;
+
+/// BU11, BU12 (PR7-59): how far the board shifts down under a boss bar so the bar covers no unit and no tile the plan
+/// can target (in bounds and walkable, or holding a unit); the bar may lie over wall rows. Read against the grown bar
+/// (with the intent rows), so the board keeps its place while a hero targets the boss and after; 0 in the Flat view
+/// (its cells fill the panel) and at most `MAX_LIFT`.
+pub(super) fn board_lift(w: &emberwake_battle::world::World, geo: &crate::stage::Geom) -> i32 {
+    use emberwake_battle::grid::{V2, GRID_H, GRID_W};
+    if geo.view != crate::stage::View::Stage {
+        return 0;
+    }
+    let board = super::draw::BOARD;
+    let bar = Rect::new(board.x + INSET, board.y + INSET, board.w - 2 * INSET, BAR_H + ROWS_H);
+    let units: Vec<V2> = (0..w.units.len()).flat_map(|u| w.cells_of(u)).collect();
+    let mut lift = 0;
+    for y in 0..GRID_H {
+        for x in 0..GRID_W {
+            let c = V2::new(x, y);
+            let r = geo.cell_rect(c);
+            if super::skill_menu::overlaps(r, bar) && (w.grid.is_walkable(c) || units.contains(&c)) {
+                lift = lift.max(bar.y + bar.h - r.y);
+            }
+        }
+    }
+    lift.clamp(0, MAX_LIFT)
+}
 
 /// The bar's height for `b` (contract 9.1: 84 px, 142 px with the intent rows).
 pub(super) fn bar_h(b: &BossBar) -> i32 {

@@ -4,7 +4,9 @@
 //! the hover's members and "Party" line; the impact numbers' format (9999, 10K, 1M); a phase break's "Block N: ends"
 //! and "Ph. 2 next round" with the blocks after it struck; the skill menu beside a tile keeps clear of the docked card,
 //! the foe panel and the target. Battles are the first catalog encounter edited in memory (its first enemy made a boss
-//! with an `hp_below` phase; no shipped data changes); every number is the kit's.
+//! with an `hp_below` phase; no shipped data changes); every number is the kit's. PR7-59 (`FB-368`): the bar keeps the
+//! unit's name (a phase `form` after it), and on the Vane fight (the `boss_bar` scenario's) the Stage board shifts down
+//! until the bar covers no unit or open tile.
 
 use crate::battle::{Action, BattleScreen};
 use crate::battle_view::{boss_rows, impact_num, BossRows};
@@ -261,4 +263,100 @@ fn the_menu_keeps_clear_of_the_card_the_panel_and_the_target() {
             }
         }
     }
+}
+
+/// BU3b (PR7-59, `FB-368` (1)): the bar's title is the boss unit's name and title, never a phase's `name` (the phase
+/// banner shows it); a phase that sets a `form` shows "<name>, <form>" in place of the title.
+#[test]
+fn the_bar_keeps_the_units_name_and_shows_a_phase_form() {
+    let (mut cx, mut g, mut b) = boss_arena(0, 50);
+    let boss = boss_of(&b);
+    let full = text(&b, "boss.name");
+    let title = b.w.iter().find(|w| w.id == "boss.title").map(|w| w.text.clone());
+    assert_eq!(full, s(&b).w.units[boss].name, "before the phase: the unit's name");
+    // the `hp_below` phase fired (its name "Unbound"): the bar keeps the unit's name and title
+    let sm = b.host.session.as_mut().unwrap();
+    sm.phases.fired.insert("unbound".into(), (1, 1));
+    assert_eq!(sm.phase_bar().unwrap().name, "Unbound", "the phase's name is the kit's read (the banner's)");
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    assert_eq!(text(&b, "boss.name"), full, "not the phase's name");
+    assert_eq!(b.w.iter().find(|w| w.id == "boss.title").map(|w| w.text.clone()), title, "the title kept");
+    // the phase sets a form: "<name>, <form>", no title
+    b.host.session.as_mut().unwrap().phases.phases.iter_mut().find(|p| p.id == "unbound").expect("the phase").form = "Unbound".into();
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    assert_eq!(text(&b, "boss.name"), format!("{full}, Unbound"));
+    assert!(!has(&b, "boss.title"), "the form takes the title's place");
+}
+
+/// The Vane fight (sunk_ward `enc_evt_01`, the `boss_bar` scenario's) under the timeline on the Stage view.
+fn vane_fight() -> (Cx, Gfx, BattleScreen) {
+    let mut cx = crate::hud::hud_tests::game_cx();
+    cx.settings.v["battle_view"] = json!("stage");
+    let mut b = BattleScreen::arena_with(&cx, Some("sunk_ward".into()), "enc_evt_01", Some(TIMELINE.to_string()), "", false);
+    assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
+    let mut g = crate::hud::hud_tests::gfx();
+    b.tick(&mut cx);
+    if b.selected.is_none() {
+        b.selected = b.session().w.allies.first().copied();
+    }
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    (cx, g, b)
+}
+
+/// The tiles the bar must leave clear: in bounds and walkable, or holding a unit.
+fn kept(w: &emberwake_battle::world::World, c: emberwake_battle::grid::V2) -> bool {
+    w.grid.is_walkable(c) || (0..w.units.len()).any(|u| w.cells_of(u).contains(&c))
+}
+
+/// BU11, BU12 (PR7-59, `FB-368` (2)): on the Vane fight the grown bar (a hero targeting the boss) covers no unit and no
+/// tile the plan can target: the board shifts down by the least that clears them (a kept tile then starts right under
+/// the bar), at most `MAX_LIFT`; the tiles' widgets move with it. A board whose rows under the bar hold only walls and
+/// no unit keeps its place.
+#[test]
+fn the_board_shifts_down_until_the_bar_covers_no_unit_or_open_tile() {
+    use crate::battle::boss_bar::{board_lift, MAX_LIFT};
+    use crate::battle::skill_menu::overlaps;
+    use crate::stage::{Geom, View};
+    use emberwake_battle::grid::{V2, GRID_H, GRID_W};
+    let (mut cx, mut g, mut b) = vane_fight();
+    let boss = boss_of(&b);
+    target(&mut cx, &mut g, &mut b, boss);
+    assert!(has(&b, "boss.rows"), "the grown bar");
+    let bar = b.w.iter().find(|w| w.id == "boss.bar").expect("the bar").rect;
+    let geo = Geom::new(View::Stage, &cx.tuning.value);
+    let lift = b.board_lift;
+    assert!((0..=MAX_LIFT).contains(&lift), "{lift}");
+    let w = &s(&b).w;
+    let tile = |c: V2| b.w.iter().find(|x| x.id == format!("tile.{}.{}", c.x, c.y)).expect("the tile widget").rect;
+    let mut touching = false;
+    for y in 0..GRID_H {
+        for x in 0..GRID_W {
+            let c = V2::new(x, y);
+            let r = geo.cell_rect(c);
+            assert_eq!(tile(c), Rect::new(r.x, r.y + lift, r.w, r.h), "{c}: the widget moves with the board");
+            if kept(w, c) {
+                assert!(!overlaps(tile(c), bar), "{c} under the bar {bar:?}");
+                touching |= tile(c).y == bar.y + bar.h;
+            }
+        }
+    }
+    let covered = (0..GRID_H).flat_map(|y| (0..GRID_W).map(move |x| V2::new(x, y))).any(|c| kept(w, c) && overlaps(geo.cell_rect(c), bar));
+    assert_eq!(lift > 0, covered, "a shift only when the bar would cover a kept tile");
+    assert!(lift == 0 || touching, "the least shift: a kept tile right under the bar");
+    // the rows under the bar all walls, no unit there: no shift
+    let mut walled = w.clone();
+    let wall = (0..GRID_W).map(|x| V2::new(x, 0)).find(|c| !walled.grid.is_walkable(*c)).expect("a wall tile on the top row");
+    let mut rows: Vec<String> = (0..GRID_H).map(|y| (0..GRID_W).map(|x| walled.grid.glyph(V2::new(x, y))).collect()).collect();
+    let g0 = walled.grid.glyph(wall);
+    rows[0] = std::iter::repeat_n(g0, GRID_W as usize).collect();
+    walled.grid.apply_board("", &rows, &indexmap::IndexMap::new());
+    for u in 0..walled.units.len() {
+        if walled.grid.positions[u].is_some_and(|p| p.y == 0) {
+            walled.grid.positions[u] = None;
+        }
+    }
+    assert!((0..GRID_W).all(|x| !walled.grid.is_walkable(V2::new(x, 0))), "the top row walled");
+    let open_under = (0..GRID_H).flat_map(|y| (0..GRID_W).map(move |x| V2::new(x, y))).any(|c| kept(&walled, c) && overlaps(geo.cell_rect(c), bar));
+    assert_eq!(board_lift(&walled, &geo) > 0, open_under, "no kept tile under the bar: no shift");
+    assert_eq!(board_lift(w, &Geom::new(View::Flat, &cx.tuning.value)), 0, "the Flat view keeps its place");
 }

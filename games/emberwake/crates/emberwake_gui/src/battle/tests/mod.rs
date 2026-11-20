@@ -1141,7 +1141,7 @@ fn a_fired_phase_with_a_shake_starts_it_at_once() {
     let fire_phase = |b: &mut BattleScreen, id: &str| {
         let s = b.host.session.as_mut().unwrap();
         let effect: aegis_core::value::Obj = serde_json::from_value(json!({"type": emberwake_data::SHAKE_EFFECT, "preset": "tremor"})).unwrap();
-        s.phases.phases.push(emberwake_battle::encounter::PhaseDef { id: id.into(), name: String::new(), trigger: Default::default(), effects: vec![effect] });
+        s.phases.phases.push(emberwake_battle::encounter::PhaseDef { id: id.into(), name: String::new(), form: String::new(), trigger: Default::default(), effects: vec![effect] });
         s.phases.fired.insert(id.into(), (s.current_round, s.current_block));
     };
     fire_phase(&mut b, "fx_tremor");
