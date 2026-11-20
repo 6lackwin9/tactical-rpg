@@ -376,7 +376,7 @@ pub(super) fn ap_held_text(ap: i32, source: &str) -> String {
 }
 
 /// A kind's own icon.
-pub(super) fn kind_icon(kind: &str) -> String {
+pub(crate) fn kind_icon(kind: &str) -> String {
     format!("skills/kinds/{}.png", kind.to_lowercase())
 }
 

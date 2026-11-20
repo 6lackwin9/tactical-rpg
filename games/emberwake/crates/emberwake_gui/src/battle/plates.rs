@@ -215,10 +215,10 @@ pub(super) fn party_plate(ui: &mut Ui<super::Action>, cx: &mut Cx, faces: &mut F
     let hw = ui.p.text_w(&hp_text, SMALL);
     ui.p.text(tx as f32, r.y as f32 + 17.0, &hp_text, SMALL, th().text);
     let mut nx = tx as f32 + hw + 3.0;
+    // STATUSVIS1 SV6, SV7 (PR7-57): the one planned loss (hits and ticks), tinted with an arrow when a modifier moved its
+    // hits, each hit and tick on its frameless hover
     if p.incoming > 0 {
-        let t = format!("-{}", p.incoming);
-        ui.p.text(nx, r.y as f32 + 17.0, &t, SMALL, th().foe);
-        nx += ui.p.text_w(&t, SMALL) + 2.0;
+        nx += incoming_number(ui, &format!("party.{}.incoming", p.unit), p, nx, r.y as f32 + 17.0) + 2.0;
     }
     // contract 6: a planned heal, the moss heart and "+n"
     if p.heal > 0 {
@@ -241,27 +241,47 @@ pub(super) fn party_plate(ui: &mut Ui<super::Action>, cx: &mut Cx, faces: &mut F
         pips(&mut ui.p, party_poise_row(r), lit, max);
     }
     status_column(ui, cx, &format!("party.{}", p.unit), &p.tabs, col, STATUS_SLOTS);
-    passive_row(ui, cx, &format!("party.{}", p.unit), &p.passives, Rect::new(pr.x, pr.y + pr.h + 1, pr.w, PASSIVE_ICON));
+    if p.sockets || !p.passives.is_empty() {
+        passive_sockets(ui, cx, &format!("party.{}", p.unit), &p.passives, Rect::new(pr.x, pr.y + pr.h + 1, pr.w, PASSIVE_ICON));
+    }
 }
 
-/// PASSIVE-ICON1 (ENGINE-24, STATUSVIS1 SV10): a passive icon under the portrait (16 px at 1280 x 720) and the gap.
-pub(super) const PASSIVE_ICON: i32 = 8;
+/// SV6, SV7: the plate's planned loss "-n" at (`x`, `y`): tinted and arrowed by `p.loss_sign`, its hover each hit and
+/// tick with the total (`Plate::loss`). Returns its width.
+fn incoming_number(ui: &mut Ui<super::Action>, id: &str, p: &Plate, x: f32, y: f32) -> f32 {
+    let t = format!("-{}", p.incoming);
+    let tip = super::statusvis::num_tip("Planned loss", &p.loss);
+    super::statusvis::number(ui, id, &t, x, y, SMALL, p.loss_sign, th().text, tip)
+}
+
+/// PASSIVE-ICON1 (ENGINE-24, STATUSVIS1 SV10), SV13 (PR7-57): a loadout passive's socket under the portrait (18 px
+/// at 1280 x 720) and the gap between the two.
+pub(super) const PASSIVE_ICON: i32 = 9;
 const PASSIVE_GAP: i32 = 2;
 /// SV12: the placeholder while an archetype's icon is not there yet (a skill kind's icon).
 const PASSIVE_PLACEHOLDER: &str = "skills/kinds/focus.png";
 
-/// SV10: the loadout's passives as small icons in `row` under the portrait (apart from the status column), each its
-/// own label `<id>.passive.<i>` with the passive's name on its hover card.
-fn passive_row(ui: &mut Ui<super::Action>, cx: &mut Cx, id: &str, passives: &[crate::battle_view::PlatePassive], row: Rect) {
-    for (i, p) in passives.iter().enumerate() {
-        let r = Rect::new(row.x + i as i32 * (PASSIVE_ICON + PASSIVE_GAP), row.y, PASSIVE_ICON, PASSIVE_ICON);
-        if r.x + r.w > row.x + row.w {
-            break;
+/// SV10, SV13: the loadout's two passive sockets centred in `row` under the portrait (apart from the status column):
+/// each slotted passive's icon its own label `<id>.passive.<i>` with its name and what it does on the hover; an empty
+/// socket dim, its label `<id>.socket.<i>`.
+fn passive_sockets(ui: &mut Ui<super::Action>, cx: &mut Cx, id: &str, passives: &[crate::battle_view::PlatePassive], row: Rect) {
+    let n = crate::battle_view::PLATE_PASSIVES as i32;
+    let x0 = row.x + (row.w - (n * PASSIVE_ICON + (n - 1) * PASSIVE_GAP)) / 2;
+    for i in 0..n as usize {
+        let r = Rect::new(x0 + i as i32 * (PASSIVE_ICON + PASSIVE_GAP), row.y, PASSIVE_ICON, PASSIVE_ICON);
+        match passives.get(i) {
+            Some(p) => {
+                let px = ui.icon_px(r).max(1);
+                let img = cx.art.first(&[p.icon.clone(), PASSIVE_PLACEHOLDER.to_string()], px, px).cloned();
+                aegis_ui::panes::icon_tile(ui, r, img.as_ref(), if img.is_none() { "P" } else { "" });
+                let about = if p.about.is_empty() { "Loadout passive: always on.".to_string() } else { p.about.clone() };
+                ui.push(format!("{id}.passive.{i}"), "label", p.name.clone(), r, true, false, None, vec![(p.name.clone(), th().gold), (about, th().text)]);
+            }
+            None => {
+                ui.p.panel(r, th().game("slot_empty", rgba(20, 28, 46, 120)), th().game("slot_empty_edge", rgba(58, 78, 116, 120)), 0.0);
+                ui.push(format!("{id}.socket.{i}"), "label", "Empty passive socket", r, true, false, None, vec![("Empty passive socket".into(), th().dim), ("A loadout holds up to two passives.".into(), th().text)]);
+            }
         }
-        let px = ui.icon_px(r).max(1);
-        let img = cx.art.first(&[p.icon.clone(), PASSIVE_PLACEHOLDER.to_string()], px, px).cloned();
-        aegis_ui::panes::icon_tile(ui, r, img.as_ref(), if img.is_none() { "P" } else { "" });
-        ui.push(format!("{id}.passive.{i}"), "label", p.name.clone(), r, true, false, None, vec![(p.name.clone(), th().gold), ("Loadout passive: always on.".into(), th().text)]);
     }
 }
 
@@ -334,6 +354,11 @@ pub(super) fn foe_plate(ui: &mut Ui<super::Action>, cx: &mut Cx, faces: &mut Fac
     bar(&mut ui.p, Rect::new(tx, r.y + 13, text_w, 3), p.hp, p.max_hp, if p.active { th().foe } else { th().dim }, p.incoming);
     let hp_text = if p.active { format!("{}/{}", p.hp, p.max_hp) } else { "Down".to_string() };
     ui.p.text(tx as f32, r.y as f32 + 17.0, &hp_text, SMALL, if p.active { th().text } else { th().dim });
+    // SV6, SV7 (PR7-57): the one planned loss beside it, with its hover
+    if p.incoming > 0 && p.active {
+        let nx = tx as f32 + ui.p.text_w(&hp_text, SMALL) + 3.0;
+        incoming_number(ui, &format!("foe.{}.incoming", p.unit), p, nx, r.y as f32 + 17.0);
+    }
     if let Some(l) = p.lands.as_ref().filter(|_| p.active) {
         lands_row(ui, cx, small, looks, l, lands_rect(r));
     }

@@ -408,6 +408,13 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     }
     // INPUT1 PB2: a timeline battle's strip follows the playback's resolving block (classic: the current block)
     let live_block = if aids { cursor.unwrap_or(0) } else if !planning && s.phase == Phase::Resolving { s.current_block } else { 0 };
+    // STATUSVIS1 SV5, SV15 (PR7-57): the selected hero's locked blocks, by run (stun one tile over blocks 1-2, stagger
+    // a tile on 1 and one on 4): a grey tile with the status icon in place of the lock's entries, no plan there
+    let locks: Vec<emberwake_battle::status_view::LockRun> = match sel {
+        Some(u) if timeline && w.units[u].is_active() => emberwake_battle::status_view::lock_runs(w, u),
+        _ => Vec::new(),
+    };
+    let locked = |b: i32| emberwake_battle::status_view::run_at(&locks, b);
     for b in 1..=s.def.total_blocks {
         let r = Rect::new(bx + (b - 1) * bw, 6, bw - 1, 16);
         let at = entries.iter().position(|e| b >= e.0 && b <= e.1);
@@ -477,19 +484,27 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
         // BATTLE-UI2 (battle contract 7, FB-358): an empty or a picked block opens the skill menu under it; a ghost block
         // opens it from a right click or the menu key (Tab, pad north)
-        let menu = timeline && planning && accept.is_none() && open && sel.is_some_and(|u| w.allies.contains(&u) && w.units[u].is_active());
+        let menu = timeline && planning && accept.is_none() && open && sel.is_some_and(|u| w.allies.contains(&u) && w.units[u].is_active()) && locked(b).is_none();
         if menu {
             tip.push(("Click: the skill menu for this block".into(), th().dim));
         } else if accept.is_some() {
             tip.push(("Right click or Tab: the skill menu".into(), th().dim));
         }
         let action = accept.map(Action::GhostSlot).or(menu.then_some(Action::StripMenu(b)));
+        // SV5: a locked block's hover names the lock and its blocks; the run's first block holds the whole run
+        let (wr, tip) = match locked(b) {
+            Some(run) => (if run.start == b { Rect::new(r.x, r.y, (run.end - run.start + 1) * bw - 1, r.h) } else { r }, super::statusvis::lock_tip(run)),
+            None => (wr, tip),
+        };
         ui.push(format!("strip.block{b}"), "block", entry.map(|e| e.2.clone()).unwrap_or_else(|| "empty".into()), wr, true, live_block == b, action, tip);
     }
     // Each action is one continuous span over its blocks, coloured by kind (COMBAT-UI3).
     let mut strip_labels = Vec::new();
     for (k, e) in entries.iter().enumerate() {
         let r = Rect::new(bx + (e.0 - 1) * bw, 6, (e.1 - e.0 + 1) * bw - 1, 16);
+        if locked(e.0).is_some() {
+            continue;
+        }
         let live = live_block >= e.0 && live_block <= e.1;
         // VISCLAR1-D (mock `rest_colour`): under the round intent a Rest block is light slate (the planner fills every spare
         // block with them, so it has to stand out as time not used)
@@ -520,6 +535,14 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             let mr = Rect::new(r.x + 1, 7, (bw - 3).min(r.w - 2), 14);
             aegis_ui::timeline::draw_mark(&mut ui, &format!("strip.mark.{k}"), &mark, mr);
         }
+    }
+    for run in &locks {
+        let r = Rect::new(bx + (run.start - 1) * bw, 6, (run.end - run.start + 1) * bw - 1, 16);
+        super::statusvis::lock_tile(&mut ui, cx, r, &run.status);
+        if live_block >= run.start && live_block <= run.end {
+            ui.p.panel(r, rgba(0, 0, 0, 0), th().gold, 0.0);
+        }
+        strip_labels.push(json!({"locked": run.status, "blocks": [run.start, run.end]}));
     }
     g.strip_labels = strip_labels;
     // VISCLAR1-D: a Move that replaced a larger block says so, under the blocks it left as Rest
@@ -556,7 +579,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             ui.p.fill(Rect::new(bx + (b - 1) * bw, 22, bw - 1, 2), th().foe);
         }
         // PR7-40 part 2: the selected tile's 2 px gold rim: the hero's latest pick (the one Undo takes back)
-        let picked = if planning { entries.iter().enumerate().rev().find(|(k, e)| !ghosts.get(*k).copied().unwrap_or(false) && e.3 != "REST").map(|(k, _)| k) } else { None };
+        let picked = if planning { entries.iter().enumerate().rev().find(|(k, e)| !ghosts.get(*k).copied().unwrap_or(false) && e.3 != "REST" && locked(e.0).is_none()).map(|(k, _)| k) } else { None };
         if let Some(e) = picked.and_then(|k| entries.get(k)) {
             let r = Rect::new(bx + (e.0 - 1) * bw, 6, (e.1 - e.0 + 1) * bw - 1, 16);
             for edge in [Rect::new(r.x, r.y, r.w, 1), Rect::new(r.x, r.y + r.h - 1, r.w, 1), Rect::new(r.x, r.y, 1, r.h), Rect::new(r.x + r.w - 1, r.y, 1, r.h)] {
@@ -710,6 +733,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             hovered_ally = Some(a);
         }
         let look = &looks[a];
+        let first_widget = ui.widgets.len();
         if guest {
             super::plates::guest_plate(&mut ui, cx, &mut g.panel_faces, w, look, plate, r);
         } else {
@@ -744,6 +768,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
         let tip = unit_tip(s, a, sel, &tells, &rounds, &classes);
         ui.push(format!("party.{a}"), "card", format!("{} HP {}/{} {}", u.name, u.hp, u.max_hp, crate::intent_text::ap_text(u.ap, u.max_ap, "/")), r, true, plate.selected, Some(Action::Select(a)), tip);
+        super::statusvis::lift_plate_info(&mut ui, first_widget, &format!("party.{a}"));
         y += r.h + super::plates::PLATE_GAP;
     }
     g.cards_shown = cards_shown;
@@ -1041,6 +1066,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                     hovered_foe = Some(e);
                 }
                 let hot = hover || model.card.as_ref().is_some_and(|c| c.foe == e);
+                let first_widget = ui.widgets.len();
                 if matches!(entry, crate::battle_view::FoeEntry::Full(_)) {
                     super::plates::foe_plate(&mut ui, cx, &mut g.panel_faces, &mut g.mini_faces, w, &looks, p, r, hot);
                 } else {
@@ -1059,6 +1085,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                 }
                 let tip = unit_tip(s, e, sel, &tells, &rounds, &classes);
                 ui.push(format!("foe.{e}"), "card", format!("{} {}/{} {}", u.name, u.hp, u.max_hp, next), r, true, hover, Some(Action::UnitClick(e)), tip);
+                super::statusvis::lift_plate_info(&mut ui, first_widget, &format!("foe.{e}"));
             }
             crate::battle_view::FoeEntry::Group { key, name, plates, open } => {
                 // contract 4 (PR7-40 part 2): a click opens the group into compact plates; the open group's header closes it
@@ -1297,13 +1324,30 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         ui.push("timeline.backdrop", "backdrop", "", r, true, false, Some(Action::TimelinePick(None)), Vec::new());
         crate::hud::hud_panel(&mut ui, r, th().game("timeline_fill", rgba(10, 14, 24, 250)), th().edge, RADIUS);
         let on_track = |k: &str| Action::TimelinePick(timeline_view::unit_of(k));
+        // STATUSVIS1-B (SV14, SV15): each row's one target in its aside square, each span's skill (or lock) icon
+        let aims = timeline_view::row_aims(s, &opts);
         let faces = &mut g.timeline_faces;
-        let icon = |ui: &mut Ui<Action>, track: &aegis_ui::timeline::Track, sq: Rect| {
-            if let Some((who, look)) = icons.get(&track.key) {
-                timeline_portrait(ui, cx, faces, who, look, sq);
+        let small = &mut g.mini_faces;
+        let slot = |ui: &mut Ui<Action>, slot: aegis_ui::timeline::Slot<'_>, sq: Rect| match slot {
+            aegis_ui::timeline::Slot::Icon(track) => {
+                if let Some((who, look)) = icons.get(&track.key) {
+                    timeline_portrait(ui, cx, faces, who, look, sq);
+                }
+            }
+            aegis_ui::timeline::Slot::Aside(track) => {
+                if let Some(aim) = aims.get(&track.key) {
+                    super::statusvis::row_target(ui, cx, small, &looks, &s.w, &track.key, *aim, sq);
+                }
+            }
+            aegis_ui::timeline::Slot::Segment(_, seg) => {
+                let chain = seg.icon.as_deref().map(timeline_view::icon_chain).unwrap_or_default();
+                let px = ui.icon_px(sq).max(1);
+                if let Some(img) = cx.art.first(&chain, px, px).cloned() {
+                    ui.p.image_alpha(&img, sq, if seg.ghost { 150 } else { 255 });
+                }
             }
         };
-        t.draw_icons(&mut ui, "timeline", Rect::new(r.x + TV_PAD, r.y + TV_PAD, r.w - 2 * TV_PAD, r.h - 2 * TV_PAD), |_| Action::TimelinePick(None), on_track, |k, _| on_track(k), icon);
+        t.draw_slots(&mut ui, "timeline", Rect::new(r.x + TV_PAD, r.y + TV_PAD, r.w - 2 * TV_PAD, r.h - 2 * TV_PAD), |_| Action::TimelinePick(None), on_track, |k, _| on_track(k), slot);
         g.tv_shown = Some(t);
     } else {
         g.tv_shown = None;

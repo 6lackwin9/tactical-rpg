@@ -1,3 +1,4 @@
+mod statusvis1b_tests;
 mod pacing_tests;
 mod battle_ui2b_tests;
 mod battle_ui2c_tests;

@@ -28,6 +28,7 @@ pub mod round_intent_plan;
 pub mod script;
 pub mod session;
 pub mod sim;
+pub mod status_view;
 pub mod skill;
 pub mod trigger;
 pub mod wear;

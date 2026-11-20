@@ -522,6 +522,26 @@ pub fn hit_on(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: Unit
 
 /// `hit_on`, the hit forced to crit when `crit` (BATTLE-UI2: the foe card's crit star; `HitInput::force_crit`).
 fn hit_on_with(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: UnitId, crit: bool) -> Option<HitOn> {
+    hit_on_adjusted(w, sched, a, t, crit, &Adjust::NONE)
+}
+
+/// STATUSVIS1 SV7 (PR7-57): what a what-if forecast takes away from a hit (`hit_on_adjusted`): `power` multiplies
+/// the command's power (1.0: as booked; the reciprocal of an attacker's status factor takes that status out), `strip`
+/// lists statuses the target is forecast without, `guard` false forecasts it unguarded.
+#[derive(Debug, Clone, Copy)]
+pub struct Adjust<'a> {
+    pub power: f64,
+    pub strip: &'a [&'a str],
+    pub guard: bool,
+}
+
+impl Adjust<'_> {
+    /// The hit as booked (`hit_on`).
+    pub const NONE: Adjust<'static> = Adjust { power: 1.0, strip: &[], guard: true };
+}
+
+/// `hit_on_with` under `adj` (`Adjust::NONE`: the same hit, the same numbers). Read only.
+pub fn hit_on_adjusted(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: UnitId, crit: bool, adj: &Adjust) -> Option<HitOn> {
     use rpgkit_rules::damage::{self, HitInput};
     let src = a.unit;
     if a.cancelled || src == t || !w.has(t) {
@@ -558,9 +578,15 @@ fn hit_on_with(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: Uni
         }
     }
     let cover = if from == NO_CELL { 0.0 } else { crate::command::cover_for(&w.grid, from, position_at(w, sched, t, a.impact), ranged) };
-    let guard = if a.command.ignore_guard { 0.0 } else { guard_at(w, sched, t, a.impact) };
+    let guard = if a.command.ignore_guard || !adj.guard { 0.0 } else { guard_at(w, sched, t, a.impact) };
     let mut target = w.units[t].clone();
     target.stance = stance_at(w, sched, t, a.impact);
+    for s in adj.strip {
+        target.st.active.shift_remove(*s);
+    }
+    if adj.power != 1.0 {
+        mult *= adj.power;
+    }
     // the guard joins the cover in the one guard-and-cover term (`damage::compute` adds them before its cap)
     let input = HitInput { ranged, offhand, skill_mult: mult, cover: cover + guard, include_guard: false, ignore_armor: a.command.pierces(w), distance, attacker_stance: Some(stance_at(w, sched, src, a.impact)), force_crit: crit, ..HitInput::default() };
     let damage = damage::compute(&w.units[src], &target, input).final_dmg;

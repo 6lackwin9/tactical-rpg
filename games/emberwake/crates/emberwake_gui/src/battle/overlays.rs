@@ -88,7 +88,7 @@ pub(super) struct Overlay {
 
 /// RULESET1-U slice 6: the overlay groups as the Settings Battle tab lists them: (id, label, what it shows, default);
 /// VISCLAR1 VC6: every group on by default but `all_bars`, `test_hazards` and `test_arena`.
-pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 24] = [
+pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 23] = [
     ("band", "Reach band", "The selected hero's attack reach around the tile it strikes from (Assault, Maneuver).", true),
     ("front", "Maneuver front", "The target's front, where an Engage never stands (Maneuver).", true),
     ("valid", "Valid targets", "Rings on the units a click would make the round target.", true),
@@ -106,7 +106,7 @@ pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 24] = [
     // VISCLAR1 VC3: today's look, every unit's bars on the board
     ("all_bars", "All bars", "Every unit's HP and poise bars on the board; off: only the selected hero, its target and the unit under the mouse (hold Alt: all).", false),
     ("breaks", "Breaks", "BREAK over a broken unit and on its cancelled strip span.", true),
-    ("parts", "Wind-up and impact", "The full timeline's wind-up, impact and recovery shading.", true),
+    // PR7-57 (STATUSVIS1 SV14): `parts` ("Wind-up and impact", the full timeline's shading) retired with the calmer view
     ("forecasts", "Hit forecasts", "Stagger and break forecasts in the strip tips and the intel panel.", true),
     ("summary", "Round summary", "The round summary in the message bar at round end.", true),
     // HOOKS1-UI slice 1: the hooks' marks (HOOKS1 GH6, AH3). VISCLAR1-B, decision "Battle view answers": the board's marks
@@ -157,12 +157,11 @@ pub(crate) struct Layers {
     pub(super) walks: bool,
     pub(super) glyphs: bool,
     pub(crate) badges: bool,
-    /// Slice 5: poise bars, BREAK markers, impact / recovery on the strip (the full timeline adds wind-up), hit forecasts, the round summary.
+    /// Slice 5: poise bars, BREAK markers, hit forecasts, the round summary.
     pub(super) poise: bool,
     /// VISCLAR1 VC3: every unit's token bars, not only the focus set's (off by default).
     pub(super) all_bars: bool,
     pub(crate) breaks: bool,
-    pub(crate) parts: bool,
     pub(super) forecasts: bool,
     pub(super) summary: bool,
     /// HOOKS1-UI slice 1: ground hazards (GH6), the arena telegraph (AH3).
@@ -182,10 +181,10 @@ pub(crate) struct Layers {
 
 impl Layers {
     /// The group ids, as the settings key names them (`OVERLAY_GROUPS`' order).
-    pub(super) const IDS: [&'static str; 24] = {
-        let mut ids = [""; 24];
+    pub(super) const IDS: [&'static str; 23] = {
+        let mut ids = [""; 23];
         let mut k = 0;
-        while k < 24 {
+        while k < 23 {
             ids[k] = OVERLAY_GROUPS[k].0;
             k += 1;
         }
@@ -209,7 +208,6 @@ impl Layers {
             poise: on("poise"),
             all_bars: on("all_bars"),
             breaks: on("breaks"),
-            parts: on("parts"),
             forecasts: on("forecasts"),
             summary: on("summary"),
             hazards: on("test_hazards"),
@@ -225,7 +223,7 @@ impl Layers {
 
     /// The flags by group id (the agent link's state).
     pub(super) fn json(&self) -> Value {
-        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.badges, self.poise, self.all_bars, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena, self.meters, self.guard, self.pushes, self.hold, self.gate, self.tracers];
+        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.badges, self.poise, self.all_bars, self.breaks, self.forecasts, self.summary, self.hazards, self.arena, self.meters, self.guard, self.pushes, self.hold, self.gate, self.tracers];
         Value::Object(Self::IDS.iter().zip(v).map(|(k, b)| (k.to_string(), json!(b))).collect())
     }
 }

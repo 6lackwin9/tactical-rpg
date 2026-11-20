@@ -2401,6 +2401,25 @@ impl Unit {
         self.st.active.iter().filter(|s| raises(s)).fold(1.0, |f, s| f * (1.0 + self.capped_magnitude(s) as f64 / 100.0))
     }
 
+    /// STATUSVIS1 SV7 (PR7-57): the factor active status `status` puts on this unit's attack power alone: `1 - m / 100`
+    /// for an Attack Power debuff (weaken), `1 + m / 100` for a buff (empower), `m` its capped magnitude; 1.0 for any
+    /// other status, one not active, or while `attack_power` is held (the held value is no status's). The product over
+    /// the active statuses is `weaken_factor() * empower_factor()`. Read only.
+    pub fn attack_power_factor_of(&self, status: &str) -> f64 {
+        use crate::status::{lowers_rating, raises_rating, Rating};
+        if self.rating_set(Rating::AttackPower).is_some() || !self.st.active.contains(status) {
+            return 1.0;
+        }
+        let m = self.capped_magnitude(status) as f64 / 100.0;
+        if lowers_rating(status, Rating::AttackPower) {
+            1.0 - m
+        } else if raises_rating(status, Rating::AttackPower) {
+            1.0 + m
+        } else {
+            1.0
+        }
+    }
+
     pub fn potency_for(&self, family: &str) -> f64 {
         1.0
             + self.potency_bonus.get(family).copied().unwrap_or(0.0)
