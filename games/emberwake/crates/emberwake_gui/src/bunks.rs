@@ -190,6 +190,12 @@ pub const PEGBOARD_ART: &str = "bunk_pegboard";
 pub const LOCKER_ART: &str = "footlocker";
 pub const LOCKER_OPEN: &str = "_open";
 pub const LOCKER_PREFIX: &str = "locker.";
+/// FOOTLOCKER1B (`PR7-58` (2), `FB-362`): how long the open footlocker shows before its loadout comes up, and after the
+/// loadout closes before it shuts (ms of the frame's clock, `aegis_core::clock`).
+pub const LOCKER_BEAT_MS: u64 = 250;
+pub fn locker_beat() -> aegis_core::clock::Duration {
+    aegis_core::clock::Duration::from_millis(LOCKER_BEAT_MS)
+}
 /// BUNKS-EMBLEM1 (`PR7-52`): a founder's emblem in the lunette (`ui/badges/founder_<character id>.png`, placeholders
 /// from the take 8 mock until Art/UI `AI-33`), centred on the bed and its top this many art px over the bed's top (1 px
 /// inside the lunette's arch).
@@ -431,10 +437,26 @@ pub fn plate_room(r: Rect, all: &[Rect]) -> i32 {
     all.iter().filter(|o| **o != r && o.y < r.y + r.h && r.y < o.y + o.h).map(|o| (mid(o) - mid(&r)).abs() / 2).min().unwrap_or(i32::MAX)
 }
 
-/// The width (screen px) a plate needs to show `name` whole: the class glyph and the name with their margins.
+/// FOOTLOCKER1B (`PR7-58` (3), `FB-362` option B): whether a plate shows its class glyph: not at the largest text size
+/// (Extra large), where the blanket and the peg board carry the class and the first name takes the room.
+pub fn plate_glyph(p: &Painter) -> bool {
+    let largest = aegis_ui::screen::TEXT_SIZES.iter().map(|s| s.1).fold(0.0, f64::max);
+    (p.fonts.scale as f64) < largest - 1e-3
+}
+
+/// The space (screen px) a plate's text starts after: the class glyph and its margins, or the left margin alone.
+fn plate_lead(p: &mut Painter) -> i32 {
+    if plate_glyph(p) {
+        1 + p.line_h(PLATE_TEXT).ceil() as i32 + 1
+    } else {
+        2
+    }
+}
+
+/// The width (screen px) a plate needs to show `name` whole: the class glyph (`plate_glyph`) and the name with their
+/// margins.
 pub fn plate_need(p: &mut Painter, name: &str) -> i32 {
-    let side = p.line_h(PLATE_TEXT).ceil() as i32;
-    1 + side + 1 + p.text_w(name, PLATE_TEXT).ceil() as i32 + 2
+    plate_lead(p) + p.text_w(name, PLATE_TEXT).ceil() as i32 + 2
 }
 
 /// HUB-BUNKS2 (2), BUNKS-LAYOUT3 (2), (7): the brass plate of a bunk of art `bed` drawn in `dr` (`drawn_rect`;
@@ -480,22 +502,33 @@ pub fn plate_name(p: &mut Painter, name: &str, w: i32) -> String {
     }
 }
 
+/// FOOTLOCKER1B (3): the text a plate of width `w` draws: `plate_name`, cut with an ellipsis when still too wide (the
+/// bunk's hover names the member in full).
+pub fn plate_shown(p: &mut Painter, name: &str, w: i32) -> String {
+    let word = plate_name(p, name, w);
+    let room = (w - plate_lead(p) - 2) as f32;
+    p.fit(&word, PLATE_TEXT, room)
+}
+
 /// Draws the plate `pr` (`plate_rect`): a brass-edged plate, the class glyph (`CLASS_GLYPH_DIR`; the class name's first
 /// letter in a ring without the art) at the left and the member's name (`plate_name`, shortened to fit).
 pub fn draw_plate(ui: &mut Ui<impl Clone>, cx: &mut Cx, pr: Rect, name: &str, class_id: &str, class: &str) {
     let (fill, edge, ink) = plate_colours();
     ui.p.panel(pr, fill, edge, 0.0);
     let side = pr.h - 2;
-    let gr = Rect::new(pr.x + 1, pr.y + 1, side, side);
-    let px = (side as f32 * ui.p.v.s).round().max(1.0) as i32;
-    match cx.art.image(&format!("{CLASS_GLYPH_DIR}{class_id}.png"), px, px) {
-        Some(img) => ui.p.image(img, gr),
-        None => {
-            let letter = class.chars().next().map_or('?', |c| c.to_ascii_uppercase());
-            aegis_ui::ui::draw_glyph(&mut ui.p, aegis_ui::ui::Glyph::Letter(letter), gr, th().gold);
+    // FOOTLOCKER1B (3): no glyph at Extra large (`plate_glyph`)
+    if plate_glyph(&ui.p) {
+        let gr = Rect::new(pr.x + 1, pr.y + 1, side, side);
+        let px = (side as f32 * ui.p.v.s).round().max(1.0) as i32;
+        match cx.art.image(&format!("{CLASS_GLYPH_DIR}{class_id}.png"), px, px) {
+            Some(img) => ui.p.image(img, gr),
+            None => {
+                let letter = class.chars().next().map_or('?', |c| c.to_ascii_uppercase());
+                aegis_ui::ui::draw_glyph(&mut ui.p, aegis_ui::ui::Glyph::Letter(letter), gr, th().gold);
+            }
         }
     }
-    let tx = pr.x + 1 + side + 1;
+    let tx = pr.x + plate_lead(&mut ui.p);
     let shown = plate_name(&mut ui.p, name, pr.w);
     ui.p.text_fit(tx as f32, pr.y as f32 + 1.0, &shown, PLATE_TEXT, (pr.x + pr.w - 2 - tx) as f32, ink);
 }
@@ -801,6 +834,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::hud::hud_tests::{frame, game_cx, gfx};
     use crate::region::RegionMap;
+    use aegis_core::clock::{Duration, Instant};
     use crate::screens::{Game, Key};
     use emberwake_world::new_game;
     use std::path::Path;
@@ -1260,8 +1294,11 @@ pub(crate) mod tests {
         assert!(!all.iter().any(|l| l.0 == ids[3]), "no footlocker for a member in the crypts");
         let empty = map.state(&cx)["bunks"].as_array().cloned().unwrap().iter().filter(|b| b["member"] == json!("")).count();
         assert!(empty > 0 && all.len() + 1 + empty == map.state(&cx)["bunks"].as_array().unwrap().len(), "none on an empty bunk");
-        // the click: the loadout of that member, on the gear page
+        // the click: the loadout of that member, on the gear page (FOOTLOCKER1B: after the opening beat)
+        let t0 = Instant::now() + Duration::from_secs(1);
+        map.tick_at(&mut cx, t0);
         map.click_id(&mut cx, &format!("{LOCKER_PREFIX}{}", ids[0])).expect("the footlocker is clickable");
+        map.tick_at(&mut cx, t0 + locker_beat());
         let mut sheet = match cx.nav.pop() {
             Some(Nav::Push(s)) => s,
             _ => panic!("the loadout opens"),
@@ -1277,7 +1314,10 @@ pub(crate) mod tests {
         assert_eq!(open[0].0, ids[0]);
         assert!(open[0].3.ends_with("/footlocker_open/v0.png"), "the open art: {open:?}");
         shot(&g, "hub_footlocker_open");
-        // the loadout closed: the map on top again, the footlocker closed
+        // the loadout closed: the map on top again, the footlocker closed after the closing beat
+        let t1 = t0 + Duration::from_secs(5);
+        map.tick_at(&mut cx, t1);
+        map.tick_at(&mut cx, t1 + locker_beat());
         frame(&mut map, &mut cx, &mut g, 1.0);
         assert!(lockers(&map, &cx).iter().all(|l| !l.2 && l.3.ends_with("/footlocker/v0.png")), "closed again");
         assert_eq!(map.state(&cx)["locker_open"], json!(""));
@@ -1285,7 +1325,10 @@ pub(crate) mod tests {
         let (_, at, _, _) = lockers(&map, &cx).into_iter().find(|l| l.0 == ids[1]).unwrap();
         cx.gs_mut().position = at;
         frame(&mut map, &mut cx, &mut g, 1.0);
+        let t2 = t1 + Duration::from_secs(5);
+        map.tick_at(&mut cx, t2);
         map.key(&mut cx, Key::Char('e'));
+        map.tick_at(&mut cx, t2 + locker_beat());
         match cx.nav.pop() {
             Some(Nav::Push(s)) => {
                 assert_eq!(s.id(), "character");
@@ -1294,6 +1337,209 @@ pub(crate) mod tests {
             _ => panic!("E by the footlocker opens the loadout"),
         }
         assert_eq!(map.state(&cx)["locker_open"], json!(ids[1]));
+    }
+
+    /// The loadouts waiting to open (the story stage a new game's first tick resets to stays queued, so the story ticks
+    /// no more: the tests' screen stack never moves).
+    fn loadouts(cx: &Cx) -> usize {
+        cx.nav.iter().filter(|n| matches!(n, Nav::Push(s) if s.id() == "character")).count()
+    }
+
+    /// FOOTLOCKER1B (`PR7-58` (2), `FB-362`): a click swaps the footlocker to its open art at once and holds it there for
+    /// `LOCKER_BEAT_MS` of the frame's clock (no input taken) before the loadout comes up; once the loadout closed the map
+    /// shows it open for the same beat, then closed.
+    #[test]
+    fn footlocker1b_the_footlocker_shows_open_for_a_beat_each_way() {
+        let (mut cx, ids) = hub_cx(false);
+        let mut g = gfx_720();
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let shown_open = |map: &mut RegionMap, cx: &mut Cx, g: &mut Gfx| {
+            frame(map, cx, g, 1.0);
+            lockers(map, cx).into_iter().filter(|l| l.2).map(|l| (l.0, l.3)).collect::<Vec<_>>()
+        };
+        let beat = locker_beat();
+        let ms = Duration::from_millis(1);
+        let t0 = Instant::now() + Duration::from_secs(1);
+        map.tick_at(&mut cx, t0);
+        map.click_id(&mut cx, &format!("{LOCKER_PREFIX}{}", ids[0])).expect("the footlocker is clickable");
+        assert_eq!(loadouts(&cx), 0, "no loadout at the click");
+        let open = shown_open(&mut map, &mut cx, &mut g);
+        assert!(open.len() == 1 && open[0].0 == ids[0] && open[0].1.ends_with("/footlocker_open/v0.png"), "the open art at once: {open:?}");
+        shot(&g, "hub_footlocker_beat");
+        // the beat holds: no loadout, no step, no other footlocker
+        let at = cx.gs().position;
+        map.key(&mut cx, Key::Right);
+        map.click_id(&mut cx, &format!("{LOCKER_PREFIX}{}", ids[1])).ok();
+        map.tick_at(&mut cx, t0 + beat - ms);
+        assert_eq!(loadouts(&cx), 0, "the loadout waits for the beat");
+        assert_eq!(cx.gs().position, at, "the map holds still while it opens");
+        assert_eq!(map.state(&cx)["locker_open"], json!(ids[0]));
+        map.tick_at(&mut cx, t0 + beat);
+        assert_eq!(loadouts(&cx), 1, "one loadout as the beat ends");
+        match cx.nav.pop() {
+            Some(Nav::Push(s)) => assert_eq!((s.id(), s.state(&cx)["member"].clone()), ("character", json!(ids[0])), "the loadout after the beat"),
+            _ => panic!("the loadout comes up as the beat ends"),
+        }
+        // closed: the map ticks again, the open art holds for the beat, then the closed art
+        let t1 = t0 + Duration::from_secs(3);
+        map.tick_at(&mut cx, t1);
+        assert_eq!(shown_open(&mut map, &mut cx, &mut g).len(), 1, "open just after the loadout closed");
+        map.tick_at(&mut cx, t1 + beat - ms);
+        assert_eq!(shown_open(&mut map, &mut cx, &mut g).len(), 1, "open through the beat");
+        map.tick_at(&mut cx, t1 + beat);
+        assert!(shown_open(&mut map, &mut cx, &mut g).is_empty(), "closed after the beat");
+        assert_eq!(map.state(&cx)["locker_open"], json!(""));
+        assert_eq!(loadouts(&cx), 0, "nothing else opened");
+    }
+
+    /// FOOTLOCKER1B (`PR7-58` (1)): E takes a footlocker on the tile ahead first, then the normal interact, and a
+    /// footlocker underfoot last: from a neighbouring tile facing a footlocker it opens; standing on a footlocker facing
+    /// an NPC (a test-only copy of the hub with a present NPC's anchor moved beside it) the talk opens, not the footlocker;
+    /// standing on it facing nothing it opens.
+    #[test]
+    fn footlocker1b_e_takes_the_footlocker_ahead_then_the_npc_then_the_one_underfoot() {
+        let (mut cx, ids) = hub_cx(false);
+        let mut g = gfx_720();
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let d = cx.data.clone();
+        let loc = explore::location(&d, cx.gs()).clone();
+        let t = explore::template_of(&d, &loc).clone();
+        let all = lockers(&map, &cx);
+        let tiles: Vec<(i64, i64)> = all.iter().map(|l| l.1).collect();
+        let free = |p: (i64, i64)| explore::is_open(&t, p.0, p.1) && !tiles.contains(&p) && explore::markers_of(&loc).iter().all(|m| explore::marker_pos(&t, m, 0) != p);
+        // a footlocker with a free neighbour on some side (the party there facing it) and a free tile on another
+        let (member, at, side) = all
+            .iter()
+            .find_map(|l| explore::DIRS.iter().find(|d| free((l.1 .0 - d.0, l.1 .1 - d.1))).map(|d| (l.0.clone(), l.1, *d)))
+            .expect("a footlocker with a free neighbour");
+        let mut now = Instant::now() + Duration::from_secs(1);
+        let mut tick = |map: &mut RegionMap, cx: &mut Cx| {
+            now += Duration::from_secs(1);
+            map.tick_at(cx, now);
+        };
+        // (a) from the neighbouring tile, facing it
+        cx.gs_mut().position = (at.0 - side.0, at.1 - side.1);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        tick(&mut map, &mut cx);
+        map.interact(&mut cx, side);
+        assert_eq!(map.state(&cx)["locker_open"], json!(member), "the footlocker ahead opens");
+        tick(&mut map, &mut cx);
+        assert!(matches!(cx.nav.pop(), Some(Nav::Push(s)) if s.id() == "character"), "its loadout");
+        tick(&mut map, &mut cx);
+        tick(&mut map, &mut cx);
+        assert_eq!(map.state(&cx)["locker_open"], json!(""), "closed again");
+        // (b) on the footlocker facing an NPC: the NPC talks; (c) facing nothing: the footlocker underfoot opens
+        let npc = explore::markers_of(&loc).into_iter().find(|m| json::s(m, "kind") == "npc" && explore::presence(&d, cx.gs(), &json::s(&loc, "_qid"), m) == "present").expect("a present NPC in the hub");
+        let face = *explore::DIRS.iter().find(|dd| free((at.0 + dd.0, at.1 + dd.1))).expect("a free tile beside the footlocker");
+        let beside = (at.0 + face.0, at.1 + face.1);
+        let mut moved = (*d).clone();
+        let m = moved.maps.iter_mut().find(|m| json::s(m, "id") == json::s(&t, "id")).expect("the hub map");
+        for a in m.get_mut("anchors").and_then(|v| v.as_array_mut()).expect("anchors") {
+            if a["id"] == json!(json::s(&npc, "anchor")) {
+                a["x"] = json!(beside.0);
+                a["y"] = json!(beside.1);
+            }
+        }
+        cx.app.data = Arc::new(moved);
+        cx.gs_mut().position = at;
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        tick(&mut map, &mut cx);
+        map.interact(&mut cx, face);
+        assert!(map.svc.talking(), "the NPC ahead talks");
+        assert_eq!(map.state(&cx)["locker_open"], json!(""), "the footlocker underfoot stays shut");
+        shot(&g, "hub_footlocker_npc_first");
+        map.svc.end(&mut cx);
+        let _ = ids;
+        let back = (-face.0, -face.1);
+        if free((at.0 + back.0, at.1 + back.1)) {
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            map.interact(&mut cx, back);
+            assert_eq!(map.state(&cx)["locker_open"], json!(member), "facing nothing: the footlocker underfoot opens");
+        }
+    }
+
+    /// FOOTLOCKER1B (`PR7-58` (3), `FB-362` option B): at Extra large a plate drops its class glyph so the first name fits:
+    /// with every member named after the founder whose first name is widest, each plate shows that first name whole; a
+    /// name whose first word is still too wide is cut with an ellipsis, and the bunk's hover names the member in full.
+    /// At Normal the glyph stays.
+    #[test]
+    fn footlocker1b_extra_large_plates_drop_the_glyph_and_show_the_first_name() {
+        let (mut cx, _) = hub_cx(false);
+        let mut g = gfx();
+        let mut map = RegionMap::new(&mut cx);
+        let xl = aegis_ui::screen::TEXT_SIZES.iter().map(|s| s.1).fold(0.0, f64::max) as f32;
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let plates = |map: &RegionMap, cx: &Cx| map.state(cx)["bunks"].as_array().cloned().unwrap().into_iter().filter(|b| b.get("plate").is_some()).collect::<Vec<_>>();
+        assert!(plates(&map, &cx).iter().all(|b| b["plate"]["glyph"] == json!(true)), "Normal: the glyph");
+        // the founder whose first name is widest at Extra large
+        let names: Vec<String> = cx.data.catalogs.own_entries(WORLD, "characters").iter().filter(|c| json::s(c, "role") == "party").map(|c| json::s(c, "name")).collect();
+        g.fonts.scale = xl;
+        let first = |n: &str| n.split_whitespace().next().unwrap_or(n).to_string();
+        let mut widest = names.iter().map(|n| first(n)).collect::<Vec<_>>();
+        let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+        widest.sort_by(|a, b| p.text_w(a, PLATE_TEXT).total_cmp(&p.text_w(b, PLATE_TEXT)).then(a.cmp(b)));
+        let longest = names.iter().find(|n| first(n) == *widest.last().unwrap()).unwrap().clone();
+        for m in cx.gs_mut().party.members.iter_mut() {
+            m.name = longest.clone();
+        }
+        frame(&mut map, &mut cx, &mut g, xl);
+        let ps = plates(&map, &cx);
+        assert!(!ps.is_empty());
+        for b in &ps {
+            assert_eq!(b["plate"]["glyph"], json!(false), "Extra large: no glyph: {b}");
+            let shown = b["plate"]["shown"].as_str().unwrap();
+            assert!(shown == longest || shown == first(&longest), "'{longest}': the first name whole: {b}");
+        }
+        shot(&g, "hub_plates_xl_first_name");
+        // too wide even alone: cut with an ellipsis; the hover names the member in full
+        let long = "Wilhelmina-Bartholomew Underhill".to_string();
+        for m in cx.gs_mut().party.members.iter_mut() {
+            m.name = long.clone();
+        }
+        frame(&mut map, &mut cx, &mut g, xl);
+        let b = plates(&map, &cx).into_iter().next().unwrap();
+        assert!(b["plate"]["shown"].as_str().unwrap().ends_with("..."), "cut with an ellipsis: {b}");
+        let prop = b["prop"].as_str().unwrap().to_string();
+        let w = map.widgets().into_iter().find(|w| w["id"] == format!("{BUNK_PREFIX}{prop}")).expect("the bunk's click area");
+        let r = (w["rect"][0].as_i64().unwrap() as i32, w["rect"][1].as_i64().unwrap() as i32, w["rect"][2].as_i64().unwrap() as i32, w["rect"][3].as_i64().unwrap() as i32);
+        g.fonts.scale = xl;
+        map.draw(&mut cx, &mut g, (r.0 + r.2 / 2, r.1 + r.3 / 2), true);
+        let w = map.widgets().into_iter().find(|w| w["id"] == format!("{BUNK_PREFIX}{prop}")).unwrap();
+        assert_eq!(w["tip"][0], json!(long), "the hover: the full name");
+    }
+
+    /// BUNKS-FIX1 (`PR7-46` (3), `PT-35`): one click on an NPC in the hub walks the party beside them and opens the talk
+    /// on arrival, with no second click: every present NPC of the hub, from the bunk room.
+    #[test]
+    fn bunks_fix1_one_click_on_an_npc_walks_there_and_talks() {
+        let (mut cx, _) = hub_cx(false);
+        let mut g = gfx_720();
+        let d = cx.data.clone();
+        let loc = explore::location(&d, cx.gs()).clone();
+        let npcs: Vec<String> = explore::markers_of(&loc).into_iter().filter(|m| json::s(m, "kind") == "npc" && explore::presence(&d, cx.gs(), &json::s(&loc, "_qid"), m) == "present").map(|m| json::s(&m, "id")).collect();
+        assert!(!npcs.is_empty(), "the hub has NPCs");
+        let mut now = Instant::now() + Duration::from_secs(1);
+        for id in &npcs {
+            cx.gs_mut().position = ROOM;
+            let mut map = RegionMap::new(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            // the first tick queues the new game's story stage (it stays queued: no screen stack here)
+            now += Duration::from_millis(500);
+            map.tick_at(&mut cx, now);
+            map.click_id(&mut cx, &format!("marker.{id}")).unwrap_or_else(|e| panic!("{id}: {e}"));
+            let mut ticks = 0;
+            while !map.svc.talking() && ticks < 400 {
+                now += Duration::from_millis(500);
+                map.tick_at(&mut cx, now);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                ticks += 1;
+            }
+            assert!(map.svc.talking(), "{id}: one click talks on arrival (at {:?})", cx.gs().position);
+            map.svc.end(&mut cx);
+        }
     }
 
     /// FOOTLOCKER1 (3): the stash chest left the hub map: no point there opens the stash, no chest marker is drawn (the
