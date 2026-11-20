@@ -28,6 +28,7 @@ screen.
 - BU3. Name per phase. The bar's title is the phase's `name` when it has one (a form or state, for example "the
   Foundry Master, Unbound"), else the boss unit's name and title. When a phase brings a different boss unit (a wave
   effect whose unit is the encounter's boss for that phase), the bar follows that unit: its name, HP and poise.
+- BU3b. (Design 2026-11-20 `[PROVISIONAL]`, `FB-368`) Act 1 phase names read as events ("Vane withdraws"), so the bar's title stays the boss unit's name and title; a phase `name` shows only in the phase banner. A phase may set an optional `form` (kit field), shown after the name on the bar in place of the title. Built in `PR7-59`.
 - BU4. Passive tags. Under the title, one tag per boss passive (the unit's `passives`, by display name); hover or
   focus shows the passive's description. No phase change or enrage tags (user 2026-11-19 18:12: the header shows the
   phase; enrage is the baseline rule of `ENRAGE2.md` for every enemy). No other text on the bar.
