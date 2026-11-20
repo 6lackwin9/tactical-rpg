@@ -100,8 +100,17 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-28` (`TITLEFX1`) | Done (tools lane) | `develop` | Lantern glows and rising embers over the title backdrop at the spots of `backgrounds/menu/title.fx.json`; off under Reduce motion; scenarios `title_fx` and `title_fx_still`. FB-393 |
 | `ENGINE-28` (`CAMPAIGN-SIM1`) | Done, report only (tools lane) | `develop` | `tools/fc.sh sim campaign world=<world>`: story fights in story order with the party each fields, XP and levels carried by the kit's rules, optional side fights; Sunk Ward founders reach M5 at level 7, where the Crucible is still 3 % (Overlook 9 %). FB-395 |
 | `PR7-30` (`MENURAIL1`) | Done (tools lane) | `develop` | Game menu as a left rail plus party box; story title cards and the run-over card in the ornate frame with the title on a banner across the top edge (kit `rpgkit_ui::banner`); the Recipe pane ornate. FB-397 |
+| `ENGINE-29` (`ESCAPE-PLAY1`) | Done, report only (tools lane) | `develop` | No escape bug in the driver; the level effect was the fixed start (jittered: Crucible 0-6 % at every level 3-8); two trial fixes were worse and reverted; options for the Crucible call. FB-399 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-399: ENGINE-29 ESCAPE-PLAY1, no escape bug; the level effect was a fixed-start artifact
+
+- **Status**: done (tools lane), report only; no code, data or golden change.
+- **Spec**: `READY.md` `ENGINE-29` (`FB-395`).
+- **Finding** (`BALANCE_REPORT.md` "2026-11-20 ENGINE-29"): with the authored start tiles the seeds barely vary the Crucible, so 64 seeds play close to one fight; the Overlook's 41-54/64 at levels 4-5 and 0/64 from level 6 come from that one fight going one way or the other (from level 6 Hollis gets out a round sooner and the foes turn on Maren, the slowest escaper). With start tiles jittered by one tile the Overlook wins 0-6 % and the base 0-5 % at every level from 3 to 8. The driver has no escape bug: non-keepers Withdraw from the round the keeper can reach the winch, along routes around the enemy line. Two trial fixes in the shared auto-plan (test-only switch, measured, reverted) made it worse: Withdraw from round 1 (0/32 at every level) and Guard in place until the keeper is in reach (0/32). Per the feedback rule (two failed targeted fixes) I stopped there.
+- **Question for Design / the user** (with the other boss calls): the auto driver loses the Crucible at any level, so FB-389's figures at levels 4-5 (75-84 %) were fixed-start luck and the sim cannot rate fix (b). Options: (a) judge the Crucible by a human playtest at level 7 (its real level, FB-395); (b) a data change to the escape itself, such as `objective_count` 2 (FB-389 (c)) or exits nearer the party's side; (c) a new auto-plan row teaching escapers to move as a group (a design task, not a fix; it would move the shared auto-plan and its goldens).
+- **Docs delta**: none. `HISTORY.md`: "FB-389's Crucible figures at levels 4-5 were one fixed start; with jittered starts the auto driver wins 0-6 % at levels 3-8 (ENGINE-29)".
 
 ### FB-397: PR7-30 MENURAIL1, the game menu rail and the banner cards
 
