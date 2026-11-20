@@ -2,7 +2,7 @@
 
 What only you can judge, with what to do. The planner keeps this current: new items go in when they land, and an item leaves when you've answered. Say "open the build" and the planner launches the latest one.
 
-## For the next session (Design keeps this list; updated 2026-11-20 04:25)
+## For the next session (Design keeps this list; updated 2026-11-20 06:40)
 
 Parked for your approval (golden re-records need your word):
 
@@ -11,6 +11,10 @@ Parked for your approval (golden re-records need your word):
   the unit already holds (ends Vesper's Fade loop; 6 of 18 timeline fights move); (b) a hero whose target is down or
   out of reach retargets the nearest reachable foe instead of resting (8 fights move, sim golden run 21, one repro
   re-recorded). Recommendation: approve both for heroes; enemies keep resting (TG4 unchanged).
+- [ ] Planner fixes from the Crucible hand play (`PR7-60`, `FB-403`), behind a test-only switch until you approve: a
+  pick that clashes with an earlier hero's route is refused instead of dropping it, and Withdraw no longer spends AP
+  below zero. They move `sim_golden`, `phasefold` and `timeline_golden`. Recommendation: approve (both were bugs a player
+  could hit); take it together with the auto-plan fixes above.
 - [ ] Fight length after the enrage and caps landed (`PR7-55`, `FB-377`; what-if sims `FB-381`, `BALANCE_REPORT.md`
   "2026-11-19 ENGINE-26"): (a) random fights end in 1 round against your 3; more foe HP does not help (still 1 round
   at +100 %); one more foe gives 2 rounds (99 % won), two more give 3 (98 % won). Recommendation: two more foes per
@@ -22,8 +26,10 @@ Parked for your approval (golden re-records need your word):
   won 1 (round 6, no downs); the Overlook fled 1, won 1; Auto alone loses. Winnable, with no margin: one founder down
   ends the win. Two escapers instead of three (changes canon) would have turned 3 of the 6 losses into wins. The play
   also found planner bugs (a hand move can't step onto an exit, a later pick drops an earlier one, the keeper defaults
-  to the founder farthest from the winch), now queued (`PR7-60`). Recommendation: keep "one holds, three get out";
-  fix the planner, rerun the hand play, and only then weigh a data change; then the other bosses after you play one.
+  to the founder farthest from the winch), now fixed (`PR7-60`). Rerun by hand after the fixes (`FB-405`): the base fight
+  is still won (round 6); the Overlook is lost 3 of 3, because Withdraw can no longer run into AP debt. Recommendation:
+  keep "one holds, three get out" and that AP rule, and ease the Overlook itself (exits nearer, or one more founder AP
+  there); then the other bosses after you play one.
 - [ ] Enemy short names for the foe plates (`PR7-40`): Brawler, Berserker, Footman, Enforcer, Husk, Archer,
   Crossbowman, Purifier, Shaman, Skirmisher (also the Tallow Dredger), Scout, Flagellant, Render-Beast, Ash-Crawler;
   bosses by name.
