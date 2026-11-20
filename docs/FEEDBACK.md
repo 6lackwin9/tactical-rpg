@@ -104,8 +104,45 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-30` (`MENURAIL1`) | Done (tools lane) | `develop` | Game menu as a left rail plus party box; story title cards and the run-over card in the ornate frame with the title on a banner across the top edge (kit `rpgkit_ui::banner`); the Recipe pane ornate. FB-397 |
 | `ENGINE-29` (`ESCAPE-PLAY1`) | Done, report only (tools lane) | `develop` | No escape bug in the driver; the level effect was the fixed start (jittered: Crucible 0-6 % at every level 3-8); two trial fixes were worse and reverted; options for the Crucible call. FB-399 |
 | `ENGINE-30` (`AGENT-CRUCIBLE1`), `ENGINE-31` (`SIM-JITTER1`) | Done, report only (tools lane) | `develop` | The Crucible played by hand at level 7: base won in round 6 and Overlook in round 5 with no downs, every other try lost a founder; `objective_count` 2 would turn three losses into wins; sim start jitter is already the default (fixed starts move 7-16 of 24 fights). FB-401 |
+| `PR7-60` (`ESCAPE-PLAN1`) | Built (tools lane); goldens parked | `develop` | Hand moves onto exits; a pick never drops another's (refused with the reason), hand moves pass through friends; the hold pick suggests the nearest hero and can change until round 1; a hero's Withdraw spends no AP it lacks; the foe card keeps off the winch and exits. `sim_golden`, `phasefold` and `timeline_golden` run the old moves behind a test-only switch until the user approves the re-record. FB-403 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-403: PR7-60 ESCAPE-PLAN1 built; three goldens wait on the user behind a test-only switch
+
+- **Status**: built (tools lane), `develop`. The Crucible hand-play rerun the row asks for follows as its own item.
+- **Spec**: `docs/READY.md` row `0k7` (`PR7-60`, `FB-401`; Design's (a) on the XP half, 7d48bc13).
+- **What landed** (kit `rpgkit_battle` unless named):
+  1. A hand move may end on an exit for a unit Withdraw lets leave (`World::may_leave_at`: one tile, not the hold's
+     holder); `move_route`, `apply_goto` and `move_tiles` take it, and the move leaves by the exit as Withdraw does.
+     Checked against every encounter with exits: the rule reads the board's `exits` and the hold, nothing per encounter.
+  2. `round_intent_plan::pick` refuses a pick whose rebuild would drop another member's hand picks, with that member's
+     reason ("Blocked by Maren's plan: Move here dropped: No path"), and leaves the battle as it was; `move_tiles` does
+     not offer such a tile. A party member's hand move (`Plan::pass_route`) may pass through a tile a friend holds or
+     will hold, never ending a move block there, when that route is shorter or the only one; the walk passes through the
+     friend and steps back to its last free tile if cut on one (`command::walk`).
+  3. `pick_default` `nearest` (the hero with the shortest walk to a hold tile; ties the first); the Crucible and its
+     Overlook take it (seed `escape_plan1.json`). `stay_pick` may be repeated until round 1 is confirmed, the new pick
+     replacing the old. The battle screen marks the suggested hero on the pick, shows the holder pressed, and while round
+     1 is planned shows a chip `<hero> holds the winch · Change` that opens the pick again.
+  4. A party member's Withdraw walks only as far as its AP pays for and is refused at 0 AP ("Not enough AP to
+     withdraw."); the foe AI's Withdraw is as before.
+  5. The docked foe card takes the board side covering fewer objective tiles (hold tiles, exits) after the selected hero
+     and its target. The XP half stays as is (Design (a)).
+- **Goldens (parked for the user)**: (2) and (4) move `sim_golden` (run 15, role 5 quick), `phasefold` and
+  `timeline_golden`; nothing else moved. Per the row they land behind a test-only switch
+  (`rpgkit_battle::plan::set_escape_plan1(false)`, called only by those three tests), so the goldens run with the moves
+  as before. To adopt: re-record the three with the switch removed, in one commit naming this item and a HISTORY row.
+  The user's call, with `PR7-41` item 6.
+- **Tests**: `rpgkit_battle/tests/escape_plan.rs` (5 tests, one per item), `stay_behind.rs` and the host's
+  `stay_pick.rs` updated for the repeatable pick, `hold_ai.rs` fixture given `ap_regen` 4 (it relied on Withdraw running
+  AP into debt with no regen), `rpgkit_content` `stay_behind_checks` names `nearest`. The repro recording
+  `agent-classic-and-timeline-autoplay` is re-recorded (an intended change, not a golden): its timeline autoplay of
+  `goblin_skirmish` (seed 7) now runs out of time (fled) in round 6 instead of losing, the heroes walking through each
+  other; its classic session is unchanged.
+- **Docs delta**: `docs/HISTORY.md`: "2026-11-20 `PR7-60` ESCAPE-PLAN1: the hold pick is no longer final before round 1
+  is confirmed (ENCOUNTER2 H1 said once); a pick no longer drops a later member's hand picks (INPUT1 GH5's drop now
+  refuses the pick); a hero's Withdraw no longer spends AP into debt." `engine/README.md` none.
 
 ### FB-401: ENGINE-30 AGENT-CRUCIBLE1 and ENGINE-31 SIM-JITTER1, a careful player wins the Crucible; jitter is already the default
 

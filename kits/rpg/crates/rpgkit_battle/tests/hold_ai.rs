@@ -49,7 +49,8 @@ fn catalog() -> Catalog {
     }))
 }
 
-/// The escape `hold` of the winch (three of four heroes out, `fallback` from `stay`), on an open 12 x 9 floor.
+/// The escape `hold` of the winch (three of four heroes out, `fallback` from `stay`), on an open 12 x 9 floor; AP comes
+/// back each round (`ap_regen` 4), as a hero's Withdraw spends no AP it lacks (ESCAPE-PLAN1 (4)).
 fn row(stay: Value) -> Value {
     let mut sb = json!({"mode": "hold", "tiles": [[WINCH.x, WINCH.y]], "tiles_label": "the winch"});
     for (k, v) in stay.as_object().unwrap() {
@@ -57,7 +58,7 @@ fn row(stay: Value) -> Value {
     }
     json!({"id": "hold", "name": "Hold", "rows": vec![".".repeat(12); 9], "party": ["s_ash", "s_bryn", "s_cole", "s_dara"], "enemies": ["s_brute"],
         "exits": [[11, 3], [11, 4], [11, 5]], "objective": "escape", "objective_count": 3, "stay_behind": sb,
-        "total_blocks": 6, "unit_ap": 10, "ap_regen": 0, "max_rounds": 12, "rng_seed": 1337})
+        "total_blocks": 6, "unit_ap": 10, "ap_regen": 4, "max_rounds": 12, "rng_seed": 1337})
 }
 
 /// The round intent ruleset of these tests (Guard is offered through `active_guard`).

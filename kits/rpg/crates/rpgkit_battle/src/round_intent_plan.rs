@@ -1401,19 +1401,34 @@ fn target_label(w: &World, t: RoundTarget) -> String {
 /// INPUT1 IF4, IF6 a-b, GH3: appends `picks` to `c`'s picks on target `at` (the first skill or item pick sets the
 /// intent, the Maneuver kind and the round target) and rebuilds `c`'s plan from its picks, then every later member's
 /// (PL8; the later members' dropped picks and refusals come back). Atomic: a refused pick leaves the battle as it was.
+///
+/// ESCAPE-PLAN1 (2): a pick never drops another member's hand picks: when the rebuild would drop one (the routes
+/// clash), the pick is refused with that member's reason ("Blocked by <member>'s plan: Move here dropped: Too far") and
+/// the battle stays as it was.
 pub fn pick(w: &mut World, plan: &mut Plan, c: UnitId, at: RoundTarget, picks: &[Pick]) -> (Result<(), String>, Vec<(UnitId, String)>) {
     let (w0, seq0) = (w.clone(), plan.sequences.clone());
-    match pick_inner(w, plan, c, at, picks) {
+    let refused = match pick_inner(w, plan, c, at, picks) {
         Ok(()) => {
             let later = rebuild_later(w, plan, c);
-            (Ok(()), later)
+            match clash(&w0, w, c, &later) {
+                None => return (Ok(()), later),
+                Some(why) => why,
+            }
         }
-        Err(e) => {
-            *w = w0;
-            plan.sequences = seq0;
-            (Err(e.text), Vec::new())
-        }
-    }
+        Err(e) => e.text,
+    };
+    *w = w0;
+    plan.sequences = seq0;
+    (Err(refused), Vec::new())
+}
+
+/// ESCAPE-PLAN1 (2): the reason a pick by `c` is refused when the rebuild of the later members (`later`, their
+/// refusals) left one of them fewer hand picks than it held in `before` (None: no hand pick was dropped).
+fn clash(before: &World, after: &World, c: UnitId, later: &[(UnitId, String)]) -> Option<String> {
+    let side = if after.allies.contains(&c) { &after.allies } else { &after.enemies };
+    let m = side.iter().copied().find(|&m| m != c && picks_of(after, m).len() < picks_of(before, m).len())?;
+    let why = later.iter().find(|(u, _)| *u == m).map(|(_, t)| t.strip_prefix(&format!("{}: ", after.units[m].name)).unwrap_or(t).to_string()).unwrap_or_default();
+    Some(if why.is_empty() { format!("Blocked by {}'s plan", after.units[m].name) } else { format!("Blocked by {}'s plan: {why}", after.units[m].name) })
 }
 
 /// `pick`'s steps: the picks set (`set_up_picks`), then `c`'s plan built from them.
@@ -1990,7 +2005,9 @@ fn place(w: &World, plan: &mut Plan, c: UnitId, steps: Vec<Step>, may_move: bool
 /// ET3: the route of a plain move from `from` to the empty tile `cell`: "No path", "Claimed by <ally>'s move".
 fn move_route(w: &World, plan: &Plan, c: UnitId, from: V2, cell: V2) -> Result<Vec<V2>, String> {
     // BIGUNIT1 BU6: a big unit's whole square
-    if w.cells_at(c, cell).iter().any(|&n| !w.grid.is_valid(n) || !w.grid.is_walkable(n) || w.grid.is_exit(n)) {
+    // ESCAPE-PLAN1 (1): a unit Withdraw lets leave may pick an exit tile and leaves by it
+    let leaves = w.may_leave_at(c, cell);
+    if !leaves && w.cells_at(c, cell).iter().any(|&n| !w.grid.is_valid(n) || !w.grid.is_walkable(n) || w.grid.is_exit(n)) {
         return Err("That tile can't be moved to.".into());
     }
     if cell == from {
@@ -2002,7 +2019,7 @@ fn move_route(w: &World, plan: &Plan, c: UnitId, from: V2, cell: V2) -> Result<V
             return Err(format!("Claimed by {}'s move", w.units[m].name));
         }
     }
-    let route = plan.route(w, c, from, &[cell].into_iter().collect(), &blocked, false);
+    let route = plan.pass_route(w, c, from, &[cell].into_iter().collect(), leaves);
     if route.is_empty() {
         return Err("No path".into());
     }
@@ -2732,7 +2749,7 @@ pub fn move_tiles(w: &World, plan: &Plan, c: UnitId) -> Vec<MoveTile> {
     for y in 0..GRID_H {
         for x in 0..GRID_W {
             let cell = V2::new(x, y);
-            if cell == from || cell.dist(from) > reach || !w.grid.is_walkable(cell) || w.grid.is_exit(cell) || w.occupant(cell).is_some() {
+            if cell == from || cell.dist(from) > reach || !w.grid.is_walkable(cell) || (w.grid.is_exit(cell) && !w.may_leave_at(c, cell)) || w.occupant(cell).is_some() {
                 continue;
             }
             // BIGUNIT1 BU6, BU15: a big unit's move tiles are anchors its whole square fits
@@ -2741,7 +2758,13 @@ pub fn move_tiles(w: &World, plan: &Plan, c: UnitId) -> Vec<MoveTile> {
             }
             let o = option_of(w, plan, c, vec![if held { Pick::StepAfter(cell) } else { Pick::MoveHere(cell) }], RoundTarget::Cell(cell), base);
             if o.problem.is_none() {
-                let drops = trial(w, plan, c, o.at, &o.picks).map_or_else(|_| String::new(), |(_, after)| dropped_fill(w, plan, &after, c));
+                let Ok((mut w2, mut after)) = trial(w, plan, c, o.at, &o.picks) else { continue };
+                let drops = dropped_fill(w, plan, &after, c);
+                // ESCAPE-PLAN1 (2): a tile whose move would drop another member's hand picks is refused by `pick`
+                let later = rebuild_later(&mut w2, &mut after, c);
+                if clash(w, &w2, c, &later).is_some() {
+                    continue;
+                }
                 out.push(MoveTile { cell, blocks: o.blocks, ap: o.ap, drops });
             }
         }

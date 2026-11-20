@@ -3,14 +3,14 @@
   "version": 2,
   "id": "agent-classic-and-timeline-autoplay",
   "origin": "agent",
-  "created": "2026-11-19T22:06:53Z",
+  "created": "2026-11-20T04:58:57Z",
   "engine": "aegis 0.1.0",
   "source_rev": "",
   "scenario": "",
   "parent": null,
   "content": {
     "algo": "sha256-12",
-    "total": "4eed0eaf4667",
+    "total": "05c9642c0b4d",
     "files": {
       "catalog/body_slots.json": "4593d9afe719",
       "catalog/classes.json": "e639471c2246",
@@ -36,7 +36,7 @@
       "catalog/units.json": "2be606f07b60",
       "catalog/zones.json": "0674cd594beb",
       "dialogue/services.json": "2d46a14bb6d4",
-      "maps/maps.json": "7654ff00c965",
+      "maps/maps.json": "f3f03ca40eb7",
       "progression/xp_curve.json": "0a033e698e9b",
       "quests/quests.json": "c2a37256fd3a",
       "seeds/act1fix2.json": "9d94cffcfa30",
@@ -85,6 +85,7 @@
       "seeds/cln44.json": "144adacad7ef",
       "seeds/empower1.json": "eeb5e3f8ea0d",
       "seeds/enrage2.json": "f349cf8fc969",
+      "seeds/escape_plan1.json": "87207895b0a4",
       "seeds/gearrework1_fix.json": "34e838758810",
       "seeds/input2.json": "c9f086f4f651",
       "seeds/kithooks1.json": "5d00b2c29261",
@@ -122,6 +123,7 @@
       "seeds/pr7_43.json": "35dade476ca1",
       "seeds/pr7_53.json": "5654d9da5806",
       "seeds/pr7_53_upgrade_props.json": "8d2447ff15e5",
+      "seeds/pr7_53z_footlocker.json": "d57568a76073",
       "seeds/pr7_8.json": "124dce3e4f3f",
       "seeds/pr7_9.json": "03443a3e7c4c",
       "seeds/r41s2.json": "9a0a02b84a03",
@@ -176,9 +178,9 @@
       "worlds/sunk_ward/characters.json": "ae13cd0e8596",
       "worlds/sunk_ward/checkpoints.json": "6eba6545c0a5",
       "worlds/sunk_ward/dialogues.json": "a9861ec82ec2",
-      "worlds/sunk_ward/encounters.json": "7668be1129d9",
+      "worlds/sunk_ward/encounters.json": "9ce290a8b3e5",
       "worlds/sunk_ward/factions.json": "a02cedc2a45c",
-      "worlds/sunk_ward/locations.json": "8a6b1224e78e",
+      "worlds/sunk_ward/locations.json": "546a273b9d17",
       "worlds/sunk_ward/loot.json": "c23b2034d92f",
       "worlds/sunk_ward/meters.json": "c2727392bde7",
       "worlds/sunk_ward/quests.json": "b01c1ee316a9",
@@ -1061,46 +1063,46 @@
           "at": 2,
           "state": {
             "round": 6,
-            "over": true,
-            "result": "lost",
-            "log_count": 210,
+            "over": false,
+            "result": "fled",
+            "log_count": 224,
             "units": [
               {
                 "id": 0,
                 "hp": 0,
-                "ap": 1,
+                "ap": 3,
                 "pos": [
-                  0,
-                  4
+                  4,
+                  6
                 ],
                 "stance": "neutral",
                 "statuses": [
                   "slow",
-                  "expose",
-                  "steadfast"
+                  "expose"
                 ],
                 "pending": [
-                  "slow",
-                  "steadfast"
+                  "expose"
                 ],
                 "alive": false,
                 "withdrawn": false
               },
               {
                 "id": 1,
-                "hp": 0,
-                "ap": 12,
+                "hp": 120,
+                "ap": 0,
                 "pos": [
-                  4,
-                  3
+                  0,
+                  4
                 ],
                 "stance": "neutral",
-                "statuses": [],
+                "statuses": [
+                  "expose"
+                ],
                 "pending": [],
-                "alive": false,
+                "alive": true,
                 "withdrawn": false,
                 "meters": {
-                  "ammo_pips": 3
+                  "ammo_pips": 2
                 }
               },
               {
@@ -1108,8 +1110,8 @@
                 "hp": 120,
                 "ap": 12,
                 "pos": [
-                  1,
-                  2
+                  3,
+                  6
                 ],
                 "stance": "neutral",
                 "statuses": [
@@ -1121,18 +1123,16 @@
               },
               {
                 "id": 3,
-                "hp": 84,
+                "hp": 0,
                 "ap": 12,
                 "pos": [
-                  1,
-                  3
+                  3,
+                  1
                 ],
                 "stance": "neutral",
-                "statuses": [
-                  "empower"
-                ],
+                "statuses": [],
                 "pending": [],
-                "alive": true,
+                "alive": false,
                 "withdrawn": false
               },
               {
@@ -1140,8 +1140,8 @@
                 "hp": 84,
                 "ap": 12,
                 "pos": [
-                  4,
-                  6
+                  7,
+                  4
                 ],
                 "stance": "neutral",
                 "statuses": [
@@ -1159,14 +1159,18 @@
                 "hp": 84,
                 "ap": 12,
                 "pos": [
-                  3,
-                  4
+                  4,
+                  5
                 ],
                 "stance": "neutral",
                 "statuses": [
+                  "weaken",
+                  "expose",
                   "empower"
                 ],
-                "pending": [],
+                "pending": [
+                  "expose"
+                ],
                 "alive": true,
                 "withdrawn": false
               },
@@ -1175,12 +1179,11 @@
                 "hp": 120,
                 "ap": 12,
                 "pos": [
-                  1,
-                  4
+                  3,
+                  5
                 ],
                 "stance": "neutral",
                 "statuses": [
-                  "weaken",
                   "empower"
                 ],
                 "pending": [],
@@ -1192,7 +1195,7 @@
         }
       ],
       "end": {
-        "result": "lost",
+        "result": "fled",
         "at": 2
       }
     }

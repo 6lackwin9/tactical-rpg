@@ -28,8 +28,9 @@
 //!   plan_view {unit?}                          compiled timeline per ally (blocks, AP, targets, est. damage)
 //!   probe {unit, step}                         would this step fit next? (valid, reason, entries it adds); no change
 //!   add_step {unit, step} / undo {unit} / clear {unit}   edit an ally's steps one at a time
-//!   stay_pick {unit}                           ENCOUNTER2 H1: who holds a hold escape's tiles (once, round 1, before
-//!                                              confirm; `confirm`, `step` and `resolve` refuse until then; autoplay
+//!   stay_pick {unit}                           ENCOUNTER2 H1: who holds a hold escape's tiles (round 1, before
+//!                                              confirm; a new pick replaces the old one, ESCAPE-PLAN1 (3);
+//!                                              `confirm`, `step` and `resolve` refuse until then; autoplay
 //!                                              picks by the encounter's `pick_default`)
 //!   confirm                                    lock the party plan and schedule it
 //!   step                                       resolve one action (or block wrap-up)

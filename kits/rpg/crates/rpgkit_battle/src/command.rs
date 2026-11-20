@@ -1645,15 +1645,26 @@ fn walk(w: &mut World, rng: &mut GodotRng, src: UnitId, planned: &[V2], expected
     let mut blocked_by = String::new();
     let mut trapped = String::new();
     let mut entered = Vec::new();
-    for d in route {
+    // ESCAPE-PLAN1 (2): a party member walks through a friend's tile mid-route (never stopping on it); `back` is the
+    // last tile it stood on alone and the tiles walked to it
+    let passes = crate::plan::escape_plan1() && w.allies.contains(&src) && w.size_of(src) == 1;
+    let mut back = (start, 0);
+    let n = route.len();
+    for (i, d) in route.into_iter().enumerate() {
         let here = w.pos(src);
         let next = here + d;
-        if !w.units[src].is_active() || !w.move_unit(src, d) {
+        let through = passes && i + 1 < n && w.units[src].is_active() && w.grid.is_walkable(next) && !w.grid.is_exit(next) && w.occupant(next).is_some_and(|o| o != src && w.friends_of(src).contains(&o));
+        if through {
+            w.grid.positions[src] = Some(next);
+        } else if !w.units[src].is_active() || !w.move_unit(src, d) {
             cut = true;
             blocked_by = describe_blocker_for(w, src, here, next);
             break;
         }
         moved += 1;
+        if !through && w.grid.pos(src).is_some() {
+            back = (w.pos(src), moved);
+        }
         // BIGUNIT1 BU7: the cells newly covered roll their hazards and may spring a trap
         let new_cells = newly_covered(w, src, here, next);
         if w.grid.pos(src).is_some() {
@@ -1664,6 +1675,11 @@ fn walk(w: &mut World, rng: &mut GodotRng, src: UnitId, planned: &[V2], expected
             trapped = format!("the {trap}");
             break;
         }
+    }
+    // ESCAPE-PLAN1 (2): a walk cut on a friend's tile steps back to the last tile it held alone
+    if passes && w.grid.pos(src).is_some() && w.occupant_other(src, w.pos(src)).is_some() {
+        w.grid.positions[src] = Some(back.0);
+        moved = back.1;
     }
     let notes = hazard_on_enter(w, rng, src, &entered);
     if w.units[src].is_withdrawn {

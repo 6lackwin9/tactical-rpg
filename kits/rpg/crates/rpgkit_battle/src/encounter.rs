@@ -221,8 +221,9 @@ pub const TIMEOUT_OUTCOMES: [&str; 3] = [FLED, LOST, ESCAPED];
 pub const STAY_HOLD: &str = "hold";
 pub const STAY_STAND: &str = "stand";
 pub const STAY_MODES: [&str; 2] = [STAY_HOLD, STAY_STAND];
-/// H1: who holds when nobody picked (`pick_default`): the hero with the most HP now, or the first deployed.
-pub const PICK_DEFAULTS: [&str; 2] = ["highest_hp", "first"];
+/// H1: who holds when nobody picked (`pick_default`): the hero with the most HP now, the first deployed, or
+/// (ESCAPE-PLAN1 (3)) the hero with the shortest route to a hold tile (`nearest`; ties the first).
+pub const PICK_DEFAULTS: [&str; 3] = ["highest_hp", "first", "nearest"];
 /// H2: who else opens the gate once the holder is down (`fallback`).
 pub const FALLBACKS: [&str; 2] = ["any", "none"];
 /// W3: what the world does with the hero who stayed (`then`; ROSTER1 3.2).

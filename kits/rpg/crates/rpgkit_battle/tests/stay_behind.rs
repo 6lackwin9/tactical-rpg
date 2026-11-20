@@ -1,12 +1,12 @@
 //! ENCOUNTER2-H on a scratch catalog built here (no shipped data): the hold-a-tile escape (`stay_behind` mode hold,
 //! docs/specs/ENCOUNTER2.md 3.1), `unkillable` (S1), the timeout verdict in the session (S2) and the party fates (S3).
-//! Expectations come from the rules: round 1 is not confirmed before someone holds; the pick is allowed once, while
-//! round 1 is planned (H1); the gate is open while the holder is active on a hold tile, or with the holder down and
-//! `fallback` any while any hero is (H2); a step onto an exit through a shut gate fails and the unit stays before it,
-//! while planning still takes the Withdraw and the holder's own Withdraw is refused (H3); the escape is won at a block
-//! end once the gate is open, `objective_count` heroes are out and every other one is out, down or holding, and the
-//! holders stayed (H4); the last round over gives `timeout_outcome` (fled unless it names lost; H5, S2); damage leaves
-//! an unkillable unit at 1 HP and the log one cell per unit (S1).
+//! Expectations come from the rules: round 1 is not confirmed before someone holds; the pick is allowed while round 1
+//! is planned, a new pick replacing the old (H1, ESCAPE-PLAN1 (3)); the gate is open while the holder is active on a
+//! hold tile, or with the holder down and `fallback` any while any hero is (H2); a step onto an exit through a shut
+//! gate fails and the unit stays before it, while planning still takes the Withdraw and the holder's own Withdraw is
+//! refused (H3); the escape is won at a block end once the gate is open, `objective_count` heroes are out and every
+//! other one is out, down or holding, and the holders stayed (H4); the last round over gives `timeout_outcome` (fled
+//! unless it names lost; H5, S2); damage leaves an unkillable unit at 1 HP and the log one cell per unit (S1).
 
 use indexmap::IndexMap;
 use rpgkit_battle::encounter::PartyFate;
@@ -116,8 +116,11 @@ fn round_one_waits_for_the_pick_and_the_pick_is_made_once() {
     assert_eq!(s.stay_pick(ASH), Ok(()));
     assert_eq!(s.w.hold.as_ref().unwrap().holder, Some(ASH));
     assert!(!s.needs_stay_pick());
-    assert_eq!(s.stay_pick(BRYN), Err(format!("Ash already holds {LABEL}.")), "a second pick is refused");
+    // ESCAPE-PLAN1 (3): a second pick replaces the first until round 1 is confirmed
+    assert_eq!(s.stay_pick(BRYN), Ok(()), "a second pick replaces the first");
+    assert_eq!(s.stay_pick(ASH), Ok(()));
     assert!(s.confirm_plan(), "after the pick the plan is confirmed");
+    assert_eq!(s.stay_pick(BRYN), Err(format!("Ash already holds {LABEL}.")), "no pick after the confirm");
     // the same battle without a hold has nothing to pick
     let mut plain = session(row(json!({}), json!({"stay_behind": {}})), by_the_exits());
     assert!(!plain.needs_stay_pick() && plain.w.hold.is_none());

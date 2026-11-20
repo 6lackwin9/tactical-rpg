@@ -158,7 +158,7 @@ fn each_broken_rule_is_one_error() {
     one(stay_errors(&v, json!({"tiles_label": "x".repeat(25)})), "Stay-behind tiles_label is 1 to 24 characters.", "long label");
     one(stay_errors(&v, json!({"room": "yard"})), "Stay-behind room 'yard' is not a room of this encounter.", "room");
     one(stay_errors(&v, json!({"fallback": "some"})), "Stay-behind fallback 'some' is not one of any, none.", "fallback");
-    one(stay_errors(&v, json!({"pick_default": "last"})), "Stay-behind pick_default 'last' is not one of highest_hp, first.", "pick_default");
+    one(stay_errors(&v, json!({"pick_default": "last"})), "Stay-behind pick_default 'last' is not one of highest_hp, first, nearest.", "pick_default");
     one(stay_errors(&v, json!({"stand_hp_pct": 30})), "Stay-behind stand_hp_pct is for mode stand only.", "a stand key on a hold");
     let stand = |extra: Value| {
         let mut sb = json!({"mode": "stand", "tiles": [], "fallback": null, "pick_default": null});

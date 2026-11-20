@@ -1,7 +1,7 @@
 //! ENCOUNTER2-H through the host on a scratch catalog (no shipped data): `stay_pick {unit}` names the holder of a hold
-//! escape once, before round 1 is confirmed, and is recorded for replays (H1); `confirm`, `step` and `resolve` refuse
-//! until then; `autoplay` picks by `pick_default`; `state` gains `hold` only for a hold escape; the checkpoint result at
-//! the round limit is the encounter's `timeout_outcome` (S2).
+//! escape before round 1 is confirmed, a new pick replacing the old (ESCAPE-PLAN1 (3)), and is recorded for replays
+//! (H1); `confirm`, `step` and `resolve` refuse until then; `autoplay` picks by `pick_default`; `state` gains `hold`
+//! only for a hold escape; the checkpoint result at the round limit is the encounter's `timeout_outcome` (S2).
 
 use rpgkit_data::Catalog;
 use rpgkit_host::{outcome_of, Battle, Host};
@@ -61,8 +61,11 @@ fn the_holder_is_picked_once_before_round_one_is_confirmed() {
     let picked = h.handle(&json!({"cmd": "stay_pick", "unit": 1}));
     assert_eq!(ok(&picked)["holder"], json!(1));
     assert_eq!(picked["state"]["hold"]["holder"], json!(1));
-    refused(&h.handle(&json!({"cmd": "stay_pick", "unit": 0})), "already holds the winch");
+    // ESCAPE-PLAN1 (3): a new pick replaces the old one until round 1 is confirmed
+    assert_eq!(ok(&h.handle(&json!({"cmd": "stay_pick", "unit": 0})))["holder"], json!(0));
+    assert_eq!(ok(&h.handle(&json!({"cmd": "stay_pick", "unit": 1})))["holder"], json!(1));
     ok(&h.handle(&json!({"cmd": "confirm"})));
+    refused(&h.handle(&json!({"cmd": "stay_pick", "unit": 0})), "already holds the winch");
     // the pick is in the history, so the requests replay to the same holder
     let history: Vec<Value> = h.handle(&json!({"cmd": "history"}))["history"].as_array().unwrap().clone();
     assert!(history.iter().any(|r| r["cmd"] == json!("stay_pick") && r["unit"] == json!(1)), "{history:?}");
