@@ -123,8 +123,8 @@ to `battle_take36_locks_mock.py`, shots in the project files `art-ui/battle_ux14
     lists each hit and each tick with the total. Regen previews as the moss gain.
   - Numbers after modifiers (SV7, SV13): every deterministic number (damage, heal) is the final number only, tinted
     when a modifier changed it (lowered in the theme's `foe` colour with a small down arrow, raised in the game colour
-    `boss_gold` with a small up arrow; theme tokens, not hexes, `FB-370`). A hovered number gets no frame; its hover lists the base and each modifier's percent. No struck
-    base, no shield glyph.
+    `boss_gold` with a small up arrow; theme tokens, not hexes, `FB-370`). A hovered number gets no frame; its hover
+    lists the base and each modifier's percent. No struck base, no shield glyph.
   - Movement (`move_rate`): lost move tiles dimmed at the range edge, gained ones gold-edged.
   - Taunt (SV8): a 20 px badge over the taunted unit's sprite (dark slate, crimson rim, the taunt icon, a pointer
     down), bobbing 1 px; hover names the unit it must target and the rounds left. No ring at the feet. A stealthed
