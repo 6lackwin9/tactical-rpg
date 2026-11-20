@@ -222,8 +222,13 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
         Some("arena") => match ruleset {
             Some(ruleset) => {
                 emberwake_rules::ruleset::Ruleset::of(&cx.app.data.cat, ruleset).map_err(anyhow::Error::msg)?;
-                let encounter = cx.app.encounter.clone();
-                stack.push(Box::new(battle::BattleScreen::arena_with(&cx, None, &encounter, Some(ruleset.to_string()), "", false)));
+                // PR7-54: `scene=<world>:<encounter>` opens a world's encounter (the playback form), so a scenario reaches
+                // a boss fight of a world
+                let (world, encounter) = match cx.app.encounter.split_once(':') {
+                    Some((w, e)) => (Some(w.to_string()), e.to_string()),
+                    None => (None, cx.app.encounter.clone()),
+                };
+                stack.push(Box::new(battle::BattleScreen::arena_with(&cx, world, &encounter, Some(ruleset.to_string()), "", false)));
             }
             None => stack.push(Box::new(battle::BattleScreen::sandbox(&cx))),
         },

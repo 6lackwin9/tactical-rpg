@@ -140,8 +140,8 @@ pub(super) fn party_poise_row(r: Rect) -> Rect {
     Rect::new(r.x + 3, r.y + r.h - 4, r.w - STATUS_COL - 6, 2)
 }
 
-/// Contract 6: one status tab in `r`: the icon, the rim (gold a buff, oxblood a debuff; dashed when a planned move
-/// applies it), the rounds left as up to 3 pips at its right (a permanent one a full bar).
+/// Contract 6: one status tab in `r`: the icon and the rim (gold a buff, oxblood a debuff; dashed when a planned move
+/// applies it). BOSSUI1 BU6 (PR7-54): icon only, no pips or numbers; the rounds left are in its list line (`Tab::line`).
 pub(super) fn tab(ui: &mut Ui<super::Action>, cx: &mut Cx, t: &Tab, r: Rect) {
     let rim = if t.buff { th().gold } else { oxblood() };
     ui.p.fill(r, rgb(16, 20, 30));
@@ -153,20 +153,11 @@ pub(super) fn tab(ui: &mut Ui<super::Action>, cx: &mut Cx, t: &Tab, r: Rect) {
     } else {
         ui.p.panel(r, rgba(0, 0, 0, 0), rim, 0.0);
     }
-    let side = (r.h - 2).min(r.w - 4).max(1);
-    let ir = Rect::new(r.x + 1, r.y + (r.h - side) / 2, side, side);
+    let side = (r.h - 2).min(r.w - 2).max(1);
+    let ir = Rect::new(r.x + (r.w - side) / 2, r.y + (r.h - side) / 2, side, side);
     if !icon(ui, cx, &t.icon, ir, if t.planned { 170 } else { 255 }) {
         let letter: String = t.name.chars().take(1).collect();
         ui.p.text_center(ir.x as f32 + ir.w as f32 / 2.0, ir.y as f32, &letter, SMALL, rim);
-    }
-    let px = r.x + r.w - 3;
-    match t.rounds {
-        None => ui.p.fill(Rect::new(px, r.y + 1, 2, r.h - 2), rim),
-        Some(n) => {
-            for k in 0..n.clamp(0, 3) {
-                ui.p.fill(Rect::new(px, r.y + r.h - 3 - k * 3, 2, 2), rim);
-            }
-        }
     }
 }
 

@@ -12,7 +12,7 @@ use emberwake_battle::intent::{self, FoeCard};
 use emberwake_battle::resolver::ScheduledAction;
 use emberwake_battle::round_intent::{self as ri, RoundIntent};
 use emberwake_battle::round_intent_plan as rip;
-use emberwake_battle::session::{Phase, Session};
+use emberwake_battle::session::{Phase, PhaseMark, Session};
 use emberwake_battle::world::{UnitId, World};
 
 /// The view's screen name (its layout and fixture files).
@@ -245,6 +245,200 @@ impl CardView {
     }
 }
 
+/// BOSSUI1 (PR7-54, contract 9.2): a boss intent row's cell, or its total: the HP the hits take (0: "-"), the poise
+/// pips they break, the statuses they bring, whether one empties the poise bar (BREAK), and how many hits it holds.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ImpactCell {
+    pub hp: i32,
+    pub pips: i32,
+    pub statuses: Vec<String>,
+    pub breaks: bool,
+    pub hits: usize,
+}
+
+impl ImpactCell {
+    /// Adds hit `h` taking `hp` HP (a status once).
+    fn add(&mut self, h: &intent::CardHit, hp: i32) {
+        self.hp += hp;
+        self.pips += h.pips;
+        self.breaks |= h.breaks;
+        self.hits += 1;
+        for st in &h.statuses {
+            if !self.statuses.contains(st) {
+                self.statuses.push(st.clone());
+            }
+        }
+    }
+
+    /// The HP cell's text: "-1250", "-12K"; "-" where the row does not hit (contract 9.2 numbers).
+    pub fn hp_text(&self) -> String {
+        if self.hits == 0 || self.hp <= 0 { "-".to_string() } else { format!("-{}", impact_num(self.hp)) }
+    }
+}
+
+/// Contract 9.2 numbers: whole up to 9999, K from 10K ("12K", "120K"), M from 1M (both rounded down).
+pub fn impact_num(n: i32) -> String {
+    let a = n.unsigned_abs();
+    let sign = if n < 0 { "-" } else { "" };
+    if a >= 1_000_000 {
+        format!("{sign}{}M", a / 1_000_000)
+    } else if a >= 10_000 {
+        format!("{sign}{}K", a / 1000)
+    } else {
+        format!("{sign}{a}")
+    }
+}
+
+/// BOSSUI1 (contract 9.2): one boss intent row: the selected hero, "Others", one member, or "Party"; a cell per block
+/// and the total of what lands.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ImpactRow {
+    pub unit: Option<UnitId>,
+    pub name: String,
+    pub cells: Vec<ImpactCell>,
+    pub total: ImpactCell,
+}
+
+/// BOSSUI1 BU11, BU16 (contract 9.2): the boss intent rows while planning: the selected hero's row, "Others" (the rest
+/// of the party summed, never the hero again), the hover's member rows and "Party" line; the block a phase break
+/// lands (`ends`, with the next phase's number) and the block the poise breaks.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct BossRows {
+    pub blocks: i32,
+    pub hero: Option<ImpactRow>,
+    pub others: ImpactRow,
+    pub members: Vec<ImpactRow>,
+    pub party: ImpactRow,
+    pub ends: Option<i32>,
+    pub next_phase: usize,
+    pub break_block: Option<i32>,
+}
+
+impl BossRows {
+    /// Block `b`'s header: "Block N", "Block N: ends" where the phase breaks, "Ph. 2 next round" on the first block it
+    /// cancels (contract 9.2).
+    pub fn header(&self, b: i32) -> String {
+        match self.ends {
+            Some(e) if e == b => format!("Block {b}: ends"),
+            Some(e) if b == e + 1 => format!("Ph. {} next round", self.next_phase),
+            _ => format!("Block {b}"),
+        }
+    }
+
+    /// Block `b` does not run (after the phase break): greyed, its numbers struck.
+    pub fn struck(&self, b: i32) -> bool {
+        self.ends.is_some_and(|e| b > e)
+    }
+}
+
+/// BOSSUI1 (contract 9.1, row 3): the boss's own next blow: its skill (icon) and name, its target, the block it lands
+/// and its damage.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BossBlow {
+    pub skill: String,
+    pub name: String,
+    pub target: Option<UnitId>,
+    pub impact: i32,
+    pub damage: i32,
+}
+
+/// BOSSUI1 BU7, BU10 (contract 9.1, row 3): the boss's poise: pips lit, of (its own `poise_pips`), the pips the plan
+/// breaks, the bar's pip threshold, BREAK planned.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct BossPoise {
+    pub lit: i32,
+    pub of: i32,
+    pub planned: i32,
+    pub threshold: i32,
+    pub breaks: bool,
+}
+
+impl BossPoise {
+    /// "6/10".
+    pub fn text(&self) -> String {
+        format!("{}/{}", self.lit, self.of)
+    }
+}
+
+/// BOSSUI1 BU10: the most pips a boss bar draws.
+pub const BOSS_PIPS_MAX: i32 = 10;
+
+/// BOSSUI1 (PR7-54, contract 9.1): the boss bar across the board's top (in place of the boss's plate and its card).
+#[derive(Debug, Clone, PartialEq)]
+pub struct BossBar {
+    pub unit: UnitId,
+    /// The title (the phase's name, else the unit's full name) and the character's title ("" none).
+    pub name: String,
+    pub title: String,
+    pub marks: Vec<PhaseMark>,
+    pub current: usize,
+    /// The current phase's span: HP left of it and its size ("160/450"), and the HP the plan takes of it.
+    pub span_left: i32,
+    pub span: i32,
+    pub planned: i32,
+    pub poise: Option<BossPoise>,
+    /// The boss passives: (display name, description) for the tags (BU4).
+    pub passives: Vec<(String, String)>,
+    pub tabs: Vec<Tab>,
+    pub blow: Option<BossBlow>,
+    /// The intent rows: only while planning, when a hero targets the boss or it is pinned (contract 9.2).
+    pub rows: Option<BossRows>,
+}
+
+impl BossBar {
+    /// "160/450".
+    pub fn span_text(&self) -> String {
+        format!("{}/{}", self.span_left, self.span)
+    }
+}
+
+/// BOSSUI1 (contract 9.2): the boss intent rows over the boss's card read `read` (the kit's `foe_card` over the live
+/// plan), cut where the plan breaks the phase (`intent::phase_cut` on the span's `floor`): the hits after the
+/// breaking one do not land (the same block's are dropped, a later block's are shown struck); totals count what
+/// lands. `hero` the selected hero, `allies` the members in plate order, `next_phase` the next phase's number.
+pub fn boss_rows(read: &FoeCard, floor: i32, blocks: i32, hero: Option<UnitId>, allies: &[(UnitId, String)], next_phase: usize) -> BossRows {
+    let blocks = blocks.max(1);
+    let cut = intent::phase_cut(read, floor);
+    let row = |unit: Option<UnitId>, name: &str| ImpactRow { unit, name: name.to_string(), cells: vec![ImpactCell::default(); blocks as usize], total: ImpactCell::default() };
+    let mut out = BossRows { blocks, hero: hero.map(|h| row(Some(h), &allies.iter().find(|a| a.0 == h).map_or_else(String::new, |a| a.1.clone()))), others: row(None, "Others"), members: allies.iter().map(|a| row(Some(a.0), &a.1)).collect(), party: row(None, "Party"), ends: cut.map(|c| c.block), next_phase, break_block: None };
+    for (k, h) in read.hits.iter().enumerate() {
+        let (hp, lands) = match cut {
+            Some(c) if k == c.hit => (c.landed, true),
+            Some(c) if k > c.hit && h.impact == c.block => continue,
+            Some(c) if k > c.hit => (h.damage, false),
+            _ => (h.damage, true),
+        };
+        let b = (h.impact.clamp(1, blocks) - 1) as usize;
+        if lands && h.breaks && out.break_block.is_none() {
+            out.break_block = Some(h.impact);
+        }
+        let mine = Some(h.unit) == hero;
+        let put = |r: &mut ImpactRow| {
+            r.cells[b].add(h, hp);
+            if lands {
+                r.total.add(h, hp);
+            }
+        };
+        match out.hero.as_mut() {
+            Some(r) if mine => put(r),
+            _ => put(&mut out.others),
+        }
+        if let Some(r) = out.members.iter_mut().find(|r| r.unit == Some(h.unit)) {
+            put(r);
+        }
+        put(&mut out.party);
+    }
+    out
+}
+
+/// The boss's first live blow this round (`lands_of` with its skill and damage).
+fn boss_blow(w: &World, sched: &[ScheduledAction], boss: UnitId) -> Option<BossBlow> {
+    let l = lands_of(w, sched, boss)?;
+    let a = intent::actions_of(boss, sched).into_iter().find(|a| a.impact == l.impact)?;
+    let hit = l.target.and_then(|t| intent::hits_on(w, sched, boss, t).into_iter().find(|h| h.block == l.impact));
+    Some(BossBlow { skill: a.command.skill.clone(), name: hit.as_ref().map_or_else(|| w.cat.skill(&a.command.skill).map_or_else(String::new, |s| s.name.clone()), |h| h.skill.clone()), target: l.target, impact: l.impact, damage: hit.map_or(0, |h| h.damage) })
+}
+
 /// The whole view-model.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct BattleModel {
@@ -256,6 +450,8 @@ pub struct BattleModel {
     pub hostiles: String,
     pub reinforce: String,
     pub card: Option<CardView>,
+    /// BOSSUI1 (PR7-54, contract 9): the boss bar (None: no boss on the field); the boss then has no plate and no card.
+    pub boss: Option<BossBar>,
 }
 
 /// The round as it will run: while planning the plan booked after the enemies' actions (`planned_schedule`), else
@@ -311,10 +507,11 @@ fn poise_of(w: &World, u: UnitId) -> Option<(i32, i32)> {
     use emberwake_battle::poise;
     let st = poise::state(w, u).filter(|st| st.max > 0)?;
     let n = &w.ruleset.numbers;
+    let full = poise::full_pips(n, st);
     if st.broken {
-        return Some((0, n.poise_pips.max(1)));
+        return Some((0, full));
     }
-    Some(if poise::pips_mode(n) { (poise::pips_now(n, st).min(n.poise_pips.max(1)), n.poise_pips.max(1)) } else { (poise::bar_pips(n, st), n.poise_pips.max(1)) })
+    Some(if poise::pips_mode(n) { (poise::pips_now(n, st).min(full), full) } else { (poise::bar_pips(n, st), full) })
 }
 
 /// What the model reads beside the session: the selected hero, the pinned or hovered foe, the round-start AP of each
@@ -328,6 +525,9 @@ pub struct Inputs<'a> {
     pub intent_of: &'a dyn Fn(UnitId) -> Option<RoundIntent>,
     /// Contract 4: the groups the player opened (their catalog units).
     pub open_groups: &'a [String],
+    /// BOSSUI1 (contract 9.2): the inspected (pinned) unit, and a passive's description by id (the boss tags' hover).
+    pub pinned: Option<UnitId>,
+    pub passive_about: &'a dyn Fn(&str) -> String,
 }
 
 /// BATTLE-UI2: the view-model of session `s` (contract 2-6).
@@ -400,10 +600,16 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
         if guest { m.guests.push(p) } else { m.party.push(p) }
     }
     // the foes on the field (reinforcements not placed yet are left out)
-    let shown: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| w.grid.pos(e).is_some() || !w.units[e].is_alive() || w.units[e].is_withdrawn).collect();
+    // BOSSUI1 (contract 9.1): a boss on the bar leaves the foe panel
+    let phase_bar = s.phase_bar();
+    let boss = phase_bar.as_ref().map(|p| p.unit);
+    let shown: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| Some(e) != boss && (w.grid.pos(e).is_some() || !w.units[e].is_alive() || w.units[e].is_withdrawn)).collect();
     let active = shown.iter().filter(|e| w.units[**e].is_active()).count();
     m.hostiles = format!("Hostiles {active}");
     m.reinforce = s.phases.next_reinforcement().map_or_else(String::new, |(n, r)| format!("+{n} round {r}"));
+    if boss.is_some() && m.reinforce.is_empty() {
+        m.reinforce = BOSS_ABOVE.to_string();
+    }
     let keep_full = card_foe.or_else(|| inp.sel.and_then(target_of));
     if shown.len() >= GROUP_FROM {
         let mut groups: Vec<(String, Vec<Plate>)> = Vec::new();
@@ -456,8 +662,53 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
         let (name, title) = (inp.full_name)(f);
         Some(CardView { foe: f, name, title, boss: w.units[f].tier == "boss", hero, read, rows })
     });
+    // BOSSUI1 (contract 9): the boss bar; the boss's card folds into it
+    if let Some(pb) = phase_bar {
+        let b = pb.unit;
+        if m.card.as_ref().is_some_and(|c| c.foe == b) {
+            m.card = None;
+        }
+        let unit = &w.units[b];
+        let read = cards.iter().find(|c| c.0 == b).map_or_else(|| intent::foe_card(w, &sched, b), |c| c.1.clone());
+        let (span_left, span) = pb.span(unit.hp);
+        let hero = inp.sel.filter(|h| w.allies.contains(h) && w.units[*h].is_active());
+        let allies: Vec<(UnitId, String)> = w.allies.iter().copied().filter(|&a| w.units[a].is_active()).map(|a| (a, (inp.plate_name)(a))).collect();
+        let rows = boss_rows(&read, pb.floor, s.def.total_blocks, hero, &allies, pb.current + 2);
+        let show_rows = planning && (hero.and_then(target_of) == Some(b) || inp.pinned == Some(b));
+        let poise = poise_of(w, b).map(|(lit, of)| {
+            let st = emberwake_battle::poise::state(w, b).copied().unwrap_or_default();
+            BossPoise { lit, of, planned: rows.party.total.pips.min(lit), threshold: emberwake_battle::poise::pip_threshold(&w.ruleset.numbers, &st), breaks: rows.break_block.is_some() }
+        });
+        let (full, title) = (inp.full_name)(b);
+        let mut passives: Vec<(String, String)> = Vec::new();
+        let ids = w.cat.units.get(&unit.catalog_id).map(|d| d.passives.clone()).unwrap_or_default();
+        for id in ids.iter().chain(unit.passives.iter()) {
+            if let Some(p) = w.cat.passives.get(id).filter(|p| !passives.iter().any(|x| x.0 == p.name)) {
+                passives.push((p.name.clone(), (inp.passive_about)(id)));
+            }
+        }
+        let planned_statuses: Vec<String> = rows.party.total.statuses.clone();
+        m.boss = Some(BossBar {
+            unit: b,
+            name: if pb.name.is_empty() { full } else { pb.name.clone() },
+            title: if pb.name.is_empty() { title } else { String::new() },
+            marks: pb.marks.clone(),
+            current: pb.current,
+            span_left,
+            span,
+            planned: if planning { rows.party.total.hp.min(span_left) } else { 0 },
+            poise,
+            passives,
+            tabs: tabs_of(w, b, if planning { &planned_statuses } else { &[] }),
+            blow: boss_blow(w, &sched, b),
+            rows: show_rows.then_some(rows),
+        });
+    }
     m
 }
+
+/// BOSSUI1 (take 31): the foe panel's note while the boss is on the bar.
+pub const BOSS_ABOVE: &str = "Boss above";
 
 /// "180/242".
 fn hp_text(p: &Plate) -> String {

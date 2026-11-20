@@ -294,14 +294,16 @@ impl Popup {
 
     /// VISCLAR1-D: a skill menu measured for this frame's text size and placed beside its tile (`tile`: that tile's rect in
     /// the board's view) inside the battle view `view`.
-    pub(super) fn fit_grid(&mut self, p: &mut aegis_ui::painter::Painter, row_h: i32, tile: Option<Rect>, view: Rect) {
+    /// PR7-54 (`FB-364` (1)): beside a tile it opens clear of `keep` (`skill_menu::menu_place_clear`), on the `left`
+    /// first when the layout prefers it.
+    pub(super) fn fit_grid(&mut self, p: &mut aegis_ui::painter::Painter, row_h: i32, tile: Option<Rect>, view: Rect, keep: &[Rect], left: bool) {
         let Some(g) = self.grid.as_mut() else { return };
         g.fit(p);
         let (w, h) = g.size(row_h);
         self.w = w;
         (self.x, self.y) = match (self.block, tile) {
             (Some((_, b)), _) => super::skill_menu::menu_below(b, (w, h), Rect::new(2, 2, W - 4, H - 4)),
-            (None, Some(t)) => super::skill_menu::menu_place(t, (w, h), view),
+            (None, Some(t)) => super::skill_menu::menu_place_clear(t, (w, h), view, keep, left),
             (None, None) => (self.x.clamp(2, (W - w - 2).max(2)), self.y.clamp(2, (H - h - 2).max(2))),
         };
     }

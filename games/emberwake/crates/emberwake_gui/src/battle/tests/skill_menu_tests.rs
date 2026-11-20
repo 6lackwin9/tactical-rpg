@@ -620,7 +620,7 @@ fn move_waiting_for_a_tile_marks_its_reach_and_ends_with_confirm() {
 }
 
 /// User 2026-11-05: the menu opens beside the clicked unit, inside the battle view: never over the strip or off the screen,
-/// flipping sides near an edge: both views, 1280x720 and 1920x1080, the three text sizes, a unit at each corner of the board.
+/// flipping sides near an edge (PR7-54: or under or above it, clear of the docked card): both views, 1280x720 and 1920x1080, the three text sizes, a unit at each corner of the board.
 #[test]
 fn the_menu_opens_beside_the_unit_at_every_corner() {
     use crate::stage::{Geom, View};
@@ -647,8 +647,10 @@ fn the_menu_opens_beside_the_unit_at_every_corner() {
                     assert!(panel.x >= view_rect.x && panel.x + panel.w <= view_rect.x + view_rect.w, "{at}: in the view across: {panel:?}");
                     assert!(panel.y >= view_rect.y && panel.y + panel.h <= view_rect.y + view_rect.h, "{at}: in the view down: {panel:?}");
                     assert!(panel.y >= 26, "{at}: clear of the strip: {panel:?}");
-                    assert!(panel.x >= tile.x + tile.w || panel.x + panel.w <= tile.x, "{at}: beside the tile {tile:?}, not over it: {panel:?}");
-                    if corner.x == GRID_W - 1 {
+                    // PR7-54 (FB-364 (1)): beside the tile, or under or above it when a side would cover the docked card
+                    let beside = panel.x >= tile.x + tile.w || panel.x + panel.w <= tile.x;
+                    assert!(beside || panel.y >= tile.y + tile.h || panel.y + panel.h <= tile.y, "{at}: beside, under or above the tile {tile:?}, not over it: {panel:?}");
+                    if corner.x == GRID_W - 1 && beside {
                         assert!(panel.x + panel.w <= tile.x, "{at}: flipped to the left");
                     }
                 }

@@ -333,6 +333,8 @@ pub struct Unit {
     /// RULESET1 P2 (rule poise): the unit row's `poise`: -1 = the ruleset's derived Max Poise, 0 = no poise bar (never
     /// breaks), above 0 = a fixed Max Poise. Units built from member state keep -1.
     pub poise: i32,
+    /// BOSSUI1 BU7: the unit row's `poise_pips` (0 = the ruleset's `poise_pips`; units built from member state keep 0).
+    pub poise_pips: i32,
     /// BIGUNIT1 BU1: the cells the unit fills on the battle grid (1, or 2 for a 2 x 2 square anchored at its position);
     /// the unit row's `footprint` (1 for units built from member state).
     pub footprint: i32,
@@ -517,6 +519,7 @@ impl Unit {
             foresight_source: String::new(),
             foresight_range: 0,
             poise: -1,
+            poise_pips: 0,
             footprint: 1,
             stagger_taken: Vec::new(),
             passive_forced: ForcedTraits::default(),
@@ -2192,6 +2195,7 @@ fn build_catalog_unit(
     u.power_override = e.power;
     u.armor_override = e.armor;
     u.poise = e.poise;
+    u.poise_pips = e.poise_pips;
     u.footprint = e.footprint;
     for (k, v) in &e.status_resist {
         u.status_resist.insert(k.clone(), *v);

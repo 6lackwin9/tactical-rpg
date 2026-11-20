@@ -110,7 +110,13 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         // VISCLAR1-D: the skill menu beside its tile, in this frame's view of the board
         let geo = Geom::new(View::of_setting(&cx.settings.v["battle_view"]), &tuning);
         let tile = pop.anchor.map(|c| geo.cell_rect(c));
-        pop.fit_grid(&mut ui.p, menu_row, tile, Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4));
+        // PR7-54 (FB-364 (1), contract 7): clear of the docked card or boss bar and the foe panel (last frame's
+        // panels) and the menu's target tile
+        let mut keep: Vec<Rect> = g.panels.iter().filter(|p| p.0 == "intel" || p.0 == "hostiles").map(|p| p.1).collect();
+        if let (Some(s), Some((_, emberwake_battle::round_intent::RoundTarget::Unit(t)))) = (g.host.session.as_ref(), pop.menu) {
+            keep.extend(s.w.grid.pos(t).filter(|c| Some(*c) != pop.anchor).map(|c| geo.cell_rect(c)));
+        }
+        pop.fit_grid(&mut ui.p, menu_row, tile, Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4), &keep, MENU_LEFT);
     }
     let Some(s) = g.host.session.as_ref() else {
         ui.p.text(8.0, 8.0, &g.message, BODY, th().foe);
@@ -319,7 +325,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
     };
     let intent_of = |u: usize| round_of(u).filter(|_| w.allies.contains(&u) || show_tells);
-    let model = crate::battle_view::model(s, &crate::battle_view::Inputs { sel, card_foe, round_ap: &round_ap, plate_name: &plate_name, full_name: &full_name, intent_of: &intent_of, open_groups: &g.open_groups });
+    let passive_about = |id: &str| -> String { aegis_core::json::s(data.entry("passives", id), "description") };
+    let model = crate::battle_view::model(s, &crate::battle_view::Inputs { sel, card_foe, round_ap: &round_ap, plate_name: &plate_name, full_name: &full_name, intent_of: &intent_of, open_groups: &g.open_groups, pinned, passive_about: &passive_about });
     // BATTLE-UI2 contract 2: the selected hero's portrait, then "Round 1 of 8" in the display face's gold, the goal and
     // the protect line (gold) under it; UI5: the hero's intent glyph at the title's end
     let mut tx = 8;
@@ -1073,9 +1080,28 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     let _ = (hovered_ally, hovered_foe);
     // contract 5: the docked foe card at the board's top right (the panel `intel`); the full timeline view covers the
     // board, the card with it
+    // BOSSUI1 (PR7-54, contract 9.1): the boss bar across the board's top (the panel `intel`); the card docks under it
+    let mut card_top = BOARD.y + 3;
+    if let Some(bb) = model.boss.as_ref().filter(|_| !g.timeline_view_open()) {
+        let inset = super::boss_bar::INSET;
+        let r = Rect::new(BOARD.x + inset, BOARD.y + inset, BOARD.w - 2 * inset, super::boss_bar::bar_h(bb));
+        g.panels.push(("intel", r));
+        let tip = if pinned == Some(bb.unit) { inspect_tip(s, bb.unit, sel, &tells, &rounds, &classes, show_tells) } else { Vec::new() };
+        if let Some(hr) = super::boss_bar::draw_bar(&mut ui, cx, (&mut g.card_faces, &mut g.mini_faces), &looks, bb, r, tip) {
+            g.panels.push(("intel", hr));
+        }
+        card_top = r.y + r.h + 2;
+    }
     if let Some(c) = model.card.as_ref().filter(|_| !g.timeline_view_open()) {
         let h = super::card::card_h(c);
-        let r = Rect::new(BOARD.x + BOARD.w - 3 - super::card::CARD_W, BOARD.y + 3, super::card::CARD_W, h.min(BOARD.h - 6));
+        // contract 9.2 (BU12): the card docks at the board's top right unless it would cover the selected hero or its
+        // target, then top left
+        let mut r = Rect::new(BOARD.x + BOARD.w - 3 - super::card::CARD_W, card_top, super::card::CARD_W, h.min(BOARD.h - 6));
+        let geo = Geom::new(View::of_setting(&cx.settings.v["battle_view"]), &tuning);
+        let keep: Vec<Rect> = card_keep_clear(w, sel).into_iter().map(|c| geo.cell_rect(c)).collect();
+        if keep.iter().any(|k| super::skill_menu::overlaps(r, *k)) {
+            r.x = BOARD.x + 3;
+        }
         g.panels.push(("intel", r));
         // INPUT1 IS1: a pinned foe's card names it and holds its inspect lines on its hover; the agent link's
         // `intel.unit` is the card under the round intent or a pin (classic: `card.unit`), a pinned member's plate
@@ -1332,6 +1358,20 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // TRANSITIONS1: the running beat over everything, its full-screen widget last (a click skips it)
     g.draw_beat(&mut ui, cx, now);
     g.w = ui.widgets;
+}
+
+/// PR7-54 (`FB-364` (1)): the skill menu's preferred side beside a tile (false: the right). `ui/layouts/battle.json`
+/// names no side yet; code keeps the menu clear either way (`skill_menu::menu_place_clear`).
+const MENU_LEFT: bool = false;
+
+/// BOSSUI1 BU12: the board cells the docked card and the menus keep clear of: the selected hero's and its round target's.
+pub(super) fn card_keep_clear(w: &World, sel: Option<usize>) -> Vec<emberwake_battle::grid::V2> {
+    let Some(h) = sel else { return Vec::new() };
+    let target = w.round_states.get(&h).and_then(|r| r.target).and_then(|t| match t {
+        ri::RoundTarget::Unit(u) => Some(u),
+        _ => None,
+    });
+    std::iter::once(h).chain(target).filter_map(|u| w.grid.pos(u)).collect()
 }
 
 // ---- VISCLAR1-D: the round banner --------------------------------------------------------

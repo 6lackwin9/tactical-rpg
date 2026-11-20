@@ -241,6 +241,46 @@ pub struct LogGroup {
     pub lines: Vec<String>,
 }
 
+/// BOSSUI1 BU2 (PR7-54): a phase marker of the boss bar: beaten (dimmed), the current one, or still to fight.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PhaseMark {
+    Beaten,
+    Current,
+    Coming,
+}
+
+/// BOSSUI1 BU1-BU3 (PR7-54, battle contract 9.1): the boss bar's read of the fight's phases (`Session::phase_bar`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PhaseBar {
+    /// The boss unit the bar follows (a phase that brings a new boss unit moves it there).
+    pub unit: UnitId,
+    /// One per fight phase (the first, then one per `hp_below` phase), at most `PHASE_MARKS`.
+    pub marks: Vec<PhaseMark>,
+    /// The current phase (0-based).
+    pub current: usize,
+    /// The current phase's name ("" = none: the unit's name and title).
+    pub name: String,
+    /// The current phase's HP span: it starts at `top` and ends at `floor` (the next `hp_below` threshold on the
+    /// unit; 0 for the last phase).
+    pub top: i32,
+    pub floor: i32,
+    /// The phase's threshold was reached; the next phase starts next round (PHASEBREAK1).
+    pub broken: bool,
+}
+
+impl PhaseBar {
+    /// The span's HP left and its size ("160/450").
+    pub fn span(&self, hp: i32) -> (i32, i32) {
+        ((hp - self.floor).clamp(0, (self.top - self.floor).max(0)), (self.top - self.floor).max(1))
+    }
+}
+
+/// BOSSUI1 BU2: the boss bar shows at most this many phase markers.
+pub const PHASE_MARKS: usize = 4;
+
+/// The tier whose unit takes the boss bar (contract 9.1).
+pub const BOSS_TIER: &str = "boss";
+
 /// REWARD1 2.2: how a battle left an enemy-side unit. Killed (HP 0, whoever dealt the blow), surrendered (MORALE1: a
 /// broken group withdraws in place), fled (withdrew on its own), standing (still there, or never came). PR6-9:
 /// withdrawn (a `retreat` objective's unit driven to its HP floor, or gone from the field: it left alive and the party
@@ -1365,9 +1405,10 @@ impl Session {
                 round_intent::set_default_intent(&mut self.w, c, &form.intent);
             }
             if crate::poise::on(&self.w) {
-                let (n, max_poise) = (self.w.ruleset.numbers.clone(), crate::poise::max_poise(&self.w, c));
+                let (n, max_poise, own) = (self.w.ruleset.numbers.clone(), crate::poise::max_poise(&self.w, c), self.w.units[c].poise_pips.max(0));
                 let st = self.w.poise.entry(c).or_default();
                 st.broken = false;
+                st.full = own;
                 crate::poise::refill(&n, st, max_poise);
             }
             if block > 0 {
@@ -2099,6 +2140,34 @@ impl Session {
     /// skipped blocks after it).
     pub fn phase_breaks(&self) -> &[(UnitId, i32, i32)] {
         &self.breaks
+    }
+
+    /// BOSSUI1 BU1-BU3 (PR7-54): the boss bar's phase read, None without a boss on the field (an active enemy of the
+    /// `boss` tier, placed). The bar follows the boss the next `hp_below` phase names when it is on the field, else the
+    /// boss that came last (a phase's new boss unit). The phases are the first plus one per `hp_below` phase (round
+    /// and arrival phases are cues, not phases of the bar); a fired one is beaten. The span runs from the threshold of
+    /// the last fired `hp_below` phase on the unit (its max HP before one) to the next one's threshold still to come
+    /// (0 for the last phase); `broken` once that threshold is reached (the next phase is due). Read only.
+    pub fn phase_bar(&self) -> Option<PhaseBar> {
+        let w = &self.w;
+        let bosses: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| w.units[e].is_active() && w.grid.pos(e).is_some() && !self.phases.is_reserved(e) && self.tier_of(e) == BOSS_TIER).collect();
+        let hp_phases: Vec<&encounter::PhaseDef> = self.phases.phases.iter().filter(|p| value::string(&p.trigger, "kind", "") == "hp_below").collect();
+        let open = |p: &encounter::PhaseDef| !self.phases.fired.contains_key(&p.id) && !self.phases.dropped.contains(&p.id);
+        let named = hp_phases.iter().filter(|p| open(p) && !self.phases.due.contains(&p.id)).find_map(|p| self.first_of_ref(&value::string(&p.trigger, "unit", ""))).filter(|c| bosses.contains(c));
+        let unit = named.or_else(|| bosses.iter().copied().max())?;
+        let u = &w.units[unit];
+        let fired: Vec<&encounter::PhaseDef> = self.phases.fired.keys().filter_map(|id| hp_phases.iter().find(|p| &p.id == id).copied()).collect();
+        let total = (hp_phases.len() + 1).min(PHASE_MARKS);
+        let current = fired.len().min(total - 1);
+        let marks = (0..total).map(|k| if k < current { PhaseMark::Beaten } else if k == current { PhaseMark::Current } else { PhaseMark::Coming }).collect();
+        let name = fired.last().map_or_else(String::new, |p| p.name.clone());
+        let threshold = |p: &encounter::PhaseDef| value::int(&p.trigger, "pct", 0) * u.max_hp / 100;
+        let on_unit = |p: &&&encounter::PhaseDef| self.first_of_ref(&value::string(&p.trigger, "unit", "")) == Some(unit);
+        let top = fired.iter().filter(on_unit).map(|p| threshold(p)).min().unwrap_or(u.max_hp).clamp(0, u.max_hp);
+        let next: Option<i32> = hp_phases.iter().filter(|p| open(p) && on_unit(p)).map(|p| threshold(p)).filter(|t| *t >= 1 && *t < top).max();
+        let floor = next.unwrap_or(0);
+        let broken = hp_phases.iter().any(|p| self.phases.due.contains(&p.id) && on_unit(&p)) || (floor > 0 && u.hp <= floor);
+        Some(PhaseBar { unit, marks, current, name, top, floor, broken })
     }
 
     /// CatalogEncounter.on_block_start: a due phase fires first, then one morale break line, then the arrival (the
