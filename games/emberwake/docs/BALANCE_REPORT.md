@@ -7,6 +7,43 @@
 | [BALANCE_REPORT_2026-11A.md](../../../docs/archive/BALANCE_REPORT_2026-11A.md) | `PR5-27` .. `R1-BAL`, `INPUT1-MB`, `RULESET1`, `REWARD1-B`, `BAL4/5` (`2026-10-18 .. 2026-11-10`) | All pre-`U3_GEAR_REWORK` Channel Duel, `R4-CLOSE` (`61.0%` feel / `92%` party), `R1..R4`, and classic Ashlands balance runs |
 | [BALANCE_REPORT_2026-10.md](../../../docs/archive/BALANCE_REPORT_2026-10.md) | `2026-10-17` initial runs | Earliest October 2026 baseline snapshot |
 
+## 2026-11-20 ENGINE-27 CRUCIBLE-CHECK1 why both Crucible fights are won 0 % (`FB-389`)
+
+Report only: no data, rule or golden change. Replayed `enc_evt_06` and `enc_evt_06_overlook` round by round (the feel
+sim's loop: `auto_draft` balanced, the world's timeline ruleset, 32 seeds each, a scratch test not kept) with the gate,
+the holder, every unit's HP and tile, and the outcome printed each round.
+
+**No rule bug.** Every part of the fight works as specified: the holder is picked by `highest_hp` (Kaelen) and walks
+to the winch (10, 1) by round 2; the gate opens on round 2; the `arrival` wave lands on round 3 (round 4 in the
+Overlook variant) at (6, 4) and (7, 4); `infusion` fires on round 4; Nemeth is never finished; heroes withdraw through
+the open gate. The objective is `escape` with `objective_count` 3 and four founders (`party_min` 4), so the three who
+are not holding must all get out: **any founder down makes the win impossible** (the fight then ends `fled` or `lost`).
+
+| Party level (authored 1) | Base: won | Base: round-1 founder deaths | Overlook: won | With `objective_count` 2: base / Overlook |
+| --- | --- | --- | --- | --- |
+| +0 (as the feel sim runs it) | 0/32 | 24 | 0/32 | 0 / 0 |
+| +1 | 0/32 | 19 | 0/32 | 0 / 0 |
+| +2 | 0/32 | 19 | 0/32 | 0 / 0 |
+| +3 | 0/32 (32 fled) | 4 | 24/32 | 30 / 28 |
+| +4 | 0/32 (32 fled) | 2 | 27/32 | 32 / 31 |
+
+Two causes, in order:
+
+1. **Party level.** The feel sim fights every world encounter with the founders at their authored level 1; the
+   Crucible's foes are level 2-6 (Nemeth 6). Up to level 3 a founder falls in round 1 in most seeds (the line starts
+   two tiles from seven foes), which ends the escape before it starts. The other Act 1 bosses are winnable at level 1;
+   the Crucible is the one fight tuned for a levelled party (`FB-253`: tuned for human play).
+2. **The round-3 wave in the escape lane.** At level 4 few founders fall in round 1, but the base fight still wins
+   0/32: the escapers cross to the exits at column 11 through the enemy line, the two wave footmen arrive on round 3
+   in that lane, and one escaper falls on the way in every seed. The Overlook variant (wave on round 4) wins 24/32 at
+   the same level.
+
+Smallest fixes (data; they wait for the user with the other boss calls): (a) state the party level the Crucible is
+tuned for and let the feel sim fight it there (at level 4 the Overlook is 75 %, the base 0 %); (b) the base wave on
+round 4 as in the Overlook (the base then plays like the Overlook); (c) `objective_count` 2 (94 % at level 4, but
+CANON's "one holds, three get out" changes). Open question: no sim models the founders' real level at M5 (there is
+no Act 1 XP campaign); below level 4 the fight stays unwinnable for the auto driver whatever the wave does.
+
 ## 2026-11-19 ENGINE-26 BALANCE-WHATIF1 what-if runs (`FB-381`)
 
 Report only: no data or golden change; the user picks the data change. Sunk Ward, timeline rules with the ENRAGE2

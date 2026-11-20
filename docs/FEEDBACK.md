@@ -93,8 +93,17 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-25` (`UISPLIT1-J`) forge, siege, epilogue | Stage A done for three screens (tools lane); the dojo next; the hub talk held for main Build's `PR7-46` | `develop` (squash `ENGINE-25` A1) | View-models, actions, fixtures and tests for the Content and World Forge viewers, the siege screen and the epilogue; today's drawing kept. FB-383 |
 | `ENGINE-25` (`UISPLIT1-J`) dojo | Stage A done for the dojo (tools lane); four of five screens done, the hub talk held for main Build's `PR7-46` | `develop` (squash `ENGINE-25` A2) | View-model, actions, fixture and tests for the dojo; today's drawing kept. FB-385 |
 | `ENGINE-25` (`UISPLIT1-J`) hub talk | Stage A done for all five screens (tools lane) | `develop` (squash `ENGINE-25` A3) | View-model, actions, fixture and tests for the talk box; today's drawing kept. FB-387 |
+| `ENGINE-27` (`CRUCIBLE-CHECK1`) | Done, report only (tools lane) | `develop` | No rule bug: the escape needs all three non-holders out; at the authored level 1 a founder falls in round 1, and at level 4 the round-3 wave still blocks the exit lane (Overlook 75 %, base 0 %). FB-389 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-389: ENGINE-27 CRUCIBLE-CHECK1, why both Crucible fights are won 0 %
+
+- **Status**: done (tools lane), report only; no data, rule or golden change.
+- **Spec**: `READY.md` `ENGINE-27` (`FB-381`).
+- **Finding**: no rule bug. A round-by-round replay (32 seeds each, party level +0 to +4, `objective_count` 3 and 2) shows the holder, the gate, the wave, `infusion`, `unkillable` and the withdrawals all working as specified (`BALANCE_REPORT.md` "2026-11-20 ENGINE-27 CRUCIBLE-CHECK1"). The win needs all three non-holders out (`objective_count` 3 of four founders), so one founder down ends it. (1) At the authored level 1 (how the feel sim fights every world encounter) against level 2-6 foes, a founder falls in round 1 in 24 of 32 seeds, and still 19 of 32 at levels 2 and 3. (2) At level 4, round-1 deaths are rare (4 of 32), yet the base fight wins 0/32: the round-3 wave lands in the escape lane and one escaper falls on the way every time; the Overlook (wave on round 4) wins 24/32 at level 4 and 27/32 at level 5. With `objective_count` 2: 28-32 of 32 from level 4, still 0 below.
+- **Question for the user** (data, waits with the other boss calls): the smallest fixes are (a) name the party level the Crucible is tuned for and run the feel sim there; (b) move the base wave to round 4 as in the Overlook; (c) `objective_count` 2 (changes CANON's "one holds, three get out"). No sim models the founders' real level at M5 (no Act 1 XP campaign); below level 4 neither (a) nor (b) makes it winnable for the auto driver.
+- **Docs delta**: none (the report section is in `BALANCE_REPORT.md`). `HISTORY.md`: none.
 
 ### FB-387: ENGINE-25 UISPLIT1-J Stage A for the hub talk; the row is done
 
