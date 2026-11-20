@@ -658,6 +658,33 @@ impl FoeCard {
     }
 }
 
+/// BOSSUI1 BU15, BU16 (PR7-54): where the plan breaks a phase on the card's foe. With the phase's threshold `floor`
+/// (`Session::phase_bar`; 0 for the last phase: no break) the hits land in the card's order until one takes the foe
+/// to or below it: that hit (`hit`, its index in `FoeCard::hits`) lands in block `block` and stops at the threshold
+/// (`landed`: the HP it takes), and the round ends there (PHASEBREAK1: no later hit lands). None when no hit reaches
+/// it. Read only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PhaseCut {
+    pub hit: usize,
+    pub block: i32,
+    pub landed: i32,
+}
+
+/// BOSSUI1 BU15: the card's phase break on threshold `floor` (`PhaseCut`).
+pub fn phase_cut(card: &FoeCard, floor: i32) -> Option<PhaseCut> {
+    if floor < 1 || card.hp <= floor {
+        return None;
+    }
+    let mut hp = card.hp;
+    for (k, h) in card.hits.iter().enumerate() {
+        if hp - h.damage <= floor {
+            return Some(PhaseCut { hit: k, block: h.impact, landed: (hp - floor).max(0) });
+        }
+        hp -= h.damage;
+    }
+    None
+}
+
 /// The chance `hp` HP of base hits `hits` (each `(damage, crit damage, crit chance)`) are all taken, over every crit
 /// outcome (each hit crits on its own): an exact distribution of the damage so far, capped at `hp`.
 fn down_chance(hp: i32, hits: &[(i32, i32, f64)]) -> f64 {
@@ -694,7 +721,7 @@ pub fn foe_card(w: &World, sched: &[ScheduledAction], foe: UnitId) -> FoeCard {
     let n = &w.ruleset.numbers;
     let bar = poise::state(w, foe).filter(|st| st.max > 0).copied();
     if let Some(st) = bar {
-        (card.threshold, card.pips, card.max_pips) = (poise::threshold(n, st.max), poise::pips_now(n, &st), n.poise_pips);
+        (card.threshold, card.pips, card.max_pips) = (poise::pip_threshold(n, &st), poise::pips_now(n, &st), poise::full_pips(n, &st));
     }
     let mut acts: Vec<(usize, &ScheduledAction)> = sched.iter().enumerate().filter(|(_, a)| !a.cancelled && a.unit != foe && w.allies.contains(&a.unit)).collect();
     acts.sort_by_key(|(k, a)| (a.impact, a.start, *k));

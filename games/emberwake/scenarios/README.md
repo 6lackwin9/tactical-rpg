@@ -30,6 +30,7 @@ playtest harness (`tools/fc.sh playtest`) after the prologue; make it again the 
 | `controls_rebind` | PR7-44 (CONTROLS-UI1): Settings > Controls; a row click then `k` rebinds Walk up, Esc cancels, `z` asks to swap with Undo and Swap trades, Pad Y for Help is refused (no button to trade), Confirm and Back swap Pad A and Pad B, Reset to defaults drops the map; shots and the text audit of the tab and the question | about 3 s |
 | `tallow_shop` | PR7-42 (PT-19): the save `saves/sweep_start`; the Candle-Maker's first choice opens his window selling Warded Tallow at 5 Scrap, and one is bought | about 5 s |
 | `battle_board_marks` | PR7-40 part 3 (BATTLE-UI2 contract 6-8): `kit_winch_escape` on the Timeline ruleset, picks by the link; round 1 a Snare Wire on the Warlord's tile, round 2 a Shield Bash push and a Tend Wounds heal; shots of the heal "+n", the status chips, the hazard with its rounds left, the push to its landing tile and the row skill menu on a strip block | about 5 s |
+| `boss_bar` | PR7-54 (BOSSUI1, contract 9): Captain Vane's fight (`scene=sunk_ward:enc_evt_01`, the arena's world encounter form) on the Timeline ruleset; the boss bar with its phase markers and passive tags, Kaelen's intent row while planning, the member hover with the Party line, the bar folded to 84 px once confirmed | about 10 s |
 
 The three screen scenarios also time frames (`perf`, ENGINE-2, numbers only, no budget): the main menu, the region map and
 battle planning. Measured 2026-11-18 at 1280x720 in a dev build with no window: p50 4.6 ms, 29.5 ms and 20.2 ms.

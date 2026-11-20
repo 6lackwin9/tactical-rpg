@@ -1,0 +1,31 @@
+{
+  "id": "boss_bar",
+  "title": "PR7-54 (BOSSUI1, battle contract 9): Captain Vane's fight (sunk_ward enc_evt_01) on the Timeline ruleset; the boss bar across the board's top with its phase markers and passive tags; Kaelen targets Vane: the two intent rows while planning (Kaelen, Others) and their hover listing every member with the Party line; the skill menu on Vane's tile kept clear of the bar",
+  "launch": {"screen": "arena", "scene": "sunk_ward:enc_evt_01", "ruleset": "timeline", "seed": 7},
+  "settings": {"reduce_motion": true},
+  "timeout_s": 600,
+  "steps": [
+    {"step": "wait", "until": {"path": "state.ruleset.id", "eq": "timeline"}},
+    {"step": "wait", "until": {"widget": "boss.bar"}},
+    {"step": "pause", "ms": 1500},
+    {"step": "shot", "name": "boss_talk"},
+    {"step": "repeat", "times": 4, "until": {"path": "state.talk", "absent": true}, "steps": [{"step": "click", "id": "dialogue.continue"}, {"step": "pause", "ms": 600}]},
+    {"step": "link", "body": {"cmd": "round_intent", "unit": 0, "intent": "assault", "target": 4}},
+    {"step": "link", "body": {"cmd": "round_intent", "unit": 1, "intent": "assault", "target": 4}},
+    {"step": "link", "body": {"cmd": "round_intent", "unit": 2, "intent": "assault", "target": 4}},
+    {"step": "click", "id": "party.1"},
+    {"step": "pause", "ms": 300},
+    {"step": "click", "id": "party.2"},
+    {"step": "pause", "ms": 300},
+    {"step": "click", "id": "party.0"},
+    {"step": "wait", "until": {"widget": "boss.rows"}},
+    {"step": "pause", "ms": 1500},
+    {"step": "shot", "name": "boss_planning"},
+    {"step": "hover", "id": "boss.rows"},
+    {"step": "wait", "until": {"widget": "boss.members"}},
+    {"step": "shot", "name": "boss_rows_hover"},
+    {"step": "link", "body": {"cmd": "confirm"}},
+    {"step": "pause", "ms": 1500},
+    {"step": "shot", "name": "boss_resolving"}
+  ]
+}

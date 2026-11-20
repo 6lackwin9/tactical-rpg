@@ -16,7 +16,7 @@
     {"step": "wait", "until": {"path": "state.beat", "absent": true}, "timeout_ms": 20000},
     {"step": "click", "id": "dialogue.continue"},
     {"step": "pause", "ms": 800},
-    {"step": "hover", "id": "foe.6"},
+    {"step": "hover", "id": "foe.7"},
     {"step": "pause", "ms": 600},
     {"step": "shot", "name": "hover_on_foe_row"},
     {"step": "hover", "id": "party.0"},

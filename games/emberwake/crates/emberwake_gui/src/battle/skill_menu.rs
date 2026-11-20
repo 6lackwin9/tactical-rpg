@@ -229,6 +229,52 @@ pub(super) fn menu_place(cell: Rect, size: (i32, i32), view: Rect) -> (i32, i32)
     (x, y)
 }
 
+/// Whether rects `a` and `b` share any pixel.
+pub(super) fn overlaps(a: Rect, b: Rect) -> bool {
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+}
+
+/// The pixels rects `a` and `b` share.
+fn shared(a: Rect, b: Rect) -> i64 {
+    let w = (a.x + a.w).min(b.x + b.w) - a.x.max(b.x);
+    let h = (a.y + a.h).min(b.y + b.h) - a.y.max(b.y);
+    if w <= 0 || h <= 0 { 0 } else { w as i64 * h as i64 }
+}
+
+/// PR7-54 (`FB-364` (1), battle contract 7 and 9.2, BU12): where a menu of `size` opens beside tile `cell` inside
+/// `view`, clear of `keep` (the docked foe card or the boss bar, the foe panel, the selected target's tile) and of the
+/// tile itself: the preferred side first (`left`: the left; else the right), then the other side, each centred on the
+/// tile; then under the tile, above it, then a side just under a kept rect, then beside a kept rect on the tile's row. With nothing to keep clear it is `menu_place`.
+/// When every place covers something, the one covering the fewest kept pixels.
+pub(super) fn menu_place_clear(cell: Rect, size: (i32, i32), view: Rect, keep: &[Rect], left: bool) -> (i32, i32) {
+    if keep.is_empty() && !left {
+        return menu_place(cell, size, view);
+    }
+    let (w, h) = size;
+    let clamp_x = |x: i32| x.clamp(view.x, (view.x + view.w - w).max(view.x));
+    let clamp_y = |y: i32| y.clamp(view.y, (view.y + view.h - h).max(view.y));
+    let (rx, lx) = (cell.x + cell.w + GAP, cell.x - GAP - w);
+    let sides = if left { [lx, rx] } else { [rx, lx] };
+    let fits: Vec<i32> = sides.into_iter().filter(|x| *x >= view.x && x + w <= view.x + view.w).collect();
+    let mut places: Vec<(i32, i32)> = fits.iter().map(|&x| (x, clamp_y(cell.y + cell.h / 2 - h / 2))).collect();
+    let mid = clamp_x(cell.x + cell.w / 2 - w / 2);
+    places.push((mid, clamp_y(cell.y + cell.h + GAP)));
+    places.push((mid, clamp_y(cell.y - GAP - h)));
+    for &x in &fits {
+        places.extend(keep.iter().map(|k| (x, clamp_y(k.y + k.h + GAP))));
+    }
+    // a tall menu that cannot pass a kept rect up or down: beside the kept rect, still on the tile's row
+    let row_y = clamp_y(cell.y + cell.h / 2 - h / 2);
+    for k in keep {
+        places.extend([k.x - GAP - w, k.x + k.w + GAP].into_iter().filter(|x| *x >= view.x && x + w <= view.x + view.w).map(|x| (x, row_y)));
+    }
+    let covered = |p: &(i32, i32)| {
+        let r = Rect::new(p.0, p.1, w, h);
+        keep.iter().map(|k| shared(r, *k)).sum::<i64>() + shared(r, cell) * 4
+    };
+    places.iter().copied().find(|p| covered(p) == 0).or_else(|| places.iter().copied().min_by_key(covered)).unwrap_or_else(|| menu_place(cell, size, view))
+}
+
 /// BATTLE-UI2 (battle contract 7): where a menu of `size` opens on strip block `block`: under it, its left edge on the
 /// block's, inside the screen `view`.
 pub(super) fn menu_below(block: Rect, size: (i32, i32), view: Rect) -> (i32, i32) {

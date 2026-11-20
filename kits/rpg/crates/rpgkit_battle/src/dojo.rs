@@ -867,7 +867,7 @@ impl DojoSession {
             return PoiseState::default();
         }
         let max = poise::max_poise_of(&self.cat, &self.ruleset, u);
-        let mut st = PoiseState { broken_last: last.broken, ..PoiseState::default() };
+        let mut st = PoiseState { broken_last: last.broken, full: u.poise_pips.max(0), ..PoiseState::default() };
         poise::refill(&self.ruleset.numbers, &mut st, max);
         st
     }
@@ -922,7 +922,7 @@ impl DojoSession {
         let after = settled.after;
         let mut line = format!("{} = {taken} -> poise {before} -> {after}", terms.join(" x "));
         if poise::pips_mode(&n) {
-            line += &format!(" (pips {} -> {}, T {})", bar.pips, settled.pips, poise::threshold(&n, bar.max));
+            line += &format!(" (pips {} -> {}, T {})", bar.pips, settled.pips, poise::pip_threshold(&n, &bar));
         }
         let cause = match settled.verdict {
             Verdict::Breaks(BreakCause::Sure) => Some("BREAK (sure break)"),

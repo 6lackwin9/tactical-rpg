@@ -912,7 +912,7 @@ pub(super) fn pip_view(n: &emberwake_rules::ruleset::Numbers, st: &emberwake_bat
     if !poise::pips_mode(n) {
         return PipView { lit: poise_pips(st.value, st.max, st.broken), total: POISE_PIPS, bonus: !st.broken && st.value > st.max, pips: false };
     }
-    let total = n.poise_pips.max(1);
+    let total = emberwake_battle::poise::full_pips(n, st);
     let now = if st.broken || st.max <= 0 { 0 } else { poise::pips_now(n, st) };
     PipView { lit: now.clamp(0, total), total, bonus: now > total, pips: true }
 }

@@ -26,6 +26,7 @@
 
 mod beats;
 mod board;
+mod boss_bar;
 mod card;
 mod draw;
 mod flow;

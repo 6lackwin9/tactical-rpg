@@ -24,7 +24,7 @@
     {"step": "wait", "until": {"path": "state.playing", "eq": false}, "timeout_ms": 120000},
     {"step": "click", "id": "strip.confirm"},
     {"step": "pause", "ms": 2500},
-    {"step": "hover", "id": "foe.4"},
+    {"step": "hover", "id": "boss.bar"},
     {"step": "shot", "name": "sweep_round2_area_marks"}
   ]
 }

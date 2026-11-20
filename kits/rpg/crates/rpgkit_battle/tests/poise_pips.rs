@@ -472,7 +472,7 @@ fn bar_mode_ignores_the_pip_numbers() {
             ..Numbers::default()
         };
         let max = rng.randi_range(1, 100);
-        let st = PoiseState { max, value: rng.randi_range(0, max + 30), broken: rng.randi_range(0, 5) == 0, broken_last: false, pips: rng.randi_range(0, 9), rest_blocks: 0 };
+        let st = PoiseState { max, value: rng.randi_range(0, max + 30), broken: rng.randi_range(0, 5) == 0, broken_last: false, pips: rng.randi_range(0, 9), rest_blocks: 0, full: 0 };
         let sure = match rng.randi_range(0, 2) {
             0 => None,
             1 => Some(BreakCause::Sure),
@@ -772,4 +772,35 @@ fn the_break_stagger_note_follows_the_queue_rule() {
     let s = session(timeline(json!({})));
     let w = s.w.clone();
     assert_eq!(poise::break_stagger_note(&w.ruleset.numbers, &w.units[FOE]), None, "bar");
+}
+
+/// BOSSUI1 BU7 (PR7-54): a unit row's own `poise_pips` (0 or missing: the ruleset's) sets its full bar's pips, and each
+/// pip is its Max Poise over them (`T = max(1, roundi(max_poise / poise_pips))`); a hit of `T` stagger removes one.
+#[test]
+fn a_units_own_poise_pips_set_its_bar() {
+    let own = 2 * pips_numbers().poise_pips.max(1);
+    let mut cat = catalog();
+    let row = cat.units.get_mut("p_foe").unwrap();
+    assert_eq!(row.poise_pips, 0, "no field: 0, the ruleset's");
+    let parsed = Catalog::from_value(&json!({"units": [{"id": "p_boss", "name": "p_boss", "side": "enemy", "poise_pips": own}]}));
+    assert_eq!(parsed.units["p_boss"].poise_pips, own, "the row's field");
+    row.poise_pips = own;
+    let row = json!({"id": "p_fight", "name": "Fight", "party": ["p_hero", "p_ally"], "enemies": ["p_foe"], "total_blocks": BLOCKS, "unit_ap": 10, "ap_regen": 0, "max_rounds": 8, "rng_seed": 1337});
+    let mut def = EncounterDef::from_obj(row.as_object().unwrap());
+    def.ruleset = pips_rules();
+    let mut s = Session::start(Arc::new(cat), def, &IndexMap::new());
+    for (c, cell) in [(HERO, V2::new(6, 4)), (ALLY, V2::new(0, 8)), (FOE, V2::new(7, 4))] {
+        s.w.grid.positions[c] = Some(cell);
+    }
+    poise::round_start(&mut s.w);
+    let n = s.w.ruleset.numbers.clone();
+    let st = bar(&s.w, FOE);
+    let t = poise::threshold_over(TANK, own);
+    assert_eq!((poise::full_pips(&n, &st), st.pips, poise::pip_threshold(&n, &st)), (own, own, t), "the unit's pips and threshold");
+    assert_eq!(st.value, own * t, "the value mirrors the pips");
+    assert_eq!(poise::full_pips(&n, &bar(&s.w, HERO)), n.poise_pips.max(1), "a unit without the field keeps the ruleset's");
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    strike(&mut w, &mut res, "p_jab", t, 1);
+    assert_eq!(bar(&w, FOE).pips, own - 1, "a hit of T stagger removes one pip");
 }
