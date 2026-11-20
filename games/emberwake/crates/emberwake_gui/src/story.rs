@@ -20,9 +20,12 @@ use serde_json::{json, Value};
 
 /// The card colours (STORYUI1 3, LOOK1-G2: from the theme): `text`, `gold` as the accent, and a dim of the card's own
 /// (Polished Steel, hue 06: a card's dim lines sit on art, whatever the theme's `dim` is).
+/// MENURAIL1 (PR7-30): the banner a story title card's title sits on (decision "LOOK1-A6 picks").
+pub const BANNER_ART: &str = "ui/banner_full.png";
+
 pub fn palette() -> Palette {
     let t = th();
-    Palette { text: t.text, accent: t.gold, dim: t.game("story_dim", rgb(0x9c, 0xa3, 0xaf)) }
+    Palette { text: t.text, accent: t.gold, dim: t.game("story_dim", rgb(0x9c, 0xa3, 0xaf)), banner: BANNER_ART }
 }
 
 /// A card of world `world` as the engine plays it (W5): the card keys through `Card::from_json`; a `line` card's speaker
