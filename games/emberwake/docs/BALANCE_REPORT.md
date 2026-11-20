@@ -7,6 +7,39 @@
 | [BALANCE_REPORT_2026-11A.md](../../../docs/archive/BALANCE_REPORT_2026-11A.md) | `PR5-27` .. `R1-BAL`, `INPUT1-MB`, `RULESET1`, `REWARD1-B`, `BAL4/5` (`2026-10-18 .. 2026-11-10`) | All pre-`U3_GEAR_REWORK` Channel Duel, `R4-CLOSE` (`61.0%` feel / `92%` party), `R1..R4`, and classic Ashlands balance runs |
 | [BALANCE_REPORT_2026-10.md](../../../docs/archive/BALANCE_REPORT_2026-10.md) | `2026-10-17` initial runs | Earliest October 2026 baseline snapshot |
 
+## 2026-11-20 ENGINE-29 ESCAPE-PLAY1 the auto driver's Crucible play by level (`FB-399`)
+
+Report only: no code, data or golden change (two trial fixes were measured and reverted). Founders raised to each level
+by `WorldRoster::ally_levels`, the world's timeline ruleset, `auto_draft` balanced, 12 rounds.
+
+| Fight | Start tiles | L3 | L4 | L5 | L6 | L7 | L8 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `enc_evt_06_overlook` | jittered (the sims' default), 64 seeds | 0 | 0 | 0 | 1 | 3 | 4 |
+| `enc_evt_06` | jittered, 64 seeds | 0 | 0 | 3 | 3 | 3 | 2 |
+| `enc_evt_06_overlook` | authored (`jitter=off`), 64 seeds | 0 | 41 | 54 | 0 | 0 | 0 |
+| `enc_evt_06` | authored, 64 seeds | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Findings:
+
+1. **The level effect is an artifact of the fixed start.** With the authored tiles the seeds barely change the fight,
+   so 64 seeds are close to one fight: at levels 4 and 5 that fight happens to win, from level 6 it does not (Hollis,
+   a little tougher, gets out a round sooner, so the foes turn on Maren, the slowest escaper, alone at the lane's end).
+   With start tiles jittered by one tile the Overlook is 0-6 % at every level from 3 to 8 and the base 0-5 %: the
+   Crucible is a near loss for the auto driver at any level, and the `FB-389` figures at levels 4-5 (75-84 %) were the
+   same fixed-start luck.
+2. **No escape bug in the driver.** Every non-keeper plans Withdraw from the round the keeper can reach the winch
+   (round 2); the routes run around the enemy line to the column-11 exits; Maren's route takes her south first, so she
+   spends rounds 2-4 inside the foes' reach. Round 1 is the tactic's normal draft (the escapers engage the nearest
+   foes) because the gate is still shut.
+3. **Two trial fixes made it worse** (shared auto-plan, test-only switch, reverted): escapers Withdraw from round 1
+   (0/32 at every level, authored start) and escapers Guard in place until the keeper is in reach (0/32 everywhere).
+   The round-1 engage is what wins the lucky starts.
+
+So the Crucible's difficulty is in the fight (seven foes and the round-3 wave between the party and the exits, all
+three non-holders needed out), not in the driver. A sim cannot rate fix (b) of `FB-389` (wave on round 4) above 0-6 %
+for the auto driver; it needs a human playtest or a data change of the escape itself (e.g. `objective_count` 2, or
+exits nearer the party's side).
+
 ## 2026-11-20 ENGINE-28 CAMPAIGN-SIM1 Sunk Ward Act 1 at the party's real levels (`FB-395`)
 
 Report only: no data, rule or golden change. New kit sim run `tools/fc.sh sim campaign world=sunk_ward seeds=32`
