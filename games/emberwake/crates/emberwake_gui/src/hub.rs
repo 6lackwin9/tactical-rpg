@@ -120,6 +120,14 @@ pub enum HubAct {
 
 /// The hub popup's frame.
 pub const HUB_RECT: Rect = Rect::new(95, 25, 450, 310);
+/// MENURAIL1 (PR7-30, LOOK1 M2): the left rail of the game menu (x inset from the frame, width, top, button height and
+/// step) and the gap between the rail and the party box.
+const RAIL_INSET: i32 = 10;
+const RAIL_W: i32 = 130;
+const RAIL_TOP: i32 = 80;
+const RAIL_BTN_H: i32 = 20;
+const RAIL_STEP: i32 = 26;
+const RAIL_GAP: i32 = 12;
 
 #[derive(Default)]
 pub struct Hub {
@@ -199,7 +207,9 @@ impl Screen<GameCx> for Hub {
         let gs = cx.gs().clone();
         let fr = HUB_RECT;
         ui.frame(fr, &cx.world_name(&gs.world_id), true);
-        ui.p.text_center(320.0, 62.0, &cx.location_name(&gs.world_id, &gs.location_id), BODY + 1.0, th().dim);
+        // MENURAIL1: the place over the party box
+        let box_mid = fr.x + RAIL_INSET + RAIL_W + RAIL_GAP + (fr.w - 2 * RAIL_INSET - RAIL_W - RAIL_GAP) / 2;
+        ui.p.text_center(box_mid as f32, 62.0, &cx.location_name(&gs.world_id, &gs.location_id), BODY + 1.0, th().dim);
         let active: Vec<String> = gs.party.active_members().iter().map(|m| m.id.clone()).collect();
         let mut rows: Vec<&UnitState> = gs.party.members.iter().filter(|m| active.contains(&m.id)).collect();
         rows.extend(gs.party.members.iter().filter(|m| !active.contains(&m.id)));
@@ -222,10 +232,13 @@ impl Screen<GameCx> for Hub {
         // column, and more columns (as many as the frame's width holds) while the box is taller than the room left
         // above the menu (three button rows and the detail line, over the frame's bottom edge); when the widest
         // columns are still too tall the rows go compact (name and HP; the class line moves to the portrait's card)
+        // MENURAIL1: the party box takes the frame right of the rail, above the detail line at the frame's foot
         let lh = ui.p.line_h(BODY + 1.0).ceil() as i32;
         let bunks_h = if bunks_text(&gs).is_some() { step as i32 + 3 } else { 0 };
-        let room = fr.y + fr.h - 4 - lh - 76 - 10 - bunks_h - 80;
-        let widest = ((fr.w - 16) / col_w.max(1)).max(1) as usize;
+        let detail_y = fr.y + fr.h - 8 - lh;
+        let area = Rect::new(fr.x + RAIL_INSET + RAIL_W + RAIL_GAP, RAIL_TOP, fr.w - 2 * RAIL_INSET - RAIL_W - RAIL_GAP, 0);
+        let room = detail_y - 6 - bunks_h - RAIL_TOP;
+        let widest = (area.w / col_w.max(1)).max(1) as usize;
         let fits = |cols: usize, row_h: i32| 4 + rows.len().div_ceil(cols) as i32 * row_h <= room;
         let mut cols = if rows.len() > 4 { 2 } else { 1 };
         let compact = !fits(widest.max(cols), row_h);
@@ -238,7 +251,7 @@ impl Screen<GameCx> for Hub {
         let per_col = rows.len().div_ceil(cols).max(1);
         let hp_y = if compact { step } else { step * 2.0 };
         let bh = 4 + per_col as i32 * row_h;
-        let bx = Rect::new(320 - cols as i32 * col_w / 2, 80, cols as i32 * col_w, bh);
+        let bx = Rect::new(area.x + (area.w - cols as i32 * col_w) / 2, RAIL_TOP, cols as i32 * col_w, bh);
         crate::hud::hud_panel(&mut ui, bx, th().card, th().edge, 2.0);
         for (i, (m, (class_line, (hp, max, wounded)))) in rows.iter().zip(&lines).enumerate() {
             let x = (bx.x + (i / per_col) as i32 * col_w) as f32 + 3.0;
@@ -263,13 +276,12 @@ impl Screen<GameCx> for Hub {
                 ui.push(format!("hub.wounded.{}", m.id), "row", mark, r, true, false, None, tip(mark, &wounded_tip(cx, m)));
             }
         }
-        let mut below = bx.y + bh;
         if let Some(bunks) = bunks_text(&gs) {
-            ui.p.text_center(320.0, below as f32 + 3.0, &bunks, BODY + 1.0, th().dim);
-            below += step as i32 + 3;
+            ui.p.text_center((bx.x + bx.w / 2) as f32, (bx.y + bh) as f32 + 3.0, &bunks, BODY + 1.0, th().dim);
         }
         let pts: i64 = gs.party.members.iter().map(|m| m.unspent(&cx.data).max(0)).sum();
         let entries = [
+            (HubAct::Return, "hub.return", "Resume".to_string(), "Back to the map."),
             (HubAct::Party, "hub.party", if pts > 0 { format!("Party ({pts} point{} to spend)", if pts == 1 { "" } else { "s" }) } else { "Party".into() }, "Roster, level up, skills and gear."),
             (HubAct::Journal, "hub.journal", "Journal".into(), "Quests ready, active, on hold and completed."),
             (HubAct::Save, "hub.save", "Save game".into(), "Save to one of the manual slots."),
@@ -277,18 +289,17 @@ impl Screen<GameCx> for Hub {
             (HubAct::Settings, "hub.settings", "Settings".into(), "Sound, display, gameplay and controls."),
             (HubAct::Quit, "hub.quit", "Quit to main menu".into(), "Back to the title (you are asked first; unsaved progress is lost)."),
         ];
-        let top = below + 10;
-        let mut detail = "Roster, level up, skills and gear.".to_string();
+        // MENURAIL1: the rail down the frame's left, Resume first
+        let mut detail = "Back to the map.".to_string();
         for (i, (a, id, label, desc)) in entries.iter().enumerate() {
-            let r = Rect::new(if i % 2 == 0 { 187 } else { 323 }, top + (i as i32 / 2) * 24, 130, 18);
+            let r = Rect::new(fr.x + RAIL_INSET, RAIL_TOP + i as i32 * RAIL_STEP, RAIL_W, RAIL_BTN_H);
             let why = Self::reason(cx, *a);
             ui.button_full(id, r, label, *a, true, false, BODY + 1.0, if why.is_empty() { tip(label, desc) } else { vec![(label.clone(), th().gold), (why.clone(), th().foe)] });
             if ui.hover(r) {
                 detail = if why.is_empty() { desc.to_string() } else { why };
             }
         }
-        ui.p.text_center(320.0, (top + 76) as f32, &detail, BODY + 1.0, th().dim);
-        ui.button("hub.return", Rect::new(110, 303, 75, 18), "Return to map", HubAct::Return, true);
+        ui.p.text_center((fr.x + fr.w / 2) as f32, detail_y as f32, &detail, BODY + 1.0, th().dim);
         self.w = ui.widgets;
     }
     fn resume(&mut self, _cx: &mut Cx) {}

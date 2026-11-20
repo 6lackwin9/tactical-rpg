@@ -500,18 +500,19 @@ impl Screen<GameCx> for RunOverScreen {
         let widths: Vec<i32> = labels.iter().map(|l| button_w(&mut ui, l)).collect();
         let row = widths.iter().sum::<i32>() + 6 * (widths.len() as i32 - 1);
         let scale = ui.p.fonts.scale.max(1.0);
-        let inner = ((CARD_W as f32 * scale).ceil() as i32).max(row).max(ui.p.text_w(OVER_TITLE, HEAD).ceil() as i32).min(W - 40 - 2 * PAD);
         let (hl, bl) = (ui.p.line_h(HEAD), ui.p.line_h(BODY));
+        // MENURAIL1 (PR7-30): the title on the story banner across the card's top edge, the card in the ornate frame
+        let banner_h = (hl * rpgkit_ui::banner::HEIGHT_OVER_LINE).ceil() as i32;
+        let inner = ((CARD_W as f32 * scale).ceil() as i32).max(row).max(ui.p.text_w(OVER_TITLE, HEAD).ceil() as i32 + 2 * banner_h).min(W - 40 - 2 * PAD);
         let body = lines(&mut ui, &self.text, BODY, inner as f32);
         let bh = (bl + 6.0).ceil() as i32;
         // the buttons in one row when they fit, else one under the other
         let stacked = row > inner;
         let buttons_h = if stacked { 3 * bh + 2 * 4 } else { bh };
-        let h = PAD + hl.ceil() as i32 + 8 + (body.len() as f32 * bl).ceil() as i32 + 12 + buttons_h + PAD;
+        let h = banner_h / 2 + 2 + PAD + (body.len() as f32 * bl).ceil() as i32 + 12 + buttons_h + PAD;
         let r = Rect::new((W - inner - 2 * PAD) / 2, (H - h) / 2, inner + 2 * PAD, h);
-        ui.p.panel(r, th().game("defeat_card", rgba(24, 16, 22, 255)), th().foe, 4.0);
-        ui.p.text_center((r.x + r.w / 2) as f32, (r.y + PAD) as f32, OVER_TITLE, HEAD, th().foe);
-        let mut y = (r.y + PAD) as f32 + hl.ceil() + 8.0;
+        let card = rpgkit_ui::banner::banner_card(&mut ui, &mut cx.art, crate::story::BANNER_ART, r, OVER_TITLE, HEAD, th().foe, th().game("defeat_card", rgba(24, 16, 22, 255)), th().foe);
+        let mut y = card.y as f32 + 6.0;
         for l in &body {
             ui.p.text_center((r.x + r.w / 2) as f32, y, l, BODY, th().text);
             y += bl;

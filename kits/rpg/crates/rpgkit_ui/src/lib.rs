@@ -10,6 +10,7 @@
 //!   its view-model and actions.
 //! - `portrait_page`: the Kit widgets' Portraits page (`aegis_ui::specimens` page hook) on the code-drawn sample face.
 
+pub mod banner;
 pub mod pips;
 pub mod portrait_fx;
 pub mod portrait_page;

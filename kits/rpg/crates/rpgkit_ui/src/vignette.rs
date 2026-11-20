@@ -43,6 +43,8 @@ pub const CAPTION_W: i32 = 560;
 pub const CAPTION_PAD: i32 = 8;
 pub const TEXT_BOX: Rect = Rect::new(80, 120, 480, 120);
 pub const TITLE_Y: f32 = 140.0;
+/// MENURAIL1: the narrowest title card (a short title still gets a card that reads as one).
+pub const TITLE_CARD_MIN_W: i32 = 300;
 pub const RULE_W: i32 = 200;
 pub const PORTRAIT: i32 = 64;
 /// Room kept under a caption box for the "Click to continue" hint.
@@ -575,12 +577,15 @@ pub struct Palette {
     pub text: Rgba,
     pub accent: Rgba,
     pub dim: Rgba,
+    /// MENURAIL1 (PR7-30): the banner picture a title card's title sits on, across the top edge of a framed card
+    /// (`crate::banner`); "" (or a missing file): the title between two rules as before.
+    pub banner: &'static str,
 }
 
 impl Default for Palette {
     fn default() -> Self {
         let t = th();
-        Palette { text: t.text, accent: t.gold, dim: t.dim }
+        Palette { text: t.text, accent: t.gold, dim: t.dim, banner: "" }
     }
 }
 
@@ -759,6 +764,26 @@ impl CardPortrait {
     }
 }
 
+/// MENURAIL1 (PR7-30): a title card as a story card: the subtitle in an `ornate` card centred on the title's place, the
+/// title on the palette's banner across the card's top edge (`crate::banner::banner_card`).
+fn title_card<A: Clone>(ui: &mut Ui<A>, art: &mut Art, c: &Card, pal: &Palette) {
+    let big = CARD_BODY * 2.0;
+    let ls = ui.p.line_h(CARD_BODY);
+    let subs = if c.subtitle.is_empty() { Vec::new() } else { ui.p.wrap(&c.subtitle, CARD_BODY, CAPTION_W as f32) };
+    let sub_w = subs.iter().map(|l| ui.p.text_w(l, CARD_BODY)).fold(0.0f32, f32::max);
+    let banner_h = (ui.p.line_h(big) * crate::banner::HEIGHT_OVER_LINE).ceil() as i32;
+    let w = ((ui.p.text_w(&c.title, big) + 2.0 * banner_h as f32).max(sub_w + 48.0).max(TITLE_CARD_MIN_W as f32).ceil() as i32).min(W - 60);
+    let h = banner_h / 2 + 16 + (subs.len() as f32 * ls).ceil() as i32 + 18;
+    let card = Rect::new((W - w) / 2, TITLE_Y as i32 - h / 2, w, h);
+    let t = th();
+    let body = crate::banner::banner_card(ui, art, pal.banner, card, &c.title, big, pal.accent, t.panel, t.edge);
+    let mut y = body.y as f32 + 8.0;
+    for l in &subs {
+        ui.p.text_center(W as f32 / 2.0, y, l, CARD_BODY, pal.text);
+        y += ls;
+    }
+}
+
 /// Draws the player's card on the whole stage (V9): the frame colour, the backdrop or the picture, the falling specks (unless
 /// `reduce_motion`), the card's texts, the hint in a hold that waits, and the fade cover. Widgets are the caller's.
 /// While the card's shake runs (FX1 5.2) the picture area, the caption box, the title, line and text-card texts and the
@@ -831,6 +856,7 @@ pub fn draw_with<A: Clone>(ui: &mut Ui<A>, art: &mut Art, pl: &Player, pal: &Pal
                 y += lh;
             }
         }
+        Style::Title if !pal.banner.is_empty() && art.has(pal.banner) => title_card(ui, art, c, pal),
         Style::Title => {
             let big = CARD_BODY * 3.0;
             let (lt, ls) = (ui.p.line_h(big), ui.p.line_h(CARD_BODY));
