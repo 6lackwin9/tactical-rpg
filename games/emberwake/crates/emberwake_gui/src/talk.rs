@@ -83,7 +83,7 @@ pub(crate) struct TalkBox {
 
 /// The rows of `view` (a `DialogueRunner::view`) in order: (widget id, text shown, locked, action): each choice (a
 /// locked one with its reason), then Continue when the node goes on (or ends with no reply).
-fn reply_rows(view: &Dict) -> Vec<(String, String, bool, TalkAct)> {
+pub(crate) fn reply_rows(view: &Dict) -> Vec<(String, String, bool, TalkAct)> {
     let choices = json::aget(view, "choices");
     let mut out: Vec<(String, String, bool, TalkAct)> = choices
         .iter()
@@ -114,8 +114,16 @@ fn capped(mut lines: Vec<String>, n: usize) -> Vec<String> {
 /// text size, at most the canvas less 40), centred, `TALK_GAP` above the bottom; its height from the content, at least
 /// `TALK_MIN_H`, at most `TALK_MAX_PCT` % of the canvas (the replies, then the line, scroll when they do not fit).
 pub(crate) fn talk_layout(p: &mut Painter, view: &Dict) -> TalkBox {
-    let band_text = if s(view, "faction").is_empty() { String::new() } else { format!("{}: {}", s(view, "faction_name"), s(view, "band")) };
-    box_layout(p, &s(view, "speaker_name"), &band_text, &s(view, "text"), reply_rows(view))
+    box_layout(p, &s(view, "speaker_name"), &band_line(view), &s(view, "text"), reply_rows(view))
+}
+
+/// The DIM line under the speaker's name: their faction and standing ("Faction: band"), "" without a faction.
+pub(crate) fn band_line(view: &Dict) -> String {
+    if s(view, "faction").is_empty() {
+        String::new()
+    } else {
+        format!("{}: {}", s(view, "faction_name"), s(view, "band"))
+    }
 }
 
 /// The dialogue box's measure for any speaker (`talk_layout` for a conversation; HUB-POLISH1: the bunk card): the
@@ -400,6 +408,16 @@ impl Services {
     /// The character talked to last ("" when none).
     pub(crate) fn talked(&self) -> String {
         self.runner.as_ref().map(|r| r.character_qid.clone()).unwrap_or_default()
+    }
+
+    /// ENGINE-25: the open conversation's view (a `DialogueRunner::view`), None when none is open.
+    pub(crate) fn talk_view(&self, cx: &Cx) -> Option<Dict> {
+        self.runner.as_ref().filter(|r| !r.closed).map(|r| r.view(&cx.data, cx.gs()))
+    }
+
+    /// ENGINE-25: the turn-in picker is open over the talk box.
+    pub(crate) fn turning_in(&self) -> bool {
+        self.pending.is_some()
     }
 
     /// Opens the conversation with `character`.
@@ -832,6 +850,8 @@ impl Services {
             "recipe_pane": if self.recipe_npc().is_empty() { Value::Null } else { self.recipe_state(cx) },
             "facility": Some(self.facility_npc()).filter(|n| !n.is_empty()),
             "facility_pane": if self.facility_npc().is_empty() { Value::Null } else { self.facility_state(cx) },
+            // ENGINE-25 (UISPLIT1-J Stage A): the talk box's view-model
+            "talk_view": crate::talk_view::view(cx, self).to_json(),
             "portraits": if self.talking() && shop_qid.is_empty() && board_qid.is_empty() && self.recipe_npc().is_empty() && self.facility_npc().is_empty() { self.faces.state() } else { json!([]) }})
     }
 }

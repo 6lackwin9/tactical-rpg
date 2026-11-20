@@ -92,8 +92,17 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-26` (`BALANCE-WHATIF1`) | done (tools lane); the data change waits for the user | `develop` (squash `ENGINE-26`) | What-if sim keys `foe_hp=`, `foes=`, `foe_level=` (feel mode, report only); random, elite and boss what-if runs in `BALANCE_REPORT.md`. FB-381 |
 | `ENGINE-25` (`UISPLIT1-J`) forge, siege, epilogue | Stage A done for three screens (tools lane); the dojo next; the hub talk held for main Build's `PR7-46` | `develop` (squash `ENGINE-25` A1) | View-models, actions, fixtures and tests for the Content and World Forge viewers, the siege screen and the epilogue; today's drawing kept. FB-383 |
 | `ENGINE-25` (`UISPLIT1-J`) dojo | Stage A done for the dojo (tools lane); four of five screens done, the hub talk held for main Build's `PR7-46` | `develop` (squash `ENGINE-25` A2) | View-model, actions, fixture and tests for the dojo; today's drawing kept. FB-385 |
+| `ENGINE-25` (`UISPLIT1-J`) hub talk | Stage A done for all five screens (tools lane) | `develop` (squash `ENGINE-25` A3) | View-model, actions, fixture and tests for the talk box; today's drawing kept. FB-387 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-387: ENGINE-25 UISPLIT1-J Stage A for the hub talk; the row is done
+
+- **Status**: done (tools lane) on `develop`; with FB-383 and FB-385, Stage A covers all five `ENGINE-25` screens. Main Build cleared `talk.rs` (its `PR7-46` item 3 did not need it).
+- **Spec**: `READY.md` `ENGINE-25` (UISPLIT1 US1, US6, US8).
+- **Finding**: `emberwake_gui/src/talk_view.rs` (view `talk`, the talk box of `talk::Services` over the region map, in a hub or on `ServiceScreen`): `pane` ("talk", or the pane over it: "shop", "recipe", "facility", "board", "turn_in"; "" when nothing is open), `speaker`, `band` (the faction line), `expression`, `line`, `replies` (a row per reply as the box draws it, id the widget to click, the number 1-9 as the detail, off while locked or under the turn-in picker). Actions `choose` (arg the reply index), `advance` (Continue), `farewell` (on with a farewell reply or a talk that need not be answered); `talk_view::talk_act` maps them to `SvcAct`. Fixture `ui/views/talk.view.json` (shape test plus an `#[ignore]` writer). The link state gains `talk_view` on the services and the region map (the region map's `view` key is its camera view). The band line moved into a shared `talk::band_line`; the drawing is unchanged (828 GUI tests pass).
+- **Guess** (minor, made provisionally): the panes over the talk (shop, board, recipe, facility, turn-in) keep their own views and are named only by `pane`; the shop's is `trade`.
+- **Docs delta**: `STRUCTURE.md`: `emberwake_gui/src/talk_view.rs` (view-model, ENGINE-25). `HISTORY.md`: none.
 
 ### FB-385: ENGINE-25 UISPLIT1-J Stage A for the dojo
 

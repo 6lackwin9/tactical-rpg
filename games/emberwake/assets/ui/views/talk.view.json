@@ -1,0 +1,62 @@
+{
+  "screen": "talk",
+  "fields": {
+    "pane": {
+      "text": "talk"
+    },
+    "speaker": {
+      "text": "Mara Voss"
+    },
+    "band": {
+      "text": "Ember Wardens: neutral"
+    },
+    "expression": {
+      "text": ""
+    },
+    "line": {
+      "text": "Mara looks up from a map pinned flat with knives. \"Make it quick.\""
+    },
+    "replies": {
+      "rows": [
+        {
+          "id": "choice.0",
+          "label": "What is this place?",
+          "detail": "1",
+          "picture": null,
+          "enabled": true
+        },
+        {
+          "id": "choice.1",
+          "label": "[KNOW 14] These ash drifts are fresh. The Horde is close.  (Needs KNOW 14)",
+          "detail": "2",
+          "picture": null,
+          "enabled": false
+        },
+        {
+          "id": "choice.2",
+          "label": "Farewell.",
+          "detail": "3",
+          "picture": null,
+          "enabled": true
+        }
+      ]
+    }
+  },
+  "actions": [
+    {
+      "id": "choose",
+      "label": "Choose",
+      "enabled": true
+    },
+    {
+      "id": "advance",
+      "label": "Continue",
+      "enabled": false
+    },
+    {
+      "id": "farewell",
+      "label": "Farewell",
+      "enabled": true
+    }
+  ]
+}

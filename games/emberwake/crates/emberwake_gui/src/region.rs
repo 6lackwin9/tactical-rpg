@@ -1820,6 +1820,8 @@ impl Screen<GameCx> for RegionMap {
             "view": mapview::View::of_setting(&cx.settings.v["region_view"]).name(), "ground": self.ground.state(), "leader": leader_id(cx), "arrows": self.arrows, "pan": self.pan.filter(|_| self.pan_loc == gs.location_id).map(|p| json!([p.0, p.1])),
             // PORTRAITFX1 4.11: the speaker's portrait while the talk box shows (the shop or the board hides it)
             "portraits": svc["portraits"],
+            // ENGINE-25: the talk box's view-model (`talk_view`)
+            "talk_view": svc["talk_view"],
             // REVEAL1 1.3: each roofed indoor zone's roof opacity (0 gone, 1 opaque)
             "roofs": self.roofs.state(),
             // BUNKS1: in a hub, where each member idles and each bunk's member, state and candle (null elsewhere)
