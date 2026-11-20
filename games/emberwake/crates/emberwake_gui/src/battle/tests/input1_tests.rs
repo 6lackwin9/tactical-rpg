@@ -133,8 +133,8 @@ fn first_valid_pick(b: &BattleScreen) -> usize {
     p.rows.iter().position(|r| r.valid && r.at == at && matches!(&r.act, RowAct::Pick(p) if p.iter().any(|x| x.holds_target()))).expect("a usable skill row")
 }
 
-/// IF1, IF2, IF4: a click on an enemy sets the round target and opens the skill menu at the click, titled "<hero> ->
-/// <target>", with only skills an enemy takes (no Support or Guard row); a pick appends it and the menu stays open,
+/// IF1, IF2, IF4: a click on an enemy sets the round target and opens the skill menu at the click, titled (BATTLE-UI2
+/// battle contract 7) "Block <the block the next pick starts on> vs <target>", with only skills an enemy takes (no Support or Guard row); a pick appends it and the menu stays open,
 /// re-listed: only rows that can still be picked, of the round intent.
 #[test]
 fn a_target_click_opens_the_skill_menu_and_a_pick_relists_it() {
@@ -144,7 +144,8 @@ fn a_target_click_opens_the_skill_menu_and_a_pick_relists_it() {
     b.run(&mut cx, Action::UnitClick(f));
     assert_eq!(w(&b).round_states[&h].target, Some(RoundTarget::Unit(f)), "the click sets the target at once: {}", b.message);
     let p = b.popup.as_ref().expect("the skill menu");
-    assert_eq!((p.menu, p.title.clone()), (Some((h, RoundTarget::Unit(f))), format!("{} -> {}", w(&b).units[h].name, w(&b).units[f].name)));
+    let next = rip::next_pick_block(&w(&b), &b.host.session.as_ref().unwrap().plan, h);
+    assert_eq!((p.menu, p.title.clone()), (Some((h, RoundTarget::Unit(f))), format!("Block {next} vs {}", w(&b).units[f].name)));
     let s = b.host.session.as_ref().unwrap();
     assert_eq!(p.rows.iter().filter(|r| matches!(r.act, crate::battle::input::RowAct::Pick(_))).count(), rip::menu_options(&s.w, &s.plan, h, RoundTarget::Unit(f)).len(), "one row per kit cell");
     for row in p.rows.iter().filter(|r| r.valid) {

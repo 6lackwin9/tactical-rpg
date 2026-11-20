@@ -79,8 +79,9 @@ fn plan_of(b: &BattleScreen, h: usize) -> Vec<(usize, i32, Option<usize>, V2)> {
     crate::battle::input::plan_rows(&s(b).w, &s(b).plan, h)
 }
 
-/// The menu holds the neutral row and one row per intent the ruleset lists, in `RoundIntent::ALL`'s order, with no text on a
-/// skill cell; its Fill, Move and Rest sit left to right on top, each skill and item in its own intent's row.
+/// The menu holds the neutral row and the rows of each intent the ruleset lists, in `RoundIntent::ALL`'s order; its Fill,
+/// Move and Rest sit left to right on top, each skill and item in its own intent's rows. BATTLE-UI2 (battle contract 7):
+/// a skill row spans the panel (icon, name, cost, damage, chips), one under another.
 #[test]
 fn the_rows_are_the_rulesets_intents_under_the_neutral_row() {
     let (mut cx, mut g, mut b) = arena();
@@ -110,8 +111,9 @@ fn the_rows_are_the_rulesets_intents_under_the_neutral_row() {
             };
             assert_eq!(i.id(), want, "row {k} is in its own intent's row");
             let r = p.row(b.menu_row, k);
-            assert_eq!((r.w, r.h), (ICON, ICON), "a cell is its icon");
-            assert!(r.y > x("Fill").y, "under the neutral row");
+            let panel = p.rect(b.menu_row);
+            assert_eq!((r.x, r.w, r.h), (panel.x + 4, panel.w - 8, crate::battle::skill_menu::ROW_H), "a row spans the panel");
+            assert!(r.y > x("Fill").y + ICON, "under the neutral row");
         }
     }
 }
@@ -195,26 +197,27 @@ fn a_fifth_row_holds() {
 }
 
 fn row_in(slot: Slot) -> Row {
-    Row { label: "x".into(), detail: String::new(), valid: true, act: RowAct::Pick(vec![rip::Pick::Item("x".into())]), tip: Vec::new(), warn: false, ap_short: None, slot: Some(slot), icon: Vec::new(), at: None, count: None }
+    Row { label: "x".into(), detail: String::new(), valid: true, act: RowAct::Pick(vec![rip::Pick::Item("x".into())]), tip: Vec::new(), warn: false, ap_short: None, slot: Some(slot), icon: Vec::new(), at: None, count: None, facts: None }
 }
 
-/// A row's place comes from its slot alone: a pouch item or a skill may sit in any intent's row, a row stays on one line
-/// however long (INTENT2-U, IR19 Option A), and an empty row keeps its line.
+/// A row's place comes from its slot alone: a pouch item or a skill may sit in any intent's rows. BATTLE-UI2 (battle
+/// contract 7, replacing the icon grid's one line per intent): every row takes its own line under the neutral line, the
+/// rows of an intent together in the ruleset's order, and an intent with no row takes no line.
 #[test]
-fn any_row_takes_a_cell_and_a_long_row_stays_on_one_line() {
+fn any_row_takes_a_line_and_each_row_its_own() {
     let intents: Vec<(RoundIntent, String)> = RoundIntent::ALL.into_iter().map(|i| (i, i.name().to_string())).collect();
-    for (at, (i, _)) in intents.iter().enumerate() {
+    for (i, _) in &intents {
         let g = MenuGrid::new(&intents, intents.iter().map(|x| x.0).collect(), &[row_in(Slot::Intent(*i))], None);
-        assert_eq!(g.places[0], (at as i32 + 1, 0), "the item in {}'s row", i.id());
-        assert_eq!(g.depth, intents.len() as i32 + 1, "an empty row keeps its line");
+        assert_eq!(g.places[0], (1, 0), "the item in {}'s rows, under the neutral line", i.id());
+        assert_eq!(g.depth, 2, "the intents without a row take no line");
     }
     let n = 12;
     let rows = vec![row_in(Slot::Intent(RoundIntent::Guard)); n];
     let g = MenuGrid::new(&intents, intents.iter().map(|x| x.0).collect(), &rows, None);
-    let guard = intents.iter().position(|x| x.0 == RoundIntent::Guard).unwrap() as i32 + 1;
-    assert_eq!(g.places, (0..n as i32).map(|c| (guard, c)).collect::<Vec<_>>(), "one line, a column per cell");
-    assert_eq!((g.depth, g.cols), (intents.len() as i32 + 1, n as i32), "no extra line; the panel widens");
-    assert!(g.lines.iter().skip(1).enumerate().all(|(k, l)| l.2 == k as i32 + 1), "every row on its own line");
+    assert_eq!(g.places, (1..=n as i32).map(|l| (l, 0)).collect::<Vec<_>>(), "a line per row");
+    assert_eq!(g.depth, n as i32 + 1, "the panel grows down");
+    let guard = intents.iter().position(|x| x.0 == RoundIntent::Guard).unwrap();
+    assert!(g.lines.iter().skip(1).enumerate().all(|(k, l)| l.2 == if k <= guard { 1 } else { n as i32 + 1 }), "each intent starts where the one before ends: {:?}", g.lines);
 }
 
 /// The row list is one input: a subset keeps every place, and a row left out draws nothing and takes no hover or click.

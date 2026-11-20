@@ -63,6 +63,7 @@ Scene Runner > Arena > `tl_flank`, with **Ruleset set to Timeline** on the Arena
 - [ ] Rings: the intent ring replaces the side ring; the letter shows on Alt. In a test fight both sides share sprites, so judge it with real factions in mind.
 - [ ] Skill menu: click a unit or tile. It opens beside it, icons only, with rows the target does not allow greyed. Does it read? It can cover a nearby unit.
 - [ ] Move in the menu, after a skill: click a tile. The plate names the blocks it takes back, only Rest follows, up to 3 move blocks. Is the reach, up to 12 tiles for fast units, what you want?
+- [ ] Skill menu from a strip block (`PR7-40` part 3): a pick always lands after your last pick, and the title says which block ("Block 4 vs Brute"), even when you clicked a later empty block. Is that right, or should it land at the clicked block?
 - [ ] Anything else looks wrong? If nothing does, the clarity pass closes.
 
 ## Walking and turns
