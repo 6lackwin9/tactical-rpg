@@ -7,6 +7,42 @@
 | [BALANCE_REPORT_2026-11A.md](../../../docs/archive/BALANCE_REPORT_2026-11A.md) | `PR5-27` .. `R1-BAL`, `INPUT1-MB`, `RULESET1`, `REWARD1-B`, `BAL4/5` (`2026-10-18 .. 2026-11-10`) | All pre-`U3_GEAR_REWORK` Channel Duel, `R4-CLOSE` (`61.0%` feel / `92%` party), `R1..R4`, and classic Ashlands balance runs |
 | [BALANCE_REPORT_2026-10.md](../../../docs/archive/BALANCE_REPORT_2026-10.md) | `2026-10-17` initial runs | Earliest October 2026 baseline snapshot |
 
+## 2026-11-20 ENGINE-28 CAMPAIGN-SIM1 Sunk Ward Act 1 at the party's real levels (`FB-395`)
+
+Report only: no data, rule or golden change. New kit sim run `tools/fc.sh sim campaign world=sunk_ward seeds=32`
+(`rpgkit_sim::world_campaign`): the story fights in story order (the `new_game` sequence, then the main quests, the
+interlude before M5 because it sets the flag M5 needs), each with the party it fields, XP paid by the kit's kill XP at
+each member's own level and levels raised by the class's default growth. Every fight counts as won for the XP (a lost
+story fight is retried in play) and starts at full HP. `side=2` (the default, the patrol `visit_cap`) adds two roamer or
+scavenger fights before each quest fight, round robin over the paced bindings, repeats at `repeat_xp_pct`. Each fight is
+also fought at the authored level 1 (the feel sim's view). Auto driver, the world's timeline ruleset, jitter on.
+
+| Fight | Levels on entry, side 2 | Won % (level 1) | Median rounds | Minutes | HP left | Levels on entry, side 0 | Won %, side 0 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `enc_pro_0a` | Kaelen 1 | 87.5 (87.5) | 6 | 1.8 | 82 % | 1 | 87.5 |
+| `enc_pro_0b` | 2, Vesper 1 | 100 (100) | 3 | 1.4 | 90 % | 2, 1 | 100 |
+| `enc_pro_0c` | 2, 1, 1, 1 | 100 (100) | 4 | 3.2 | 95 % | 2, 1, 1, 1 | 100 |
+| `enc_evt_01` M1 | 4, 3, 3, 3 | 81.3 (53.1) | 8 | 6.5 | 37 % | 3, 3, 2, 2 | 59.4 |
+| `enc_evt_02` M2 | 5 | 96.9 (84.4) | 5 | 4.0 | 74 % | 4 | 93.8 |
+| `enc_evt_03` M3 | 6 | 65.6 (28.1) | 6 | 4.8 | 26 % | 5 | 53.1 |
+| `enc_evt_04` M4 | 6 | 100 (56.3) | 6 | 4.8 | 73 % | 6 | 100 |
+| `enc_evt_05` interlude | 7 | 100 (56.3) | 6 | 4.8 | 86 % | 6 | 100 |
+| `enc_evt_06` M5 Crucible | 7 | 3.1 (0) | 4 | 3.2 | 8 % | 7 | 3.1 |
+| `enc_evt_06_overlook` | 7 | 9.4 (0) | 6 | 4.8 | 12 % | 7 | not run |
+
+Founders end Act 1 at level 8 with side fights, 7 without. Every side fight is won 100 % (1-3 rounds); story XP is most
+of the gain (M5 alone pays 240 a founder), so `side=` moves a founder about one level by M3 and none by M5.
+
+Findings:
+
+1. **The founders reach M5 at level 7**, not the level 1 the feel sim uses. M1 to M4 and the interlude are fair at
+   those levels (M3 is the hard one, 66 %; M1 81 %).
+2. **The Crucible stays unwinnable at the real level: 3 % (base) and 9 % (Overlook) with jitter, 0 % both without.**
+3. **The auto driver's Crucible result is not monotonic in level.** Without jitter the Overlook wins 24/32 at level 4,
+   27/32 at level 5 (the ENGINE-27 numbers) and 0/32 at levels 6 and 7: from level 6 Maren falls in round 4 and Kaelen
+   in round 7 in every seed (holder Kaelen throughout; no skill unlocks at 6). So the auto driver's escape play, not
+   the fight's numbers, decides the Crucible above level 5; fix (b) of `FB-389` cannot be judged by the sim alone.
+
 ## 2026-11-20 ENGINE-27 CRUCIBLE-CHECK1 why both Crucible fights are won 0 % (`FB-389`)
 
 Report only: no data, rule or golden change. Replayed `enc_evt_06` and `enc_evt_06_overlook` round by round (the feel

@@ -66,6 +66,12 @@ pub const CHANNEL_COST_KEYS: [&str; 3] = ["channel_cost_1", "channel_cost_2", "c
 pub const CHANNEL_COST_MAX: f64 = 100.0;
 /// CAMPAIGN1-SIM: the keys only the deadlines mode reads (any other mode refuses them).
 pub const DEADLINE_KEYS: [&str; 1] = ["losses"];
+/// CAMPAIGN-SIM1 (ENGINE-28): the keys only the world campaign run (`campaign world=<id>`) reads.
+pub const WORLD_CAMPAIGN_KEYS: [&str; 2] = ["side", "story"];
+/// CAMPAIGN-SIM1: the most side fights `side=` puts before a quest fight.
+pub const SIDE_MAX: i32 = 9;
+/// CAMPAIGN-SIM1: the help of the world campaign run, printed apart from `usage` (which `sim_golden` holds).
+pub const WORLD_CAMPAIGN_USAGE: &str = "       campaign world=<world> [seeds=N] [side=0-9] [story=<enc,...>]: the world's story fights in story order with the party each fields, XP and level-ups carried by the kit's rules (each fight counted won: a lost story fight is retried), side= roamer fights before each quest fight (default: the world's patrol visit cap); per fight the entry levels, won %, median rounds, minutes and HP left beside the same fight at the authored levels";
 /// CAMPAIGN1-SIM: `losses=` (lost tries per mission in the worst case): default and range.
 pub const LOSSES_DEFAULT: i64 = 1;
 pub const LOSSES_MAX: i64 = 9;
@@ -194,6 +200,13 @@ pub struct SimArgs {
     pub losses: i64,
     /// The deadlines keys given, for the check that no other mode takes them.
     deadline_keys: Vec<String>,
+    /// CAMPAIGN-SIM1 (world campaign only): side fights before each quest fight (`side=0..SIDE_MAX`; None: the world's
+    /// patrol visit cap).
+    pub side: Option<i32>,
+    /// CAMPAIGN-SIM1 (world campaign only): the story fights in order (`story=<enc,...>`; empty: derived from the world).
+    pub story: Vec<String>,
+    /// The world campaign keys given, for the check that no other run takes them.
+    campaign_keys: Vec<String>,
 }
 
 impl Default for SimArgs {
@@ -263,6 +276,9 @@ impl Default for SimArgs {
             feel_keys: Vec::new(),
             losses: LOSSES_DEFAULT,
             deadline_keys: Vec::new(),
+            side: None,
+            story: Vec::new(),
+            campaign_keys: Vec::new(),
         }
     }
 }
@@ -470,6 +486,14 @@ impl SimArgs {
         } else if let Some(k) = a.deadline_keys.first() {
             return Err(format!("{k}= is a deadlines key (mode deadlines only)"));
         }
+        if let Some(k) = a.campaign_keys.first().filter(|_| !a.world_campaign()) {
+            return Err(format!("{k}= is a world campaign key (campaign world=<world> only)"));
+        }
+        for id in &a.story {
+            if !has_encounter(d, &a.world, id) {
+                return Err(format!("story: '{id}' is not an encounter of world {}", a.world));
+            }
+        }
         a.ruleset = rpgkit_rules::ruleset::Ruleset::of(&d.cat, &a.ruleset_id)?;
         a.ruleset.adjust(&a.rules)?;
         if let Some(m) = a.melee_diagonal {
@@ -562,6 +586,11 @@ impl SimArgs {
         Ok(())
     }
 
+    /// CAMPAIGN-SIM1 (ENGINE-28): the run is the world campaign (`campaign` with `world=`), not the game's story run.
+    pub fn world_campaign(&self) -> bool {
+        self.mode == "campaign" && self.world_set
+    }
+
     /// The PlanPresets id the party drafts with in the feel mode (its tactic's).
     pub fn tactic_preset(&self) -> &'static str {
         TACTICS.iter().find(|(name, _)| *name == self.tactic).map_or("balanced", |(_, p)| p)
@@ -576,7 +605,24 @@ impl SimArgs {
         if DEADLINE_KEYS.contains(&key) && !self.deadline_keys.iter().any(|k| k == key) {
             self.deadline_keys.push(key.to_string());
         }
+        if WORLD_CAMPAIGN_KEYS.contains(&key) && !self.campaign_keys.iter().any(|k| k == key) {
+            self.campaign_keys.push(key.to_string());
+        }
         match key {
+            // CAMPAIGN-SIM1: the world campaign run's keys.
+            "side" => {
+                let Some(n) = value.parse::<i32>().ok().filter(|n| (0..=SIDE_MAX).contains(n)) else {
+                    return Err(format!("side must be 0..{SIDE_MAX} (got '{value}')"));
+                };
+                self.side = Some(n);
+            }
+            "story" => {
+                let ids = list(value);
+                if ids.is_empty() {
+                    return Err("story must list encounter ids, comma separated".into());
+                }
+                self.story = ids;
+            }
             // CAMPAIGN1-SIM: the deadlines mode's key.
             "losses" => {
                 let Some(n) = value.parse::<i64>().ok().filter(|n| (0..=LOSSES_MAX).contains(n)) else {
