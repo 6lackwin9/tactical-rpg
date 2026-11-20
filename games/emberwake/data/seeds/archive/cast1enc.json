@@ -785,6 +785,101 @@
    "kind": "encounters",
    "world": "sunk_ward",
    "entry": {
+    "id": "enc_pro_0a",
+    "name": "The Alley",
+    "description": "Prologue: a curfew sweep in the Alleyway of Cinders.",
+    "intro": "The curfew bell tolls and two Castellan Footmen close the alley.",
+    "location": "",
+    "zone": "alley",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      3
+     ],
+     [
+      11,
+      4
+     ]
+    ],
+    "rows": [
+     "############",
+     "#..r.......#",
+     "#......r...#",
+     "#...........",
+     "#...........",
+     "#...r......#",
+     "#.......r..#",
+     "############",
+     "############"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 8,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen"
+    ],
+    "enemies": [
+     "footman_patrol",
+     "footman_patrol"
+    ],
+    "phases": [
+     {
+      "id": "tremor",
+      "name": "The bell tremor",
+      "trigger": {
+       "kind": "round",
+       "round": 2
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "The alley shudders as the distant curfew bell tolls. Watch whistles shrill down the lane."
+       },
+       {
+        "type": "shake",
+        "preset": "tremor"
+       }
+      ],
+      "pause_autoplay": false
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "rout",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 1,
+    "objective_text": "Strike while they wind up: a quick Pommel Strike breaks a slow blow.",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {},
+    "key_loot": [],
+    "objective_reward": {},
+    "guests": [],
+    "party_min": 0,
+    "protect": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
     "id": "enc_pro_0b",
     "name": "The Rooftop",
     "description": "Prologue: the Meat Market rooftops; Vesper joins.",
