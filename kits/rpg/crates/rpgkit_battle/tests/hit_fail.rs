@@ -220,3 +220,23 @@ fn an_intercept_is_forecast_as_an_intercept() {
     assert_eq!(w.units[ALLY].hp, ally_hp, "{:?}", res.log);
     assert!(w.units[ARCHER].hp < archer_hp, "the holder took it: {:?}", res.log);
 }
+
+/// A forecast clash: the attacker and its target both walk onto one tile before the hit. One of them stops short when
+/// the round runs, so they end side by side either way: the hit is forecast to land on the target where it stands now
+/// (`intent::target_at`), not out of reach, and lands for its forecast.
+#[test]
+fn a_clash_onto_one_tile_is_forecast_to_land() {
+    let mut w = world(timeline("melee"));
+    w.grid.positions[HERO] = Some(v(3, 4));
+    let mut res = Resolver::new(BLOCKS, 1);
+    book(&mut res, HERO, walk(HERO, &[v(1, 0)]), 1);
+    book(&mut res, FOE, walk(FOE, &[v(-1, 0)]), 1);
+    let a = book(&mut res, HERO, hit(&w, HERO, FOE, "tl_heavy"), 2);
+    let f = forecast(&w, &res, a, FOE);
+    assert_eq!(f.fails, None, "{f:?}");
+    assert!(f.damage > 0, "{f:?}");
+    let hp = w.units[FOE].hp;
+    run(&mut w, &mut res, 1, 3);
+    assert!(res.scheduled[a].command.log.starts_with("[Attack]") && !res.scheduled[a].command.log.contains("CRIT"), "{:?}", res.log);
+    assert_eq!(hp - w.units[FOE].hp, f.damage, "{:?}", res.log);
+}

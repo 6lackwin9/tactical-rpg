@@ -230,10 +230,9 @@ pub fn counter_on(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: 
         CmdKind::Area { .. } => src.attack_range > 1,
         _ => return None,
     };
-    // HITCALC1: the tile it strikes from as its hit reads it (`intent::scene_at`)
-    let from = intent::scene_at(w, sched, a, t).from;
-    // both planned onto one tile (a forecast clash: one of them stops short when the round runs): `t` where it stands
-    let at = Some(intent::position_at(w, sched, t, a.impact)).filter(|p| *p != from).unwrap_or_else(|| w.grid.pos(t).unwrap_or(crate::grid::NO_CELL));
+    // HITCALC1: both tiles as its hit reads them (`intent::scene_at`; a forecast clash onto one tile reads `t` where
+    // it stands now, `intent::target_at`)
+    let crate::command::HitScene { from, at, .. } = intent::scene_at(w, sched, a, t);
     let flank = crate::round_intent::flank_bonus_at(w, a.unit, from, t);
     if !crate::command::riposte_answers_at(w, a.unit, from, t, at, ranged || flank) {
         return None;

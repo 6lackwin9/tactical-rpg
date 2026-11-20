@@ -256,3 +256,39 @@ fn the_forecast_names_the_landing_block_and_each_hit() {
         }
     }
 }
+
+/// HITCALC1 (PR7-45, FB-336): once the round is over an enemy's hover card reads this round's line ("This round:
+/// <first action>") and drops the forecast of its landed hits; while planning the same tell reads "Intent:" with it.
+#[test]
+fn the_round_over_hover_reads_this_rounds_line() {
+    use crate::battle::tips::ROUND_OVER_HEAD;
+    use emberwake_battle::session::Phase;
+    let (cx, _g, mut b) = arena(Some(TIMELINE), false);
+    let h = b.selected.unwrap();
+    let tells = s(&b).enemy_intents();
+    let planned: Vec<(usize, String)> = tells.iter().map(|r| (r.unit, intent_text::first_line(&s(&b).w, &r.line))).collect();
+    for (e, line) in &planned {
+        let tip = unit_tip(s(&b), *e, Some(h), &tells, &s(&b).round_intents(), &[]);
+        assert!(tip.iter().any(|t| t.0 == format!("Intent: {line}")), "planning: {tip:?}");
+    }
+    let r = b.send(&cx, json!({"cmd": "confirm"}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    for _ in 0..64 {
+        if s(&b).phase == Phase::Replay || s(&b).combat_over {
+            break;
+        }
+        b.send(&cx, json!({"cmd": "step"}));
+    }
+    let sess = s(&b);
+    assert!(sess.phase == Phase::Replay && !sess.combat_over, "the round is over: {:?}", sess.phase);
+    let rounds = sess.round_intents();
+    let mut seen = 0;
+    for r in rounds.iter().filter(|r| sess.w.enemies.contains(&r.unit) && sess.w.units[r.unit].is_active()) {
+        let tip = unit_tip(sess, r.unit, Some(h), &sess.enemy_intents(), &rounds, &[]);
+        let head = format!("{ROUND_OVER_HEAD} {}", intent_text::first_line(&sess.w, &r.line));
+        assert!(tip.iter().any(|t| t.0 == head), "{head}: {tip:?}");
+        assert!(tip.iter().all(|t| !t.0.starts_with("Intent:") && !t.0.starts_with("Targets you") && !t.0.starts_with("Heads for you")), "{tip:?}");
+        seen += 1;
+    }
+    assert!(seen > 0, "an enemy stands at the round's end");
+}

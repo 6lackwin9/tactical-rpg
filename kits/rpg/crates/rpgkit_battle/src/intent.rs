@@ -558,6 +558,13 @@ impl Adjust<'_> {
     pub const NONE: Adjust<'static> = Adjust { power: 1.0, strip: &[], guard: true };
 }
 
+/// HITCALC1 (PR7-45): where target `t` stands at `block` for an attacker on tile `from` then (`position_at`); when both
+/// are planned onto one tile (a forecast clash: one of them stops short when the round runs), `t` where it stands now
+/// (the rule `status_view::counter_on` reads too). Read only.
+pub fn target_at(w: &World, sched: &[ScheduledAction], t: UnitId, from: V2, block: i32) -> V2 {
+    Some(position_at(w, sched, t, block)).filter(|p| *p != from || from == NO_CELL).unwrap_or_else(|| w.grid.pos(t).unwrap_or(NO_CELL))
+}
+
 /// HITCALC1 (PR7-45): the board scheduled action `a`'s hit on `t` is read on at its impact (`command::HitScene`): the
 /// attacker's tile then (`position_at`; a carried Engage that has not started strikes from its planned tile), the
 /// target's tile then, its guard then (`guard_at`; 0 for a guard-bypassing command) and both stances then
@@ -568,7 +575,7 @@ pub fn scene_at(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: Un
         _ => position_at(w, sched, a.unit, a.impact),
     };
     let guard = if a.command.ignore_guard { 0.0 } else { guard_at(w, sched, t, a.impact) };
-    crate::command::HitScene { from, at: position_at(w, sched, t, a.impact), guard: Some(guard), attacker_stance: Some(stance_at(w, sched, a.unit, a.impact)), target_stance: Some(stance_at(w, sched, t, a.impact)) }
+    crate::command::HitScene { from, at: target_at(w, sched, t, from, a.impact), guard: Some(guard), attacker_stance: Some(stance_at(w, sched, a.unit, a.impact)), target_stance: Some(stance_at(w, sched, t, a.impact)) }
 }
 
 /// HITCALC1 (PR7-45): how scheduled attack `a` on `t` fails at its impact, in `Command::execute`'s order: a protected
@@ -585,7 +592,7 @@ fn attack_fail(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: Uni
     let band = crate::command::reach_band(w, src, *min_range, *max_range);
     let (sa, st) = (w.size_of(src), w.size_of(t));
     let gap = |from: V2, at: V2| crate::grid::square_band(cmd.diagonal, from, sa, at, st);
-    let t0 = position_at(w, sched, t, a.start);
+    let t0 = target_at(w, sched, t, start_tile, a.start);
     let in_band = |d: i32, extra: i32| d >= band.0 && d <= band.1 + extra;
     let known = start_tile != NO_CELL && t0 != NO_CELL;
     // the chase or dash it may take as it starts: only toward a target out of its band then
