@@ -1,6 +1,6 @@
 {
   "id": "hub_points",
-  "title": "PR7-37 (PT-03, PT-29): the playtest save hub_start; a click on the cold vaults and the coke-brazier walks there (beside the vaults, walled off) and each answers in the log; E on the brazier rests or says why not; PR7-51 (FOOTLOCKER1): Maren's footlocker opens her loadout over the shared stash (the open art behind it) and closes with it; Widow Varka's What do you sell? says her shelves are shut until Ivo is home",
+  "title": "PR7-37 (PT-03, PT-29): the playtest save hub_start; a click on the cold vaults and the coke-brazier walks there (beside the vaults, walled off) and each answers in the log; E on the brazier rests or says why not; PR7-51 (FOOTLOCKER1): Maren's footlocker opens her loadout over the shared stash (the open art behind it) and closes with it; PR7-58 (FOOTLOCKER1B): it shows open on the map for a beat before the loadout comes up; Widow Varka's What do you sell? says her shelves are shut until Ivo is home",
   "launch": {"save": "hub_start"},
   "settings": {"reduce_motion": true},
   "timeout_s": 300,
@@ -22,6 +22,7 @@
     {"step": "pause", "ms": 600},
     {"step": "shot", "name": "hub_brazier_rest"},
     {"step": "click", "id": "locker.maren"},
+    {"step": "assert", "until": {"all": [{"path": "screen", "eq": "region_map"}, {"path": "state.locker_open", "eq": "maren"}]}},
     {"step": "wait", "until": {"path": "screen", "eq": "character"}, "timeout_ms": 15000},
     {"step": "pause", "ms": 600},
     {"step": "shot", "name": "hub_footlocker_open"},

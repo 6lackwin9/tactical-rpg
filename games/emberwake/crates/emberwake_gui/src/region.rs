@@ -162,6 +162,11 @@ pub struct RegionMap {
     /// map is the top screen again).
     lockers: Vec<(String, Pos, Rect, String)>,
     locker_open: String,
+    /// FOOTLOCKER1B (`PR7-58` (2)): the footlocker's beat (`bunks::LOCKER_BEAT_MS`): when it ends and whether it is the
+    /// opening one (the open art shows, then the loadout comes up) or the closing one (the open art after the loadout
+    /// closed, then the closed art); and whether the loadout it opened is up (the map ticks again only once it closed).
+    locker_beat: Option<(Instant, bool)>,
+    locker_up: bool,
     /// TRANSITIONS1 T2 step 4: the arrival card showing since when, and whether it opened the ticker for its change
     /// lines (closed again when the card goes).
     arrival: Option<(crate::transitions::Arrival, Instant)>,
@@ -557,6 +562,8 @@ impl RegionMap {
             bunk_held: Vec::new(),
             lockers: Vec::new(),
             locker_open: String::new(),
+            locker_beat: None,
+            locker_up: false,
             arrival: None,
             ticker_forced: false,
         }
@@ -715,7 +722,7 @@ impl RegionMap {
     }
 
     /// A frame's tick at wall time `now` (the frame's clock: the glide and the camera read it in `draw`).
-    fn tick_at(&mut self, cx: &mut Cx, now: Instant) {
+    pub(crate) fn tick_at(&mut self, cx: &mut Cx, now: Instant) {
         self.frame_at = Some(now);
         // PLAYUI1-R: the sprites play on their own clock at the animation speed setting (as the battle tokens)
         let speed = mapview::anim_speed(&cx.settings.v);
@@ -723,6 +730,25 @@ impl RegionMap {
         self.step = mapview::WalkStep::of(&cx.settings.v, cx.held.shift);
         self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
         self.anim_at = now;
+        // FOOTLOCKER1B (2): the map ticks again with the loadout a footlocker opened closed: the closing beat starts;
+        // a beat ended: the loadout comes up (opening) or the footlocker closes; the map holds still while it opens
+        if std::mem::take(&mut self.locker_up) {
+            self.locker_beat = Some((now + crate::bunks::locker_beat(), false));
+        }
+        if let Some((due, opening)) = self.locker_beat {
+            if now >= due {
+                self.locker_beat = None;
+                if opening {
+                    self.locker_up = true;
+                    cx.nav.push(Nav::Push(Box::new(crate::party::Character::new(cx, &self.locker_open.clone(), "gear"))));
+                } else {
+                    self.locker_open.clear();
+                }
+            }
+            if opening {
+                return;
+            }
+        }
         // PORTRAITFX1 4.5: the talk box's portrait clock moves; CAMPAIGN1 W3: a Yes to the ask before a resting reply
         // picks it (`Services::tick`)
         if let Some(fought) = self.svc.tick(cx) {
@@ -787,21 +813,21 @@ impl RegionMap {
         !self.walk.is_empty() || self.moved_at.is_some_and(|(t, step)| self.anim_ms - t < step + WALK_LINGER_MS)
     }
 
-    fn interact(&mut self, cx: &mut Cx, dir: Pos) {
+    pub(crate) fn interact(&mut self, cx: &mut Cx, dir: Pos) {
         self.turn(dir);
         // BUNKS1 BK8, BK11: a member idling ahead plays its waiting talk (the lead's too), else opens its card
         let ahead = (cx.gs().position.0 + dir.0, cx.gs().position.1 + dir.1);
+        // FOOTLOCKER1B (`PR7-58` (1)): a footlocker ahead first, then what stands ahead (a member, a marker, a point),
+        // and a footlocker underfoot last
+        if let Some(member) = self.lockers.iter().find(|l| l.1 == ahead).map(|l| l.0.clone()) {
+            self.open_locker(cx, &member);
+            return;
+        }
         let member = self.hub.member_at(ahead);
         if !member.is_empty() {
             if !self.play_talk(cx, &member) {
                 cx.nav.push(Nav::Push(Box::new(crate::bunks::BunkCard::new(&member))));
             }
-            return;
-        }
-        // FOOTLOCKER1: a footlocker ahead or underfoot opens its member's loadout
-        let here = cx.gs().position;
-        if let Some(member) = self.lockers.iter().find(|l| l.1 == ahead).or_else(|| self.lockers.iter().find(|l| l.1 == here)).map(|l| l.0.clone()) {
-            self.open_locker(cx, &member);
             return;
         }
         let d = cx.data.clone();
@@ -833,16 +859,36 @@ impl RegionMap {
             // PR7-37 (PT-03, PT-29): a point of interest underfoot or ahead answers (its line, then its use)
             _ => match explore::point_near(&d, cx.gs(), dir) {
                 Some(m) => act_on_point(cx, &m),
-                None => cx.log("Nothing there."),
+                None => {
+                    let here = cx.gs().position;
+                    match self.lockers.iter().find(|l| l.1 == here).map(|l| l.0.clone()) {
+                        Some(member) => self.open_locker(cx, &member),
+                        None => cx.log("Nothing there."),
+                    }
+                }
             },
         }
     }
 
     /// FOOTLOCKER1 (`PR7-51`): `member`'s footlocker opens (the open art while the screen is up) and their loadout opens
     /// over the map: the Character window's gear page focused on them, beside the shared stash (gear and consumables).
-    fn open_locker(&mut self, cx: &mut Cx, member: &str) {
+    /// FOOTLOCKER1B (`PR7-58` (2)): the open art shows for the beat first (the frame's clock); the loadout comes up as it
+    /// ends (`tick_at`). A footlocker already in its beat or open takes nothing more.
+    fn open_locker(&mut self, _cx: &mut Cx, member: &str) {
+        if self.locker_beat.is_some_and(|b| b.1) || self.locker_up {
+            return;
+        }
+        self.walk.clear();
+        self.walk_target = None;
+        self.hold = false;
         self.locker_open = member.to_string();
-        cx.nav.push(Nav::Push(Box::new(crate::party::Character::new(cx, member, "gear"))));
+        let now = self.frame_at.unwrap_or_else(Instant::now);
+        self.locker_beat = Some((now + crate::bunks::locker_beat(), true));
+    }
+
+    /// FOOTLOCKER1B (2): a footlocker is in its opening beat (the map takes no input until the loadout is up).
+    fn locker_opening(&self) -> bool {
+        self.locker_beat.is_some_and(|b| b.1)
     }
 
     /// Opens the conversation with `character` (`Services::talk`).
@@ -940,6 +986,9 @@ impl RegionMap {
     }
 
     fn act(&mut self, cx: &mut Cx, a: RAct) {
+        if self.locker_opening() {
+            return;
+        }
         let d = cx.data.clone();
         match a {
             RAct::MapClick => {
@@ -1064,10 +1113,6 @@ impl Screen<GameCx> for RegionMap {
         self.bunk_walls.clear();
         self.bunk_held.clear();
         self.lockers.clear();
-        // FOOTLOCKER1: the loadout a footlocker opened has closed once the map is the top screen again
-        if live {
-            self.locker_open.clear();
-        }
         let gs = cx.gs().clone();
         // the open conversation; a new node starts its line and its replies scrolled to the top; PORTRAITFX1-D: a
         // portrait left out of the last frame (the conversation ended or hid) is dropped
@@ -1520,10 +1565,11 @@ impl Screen<GameCx> for RegionMap {
                             let (name, class, class_id) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m), m.class_id(&d));
                             let plate = crate::bunks::plate_rect(&mut ui.p, r, &bed, &name, room, p.flip);
                             let full = crate::bunks::plate_need(&mut ui.p, &name) <= plate.w;
-                            let shown = crate::bunks::plate_name(&mut ui.p, &name, plate.w);
+                            let shown = crate::bunks::plate_shown(&mut ui.p, &name, plate.w);
+                            let glyph = crate::bunks::plate_glyph(&ui.p);
                             crate::bunks::draw_plate(&mut ui, cx, plate, &name, &class_id, &class);
                             if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
-                                e["plate"] = json!({"name": name, "shown": shown, "class": class, "class_id": class_id, "rect": [plate.x, plate.y, plate.w, plate.h], "full": full, "wall": bed.niche, "room": room});
+                                e["plate"] = json!({"name": name, "shown": shown, "class": class, "class_id": class_id, "rect": [plate.x, plate.y, plate.w, plate.h], "full": full, "wall": bed.niche, "room": room, "glyph": glyph});
                                 e["dressed"] = entry;
                             }
                         } else {
@@ -1748,6 +1794,10 @@ impl Screen<GameCx> for RegionMap {
             }
             return;
         }
+        // FOOTLOCKER1B (2): a footlocker opening holds the map still
+        if self.locker_opening() {
+            return;
+        }
         // an open conversation takes the keys (`Services::key`)
         if let Some(fought) = self.svc.key(cx, k) {
             if fought {
@@ -1785,6 +1835,9 @@ impl Screen<GameCx> for RegionMap {
     }
 
     fn back(&mut self, cx: &mut Cx) {
+        if self.locker_opening() {
+            return;
+        }
         if self.lore.is_some() {
             self.lore = None;
         } else if let Some(fought) = self.svc.back(cx) {
@@ -1808,7 +1861,10 @@ impl Screen<GameCx> for RegionMap {
         json!({"location": gs.location_id, "position": [gs.position.0, gs.position.1], "facing": [self.facing.0, self.facing.1],
             // TURNFEEL1: the feel options and the last step's times (wall ms)
             "walk_feel": {"turn_beat": feel.beat, "equal_speed": feel.equal, "corner": feel.corner.name(), "step_at_ms": self.last_step.filter(|_| cx.settings.v["camera_trail"] == json!(true)).map(|t| t.saturating_duration_since(self.opened_at).as_secs_f64() * 1000.0), "glide_ms": self.leg.glide, "delay_ms": self.leg.delay},
-            "walking": !self.walk.is_empty(), "log": cx.log.iter().rev().take(8).rev().collect::<Vec<_>>(),
+            "walking": !self.walk.is_empty(),
+            // BUNKS-FIX1 (`PR7-46` (3)): the marker the walk acts on when it arrives (a talk, a point; "" none)
+            "walk_to": self.walk_target.clone().unwrap_or_default(),
+            "log": cx.log.iter().rev().take(8).rev().collect::<Vec<_>>(),
             "dialogue": svc["dialogue"], "turn_in": svc["turn_in"],
             "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
             "arrival": self.arrival.as_ref().map(|(a, _)| json!({"card": a.card, "changes": a.changes})),
