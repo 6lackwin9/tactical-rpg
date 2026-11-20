@@ -36,6 +36,7 @@ mod overlays;
 mod playback;
 mod plates;
 mod skill_menu;
+mod statusvis;
 mod talks;
 mod tips;
 mod tokens;
@@ -47,7 +48,7 @@ pub(crate) use marks::{party_foresight_off, seen_intents};
 #[allow(unused_imports)]
 pub(crate) use marks::FORESIGHT_OFF;
 pub(crate) use overlays::{overlay_default, settings_overlay_groups, Layers, OVERLAY_GROUPS};
-pub(crate) use tips::{action_rows, ap_lines, channel_action, channel_block, channel_fill, channeled_word, kind_color};
+pub(crate) use tips::{action_rows, ap_lines, channel_action, channel_block, channel_fill, channeled_word, kind_color, kind_icon};
 pub(crate) use input::skill_text;
 pub(crate) use skill_menu::CHANNEL_TINT;
 use draw::{draw, log_groups_json};
@@ -606,6 +607,24 @@ impl BattleScreen {
         cx.playtest.put_session(&mut self.slot, s);
     }
 
+    /// PR7-57 (STATUSVIS1-B): the agent link's `debug_status` (dev tools only): unit `unit` holds `status` now for
+    /// `rounds` (the status's default) at `magnitude` (its least), as a grant that lands at once
+    /// (`status::grant_now`); for proof shots of the statuses' looks. Not a battle command, never in a recording.
+    pub(crate) fn debug_status(&mut self, cx: &Cx, body: &Value) -> Value {
+        if !crate::DEV_TOOLS {
+            return json!({"ok": false, "error": "debug_status needs the dev tools"});
+        }
+        let Some(s) = self.host.session.as_mut() else { return json!({"ok": false, "error": "no battle"}) };
+        let status = body["status"].as_str().unwrap_or("");
+        let Some(row) = emberwake_rules::status::row_of(status) else { return json!({"ok": false, "error": format!("unknown status '{status}'")}) };
+        let Some(unit) = body["unit"].as_u64().map(|u| u as usize).filter(|u| *u < s.w.units.len()) else { return json!({"ok": false, "error": "debug_status needs a unit"}) };
+        let rounds = body["rounds"].as_i64().map_or(row.default_rounds.max(1), |r| r as i32);
+        let magnitude = body["magnitude"].as_i64().map_or(row.magnitude_min, |m| m as i32);
+        emberwake_rules::status::grant_now(&mut s.w.units[unit], status, rounds, magnitude, "debug");
+        self.after_change(cx);
+        json!({"ok": true})
+    }
+
     /// The command-host session as the recording keeps it (a take-over names its parent in `end`).
     fn recorded(&self) -> aegis_host::playtest::Session {
         let mut s = aegis_host::playtest::Session::of(&self.host);
@@ -795,15 +814,13 @@ impl Screen<GameCx> for BattleScreen {
     /// keyboard focus as before. The raw input is read through the map, so a CONTROLS-UI1 rebind is respected.
     fn capture(&mut self, cx: &mut Cx, input: aegis_ui::controls::Input) -> bool {
         use aegis_ui::controls::{Controls, Input};
-        if !self.menu_key() {
-            return false;
-        }
         let (map, _) = Controls::from_settings(&cx.settings.v);
         let gives = match input {
             Input::Key(k) => map.key(k),
             Input::Pad(p) => map.pad(p),
         };
-        gives == Key::Tab
+        // PR7-57: only the menu key opens the menu (any other key, T among them, kept opening it as a side effect)
+        gives == Key::Tab && self.menu_key()
     }
 
     /// FPSCAP1: a battle waiting for the player moves slowly (idle clips, portraits, status loops); any other time every
@@ -1254,6 +1271,10 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn command(&mut self, cx: &Cx, body: &Value) -> Option<Value> {
+        // PR7-57 (STATUSVIS1-B): the dev tools' status grant for proof shots (not a battle command: the host never sees it)
+        if body["cmd"] == json!("debug_status") {
+            return Some(self.debug_status(cx, body));
+        }
         // An agent-link `new` ends this session: park it for the hub (saved on the next tick), then start a new one.
         let restart = body["cmd"] == json!("new");
         if restart && self.recordable() {

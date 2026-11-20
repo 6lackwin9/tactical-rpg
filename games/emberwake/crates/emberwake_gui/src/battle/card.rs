@@ -122,19 +122,42 @@ fn row(ui: &mut Ui<super::Action>, cx: &mut Cx, small: &mut Faces, looks: &Looks
     // the damage: a blow shows the red heart and "-34" (the kit's heart badge is the heal's moss heart, contract 6)
     super::plates::heart_shape(&mut ui.p, Rect::new(at, y + 2, 6, 5), th().foe);
     let dmg = format!("-{}", r.damage);
-    ui.p.text(at as f32 + 9.0, y as f32 + 1.0, &dmg, BODY, if r.after_ko { th().dim } else { th().text });
+    // STATUSVIS1 SV7 (PR7-57): the number after every modifier, tinted with an arrow when one moved it; its breakdown on
+    // a frameless hover (pushed after the row, so it is the card under the mouse)
+    let plain = if r.after_ko { th().dim } else { th().text };
+    let col = super::statusvis::num_col(r.sign, plain);
+    ui.p.text(at as f32 + 9.0, y as f32 + 1.0, &dmg, BODY, col);
+    let dw = ui.p.text_w(&dmg, BODY);
+    super::statusvis::arrow(&mut ui.p, at as f32 + 9.0 + dw + 1.0, y as f32 + 3.0, r.sign, col);
     line_box(ui, &format!("card.row.{k}.damage"), &dmg, Rect::new(at + 9, y, 24, ROW_H - 1), BODY);
+    let num_r = Rect::new(at + 9, y, (dw.ceil() as i32 + 5).min(25), ROW_H - 1);
     at += 34;
     poise_area(ui, cx, &r.pips, at, y);
     at += POISE_SLOTS * 4 + 6;
-    let after = chips(ui, cx, &r.statuses, at, y + 1);
+    let mut after = chips(ui, cx, &r.statuses, at, y + 1);
+    // SV9: the riposte chip, no number; its hover the likely return on each hitter
+    let mut chip = None;
+    if !r.riposte.is_empty() {
+        chip = Some(after + 1);
+        after += 2 + super::statusvis::riposte_chip_w(ui);
+    }
     if r.after_ko {
         soft_tag(ui, "after KO", after + 1, y);
     } else if r.ko {
         tag(ui, "KO", after + 1, y, oxblood());
     }
     let tip = vec![(r.name.clone(), th().gold), (format!("Blocks {}-{}: -{} HP", r.start, r.impact, r.damage), th().text)];
-    ui.push(format!("card.row.{k}"), "row", format!("{} -{}", r.name, r.damage), Rect::new(x, y, CARD_W - 8, ROW_H - 1), true, false, None, tip);
+    // SV13: a hovered number (or chip) gets no frame: the row's own hover outline stays off while the mouse is on it
+    let chip_r = chip.map(|cx0| Rect::new(cx0, y, super::statusvis::riposte_chip_w(ui), 8));
+    let on_number = (!r.parts.is_empty() && ui.hover(num_r)) || chip_r.is_some_and(|c| ui.hover(c));
+    ui.push(format!("card.row.{k}"), if on_number { "label" } else { "row" }, format!("{} -{}", r.name, r.damage), Rect::new(x, y, CARD_W - 8, ROW_H - 1), true, false, None, tip);
+    if !r.parts.is_empty() {
+        ui.push(format!("card.row.{k}.number"), "label", dmg.clone(), num_r, true, false, None, super::statusvis::num_tip(&format!("{}: -{} HP", r.name, r.damage), &r.parts));
+    }
+    if let Some(cx0) = chip {
+        let returns: Vec<(String, i32)> = r.riposte.iter().map(|(u, hp)| (looks.get(*u).map_or_else(|| format!("unit {u}"), |l| l.0.name.clone()), *hp)).collect();
+        super::statusvis::riposte_chip(ui, &format!("card.row.{k}.riposte"), cx0, y, &returns);
+    }
 }
 
 /// A footer text at (`x`, `y`) with its label widget.

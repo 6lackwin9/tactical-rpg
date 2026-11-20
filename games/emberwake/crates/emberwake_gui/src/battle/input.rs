@@ -693,6 +693,10 @@ impl BattleScreen {
         }
         let w = &self.session().w;
         let Some(h) = self.selected.filter(|&h| ri::on(w) && w.allies.contains(&h) && w.units[h].is_active() && w.has(h)) else { return };
+        // STATUSVIS1 SV5 (PR7-57): a block a lock takes holds no plan, so it opens no menu
+        if emberwake_battle::status_view::run_at(&emberwake_battle::status_view::lock_runs(w, h), b).is_some() {
+            return;
+        }
         let at = w.round_states.get(&h).and_then(|r| r.target).or_else(|| ri::intent_of(w, h).and_then(|i| rip::proposed_target(w, h, i))).unwrap_or(RoundTarget::Myself);
         let rect = self.w.iter().find(|x| x.id == format!("strip.block{b}")).map(|x| x.rect).unwrap_or_default();
         self.move_aim = None;
@@ -727,7 +731,20 @@ impl BattleScreen {
             return true;
         }
         let total = self.session().def.total_blocks.max(1);
-        let b = self.strip_block_under_mouse().map(|x| x.0).unwrap_or_else(|| rip::next_pick_block(&self.session().w, &self.session().plan, h).clamp(1, total));
+        let b = self.strip_block_under_mouse().map(|x| x.0).unwrap_or_else(|| {
+            // PR7-57 (SV5): off the strip the key opens on the next pick's block, past a lock's run (a locked block holds
+            // no plan; the pick lands after it)
+            let w = &self.session().w;
+            let runs = emberwake_battle::status_view::lock_runs(w, h);
+            let mut b = rip::next_pick_block(w, &self.session().plan, h).clamp(1, total);
+            while let Some(r) = emberwake_battle::status_view::run_at(&runs, b) {
+                b = (r.end + 1).min(total);
+                if r.end >= total {
+                    break;
+                }
+            }
+            b
+        });
         self.strip_menu(b);
         true
     }

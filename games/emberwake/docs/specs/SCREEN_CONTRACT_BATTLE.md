@@ -13,8 +13,8 @@ screen at 1280x720, 1:1.
 ## 1. Frames
 
 - The battle screen's main panels keep the current ornate frame; popups, cards and the HUD use frame A (1 px bronze
-  `#74543c` outer, dark gap, 1 px iron `#4b5563` inner, oxblood `#991b1b` top line, no corners). Typed 2026-11-18
-  20:42, "Main current pop-up A".
+  outer `frame_a_outer`, dark gap, 1 px iron inner `frame_a_inner`, oxblood top line `frame_a_top`, no corners; theme
+  game colours). Typed 2026-11-18 20:42, "Main current pop-up A".
 
 ## 2. Top bar
 
@@ -122,9 +122,9 @@ to `battle_take36_locks_mock.py`, shots in the project files `art-ui/battle_ux14
   - One HP loss (SV6): hits and ticks are one planned-loss slice on the HP bar and one number; hovering the number
     lists each hit and each tick with the total. Regen previews as the moss gain.
   - Numbers after modifiers (SV7, SV13): every deterministic number (damage, heal) is the final number only, tinted
-    when a modifier changed it (lowered oxblood light `#e27064` with a small down arrow, raised gold `#f0c450` with a
-    small up arrow). A hovered number gets no frame; its hover lists the base and each modifier's percent. No struck
-    base, no shield glyph.
+    when a modifier changed it (lowered in the theme's `foe` colour with a small down arrow, raised in the game colour
+    `boss_gold` with a small up arrow; theme tokens, not hexes, `FB-370`). A hovered number gets no frame; its hover
+    lists the base and each modifier's percent. No struck base, no shield glyph.
   - Movement (`move_rate`): lost move tiles dimmed at the range edge, gained ones gold-edged.
   - Taunt (SV8): a 20 px badge over the taunted unit's sprite (dark slate, crimson rim, the taunt icon, a pointer
     down), bobbing 1 px; hover names the unit it must target and the rounds left. No ring at the feet. A stealthed
