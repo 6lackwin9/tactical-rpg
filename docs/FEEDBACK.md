@@ -94,8 +94,17 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-25` (`UISPLIT1-J`) dojo | Stage A done for the dojo (tools lane); four of five screens done, the hub talk held for main Build's `PR7-46` | `develop` (squash `ENGINE-25` A2) | View-model, actions, fixture and tests for the dojo; today's drawing kept. FB-385 |
 | `ENGINE-25` (`UISPLIT1-J`) hub talk | Stage A done for all five screens (tools lane) | `develop` (squash `ENGINE-25` A3) | View-model, actions, fixture and tests for the talk box; today's drawing kept. FB-387 |
 | `ENGINE-27` (`CRUCIBLE-CHECK1`) | Done, report only (tools lane) | `develop` | No rule bug: the escape needs all three non-holders out; at the authored level 1 a founder falls in round 1, and at level 4 the round-3 wave still blocks the exit lane (Overlook 75 %, base 0 %). FB-389 |
+| `PR7-29` (`SLOTCARD1`) | Done (tools lane) | `develop` | The save and load screens draw six `slot_card`s in two columns (location picture, place, day, party portraits, time, lock and delete); one click acts as before; "The Ashlands · time" with no location. FB-391 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-391: PR7-29 SLOTCARD1, slot cards on the save and load screens
+
+- **Status**: done (tools lane) on `develop`.
+- **Spec**: `READY.md` `PR7-29` (`LOOK1.md` M2, mock screen 2; `FB-369`).
+- **Finding**: `menus::Slots` draws the six slots as `aegis_ui::panes::slot_card`s, 290 x 84 in two columns (`menus::card_rect`), the autosave first: the save's location picture (`backgrounds/location/<id>.png`, else the world's title picture `backgrounds/title/<world>.png`, else the card's letter) as the thumbnail; the slot's name as the title; the place ("World, Location") and the lead's day as the lines; the party's portraits (up to four, active first); the time saved as the stamp; lock and delete as the card's corner icons. An empty or unreadable slot shows a plain well. One click acts as before (PLAYUI1, `[PROVISIONAL]` per the row; no select-then-act); widget ids, the off state and the hover lines ("Save here.", "Locked: unlock it to save over it.", the lock's "Lock (protect from overwrite and delete)") are unchanged, so the `slots` view-model and its fixture do not move. FB-369's line: `menus::slot_place` joins only the parts that exist, so a save with no location reads "The Ashlands · time" (test `a_save_with_no_location_drops_the_comma`). Screenshots at Normal and Extra large text in project files `tools-lane/pr7_29/` (no cut or overlap; at Extra large a long place is cut with the full text on the hover card).
+- **Guess** (minor, made provisionally): the corner icons are the kit card's drawn glyphs, not the `ui/lock.png` / `ui/delete.png` files (the card draws its own icons); the theme colour `menu_row` (only the old rows read it) is removed from `theme.json` and the contrast table.
+- **Docs delta**: none. `HISTORY.md`: "the save and load rows (a 500 x 31 list with the lead's animated portrait) replaced by slot cards (PR7-29, LOOK1 M2)".
 
 ### FB-389: ENGINE-27 CRUCIBLE-CHECK1, why both Crucible fights are won 0 %
 
