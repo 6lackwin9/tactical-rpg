@@ -26,6 +26,7 @@ mod bunks;
 mod controls_view;
 #[cfg(feature = "dev_tools")]
 mod dojo;
+mod dojo_view;
 mod epilogue;
 mod epilogue_view;
 mod facility;

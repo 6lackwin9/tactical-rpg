@@ -1,0 +1,457 @@
+{
+  "screen": "dojo",
+  "fields": {
+    "title": {
+      "text": "Dojo"
+    },
+    "heroes": {
+      "rows": [
+        {
+          "id": "0",
+          "label": "Warrior",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "HP 282/282  AP 12/12  Neutral",
+          "selected": true
+        },
+        {
+          "id": "1",
+          "label": "Ranger",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "HP 158/158  AP 12/12  Neutral"
+        },
+        {
+          "id": "2",
+          "label": "Rogue",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "HP 162/162  AP 12/12  Neutral"
+        },
+        {
+          "id": "3",
+          "label": "Mage",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "HP 152/152  AP 12/12  Neutral"
+        }
+      ]
+    },
+    "carry": {
+      "text": "Carry 87 / 218  LIGHT"
+    },
+    "stage": {
+      "stats": [
+        [
+          "Warrior",
+          "HP 282/282"
+        ],
+        [
+          "AP 12/12  Neutral",
+          ""
+        ],
+        [
+          "Training Dummy",
+          "HP 451/500"
+        ],
+        [
+          "Neutral  guard 0%",
+          ""
+        ]
+      ],
+      "tone": [
+        "gold",
+        "dim",
+        "foe",
+        "dim"
+      ]
+    },
+    "round": {
+      "text": "Round 1"
+    },
+    "gear": {
+      "rows": [
+        {
+          "id": "main_hand",
+          "label": "main hand: Steel Broadsword",
+          "detail": "",
+          "picture": null,
+          "enabled": true
+        },
+        {
+          "id": "off_hand",
+          "label": "off hand: Iron Kite Shield",
+          "detail": "",
+          "picture": null,
+          "enabled": true
+        },
+        {
+          "id": "head",
+          "label": "head: empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false
+        },
+        {
+          "id": "body",
+          "label": "body: Steel Plate Cuirass",
+          "detail": "",
+          "picture": null,
+          "enabled": true
+        },
+        {
+          "id": "accessory_1",
+          "label": "accessory 1: Ring of the Bear",
+          "detail": "",
+          "picture": null,
+          "enabled": true
+        },
+        {
+          "id": "accessory_2",
+          "label": "accessory 2: empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false
+        }
+      ]
+    },
+    "pouch": {
+      "rows": [
+        {
+          "id": "0",
+          "label": "1. Healing Draught",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "buttons": [
+            {
+              "action": "unpouch",
+              "label": "x",
+              "enabled": true
+            }
+          ]
+        },
+        {
+          "id": "1",
+          "label": "2. Throwing Fire Bomb",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "buttons": [
+            {
+              "action": "unpouch",
+              "label": "x",
+              "enabled": true
+            }
+          ]
+        },
+        {
+          "id": "2",
+          "label": "3. Empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false
+        }
+      ]
+    },
+    "stash_tabs": {
+      "tabs": {
+        "labels": [
+          "All",
+          "Weapons",
+          "Armor",
+          "Acc.",
+          "Items"
+        ],
+        "open": 0
+      }
+    },
+    "stash": {
+      "rows": [
+        {
+          "id": "acc_swift_amulet",
+          "label": "Amulet of Swiftness x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "+3 DEX; weight 0.2. Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "acc_bear_ring",
+          "label": "Ring of the Bear x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "+2 STR; +2 CONS; weight 0.2. Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "arm_leather",
+          "label": "Leather Brigandine x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "mitigation 4; burden 1; needs 9 DEX; weight 3. Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "arm_plate",
+          "label": "Steel Plate Cuirass x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "mitigation 8; burden 3; needs 12 CONS; weight 8.5. Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "con_focus_elixir",
+          "label": "Elixir of Focus x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "weight 0.4. Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "con_heal_potion",
+          "label": "Healing Draught x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "heals 90; weight 0.5. Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "con_fire_bomb",
+          "label": "Throwing Fire Bomb x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "45 damage; weight 1. Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "shd_buckler",
+          "label": "Duelist Buckler x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "mitigation 4; needs 9 DEX; weight 1.5. Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "shd_kite",
+          "label": "Iron Kite Shield x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "mitigation 6; burden 2; needs 12 STR; weight 4. Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "wpn_battle_axe",
+          "label": "Battle Axe x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "Power 26, range 1, 2H; burden 2; needs 15 STR; weight 4. Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "wpn_flanged_mace",
+          "label": "Flanged Mace x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "Power 15, range 1; burden 2; needs 11 STR; weight 3. Warrior can't wear Flanged Mace: untrained in censer (proficiency 0). Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "wpn_hand_axe",
+          "label": "Hatchet x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "Power 14, range 1; needs 10 STR; weight 2. Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "wpn_claymore",
+          "label": "Iron Claymore x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "Power 26, range 1, 2H; burden 2; needs 14 STR; weight 4.5. Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "wpn_shortsword",
+          "label": "Iron Shortsword x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "Power 14, range 1; needs 10 STR; weight 1.8. Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "wpn_tome",
+          "label": "Mystic Spellbook x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "Power 0, range 1; +1 KNOW; needs 11 KNOW; weight 1.2. Warrior can't wear Mystic Spellbook: untrained in tome (proficiency 0). Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "wpn_shortbow",
+          "label": "Oak Shortbow x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "Power 20, range 3, 2H; needs 13 DEX; weight 2. Warrior can't wear Oak Shortbow: untrained in bow (proficiency 0). Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "wpn_staff",
+          "label": "Runed Staff x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "Power 24, range 2, 2H; needs 14 INT; weight 2.2. Warrior can't wear Runed Staff: untrained in staff (proficiency 0). Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "wpn_dagger",
+          "label": "Shadow Dagger x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "Power 16, range 1; needs 12 DEX; weight 1. Warrior can't wear Shadow Dagger: untrained in dagger (proficiency 0). Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "wpn_knuckles",
+          "label": "Spiked Knuckles x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "Power 12, range 1; needs 10 STR; weight 1.2. Warrior can't wear Spiked Knuckles: untrained in fist (proficiency 0). Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "wpn_stiletto",
+          "label": "Stiletto x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "Power 15, range 1; needs 11 DEX; weight 2. Warrior can't wear Stiletto: untrained in dagger (proficiency 0). Click to wear it in its first free slot (or load the pouch), or drag it."
+        },
+        {
+          "id": "wpn_warhammer",
+          "label": "Titan Warhammer x1",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "note": "Power 34, range 1, 2H; burden 3; needs 22 STR; weight 7. Warrior can't wear Titan Warhammer: needs STR 22 (has 19 with the proficiency discount). Click to wear it in its first free slot (or load the pouch), or drag it."
+        }
+      ]
+    },
+    "log_tabs": {
+      "tabs": {
+        "labels": [
+          "ALL",
+          "ATTACK",
+          "DEFEND",
+          "BUFF",
+          "EVENT"
+        ],
+        "open": 0
+      }
+    },
+    "log": {
+      "rows": [
+        {
+          "id": "1",
+          "label": "#1 Main Strike",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "Steel Broadsword • 49 ATK  [HIT] 49",
+          "selected": true,
+          "tone": "foe"
+        }
+      ]
+    },
+    "breakdown": {
+      "text": "[color=#fde047][b]Main Strike[/b][/color]  Warrior > Training Dummy  (Steel Broadsword)\n1. Weapon Power: [color=#e2e8f0]20[/color] (Base 18, [color=#a855f7]Training +2[/color])\n2. Unit Power: 19 STR x 1.5 = [color=#38bdf8]+28.5[/color]\n3. Attack Power: 20.0 + 28.5 = [color=#e2e8f0]49[/color]\n4. Multipliers: Guard x1.00 (0%) | Armor 0 x1.00 | Stance x1.00 | Crit no (9.0% chance)\n[color=#4ade80][b]RESULT: 49 damage[/b][/color]  (Training Dummy HP 451 / 500)"
+    }
+  },
+  "actions": [
+    {
+      "id": "hero",
+      "label": "Hero",
+      "enabled": true
+    },
+    {
+      "id": "strike",
+      "label": "Strike",
+      "enabled": true
+    },
+    {
+      "id": "use_skill",
+      "label": "Use",
+      "enabled": true
+    },
+    {
+      "id": "pouch",
+      "label": "Use item",
+      "enabled": true
+    },
+    {
+      "id": "unpouch",
+      "label": "Unload",
+      "enabled": true
+    },
+    {
+      "id": "unequip",
+      "label": "Take off",
+      "enabled": true
+    },
+    {
+      "id": "stash_use",
+      "label": "Wear",
+      "enabled": true
+    },
+    {
+      "id": "stash_filter",
+      "label": "Filter",
+      "enabled": true
+    },
+    {
+      "id": "log_filter",
+      "label": "Log filter",
+      "enabled": true
+    },
+    {
+      "id": "log_pick",
+      "label": "Explain",
+      "enabled": true
+    },
+    {
+      "id": "log_clear",
+      "label": "CLEAR",
+      "enabled": true
+    },
+    {
+      "id": "next_round",
+      "label": "Next round",
+      "enabled": true
+    },
+    {
+      "id": "stance",
+      "label": "Stance",
+      "enabled": true
+    },
+    {
+      "id": "heal_hero",
+      "label": "Heal hero",
+      "enabled": true
+    },
+    {
+      "id": "heal_dummy",
+      "label": "Heal dummy",
+      "enabled": true
+    },
+    {
+      "id": "exit",
+      "label": "Exit",
+      "enabled": true
+    }
+  ]
+}
