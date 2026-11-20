@@ -1,0 +1,17 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "time": "2026-11-19T19:57:10Z",
+  "prompt_sent": "Use the attached image only as the reference for style, scale, palette and the straight front-on top-down view (it is one house prop); draw a new separate prop, not this house. One pixel-art prop for a dark gothic tactical RPG on a flat solid #FF00FF magenta background: a row of two narrow two-storey soot-black tenement houses joined wall to wall, slate roofs, timber framing, small amber-lit windows and two doors, drawn at exactly the same scale as the reference house (each house about half its width, the same storey height and door size). Straight front-on view, the roof seen from the front like the reference, no perspective from above. No cast shadow, no ground, no text, no frame.",
+  "references": [
+    "G:/My Drive/image_pipeline/refs/tenement_block_ref.png"
+  ],
+  "n": 1,
+  "files": [
+    {
+      "file": "output/prop_tenement_row_2_q1795033584.png",
+      "width": 1024,
+      "height": 1024
+    }
+  ],
+  "notes": "Verified resolution (>=1024px) and aspect ratio within 3% tolerance."
+}

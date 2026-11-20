@@ -1,0 +1,32 @@
+{
+  "screen": "battle",
+  "note": "AI-36 (PR7-40, FB-356; SCREEN_CONTRACT_BATTLE sections 1-5): the battle screen's rects at 640x360 in grid tokens of 4 (the shipped code rects are 2 px off the grid: strip 2,2,636,24; sides 2,28,92,290 and 546,28,92,290; board 98,28,444,290; card 158 wide; this file rounds them to the grid). Plates 88 x 42 (compact 26), strip portrait 18, title end 88 stay with the plate and strip code (custom slots). The battle screen draws in code today; this file names its regions for the gallery and the agent link until it reads them.",
+  "regions": [
+    {"id": "strip", "component": "panel_shell", "style": "popup", "anchor": "top", "w": "fill", "h": 7},
+    {"id": "portrait", "in": "strip", "component": "custom", "bind": {"slot": "strip_portrait"}, "anchor": "left", "w": 5, "h": 5},
+    {"id": "round", "in": "strip", "component": "heading", "bind": {"text": "round"}, "anchor": "top_left", "w": 16, "h": 2, "x": 5},
+    {"id": "goal", "in": "strip", "component": "text_block", "bind": {"text": "goal"}, "anchor": "top_left", "w": 16, "h": 2, "x": 5, "y": 2},
+    {"id": "protect", "in": "strip", "component": "text_block", "style": "muted", "bind": {"text": "protect"}, "anchor": "top_left", "w": 16, "h": 1, "x": 5, "y": 4},
+    {"id": "tiles", "in": "strip", "component": "custom", "bind": {"slot": "strip_tiles"}, "anchor": "top_left", "w": 76, "h": "fill", "x": 22},
+    {"id": "ap", "in": "strip", "component": "text_block", "bind": {"text": "ap"}, "anchor": "top_left", "w": 20, "h": 2, "x": 99, "y": 2},
+    {"id": "ap_ghost", "in": "strip", "component": "text_block", "style": "muted", "bind": {"text": "ap_ghost"}, "anchor": "top_left", "w": 8, "h": 2, "x": 119, "y": 2},
+    {"id": "bar", "in": "strip", "component": "button_bar", "bind": {"actions": ["party_tactic", "hero_tactic", "auto", "clear", "confirm"]}, "anchor": "right", "w": 30, "h": 5},
+    {"id": "left", "component": "panel_shell", "style": "popup", "anchor": "top_left", "w": 23, "h": 72, "y": 7},
+    {"id": "party", "in": "left", "component": "list_row", "row_ids": "plate", "bind": {"rows": "party", "select": "select"}, "anchor": "top", "w": "fill", "h": 44},
+    {"id": "guests", "in": "left", "component": "list_row", "row_ids": "guest", "bind": {"rows": "guests", "select": "select"}, "anchor": "top", "w": "fill", "h": 10, "y": 45},
+    {"id": "hero", "in": "left", "component": "custom", "bind": {"slot": "hero_panel"}, "anchor": "bottom", "w": "fill", "h": 14},
+    {"id": "board", "component": "custom", "bind": {"slot": "board"}, "anchor": "top_left", "w": 111, "h": 72, "x": 24, "y": 7},
+    {"id": "card", "in": "board", "component": "panel_shell", "style": "popup", "anchor": "top_right", "w": 40, "h": 40},
+    {"id": "card_name", "in": "card", "component": "heading", "bind": {"text": "card_name"}, "anchor": "top_left", "w": "fill", "h": 2},
+    {"id": "card_title", "in": "card", "component": "text_block", "style": "muted", "bind": {"text": "card_title"}, "anchor": "top_left", "w": "fill", "h": 1, "y": 2},
+    {"id": "card_hp", "in": "card", "component": "bar_meter", "bind": {"meter": "card_hp"}, "anchor": "top_left", "w": "fill", "h": 2, "y": 3},
+    {"id": "card_ko", "in": "card", "component": "text_block", "bind": {"text": "card_ko"}, "anchor": "top_left", "w": "50%", "h": 2, "y": 5},
+    {"id": "card_break", "in": "card", "component": "text_block", "bind": {"text": "card_break"}, "anchor": "top_right", "w": "50%", "h": 2, "y": 5},
+    {"id": "card_rows", "in": "card", "component": "list_row", "row_ids": "card.row", "bind": {"rows": "card_rows"}, "anchor": "top_left", "w": "fill", "h": "fill", "y": 8},
+    {"id": "right", "component": "panel_shell", "style": "popup", "anchor": "top_right", "w": 23, "h": 72, "y": 7},
+    {"id": "hostiles", "in": "right", "component": "heading", "style": "muted", "bind": {"text": "hostiles"}, "anchor": "top_left", "w": "50%", "h": 2},
+    {"id": "reinforce", "in": "right", "component": "text_block", "style": "right", "bind": {"text": "reinforce"}, "anchor": "top_right", "w": "50%", "h": 2},
+    {"id": "foes", "in": "right", "component": "list_row", "row_ids": "foe", "bind": {"rows": "foes", "select": "pin"}, "anchor": "top", "w": "fill", "h": "fill", "y": 3},
+    {"id": "log", "component": "custom", "bind": {"slot": "log"}, "anchor": "bottom", "w": "fill", "h": 10}
+  ]
+}

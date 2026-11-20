@@ -1,0 +1,22 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "time": "2026-11-19T19:57:10Z",
+  "prompt_sent": "A sheet of 4 pixel-art props for the top-down tile maps of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art. Square 1:1 image, an exact 2 by 2 grid of 4 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Every tile is filled edge to edge with flat, solid pure magenta (#FF00FF), so the background can be keyed out. Each tile holds one single prop group drawn as large as the tile allows in the proportions named for it (width by height). VIEW, the same for every prop: seen straight from the front and slightly from above, like furniture on a classic top-down JRPG tile map; the front face is flat to the viewer, its bottom edge perfectly horizontal; we see a little of the top. Muted soot-darkened palette: worn brown timber, dull iron, grey-cream canvas; no bright colours, no text, no people. Top row, a carpenter's corner where a bed is being built: (1) a half-built wooden bed frame (head posts and side rails, no slats or mattress yet) beside a sawhorse with a hand saw resting on it, a few loose planks and wood shavings on the floor, about 2.5 by 1.2; (2) the same scene from slightly further along: the frame with a few slats nailed on, a mallet and a small sack of nails by the sawhorse, about 2.5 by 1.2. Bottom row, stores for new sleepers: (3) two wooden crates stacked, with three rolled straw-stuffed canvas sleeping pallets tied with cords piled beside and on top, and a coil of rope, about 2.5 by 1.3; (4) the same stores, fewer rolls, a folded grey blanket on the top crate, about 2.2 by 1.2.",
+  "references": [
+    "G:/My Drive/image_pipeline/refs/props_buildings_gen1793556098_1.png"
+  ],
+  "n": 2,
+  "files": [
+    {
+      "file": "output/props_hub_upgrade_spots_2_q1795108500_1.png",
+      "width": 1024,
+      "height": 1024
+    },
+    {
+      "file": "output/props_hub_upgrade_spots_2_q1795108500_2.png",
+      "width": 1024,
+      "height": 1024
+    }
+  ],
+  "notes": "Verified resolution (>=1024px) and aspect ratio within 3% tolerance."
+}

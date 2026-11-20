@@ -210,11 +210,6 @@
    "y": 11
   },
   {
-   "id": "chest_a",
-   "x": 10,
-   "y": 6
-  },
-  {
    "id": "rest",
    "x": 22,
    "y": 12
@@ -785,7 +780,6 @@
   "npc_c": "Talia at the mission board",
   "npc_d": "Widow Varka at her moored skiff",
   "lore_a": "Ivo beside Talia (after the Toll-Pen rescue)",
-  "chest_a": "the stash (the Slab room's corner)",
   "rest": "the brazier: rest and the bunk roster",
   "crypts": "the Isolation Crypts' door (Stage IV operatives, stasis slots)"
  },

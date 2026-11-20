@@ -75,6 +75,11 @@ impl EpilogueScreen {
             ..Epilogue::default()
         });
         let card = if epilogue.art.is_empty() { over.as_ref().map(|o| o.card.clone()).unwrap_or_default() } else { epilogue.art.clone() };
+        Self::with(ending_id, epilogue, card)
+    }
+
+    /// ENGINE-25: the screen of ending `ending_id` with its epilogue and vignette, paged.
+    pub(crate) fn with(ending_id: String, epilogue: Epilogue, card: String) -> Self {
         let mut pages: Vec<Page> = epilogue.paragraphs.iter().cloned().map(Page::Paragraph).collect();
         if !epilogue.outcomes.is_empty() {
             pages.push(Page::Outcomes);
@@ -88,11 +93,44 @@ impl EpilogueScreen {
         Self { ending: ending_id, epilogue, card, played: false, page: 0, pages, w: Vec::new() }
     }
 
-    fn last(&self) -> bool {
+    /// ENGINE-25: the epilogue, the open page's index and the page count.
+    pub(crate) fn epilogue(&self) -> &Epilogue {
+        &self.epilogue
+    }
+
+    pub(crate) fn page_at(&self) -> (usize, usize) {
+        (self.page, self.pages.len())
+    }
+
+    /// The open page's kind ("paragraph", "outcomes", "fates"), its paragraph ("" for another kind) and its fate cards
+    /// (none for another kind).
+    pub(crate) fn page_kind(&self) -> &'static str {
+        match &self.pages[self.page] {
+            Page::Paragraph(_) => "paragraph",
+            Page::Outcomes => "outcomes",
+            Page::Fates(_) => "fates",
+        }
+    }
+
+    pub(crate) fn page_text(&self) -> String {
+        match &self.pages[self.page] {
+            Page::Paragraph(t) => t.clone(),
+            _ => String::new(),
+        }
+    }
+
+    pub(crate) fn page_fates(&self) -> &[FateCard] {
+        match &self.pages[self.page] {
+            Page::Fates(from) => self.fates(*from),
+            _ => &[],
+        }
+    }
+
+    pub(crate) fn last(&self) -> bool {
         self.page + 1 >= self.pages.len()
     }
 
-    fn act(&mut self, cx: &mut Cx, a: EpilogueAct) {
+    pub(crate) fn act(&mut self, cx: &mut Cx, a: EpilogueAct) {
         match a {
             EpilogueAct::Back => self.page = self.page.saturating_sub(1),
             EpilogueAct::Next => self.page = (self.page + 1).min(self.pages.len() - 1),
@@ -140,6 +178,14 @@ struct CardLines {
     tag: Vec<String>,
     text: Vec<String>,
     keepsake: Vec<String>,
+}
+
+/// The Load a save button's hover line.
+pub(crate) const LOAD_SAVE_NOTE: &str = "The save slots and the autosave written before the end.";
+
+/// The page count along the foot ("2 / 5").
+pub(crate) fn page_count(page: usize, pages: usize) -> String {
+    format!("{} / {pages}", page + 1)
 }
 
 /// The tag line of a fate card: "Departed (cause)" and the stage's name, or the stage alone.
@@ -228,7 +274,7 @@ impl Screen<GameCx> for EpilogueScreen {
         // the page count and the buttons, along the panel's foot
         let bh = (bl + 6.0).ceil() as i32;
         let by = r.y + r.h - PAD - bh;
-        let count = format!("{} / {}", self.page + 1, self.pages.len());
+        let count = page_count(self.page, self.pages.len());
         ui.p.text(left, (by + (bh - sl.ceil() as i32) / 2) as f32, &count, SMALL, th().dim);
         let mut buttons: Vec<(&str, &str, EpilogueAct, bool)> = vec![("epilogue.back", BACK, EpilogueAct::Back, self.page > 0)];
         if self.last() {
@@ -241,7 +287,7 @@ impl Screen<GameCx> for EpilogueScreen {
         let mut x = r.x + r.w - PAD - widths.iter().sum::<i32>() - GAP * (widths.len() as i32 - 1);
         for (b, bw) in buttons.into_iter().zip(widths) {
             let card = match b.2 {
-                EpilogueAct::LoadSave => tip(b.1, "The save slots and the autosave written before the end."),
+                EpilogueAct::LoadSave => tip(b.1, LOAD_SAVE_NOTE),
                 _ => tip(b.1, ""),
             };
             ui.button_tip(b.0, Rect::new(x, by, bw, bh), b.1, b.2, b.3, card);
@@ -273,12 +319,8 @@ impl Screen<GameCx> for EpilogueScreen {
     }
 
     fn state(&self, _cx: &Cx) -> Value {
-        let page = match &self.pages[self.page] {
-            Page::Paragraph(_) => "paragraph",
-            Page::Outcomes => "outcomes",
-            Page::Fates(_) => "fates",
-        };
-        json!({"ending": self.ending, "title": self.epilogue.title, "tone": self.epilogue.tone, "card": self.card, "page": self.page, "pages": self.pages.len(), "page_kind": page,
+        let page = self.page_kind();
+        json!({"view": crate::epilogue_view::view(self).to_json(), "ending": self.ending, "title": self.epilogue.title, "tone": self.epilogue.tone, "card": self.card, "page": self.page, "pages": self.pages.len(), "page_kind": page,
                "outcomes": self.epilogue.outcomes, "fates": self.epilogue.fates.iter().map(|f| json!({"member": f.member, "name": f.name, "departed": f.departed, "tag": fate_tag(f), "text": f.text, "keepsake": f.keepsake})).collect::<Vec<_>>()})
     }
 
