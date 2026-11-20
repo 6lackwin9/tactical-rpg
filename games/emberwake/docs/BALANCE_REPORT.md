@@ -7,6 +7,97 @@
 | [BALANCE_REPORT_2026-11A.md](../../../docs/archive/BALANCE_REPORT_2026-11A.md) | `PR5-27` .. `R1-BAL`, `INPUT1-MB`, `RULESET1`, `REWARD1-B`, `BAL4/5` (`2026-10-18 .. 2026-11-10`) | All pre-`U3_GEAR_REWORK` Channel Duel, `R4-CLOSE` (`61.0%` feel / `92%` party), `R1..R4`, and classic Ashlands balance runs |
 | [BALANCE_REPORT_2026-10.md](../../../docs/archive/BALANCE_REPORT_2026-10.md) | `2026-10-17` initial runs | Earliest October 2026 baseline snapshot |
 
+## 2026-11-20 ENGINE-31 SIM-JITTER1 start jitter on and off (`FB-401`)
+
+Report only: no code, data or golden change. The feel sim already jitters start tiles by default (`jitter=on`: each
+unit up to one tile inside its half, and the party order, seeded per fight), and the `ENGINE-26` what-ifs ran with it:
+its authored row is reproduced exactly here. So this run compares the published numbers (jitter on) with fixed starts
+(`jitter=off`): all 24 Sunk Ward fights, 32 seeds, `aegis sim feel world=sunk_ward pace=on`, the `ENGINE-26` what-if
+keys. "Moves" means won % by 10 points or more, or the median rounds won by 1 or more.
+
+| Run | Fights that move (of 24) | Pace on (won %, median rounds by tier) | Pace off |
+| --- | --- | --- | --- |
+| As authored | 10 | mob 95.8/4, elite 96.9/4, boss 39.7/9 | mob 88.5/3, elite 100/3.5, boss 31.7/10 |
+| Foe HP +25 % | 10 | mob 63.5/3, elite 90.6/4, boss 25.9/9 | mob 69.8/4, elite 98.4/5, boss 19.6/10 |
+| Foe HP +50 % | 11 | mob 60.4/4, elite 76.6/5, boss 12.9/10 | mob 66.7/4, elite 88.3/6, boss 15.2/10 |
+| Foe HP +100 % | 8 | mob 43.8/3, elite 51.6/7, boss 6.3/11 | mob 41.7/3, elite 28.9/7, boss 5.8/9 |
+| One more foe | 16 | random 99.4/2, elite 61.7/5, boss 23.2/9.5 | random 100/1, elite 56.3/6, boss 7.6/8 |
+| One more foe, HP +25 % | 11 | random 100/2, elite 37.5/6, boss 13.4/10 | random 100/2, elite 46.1/6, boss 10.7/9 |
+| One more foe, HP +50 % | 7 | random 100/2, elite 25.8/7, boss 8.5/10 | random 100/2, elite 26.6/6, boss 2.2/10 |
+| One more foe, HP +100 % | 12 | random 98.4/2, elite 2.3/8, boss 3.1/12 | random 100/3, elite 9.4/7.5, boss 1.3/11 |
+| Two more foes | 11 | random 98.1/3, elite 18/7, boss 15.2/9 | random 100/3, elite 16.4/8, boss 10.3/9 |
+| Every foe +1 level | 9 | mob 75/3, elite 90.6/4, boss 34.8/8.5 | mob 75/3, elite 100/4, boss 33/11 |
+
+As authored, the fights that move (on to off): the prologue's first fight 87.5 to 65.6 %; the Sweep 53.1 to 18.8; the
+Crossroads Cages 84.4 to 31.3 (median 7 to 8.5); the Bone-Mill Raid 28.1 to 12.5; the Tallow Vats 56.3 to 71.9; the
+Awakening Fissure 56.3 to 87.5; and four fights by one round only (the prologue's second fight, the Proctor Wardens,
+the Kiln Haulers, the Guild Bruisers). Under "one more foe" every random fight's median drops from 2 to 1 with fixed
+starts, so `ENGINE-26`'s finding (one more foe reaches the 2-round target) holds only with jitter.
+
+Findings:
+
+1. Fixed starts move a third to two thirds of the fights, bosses most (up to 53 points), because 32 seeds of one start
+   are close to one fight (`ENGINE-29`). The jittered numbers are the ones to trust.
+2. **Jitter is already the default** of every sim mode, the what-ifs and the campaign run included (`SimArgs` `jitter: true`), so
+   nothing needs to change and no golden is touched. The goldens and contract tests that pin `jitter=off` do it on
+   purpose, for byte-stable output (`emberwake_sim` `sim_golden`, `timeline_golden`, the host's `auto_driver` test,
+   `rpgkit_sim` `feel` tests). The fixed starts in `FB-389` came from a hand-built test session, not from the sim.
+
+## 2026-11-20 ENGINE-30 AGENT-CRUCIBLE1 the Crucible played by hand at level 7 (`FB-401`)
+
+Report only: no code, data or golden change. Played through the real game with `tools/fc.sh playtest`, each round
+planned by hand with the battle's own picks (round intent picks, Auto-fill off, Auto pressed only where noted). The
+saves were built from the Act 1 story test's state after the Interlude: M5 taken, the party standing at the Crucible
+Watchpost, the four founders at level 7 (the level `ENGINE-28` finds at M5), full HP, no Warded Tallow (the fight opens
+at AP 8/10). The fight is deterministic for the same picks, so each try is a different plan, and later tries replay the
+rounds that worked. Run logs and the shots of each deciding round are in project files `tools-lane/engine30/<try>/`.
+
+| Try | Fight | Result | Downs (round, cause) | Escape |
+| --- | --- | --- | --- | --- |
+| base 1 | `enc_evt_06` | lost (wipe, round 6) | Kaelen r3 in the gap (round 2 took him 326 to 48, mostly Decapitation); then all | gate open r1 (Vesper); none out |
+| base 2 | `enc_evt_06` | lost (wipe, round 6) | Vesper r3 at the winch (Heavy Thrust and two crossbows) | gate open r1; none out |
+| base 3 | `enc_evt_06` | fled (2 of 3 out) | Kaelen r3 (Decapitation, 232) | Maren r3, Hollis after (Auto) |
+| base 4 | `enc_evt_06` | fled (2 of 3 out) | Kaelen r3 (his hit to break it was dodged) | Maren r3, Hollis after (Auto) |
+| base 5 | `enc_evt_06` | **won, round 6 block 1** | none (Vesper ends 33/222) | Maren r3, Hollis r4, Kaelen r6 |
+| Overlook 1 | `enc_evt_06_overlook` | fled (2 of 3 out) | Vesper r5 at the winch (five Heretic's Brands, a crossbow) | Maren r3, Hollis r4; Kaelen walled in r5 |
+| Overlook 2 | `enc_evt_06_overlook` | **won, round 5 block 1** | none (Vesper ends 108/222) | Maren r3, Hollis r4, Kaelen r5 |
+| Overlook 3 | `enc_evt_06_overlook` | fled (1 of 3 out) | Vesper r5, Maren r6, Kaelen r7 | Auto every round (Vesper keeper): Hollis r3 |
+
+The winning plan (base 5; Overlook 2 differs only in round 3's tile):
+
+1. Round 1, hold back: Vesper picked to hold the winch; Kaelen Hold Line in front, Vesper and Maren guard, Hollis
+   Heavy Winch Sunder kills Crossbowman 2 (142 on 136). The foes walk west and leave both outer lanes.
+2. Round 2: Vesper up the top lane to (7,1), Maren down the bottom lane to (7,7), Kaelen one Pommel Strike then Rest
+   (AP for later), Hollis shoots. Nemeth's Decapitation on Maren whiffs because she walked off its tile.
+3. Round 3: Vesper onto the winch (gate open in block 1); Maren withdraws (Auto, block 2); Hollis to (9,2); Kaelen
+   makes a two-block move, (2,5) in base 5 and (4,7) in Overlook 2, so Decapitation lands on an empty tile.
+4. Rounds 4-6: Auto for the escapers (only the auto-plan can step onto an exit); Kaelen walks the bottom lane.
+
+Answer: **a careful player can win both fights at level 7, with no margin.** Every win needs all four founders
+standing (one holds, three must leave), Vesper survives about three rounds on the winch, and Nemeth's Decapitation
+(232-278 in one hit) must be dodged by moving off its tile; a hit timed to break it missed because Nemeth stepped first.
+The base fight's round-3 wave lands on (7,3) and (7,4), right outside the middle gap. Pressing Auto every round
+loses (Overlook 3), as in the `ENGINE-29` sims.
+
+Which `FB-399` (b) change turns a loss around: **`objective_count` 2.** Three of the six losses ended "fled" with two
+founders out and would have been wins (base 3 and 4, Overlook 1; Overlook 3 had one out). Exits nearer the party would shorten
+Kaelen's walk (Overlook 1 was lost with Kaelen walled in on the bottom lane, seven tiles from an exit) but not save a founder who falls in
+round 3 (base 1 to 4). Moving the base wave to round 4, as in the Overlook, removes the wall outside the gap but the
+Overlook itself still lost two of three.
+
+Found while playing (for Design; not fixed here):
+
+1. A hand pick cannot step onto an open exit ("That tile can't be moved to"): `move_route` and `apply_goto` refuse
+   exit tiles, so only the auto-plan's escape row (Withdraw) leaves. A player has to know to press Auto or a preset
+   for each escaper.
+2. A later hero's pick silently drops an earlier hero's picks when the routes cross ("rebuild ... every later member";
+   the dropped member's route goes invalid, "Too far"), and a tile an ally starts or ends a block on blocks routes in
+   that block. In round 1 Kaelen is boxed in by the formation and cannot plan any route.
+3. The keeper pick is final and its default (`highest_hp`) is Kaelen, the one founder who cannot reach the winch in
+   round 1.
+4. The Withdraw draft may spend AP below zero (-1 to -3); hand moves cannot.
+5. Results: the benched Dunstan gets +10 XP and the captured keeper none; the pinned foe card covers the winch corner.
+
 ## 2026-11-20 ENGINE-29 ESCAPE-PLAY1 the auto driver's Crucible play by level (`FB-399`)
 
 Report only: no code, data or golden change (two trial fixes were measured and reverted). Founders raised to each level
