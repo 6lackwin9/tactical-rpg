@@ -347,12 +347,7 @@ impl Timeline {
             row.x
         };
         // the aside square at the label column's right end, the label left of it
-        let lane_end = if t.aside {
-            let sq = Rect::new(lane_x - m.u(ICON_W + 1), row.y, m.u(ROW_H), m.u(ROW_H));
-            sq.x
-        } else {
-            lane_x
-        };
+        let lane_end = if t.aside { lane_x - m.u(ICON_W + 1) } else { lane_x };
         let label = Rect::new(lx + m.u(1), row.y + m.u(1), lane_end - lx - m.u(3), m.u(ROW_H - 2));
         if selected || ui.hover(label) {
             ui.p.panel(label, if selected { ui.t.selected } else { ui.t.card_hot }, if selected { ui.t.focus } else { ui.t.edge }, m.uf(2.0));

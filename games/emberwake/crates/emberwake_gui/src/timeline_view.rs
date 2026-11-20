@@ -4,11 +4,11 @@
 //! (the playhead during playback), "Party" (allies in roster order, guests too) above "Enemies" (the hostile list's
 //! order), one track per unit present or acting in the round, a downed unit's lane hatched.
 //!
-//! A party track holds the member's plan while planning (picks solid, the planner's ghost in the ghost style, GH8; the
-//! wind-up, impact and recovery parts and BREAK marks as on the strip), its committed actions during playback; its
+//! A party track holds the member's plan while planning (picks solid, the planner's ghost in the ghost style, GH8),
+//! its committed actions during playback (a broken one with its BREAK mark); its
 //! label leads with its intent's letter ("A Vanguard") and its card carries AP9's lines. An enemy track shows only what
 //! the party knows (TV4): while planning an unrevealed enemy is masked with "`<Intent>`: `<target>`" (else "Plans in
-//! secret") and its tell while the tells show, its impact badges as marks; during playback it holds only its actions
+//! secret") and its tell while the tells show (its target in the row's aside square); during playback it holds only its actions
 //! that have started; a revealed one (foresight, enrage, `plan_reveal`) shows its whole plan and the card "Plan revealed
 //! (`<reader>`)". VISCLAR1 VC4's Party foresight off masks foresight reveals (the records come through `seen_intents`).
 //! Display only: nothing here changes the battle.
@@ -56,7 +56,7 @@ pub struct Opts<'a> {
     pub foresight_off: bool,
     /// The Show enemy tells setting (key I): a masked track's note adds the tell.
     pub show_tells: bool,
-    /// The overlay groups `parts`, `breaks` and `badges` (`battle_overlays`).
+    /// The overlay groups (`battle_overlays`); the view reads `breaks`.
     pub layers: Layers,
     /// The selected party member (its track is the selected one) and the selected block.
     pub selected: Option<usize>,
@@ -92,8 +92,9 @@ fn segment(key: String, start: i32, end: i32, name: &str, kind: &str, target: Op
     Segment { key, start, end, label, fill, dashed: kind == "MOVE", tip, ghost: ghost && !rest, ..Segment::default() }
 }
 
-/// The committed (or archived) actions of `u` among `actions` as segments: parts from each action's impact, a broken
-/// one marked BREAK, a cancelled one hatched; `keep` filters the actions (an unrevealed enemy's started ones).
+/// The committed (or archived) actions of `u` among `actions` as segments (a tile with its skill icon, a lock run one
+/// grey tile): a broken one marked BREAK, a cancelled one hatched; `keep` filters the actions (an unrevealed enemy's
+/// started ones).
 fn action_segments(w: &World, actions: &[ScheduledAction], u: usize, layers: &Layers, keep: impl Fn(&ScheduledAction) -> bool) -> (Vec<Segment>, Vec<Mark>) {
     let mine: Vec<&ScheduledAction> = actions.iter().filter(|a| a.unit == u).collect();
     let rows = action_rows(w, actions, u);
@@ -122,7 +123,7 @@ fn action_segments(w: &World, actions: &[ScheduledAction], u: usize, layers: &La
 }
 
 /// Member `u`'s plan while planning (on `pw`, `plan`): picks solid, the planner's ghost after them, each with its reason
-/// tag and AP; parts as the strip draws them (impact at the span's end).
+/// tag and AP, each a tile with its skill icon (SV14: no wind-up parts).
 fn plan_segments(pw: &World, plan: &Plan, u: usize) -> Vec<Segment> {
     let timeline = ri::on(pw);
     let entries = plan.compile(pw, u).entries;
@@ -194,29 +195,34 @@ fn lock_card(status: &str, start: i32, end: i32) -> Tip {
 }
 
 /// SV14, SV15: each unit track's one target for the round (`status_view::row_aim` over the round as it will run: the
-/// shown member's plan while planning; a masked enemy's from its round state, which the masked note already names).
+/// shown member's plan while planning). A masked enemy (TV4: planning, unrevealed) reads its round state's target only,
+/// which the masked note already names: never its scheduled actions, so the row shows no area or ground shape the
+/// party does not know.
 pub fn row_aims(s: &Session, o: &Opts) -> BTreeMap<String, RowAim> {
     let w = &s.w;
     let live = o.viewed == s.current_round;
     let planning = live && s.phase == Phase::Planning && !s.plan_confirmed;
     let actions: Vec<ScheduledAction> = if live { s.resolver.scheduled.clone() } else { s.round_record(o.viewed).map(|r| r.actions.clone()).unwrap_or_default() };
     let planned = if planning { intent::planned_schedule(w, &actions, &s.plan) } else { actions.clone() };
+    let tells = if planning { seen_intents(w, s.enemy_intents(), o.foresight_off) } else { Vec::new() };
     let mut out = BTreeMap::new();
     for &u in w.allies.iter().chain(w.enemies.iter()) {
-        let aim = match o.shown {
-            Some((m, pw, pp)) if m == u && planning => sv::row_aim(pw, &intent::planned_schedule(pw, &actions, pp), u),
-            _ => sv::row_aim(w, &planned, u),
-        };
-        let masked = planning && w.enemies.contains(&u) && !o.reveal_all;
-        let aim = if masked && aim.target == sv::RowTarget::None {
-            match w.round_states.get(&u).and_then(|r| r.target) {
-                Some(ri::RoundTarget::Unit(t)) => RowAim { target: if w.enemies.contains(&t) { sv::RowTarget::Ally(t) } else { sv::RowTarget::Foe(t) }, area: false },
-                Some(ri::RoundTarget::Cell(c)) => RowAim { target: sv::RowTarget::Ground(c), area: false },
-                Some(ri::RoundTarget::Myself) => RowAim { target: sv::RowTarget::Myself, area: false },
-                None => aim,
-            }
+        let revealed = o.reveal_all || tells.iter().find(|t| t.unit == u).is_some_and(|t| t.revealed);
+        let masked = planning && w.enemies.contains(&u) && w.units[u].is_active() && !revealed;
+        let aim = if masked {
+            let target = match w.round_states.get(&u).and_then(|r| r.target) {
+                Some(ri::RoundTarget::Unit(t)) if w.enemies.contains(&t) => sv::RowTarget::Ally(t),
+                Some(ri::RoundTarget::Unit(t)) => sv::RowTarget::Foe(t),
+                Some(ri::RoundTarget::Cell(c)) => sv::RowTarget::Ground(c),
+                Some(ri::RoundTarget::Myself) => sv::RowTarget::Myself,
+                None => sv::RowTarget::None,
+            };
+            RowAim { target, area: false }
         } else {
-            aim
+            match o.shown {
+                Some((m, pw, pp)) if m == u && planning => sv::row_aim(pw, &intent::planned_schedule(pw, &actions, pp), u),
+                _ => sv::row_aim(w, &planned, u),
+            }
         };
         out.insert(track_key(u), aim);
     }
@@ -318,7 +324,7 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
             let mut tip: Tip = vec![(unit.name.clone(), th().gold)];
             let mut track = Track { key: track_key(e), label: unit.name.clone(), colour: if unit.is_active() { FOE } else { DOWN }, hatched: !unit.is_alive(), aside: true, ..Track::default() };
             if planning && unit.is_active() && !revealed {
-                // TV4: masked: the round intent and target, the tell, the impact badges; none of the plan's skills
+                // TV4: masked: the round intent and target, the tell; none of the plan's skills
                 let note = masked_note(w, rec, o.show_tells);
                 tip.push((note.clone(), th().text));
                 track.masked = Some(note);

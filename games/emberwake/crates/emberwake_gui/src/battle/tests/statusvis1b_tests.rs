@@ -234,3 +234,74 @@ fn the_ap_row_follows_the_rules_under_a_lock() {
         assert!(line(&b).starts_with(&format!("AP {now}/")), "the AP the rules leave: {}", line(&b));
     }
 }
+
+/// SV5 with contract 7: the menu key over a locked block opens no menu (as its click); only what the player's map
+/// turns into Tab is the menu key (a rebind moves it; T or any other key opens nothing); off the strip the key still
+/// opens the menu on the block the next pick takes.
+#[test]
+fn the_menu_key_opens_nothing_on_a_locked_block() {
+    use aegis_ui::controls::{Controls, Input, Pad, SETTINGS_KEY};
+    let (mut cx, mut g, mut b) = arena();
+    let h = b.selected.expect("a hero");
+    give(&cx, &mut b, h, "stun", 0);
+    drawn(&mut cx, &mut g, &mut b);
+    let run = sv::lock_runs(&b.session().w, h).first().cloned().expect("the stun's run");
+    let r = widget(&b, &format!("strip.block{}", run.start)).expect("the locked block").rect;
+    b.mouse = (r.x + r.w / 2, r.y + r.h / 2);
+    assert_eq!(b.strip_block_under_mouse().map(|x| x.0), Some(run.start));
+    b.capture(&mut cx, Input::Key(Key::Tab));
+    assert!(b.popup.as_ref().and_then(|p| p.menu.as_ref()).is_none(), "no menu on a locked block");
+    b.strip_menu(run.end);
+    assert!(b.popup.is_none(), "nor on the run's last block");
+    assert!(!b.capture(&mut cx, Input::Key(Key::Char('t'))), "T is not the menu key");
+    assert!(b.popup.is_none());
+    // a rebind: Pad X gives Tab; over the lock it opens nothing, off the strip it opens the menu
+    let (mut map, _) = Controls::from_settings(&cx.settings.v);
+    map.bind_pad(Key::Tab, Pad::West);
+    cx.settings.v[SETTINGS_KEY] = map.to_json();
+    b.capture(&mut cx, Input::Pad(Pad::West));
+    assert!(b.popup.is_none(), "the rebound key opens nothing over the lock");
+    b.mouse = (-500, -500);
+    assert!(!b.capture(&mut cx, Input::Pad(Pad::North)), "pad north no longer gives Tab");
+    assert!(b.capture(&mut cx, Input::Pad(Pad::West)));
+    let p = b.popup.as_ref().filter(|p| p.menu.is_some()).expect("off the strip the rebound key opens the menu");
+    let at = p.block.map(|x| x.0).expect("on a block");
+    assert!(sv::run_at(&sv::lock_runs(&b.session().w, h), at).is_none(), "past the lock: block {at}");
+}
+
+/// SV14 with TV4: a masked enemy's row target is its round state's target only (what its masked note names), never a
+/// shape read from its secret actions (no area ring, no ground patch the party does not know); revealed, the row reads
+/// its plan.
+#[test]
+fn a_masked_enemy_row_shows_only_its_round_target() {
+    use emberwake_battle::round_intent::RoundTarget;
+    let (_cx, _g, b) = arena();
+    let s = b.session();
+    let opts = |reveal_all: bool| crate::timeline_view::Opts { viewed: s.current_round, reveal_all, foresight_off: false, show_tells: true, layers: crate::battle::Layers::of(&json!(null)), selected: None, block: None, shown: None, playhead: None };
+    let aims = crate::timeline_view::row_aims(s, &opts(false));
+    let tells = s.enemy_intents();
+    let mut masked = 0;
+    for &e in s.w.enemies.iter().filter(|&&e| s.w.units[e].is_active()) {
+        if tells.iter().find(|t| t.unit == e).is_some_and(|t| t.revealed) {
+            continue;
+        }
+        masked += 1;
+        let aim = aims.get(&crate::timeline_view::track_key(e)).expect("its aim");
+        assert!(!aim.area, "unit {e}: no area shape from its secret plan");
+        let want = match s.w.round_states.get(&e).and_then(|r| r.target) {
+            Some(RoundTarget::Unit(t)) if s.w.enemies.contains(&t) => RowTarget::Ally(t),
+            Some(RoundTarget::Unit(t)) => RowTarget::Foe(t),
+            Some(RoundTarget::Cell(c)) => RowTarget::Ground(c),
+            Some(RoundTarget::Myself) => RowTarget::Myself,
+            None => RowTarget::None,
+        };
+        assert_eq!(aim.target, want, "unit {e}: its round state's target");
+    }
+    assert!(masked > 0, "an enemy plans in secret");
+    // revealed (the Gallery's Reveal), the rows read the plan
+    let open = crate::timeline_view::row_aims(s, &opts(true));
+    for &e in s.w.enemies.iter().filter(|&&e| s.w.units[e].is_active()) {
+        let planned = emberwake_battle::intent::planned_schedule(&s.w, &s.resolver.scheduled, &s.plan);
+        assert_eq!(open[&crate::timeline_view::track_key(e)], sv::row_aim(&s.w, &planned, e), "unit {e}");
+    }
+}

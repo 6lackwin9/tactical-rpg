@@ -638,7 +638,7 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
             incoming: incoming_hp,
             loss,
             loss_sign,
-            heal: if planning { intent::heal_on(w, &sched, u) + gain } else { 0 },
+            heal: if planning { (intent::heal_on(w, &sched, u) + gain).min((unit.max_hp - unit.hp).max(0)) } else { 0 },
             ap,
             poise: poise_of(w, u),
             tabs: tabs_of(w, u, &planned_statuses),
@@ -813,7 +813,10 @@ pub fn planned_loss_view(w: &World, sched: &[ScheduledAction], u: UnitId) -> (i3
         lines.push(NumLine::new(if t.hp < 0 { format!("Round end, {name}: -{}", -t.hp) } else { format!("Round end, {name}: +{}", t.hp) }, 0));
     }
     if pl.loss > 0 {
-        lines.push(NumLine::new(format!("Total -{}", pl.loss), 2));
+        // the loss stops at the HP left: the total says so when the hits and ticks come to more
+        let raw = pl.hit_hp() + pl.ticks.iter().filter(|t| t.hp < 0).map(|t| -t.hp).sum::<i32>();
+        let capped = if raw > pl.loss { " (capped at HP)" } else { "" };
+        lines.push(NumLine::new(format!("Total -{}{capped}", pl.loss), 2));
     }
     (pl.loss, lines, sum_sign(&parts), pl.gain)
 }
