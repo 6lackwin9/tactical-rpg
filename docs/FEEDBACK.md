@@ -106,8 +106,36 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-30` (`AGENT-CRUCIBLE1`), `ENGINE-31` (`SIM-JITTER1`) | Done, report only (tools lane) | `develop` | The Crucible played by hand at level 7: base won in round 6 and Overlook in round 5 with no downs, every other try lost a founder; `objective_count` 2 would turn three losses into wins; sim start jitter is already the default (fixed starts move 7-16 of 24 fights). FB-401 |
 | `PR7-60` (`ESCAPE-PLAN1`) | Built (tools lane); goldens parked | `develop` | Hand moves onto exits; a pick never drops another's (refused with the reason), hand moves pass through friends; the hold pick suggests the nearest hero and can change until round 1; a hero's Withdraw spends no AP it lacks; the foe card keeps off the winch and exits. `sim_golden`, `phasefold` and `timeline_golden` run the old moves behind a test-only switch until the user approves the re-record. FB-403 |
 | `PR7-61` (`PLAN-RECURSE1`) | Built (tools lane) | `develop` | An Engage with an area skill that `affects` `all` as a unit's first step no longer recurses without end with friends active: while a first move is compiled, the area counts friends where they stand. No golden moved. FB-407 |
+| `PR7-31` (`OBJUI1`) | Built (tools lane) | `develop` | Board chips for morale (state bars, the group letter with several groups), the leader's pennant, the slay crown and the guest shield (gold rim when it must survive); the words on the hover card and the foe card's portrait; the goal hovers to the objective and morale lines; the results read the objective line and a break's lines. No Enraged chip (Design's amendment). FB-409 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-409: PR7-31 OBJUI1 built; morale, leader, slay and guest marks on the battle screen, the objective on the results
+
+- **Status**: built (tools lane), `develop`. UI to review (placeholder glyphs, Art/UI may restyle).
+- **Spec**: `docs/READY.md` row `1e` (`PR7-31`, amended 2026-11-20: no Enraged chip); `OBJ1.md` section 3 and
+  `MORALE1.md` section 3 (archived specs).
+- **What landed**:
+  - Kit `rpgkit_battle::obj_view` (new): the morale state's word and flavour line (never a value), the group letter
+    when a battle has several groups, the leader, the planning line on how they give up, the slay target, guests and
+    must-survive guests, and the results lines. `Session::morale_leader` and `Session::slay_target` (new readers).
+  - Battle screen (`emberwake_gui` `battle/objchips.rs`, new): a column of 8-unit chips at each standing unit's lower
+    left on both boards (flat: the tile's corner; Stage: beside the sprite's feet), bottom up: the guest's shield,
+    the morale state (three bars lit 3 steady, 2 shaken, 1 wavering, gold when fearless; the group letter instead with
+    several groups), the leader's pennant, the slay crown. Each chip hovers to its words (widgets `board.guest.N`,
+    `board.morale.N`, `board.leader.N`, `board.slay.N`; on Stage they sit above the unit widgets for the hover).
+  - The unit hover card adds "Guest", "Must survive", "Slay target: defeat it to win", "Wavering, group B: eyes on
+    the exit; runs once bloodied" and "Leader: its fall shakes every group". The docked foe card puts the morale chip
+    and the pennant on its portrait's lower corners (`card.morale`, `card.leader`).
+  - The top bar's goal hovers to the full objective line (rule 9) and the morale line ("They give up when Captain Vane
+    falls or half of them are down; shaken ones run sooner."). Contract 2 has no room for a third strip line.
+  - Results: `Objective met: <goal>` in gold on a win, "The objective failed." otherwise; after a win the break lines
+    (rule 12). The results state gains `objective` after a battle only.
+- **Tests**: `emberwake_gui` `battle/tests/objui1_tests.rs` (7 tests on the Sunk Ward sweep and bone-mill raid, the
+  Ashlands wagon raid and Ashmaw stand); scenario `objui1_marks` (three shots, in the project files
+  `tools-lane/pr731/`).
+- **Docs delta**: `docs/STRUCTURE.md`: kit `rpgkit_battle/src/obj_view.rs` (objective and morale reads for the
+  screen); `SCREEN_CONTRACT_BATTLE.md` has no line for these chips yet (Art/UI may add one with a restyle).
 
 ### FB-334: PR7-41 items 2 and 6 landed in part; two golden-moving rules parked
 

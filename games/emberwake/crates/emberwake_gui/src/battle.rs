@@ -32,6 +32,7 @@ mod draw;
 mod flow;
 mod input;
 mod marks;
+mod objchips;
 mod overlays;
 mod playback;
 mod plates;

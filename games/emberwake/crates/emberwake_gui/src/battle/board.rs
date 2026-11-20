@@ -488,6 +488,12 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
         let n = w.size_of(i);
         super::statusvis::taunt_badge(ui, cx, w, i, &st, (GRID_X + pos.x * TILE + n * TILE / 2, GRID_Y + pos.y * TILE + 2), super::statusvis::bob(anim_now, reduce));
     }
+    // OBJUI1 (PR7-31): the objective and morale chips at each standing unit's lower left
+    for i in 0..w.units.len() {
+        let Some(pos) = w.grid.pos(i).filter(|_| w.units[i].is_alive()) else { continue };
+        let n = w.size_of(i);
+        super::objchips::token_chips(ui, cx, s, i, (GRID_X + pos.x * TILE + 1, GRID_Y + pos.y * TILE + n * TILE - 7));
+    }
     for f in floats {
         if let Some(pos) = w.grid.pos(f.unit) {
             let t = now.duration_since(f.born).as_millis() as f32 / f.ms.max(1) as f32;
@@ -922,6 +928,10 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
             super::statusvis::taunt_badge(ui, cx, w, t.i, &st, (t.body_rect.x + t.body_rect.w / 2, t.body_rect.y), super::statusvis::bob(anim_now, reduce));
         }
     }
+    // OBJUI1 (PR7-31): the objective and morale chips left of each standing unit's sprite, from its feet up
+    for t in units.iter().filter(|t| t.alive) {
+        super::objchips::token_chips(ui, cx, s, t.i, (t.body_rect.x - super::objchips::CHIP - 1, t.body_rect.y + t.body_rect.h));
+    }
     ui.p.shift(-shift.0, -shift.1);
     ui.p.clip(None);
 
@@ -949,6 +959,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
         let tip = unit_tip(s, i, sel, tells, rounds, classes);
         ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), widget_rect(t), true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
     }
+    // OBJUI1: the chips' hovers over the units'
+    super::objchips::raise_chips(ui);
     board_hover
 }
 

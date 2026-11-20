@@ -216,7 +216,8 @@ impl BattleScreen {
         for l in &next {
             cx.log(l.clone());
         }
-        let results = crate::hub::Results::new(&res, &outcome, &fight).after_fight(timed_out, next).over_battle(cx.settings.reduce_motion(), before);
+        let objective = emberwake_battle::obj_view::result_lines(self.session(), &outcome);
+        let results = crate::hub::Results::new(&res, &outcome, &fight).after_fight(timed_out, next).objective(objective).over_battle(cx.settings.reduce_motion(), before);
         cx.nav.push(Nav::Push(Box::new(results)));
     }
 

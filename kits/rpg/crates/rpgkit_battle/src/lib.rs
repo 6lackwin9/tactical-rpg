@@ -13,6 +13,7 @@ pub mod ground;
 pub mod intent;
 pub mod log;
 pub mod mark;
+pub mod obj_view;
 pub mod meter;
 pub mod metrics;
 pub mod offhand;

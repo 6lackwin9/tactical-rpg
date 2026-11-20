@@ -359,7 +359,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
         let ly = 11 + 6 * k as i32;
         ui.p.text_fit(tx as f32, ly as f32, text, SMALL, line_room, colour);
-        ui.push(id, "label", text.clone(), Rect::new(tx, ly, line_room as i32, ui.p.line_h(SMALL).ceil() as i32), true, false, None, Vec::new());
+        // OBJUI1 (PR7-31; OBJ1 rule 9, MORALE1 3): the goal hovers to the full objective line and the morale line
+        let tip: Tip = if id == "strip.goal" { [(&model.top.objective, th().text), (&model.top.morale, th().dim)].into_iter().filter(|(t, _)| !t.is_empty()).map(|(t, c)| (t.clone(), c)).collect() } else { Vec::new() };
+        ui.push(id, "label", text.clone(), Rect::new(tx, ly, line_room as i32, ui.p.line_h(SMALL).ceil() as i32), true, false, None, tip);
     }
     // HOOKS1-UI slice 3 (UM7): the selected hero's meters on a thin row at the strip's foot
     if let Some(u) = sel {

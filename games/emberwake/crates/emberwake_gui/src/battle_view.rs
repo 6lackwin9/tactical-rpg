@@ -216,6 +216,9 @@ pub struct TopBar {
     /// The goal and the protect line ("" none).
     pub goal: String,
     pub protect: String,
+    /// OBJUI1 (OBJ1 rule 9, MORALE1 3): the goal's hover: the full objective line and the morale line ("" none).
+    pub objective: String,
+    pub morale: String,
     /// The selected hero's AP: now, picked, the ghost's, the cap (contract 2's AP line).
     pub ap_now: i32,
     pub ap_picked: i32,
@@ -274,6 +277,9 @@ pub struct CardView {
     pub hero: Option<UnitId>,
     pub read: FoeCard,
     pub rows: Vec<CardRow>,
+    /// OBJUI1 (MORALE1 3): the foe's morale state and whether it leads (None, false without morale).
+    pub morale: Option<emberwake_battle::obj_view::MoraleMark>,
+    pub leader: bool,
 }
 
 impl CardView {
@@ -597,6 +603,8 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
     m.top.round = format!("Round {} of {}", s.current_round.max(1), s.def.max_rounds);
     m.top.goal = emberwake_battle::encounter::Objectives::goal_of(&s.def.raw, name_of);
     m.top.protect = emberwake_battle::encounter::Objectives::protect_of(&s.def.raw, name_of);
+    m.top.objective = emberwake_battle::encounter::Objectives::text_of(&s.def.raw, name_of);
+    m.top.morale = emberwake_battle::obj_view::header_line(s);
     // the hits the enemies' blows land on each ally this round
     let incoming = |u: UnitId| -> Vec<intent::HitOn> { w.enemies.iter().flat_map(|&e| intent::hits_on(w, &sched, e, u)).collect() };
     if let Some(h) = inp.sel.filter(|h| w.allies.contains(h)) {
@@ -749,7 +757,7 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
             }
         };
         let (name, title) = (inp.full_name)(f);
-        Some(CardView { foe: f, name, title, boss: w.units[f].tier == "boss", hero, read, rows })
+        Some(CardView { foe: f, name, title, boss: w.units[f].tier == "boss", hero, read, rows, morale: emberwake_battle::obj_view::morale_mark(s, f), leader: emberwake_battle::obj_view::is_leader(s, f) })
     });
     // BOSSUI1 (contract 9): the boss bar; the boss's card folds into it
     if let Some(pb) = phase_bar {
@@ -910,7 +918,7 @@ mod tests {
         let top = TopBar { ap_now: 10, ap_picked: 6, ap_ghost: 2, ap_cap: 12, ..TopBar::default() };
         assert_eq!((top.ap_text(), top.ghost_text()), ("AP 10/12 -6".to_string(), "(-2)".to_string()));
         assert_eq!(ApBar { start: 10, planned: 6, cap: 12 }.left(), 4);
-        let mut c = CardView { foe: 1, name: String::new(), title: String::new(), boss: false, hero: None, read: FoeCard { ko_block: Some(5), break_block: Some(4), ..FoeCard::default() }, rows: Vec::new() };
+        let mut c = CardView { foe: 1, name: String::new(), title: String::new(), boss: false, hero: None, read: FoeCard { ko_block: Some(5), break_block: Some(4), ..FoeCard::default() }, rows: Vec::new(), morale: None, leader: false };
         assert_eq!((c.ko_text(), c.break_text()), ("KO in block 5".to_string(), "BREAK in block 4".to_string()));
         c.read.crit_star = Some(3);
         assert_eq!(c.ko_text(), "KO in block 5 (star 3)");
