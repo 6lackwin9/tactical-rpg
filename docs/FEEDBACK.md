@@ -105,8 +105,23 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-29` (`ESCAPE-PLAY1`) | Done, report only (tools lane) | `develop` | No escape bug in the driver; the level effect was the fixed start (jittered: Crucible 0-6 % at every level 3-8); two trial fixes were worse and reverted; options for the Crucible call. FB-399 |
 | `ENGINE-30` (`AGENT-CRUCIBLE1`), `ENGINE-31` (`SIM-JITTER1`) | Done, report only (tools lane) | `develop` | The Crucible played by hand at level 7: base won in round 6 and Overlook in round 5 with no downs, every other try lost a founder; `objective_count` 2 would turn three losses into wins; sim start jitter is already the default (fixed starts move 7-16 of 24 fights). FB-401 |
 | `PR7-60` (`ESCAPE-PLAN1`) | Built (tools lane); goldens parked | `develop` | Hand moves onto exits; a pick never drops another's (refused with the reason), hand moves pass through friends; the hold pick suggests the nearest hero and can change until round 1; a hero's Withdraw spends no AP it lacks; the foe card keeps off the winch and exits. `sim_golden`, `phasefold` and `timeline_golden` run the old moves behind a test-only switch until the user approves the re-record. FB-403 |
+| `PR7-61` (`PLAN-RECURSE1`) | Built (tools lane) | `develop` | An Engage with an area skill that `affects` `all` as a unit's first step no longer recurses without end with friends active: while a first move is compiled, the area counts friends where they stand. No golden moved. FB-407 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-407: PR7-61 PLAN-RECURSE1 built; the planner no longer recurses on an area skill that hits everyone
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `0k8` (`PR7-61`, `FB-372`).
+- **What landed**: `rpgkit_battle` `Plan::apply_area` counts the friends an area hits at each friend's planned tile,
+  and `planned_position` reaches `first_move` through `ally_moves`, which compiles the unit's first step and so comes
+  back to `apply_area`. While a first move is compiled (`blocked_override` set) the count now reads each friend's tile
+  as it stands; `first_move` drops that count, so every other caller reads the planned tile as before.
+- **Tests**: new `rpgkit_battle/tests/plan_recurse.rs` (an Engage with a `RING` `affects: all` skill as the first step
+  of both heroes, in either order, overflowed the stack before the fix; a friend walking into the ring is still
+  counted at its planned tile). `status_view.rs` `the_counter_follows_the_riposte_rule_not_the_skill_kind` is back on
+  `affects: all` (`PR7-59` had used `enemies` to dodge the crash).
+- **Goldens**: none moved (full gate clean).
 
 ### FB-405: PR7-60 ESCAPE-PLAN1 Crucible rerun: the base fight is still won by hand, the Overlook now lost
 

@@ -35,7 +35,7 @@ fn session() -> Session {
         json!({"id": "stunned", "name": "Stunned", "kind": "STATUS", "level": 1, "blocks": 1, "system": true}),
         json!({"id": "rest", "name": "Rest", "kind": "REST", "level": 1, "blocks": 1, "system": true, "basic": true, "recover_ap": 2}),
         json!({"id": "c_hit", "name": "Hit", "kind": "ATTACK", "level": 1, "blocks": 2, "ap_cost": 2, "power_mult": 1.0, "target_mode": "ENEMY"}),
-        json!({"id": "c_arc", "name": "Arc", "kind": "ATTACK", "level": 1, "blocks": 2, "ap_cost": 2, "power_mult": 1.0, "area": "ARC", "affects": "enemies", "target_mode": "ENEMY"}),
+        json!({"id": "c_arc", "name": "Arc", "kind": "ATTACK", "level": 1, "blocks": 2, "ap_cost": 2, "power_mult": 1.0, "area": "ARC", "affects": "all", "target_mode": "ENEMY"}),
         json!({"id": "c_mend", "name": "Mend", "kind": "SUPPORT", "round_intent": "support", "level": 1, "blocks": 2, "ap_cost": 2, "heal_base": 30, "heal_mult": 0.3, "target_mode": "ALLY_OR_SELF"}),
     ];
     let unit = |id: &str, side: &str, speed: i32| json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 500, "power": 100, "armor": 10, "speed": speed, "attack_range": 1, "skill_cap": 5});

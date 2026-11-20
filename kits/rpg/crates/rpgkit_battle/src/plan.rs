@@ -1563,8 +1563,13 @@ impl Plan {
                 }
             }
             let mut friends_hit = 0;
+            // while a first move is compiled (`first_move`, which `planned_position` itself calls through `ally_moves`)
+            // a friend stands where it is now: asking for its planned tile there recurses without end, and the count
+            // is dropped by `first_move` anyway
+            let compiling_first = self.blocked_override.borrow().is_some();
             for &f in w.friends_of(c) {
-                if f != c && skill::affects_unit(affects, true) && w.units[f].is_active() && cells.contains(&self.planned_position(w, f)) {
+                let at = if compiling_first { w.pos(f) } else { self.planned_position(w, f) };
+                if f != c && skill::affects_unit(affects, true) && w.units[f].is_active() && cells.contains(&at) {
                     friends_hit += 1;
                 }
             }
