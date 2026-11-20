@@ -2343,6 +2343,7 @@ mod tests {
                     Section { title: "Enemies".into(), colour: TEXT, tracks: vec![Track { key: "foe".into(), label: "Foe".into(), colour: TEXT, segments: vec![seg("hidden", 1, 6)], masked: Some("Plans in secret".into()), ..Track::default() }] },
                 ],
                 ruler: None,
+                tiles: false,
             };
             t.draw(&mut ui, "tl", Rect::new(10, 10, 74 + 4 + 300, 120), |b| format!("block {b}"), |k| format!("track {k}"), |k, s| format!("seg {k} {s}"));
             self.w = ui.widgets;

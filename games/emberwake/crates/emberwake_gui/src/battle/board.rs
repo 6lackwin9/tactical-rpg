@@ -177,7 +177,9 @@ pub(super) struct StatusOn {
 /// link's `status_fx` (S9).
 fn status_draws(tokens: &mut Tokens, i: usize, alive: bool, wall: u64, now: u64, t: &Tuning) -> Vec<fx::Drawn> {
     let Some(a) = tokens.anims.get_mut(i) else { return Vec::new() };
-    let looks = if alive { fx::status_frame(&a.marks, &mut a.slots, wall, now, t.status_cycle_ms) } else { Vec::new() };
+    let mut looks = if alive { fx::status_frame(&a.marks, &mut a.slots, wall, now, t.status_cycle_ms) } else { Vec::new() };
+    // STATUSVIS1 SV8 (PR7-57): a targeting pull (taunt) shows as the badge over the sprite, no ring at the feet
+    looks.retain(|d| !emberwake_rules::status::has_targeting_pull(d.id));
     a.status_fx = looks.iter().map(|d| d.id).collect();
     looks
 }
@@ -480,6 +482,12 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
     // FX1 4.1: the air layer over the units, before the floats (STATUSFX1 S6: the status loops first)
     draw_status_loops(&mut ui.p, &status, Layer::Air, &geo, tuning, anim_now, reduce);
     live.draw(&mut ui.p, anim_now, Layer::Air);
+    // STATUSVIS1 SV8 (PR7-57): the taunt badge over each taunting unit's token
+    for i in 0..w.units.len() {
+        let (Some(pos), Some(st)) = (w.grid.pos(i).filter(|_| w.units[i].is_alive()), super::statusvis::taunt_of(w, i)) else { continue };
+        let n = w.size_of(i);
+        super::statusvis::taunt_badge(ui, cx, w, i, &st, (GRID_X + pos.x * TILE + n * TILE / 2, GRID_Y + pos.y * TILE + 2), super::statusvis::bob(anim_now, reduce));
+    }
     for f in floats {
         if let Some(pos) = w.grid.pos(f.unit) {
             let t = now.duration_since(f.born).as_millis() as f32 / f.ms.max(1) as f32;
@@ -906,6 +914,12 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                 live.draw(&mut ui.p, anim_now, Layer::Air);
             }
             _ => {}
+        }
+    }
+    // STATUSVIS1 SV8 (PR7-57): the taunt badge over each taunting unit's sprite (the top of its body)
+    for t in units.iter().filter(|t| t.alive) {
+        if let Some(st) = super::statusvis::taunt_of(w, t.i) {
+            super::statusvis::taunt_badge(ui, cx, w, t.i, &st, (t.body_rect.x + t.body_rect.w / 2, t.body_rect.y), super::statusvis::bob(anim_now, reduce));
         }
     }
     ui.p.shift(-shift.0, -shift.1);

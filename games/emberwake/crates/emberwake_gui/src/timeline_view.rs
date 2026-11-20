@@ -12,20 +12,29 @@
 //! that have started; a revealed one (foresight, enrage, `plan_reveal`) shows its whole plan and the card "Plan revealed
 //! (`<reader>`)". VISCLAR1 VC4's Party foresight off masks foresight reveals (the records come through `seen_intents`).
 //! Display only: nothing here changes the battle.
+//!
+//! STATUSVIS1-B (PR7-57, SV13-SV15, takes 34-36, contract 9.3): the calmer view: every span a tile (the engine's
+//! `tiles`: a dark tint of its kind colour, a kind band on top, a kind rim) with its skill icon (`Segment.icon`, the
+//! icon chain joined by `|`), no wind-up parts and no per-blow ticks; a unit's locked blocks one grey tile per run with
+//! the status icon (stun one tile over blocks 1-2, stagger one on 1 and one on 4); each row's one target for the round
+//! in its aside square (`row_aims`: crimson an enemy, teal an ally or itself, an amber ring for an area skill's main
+//! target, a 3 x 3 floor patch for a ground tile, a dim dash for none).
 
 use crate::battle::{action_rows, ap_lines, channel_action, channel_block, channel_fill, channeled_word, kind_color, seen_intents, skill_text, Layers, CHANNEL_TINT};
 use crate::intent_text;
 use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, Rgba};
-use aegis_ui::timeline::{Mark, Part, PartStyle, Section, Segment, Timeline, Track};
+use aegis_ui::timeline::{Mark, Section, Segment, Timeline, Track};
 use aegis_ui::ui::{Tip};
-use emberwake_battle::intent::{Intent, ARRIVING, HIT, IDLE};
+use emberwake_battle::intent::{self, Intent, ARRIVING, IDLE};
 use emberwake_battle::plan::Plan;
 use emberwake_battle::resolver::ScheduledAction;
 use emberwake_battle::round_intent as ri;
 use emberwake_battle::round_intent_plan as rip;
 use emberwake_battle::session::{Phase, Session};
+use emberwake_battle::status_view::{self as sv, RowAim};
 use emberwake_battle::world::World;
+use std::collections::BTreeMap;
 
 /// The party's colour (labels, the section title).
 use crate::tokens::ally;
@@ -69,22 +78,6 @@ pub fn unit_of(key: &str) -> Option<usize> {
     key.strip_prefix('u').and_then(|n| n.parse().ok())
 }
 
-/// A span's styled runs: the wind-up before its impact shaded, the impact bright, the blocks after it to `end`
-/// hatched (RULESET1-U slice 5; the strip's spans use it too).
-pub fn parts_of(start: i32, impact: i32, end: i32, winds: bool) -> Vec<Part> {
-    let mut out = Vec::new();
-    if winds && impact > start {
-        out.push(Part { start, end: impact - 1, style: PartStyle::Windup });
-    }
-    if winds && (impact > start || end > impact) {
-        out.push(Part { start: impact, end: impact, style: PartStyle::Impact });
-    }
-    if end > impact {
-        out.push(Part { start: impact + 1, end, style: PartStyle::Recovery });
-    }
-    out
-}
-
 /// A segment: its label ("Cut > Wolf"), fill by kind (a ghost in the ghost look, a Rest dim under the round intent),
 /// its card (an "Auto-filled" head on a ghost, the blocks, the target, extra lines).
 #[allow(clippy::too_many_arguments)]
@@ -107,13 +100,16 @@ fn action_segments(w: &World, actions: &[ScheduledAction], u: usize, layers: &La
     let timeline = ri::on(w);
     let (mut segs, mut marks) = (Vec::new(), Vec::new());
     for (i, (a, r)) in mine.iter().zip(rows).enumerate().filter(|(_, (a, _))| keep(a)) {
+        // SV15: a locked block (its status's lost block) joins its run's one grey tile
+        if let emberwake_battle::command::CmdKind::StatusBlock { status } = &a.command.kind {
+            push_lock(&mut segs, format!("{i}"), a.start, a.end.max(a.start), status);
+            continue;
+        }
         let mut s = segment(format!("{i}"), r.0, r.1, &r.2, &r.3, r.4, false, timeline, Vec::new());
+        s.icon = w.cat.skill(&a.command.skill).map(|sk| icon_key(&emberwake_content::art::skill_icon_chain(sk.family_id(), &sk.kind)));
         // PK1-S2c (placeholder): an action in a Channel round's mode is tinted
         if channel_action(w, a) {
             channel_look(w, &mut s);
-        }
-        if layers.parts && timeline {
-            s.parts = parts_of(a.start, a.impact, a.end, emberwake_battle::poise::winds_up(&a.command));
         }
         s.hatched = a.cancelled;
         if a.broken && layers.breaks {
@@ -127,14 +123,18 @@ fn action_segments(w: &World, actions: &[ScheduledAction], u: usize, layers: &La
 
 /// Member `u`'s plan while planning (on `pw`, `plan`): picks solid, the planner's ghost after them, each with its reason
 /// tag and AP; parts as the strip draws them (impact at the span's end).
-fn plan_segments(pw: &World, plan: &Plan, u: usize, layers: &Layers) -> Vec<Segment> {
+fn plan_segments(pw: &World, plan: &Plan, u: usize) -> Vec<Segment> {
     let timeline = ri::on(pw);
     let entries = plan.compile(pw, u).entries;
     let (ghosts, reasons) = if timeline { (rip::ghost_entries(pw, plan, u), rip::reasons(pw, plan, u)) } else { (Vec::new(), Vec::new()) };
-    entries
-        .iter()
-        .enumerate()
-        .map(|(i, e)| {
+    let mut out: Vec<Segment> = Vec::new();
+    for (i, e) in entries.iter().enumerate() {
+        // SV15: a locked block joins its run's one grey tile
+        if !e.status_name.is_empty() {
+            push_lock(&mut out, format!("{i}"), e.start_block, e.end_block(pw), &e.status_name);
+            continue;
+        }
+        out.push({
             let sk = &pw.cat.skills[e.skill];
             let ghost = ghosts.get(i).copied().unwrap_or(false);
             let why = reasons.get(i).filter(|r| !r.is_empty());
@@ -155,12 +155,72 @@ fn plan_segments(pw: &World, plan: &Plan, u: usize, layers: &Layers) -> Vec<Segm
             if s.ghost {
                 s.tip.insert(0, (why.map_or_else(|| "Auto-filled".to_string(), |r| format!("Auto-filled: {r}")), th().dim));
             }
-            if layers.parts && timeline {
-                s.parts = parts_of(e.start_block, e.end_block(pw), e.end_block(pw), emberwake_battle::poise::winds_up(&e.build_command(pw, u)));
-            }
+            let chain = if e.item.is_some() { vec![crate::battle::kind_icon("ITEM")] } else { emberwake_content::art::skill_icon_chain(sk.family_id(), &sk.kind) };
+            s.icon = Some(icon_key(&chain));
             s
-        })
-        .collect()
+        });
+    }
+    out
+}
+
+/// SV13: a segment's icon key: its icon chain (the first file there is drawn) joined by `|` (`icon_chain`).
+pub fn icon_key(chain: &[String]) -> String {
+    chain.join("|")
+}
+
+/// The icon chain of an icon key (`icon_key`).
+pub fn icon_chain(key: &str) -> Vec<String> {
+    key.split('|').filter(|p| !p.is_empty()).map(str::to_string).collect()
+}
+
+/// SV15: lock block `start`-`end` of `status` on a track: it extends the last segment when that is the same status's
+/// tile ending the block before, else it starts a grey tile with the status icon (its card: the status, its blocks,
+/// no plan there).
+fn push_lock(segs: &mut Vec<Segment>, key: String, start: i32, end: i32, status: &str) {
+    let icon = Some(icon_key(&[emberwake_content::art::status_icon(status)]));
+    if let Some(last) = segs.last_mut().filter(|l| l.icon == icon && l.key.starts_with("lock") && l.end + 1 == start) {
+        last.end = end;
+        last.tip = lock_card(status, last.start, end);
+        return;
+    }
+    let name = emberwake_rules::status::display_name(status);
+    segs.push(Segment { key: format!("lock{key}"), start, end, label: name, fill: crate::tokens::lock_block(), tip: lock_card(status, start, end), icon, ..Segment::default() });
+}
+
+/// SV15: a lock tile's card.
+fn lock_card(status: &str, start: i32, end: i32) -> Tip {
+    let blocks = if start == end { format!("Block {start} locked") } else { format!("Blocks {start}-{end} locked") };
+    vec![(emberwake_rules::status::display_name(status), FOE), (blocks, th().text), ("No move can be planned here.".into(), th().dim)]
+}
+
+/// SV14, SV15: each unit track's one target for the round (`status_view::row_aim` over the round as it will run: the
+/// shown member's plan while planning; a masked enemy's from its round state, which the masked note already names).
+pub fn row_aims(s: &Session, o: &Opts) -> BTreeMap<String, RowAim> {
+    let w = &s.w;
+    let live = o.viewed == s.current_round;
+    let planning = live && s.phase == Phase::Planning && !s.plan_confirmed;
+    let actions: Vec<ScheduledAction> = if live { s.resolver.scheduled.clone() } else { s.round_record(o.viewed).map(|r| r.actions.clone()).unwrap_or_default() };
+    let planned = if planning { intent::planned_schedule(w, &actions, &s.plan) } else { actions.clone() };
+    let mut out = BTreeMap::new();
+    for &u in w.allies.iter().chain(w.enemies.iter()) {
+        let aim = match o.shown {
+            Some((m, pw, pp)) if m == u && planning => sv::row_aim(pw, &intent::planned_schedule(pw, &actions, pp), u),
+            _ => sv::row_aim(w, &planned, u),
+        };
+        let masked = planning && w.enemies.contains(&u) && !o.reveal_all;
+        let aim = if masked && aim.target == sv::RowTarget::None {
+            match w.round_states.get(&u).and_then(|r| r.target) {
+                Some(ri::RoundTarget::Unit(t)) => RowAim { target: if w.enemies.contains(&t) { sv::RowTarget::Ally(t) } else { sv::RowTarget::Foe(t) }, area: false },
+                Some(ri::RoundTarget::Cell(c)) => RowAim { target: sv::RowTarget::Ground(c), area: false },
+                Some(ri::RoundTarget::Myself) => RowAim { target: sv::RowTarget::Myself, area: false },
+                None => aim,
+            }
+        } else {
+            aim
+        };
+        out.insert(track_key(u), aim);
+    }
+    out
 }
 
 /// PK1-S2c (PK1 4.3 item 6, placeholder, user 2026-11-10): a span in a Channel round's mode: its fill blended toward
@@ -186,20 +246,6 @@ pub fn masked_note(w: &World, rec: Option<&Intent>, show_tells: bool) -> String 
     } else {
         format!("{head}; Next: {} {}", r.line.skill, intent_text::block_text(r.line.blocks))
     }
-}
-
-/// V1 as marks: a red "!" at each hit's impact block, a gold "*" at any other action's.
-fn impact_marks(r: &Intent, blocks: i32) -> Vec<Mark> {
-    r.impacts
-        .iter()
-        .filter(|(b, _)| (1..=blocks).contains(b))
-        .enumerate()
-        .map(|(k, &(b, kind))| {
-            let hit = kind == HIT;
-            let col = if hit { FOE } else { th().gold };
-            Mark { key: format!("i{k}"), block: b, glyph: if hit { "!" } else { "*" }.into(), colour: col, tip: vec![(format!("B{b}"), col), (if hit { "A hit lands." } else { "An action lands." }.into(), th().text)] }
-        })
-        .collect()
 }
 
 /// "Plan revealed (Read by Sella (Hawk Eye))", "Plan revealed (enraged)", "Plan revealed (plan reveal)".
@@ -241,7 +287,7 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
                 Some((m, pw, pp)) if m == u => (pw, pp),
                 _ => (w, &s.plan),
             };
-            let (segments, marks) = if planning && unit.is_active() { (plan_segments(pw, plan, u, &o.layers), Vec::new()) } else { action_segments(w, &actions, u, &o.layers, |_| true) };
+            let (segments, marks) = if planning && unit.is_active() { (plan_segments(pw, plan, u), Vec::new()) } else { action_segments(w, &actions, u, &o.layers, |_| true) };
             let letter = ri::intent_of(pw, u).filter(|_| timeline && live && unit.is_active()).map(|i| format!("{} ", i.label(&pw.cat).chars().next().unwrap_or(' '))).unwrap_or_default();
             let label = format!("{letter}{}", unit.name);
             let mut tip: Tip = vec![(label.clone(), th().gold)];
@@ -257,7 +303,7 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
             if !unit.is_alive() {
                 tip.push(("Down".into(), FOE));
             }
-            Track { key: track_key(u), label, colour: if unit.is_active() { ally() } else { DOWN }, segments, marks, tip, hatched: !unit.is_alive(), ..Track::default() }
+            Track { key: track_key(u), label, colour: if unit.is_active() { ally() } else { DOWN }, segments, marks, tip, hatched: !unit.is_alive(), aside: true, ..Track::default() }
         })
         .collect();
     let enemies: Vec<Track> = w
@@ -270,15 +316,13 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
             let rec = rec_of(e);
             let revealed = !live || o.reveal_all || rec.is_some_and(|r| r.revealed);
             let mut tip: Tip = vec![(unit.name.clone(), th().gold)];
-            let mut track = Track { key: track_key(e), label: unit.name.clone(), colour: if unit.is_active() { FOE } else { DOWN }, hatched: !unit.is_alive(), ..Track::default() };
+            let mut track = Track { key: track_key(e), label: unit.name.clone(), colour: if unit.is_active() { FOE } else { DOWN }, hatched: !unit.is_alive(), aside: true, ..Track::default() };
             if planning && unit.is_active() && !revealed {
                 // TV4: masked: the round intent and target, the tell, the impact badges; none of the plan's skills
                 let note = masked_note(w, rec, o.show_tells);
                 tip.push((note.clone(), th().text));
                 track.masked = Some(note);
-                if let Some(r) = rec.filter(|_| emberwake_battle::intent::badges_on(w) && o.layers.badges) {
-                    track.marks = impact_marks(r, blocks);
-                }
+                // SV14 (take 35): no per-blow ticks in the calmer view; the masked note names the intent and target
             } else {
                 // playback: an unrevealed enemy's actions that have started (block <= the playhead), a revealed one's all
                 let upto = if live && !revealed && s.phase != Phase::Replay { at } else { i32::MAX };
@@ -305,6 +349,7 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
         selected_track: o.selected.filter(|u| w.allies.contains(u)).map(track_key),
         sections: vec![Section { title: "Party".into(), colour: ally(), tracks: party }, Section { title: "Enemies".into(), colour: FOE, tracks: enemies }],
         ruler: None,
+        tiles: true,
     }
 }
 

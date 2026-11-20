@@ -22,6 +22,12 @@
 //! (`Track.icon`, widget `<id>.icon.<track>`); the caller draws into it (`draw_icons`' callback: a portrait, a glyph).
 //! Off by default: a track without it draws exactly as before.
 //!
+//! Tiles, segment icons and an aside square (STATUSVIS1-B, engine-only): `Timeline.tiles` draws every segment as a
+//! tile (a dark tint of its colour, a band of it along the top and a rim of it); a segment can carry an icon key
+//! (`Segment.icon`, the caller's: the widget draws none itself) whose square the caller fills (`draw_slots`); a track can
+//! reserve a second square at the label column's right end (`Track.aside`, widget `<id>.aside.<track>`; a target, say).
+//! All off by default: a timeline without them draws exactly as before.
+//!
 //! LAYOUT720-E4: the widget draws in the units of the screen's grid (`Ui::m`), its positions still sums from its rect. The
 //! consts are old units, and what has no `Ui` to read answers in them (`_on`: on any grid, `g` units per old unit).
 
@@ -89,6 +95,9 @@ pub struct Segment {
     /// A ghost span (a planned, not chosen, span): its fill at `GHOST_ALPHA`, a dashed outline all round and the label
     /// in `dim` (`draw_ghost`).
     pub ghost: bool,
+    /// The caller's icon key (None: no icon): the bar keeps a square for it (`icon_square`), drawn by `draw_slots`'
+    /// callback; the label follows it where there is room, else only the icon shows.
+    pub icon: Option<String>,
 }
 
 /// A glyph in a colour at one block of a track, with its hover card; it takes no click.
@@ -132,6 +141,9 @@ pub struct Track {
     /// An icon square (PORTRAITFX1-TL): a square of the row height left of the label, widget `<id>.icon.<key>`; the
     /// caller draws into it (`draw_icons`' callback, or after the widget from the widget's rect).
     pub icon: bool,
+    /// An aside square: a square of the row height at the label column's right end, widget `<id>.aside.<key>` (kind
+    /// `aside`, the track's card); the caller draws into it (`draw_slots`' callback).
+    pub aside: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -152,6 +164,37 @@ pub struct Timeline {
     pub sections: Vec<Section>,
     /// The ruler's label (ENGINE-5: the caller's word for a block; "Block" when None).
     pub ruler: Option<String>,
+    /// Every segment drawn as a tile (`TILE_TINT` of its colour over the lane, a band of it along the top, a rim of it).
+    pub tiles: bool,
+}
+
+/// What `draw_slots`' callback fills: a track's icon square, its aside square, or a segment's icon square.
+#[derive(Debug, Clone, Copy)]
+pub enum Slot<'a> {
+    Icon(&'a Track),
+    Aside(&'a Track),
+    Segment(&'a Track, &'a Segment),
+}
+
+/// A tile's tint: this share of its colour over the lane (STATUSVIS1-B take 34: 30 %).
+pub const TILE_TINT: f32 = 0.3;
+/// A tile's band along its top, in px at 1280 x 720 (scaled with the grid: `(TILE_BAND * g + 1) / 2`).
+pub const TILE_BAND: i32 = 3;
+/// A segment icon's largest side (old units; 24 px at 1280 x 720).
+pub const SEG_ICON: i32 = 12;
+
+/// The tile fill of `fill` over `lane`: `TILE_TINT` of the colour, opaque.
+pub fn tile_fill(fill: Rgba, lane: Rgba) -> Rgba {
+    let mix = |a: u8, b: u8| (b as f32 + (a as f32 - b as f32) * TILE_TINT).round() as u8;
+    [mix(fill[0], lane[0]), mix(fill[1], lane[1]), mix(fill[2], lane[2]), 255]
+}
+
+/// The icon square of a segment's bar `bar` (on grid `g`): at most `SEG_ICON` old units and 1 unit short of the bar's
+/// height, at its left (`left`) or its centre.
+pub fn icon_square(bar: Rect, g: i32, left: bool) -> Rect {
+    let side = (SEG_ICON * g).min(bar.h - 2 * g).min(bar.w - 2 * g).max(1);
+    let x = if left { bar.x + 2 * g } else { bar.x + (bar.w - side) / 2 };
+    Rect::new(x, bar.y + (bar.h - side) / 2, side, side)
 }
 
 impl Timeline {
@@ -239,8 +282,20 @@ impl Timeline {
     /// squeezed), with the whole square in the screen's units. The label column is `ICON_W` wider for an icon track's label.
     #[allow(clippy::too_many_arguments)]
     pub fn draw_icons<A: Clone>(&self, ui: &mut Ui<A>, id: &str, r: Rect, on_block: impl Fn(i32) -> A, on_track: impl Fn(&str) -> A, on_segment: impl Fn(&str, &str) -> A, mut icon: impl FnMut(&mut Ui<A>, &Track, Rect)) {
+        self.draw_slots(ui, id, r, on_block, on_track, on_segment, |ui, slot, sq| {
+            if let Slot::Icon(t) = slot {
+                icon(ui, t, sq);
+            }
+        });
+    }
+
+    /// `draw_icons` with every square the caller fills (STATUSVIS1-B): `slot(ui, Slot, square)` for a track's icon
+    /// square, its aside square (`Track.aside`) and each segment's icon square (`Segment.icon`), inside the rows' scroll
+    /// clip. The label column is `ICON_W` wider for each of a track's squares.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_slots<A: Clone>(&self, ui: &mut Ui<A>, id: &str, r: Rect, on_block: impl Fn(i32) -> A, on_track: impl Fn(&str) -> A, on_segment: impl Fn(&str, &str) -> A, mut icon: impl FnMut(&mut Ui<A>, Slot<'_>, Rect)) {
         let m = ui.m();
-        let longest = self.sections.iter().flat_map(|s| &s.tracks).map(|t| ui.p.text_w(&t.label, m.body).ceil() as i32 + m.u(9) + if t.icon { m.u(ICON_W) } else { 0 }).max().unwrap_or(0);
+        let longest = self.sections.iter().flat_map(|s| &s.tracks).map(|t| ui.p.text_w(&t.label, m.body).ceil() as i32 + m.u(9) + if t.icon { m.u(ICON_W) } else { 0 } + if t.aside { m.u(ICON_W) } else { 0 }).max().unwrap_or(0);
         let label_w = longest.clamp(m.u(LABEL_W), (r.w / 4).max(m.u(LABEL_W)));
         let lane_x = r.x + label_w;
         let lane_w = (r.w - label_w - m.u(4)).max(m.u(self.blocks.max(1)));
@@ -280,23 +335,35 @@ impl Timeline {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn draw_track<A: Clone>(&self, ui: &mut Ui<A>, id: &str, t: &Track, row: Rect, lane_x: i32, lane_w: i32, on_track: &impl Fn(&str) -> A, on_segment: &impl Fn(&str, &str) -> A, icon: &mut impl FnMut(&mut Ui<A>, &Track, Rect)) {
+    fn draw_track<'t, A: Clone>(&self, ui: &mut Ui<A>, id: &str, t: &'t Track, row: Rect, lane_x: i32, lane_w: i32, on_track: &impl Fn(&str) -> A, on_segment: &impl Fn(&str, &str) -> A, icon: &mut impl FnMut(&mut Ui<A>, Slot<'t>, Rect)) {
         let selected = self.selected_track.as_deref() == Some(t.key.as_str());
         let m = ui.m();
         let lx = if t.icon {
             let sq = icon_rect_on(row, m.g);
             ui.push(format!("{id}.icon.{}", t.key), "icon", t.label.clone(), sq, true, false, None, Vec::new());
-            icon(ui, t, sq);
+            icon(ui, Slot::Icon(t), sq);
             row.x + m.u(ICON_W)
         } else {
             row.x
         };
-        let label = Rect::new(lx + m.u(1), row.y + m.u(1), lane_x - lx - m.u(3), m.u(ROW_H - 2));
+        // the aside square at the label column's right end, the label left of it
+        let lane_end = if t.aside {
+            let sq = Rect::new(lane_x - m.u(ICON_W + 1), row.y, m.u(ROW_H), m.u(ROW_H));
+            sq.x
+        } else {
+            lane_x
+        };
+        let label = Rect::new(lx + m.u(1), row.y + m.u(1), lane_end - lx - m.u(3), m.u(ROW_H - 2));
         if selected || ui.hover(label) {
             ui.p.panel(label, if selected { ui.t.selected } else { ui.t.card_hot }, if selected { ui.t.focus } else { ui.t.edge }, m.uf(2.0));
         }
         ui.p.text_fit(label.x as f32 + m.uf(3.0), label.y as f32 + m.uf(2.0), &t.label, m.body, label.w as f32 - m.uf(6.0), t.colour);
         ui.push(format!("{id}.track.{}", t.key), "row", t.label.clone(), label, true, selected, Some(on_track(&t.key)), t.tip.clone());
+        if t.aside {
+            let sq = Rect::new(lane_end, row.y, m.u(ROW_H), m.u(ROW_H));
+            ui.push(format!("{id}.aside.{}", t.key), "aside", t.label.clone(), sq, true, false, None, Vec::new());
+            icon(ui, Slot::Aside(t), sq);
+        }
         // The lane: one cell per block (hatched on a hatched track).
         for b in 1..=self.blocks {
             let (x0, x1) = self.block_span(lane_x, lane_w, b);
@@ -324,11 +391,16 @@ impl Timeline {
         let bars: Vec<Rect> = t.segments.iter().map(|s| self.bar_on(s, row, lane_x, lane_w, m.g)).collect();
         for (s, &bar) in t.segments.iter().zip(&bars) {
             let hover = ui.hover(bar);
-            let mut fill = if s.ghost { ghost_fill(s.fill) } else { s.fill };
+            let base = if self.tiles { tile_fill(s.fill, ui.t.lane) } else { s.fill };
+            let mut fill = if s.ghost { ghost_fill(base) } else { base };
             if hover {
                 fill = [fill[0].saturating_add(30), fill[1].saturating_add(30), fill[2].saturating_add(30), fill[3]];
             }
-            ui.p.panel(bar, fill, if hover { ui.t.focus } else { rgba(0, 0, 0, 0) }, m.uf(RADIUS));
+            ui.p.panel(bar, fill, if hover { ui.t.focus } else if self.tiles { s.fill } else { rgba(0, 0, 0, 0) }, m.uf(RADIUS));
+            if self.tiles {
+                let band = ((TILE_BAND * m.g + 1) / 2).max(1);
+                ui.p.fill(Rect::new(bar.x, bar.y, bar.w, band), if s.ghost { ghost_fill(s.fill) } else { s.fill });
+            }
             for p in &s.parts {
                 if let Some(pr) = self.part_rect(s, p, bar, lane_x, lane_w) {
                     draw_part(ui, p.style, bar, pr);
@@ -361,10 +433,21 @@ impl Timeline {
         }
         for (s, &bar) in t.segments.iter().zip(&bars) {
             let need = ui.p.text_w(&s.label, m.small).ceil() as i32;
-            let (x0, x1) = (bar.x + m.u(3), bar.x + bar.w - m.u(3));
+            let (mut x0, x1) = (bar.x + m.u(3), bar.x + bar.w - m.u(3));
+            let mut label = true;
+            if s.icon.is_some() {
+                // the icon at the left with the label after it where it fits, else the icon alone at the centre
+                let left = icon_square(bar, m.g, true);
+                let fits = left.x + left.w + m.u(2) + need <= x1;
+                let sq = if fits { left } else { icon_square(bar, m.g, false) };
+                icon(ui, Slot::Segment(t, s), sq);
+                x0 = sq.x + sq.w + m.u(2);
+                label = fits;
+            }
             let (lx, lx1) = clear_of_on(x0, x1, &kept, need, m.g);
-            if (lx, lx1) == (x0, x1) || lx1 - lx >= m.u(6) {
-                ui.p.text_fit(lx as f32, bar.y as f32 + m.uf(1.0), &s.label, m.small, (lx1 - lx) as f32, if s.ghost { ui.t.dim } else { ui.t.text });
+            if label && ((lx, lx1) == (x0, x1) || lx1 - lx >= m.u(6)) {
+                let ly = if s.icon.is_some() { bar.y as f32 + (bar.h as f32 - ui.p.line_h(m.small)) / 2.0 } else { bar.y as f32 + m.uf(1.0) };
+                ui.p.text_fit(lx as f32, ly, &s.label, m.small, (lx1 - lx) as f32, if s.ghost { ui.t.dim } else { ui.t.text });
             }
             ui.push(format!("{id}.seg.{}.{}", t.key, s.key), "row", s.label.clone(), bar, true, false, Some(on_segment(&t.key, &s.key)), s.tip.clone());
         }
@@ -540,6 +623,7 @@ pub fn sample() -> Timeline {
         selected_track: Some("p1".into()),
         sections: vec![Section { title: "Party".into(), colour: ally, tracks: party }, Section { title: "Enemies".into(), colour: foe, tracks: enemies }],
         ruler: None,
+        tiles: false,
     }
 }
 
