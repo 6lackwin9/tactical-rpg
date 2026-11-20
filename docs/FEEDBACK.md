@@ -95,8 +95,17 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-25` (`UISPLIT1-J`) hub talk | Stage A done for all five screens (tools lane) | `develop` (squash `ENGINE-25` A3) | View-model, actions, fixture and tests for the talk box; today's drawing kept. FB-387 |
 | `ENGINE-27` (`CRUCIBLE-CHECK1`) | Done, report only (tools lane) | `develop` | No rule bug: the escape needs all three non-holders out; at the authored level 1 a founder falls in round 1, and at level 4 the round-3 wave still blocks the exit lane (Overlook 75 %, base 0 %). FB-389 |
 | `PR7-29` (`SLOTCARD1`) | Done (tools lane) | `develop` | The save and load screens draw six `slot_card`s in two columns (location picture, place, day, party portraits, time, lock and delete); one click acts as before; "The Ashlands · time" with no location. FB-391 |
+| `PR7-28` (`TITLEFX1`) | Done (tools lane) | `develop` | Lantern glows and rising embers over the title backdrop at the spots of `backgrounds/menu/title.fx.json`; off under Reduce motion; scenarios `title_fx` and `title_fx_still`. FB-393 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-393: PR7-28 TITLEFX1, the title backdrop's fire layer
+
+- **Status**: done (tools lane) on `develop`.
+- **Spec**: `READY.md` `PR7-28` (`LOOK1-M1F`, mock `03_main_menu_and_slots.js`).
+- **Finding**: `emberwake_gui/src/title_fx.rs` draws, over the main menu's backdrop and with `aegis_ui::fx` (`Looped` `Flash` and `Sparks`) on the menu's own clock, three nested flickering glows at each lantern spot and a few rising, fading embers at each ember spot. The spots are data, in the picture's sidecar `backgrounds/menu/title.fx.json` (`{"spots": [{"kind": "lantern" or "embers", "at": [u, v]}]}`, fractions of the picture, mapped through the backdrop's cover fit): the mock's five lanterns (both portal brackets, three bridge posts) and six ember origins (those plus the open door). It shows only over the picture whose sidecar it is and never under Reduce motion (no drawing; the menu goes back to idle frames); while it shows the menu asks for about 30 frames a second. The agent link reads `state.title_fx` (`on`, `lanterns`, `embers`). GUI audit: scenarios `title_fx` (asserts on with 5 and 6 spots, a 24-frame clip) and `title_fx_still` (Reduce motion: asserts off); clip and still in project files `tools-lane/pr7_28_title_fire.gif` and `pr7_28_title_still.png`. Tests: the shipped spots, off under Reduce motion and over the menu picture, the cover-fit mapping, a malformed spot left out.
+- **Guess** (minor, made provisionally): the spots live in a sidecar beside the picture (the layered tree now allows `backgrounds/menu/<picture>.fx.json`, as `backgrounds/world_map/` allows its JSON sidecars), so a new title picture brings its own spots and the art studio can move them; the glow sizes and colours stay in code. The mock's window glows and falling ash are not part of the row (it names embers and lantern flicker).
+- **Docs delta**: `docs/specs/ASSETORG2.md` section 3: `backgrounds/menu/<picture>.fx.json` (TITLEFX1 spots). `STRUCTURE.md`: `emberwake_gui/src/title_fx.rs` (the title fire layer). `HISTORY.md`: none.
 
 ### FB-391: PR7-29 SLOTCARD1, slot cards on the save and load screens
 

@@ -64,6 +64,7 @@ mod stage;
 mod story;
 mod talk;
 mod talk_view;
+mod title_fx;
 mod timeline_view;
 mod tokens;
 mod transitions;
