@@ -1823,18 +1823,25 @@ pub fn hazard_round_end(w: &mut World, rng: &mut GodotRng, units: &[UnitId]) -> 
     lines
 }
 
-/// RiposteRules.counter: a riposting defender answers an adjacent melee hit it survived, once per attacker per round
-/// (diagonally adjacent too under `melee_diagonal` all, INPUT1 MR10).
-pub fn riposte_counter(w: &mut World, rng: &mut GodotRng, attacker: UnitId, defender: UnitId, ranged: bool) -> Option<Reaction> {
-    if ranged || attacker == defender {
-        return None;
+/// RiposteRules.counter's condition (STATUSVIS1 SV9, FB-370: the riposte chip reads it on a planned hit): whether
+/// `defender` standing at `at` answers a hit by `attacker` struck from `from`: not `ranged` (the caller folds a flank
+/// in), not itself, the defender holding `riposte` and alive, the attacker active and not answered yet this round, the
+/// two adjacent (INPUT1 MR10, GD3: under `melee_diagonal` all, diagonally too). Read only.
+pub fn riposte_answers_at(w: &World, attacker: UnitId, from: V2, defender: UnitId, at: V2, ranged: bool) -> bool {
+    if ranged || attacker == defender || from == NO_CELL || at == NO_CELL {
+        return false;
     }
     let d = &w.units[defender];
     if !d.has_status("riposte") || !d.is_alive() || !w.units[attacker].is_active() || d.riposted.contains(&attacker) {
-        return None;
+        return false;
     }
-    // INPUT1 MR10, GD3: under `melee_diagonal` all the counter answers a diagonal melee hit too
-    if !w.has(attacker) || !w.has(defender) || w.band_at(round_intent::diagonal(w, defender, None), defender, w.pos(defender), attacker) != 1 {
+    crate::grid::square_band(round_intent::diagonal(w, defender, None), at, w.size_of(defender), from, w.size_of(attacker)) == 1
+}
+
+/// RiposteRules.counter: a riposting defender answers an adjacent melee hit it survived, once per attacker per round
+/// (diagonally adjacent too under `melee_diagonal` all, INPUT1 MR10).
+pub fn riposte_counter(w: &mut World, rng: &mut GodotRng, attacker: UnitId, defender: UnitId, ranged: bool) -> Option<Reaction> {
+    if !w.has(attacker) || !w.has(defender) || !riposte_answers_at(w, attacker, w.pos(attacker), defender, w.pos(defender), ranged) {
         return None;
     }
     w.units[defender].riposted.push(attacker);

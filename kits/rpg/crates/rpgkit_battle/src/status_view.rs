@@ -188,7 +188,18 @@ pub fn loss_reads(w: &World, sched: &[ScheduledAction], u: UnitId) -> Vec<HitRea
     let foes = w.foes_of(u);
     let mut acts: Vec<(usize, &ScheduledAction)> = sched.iter().enumerate().filter(|(_, a)| !a.cancelled && a.unit != u && foes.contains(&a.unit)).collect();
     acts.sort_by_key(|(k, a)| (a.impact, a.start, *k));
-    acts.into_iter().filter_map(|(_, a)| hit_parts(w, sched, a, u).map(|parts| HitRead { parts, counter: counter_on(w, a, u) })).collect()
+    // FB-370: the counter answers once per attacker per round, so only an attacker's first answered hit shows it
+    let mut answered: Vec<UnitId> = Vec::new();
+    acts.into_iter()
+        .filter_map(|(_, a)| {
+            let parts = hit_parts(w, sched, a, u)?;
+            let counter = counter_on(w, sched, a, u).filter(|_| !answered.contains(&a.unit));
+            if counter.is_some() {
+                answered.push(a.unit);
+            }
+            Some(HitRead { parts, counter })
+        })
+        .collect()
 }
 
 /// SV9: the likely return of `defender`'s counter on `attacker` (RiposteRules.counter: the ruleset's `counter_mult` x the
@@ -204,12 +215,23 @@ pub fn counter_return(w: &World, defender: UnitId, attacker: UnitId) -> Option<i
     Some(damage::compute(d, a, HitInput { skill_mult: mult, ..HitInput::default() }).final_dmg)
 }
 
-/// SV9: the counter the hit `a` would draw from `t` (`counter_return` on the action's unit): only a melee Attack
-/// draws it (the counter answers an adjacent melee hit). None otherwise.
-pub fn counter_on(w: &World, a: &ScheduledAction, t: UnitId) -> Option<i32> {
-    let CmdKind::Attack { use_offhand, .. } = &a.command.kind else { return None };
-    let ranged = w.units[a.unit].attack_range > 1 && !use_offhand;
-    if ranged {
+/// SV9 (FB-370: by the rule, not the skill kind): the counter the hit `a` would draw from `t` (`counter_return` on the
+/// action's unit) when the riposte rule would answer it (`command::riposte_answers_at`): any hit of an Attack or an
+/// Area on `t` that is not ranged nor a flank, from a tile adjacent to `t`, both read where they stand at its impact
+/// (the plan's moves first; when both are planned onto one tile, `t` where it stands now). None otherwise. Once per attacker is the caller's (`loss_reads`).
+pub fn counter_on(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: UnitId) -> Option<i32> {
+    intent::hit_on(w, sched, a, t)?;
+    let src = &w.units[a.unit];
+    let ranged = match &a.command.kind {
+        CmdKind::Attack { use_offhand, .. } => src.attack_range > 1 && !use_offhand,
+        CmdKind::Area { .. } => src.attack_range > 1,
+        _ => return None,
+    };
+    let from = intent::position_at(w, sched, a.unit, a.impact);
+    // both planned onto one tile (a forecast clash: one of them stops short when the round runs): `t` where it stands
+    let at = Some(intent::position_at(w, sched, t, a.impact)).filter(|p| *p != from).unwrap_or_else(|| w.grid.pos(t).unwrap_or(crate::grid::NO_CELL));
+    let flank = crate::round_intent::flank_bonus_from(w, a.unit, from, t);
+    if !crate::command::riposte_answers_at(w, a.unit, from, t, at, ranged || flank) {
         return None;
     }
     counter_return(w, t, a.unit)
