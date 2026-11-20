@@ -1511,6 +1511,22 @@ impl Session {
         self.unit_tiers.get(&c).cloned().unwrap_or_else(|| self.w.units[c].tier.clone())
     }
 
+    /// OBJUI1: the morale leader's unit (None with morale off, no leader, or its key gone).
+    pub fn morale_leader(&self) -> Option<UnitId> {
+        if !self.morale.on || self.morale.leader.is_empty() {
+            return None;
+        }
+        self.units_by_key.get(&self.morale.leader).copied()
+    }
+
+    /// OBJUI1: the slay objective's target (None for any other objective).
+    pub fn slay_target(&self) -> Option<UnitId> {
+        if self.objective.objective != "slay" {
+            return None;
+        }
+        self.first_of_ref(&self.objective.unit_ref)
+    }
+
     /// Rule 5: boss or elite tier, a live profile that never flees, or the slay target.
     pub fn is_fearless(&self, c: UnitId) -> bool {
         let tier = self.tier_of(c);

@@ -1303,3 +1303,4 @@ mod visclar_d_tests;
 mod hud_frame_tests;
 mod portrait_frame_tests;
 mod boss_ui1_tests;
+mod objui1_tests;

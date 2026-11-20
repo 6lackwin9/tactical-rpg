@@ -1,0 +1,20 @@
+{
+  "id": "objui1_marks",
+  "title": "PR7-31 (OBJUI1; OBJ1-U, MORALE1-U): Captain Vane's sweep (sunk_ward enc_evt_01, morale on) on the Timeline ruleset; each foe's morale chip at its sprite's feet (Fearless gold on Vane), a foe's chip hovered to its state, line and the kills-and-crits line, and the goal hovered to the objective and morale lines",
+  "launch": {"screen": "arena", "scene": "sunk_ward:enc_evt_01", "ruleset": "timeline", "seed": 7},
+  "settings": {"reduce_motion": true},
+  "timeout_s": 600,
+  "steps": [
+    {"step": "wait", "until": {"path": "state.ruleset.id", "eq": "timeline"}},
+    {"step": "repeat", "times": 4, "until": {"path": "state.talk", "absent": true}, "steps": [{"step": "click", "id": "dialogue.continue"}, {"step": "pause", "ms": 600}]},
+    {"step": "wait", "until": {"widget": "board.morale.5"}},
+    {"step": "pause", "ms": 1500},
+    {"step": "shot", "name": "objui1_board"},
+    {"step": "hover", "id": "board.morale.5"},
+    {"step": "pause", "ms": 600},
+    {"step": "shot", "name": "objui1_morale_hover"},
+    {"step": "hover", "id": "strip.goal"},
+    {"step": "pause", "ms": 600},
+    {"step": "shot", "name": "objui1_goal_hover"}
+  ]
+}

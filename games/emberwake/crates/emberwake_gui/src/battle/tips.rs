@@ -596,6 +596,24 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
         None => format!("Level {} {}", u.stats.level, u.tier),
     };
     t.push((format!("{level}   Initiative {}   Reach {}", u.initiative, reach_text(w, i)), th().dim));
+    // OBJUI1 (PR7-31; OBJ1 3, MORALE1 3): the guest and must-survive marks, the slay target, the morale state in words
+    // with its line, the leader
+    let marks = emberwake_battle::obj_view::marks(s, i);
+    if marks.guest {
+        t.push(("Guest".into(), crate::tokens::guest()));
+    }
+    if marks.must_survive {
+        t.push(("Must survive".into(), crate::tokens::boss_gold()));
+    }
+    if marks.slay {
+        t.push(("Slay target: defeat it to win".into(), crate::tokens::boss_gold()));
+    }
+    if let Some(m) = emberwake_battle::obj_view::morale_mark(s, i) {
+        t.push((format!("{}: {}", m.title(), m.line), super::objchips::state_col(m.state)));
+    }
+    if emberwake_battle::obj_view::is_leader(s, i) {
+        t.push((emberwake_battle::obj_view::LEADER_LINE.into(), crate::tokens::boss_gold()));
+    }
     if let Some(line) = derived_line(&derived_rows(s, i)) {
         t.push((line, th().dim));
     }

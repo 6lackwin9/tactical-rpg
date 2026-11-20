@@ -503,6 +503,9 @@ pub struct Results {
     /// leaves open (`open_jobs_lines`).
     timed_out: bool,
     next_lines: Vec<String>,
+    /// OBJUI1 (OBJ1 3, MORALE1 3): the objective line ("Objective met: ..." or "The objective failed.") and, after a
+    /// win by a break, the break lines (`obj_view::result_lines`; empty outside a battle).
+    objective: Vec<String>,
     w: Vec<Widget<ResAct>>,
 }
 
@@ -767,8 +770,15 @@ impl Results {
             leaving: None,
             timed_out: false,
             next_lines: Vec::new(),
+            objective: Vec::new(),
             w: Vec::new(),
         }
+    }
+
+    /// OBJUI1: the objective line and the break lines under it (`obj_view::result_lines`).
+    pub fn objective(mut self, lines: Vec<String>) -> Self {
+        self.objective = lines;
+        self
     }
 
     /// PR7-37 (PT-02, PT-24): the fight ran out of rounds (`timed_out`), and the lines on what it leaves open.
@@ -899,6 +909,12 @@ impl Screen<GameCx> for Results {
                 y += line;
             }
         }
+        // OBJUI1 (OBJ1 3, MORALE1 3): the objective line (gold when met), then a break win's lines
+        for (k, text) in self.objective.iter().enumerate() {
+            let col = if k > 0 { th().info } else if text == emberwake_battle::obj_view::FAILED_LINE { th().dim } else { th().gold };
+            ui.p.text(24.0, y as f32, text, BODY + 1.0, col);
+            y += line;
+        }
         // PR7-37 (PT-24): what happens next (the jobs it leaves open)
         for text in &self.next_lines {
             ui.p.text(24.0, y as f32, text, BODY + 1.0, th().gold);
@@ -995,6 +1011,10 @@ impl Screen<GameCx> for Results {
         // TRANSITIONS1 T2: only over a battle (the state of the other results reads as before)
         if self.over {
             out["over_battle"] = json!({"plain": self.plain, "arrives": self.before.is_some(), "leaving": self.leave_ms(Instant::now())});
+        }
+        // OBJUI1: only after a battle (the state of the other results reads as before)
+        if !self.objective.is_empty() {
+            out["objective"] = json!(self.objective);
         }
         // PK1-S1: only when the battle left marks (the state of a battle without them reads as before)
         if !self.marks.is_empty() {

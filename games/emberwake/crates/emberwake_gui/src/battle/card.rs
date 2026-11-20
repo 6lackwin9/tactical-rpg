@@ -192,6 +192,14 @@ pub(super) fn draw_card(ui: &mut Ui<super::Action>, cx: &mut Cx, (faces, small):
     if c.boss {
         crown(ui, cx, Rect::new(pr.x - 1, pr.y - 2, 8, 6));
     }
+    // OBJUI1 (PR7-31; MORALE1 3): the morale chip and the leader's pennant on the portrait's lower corners, their words
+    // on hover
+    if let Some(m) = &c.morale {
+        super::objchips::morale_chip(ui, m, Rect::new(pr.x - 2, pr.y + pr.h - super::objchips::CHIP + 2, super::objchips::CHIP, super::objchips::CHIP), "card.morale");
+    }
+    if c.leader {
+        super::objchips::leader_chip(ui, Rect::new(pr.x + pr.w - super::objchips::CHIP + 2, pr.y + pr.h - super::objchips::CHIP + 2, super::objchips::CHIP, super::objchips::CHIP), "card.leader");
+    }
     let tx = pr.x + pr.w + 4;
     let room = (r.x + r.w - 5 - tx) as f32;
     let name = ui.p.fit(&c.name, BODY, room);
