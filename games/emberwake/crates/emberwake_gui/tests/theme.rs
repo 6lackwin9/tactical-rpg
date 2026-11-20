@@ -463,7 +463,7 @@ fn every_game_colour_is_set_used_and_has_one_fallback() {
 
 /// The game colours filled behind text, with the theme roles drawn on them (`dim` at 3:1, the rest at 4.5:1). A
 /// translucent fill is taken over `bg`, as `contrast` does.
-const FILLS_BEHIND_TEXT: [(&str, &[&str]); 28] = [
+const FILLS_BEHIND_TEXT: [(&str, &[&str]); 27] = [
     ("battle_panel", &["text", "dim", "gold", "foe", "good", "info"]),
     ("chip", &["text", "gold", "dim"]),
     ("column", &["text", "gold", "dim", "foe", "good"]),
@@ -475,7 +475,6 @@ const FILLS_BEHIND_TEXT: [(&str, &[&str]); 28] = [
     ("legend_fill", &["text", "dim"]),
     ("log_fill", &["text", "dim", "gold", "foe"]),
     ("map_pane", &["text", "gold", "dim", "good", "info"]),
-    ("menu_row", &["text", "gold", "dim"]),
     ("outcome_fill", &["gold", "good", "foe", "text"]),
     ("party_box", &["text", "gold", "dim"]),
     ("popup_fill", &["text", "gold", "dim"]),

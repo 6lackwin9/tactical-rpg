@@ -20,6 +20,7 @@ use rpgkit_ui::vignette::{TextSpeed, REDUCE_MOTION, TEXT_SPEED};
 use rpgkit_ui::portrait_overlays;
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
+use emberwake_content::art as kart;
 use emberwake_world::{new_game, progression, save};
 use serde_json::{json, Value};
 
@@ -112,6 +113,7 @@ fn menu_panel<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, r: Rect) {
 const MENU_DIM: u8 = 153;
 
 /// What Continue's peek shows of the newest save.
+#[derive(Clone)]
 struct Peek {
     location: String,
     when: String,
@@ -713,7 +715,7 @@ pub(crate) fn slot_text(cx: &Cx, slot: i64, head: &Dict) -> (String, String) {
             })
             .collect();
         let at = json::i(head, "saved_at", 0);
-        label = format!("{label} · {}, {}{}", cx.world_name(&world), cx.location_name(&world, &s(head, "location_id")), if at > 0 { format!(" · {}", datetime(at)) } else { String::new() });
+        label = format!("{label} · {}{}", slot_place(cx, head), if at > 0 { format!(" · {}", datetime(at)) } else { String::new() });
         party.join(", ")
     } else if exists {
         format!("Can't load ({})", s(head, "error"))
@@ -721,6 +723,32 @@ pub(crate) fn slot_text(cx: &Cx, slot: i64, head: &Dict) -> (String, String) {
         "Empty".into()
     };
     (label, status)
+}
+
+/// A readable save's place: the world and the location ("The Ashlands, Warden Keep"), the world alone when the save
+/// names no location (PR7-29, FB-369: never "The Ashlands, ").
+pub(crate) fn slot_place(cx: &Cx, head: &Dict) -> String {
+    let world = s(head, "world_id");
+    let mut parts = vec![cx.world_name(&world)];
+    let at = cx.location_name(&world, &s(head, "location_id"));
+    if !at.is_empty() {
+        parts.push(at);
+    }
+    parts.retain(|p| !p.is_empty());
+    parts.join(", ")
+}
+
+/// PR7-29 (SLOTCARD1, LOOK1 M2): the slot cards' grid: six 290 x 84 cards in two columns, the autosave first.
+pub const CARD_W: i32 = 290;
+pub const CARD_H: i32 = 84;
+const CARD_GAP: i32 = 8;
+const CARDS_X: i32 = (W - 2 * CARD_W - CARD_GAP) / 2;
+const CARDS_Y: i32 = 50;
+
+/// Slot `slot`'s card rect (two columns, filled row by row).
+pub fn card_rect(slot: i64) -> Rect {
+    let (col, row) = (slot as i32 % 2, slot as i32 / 2);
+    Rect::new(CARDS_X + col * (CARD_W + CARD_GAP), CARDS_Y + row * (CARD_H + CARD_GAP), CARD_W, CARD_H)
 }
 
 /// The day line of a readable save's lead (the Continue peek's), None when it does not load.
@@ -766,61 +794,83 @@ impl Screen<GameCx> for Slots {
         let mut ui: Ui<SlotAct> = Ui::new(g, mouse, live);
         self.faces.begin();
         // PR7-36 (ART-08): a main panel over the dimmed title backdrop, as Settings sits over the menu
-        menu_panel(&mut ui, cx, Rect::new(56, 8, 528, 312));
-        title(&mut ui, if self.saving { "Save game" } else { "Load game" }, 26);
+        menu_panel(&mut ui, cx, Rect::new(CARDS_X - 12, 6, W - 2 * CARDS_X + 24, H - 12));
+        title(&mut ui, if self.saving { "Save game" } else { "Load game" }, 20);
         for slot in save::AUTOSAVE_SLOT..=save::LAST_SLOT {
-            let mut r = Rect::new(70, 54 + slot as i32 * 36, 500, 31);
+            let r = card_rect(slot);
             let head = save::peek(&cx.data, &cx.save_dir, slot);
             let exists = json::b(&head, "exists", false);
             let ok = json::b(&head, "ok", false);
             let lead = if ok {
                 let key = (slot, json::i(&head, "saved_at", 0));
                 self.leads.retain(|k, _| k.0 != slot || *k == key);
-                self.leads.entry(key).or_insert_with(|| Peek::read(cx, slot)).as_ref().map(|p| (p.when.clone(), p.party.first().cloned()))
+                self.leads.entry(key).or_insert_with(|| Peek::read(cx, slot)).clone()
             } else {
                 None
             };
-            let (mut label, status) = slot_text(cx, slot, &head);
-            // The whole row is the click (PLAYUI1 section 1); lock and delete are icons in its top-right corner.
+            let (label, status) = slot_text(cx, slot, &head);
             let locked = save::is_locked(&cx.save_dir, slot);
             let row = slot_row(self.saving, slot, exists, ok, locked, Self::no_save(cx));
-            let hover = row.action.is_some() && ui.hover(r);
-            ui.p.panel(r, if hover { th().card_hot } else { th().game("menu_row", rgba(26, 36, 58, 250)) }, if hover { th().gold } else { th().edge }, 2.0);
-            let card = r;
-            // the lead's portrait at the row's left and the day on its first line
-            if let Some((when, lead)) = &lead {
-                if let Some((_, _, who, look)) = lead {
-                    let pr = Rect::new(r.x + 2, r.y + 2, r.h - 4, r.h - 4);
-                    self.faces.draw(&mut ui.p, cx, who, look, "roster", pr);
-                    r.x += r.h;
-                    r.w -= r.h;
+            // PR7-29 (SLOTCARD1): the location's picture (else the world's title picture), the name, the place and the
+            // lead's day, the party's portraits and the time saved; one click acts as before (PLAYUI1), lock and
+            // delete in the top-right corner
+            let (thumb_r, _, _, _) = panes::slot_rects_on(&ui.m(), r, 2);
+            let scale = ui.p.v.s;
+            let (tw, tpx) = ((thumb_r.w as f32 * scale).round() as i32, (thumb_r.h as f32 * scale).round() as i32);
+            // a slot with no readable save shows a plain well (no letter), as the mock's empty card
+            let well = || {
+                let c = crate::portraits::portrait_well();
+                aegis_ui::canvas::Image { w: 1, h: 1, px: vec![c[0], c[1], c[2], 255] }
+            };
+            let thumb = if ok {
+                let world = s(&head, "world_id");
+                let files = [kart::location_background(&s(&head, "location_id")), kart::title_background(&world)];
+                files.iter().find_map(|f| cx.art.image(f, tw.max(1), tpx.max(1)).cloned())
+            } else {
+                Some(well())
+            };
+            let face = ui.icon_px(Rect::new(0, 0, panes::PORTRAIT, panes::PORTRAIT));
+            let faces: Vec<aegis_ui::canvas::Image> = lead.as_ref().map(|p| p.party.iter().filter_map(|(_, _, who, _)| cx.art.first(&who.chain(""), face, face).cloned()).collect()).unwrap_or_default();
+            let name = if slot == save::AUTOSAVE_SLOT { "Autosave".to_string() } else { format!("Slot {slot}") };
+            let lines = if ok {
+                let mut l = vec![slot_place(cx, &head)];
+                if let Some(p) = &lead {
+                    l.push(p.when.clone());
                 }
-                label = format!("{label} · {when}");
-            }
-            let text_w = (r.w - 8 - if row.delete { 40 } else { 0 }) as f32;
-            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &label, BODY, text_w, if ok { th().text } else { th().dim });
-            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 16.0, &status, BODY, text_w, th().dim);
-            let enabled = row.action.is_some();
-            ui.push(format!("slot.{slot}"), "card", format!("{label}: {status}"), card, enabled, false, row.action, tip(&label, &row.why));
-            let del = Rect::new(r.x + r.w - 4 - 16, r.y + 4, 16, 16);
-            let px = ui.icon_px(del);
+                l
+            } else {
+                vec![status.clone()]
+            };
+            let at = json::i(&head, "saved_at", 0);
+            let view = panes::SlotView { thumb: thumb.as_ref(), title: name, lines, portraits: faces.iter().collect(), stamp: if ok && at > 0 { datetime(at) } else { String::new() } };
+            let mut corner = Vec::new();
             if row.lock {
-                let lr = Rect::new(del.x - 18, del.y, 16, 16);
-                let (label, card, glyph, file) = if locked {
-                    ("Unlock", "Unlock", Glyph::Lock, "ui/lock.png")
-                } else {
-                    ("Lock", "Lock (protect from overwrite and delete)", Glyph::Unlock, "ui/unlock.png")
-                };
-                let img = cx.art.image(file, px, px).cloned();
-                ui.icon_button(&format!("slot.{slot}.lock"), lr, label, img.as_ref(), glyph, SlotAct::Lock(slot, !locked), true, locked, tip(card, ""));
+                let (label, glyph) = if locked { ("Unlock", Glyph::Lock) } else { ("Lock", Glyph::Unlock) };
+                corner.push(panes::Corner { key: "lock".into(), label: label.into(), glyph, action: SlotAct::Lock(slot, !locked), enabled: true, toggled: locked, tip: String::new() });
             }
             if row.delete {
-                let img = cx.art.image("ui/delete.png", px, px).cloned();
-                let card = if locked { tip("Delete", "Unlock the save to delete it.") } else { tip("Delete", "") };
-                ui.icon_button(&format!("slot.{slot}.delete"), del, "Delete", img.as_ref(), Glyph::Delete, SlotAct::Delete(slot), !locked, false, card);
+                corner.push(panes::Corner { key: "delete".into(), label: "Delete".into(), glyph: Glyph::Delete, action: SlotAct::Delete(slot), enabled: !locked, toggled: false, tip: if locked { "Unlock the save to delete it.".into() } else { String::new() } });
+            }
+            let id = format!("slot.{slot}");
+            panes::slot_card(&mut ui, &id, r, &view, row.action, false, &corner);
+            // the card's widget: off when a click does nothing, its text the row's two lines, its hover card what a click
+            // does (or why it does nothing), as the rows before it said
+            let full = match &lead {
+                Some(p) => format!("{label} · {}", p.when),
+                None => label.clone(),
+            };
+            if let Some(w) = ui.widgets.iter_mut().find(|w| w.id == format!("{id}.lock")) {
+                w.tip = tip(if locked { "Unlock" } else { "Lock (protect from overwrite and delete)" }, "");
+            }
+            if let Some(w) = ui.widgets.iter_mut().find(|w| w.id == id) {
+                w.enabled = row.action.is_some();
+                w.text = format!("{full}: {status}");
+                if w.tip.is_empty() {
+                    w.tip = tip(&full, &row.why);
+                }
             }
         }
-        ui.button("slots.back", Rect::new(70, 292, 70, 18), "Back", SlotAct::Back, true);
+        ui.button("slots.back", Rect::new(CARDS_X, CARDS_Y + 3 * (CARD_H + CARD_GAP), 70, 18), "Back", SlotAct::Back, true);
         self.w = ui.widgets;
     }
     /// The agent link's reading: the screen's view-model (UISPLIT1-H Stage A, `save_view`).
@@ -1918,6 +1968,23 @@ mod tests {
         std::fs::write(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/ui/views/slots.view.json"), serde_json::to_string_pretty(&v).unwrap() + "\n").unwrap();
     }
 
+    /// PR7-29 (FB-369): a save that names no location reads "World · time" with no comma and no empty part; one that
+    /// names a location reads "World, Location".
+    #[test]
+    fn a_save_with_no_location_drops_the_comma() {
+        let dir = aegis_core::scratch::Scratch::vacant("emberwake_slot_place");
+        let cx = cx(dir.to_path_buf());
+        let world = cx.gs().world_id.clone();
+        let name = cx.world_name(&world);
+        let head = |loc: &str| json::dict(&json!({"world_id": world, "location_id": loc})).clone();
+        assert_eq!(slot_place(&cx, &head("")), name);
+        let loc = cx.data.merged_entries(&world, "locations").first().map(|l| s(l, "id")).expect("a location");
+        assert_eq!(slot_place(&cx, &head(&loc)), format!("{name}, {}", cx.location_name(&world, &loc)));
+        let head = json::dict(&json!({"exists": true, "ok": true, "world_id": world, "location_id": "", "saved_at": 1_700_000_000, "party": []})).clone();
+        let (label, _) = slot_text(&cx, 1, &head);
+        assert!(label.starts_with(&format!("Slot 1 · {name} · ")) && !label.contains(", "), "{label}");
+    }
+
     /// PLAYUI1 section 1 acceptance over the screen's widgets (the agent link's ids): `slot.2` saves an empty slot at
     /// once and asks on a filled one; `slot.2.lock` locks it, after which `slot.2` and its delete take no click and
     /// their cards name the lock; the autosave has no lock; the load screen loads a locked save; unlock, delete.
@@ -1940,10 +2007,14 @@ mod tests {
         assert!(matches!(cx.nav.last(), Some(Nav::Push(_))), "a filled slot asks before overwriting");
         cx.nav.clear();
 
-        // The icons sit 4 px from the row's top and right edges, right to left: delete, lock.
+        // PR7-29 (SLOTCARD1): the card is slot 2's place in the two-column grid; its icons are the card's corner icons
+        // (`panes::slot_rects`), right to left: delete, lock.
         let (row, del, lock) = (get(&w, "slot.2").unwrap(), get(&w, "slot.2.delete").unwrap(), get(&w, "slot.2.lock").unwrap());
-        assert_eq!((n(del, 0) + n(del, 2), n(del, 1)), (n(row, 0) + n(row, 2) - 4, n(row, 1) + 4));
-        assert_eq!((n(del, 2), n(del, 3)), (16, 16));
+        let r = card_rect(2);
+        assert_eq!((n(row, 0), n(row, 1), n(row, 2), n(row, 3)), (r.x, r.y, CARD_W, CARD_H));
+        let (_, _, _, icons) = panes::slot_rects(r, 2);
+        assert_eq!((n(del, 0), n(del, 1), n(del, 2)), (icons[1].x, icons[1].y, icons[1].w));
+        assert_eq!((n(lock, 0), n(lock, 1)), (icons[0].x, icons[0].y));
         assert!(n(lock, 0) + n(lock, 2) <= n(del, 0), "the lock is left of delete");
 
         s.click_id(&mut cx, "slot.2.lock").unwrap();
