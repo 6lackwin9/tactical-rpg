@@ -146,9 +146,20 @@ pub struct MainMenu {
     newest: Option<i64>,
     /// The mouse or the keyboard has moved since the menu opened: the opening focus on Continue does not show the peek.
     moved: bool,
+    /// TITLEFX1 (PR7-28): the title backdrop's fire layer, its spots read once; the picture the menu drew last.
+    fire: Option<crate::title_fx::TitleFx>,
+    picture: &'static str,
 }
 
+/// TITLEFX1: the fire layer's frame pacing (about 30 frames a second).
+const FIRE_FRAME_MS: u64 = 33;
+
 impl MainMenu {
+    /// The title's fire shows (its spots read, the picture drawn is theirs, Reduce motion off).
+    fn fire_on(&self, cx: &Cx) -> bool {
+        self.fire.as_ref().is_some_and(|f| f.on(self.picture, cx.settings.reduce_motion()))
+    }
+
     fn act(&mut self, cx: &mut Cx, a: MenuAct) {
         match a {
             MenuAct::Continue => {
@@ -324,6 +335,17 @@ impl Screen<GameCx> for MainMenu {
         let picture = if cx.art.has(TITLE_ART) { TITLE_ART } else { MENU_ART };
         let img = cx.art.size_of(picture).and_then(|(w, h)| cx.art.image(picture, w, h));
         panes::backdrop_pane(&mut ui, "menu.backdrop", img, picture, area, 0, MENU_VIGNETTE);
+        // TITLEFX1 (PR7-28): lantern glows and rising embers at the data-placed spots, over the picture they belong to
+        self.picture = picture;
+        if self.fire.as_ref().is_none_or(|f| f.picture != picture) {
+            self.fire = Some(crate::title_fx::TitleFx::load(cx.art.layers(), picture));
+        }
+        let fire = self.fire.as_mut().expect("loaded above");
+        if fire.on(picture, cx.settings.reduce_motion()) {
+            if let Some(size) = cx.art.size_of(picture) {
+                fire.draw(&mut ui.p, area, size);
+            }
+        }
         Self::logo(&mut ui, cx);
         let newest = *self.newest.get_or_insert_with(|| save::newest_slot(&cx.data, &cx.save_dir));
         let mut items: Vec<MenuItem<MenuAct>> = Vec::new();
@@ -363,13 +385,27 @@ impl Screen<GameCx> for MainMenu {
         ui.p.text_right((foot.x + foot.w) as f32, version_y, "Version dev · Aegis engine", m.small, dim);
         self.w = ui.widgets;
     }
-    /// The peek's portraits breathe on the menu's clock.
+    /// The peek's portraits breathe and the title's fire moves on the menu's clock.
     fn tick(&mut self, _cx: &mut Cx) {
         self.faces.tick();
+        if let Some(f) = self.fire.as_mut() {
+            f.tick();
+        }
     }
-    /// The picture, the logo and the entries stand still; only the peek's portraits move.
-    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
-        if self.peek.is_some() { FrameNeed::Full } else { FrameNeed::Idle }
+    /// The picture, the logo and the entries stand still; the peek's portraits move, and the title's fire at about
+    /// 30 frames a second while it shows (TITLEFX1: never under Reduce motion).
+    fn frame_need(&self, cx: &Cx) -> FrameNeed {
+        if self.peek.is_some() {
+            FrameNeed::Full
+        } else if self.fire_on(cx) {
+            FrameNeed::Within(Duration::from_millis(FIRE_FRAME_MS))
+        } else {
+            FrameNeed::Idle
+        }
+    }
+    /// The agent link's reading: the title's fire layer (on or off, its spots).
+    fn state(&self, cx: &Cx) -> Value {
+        json!({"title_fx": self.fire.as_ref().map(|f| f.state(self.fire_on(cx)))})
     }
     /// Back on the menu: the newest save may have changed, and the focus opens on Continue again.
     fn resume(&mut self, _cx: &mut Cx) {

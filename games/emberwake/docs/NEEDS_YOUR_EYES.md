@@ -2,7 +2,7 @@
 
 What only you can judge, with what to do. The planner keeps this current: new items go in when they land, and an item leaves when you've answered. Say "open the build" and the planner launches the latest one.
 
-## For the next session (Design keeps this list; updated 2026-11-20 01:10)
+## For the next session (Design keeps this list; updated 2026-11-20 02:40)
 
 Parked for your approval (golden re-records need your word):
 
@@ -18,8 +18,13 @@ Parked for your approval (golden re-records need your word):
   the estimate; 7-8 minutes at 5 rounds would mean about 19-22 s of planning per hero per round (the estimate uses
   10 s). Recommendation: keep the targets and measure your planning time at the next PC playtest. (c) Bosses (band
   20-40 % won): the Bone-Mill Raid 28 % is in band; the Sweep 53, the Tallow Vats 56, the Fissure 56 and the Cages 84
-  are above; both Crucible fights are never won, which Design is checking as a likely bug (`ENGINE-27`).
-  Recommendation: decide the boss tuning after that check and after you play one boss fight.
+  are above; both Crucible fights are never won. The check (`FB-389`) found no bug: the escape needs all three
+  non-holders out, a founder falls in round 1 at level 1, and at level 4 the round-3 wave blocks the exit lane (the
+  Overlook, wave on round 4, wins 75 %). Options: (a) tune for a named party level; (b) move the wave to round 4; (c)
+  two must escape (changes canon). Recommendation: (b), tuned for the level a new campaign sim gives at the Crucible
+  (`ENGINE-28`, which plays Act 1 in order with XP): the founders reach the Crucible at level 7. The sim's own
+  escape play breaks from level 6 (a fix is queued, `ENGINE-29`), so the Crucible numbers come after it; then decide
+  the other bosses after you play one boss fight.
 - [ ] Enemy short names for the foe plates (`PR7-40`): Brawler, Berserker, Footman, Enforcer, Husk, Archer,
   Crossbowman, Purifier, Shaman, Skirmisher (also the Tallow Dredger), Scout, Flagellant, Render-Beast, Ash-Crawler;
   bosses by name.

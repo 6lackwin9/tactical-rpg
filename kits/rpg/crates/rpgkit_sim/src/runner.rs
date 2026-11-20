@@ -194,6 +194,9 @@ pub struct Runner<'a> {
     pub driver: crate::timed::Driver,
     /// PR6-1: per-class main-hand weapon mastery applied to generated enemies (`&[]` = none).
     pub enemy_mastery: &'static [(&'static str, i32)],
+    /// CAMPAIGN-SIM1 (ENGINE-28): world fights field these allies at these levels (`WorldRoster::ally_levels`; empty
+    /// = the authored levels).
+    pub ally_levels: IndexMap<String, i64>,
 }
 
 impl<'a> Runner<'a> {
@@ -223,6 +226,7 @@ impl<'a> Runner<'a> {
             party_tactic: None,
             driver: crate::timed::Driver::Auto,
             enemy_mastery: &[],
+            ally_levels: IndexMap::new(),
         }
     }
 
@@ -400,6 +404,7 @@ impl<'a> Runner<'a> {
         def.ruleset = self.args.ruleset_for(Some(&d.ruleset(world)));
         // BALANCE-WHATIF1 (ENGINE-26): the what-if foes (more of the last one, levels up, HP scaled)
         roster.foe_levels = i64::from(self.args.foe_level);
+        roster.ally_levels = self.ally_levels.clone();
         if let Some(last) = def.enemies.last().cloned() {
             def.enemies.extend(std::iter::repeat_n(last, self.args.foes.max(0) as usize));
         }

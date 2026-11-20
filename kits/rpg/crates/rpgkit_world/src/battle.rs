@@ -12,6 +12,7 @@ use aegis_core::json::{self, int, Dict};
 use rpgkit_battle::encounter::{PartyFate, StayBehind};
 use rpgkit_battle::session::{EncounterDef, Fate, Prebuilt, Session, StartGrant};
 use serde_json::Value;
+use indexmap::IndexMap;
 
 /// ENRAGE2 EN9 adds `escaped`: a random fight's foes slipped away at its round cap.
 pub const OUTCOMES: [&str; 4] = ["won", "lost", "fled", ESCAPED];
@@ -110,13 +111,16 @@ pub struct WorldRoster<'a> {
     /// BALANCE-WHATIF1 (ENGINE-26): levels added to every enemy on top of its stage level (the sim's `foe_level=`; 0
     /// everywhere else).
     pub foe_levels: i64,
+    /// CAMPAIGN-SIM1 (ENGINE-28): the level each named ally fights at when above its authored level (the sim's campaign
+    /// run, carrying XP from fight to fight; empty everywhere else). The raise spends its points as `raise_level` does.
+    pub ally_levels: IndexMap<String, i64>,
 }
 
 impl<'a> WorldRoster<'a> {
     /// W.2-S1 (FB-50a): the roster of a battle played in `world` at stage 0 (the one constructor; `begin_world` builds
     /// on it and sets the stage and the allies).
     pub fn new(d: &'a Data, world: impl Into<String>) -> Self {
-        Self { d, world: world.into(), stage: 0, allies: Vec::new(), captive: None, captive_fallback: String::new(), echoes: Vec::new(), foe_levels: 0 }
+        Self { d, world: world.into(), stage: 0, allies: Vec::new(), captive: None, captive_fallback: String::new(), echoes: Vec::new(), foe_levels: 0, ally_levels: IndexMap::new() }
     }
 
     /// PR6-10: the echo unit an echo ref plays (None for any other ref, or an index past the built echoes).
@@ -214,6 +218,8 @@ impl rpgkit_battle::session::Roster for WorldRoster<'_> {
         let mut def = rpgkit_data::UnitDef::from_obj(&e);
         if !self.allies.iter().any(|a| a == r) {
             rpgkit_rules::unit::raise_level(cat, &mut def, (stage_level(&e, self.stage) + self.foe_levels) as i32);
+        } else if let Some(&level) = self.ally_levels.get(r).filter(|l| **l > i64::from(def.level)) {
+            rpgkit_rules::unit::raise_level(cat, &mut def, level as i32);
         }
         Some(def)
     }

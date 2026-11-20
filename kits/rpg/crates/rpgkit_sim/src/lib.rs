@@ -23,6 +23,7 @@ pub mod targets;
 pub mod timed;
 pub mod variants;
 pub mod world;
+pub mod world_campaign;
 
 use args::SimArgs;
 use rpgkit_world::Data;
@@ -75,7 +76,7 @@ const CLASS_MODES: [&str; 8] = ["duel", "tier", "levels", "group", "stats", "par
 /// encounter its roster, a role its limit test.
 pub fn class_problem(a: &SimArgs) -> String {
     let c = &a.game.classes;
-    let needs = CLASS_MODES.contains(&a.mode.as_str()) || (a.mode == "campaign" && a.game.story.is_some());
+    let needs = CLASS_MODES.contains(&a.mode.as_str()) || (a.mode == "campaign" && a.game.story.is_some() && !a.world_campaign());
     if needs && c.ids.is_empty() {
         return format!("mode '{}' needs the game's sim classes (SimGame.classes names none)", a.mode);
     }
@@ -160,6 +161,8 @@ pub fn run(d: &Data, argv: &[String], game: &SimGame) -> Vec<String> {
                 out.push(args::DURABILITY_USAGE.to_string());
                 // PK2-FOLLOWUP: the same, for `mastery=`
                 out.push(args::MASTERY_USAGE.to_string());
+                // CAMPAIGN-SIM1: the same, for `campaign world=`
+                out.push(args::WORLD_CAMPAIGN_USAGE.to_string());
             }
             return out;
         }
@@ -175,6 +178,11 @@ pub fn run(d: &Data, argv: &[String], game: &SimGame) -> Vec<String> {
         return deadlines::deadlines_mode(d, &a);
     }
     let mut r = Runner::new(d, &a);
+    // CAMPAIGN-SIM1 (ENGINE-28): the world campaign run prints its own ARGS line
+    if a.world_campaign() {
+        world_campaign::run(&mut r);
+        return r.out;
+    }
     r.metrics.keep_totals = a.metrics && !args::METRIC_MODES.contains(&a.mode.as_str());
     r.print(a.header());
     // BASERULES1-M2 (FB-40): the picked ruleset's notes, right under ARGS (none for a clean row)

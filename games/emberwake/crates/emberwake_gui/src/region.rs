@@ -3439,7 +3439,9 @@ mod tests {
             // MAP-HOOKS1: a location's landmark on the world map, and a world map background with its layout sidecar
             ["map", "landmarks", f] => png(f),
             ["backgrounds", "world_map", f] => png(f) || f.ends_with(".json"),
-            ["backgrounds", "menu" | "title" | "location" | "battle" | "story", f] => png(f),
+            // TITLEFX1 (PR7-28): a menu picture's fire spots `<picture>.fx.json` beside it
+            ["backgrounds", "menu", f] => png(f) || f.ends_with(".fx.json"),
+            ["backgrounds", "title" | "location" | "battle" | "story", f] => png(f),
             ["audio", "sfx", f] => f.ends_with(".wav"),
             ["audio", "music", f] => f.ends_with(".ogg"),
             // AMBIENCE1: a place's ambient loop

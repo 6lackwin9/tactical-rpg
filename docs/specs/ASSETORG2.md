@@ -79,6 +79,7 @@ games/<id>/assets/
   skills/<family>.png                        skill family icons
   tilesets/<set>/<tile>/v<n>.png             world tilesets (set = world id)
   backgrounds/{menu,title,world_map,location}/<id>.png
+  backgrounds/menu/<picture>.fx.json         title fire spots beside a menu picture (TITLEFX1, PR7-28)
   audio/music/<key>.ogg, audio/sfx/<key>.wav, audio/ambience/<key>.ogg   (AMBIENCE1, by the music's keys)
 ```
 
