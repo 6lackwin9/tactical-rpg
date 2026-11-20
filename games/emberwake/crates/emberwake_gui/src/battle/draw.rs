@@ -3,7 +3,7 @@
 use aegis_ui::theme::th;
 use super::board::{cell_rect, draw_flat, draw_stage, note_drawn, with_alpha, Board};
 use super::input::{engage_positions, kind_name, pick_text, rest_text, skill_text, target_name, RowAct};
-use super::marks::{arena_badge, arrows_of, broken_spans, draw_hold_pick, draw_tracers, focus_set, held_guard, hit_forecasts, meter_row, meter_text, meters_of, party_foresight_off, pip_view, poise_shown, push_forecasts, push_text, seen_intents, HitForecast, HoldMarks, HookMarks, HELD, METER};
+use super::marks::{arena_badge, arrows_of, broken_spans, draw_hold_chip, draw_hold_pick, draw_tracers, focus_set, held_guard, hit_forecasts, meter_row, meter_text, meters_of, party_foresight_off, pip_view, poise_shown, push_forecasts, push_text, seen_intents, HitForecast, HoldMarks, HookMarks, HELD, METER};
 use super::overlays::{overlay_of, reach_text, Layers};
 use super::playback::PlaySpeed;
 use super::{Action, BattleScreen, ally, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PLAYBACK_SPEEDS, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
@@ -1002,8 +1002,11 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         ui.p.clip(None);
     }
     // ENCOUNTER2 H1: the hold pick over the board while round 1 waits for it
-    if planning && s.needs_stay_pick() {
+    // ESCAPE-PLAN1 (3): until round 1 is confirmed a chip names the holder and opens the pick again
+    if planning && (s.needs_stay_pick() || (g.hold_repick && s.current_round == 1)) {
         draw_hold_pick(&mut ui, s);
+    } else if planning && s.current_round == 1 && s.w.hold.is_some() {
+        draw_hold_chip(&mut ui, s);
     }
     // WINDUP1 6.2: the clip each token drew (the agent link's `tokens`)
     note_drawn(&mut g.tokens, s, &mut cx.art, g.clock.ms as u64);
@@ -1099,8 +1102,12 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let mut r = Rect::new(BOARD.x + BOARD.w - 3 - super::card::CARD_W, card_top, super::card::CARD_W, h.min(BOARD.h - 6));
         let geo = Geom::new(View::of_setting(&cx.settings.v["battle_view"]), &tuning);
         let keep: Vec<Rect> = card_keep_clear(w, sel).into_iter().map(|c| geo.cell_rect(c)).collect();
-        if keep.iter().any(|k| super::skill_menu::overlaps(r, *k)) {
-            r.x = BOARD.x + 3;
+        // ESCAPE-PLAN1 (5): and the objective tiles (a hold's tiles, the exits), on the side covering fewer of them
+        let goals: Vec<Rect> = objective_cells(w).into_iter().map(|c| geo.cell_rect(c)).collect();
+        let cost = |r: Rect| (keep.iter().filter(|k| super::skill_menu::overlaps(r, **k)).count(), goals.iter().filter(|k| super::skill_menu::overlaps(r, **k)).count());
+        let left = Rect { x: BOARD.x + 3, ..r };
+        if cost(left) < cost(r) {
+            r = left;
         }
         g.panels.push(("intel", r));
         // INPUT1 IS1: a pinned foe's card names it and holds its inspect lines on its hover; the agent link's
@@ -1372,6 +1379,11 @@ pub(super) fn card_keep_clear(w: &World, sel: Option<usize>) -> Vec<emberwake_ba
         _ => None,
     });
     std::iter::once(h).chain(target).filter_map(|u| w.grid.pos(u)).collect()
+}
+
+/// ESCAPE-PLAN1 (5): the objective tiles the docked card keeps clear of: a hold escape's tiles and the board's exits.
+pub(super) fn objective_cells(w: &World) -> Vec<emberwake_battle::grid::V2> {
+    w.hold.iter().flat_map(|g| g.tiles.iter().copied()).chain(w.grid.exits.iter().copied()).collect()
 }
 
 // ---- VISCLAR1-D: the round banner --------------------------------------------------------

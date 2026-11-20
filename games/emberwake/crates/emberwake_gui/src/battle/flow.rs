@@ -403,10 +403,12 @@ impl BattleScreen {
             Action::StayPick(c) => {
                 let r = self.send(cx, json!({"cmd": "stay_pick", "unit": c}));
                 if r["ok"] == json!(true) {
+                    self.hold_repick = false;
                     let line = hold_line(self.session());
                     self.message = format!("{line} Plan your round, then confirm.");
                 }
             }
+            Action::StayRepick => self.hold_repick = true,
             // ENCOUNTER2-C4: a locked round has no Confirm (the script confirmed it; it plays by itself)
             Action::Confirm if self.locked() => {}
             Action::Confirm => {

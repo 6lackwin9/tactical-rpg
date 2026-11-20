@@ -1,0 +1,56 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_evt_06",
+        "stay_behind": {
+          "mode": "hold",
+          "tiles": [
+            [
+              10,
+              1
+            ]
+          ],
+          "tiles_label": "the winch",
+          "fallback": "any",
+          "pick_default": "nearest",
+          "flag": "sunk_ward.crucible_stayed",
+          "then": "capture",
+          "result_line": "{name} held the winch."
+        }
+      },
+      "fields": [
+        "stay_behind"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "entry": {
+        "id": "enc_evt_06_overlook",
+        "stay_behind": {
+          "mode": "hold",
+          "tiles": [
+            [
+              10,
+              1
+            ]
+          ],
+          "tiles_label": "the winch",
+          "fallback": "any",
+          "pick_default": "nearest",
+          "flag": "sunk_ward.crucible_stayed",
+          "then": "capture",
+          "result_line": "{name} held the winch."
+        }
+      },
+      "fields": [
+        "stay_behind"
+      ]
+    }
+  ]
+}

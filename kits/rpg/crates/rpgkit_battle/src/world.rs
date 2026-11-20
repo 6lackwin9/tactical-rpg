@@ -1047,6 +1047,11 @@ impl World {
         (0..self.units.len()).find(|&u| self.grid.positions[u].is_some_and(|a| square_covers(a, self.size_of(u), cell)) && self.units[u].is_active())
     }
 
+    /// ESCAPE-PLAN1 (2): an active unit other than `c` covering `cell` (a unit walking through a friend shares its tile).
+    pub fn occupant_other(&self, c: UnitId, cell: V2) -> Option<UnitId> {
+        (0..self.units.len()).find(|&u| u != c && self.grid.positions[u].is_some_and(|a| square_covers(a, self.size_of(u), cell)) && self.units[u].is_active())
+    }
+
     pub fn is_occupied(&self, cell: V2) -> bool {
         self.occupant(cell).is_some()
     }
@@ -1101,6 +1106,13 @@ impl World {
                 true
             }
         }
+    }
+
+    /// ESCAPE-PLAN1 (1): unit `c` may plan a hand move onto `cell` to leave by it, as Withdraw lets it: `cell` is an
+    /// exit, `c` takes one tile and does not hold a hold escape's gate (a shut gate may open in the same round, as for
+    /// Withdraw; the walk stops at it otherwise).
+    pub fn may_leave_at(&self, c: UnitId, cell: V2) -> bool {
+        self.grid.is_valid(cell) && self.grid.is_exit(cell) && self.size_of(c) == 1 && self.hold.as_ref().is_none_or(|g| g.holder != Some(c))
     }
 
     /// `move_unit`'s rule for one step of `c` by `offset` from `from` (nothing changes): the tile it enters, the exit

@@ -2446,15 +2446,15 @@ impl Session {
         self.w.hold.as_ref().is_some_and(|g| g.holder.is_none())
     }
 
-    /// ENCOUNTER2 H1: `c` holds the hold tiles (host request `stay_pick`): once, while round 1 is planned and nothing
-    /// is confirmed, a hero on the field.
+    /// ENCOUNTER2 H1: `c` holds the hold tiles (host request `stay_pick`): a hero on the field, while round 1 is
+    /// planned and nothing is confirmed; ESCAPE-PLAN1 (3): until then a new pick replaces the old one.
     pub fn stay_pick(&mut self, c: UnitId) -> Result<(), String> {
         let Some(g) = self.w.hold.as_ref() else { return Err("This battle has no tile to hold.".into()) };
-        if let Some(h) = g.holder {
-            return Err(format!("{} already holds {}.", self.w.units[h].name, g.label));
-        }
         if self.current_round != 1 || !self.is_planning() {
-            return Err("The holder is picked before round 1 is confirmed.".into());
+            return Err(match g.holder {
+                Some(h) => format!("{} already holds {}.", self.w.units[h].name, g.label),
+                None => "The holder is picked before round 1 is confirmed.".into(),
+            });
         }
         if c >= self.w.units.len() || !g.heroes.contains(&c) || !self.w.has(c) {
             return Err(format!("Pick a hero on the field to hold {}.", g.label));
@@ -2466,24 +2466,61 @@ impl Session {
     }
 
     /// ENCOUNTER2 H1: the holder sims and autoplay pick (`pick_default`: the hero on the field with the most HP, the
-    /// first on a tie; or the first hero on the field); None when no pick is due.
+    /// first on a tie; or the first hero on the field; or, ESCAPE-PLAN1 (3), the one nearest a hold tile); None when
+    /// no pick is due.
     pub fn stay_pick_default(&mut self) -> Option<UnitId> {
         if !self.needs_stay_pick() || self.current_round != 1 || !self.is_planning() {
             return None;
         }
+        let pick = self.stay_pick_suggestion()?;
+        self.stay_pick(pick).ok()?;
+        Some(pick)
+    }
+
+    /// ENCOUNTER2 H1, ESCAPE-PLAN1 (3): the hero `pick_default` names for the hold (the battle screen marks it on the
+    /// pick); None without a hold escape or a hero on the field.
+    pub fn stay_pick_suggestion(&self) -> Option<UnitId> {
         let g = self.w.hold.as_ref()?;
         let on_field: Vec<UnitId> = g.heroes.iter().copied().filter(|&c| self.w.has(c)).collect();
-        let first = self.stay.as_ref().is_some_and(|sb| sb.pick_default == "first");
+        let mode = self.stay.as_ref().map_or(encounter::PICK_DEFAULTS[0], |sb| sb.pick_default.as_str());
         let mut pick = on_field.first().copied()?;
-        if !first {
-            for &c in &on_field {
-                if self.w.units[c].hp > self.w.units[pick].hp {
-                    pick = c;
+        match mode {
+            "first" => {}
+            "nearest" => {
+                let mut best = self.hold_route_len(pick, &g.tiles);
+                for &c in &on_field[1..] {
+                    let d = self.hold_route_len(c, &g.tiles);
+                    if d < best {
+                        (pick, best) = (c, d);
+                    }
+                }
+            }
+            _ => {
+                for &c in &on_field {
+                    if self.w.units[c].hp > self.w.units[pick].hp {
+                        pick = c;
+                    }
                 }
             }
         }
-        self.stay_pick(pick).ok()?;
         Some(pick)
+    }
+
+    /// ESCAPE-PLAN1 (3): the tiles of `c`'s shortest walk to a free hold tile around the units on the board (0 on one,
+    /// `usize::MAX` with no route).
+    fn hold_route_len(&self, c: UnitId, tiles: &[V2]) -> usize {
+        let from = self.w.pos(c);
+        if tiles.contains(&from) {
+            return 0;
+        }
+        let blocked: crate::path::Cells = self.w.allies.iter().chain(self.w.enemies.iter()).filter(|&&o| o != c && self.w.has(o)).map(|&o| self.w.pos(o)).collect();
+        let goals: crate::path::Cells = tiles.iter().copied().filter(|t| !blocked.contains(t)).collect();
+        let route = crate::path::find_path_sized(&self.w.grid, from, &goals, &blocked, false, &crate::path::Hooks::default(), self.w.size_of(c));
+        if route.is_empty() {
+            usize::MAX
+        } else {
+            route.len()
+        }
     }
 
     /// ENCOUNTER2 H3: the plan line of a hold escape while its gate is shut ("" otherwise).

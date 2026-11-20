@@ -180,6 +180,8 @@ pub enum Action {
     AllyTarget,
     /// ENCOUNTER2 H1: the hero picked to hold a hold escape's tiles.
     StayPick(usize),
+    /// ESCAPE-PLAN1 (3): the holder chip's Change: the hold pick opens again (until round 1 is confirmed).
+    StayRepick,
     /// ENCOUNTER2-C DT9: a reply or Continue in the open battle talk's box.
     Talk(TalkAct),
     /// INPUT1 TV1: key T opens and closes the full timeline view.
@@ -258,6 +260,8 @@ pub struct BattleScreen {
     move_aim: Option<(usize, i32)>,
     /// The tiles that Move can go to, marked on the board while it waits.
     move_tiles: Vec<rip::MoveTile>,
+    /// ESCAPE-PLAN1 (3): the hold pick is open again after the holder chip's Change.
+    hold_repick: bool,
     playing: bool,
     auto: bool,
     next_at: Instant,
@@ -471,6 +475,7 @@ impl BattleScreen {
             popup: None,
             move_aim: None,
             move_tiles: Vec::new(),
+            hold_repick: false,
             playing: false,
             auto: false,
             next_at: Instant::now(),

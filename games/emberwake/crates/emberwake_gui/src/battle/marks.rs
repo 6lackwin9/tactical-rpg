@@ -692,7 +692,9 @@ pub(super) fn draw_hold_pick(ui: &mut Ui<Action>, s: &Session) {
     let Some(gate) = s.w.hold.as_ref() else { return };
     let ids = hold_pick_ids(s);
     let title = format!("Who holds {}?", gate.label);
-    let labels: Vec<String> = ids.iter().map(|&c| format!("{}  HP {}/{}", s.w.units[c].name, s.w.units[c].hp, s.w.units[c].max_hp)).collect();
+    // ESCAPE-PLAN1 (3): the encounter's suggestion (`pick_default`) is marked; the current holder shows pressed
+    let suggest = s.stay_pick_suggestion();
+    let labels: Vec<String> = ids.iter().map(|&c| format!("{}  HP {}/{}{}", s.w.units[c].name, s.w.units[c].hp, s.w.units[c].max_hp, if suggest == Some(c) { "  (suggested)" } else { "" })).collect();
     let widths: Vec<i32> = labels.iter().map(|l| (ui.p.text_w(l, BODY) + 12.0).ceil() as i32).collect();
     let inner = widths.iter().sum::<i32>() + 4 * (ids.len() as i32 - 1).max(0);
     let w = (inner.max((ui.p.text_w(&title, TITLE) + 12.0).ceil() as i32) + 12).min(GRID_W * TILE - 8);
@@ -705,9 +707,21 @@ pub(super) fn draw_hold_pick(ui: &mut Ui<Action>, s: &Session) {
     let y = r.y + r.h - 16;
     for ((c, label), bw) in ids.iter().zip(&labels).zip(&widths) {
         let tip = vec![(format!("{} holds {}", s.w.units[*c].name, gate.label), th().gold), ("They walk to it and guard it; the gate is open while they stand on it.".into(), th().text)];
-        ui.button_full(&format!("hold.pick.{c}"), Rect::new(x, y, *bw, 14), label, Action::StayPick(*c), true, false, BODY, tip);
+        ui.button_full(&format!("hold.pick.{c}"), Rect::new(x, y, *bw, 14), label, Action::StayPick(*c), true, gate.holder == Some(*c), BODY, tip);
         x += bw + 4;
     }
+}
+
+/// ESCAPE-PLAN1 (3): "<hero> holds <tiles> · Change" over the board's lower edge while round 1 is planned; Change opens
+/// the pick again.
+pub(super) fn draw_hold_chip(ui: &mut Ui<Action>, s: &Session) {
+    let Some(gate) = s.w.hold.as_ref() else { return };
+    let Some(h) = gate.holder else { return };
+    let label = format!("{} holds {}  ·  Change", s.w.units[h].name, gate.label);
+    let w = ((ui.p.text_w(&label, BODY) + 14.0).ceil() as i32).min(GRID_W * TILE - 8);
+    let r = Rect::new(GRID_X + (GRID_W * TILE - w) / 2, GRID_Y + GRID_H * TILE - 20, w, 14);
+    let tip = vec![(format!("{} holds {}", s.w.units[h].name, gate.label), th().gold), ("Change who holds it until round 1 is confirmed.".into(), th().text)];
+    ui.button_full("hold.change", r, &label, Action::StayRepick, true, false, BODY, tip);
 }
 
 // ---- HOOKS1-UI slice 4: push and pull forecasts (HOOKS1 5) ---------------------------------------------------------

@@ -20,6 +20,21 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+/// ESCAPE-PLAN1 (2), (4) (`PR7-60`): on (the default) a party member's hand move may walk through a friend's tile and
+/// its Withdraw spends no AP it lacks; off = the moves as before the row. Test-only: the goldens recorded before the row
+/// (`sim_golden`, `phasefold`) turn it off until the user approves their re-record (`FB-403`); nothing else sets it.
+static ESCAPE_PLAN1: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Whether ESCAPE-PLAN1 (2) and (4) apply (see `ESCAPE_PLAN1`).
+pub fn escape_plan1() -> bool {
+    ESCAPE_PLAN1.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Test-only: sets `ESCAPE_PLAN1` (the pre-row goldens pass false).
+pub fn set_escape_plan1(on: bool) {
+    ESCAPE_PLAN1.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub const MAX_MOVE_BLOCKS: usize = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -970,8 +985,10 @@ impl Plan {
         }
         let blocked = self.blocked_cells(w, c);
         let dest = step.cell.get();
+        // ESCAPE-PLAN1 (1): a hand move onto an exit leaves by it, as Withdraw does
+        let leaves = w.may_leave_at(c, dest);
         // BIGUNIT1 BU6: a big unit's whole square at the destination
-        if w.cells_at(c, dest).iter().any(|&n| !w.grid.is_valid(n) || !w.grid.is_walkable(n) || w.grid.is_exit(n)) {
+        if !leaves && w.cells_at(c, dest).iter().any(|&n| !w.grid.is_valid(n) || !w.grid.is_walkable(n) || w.grid.is_exit(n)) {
             return "That tile can't be moved to.".into();
         }
         if w.cells_at(c, dest).iter().any(|n| blocked.contains(n)) {
@@ -980,7 +997,7 @@ impl Plan {
         if st.pos == dest {
             return "Already there.".into();
         }
-        let route = self.route(w, c, st.pos, &[dest].into_iter().collect(), &blocked, false);
+        let route = self.pass_route(w, c, st.pos, &[dest].into_iter().collect(), leaves);
         if route.is_empty() {
             return "No path to that tile.".into();
         }
@@ -992,7 +1009,11 @@ impl Plan {
         if need > cap {
             return "An after-move takes one move block.".into();
         }
-        self.add_move(w, c, st, &route, None, index)
+        let p = self.add_move(w, c, st, &route, None, index);
+        if p.is_empty() && leaves {
+            st.withdrawn = true;
+        }
+        p
     }
 
     /// RULESET1_INTENT AS3: why `c` cannot take an after-move now ("" = it can).
@@ -1039,9 +1060,22 @@ impl Plan {
         if route.is_empty() {
             return "No route to an exit.".into();
         }
-        let reaches = self.fits_move(w, c, st.pos, &route);
+        let mut reaches = self.fits_move(w, c, st.pos, &route);
         if !reaches {
             route = path::fit_blocks(&w.grid, st.pos, &route, w.units[c].move_per_block(), MAX_MOVE_BLOCKS);
+        }
+        // ESCAPE-PLAN1 (4): a party member's Withdraw (the round's draft) spends only the AP left, as a hand move (it
+        // walks as far as that pays for)
+        if escape_plan1() && w.pays_ap(c) && w.allies.contains(&c) {
+            let per = skill::ap_cost_by(&w.cat.skills[w.book().lowest(Kind::Move)], Some(&w.units[c]), &w.ruleset).max(0);
+            let afford = if per == 0 { route.len() } else { (st.ap_left.max(0) / per) as usize };
+            if afford < route.len() {
+                if afford == 0 {
+                    return "Not enough AP to withdraw.".into();
+                }
+                route.truncate(afford);
+                reaches = false;
+            }
         }
         let p = self.add_move(w, c, st, &route, None, index);
         if p.is_empty() && reaches {
@@ -1763,6 +1797,37 @@ impl Plan {
             return o.clone();
         }
         Rc::new(self.blocked_for(w, c, &self.ally_moves(w)))
+    }
+
+    /// ESCAPE-PLAN1 (2): the route of a party member's hand move to `goals`: around every unit as `route` has it; when
+    /// that finds none or a longer one, through the tiles its friends hold or will hold (their start and planned end
+    /// tiles), never ending a move block on one. Other units route as before.
+    pub fn pass_route(&self, w: &World, c: UnitId, from: V2, goals: &Cells, goals_are_exits: bool) -> Vec<V2> {
+        let blocked = self.blocked_cells(w, c);
+        let around = self.route(w, c, from, goals, &blocked, goals_are_exits);
+        if !escape_plan1() || !w.allies.contains(&c) || w.size_of(c) > 1 {
+            return around;
+        }
+        // the blocked tiles no foe stands on are the friends' (their start and planned end tiles)
+        let friends = w.friends_of(c);
+        let foes: Cells = w.allies.iter().chain(w.enemies.iter()).filter(|&&o| o != c && w.has(o) && !friends.contains(&o)).flat_map(|&o| crate::grid::square_cells(w.pos(o), w.size_of(o))).collect();
+        let soft: Cells = blocked.iter().copied().filter(|x| !foes.contains(x)).collect();
+        if goals.iter().any(|g| soft.contains(g)) {
+            return around;
+        }
+        let hard: Cells = blocked.iter().copied().filter(|x| foes.contains(x)).collect();
+        let through = self.route(w, c, from, goals, &hard, goals_are_exits);
+        if through.is_empty() || (!around.is_empty() && around.len() <= through.len()) {
+            return around;
+        }
+        let mut pos = from;
+        for part in path::chunk_sized(&w.grid, from, &through, w.units[c].move_per_block(), 1) {
+            pos = part.iter().fold(pos, |a, d| a + *d);
+            if soft.contains(&pos) {
+                return around;
+            }
+        }
+        through
     }
 
     fn blocked_for(&self, w: &World, c: UnitId, moves: &HashMap<UnitId, FirstMove>) -> Cells {

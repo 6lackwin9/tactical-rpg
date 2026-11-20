@@ -1403,7 +1403,7 @@
 				],
 				"tiles_label": "the winch",
 				"fallback": "any",
-				"pick_default": "highest_hp",
+				"pick_default": "nearest",
 				"flag": "sunk_ward.crucible_stayed",
 				"then": "capture",
 				"result_line": "{name} held the winch."
@@ -1579,7 +1579,7 @@
 				],
 				"tiles_label": "the winch",
 				"fallback": "any",
-				"pick_default": "highest_hp",
+				"pick_default": "nearest",
 				"flag": "sunk_ward.crucible_stayed",
 				"then": "capture",
 				"result_line": "{name} held the winch."
