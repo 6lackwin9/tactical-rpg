@@ -240,6 +240,8 @@ const STAGE_TILE_PX: [(u32, u32); 1] = [(64, 48)];
 /// (REGIONGROUND1_SCENE 1.6: one storey, 4 cells wide), stage 64 x 24.
 const REGION_FACE_PX: [(u32, u32); 3] = [(32, 16), (32, 12), (128, 48)];
 const STAGE_FACE_PX: [(u32, u32); 1] = [(64, 24)];
+/// DIORAMA1 D4: a stage set's wall foot strip (`wall_foot/`, the top 8 logical px of a row 0 cell at 2 art px).
+const STAGE_FOOT_PX: [(u32, u32); 1] = [(64, 16)];
 
 /// The world's `stage_set` and the `tileset` of each of its locations, as (label, set id) with empty ids left out.
 fn bound_sets(v: &View, w: &str) -> (Option<String>, Vec<(String, String)>) {
@@ -315,7 +317,14 @@ pub fn tileset_errors(v: &View, w: &str) -> Vec<String> {
                     let in_set = rel.strip_prefix(&format!("tilesets/{set}/")).unwrap_or(&rel);
                     let tile = in_set.strip_prefix("boundary/").and_then(|b| b.split_once('/')).map_or(in_set, |(_, rest)| rest);
                     let face = tile.starts_with("wall_face/");
-                    let (sizes, what) = if face { (face_px, format!("{role} wall face")) } else { (tile_px, format!("{role} tile")) };
+                    let foot = role == "stage" && tile.starts_with("wall_foot/");
+                    let (sizes, what) = if face {
+                        (&face_px[..], format!("{role} wall face"))
+                    } else if foot {
+                        (&STAGE_FOOT_PX[..], format!("{role} wall foot"))
+                    } else {
+                        (&tile_px[..], format!("{role} tile"))
+                    };
                     if !sizes.contains(&size) {
                         let wants = sizes.iter().map(|(a, b)| format!("{a}x{b}")).collect::<Vec<_>>().join(" or ");
                         out.push(format!("Tile art '{rel}' is {}x{} px; a {what} wants {wants}.", size.0, size.1));

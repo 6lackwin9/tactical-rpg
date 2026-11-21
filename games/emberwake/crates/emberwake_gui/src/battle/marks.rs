@@ -361,6 +361,8 @@ pub(super) struct GroundMark {
     last_round: i32,
     /// PR7-40 part 2 (contract 8): the hazard's icon (its status's kit icon; "" none: the glyph shows).
     icon: String,
+    /// DIORAMA1 D3: the hazard's status (its decal folder `props/hazards/<status>`; "" none).
+    status: String,
     tip: Tip,
 }
 
@@ -428,7 +430,7 @@ impl HookMarks {
     /// The agent link's state: the marks as drawn (tiles as [x, y]).
     pub(super) fn json(&self) -> Value {
         json!({
-            "ground": self.ground.iter().filter(|_| self.show_ground).map(|g| json!({"at": [g.cell.x, g.cell.y], "id": g.id, "name": g.name, "glyph": g.glyph, "hidden": g.hidden, "last_round": g.last_round})).collect::<Vec<_>>(),
+            "ground": self.ground.iter().filter(|_| self.show_ground).map(|g| json!({"at": [g.cell.x, g.cell.y], "id": g.id, "name": g.name, "glyph": g.glyph, "hidden": g.hidden, "last_round": g.last_round, "status": g.status})).collect::<Vec<_>>(),
             "arena": if self.show_arena { emberwake_battle::intent::arena_json(&self.arena) } else { json!([]) },
         })
     }
@@ -534,7 +536,7 @@ fn ground_mark(w: &World, cell: V2, p: &emberwake_battle::ground::Placed) -> Gro
         tip.push(("Hidden from the foes".into(), th().dim));
     }
     let icon = if d.status.is_empty() { String::new() } else { emberwake_content::art::status_icon(&d.status) };
-    GroundMark { cell, id: d.id.clone(), name: d.name.clone(), tint, glyph: d.glyph.clone(), hidden: d.hidden, last_round: p.last_round, icon, tip }
+    GroundMark { cell, id: d.id.clone(), name: d.name.clone(), tint, glyph: d.glyph.clone(), hidden: d.hidden, last_round: p.last_round, icon, status: d.status.clone(), tip }
 }
 
 /// HOOKS1-UI slice 1: the ground hazards (a tinted plate with the row's glyph; the party's own hidden ones fainter) and
@@ -545,9 +547,12 @@ pub(super) fn draw_hook_marks(p: &mut Painter, art: &mut aegis_ui::art::Art, m: 
     let plate_of = |c: V2| ground_plate(geo, c);
     for g in m.ground.iter().filter(|_| m.show_ground) {
         let r = plate_of(g.cell);
-        let (fill, edge) = if g.hidden { (36, 120) } else { (70, 200) };
-        plate(p, r, with_alpha(g.tint, fill), with_alpha(g.tint, edge));
         let alpha = if g.hidden { 150 } else { 235 };
+        // DIORAMA1 D3: the status's painted decal on the tile (the tint plate only when there is no decal file)
+        if !draw_decal(p, art, &g.status, g.cell, r, alpha) {
+            let (fill, edge) = if g.hidden { (36, 120) } else { (70, 200) };
+            plate(p, r, with_alpha(g.tint, fill), with_alpha(g.tint, edge));
+        }
         let side = (r.h / 3).clamp(5, 8);
         let ir = Rect::new(r.x + 2, r.y + 2, side, side);
         let px = ((side as f32) * p.v.s).round().max(1.0) as i32;
@@ -575,6 +580,36 @@ pub(super) fn draw_hook_marks(p: &mut Painter, art: &mut aegis_ui::art::Art, m: 
         for k in [5.0, 9.0] {
             p.line(x1 - k, y1, x1, y1 - k * 0.6, with_alpha(ARENA, 200), 1.0);
         }
+    }
+}
+
+/// DIORAMA1 D3 (SCREEN_CONTRACT_BATTLE 8.1): a ground hazard's decal for `status` on tile `c`, `props/hazards/<status>/v*`
+/// (picked by the tile, like the stage's tiles); None: no status or no file (the tint plate shows).
+pub(super) fn decal_art(art: &mut aegis_ui::art::Art, status: &str, c: V2) -> Option<String> {
+    if status.is_empty() {
+        return None;
+    }
+    art.pick(&[&format!("{DECAL_DIR}/{status}")], None, c.x, c.y)
+}
+
+/// The decals' folder (`<dir>/<status>/v*.png`, drawn at `DECAL_ART_PX` art px per logical px).
+pub(super) const DECAL_DIR: &str = "props/hazards";
+pub(super) const DECAL_ART_PX: i32 = 2;
+
+/// Draws tile `c`'s decal for `status` centred on plate `r` (its art size halved, kept inside the plate); false when
+/// there is none.
+fn draw_decal(p: &mut Painter, art: &mut aegis_ui::art::Art, status: &str, c: V2, r: Rect, alpha: u8) -> bool {
+    let Some(rel) = decal_art(art, status, c) else { return false };
+    let Some((iw, ih)) = art.size_of(&rel) else { return false };
+    let (w, h) = ((iw / DECAL_ART_PX).min(r.w).max(1), (ih / DECAL_ART_PX).min(r.h).max(1));
+    let d = Rect::new(r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h);
+    let k = p.v.s;
+    match art.image(&rel, ((w as f32) * k).round().max(1.0) as i32, ((h as f32) * k).round().max(1.0) as i32) {
+        Some(img) => {
+            p.image_alpha(img, d, alpha);
+            true
+        }
+        None => false,
     }
 }
 

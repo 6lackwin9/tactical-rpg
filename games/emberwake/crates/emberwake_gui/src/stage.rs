@@ -36,6 +36,8 @@ pub const BOARD: Rect = Rect::new(BOARD_X, BOARD_Y, GRID_W * CELL_W, GRID_H * CE
 pub const SET_ART_PX: i32 = 2;
 /// The front face under the near edge (`FACE_H` tall) and the drop shadow under it.
 pub const FACE_H: i32 = 12;
+/// DIORAMA1 D4: the wall foot's height (the top of a row 0 cell, where the backdrop meets the board).
+pub const WALL_FOOT_H: i32 = 8;
 pub const FRONT_FACE: Rect = Rect::new(128, BOARD_Y + GRID_H * CELL_H, 384, FACE_H);
 pub const DROP_SHADOW: Rect = Rect::new(128, BOARD_Y + GRID_H * CELL_H + FACE_H, 384, 8);
 /// How far a block's cap is lifted above its cell.
@@ -343,6 +345,28 @@ pub fn face_art(art: &mut Art, set: &str, x: i32, y: i32) -> Option<String> {
     art.pick(&dirs_ref(&battle_stage_dirs("wall_face", set)), None, x, y)
 }
 
+/// DIORAMA1 D4 (SCREEN_CONTRACT_BATTLE 8.1): the wall foot strip on row 0's cell `x`, `tilesets/<set>/wall_foot/v*`
+/// (the world's set first, then the common stage set); None: no file, nothing drawn.
+pub fn wall_foot_art(art: &mut Art, set: &str, x: i32) -> Option<String> {
+    art.pick(&dirs_ref(&battle_stage_dirs("wall_foot", set)), None, x, 0)
+}
+
+/// DIORAMA1 D4: the strip over row 0's ground cells (`WALL_FOOT_H` tall, at the set's art px), so the floor runs into
+/// the wall band instead of stopping at a line; blocks and standing cells draw their own.
+fn draw_wall_foot(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str) {
+    for x in 0..GRID_W {
+        let c = V2::new(x, 0);
+        if !at(grid, c).is_some_and(|t| is_ground(grid, t)) {
+            continue;
+        }
+        let Some(rel) = wall_foot_art(art, set, x) else { continue };
+        let r = stage_cell(c);
+        if let Some(img) = stage_image(art, &rel, set, CELL_W, WALL_FOOT_H) {
+            p.image(img, Rect::new(r.x, r.y, r.w, WALL_FOOT_H));
+        }
+    }
+}
+
 /// 3.4: zone `zone`'s backdrop file (None: no zone, or no file: the gradient).
 pub fn backdrop_art(art: &mut Art, zone: &str) -> Option<String> {
     let rel = battle_backdrop(zone);
@@ -499,6 +523,7 @@ pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, grid_
         }
     }
     draw_pieces(p, art, grid, set);
+    draw_wall_foot(p, art, grid, set);
     for y in 0..GRID_H {
         for x in 0..GRID_W {
             let c = V2::new(x, y);
@@ -1330,6 +1355,31 @@ mod tests {
         let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         assert_ne!(frame_hash(&mut art, &ZONES, "zz_set"), TODAYS_FRAME);
         assert_eq!(frame_hash(&mut art, &ZONES, ""), TODAYS_FRAME, "the same layer without the set named");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// DIORAMA1 D4: a set's `wall_foot` strip changes only row 0's top `WALL_FOOT_H` px of ground cells; a set without
+    /// one draws today's frame.
+    #[test]
+    fn the_wall_foot_draws_on_row_0_only() {
+        let root = scratch("wall_foot");
+        todays_layer(&root);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let grid = zone("stone_arena");
+        let before = paint(&mut art, &grid, "zz_set", 0, 1, (0, 0));
+        assert_eq!(wall_foot_art(&mut art, "zz_set", 0), None);
+        ramp(&root, "tilesets/zz_set/wall_foot/v0.png", 64, 16, [250, 0, 250]);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        assert_eq!(wall_foot_art(&mut art, "zz_set", 3).as_deref(), Some("tilesets/zz_set/wall_foot/v0.png"));
+        let after = paint(&mut art, &grid, "zz_set", 0, 1, (0, 0));
+        let (w, mut changed) = (before.canvas.w, Vec::new());
+        for (i, (a, b)) in before.canvas.px.chunks(4).zip(after.canvas.px.chunks(4)).enumerate() {
+            if a != b {
+                changed.push(((i as i32) % w, (i as i32) / w));
+            }
+        }
+        assert!(!changed.is_empty(), "the strip shows");
+        assert!(changed.iter().all(|&(x, y)| (BOARD_Y..BOARD_Y + WALL_FOOT_H).contains(&y) && (BOARD_X..BOARD_X + GRID_W * CELL_W).contains(&x)), "only the top of row 0");
         let _ = std::fs::remove_dir_all(&root);
     }
 

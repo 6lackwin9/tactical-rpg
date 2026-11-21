@@ -642,6 +642,33 @@ impl BattleScreen {
         json!({"ok": true})
     }
 
+    /// PR7-64 (DIORAMA1): a dev tools ground hazard on tile `at` ([x, y]; or `free`: the n-th free tile) carrying `status` (a test row: 3 rounds, left
+    /// by the first ally, tint `tint` or a violet), for proof shots of the decals and the tint fallback; refused without the
+    /// dev tools, a battle or a free tile.
+    pub(crate) fn debug_ground(&mut self, cx: &Cx, body: &Value) -> Value {
+        if !crate::DEV_TOOLS {
+            return json!({"ok": false, "error": "debug_ground needs the dev tools"});
+        }
+        let Some(s) = self.host.session.as_mut() else { return json!({"ok": false, "error": "no battle"}) };
+        let at = |k: usize| body["at"][k].as_i64().map(|v| v as i32);
+        let free = |c: &emberwake_battle::grid::V2| s.w.grid.is_valid(*c) && s.w.grid.is_walkable(*c);
+        // `free`: the n-th walkable tile with no unit, in reading order (a scenario that does not know the map)
+        let nth = body["free"].as_u64().and_then(|n| {
+            let (gw, gh) = (emberwake_battle::grid::GRID_W, emberwake_battle::grid::GRID_H);
+            (0..gh).flat_map(|y| (0..gw).map(move |x| emberwake_battle::grid::V2::new(x, y))).filter(|c| free(c) && s.w.occupant(*c).is_none()).nth(n as usize)
+        });
+        let Some(cell) = nth.or_else(|| at(0).zip(at(1)).map(|(x, y)| emberwake_battle::grid::V2::new(x, y)).filter(free)) else {
+            return json!({"ok": false, "error": "debug_ground needs a walkable tile 'at' (or 'free': n)"});
+        };
+        let status = body["status"].as_str().unwrap_or("");
+        let row = json!({"id": format!("debug_{status}"), "name": format!("Test {status}"), "on": "enter", "damage": 3, "status": status, "potency": 50, "affects": "all", "duration": 3, "tint": body["tint"].as_str().unwrap_or("#b070e0"), "glyph": "?"});
+        let (by, round) = (s.w.allies.first().copied().unwrap_or(0), s.current_round);
+        let def = emberwake_data::HazardDef::from_obj(row.as_object().expect("an object"));
+        s.w.grid.ground.insert(cell, emberwake_battle::ground::Placed { def, by, round, last_round: round + 2 });
+        self.after_change(cx);
+        json!({"ok": true, "at": [cell.x, cell.y]})
+    }
+
     /// The command-host session as the recording keeps it (a take-over names its parent in `end`).
     fn recorded(&self) -> aegis_host::playtest::Session {
         let mut s = aegis_host::playtest::Session::of(&self.host);
@@ -1293,6 +1320,10 @@ impl Screen<GameCx> for BattleScreen {
         // PR7-57 (STATUSVIS1-B): the dev tools' status grant for proof shots (not a battle command: the host never sees it)
         if body["cmd"] == json!("debug_status") {
             return Some(self.debug_status(cx, body));
+        }
+        // PR7-64 (DIORAMA1): the dev tools' ground hazard for proof shots of the decals
+        if body["cmd"] == json!("debug_ground") {
+            return Some(self.debug_ground(cx, body));
         }
         // An agent-link `new` ends this session: park it for the hub (saved on the next tick), then start a new one.
         let restart = body["cmd"] == json!("new");

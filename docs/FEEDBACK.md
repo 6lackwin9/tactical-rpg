@@ -113,8 +113,38 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-62` (`INTERCEPT-LIMIT1`) | Built (tools lane) | `develop` | `trigger::intercept_of` walks the same `ally_hit` rows as the hit, in its order, with their use limits (counts now on `World::trigger_uses`): a spent intercept is no longer forecast. Kit tests for a spent limit; goldens unchanged. FB-413 |
 | `ENGINE-21` (`UISPLIT1-H`) character sheet | Stage A built (tools lane) | `develop` | View-models `character` (the window), `stats`, `level_up`, `skills` and `deck`, with actions, fixtures and tests; the Gear tab stays the `loadout` view; today's drawing kept. FB-415 |
 | `PR7-27` (`VNSTAGE1`) | Built (tools lane) | `develop` | The story stage: cards carry actors (full-body pictures, a code-drawn figure where none exists) who enter left and exit right, met ones pinned right; cameras Static, Scroll and Pan; dialogue and narration keep the scene's backdrop dimmed; the cutscene bar gains Auto and Log; born split (view `vignette` and its fixture). Seed `vnstage1` stages the meat market and the mortuary cart. FB-417 |
+| `PR7-64` (`DIORAMA1`) | Built (tools lane) | `develop` | Sunk Ward names stage set `sunk_ward_stage` (seed `diorama1`); ground hazards draw their painted decal `props/hazards/<status>/v*` under the icon and rounds left (the tint without a file); row 0's ground cells draw the set's `wall_foot` strip. FB-419 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-419: PR7-64 DIORAMA1 built; the Act 1 diorama battle stage (D1, D3, D4)
+
+- **Status**: built (tools lane), `develop`. Visible: every Sunk Ward fight now draws on `sunk_ward_stage` (shot in
+  project files `build-tools/pr7-64_diorama.png`, scenario `diorama_stage`).
+- **Spec**: `docs/READY.md` row 00 `PR7-64` (`DIORAMA1`), `SCREEN_CONTRACT_BATTLE.md` 8.1.
+- **What landed**:
+  - D1: seed `diorama1.json` (a `world` step) sets `stage_set: "sunk_ward_stage"` on the Sunk Ward manifest. The
+    content check knew the stage set's tiles (64 x 48) and wall face (64 x 24) only, and it refused the `wall_foot`
+    strips (64 x 16), so kit `rpgkit_content` `check/assets.rs` now accepts a stage set's `wall_foot/` at 64 x 16 (a
+    test case in `look1_sets.rs`).
+  - D3 (game `battle/marks.rs`): a ground hazard whose status has files under `props/hazards/<status>/` draws one
+    (picked by the tile, like the stage tiles) centred on its plate, at 2 art px per px, kept inside the plate; then
+    today's icon and rounds left. The tint plate shows only when there is no decal (`root`, smoke and the rest today).
+    The hidden-hazard fading stays (alpha 150). The agent state's ground marks carry `status`.
+  - D4 (game `stage.rs`): row 0's ground cells draw `tilesets/<set>/wall_foot/v*` (the world's set first, then
+    `common_stage`) over their top 8 logical px, after the tiles and before the lips and props; blocks and standing
+    cells draw their own. A set without the files draws today's frame.
+  - Dev link `debug_ground` (dev tools only, like `debug_status`): a test hazard of a status on a tile (`at` or the
+    n-th free tile `free`), for proof shots.
+- **Tests**: `a_hazard_decal_replaces_the_tint_and_the_tint_stays_without_one` (burn, poison and slow resolve their
+  decals; two tints draw the same frame with a decal and different frames without one, both views),
+  `the_wall_foot_draws_on_row_0_only` (only the top 8 px of row 0 change), `the_dev_link_puts_a_ground_hazard`, the
+  content size case. Engine goldens unchanged; no golden shots.
+- **Changed shots** (no baselines; review shots only): the Sunk Ward fights in `boss_bar`, `cages_auto_plan`,
+  `fight1_pommel_hint`, `floatpanels_log`, `job_fight_repair`, `objui1_marks`, `story_battle_hub` and `vn_stage`.
+- **For the coordinator**: ready for Fable's in-game UI consistency review. D5 (painted unit frames) is not in this row
+  (`PR7-65`).
+- **Docs delta**: none beyond the row (no new files or crates).
 
 ### FB-417: PR7-27 VNSTAGE1 built; the story stage, Auto and Log
 

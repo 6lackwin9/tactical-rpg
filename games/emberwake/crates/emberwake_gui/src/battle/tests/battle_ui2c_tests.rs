@@ -300,3 +300,46 @@ fn a_planned_heal_shows_plus_n_on_the_plate() {
     let label = b.w.iter().find(|w| w.id == format!("party.{ally}.heal")).expect("the heal label on the plate");
     assert_eq!(label.text, format!("+{want}"));
 }
+
+/// DIORAMA1 D3 (SCREEN_CONTRACT_BATTLE 8.1): a ground hazard whose status has a decal file (`burn`, `poison`, `slow`)
+/// draws the decal instead of the tint plate (its tint no longer shows: two tints draw the same frame); a status
+/// without one (`root`) keeps the tint (two tints differ), in both views. The icon and rounds left stay over either.
+#[test]
+fn a_hazard_decal_replaces_the_tint_and_the_tint_stays_without_one() {
+    let art = |c: &mut Art, s: &str| crate::battle::marks::decal_art(c, s, V2::new(2, 3));
+    let mut a = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+    for s in ["burn", "poison", "slow"] {
+        assert!(art(&mut a, s).is_some_and(|r| r.starts_with(&format!("props/hazards/{s}/v"))), "{s}");
+    }
+    assert_eq!((art(&mut a, "root"), art(&mut a, "")), (None, None));
+    for view in ["flat", "stage"] {
+        let shot = |status: &str, tint: &str| {
+            let (mut cx, mut g, mut b) = arena(None, "+ground_hazards", view);
+            cx.settings.v["battle_overlays"] = json!({"test_hazards": true});
+            let sess = b.host.session.as_mut().unwrap();
+            let round = sess.current_round;
+            let (hero, cell) = (sess.w.allies[0], free_cells(sess)[0]);
+            let row = json!({"id": "t_patch", "name": "Test Patch", "on": "enter", "damage": 5, "status": status, "potency": 60, "affects": "foes", "duration": 3, "tint": tint, "glyph": "P"});
+            sess.w.grid.ground.insert(cell, Placed { def: HazardDef::from_obj(row.as_object().unwrap()), by: hero, round, last_round: round + 2 });
+            crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
+            assert_eq!(b.state(&cx)["hook_marks"]["ground"][0]["status"], json!(status), "{view}");
+            g.canvas.px.clone()
+        };
+        assert!(shot("burn", "#40c0ff") == shot("burn", "#ff2020"), "{view}: the decal, not the tint");
+        assert!(shot("root", "#40c0ff") != shot("root", "#ff2020"), "{view}: no decal file: the tint");
+    }
+}
+
+/// PR7-64: the dev link's `debug_ground` puts a test hazard of a status on a free tile (the proof shots' decals) and
+/// refuses a tile that is not walkable.
+#[test]
+fn the_dev_link_puts_a_ground_hazard() {
+    let (cx, _g, mut b) = arena(None, "+ground_hazards", "stage");
+    let cell = free_cells(s(&b))[0];
+    let r = b.debug_ground(&cx, &json!({"cmd": "debug_ground", "at": [cell.x, cell.y], "status": "burn"}));
+    assert_eq!(r, json!({"ok": true, "at": [cell.x, cell.y]}));
+    let r = b.debug_ground(&cx, &json!({"cmd": "debug_ground", "free": 1, "status": "slow"}));
+    assert_eq!(r["at"], json!([free_cells(s(&b))[1].x, free_cells(s(&b))[1].y]), "the second free tile");
+    assert_eq!(s(&b).w.grid.ground.get(&cell).map(|p| p.def.status.as_str()), Some("burn"));
+    assert_eq!(b.debug_ground(&cx, &json!({"cmd": "debug_ground", "at": [-1, 0], "status": "burn"}))["ok"], json!(false));
+}

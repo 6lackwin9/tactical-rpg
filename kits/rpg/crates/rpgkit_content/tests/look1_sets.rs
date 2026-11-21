@@ -112,6 +112,9 @@ fn tiles_of_the_wrong_size_are_errors() {
     png(&root.join("tilesets/ward_stage/grass/v0.png"), 64, 48);
     png(&root.join("tilesets/ward_stage/wall_face/v0.png"), 64, 24);
     png(&root.join("tilesets/ward_stage/wall_face/v1.png"), 64, 48);
+    // DIORAMA1 D4: a stage set's wall foot strip is 64 x 16
+    png(&root.join("tilesets/ward_stage/wall_foot/v0.png"), 64, 16);
+    png(&root.join("tilesets/ward_stage/wall_foot/v1.png"), 64, 48);
     png(&root.join("tilesets/ward/wall_face/v0.png"), 32, 16);
     png(&root.join("tilesets/ward/wall_face/v1.png"), 32, 12);
     png(&root.join("tilesets/ward/wall_face/v2.png"), 32, 32);
@@ -120,7 +123,8 @@ fn tiles_of_the_wrong_size_are_errors() {
         errors,
         ["Tile art 'tilesets/ward/wall/v0.png' is 16x16 px; a region tile wants 32x32 or 32x24.".to_string(),
          "Tile art 'tilesets/ward/wall_face/v2.png' is 32x32 px; a region wall face wants 32x16 or 32x12 or 128x48.".to_string(),
-         "Tile art 'tilesets/ward_stage/wall_face/v1.png' is 64x48 px; a stage wall face wants 64x24.".to_string()]
+         "Tile art 'tilesets/ward_stage/wall_face/v1.png' is 64x48 px; a stage wall face wants 64x24.".to_string(),
+         "Tile art 'tilesets/ward_stage/wall_foot/v1.png' is 64x48 px; a stage wall foot wants 64x16.".to_string()]
     );
     // one id as both the region set and the stage set is checked in both roles
     let both = assets::tileset_errors(&view(&root, "ward_stage", "ward_stage"), "test_world");
