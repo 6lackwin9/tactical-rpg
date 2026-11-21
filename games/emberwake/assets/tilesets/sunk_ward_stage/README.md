@@ -8,7 +8,7 @@ back to `common_stage`. Spec: `games/emberwake/docs/specs/SCREEN_CONTRACT_BATTLE
 
 | Folder | Art size | What |
 | --- | --- | --- |
-| `floor/` | 64 x 48 | Wet cobbles (to be replaced by SW-01 v2, rounded setts) |
+| `floor/` | 64 x 48 | Rounded wet basalt setts (SW-01 v2) |
 | `stone/` | 64 x 48 | The cobbles darkened |
 | `wall/` | 64 x 48 | Block cap: ward wall brick |
 | `wall_face/` | 64 x 24 | Front face and block face: the wall's plinth |
