@@ -70,6 +70,10 @@ fn the_menu_button_fits_at_extra_large_text() {
         // the bar's read-out: on the button's row, after the bar's left buttons
         let round = texts.iter().find(|t| t.text.starts_with("Round ") && (t.y - 326.0).abs() < 2.0 && t.x > x as f32).expect("the round read-out");
         assert!(round.x >= (x + w) as f32, "{name}: the round read-out at {} overlaps the button ending at {}", round.x, x + w);
+        // only a size whose label needs more room widens the button; the others draw as before PR7-47
+        if name != "Extra large" {
+            assert_eq!(w, 30, "{name}: the Menu button keeps its width");
+        }
     }
 }
 

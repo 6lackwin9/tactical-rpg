@@ -990,7 +990,7 @@ impl DialogueRunner {
                 "rest" if gs.campaign.is_some() => {
                     let why = crate::campaign::purse::rest_refusal(d, gs);
                     if !why.is_empty() {
-                        out.push(why.into());
+                        out.push(why);
                     }
                 }
                 // ROSTER1 PO2 (PK3 3.1): swearing in a pool entry: the roster is open and the entry waits (its home is

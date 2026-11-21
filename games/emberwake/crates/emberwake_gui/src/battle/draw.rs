@@ -1190,7 +1190,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // PR7-47 (FB-344 question 4): Menu / Exit is as wide as its label at the text size (30 at Normal), and the round
     // read-out and the message after it move right by as much
     let bar_label = if g.world_mode() { "Menu" } else { "Exit" };
-    let bar_w = 30.max((ui.p.text_w(bar_label, BODY) + ui.m().uf(6.0)).ceil() as i32 + 2);
+    let bar_w = 30.max((ui.p.text_w(bar_label, BODY) + ui.m().uf(6.0)).ceil() as i32);
     if g.world_mode() {
         ui.button_full("bar.menu", Rect::new(84, 325, bar_w, 14), "Menu", Action::Settings, true, false, BODY, vec![("Menu (Esc)".into(), th().gold), ("Settings, Retreat where the fight allows it, and Return to title once the fight is over.".into(), th().text)]);
     } else {

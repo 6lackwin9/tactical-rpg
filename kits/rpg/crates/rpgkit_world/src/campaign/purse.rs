@@ -19,8 +19,8 @@ pub const PCT_MAX: i64 = 100;
 /// R1 `where`: the refusals of a rest the rule does not allow here (`rest_places`, `none`).
 pub const REFUSE_NOT_REST_PLACE: &str = "Rest only at a safe place.";
 pub const REFUSE_NO_REST: &str = "There is no resting here.";
-/// R1 `needs_upkeep`: the refusal of a rest that costs more upkeep than the party holds names the world's upkeep
-/// (PR7-47: `terms::not_enough_upkeep_to_camp`, "Not enough Lamp Oil to make camp.").
+// R1 `needs_upkeep`: the refusal of a rest that costs more upkeep than the party holds names the world's upkeep
+// (PR7-47: `terms::not_enough_upkeep_to_camp`, "Not enough Lamp Oil to make camp.").
 
 /// The block `key` of world `w` when it runs a campaign, else {} (today's rules, X1).
 fn block(d: &Data, w: &str, key: &str) -> Dict {
