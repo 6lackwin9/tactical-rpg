@@ -151,6 +151,39 @@ pub fn legs(d: &Data, gs: &GameState, w: &str) -> Vec<(Dict, String, String)> {
     directed(graph(d, w).into_iter().filter(|r| is_open(gs, r)))
 }
 
+/// PR7-37 (PT-31): the road legs open now (`legs`), as sorted route qids.
+pub fn open_roads(d: &Data, gs: &GameState) -> Vec<String> {
+    let mut out: Vec<String> = legs(d, gs, &gs.world_id).iter().map(|(r, _, _)| json::s(r, "_qid")).filter(|q| !q.is_empty()).collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// PR7-47: the open roads the player was last told about (the saved `explore.roads_seen`), None before the first look.
+pub fn roads_seen(gs: &GameState) -> Option<Vec<String>> {
+    let a = gs.explore.get(crate::state::ROADS_SEEN_KEY)?.as_array()?;
+    Some(a.iter().filter_map(|q| q.as_str().map(String::from)).collect())
+}
+
+/// PR7-37 (PT-31), PR7-47: the legs (from, to) of the roads opened since the player was last told, one per road, and
+/// the open roads saved as told (`explore.roads_seen`, so a road opened before a save is still told after the load).
+/// The first look (no saved list: a new game, an older save) only learns the roads open then; no change writes nothing.
+pub fn note_new_roads(d: &Data, gs: &mut GameState) -> Vec<(String, String)> {
+    let open = open_roads(d, gs);
+    let seen = roads_seen(gs);
+    if seen.as_ref() == Some(&open) {
+        return Vec::new();
+    }
+    gs.explore.insert(crate::state::ROADS_SEEN_KEY.into(), Value::Array(open.iter().map(|q| Value::String(q.clone())).collect()));
+    let Some(seen) = seen else { return Vec::new() };
+    let all = legs(d, gs, &gs.world_id);
+    open.iter()
+        .filter(|q| !seen.contains(q))
+        .filter_map(|q| all.iter().find(|(r, _, _)| json::s(r, "_qid") == *q))
+        .map(|(_, a, b)| (a.clone(), b.clone()))
+        .collect()
+}
+
 /// CAMPAIGN1-SIM: every directed leg of `w`'s graph, route gates ignored (the full graph `sim deadlines` plans on).
 pub fn all_legs(d: &Data, w: &str) -> Vec<(Dict, String, String)> {
     directed(graph(d, w).into_iter())

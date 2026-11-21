@@ -19,8 +19,8 @@ pub const PCT_MAX: i64 = 100;
 /// R1 `where`: the refusals of a rest the rule does not allow here (`rest_places`, `none`).
 pub const REFUSE_NOT_REST_PLACE: &str = "Rest only at a safe place.";
 pub const REFUSE_NO_REST: &str = "There is no resting here.";
-/// R1 `needs_upkeep`: the refusal of a rest that costs more upkeep than the party holds.
-pub const REFUSE_UPKEEP: &str = "Not enough upkeep to rest.";
+/// R1 `needs_upkeep`: the refusal of a rest that costs more upkeep than the party holds names the world's upkeep
+/// (PR7-47: `terms::not_enough_upkeep_to_camp`, "Not enough Warded Tallow to make camp.").
 
 /// The block `key` of world `w` when it runs a campaign, else {} (today's rules, X1).
 fn block(d: &Data, w: &str, key: &str) -> Dict {
@@ -212,18 +212,18 @@ pub fn start_ap(ap: i64, mods: &BattleMods) -> i64 {
 /// R1, R2: why a rest is refused now ("" = may rest): `where` (Camp on a world-map node, only at a rest place, or
 /// never), nobody hurt, and too little upkeep when `needs_upkeep`. Outside a campaign world: today's Camp
 /// (`progression::can_camp`).
-pub fn rest_refusal(d: &Data, gs: &GameState) -> &'static str {
+pub fn rest_refusal(d: &Data, gs: &GameState) -> String {
     // PR6-9: no rest while a siege with `no_camp` runs
     let siege = crate::siege::camp_refusal(d, gs);
     if !siege.is_empty() {
-        return siege;
+        return siege.into();
     }
     if gs.campaign.is_none() {
         return progression::can_camp(d, gs);
     }
     let over = super::save_refusal(gs);
     if !over.is_empty() {
-        return over;
+        return over.into();
     }
     let rule = rest_rule(d, &gs.world_id);
     let place = match rule.place.as_str() {
@@ -233,16 +233,16 @@ pub fn rest_refusal(d: &Data, gs: &GameState) -> &'static str {
         _ => "",
     };
     if !place.is_empty() {
-        return place;
+        return place.into();
     }
     // R2: ROSTER1's wounded members count as hurt (`progression::hurt`)
     if !progression::hurt(&gs.party) {
-        return progression::REFUSE_RESTED;
+        return progression::REFUSE_RESTED.into();
     }
     if rule.needs_upkeep && gs.party.supplies < rest_cost(d, gs) {
-        return REFUSE_UPKEEP;
+        return crate::terms::not_enough_upkeep_to_camp(d, &gs.world_id);
     }
-    ""
+    String::new()
 }
 
 /// R1 `cost` with PR6-8's facility `rest_upkeep` deltas in force (`facility::rest_upkeep_delta`), never below 0: the
@@ -269,7 +269,7 @@ fn rest_body(d: &Data, gs: &mut GameState) -> (i64, i64, i64) {
 pub fn rest(d: &Data, gs: &mut GameState) -> Dict {
     let refusal = rest_refusal(d, gs);
     if !refusal.is_empty() {
-        let mut out = json::fail(refusal);
+        let mut out = json::fail(&refusal);
         out.insert("spent".into(), int(0));
         out.insert("restored".into(), int(0));
         out.insert("events".into(), Value::Array(Vec::new()));

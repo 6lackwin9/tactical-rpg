@@ -49,7 +49,8 @@ fn the_upkeep_is_bought_and_a_rest_at_zero_is_refused() {
     let cost = purse::rest_cost(&d, &probe);
     assert!(cost > 0, "a rest costs upkeep");
     let mut gs = hurt_at_rest(&d, price * cost);
-    assert_eq!(progression::can_camp(&d, &gs), purse::REFUSE_UPKEEP, "no rest at 0 upkeep");
+    let item = purse::purse(&d, WORLD).upkeep.name;
+    assert_eq!(progression::can_camp(&d, &gs), format!("Not enough {item} to make camp."), "no rest at 0 upkeep, the world's upkeep named");
     let refused = progression::make_camp(&d, &mut gs);
     assert!(!json::b(&refused, "ok", false), "Make camp is refused at 0");
     assert_eq!(gs.party.members[0].hp_lost, 1, "nobody healed");

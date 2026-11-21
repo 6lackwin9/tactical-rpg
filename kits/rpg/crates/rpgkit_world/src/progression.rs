@@ -404,7 +404,7 @@ pub const REFUSE_NOT_AT_NODE: &str = "Make camp on the world map.";
 pub const REFUSE_RESTED: &str = "Everyone is rested.";
 /// TERMS1: the upkeep's default word (`terms::UPKEEP`) with CAMP_COST: only a world without a campaign refuses a Camp
 /// with it, and there the purse, so the upkeep, has its default name (the campaign rest refuses with
-/// `campaign::purse::REFUSE_UPKEEP`); `tests/terms.rs` checks it against the register.
+/// `terms::not_enough_upkeep_to_camp`); `tests/terms.rs` checks it against the register.
 pub const REFUSE_SUPPLIES: &str = "Making camp needs 3 supplies.";
 
 pub fn rally(max_hp: i64) -> i64 {
@@ -465,25 +465,25 @@ pub fn is_rest_place(d: &Data, gs: &GameState, location_ref: &str) -> bool {
 }
 
 /// HealRules.can_camp; in a campaign world the rest rule's refusal (CAMPAIGN1 R1, R2: `campaign::purse::rest_refusal`).
-pub fn can_camp(d: &Data, gs: &GameState) -> &'static str {
+pub fn can_camp(d: &Data, gs: &GameState) -> String {
     // PR6-9: no rest while a siege with `no_camp` runs
     let siege = crate::siege::camp_refusal(d, gs);
     if !siege.is_empty() {
-        return siege;
+        return siege.into();
     }
     if gs.campaign.is_some() {
         return crate::campaign::purse::rest_refusal(d, gs);
     }
     if crate::travel::current_node(d, gs).is_empty() {
-        return REFUSE_NOT_AT_NODE;
+        return REFUSE_NOT_AT_NODE.into();
     }
     if !hurt(&gs.party) {
-        return REFUSE_RESTED;
+        return REFUSE_RESTED.into();
     }
     if gs.party.supplies < CAMP_COST {
-        return REFUSE_SUPPLIES;
+        return REFUSE_SUPPLIES.into();
     }
-    ""
+    String::new()
 }
 
 /// {ok, errors, spent, restored, events}. In a campaign world the rest rule's rest (CAMPAIGN1 R2: `campaign::purse::rest`,
@@ -494,7 +494,7 @@ pub fn make_camp(d: &Data, gs: &mut GameState) -> Dict {
     }
     let refusal = can_camp(d, gs);
     if !refusal.is_empty() {
-        let mut out = json::fail(refusal);
+        let mut out = json::fail(&refusal);
         out.insert("spent".into(), int(0));
         out.insert("restored".into(), int(0));
         out.insert("events".into(), Value::Array(Vec::new()));

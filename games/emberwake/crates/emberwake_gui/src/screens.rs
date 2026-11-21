@@ -51,15 +51,12 @@ pub struct Game {
     /// TRANSITIONS1 T2 step 4: the arrival a won fight left for the hub (the region map shows it as it comes back on top;
     /// the story stage drops it when a vignette plays next).
     pub arrival: Option<crate::transitions::Arrival>,
-    /// PR7-37 (PT-31): the open road legs the player was last told about (route qids; None until first looked at,
-    /// `worldmap::note_new_roads`), so a road a story beat opens gets a notice. Not saved.
-    pub roads_seen: Option<Vec<String>>,
 }
 
 impl Game {
     pub fn new(gs: GameState, slot: i64, sample: bool) -> Self {
         let clean = gs.to_value();
-        Self { gs, slot, clean, busy: false, sample, notices: Vec::new(), arrival: None, roads_seen: None }
+        Self { gs, slot, clean, busy: false, sample, notices: Vec::new(), arrival: None }
     }
 }
 
@@ -198,10 +195,14 @@ pub fn character_art(d: &Data, character: &aegis_core::json::Dict) -> (String, S
 /// sequence runs (STORYUI1 5.4: a new game in a world with a start sequence, a save made during one).
 pub fn enter_game(cx: &mut Cx, gs: GameState, slot: i64, warnings: Vec<String>) {
     let story = emberwake_world::story::is_running(&gs);
+    // PR7-37 (PT-31), PR7-47: a game with no saved roads (new, or an older save) learns the roads open now, before its
+    // clean copy is taken (only later ones get a notice); a save's roads opened since its last look are told on the map
+    let mut gs = gs;
+    if emberwake_world::travel::roads_seen(&gs).is_none() {
+        emberwake_world::travel::note_new_roads(&cx.data.clone(), &mut gs);
+    }
     cx.game = Some(Game::new(gs, slot, false));
     cx.log.clear();
-    // PR7-37 (PT-31): the roads open as the game starts are known (only later ones get a notice)
-    crate::worldmap::note_new_roads(cx);
     if !warnings.is_empty() {
         cx.notice = warnings;
     }

@@ -30,6 +30,9 @@ pub const EXPLORE_KEYS: [&str; 5] = ["steps", "next_at", "loc_steps", "last_safe
 /// MAPNAV1-U: the optional `explore` key naming the member who leads on the maps (`GameState::explore_leader`); absent
 /// = the first standing active member (a save without it loads as before).
 pub const LEADER_KEY: &str = "leader";
+/// PR7-47: the optional `explore` key of the open road legs the player was last told about (sorted route qids,
+/// `travel::note_new_roads`); absent until the world map first looks (a save without it loads as before).
+pub const ROADS_SEEN_KEY: &str = "roads_seen";
 pub const AUTO_IDS: [&str; 6] = ["balanced", "aggressive", "focus_weakest", "defensive", "ranged_kite", "economy"];
 pub const DEFAULT_TACTIC: &str = "balanced";
 /// A1.2-K3 (INTENT2-K3): the copies one pouch stack of catalog item `item` holds: `min(5, max_stack)`, at least 1
@@ -2349,8 +2352,10 @@ pub fn explore_errors(e: &Dict) -> Vec<String> {
     let has_home = e.contains_key(HOME_WORLD_KEY);
     let has_leader = e.contains_key(LEADER_KEY);
     let has_patrols = e.contains_key(PATROLS_KEY);
-    let mut ok = e.len() == EXPLORE_KEYS.len() + has_home as usize + has_leader as usize + has_patrols as usize;
+    let has_roads = e.contains_key(ROADS_SEEN_KEY);
+    let mut ok = e.len() == EXPLORE_KEYS.len() + has_home as usize + has_leader as usize + has_patrols as usize + has_roads as usize;
     ok = ok && (!has_patrols || e.get(PATROLS_KEY).and_then(Value::as_object).is_some_and(patrols_ok));
+    ok = ok && (!has_roads || e.get(ROADS_SEEN_KEY).and_then(Value::as_array).is_some_and(|a| a.iter().all(|q| q.as_str().is_some_and(qid_ok))));
     ok = ok && (!has_home || e.get(HOME_WORLD_KEY).and_then(Value::as_str).is_some_and(json::id_ok));
     ok = ok && (!has_leader || e.get(LEADER_KEY).and_then(Value::as_str).is_some_and(json::id_ok));
     ok = ok && EXPLORE_KEYS.iter().all(|k| e.contains_key(*k));
