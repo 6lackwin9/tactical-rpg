@@ -2,7 +2,7 @@
 
 What only you can judge, with what to do. The planner keeps this current: new items go in when they land, and an item leaves when you've answered. Say "open the build" and the planner launches the latest one.
 
-## For the next session (Design keeps this list; updated 2026-11-20 06:40)
+## For the next session (Design keeps this list; updated 2026-11-21 22:50)
 
 Parked for your approval (golden re-records need your word):
 
@@ -30,6 +30,11 @@ Parked for your approval (golden re-records need your word):
   is still won (round 6); the Overlook is lost 3 of 3, because Withdraw can no longer run into AP debt. Recommendation:
   keep "one holds, three get out" and that AP rule, and ease the Overlook itself (exits nearer, or one more founder AP
   there); then the other bosses after you play one.
+- [ ] Diorama battle stage in the game (your 21:46 go-ahead): the first slice landed (`PR7-64`); Fable's in-game review
+  (https://claude.ai/artifact/GfoCKjXQnVeTbFBBshuRe2) found the UI chrome on contract and the stage about half way to
+  the mock. Queued as provisional, to confirm: amber light pools under the lanterns with a soft vignette; cover props
+  (crates, pillars, lamps) drawn on blocked cells inside the arena, display only; a faint grid at rest (Settings can turn
+  it off). Painted founder frames and the Act 1 story staging are on the way; the 17 enemy units need painted sheets.
 - [ ] Enemy short names for the foe plates (`PR7-40`): Brawler, Berserker, Footman, Enforcer, Husk, Archer,
   Crossbowman, Purifier, Shaman, Skirmisher (also the Tallow Dredger), Scout, Flagellant, Render-Beast, Ash-Crawler;
   bosses by name.
