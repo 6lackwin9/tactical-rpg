@@ -1180,12 +1180,16 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     }
     // Test Arena only: leave at any time (Esc does the same); a world battle is left only through its end, and its Menu
     // (PR7-26; Esc with nothing open does the same) opens the in-game Settings popup in the same place.
+    // PR7-47 (FB-344 question 4): Menu / Exit is as wide as its label at the text size (30 at Normal), and the round
+    // read-out and the message after it move right by as much
+    let bar_label = if g.world_mode() { "Menu" } else { "Exit" };
+    let bar_w = 30.max((ui.p.text_w(bar_label, BODY) + ui.m().uf(6.0)).ceil() as i32 + 2);
     if g.world_mode() {
-        ui.button_full("bar.menu", Rect::new(84, 325, 30, 14), "Menu", Action::Settings, true, false, BODY, vec![("Menu (Esc)".into(), th().gold), ("Settings, Retreat where the fight allows it, and Return to title once the fight is over.".into(), th().text)]);
+        ui.button_full("bar.menu", Rect::new(84, 325, bar_w, 14), "Menu", Action::Settings, true, false, BODY, vec![("Menu (Esc)".into(), th().gold), ("Settings, Retreat where the fight allows it, and Return to title once the fight is over.".into(), th().text)]);
     } else {
-        ui.button_full("bar.exit", Rect::new(84, 325, 30, 14), "Exit", Action::Leave, true, false, BODY, vec![("Back to the screen you came from (Esc)".into(), th().text)]);
+        ui.button_full("bar.exit", Rect::new(84, 325, bar_w, 14), "Exit", Action::Leave, true, false, BODY, vec![("Back to the screen you came from (Esc)".into(), th().text)]);
     }
-    let ox = 32;
+    let ox = 32 + (bar_w - 30);
     let phase = match s.phase {
         Phase::Planning => "Planning",
         Phase::Resolving => "Resolving",
