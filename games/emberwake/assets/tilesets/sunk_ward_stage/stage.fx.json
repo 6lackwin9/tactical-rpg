@@ -1,0 +1,161 @@
+{
+ "_note": "Lantern spots per battle zone backdrop (AI-41 item 4, PR7-68 R3): at = [u, v] as fractions of the 384 x 52 backdrop; the pool lands on the floor below u. `spots` is the default (the canal wall); `zones` overrides it per battle zone.",
+ "spots": [
+  {
+   "kind": "lantern",
+   "at": [
+    0.14,
+    0.34
+   ]
+  },
+  {
+   "kind": "lantern",
+   "at": [
+    0.53,
+    0.34
+   ]
+  },
+  {
+   "kind": "lantern",
+   "at": [
+    0.81,
+    0.34
+   ]
+  }
+ ],
+ "zones": {
+  "canal": {
+   "spots": [
+    {
+     "kind": "lantern",
+     "at": [
+      0.14,
+      0.34
+     ]
+    },
+    {
+     "kind": "lantern",
+     "at": [
+      0.53,
+      0.34
+     ]
+    },
+    {
+     "kind": "lantern",
+     "at": [
+      0.81,
+      0.34
+     ]
+    }
+   ]
+  },
+  "alley": {
+   "spots": [
+    {
+     "kind": "lantern",
+     "at": [
+      0.139,
+      0.18
+     ]
+    },
+    {
+     "kind": "lantern",
+     "at": [
+      0.933,
+      0.18
+     ]
+    }
+   ]
+  },
+  "watchpost": {
+   "spots": [
+    {
+     "kind": "lantern",
+     "at": [
+      0.076,
+      0.23
+     ]
+    },
+    {
+     "kind": "lantern",
+     "at": [
+      0.923,
+      0.23
+     ]
+    }
+   ]
+  },
+  "tallow_vats": {
+   "spots": [
+    {
+     "kind": "lantern",
+     "at": [
+      0.013,
+      0.72
+     ]
+    },
+    {
+     "kind": "lantern",
+     "at": [
+      0.5,
+      0.72
+     ]
+    },
+    {
+     "kind": "lantern",
+     "at": [
+      0.988,
+      0.72
+     ]
+    }
+   ]
+  },
+  "foundry": {
+   "spots": [
+    {
+     "kind": "lantern",
+     "at": [
+      0.735,
+      0.6
+     ]
+    }
+   ]
+  },
+  "rooftops": {
+   "spots": [
+    {
+     "kind": "lantern",
+     "at": [
+      0.597,
+      0.79
+     ]
+    }
+   ]
+  },
+  "undercroft": {
+   "spots": [
+    {
+     "kind": "lantern",
+     "at": [
+      0.088,
+      0.56
+     ]
+    },
+    {
+     "kind": "lantern",
+     "at": [
+      0.556,
+      0.56
+     ]
+    },
+    {
+     "kind": "lantern",
+     "at": [
+      0.909,
+      0.56
+     ]
+    }
+   ]
+  }
+ }
+}
