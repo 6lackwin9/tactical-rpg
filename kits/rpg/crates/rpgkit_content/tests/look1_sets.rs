@@ -115,6 +115,10 @@ fn tiles_of_the_wrong_size_are_errors() {
     // DIORAMA1 D4: a stage set's wall foot strip is 64 x 16
     png(&root.join("tilesets/ward_stage/wall_foot/v0.png"), 64, 16);
     png(&root.join("tilesets/ward_stage/wall_foot/v1.png"), 64, 48);
+    // DIORAMA2 R2: a stage set's front face per terrain is 64 x 24, like its wall face
+    png(&root.join("tilesets/ward_stage/front_face/floor/v0.png"), 64, 24);
+    // DIORAMA3 R5: a stage set's cover prop is 64 x 72
+    png(&root.join("tilesets/ward_stage/cover/v0.png"), 64, 72);
     png(&root.join("tilesets/ward/wall_face/v0.png"), 32, 16);
     png(&root.join("tilesets/ward/wall_face/v1.png"), 32, 12);
     png(&root.join("tilesets/ward/wall_face/v2.png"), 32, 32);

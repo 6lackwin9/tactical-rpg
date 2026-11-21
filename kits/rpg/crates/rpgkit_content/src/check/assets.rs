@@ -242,6 +242,8 @@ const REGION_FACE_PX: [(u32, u32); 3] = [(32, 16), (32, 12), (128, 48)];
 const STAGE_FACE_PX: [(u32, u32); 1] = [(64, 24)];
 /// DIORAMA1 D4: a stage set's wall foot strip (`wall_foot/`, the top 8 logical px of a row 0 cell at 2 art px).
 const STAGE_FOOT_PX: [(u32, u32); 1] = [(64, 16)];
+/// DIORAMA3 R5: a stage set's cover prop on a blocked cell (`cover/`, a cell and its height above).
+const STAGE_COVER_PX: [(u32, u32); 1] = [(64, 72)];
 
 /// The world's `stage_set` and the `tileset` of each of its locations, as (label, set id) with empty ids left out.
 fn bound_sets(v: &View, w: &str) -> (Option<String>, Vec<(String, String)>) {
@@ -316,12 +318,15 @@ pub fn tileset_errors(v: &View, w: &str) -> Vec<String> {
                 if let Some(size) = png_size(&root.join(&rel)) {
                     let in_set = rel.strip_prefix(&format!("tilesets/{set}/")).unwrap_or(&rel);
                     let tile = in_set.strip_prefix("boundary/").and_then(|b| b.split_once('/')).map_or(in_set, |(_, rest)| rest);
-                    let face = tile.starts_with("wall_face/");
+                    // DIORAMA2 R2: a stage set's front face per terrain (`front_face/<terrain>/`) is a wall face's size
+                    let face = tile.starts_with("wall_face/") || (role == "stage" && tile.starts_with("front_face/"));
                     let foot = role == "stage" && tile.starts_with("wall_foot/");
                     let (sizes, what) = if face {
                         (&face_px[..], format!("{role} wall face"))
                     } else if foot {
                         (&STAGE_FOOT_PX[..], format!("{role} wall foot"))
+                    } else if role == "stage" && tile.starts_with("cover/") {
+                        (&STAGE_COVER_PX[..], format!("{role} cover prop"))
                     } else {
                         (&tile_px[..], format!("{role} tile"))
                     };

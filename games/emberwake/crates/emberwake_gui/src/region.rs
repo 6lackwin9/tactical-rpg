@@ -3402,10 +3402,10 @@ mod tests {
     /// REGIONGROUND1: a ground's one texture and a boundary's tiles are in the tree; a ground's other file is a stray.
     #[test]
     fn ground_and_boundary_art_follow_their_patterns() {
-        for ok in ["tilesets/ashlands/ground/mud/v0.png", "tilesets/common/boundary/keep/wall/v0.png", "tilesets/common/boundary/keep/wall_face/v2.png"] {
+        for ok in ["tilesets/ashlands/ground/mud/v0.png", "tilesets/common/boundary/keep/wall/v0.png", "tilesets/common/boundary/keep/wall_face/v2.png", "tilesets/sunk_ward_stage/front_face/floor/v3.png", "tilesets/sunk_ward_stage/stage.fx.json", "tilesets/sunk_ward_stage/cover/v0.png", "tilesets/sunk_ward_stage/wall_foot/v1.png"] {
             assert!(layout_ok(ok), "{ok}");
         }
-        for stray in ["tilesets/ashlands/ground/mud/v1.png", "tilesets/ashlands/ground/mud.png", "tilesets/ashlands/ground/mud/over_ash/m01.png", "tilesets/common/boundary/keep/roof/v0.png", "tilesets/common/boundary/keep/wall/face.png"] {
+        for stray in ["tilesets/ashlands/ground/mud/v1.png", "tilesets/ashlands/ground/mud.png", "tilesets/ashlands/ground/mud/over_ash/m01.png", "tilesets/common/boundary/keep/roof/v0.png", "tilesets/common/boundary/keep/wall/face.png", "tilesets/sunk_ward_stage/front_face/floor.png", "tilesets/sunk_ward_stage/floor/stage.fx.json"] {
             assert!(!layout_ok(stray), "{stray}");
         }
     }
@@ -3491,6 +3491,9 @@ mod tests {
             // REGIONGROUND1: a ground's one texture (only `v0` is read), and a boundary's tiles
             ["tilesets", _, "ground", _, "v0.png"] => true,
             ["tilesets", _, "boundary", _, "wall" | "wall_face", f] => v(f),
+            // DIORAMA2 R2 and DIORAMA3 R3 (ASSETORG2): a stage set's front face per terrain and its light spots
+            ["tilesets", _, "front_face", _, f] => v(f),
+            ["tilesets", _, "stage.fx.json"] => true,
             // MAP-HOOKS1: a location's landmark on the world map, and a world map background with its layout sidecar
             ["map", "landmarks", f] => png(f),
             ["backgrounds", "world_map", f] => png(f) || f.ends_with(".json"),

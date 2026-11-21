@@ -118,6 +118,20 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 
 ## 2. Feedback Items (Append-Only)
 
+### FB-423: develop's content check refused Art/UI's front-face files; fixed in the check (PR7-67 slice 0)
+
+- **Status**: fixed (tools lane), `develop`.
+- **What happened**: Art/UI's `70cbada1` added `tilesets/sunk_ward_stage/front_face/<terrain>/v*.png` (64 x 24) for
+  `PR7-67` R2. Since `PR7-64` the Sunk Ward world names that stage set, so the content check (A14) measured them as stage
+  tiles (64 x 48) and failed `tools/fc.sh content check` and the gate on develop from that merge on.
+- **Fix**: kit `rpgkit_content` `check/assets.rs` takes a stage set's `front_face/` at the wall face's size (64 x 24)
+  and its `cover/` at 64 x 72 (SW-20, coming), with cases in `look1_sets.rs`; the game's layered-tree test
+  (`region.rs` `layout_ok`) takes `tilesets/<set>/front_face/<terrain>/v*.png` and `tilesets/<set>/stage.fx.json`
+  (the test failed on both too); `cover/v*.png` already matched. The drawing itself (R2) lands with the rest of `PR7-67`.
+- **For Design**: an Art/UI drop under a named stage set now meets the content check on its merge. A note in
+  `ART_UI_REQUESTS` (or ASSETORG2's size table) that new stage-set folders need a size row in the check first would
+  avoid a repeat.
+
 ### FB-421: PR7-66 VNSTAGE1B built; every Act 1 scene with speakers is staged
 
 - **Status**: built (tools lane), `develop`. Data and a scenario only; no code changed. Shots in project files
