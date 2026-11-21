@@ -152,6 +152,36 @@ to `battle_take36_locks_mock.py`, shots in the project files `art-ui/battle_ux14
 - Ground hazards: tinted tiles with the hazard's icon and rounds left; push or pull: a dashed gold arrow to a dashed
   landing tile on the target.
 
+### 8.1 Style 2 diorama stage (Act 1)
+
+Approved for the game by Tushar 2026-11-21 21:46 ("update the actual battle UI and exploration map with the new
+direction"); Act 1 first (21:47). The direction is the Sunk Ward diorama mock (Art/UI thread, artifact "Sunk Ward
+Diorama Grid"): a lantern-lit wall band over the far edge, painted cobbles, a quay or plinth front face, hazard decals
+on the tiles and painted unit frames. Every file named here is a Gemini placeholder (decision "Placeholder-first
+assets"); finals replace them in place.
+
+It keeps today's stage geometry (STAGE1 option B: `INTERIOR`, `BACKDROP` 384 x 52, cells 32 x 24, `FRONT_FACE` 12 tall,
+LOOK1 stage set art at 2 art px per logical px), so most of it is files:
+
+- D1, stage set `sunk_ward_stage` (files in this PR): `tilesets/sunk_ward_stage/{floor,stone,wall,wall_face,deep_water}/v0..v3.png`
+  (64 x 48; `wall_face` 64 x 24); other terrains fall back to `common_stage`. Needs the Sunk Ward world manifest to name
+  it (`stage_set: "sunk_ward_stage"`, data through `aegis content`). Scenario shots of Sunk Ward fights change.
+- D2, backdrops: `backgrounds/battle/alley.png` and `canal.png` replaced by the wall band (384 x 52, drawn 1:1).
+  The other Act 1 zones (`watchpost`, `tallow_vats`, `foundry`, `rooftops`, `undercroft`) get theirs as the Gemini
+  queue makes them, at the same paths.
+- D3, hazard decals (code): a cell with a ground hazard draws a decal over its tile, then today's icon and rounds left;
+  the tint stays only when no decal file exists. Files `props/hazards/<status>/v0..v3.png` (decal art about 60 x 44 art
+  px, transparent, drawn centred on the cell at 2 art px per px; files in this PR): `burn` fire, `poison` runoff, `slow`
+  oil (grease, ice); any other status (`root`, smoke) keeps the tint.
+- D4, wall foot (code): row 0's cells draw a strip `tilesets/<set>/wall_foot/v*.png` (64 x 16 art, top 8 logical px of
+  the cell) where the backdrop meets the board, so the floor runs into the wall instead of stopping at a line.
+- D5, painted unit frames (code): a unit's `clips.json` may give a larger `frame` (the painted sheets are 112 x 84 with
+  a `foot` row) and the stage draws it scaled so an idle frame stands about 1.15 cells tall, feet on the cell's foot
+  point; `idle`, `walk`, `attack`, `hurt`, `death` clips, every missing clip falls back to `idle` (SPRITE1-L). Kaelen's
+  sheet lands once Gemini item SW-06 passes its frame consistency pass; Vesper, Maren and Hollis follow (SW-07..09).
+- Exploration maps follow the battle zones, from design reference images (never renders), then built from tiles and
+  props as before; a separate row when the first map is ready.
+
 ## 9. Boss bar and full timeline view
 
 Signed off 2026-11-19: the boss UI from takes 26 to 32 (`BOSSUI1` BU9 to BU17, `ENRAGE2` EN5; mocks
