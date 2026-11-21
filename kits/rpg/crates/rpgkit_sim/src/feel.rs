@@ -827,7 +827,7 @@ impl Feel {
         let m = rpgkit_battle::channel::meter_id(&s.w);
         if !m.is_empty() {
             let prefix = format!("{}{m}#", rpgkit_battle::meter::METER_KEY);
-            for (unit, n) in s.resolver.triggers.battle_counts(&prefix) {
+            for (unit, n) in s.w.trigger_uses.battle_counts(&prefix) {
                 if s.w.allies.contains(&unit) {
                     c.party.channel_triggers += i64::from(n);
                 } else {
@@ -841,7 +841,7 @@ impl Feel {
                     let key = format!("{}{m}#{n}", rpgkit_battle::meter::METER_KEY);
                     for unit in 0..s.w.units.len() {
                         let max = rpgkit_battle::meter::pool(&s.w, unit, m).map_or(def.max, |p| p.max);
-                        let fired = s.resolver.triggers.battle_count(unit, &key);
+                        let fired = s.w.trigger_uses.battle_count(unit, &key);
                         if fired == 0 || at < max {
                             continue;
                         }

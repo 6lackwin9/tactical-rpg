@@ -109,8 +109,30 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-61` (`PLAN-RECURSE1`) | Built (tools lane) | `develop` | An Engage with an area skill that `affects` `all` as a unit's first step no longer recurses without end with friends active: while a first move is compiled, the area counts friends where they stand. No golden moved. FB-407 |
 | `PR7-31` (`OBJUI1`) | Built (tools lane) | `develop` | Board chips for morale (state bars, the group letter with several groups), the leader's pennant, the slay crown and the guest shield (gold rim when it must survive); the words on the hover card and the foe card's portrait; the goal hovers to the objective and morale lines; the results read the objective line and a break's lines. No Enraged chip (Design's amendment). FB-409 |
 | `PR7-33` (`FLOATPANELS1`) | Built (tools lane) | `develop` | The region's "Here (N)" legend, its event ticker and the battle log float (unlock, drag, minimise in place to a named button, place and lock kept in the settings) on the floating panel, now an engine module `aegis_ui::float_panel` with shared chrome. FB-411 |
+| `PR7-62` (`INTERCEPT-LIMIT1`) | Built (tools lane) | `develop` | `trigger::intercept_of` walks the same `ally_hit` rows as the hit, in its order, with their use limits (counts now on `World::trigger_uses`): a spent intercept is no longer forecast. Kit tests for a spent limit; goldens unchanged. FB-413 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-413: PR7-62 INTERCEPT-LIMIT1 built; a hit forecast no longer shows an intercept whose use is spent
+
+- **Status**: built (tools lane), `develop`. No visible change beyond the corrected forecast.
+- **Spec**: `docs/READY.md` row `0k9` (`PR7-62`), from `FB-374` "Left".
+- **What landed**:
+  - Kit `rpgkit_battle::trigger::Uses` (new): the trigger rows' `limit` counts (this round, this battle) moved from
+    the resolver's `trigger::State` to the world (`World::trigger_uses`, no save key, like `skill_uses`), so a read-only
+    forecast reads the counts the resolver checks. `battle_counts` and `battle_count` moved with them (the sim's
+    `feel.rs` reads `s.w.trigger_uses`).
+  - `trigger::watchers` (new, private): the `ally_hit` rows with uses left at a block, in the order the hit consults
+    them (a running skill's rows first, then passives and worn items, each by unit). Both the hit (`guardians`) and its
+    forecast (`intercept_of`) walk it, so their order and limits match by construction. The unit order was already the
+    same (both by unit id); now it is one function.
+- **Tests**: kit `hit_fail.rs` +2: a spent row is not forecast and the round agrees (full damage on the target, none on
+  the holder); a first cut spends the guard's use, and a second foe's cut later in the round is forecast to land and
+  does. Goldens unchanged (full gate clean).
+- **Left**: uses an earlier hit of the same round will spend are not foreseen (the forecast reads the counts as they
+  stand; the two tests read after the first cut lands). Inside one area action, the guard's per-action use count is not
+  forecast per target either.
+- **Docs delta**: `docs/STRUCTURE.md` none. `docs/HISTORY.md` none.
 
 ### FB-411: PR7-33 FLOATPANELS1 built; the region legend, the ticker and the battle log float like the world map's legend
 

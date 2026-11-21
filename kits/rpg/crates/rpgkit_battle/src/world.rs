@@ -307,6 +307,9 @@ pub struct World {
     /// PK2-S1: (unit, skill catalog id) -> how many times the unit started that skill this battle (only skills with a
     /// `uses_per_battle` are counted; `mark::uses_problem`).
     pub skill_uses: IndexMap<(UnitId, String), i32>,
+    /// INTERCEPT-LIMIT1 (PR7-62): how many times each unit's trigger rows fired this round and battle, for their
+    /// `limit` (the resolver counts them; forecasts read them; no save key).
+    pub trigger_uses: crate::trigger::Uses,
     /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): unit -> the main-hand weapon families it started an attack skill with
     /// this battle, each once (only heroes built from member state, `Unit::rank_choice`): the settle's mastery use
     /// (`rpgkit_world::roster::HeroEnd::attacked`).
@@ -393,6 +396,7 @@ impl World {
             sides: Default::default(),
             marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()),
             skill_uses: IndexMap::new(),
+            trigger_uses: Default::default(),
             weapon_attacks: IndexMap::new(),
             channel_actions: IndexMap::new(),
             dulled_lock: false,

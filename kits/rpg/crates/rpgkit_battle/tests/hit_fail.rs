@@ -240,3 +240,58 @@ fn a_clash_onto_one_tile_is_forecast_to_land() {
     assert!(res.scheduled[a].command.log.starts_with("[Attack]") && !res.scheduled[a].command.log.contains("CRIT"), "{:?}", res.log);
     assert_eq!(hp - w.units[FOE].hp, f.damage, "{:?}", res.log);
 }
+
+/// INTERCEPT-LIMIT1 (PR7-62): the guard of `an_intercept_is_forecast_as_an_intercept`, booked with the cut, and the
+/// round's resolver; `FOE_B` also next to the target.
+fn guarded_round() -> (World, Resolver, usize) {
+    let mut w = world(timeline("melee"));
+    w.grid.positions[ALLY] = Some(v(5, 3));
+    w.grid.positions[ARCHER] = Some(v(6, 3));
+    w.grid.positions[FOE_B] = Some(v(5, 2));
+    round_intent::set_target(&mut w, FOE, RoundTarget::Unit(ALLY)).unwrap();
+    round_intent::set_target(&mut w, FOE_B, RoundTarget::Unit(ALLY)).unwrap();
+    let cut = hit(&w, FOE, ALLY, "tl_cut");
+    let mut plan = Plan::new();
+    assert_eq!(plan.add_step(&w, ARCHER, PlanStep::self_skill(sid(&w, "tl_hook_guard")), true), "");
+    let guard = plan.entries_for(&w, ARCHER)[0].build_command(&w, ARCHER);
+    let mut res = Resolver::new(BLOCKS, 1);
+    book(&mut res, ARCHER, guard, 1);
+    let a = book(&mut res, FOE, cut, 1);
+    (w, res, a)
+}
+
+/// INTERCEPT-LIMIT1 (PR7-62): the guard's row (`limit` "round") has already fired this round: the forecast shows no
+/// intercept, the hit's full damage reaches the target, and the round agrees (the target takes it, the holder not).
+#[test]
+fn a_spent_intercept_is_not_forecast() {
+    let (mut w, mut res, a) = guarded_round();
+    let full = intent::hit_on_adjusted(&w, &res.scheduled, &res.scheduled[a], ALLY, false, &intent::Adjust::NONE).unwrap();
+    assert!(full.fails.is_some(), "with a use left it is forecast as an intercept: {full:?}");
+    w.trigger_uses.count(ARCHER, "skill:tl_hook_guard#0");
+    let f = forecast(&w, &res, a, ALLY);
+    assert_eq!(f.fails, None, "a spent row is not forecast: {f:?}");
+    assert!(f.damage > 0);
+    let (ally_hp, archer_hp) = (w.units[ALLY].hp, w.units[ARCHER].hp);
+    run(&mut w, &mut res, 1, 1);
+    assert_eq!(w.units[ALLY].hp, ally_hp - f.damage, "the forecast damage lands: {:?}", res.log);
+    assert_eq!(w.units[ARCHER].hp, archer_hp, "the holder takes nothing: {:?}", res.log);
+}
+
+/// INTERCEPT-LIMIT1 (PR7-62): the first cut of the round spends the guard's use; a second foe's cut later in the round
+/// is then forecast to land on the target, and it does.
+#[test]
+fn an_intercept_spent_earlier_in_the_round_is_not_forecast_again() {
+    let (mut w, mut res, _) = guarded_round();
+    let second = hit(&w, FOE_B, ALLY, "tl_cut");
+    let b = book(&mut res, FOE_B, second, 2);
+    run(&mut w, &mut res, 1, 1);
+    assert_eq!(w.trigger_uses.battle_count(ARCHER, "skill:tl_hook_guard#0"), 1, "the first cut was taken: {:?}", res.log);
+    let mut unspent = w.clone();
+    unspent.trigger_uses = Default::default();
+    assert!(matches!(forecast(&unspent, &res, b, ALLY).fails, Some(HitFail::Intercepted { by: ARCHER, .. })), "the guard still covers the second cut");
+    let f = forecast(&w, &res, b, ALLY);
+    assert_eq!(f.fails, None, "{f:?}");
+    let ally_hp = w.units[ALLY].hp;
+    run(&mut w, &mut res, 2, 2);
+    assert_eq!(w.units[ALLY].hp, ally_hp - f.damage, "the forecast damage lands: {:?}", res.log);
+}
