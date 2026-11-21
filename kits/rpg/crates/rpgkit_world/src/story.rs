@@ -282,6 +282,19 @@ pub fn card_portrait(d: &Data, home: &str, card: &Dict) -> Vec<String> {
     art::face_chain(&art::portrait_tier(c, unit), &json::s(c, "id"), &art::body_of(c, unit, class), &json::s(card, "expression"))
 }
 
+/// VNSTAGE1 (PR7-27): a story stage actor `who` (a characters ref of world `home`): its shown name and its full-body
+/// picture chain (`art::full_body_chain`); an unknown ref shows its id and tries the id's picture.
+pub fn stage_actor(d: &Data, home: &str, who: &str) -> (String, Vec<String>) {
+    let c = d.resolve(home, "characters", who);
+    if c.is_empty() {
+        return (who.to_string(), art::full_body_chain(who, ""));
+    }
+    let unit = d.entry("units", &json::s(c, "base_unit"));
+    let class = d.entry("classes", &json::s(unit, "class_id"));
+    let id = json::s(c, "id");
+    (json::s_or(c, "name", &id), art::full_body_chain(&id, &art::body_of(c, unit, class)))
+}
+
 /// W3: vignette `r` as it plays now: {vignette (qid), name, music, frame, skippable, once, seen (W6: Skip asks only
 /// when false), cards}; {} for an unknown ref.
 pub fn scene(d: &Data, gs: &GameState, r: &str) -> Dict {

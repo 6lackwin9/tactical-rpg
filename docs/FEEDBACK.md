@@ -112,8 +112,48 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-33` (`FLOATPANELS1`) | Built (tools lane) | `develop` | The region's "Here (N)" legend, its event ticker and the battle log float (unlock, drag, minimise in place to a named button, place and lock kept in the settings) on the floating panel, now an engine module `aegis_ui::float_panel` with shared chrome. FB-411 |
 | `PR7-62` (`INTERCEPT-LIMIT1`) | Built (tools lane) | `develop` | `trigger::intercept_of` walks the same `ally_hit` rows as the hit, in its order, with their use limits (counts now on `World::trigger_uses`): a spent intercept is no longer forecast. Kit tests for a spent limit; goldens unchanged. FB-413 |
 | `ENGINE-21` (`UISPLIT1-H`) character sheet | Stage A built (tools lane) | `develop` | View-models `character` (the window), `stats`, `level_up`, `skills` and `deck`, with actions, fixtures and tests; the Gear tab stays the `loadout` view; today's drawing kept. FB-415 |
+| `PR7-27` (`VNSTAGE1`) | Built (tools lane) | `develop` | The story stage: cards carry actors (full-body pictures, a code-drawn figure where none exists) who enter left and exit right, met ones pinned right; cameras Static, Scroll and Pan; dialogue and narration keep the scene's backdrop dimmed; the cutscene bar gains Auto and Log; born split (view `vignette` and its fixture). Seed `vnstage1` stages the meat market and the mortuary cart. FB-417 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-417: PR7-27 VNSTAGE1 built; the story stage, Auto and Log
+
+- **Status**: built (tools lane), `develop`. Visible: the prologue's meat market and mortuary cart scenes now play on
+  the stage (shots in project files `build-tools/pr7-27/`, scenario `vn_stage`).
+- **Spec**: `docs/READY.md` row 1a `PR7-27` (`VNSTAGE1`), `ART_UI_STUDIO.md` §3.2 and screen 4, `ART-10`, `ART-11`.
+- **What landed**:
+  - Kit `rpgkit_ui::vn_stage` (new): a card's `actors` (`who`, `side` left or right, `move` stay, enter or exit) stand
+    on the stage rectangle (the picture rect), feet on its floor. The party enters from off the left edge and exits past
+    the right; a right-side actor under Scroll or Pan is pinned to the backdrop, so it comes in from off-frame right as
+    the backdrop moves. Several on one side stand in slots 56 px apart toward their edge. Cameras: Static (the picture
+    fitted, as before), Scroll (the backdrop slides 280 px, the party walks in place) and Pan (as Scroll, the party
+    walks forward 60 px with it). The walk lasts `walk_ms` (default 1600, eased); reduce motion puts everyone at the
+    end. The speaker draws last and full, the others slightly faded. Where no full-body picture exists (Hollis today)
+    a code-drawn silhouette stands in (placeholder-first).
+  - `ART-10`/`ART-11`: a line or text card keeps the scene's last picture, dimmed (alpha 102 of black, about 40 %),
+    never plain black, where its own card's camera left it.
+  - The cutscene bar: Auto (a card that waits moves on 1.8 s after its text) and Log (a panel of the lines so far;
+    Next, a click or Back closes it), left of Skip.
+  - Born split (UISPLIT1 US8): view `vignette` (fields `style`, `speaker`, `text`, `shown`, `backdrop`, `dimmed`,
+    `camera`, `actors`, `auto`, `log_open`, `log`; actions `next`, `skip`, `auto`, `log`), `act_of`, the fixture
+    `games/emberwake/assets/ui/views/vignette.view.json` with a shape test; the screen's state carries `view`.
+  - Content: `cards` take `actors` (at most 4, none on a title card, each `who` a character), `camera` and `walk_ms`
+    (0 to 6000), checked by `rpgkit_content`; `kits/rpg/schema.json` help updated. Kit `art::full_body_chain` and
+    `story::stage_actor` resolve the name and pictures (the character's, then its class body's).
+  - Data (seed `vnstage1.json`): `vg_meat_market` (Kaelen enters on a scroll, exits on the narration) and
+    `vg_bridge_cart` (Vesper and Kaelen enter on a pan; Maren and Hollis stand right; all four exit on the last card).
+- **Tests**: kit unit tests (enter, exit, slots, each camera, the backdrop covering the stage), kit vignette tests
+  (actors read, the kept backdrop and its camera, Auto, the Log and the view), 12 bad content cases, game tests
+  `a_staged_card_resolves_its_actors`, `the_story_stage_enters_exits_and_moves_its_camera` and the fixture shape;
+  scenario `vn_stage` (8 shots, no golden). Engine goldens unchanged.
+- **Next to the mock**: the mock's screen 4 fills the whole screen with the backdrop and draws large rigged actors
+  with mood tags; the build keeps today's picture rect and dialogue box (one stage rectangle, `ART-11`) and static
+  full-body pictures. A layout file can place the stage later (the view carries everything); the animated rig is not
+  built.
+- **Questions for Design** (provisional calls made): (1) the dim is a flat 40 % black; (2) the Log lists narration
+  without a speaker line; (3) which other scenes to stage (only the two prologue scenes are staged so far).
+- **Docs delta**: `STRUCTURE.md`, kit `rpgkit_ui`: add `src/vn_stage.rs` (the story stage: actors, cameras, the kept
+  backdrop). `GAME_BRIEF.md` story: vignette cards may stage actors with a camera; the bar has Auto and Log.
 
 ### FB-415: ENGINE-21 character sheet Stage A built; the Character window's view-models
 

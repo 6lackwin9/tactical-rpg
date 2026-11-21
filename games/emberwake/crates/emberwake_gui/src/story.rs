@@ -41,6 +41,14 @@ pub fn card_of(d: &Data, world: &str, raw: &Dict) -> Card {
         // PORTRAITFX1-D: the portrait's effects are seeded by the character id, as the talk box's
         c.portrait_key = s(who, "id");
     }
+    // VNSTAGE1 (PR7-27): the stage actors' names and full-body pictures
+    for a in &mut c.actors {
+        (a.name, a.sprite) = story::stage_actor(d, world, &a.who);
+        let id = s(d.resolve(world, "characters", &a.who), "id");
+        if !id.is_empty() {
+            a.who = id;
+        }
+    }
     c
 }
 
@@ -1063,5 +1071,110 @@ pub(crate) mod tests {
         assert_eq!((fight.id(), fight.state(&cx)["source"].clone()), ("debug_fight", json!(story::FIGHT_SOURCE)));
         assert!(cx.log.iter().any(|l| l == fight_line) && stage.state(&cx)["error"] == json!([]));
         let _ = std::fs::remove_dir_all(&cx.shot_dir);
+    }
+
+    /// PR7-27 (VNSTAGE1): a staged scene of the test world: the hero walks in left on a scrolling backdrop to meet the
+    /// clerk pinned right, the clerk speaks, the narration closes as the hero walks out right.
+    fn staged_reel(d: &Data) -> Reel {
+        let cards = [
+            json!({"style": "image", "image": "backgrounds/story/x.png", "text": "The hub.", "fade_in_ms": 0, "fade_out_ms": 0, "camera": "scroll",
+                "actors": [{"who": "hero", "side": "left", "move": "enter"}, {"who": "clerk", "side": "right"}]}),
+            json!({"style": "line", "speaker": "clerk", "text": "Well?", "actors": [{"who": "hero", "side": "left"}, {"who": "clerk", "side": "right"}]}),
+            json!({"style": "text", "text": "He goes.", "actors": [{"who": "hero", "side": "left", "move": "exit"}]}),
+        ];
+        let mut reel = Reel::from_json(&json!({"id": "tale:staged", "skippable": true}));
+        reel.cards = cards.iter().map(|c| card_of(d, "tale", json::dict(c))).collect();
+        reel
+    }
+
+    /// PR7-27: a card's actors take the character's name and full-body chain (the kit's `story::stage_actor`; a `who`
+    /// that names no character keeps its id and its own full-body path), and the clerk's id, so the speaker is found.
+    #[test]
+    fn a_staged_card_resolves_its_actors() {
+        let d = data();
+        let reel = staged_reel(&d);
+        let a = &reel.cards[0].actors;
+        assert_eq!(a.iter().map(|a| (a.who.as_str(), a.name.as_str(), a.side, a.motion)).collect::<Vec<_>>(), [("hero", "hero", vignette::Side::Left, vignette::Motion::Enter), ("clerk", "Clerk", vignette::Side::Right, vignette::Motion::Stay)]);
+        assert_eq!((a[0].sprite[0].as_str(), a[1].sprite[0].as_str()), ("portraits/full_body/hero.png", "portraits/full_body/clerk.png"));
+        assert_eq!((reel.cards[0].camera, reel.cards[1].camera, reel.cards[1].portrait_key.as_str()), (vignette::StageCamera::Scroll, vignette::StageCamera::Static, "clerk"));
+    }
+
+    /// PR7-27: on the game's vignette screen the hero walks in from off the left edge to his place while the scroll
+    /// brings the clerk in from off the right; the line keeps the scene's backdrop dimmed where the scroll left it,
+    /// with the clerk speaking; the narration walks the hero out past the right edge. Reduce motion puts each at its end.
+    #[test]
+    fn the_story_stage_enters_exits_and_moves_its_camera() {
+        use rpgkit_ui::vn_stage::{actor_x, backdrop_offset, ACTOR_PX, SCROLL_PX, STAGE};
+        let d = data();
+        let cx = story_cx(data());
+        let mut s = vignette_screen(&cx, staged_reel(&d), |_, _| {});
+        let at = |s: &VignetteScreen<GameCx>, k: usize| {
+            let (c, t) = (s.player.card().expect("a card"), s.player.walk(false));
+            let (cam, bt) = s.player.backdrop_camera(t);
+            (actor_x(&c.actors[k], c.camera, t, 0), backdrop_offset(cam, bt))
+        };
+        let field = |s: &VignetteScreen<GameCx>, f: &str| s.view().to_json()["fields"][f].clone();
+        // the image card at its start: hero off left, clerk off right, backdrop unmoved
+        let (hero0, off0) = at(&s, 0);
+        assert!(hero0 + ACTOR_PX / 2 <= STAGE.x && off0 == 0, "{hero0} {off0}");
+        assert!(at(&s, 1).0 - ACTOR_PX / 2 >= STAGE.x + STAGE.w, "the clerk is off the right edge");
+        assert_eq!(field(&s, "camera"), json!({"text": "scroll"}));
+        s.player.advance(vignette::WALK_MS);
+        let ((hero1, off1), (clerk1, _)) = (at(&s, 0), at(&s, 1));
+        assert_eq!(off1, -SCROLL_PX, "the scroll's end");
+        assert!(hero1 > STAGE.x && clerk1 < STAGE.x + STAGE.w && hero1 < clerk1, "both on the stage, hero left: {hero1} {clerk1}");
+        // the line: the backdrop kept, dimmed, where the scroll left it; the clerk speaks
+        while s.player.card_index() < 1 {
+            s.player.press();
+        }
+        assert_eq!((at(&s, 1).1, field(&s, "dimmed"), field(&s, "backdrop")), (-SCROLL_PX, json!({"flag": true}), json!({"picture": "backgrounds/story/x.png"})));
+        let rows = field(&s, "actors")["rows"].clone();
+        assert_eq!((rows[1]["id"].clone(), rows[1]["selected"].clone(), rows[0]["sub"].clone()), (json!("clerk"), json!(true), json!("stay")));
+        // the narration: the hero walks out past the right edge
+        while s.player.card_index() < 2 {
+            s.player.press();
+        }
+        let start = at(&s, 0).0;
+        s.player.advance(vignette::WALK_MS);
+        let end = at(&s, 0).0;
+        assert!(start < end && end - ACTOR_PX / 2 >= STAGE.x + STAGE.w, "{start} -> {end}");
+        assert_eq!(s.player.walk(true), 1.0, "reduce motion: at the end at once");
+        let _ = std::fs::remove_dir_all(&cx.shot_dir);
+    }
+
+    /// The vignette screen's view on the staged scene's line card (the fixture's values).
+    fn vignette_view() -> aegis_ui::screen_layout::View {
+        let d = data();
+        let cx = story_cx(data());
+        let mut s = vignette_screen(&cx, staged_reel(&d), |_, _| {});
+        while s.player.card_index() < 1 {
+            s.player.press();
+        }
+        s.player.advance(3000);
+        let v = s.view();
+        let _ = std::fs::remove_dir_all(&cx.shot_dir);
+        v
+    }
+
+    /// PR7-27 (UISPLIT1 US6, born split): the fixture `ui/views/vignette.view.json` has the view's shape (field names
+    /// and kinds, action ids).
+    #[test]
+    fn the_vignette_fixture_has_the_view_shape() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let layers = aegis_core::assets::Layers::of(vec![root]);
+        let shape = |v: &aegis_ui::screen_layout::View| (v.screen.clone(), v.fields.iter().map(|(n, f)| (n.clone(), f.kind())).collect::<Vec<_>>(), v.actions.iter().map(|a| a.id.clone()).collect::<Vec<_>>());
+        let v = vignette_view();
+        let fixture = aegis_ui::screen_layout::load_fixture(&layers, &v.screen).expect("the fixture file").expect("it parses");
+        assert_eq!(shape(&fixture), shape(&v));
+    }
+
+    /// Writes the vignette fixture from the staged scene (run by hand: `cargo test -p emberwake_gui
+    /// write_vignette_fixture -- --ignored`).
+    #[test]
+    #[ignore]
+    fn write_vignette_fixture() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/ui/views");
+        let v = vignette_view();
+        std::fs::write(dir.join(format!("{}.view.json", v.screen)), serde_json::to_string_pretty(&v.to_json()).unwrap() + "\n").unwrap();
     }
 }

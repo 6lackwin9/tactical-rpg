@@ -18,3 +18,4 @@ pub mod portrait_overlays;
 pub mod shop;
 pub mod shop_view;
 pub mod vignette;
+pub mod vn_stage;

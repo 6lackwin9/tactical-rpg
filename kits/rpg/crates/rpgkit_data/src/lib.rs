@@ -1968,8 +1968,17 @@ pub const STORY_KINDS: [&str; 3] = ["vignettes", "sequences", "boards"];
 /// 4.2: a card's style.
 pub const CARD_STYLES: [&str; 4] = ["image", "text", "title", "line"];
 /// 4.2: the keys a card takes (any other key is refused); PORTRAITFX1 7: a `line` card's `expression`; FX1 5.1: a
-/// card's camera `shake`; FB-206 (2b): `particles_rise` (falling specks); ASSETORG4 dropped its old-name alias.
-pub const CARD_KEYS: [&str; 16] = ["style", "image", "top", "bottom", "particles_rise", "title", "subtitle", "text", "speaker", "fade_in_ms", "fade_out_ms", "hold_ms", "cue", "when", "expression", "shake"];
+/// card's camera `shake`; FB-206 (2b): `particles_rise` (falling specks); ASSETORG4 dropped its old-name alias;
+/// VNSTAGE1: `actors`, `camera`, `walk_ms`.
+pub const CARD_KEYS: [&str; 19] = ["style", "image", "top", "bottom", "particles_rise", "title", "subtitle", "text", "speaker", "fade_in_ms", "fade_out_ms", "hold_ms", "cue", "when", "expression", "shake", "actors", "camera", "walk_ms"];
+/// VNSTAGE1 (PR7-27): a card's stage actors `[{"who" (a characters ref), "side", "move"}]` (at most `ACTORS_MAX`, no
+/// title card), its stage camera and its walk's length.
+pub const ACTOR_KEYS: [&str; 3] = ["who", "side", "move"];
+pub const ACTOR_SIDES: [&str; 2] = ["left", "right"];
+pub const ACTOR_MOVES: [&str; 3] = ["stay", "enter", "exit"];
+pub const STAGE_CAMERAS: [&str; 3] = ["static", "scroll", "pan"];
+pub const ACTORS_MAX: usize = 4;
+pub const WALK_MS_MAX: i64 = 6000;
 /// FX1 5.1: the camera shake presets a card's `shake` and a phase's shake effect may name: the kit's copy of the
 /// engine's `aegis_ui::fx::SHAKE_PRESETS` (the content crates do not depend on `aegis_ui`; a GUI test keeps them equal).
 pub const SHAKE_PRESETS: [&str; 5] = ["jolt", "heavy", "toll", "tremor", "quake"];

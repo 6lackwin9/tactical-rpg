@@ -24,6 +24,18 @@ use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, RADIUS, SMALL, H, W};
 use aegis_core::json;
 use serde_json::{json, Value};
 use aegis_core::clock::Instant;
+use aegis_ui::screen_layout::{Act, Field, RowView, View};
+pub use crate::vn_stage::{actors_of, Actor, Motion, Side, StageCamera, WALK_MS};
+
+/// VNSTAGE1: the longest walk a card may name.
+pub const WALK_MS_MAX: u32 = 6000;
+/// VNSTAGE1: under Auto a card that waits for a press moves on this long after its text is out.
+pub const AUTO_MS: u32 = 1800;
+/// VNSTAGE1: the screen's view-model id (`VignetteScreen::view`).
+pub const VIEW_SCREEN: &str = "vignette";
+/// VNSTAGE1: the Log panel and the lines it keeps on view (the latest).
+pub const LOG_PANEL: Rect = Rect::new(60, 30, 520, 300);
+pub const LOG_LINES: usize = 12;
 
 /// The settings keys (engine keys, `Settings::engine_defaults`).
 pub const TEXT_SPEED: &str = "text_speed";
@@ -210,6 +222,11 @@ pub struct Card {
     pub cue: String,
     /// A camera shake preset (`fx::SHAKE_PRESETS`) started with the card's fade in; "" none, an unknown name none.
     pub shake: String,
+    /// VNSTAGE1 (`vn_stage`): the actors on the stage (names and pictures resolved by the caller), the stage camera and
+    /// how long the walk takes.
+    pub actors: Vec<Actor>,
+    pub camera: StageCamera,
+    pub walk_ms: u32,
 }
 
 impl Default for Card {
@@ -232,6 +249,9 @@ impl Default for Card {
             hold_ms: 0,
             cue: String::new(),
             shake: String::new(),
+            actors: Vec::new(),
+            camera: StageCamera::Static,
+            walk_ms: WALK_MS,
         }
     }
 }
@@ -242,7 +262,8 @@ fn ms_of(d: &json::Dict, key: &str, fallback: u32, max: u32) -> u32 {
 
 impl Card {
     /// A card from its JSON form (the keys of STORYUI1 4.2: style, image, top, bottom, particles_rise, title,
-    /// subtitle, text, fade_in_ms, fade_out_ms, hold_ms, cue; FX1's shake; PORTRAITFX1's expression); bad values fall
+    /// subtitle, text, fade_in_ms, fade_out_ms, hold_ms, cue; FX1's shake; PORTRAITFX1's expression; VNSTAGE1's actors,
+    /// camera and walk_ms); bad values fall
     /// back to the defaults; keys are read as written (ASSETORG4: no old-name aliases). `speaker`, `portrait`, `portrait_key` and `when` are the caller's to resolve.
     pub fn from_json(v: &Value) -> Card {
         let d = json::dict(v);
@@ -263,6 +284,9 @@ impl Card {
             cue: json::s(d, "cue"),
             shake: json::s(d, "shake"),
             expression: json::s(d, "expression"),
+            actors: actors_of(json::get(d, "actors")),
+            camera: StageCamera::parse(&json::s(d, "camera")).unwrap_or_default(),
+            walk_ms: ms_of(d, "walk_ms", base.walk_ms, WALK_MS_MAX),
             ..base
         }
     }
@@ -371,12 +395,14 @@ pub struct Player {
     /// Cues of the cards started since the last `take_cues`.
     cues: Vec<String>,
     skipped: bool,
+    /// VNSTAGE1: Auto: a card that waits for a press moves on `AUTO_MS` after its text is out.
+    pub auto: bool,
 }
 
 impl Player {
     /// The reel at its first card's fade in (its cue queued); an empty reel is done at once.
     pub fn new(reel: Reel, speed: TextSpeed) -> Player {
-        let mut p = Player { reel, speed, shakes: ShakeTable::default(), shake_limits: ShakeLimits::CEILING, card: 0, phase: Phase::Done, t: 0, card_ms: 0, cues: Vec::new(), skipped: false };
+        let mut p = Player { reel, speed, shakes: ShakeTable::default(), shake_limits: ShakeLimits::CEILING, card: 0, phase: Phase::Done, t: 0, card_ms: 0, cues: Vec::new(), skipped: false, auto: false };
         p.start_card(0);
         p.advance(0);
         p
@@ -409,7 +435,8 @@ impl Player {
                 Some(cps) => (self.total() as u64 * 1000).div_ceil(cps as u64) as u32,
                 None => 0,
             }),
-            Phase::Hold => (c.hold_ms > 0).then_some(c.hold_ms),
+            Phase::Hold if c.hold_ms > 0 => Some(c.hold_ms),
+            Phase::Hold => self.auto.then_some(AUTO_MS),
             Phase::FadeOut => Some(self.speed.fade(c.fade_out_ms)),
             Phase::Done => None,
         }
@@ -520,7 +547,45 @@ impl Player {
 
     /// A hold that waits for the player (the "Click to continue" hint shows).
     pub fn waiting(&self) -> bool {
-        self.phase == Phase::Hold && self.card().is_some_and(|c| c.hold_ms == 0)
+        !self.auto && self.phase == Phase::Hold && self.card().is_some_and(|c| c.hold_ms == 0)
+    }
+
+    /// VNSTAGE1 (ART-10): the painted backdrop the current card's stage shows: its own picture, else the nearest
+    /// earlier card's (the scene's last backdrop); None when no card so far names one.
+    pub fn backdrop(&self) -> Option<&str> {
+        self.backdrop_card().map(|c| c.image.as_str())
+    }
+
+    /// VNSTAGE1: the card whose picture `backdrop` is (the current card or the nearest earlier one with a picture).
+    fn backdrop_card(&self) -> Option<&Card> {
+        let upto = self.card.min(self.reel.cards.len().saturating_sub(1));
+        self.reel.cards.get(..=upto)?.iter().rev().find(|c| !c.image.is_empty())
+    }
+
+    /// VNSTAGE1: how the kept backdrop stands on the current card: a card of its own moving camera moves it (at the
+    /// walk's progress); else it stays where its own card's camera left it (that camera at the end of its move), so a
+    /// scroll does not jump back when the dialogue starts.
+    pub fn backdrop_camera(&self, walk: f32) -> (StageCamera, f32) {
+        match self.card() {
+            Some(c) if c.camera != StageCamera::Static => (c.camera, walk),
+            _ => (self.backdrop_card().map_or(StageCamera::Static, |b| b.camera), 1.0),
+        }
+    }
+
+    /// VNSTAGE1: the current card's walk progress (0..1, eased; 1 under `reduce_motion` or once done).
+    pub fn walk(&self, reduce_motion: bool) -> f32 {
+        match self.card() {
+            Some(c) if !reduce_motion && !self.done() => crate::vn_stage::progress(self.card_ms, c.walk_ms),
+            _ => 1.0,
+        }
+    }
+
+    /// VNSTAGE1: the Log: (speaker, text) of every card with text shown so far, oldest first (the current card once its
+    /// text starts).
+    pub fn log(&self) -> Vec<(String, String)> {
+        let started = matches!(self.phase, Phase::Typing | Phase::Hold | Phase::FadeOut);
+        let upto = if started { self.card + 1 } else { self.card };
+        self.reel.cards.iter().take(upto).filter(|c| !c.text.is_empty()).map(|c| (c.speaker.clone(), c.text.clone())).collect()
     }
 
     /// The cover's alpha over the stage (V6): 255 x (1 - t / fade) in fade in, 255 x t / fade in fade out, full once
@@ -812,10 +877,20 @@ pub fn draw_with<A: Clone>(ui: &mut Ui<A>, art: &mut Art, pl: &Player, pal: &Pal
     if c.style == Style::Image {
         ui.p.shift(dx, dy);
     }
-    // The backdrop, or the picture letterboxed in the frame colour.
+    // The backdrop, or the picture letterboxed in the frame colour. VNSTAGE1: a line or text card keeps the scene's last
+    // picture on the stage, dimmed (ART-10); a moving camera covers the stage with the picture and slides it.
     let area = if c.style == Style::Image { PICTURE } else { stage };
-    let picture = (c.style == Style::Image && !c.image.is_empty()).then(|| art.size_of(&c.image)).flatten().filter(|s| s.0 > 0 && s.1 > 0);
+    let walk = pl.walk(reduce_motion);
+    let kept = match c.style {
+        Style::Line | Style::Text => pl.backdrop().map(str::to_string),
+        Style::Image if c.camera != StageCamera::Static && !c.image.is_empty() => Some(c.image.clone()),
+        _ => None,
+    };
+    let (camera, at) = pl.backdrop_camera(walk);
+    let staged = kept.is_some_and(|rel| crate::vn_stage::draw_backdrop(&mut ui.p, art, &rel, camera, at, c.style != Style::Image));
+    let picture = (c.style == Style::Image && !c.image.is_empty() && !staged).then(|| art.size_of(&c.image)).flatten().filter(|s| s.0 > 0 && s.1 > 0);
     match picture {
+        _ if staged => {}
         Some((iw, ih)) => {
             let k = (area.w as f32 / iw as f32).min(area.h as f32 / ih as f32);
             let (w, h) = ((iw as f32 * k).round() as i32, (ih as f32 * k).round() as i32);
@@ -831,6 +906,9 @@ pub fn draw_with<A: Clone>(ui: &mut Ui<A>, art: &mut Art, pl: &Player, pal: &Pal
     }
     if c.particles_rise && !reduce_motion {
         particles(&mut ui.p, area, pl.card_index(), pl.card_ms());
+    }
+    if c.style != Style::Title {
+        crate::vn_stage::draw_actors(&mut ui.p, art, &c.actors, c.camera, walk, pl.card_ms(), &c.portrait_key, reduce_motion);
     }
     if c.style != Style::Image {
         ui.p.shift(dx, dy);
@@ -915,6 +993,10 @@ pub type OnDone<G> = Box<dyn FnOnce(&mut Cx<G>, Ended)>;
 pub enum VAct {
     Next,
     Skip,
+    /// VNSTAGE1: Auto on or off.
+    Auto,
+    /// VNSTAGE1: the Log open or closed.
+    Log,
 }
 
 /// The vignette screen (V15): a full screen playing one reel; `on_done` runs once, when the reel ends or is skipped,
@@ -928,6 +1010,8 @@ pub struct VignetteScreen<G> {
     pub portrait: CardPortrait,
     /// ASSETORG4: the game mounts the portrait overlay layer (`portrait_overlays`; off unless `portrait_overlays`).
     pub overlays: bool,
+    /// VNSTAGE1: the Log panel is open (the reel waits while it is).
+    pub log_open: bool,
     on_done: Option<OnDone<G>>,
     last: Option<Instant>,
     w: Vec<Widget<VAct>>,
@@ -935,7 +1019,7 @@ pub struct VignetteScreen<G> {
 
 impl<G: Context> VignetteScreen<G> {
     pub fn new(reel: Reel, speed: TextSpeed, on_done: impl FnOnce(&mut Cx<G>, Ended) + 'static) -> Self {
-        Self { player: Player::new(reel, speed), palette: Palette::default(), ask_first: false, portrait: CardPortrait::default(), overlays: false, on_done: Some(Box::new(on_done)), last: None, w: Vec::new() }
+        Self { player: Player::new(reel, speed), palette: Palette::default(), ask_first: false, portrait: CardPortrait::default(), overlays: false, log_open: false, on_done: Some(Box::new(on_done)), last: None, w: Vec::new() }
     }
 
     /// ASSETORG4: the game's switch of the line cards' portrait overlays (`portrait_overlays::Mount::resolve` with the
@@ -1032,8 +1116,93 @@ impl<G: Context> VignetteScreen<G> {
 
     fn act(&mut self, cx: &mut Cx<G>, a: VAct) {
         match a {
+            VAct::Next if self.log_open => self.log_open = false,
             VAct::Next => self.press(cx),
             VAct::Skip => self.want_skip(cx),
+            VAct::Auto => self.player.auto = !self.player.auto,
+            VAct::Log => self.log_open = !self.log_open,
+        }
+    }
+
+    /// VNSTAGE1 (UISPLIT1 US8, born split): what the screen shows and offers, for a layout file to place later: `style`,
+    /// `speaker`, `text` (the card's whole text) and `shown` (the characters typed), `backdrop` (the stage's picture, ""
+    /// none) and `dimmed`, `camera`, `actors` (a row per actor, id its `who`: the name, its side as the detail, its move
+    /// as the sub, its first picture; selected while it speaks), `auto` and `log_open`, `log` (a row per line so far:
+    /// the speaker, the text as the sub). Actions `next` (on until the reel is over), `skip` (on while it may be
+    /// skipped), `auto`, `log`.
+    pub fn view(&self) -> View {
+        let pl = &self.player;
+        let c = pl.card();
+        let style = c.map(|c| c.style);
+        let backdrop = match style {
+            Some(Style::Line | Style::Text) => pl.backdrop().unwrap_or("").to_string(),
+            Some(Style::Image) => c.map(|c| c.image.clone()).unwrap_or_default(),
+            _ => String::new(),
+        };
+        let actors: Vec<RowView> = c
+            .map(|c| c.actors.iter().map(|a| RowView { id: a.who.clone(), label: a.name.clone(), detail: a.side.name().into(), sub: a.motion.name().into(), picture: a.sprite.first().cloned(), selected: a.who == c.portrait_key && !a.who.is_empty(), enabled: true, ..Default::default() }).collect())
+            .unwrap_or_default();
+        let log: Vec<RowView> = pl.log().into_iter().enumerate().map(|(i, (who, text))| RowView { id: i.to_string(), label: who, sub: text, enabled: true, ..Default::default() }).collect();
+        let done = pl.done();
+        View::new(VIEW_SCREEN)
+            .text("style", style.map_or("", Style::name))
+            .text("speaker", c.map(|c| c.speaker.clone()).unwrap_or_default())
+            .text("text", c.map(|c| c.text.clone()).unwrap_or_default())
+            .field("shown", Field::Number(pl.shown() as f64))
+            .field("backdrop", Field::Picture(backdrop))
+            .field("dimmed", Field::Flag(matches!(style, Some(Style::Line | Style::Text)) && pl.backdrop().is_some()))
+            .text("camera", c.map_or("static", |c| c.camera.name()))
+            .field("actors", Field::Rows(actors))
+            .field("auto", Field::Flag(pl.auto))
+            .field("log_open", Field::Flag(self.log_open))
+            .field("log", Field::Rows(log))
+            .action("next", "Next", !done)
+            .action("skip", "Skip", pl.reel.skippable && !done)
+            .action("auto", "Auto", !done)
+            .action("log", "Log", !done)
+    }
+
+    /// VNSTAGE1: a view click as the screen's own (`VAct`); None for an unknown action or one that is off.
+    pub fn act_of(&self, a: &Act) -> Option<VAct> {
+        let done = self.player.done();
+        match a.action.as_str() {
+            "next" if !done => Some(VAct::Next),
+            "skip" if self.player.reel.skippable && !done => Some(VAct::Skip),
+            "auto" if !done => Some(VAct::Auto),
+            "log" if !done => Some(VAct::Log),
+            _ => None,
+        }
+    }
+
+    /// VNSTAGE1: the Log panel: the latest `LOG_LINES` lines, the speaker's name in the accent over each.
+    fn draw_log(&self, ui: &mut Ui<VAct>) {
+        let t = th();
+        ui.p.fill(Rect::new(0, 0, W, H), with_alpha(rgb(0, 0, 0), 150));
+        ui.p.panel(LOG_PANEL, t.panel, t.edge, RADIUS);
+        ui.p.text((LOG_PANEL.x + 10) as f32, (LOG_PANEL.y + 8) as f32, "Log", CARD_BODY, self.palette.accent);
+        let lines = self.player.log();
+        let lh = ui.p.line_h(SMALL);
+        let (x, w) = (LOG_PANEL.x + 10, LOG_PANEL.w - 20);
+        let mut y = (LOG_PANEL.y + 26) as f32;
+        let bottom = (LOG_PANEL.y + LOG_PANEL.h - 8) as f32;
+        let start = lines.len().saturating_sub(LOG_LINES);
+        for (who, text) in &lines[start..] {
+            let wrapped = ui.p.wrap(text, SMALL, w as f32);
+            if y + lh * (wrapped.len() + usize::from(!who.is_empty())) as f32 > bottom {
+                break;
+            }
+            if !who.is_empty() {
+                ui.p.text(x as f32, y, who, SMALL, self.palette.accent);
+                y += lh;
+            }
+            for l in wrapped {
+                ui.p.text(x as f32, y, &l, SMALL, self.palette.text);
+                y += lh;
+            }
+            y += 3.0;
+        }
+        if lines.is_empty() {
+            ui.p.text(x as f32, y, "Nothing yet.", SMALL, self.palette.dim);
         }
     }
 }
@@ -1052,9 +1221,25 @@ impl<G: Context> Screen<G> for VignetteScreen<G> {
         // No hover card on the advance area (PR7-26): a card trailing the pointer over the whole stage covers the
         // scene; the corner hint already says how to move on.
         ui.push("vignette.next", "stage", "", Rect::new(0, 0, W, H), !done, false, Some(VAct::Next), Vec::new());
+        // VNSTAGE1: the cutscene bar, right to left: Skip (when the reel may be skipped), Log, Auto
+        let mut right = W - 6;
         if self.player.reel.skippable && !done {
             let w = (ui.p.text_w("Skip", SMALL) + 14.0).ceil() as i32;
-            ui.button_full("vignette.skip", Rect::new(W - w - 6, 6, w, 13), "Skip", VAct::Skip, true, false, SMALL, tip("Skip", "Esc or a right click skips the scene."));
+            right -= w;
+            ui.button_full("vignette.skip", Rect::new(right, 6, w, 13), "Skip", VAct::Skip, true, false, SMALL, tip("Skip", "Esc or a right click skips the scene."));
+            right -= 4;
+        }
+        if !done {
+            for (id, label, act, on, help) in [("vignette.log", "Log", VAct::Log, self.log_open, "The lines of this scene so far."), ("vignette.auto", "Auto", VAct::Auto, self.player.auto, "Cards that wait for a click move on by themselves.")] {
+                let w = (ui.p.text_w(label, SMALL) + 14.0).ceil() as i32;
+                right -= w;
+                ui.button_full(id, Rect::new(right, 6, w, 13), label, act, true, on, SMALL, tip(label, help));
+                right -= 4;
+            }
+        }
+        if self.log_open && !done {
+            self.draw_log(&mut ui);
+            ui.push("vignette.log.close", "stage", "", Rect::new(0, 0, W, H), true, false, Some(VAct::Log), Vec::new());
         }
         self.w = ui.widgets;
     }
@@ -1065,13 +1250,17 @@ impl<G: Context> Screen<G> for VignetteScreen<G> {
 
     fn key(&mut self, cx: &mut Cx<G>, k: Key) {
         if matches!(k, Key::Space | Key::Enter) {
-            self.press(cx);
+            self.act(cx, VAct::Next);
         }
     }
 
-    /// Right click and Esc: skip.
+    /// Right click and Esc: skip (VNSTAGE1: with the Log open, close it).
     fn back(&mut self, cx: &mut Cx<G>) {
-        self.want_skip(cx);
+        if self.log_open {
+            self.log_open = false;
+        } else {
+            self.want_skip(cx);
+        }
     }
 
     /// The frame time (at most `MAX_FRAME_MS`) moves the reel.
@@ -1080,7 +1269,8 @@ impl<G: Context> Screen<G> for VignetteScreen<G> {
         let now = Instant::now();
         let ms = self.last.map_or(0, |l| now.duration_since(l).as_millis().min(MAX_FRAME_MS as u128) as u32);
         self.last = Some(now);
-        self.advance(cx, ms);
+        // VNSTAGE1: the reel waits while the Log is open
+        self.advance(cx, if self.log_open { 0 } else { ms });
     }
 
     /// Back from the question: its answer, and no jump for the time it was open.
@@ -1096,6 +1286,9 @@ impl<G: Context> Screen<G> for VignetteScreen<G> {
         v["skippable"] = json!(self.player.reel.skippable);
         v["ask_first"] = json!(self.ask_first);
         v["portraits"] = self.portrait.state();
+        v["auto"] = json!(self.player.auto);
+        v["log_open"] = json!(self.log_open);
+        v["view"] = self.view().to_json();
         v
     }
 

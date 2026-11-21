@@ -260,6 +260,19 @@ fn each_bad_vignette_or_card_field_is_one_error() {
         ("a cue not text", with(&g, &["cards", "3", "cue"], json!(3)), "Card 4: cue must be text."),
         ("a when kind unknown", with(&g, &["cards", "1", "when", "0", "kind"], json!("weather")), "Card 2 when 1: unknown condition kind 'weather'"),
         ("a when on an unknown quest", with(&g, &["cards", "1", "when"], json!([{"kind": "quest", "quest": "q_ghost", "status": "active"}])), "unknown quest 'q_ghost'"),
+        // VNSTAGE1 (PR7-27): the stage keys
+        ("actors not a list", with(&g, &["cards", "3", "actors"], json!({})), "Card 4: actors must be a list"),
+        ("an actor not an object", with(&g, &["cards", "3", "actors"], json!(["keeper_a"])), "Card 4 actor 1 must be an object"),
+        ("an actor without who", with(&g, &["cards", "3", "actors"], json!([{"side": "left"}])), "Card 4 actor 1: who is required"),
+        ("an unknown actor", with(&g, &["cards", "3", "actors"], json!([{"who": "ghost"}])), "unknown character 'ghost'"),
+        ("an actor twice", with(&g, &["cards", "3", "actors"], json!([{"who": "keeper_a"}, {"who": "keeper_a", "side": "right"}])), "Card 4 actor 2: 'keeper_a' is on the stage twice."),
+        ("an actor key unknown", with(&g, &["cards", "3", "actors"], json!([{"who": "keeper_a", "pose": "x"}])), "Card 4 actor 1: unknown key 'pose'."),
+        ("a side unknown", with(&g, &["cards", "3", "actors"], json!([{"who": "keeper_a", "side": "up"}])), "side 'up' is not one of left, right."),
+        ("a move unknown", with(&g, &["cards", "3", "actors"], json!([{"who": "keeper_a", "move": "fly"}])), "move 'fly' is not one of stay, enter, exit."),
+        ("five actors", with(&g, &["cards", "3", "actors"], json!([{"who": "keeper_a"}, {"who": "k1"}, {"who": "k2"}, {"who": "k3"}, {"who": "k4"}])), "Card 4: at most 4 actors (has 5)."),
+        ("actors on a title card", with(&g, &["cards", "2", "actors"], json!([{"who": "keeper_a"}])), "Card 3: a title card has no actors."),
+        ("a camera unknown", with(&g, &["cards", "3", "camera"], json!("dolly")), "Card 4: camera 'dolly' is not one of static, scroll, pan."),
+        ("a walk over 6000", with(&g, &["cards", "3", "walk_ms"], json!(6001)), "Card 4: walk_ms must be a whole number 0..6000."),
     ];
     for (tag, bad, needle) in cases {
         assert_one(&v, "vignettes", &g, &bad, needle, tag);
@@ -270,6 +283,8 @@ fn each_bad_vignette_or_card_field_is_one_error() {
     let full: Vec<Value> = (0..24).map(|_| json!({"style": "text", "text": "x"})).collect();
     assert!(added(&v, "vignettes", &g, &with(&g, &["cards"], json!(full))).is_empty());
     assert!(added(&v, "vignettes", &g, &with(&g, &["music"], json!("none"))).is_empty(), "none is silence");
+    let staged = with(&with(&with(&g, &["cards", "3", "actors"], json!([{"who": "keeper_a", "side": "left", "move": "enter"}])), &["cards", "3", "camera"], json!("pan")), &["cards", "3", "walk_ms"], json!(1200));
+    assert!(added(&v, "vignettes", &g, &staged).is_empty(), "a staged line card is clean");
     drop_scratch(&data);
 }
 

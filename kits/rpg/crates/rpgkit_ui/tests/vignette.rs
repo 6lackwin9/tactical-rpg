@@ -14,7 +14,7 @@ use aegis_ui::playtest::Playtests;
 use aegis_ui::screen::{Context, Cx, Nav, Screen, Settings, TEXT_SIZES, TEXT_SPEEDS};
 use aegis_ui::text_audit;
 use aegis_ui::ui::{Gfx, Kit, Ui, H, W};
-use rpgkit_ui::vignette::{self, Card, Ended, Palette, Phase, Player, Reel, Style, TextSpeed, VignetteScreen, CARD_BODY, SKIP_TAG};
+use rpgkit_ui::vignette::{self, Card, Ended, Palette, Phase, Player, Reel, StageCamera, Style, TextSpeed, VignetteScreen, CARD_BODY, SKIP_TAG};
 use serde_json::{json, Value};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -391,7 +391,8 @@ fn the_agent_view_and_the_widgets() {
     }
     assert_eq!((st["reel"].clone(), st["cards"].clone(), st["phase"].clone(), st["total"].clone()), (json!("test"), json!(2), json!("fade_in"), json!(6)));
     let ids: Vec<String> = s.widgets().iter().map(|w| w["id"].as_str().unwrap().to_string()).collect();
-    assert_eq!(ids, vec!["vignette.next", "vignette.skip"]);
+    // VNSTAGE1: the cutscene bar adds Log and Auto
+    assert_eq!(ids, vec!["vignette.next", "vignette.skip", "vignette.log", "vignette.auto"]);
     s.click_id(&mut cx, "vignette.next").unwrap();
     assert_eq!(s.state(&cx)["phase"], json!("typing"), "the stage is a press");
     s.key(&mut cx, aegis_ui::Key::Space);
@@ -852,4 +853,98 @@ fn the_player_reads_the_shared_reduce_motion_setting() {
     assert!(!rpgkit_ui::vignette::reduce_motion(&s));
     s.v[aegis_ui::screen::REDUCE_MOTION] = serde_json::json!(true);
     assert!(rpgkit_ui::vignette::reduce_motion(&s) && s.reduce_motion());
+}
+
+// ---- VNSTAGE1 (PR7-27): the story stage ----------------------------------------------------------------------------
+
+fn line(who: &str, text: &str) -> vignette::Card {
+    vignette::Card { style: vignette::Style::Line, speaker: who.into(), portrait_key: who.into(), text: text.into(), fade_in_ms: 0, fade_out_ms: 0, ..vignette::Card::default() }
+}
+
+/// A card's stage keys: actors with their side and move (defaults left and stay), the camera, the walk.
+#[test]
+fn a_card_reads_its_actors_camera_and_walk() {
+    use vignette::{Motion, Side, StageCamera};
+    let c = vignette::Card::from_json(&json!({"style": "line", "text": "x", "actors": [{"who": "a", "move": "enter"}, {"who": "b", "side": "right"}], "camera": "pan", "walk_ms": 900}));
+    assert_eq!(c.actors.iter().map(|a| (a.who.as_str(), a.side, a.motion)).collect::<Vec<_>>(), [("a", Side::Left, Motion::Enter), ("b", Side::Right, Motion::Stay)]);
+    assert_eq!((c.camera, c.walk_ms), (StageCamera::Pan, 900));
+    let plain = vignette::Card::from_json(&json!({"style": "text", "text": "x", "camera": "dolly"}));
+    assert_eq!((plain.actors.len(), plain.camera, plain.walk_ms), (0, StageCamera::Static, vignette::WALK_MS));
+}
+
+/// ART-10: a line or text card keeps the scene's last picture as its backdrop; before any picture there is none.
+#[test]
+fn dialogue_keeps_the_scenes_last_backdrop() {
+    let pic = vignette::Card { image: "backgrounds/x.png".into(), fade_in_ms: 0, fade_out_ms: 0, camera: StageCamera::Scroll, ..card("Look.") };
+    let pan = vignette::Card { camera: StageCamera::Pan, ..line("b", "And.") };
+    let mut p = Player::new(reel(vec![line("a", "First."), pic, line("a", "Then."), pan]), TextSpeed::Instant);
+    assert_eq!(p.backdrop(), None, "no picture yet");
+    assert_eq!(p.backdrop_camera(0.3), (StageCamera::Static, 1.0));
+    // the picture's own card scrolls it; the next line keeps it where the scroll ended; a line's own camera moves it on
+    for (card, camera) in [(1, (StageCamera::Scroll, 0.3)), (2, (StageCamera::Scroll, 1.0)), (3, (StageCamera::Pan, 0.3))] {
+        while p.card_index() < card {
+            p.press();
+        }
+        assert_eq!((p.backdrop(), p.backdrop_camera(0.3)), (Some("backgrounds/x.png"), camera), "card {card}");
+    }
+}
+
+/// Auto: a card that waits for a press moves on `AUTO_MS` after its text is out (no hint while it does); off, it waits.
+#[test]
+fn auto_moves_a_waiting_card_on() {
+    let mut p = Player::new(reel(vec![line("a", "One."), line("a", "Two.")]), TextSpeed::Instant);
+    p.advance(10);
+    assert!(p.waiting());
+    p.advance(vignette::AUTO_MS * 3);
+    assert_eq!(p.card_index(), 0, "off: it waits");
+    p.auto = true;
+    assert!(!p.waiting(), "no hint under Auto");
+    p.advance(10);
+    assert_eq!(p.card_index(), 1, "on: a card held past AUTO_MS moves on at once");
+    p.advance(vignette::AUTO_MS - 100);
+    assert_eq!(p.card_index(), 1, "the next waits AUTO_MS after its text");
+    p.advance(200);
+    assert!(p.done(), "then moves on");
+}
+
+/// The Log lists the lines shown so far (the current one once its text starts); while it is open the reel waits, a
+/// click or Esc closes it; the view-model carries the actors, the camera, Auto, the Log and the actions.
+#[test]
+fn the_log_auto_and_the_view() {
+    let (mut cx, mut g) = (cx(), gfx());
+    let mut a = line("ann", "Hello.");
+    a.actors = vignette::actors_of(&json!([{"who": "ann"}, {"who": "bo", "side": "right", "move": "enter"}]));
+    a.camera = vignette::StageCamera::Scroll;
+    let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![a, line("bo", "Hi.")]), TextSpeed::Instant, |_, _| {});
+    s.advance(&mut cx, 10);
+    assert_eq!(s.player.log(), vec![("ann".to_string(), "Hello.".to_string())]);
+    let v = s.view();
+    assert_eq!(v.screen, vignette::VIEW_SCREEN);
+    let names: Vec<&str> = v.fields.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(names, ["style", "speaker", "text", "shown", "backdrop", "dimmed", "camera", "actors", "auto", "log_open", "log"]);
+    match v.get("actors") {
+        Some(aegis_ui::screen_layout::Field::Rows(r)) => {
+            assert_eq!(r.iter().map(|r| (r.id.as_str(), r.detail.as_str(), r.sub.as_str(), r.selected)).collect::<Vec<_>>(), [("ann", "left", "stay", true), ("bo", "right", "enter", false)]);
+        }
+        _ => panic!("no actors"),
+    }
+    assert_eq!(v.get("camera"), Some(&aegis_ui::screen_layout::Field::Text("scroll".into())));
+    let click = |a: &str| aegis_ui::screen_layout::Act { action: a.into(), arg: None };
+    assert_eq!(s.act_of(&click("log")), Some(vignette::VAct::Log));
+    assert_eq!(s.act_of(&click("nope")), None);
+    s.draw(&mut cx, &mut g, (-1, -1), true);
+    s.click_id(&mut cx, "vignette.log").unwrap();
+    assert!(s.log_open);
+    s.draw(&mut cx, &mut g, (-1, -1), true);
+    assert!(s.widgets().iter().any(|w| w["id"] == "vignette.log.close"));
+    let card = s.player.card_index();
+    s.key(&mut cx, aegis_ui::Key::Space);
+    assert!(!s.log_open && s.player.card_index() == card, "a press closes the Log and does not move on");
+    s.click_id(&mut cx, "vignette.log").unwrap();
+    s.back(&mut cx);
+    assert!(!s.log_open && !s.player.done(), "Esc closes the Log, not the scene");
+    s.draw(&mut cx, &mut g, (-1, -1), true);
+    s.click_id(&mut cx, "vignette.auto").unwrap();
+    assert!(s.player.auto && s.state(&cx)["auto"] == json!(true));
+    assert_eq!(s.state(&cx)["view"]["screen"], json!("vignette"));
 }

@@ -232,6 +232,18 @@ pub fn portrait_chain(tier: &str, id: &str, body: &str) -> Vec<String> {
     out
 }
 
+/// VNSTAGE1 (PR7-27): the full-body pictures to try for a story stage actor: the character's own
+/// (`portraits/full_body/<id>.png`), then its body's (`<body>` the body key's class); none found draws the stage's code
+/// figure.
+pub fn full_body_chain(id: &str, body: &str) -> Vec<String> {
+    let mut out = vec![format!("portraits/full_body/{id}.png")];
+    let class = split_body(body).0;
+    if !class.is_empty() && class != id {
+        out.push(format!("portraits/full_body/{class}.png"));
+    }
+    out
+}
+
 /// PORTRAITFX1 5.4 (PQ2), PORTRAITFX2 FL1: the plain face and the kit's default faces (a game's own list:
 /// `Catalog::faces`).
 pub use rpgkit_data::{DEFAULT_FACES, NEUTRAL};

@@ -73,13 +73,28 @@
 					"bottom": "#1e232d",
 					"text": "Kaelen runs the Lower Meat Market past boiling rendering cauldrons. Hollow-eyed, grey-veined Spent stand in silent queues with wooden bowls, trading curfew tallies for communion draughts and grey salt. Not one of them looks up.",
 					"fade_in_ms": 1200,
-					"fade_out_ms": 600
+					"fade_out_ms": 600,
+					"camera": "scroll",
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left",
+							"move": "enter"
+						}
+					]
 				},
 				{
 					"style": "text",
 					"text": "Whistles shriek behind him. Three scourge-bearers in mortuary grey are already on the rooftops, and the smoke over the chimneys is moving the wrong way.",
 					"top": "#0a0b10",
-					"bottom": "#1e232d"
+					"bottom": "#1e232d",
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left",
+							"move": "exit"
+						}
+					]
 				}
 			],
 			"tags": [
@@ -101,33 +116,120 @@
 					"bottom": "#1e232d",
 					"text": "The canal bridge. An iron mortuary cart stands on the span, its shutters chained, and two prisoners rattle inside.",
 					"fade_in_ms": 1200,
-					"fade_out_ms": 600
+					"fade_out_ms": 600,
+					"camera": "pan",
+					"actors": [
+						{
+							"who": "vesper",
+							"side": "left",
+							"move": "enter"
+						},
+						{
+							"who": "kaelen",
+							"side": "left",
+							"move": "enter"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "vesper",
-					"text": "Chain's black iron. Lever it at the hasp and keep your thumbs out of the way."
+					"text": "Chain's black iron. Lever it at the hasp and keep your thumbs out of the way.",
+					"actors": [
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "kaelen",
+							"side": "left"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "kaelen",
-					"text": "Watch crossbow on the far rail. Whoever is in there, they've been in there since the bell."
+					"text": "Watch crossbow on the far rail. Whoever is in there, they've been in there since the bell.",
+					"actors": [
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "kaelen",
+							"side": "left"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "maren",
-					"text": "Please. Whatever you are, break it. They have the Scriptorium seals on this cart, and they do not use them for the living."
+					"text": "Please. Whatever you are, break it. They have the Scriptorium seals on this cart, and they do not use them for the living.",
+					"actors": [
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "maren",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "hollis",
-					"text": "Left your sister in a ward, did you? Mine's in a convoy. Get this lid off and give me back my arbalest."
+					"text": "Left your sister in a ward, did you? Mine's in a convoy. Get this lid off and give me back my arbalest.",
+					"actors": [
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "maren",
+							"side": "right"
+						},
+						{
+							"who": "hollis",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "text",
 					"text": "The hasp gives. Footmen on both banks. The cart's captives climb out swinging.",
 					"top": "#0a0b10",
-					"bottom": "#1e232d"
+					"bottom": "#1e232d",
+					"actors": [
+						{
+							"who": "vesper",
+							"side": "left",
+							"move": "exit"
+						},
+						{
+							"who": "kaelen",
+							"side": "left",
+							"move": "exit"
+						},
+						{
+							"who": "maren",
+							"side": "right",
+							"move": "exit"
+						},
+						{
+							"who": "hollis",
+							"side": "right",
+							"move": "exit"
+						}
+					]
 				}
 			],
 			"tags": [
