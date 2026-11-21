@@ -1,0 +1,306 @@
+{
+  "screen": "deck",
+  "fields": {
+    "active_head": {
+      "text": "Actives 3 / 3"
+    },
+    "active_hint": {
+      "text": "Automatic deck"
+    },
+    "active": {
+      "rows": [
+        {
+          "id": "active.0",
+          "label": "Taunt Shout",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": true,
+          "detail2": "Guard I",
+          "note": "Taunt Shout: grants taunt for 2 rounds starting next round. Foes that can reach you must target you."
+        },
+        {
+          "id": "active.1",
+          "label": "Dread Roar",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": true,
+          "detail2": "Assault I",
+          "note": "Dread Roar: 8 stagger, 80% to Weaken (-20% outgoing power) for 2 rounds within 1-2."
+        },
+        {
+          "id": "active.2",
+          "label": "Phalanx Cover",
+          "detail": "3 AP",
+          "picture": null,
+          "enabled": true,
+          "detail2": "Guard I",
+          "note": "Phalanx Cover: -35% damage and Steadfast for 1 round; intercepts one adjacent melee hit on an ally and fortifies self."
+        }
+      ]
+    },
+    "passive_head": {
+      "text": "Passives 0 / 2"
+    },
+    "passive_hint": {
+      "text": "From the hero's deck and background"
+    },
+    "passive": {
+      "rows": [
+        {
+          "id": "passive.0",
+          "label": "Empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "tone": "dim",
+          "note": "Holds one of the hero's passives; none owned yet: they come from the hero's own deck, background, faction, disciplines and named items."
+        },
+        {
+          "id": "passive.1",
+          "label": "Empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "tone": "dim",
+          "note": "Holds one of the hero's passives; none owned yet: they come from the hero's own deck, background, faction, disciplines and named items."
+        }
+      ]
+    },
+    "keystone_head": {
+      "text": "Keystone 0 / 1"
+    },
+    "keystone_hint": {
+      "text": "Opens at level 6"
+    },
+    "keystone": {
+      "rows": [
+        {
+          "id": "keystone.0",
+          "label": "Empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "tone": "dim",
+          "note": "Holds one of the hero's keystones. The class keystone opens at level 6 (the hero is level 5); a Tier III graft or a mastery 3 masterwork can take the slot instead."
+        }
+      ]
+    },
+    "basics": {
+      "rows": [
+        {
+          "id": "move",
+          "label": "Move",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": false,
+          "sub": "Basic for any intent, 1 AP",
+          "note": "Move up to 2 blocks (speed-based tiles per block), once per round: 1 AP per tile. Keeps your stance."
+        },
+        {
+          "id": "rest",
+          "label": "Rest",
+          "detail": "0 AP",
+          "picture": null,
+          "enabled": false,
+          "sub": "Basic for any intent, 0 AP",
+          "note": "Catch your breath: recover 2 AP and return to Neutral stance, free."
+        },
+        {
+          "id": "strike",
+          "label": "Strike",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": false,
+          "sub": "Assault basic, 1 AP",
+          "note": "A measured blow."
+        },
+        {
+          "id": "offhand_jab",
+          "label": "Off-hand Jab",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": false,
+          "sub": "Assault basic, 1 AP",
+          "note": "Melee jab with the off-hand weapon (or bare hands) at distance 1: ranged units' point-blank answer."
+        },
+        {
+          "id": "active_guard",
+          "label": "Active Guard",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": false,
+          "sub": "Guard basic, 1 AP",
+          "note": "Guard, Standard: raise a guard, -35% damage."
+        },
+        {
+          "id": "hold_line",
+          "label": "Hold Line",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": false,
+          "sub": "Guard basic, 1 AP",
+          "note": "Hold Line: -25% damage this round; grants Fortify (+4 armor) for 1 round."
+        }
+      ]
+    },
+    "right": {
+      "tabs": {
+        "labels": [
+          "Owned",
+          "Order by intent"
+        ],
+        "open": 0
+      }
+    },
+    "owned": {
+      "rows": [
+        {
+          "id": "active.taunt_shout",
+          "label": "Taunt Shout  [Guard]  Rank I  1 AP",
+          "detail": "Slotted",
+          "picture": null,
+          "enabled": false,
+          "sub": "Taunt Shout: grants taunt for 2 rounds starting next round. Foes that can reach you must target you."
+        },
+        {
+          "id": "active.intimidate",
+          "label": "Dread Roar  [Assault]  Rank I  1 AP",
+          "detail": "Slotted",
+          "picture": null,
+          "enabled": false,
+          "sub": "Dread Roar: 8 stagger, 80% to Weaken (-20% outgoing power) for 2 rounds within 1-2."
+        },
+        {
+          "id": "active.intercept_guard",
+          "label": "Phalanx Cover  [Guard]  Rank I  3 AP",
+          "detail": "Slotted",
+          "picture": null,
+          "enabled": false,
+          "sub": "Phalanx Cover: -35% damage and Steadfast for 1 round; intercepts one adjacent melee hit on an ally and fortifies self."
+        },
+        {
+          "id": "worn.shield_bash",
+          "label": "Shield Bash  [Assault]  2 AP  from worn gear",
+          "detail": "Worn",
+          "picture": null,
+          "enabled": false,
+          "sub": "Shield Bash: 75% power, 16 stagger, 75% to Stagger for 1 round, and pushes the target back.",
+          "tone": "gold"
+        }
+      ]
+    },
+    "order": {
+      "rows": [
+        {
+          "id": "assault.0",
+          "label": "1. Dread Roar",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": false,
+          "sub": "Assault",
+          "note": "Dread Roar: 8 stagger, 80% to Weaken (-20% outgoing power) for 2 rounds within 1-2."
+        },
+        {
+          "id": "assault.1",
+          "label": "2. Strike",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": true,
+          "sub": "Assault",
+          "tone": "info",
+          "note": "A measured blow."
+        },
+        {
+          "id": "assault.2",
+          "label": "3. Off-hand Jab",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": true,
+          "sub": "Assault",
+          "tone": "info",
+          "note": "Melee jab with the off-hand weapon (or bare hands) at distance 1: ranged units' point-blank answer."
+        },
+        {
+          "id": "guard.0",
+          "label": "1. Taunt Shout",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": false,
+          "sub": "Guard",
+          "note": "Taunt Shout: grants taunt for 2 rounds starting next round. Foes that can reach you must target you."
+        },
+        {
+          "id": "guard.1",
+          "label": "2. Phalanx Cover",
+          "detail": "3 AP",
+          "picture": null,
+          "enabled": true,
+          "sub": "Guard",
+          "note": "Phalanx Cover: -35% damage and Steadfast for 1 round; intercepts one adjacent melee hit on an ally and fortifies self."
+        },
+        {
+          "id": "guard.2",
+          "label": "3. Active Guard",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": true,
+          "sub": "Guard",
+          "tone": "info",
+          "note": "Guard, Standard: raise a guard, -35% damage."
+        },
+        {
+          "id": "guard.3",
+          "label": "4. Hold Line",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": true,
+          "sub": "Guard",
+          "tone": "info",
+          "note": "Hold Line: -25% damage this round; grants Fortify (+4 armor) for 1 round."
+        }
+      ]
+    }
+  },
+  "actions": [
+    {
+      "id": "deck_slot",
+      "label": "Slot",
+      "enabled": true
+    },
+    {
+      "id": "deck_unslot",
+      "label": "Take out",
+      "enabled": true
+    },
+    {
+      "id": "right",
+      "label": "Show",
+      "enabled": true
+    },
+    {
+      "id": "order_up",
+      "label": "Move up",
+      "enabled": true
+    },
+    {
+      "id": "order_auto",
+      "label": "Auto order",
+      "enabled": false
+    },
+    {
+      "id": "reset",
+      "label": "Reset",
+      "enabled": true
+    },
+    {
+      "id": "use_default",
+      "label": "Use default",
+      "enabled": false
+    },
+    {
+      "id": "confirm",
+      "label": "Confirm",
+      "enabled": false
+    }
+  ]
+}

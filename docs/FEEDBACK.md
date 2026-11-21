@@ -110,8 +110,64 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-61` (`PLAN-RECURSE1`) | Built (tools lane) | `develop` | An Engage with an area skill that `affects` `all` as a unit's first step no longer recurses without end with friends active: while a first move is compiled, the area counts friends where they stand. No golden moved. FB-407 |
 | `PR7-31` (`OBJUI1`) | Built (tools lane) | `develop` | Board chips for morale (state bars, the group letter with several groups), the leader's pennant, the slay crown and the guest shield (gold rim when it must survive); the words on the hover card and the foe card's portrait; the goal hovers to the objective and morale lines; the results read the objective line and a break's lines. No Enraged chip (Design's amendment). FB-409 |
 | `PR7-33` (`FLOATPANELS1`) | Built (tools lane) | `develop` | The region's "Here (N)" legend, its event ticker and the battle log float (unlock, drag, minimise in place to a named button, place and lock kept in the settings) on the floating panel, now an engine module `aegis_ui::float_panel` with shared chrome. FB-411 |
+| `PR7-62` (`INTERCEPT-LIMIT1`) | Built (tools lane) | `develop` | `trigger::intercept_of` walks the same `ally_hit` rows as the hit, in its order, with their use limits (counts now on `World::trigger_uses`): a spent intercept is no longer forecast. Kit tests for a spent limit; goldens unchanged. FB-413 |
+| `ENGINE-21` (`UISPLIT1-H`) character sheet | Stage A built (tools lane) | `develop` | View-models `character` (the window), `stats`, `level_up`, `skills` and `deck`, with actions, fixtures and tests; the Gear tab stays the `loadout` view; today's drawing kept. FB-415 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-415: ENGINE-21 character sheet Stage A built; the Character window's view-models
+
+- **Status**: built (tools lane), `develop`. No visible change.
+- **Spec**: `docs/READY.md` row `ENGINE-21` (`UISPLIT1-H`, US1, US6, US8), like the board and save/load (`FB-369`).
+- **What landed** (game `emberwake_gui`, new `character_view.rs`; its doc comment lists every field and action):
+  - `character`, the window: `title`, `member` ("Name  Lv N  +P"), `tabs` (the open one); actions `member_prev`,
+    `member_next`, `tab`, `close`.
+  - `stats`: the summary line, the wounded line, the In party flag and count, the bunks line, the core stat rows
+    (total, base, growth and spent), the derived rows, the mastery and innate passives lines; action `toggle_active`.
+  - `level_up`: points left, a row per stat with the draft (new total, "+N" in gold, `-` and `+` buttons), the
+    derived rows with "old -> new" in gold; actions `remove`, `add`, `auto`, `revert`, `confirm`.
+  - `skills` (classic): the class and extra slot rows (AP, rank in gold below the top, `<` and `>` buttons), the owned
+    list with Slot, Slotted, Full or Worn; actions `slot`, `unslot`, `rank_down`, `rank_up`, `reset`, `use_default`,
+    `clear_all`, `confirm`.
+  - `deck` (the deck rule): per kind a head, a hint and the slot rows; the basics; the right column's tabs; the owned
+    list; the order (a row per place, on from the second); actions `deck_slot`, `deck_unslot`, `right`, `order_up`,
+    `order_auto`, `reset`, `use_default`, `confirm`.
+  - The Gear tab stays the `loadout` view (`ENGINE-23`). `character_act` maps each view click to the window's own
+    action, refusing a row that is not there or a click that does nothing; Stage B's layout draw will hand its clicks
+    to it.
+  - The agent link carries the window's view under `shell` and the open tab's under `view`.
+  - `party.rs`: `skills_now` reads the Skills draft, or the saved skills before the tab loads them, without changing
+    the screen (`load_skills` now uses it). The deck's skill line moved out of `draw_deck` into `deck_skill`,
+    `intent_label` and `passive_text`, so the view and the drawing share it. Small readers were added for the views.
+- **Fixtures**: `games/emberwake/assets/ui/views/{character,stats,level_up,skills,deck}.view.json`, written by the
+  ignored test `write_character_fixtures` from the test bed world (classic, and the deck rule for `deck`).
+- **Tests**: `character_view` +7 (the window, each tab's fields and clicks, the state keys, the fixtures' shapes). All
+  `emberwake_gui` tests pass unchanged, so the drawing is the same.
+- **Left**: the deck's follow-up editor and every drag stay with the drawing until Stage B. The portrait is not a view
+  field (the screen draws it from the member's look, not a file path).
+- **Docs delta**: `docs/STRUCTURE.md`: `emberwake_gui/src/character_view.rs` (the Character window's view-models,
+  UISPLIT1-H Stage A) beside `loadout_view.rs`. `docs/HISTORY.md` none.
+
+### FB-413: PR7-62 INTERCEPT-LIMIT1 built; a hit forecast no longer shows an intercept whose use is spent
+
+- **Status**: built (tools lane), `develop`. No visible change beyond the corrected forecast.
+- **Spec**: `docs/READY.md` row `0k9` (`PR7-62`), from `FB-374` "Left".
+- **What landed**:
+  - Kit `rpgkit_battle::trigger::Uses` (new): the trigger rows' `limit` counts (this round, this battle) moved from
+    the resolver's `trigger::State` to the world (`World::trigger_uses`, no save key, like `skill_uses`), so a read-only
+    forecast reads the counts the resolver checks. `battle_counts` and `battle_count` moved with them (the sim's
+    `feel.rs` reads `s.w.trigger_uses`).
+  - `trigger::watchers` (new, private): the `ally_hit` rows with uses left at a block, in the order the hit consults
+    them (a running skill's rows first, then passives and worn items, each by unit). Both the hit (`guardians`) and its
+    forecast (`intercept_of`) walk it, so their order and limits match by construction. The unit order was already the
+    same (both by unit id); now it is one function.
+- **Tests**: kit `hit_fail.rs` +2: a spent row is not forecast and the round agrees (full damage on the target, none on
+  the holder); a first cut spends the guard's use, and a second foe's cut later in the round is forecast to land and
+  does. Goldens unchanged (full gate clean).
+- **Left**: uses an earlier hit of the same round will spend are not foreseen (the forecast reads the counts as they
+  stand; the two tests read after the first cut lands). Inside one area action, the guard's per-action use count is not
+  forecast per target either.
+- **Docs delta**: `docs/STRUCTURE.md` none. `docs/HISTORY.md` none.
 
 ### FB-411: PR7-33 FLOATPANELS1 built; the region legend, the ticker and the battle log float like the world map's legend
 

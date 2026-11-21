@@ -152,11 +152,62 @@ impl AllyWatch {
     }
 }
 
-/// The battle's trigger state (on the resolver): `limit` counts, the HP shares last seen (`hp_below`), the grants that
-/// end with a guard, the round a `reveal` shows, and the fired triggers the session has not logged yet.
+/// INTERCEPT-LIMIT1 (PR7-62): how many times each unit's trigger rows fired, this round and this battle, for their
+/// `limit` (on the world, `World::trigger_uses`, so a read-only forecast reads the same counts the resolver checks).
+#[derive(Debug, Clone, Default)]
+pub struct Uses {
+    counts: IndexMap<(UnitId, String), (i32, i32)>,
+}
+
+impl Uses {
+    /// PR5-26 (the sim's counts): how many times each unit's trigger rows whose key starts with `prefix` fired this
+    /// battle (units with none left out; unit order of first firing).
+    pub fn battle_counts(&self, prefix: &str) -> Vec<(UnitId, i32)> {
+        let mut out: Vec<(UnitId, i32)> = Vec::new();
+        for ((unit, _), (_, battle)) in self.counts.iter().filter(|((_, k), (_, b))| k.starts_with(prefix) && *b > 0) {
+            match out.iter_mut().find(|(u, _)| u == unit) {
+                Some(e) => e.1 += battle,
+                None => out.push((*unit, *battle)),
+            }
+        }
+        out
+    }
+
+    /// PR5-26 follow-up (FB-201, the sim's crises): how many times `unit`'s trigger row `key` fired this battle.
+    pub fn battle_count(&self, unit: UnitId, key: &str) -> i32 {
+        self.counts.get(&(unit, key.to_string())).map_or(0, |(_, battle)| *battle)
+    }
+
+    /// The uses `h`'s row has left (-1: no limit).
+    fn allows(&self, unit: UnitId, h: &Holder) -> i32 {
+        let (round, battle) = self.counts.get(&(unit, h.key.clone())).copied().unwrap_or((0, 0));
+        match h.row.limit.as_str() {
+            "none" => -1,
+            "battle" => (1 - battle).max(0),
+            _ => (1 - round).max(0),
+        }
+    }
+
+    /// Test seam (INTERCEPT-LIMIT1): one firing of `unit`'s row `key`, as the resolver counts it.
+    pub fn count(&mut self, unit: UnitId, key: &str) {
+        let e = self.counts.entry((unit, key.to_string())).or_insert((0, 0));
+        e.0 += 1;
+        e.1 += 1;
+    }
+
+    /// Round start: the round's counts reset.
+    fn new_round(&mut self) {
+        for v in self.counts.values_mut() {
+            v.0 = 0;
+        }
+    }
+}
+
+/// The battle's trigger state (on the resolver): the HP shares last seen (`hp_below`), the grants that end with a
+/// guard, the round a `reveal` shows, and the fired triggers the session has not logged yet (the `limit` counts are
+/// on the world, `Uses`).
 #[derive(Debug, Clone, Default)]
 pub struct State {
-    counts: IndexMap<(UnitId, String), (i32, i32)>,
     hp_seen: Vec<i32>,
     until_guard: Vec<(UnitId, String)>,
     reveal_round: i32,
@@ -181,39 +232,6 @@ impl State {
     /// PK1-S1 (3.4): the `ap` sets still waiting (unit, set, round starts left).
     pub fn ap_sets(&self) -> Vec<(UnitId, i32, i32)> {
         self.ap_sets.iter().map(|a| (a.unit, a.set, a.rounds)).collect()
-    }
-
-    /// PR5-26 (the sim's counts): how many times each unit's trigger rows whose key starts with `prefix` fired this
-    /// battle (units with none left out; unit order of first firing).
-    pub fn battle_counts(&self, prefix: &str) -> Vec<(UnitId, i32)> {
-        let mut out: Vec<(UnitId, i32)> = Vec::new();
-        for ((unit, _), (_, battle)) in self.counts.iter().filter(|((_, k), (_, b))| k.starts_with(prefix) && *b > 0) {
-            match out.iter_mut().find(|(u, _)| u == unit) {
-                Some(e) => e.1 += battle,
-                None => out.push((*unit, *battle)),
-            }
-        }
-        out
-    }
-
-    /// PR5-26 follow-up (FB-201, the sim's crises): how many times `unit`'s trigger row `key` fired this battle.
-    pub fn battle_count(&self, unit: UnitId, key: &str) -> i32 {
-        self.counts.get(&(unit, key.to_string())).map_or(0, |(_, battle)| *battle)
-    }
-
-    fn allows(&self, unit: UnitId, h: &Holder) -> i32 {
-        let (round, battle) = self.counts.get(&(unit, h.key.clone())).copied().unwrap_or((0, 0));
-        match h.row.limit.as_str() {
-            "none" => -1,
-            "battle" => (1 - battle).max(0),
-            _ => (1 - round).max(0),
-        }
-    }
-
-    fn count(&mut self, unit: UnitId, key: &str) {
-        let e = self.counts.entry((unit, key.to_string())).or_insert((0, 0));
-        e.0 += 1;
-        e.1 += 1;
     }
 
     fn watch_hp(&mut self, w: &World) {
@@ -450,15 +468,21 @@ fn guardians(res: &Resolver, w: &World, idx: usize) -> Vec<Guardian> {
     if !matches!(a.command.kind, CmdKind::Attack { .. } | CmdKind::Area { .. }) {
         return Vec::new();
     }
-    let block = a.impact;
+    watchers(&res.scheduled, w, a.impact)
+}
+
+/// 8.4: the `ally_hit` rows with uses left (`World::trigger_uses`) at `block` over the round `sched`, in the order
+/// `ally_hit` consults them: a running skill's rows first, then passives and worn items, each by unit. Shared by the
+/// hit (`guardians`) and its forecast (`intercept_of`), so both walk the same rows in the same order.
+fn watchers(sched: &[crate::resolver::ScheduledAction], w: &World, block: i32) -> Vec<Guardian> {
     let mut out = Vec::new();
     for skills in [true, false] {
         for c in 0..w.units.len() {
-            for h in holders_of(res, w, c, block, skills, !skills) {
+            for h in holders_in(sched, w, c, block, skills, !skills) {
                 if h.row.on != "ally_hit" {
                     continue;
                 }
-                let left = res.triggers.allows(c, &h);
+                let left = w.trigger_uses.allows(c, &h);
                 if left != 0 {
                     out.push(Guardian { holder: h, left });
                 }
@@ -532,25 +556,22 @@ fn ally_event(w: &World, holder: &Holder, src: UnitId, f: UnitId, ranged: bool, 
 }
 
 /// HITCALC1 (PR7-45): read only, the forecast of 8.4's redirect: the friend whose `ally_hit` row would claim `src`'s
-/// hit on `f` landing at `block` (`sched`: the round as it will run; a running skill's rows first, then passives and worn
-/// items, as `ally_hit` consults them) and its share in percent; None without the rule triggers, a dead `f` or no such
-/// row. A row's use limit is not read (the forecast has no trigger counts).
+/// hit on `f` landing at `block` (`sched`: the round as it will run) and its share in percent; None without the rule
+/// triggers, a dead `f` or no such row. INTERCEPT-LIMIT1 (PR7-62): it walks `ally_hit`'s own rows in its order
+/// (`watchers`), so a row whose use limit is spent (`World::trigger_uses`) is not forecast. Uses spent by earlier hits
+/// of the same round are not foreseen.
 #[allow(clippy::too_many_arguments)]
 pub fn intercept_of(w: &World, sched: &[crate::resolver::ScheduledAction], block: i32, src: UnitId, f: UnitId, ranged: bool, family: &str, skip: &[UnitId]) -> Option<(UnitId, i32)> {
     if !on(w) || !w.units[f].is_alive() {
         return None;
     }
     let other_hp = share(w, src);
-    for skills in [true, false] {
-        for c in 0..w.units.len() {
-            for h in holders_in(sched, w, c, block, skills, !skills) {
-                if h.row.on != "ally_hit" || !has_redirect(&h.row) || ally_event(w, &h, src, f, ranged, family, skip, other_hp).is_none() {
-                    continue;
-                }
-                let e = h.row.effects.iter().find(|e| value::string(e, "type", "") == "redirect")?;
-                return Some((h.unit, value::int(e, "pct", 100).clamp(1, 100)));
-            }
+    for g in watchers(sched, w, block) {
+        if !has_redirect(&g.holder.row) || ally_event(w, &g.holder, src, f, ranged, family, skip, other_hp).is_none() {
+            continue;
         }
+        let e = g.holder.row.effects.iter().find(|e| value::string(e, "type", "") == "redirect")?;
+        return Some((g.holder.unit, value::int(e, "pct", 100).clamp(1, 100)));
     }
     None
 }
@@ -591,7 +612,7 @@ pub fn after_action(res: &mut Resolver, w: &mut World, idx: usize, before: &Befo
     if let Some(watch) = watch {
         for af in &watch.fired {
             let holder = &watch.guardians[af.guardian].holder;
-            res.triggers.count(holder.unit, &holder.key);
+            w.trigger_uses.count(holder.unit, &holder.key);
             let mut fired = Fired::new(holder.unit, "ally_hit", af.event.other, &holder.source);
             // the redirect's HP was lost inside the hit (the attack's own log cell explains it)
             for l in &af.lines {
@@ -755,10 +776,10 @@ fn dispatch(res: &mut Resolver, w: &mut World, events: Vec<Event>, block: i32) {
             continue;
         }
         for h in holders_of(res, w, ev.holder, block, true, true) {
-            if h.row.on != ev.on || res.triggers.allows(h.unit, &h) == 0 || !matches(w, &ev, &h.row.when) {
+            if h.row.on != ev.on || w.trigger_uses.allows(h.unit, &h) == 0 || !matches(w, &ev, &h.row.when) {
                 continue;
             }
-            res.triggers.count(h.unit, &h.key);
+            w.trigger_uses.count(h.unit, &h.key);
             let mut fired = Fired::new(h.unit, ev.on, ev.other, &h.source);
             let effects = h.row.effects.clone();
             run_effects(res, w, &ev, &h, &effects, block, true, &mut fired);
@@ -1244,9 +1265,7 @@ pub fn round_start(res: &mut Resolver, w: &mut World) {
     if !on(w) {
         return;
     }
-    for v in res.triggers.counts.values_mut() {
-        v.0 = 0;
-    }
+    w.trigger_uses.new_round();
     if let Some(base) = res.triggers.reveal_base.take() {
         w.plan_reveal = base;
     }

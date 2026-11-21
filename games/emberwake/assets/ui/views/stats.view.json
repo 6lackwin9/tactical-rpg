@@ -1,0 +1,168 @@
+{
+  "screen": "stats",
+  "fields": {
+    "summary": {
+      "text": "Level 5  ·  XP 380 (220 to next)  ·  Gold 100"
+    },
+    "wounded": {
+      "text": "",
+      "tone": "foe"
+    },
+    "in_party": {
+      "flag": true
+    },
+    "party": {
+      "text": "In party (1/3)"
+    },
+    "bunks": {
+      "text": ""
+    },
+    "core": {
+      "rows": [
+        {
+          "id": "STR",
+          "label": "STR",
+          "detail": "21",
+          "picture": null,
+          "enabled": true,
+          "sub": "Base 13 · Growth 8 · Spent 0",
+          "note": "Strength: power with STR weapons, +2 max HP per point, +1 armor per 4 points; unarmed hits use STR + DEX."
+        },
+        {
+          "id": "DEX",
+          "label": "DEX",
+          "detail": "7",
+          "picture": null,
+          "enabled": true,
+          "sub": "Base 7 · Growth 0 · Spent 0",
+          "note": "Dexterity: initiative (8 + DEX - gear burden) and move rate, power with DEX weapons and of shots without a ranged weapon."
+        },
+        {
+          "id": "INT",
+          "label": "INT",
+          "detail": "6",
+          "picture": null,
+          "enabled": true,
+          "sub": "Base 6 · Growth 0 · Spent 0",
+          "note": "Intelligence: debuff resistance (2.5% per point) and power with INT weapons."
+        },
+        {
+          "id": "CONS",
+          "label": "CONS",
+          "detail": "25",
+          "picture": null,
+          "enabled": true,
+          "sub": "Base 17 · Growth 8 · Spent 0",
+          "note": "Constitution: +8 max HP per point."
+        },
+        {
+          "id": "PERC",
+          "label": "PERC",
+          "detail": "13",
+          "picture": null,
+          "enabled": true,
+          "sub": "Base 9 · Growth 4 · Spent 0",
+          "note": "Perception: crit chance +1% per point above 10; at 18 or more, ranged weapons reach 1 tile further."
+        },
+        {
+          "id": "KNOW",
+          "label": "KNOW",
+          "detail": "10",
+          "picture": null,
+          "enabled": true,
+          "sub": "Base 10 · Growth 0 · Spent 0",
+          "note": "Knowledge: from 12, every 4 points open skill families one level earlier (up to 2 levels)."
+        }
+      ]
+    },
+    "derived": {
+      "rows": [
+        {
+          "id": "Max HP",
+          "label": "Max HP",
+          "detail": "302",
+          "picture": null,
+          "enabled": true,
+          "note": "Health: 60 + 8 per CONS + 2 per STR."
+        },
+        {
+          "id": "Initiative",
+          "label": "Initiative",
+          "detail": "15",
+          "picture": null,
+          "enabled": true,
+          "note": "Initiative: 8 + DEX - the burden of worn gear and carry overload (at least 1); units with more act earlier."
+        },
+        {
+          "id": "Tiles per move",
+          "label": "Tiles per move",
+          "detail": "3",
+          "picture": null,
+          "enabled": true,
+          "note": "Tiles one move covers (move rate): (8 + DEX + 2) / 5, from 1 to 4; burden and overload lower it only past initiative 1; haste adds 1, slow takes 1."
+        },
+        {
+          "id": "Crit %",
+          "label": "Crit %",
+          "detail": "12",
+          "picture": null,
+          "enabled": true,
+          "note": "Critical hit chance: 5% + 1% per PERC above 10, plus the weapon proficiency bonus."
+        },
+        {
+          "id": "Melee power",
+          "label": "Melee power",
+          "detail": "52",
+          "picture": null,
+          "enabled": true,
+          "note": "Melee hit power: the weapon's power (with tier and proficiency bonuses) + its scaling stat x your proficiency scaling."
+        },
+        {
+          "id": "Ranged power",
+          "label": "Ranged power",
+          "detail": "11",
+          "picture": null,
+          "enabled": true,
+          "note": "Ranged hit power, the same way with a ranged weapon; without one, DEX alone."
+        },
+        {
+          "id": "Armor",
+          "label": "Armor",
+          "detail": "23",
+          "picture": null,
+          "enabled": true,
+          "note": "Armor rating: gear mitigation + STR / 4; it cuts damage taken by rating / (rating + 50)."
+        },
+        {
+          "id": "Debuff resist %",
+          "label": "Debuff resist %",
+          "detail": "15",
+          "picture": null,
+          "enabled": true,
+          "note": "Chance to shake off a debuff: 2.5% per INT, plus the unit's own resistances."
+        },
+        {
+          "id": "AP",
+          "label": "AP",
+          "detail": "10",
+          "picture": null,
+          "enabled": true,
+          "note": "Action points: the most this unit holds; each round refills some or all of it (the battle's AP regen). A skill costs its level (1-5) in AP, Move 1 and Rest nothing, or the AP cost its row sets under the AP cost rule."
+        }
+      ]
+    },
+    "mastery": {
+      "text": ""
+    },
+    "innate": {
+      "text": "Innate passives (no slot): Warden's Eye, Keen Senses"
+    }
+  },
+  "actions": [
+    {
+      "id": "toggle_active",
+      "label": "In party",
+      "enabled": true
+    }
+  ]
+}
