@@ -192,6 +192,25 @@ fn a_refusals_fields_give_its_text_and_read_back_from_json() {
     assert_eq!(Reason::from_json(&json!({"kind": "nope"})), None);
 }
 
+/// HITCALC1 (PR7-45): the kind of target a menu cell needs travels as a field (`Reason::NeedsTarget`): its text is the
+/// menu's old words ("Target an ally to use this"), its JSON reads back, and the screen reads who it takes from the
+/// field (`takes_self`, `takes_ally`).
+#[test]
+fn a_target_refusal_carries_the_kind_of_target() {
+    use rpgkit_battle::refusal::TargetNeed;
+    let words = ["a tile", "a tile (or an enemy's tile)", "an enemy", "an enemy or a tile", "yourself", "an ally", "yourself or an ally"];
+    for (n, w) in TargetNeed::ALL.into_iter().zip(words) {
+        let r = Reason::NeedsTarget(n);
+        assert_eq!(r.to_string(), format!("Target {w} to use this"));
+        assert_eq!(Reason::from_json(&r.to_json()), Some(r.clone()), "{n:?}");
+        assert_eq!(r.to_json()["text"], json!(r.to_string()), "the JSON keeps the words");
+        assert_eq!(TargetNeed::parse(n.id()), Some(n));
+    }
+    let takes: Vec<(bool, bool)> = TargetNeed::ALL.iter().map(|n| (n.takes_self(), n.takes_ally())).collect();
+    assert_eq!(takes, vec![(false, false), (false, false), (false, false), (false, false), (true, false), (false, true), (true, true)]);
+    assert_eq!(Reason::from_json(&json!({"kind": "needs_target", "need": "nope"})), None);
+}
+
 /// HOOKS1 HC1 through the planner: a step refused for its HP cost carries it in fields (`Plan::add_step_why`), and
 /// `add_step`'s text is the same reason's.
 #[test]

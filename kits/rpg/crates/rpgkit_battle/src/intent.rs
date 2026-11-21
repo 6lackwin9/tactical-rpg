@@ -477,6 +477,23 @@ pub struct HitOn {
     /// The action's place among its unit's live actions in block order (`actions_of`; 0 = its first, the tell's
     /// line), so a screen can keep an unrevealed plan's later actions hidden; `hit_on` leaves it 0.
     pub nth: usize,
+    /// HITCALC1 (PR7-45): how the hit fails at its impact (None: it lands). `damage` is what reaches the target: 0
+    /// for a dodge, out of reach or a protected flank; the part an intercept leaves.
+    pub fails: Option<HitFail>,
+}
+
+/// HITCALC1 (PR7-45): how a planned hit fails at its impact, as the resolver decides it (`Command::execute`,
+/// `trigger::ally_hit`), so a screen shows it as such instead of a number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HitFail {
+    /// ATTACKLOCK1: the target left the tile the attack locked on before it lands.
+    Dodged,
+    /// The target is outside the attack's reach band at the impact (after the chase or dash it may take as it starts).
+    OutOfReach,
+    /// INPUT1 MR8 c: a carried Engage finds the target's flank protected and misses.
+    FlankProtected,
+    /// HOOKS1 8.4: a friend of the target takes `pct` percent of the hit (`trigger::intercept_of`).
+    Intercepted { by: UnitId, pct: i32 },
 }
 
 /// PT-20, PT-17: where `c` stands when a hit lands at `block`: the end tile of its last live move that lands earlier
@@ -484,7 +501,8 @@ pub struct HitOn {
 /// planning), so a party member's planned moves count.
 pub fn position_at(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32) -> V2 {
     let mut at = w.grid.pos(c).unwrap_or(NO_CELL);
-    for a in actions_of(c, sched).into_iter().filter(|a| a.impact < block) {
+    // HITCALC1: a move that already landed is in the tile it stands on now (mid-round reads)
+    for a in actions_of(c, sched).into_iter().filter(|a| a.impact < block && !a.landed) {
         if let CmdKind::Walk { path, .. } = &a.command.kind {
             // each move steps on from where the earlier ones end (the preview's start is the chain's tile)
             if let Some(end) = crate::command::walk_preview(w, c, path, at).last() {
@@ -511,10 +529,10 @@ pub fn area_cells(w: &World, sched: &[ScheduledAction], a: &ScheduledAction) -> 
 }
 
 /// PT-20: the hit scheduled action `a` lands on `t` (an Attack on it, or an Area whose tiles hold it or that is
-/// locked on it), forecast as `HitOn`; None for any other action or a target it misses. The damage follows the
-/// resolver's hit (`Command::land`): the command's power, the flank and exploit factors, the distance potency and cover
-/// from the tile the attacker stands on then (`position_at`), both units' stances then (`stance_at`), armour
-/// piercing and `guard_at` the impact (left out for a guard-bypassing hit). `sched` is the round as it will run
+/// locked on it), forecast as `HitOn`; None for any other action or a target it misses. HITCALC1 (PR7-45): the damage
+/// comes from the resolver's own hit-input builder (`command::hit_terms`) on the board at the impact (`scene_at`: the
+/// tiles both units stand on then, `guard_at` the impact, both stances then), and a hit that fails at its impact says
+/// how (`HitOn::fails`: a dodge, out of reach, a protected flank or an intercept). `sched` is the round as it will run
 /// (`planned_schedule` while planning).
 pub fn hit_on(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: UnitId) -> Option<HitOn> {
     hit_on_with(w, sched, a, t, false)
@@ -540,57 +558,119 @@ impl Adjust<'_> {
     pub const NONE: Adjust<'static> = Adjust { power: 1.0, strip: &[], guard: true };
 }
 
+/// HITCALC1 (PR7-45): where target `t` stands at `block` for an attacker on tile `from` then (`position_at`); when both
+/// are planned onto one tile (a forecast clash: one of them stops short when the round runs), `t` where it stands now
+/// (the rule `status_view::counter_on` reads too). Read only.
+pub fn target_at(w: &World, sched: &[ScheduledAction], t: UnitId, from: V2, block: i32) -> V2 {
+    Some(position_at(w, sched, t, block)).filter(|p| *p != from || from == NO_CELL).unwrap_or_else(|| w.grid.pos(t).unwrap_or(NO_CELL))
+}
+
+/// HITCALC1 (PR7-45): the board scheduled action `a`'s hit on `t` is read on at its impact (`command::HitScene`): the
+/// attacker's tile then (`position_at`; a carried Engage that has not started strikes from its planned tile), the
+/// target's tile then, its guard then (`guard_at`; 0 for a guard-bypassing command) and both stances then
+/// (`stance_at`). Read only.
+pub fn scene_at(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: UnitId) -> crate::command::HitScene {
+    let from = match a.command.carry {
+        crate::command::Carry::Engage(cell) if !a.command.started && cell != NO_CELL => cell,
+        _ => position_at(w, sched, a.unit, a.impact),
+    };
+    let guard = if a.command.ignore_guard { 0.0 } else { guard_at(w, sched, t, a.impact) };
+    crate::command::HitScene { from, at: target_at(w, sched, t, from, a.impact), guard: Some(guard), attacker_stance: Some(stance_at(w, sched, a.unit, a.impact)), target_stance: Some(stance_at(w, sched, t, a.impact)) }
+}
+
+/// HITCALC1 (PR7-45): how scheduled attack `a` on `t` fails at its impact, in `Command::execute`'s order: a protected
+/// flank (decided as it starts, from its tile then), an ATTACKLOCK1 dodge (the lock it holds, or before it starts the
+/// one it takes: the target's tile at its start when in reach then and the ruleset locks the band) and its reach band
+/// at the impact (before it starts, plus the chase or dash tiles it may take). `scene`: the board at the impact.
+fn attack_fail(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: UnitId, scene: &crate::command::HitScene) -> Option<HitFail> {
+    let CmdKind::Attack { min_range, max_range, follow_tiles, dash_tiles, .. } = &a.command.kind else { return None };
+    let (src, cmd) = (a.unit, &a.command);
+    let start_tile = position_at(w, sched, src, a.start);
+    if crate::command::flank_protected_from(w, cmd, start_tile) {
+        return Some(HitFail::FlankProtected);
+    }
+    let band = crate::command::reach_band(w, src, *min_range, *max_range);
+    let (sa, st) = (w.size_of(src), w.size_of(t));
+    let gap = |from: V2, at: V2| crate::grid::square_band(cmd.diagonal, from, sa, at, st);
+    let t0 = target_at(w, sched, t, start_tile, a.start);
+    let in_band = |d: i32, extra: i32| d >= band.0 && d <= band.1 + extra;
+    let known = start_tile != NO_CELL && t0 != NO_CELL;
+    // the chase or dash it may take as it starts: only toward a target out of its band then
+    let extra = if cmd.started || cmd.carry != crate::command::Carry::None || (known && in_band(gap(start_tile, t0), 0)) { 0 } else { (*follow_tiles).max(*dash_tiles).max(0) };
+    let lock = if cmd.started {
+        cmd.locked
+    } else if w.ruleset.attack_lock().locks(round_intent::melee_band(band)) {
+        (known && in_band(gap(start_tile, t0), extra)).then_some((t, t0))
+    } else {
+        None
+    };
+    if lock.is_some_and(|(l, cell)| l == t && scene.at != cell) {
+        return Some(HitFail::Dodged);
+    }
+    if scene.from == NO_CELL || scene.at == NO_CELL {
+        return None;
+    }
+    let d = gap(scene.from, scene.at);
+    (d < band.0 || d > band.1 + extra).then_some(HitFail::OutOfReach)
+}
+
 /// `hit_on_with` under `adj` (`Adjust::NONE`: the same hit, the same numbers). Read only.
 pub fn hit_on_adjusted(w: &World, sched: &[ScheduledAction], a: &ScheduledAction, t: UnitId, crit: bool, adj: &Adjust) -> Option<HitOn> {
-    use rpgkit_rules::damage::{self, HitInput};
+    use rpgkit_rules::damage;
     let src = a.unit;
     if a.cancelled || src == t || !w.has(t) {
         return None;
     }
-    let from = position_at(w, sched, src, a.impact);
-    let (mult, offhand, ranged) = match &a.command.kind {
-        CmdKind::Attack { target, skill_mult, use_offhand, .. } if target.or(w.units[src].active_target) == Some(t) && *skill_mult > 0.0 => (*skill_mult, *use_offhand, w.units[src].attack_range > 1 && !use_offhand),
-        CmdKind::Area { skill_mult, target, splash, affects, .. } if *skill_mult > 0.0 && crate::skill::affects_unit(*affects, w.friends_of(src).contains(&t)) => {
+    let mut scene = scene_at(w, sched, a, t);
+    let mut skip: Vec<UnitId> = Vec::new();
+    let (power, offhand, ranged, mut fails) = match &a.command.kind {
+        CmdKind::Attack { target, skill_mult, use_offhand, .. } if target.or(w.units[src].active_target) == Some(t) && *skill_mult > 0.0 => {
+            (*skill_mult, *use_offhand, w.units[src].attack_range > 1 && !use_offhand, attack_fail(w, sched, a, t, &scene))
+        }
+        CmdKind::Area { skill_mult, target, splash, affects, band, shape, .. } if *skill_mult > 0.0 && crate::skill::affects_unit(*affects, w.friends_of(src).contains(&t)) => {
             // PT-17: the tiles it strikes when it lands, the target where it stands then (BIGUNIT1 BU9: any of its cells)
             let struck = area_cells(w, sched, a);
-            let at = position_at(w, sched, t, a.impact);
-            if !w.cells_at(t, at).iter().any(|c| struck.contains(c)) {
+            if !w.cells_at(t, scene.at).iter().any(|c| struck.contains(c)) {
                 return None;
             }
-            (*skill_mult * if target.is_none_or(|p| p == t) { 1.0 } else { *splash }, false, w.units[src].attack_range > 1)
+            // HOOKS1 8.4: a unit the area also strikes takes no redirect
+            skip = w.units.iter().enumerate().filter(|&(v, _)| w.has(v) && w.cells_at(v, position_at(w, sched, v, a.impact)).iter().any(|c| struck.contains(c))).map(|(v, _)| v).collect();
+            // A4.2-K1b (IR17): a shaped Assault row strikes no tile when its target is out of its band at the impact (it
+            // may chase 1 tile as it starts)
+            let extra = i32::from(!a.command.started);
+            let reach = |d: i32| d >= band.0 && d <= band.1 + extra;
+            let out = target.is_some_and(|p| p == t) && scene.from != NO_CELL && !reach(crate::grid::square_band(crate::skill::diagonal_shape(*shape), scene.from, w.size_of(src), scene.at, w.size_of(t)));
+            (*skill_mult * if target.is_none_or(|p| p == t) { 1.0 } else { *splash }, false, w.units[src].attack_range > 1, out.then_some(HitFail::OutOfReach))
         }
         _ => return None,
     };
-    let flank = round_intent::flank_bonus_from(w, src, from, t);
-    let exploit = crate::skill::exploit_match_by(&a.command.exploit, &w.units[t], &[], flank, &w.ruleset).1;
-    let mut mult = mult * exploit * crate::command::flank_power(w, flank);
-    let dist = if from != NO_CELL { w.dist_at(src, from, t) } else { 0 };
-    let mut distance = 0;
-    if dist > 0 {
-        match w.cat.skill(&a.command.skill) {
-            Some(s) => {
-                let (base, at) = (w.units[src].potency_for_skill(s), w.units[src].potency_for_skill_at(s, ranged, dist));
-                if (at - base).abs() > 1e-12 && base.abs() > 1e-12 {
-                    mult *= at.max(0.0) / base;
-                }
-            }
-            None => distance = dist,
-        }
+    if !adj.guard {
+        scene.guard = Some(0.0);
     }
-    let cover = if from == NO_CELL { 0.0 } else { crate::command::cover_for(&w.grid, from, position_at(w, sched, t, a.impact), ranged) };
-    let guard = if a.command.ignore_guard || !adj.guard { 0.0 } else { guard_at(w, sched, t, a.impact) };
-    let mut target = w.units[t].clone();
-    target.stance = stance_at(w, sched, t, a.impact);
-    for s in adj.strip {
-        target.st.active.shift_remove(*s);
-    }
+    let guard = scene.guard.unwrap_or(0.0);
+    let mut input = crate::command::hit_terms(w, &a.command, src, t, &scene, ranged, offhand, power).input;
+    input.force_crit = crit;
     if adj.power != 1.0 {
-        mult *= adj.power;
+        input.skill_mult *= adj.power;
     }
-    // the guard joins the cover in the one guard-and-cover term (`damage::compute` adds them before its cap)
-    let input = HitInput { ranged, offhand, skill_mult: mult, cover: cover + guard, include_guard: false, ignore_armor: a.command.pierces(w), distance, attacker_stance: Some(stance_at(w, sched, src, a.impact)), force_crit: crit, ..HitInput::default() };
-    let damage = damage::compute(&w.units[src], &target, input).final_dmg;
-    Some(HitOn { skill: skill_name(w, &a.command), block: a.impact, damage, guarded: guard > 0.0, nth: 0 })
+    let damage = if adj.strip.is_empty() {
+        damage::compute(&w.units[src], &w.units[t], input).final_dmg
+    } else {
+        let mut target = w.units[t].clone();
+        for s in adj.strip {
+            target.st.active.shift_remove(*s);
+        }
+        damage::compute(&w.units[src], &target, input).final_dmg
+    };
+    if fails.is_none() {
+        fails = crate::trigger::intercept_of(w, sched, a.impact, src, t, ranged, &a.command.family, &skip).map(|(by, pct)| HitFail::Intercepted { by, pct });
+    }
+    let damage = match fails {
+        None => damage,
+        Some(HitFail::Intercepted { pct, .. }) if pct < 100 => crate::trigger::part(damage, 100 - pct),
+        Some(_) => 0,
+    };
+    Some(HitOn { skill: skill_name(w, &a.command), block: a.impact, damage, guarded: guard > 0.0, nth: 0, fails })
 }
 
 /// PT-20: every hit `attacker`'s live scheduled actions land on `t` this round, in block order (`hit_on`), each with
@@ -626,6 +706,8 @@ pub struct CardHit {
     pub statuses: Vec<String>,
     /// It lands after the forecast KO block (the soft "after KO" tag).
     pub after_ko: bool,
+    /// HITCALC1 (PR7-45): how it fails at its impact (`HitOn::fails`; None: it lands).
+    pub fails: Option<HitFail>,
 }
 
 /// BATTLE-UI2 (`SCREEN_CONTRACT_BATTLE.md` 6, the heal preview): the HP the round's planned heals restore on `unit`
@@ -759,14 +841,23 @@ pub fn foe_card(w: &World, sched: &[ScheduledAction], foe: UnitId) -> FoeCard {
             Some((a, h, crit))
         })
         .collect();
+    // HITCALC1: a hit that fails at its impact (or that a friend takes whole) staggers nothing
+    let staggers = |h: &HitOn| match h.fails {
+        None => true,
+        Some(HitFail::Intercepted { pct, .. }) => pct < 100,
+        Some(_) => false,
+    };
     let planned: Vec<poise::PlannedHit> = landed
         .iter()
+        .filter(|(_, h, _)| staggers(h))
         .map(|(a, _, _)| {
-            let flank = round_intent::flank_bonus_from(w, a.unit, position_at(w, sched, a.unit, a.impact), foe);
+            let flank = round_intent::flank_bonus_at(w, a.unit, scene_at(w, sched, a, foe).from, foe);
             poise::PlannedHit { target: foe, block: a.impact, impact: a.command.impact, blocks: a.command.block_cost, flank, ignore_guard: a.command.ignore_guard }
         })
         .collect();
-    let fcs = if bar.is_some() { poise::forecast_hits(w, sched, &planned) } else { Vec::new() };
+    let fcs_kept = if bar.is_some() { poise::forecast_hits(w, sched, &planned) } else { Vec::new() };
+    let mut kept = fcs_kept.into_iter();
+    let fcs: Vec<Option<poise::Forecast>> = if bar.is_some() { landed.iter().map(|(_, h, _)| if staggers(h) { kept.next().flatten() } else { None }).collect() } else { Vec::new() };
     let mut broken = bar.is_some_and(|st| st.broken);
     let mut taken = 0;
     for (k, (a, h, crit)) in landed.iter().enumerate() {
@@ -785,7 +876,7 @@ pub fn foe_card(w: &World, sched: &[ScheduledAction], foe: UnitId) -> FoeCard {
         }
         let statuses = if a.command.status_effect.is_empty() { Vec::new() } else { vec![a.command.status_effect.clone()] };
         let chance = (rpgkit_rules::damage::crit_chance(&w.units[a.unit]) / 100.0).clamp(0.0, 1.0);
-        card.hits.push(CardHit { unit: a.unit, skill: a.command.skill.clone(), name: h.skill.clone(), start: a.start, impact: a.impact, damage: h.damage, crit_damage: *crit, crit_chance: chance, pips, breaks, on_broken, statuses, after_ko });
+        card.hits.push(CardHit { unit: a.unit, skill: a.command.skill.clone(), name: h.skill.clone(), start: a.start, impact: a.impact, damage: h.damage, crit_damage: *crit, crit_chance: chance, pips, breaks, on_broken, statuses, after_ko, fails: h.fails });
     }
     if let Some(ko) = card.ko_block {
         let blocks: Vec<i32> = card.by_block().into_iter().map(|(b, _)| b).filter(|b| *b < ko).collect();

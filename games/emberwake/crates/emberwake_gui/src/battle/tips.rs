@@ -661,11 +661,14 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     }
     if !ally && u.is_active() {
         let mut hit_shown = false;
+        // HITCALC1 (PR7-45): once the round is over its tell reads as this round's line ("This round: ..."), and its
+        // forecast, of hits that have landed, is not shown again (the log has what they did)
+        let over = s.phase == Phase::Replay;
         match tell {
             Some(r) => {
                 // IS2: the tell's first action only while the tells show (I)
                 if tells_shown {
-                    t.push((format!("Intent: {}", intent_text::first_line(w, &r.line)), th().gold));
+                    t.push((format!("{} {}", if over { ROUND_OVER_HEAD } else { "Intent:" }, intent_text::first_line(w, &r.line)), th().gold));
                 }
                 // V1, V2: who reads the plan (a reader who fell stays listed), the enrage or the battle's plan reveal
                 if let Some(head) = intent_text::reveal_head(w, r, |p| s.w.cat.passives.get(p).map(|x| x.name.clone()).unwrap_or_else(|| p.to_string())) {
@@ -675,7 +678,7 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
                     }
                 }
                 // PR7-41 (PT-20): the hits on the selected hero, per hit at the block each lands, with its guard then
-                if let Some(f) = sel.filter(|_| tells_shown).and_then(|h| intent_text::forecast(r, h, &intent_text::forecast_hits(r, h, hits_on_hero(s, i, h)))) {
+                if let Some(f) = sel.filter(|_| tells_shown && !over).and_then(|h| intent_text::forecast(r, h, &intent_text::forecast_hits(r, h, hits_on_hero(s, i, h)))) {
                     hit_shown = f.starts_with("Targets you");
                     t.push((f, th().foe));
                 }
@@ -698,6 +701,9 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     }
     t
 }
+
+/// HITCALC1 (PR7-45): the head of an enemy's tell on its hover card once the round is over (instead of "Intent:").
+pub(super) const ROUND_OVER_HEAD: &str = "This round:";
 
 /// PR7-3 (review N3): the party card's badge text while a weapon is dulled.
 pub(super) const DULLED_BADGE: &str = "Dulled";

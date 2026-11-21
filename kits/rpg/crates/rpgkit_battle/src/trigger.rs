@@ -292,12 +292,17 @@ pub fn raise_guard(w: &mut World, c: UnitId, block: i32) {
 /// The holders of `c` now: the triggers of its commands that run (start to impact) at `block`, then its passives' and
 /// worn items' (8.1), then its meters' (U1.2-S5). None when it is not on the field.
 fn holders_of(res: &Resolver, w: &World, c: UnitId, block: i32, skills: bool, held: bool) -> Vec<Holder> {
+    holders_in(&res.scheduled, w, c, block, skills, held)
+}
+
+/// `holders_of` over the scheduled actions `sched` (HITCALC1: a forecast reads the round as it will run).
+fn holders_in(sched: &[crate::resolver::ScheduledAction], w: &World, c: UnitId, block: i32, skills: bool, held: bool) -> Vec<Holder> {
     let mut out = Vec::new();
     if !w.has(c) {
         return out;
     }
     if skills {
-        for a in res.scheduled.iter().filter(|a| a.unit == c && !a.cancelled && a.start <= block && block <= a.impact) {
+        for a in sched.iter().filter(|a| a.unit == c && !a.cancelled && a.start <= block && block <= a.impact) {
             for (i, row) in a.command.triggers.iter().enumerate() {
                 out.push(Holder { unit: c, source: a.command.name.clone(), key: format!("skill:{}#{i}", a.command.name), row: row.clone() });
             }
@@ -472,21 +477,18 @@ pub fn ally_hit(w: &mut World, watch: &mut AllyWatch, src: UnitId, f: UnitId, ra
     if !w.units[f].is_alive() {
         return None;
     }
-    let other_hp = Some(share(w, src));
+    let other_hp = share(w, src);
     for gi in 0..watch.guardians.len() {
         let g = &watch.guardians[gi];
-        let h = g.holder.unit;
-        if g.left == 0 || h == src || h == f || skip.contains(&h) || !w.has(h) || !w.friends_of(h).contains(&f) {
+        if g.left == 0 {
             continue;
         }
         let redirects = has_redirect(&g.holder.row);
         if redirects && claim.is_some() {
             continue;
         }
-        let ev = Event { ally: Some(f), ranged: Some(ranged), family: family.to_string(), other_hp, ..Event::new("ally_hit", h, Some(src)) };
-        if !matches(w, &ev, &g.holder.row.when) {
-            continue;
-        }
+        let Some(ev) = ally_event(w, &g.holder, src, f, ranged, family, skip, other_hp) else { continue };
+        let h = g.holder.unit;
         let row = g.holder.row.clone();
         if watch.guardians[gi].left > 0 {
             watch.guardians[gi].left -= 1;
@@ -514,6 +516,43 @@ pub fn ally_hit(w: &mut World, watch: &mut AllyWatch, src: UnitId, f: UnitId, ra
         watch.fired.push(AllyFired { guardian: gi, event: ev, lines, rest });
     }
     claim
+}
+
+/// 8.4: the event of `holder`'s `ally_hit` row when it fires on `src`'s hit on friend `f` (H not the attacker, not F,
+/// not in `skip`, on the field, F its friend, the row's conditions met); None otherwise. `other_hp`: the attacker's HP
+/// share. Shared by the hit (`ally_hit`) and its forecast (`intercept_of`).
+#[allow(clippy::too_many_arguments)]
+fn ally_event(w: &World, holder: &Holder, src: UnitId, f: UnitId, ranged: bool, family: &str, skip: &[UnitId], other_hp: f64) -> Option<Event> {
+    let h = holder.unit;
+    if h == src || h == f || skip.contains(&h) || !w.has(h) || !w.friends_of(h).contains(&f) {
+        return None;
+    }
+    let ev = Event { ally: Some(f), ranged: Some(ranged), family: family.to_string(), other_hp: Some(other_hp), ..Event::new("ally_hit", h, Some(src)) };
+    matches(w, &ev, &holder.row.when).then_some(ev)
+}
+
+/// HITCALC1 (PR7-45): read only, the forecast of 8.4's redirect: the friend whose `ally_hit` row would claim `src`'s
+/// hit on `f` landing at `block` (`sched`: the round as it will run; a running skill's rows first, then passives and worn
+/// items, as `ally_hit` consults them) and its share in percent; None without the rule triggers, a dead `f` or no such
+/// row. A row's use limit is not read (the forecast has no trigger counts).
+#[allow(clippy::too_many_arguments)]
+pub fn intercept_of(w: &World, sched: &[crate::resolver::ScheduledAction], block: i32, src: UnitId, f: UnitId, ranged: bool, family: &str, skip: &[UnitId]) -> Option<(UnitId, i32)> {
+    if !on(w) || !w.units[f].is_alive() {
+        return None;
+    }
+    let other_hp = share(w, src);
+    for skills in [true, false] {
+        for c in 0..w.units.len() {
+            for h in holders_in(sched, w, c, block, skills, !skills) {
+                if h.row.on != "ally_hit" || !has_redirect(&h.row) || ally_event(w, &h, src, f, ranged, family, skip, other_hp).is_none() {
+                    continue;
+                }
+                let e = h.row.effects.iter().find(|e| value::string(e, "type", "") == "redirect")?;
+                return Some((h.unit, value::int(e, "pct", 100).clamp(1, 100)));
+            }
+        }
+    }
+    None
 }
 
 /// 8.4: the HP share of a hit's `pct` part: rounded, at least 1 when the part is above 0.
