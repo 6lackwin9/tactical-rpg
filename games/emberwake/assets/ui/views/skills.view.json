@@ -1,0 +1,203 @@
+{
+  "screen": "skills",
+  "fields": {
+    "loadout": {
+      "text": "Default loadout"
+    },
+    "class": {
+      "rows": [
+        {
+          "id": "class.0",
+          "label": "Taunt Shout",
+          "detail": "1 AP",
+          "picture": null,
+          "enabled": true,
+          "detail2": "I",
+          "note": "Taunt Shout: grants taunt for 2 rounds starting next round. Foes that can reach you must target you.",
+          "buttons": [
+            {
+              "action": "rank_down",
+              "label": "<",
+              "enabled": false
+            },
+            {
+              "action": "rank_up",
+              "label": ">",
+              "enabled": false
+            }
+          ]
+        },
+        {
+          "id": "class.1",
+          "label": "Dread Roar",
+          "detail": "2 AP",
+          "picture": null,
+          "enabled": true,
+          "detail2": "I",
+          "note": "Dread Roar: 8 stagger, 80% to Weaken (-20% outgoing power) for 2 rounds within 1-2.",
+          "buttons": [
+            {
+              "action": "rank_down",
+              "label": "<",
+              "enabled": false
+            },
+            {
+              "action": "rank_up",
+              "label": ">",
+              "enabled": false
+            }
+          ]
+        },
+        {
+          "id": "class.2",
+          "label": "Phalanx Cover",
+          "detail": "4 AP",
+          "picture": null,
+          "enabled": true,
+          "detail2": "I",
+          "note": "Phalanx Cover: -35% damage and Steadfast for 1 round; intercepts one adjacent melee hit on an ally and fortifies self.",
+          "buttons": [
+            {
+              "action": "rank_down",
+              "label": "<",
+              "enabled": false
+            },
+            {
+              "action": "rank_up",
+              "label": ">",
+              "enabled": false
+            }
+          ]
+        },
+        {
+          "id": "class.3",
+          "label": "Empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "tone": "dim",
+          "note": "Drag a skill here, or click a skill in the list."
+        },
+        {
+          "id": "class.4",
+          "label": "Empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "tone": "dim",
+          "note": "Drag a skill here, or click a skill in the list."
+        }
+      ]
+    },
+    "extra": {
+      "rows": [
+        {
+          "id": "extra.0",
+          "label": "Empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "tone": "dim",
+          "note": "Drag a skill here, or click a skill in the list."
+        },
+        {
+          "id": "extra.1",
+          "label": "Empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "tone": "dim",
+          "note": "Drag a skill here, or click a skill in the list."
+        },
+        {
+          "id": "extra.2",
+          "label": "Empty",
+          "detail": "",
+          "picture": null,
+          "enabled": false,
+          "tone": "dim",
+          "note": "Drag a skill here, or click a skill in the list."
+        }
+      ]
+    },
+    "owned": {
+      "rows": [
+        {
+          "id": "taunt_shout",
+          "label": "Taunt Shout  [Novice]  Rank I",
+          "detail": "Slotted",
+          "picture": null,
+          "enabled": false,
+          "sub": "Taunt Shout: grants taunt for 2 rounds starting next round. Foes that can reach you must target you."
+        },
+        {
+          "id": "intimidate",
+          "label": "Dread Roar  [Novice]  Rank I",
+          "detail": "Slotted",
+          "picture": null,
+          "enabled": false,
+          "sub": "Dread Roar: 8 stagger, 80% to Weaken (-20% outgoing power) for 2 rounds within 1-2."
+        },
+        {
+          "id": "intercept_guard",
+          "label": "Phalanx Cover  [Novice]  Rank I",
+          "detail": "Slotted",
+          "picture": null,
+          "enabled": false,
+          "sub": "Phalanx Cover: -35% damage and Steadfast for 1 round; intercepts one adjacent melee hit on an ally and fortifies self."
+        },
+        {
+          "id": "worn.shield_bash",
+          "label": "Shield Bash  1 AP  from worn gear",
+          "detail": "Worn",
+          "picture": null,
+          "enabled": false,
+          "sub": "Shield Bash: 75% power, 16 stagger, 75% to Stagger for 1 round, and pushes the target back.",
+          "tone": "gold"
+        }
+      ]
+    }
+  },
+  "actions": [
+    {
+      "id": "slot",
+      "label": "Slot",
+      "enabled": true
+    },
+    {
+      "id": "unslot",
+      "label": "Take out",
+      "enabled": true
+    },
+    {
+      "id": "rank_down",
+      "label": "<",
+      "enabled": true
+    },
+    {
+      "id": "rank_up",
+      "label": ">",
+      "enabled": true
+    },
+    {
+      "id": "reset",
+      "label": "Reset",
+      "enabled": true
+    },
+    {
+      "id": "use_default",
+      "label": "Use default",
+      "enabled": false
+    },
+    {
+      "id": "clear_all",
+      "label": "Clear all",
+      "enabled": true
+    },
+    {
+      "id": "confirm",
+      "label": "Confirm",
+      "enabled": false
+    }
+  ]
+}

@@ -28,7 +28,7 @@ use serde_json::{json, Value};
 /// the member picker, above every tab's content).
 pub const PORTRAIT: i32 = 48;
 
-const TABS: [(&str, &str); 4] = [("stats", "Stats"), ("level_up", "Level up"), ("skills", "Skills"), ("gear", "Gear")];
+pub(crate) const TABS: [(&str, &str); 4] = [("stats", "Stats"), ("level_up", "Level up"), ("skills", "Skills"), ("gear", "Gear")];
 
 #[derive(Debug, Clone)]
 pub enum PAct {
@@ -138,7 +138,7 @@ pub(crate) fn party_ruleset(cx: &Cx) -> String {
 
 /// PartyPreview.derived: the derived rows of a member built without auto-spend, as it fights in `world` (its class path
 /// and deck rule there; HOOKS1-UI slice 2).
-fn derived(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
+pub(crate) fn derived(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
     progression::build_with(d, m, world, false).map(|b| derived_of(&d.cat, ruleset, &b.unit)).unwrap_or_default()
 }
 
@@ -309,7 +309,7 @@ pub(crate) fn tagged(tag: &str) -> String {
 }
 
 /// What a core stat does, for the detail pane (numbers from the rules: StatRules, DamageCalculator).
-fn stat_desc(st: &str) -> String {
+pub(crate) fn stat_desc(st: &str) -> String {
     use emberwake_rules::damage::{CRIT_PER_PERC, CRIT_PERC_FLOOR};
     use emberwake_rules::stats::{HP_PER_CONS, KNOW_UNLOCK_BASE, KNOW_UNLOCK_STEP, MAX_UNLOCK_REDUCTION, RANGE_PERC_THRESHOLD};
     match st {
@@ -374,7 +374,44 @@ impl Character {
         cx.gs().party.member(&self.member).expect("member")
     }
 
-    fn has_draft(&self, cx: &Cx) -> bool {
+    /// ENGINE-21 (UISPLIT1-H Stage A): the member shown, the open tab, the level-up draft and the deck tab's right
+    /// column ("owned" or "order"), as the character views read them.
+    pub(crate) fn member(&self) -> &str {
+        &self.member
+    }
+
+    pub(crate) fn tab(&self) -> &'static str {
+        self.tab
+    }
+
+    pub(crate) fn level_draft(&self) -> &IndexMap<String, i64> {
+        &self.draft
+    }
+
+    pub(crate) fn deck_view(&self) -> &'static str {
+        self.deck_view
+    }
+
+    /// ENGINE-21: the Skills tab's draft as the skills views read it: the open draft, else the member's saved skills as
+    /// the tab loads them (the deck terms under the deck rule, the deck, the classic slots, whether they are the
+    /// default).
+    pub(crate) fn skills_now(&self, cx: &Cx) -> (Option<DeckTerms>, Deck, SkillSlots, bool) {
+        if self.skills_loaded {
+            return (self.terms.clone(), self.deck.clone(), self.slots(), self.using_default);
+        }
+        let m = self.m(cx);
+        // RULESET1 9 D6: under the deck rule the tab edits the deck (classic: today's slots)
+        let terms = DeckTerms::for_member(&cx.data, m, &cx.gs().world_id, &cx.data.ruleset(&cx.gs().world_id));
+        let using_default = m.loadout_class.is_empty() && m.loadout_extra.is_empty();
+        let (class, extra) = if using_default {
+            SkillSlots::default_of(&cx.data, m, &cx.gs().world_id).unwrap_or_else(|| (self.class_slots.clone(), self.extra_slots.clone()))
+        } else {
+            (m.loadout_class.clone(), m.loadout_extra.clone())
+        };
+        (terms, m.deck.clone(), SkillSlots { class, extra, ranks: m.loadout_ranks.clone() }, using_default)
+    }
+
+    pub(crate) fn has_draft(&self, cx: &Cx) -> bool {
         match self.tab {
             "level_up" => self.draft.values().sum::<i64>() > 0,
             "skills" if self.terms.is_some() => self.skills_loaded && self.deck != self.m(cx).deck,
@@ -398,23 +435,14 @@ impl Character {
         if self.skills_loaded {
             return;
         }
-        let m = self.m(cx).clone();
-        // RULESET1 9 D6: under the deck rule the tab edits the deck (classic: today's slots)
-        self.terms = DeckTerms::for_member(&cx.data, &m, &cx.gs().world_id, &cx.data.ruleset(&cx.gs().world_id));
-        self.deck = m.deck.clone();
-        self.using_default = m.loadout_class.is_empty() && m.loadout_extra.is_empty();
-        if self.using_default {
-            self.fill_default(cx);
-        } else {
-            self.class_slots = m.loadout_class.clone();
-            self.extra_slots = m.loadout_extra.clone();
-        }
-        self.ranks = m.loadout_ranks.clone();
+        let (terms, deck, slots, using_default) = self.skills_now(cx);
+        (self.terms, self.deck, self.using_default) = (terms, deck, using_default);
+        self.set_slots(slots);
         self.skills_loaded = true;
     }
 
     /// The member's class path families in the played world (`party_ops::path_families`).
-    fn path_families(&self, cx: &Cx) -> Vec<String> {
+    pub(crate) fn path_families(&self, cx: &Cx) -> Vec<String> {
         party_ops::path_families(&cx.data, self.m(cx), &cx.gs().world_id)
     }
 
@@ -925,10 +953,10 @@ impl Screen<GameCx> for Character {
 
     fn state(&self, cx: &Cx) -> Value {
         let mut out = json!({"member": self.member, "tab": self.tab, "draft": self.draft.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<String, Value>>(), "has_draft": self.has_draft(cx), "portraits": self.faces.state()});
-        // ENGINE-23 (UISPLIT1-I Stage A): the loadout's view-model on the Gear tab
-        if self.tab == "gear" {
-            out["view"] = crate::loadout_view::view(cx, self).to_json();
-        }
+        // ENGINE-21 (UISPLIT1-H Stage A): the window's view-model and the open tab's (ENGINE-23: the loadout's on the Gear
+        // tab)
+        out["shell"] = crate::character_view::character(cx, self).to_json();
+        out["view"] = crate::character_view::tab_view(cx, self).to_json();
         if let (true, Some(t)) = (self.tab == "skills", &self.terms) {
             let shown = t.shown(&self.deck);
             out["deck"] = deck_json(&self.deck);
@@ -1256,20 +1284,9 @@ impl Character {
         let rs = d.ruleset(&cx.gs().world_id);
         let built = progression::build_with(d, m, &cx.gs().world_id, false).map(|b| b.unit);
         let shown = t.shown(&self.deck);
-        let intent_name = |i: &str| emberwake_battle::round_intent::RoundIntent::parse(i).map(|x| x.label(cat)).unwrap_or_else(|| title_case(i));
-        // (name, intent, AP, rank, description) of family `f` at the rank the member uses now (its top unlocked)
-        let skill_of = |f: &str| -> (String, String, i32, i32, String) {
-            let top = built.as_ref().and_then(|u| u.selectable_ranks(cat, f).last().copied()).unwrap_or(0);
-            let row = cat.family_rows(f).into_iter().find(|s| s.tier == top).or_else(|| cat.tier_one(f));
-            let name = cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
-            // PR7-37 (PT-06): a worn item's skill (in none of the deck's lists) shows its own intent
-            let intent = intent_name(&t.intent_for(cat, f));
-            match row {
-                Some(s) => (name, intent, emberwake_battle::skill::ap_cost_by(s, built.as_ref(), &rs), top, emberwake_content::source::skill_description(&s.raw, rs.stances())),
-                None => (name, intent, 0, top, String::new()),
-            }
-        };
-        let passive_of = |p: &str| (s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"));
+        let intent_name = |i: &str| intent_label(d, i);
+        let skill_of = |f: &str| deck_skill(d, built.as_ref(), t, &rs, f);
+        let passive_of = |p: &str| passive_text(d, p);
         let name_of = |kind: &str, id: &str| if kind == "active" { skill_of(id).0 } else { passive_of(id).0 };
         let (level, key_level) = (m.level(d) as i32, progression::keystone_level(d, m));
         // Left: the buckets.
@@ -1774,6 +1791,31 @@ fn off_hand_preview(b: &emberwake_rules::unit::OffHandButton) -> (String, aegis_
 
 /// A deck as the agent link reads it (every key, empty ones too).
 /// INPUT1 FL3: places a line in the follow-up editor, and the width of an order entry's follow-up toggle.
+/// (name, intent, AP, rank, description) of family `f` under the deck rule at the rank the member uses now (its top
+/// unlocked; `built` the member's battle unit), for the Skills tab and its view (`character_view`).
+pub(crate) fn deck_skill(d: &Data, built: Option<&Unit>, t: &DeckTerms, rs: &emberwake_rules::ruleset::Ruleset, f: &str) -> (String, String, i32, i32, String) {
+    let cat = &d.cat;
+    let top = built.and_then(|u| u.selectable_ranks(cat, f).last().copied()).unwrap_or(0);
+    let row = cat.family_rows(f).into_iter().find(|s| s.tier == top).or_else(|| cat.tier_one(f));
+    let name = cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
+    // PR7-37 (PT-06): a worn item's skill (in none of the deck's lists) shows its own intent
+    let intent = intent_label(d, &t.intent_for(cat, f));
+    match row {
+        Some(s) => (name, intent, emberwake_battle::skill::ap_cost_by(s, built, rs), top, emberwake_content::source::skill_description(&s.raw, rs.stances())),
+        None => (name, intent, 0, top, String::new()),
+    }
+}
+
+/// An intent id as the screen names it.
+pub(crate) fn intent_label(d: &Data, i: &str) -> String {
+    emberwake_battle::round_intent::RoundIntent::parse(i).map(|x| x.label(&d.cat)).unwrap_or_else(|| title_case(i))
+}
+
+/// A passive's (name, description).
+pub(crate) fn passive_text(d: &Data, p: &str) -> (String, String) {
+    (s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"))
+}
+
 const FOLLOW_PER: usize = 5;
 const FOLLOW_TOGGLE: i32 = 11;
 
@@ -1916,7 +1958,7 @@ const PK2_Y: i32 = 246;
 /// AUDIT-04 (PR5-40): the member's PK2 numbers, read only, for the Stats tab's PK2 line, only those it has: its weapon
 /// mastery per family (level and XP), the techniques and the mastery keystone open now (as the built unit holds them),
 /// and each wielded weapon instance's durability (MW = masterwork).
-fn pk2_rows(d: &Data, world: &str, m: &UnitState) -> Vec<(DRow, String)> {
+pub(crate) fn pk2_rows(d: &Data, world: &str, m: &UnitState) -> Vec<(DRow, String)> {
     let row = |label: &str, shown: String, desc: &str, short: String| (DRow { label: label.into(), value: 0, shown, desc: desc.into() }, short);
     let skill = |id: &str| d.cat.skill(id).map_or_else(|| id.to_string(), |s| s.name.clone());
     let top = emberwake_data::mastery::MASTERY_MAX;
@@ -2010,7 +2052,7 @@ fn item_numbers(def: &emberwake_data::ItemDef) -> String {
     c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str() + ".").unwrap_or_default()
 }
 
-fn roman(n: i32) -> &'static str {
+pub(crate) fn roman(n: i32) -> &'static str {
     ["-", "I", "II", "III", "IV", "V"].get(n.max(0) as usize).copied().unwrap_or("V+")
 }
 

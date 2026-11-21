@@ -23,15 +23,16 @@ mod battle_view;
 mod board;
 mod board_view;
 mod bunks;
+mod character_view;
 mod controls_view;
 #[cfg(feature = "dev_tools")]
 mod dojo;
 mod dojo_view;
 mod epilogue;
 mod epilogue_view;
-mod floats;
 mod facility;
 mod facility_view;
+mod floats;
 #[cfg(feature = "dev_tools")]
 mod forge;
 mod forge_view;
