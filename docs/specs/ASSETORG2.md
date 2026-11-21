@@ -77,7 +77,7 @@ games/<id>/assets/
   portraits/full_body/<id>.png               full-body story stage sprites (FB-140)
   items/<family>/<icon>.png                  named item icons
   skills/<family>.png                        skill family icons
-  tilesets/<set>/<tile>/v<n>.png             world tilesets (set = world id); a stage set also allows wall_foot/ at 64 x 16 (DIORAMA1, PR7-64)
+  tilesets/<set>/<tile>/v<n>.png             world tilesets (set = world id); a stage set also allows wall_foot/ at 64 x 16 (DIORAMA1, PR7-64), front_face/<terrain>/ at 64 x 24, cover/ at 64 x 72 and the sidecar stage.fx.json (DIORAMA2, DIORAMA3)
   backgrounds/{menu,title,world_map,location}/<id>.png
   backgrounds/menu/<picture>.fx.json         title fire spots beside a menu picture (TITLEFX1, PR7-28)
   audio/music/<key>.ogg, audio/sfx/<key>.wav, audio/ambience/<key>.ogg   (AMBIENCE1, by the music's keys)
