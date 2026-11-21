@@ -1,0 +1,22 @@
+{
+  "id": "floatpanels_log",
+  "title": "PR7-33 (FLOATPANELS1): Captain Vane's sweep (sunk_ward enc_evt_01) on the Timeline ruleset; Expand opens the combat log as a floating panel at the board's top left with its lock and minimize buttons; unlocked it glows amber; minimize leaves a Combat log button in place",
+  "launch": {"screen": "arena", "scene": "sunk_ward:enc_evt_01", "ruleset": "timeline", "seed": 7},
+  "settings": {"reduce_motion": true},
+  "timeout_s": 600,
+  "steps": [
+    {"step": "wait", "until": {"path": "state.ruleset.id", "eq": "timeline"}},
+    {"step": "repeat", "times": 4, "until": {"path": "state.talk", "absent": true}, "steps": [{"step": "click", "id": "dialogue.continue"}, {"step": "pause", "ms": 600}]},
+    {"step": "click", "id": "bar.log"},
+    {"step": "wait", "until": {"widget": "log.panel"}},
+    {"step": "pause", "ms": 600},
+    {"step": "shot", "name": "log_open"},
+    {"step": "click", "id": "log.panel.lock"},
+    {"step": "pause", "ms": 600},
+    {"step": "shot", "name": "log_unlocked"},
+    {"step": "click", "id": "log.panel.min"},
+    {"step": "wait", "until": {"widget": "log.panel.open"}},
+    {"step": "pause", "ms": 600},
+    {"step": "shot", "name": "log_minimized"}
+  ]
+}

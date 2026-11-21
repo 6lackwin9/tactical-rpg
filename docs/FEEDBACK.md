@@ -108,8 +108,36 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-60` (`ESCAPE-PLAN1`) | Built (tools lane); goldens parked | `develop` | Hand moves onto exits; a pick never drops another's (refused with the reason), hand moves pass through friends; the hold pick suggests the nearest hero and can change until round 1; a hero's Withdraw spends no AP it lacks; the foe card keeps off the winch and exits. `sim_golden`, `phasefold` and `timeline_golden` run the old moves behind a test-only switch until the user approves the re-record. FB-403 |
 | `PR7-61` (`PLAN-RECURSE1`) | Built (tools lane) | `develop` | An Engage with an area skill that `affects` `all` as a unit's first step no longer recurses without end with friends active: while a first move is compiled, the area counts friends where they stand. No golden moved. FB-407 |
 | `PR7-31` (`OBJUI1`) | Built (tools lane) | `develop` | Board chips for morale (state bars, the group letter with several groups), the leader's pennant, the slay crown and the guest shield (gold rim when it must survive); the words on the hover card and the foe card's portrait; the goal hovers to the objective and morale lines; the results read the objective line and a break's lines. No Enraged chip (Design's amendment). FB-409 |
+| `PR7-33` (`FLOATPANELS1`) | Built (tools lane) | `develop` | The region's "Here (N)" legend, its event ticker and the battle log float (unlock, drag, minimise in place to a named button, place and lock kept in the settings) on the floating panel, now an engine module `aegis_ui::float_panel` with shared chrome. FB-411 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-411: PR7-33 FLOATPANELS1 built; the region legend, the ticker and the battle log float like the world map's legend
+
+- **Status**: built (tools lane), `develop`. UI to review.
+- **Spec**: `docs/READY.md` row `1g` (`PR7-33`); `preferences/ui.md` "Floating panels" (user 2026-11-13), `P-UI-03`.
+- **What landed**:
+  - Engine `aegis_ui::float_panel` (new, game-agnostic): the world map's `FloatPanel` moved there unchanged (place in a
+    free corner or the middle unlocked, drag while unlocked, minimise to a chip whose top right is the minimise
+    button's, `saved`/`restore_saved`), plus `keep` (one frame's bookkeeping of a kept panel), `draw` (the shared
+    chrome: frame, amber rim while unlocked, the lock and minimise buttons, or the named chip; a game frame drawn
+    between the fill and the buttons) and `chip_size`. The world map re-exports it and draws its legend as before.
+  - Game `emberwake_gui` `floats.rs` (new): the settings keys `region_legend`, `region_log`, `battle_log` and `frame`,
+    which takes a kept place or the panel's default corner, locked, and saves a change.
+  - Region map: the "Here (N)" legend is a floating panel at the top right (as before), its title row holding the
+    lock and minimise buttons; minimised it is a "Here (N)" button in place (`map_legend_open` keeps that state as
+    before). The ticker is a floating panel at the bottom left; minimised a "Log" button; its bottom edge stays put
+    while L opens and closes it. Both keep the HUD frame. Widgets `legend`, `legend.lock`, `legend.min`,
+    `legend.open`; `log.panel`, `log.panel.lock`, `log.panel.min`, `log.panel.open` (the ticker's `log` button stays).
+  - Battle: Expand (or L) opens the combat log as a floating panel over the board, half its width plus 32, at its
+    top left, locked; minimised a "Combat log" button; Close and L still hide it. The entry count moved to the label
+    `log.lines` (the panel widget `log.panel` is now the floating body).
+- **Tests**: engine `float_panel` (2), region `the_ticker_floats_drags_unlocked_and_minimizes_in_place`, battle
+  `battle/tests/floatpanels_tests.rs`; three existing tests follow the new widgets (`legend` is a backdrop with
+  `legend.min`/`legend.open` instead of a section toggle; `log.lines` carries the count). Scenario `floatpanels_log`
+  (shots in the project files `tools-lane/pr733/`).
+- **Docs delta**: `docs/STRUCTURE.md`: engine `aegis_ui/src/float_panel.rs`, game `emberwake_gui/src/floats.rs`;
+  `engine/README.md` module list gains `float_panel`.
 
 ### FB-409: PR7-31 OBJUI1 built; morale, leader, slay and guest marks on the battle screen, the objective on the results
 

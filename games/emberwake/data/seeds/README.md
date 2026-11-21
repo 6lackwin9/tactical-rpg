@@ -21,6 +21,8 @@ moves it last in the commit order the check uses).
 
 | Seed | Last commit | Refused with |
 | --- | --- | --- |
+| `act1story.json` | `PR7-45` (2026-11-20) | not refused: archived as stale (its `enc_pro_0a` copy undid PT-21 when re-run) |
+| `cast1enc.json` | `PR7-45` (2026-11-20) | not refused: archived as stale (same `enc_pro_0a` copy) |
 | `cast1a3.json` | `3d0ea5b8` | not refused: archived as stale (its `bile_coat` step undid `empower1.json`) |
 | `cln45.json` | `767ef4e` | units:founder_hollis: Deck order: 'field' is not an intent (one of assault, guard, support, maneuver). |
 | `attacklock1.json` | `391fafe` | units:founder_hollis: Deck order: 'field' is not an intent (one of assault, guard, support, maneuver). |

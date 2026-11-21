@@ -47,6 +47,7 @@ use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::painter::View as PView;
 use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
+use aegis_ui::float_panel::{FloatPanel, PANEL_BTN};
 use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_world::explore::{self, Pos};
 use emberwake_world::quest;
@@ -71,10 +72,17 @@ pub enum RAct {
     /// SERVICES1: a click on the conversation, its shop, its board or the turn-in picker (`talk::Services`).
     Svc(SvcAct),
     CloseLore,
-    /// Fold or open the legend (`map_legend_open`).
+    /// Minimize the legend to its "Here (N)" button, or open it again (`map_legend_open`).
     Legend,
     /// Show the last events in the ticker, or only the latest (L).
     Log,
+    /// FLOATPANELS1: lock or unlock the legend, the ticker; minimize the ticker or open it again.
+    LegendLock,
+    LogLock,
+    LogMin,
+    LogOpen,
+    /// FLOATPANELS1: a click on a floating panel's body (kept off the map under it).
+    Panel,
     /// MAPNAV1-U: a legend row or an edge arrow: the camera looks at the marker (a second click on the row while it
     /// looks there walks there, as a marker click).
     Pan(String),
@@ -111,6 +119,15 @@ pub struct RegionMap {
     geo: MapGeom,
     /// The ticker shows the last `LOG_OPEN` events (else only the latest).
     log_open: bool,
+    /// FLOATPANELS1 (`preferences/ui.md` "Floating panels"): the legend and the ticker float (unlock, drag, minimize in
+    /// place to a named button); their place and lock kept in the settings (`LEGEND_PANEL_KEY`, `LOG_PANEL_KEY`), the
+    /// legend's minimized state as `map_legend_open`. The baselines kept and the sizes of the last frame.
+    legend_panel: FloatPanel,
+    legend_kept: Option<Value>,
+    legend_size: (i32, i32),
+    log_panel: FloatPanel,
+    log_kept: Option<Value>,
+    log_size: (i32, i32),
     /// PLAYUI1-R: the sprites' animation clock (ms, at the animation speed setting) and when it last advanced.
     anim_ms: f64,
     anim_at: Instant,
@@ -536,6 +553,12 @@ impl RegionMap {
             hold: false,
             geo: MapGeom::default(),
             log_open: false,
+            legend_panel: FloatPanel::default(),
+            legend_kept: None,
+            legend_size: (0, 0),
+            log_panel: FloatPanel::default(),
+            log_kept: None,
+            log_size: (0, 0),
             anim_ms: 0.0,
             anim_at: Instant::now(),
             leader: ClipPlayer::default(),
@@ -1064,6 +1087,11 @@ impl RegionMap {
                 }
             }
             RAct::Log => self.log_open = !self.log_open,
+            RAct::LegendLock => self.legend_panel.toggle_lock(),
+            RAct::LogLock => self.log_panel.toggle_lock(),
+            RAct::LogMin => self.log_panel.minimize(),
+            RAct::LogOpen => self.log_panel.restore(MAP_AREA, self.log_size),
+            RAct::Panel => {}
         }
     }
 
@@ -1949,9 +1977,9 @@ impl RegionMap {
         self.w.iter().find(|w| w.kind == "row" && w.rect.contains(self.mouse.0, self.mouse.1)).and_then(|w| w.id.strip_prefix("here.")).map(str::to_string)
     }
 
-    /// The legend (spec PLAYUI1 2.1 A, MAPNAV1-U's collapse): a pane floating at the map's top right under the HUD bar.
-    /// Its header "Here (N)" with a chevron collapses it to the header (kept in the settings as `map_legend_open`); a
-    /// row per marker shows the marker's map icon, its name and (people) their service icons at the right; spent
+    /// The legend (spec PLAYUI1 2.1 A; FLOATPANELS1): a floating panel (`aegis_ui::float_panel`) that starts at the
+    /// map's top right under the HUD bar, locked; unlocked it drags anywhere on the map, and its minimize button shrinks
+    /// it in place to a "Here (N)" button (kept in the settings as `map_legend_open`); a row per marker shows the marker's map icon, its name and (people) their service icons at the right; spent
     /// markers dim. A row click looks there (MAPNAV1-U: the camera pans to the marker); a second click while it looks
     /// there walks there as before. Width from the texts, at most `LEGEND_MAX` (times the text size). Its rect (the edge
     /// arrows keep off it).
@@ -1973,26 +2001,35 @@ impl RegionMap {
         let open = cx.settings.v["map_legend_open"].as_bool().unwrap_or(true);
         let rh = (ui.p.line_h(BODY).ceil() as i32 + 4).max(14);
         let title = format!("Here ({})", rows.len());
-        let mut w = 14 + ui.p.text_w(&title, BODY).ceil() as i32 + 8;
+        // FLOATPANELS1: the head row holds the title and, at its right, the lock and minimize buttons
+        let buttons = 2 * PANEL_BTN + 8;
+        let mut w = 4 + ui.p.text_w(&title, BODY).ceil() as i32 + 6 + buttons;
         for (_, _, _, label, _, services) in &rows {
             w = w.max(4 + ICON + 4 + ui.p.text_w(label, BODY).ceil() as i32 + 6 + services.len() as i32 * (SERVICE + 1) + 4);
         }
-        let w = w.min((LEGEND_MAX as f32 * ui.p.fonts.scale).round() as i32);
-        let x = W - 4 - w;
-        let head = Rect::new(x, HUD_H + 4, w, rh);
-        ui.p.fill(head, th().game("map_pane", PANE));
-        let t = tip(&title, if open { "Click to fold the legend to this line." } else { "Click to open the legend: who and what is here." });
-        ui.section("legend", head, &title, "", open, RAct::Legend, t);
-        if !open || rows.is_empty() {
-            return head;
-        }
-        let top = head.y + head.h + 1;
+        let w = w.min((LEGEND_MAX as f32 * ui.p.fonts.scale).round() as i32 + buttons);
+        let top_y = HUD_H + 4;
         let content = rows.len() as i32 * rh;
-        let pane = Rect::new(x, top, w, content.min(H - 4 - top));
-        let whole = Rect::new(x, head.y, w, pane.y + pane.h - head.y);
-        ui.p.fill(pane, th().game("map_pane", PANE));
-        // WEBFIX2 (a): the legend's rows in the HUD frame (the head is its section button)
-        crate::hud::hud_panel(ui, pane, rgba(0, 0, 0, 0), th().edge, 3.0);
+        let size = (w, rh + 1 + content.min(H - 4 - top_y - rh - 1));
+        let chip = aegis_ui::float_panel::chip_size(ui, &title);
+        self.legend_panel.minimized = !open;
+        let held = ui.dragging() == Some(LEGEND_PANEL_DRAG);
+        crate::floats::frame(cx, &mut self.legend_panel, &mut self.legend_kept, crate::floats::REGION_LEGEND_KEY, MAP_AREA, (W - 4 - w, top_y), size, chip, self.mouse, held);
+        self.legend_size = size;
+        let acts = aegis_ui::float_panel::Acts { body: RAct::Panel, lock: RAct::LegendLock, min: RAct::Legend, open: RAct::Legend };
+        // WEBFIX2 (a): the panel in the HUD frame
+        let hud = |ui: &mut Ui<RAct>, p: Rect| crate::hud::hud_panel(ui, p, rgba(0, 0, 0, 0), th().edge, 3.0);
+        let Some(p) = aegis_ui::float_panel::draw(ui, &self.legend_panel, "legend", &title, LEGEND_PANEL_DRAG, size, chip, &acts, th().game("map_pane", PANE), hud) else {
+            return self.legend_panel.chip_rect(size, chip);
+        };
+        ui.p.text_fit(p.x as f32 + 4.0, p.y as f32 + (rh as f32 - ui.p.line_h(BODY)) / 2.0, &title, BODY, (p.w - 8 - buttons) as f32, th().gold);
+        if rows.is_empty() {
+            return p;
+        }
+        let (x, w) = (p.x, p.w);
+        let top = p.y + rh + 1;
+        let pane = Rect::new(x, top, w, p.y + p.h - top);
+        ui.p.fill(Rect::new(x + 2, top - 1, w - 4, 1), th().edge);
         let off = ui.scroll_begin("legend.rows", pane, content);
         let px = ui.icon_px(Rect::new(0, 0, ICON + 4, ICON + 4));
         let spx = ui.icon_px(Rect::new(0, 0, SERVICE + 4, SERVICE + 4));
@@ -2029,13 +2066,13 @@ impl RegionMap {
             ui.push(format!("here.{id}"), "row", label.clone(), r, true, false, (!modal).then(|| RAct::Pan(id.clone())), t);
         }
         ui.scroll_end();
-        whole
+        p
     }
 
     /// The event log ticker (MAPLOG1-U, spec PLAYUI1 2.1 A): the latest event on one line at the map's bottom left; L
     /// or a click opens the last `LOG_OPEN` events (newest at the bottom), and again shows only the latest. Its rect
     /// (None with an empty log).
-    fn draw_ticker(&mut self, ui: &mut Ui<RAct>, cx: &Cx, modal: bool) -> Option<Rect> {
+    fn draw_ticker(&mut self, ui: &mut Ui<RAct>, cx: &mut Cx, modal: bool) -> Option<Rect> {
         let Some(latest) = cx.log.last().cloned() else { return None };
         let lh = ui.p.line_h(SMALL).ceil() as i32 + 1;
         let max_w = ((TICKER_MAX as f32 * ui.p.fonts.scale).round() as i32).min(W - 8);
@@ -2057,11 +2094,25 @@ impl RegionMap {
         let text_w = lines.iter().map(|l| ui.p.text_w(l, SMALL).ceil() as i32).max().unwrap_or(0);
         let w = (15 + text_w + 4).min(max_w);
         let h = lines.len() as i32 * lh + 5;
-        let r = Rect::new(4, H - 4 - h, w, h);
+        // FLOATPANELS1: the ticker floats (a free corner: the bottom left, locked); its lock and minimize buttons sit
+        // right of the text, and its bottom edge stays put while it opens and closes
+        let buttons = 2 * PANEL_BTN + 8;
+        let size = (w + buttons, h.max(PANEL_BTN + 4));
+        if let Some((x, y)) = self.log_panel.pos.filter(|_| self.log_size.1 > 0 && self.log_size.1 != size.1) {
+            self.log_panel.pos = Some((x, y + self.log_size.1 - size.1));
+        }
+        let chip = aegis_ui::float_panel::chip_size(ui, "Log");
+        let held = ui.dragging() == Some(LOG_PANEL_DRAG);
+        crate::floats::frame(cx, &mut self.log_panel, &mut self.log_kept, crate::floats::REGION_LOG_KEY, MAP_AREA, (4, H - 4 - size.1), size, chip, self.mouse, held);
+        self.log_size = size;
+        let acts = aegis_ui::float_panel::Acts { body: RAct::Panel, lock: RAct::LogLock, min: RAct::LogMin, open: RAct::LogOpen };
+        let hud = |ui: &mut Ui<RAct>, p: Rect| crate::hud::hud_panel(ui, p, rgba(0, 0, 0, 0), th().edge, 3.0);
+        let Some(p) = aegis_ui::float_panel::draw(ui, &self.log_panel, "log.panel", "Log", LOG_PANEL_DRAG, size, chip, &acts, th().game("map_pane", PANE), hud) else {
+            return Some(self.log_panel.chip_rect(size, chip));
+        };
+        let r = Rect::new(p.x, p.y + p.h - h, w, h);
         let hover = !modal && ui.hover(r);
-        ui.p.fill(r, th().game("map_pane", PANE));
-        crate::hud::hud_panel(ui, r, rgba(0, 0, 0, 0), if hover { th().gold } else { th().edge }, 3.0);
-        if hover && th().frame(crate::hud::HUD_FRAME).is_some() {
+        if hover {
             ui.p.panel(r, rgba(0, 0, 0, 0), th().gold, 3.0);
         }
         let last_y = r.y + 3 + (lines.len() as i32 - 1) * lh;
@@ -2075,7 +2126,7 @@ impl RegionMap {
             t.push((latest.clone(), th().text));
         }
         ui.push("log", "button", latest, r, !modal, self.log_open, Some(RAct::Log), t);
-        Some(r)
+        Some(p)
     }
 }
 
@@ -3131,6 +3182,10 @@ fn darkened_cap(cx: &mut Cx, sets: &[&str], wall: &str, b: &Block) -> Option<aeg
 const PANE: Rgba = rgba(12, 18, 28, 235);
 /// The legend's widest at text size Normal (spec PLAYUI1 2.1 A), and the ticker's.
 const LEGEND_MAX: i32 = 170;
+/// FLOATPANELS1: the area the legend and the ticker float in (the map under the HUD bar), and their drag payloads.
+const MAP_AREA: Rect = Rect::new(0, HUD_H, W, H - HUD_H);
+const LEGEND_PANEL_DRAG: &str = "region.legend";
+const LOG_PANEL_DRAG: &str = "region.log";
 const TICKER_MAX: i32 = 360;
 /// The events the opened ticker shows (MAPLOG1-U).
 pub const LOG_OPEN: usize = 12;
@@ -3579,11 +3634,14 @@ mod map_tests {
         let (mut cx, mut g) = (game_cx(), gfx());
         let mut map = RegionMap::new(&mut cx);
         frame(&mut map, &mut cx, &mut g, 1.0);
-        let head = widget(&map, "legend").expect("the legend header");
-        assert_eq!(head["kind"], json!("section"));
+        // FLOATPANELS1: a floating panel, its title row holding the lock and minimize buttons
+        let head = widget(&map, "legend").expect("the legend panel");
+        assert_eq!(head["kind"], json!("backdrop"));
         let (hx, hy, hw, _) = rect(&head);
         assert_eq!((hx + hw, hy), ((W - 4) as i64, (HUD_H + 4) as i64), "top right under the bar");
-        assert!(hw <= LEGEND_MAX as i64, "at most {LEGEND_MAX} wide at Normal: {hw}");
+        let buttons = (2 * PANEL_BTN + 8) as i64;
+        assert!(hw <= LEGEND_MAX as i64 + buttons, "at most {LEGEND_MAX} wide at Normal past its buttons: {hw}");
+        assert!(widget(&map, "legend.lock").is_some() && widget(&map, "legend.min").is_some());
         let markers = listed(&cx);
         assert!(head["text"].as_str().is_some_and(|t| t == format!("Here ({})", markers.len())), "{head}");
         let want: Vec<String> = markers.iter().map(|m| format!("here.{}", s(m, "id"))).collect();
@@ -3597,16 +3655,78 @@ mod map_tests {
             let card = widget(&map, &format!("here.{}", s(m, "id"))).map(|w| w["tip"].to_string()).unwrap_or_default();
             assert_eq!(card.contains(&services_text(&services)) && !services.is_empty(), !services.is_empty(), "{card}");
         }
-        // a click folds it to the header, kept in the settings file; another opens it again
-        map.click_id(&mut cx, "legend").expect("fold");
+        // minimize shrinks it in place to its "Here (N)" button, kept in the settings file; the button opens it again
+        let min = rect(&widget(&map, "legend.min").unwrap());
+        map.click_id(&mut cx, "legend.min").expect("minimize");
         assert_eq!(map.state(&cx)["legend_open"], json!(false));
         frame(&mut map, &mut cx, &mut g, 1.0);
-        assert!(widget(&map, "legend").is_some() && ids_with(&map, "here.").is_empty(), "folded to its header");
+        let chip = widget(&map, "legend.open").expect("the named button");
+        assert_eq!(chip["text"], head["text"]);
+        let c = rect(&chip);
+        assert_eq!((c.0 + c.2, c.1), (min.0 + min.2, min.1 - 1), "the button's top right where the minimize button's was");
+        assert!(widget(&map, "legend").is_none() && ids_with(&map, "here.").is_empty(), "minimized");
         let saved = Settings::load(cx.shot_dir.join("settings.json"), crate::screens::default_settings());
         assert_eq!(saved.v["map_legend_open"], json!(false), "the fold is saved");
-        map.click_id(&mut cx, "legend").expect("open");
+        map.click_id(&mut cx, "legend.open").expect("open");
         frame(&mut map, &mut cx, &mut g, 1.0);
         assert_eq!(ids_with(&map, "here."), want);
+    }
+
+    /// FLOATPANELS1 (`preferences/ui.md` "Floating panels"): the ticker floats: locked it stays put; unlocked its body
+    /// drags and stays where it was dropped (kept in the settings with its lock); minimize shrinks it in place to a
+    /// "Log" button that opens it again where it was; its bottom edge stays put while L opens and closes it.
+    #[test]
+    fn the_ticker_floats_drags_unlocked_and_minimizes_in_place() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        cx.log = (0..20).map(|i| format!("Event {i}.")).collect();
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let at = |map: &RegionMap, id: &str| rect(&widget(map, id).unwrap_or_else(|| panic!("no {id}")));
+        let r = at(&map, "log.panel");
+        assert!(r.0 <= 4 && r.1 + r.3 >= (H - 4) as i64, "bottom left: {r:?}");
+        assert_eq!(widget(&map, "log.panel.lock").unwrap()["text"], json!("Unlock"), "starts locked");
+        // L opens the last 12: the panel grows upward, its bottom edge in place
+        map.key(&mut cx, Key::Char('l'));
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let open = at(&map, "log.panel");
+        assert_eq!(open.1 + open.3, r.1 + r.3, "the bottom stays");
+        assert!(open.3 > r.3);
+        map.key(&mut cx, Key::Char('l'));
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        // locked: a drag does nothing
+        let held = aegis_ui::ui::Drag { key: LOG_PANEL_DRAG.into(), id: "log.panel".into(), text: "Log".into() };
+        let grab = ((r.0 + r.2 - 30) as i32, (r.1 + r.3 / 2) as i32);
+        map.draw(&mut cx, &mut g, grab, true);
+        g.kit.drag = Some(held.clone());
+        map.draw(&mut cx, &mut g, (grab.0 + 200, grab.1 - 100), true);
+        g.kit.drag = None;
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(at(&map, "log.panel"), r, "locked: stays");
+        // unlocked: it drags and the place is kept in the settings
+        map.click_id(&mut cx, "log.panel.lock").expect("unlock");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(widget(&map, "log.panel").unwrap()["drag"], json!(LOG_PANEL_DRAG));
+        map.draw(&mut cx, &mut g, grab, true);
+        g.kit.drag = Some(held);
+        map.draw(&mut cx, &mut g, (grab.0 + 200, grab.1 - 100), true);
+        g.kit.drag = None;
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let moved = at(&map, "log.panel");
+        assert_eq!((moved.0, moved.1), (r.0 + 200, r.1 - 100), "dropped there");
+        let saved = Settings::load(cx.shot_dir.join("settings.json"), crate::screens::default_settings());
+        assert_eq!(saved.v[crate::floats::REGION_LOG_KEY], json!({"pos": [moved.0, moved.1], "locked": false}));
+        // minimize toggles in place
+        let min = at(&map, "log.panel.min");
+        map.click_id(&mut cx, "log.panel.min").expect("minimize");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert!(widget(&map, "log.panel").is_none() && widget(&map, "log").is_none(), "minimized");
+        let chip = widget(&map, "log.panel.open").expect("the Log button");
+        assert_eq!(chip["text"], json!("Log"));
+        let c = rect(&chip);
+        assert_eq!((c.0 + c.2, c.1), (min.0 + min.2, min.1 - 1), "where the minimize button was");
+        map.click_id(&mut cx, "log.panel.open").expect("open");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(at(&map, "log.panel.min"), min, "restored in place");
     }
 
     #[test]

@@ -76,6 +76,13 @@ fn auto_button(ui: &mut Ui<Action>, r: Rect, enabled: bool, on: bool, tip: Tip) 
     ui.push("strip.auto", "button", "Auto", r, enabled, on, Some(Action::Autoplay), tip);
 }
 
+/// FLOATPANELS1: the battle log's panel: the area it floats in (the board), its size (half the board's width, its
+/// height), its name on the minimized button and its drag payload.
+pub(super) const LOG_AREA: Rect = Rect::new(GRID_X, GRID_Y, GRID_W * TILE, GRID_H * TILE);
+const LOG_SIZE: (i32, i32) = (GRID_W * TILE / 2 + 32, GRID_H * TILE - 8);
+const LOG_NAME: &str = "Combat log";
+const LOG_DRAG: &str = "battle.log";
+
 pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), live: bool) {
     let now = Instant::now();
     let tuning = cx.tuning.value.clone();
@@ -1262,13 +1269,25 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
     }
 
-    if g.show_log {
-        let r = Rect::new(GRID_X, GRID_Y + 4, GRID_W * TILE, GRID_H * TILE - 8);
+    // FLOATPANELS1: the open log floats over the board (a free corner: the board's top left, locked); unlocked it drags
+    // anywhere over the board, and its minimize button shrinks it in place to a "Combat log" button
+    let log_open = g.show_log && {
+        let size = LOG_SIZE;
+        let chip = aegis_ui::float_panel::chip_size(&mut ui, LOG_NAME);
+        let held = ui.dragging() == Some(LOG_DRAG);
+        crate::floats::frame(cx, &mut g.log_panel, &mut g.log_kept, crate::floats::BATTLE_LOG_KEY, LOG_AREA, (LOG_AREA.x + 4, LOG_AREA.y + 4), size, chip, mouse, held);
+        g.log_size = size;
+        let acts = aegis_ui::float_panel::Acts { body: Action::Step, lock: Action::LogLock, min: Action::LogMin, open: Action::LogOpen };
+        let hud = |ui: &mut aegis_ui::ui::Ui<Action>, p: Rect| crate::hud::hud_panel(ui, p, rgba(0, 0, 0, 0), th().edge, 3.0);
+        aegis_ui::float_panel::draw(&mut ui, &g.log_panel, "log.panel", LOG_NAME, LOG_DRAG, size, chip, &acts, th().game("log_fill", rgba(10, 14, 24, 246)), hud).is_some()
+    };
+    if log_open {
+        let r = g.log_panel.rect(LOG_SIZE);
         // ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the resolver log with the encounter's phase and kill lines
         let log = s.log_lines(0, 0);
-        ui.push("log.panel", "panel", format!("{} lines", log.len()), r, true, true, Some(Action::Step), Vec::new());
-        crate::hud::hud_panel(&mut ui, r, th().game("log_fill", rgba(10, 14, 24, 246)), th().edge, 3.0);
-        ui.p.text(r.x as f32 + 6.0, r.y as f32 + 3.0, &format!("Combat log ({} entries)", log.len()), TITLE, th().gold);
+        let head = Rect::new(r.x + 6, r.y + 3, r.w - 12 - 2 * aegis_ui::float_panel::PANEL_BTN - 8, 10);
+        ui.p.text_fit(head.x as f32, head.y as f32, &format!("Combat log ({} entries)", log.len()), TITLE, head.w as f32, th().gold);
+        ui.push("log.lines", "label", format!("{} lines", log.len()), head, true, false, None, Vec::new());
         // the rows: text, colour, x offset, a rule after it; INPUT1 PB4: a timeline battle's lines under their round's
         // "Round <r>" and their part's DIM "Block <b>" ("Round start", "Round end") with a 1 px rule, 6 px in
         let mut wrapped: Vec<(String, Rgba, f32, bool)> = Vec::new();

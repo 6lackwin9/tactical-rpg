@@ -168,6 +168,10 @@ pub enum Action {
     Step,
     Restart,
     ToggleLog,
+    /// FLOATPANELS1: lock or unlock the battle log's panel, minimize it to its "Combat log" button, open it again.
+    LogLock,
+    LogMin,
+    LogOpen,
     /// World battle over: settle it and show the results.
     Continue,
     /// Leave the Test Arena.
@@ -276,6 +280,11 @@ pub struct BattleScreen {
     pub message: String,
     show_log: bool,
     log_scroll: i32,
+    /// FLOATPANELS1: the battle log floats over the board (`aegis_ui::float_panel`); its place and lock kept in the
+    /// settings (`floats::BATTLE_LOG_KEY`); the baseline kept and its size in the last frame.
+    log_panel: aegis_ui::float_panel::FloatPanel,
+    log_kept: Option<Value>,
+    log_size: (i32, i32),
     tuning_checked: Instant,
     mode: Mode,
     encounter: String,
@@ -493,6 +502,9 @@ impl BattleScreen {
             message: String::new(),
             show_log: false,
             log_scroll: 0,
+            log_panel: aegis_ui::float_panel::FloatPanel::default(),
+            log_kept: None,
+            log_size: (0, 0),
             tuning_checked: Instant::now(),
             mode,
             encounter: cx.encounter.clone(),

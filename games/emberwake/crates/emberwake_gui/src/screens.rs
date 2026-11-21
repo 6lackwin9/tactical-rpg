@@ -24,7 +24,7 @@ pub const WINDOW_SIZES: [&str; 5] = ["1280x720", "1366x768", "1600x900", "1920x1
 /// The game's own settings keys and defaults (sound, display, text size and playtest recording are the
 /// engine's: `Settings::engine_defaults`). PLAYUI1-M: `map_names` (`hover` or `always`: the region map's marker names)
 /// and `map_legend_open` (the region map's legend, open or collapsed to its header); MAP-POLISH1: `world_map_legend`
-/// (the world map's floating Legend, `{"pos": [x, y], "locked": bool}` once moved or locked, `worldmap::LEGEND_KEY`). STAGE1: `battle_view` (`stage` or
+/// (the world map's floating Legend, `{"pos": [x, y], "locked": bool}` once moved or locked, `worldmap::LEGEND_KEY`); FLOATPANELS1: `region_legend`, `region_log` and `battle_log` (the same for the region's legend and ticker and the battle log, `floats`). STAGE1: `battle_view` (`stage` or
 /// `flat`, `stage::VIEWS`; a debug setting set in the Scene Runner since STAGE1-C). STAGE1-O: `see_through`
 /// (`selected` or `always`, `stage::SEE_THROUGH`: when covered units are outlined in battle). EXPLOREVIEW1:
 /// `region_view` (`square` or `tilted`, `mapview::VIEWS`; a debug setting set in the Scene Runner).
@@ -33,7 +33,7 @@ pub fn default_settings() -> Value {
     // `all_bars`, `test_hazards` and `test_arena`). VC5: the debug key `debug_party_foresight_off` is never a default.
     let overlays: serde_json::Map<String, Value> = crate::battle::OVERLAY_GROUPS.iter().map(|g| (g.0.to_string(), Value::Bool(g.3))).collect();
     // INPUT1 GH7: "Auto-fill the rest" on by default; PB3: the playback speed 1x; VISCLAR1-D: "Auto-confirm next round" on
-    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "auto_fill": true, crate::battle::AUTO_CONFIRM: true, "map_names": "hover", "map_zoom": 1.0, "walk_step_ms": crate::mapview::WALK_STEP_MS.2, crate::mapview::TURN_BEAT_KEY: false, crate::mapview::EQUAL_SPEED_KEY: false, crate::mapview::TURN_CORNER_KEY: crate::mapview::TURN_CORNERS[0].name(), "map_legend_open": true, crate::worldmap::LEGEND_KEY: {}, "battle_view": "stage", "region_view": "square", "see_through": "selected", "battle_overlays": overlays,
+    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "auto_fill": true, crate::battle::AUTO_CONFIRM: true, "map_names": "hover", "map_zoom": 1.0, "walk_step_ms": crate::mapview::WALK_STEP_MS.2, crate::mapview::TURN_BEAT_KEY: false, crate::mapview::EQUAL_SPEED_KEY: false, crate::mapview::TURN_CORNER_KEY: crate::mapview::TURN_CORNERS[0].name(), "map_legend_open": true, crate::worldmap::LEGEND_KEY: {}, crate::floats::REGION_LEGEND_KEY: {}, crate::floats::REGION_LOG_KEY: {}, crate::floats::BATTLE_LOG_KEY: {}, "battle_view": "stage", "region_view": "square", "see_through": "selected", "battle_overlays": overlays,
         "playback_speed": "1x"})
 }
 
