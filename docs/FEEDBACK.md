@@ -114,8 +114,32 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-21` (`UISPLIT1-H`) character sheet | Stage A built (tools lane) | `develop` | View-models `character` (the window), `stats`, `level_up`, `skills` and `deck`, with actions, fixtures and tests; the Gear tab stays the `loadout` view; today's drawing kept. FB-415 |
 | `PR7-27` (`VNSTAGE1`) | Built (tools lane) | `develop` | The story stage: cards carry actors (full-body pictures, a code-drawn figure where none exists) who enter left and exit right, met ones pinned right; cameras Static, Scroll and Pan; dialogue and narration keep the scene's backdrop dimmed; the cutscene bar gains Auto and Log; born split (view `vignette` and its fixture). Seed `vnstage1` stages the meat market and the mortuary cart. FB-417 |
 | `PR7-64` (`DIORAMA1`) | Built (tools lane) | `develop` | Sunk Ward names stage set `sunk_ward_stage` (seed `diorama1`); ground hazards draw their painted decal `props/hazards/<status>/v*` under the icon and rounds left (the tint without a file); row 0's ground cells draw the set's `wall_foot` strip. FB-419 |
+| `PR7-66` (`VNSTAGE1B`) | Built (tools lane) | `develop` | The rest of Act 1's speaking scenes staged (seed `vnstage1b`): the three hub debates and the awakening fissure; data only, no new code. FB-421 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-421: PR7-66 VNSTAGE1B built; every Act 1 scene with speakers is staged
+
+- **Status**: built (tools lane), `develop`. Data and a scenario only; no code changed. Shots in project files
+  `build-tools/pr7-66_act1_stage.png` (scenario `vn_stage_act1`).
+- **Spec**: `docs/READY.md` row 00c `PR7-66` (`VNSTAGE1B`).
+- **What landed** (seed `vnstage1b.json`, `cards` field only, through `aegis content`): `vg_debate_1`,
+  `vg_int_surge`, `vg_debate_2` and `vg_debate_3` (the Act 1 scenes with `line` cards; the prologue's two were staged
+  in `PR7-27`). The rule, applied the same way to each scene (a script, so a revised scene can be restaged the same
+  way):
+  - party members (`role: party`) stand left, everyone else right, at most two per side (the stage's limit is four);
+  - the opening picture card brings on the first two party speakers walking in and the first two others standing
+    right;
+  - a speaker not on stage takes the place of the one on their side who spoke longest ago (a party member walks in);
+  - a narration (`text`) card walks the party out right, the others stay;
+  - camera Static throughout (these scenes do not move: the hub and the fissure).
+- **Not built**: no new stage action was needed. Berek, Talia, Hollis and Elyse have no full-body picture, so they
+  stand as the code silhouette (placeholder-first); the Art/UI queue can add `portraits/full_body/<id>.png` and they
+  show with no data change.
+- **Tests**: the content check passes for every staged scene; scenario `vn_stage_act1` (9 shots, one or more per
+  scene) plays each scene through from the UI Gallery. The prologue's own two scenes are in `vn_stage`; the first debate closes the
+  prologue sequence, so a new game now plays it staged.
+- **Docs delta**: none.
 
 ### FB-419: PR7-64 DIORAMA1 built; the Act 1 diorama battle stage (D1, D3, D4)
 

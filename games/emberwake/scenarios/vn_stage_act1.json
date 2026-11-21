@@ -1,0 +1,323 @@
+{
+ "id": "vn_stage_act1",
+ "title": "PR7-66 (VNSTAGE1B): every Act 1 story scene with speakers on the story stage, from the UI Gallery's vignette pane (the scenes as written): the first hub debate (the prologue's end: Kaelen and Vesper walk in, Berek and Sabina stand right, Maren and Hollis take their places), the awakening fissure interlude, the second debate (the council only) and the third (the party walks out on the narration, Elyse walks in)",
+ "launch": {
+  "screen": "runner"
+ },
+ "settings": {
+  "reduce_motion": false
+ },
+ "timeout_s": 600,
+ "steps": [
+  {
+   "step": "click",
+   "id": "runner.gallery"
+  },
+  {
+   "step": "click",
+   "id": "gallery.entry.vignette"
+  },
+  {
+   "step": "click",
+   "id": "gallery.vignette.reel"
+  },
+  {
+   "step": "click",
+   "id": "gallery.vignette.reel.opt.4"
+  },
+  {
+   "step": "click",
+   "id": "gallery.open"
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "vignette"
+   }
+  },
+  {
+   "step": "pause",
+   "ms": 2500
+  },
+  {
+   "step": "shot",
+   "name": "debate_1_open"
+  },
+  {
+   "step": "repeat",
+   "times": 25,
+   "until": {
+    "path": "state.view.fields.speaker.text",
+    "eq": "Kaelen"
+   },
+   "steps": [
+    {
+     "step": "key",
+     "key": "space"
+    }
+   ]
+  },
+  {
+   "step": "pause",
+   "ms": 1000
+  },
+  {
+   "step": "shot",
+   "name": "debate_1_a_kaelen"
+  },
+  {
+   "step": "repeat",
+   "times": 15,
+   "until": {
+    "path": "state.view.fields.speaker.text",
+    "eq": "Hollis"
+   },
+   "steps": [
+    {
+     "step": "key",
+     "key": "space"
+    }
+   ]
+  },
+  {
+   "step": "pause",
+   "ms": 1000
+  },
+  {
+   "step": "shot",
+   "name": "debate_1_b_hollis"
+  },
+  {
+   "step": "repeat",
+   "times": 30,
+   "until": {
+    "path": "screen",
+    "ne": "vignette"
+   },
+   "steps": [
+    {
+     "step": "key",
+     "key": "space"
+    }
+   ]
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "ui_gallery"
+   }
+  },
+  {
+   "step": "click",
+   "id": "gallery.vignette.reel"
+  },
+  {
+   "step": "click",
+   "id": "gallery.vignette.reel.opt.5"
+  },
+  {
+   "step": "click",
+   "id": "gallery.open"
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "vignette"
+   }
+  },
+  {
+   "step": "pause",
+   "ms": 2500
+  },
+  {
+   "step": "shot",
+   "name": "surge_open"
+  },
+  {
+   "step": "repeat",
+   "times": 20,
+   "until": {
+    "path": "state.view.fields.speaker.text",
+    "eq": "Talia Rusk"
+   },
+   "steps": [
+    {
+     "step": "key",
+     "key": "space"
+    }
+   ]
+  },
+  {
+   "step": "pause",
+   "ms": 1000
+  },
+  {
+   "step": "shot",
+   "name": "surge_a_talia"
+  },
+  {
+   "step": "repeat",
+   "times": 30,
+   "until": {
+    "path": "screen",
+    "ne": "vignette"
+   },
+   "steps": [
+    {
+     "step": "key",
+     "key": "space"
+    }
+   ]
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "ui_gallery"
+   }
+  },
+  {
+   "step": "click",
+   "id": "gallery.vignette.reel"
+  },
+  {
+   "step": "click",
+   "id": "gallery.vignette.reel.opt.6"
+  },
+  {
+   "step": "click",
+   "id": "gallery.open"
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "vignette"
+   }
+  },
+  {
+   "step": "pause",
+   "ms": 2500
+  },
+  {
+   "step": "shot",
+   "name": "debate_2_open"
+  },
+  {
+   "step": "repeat",
+   "times": 20,
+   "until": {
+    "path": "state.view.fields.speaker.text",
+    "eq": "Talia Rusk"
+   },
+   "steps": [
+    {
+     "step": "key",
+     "key": "space"
+    }
+   ]
+  },
+  {
+   "step": "pause",
+   "ms": 1000
+  },
+  {
+   "step": "shot",
+   "name": "debate_2_a_talia"
+  },
+  {
+   "step": "repeat",
+   "times": 30,
+   "until": {
+    "path": "screen",
+    "ne": "vignette"
+   },
+   "steps": [
+    {
+     "step": "key",
+     "key": "space"
+    }
+   ]
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "ui_gallery"
+   }
+  },
+  {
+   "step": "click",
+   "id": "gallery.vignette.reel"
+  },
+  {
+   "step": "click",
+   "id": "gallery.vignette.reel.opt.8"
+  },
+  {
+   "step": "click",
+   "id": "gallery.open"
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "vignette"
+   }
+  },
+  {
+   "step": "pause",
+   "ms": 2500
+  },
+  {
+   "step": "shot",
+   "name": "debate_3_open"
+  },
+  {
+   "step": "repeat",
+   "times": 48,
+   "until": {
+    "path": "state.view.fields.speaker.text",
+    "eq": "Elyse"
+   },
+   "steps": [
+    {
+     "step": "key",
+     "key": "space"
+    }
+   ]
+  },
+  {
+   "step": "pause",
+   "ms": 1000
+  },
+  {
+   "step": "shot",
+   "name": "debate_3_b_elyse"
+  },
+  {
+   "step": "repeat",
+   "times": 30,
+   "until": {
+    "path": "screen",
+    "ne": "vignette"
+   },
+   "steps": [
+    {
+     "step": "key",
+     "key": "space"
+    }
+   ]
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "ui_gallery"
+   }
+  }
+ ]
+}

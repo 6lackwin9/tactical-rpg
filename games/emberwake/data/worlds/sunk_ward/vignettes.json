@@ -251,57 +251,241 @@
 					"bottom": "#1e232d",
 					"text": "The Sluice Undercroft. Four fugitives wash up wet to the bone, and a brazier smells of tallow and brass. Four bunks filled of six. Forty-two days on the slate.",
 					"fade_in_ms": 1200,
-					"fade_out_ms": 600
+					"fade_out_ms": 600,
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left",
+							"move": "enter"
+						},
+						{
+							"who": "vesper",
+							"side": "left",
+							"move": "enter"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "berek_dorn",
-					"text": "Shake the canal off by the coals, youngsters. The Fourth Kiln valves are pumping something beneath this city, and I cast the throats. Put your faith in honest tempered steel. Iron doesn't dream."
+					"text": "Shake the canal off by the coals, youngsters. The Fourth Kiln valves are pumping something beneath this city, and I cast the throats. Put your faith in honest tempered steel. Iron doesn't dream.",
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "sabina_kress",
 					"text": "Steel is a blunt answer, Berek. I have opened what the Tithing leaves behind. Cold steel alone will not kill a Prelate who drinks what the sleeper bleeds. Bring me what the dead leave and I will teach the living to use it.",
-					"expression": "determined"
+					"expression": "determined",
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "berek_dorn",
 					"text": "And turn them into the things we're running from. You'd pin a stranger's bone into a child and call it medicine.",
-					"expression": "angry"
+					"expression": "angry",
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "talia_rusk",
-					"text": "Enough. Both of you are arguing over a hearth with forty-two days on the slate. Eat first. Then I'll show these four what the board looks like."
+					"text": "Enough. Both of you are arguing over a hearth with forty-two days on the slate. Eat first. Then I'll show these four what the board looks like.",
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "kaelen",
-					"text": "I knocked a captain's iron aside tonight and the whole Ward heard it. I'd like to know what we are keeping alive before I ask who's right."
+					"text": "I knocked a captain's iron aside tonight and the whole Ward heard it. I'd like to know what we are keeping alive before I ask who's right.",
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "vesper",
 					"text": "Alive, mostly. Berek's iron, Sabina's knives, Talia's rods. Pick the one that doesn't bleed you for it.",
-					"expression": "happy"
+					"expression": "happy",
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "maren",
 					"text": "I copied the chronicle for the Clerisy for six years. If a hearth like this is all that stands between us and the Red Tithing, I want to know what it burns.",
-					"expression": "sad"
+					"expression": "sad",
+					"actors": [
+						{
+							"who": "maren",
+							"side": "left",
+							"move": "enter"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "hollis",
 					"text": "I want to know who is stealing the grates, so I can shoot him.",
-					"expression": "determined"
+					"expression": "determined",
+					"actors": [
+						{
+							"who": "maren",
+							"side": "left"
+						},
+						{
+							"who": "hollis",
+							"side": "left",
+							"move": "enter"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "talia_rusk",
-					"text": "The board opens with two jobs, and I want both before anything else moves. Alleyway Junction Seven, where Captain Vane has sealed the grates. The Ash-Crawl Crossroads, where Proctor Quell is emptying cages. Either one first. Both done."
+					"text": "The board opens with two jobs, and I want both before anything else moves. Alleyway Junction Seven, where Captain Vane has sealed the grates. The Ash-Crawl Crossroads, where Proctor Quell is emptying cages. Either one first. Both done.",
+					"actors": [
+						{
+							"who": "maren",
+							"side": "left"
+						},
+						{
+							"who": "hollis",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
+					]
 				}
 			],
 			"tags": [
@@ -325,24 +509,64 @@
 					"text": "Four valves shut: the Watch grates, the titration cages, the bone-mill chutes and the rendering vats. The raw condensate that fed them has nowhere left to go but down.",
 					"fade_in_ms": 1200,
 					"fade_out_ms": 600,
-					"shake": "quake"
+					"shake": "quake",
+					"actors": [
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "berek_dorn",
 					"text": "That's pressure. That's not a pipe knocking, that's a conduit with nowhere to vent. Get the bunks clear!",
-					"expression": "afraid"
+					"expression": "afraid",
+					"actors": [
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "talia_rusk",
-					"text": "Eyes on the floor. It's lifting. Everyone who can hold a weapon, with me."
+					"text": "Eyes on the floor. It's lifting. Everyone who can hold a weapon, with me.",
+					"actors": [
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "text",
 					"text": "The floor of the Sluice Undercroft splits. Something calcified and enormous drags itself up through the stone, and the drains behind it begin to crawl.",
 					"top": "#0a0b10",
-					"bottom": "#1e232d"
+					"bottom": "#1e232d",
+					"actors": [
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
+					]
 				}
 			],
 			"tags": [
@@ -364,39 +588,109 @@
 					"bottom": "#2c1546",
 					"text": "The Undercroft floor lies open. Bone-sediment crust glitters in the brazier light. The smell is brass and marrow.",
 					"fade_in_ms": 1200,
-					"fade_out_ms": 600
+					"fade_out_ms": 600,
+					"actors": [
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "berek_dorn",
-					"text": "Look at that stone. Every valve we shut, the pressure went somewhere. We did this with honest iron and a good plan."
+					"text": "Look at that stone. Every valve we shut, the pressure went somewhere. We did this with honest iron and a good plan.",
+					"actors": [
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "sabina_kress",
 					"text": "No, we did it by starving the dream. Every cage we empty, every vat we flood, the city's marrow arteries back up and the Clerisy gets desperate. Cold steel gave this to us and I would like it written on the wall.",
-					"expression": "determined"
+					"expression": "determined",
+					"actors": [
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "talia_rusk",
-					"text": "Then write what else it gave us. The Calcified Amalgam dead on the floor. A dreamer's vertebra for the Slab. A map of what lies under the Ward. We pay the price either way. I'd rather know what it buys."
+					"text": "Then write what else it gave us. The Calcified Amalgam dead on the floor. A dreamer's vertebra for the Slab. A map of what lies under the Ward. We pay the price either way. I'd rather know what it buys.",
+					"actors": [
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						},
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "berek_dorn",
 					"text": "It buys a worse Tithing, Talia, if the Clerisy decides to answer us. You've read the sweep tallies.",
-					"expression": "angry"
+					"expression": "angry",
+					"actors": [
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "sabina_kress",
-					"text": "If we are the cause of a worse rite, then we will be the ones to answer for it. Not the Founders who bled for it. Not the children."
+					"text": "If we are the cause of a worse rite, then we will be the ones to answer for it. Not the Founders who bled for it. Not the children.",
+					"actors": [
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "talia_rusk",
-					"text": "The Crucible is next. Nemeth holds the Slag Gate, and the only door out of the Ward is behind him. Eat, rest, bind what the Fissure left. We move when the bells change."
+					"text": "The Crucible is next. Nemeth holds the Slag Gate, and the only door out of the Ward is behind him. Eat, rest, bind what the Fissure left. We move when the bells change.",
+					"actors": [
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
+					]
 				}
 			],
 			"tags": [
@@ -462,29 +756,121 @@
 					"bottom": "#2c1546",
 					"text": "The Sluice Undercroft, a day and a night later. The brazier burns low. One bunk is made, and nobody has slept in it.",
 					"fade_in_ms": 1200,
-					"fade_out_ms": 600
+					"fade_out_ms": 600,
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left",
+							"move": "enter"
+						},
+						{
+							"who": "vesper",
+							"side": "left",
+							"move": "enter"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "berek_dorn",
-					"text": "I told you iron doesn't dream. It doesn't weep either. I'd trade every valve I ever cast to have that bunk slept in tonight."
+					"text": "I told you iron doesn't dream. It doesn't weep either. I'd trade every valve I ever cast to have that bunk slept in tonight.",
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "sabina_kress",
 					"text": "Cold steel bounced off Nemeth, Berek. I watched. He does not die of anything you or I can swing. If we want to reach what he took, we have to learn what he drinks.",
-					"expression": "sad"
+					"expression": "sad",
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "berek_dorn",
 					"text": "That's how they got the prelates. That's how they got whoever he took.",
-					"expression": "angry"
+					"expression": "angry",
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "sabina_kress",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
 					"speaker": "talia_rusk",
-					"text": "It is a question for another day. Tonight there are five of us and a gate, and by the next bell there will be a stranger at the Basin door. Eighteen, twenty-four, cowled to the eyes, asking to be taught."
+					"text": "It is a question for another day. Tonight there are five of us and a gate, and by the next bell there will be a stranger at the Basin door. Eighteen, twenty-four, cowled to the eyes, asking to be taught.",
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
+					]
 				},
 				{
 					"style": "line",
@@ -497,6 +883,24 @@
 							"key": "sunk_ward.crucible_stayed",
 							"op": "!=",
 							"value": "kaelen"
+						}
+					],
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
 						}
 					]
 				},
@@ -512,6 +916,24 @@
 							"op": "!=",
 							"value": "vesper"
 						}
+					],
+					"actors": [
+						{
+							"who": "kaelen",
+							"side": "left"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
 					]
 				},
 				{
@@ -525,6 +947,25 @@
 							"key": "sunk_ward.crucible_stayed",
 							"op": "!=",
 							"value": "maren"
+						}
+					],
+					"actors": [
+						{
+							"who": "maren",
+							"side": "left",
+							"move": "enter"
+						},
+						{
+							"who": "vesper",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
 						}
 					]
 				},
@@ -540,6 +981,25 @@
 							"op": "!=",
 							"value": "hollis"
 						}
+					],
+					"actors": [
+						{
+							"who": "maren",
+							"side": "left"
+						},
+						{
+							"who": "hollis",
+							"side": "left",
+							"move": "enter"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
 					]
 				},
 				{
@@ -551,6 +1011,26 @@
 							"key": "sunk_ward.crucible_stayed",
 							"op": "!=",
 							"value": "dunstan"
+						}
+					],
+					"actors": [
+						{
+							"who": "maren",
+							"side": "left",
+							"move": "exit"
+						},
+						{
+							"who": "hollis",
+							"side": "left",
+							"move": "exit"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
 						}
 					]
 				},
@@ -566,12 +1046,41 @@
 							"op": "!=",
 							"value": "elyse"
 						}
+					],
+					"actors": [
+						{
+							"who": "elyse",
+							"side": "left",
+							"move": "enter"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
 					]
 				},
 				{
 					"style": "line",
 					"speaker": "talia_rusk",
-					"text": "Then we count together. Berek will frame the bunks, Sabina will lay out her knives, and I'll bring in the first runaway. The Bastion is next."
+					"text": "Then we count together. Berek will frame the bunks, Sabina will lay out her knives, and I'll bring in the first runaway. The Bastion is next.",
+					"actors": [
+						{
+							"who": "elyse",
+							"side": "left"
+						},
+						{
+							"who": "berek_dorn",
+							"side": "right"
+						},
+						{
+							"who": "talia_rusk",
+							"side": "right"
+						}
+					]
 				}
 			],
 			"tags": [
