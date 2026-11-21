@@ -130,6 +130,16 @@ fn the_sentences_take_the_forms_of_tm6() {
     assert_eq!(progression::REFUSE_SUPPLIES, format!("Making camp needs {} {}.", progression::CAMP_COST, terms::word(&d, "plain", UPKEEP)), "the Camp refusal (no campaign) is the default word");
 }
 
+/// PR7-47: a campaign rest the purse cannot pay names the world's upkeep item by its full name, the default upkeep by
+/// its sentence word.
+#[test]
+fn the_upkeep_refusal_names_the_worlds_item() {
+    let d = data();
+    assert_eq!(terms::not_enough_upkeep_to_camp(&d, "camp"), format!("Not enough {} to make camp.", terms::name(&d, "camp", UPKEEP)));
+    assert_eq!(terms::not_enough_upkeep_to_camp(&d, "camp"), "Not enough Lamp Oil to make camp.", "the fixture's purse name");
+    assert_eq!(terms::not_enough_upkeep_to_camp(&d, "goldish"), format!("Not enough {} to make camp.", terms::word(&d, "goldish", UPKEEP)), "the default name: the word");
+}
+
 #[test]
 fn shop_quest_and_dialogue_texts_read_the_worlds_words() {
     let d = data();

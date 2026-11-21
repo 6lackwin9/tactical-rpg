@@ -52,6 +52,31 @@ fn the_world_bar_hides_restart_and_step_and_the_menu_retreats() {
     assert!(b.host.history.iter().any(|r| r["cmd"] == json!("retreat")), "recorded");
 }
 
+/// PR7-47 (item 5, `FB-344` question 4): at every text size up to Extra large the bar's Menu button shows its whole
+/// label, and the round read-out after it starts right of the button (no overlap).
+#[test]
+fn the_menu_button_fits_at_extra_large_text() {
+    let mut cx = beat_cx(false, false);
+    let mut g = gfx();
+    let mut b = battle(&mut cx, "map");
+    b.tick(&mut cx);
+    for (name, scale) in aegis_ui::screen::TEXT_SIZES {
+        let texts = frame(&mut b, &mut cx, &mut g, scale as f32);
+        let menu = b.widgets().into_iter().find(|w| w["id"] == json!("bar.menu")).expect("the Menu button");
+        let (x, _, w, _) = crate::hud::hud_tests::rect(&menu);
+        assert!(!texts.iter().any(|t| t.cut.as_deref() == Some("Menu")), "{name}: Menu is cut");
+        let label = texts.iter().find(|t| t.text == "Menu" && t.x >= x as f32 && t.x + t.w <= (x + w) as f32);
+        assert!(label.is_some(), "{name}: the label lies inside the button {x}+{w}");
+        // the bar's read-out: on the button's row, after the bar's left buttons
+        let round = texts.iter().find(|t| t.text.starts_with("Round ") && (t.y - 326.0).abs() < 2.0 && t.x > x as f32).expect("the round read-out");
+        assert!(round.x >= (x + w) as f32, "{name}: the round read-out at {} overlaps the button ending at {}", round.x, x + w);
+        // only a size whose label needs more room widens the button; the others draw as before PR7-47
+        if name != "Extra large" {
+            assert_eq!(w, 30, "{name}: the Menu button keeps its width");
+        }
+    }
+}
+
 #[test]
 fn clear_on_an_auto_filled_round_empties_it_and_keeps_it_empty() {
     let mut cx = crate::hud::hud_tests::game_cx();

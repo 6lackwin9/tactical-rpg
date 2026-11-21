@@ -815,42 +815,18 @@ impl WorldMap {
     }
 }
 
-/// PR7-37 (PT-31): the road legs open now (`travel::legs`), as sorted route qids.
-fn open_roads(d: &emberwake_world::Data, gs: &emberwake_world::GameState) -> Vec<String> {
-    let mut out: Vec<String> = travel::legs(d, gs, &gs.world_id).iter().map(|(r, _, _)| s(r, "_qid")).filter(|q| !q.is_empty()).collect();
-    out.sort();
-    out.dedup();
-    out
-}
-
-/// PR7-37 (PT-31): a road that opened since the player was last told (`Game::roads_seen`) gets a log line and a notice
-/// naming its two places ("New road open: A to B."); the first look only learns the roads open then. True when it told.
+/// PR7-37 (PT-31), PR7-47: a road that opened since the player was last told (`travel::note_new_roads`, saved in the
+/// game) gets a log line and a notice naming its two places ("New road open: A to B."); the first look only learns the
+/// roads open then. True when it told.
 pub fn note_new_roads(cx: &mut Cx) -> bool {
-    let Some(g) = cx.game.as_ref() else { return false };
-    let (d, gs) = (cx.data.clone(), g.gs.clone());
-    let open = open_roads(&d, &gs);
-    let Some(seen) = g.roads_seen.clone() else {
-        if let Some(g) = cx.game.as_mut() {
-            g.roads_seen = Some(open);
-        }
-        return false;
-    };
-    if open == seen {
-        return false;
-    }
-    let fresh: Vec<String> = open.iter().filter(|q| !seen.contains(q)).cloned().collect();
-    if let Some(g) = cx.game.as_mut() {
-        g.roads_seen = Some(open);
-    }
+    let d = cx.data.clone();
+    let Some(g) = cx.game.as_mut() else { return false };
+    let fresh = travel::note_new_roads(&d, &mut g.gs);
     if fresh.is_empty() {
         return false;
     }
-    let legs = travel::legs(&d, &gs, &gs.world_id);
-    let lines: Vec<String> = fresh
-        .iter()
-        .filter_map(|q| legs.iter().find(|(r, _, _)| s(r, "_qid") == *q))
-        .map(|(_, a, b)| format!("New road open: {} to {}.", cx.location_name(&gs.world_id, a), cx.location_name(&gs.world_id, b)))
-        .collect();
+    let w = g.gs.world_id.clone();
+    let lines: Vec<String> = fresh.iter().map(|(a, b)| format!("New road open: {} to {}.", cx.location_name(&w, a), cx.location_name(&w, b))).collect();
     for l in &lines {
         cx.log(l.clone());
     }

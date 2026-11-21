@@ -74,3 +74,12 @@ pub fn upkeep_capped(d: &Data, w: &str, lost: i64) -> String {
         format!("{}: capped at {} ({lost} left behind).", t.short, d.purse.supplies_max)
     }
 }
+
+/// CAMPAIGN1 R1 `needs_upkeep` (PR7-47): a campaign rest the purse cannot pay names the world's upkeep item by its
+/// full name ("Not enough Lamp Oil to make camp."); with the default name the sentence word ("Not enough supplies
+/// to make camp.").
+pub fn not_enough_upkeep_to_camp(d: &Data, w: &str) -> String {
+    let t = term(d, w, UPKEEP);
+    let item = if t.name == default_name(UPKEEP) { t.word } else { t.name };
+    format!("Not enough {item} to make camp.")
+}
