@@ -15,3 +15,5 @@ back to `common_stage`. Spec: `games/emberwake/docs/specs/SCREEN_CONTRACT_BATTLE
 | `deep_water/` | 64 x 48 | Canal water only, one blue-green hue (SW-04 water band, AI-41) |
 | `wall_foot/` | 64 x 16 | Row 0 strip where the backdrop meets the board (D4, drawn once Build adds it) |
 | `front_face/<terrain>/` | 64 x 24 | The front face under row 9 per terrain (AI-41 item 3, for `PR7-67` R2): `floor` and `stone` the pale stone quay lip (SW-02 kerb), `deep_water` water |
+| `stage.fx.json` | - | Lantern spots per zone backdrop (AI-41 item 4, `PR7-68` R3): top-level `spots` for the default wall, `zones.<zone>.spots` per battle zone |
+| `cover/` | 64 x 72 | Standing cover props v0 crates, v1 barrel stack, v2 stone pillar, v3 lamp post (Gemini SW-20, to come) |
