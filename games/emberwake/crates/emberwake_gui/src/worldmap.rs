@@ -38,6 +38,7 @@ use crate::hud::{hud_bar, hud_key, hud_open, purse_word, Hud, PurseWord};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
+pub use aegis_ui::float_panel::{FloatPanel, PANEL_BTN};
 use aegis_core::json::{self, s};
 use emberwake_world::{explore, progression, travel};
 use emberwake_content::world_map::{self, Owner};
@@ -434,161 +435,12 @@ pub fn label_rect(cx: f32, bottom: i32, w: i32, h: i32, map: Rect) -> Rect {
     Rect::new(x, (bottom - h).max(map.y + 1), w, h)
 }
 
-/// Whether two rects share any pixel.
-fn overlaps(a: Rect, b: Rect) -> bool {
-    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
-}
-
-/// The minimize button's side and the Legend's margin from the map edge.
-pub const PANEL_BTN: i32 = 10;
-const PANEL_MARGIN: i32 = 4;
-
-/// MAP-HOOKS1 (`preferences/ui.md` "Floating panels", AO-02): a floating panel over an area. It starts in a free corner
-/// (top right, top left, bottom right, bottom left), or in the middle and unlocked when every corner is taken;
-/// unlocked, it drags anywhere inside the area; minimized, it collapses into a named button whose top right is where the
-/// minimize button's top right was, so minimize and restore toggle in place; that button drags too while unlocked, the
-/// panel's place moving with it. Nothing here names what the panel holds.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct FloatPanel {
-    /// The open panel's top left; None until placed.
-    pub pos: Option<(i32, i32)>,
-    pub locked: bool,
-    pub minimized: bool,
-    /// The pointer's offset from the dragged rect's top left while a drag runs.
-    grab: Option<(i32, i32)>,
-    /// The pointer's last place over the panel or its button before a drag (the press a drag starts from).
-    over: Option<(i32, i32)>,
-}
-
-impl FloatPanel {
-    /// Places a panel of `size` in `area` once (later calls keep its place): the first corner whose rect overlaps none
-    /// of `taken`, locked; else the middle, unlocked.
-    pub fn place(&mut self, area: Rect, size: (i32, i32), taken: &[Rect]) {
-        if self.pos.is_some() {
-            return;
-        }
-        let (w, h) = size;
-        let (l, r) = (area.x + PANEL_MARGIN, area.x + area.w - w - PANEL_MARGIN);
-        let (t, b) = (area.y + PANEL_MARGIN, area.y + area.h - h - PANEL_MARGIN);
-        match [(r, t), (l, t), (r, b), (l, b)].into_iter().find(|&(x, y)| !taken.iter().any(|o| overlaps(Rect::new(x, y, w, h), *o))) {
-            Some(at) => {
-                self.pos = Some(at);
-                self.locked = true;
-            }
-            None => {
-                self.pos = Some((area.x + (area.w - w) / 2, area.y + (area.h - h) / 2));
-                self.locked = false;
-            }
-        }
-    }
-
-    /// The open panel's rect at `size` (at the area's origin before it is placed).
-    pub fn rect(&self, size: (i32, i32)) -> Rect {
-        let (x, y) = self.pos.unwrap_or((0, 0));
-        Rect::new(x, y, size.0, size.1)
-    }
-
-    /// The minimize button of the open panel `panel`: its top-right corner.
-    pub fn min_button(panel: Rect) -> Rect {
-        Rect::new(panel.x + panel.w - PANEL_BTN - 3, panel.y + 3, PANEL_BTN, PANEL_BTN - 1)
-    }
-
-    /// The unlock button, left of the minimize button.
-    pub fn lock_button(panel: Rect) -> Rect {
-        let m = Self::min_button(panel);
-        Rect::new(m.x - PANEL_BTN - 2, m.y, PANEL_BTN, m.h)
-    }
-
-    /// The minimized panel's `chip` w x h button: its top right where the minimize button's top right is.
-    pub fn chip_rect(&self, size: (i32, i32), chip: (i32, i32)) -> Rect {
-        let m = Self::min_button(self.rect(size));
-        Rect::new(m.x + m.w - chip.0, m.y - 1, chip.0, chip.1)
-    }
-
-    /// The rect shown now: the chip when minimized, else the panel.
-    pub fn shown(&self, size: (i32, i32), chip: (i32, i32)) -> Rect {
-        if self.minimized { self.chip_rect(size, chip) } else { self.rect(size) }
-    }
-
-    pub fn toggle_lock(&mut self) {
-        self.locked = !self.locked;
-    }
-
-    pub fn minimize(&mut self) {
-        self.minimized = true;
-    }
-
-    /// Opens the panel where it was (its minimize button where the chip's top right was), nudged inside `area`.
-    pub fn restore(&mut self, area: Rect, size: (i32, i32)) {
-        self.minimized = false;
-        self.clamp(area, size);
-    }
-
-    /// Keeps the open panel inside `area`.
-    pub fn clamp(&mut self, area: Rect, size: (i32, i32)) {
-        if let Some((x, y)) = self.pos {
-            self.pos = Some((x.clamp(area.x + 2, (area.x + area.w - size.0 - 2).max(area.x + 2)), y.clamp(area.y + 2, (area.y + area.h - size.1 - 2).max(area.y + 2))));
-        }
-    }
-
-    /// One frame of the drag: `held` is whether the pointer drags the panel (or its chip) now, `pointer` where it is and
-    /// `now` the rect it drags (`shown`). Locked, nothing moves. A drag keeps the pointer where it took hold (the last
-    /// place it was over `now` before the drag) and `now` inside `area`; the panel's place moves with it.
-    pub fn follow(&mut self, pointer: (i32, i32), held: bool, now: Rect, area: Rect) {
-        if !held || self.locked {
-            self.grab = None;
-            if now.contains(pointer.0, pointer.1) {
-                self.over = Some(pointer);
-            }
-            return;
-        }
-        let grab = *self.grab.get_or_insert_with(|| {
-            let at = self.over.filter(|o| now.contains(o.0, o.1)).unwrap_or(pointer);
-            ((at.0 - now.x).clamp(0, now.w.max(1) - 1), (at.1 - now.y).clamp(0, now.h.max(1) - 1))
-        });
-        let x = (pointer.0 - grab.0).clamp(area.x + 2, (area.x + area.w - now.w - 2).max(area.x + 2));
-        let y = (pointer.1 - grab.1).clamp(area.y + 2, (area.y + area.h - now.h - 2).max(area.y + 2));
-        let (px, py) = self.pos.unwrap_or((now.x, now.y));
-        self.pos = Some((px + x - now.x, py + y - now.y));
-    }
-}
 
 /// The drag payload of the Legend and its minimized button (`Ui::draggable`).
 pub const LEGEND_DRAG: &str = "world_map.legend";
 /// MAP-POLISH1 (FB-257 (c)): the settings key the Legend's place and lock are kept under, beside `map_legend_open`:
 /// `{"pos": [x, y], "locked": bool}` (`{}` until the player moves or locks it).
 pub const LEGEND_KEY: &str = "world_map_legend";
-
-impl FloatPanel {
-    /// MAP-POLISH1: the place and lock kept in the settings (`LEGEND_KEY`): `{"pos": [x, y], "locked": bool}`.
-    pub fn saved(&self) -> Value {
-        json!({"pos": self.pos.map(|p| vec![p.0, p.1]), "locked": self.locked})
-    }
-
-    /// MAP-POLISH1: takes a kept place and lock (`saved`) before the panel is first placed: a place whose panel of
-    /// `size` lies wholly inside `area` is taken as it is with its lock, one partly inside is moved in (`clamp`), and one
-    /// off the area (a smaller window or layout since) is dropped with its lock, so `place` starts the panel afresh (a free
-    /// corner, locked, or the middle, unlocked). False when nothing was taken (no or a bad value, a place off the area, or
-    /// the panel already placed).
-    pub fn restore_saved(&mut self, v: &Value, area: Rect, size: (i32, i32)) -> bool {
-        if self.pos.is_some() {
-            return false;
-        }
-        let Some(locked) = v.get("locked").and_then(Value::as_bool) else { return false };
-        let pos = v.get("pos").and_then(Value::as_array).and_then(|p| match p.as_slice() {
-            [x, y] => Some((x.as_i64()? as i32, y.as_i64()? as i32)),
-            _ => None,
-        });
-        let Some((x, y)) = pos else { return false };
-        if !overlaps(Rect::new(x, y, size.0, size.1), area) {
-            return false;
-        }
-        self.pos = Some((x, y));
-        self.locked = locked;
-        self.clamp(area, size);
-        true
-    }
-}
 
 /// One place's drawing on the map this frame.
 struct Mark {
@@ -1823,6 +1675,7 @@ impl Screen<GameCx> for MapLayoutScreen {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aegis_ui::float_panel::PANEL_MARGIN;
     use aegis_core::assets::Layers;
     use aegis_core::scratch::Scratch;
     use emberwake_world::state::{PartyState, UnitState};

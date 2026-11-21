@@ -497,6 +497,9 @@ impl BattleScreen {
                 self.show_log = !self.show_log;
                 self.log_scroll = 0;
             }
+            Action::LogLock => self.log_panel.toggle_lock(),
+            Action::LogMin => self.log_panel.minimize(),
+            Action::LogOpen => self.log_panel.restore(super::draw::LOG_AREA, self.log_size),
             Action::Continue => self.settle(cx),
             Action::SkipBeat => self.skip_beat(cx),
             Action::Leave => cx.nav.push(Nav::Pop),

@@ -149,6 +149,7 @@ fn phase_lines_reach_the_combat_log_panel() {
     b.show_log = true;
     let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
     assert!(recs.iter().any(|r| r.text.starts_with("[Phase] Test")), "the panel draws the phase line");
-    assert!(widget(&b, "log.panel").is_some_and(|x| x.text == format!("{} lines", s(&b).resolver.log.len() + 1)));
+    assert!(widget(&b, "log.panel").is_some(), "the floating panel (FLOATPANELS1)");
+    assert!(widget(&b, "log.lines").is_some_and(|x| x.text == format!("{} lines", s(&b).resolver.log.len() + 1)));
     assert!(!s(&b).resolver.log.contains(&line));
 }

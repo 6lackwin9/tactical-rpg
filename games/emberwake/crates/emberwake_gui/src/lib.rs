@@ -29,6 +29,7 @@ mod dojo;
 mod dojo_view;
 mod epilogue;
 mod epilogue_view;
+mod floats;
 mod facility;
 mod facility_view;
 #[cfg(feature = "dev_tools")]

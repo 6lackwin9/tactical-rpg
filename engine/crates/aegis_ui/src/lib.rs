@@ -29,6 +29,7 @@ pub mod depth;
 pub mod edit;
 pub mod focus;
 pub mod frame_tuner;
+pub mod float_panel;
 pub mod fx;
 pub mod ground;
 pub mod icon;
