@@ -65,7 +65,7 @@ pub fn view(cx: &Cx, c: &Character) -> View {
     let stash_rows: Vec<RowView> = stash_ids(d, &stash)
         .iter()
         .map(|id| {
-            let r = stash_row(d, gs, built.as_ref(), id);
+            let r = stash_row(d, gs, built.as_ref(), Some(&work), id);
             RowView {
                 id: id.clone(),
                 label: format!("{} x{}", d.item_name(id), stash[id]),
@@ -162,7 +162,7 @@ pub fn loadout_act(cx: &Cx, c: &Character, a: &Act) -> Option<PAct> {
             let to = if a.action == PACK_LESS { packed - 1 } else { packed + 1 };
             (1..=stack_limit(d, &item)).contains(&to).then_some(PAct::PouchPack(item, to))
         }
-        USE => arg.filter(|id| stash.contains_key(id) && d.cat.items.contains_key(id)).and_then(|id| stash_row(d, cx.gs(), None, &id).act),
+        USE => arg.filter(|id| stash.contains_key(id) && d.cat.items.contains_key(id)).and_then(|id| stash_row(d, cx.gs(), None, None, &id).act),
         RESET => c.gear_dirty(cx).then_some(PAct::ResetGear),
         CONFIRM => c.gear_dirty(cx).then_some(PAct::ConfirmGear),
         CLOSE => Some(PAct::Close),

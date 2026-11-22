@@ -491,6 +491,34 @@ pub fn legend_quests(d: &Data, gs: &GameState) -> Vec<(String, String, String)> 
     out
 }
 
+/// PR7-76 (PT-50): every quest ready to turn in, as (node qid, quest name, quest id) in quest order: the node is the
+/// place of the person it turns in to (`person_place`; "" when none is found); a quest without a display name is left
+/// out. A world map's legend keeps them after the active ones, marked ready.
+pub fn legend_ready(d: &Data, gs: &GameState) -> Vec<(String, String, String)> {
+    let mut out = Vec::new();
+    for qid in quest::quests_with(d, gs, "ready") {
+        let q = quest::resolved(d, gs, &qid);
+        let name = json::s(&q, "name");
+        if !name.is_empty() {
+            out.push((person_place(d, gs, &crate::dialogue::turn_in_qid(d, gs, &q)), name, qid));
+        }
+    }
+    out
+}
+
+/// PR7-76 (PT-50): the location (qid) holding a person marker of character `who` (a qualified id), the first in data
+/// order; "" when none does.
+pub fn person_place(d: &Data, gs: &GameState, who: &str) -> String {
+    if who.is_empty() {
+        return String::new();
+    }
+    let here = |m: &Value| {
+        let m = json::dict(m);
+        json::s(m, "kind") == "npc" && crate::dialogue::character_qid(d, gs, &json::s(m, "character")) == who
+    };
+    d.merged_entries(&gs.world_id, "locations").into_iter().find(|l| json::aget(l, "markers").iter().any(here)).map(|l| json::s(l, "_qid")).unwrap_or_default()
+}
+
 /// The active quests' objective places: (node qid, objective text, quest id).
 fn quest_targets_of(d: &Data, gs: &GameState) -> Vec<(String, String, String)> {
     let mut out = Vec::new();

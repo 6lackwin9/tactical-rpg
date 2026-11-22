@@ -376,6 +376,9 @@ impl Screen<GameCx> for Journal {
         let mut ui: Ui<JAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), th().game("popup_veil", rgba(0, 0, 0, 110)));
         let fr = Rect::new(16, 16, 608, 328);
+        // PR7-76 (PT-62): the panel is opaque (the theme's panel fill is see-through; nothing of the map shows through)
+        let fill = th().panel;
+        ui.p.fill(Rect::new(fr.x + 2, fr.y + 2, fr.w - 4, fr.h - 4), [fill[0], fill[1], fill[2], 255]);
         ui.frame_in("ornate", fr, "Journal", false);
         let groups = Self::shown(cx);
         let all: Vec<String> = groups.iter().flat_map(|g| g.2.clone()).collect();
@@ -1200,6 +1203,32 @@ impl Screen<GameCx> for Results {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// PR7-76 (PT-62): the Journal's panel is opaque under the game's theme (whose panel colour is see-through): drawn
+    /// over a white and over a black screen, a spot inside it (away from its texts) reads the same.
+    #[test]
+    fn pt62_the_journal_panel_is_opaque() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        cx.art = aegis_ui::art::Art::new(Some(root.to_path_buf()));
+        let theme = aegis_ui::theme::load(cx.art.layers()).expect("the game's theme");
+        assert!(theme.panel[3] < 255, "the game's panel colour lets the screen through (what the Journal must not)");
+        aegis_ui::theme::set_theme(theme);
+        let spot = |cx: &mut Cx, under: [u8; 4]| {
+            let mut g = crate::hud::hud_tests::gfx();
+            for px in g.canvas.px.chunks_mut(4) {
+                px.copy_from_slice(&under);
+            }
+            let mut j = Journal::default();
+            j.draw(cx, &mut g, (-500, -500), true);
+            let (x, y) = (g.view.x(560.0) as usize, g.view.y(300.0) as usize);
+            let at = (y * g.canvas.w as usize + x) * 4;
+            g.canvas.px[at..at + 3].to_vec()
+        };
+        let (light, dark) = (spot(&mut cx, [255, 255, 255, 255]), spot(&mut cx, [0, 0, 0, 255]));
+        aegis_ui::theme::set_theme(aegis_ui::theme::Theme::default());
+        assert_eq!(light, dark, "nothing shows through");
+    }
 
     fn name(kind: &str, id: &str) -> String {
         match (kind, id) {

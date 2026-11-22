@@ -25,6 +25,7 @@ fn data() -> Data {
         "items": [
             {"id": "sword", "name": "Sword", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "sword"},
             {"id": "pike", "name": "Pike", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "pike"},
+            {"id": "test_blade", "name": "Test Blade", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "test_family"},
             {"id": "great_sword", "name": "Great Sword", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "sword", "required_stats": {"STR": 30}},
             {"id": "ring", "name": "Ring", "item_type": "ACCESSORY", "slot": "ACCESSORY_1", "weapon_type": "accessory"}
         ],
@@ -38,7 +39,8 @@ fn data() -> Data {
         {"id": "axe", "item_type": "WEAPON", "hands": ["main_1h"]},
         {"id": "mace", "item_type": "WEAPON", "hands": ["main_1h"]},
         {"id": "shield", "item_type": "SHIELD", "hands": ["off"]},
-        {"id": "hide", "item_type": "ARMOR", "slots": ["HEAD", "BODY"]}
+        {"id": "hide", "item_type": "ARMOR", "slots": ["HEAD", "BODY"]},
+        {"id": "test_family", "name": "Test Family", "item_type": "WEAPON", "hands": ["main_1h"]}
     ]);
     let worlds = json!({"w": {"manifest": {"id": "w", "start_party": ["strict"]}, "own": {}}});
     Data::from_values(&catalog, &worlds, &json!({"item_families": families}))
@@ -65,6 +67,20 @@ fn the_strict_rule_refuses_untrained_and_unfit_gear_and_the_soft_rule_does_not()
         assert_eq!(soft.can_wear(&d, item, "main_hand"), Ok(()), "{item}: no roles, no lock (the soft wield penalty)");
     }
     assert!(!strict.trains(&d, "pike") && !soft.trains(&d, "pike"), "training reads the same either way");
+}
+
+/// PR7-76 (PT-60): the refusal names the gear type in words (its family's name), never its id; `wear_refusal` is the
+/// same line, None for an item the member may wear.
+#[test]
+fn the_refusal_names_the_gear_type_by_its_family_name() {
+    let d = data();
+    let strict = UnitState::create("a", "strict");
+    let why = strict.can_wear(&d, "test_blade", "main_hand").expect_err("proficiency 0 locks");
+    assert!(why.contains("untrained in Test Family") && !why.contains("test_family"), "{why}");
+    assert_eq!(strict.wear_refusal(&d, &d.cat.items["test_blade"]), Some(why));
+    assert_eq!(strict.wear_refusal(&d, &d.cat.items["sword"]), None);
+    assert_eq!(d.family_name("test_family"), "Test Family");
+    assert_eq!(d.family_name("pike"), "pike", "a type with no family row keeps its id");
 }
 
 #[test]

@@ -1610,7 +1610,7 @@ impl Character {
         }
         for (row, id) in ids.iter().skip(self.gear_scroll).take(ROWS).enumerate() {
             let def = &d.cat.items[*id];
-            let StashRow { act, badge, help } = stash_row(d, cx.gs(), built.as_ref(), id);
+            let StashRow { act, badge, help } = stash_row(d, cx.gs(), built.as_ref(), Some(&work), id);
             let movable = act.as_ref().is_some_and(|a| !matches!(a, PAct::ReadBook(_)));
             let y = 116 + row as i32 * 15;
             ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, y, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), th().text, act, false, item_tip(d, id, &help));
@@ -1921,6 +1921,9 @@ pub(crate) fn stash_ids(d: &Data, stash: &Stash) -> Vec<String> {
     ids
 }
 
+/// PR7-76 (PT-60): the stash badge of gear the hero cannot wear.
+pub(crate) const CANT_WEAR: &str = "can't wear";
+
 /// ENGINE-23: a stash row's click (wear, pouch, read; None for an item that is none of these), its wield penalty
 /// badge and its hover card's help line.
 pub(crate) struct StashRow {
@@ -1929,7 +1932,9 @@ pub(crate) struct StashRow {
     pub help: String,
 }
 
-pub(crate) fn stash_row(d: &Data, gs: &GameState, built: Option<&progression::Built>, id: &str) -> StashRow {
+/// PR7-76 (PT-60): `work` is the hero the stash is shown for; gear the strict gear rule refuses them (`wear_refusal`)
+/// is marked "can't wear" and its card says why in words.
+pub(crate) fn stash_row(d: &Data, gs: &GameState, built: Option<&progression::Built>, work: Option<&UnitState>, id: &str) -> StashRow {
     let def = &d.cat.items[id];
     let (act, help) = if def.is_equipment() {
         (Some(PAct::Equip(id.to_string())), "Click to wear it, or drag it onto a slot.")
@@ -1943,7 +1948,11 @@ pub(crate) fn stash_row(d: &Data, gs: &GameState, built: Option<&progression::Bu
     };
     // U3.2-S3 (FB-34): every item shows (training is no gate); one the hero would wear under a wield penalty carries
     // the badge, and its card says why
-    let badge = wield_badge(built.map(|b| &b.unit), def);
+    let refused = work.filter(|_| def.is_equipment()).and_then(|w| w.wear_refusal(d, def));
+    let badge = match refused {
+        Some(why) => Some((CANT_WEAR.to_string(), why)),
+        None => wield_badge(built.map(|b| &b.unit), def),
+    };
     let help = match &badge {
         Some((_, n)) => format!("{help} {n}"),
         None => help.to_string(),
@@ -2089,6 +2098,38 @@ mod tests {
             }
         }
         (d, m, stash)
+    }
+
+    /// PR7-76 (PT-60): stash gear a hero cannot wear (the strict gear rule, picked by rule over the shipped worlds'
+    /// starting members) is marked "can't wear" and its card says why with the gear type's name, never its id; gear the
+    /// hero may wear carries no such mark.
+    #[test]
+    fn pt60_gear_a_hero_cannot_wear_is_marked_in_the_stash() {
+        let dir = Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
+        let d = Data::open(&dir).expect("data").0;
+        let mut found = None;
+        for w in emberwake_world::new_game::playable_worlds(&d) {
+            let Ok(gs) = emberwake_world::new_game::create_for_world(&d, &w, 1) else { continue };
+            for m in &gs.party.members {
+                let mut ids: Vec<&String> = d.cat.items.keys().collect();
+                ids.sort();
+                if let Some(id) = ids.into_iter().find(|id| m.wear_refusal(&d, &d.cat.items[*id]).is_some()) {
+                    found = found.or(Some((gs.clone(), m.clone(), id.clone())));
+                }
+            }
+        }
+        let (gs, m, id) = found.expect("a member and an item the strict rule refuses");
+        let row = stash_row(&d, &gs, None, Some(&m), &id);
+        let (badge, why) = row.badge.clone().expect("marked");
+        assert_eq!(badge, CANT_WEAR);
+        assert_eq!(Some(why.clone()), m.wear_refusal(&d, &d.cat.items[&id]));
+        let gear = &d.cat.items[&id].weapon_type;
+        if why.contains("untrained") && d.family_name(gear) != *gear {
+            assert!(!why.contains(gear.as_str()) && why.contains(&d.family_name(gear)), "the type in words: {why}");
+        }
+        assert!(row.help.contains(&why), "the card says why");
+        let ok = d.cat.items.keys().find(|i| d.cat.items[*i].is_equipment() && m.wear_refusal(&d, &d.cat.items[*i]).is_none()).expect("gear the member may wear");
+        assert!(stash_row(&d, &gs, None, Some(&m), ok).badge.is_none_or(|b| b.0 != CANT_WEAR));
     }
 
     fn first(d: &Data, slot: &str) -> String {

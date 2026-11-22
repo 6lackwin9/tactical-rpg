@@ -483,6 +483,32 @@ impl Player {
         }
     }
 
+    /// PR7-76 (PT-46): the player's press (Space, Enter, a click): two presses a card. In a fade in or while typing it
+    /// shows the whole text (the card holds); in the hold it starts the fade out; in the fade out the next card comes
+    /// in already typed (a press during a fade is never lost). `press` keeps the one-phase step of V3 for tools.
+    pub fn press_next(&mut self) {
+        match self.phase {
+            Phase::Done => return,
+            Phase::FadeIn | Phase::Typing => self.to_hold(),
+            Phase::Hold => self.next_phase(),
+            Phase::FadeOut => {
+                self.start_card(self.card + 1);
+                if self.phase != Phase::Done {
+                    self.to_hold();
+                }
+            }
+        }
+        // phases of no length (an instant fade out) pass at once
+        self.advance(0);
+    }
+
+    /// The current card's text all shown: its hold from the start (the card's own clock, `card_ms`, runs on, so a shake
+    /// or the specks do not jump).
+    fn to_hold(&mut self) {
+        self.phase = Phase::Hold;
+        self.t = 0;
+    }
+
     /// Skip (V5): a skippable reel is done at once and plays no further cue; true when it skipped.
     pub fn skip(&mut self) -> bool {
         if !self.reel.skippable || self.phase == Phase::Done {
@@ -1089,7 +1115,7 @@ impl<G: Context> VignetteScreen<G> {
     }
 
     fn press(&mut self, cx: &mut Cx<G>) {
-        self.player.press();
+        self.player.press_next();
         self.settle(cx);
     }
 

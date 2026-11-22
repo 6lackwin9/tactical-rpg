@@ -213,6 +213,11 @@ impl Data {
         json::s_or(self.entry("items", id), "name", id)
     }
 
+    /// PR7-76 (PT-60): an item family's (gear type's) display name, else its id.
+    pub fn family_name(&self, id: &str) -> String {
+        json::s_or(self.entry("item_families", id), "name", id)
+    }
+
     /// The item's description with its tokens filled from the resolved row (ItemText.render, as ContentFactory.item).
     pub fn item_description(&self, id: &str) -> String {
         let row = self.entry("items", id);

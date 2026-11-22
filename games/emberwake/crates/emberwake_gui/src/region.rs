@@ -192,6 +192,13 @@ pub struct RegionMap {
     /// lines (closed again when the card goes).
     arrival: Option<(crate::transitions::Arrival, Instant)>,
     ticker_forced: bool,
+    /// PR7-76 (PT-44, PT-51): the marker the last step set a flag on (a point of interest it answered for): the walk's
+    /// arrival does not act on it again. So a point with both a use and `sets_flags` would skip its use on a click walk's
+    /// arrival (no shipped point has both; see `point_listed`).
+    point_fired: Option<String>,
+    /// PR7-76 (PT-55): a click walk a fight broke off (the location, the party's tile, the walk's tile and its marker),
+    /// taken up again after a win (`tick_at`).
+    resume: Option<(String, Pos, Pos, Option<String>)>,
 }
 
 /// One frame's camera as the agent link reports it.
@@ -417,7 +424,7 @@ fn log_once(cx: &mut Cx, line: String) {
 }
 
 /// PR7-37 (PT-29): the jobs that turned ready since `before` (a flag a point set finished one) say so.
-fn log_newly_ready(cx: &mut Cx, before: &[String]) {
+pub(crate) fn log_newly_ready(cx: &mut Cx, before: &[String]) {
     let (d, gs) = (&cx.data, cx.gs());
     let lines: Vec<String> = quest::quests_with(d, gs, "ready")
         .into_iter()
@@ -594,6 +601,8 @@ impl RegionMap {
             locker_up: false,
             arrival: None,
             ticker_forced: false,
+            point_fired: None,
+            resume: None,
         }
     }
 
@@ -674,6 +683,7 @@ impl RegionMap {
     /// One step; handles fights, world-map exits and the log. False when the walk should stop.
     fn step(&mut self, cx: &mut Cx, dir: Pos) -> bool {
         self.turn(dir);
+        self.point_fired = None;
         let d = cx.data.clone();
         let from = cx.gs().position;
         // PR7-37 (PT-29): the jobs ready before the step, so a flag a point sets says what it changed (taken before the
@@ -699,8 +709,10 @@ impl RegionMap {
         }
         let events = json::aget(&res, "events").to_vec();
         log_events(cx, &events);
-        if events.iter().any(|e| s(json::dict(e), "kind") == "flags_set") {
+        if let Some(e) = events.iter().map(json::dict).find(|e| s(e, "kind") == "flags_set") {
             log_newly_ready(cx, &ready_before);
+            // PR7-76 (PT-44, PT-51): the point answered on this step (its line, the quest's); the arrival leaves it be
+            self.point_fired = Some(s(e, "marker"));
         }
         crate::runover::take(cx, &res);
         let mut go_on = true;
@@ -711,6 +723,8 @@ impl RegionMap {
                 // that cannot be refused gets the notice
                 "fight" => {
                     go_on = false;
+                    // PR7-76 (PT-55): a click walk still under way goes on after a win
+                    self.keep_walk(cx);
                     let enc = s(e, "encounter");
                     match (s(e, "source") == "marker", crate::runover::fight_ask(cx, &enc)) {
                         (true, Some(q)) => {
@@ -726,8 +740,10 @@ impl RegionMap {
                         _ => self.start_fight(cx, e, "explore"),
                     }
                 }
+                // PR7-76 (PT-54): a road's exit opens the world map with that road's next place picked
                 "exit" if s(e, "to") == explore::WORLD_MAP => {
-                    cx.nav.push(Nav::Push(Box::new(crate::worldmap::WorldMap::new())));
+                    let map = crate::worldmap::WorldMap::toward(cx, &s(e, "marker"));
+                    cx.nav.push(Nav::Push(Box::new(map)));
                     go_on = false;
                 }
                 "exit" | "blocked" | "locked" => go_on = false,
@@ -735,6 +751,38 @@ impl RegionMap {
             }
         }
         go_on
+    }
+
+    /// PR7-76 (PT-55): keeps the click walk under way (its tile and marker, where the party stands now) for after a
+    /// fight; nothing for a key step or a walk already at its tile. A click walk is under way while steps are left on its
+    /// path or its marker waits to be reached (`walk_dest` alone is not enough: a finished walk leaves it behind).
+    fn keep_walk(&mut self, cx: &Cx) {
+        let at = cx.gs().position;
+        let under_way = !self.walk.is_empty() || self.walk_target.is_some();
+        self.resume = match self.walk_dest {
+            Some(dest) if under_way && (dest != at || self.walk_target.is_some()) => Some((cx.gs().location_id.clone(), at, dest, self.walk_target.clone())),
+            _ => None,
+        };
+    }
+
+    /// PR7-76 (PT-55): after a won fight with the party where it was found, the walk it broke off goes on (to its marker,
+    /// else its tile); a loss, a flight (the party stepped back) or a move elsewhere drops it.
+    fn resume_walk(&mut self, cx: &mut Cx) {
+        let Some(outcome) = cx.game.as_mut().and_then(|g| g.fought.take()) else { return };
+        let Some((loc, at, dest, target)) = self.resume.take() else { return };
+        if outcome != "won" || cx.gs().location_id != loc || cx.gs().position != at || self.modal() {
+            return;
+        }
+        match target {
+            Some(id) => self.walk_to_marker(cx, &id),
+            None => {
+                if let Some(path) = self.path_to(cx, dest, false).filter(|p| !p.is_empty()) {
+                    self.walk = path;
+                    self.walk_target = None;
+                    self.walk_dest = Some(dest);
+                }
+            }
+        }
     }
 
     pub fn start_fight(&mut self, cx: &mut Cx, fight: &Dict, runner: &str) {
@@ -801,6 +849,7 @@ impl RegionMap {
             self.walk_target = None;
             return;
         }
+        self.resume_walk(cx);
         // WALK2: a held movement key keeps stepping at the step rate (the press itself stepped at once; the OS key
         // repeat is dropped by the shell, `hold_walk`), so the steps chain with the walk clip running.
         if cx.held.dir.is_none() {
@@ -810,6 +859,9 @@ impl RegionMap {
             if let (Some(dir), true) = (cx.held.dir, now >= self.next_walk) {
                 let at = self.step_time(now);
                 self.plan_step(cx, at, dir);
+                // PR7-76 (PT-55): a key step is no click walk (nothing to resume after a fight it walks into)
+                self.walk_dest = None;
+                self.walk_target = None;
                 let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs()));
                 if t.is_empty() || !self.step(cx, dir) {
                     self.hold = false;
@@ -826,10 +878,14 @@ impl RegionMap {
         if !self.step(cx, dir) {
             self.walk.clear();
             self.walk_target = None;
+            self.walk_dest = None;
             return;
         }
         if self.walk.is_empty() {
-            if let Some(id) = self.walk_target.take() {
+            // the walk is over (a marker's walk below sets its own tile again)
+            self.walk_dest = None;
+            // PR7-76 (PT-44, PT-51): a point the last step already answered is not acted on again
+            if let Some(id) = self.walk_target.take().filter(|id| self.point_fired.as_deref() != Some(id.as_str())) {
                 self.walk_to_marker(cx, &id);
             }
         }
@@ -1017,7 +1073,9 @@ impl RegionMap {
                 self.walk_target = if solid { Some(id.to_string()) } else { None };
                 self.walk_dest = Some(at);
             }
-            _ => cx.log("You can't get there."),
+            // PR7-76 (PT-44): already there (a point that went once used): nothing to say
+            Some(_) => {}
+            None => cx.log("You can't get there."),
         }
     }
 
@@ -1025,6 +1083,7 @@ impl RegionMap {
         if self.locker_opening() {
             return;
         }
+        self.resume = None;
         let d = cx.data.clone();
         match a {
             RAct::MapClick => {
@@ -1415,8 +1474,8 @@ impl Screen<GameCx> for RegionMap {
                 let label = s(&view, "label");
                 let seen = r.intersect(map_area);
                 if seen.w <= 0 || seen.h <= 0 {
-                    // MAPNAV1-U: a legend entry out of view gets an edge arrow
-                    if kind != "point" {
+                    // MAPNAV1-U: a legend entry out of view gets an edge arrow (PR7-76, PT-43: a usable point too)
+                    if kind != "point" || point_listed(&m, &state) {
                         off_view.push((id, label, r));
                     }
                     continue;
@@ -2011,16 +2070,17 @@ impl RegionMap {
         let d = cx.data.clone();
         let gs = cx.gs().clone();
         let loc = explore::location(&d, &gs);
-        // (id, kind, state, label, verb, services)
-        let mut rows: Vec<(String, String, String, String, String, Vec<&'static str>)> = Vec::new();
+        // (id, kind, state, label, verb, services, a point's use)
+        let mut rows: Vec<(String, String, String, String, String, Vec<&'static str>, String)> = Vec::new();
         for m in explore::markers_of(loc) {
             let view = explore::marker_view(&d, &gs, loc, &m);
             let (kind, state) = (s(&m, "kind"), s(&view, "state"));
-            if state == "absent" || kind == "point" {
+            // PR7-76 (PT-43): a point of interest the party can use now is listed too
+            if state == "absent" || (kind == "point" && !point_listed(&m, &state)) {
                 continue;
             }
             let services = if kind == "npc" { explore::npc_services(&d, &gs, &s(d.resolve(&gs.world_id, "characters", &s(&m, "character")), "_qid")) } else { Vec::new() };
-            rows.push((s(&m, "id"), kind, state, s(&view, "label"), s(&view, "verb"), services));
+            rows.push((s(&m, "id"), kind, state, s(&view, "label"), s(&view, "verb"), services, explore::point_use(&m)));
         }
         let open = cx.settings.v["map_legend_open"].as_bool().unwrap_or(true);
         let rh = (ui.p.line_h(BODY).ceil() as i32 + 4).max(14);
@@ -2028,7 +2088,7 @@ impl RegionMap {
         // FLOATPANELS1: the head row holds the title and, at its right, the lock and minimize buttons
         let buttons = 2 * PANEL_BTN + 8;
         let mut w = 4 + ui.p.text_w(&title, BODY).ceil() as i32 + 6 + buttons;
-        for (_, _, _, label, _, services) in &rows {
+        for (_, _, _, label, _, services, _) in &rows {
             w = w.max(4 + ICON + 4 + ui.p.text_w(label, BODY).ceil() as i32 + 6 + services.len() as i32 * (SERVICE + 1) + 4);
         }
         let w = w.min((LEGEND_MAX as f32 * ui.p.fonts.scale).round() as i32 + buttons);
@@ -2057,15 +2117,15 @@ impl RegionMap {
         let off = ui.scroll_begin("legend.rows", pane, content);
         let px = ui.icon_px(Rect::new(0, 0, ICON + 4, ICON + 4));
         let spx = ui.icon_px(Rect::new(0, 0, SERVICE + 4, SERVICE + 4));
-        for (i, (id, kind, state, label, verb, services)) in rows.into_iter().enumerate() {
+        for (i, (id, kind, state, label, verb, services, point_use)) in rows.into_iter().enumerate() {
             let r = Rect::new(x, top - off + i as i32 * rh, w, rh);
             let hover = !modal && ui.hover(r);
             if hover {
                 ui.p.panel(r, th().card_hot, th().edge_hot, 3.0);
             }
             let ir = Rect::new(r.x + 4, r.y + (rh - ICON) / 2, ICON, ICON);
-            // PR7-36 (UX-28): an exit, chest or lore row shows the map's glyph (points have no legend row)
-            match (glyph_of(&kind, ""), cx.art.image(&emberwake_content::art::marker(marker_icon(&kind, &state)), px, px)) {
+            // PR7-36 (UX-28): an exit, chest, lore or (PT-43) point row shows the map's glyph
+            match (glyph_of(&kind, &point_use), cx.art.image(&emberwake_content::art::marker(marker_icon(&kind, &state)), px, px)) {
                 (Some(g), _) => draw_map_glyph(&mut ui.p, ir, g, glyph_colour(&kind, &state)),
                 (None, Some(img)) => ui.p.image(img, ir),
                 (None, None) => ui.p.fill(Rect::new(ir.x + 2, ir.y + 2, ICON - 4, ICON - 4), Self::marker_style(&kind, &state).0),
@@ -3275,6 +3335,14 @@ pub(crate) fn glyph_colour(kind: &str, state: &str) -> Rgba {
     }
 }
 
+/// PR7-76 (PT-43): a point of interest the party can use now: present (not spent) with a use (`explore::point_use`) or a
+/// flag to set; it joins the Here list and gets an edge arrow out of view. A point that only speaks stays off.
+/// Known limit (`point_fired`): a point with both a use and `sets_flags` would have its use skipped when a click walk
+/// arrives on it (the step's flag answer stands for it); no shipped point has both.
+pub(crate) fn point_listed(m: &Dict, state: &str) -> bool {
+    state == "present" && (!explore::point_use(m).is_empty() || !json::arr(&json::normalize(json::get(m, "sets_flags"))).is_empty())
+}
+
 /// A glyph's 8 x 8 picture, `#` drawn.
 fn glyph_rows(g: MapGlyph) -> [&'static str; 8] {
     match g {
@@ -3617,13 +3685,16 @@ mod map_tests {
         Rect::new(0, HUD_H, W, H - HUD_H)
     }
 
-    /// The markers the legend lists, in order: present (or spent or locked) and not a bare point.
+    /// The markers the legend lists, in order: present (or spent or locked), a point only while usable (PT-43).
     fn listed(cx: &Cx) -> Vec<Dict> {
         let gs = cx.gs();
         let loc = explore::location(&cx.data, gs);
         explore::markers_of(loc)
             .into_iter()
-            .filter(|m| s(&explore::marker_view(&cx.data, gs, loc, m), "state") != "absent" && s(m, "kind") != "point")
+            .filter(|m| {
+                let st = s(&explore::marker_view(&cx.data, gs, loc, m), "state");
+                st != "absent" && (s(m, "kind") != "point" || point_listed(m, &st))
+            })
             .collect()
     }
 
@@ -4956,14 +5027,17 @@ mod nav_tests {
         map.geo.cell_of(at)
     }
 
-    /// The legend's markers (present, spent or locked, not a bare point) with a map place: (id, tile).
+    /// The legend's markers (present, spent or locked, a point only while usable, PT-43) with a map place: (id, tile).
     fn listed(cx: &Cx) -> Vec<(String, Pos)> {
         let gs = cx.gs();
         let loc = explore::location(&cx.data, gs);
         let t = explore::template_of(&cx.data, loc);
         explore::markers_of(loc)
             .into_iter()
-            .filter(|m| s(&explore::marker_view(&cx.data, gs, loc, m), "state") != "absent" && s(m, "kind") != "point")
+            .filter(|m| {
+                let st = s(&explore::marker_view(&cx.data, gs, loc, m), "state");
+                st != "absent" && (s(m, "kind") != "point" || point_listed(m, &st))
+            })
             .map(|m| (s(&m, "id"), explore::marker_pos(t, &m, gs.explore_int("loc_steps"))))
             .filter(|(_, at)| at.0 >= 0)
             .collect()
@@ -8210,5 +8284,295 @@ mod glyph_tests {
         assert!(lit >= cells * k * k, "every cell lit: {lit} px for {cells} cells");
         let outside = Rect::new(pr.x + pr.w + 2, pr.y, 4, pr.h);
         assert!((outside.y..outside.y + outside.h).all(|y| (outside.x..outside.x + outside.w).all(|x| px(x, y) == [0, 0, 0])), "nothing past the plate");
+    }
+}
+
+/// PR7-76 (ACT1-FIX2, FB-441) on the shipped game, every place and marker picked by rule: usable points of interest
+/// join the Here list and get edge arrows (PT-43); a point walked onto answers once and no "You can't get there."
+/// follows (PT-44, PT-51); a walk a fight broke off goes on after a win only (PT-55); a road's exit opens the world map
+/// with the next place that way picked (PT-54).
+#[cfg(test)]
+mod act1_fix2_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+    use crate::worldmap::tests::{ward_hub, TIER2};
+    use emberwake_world::GameState;
+
+    /// The first location of the world (data order) with a point `want` accepts (the marker and its view's state), with
+    /// the party entered there; None when there is none.
+    fn enter_point(cx: &mut Cx, want: impl Fn(&Dict, &str) -> bool) -> Option<Dict> {
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        for loc in d.merged_entries(&world, "locations") {
+            if explore::template_of(&d, loc).is_empty() {
+                continue;
+            }
+            let mut gs = cx.gs().clone();
+            if !json::b(&explore::enter(&d, &mut gs, &s(loc, "id"), explore::SPAWN), "ok", false) {
+                continue;
+            }
+            let here = explore::location(&d, &gs).clone();
+            if let Some(m) = explore::markers_of(&here).into_iter().find(|m| s(m, "kind") == "point" && want(m, &s(&explore::marker_view(&d, &gs, &here, m), "state"))) {
+                *cx.gs_mut() = gs;
+                return Some(m);
+            }
+        }
+        None
+    }
+
+    fn widget(map: &RegionMap, id: &str) -> Option<Value> {
+        map.widgets().into_iter().find(|w| w["id"] == id)
+    }
+
+    /// An open tile that reaches `at` by a walk of at least two steps (`path_to`), the nearest first.
+    fn start_for(map: &RegionMap, cx: &mut Cx, at: Pos) -> Option<Pos> {
+        let d = cx.data.clone();
+        let t = explore::template_of(&d, explore::location(&d, cx.gs())).clone();
+        let (w, h) = explore::size_of(&t);
+        let mut tiles: Vec<Pos> = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|p| explore::is_open(&t, p.0, p.1)).collect();
+        tiles.sort_by_key(|p| (p.0 - at.0).abs() + (p.1 - at.1).abs());
+        let keep = cx.gs().position;
+        for p in tiles.into_iter().filter(|p| (p.0 - at.0).abs() + (p.1 - at.1).abs() >= 3) {
+            cx.gs_mut().position = p;
+            if map.path_to(cx, at, false).is_some_and(|w| w.len() >= 2) {
+                return Some(p);
+            }
+        }
+        cx.gs_mut().position = keep;
+        None
+    }
+
+    fn walk_out(map: &mut RegionMap, cx: &mut Cx) {
+        let mut now = Instant::now() + Duration::from_secs(1);
+        for _ in 0..200 {
+            if map.walk.is_empty() && map.walk_target.is_none() {
+                break;
+            }
+            now += Duration::from_millis(500);
+            map.tick_at(cx, now);
+        }
+    }
+
+    /// PT-43: a usable point (present, with a use or a flag to set) has its Here row; a point that only speaks has none.
+    #[test]
+    fn pt43_usable_points_join_the_here_list() {
+        let (mut cx, mut g) = (ward_hub(&TIER2, &[], false), gfx());
+        let m = enter_point(&mut cx, |m, st| point_listed(m, st)).expect("a usable point in the world");
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let row = widget(&map, &format!("here.{}", s(&m, "id"))).expect("the point's Here row");
+        assert_eq!(row["text"], json!(s(&explore::marker_view(&cx.data, cx.gs(), explore::location(&cx.data, cx.gs()), &m), "label")));
+        assert!(!point_listed(&m, "spent") && !point_listed(&m, "absent"), "a spent or absent point is not listed");
+        let mut bare = m.clone();
+        bare.shift_remove("use");
+        bare.insert("sets_flags".into(), json!([]));
+        assert!(!point_listed(&bare, "present"), "a point that only speaks is not listed");
+        if let Some(talker) = enter_point(&mut cx, |m, st| st == "present" && !point_listed(m, st)) {
+            let mut map = RegionMap::new(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert!(widget(&map, &format!("here.{}", s(&talker, "id"))).is_none(), "{talker:?} only speaks: no row");
+        }
+    }
+
+    /// PT-43: a usable point out of view gets an edge arrow (the party as far from it as the map allows).
+    #[test]
+    fn pt43_an_off_screen_usable_point_gets_an_edge_arrow() {
+        let (mut cx, mut g) = (ward_hub(&TIER2, &[], false), gfx());
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        // the first place (data order) with a usable point out of view from the tile farthest from it
+        let mut found = None;
+        'places: for loc in d.merged_entries(&world, "locations") {
+            if explore::template_of(&d, loc).is_empty() {
+                continue;
+            }
+            let mut gs = cx.gs().clone();
+            if !json::b(&explore::enter(&d, &mut gs, &s(loc, "id"), explore::SPAWN), "ok", false) {
+                continue;
+            }
+            let here = explore::location(&d, &gs).clone();
+            let t = explore::template_of(&d, &here).clone();
+            let (w, h) = explore::size_of(&t);
+            let usable: Vec<Dict> = explore::markers_of(&here).into_iter().filter(|m| s(m, "kind") == "point" && point_listed(m, &s(&explore::marker_view(&d, &gs, &here, m), "state"))).collect();
+            for m in usable {
+                let at = explore::marker_pos(&t, &m, gs.explore_int("loc_steps"));
+                let Some(far) = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|p| explore::is_open(&t, p.0, p.1)).max_by_key(|p| (p.0 - at.0).abs() + (p.1 - at.1).abs()) else { continue };
+                gs.position = far;
+                *cx.gs_mut() = gs.clone();
+                let mut map = RegionMap::new(&mut cx);
+                for _ in 0..3 {
+                    frame(&mut map, &mut cx, &mut g, 1.0);
+                }
+                let r = map.geo.cell_of(at);
+                let seen = r.intersect(MAP_AREA);
+                if seen.w <= 0 || seen.h <= 0 {
+                    found = Some((m, at, t, map, r));
+                    break 'places;
+                }
+            }
+        }
+        let (m, at, t, map, r) = found.expect("a usable point out of view from some tile of its place");
+        let (w, h) = explore::size_of(&t);
+        let id = s(&m, "id");
+        let arrow = map.state(&cx)["arrows"].as_array().cloned().unwrap_or_default().into_iter().find(|a| s(json::dict(a), "id") == id).expect("its edge arrow");
+        // placed on the map area's edge band, pointing at the point's tile, with its widget
+        let (x, y) = (arrow["at"][0].as_i64().unwrap() as i32, arrow["at"][1].as_i64().unwrap() as i32);
+        let a = MAP_AREA;
+        assert!(a.contains(x, y), "inside the map area: ({x}, {y})");
+        let edge = (x - a.x).min(a.x + a.w - x).min(y - a.y).min(a.y + a.h - y);
+        assert!(edge <= ARROW + 1, "at the edge: {edge} px in");
+        let (tx, ty) = (r.x as f64 + r.w as f64 / 2.0 - x as f64, r.y as f64 + r.h as f64 / 2.0 - y as f64);
+        let (ux, uy) = (arrow["dir"][0].as_f64().unwrap(), arrow["dir"][1].as_f64().unwrap());
+        let cos = (tx * ux + ty * uy) / (tx * tx + ty * ty).sqrt();
+        assert!(cos > 0.95, "points at the point: cos {cos}");
+        let wd = widget(&map, &format!("arrow.{id}")).expect("the arrow's widget");
+        assert_eq!(wd["kind"], json!("arrow"));
+        // walked next to it, the arrow goes
+        let near = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|p| explore::is_open(&t, p.0, p.1)).min_by_key(|p| (p.0 - at.0).abs() + (p.1 - at.1).abs()).unwrap();
+        cx.gs_mut().position = near;
+        let mut map = RegionMap::new(&mut cx);
+        for _ in 0..3 {
+            frame(&mut map, &mut cx, &mut g, 1.0);
+        }
+        assert!(widget(&map, &format!("arrow.{id}")).is_none(), "in view: no arrow");
+    }
+
+    /// PT-55 (review): a click walk that already arrived leaves nothing to resume; a key step into a fight then a win
+    /// does not walk the party anywhere.
+    #[test]
+    fn pt55_a_key_step_into_a_fight_after_a_finished_walk_resumes_nothing() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        let d = cx.data.clone();
+        let t = explore::template_of(&d, explore::location(&d, cx.gs())).clone();
+        let (w, h) = explore::size_of(&t);
+        let marked: Vec<Pos> = explore::markers_of(explore::location(&d, cx.gs())).iter().map(|m| explore::marker_pos(&t, m, 0)).collect();
+        let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+        let at = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| (0..6).all(|i| free((x + i, y)))).expect("a free row");
+        cx.gs_mut().position = at;
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let dest = (at.0 + 3, at.1);
+        let r = map.geo.cell(dest.0 as i32, dest.1 as i32);
+        map.mouse = (r.x + r.w / 2, r.y + r.h / 2);
+        map.act(&mut cx, RAct::MapClick);
+        walk_out(&mut map, &mut cx);
+        assert_eq!(cx.gs().position, dest, "the click walk arrived");
+        // a key step on (as the held key does), into a fight that keeps what walk is under way
+        cx.gs_mut().position = (dest.0 + 1, dest.1);
+        map.keep_walk(&cx);
+        cx.game.as_mut().unwrap().fought = Some("won".to_string());
+        map.tick_at(&mut cx, Instant::now() + Duration::from_secs(3));
+        assert!(map.walk.is_empty(), "no stale walk resumed: {:?}", map.walk);
+        assert_eq!(cx.gs().position, (dest.0 + 1, dest.1), "the party stays");
+    }
+
+    /// PT-44, PT-51: a point that sets a flag, walked onto by a click on it, logs its line once and never "You can't get
+    /// there." after it.
+    #[test]
+    fn pt44_pt51_a_point_walked_onto_answers_once() {
+        let mut cx = ward_hub(&TIER2, &[], false);
+        let fresh = |gs: &GameState, m: &Dict| json::arr(&json::normalize(json::get(m, "sets_flags"))).iter().any(|f| !gs.flag_true(&s(json::dict(f), "key")));
+        let probe = cx.gs().clone();
+        let m = enter_point(&mut cx, |m, st| st == "present" && fresh(&probe, m)).expect("a point that sets a flag not set yet");
+        let mut map = RegionMap::new(&mut cx);
+        let d = cx.data.clone();
+        let t = explore::template_of(&d, explore::location(&d, cx.gs())).clone();
+        let at = explore::marker_pos(&t, &m, cx.gs().explore_int("loc_steps"));
+        start_for(&map, &mut cx, at).expect("a tile a walk away");
+        // the job waiting on its flag is under way (its "Quest updated" line then comes between, as in a game)
+        let keys: Vec<String> = json::arr(&json::normalize(json::get(&m, "sets_flags"))).iter().map(|f| s(json::dict(f), "key")).collect();
+        let world = cx.gs().world_id.clone();
+        let jobs: Vec<String> = d.merged_entries(&world, "quests").into_iter().filter(|q| json::aget(q, "steps").iter().any(|st| keys.contains(&s(json::dict(st), "flag")))).map(|q| s(q, "_qid")).collect();
+        for q in &jobs {
+            cx.gs_mut().quests.insert(q.clone(), json!({"state": "active", "objective": 0}));
+        }
+        // the roads open now are told first (that notice would stop the walk)
+        crate::worldmap::note_new_roads(&mut cx);
+        cx.notice.clear();
+        cx.log.clear();
+        map.act(&mut cx, RAct::Marker(s(&m, "id")));
+        assert!(!map.walk.is_empty(), "a walk starts");
+        walk_out(&mut map, &mut cx);
+        let line = explore::point_line(&m);
+        assert_eq!(cx.log.iter().filter(|l| **l == line).count(), 1, "its line once: {:?}", cx.log);
+        assert!(!cx.log.iter().any(|l| l == "You can't get there."), "{:?}", cx.log);
+        if !jobs.is_empty() {
+            assert!(cx.log.iter().any(|l| l.starts_with("Quest updated: ")), "the job's line: {:?}", cx.log);
+        }
+    }
+
+    /// PT-55: a click walk a fight broke off goes on after a win with the party where it was; a flight (the party back a
+    /// tile) or a loss drops it.
+    #[test]
+    fn pt55_a_walk_broken_off_by_a_fight_goes_on_after_a_win() {
+        for (outcome, back, goes_on) in [("won", false, true), ("fled", true, false), ("lost", false, false)] {
+            let (mut cx, mut g) = (game_cx(), gfx());
+            let mut map = RegionMap::new(&mut cx);
+            let d = cx.data.clone();
+            let t = explore::template_of(&d, explore::location(&d, cx.gs())).clone();
+            let (w, h) = explore::size_of(&t);
+            let marked: Vec<Pos> = explore::markers_of(explore::location(&d, cx.gs())).iter().map(|m| explore::marker_pos(&t, m, 0)).collect();
+            let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+            let at = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| (0..6).all(|i| free((x + i, y)))).expect("a free row");
+            cx.gs_mut().position = at;
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let dest = (at.0 + 5, at.1);
+            let r = map.geo.cell(dest.0 as i32, dest.1 as i32);
+            map.mouse = (r.x + r.w / 2, r.y + r.h / 2);
+            map.act(&mut cx, RAct::MapClick);
+            map.tick_at(&mut cx, Instant::now() + Duration::from_secs(1));
+            let found = cx.gs().position;
+            assert_eq!(found, (at.0 + 1, at.1), "one step taken");
+            // the fight: the walk is kept, then cleared as a fight starts
+            map.keep_walk(&cx);
+            map.walk.clear();
+            map.walk_target = None;
+            if back {
+                cx.gs_mut().position = at;
+            }
+            cx.game.as_mut().unwrap().fought = Some(outcome.to_string());
+            map.tick_at(&mut cx, Instant::now() + Duration::from_secs(3));
+            assert_eq!(!map.walk.is_empty() || cx.gs().position != if back { at } else { found }, goes_on, "{outcome}: the walk goes on only after a win");
+            assert!(cx.game.as_ref().unwrap().fought.is_none(), "the outcome is taken");
+            if goes_on {
+                assert_eq!(map.walk_dest, Some(dest), "to the same tile");
+                walk_out(&mut map, &mut cx);
+                assert_eq!(cx.gs().position, dest, "arrived");
+            }
+        }
+    }
+
+    /// PT-54: in a place with several world-map exits, each road's exit picks an open neighbour the exit's way (within
+    /// 90 degrees on the world map), the place's own world-map exit none; stepping onto it opens the world map with it
+    /// picked.
+    #[test]
+    fn pt54_a_roads_exit_picks_the_next_place_that_way() {
+        let mut cx = ward_hub(&TIER2, &[], false);
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        let mut picked = 0;
+        for loc in d.merged_entries(&world, "locations") {
+            let exits: Vec<Dict> = explore::markers_of(loc).into_iter().filter(|m| s(m, "kind") == "exit" && s(m, "to") == explore::WORLD_MAP).collect();
+            if exits.len() < 2 || explore::template_of(&d, loc).is_empty() {
+                continue;
+            }
+            let mut gs = cx.gs().clone();
+            if !json::b(&explore::enter(&d, &mut gs, &s(loc, "id"), explore::SPAWN), "ok", false) {
+                continue;
+            }
+            *cx.gs_mut() = gs;
+            assert_eq!(crate::worldmap::exit_toward(&d, cx.gs(), explore::WORLD_MAP), None, "the plain exit picks nothing");
+            for e in &exits {
+                let Some(q) = crate::worldmap::exit_toward(&d, cx.gs(), &s(e, "id")) else { continue };
+                let here = cx.gs().location_id.clone();
+                let view = emberwake_world::travel::view(&d, cx.gs());
+                let road = json::aget(&view, "routes").iter().map(json::dict).any(|r| json::b(r, "open", true) && ((s(r, "from") == here && s(r, "to") == q) || (s(r, "to") == here && s(r, "from") == q)));
+                assert!(road, "{q} is an open neighbour of {here}");
+                assert_eq!(crate::worldmap::WorldMap::toward(&cx, &s(e, "id")).selected, q);
+                picked += 1;
+            }
+        }
+        assert!(picked > 0, "some road's exit picks a place");
+        assert_eq!(crate::worldmap::WorldMap::toward(&cx, "").selected, "", "no exit: nothing picked");
     }
 }

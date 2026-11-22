@@ -605,7 +605,7 @@ pub(crate) mod tests {
         cx.gs().story.running.as_ref().map(|r| r.step)
     }
 
-    /// Presses Space on a vignette screen until its reel ends (each press moves one phase, V3); the reel's `on_done`
+    /// Presses Space on a vignette screen until its reel ends (two presses a card, PT-46); the reel's `on_done`
     /// queues the pop, which is taken off.
     fn play_out(cx: &mut Cx, v: &mut Box<dyn Screen<GameCx>>) {
         for _ in 0..200 {

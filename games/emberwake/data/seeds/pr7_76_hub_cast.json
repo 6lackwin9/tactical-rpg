@@ -1,0 +1,64 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "characters",
+      "world": "sunk_ward",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "sabina_kress",
+        "art": "priest/sabina_kress"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "characters",
+      "world": "sunk_ward",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "berek_dorn",
+        "art": "warrior/berek_dorn"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "characters",
+      "world": "sunk_ward",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "talia_rusk",
+        "art": "rogue/talia_rusk"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "characters",
+      "world": "sunk_ward",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "ivo",
+        "art": "rogue/ivo"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "characters",
+      "world": "sunk_ward",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "widow_varka",
+        "art": "priest/widow_varka"
+      }
+    }
+  ]
+}

@@ -36,23 +36,25 @@ fn exit(id: &str, to: &str, label: &str) -> Value {
 fn data() -> Data {
     let w = "w";
     let locations = json!([
-        {"id": "hub", "name": "Hub"},
+        {"id": "hub", "name": "Hub", "markers": [{"id": "clerk", "kind": "npc", "anchor": "clerk", "character": "clerk"}]},
         {"id": "grate", "name": "The Grate", "markers": [exit("west", "drains", "West drains"), exit("map", "world_map", "World map")]},
         {"id": "drains", "name": "The Drains", "markers": [exit("on", "junction", "")]},
         {"id": "junction", "name": "The Junction", "markers": [exit("map", "world_map", "World map")]},
-        {"id": "yard", "name": "The Yard"}
+        {"id": "yard", "name": "The Yard", "markers": [{"id": "tablet", "kind": "point", "anchor": "tablet", "sets_flags": [{"key": "cipher", "value": true}]}]}
     ]);
     let quests = json!([
         {"id": "sweep", "name": "The Sweep", "template": "clear_site", "steps": [{"text": "Break the sweep", "encounter": "enc_sweep"}]},
         {"id": "flagged", "name": "Flagged", "template": "flag_job", "steps": [{"text": "Find the cipher", "flag": "cipher"}]},
         {"id": "opener", "name": "The Opener", "template": "clear_site", "complete_flags": [{"key": "opened", "value": true}], "steps": [{"text": "Open it", "encounter": "enc_yard"}]},
         {"id": "later", "name": "Later", "template": "clear_site", "board": "b", "show_locked": true, "requires_flags": [{"key": "opened", "value": true}], "steps": [{"text": "Later on", "encounter": "enc_yard"}]},
+        {"id": "toll", "name": "The Toll", "template": "flag_job", "turn_in": "clerk", "steps": [{"text": "Pay the toll", "flag": "toll_paid"}]},
         {"id": "riddle", "name": "Riddle", "template": "clear_site", "board": "b", "show_locked": true, "requires_flags": [{"key": "nobody_sets_this", "value": true}], "steps": [{"text": "?", "encounter": "enc_yard"}]}
     ]);
     let worlds = json!({w: {"manifest": {"id": w, "start_location": "hub", "start_party": ["hero"]}, "own": {
         "locations": with_ids(w, locations),
         "routes": with_ids(w, json!([{"id": "r1", "from": "hub", "to": "grate", "time": 1}, {"id": "r2", "from": "grate", "to": "yard", "time": 1}])),
-        "characters": with_ids(w, json!([{"id": "clerk", "name": "Clerk", "role": "npc"}])),
+        "characters": with_ids(w, json!([{"id": "clerk", "name": "Clerk", "role": "npc", "dialogue": "clerk_talk"}])),
+        "dialogues": with_ids(w, json!([{"id": "clerk_talk", "start": "n0", "nodes": [{"id": "n0", "text": "Toll.", "choices": [{"text": "Pay.", "effects": [{"effect": "set_flag", "key": "toll_paid", "value": true}]}]}]}])),
         "encounters": with_ids(w, json!([{"id": "enc_sweep", "name": "Sweep", "location": "junction", "enemies": []}, {"id": "enc_yard", "name": "Yard", "location": "yard", "enemies": []}])),
         "boards": with_ids(w, json!([{"id": "b", "name": "Board", "keeper": "clerk"}])),
         "quests": with_ids(w, quests)
@@ -155,4 +157,32 @@ fn a_locked_job_names_the_quest_that_opens_it() {
     assert_eq!(board::unlock_words(&d, &gs, "w:riddle"), "", "nothing known sets its flag: no words (the board keeps its own)");
     gs.set_flag("opened", json!(true));
     assert_eq!(board::unlock_words(&d, &gs, "w:later"), "", "the flag holds: nothing missing");
+}
+
+/// PR7-76 (PT-49): a flag job's place is where the party sets its flag: a marker whose `sets_flags` sets it (the yard's
+/// tablet), else the place of the person whose conversation sets it (the clerk in the hub); none when nothing does.
+#[test]
+fn a_flag_jobs_place_is_where_the_party_sets_its_flag() {
+    let d = data();
+    let gs = state(&d);
+    assert_eq!(board::flag_place(&d, &gs, "cipher"), "w:yard", "the tablet sets it");
+    assert_eq!(board::flag_place(&d, &gs, "toll_paid"), "w:hub", "the clerk's reply sets it");
+    assert_eq!(board::flag_place(&d, &gs, "nobody_sets_this"), "");
+    assert_eq!(board::node_of(&d, &gs, "w:flagged"), "w:yard", "the board's Where for the flag job");
+    assert_eq!(board::node_of(&d, &gs, "w:toll"), "w:hub");
+    assert_eq!(board::node_of(&d, &gs, "w:sweep"), "w:junction", "a fight's place as before");
+}
+
+/// PR7-76 (PT-50): a quest ready to turn in stays in the legend's list (`legend_ready`), at the place of the person it
+/// turns in to.
+#[test]
+fn a_ready_quest_is_listed_at_its_turn_in_place() {
+    let d = data();
+    let mut gs = state(&d);
+    assert!(travel::legend_ready(&d, &gs).is_empty(), "nothing ready yet");
+    gs.quests.insert("w:toll".into(), json!({"state": "ready", "objective": 1}));
+    assert_eq!(quest::status(&d, &gs, "w:toll"), "ready");
+    assert_eq!(travel::legend_ready(&d, &gs), [("w:hub".to_string(), "The Toll".to_string(), "w:toll".to_string())], "turned in to the clerk, in the hub");
+    assert_eq!(travel::person_place(&d, &gs, "w:clerk"), "w:hub");
+    assert_eq!(travel::person_place(&d, &gs, ""), "");
 }

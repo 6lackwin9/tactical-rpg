@@ -51,12 +51,15 @@ pub struct Game {
     /// TRANSITIONS1 T2 step 4: the arrival a won fight left for the hub (the region map shows it as it comes back on top;
     /// the story stage drops it when a vignette plays next).
     pub arrival: Option<crate::transitions::Arrival>,
+    /// PR7-76 (PT-55): the outcome of the last world fight settled ("won", "lost", ...), taken by the region map (a walk
+    /// the fight broke off goes on after a win).
+    pub fought: Option<String>,
 }
 
 impl Game {
     pub fn new(gs: GameState, slot: i64, sample: bool) -> Self {
         let clean = gs.to_value();
-        Self { gs, slot, clean, busy: false, sample, notices: Vec::new(), arrival: None }
+        Self { gs, slot, clean, busy: false, sample, notices: Vec::new(), arrival: None, fought: None }
     }
 }
 

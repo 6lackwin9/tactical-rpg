@@ -120,6 +120,49 @@ fn te1_each_press_moves_exactly_one_phase_through_two_cards() {
     assert_eq!((p.card_index(), p.phase()), (1, Phase::FadeIn));
 }
 
+/// PR7-76 (PT-46): the player's press takes two a card: one shows the whole text (from the fade in or mid-typing), one
+/// moves on; a press during the fade out is the next card's first (it comes in typed), never lost.
+#[test]
+fn pt46_a_card_takes_one_press_to_show_and_one_to_move_on() {
+    let text = "Twelve chars";
+    // from the fade in: press, press = the next card's fade in
+    let mut p = Player::new(reel(vec![card(text), card(text), card(text)]), TextSpeed::Slow);
+    assert_eq!(p.phase(), Phase::FadeIn);
+    p.press_next();
+    assert_eq!((p.card_index(), p.phase(), p.shown()), (0, Phase::Hold, p.total()), "the first press shows it all");
+    p.press_next();
+    assert_eq!((p.card_index(), p.phase()), (0, Phase::FadeOut), "the second moves on (its fade out plays)");
+    p.advance(Card::default().fade_out_ms);
+    assert_eq!((p.card_index(), p.phase()), (1, Phase::FadeIn), "the fade out ends in the next card");
+    // mid-typing: one press shows the rest
+    p.advance(Card::default().fade_in_ms + 100);
+    assert_eq!(p.phase(), Phase::Typing);
+    assert!(p.shown() < p.total());
+    p.press_next();
+    assert_eq!((p.phase(), p.shown()), (Phase::Hold, p.total()));
+    // a press during the fade out is not eaten: the next card comes in typed
+    p.press_next();
+    assert_eq!(p.phase(), Phase::FadeOut);
+    p.advance(10);
+    p.press_next();
+    assert_eq!((p.card_index(), p.phase(), p.shown()), (2, Phase::Hold, p.total()), "the press in the fade is the next card's first");
+    // the last card: show, move on, the fade out ends the reel; then nothing
+    p.press_next();
+    assert_eq!(p.phase(), Phase::FadeOut);
+    p.press_next();
+    assert!(p.done() && !p.skipped(), "a press in the last fade out ends the reel");
+    p.press_next();
+    assert!(p.done());
+    // presses alone: two per card
+    let mut p = Player::new(reel(vec![card(text), card(text)]), TextSpeed::Normal);
+    for _ in 0..4 {
+        p.press_next();
+    }
+    assert_eq!((p.card_index(), p.phase()), (1, Phase::FadeOut), "two presses a card, nothing lost in the fades");
+    p.advance(Card::default().fade_out_ms);
+    assert!(p.done(), "the last fade out ends the reel");
+}
+
 #[test]
 fn te2_typing_reveals_characters_at_the_text_speed() {
     let text = words(300);
@@ -393,12 +436,13 @@ fn the_agent_view_and_the_widgets() {
     let ids: Vec<String> = s.widgets().iter().map(|w| w["id"].as_str().unwrap().to_string()).collect();
     // VNSTAGE1: the cutscene bar adds Log and Auto
     assert_eq!(ids, vec!["vignette.next", "vignette.skip", "vignette.log", "vignette.auto"]);
+    // PR7-76 (PT-46): a press shows the whole text, the next moves on
     s.click_id(&mut cx, "vignette.next").unwrap();
-    assert_eq!(s.state(&cx)["phase"], json!("typing"), "the stage is a press");
+    assert_eq!(s.state(&cx)["phase"], json!("hold"), "the stage is a press");
     s.key(&mut cx, aegis_ui::Key::Space);
-    assert_eq!(s.state(&cx)["phase"], json!("hold"), "Space is a press");
+    assert_eq!(s.state(&cx)["phase"], json!("fade_out"), "Space is a press");
     s.key(&mut cx, aegis_ui::Key::Enter);
-    assert_eq!(s.state(&cx)["phase"], json!("fade_out"), "Enter is a press");
+    assert_eq!((s.state(&cx)["card"].clone(), s.state(&cx)["phase"].clone()), (json!(1), json!("hold")), "Enter is a press");
     let mut fixed: VignetteScreen<App> = VignetteScreen::new(Reel { skippable: false, ..reel(vec![card("x")]) }, TextSpeed::Normal, |_, _| {});
     fixed.draw(&mut cx, &mut g, (-1, -1), true);
     assert!(fixed.widgets().iter().all(|w| w["id"] != "vignette.skip"), "no Skip on a reel that is not skippable");
