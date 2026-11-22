@@ -71,6 +71,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-85` (`XL-FIX2`) | done | `develop` (squash `PR7-85`) | "R 1/12" at Large and Extra large with the goal line clear; Stats and Gear rows grow with text size (second column when needed); every XL cut hovers to its full words; engine `Screen::audit_ignores` and cut `hover`/`bare_cut`; Normal shots unchanged; `FB-404` |
 | `ENGINE-35` (`ACT1-END-RUN1`) | Report | `develop` | Crucible won by hand on try 3 at Lv 8 (no debug); Act 1's end reached at Tithing 19; Kaelen held the winch and was captured; PT-85..100; `FB-406` |
 | `PR7-89` (`ACT1-FIX4`) | done | `develop` (squash `PR7-89`) | Captured hero keeps the dose; `[Wave]`, `[Hazard]` and foe `[Escape]` log lines; results list who fought and a captured hero's XP; Journal scrolls clear of Back; hover cards close at battle end; doubled words fixed; portcullis is a look point matched to its art; the post-act road starts at the Undercroft; goldens unchanged; `FB-408` |
+| `PR7-91` (`ACT1-FIX5`) | done | `develop` (squash `PR7-91`) | The round banner hides once a battle has an outcome; blocker and forced-move lines name the terrain ("blocked by Lava", "the rubble"), a plain floor still "Floor"; goldens unchanged; `FB-410` |
 | `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
 | `PR7-4` (`SCENARIO-GOLDENS1`) | part 1 done (tools lane); baselines await the user | `develop` (squash `PR7-4` part 1) | Scenario `shot` step `golden` (tolerance, pixels allowance, diff image), `record=1`, launch `save`; every scenario in the gate (`tools/fc.sh scenarios_all`); three screen scenarios (menus, hub, battle; 18 shots) run as review shots until the user approves the baselines (`/mnt/project-files/pr7-4/`); `FB-313` |
 | `ENGINE-1` (`HELLO-GAME1`) | done (tools lane) | `develop` (squash `ENGINE-1`) | Sample game `games/hello/` on engine crates only: menu, walker sprite, one save slot, engine sounds, scenario `hello_walk` in the gate; programs `hello` and `hello_cli`; six RPG leaks listed; `FB-315` |
@@ -1077,3 +1078,21 @@ This file is the **only doc file edited by the Build Session** under the two-ses
   Rewards: "Encounter XP goes to the members who fought (`progression::award_fielded_pct`); a captured member keeps his
   XP in his departed record." Story effects: "`install` on a flag naming a departed member grafts into the departed
   record (`dialogue::departed_from_flag`)."
+
+### FB-410: PR7-91 ACT1-FIX5 built; the banner hides for every outcome panel
+
+- **Status**: built, `develop` (squash `PR7-91`). Goldens unchanged (none stores blocker or forced-move terrain text).
+  Shot `/mnt/project-files/pr7-91/victory_banner_no_round_banner.png`.
+- **What landed**:
+  - (a) `playback.rs` `round_banner_now` returns nothing once the battle has an outcome: the Victory beat and every
+    outcome panel. A new battle starts its own banner. A win keeps its 1.8 s beat and opens the results by itself.
+  - (b) `rpgkit_battle::command::terrain_name` now uses `terrain_label` (the row's name, else its id in words), with
+    "Floor" only for a plain floor; `forced.rs` `obstacle()` uses it, so pushes read "the rubble", "the lava".
+- **Guess `[PROVISIONAL]`**: the banner hides for every outcome panel (Fled, Out of time too), since each covers the
+  board; Victory and Defeat only is a one-line change.
+- **Tests**: `rpgkit_battle/tests/terrain_rows.rs` `blocker_and_forced_move_lines_name_the_terrain`;
+  `transitions_tests` `the_round_banner_hides_once_the_battle_is_over`; `story_battle_hub.json` checks
+  `state.round_banner` is absent before the Victory shot.
+- **Docs delta**: GAME_BRIEF, combat log: "Blocker and forced-move lines name the terrain by its display name
+  ('blocked by Lava', 'hits the rubble'); a plain floor reads 'Floor'. The round banner hides once a battle has an
+  outcome."

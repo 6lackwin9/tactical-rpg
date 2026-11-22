@@ -1911,9 +1911,12 @@ pub fn terrain_label(w: &World, cell: V2) -> String {
         .join(" ")
 }
 
-/// Terrain.display_name of the tile's terrain (the catalog's name, else Floor).
+/// Terrain.display_name of the tile's terrain for blocker and forced-move lines. ACT1-FIX5 (PR7-91): the same name as
+/// a hazard line (`terrain_label`: "Rubble", "Lava"; was always "Floor" as terrain rows have no name); a plain floor
+/// tile reads "Floor", and a tile with no id falls back to "Floor".
 pub fn terrain_name(w: &World, cell: V2) -> String {
-    w.cat.terrain.get(w.grid.terrain_id(cell)).map(|r| aegis_core::value::string(r, "name", "Floor")).unwrap_or_else(|| "Floor".into())
+    let label = terrain_label(w, cell);
+    if label.is_empty() { "Floor".into() } else { label }
 }
 
 /// HazardRules.at_round_end: every active unit on a round-end hazard tile rolls it, in `units` order.

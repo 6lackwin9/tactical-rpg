@@ -38,8 +38,9 @@ fn with_ids(rows: Value) -> Value {
     )
 }
 
-/// The scratch world; `go_on`: the story goes on to a vignette after the fight (else it enters the hub).
-fn data(go_on: bool) -> Data {
+/// The scratch world; `go_on`: the story goes on to a vignette after the fight (else it enters the hub); `timeline`:
+/// the world's battles play its timeline ruleset (round intent: the round banner shows).
+fn data_ruled(go_on: bool, timeline: bool) -> Data {
     let skills = json!([
         {"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "target_mode": "ENEMY"},
         {"id": "guard", "name": "Guard", "kind": "DEFEND", "level": 1, "blocks": 2, "basic": true, "mitigation": 0.3},
@@ -70,13 +71,22 @@ fn data(go_on: bool) -> Data {
         ])),
         "sequences": with_ids(json!([{"id": "story", "name": "Story", "steps": steps}]))
     }}});
+    let mut worlds = worlds;
+    if timeline {
+        worlds[WORLD]["manifest"]["ruleset"] = json!("timeline");
+    }
     Data::from_values(&catalog, &worlds, &json!({}))
 }
 
 /// A game of the scratch world, not a debug one (its fights open the battle screen), on the flat board.
 pub(super) fn beat_cx(go_on: bool, reduce: bool) -> Cx {
+    beat_cx_ruled(go_on, reduce, false)
+}
+
+/// `beat_cx`; `timeline`: under the world's timeline ruleset (`data_ruled`).
+fn beat_cx_ruled(go_on: bool, reduce: bool, timeline: bool) -> Cx {
     let mut cx = game_cx();
-    let d = Arc::new(data(go_on));
+    let d = Arc::new(data_ruled(go_on, timeline));
     let gs = emberwake_world::new_game::create_for_world(&d, WORLD, 1).expect("the scratch world starts a game");
     cx.data = d;
     cx.game = Some(crate::screens::Game::new(gs, -1, true));
@@ -456,4 +466,57 @@ fn hover_cards_close_when_the_battle_ends() {
     }
     let c = b.w.iter().find(|w| w.id == "banner.continue").expect("Continue").rect;
     assert!(aegis_ui::ui::hit(&b.w, (c.x + c.w / 2, c.y + c.h / 2)).is_some(), "Continue still clicks");
+}
+
+/// The round banner `b` would show now: its current round, started on the FX clock and faded in (alive for its hold).
+fn fresh_round_banner(b: &mut BattleScreen) {
+    let round = b.session().current_round;
+    b.banner = Some((round, b.clock.now()));
+    b.clock.advance(crate::battle::playback::ROUND_BANNER_MS.0 as f64, 1.0);
+}
+
+/// ACT1-FIX5 (PR7-91, FB-408 question 2): the round banner hides while the Victory beat plays and while the defeat
+/// banner shows, though its time has not run out; the win keeps its beat and goes on to the results; the next battle
+/// shows its round banner again.
+#[test]
+fn the_round_banner_hides_once_the_battle_is_over() {
+    let (mut cx, mut g) = (beat_cx_ruled(false, false, true), gfx());
+    let mut b = battle(&mut cx, "map");
+    fresh_round_banner(&mut b);
+    frame(&mut b, &mut cx, &mut g, 1.0);
+    let round = b.session().current_round;
+    assert!(b.state(&cx)["round_banner"]["round"] == json!(round), "a live battle shows it: {}", b.state(&cx)["round_banner"]);
+    win(&mut b, &mut cx);
+    b.tick(&mut cx);
+    assert_eq!(b.beat.map(|beat| beat.kind), Some(Kind::Victory));
+    fresh_round_banner(&mut b);
+    at_ms(&mut b, tr::VICTORY_BANNER_AT_MS + tr::BANNER_SLIDE_MS);
+    frame(&mut b, &mut cx, &mut g, 1.0);
+    assert!(b.round_banner_alive(), "its time has not run out");
+    assert_eq!(b.state(&cx)["round_banner"], Value::Null, "hidden during the Victory beat");
+    at_ms(&mut b, tr::VICTORY_MS);
+    b.tick(&mut cx);
+    assert!(b.beat.is_none() && pushed(&mut cx).id() == "battle_results", "the beat ends in the results by itself");
+
+    // a defeat: the outcome panel shows alone
+    let mut cx = beat_cx_ruled(false, false, true);
+    let mut b = battle(&mut cx, "map");
+    let sess = b.host.session.as_mut().unwrap();
+    sess.timeout_outcome = "lost".into();
+    sess.phase = emberwake_battle::session::Phase::Replay;
+    sess.current_round = sess.def.max_rounds;
+    assert_eq!(b.outcome(), "lost");
+    fresh_round_banner(&mut b);
+    frame(&mut b, &mut cx, &mut g, 1.0);
+    assert!(widget(&b, "banner.continue").is_some(), "the defeat banner shows");
+    assert!(b.round_banner_alive());
+    assert_eq!(b.state(&cx)["round_banner"], Value::Null, "hidden under the defeat banner");
+
+    // the next battle: its round banner again
+    let mut b = battle(&mut cx, "map");
+    frame(&mut b, &mut cx, &mut g, 1.0);
+    assert!(b.banner.is_some(), "the new battle starts its banner");
+    b.clock.advance(crate::battle::playback::ROUND_BANNER_MS.0 as f64, 1.0);
+    frame(&mut b, &mut cx, &mut g, 1.0);
+    assert!(b.state(&cx)["round_banner"].is_object(), "back on the next battle: {}", b.state(&cx)["round_banner"]);
 }

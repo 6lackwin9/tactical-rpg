@@ -602,8 +602,13 @@ impl BattleScreen {
         }
     }
 
-    /// VISCLAR1-D: the round the banner names and its alpha now (None: no banner showing).
+    /// VISCLAR1-D: the round the banner names and its alpha now (None: no banner showing). ACT1-FIX5 (PR7-91): none once
+    /// the battle is over, so the Victory beat and the outcome panel (Defeat and the rest) show alone; a new battle
+    /// clears the outcome and starts its own banner.
     pub(super) fn round_banner_now(&self, cx: &Cx) -> Option<(i32, u8)> {
+        if self.host.session.as_ref().is_some_and(|s| !s.final_outcome().is_empty()) {
+            return None;
+        }
         let (round, at) = self.banner?;
         let still = cx.settings.v["skip_anim"].as_bool().unwrap_or(false) || cx.settings.reduce_motion();
         Some((round, round_banner_alpha(self.clock.now().saturating_sub(at), still))).filter(|b| b.1 > 0)
