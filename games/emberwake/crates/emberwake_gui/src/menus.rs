@@ -826,6 +826,11 @@ impl Screen<GameCx> for Slots {
     fn overlay(&self) -> bool {
         false
     }
+    /// PR7-70 (PANELS2, `FB-378` question 2): a main panel; it already fills the screen (not an overlay), so the game
+    /// menu never draws under it, and a panel opened over it takes its place (`drawn_screens`).
+    fn panel(&self) -> bool {
+        true
+    }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<SlotAct> = Ui::new(g, mouse, live);
         self.faces.begin();

@@ -120,8 +120,26 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-68` (`DIORAMA3`) | Built (tools lane) | `develop` | Amber light pools under the stage set's lantern spots and a soft vignette; a block inside the arena stands as the set's cover prop; the grid faint at rest, stronger while planning, with a Board Grid setting. FB-427 |
 | `ENGINE-23` (`UISPLIT1-I`) world map | Stage A done (tools lane); ENGINE-23 complete | `develop` | View-model, actions, fixture and tests for the world map; today's drawing kept. FB-429 |
 | `PR7-63` (`XL-BATTLE1`) | Built (tools lane) | `develop` | The battle screen at Extra large: the goal under the title, "Boss above" on its own row, cut texts hover to their words, tags and tabs centred; the boss bar's next blow back on screen. FB-431 |
+| `PR7-70` (`PANELS2`) | Built (tools lane) | `develop` | Save/Load slots, forge, dojo and the services screen are panels; they already filled the screen, so nothing changes on screen. FB-433 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-433: PR7-70 PANELS2 built; the four screens already drew alone
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `PR7-70` (`PANELS2`), `FB-378` question 2.
+- **Finding**: Save/Load slots, the forge and the dojo were never drawn over the game menu: each is a full screen
+  (`overlay()` false), so `drawn_screens` already drew only it and Back showed the game menu again. `FB-378`'s question
+  read them as stacked; they were not. The shop is not a screen: it is a pane the region map (or the services screen,
+  off the map) draws inside its own frame, so it cannot take the game menu's place.
+- **What landed** (game `menus.rs`, `forge.rs`, `dojo.rs`, `talk.rs`): `panel()` true on `Slots`, `Forge`, `Dojo` and
+  `ServiceScreen` (the services screen that hosts a shop off the map), so the panel rule names them; nothing draws
+  differently today.
+- **Tests**: `hub::tests::the_game_menu_then_slots_shows_only_the_slots_and_back_returns_to_the_menu` (Save from the
+  game menu and the Load slots draw alone and Back shows the game menu; the forge, the dojo and the services screen are
+  panels that fill the screen and draw alone over it). No shot changes. Engine goldens unchanged.
+- **Docs delta**: `GAME_BRIEF.md` panel list (PR7-48 line): add "Save/Load slots, the forge, the dojo and the services
+  screen (PR7-70)".
 
 ### FB-431: PR7-63 XL-BATTLE1 built; the boss bar's next blow was drawn off screen
 

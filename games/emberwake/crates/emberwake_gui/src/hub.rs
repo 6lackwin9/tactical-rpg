@@ -1334,6 +1334,40 @@ mod tests {
         }
     }
 
+    /// PR7-70 (PANELS2): Save and Load from the game menu open the slots as a panel that draws alone, and Back shows the
+    /// game menu again; the forge, the dojo and the services screen (a shop off the map) are panels too, so a panel
+    /// over the game menu's place never draws the menu under them.
+    #[test]
+    fn the_game_menu_then_slots_shows_only_the_slots_and_back_returns_to_the_menu() {
+        let mut cx = party_of(2);
+        let mut stack: Vec<Box<dyn Screen<GameCx>>> = vec![Box::new(crate::menus::MainMenu::default()), Box::new(Hub::default())];
+        // Load asks first (unsaved progress), so its slots are pushed as its Yes does
+        for (act, id) in [(Some(HubAct::Save), "save_slots"), (None, "load_slots")] {
+            cx.nav.clear();
+            let opened: Box<dyn Screen<GameCx>> = match act {
+                Some(a) => {
+                    Hub::default().act(&mut cx, a);
+                    let Some(Nav::Push(opened)) = cx.nav.pop() else { panic!("{id}: a screen opens") };
+                    opened
+                }
+                None => Box::new(crate::menus::Slots::new(false)),
+            };
+            assert_eq!((opened.id(), opened.panel()), (id, true));
+            stack.push(opened);
+            assert_eq!(aegis_ui::screen::drawn_screens(&stack), [2], "{id}: only the slots");
+            stack.pop();
+            assert_eq!(aegis_ui::screen::drawn_screens(&stack), [0, 1], "{id}: Back returns to the game menu");
+        }
+        let others: Vec<Box<dyn Screen<GameCx>>> = vec![Box::new(crate::forge::Forge::content()), Box::new(crate::dojo::Dojo::new(&cx)), Box::new(crate::talk::ServiceScreen::default())];
+        for other in others {
+            let id = other.id();
+            assert!(other.panel() && !other.overlay(), "{id}: a panel that fills the screen");
+            stack.push(other);
+            assert_eq!(aegis_ui::screen::drawn_screens(&stack), [2], "{id}: drawn alone");
+            stack.pop();
+        }
+    }
+
     /// ROSTER1-U on the results: after the stay-behind lines, a line per departure (its life), the keepsake its record
     /// kept (KS1, KS2), then the newly wounded; none without the keys; the popup reads clean at every text size.
     #[test]

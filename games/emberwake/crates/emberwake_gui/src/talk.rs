@@ -894,6 +894,12 @@ impl ServiceScreen {
 }
 
 impl Screen<GameCx> for ServiceScreen {
+    /// PR7-70 (PANELS2, `FB-378` question 2): a main panel; it already fills the screen (not an overlay), so the game
+    /// menu never draws under it, and a panel opened over it takes its place (`drawn_screens`).
+    fn panel(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         "services"
     }
