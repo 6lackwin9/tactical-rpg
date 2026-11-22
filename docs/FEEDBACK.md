@@ -69,6 +69,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-79` (`DIORAMA-DRESS1`) | done | `develop` (squash `PR7-79`) | Ten Act 1 Sunk Ward battle boards dressed through `decor` seeds (`cover/v3` lamps on blocks, edge `lantern_pole`s, edge props), no walkability change; fix: the arena launch path reads `<world>:<id>` so its board gets the world's stage set; shots `/mnt/project-files/pr7-79/`; goldens unchanged; `FB-400` |
 | `PR7-86` (`DECOR-GEN1`) | done | `develop` (squash `PR7-86`) | Generated boards (no `rows`, no `decor`) draw 2 to 6 display-only decor pieces from the world manifest's `decor_pool` on their own seeded stream: cover keys on blocks or edges, props at the back only; seed `pr7_86_decor_pool`; goldens unchanged; `FB-402` |
 | `PR7-85` (`XL-FIX2`) | done | `develop` (squash `PR7-85`) | "R 1/12" at Large and Extra large with the goal line clear; Stats and Gear rows grow with text size (second column when needed); every XL cut hovers to its full words; engine `Screen::audit_ignores` and cut `hover`/`bare_cut`; Normal shots unchanged; `FB-404` |
+| `ENGINE-35` (`ACT1-END-RUN1`) | Report | `develop` | Crucible won by hand on try 3 at Lv 8 (no debug); Act 1's end reached at Tithing 19; Kaelen held the winch and was captured; PT-85..100; `FB-406` |
 | `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
 | `PR7-4` (`SCENARIO-GOLDENS1`) | part 1 done (tools lane); baselines await the user | `develop` (squash `PR7-4` part 1) | Scenario `shot` step `golden` (tolerance, pixels allowance, diff image), `record=1`, launch `save`; every scenario in the gate (`tools/fc.sh scenarios_all`); three screen scenarios (menus, hub, battle; 18 shots) run as review shots until the user approves the baselines (`/mnt/project-files/pr7-4/`); `FB-313` |
 | `ENGINE-1` (`HELLO-GAME1`) | done (tools lane) | `develop` (squash `ENGINE-1`) | Sample game `games/hello/` on engine crates only: menu, walker sprite, one save slot, engine sounds, scenario `hello_walk` in the gate; programs `hello` and `hello_cli`; six RPG leaks listed; `FB-315` |
@@ -870,3 +871,63 @@ This file is the **only doc file edited by the Build Session** under the two-ses
     line apart at every size, taking a second column when needed."
   - EFFICIENCY: `fc.sh scenario` rebuilds the binaries first, so a "before" sweep must be taken before any edit;
     `shots diff` runs `cargo clean` on the workspace crates.
+
+### FB-406: ENGINE-35 ACT1-END-RUN1 report; Crucible won by hand on try 3, act end reached at Tithing 19
+
+- **Status**: report only. The Crucible (Inquisitor-Prelate Nemeth, escape with a winch holder) was **won by hand on
+  try 3** in 7 rounds at party Lv 8. **No debug was used** and no save was edited. Try 1 ran rounds 8 to 12 on the auto
+  plan after the holder fell, only to reach the loss screen for the PT-66 check; try 2 was given up at R6 by reloading
+  the entry save, once 3 out could no longer happen. Everything else was hand-played.
+- **Spec**: `docs/READY.md` row `ENGINE-35`; follows `FB-392`, with the logging asks of `FB-459` (PT-71) and `FB-463`.
+- **Run**: develop `b24d2dee`, `tools/fc.sh playtest start save=` (the `before_crucible` save of act1_agent_run2, which
+  loads on this build) `keep_saves=` `shots=off`, then `aegis playtest do`; 1280x720, no window, 17:23 to 18:17 UTC.
+  Folder `/mnt/project-files/build-tools/act1_agent_run3/`: `run_log.md` (section 2 has every battle line in full from
+  `state.log_groups`, per round, for all three tries), `run_log.jsonl`, 47 shots named by log step,
+  `441_tree_odd_costs_A_R2.json` (the whole board at PT-88), `saveshot_ghost_claim_14.png` (a `save=` proof shot), and
+  saves `crucible_entry`, `act1_end` (right after "Act 2 begins") and `slag_gate`.
+- **How far**: Crucible won, the end vignettes `vg_m5_gate` and `vg_debate_3`, "Act 2 begins" at the Sluice Undercroft,
+  the Crucible turned in to Talia, then travel to the Slag Gate.
+- **Tithing**: 19 at the Crucible entry and **19 at the act's end** (the win ends the act; no day passes); 15 after the
+  4-day trip to the Slag Gate (PT-97). Alert 12% to 30%.
+- **Crucible tries** (all from `crucible_entry`; deterministic, R1 the same each time):
+
+  | Try | Holder | Result | Rounds | What decided it |
+  | --- | --- | --- | --- | --- |
+  | 1 | Kaelen | Partly escaped, 1 of 3 out | 12 (hand R1-7, auto R8-12) | Vesper out R5; from R4 Footmen 3, 4 and Nemeth guarded all three column-6 gaps, so Maren and Hollis were cut short in R6; Decapitation crit Kaelen for 415 in R7 (forecast -277); two Pommel Strikes in its windup broke nothing (PT-89) |
+  | 2 | Kaelen | given up R6 | 6 | Vesper out R5; Maren (89 HP) cut short at (5,3) when a Purifier stepped in front (Hollis's move took (4,4) first); Brands killed her in R5 |
+  | 3 | Kaelen | **Victory** | 7 | Hollis killed Purifier 1 in R1 (Sunder 145 + Quarrel 99) and with Kaelen Footman 2 in R2; Kaelen on the winch R3 B2; Maren ran the north lane in R4 and got out R5; Vesper (stealth) R6; Hollis R7 at 7 HP |
+
+  Results: "Kaelen held the winch. Kaelen was captured." His keepsake goes to the stash and Act 2 opens without him.
+
+| PT | Sev | Area | Finding | Shots |
+| --- | --- | --- | --- | --- |
+| PT-85 | major | forecast | Hit forecasts on a target that moves disagree with the result: Decapitation on Hollis after his move showed -209 at (1,3), 5 tiles from Nemeth, and nothing at (2,4), 3 tiles (try 2 R2); Maren moving to (5,5) showed no incoming while a Footman and a Purifier targeted her, she took 151 (try 2 R4); Maren showed -138 and took 0 (try 3 R1) | 1415, 1763 |
+| PT-86 | major | planning | A ranged pick on an adjacent foe adds an approach walk 4 tiles away from the fight and the exits (Winch Sunder walk to (3,1), try 1 R3; Barbed Quarrel walked Hollis from (5,7) to (1,7), away from his exit, try 3 R5) | 539 |
+| PT-87 | major | planning | Foe start tiles and ghost plans still block routes (rest of PT-72): a foe's start tile counts as blocked though it leaves in B1, so the only gap reads "Too far: 12-18 tiles"; auto ghost plans still claim tiles ("Too far: 14 tiles" for Kaelen to the winch in R1, 8 after Clear; after Clear "Claimed by Vesper's move") | saveshot_ghost_claim_14 |
+| PT-88 | major | planning | Kaelen's Billhook Sunder on an adjacent Footman (no move) refused: "Blocked by Maren's plan: Move here dropped: Too far: 8 tiles > 6"; Maren's costs from (3,5) ran above their step counts ((3,7) 4, (4,7) 5, (5,7) 6, (7,7) 8), and (7,7) had been accepted at 6 before the other picks | 312, 441_tree json |
+| PT-89 | major | combat | Two Pommel Strikes landed in B1 and B2 of Nemeth's B1-3 Decapitation windup; the summary read "no breaks (0 of 3 hits into a wind-up)" with no reason; the blow then crit for 415 against a forecast of -277 | 1005 |
+| PT-90 | major | story | After the win the log shows "Flag 'sunk_ward.sabina_dose_to' names no party member; nothing is installed." (guess: the dose went to Kaelen, now captured) | 2843 |
+| PT-91 | minor | planning | Auto-fill after hand picks repeats them and spends more: Ash-Cloud Fade ran in 4 blocks, the strip said "AP -3" yet Vesper ended at 1/10 AP; a second Tourniquet healed 5; a filled Strike spent Ammo | 183 |
+| PT-92 | minor | log | The R3 reinforcements (Footmen 3 and 4) arrive with no log line; wording "Nemeth is Burning by Floor" | log A R3 |
+| PT-93 | minor | log | A Purifier at 16 HP walked out through the party's exit, logged like a hero ("safely WITHDREW through Exit!"); the Hostiles list keeps it at 16/200 | 1066 |
+| PT-94 | minor | text | Double words: "exposes the target for 3 rounds rounds" (Billhook Sunder); "dash up to 3 tiles tiles" (Hamstring Sever) | run_log notes |
+| PT-95 | minor | results | A win goes straight to the results with no banner (a loss shows one); Dunstan, not in the fight, is listed with empty stats and +35 XP; captured Kaelen gets no XP line | 2690 |
+| PT-96 | minor | map | The Slag Gate's "The raised portcullis" marker has no Here row (like PT-83); its art shows the bars down while the text says it was lifted | 2904, 2911 |
+| PT-97 | minor | flow | The act end moves the party to the Undercroft, but the new road starts at the Watchpost, so the Slag Gate costs 4 days (Tithing 19 to 15) and 4 supplies | 2895 |
+| PT-98 | minor | UI | The journal's Back button sits on top of the last quest rows | 2850 |
+| PT-99 | minor | UI | A unit hover tooltip from before the end stays over the battle-over banner and hides its title | 1063 |
+| PT-100 | minor | lore | In `vg_debate_3` Sabina says "I watched" about a fight she was not at; Talia's "Eighteen, twenty-four, cowled to the eyes" reads oddly | run_log section 3 |
+
+- **FB-392 items re-checked** (PR7-82, PR7-83 parts, PR7-84, PR7-87 on develop):
+  - Fixed: PT-66 (no "Autosave failed" after a loss), PT-68 (attacks "lose" a stealthed hero who moves), PT-73 (results
+    "Partly escaped", "1 of 3 got out; the escape needed 3."), PT-75 (boss bar "346/346 +330" with a carried-over
+    hover), PT-77 (Crucible Lv 8 on the board), PT-83 (winch drum in Here).
+  - Partly fixed: PT-72 (a pick that would void a move is refused with a reason; see PT-87, PT-88); PT-69 (Winch Sunder
+    broke a Footman's Heavy Thrust; the Pulverizer not met); PT-79 (slot clicks always select; one Esc at "Round over"
+    opened Settings); PT-80 (negative costs after a Move pick remain: "Ash-Cloud Fade -4 blocks, -7 AP").
+  - Not reproduced: PT-70, PT-71 (every cut walk logged "[Move Cut Short]"), PT-81, PT-84.
+  - Unchanged: PT-74 (on the auto plan Maren and Hollis were downed with no escape attempt).
+  - Not re-checked (Bone-Mill and earlier boards not replayed): PT-67, PT-76, PT-78, PT-82.
+- **Not done**: odd costs could not be kept as a mid-battle save (saves are the campaign slot); the tree file captures
+  the R2 board. The Overlook and Wedges jobs remain open; Act 2 not played past the Slag Gate.
+- **Docs delta**: none.
