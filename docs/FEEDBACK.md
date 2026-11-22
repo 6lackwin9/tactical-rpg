@@ -124,8 +124,41 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-70` (`PANELS2`) | Built (tools lane) | `develop` | Save/Load slots, forge, dojo and the services screen are panels; they already filled the screen, so nothing changes on screen. FB-433 |
 | `PR7-32` (`BREPORTUI1`) | Built (tools lane) | `develop` | The results popup shows the battle report table and best moment; F2 panel sized to content, portraits, drop tiles, XP bars; PT-11 and PT-13 fixed. FB-435 |
 | `PR7-71` (`CONTROLS-MIGRATE1`) | Built (tools lane) | `develop` | On load, an action on a fixed key goes back to its own key (swap undone), the settings are saved and a notice names it. FB-437 |
+| `PR7-72` (`SHOT-DIFF1`) | Built (tools lane) | `develop` | `tools/fc.sh shots diff`: the scenarios a change can show, base shots cached per commit, `index.md` and a contact sheet. FB-439 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-439: PR7-72 SHOT-DIFF1 built; `fc.sh shots diff`
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `PR7-72` (`SHOT-DIFF1`), from `FB-378` Repeats.
+- **What landed** (tools `fc.sh`, `tools/planner/shots_diff.py` over `shots_all.py`):
+  `tools/fc.sh shots diff [base=<sha>] [scenarios=a,b|all] [out=<dir>] [tolerance=0] [pixels=0] [limit=12]`. It picks
+  the scenarios from the change since the base (committed or not, new files too): none when every changed path is a
+  `.md` file or under `docs/`, `.claude/`, `.agents/`, `legacy/`, `tools/planner/` or `tools/mock_ui/` (then it writes
+  an index saying 0 changed and runs nothing); only the changed scenario files when nothing else changed; else every
+  Emberwake scenario. It runs them on the base in a scratch worktree (skipped for scenarios already in
+  `target/shots_cache/<sha>/`), then on HEAD's working tree, and writes `index.md` (base, counts, changed with pixel
+  counts, new, gone), `sheet.png` (before, after and diff of each changed shot at half size, most changed first, at
+  most 12) and `compare/` (the full-size sheets) to `target/shots_diff/` or `out=`.
+- **Proof**: against the commit before `PR7-32` with `scenarios=story_battle_hub,battle_report`: 1 changed (the results
+  shot), 2 new (the `battle_report` shots), 6 unchanged, in 4 min 43 s with a cold cache. Sheet:
+  `/mnt/project-files/build-tools/pr7-72_shots_diff_sheet.png` (it also shows the old Continue past the panel edge
+  that `PR7-32` fixed). A docs-only commit (`e97dd714`) selects no scenario.
+- **Guesses** (`[PROVISIONAL]`): (1) frame-exact by default (tolerance 0, pixels 0), since shots run on the shot clock;
+  (2) the scenario choice is coarse (docs-only, scenario files only, else all); a finer map from code paths to
+  scenarios can come later; (3) Emberwake scenarios only (the sample game has one scenario and no shots to review);
+  (4) a scenario that fails still gives the shots it took, with its log path printed.
+- **Finding** (worth a known-issues row): a second worktree on the same `CARGO_TARGET_DIR` makes cargo treat HEAD's
+  workspace crates as built after the base build (cargo keys them by path relative to the workspace, and HEAD's files
+  are older), so HEAD's build links the base's crates. The tool cleans the workspace crates (`cargo clean -p` each)
+  after a base build; the dependencies stay shared. So "reuses the HEAD target dir" holds for the dependencies only.
+- **Tests**: `tools/planner/test_shots_diff.py` (the choice of scenarios, one changed pixel gives one changed entry and
+  a sheet, identical folders give none, `add` keeps earlier shots, a docs-only index reads 0 changed).
+- **Docs delta**: `STRUCTURE` (tools): "`tools/fc.sh shots diff` (`tools/planner/shots_diff.py`, `SHOT-DIFF1`): the
+  shots a change moves against a base commit, with `index.md` and a contact sheet; base shots cached in
+  `target/shots_cache/<sha>/`. Builders use it for a FEEDBACK item's Changed shots line." The known-issues row is
+  added (`.claude/skills/known-issues`).
 
 ### FB-437: PR7-71 CONTROLS-MIGRATE1 built; fixed-key bindings reset on load
 

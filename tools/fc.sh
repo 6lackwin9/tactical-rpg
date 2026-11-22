@@ -12,6 +12,9 @@
 #                                (<scenario>__<shot>.png, index.txt); compare= lists the shots changed (pixel counts), new and gone (ENGINE-16)
 #                                and writes before | after | diff sheets into <out>/compare/ (sheets=0: none); crop= compares only that
 #                                rectangle and writes each shot's crop into <out>/crops/ (ENGINE-20)
+#   tools/fc.sh shots diff [base=<sha>] [scenarios=a,b|all] [out=<dir>]   the shots a change moves: the scenarios it can show (none
+#                                for docs only) on HEAD and on the base (default origin/develop; cached in target/shots_cache/<sha>/),
+#                                index.md and a contact sheet (sheet.png) in out (default target/shots_diff/) (SHOT-DIFF1)
 #   tools/fc.sh rename <old> <new> [<path>...] [--strings] [--comments] [--dry]   an identifier renamed across Rust and JSON;
 #                                string literals and comments left unless asked; legacy, game data and fixtures only listed (ENGINE-16)
 #   tools/fc.sh schema-field <table> <field> <json> [--after <key>] [--replace]   add a field to kits/rpg/schema.json byte for byte
@@ -538,6 +541,66 @@ shots_all() {  # ENGINE-16: every scenario's shots in one flat folder (tools/pla
   if [ $status -eq 0 ]; then rm -rf "$tmp"; else echo "[shots-all] a scenario failed: bundles kept under $tmp (the shots it took are in $out)"; fi
 }
 
+shots_diff() {  # PR7-72 (SHOT-DIFF1): the scenarios a change can show, on HEAD's working tree and on a base commit (cached per commit), compared (tools/planner/shots_diff.py)
+  local a base="origin/develop" scen="" out="" opts=() py sha ids id td cache wt tmp n=0
+  for a in "$@"; do
+    case "$a" in
+      base=*) base=${a#base=} ;; scenarios=*) scen=${a#scenarios=} ;; out=*) out=${a#out=} ;; tolerance=*|pixels=*|limit=*) opts+=("$a") ;;
+      *) echo "usage: tools/fc.sh shots diff [base=<sha>] [scenarios=a,b|all] [out=<dir>] [tolerance=0] [pixels=0] [limit=12]"; status=2; return ;;
+    esac
+  done
+  py=$(python_with "pass") || { echo "[shots diff] no Python 3 found"; status=2; return; }
+  sha=$(git rev-parse --verify -q "$base^{commit}") || { echo "[shots diff] no commit '$base'"; status=2; return; }
+  td="${CARGO_TARGET_DIR:-$PWD/target}"; out=${out:-$td/shots_diff}; cache="$td/shots_cache/$sha"
+  # the default: what the change since the base (committed or not, new files too) can show
+  [ -n "$scen" ] || scen=$({ git diff --name-only "$sha"; git ls-files --others --exclude-standard; } | "$py" tools/planner/shots_diff.py select)
+  rm -rf "$out"; mkdir -p "$out"
+  if [ "$scen" = "none" ]; then "$py" tools/planner/shots_diff.py none "$out" base="$sha" || status=1; return; fi
+  if [ "$scen" = "all" ]; then
+    ids=$(for f in games/emberwake/scenarios/*.json; do basename "$f" .json; done)
+  else
+    ids=${scen//,/ }
+  fi
+  # the base first (a scratch worktree on the same target dir: only the workspace crates build again, then are cleaned
+  # for HEAD's build); a scenario the base lacks is skipped (its shots come out new)
+  for id in $ids; do [ -f "$cache/.done/$id" ] || n=$((n + 1)); done
+  if [ $n -gt 0 ]; then
+    wt=$(mktemp -d); rmdir "$wt"
+    git worktree add -q --detach "$wt" "$sha" || { echo "[shots diff] could not check out $sha"; status=2; return; }
+    for id in $ids; do
+      [ -f "$cache/.done/$id" ] && continue
+      [ -f "$wt/games/emberwake/scenarios/$id.json" ] || { echo "[shots diff] base: no scenario $id"; continue; }
+      tmp=$(mktemp -d)
+      (cd "$wt" && CARGO_TARGET_DIR="$td" tools/fc.sh scenario "$id" out="$tmp" > "$tmp.log" 2>&1) || echo "[shots diff] base: $id failed (its shots so far are kept; log $tmp.log)"
+      "$py" tools/planner/shots_diff.py add "$tmp" "$cache" > /dev/null && mkdir -p "$cache/.done" && touch "$cache/.done/$id"
+      rm -rf "$tmp"
+    done
+    git worktree remove --force "$wt"
+    # cargo keys a workspace crate's build by its path relative to the workspace, so the base's builds would pass for
+    # HEAD's (HEAD's older files look built): the workspace crates are cleaned, the dependencies stay shared
+    cargo clean -q $(cargo metadata -q --no-deps --format-version 1 | "$py" -c 'import json,sys; print(" ".join("-p " + p["name"] for p in json.load(sys.stdin)["packages"]))') || true
+  fi
+  mkdir -p "$out/head_run"
+  for id in $ids; do
+    tmp=$(mktemp -d)
+    tools/fc.sh scenario "$id" out="$tmp" > "$tmp.log" 2>&1 || echo "[shots diff] HEAD: $id failed (its shots so far are kept; log $tmp.log)"
+    "$py" tools/planner/shots_diff.py add "$tmp" "$out/head_run" > /dev/null
+    rm -rf "$tmp"
+  done
+  # only the scenarios run count: the cache may hold others from an earlier diff
+  mkdir -p "$out/base"
+  for id in $ids; do cp "$cache/$id"__*.png "$out/base/" 2>/dev/null || true; done
+  "$py" tools/planner/shots_diff.py report "$out/base" "$out/head_run" "$out" base="$sha" "${opts[@]}" || status=1
+  rm -rf "$out/head_run"
+}
+
+shots() {  # PR7-72: `shots diff`
+  case "${1:-}" in
+    diff) shots_diff "${@:2}" ;;
+    *) echo "usage: tools/fc.sh shots diff [base=<sha>] [scenarios=a,b|all] [out=<dir>] [tolerance=0] [pixels=0] [limit=12]"; status=2 ;;
+  esac
+}
+
 scenario() {  # the driver lies beside the game's program, so both are built first, in one profile
   local a rest=() rel=()
   if [ "${1:-}" = "check" ]; then aegis scenario "$@" || status=$?; return; fi
@@ -674,6 +737,7 @@ case "$1" in
   repro) repro ;;
   bot) bot "${@:2}" ;;
   scenario) scenario "${@:2}" ;;
+  shots) shots "${@:2}" ;;
   playtest) playtest "${@:2}" ;;
   assetlib) assetlib ;;
   seeds) seeds_check "${@:2}" ;;
@@ -684,6 +748,6 @@ case "$1" in
   web) web "${@:2}" ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;
-  *) sed -n '2,27p' "$0"; status=1 ;;
+  *) sed -n '2,30p' "$0"; status=1 ;;
 esac
 exit $status
