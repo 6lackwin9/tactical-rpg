@@ -58,8 +58,6 @@ pub struct View {
     pub typed: rpgkit_data::Catalog,
     /// The worlds over the catalog (WorldCatalog.resolve: a catalog encounter's qualified purse loot).
     pub worlds: aegis_content::world::Catalogs,
-    /// True once the catalog has a terrain file (missing terrain rows are errors then, else warnings).
-    pub terrain_file: bool,
     /// What the loader reported, catalog and worlds (Godot's load errors; validate_all lists them under "load").
     pub load_errors: Vec<String>,
     /// E2.2-S1 (FB-53b): the game-wide purse caps (the manifest's; the defaults for a view built from values).
@@ -85,7 +83,7 @@ impl View {
         for (name, key) in [("item_families", "item_families"), ("quest_templates", "quests"), ("maps", "maps"), ("services", "services")] {
             rows.insert(name.into(), json::arr(&game[key]).iter().map(|e| json::dict(e).clone()).collect());
         }
-        Self { rows, assets, typed: rpgkit_data::Catalog::from_value(catalog), worlds: aegis_content::world::Catalogs::from_values(catalog, worlds), terrain_file: true, load_errors: Vec::new(), purse: crate::source::PurseCaps::default(), music_keys: Vec::new() }
+        Self { rows, assets, typed: rpgkit_data::Catalog::from_value(catalog), worlds: aegis_content::world::Catalogs::from_values(catalog, worlds), load_errors: Vec::new(), purse: crate::source::PurseCaps::default(), music_keys: Vec::new() }
     }
 
     pub fn entries(&self, kind: &str) -> &[Dict] {
@@ -455,7 +453,7 @@ pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
 /// ContentSchema.KINDS: the catalog kinds, in the order the whole-catalog reports walk them.
 pub const KINDS: [&str; 8] = ["skills", "items", "item_families", "passives", "classes", "units", "encounters", "terrain"];
 
-/// A whole-catalog report: {"kind:id" (or "kind:required", "skills:fold", "terrain:missing", "load"): [messages]}.
+/// A whole-catalog report: {"kind:id" (or "kind:required", "skills:fold", "load"): [messages]}.
 pub type Report = IndexMap<String, Vec<String>>;
 
 /// ContentCatalog.validate_all: every entry's errors, the map templates' prop and ground checks (PROPS1, REGIONGROUND1,
@@ -489,9 +487,6 @@ pub fn validate_all(v: &View) -> Report {
     };
     add("skills:required", skill::required_errors(v));
     add("skills:fold", skill::collapse(v.entries("skills")).1);
-    if v.terrain_file {
-        add("terrain:missing", simple::missing_terrain(v.entries("terrain")).iter().map(|id| format!("No terrain row for '{id}'.")).collect());
-    }
     // CLN-44: a derived stat's or portrait cue's `rulesets` name ruleset rows (the ids are open)
     for kind in [derived::KIND, portrait::KIND] {
         for e in v.entries(kind) {
@@ -540,12 +535,6 @@ pub fn warnings_all(v: &View) -> Report {
         let found = warnings_for(v, "skills", &ranked);
         if !found.is_empty() {
             out.entry(format!("skills:{}", json::s(&ranked, "id"))).or_default().extend(found);
-        }
-    }
-    if !v.terrain_file {
-        let missing: Vec<String> = simple::missing_terrain(v.entries("terrain")).iter().map(|id| format!("No terrain row for '{id}': the code defaults apply.")).collect();
-        if !missing.is_empty() {
-            out.entry("terrain:missing".into()).or_default().extend(missing);
         }
     }
     // REVEAL1 R2: an indoor zone's cells under its roof props (`maps:<id>`)

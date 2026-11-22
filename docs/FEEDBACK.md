@@ -154,8 +154,26 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-40` (`ENGINE-GUIDE2`) | Built (tools lane) | `develop` | `engine/docs/authoring/battle_stage.md` (composed ground, stage sets and `stage.fx.json`, decor, painted sheets); scenario run keys and `shots diff` in `scenarios.md`; `content refs` / `rename` and look-only points; the sample game's field on the engine's ground composer. FB-471 |
 | `ENGINE-41` (`STAGE-KIT1`) | Built (tools lane) | `develop` | The battle stage module (geometry, `stage.fx.json` reader, composed board, decor, wall-run caps, exit path and gate, draw passes) moved to `rpgkit_ui::stage`; the game re-exports it and gives its sizes through `StageSizes`. Fixture hash, goldens and shots unchanged. FB-473 |
 | `ENGINE-42` (`KIT-SAMPLE1`) | Built (tools lane) | `develop` | `games/kit_sample/`: a two-a-side fight from its own catalog on the kit's battle stage (composed floor, one zone, a lit fire pit), engine and kit crates only; scenario in the gate; `engine/docs/authoring/kit_game.md`. FB-475 |
+| `ENGINE-43` (`TERRAIN-PARTIAL1`) | Built (tools lane) | `develop` | A terrain table may list only the types it changes; the rest take the kit's code defaults with no problem and no warning; a listed row is still checked whole. FB-477 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-477: ENGINE-43 TERRAIN-PARTIAL1 built; partial terrain tables
+
+- **Status**: built (tools lane), `develop`. Kit check change only; no data changed; every golden unchanged
+  (`checks_golden` included: no shipped or golden data set carried the removed problem or warning).
+- **Spec**: `docs/READY.md` row `ENGINE-43` (`TERRAIN-PARTIAL1`).
+- **What landed** (`kits/rpg/crates/rpgkit_content`):
+  - The content check no longer reports `terrain:missing` (a terrain file that lacks some built-in types), and the
+    warnings no longer list one line per terrain when the file is absent. `View.terrain_file` and
+    `simple::missing_terrain` are gone.
+  - Nothing changed in the loader: `TerrainTable::from_catalog` already gave every type without a row its code
+    defaults.
+  - A listed row still runs `terrain_errors` whole (ranges, glyphs, hazards), so the writer refuses a bad one.
+  - Test `tests/terrain_partial.rs`: a one-row table (floor) is written, checks and warns clean, keeps its own numbers,
+    and the other 16 types match `TerrainTable::builtin()`; a listed row out of range is refused.
+- **Docs delta**: `engine/docs/authoring/kit_game.md` and `games/kit_sample/data/README.md` now say terrain rows are
+  optional per type (done here). For Design: any spec or brief line saying "all 17 terrain rows or none" is outdated.
 
 ### FB-475: ENGINE-42 KIT-SAMPLE1 built; the kit's sample game
 

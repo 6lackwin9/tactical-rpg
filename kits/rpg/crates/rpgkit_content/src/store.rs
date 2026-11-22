@@ -616,15 +616,14 @@ pub fn remove(data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> Res
     aegis_content::store::remove(&RpgContent, data_dir, world, kind, id)
 }
 
-/// The checks view of a data folder: the loaded catalog and worlds, the art keys of its asset manifest, whether it has
-/// a terrain file, and the load problems.
+/// The checks view of a data folder: the loaded catalog and worlds, the art keys of its asset manifest and the load
+/// problems.
 pub fn view(data_dir: &Path) -> crate::check::View {
     view_of(data_dir, &source::load(data_dir))
 }
 
 fn view_of(data_dir: &Path, src: &source::Source) -> crate::check::View {
     let mut view = crate::check::View::new(&src.catalog, &src.worlds, &src.game, data_dir.parent().map(aegis_core::assets::Layers::for_game).unwrap_or_default());
-    view.terrain_file = vfs::is_file(data_dir.join("catalog/terrain.json"));
     view.load_errors = src.errors.clone();
     view.purse = src.purse;
     view.music_keys = src.music_keys.clone();

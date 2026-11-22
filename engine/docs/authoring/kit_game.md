@@ -29,7 +29,8 @@ Write every row with the content commands; the writer refuses a row that adds a 
 
 - Prefix the game's ids (`ks_`, say): the layer check refuses a game's class id named in kit code, so a game's ids must
   not match words the kit uses.
-- Terrain rows are all or nothing: once one exists the kit wants all 17. Leave them out and the code defaults apply.
+- Terrain rows are optional: list only the types the game changes (each listed row is checked whole); every other
+  type takes the kit's code defaults, with no warning.
 - `progression/xp_curve.json` is optional; without it the kit's default curve applies.
 - `<id>_cli content check` is the whole check. Run it once the rows are in.
 
