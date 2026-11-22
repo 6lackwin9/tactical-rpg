@@ -119,8 +119,41 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-67` (`DIORAMA2`) | Built (tools lane) | `develop` | The wall lip in the stage set's tone; the front face from `tilesets/<set>/front_face/<terrain>/`; the stage fills the 888 px panel with faded wings, inside the panel's rim; edge decals unclipped. FB-425 |
 | `PR7-68` (`DIORAMA3`) | Built (tools lane) | `develop` | Amber light pools under the stage set's lantern spots and a soft vignette; a block inside the arena stands as the set's cover prop; the grid faint at rest, stronger while planning, with a Board Grid setting. FB-427 |
 | `ENGINE-23` (`UISPLIT1-I`) world map | Stage A done (tools lane); ENGINE-23 complete | `develop` | View-model, actions, fixture and tests for the world map; today's drawing kept. FB-429 |
+| `PR7-63` (`XL-BATTLE1`) | Built (tools lane) | `develop` | The battle screen at Extra large: the goal under the title, "Boss above" on its own row, cut texts hover to their words, tags and tabs centred; the boss bar's next blow back on screen. FB-431 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-431: PR7-63 XL-BATTLE1 built; the boss bar's next blow was drawn off screen
+
+- **Status**: built (tools lane), `develop`. Shots in project files `build-tools/pr7-63_xl_battle.png` (Extra large:
+  the Vane fight on the Stage view above, the cage fight on Flat below).
+- **Spec**: `docs/READY.md` row `PR7-63` (`XL-BATTLE1`), `FB-376` finding.
+- **What landed** (game `battle/draw.rs`, `battle/boss_bar.rs`, `battle/plates.rs`, `battle/card.rs`), by layout, no
+  smaller text; Normal keeps its places:
+  - The strip's goal and protect lines stack by the line heights (`strip_lines`: the goal starts where the title's
+    letters end, never above 11; the protect line two thirds of a line below, never under 6), so at Extra large
+    "Rout them" no longer runs into "Round 1...". A cut round title hovers to the whole of it.
+  - "Boss above" (the reinforcement tag) keeps its own cell: when it would meet "Hostiles N" it takes a row under it,
+    as tall as its line, and the foe plates start under it.
+  - The bottom bar's message hovers to its whole text when cut; the boss name, title and blow name hover when cut.
+    Plates and guest plates already hovered to their names (`PR7-58`), so "Caged Uns..." and "Crossbow..." have theirs.
+  - A status tab's letter (when its icon is missing) and the card's "after KO" tag centre their text when the line is
+    taller than the tag.
+  - **Bug (all sizes)**: `Painter::text` returns the end x, but the boss bar took it as a width, so the boss's next
+    blow (its target, impact pips and loss) was drawn past the canvas's right edge (bone-mill raid: "K" and "-57" at
+    x 644 to 704), and the boss title's room test always failed, so a boss title never showed beside the name. Both
+    now use the width. The card's "+N" status count had the same mistake (it moved the column past the end).
+- **Tests**: `xl_battle_tests.rs` `the_battle_reads_clean_at_normal_and_extra_large` (the Vane fight `enc_evt_01`, the
+  cage fight `enc_evt_02` with two caged guests, the bone-mill raid `enc_evt_03` with a guest; Stage and Flat; Normal
+  and Extra large: no text past the canvas, overlapping or spilling out of its control, every cut text with a hover
+  holding its words; board cells and unit tokens are pictures, not controls, so letters over them are not spills),
+  `the_strip_lines_follow_the_text_size`, `the_boss_above_tag_takes_its_own_row_when_it_would_meet_the_count`.
+  `XL_SHOTS=<dir>` writes the frames with the game's art. Engine goldens unchanged.
+- **Changed shots** (review only): Extra large battle shots; at Normal, boss fights whose boss has a next blow (its
+  target, pips and loss now show) or a title with room.
+- **Left**: with six full foe plates and the tag on its own row at Extra large, the last plate may reach the panel's
+  foot (no shipped fight has both; the Vane fight has three foes).
+- **Docs delta**: none.
 
 ### FB-429: ENGINE-23 UISPLIT1-I Stage A for the world map; the row is complete
 

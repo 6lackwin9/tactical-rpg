@@ -66,7 +66,8 @@ fn chips(ui: &mut Ui<super::Action>, cx: &mut Cx, statuses: &[String], x: i32, y
         at += 8;
     }
     if statuses.len() > CARD_CHIPS {
-        at += ui.p.text(at as f32, y as f32, &format!("+{}", statuses.len() - CARD_CHIPS), SMALL, th().text).ceil() as i32 + 1;
+        // PR7-63: the painter returns the end x
+        at = ui.p.text(at as f32, y as f32, &format!("+{}", statuses.len() - CARD_CHIPS), SMALL, th().text).ceil() as i32 + 1;
     }
     at
 }
@@ -76,7 +77,14 @@ fn soft_tag(ui: &mut Ui<super::Action>, text: &str, x: i32, y: i32) {
     let w = ui.p.text_w(text, SMALL).ceil() as i32 + 4;
     ui.push(format!("card.after_ko.{x}.{y}"), "badge", text, Rect::new(x, y, w, 8), true, false, None, Vec::new());
     ui.p.panel(Rect::new(x, y, w, 8), rgba(0, 0, 0, 0), rgb(150, 130, 90), 1.0);
-    ui.p.text(x as f32 + 2.0, y as f32 + 0.5, text, SMALL, rgb(190, 170, 120));
+    let ty = tag_text_y(ui, y);
+    ui.p.text(x as f32 + 2.0, ty, text, SMALL, rgb(190, 170, 120));
+}
+
+/// PR7-63: a tag's text top: half a pixel in, or centred on the 8 px tag when its line is taller (Extra large).
+fn tag_text_y(ui: &mut Ui<super::Action>, y: i32) -> f32 {
+    let lh = ui.p.line_h(SMALL);
+    if lh > 8.0 { y as f32 + (8.0 - lh) / 2.0 } else { y as f32 + 0.5 }
 }
 
 /// A filled tag ("KO in block 5", "BREAK in block 4") at `x`; its width.

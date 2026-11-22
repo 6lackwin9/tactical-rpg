@@ -1307,3 +1307,4 @@ mod portrait_frame_tests;
 mod boss_ui1_tests;
 mod objui1_tests;
 mod floatpanels_tests;
+mod xl_battle_tests;

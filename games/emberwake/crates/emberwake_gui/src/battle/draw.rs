@@ -358,13 +358,18 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     };
     let round_text = ui.p.fit(&model.top.round, BODY, title_w);
     ui.p.text_face(aegis_ui::painter::Typeface::Display, tx as f32, 3.0, &round_text, BODY, th().gold);
-    ui.push("strip.title", "label", model.top.round.clone(), Rect::new(tx, 3, title_w as i32, ui.p.line_h(BODY).ceil() as i32), true, false, None, Vec::new());
+    // PR7-63: a title cut to its room hovers to the whole of it
+    let title_tip: Tip = if round_text != model.top.round { vec![(model.top.round.clone(), th().gold)] } else { Vec::new() };
+    ui.push("strip.title", "label", model.top.round.clone(), Rect::new(tx, 3, title_w as i32, ui.p.line_h(BODY).ceil() as i32), true, false, None, title_tip);
     let line_room = (TITLE_END - tx) as f32;
+    // PR7-63 (XL-BATTLE1): the goal and protect lines stack under the title by the text size's line heights (at Normal
+    // the old 11 and 6 px), so at Extra large they no longer run into the title or each other
+    let (goal_y, line_step) = strip_lines(ui.p.line_h(BODY), ui.p.line_h(SMALL));
     for (k, (id, text, colour)) in [("strip.goal", &model.top.goal, th().text), ("strip.protect", &model.top.protect, crate::tokens::boss_gold())].into_iter().enumerate() {
         if text.is_empty() {
             continue;
         }
-        let ly = 11 + 6 * k as i32;
+        let ly = goal_y + line_step * k as i32;
         ui.p.text_fit(tx as f32, ly as f32, text, SMALL, line_room, colour);
         // OBJUI1 (PR7-31; OBJ1 rule 9, MORALE1 3): the goal hovers to the full objective line and the morale line
         let tip: Tip = if id == "strip.goal" { [(&model.top.objective, th().text), (&model.top.morale, th().dim)].into_iter().filter(|(t, _)| !t.is_empty()).map(|(t, c)| (t.clone(), c)).collect() } else { Vec::new() };
@@ -1066,14 +1071,26 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     let right = Rect::new(W - 2 - SIDE_W, 28, SIDE_W, 290);
     crate::hud::hud_panel(&mut ui, right, th().game("battle_panel", PANEL), th().edge, RADIUS);
     ui.p.text(right.x as f32 + 6.0, 32.0, &model.hostiles, TITLE, th().foe);
+    // PR7-63: the count and the tag keep their own cells; a tag that would run into the count takes its own row
+    let mut tag_row = 0;
     if !model.reinforce.is_empty() {
         let tw = ui.p.text_w(&model.reinforce, SMALL).ceil() as i32 + 6;
-        let tr = Rect::new(right.x + right.w - 4 - tw, 31, tw, 9);
+        let count_end = right.x + 6 + ui.p.text_w(&model.hostiles, TITLE).ceil() as i32;
+        let lh = ui.p.line_h(SMALL);
+        // as tall as its line (9 at Normal), its text centred when the line is taller
+        let tag_h = (lh.ceil() as i32 + 1).max(9);
+        let mut ty = 31;
+        if right.x + right.w - 4 - tw < count_end + 3 {
+            ty = 32 + ui.p.line_h(TITLE).ceil() as i32 - 1;
+            tag_row = ty + tag_h + 2 - 42;
+        }
+        let tr = Rect::new(right.x + right.w - 4 - tw, ty, tw, tag_h);
         ui.p.panel(tr, rgba(0, 0, 0, 0), crate::tokens::planned(), 1.5);
-        ui.p.text(tr.x as f32 + 3.0, tr.y as f32 + 1.0, &model.reinforce, SMALL, crate::tokens::planned());
+        let text_y = if tag_h > 9 { tr.y as f32 + (tag_h as f32 - lh) / 2.0 } else { tr.y as f32 + 1.0 };
+        ui.p.text(tr.x as f32 + 3.0, text_y, &model.reinforce, SMALL, crate::tokens::planned());
         ui.push("foe.reinforce", "badge", model.reinforce.clone(), tr, true, false, None, vec![("Reinforcements".into(), crate::tokens::planned()), (model.reinforce.clone(), th().text)]);
     }
-    let mut y = 42;
+    let mut y = 42 + tag_row;
     let mut hovered_foe = None;
     let fx = right.x + (SIDE_W - super::plates::PLATE_W) / 2;
     for (k, entry) in model.foes.iter().enumerate() {
@@ -1216,7 +1233,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // PR7-41 (PT-34): the phase word leads the bar already ("Round 2/8  Round over"), so the message does not repeat it
     let shown_message = without_phase(&shown_message, phase);
     ui.p.text_fit((200 + ox) as f32, 326.0, &shown_message, BODY, room, th().text);
-    ui.push("bar.status", "label", format!("Round {} {phase}: {shown_message}", s.current_round), Rect::new(88 + ox, 325, 540 - ox - chip_w, 12), true, false, None, Vec::new());
+    // PR7-63: a message cut to the bar hovers to the whole of it
+    let status_tip: Tip = if ui.p.text_w(&shown_message, BODY) > room { vec![(shown_message.clone(), th().text)] } else { Vec::new() };
+    ui.push("bar.status", "label", format!("Round {} {phase}: {shown_message}", s.current_round), Rect::new(88 + ox, 325, 540 - ox - chip_w, 12), true, false, None, status_tip);
     if let Some(chip) = chip {
         let cr = Rect::new(W - 6 - (chip_w - 4), 325, chip_w - 4, 14);
         ui.p.panel(cr, th().game("chip", rgba(30, 44, 70, 255)), th().edge, 2.0);
@@ -1584,6 +1603,14 @@ fn impact_tip(t: &Intent, blocks: i32) -> Tip {
 
 /// BATTLE-UI2 contract 2: the strip's hero portrait and the right end of its title column (the blocks start at 92).
 const STRIP_PORTRAIT: i32 = 18;
+
+/// PR7-63 (XL-BATTLE1): the strip's goal line's top and the step to the protect line, for the title's and the small
+/// line's heights: the goal starts where the title's glyphs end (a line's box has room above and below its letters,
+/// about a third of the small line), never above Normal's 11; the step is two thirds of a small line, never under 6.
+pub(super) fn strip_lines(title_h: f32, small_h: f32) -> (i32, i32) {
+    let goal = (3.0 + title_h - small_h / 3.0).ceil() as i32;
+    (goal.max(11), ((small_h * 2.0 / 3.0).ceil() as i32).max(6))
+}
 const TITLE_END: i32 = 88;
 /// The hero panel's room for its Self and Ally buttons alone.
 const HERO_BUTTONS_H: i32 = 15;

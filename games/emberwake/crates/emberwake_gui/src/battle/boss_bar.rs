@@ -282,13 +282,16 @@ pub(super) fn draw_bar(ui: &mut Ui<super::Action>, cx: &mut Cx, (faces, small): 
     }
     let room = (right - name_x - 2) as f32;
     let title = ui.p.fit(&b.name, BODY, room);
-    let used = ui.p.text_face(Typeface::Display, name_x as f32, ty as f32 - 1.0, &title, BODY, boss_gold()).ceil() as i32;
-    ui.push("boss.name", "label", b.name.clone(), Rect::new(name_x, ty - 1, used.max(1), 10), true, false, None, Vec::new());
+    // PR7-63: the painter returns the end x, so the name's width is that less its start
+    let used = (ui.p.text_face(Typeface::Display, name_x as f32, ty as f32 - 1.0, &title, BODY, boss_gold()) - name_x as f32).ceil() as i32;
+    let name_tip: Tip = if title != b.name { vec![(b.name.clone(), boss_gold())] } else { Vec::new() };
+    ui.push("boss.name", "label", b.name.clone(), Rect::new(name_x, ty - 1, used.max(1), 10), true, false, None, name_tip);
     if !b.title.is_empty() && (used as f32) + 20.0 < room {
         let st = ui.p.fit(&b.title, SMALL, room - used as f32 - 6.0);
         ui.p.text((name_x + used + 6) as f32, ty as f32 + 1.0, &st, SMALL, th().dim);
         let sw = ui.p.text_w(&st, SMALL).ceil() as i32 + 1;
-        ui.push("boss.title", "label", b.title.clone(), Rect::new(name_x + used + 6, ty + 1, sw, 8), true, false, None, Vec::new());
+        let title_tip: Tip = if st != b.title { vec![(b.title.clone(), th().dim)] } else { Vec::new() };
+        ui.push("boss.title", "label", b.title.clone(), Rect::new(name_x + used + 6, ty + 1, sw, 8), true, false, None, title_tip);
     }
     // row 2: the phase's span with the planned loss, "160/450" and the loss under it
     let hy = r.y + 16;
@@ -364,8 +367,10 @@ pub(super) fn draw_bar(ui: &mut Ui<super::Action>, cx: &mut Cx, (faces, small): 
         }
         x += 12;
         let nm = ui.p.fit(&bl.name, SMALL, 70.0);
-        let w = ui.p.text(x as f32, py as f32, &nm, SMALL, th().text).ceil() as i32;
-        ui.push("boss.blow", "label", format!("{} block {}: -{}", bl.name, bl.impact, bl.damage), Rect::new(x, py, w.max(1), 8), true, false, None, Vec::new());
+        // PR7-63: the painter returns the end x (the blow's target, pips and loss were pushed off the bar)
+        let w = (ui.p.text(x as f32, py as f32, &nm, SMALL, th().text) - x as f32).ceil() as i32;
+        let blow_tip: Tip = if nm != bl.name { vec![(bl.name.clone(), th().text)] } else { Vec::new() };
+        ui.push("boss.blow", "label", format!("{} block {}: -{}", bl.name, bl.impact, bl.damage), Rect::new(x, py, w.max(1), 8), true, false, None, blow_tip);
         x += w + 4;
         if let Some(l) = bl.target.and_then(|t| looks.get(t)) {
             small.draw(&mut ui.p, cx, &l.0, &l.1, super::TIMELINE_SURFACE, Rect::new(x, py - 1, 9, 9));

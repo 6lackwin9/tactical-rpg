@@ -157,7 +157,10 @@ pub(super) fn tab(ui: &mut Ui<super::Action>, cx: &mut Cx, t: &Tab, r: Rect) {
     let ir = Rect::new(r.x + (r.w - side) / 2, r.y + (r.h - side) / 2, side, side);
     if !icon(ui, cx, &t.icon, ir, if t.planned { 170 } else { 255 }) {
         let letter: String = t.name.chars().take(1).collect();
-        ui.p.text_center(ir.x as f32 + ir.w as f32 / 2.0, ir.y as f32, &letter, SMALL, rim);
+        // PR7-63: a letter taller than its tab sits centred on it (at Extra large), else at the tab's top as before
+        let lh = ui.p.line_h(SMALL);
+        let ly = if lh > r.h as f32 { r.y as f32 + (r.h as f32 - lh) / 2.0 } else { ir.y as f32 };
+        ui.p.text_center(ir.x as f32 + ir.w as f32 / 2.0, ly, &letter, SMALL, rim);
     }
 }
 
