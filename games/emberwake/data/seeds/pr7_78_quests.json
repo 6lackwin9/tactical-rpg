@@ -1,0 +1,100 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "quests",
+      "world": "sunk_ward",
+      "fields": [
+        "rec_level"
+      ],
+      "entry": {
+        "id": "q_a1_corvo",
+        "rec_level": 3
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "quests",
+      "world": "sunk_ward",
+      "fields": [
+        "rec_level"
+      ],
+      "entry": {
+        "id": "q_a1_red_pen",
+        "rec_level": 4
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "quests",
+      "world": "sunk_ward",
+      "fields": [
+        "rec_level"
+      ],
+      "entry": {
+        "id": "q_hook_rubbings",
+        "rec_level": 4
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "quests",
+      "world": "sunk_ward",
+      "fields": [
+        "rec_level"
+      ],
+      "entry": {
+        "id": "q_hook_lock_ciphers",
+        "rec_level": 5
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "quests",
+      "world": "sunk_ward",
+      "fields": [
+        "rec_level"
+      ],
+      "entry": {
+        "id": "q_hook_bellows",
+        "rec_level": 5
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "quests",
+      "world": "sunk_ward",
+      "fields": [
+        "rec_level"
+      ],
+      "entry": {
+        "id": "q_hook_wedges",
+        "rec_level": 6
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "quests",
+      "world": "sunk_ward",
+      "fields": [
+        "rec_level"
+      ],
+      "entry": {
+        "id": "q_hook_counter_still",
+        "rec_level": 6
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "quests",
+      "world": "sunk_ward",
+      "fields": [
+        "rec_level"
+      ],
+      "entry": {
+        "id": "q_hook_overlook",
+        "rec_level": 7
+      }
+    }
+  ]
+}
