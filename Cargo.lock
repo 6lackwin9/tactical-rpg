@@ -1298,6 +1298,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
+name = "kit_sample_game"
+version = "0.1.0"
+dependencies = [
+ "aegis_cli",
+ "aegis_content",
+ "aegis_core",
+ "aegis_host",
+ "aegis_layout",
+ "aegis_ui",
+ "anyhow",
+ "indexmap",
+ "rpgkit_battle",
+ "rpgkit_content",
+ "rpgkit_ui",
+ "rpgkit_world",
+ "serde_json",
+]
+
+[[package]]
 name = "lewton"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

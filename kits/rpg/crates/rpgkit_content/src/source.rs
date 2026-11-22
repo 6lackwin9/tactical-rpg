@@ -1748,9 +1748,11 @@ pub(crate) fn service(e: &Dict) -> Dict {
     template(e, &[("id", s.clone()), ("text", s)])
 }
 
-/// XpCurve.load_file: the file as parsed when it validates, else the defaults.
+/// XpCurve.load_file: the file as parsed when it validates, else the defaults. ENGINE-42 (KIT-SAMPLE1): no file at all
+/// is the defaults with no problem (a kit game need not ship a curve); a file that does not parse or validate is still
+/// a problem.
 fn xp_curve(path: &Path, errors: &mut Vec<String>) -> Dict {
-    let doc = read(path, errors).and_then(|v| v.as_object().cloned());
+    let doc = if aegis_core::vfs::exists(path) { read(path, errors).and_then(|v| v.as_object().cloned()) } else { Some(xp_defaults()) };
     let problems = match &doc {
         None => vec![format!("XP curve file '{}' not found or not valid JSON; using defaults.", path.display())],
         Some(d) => xp_problems(d),
@@ -1759,6 +1761,11 @@ fn xp_curve(path: &Path, errors: &mut Vec<String>) -> Dict {
         return doc.unwrap();
     }
     errors.extend(problems);
+    xp_defaults()
+}
+
+/// The XP curve a game without a valid curve file uses.
+fn xp_defaults() -> Dict {
     let defaults = serde_json::json!({"version": 1, "xp_to_next": [40, 70, 110, 160, 220, 290, 370, 460, 560],
         "kill_xp": {"base": 10, "per_level": 5, "tier_mult": {"minion": 0.5, "standard": 1.0, "elite": 2.0, "boss": 5.0, "hero": 1.0},
         "level_delta_step": 0.15, "level_delta_min": 0.25, "level_delta_max": 2.0}});

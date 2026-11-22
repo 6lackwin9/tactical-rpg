@@ -1,0 +1,77 @@
+{
+	"kind": "classes",
+	"version": 1,
+	"entries": [
+		{
+			"id": "ks_fighter",
+			"name": "Fighter",
+			"description": "Holds the front with a blade.",
+			"art": "warrior",
+			"ai_role": "AGGRESSOR",
+			"base_shares": {
+				"STR": 0.21,
+				"DEX": 0.11,
+				"INT": 0.1,
+				"CONS": 0.27,
+				"PERC": 0.15,
+				"KNOW": 0.16
+			},
+			"growth_shares": {
+				"CONS": 0.4,
+				"STR": 0.4,
+				"PERC": 0.2
+			},
+			"proficiency": {
+				"sword": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
+				}
+			},
+			"skill_path": {},
+			"main_hand": "",
+			"off_hand": "",
+			"head": "",
+			"body": "",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": []
+		},
+		{
+			"id": "ks_shooter",
+			"name": "Shooter",
+			"description": "Quick on its feet; strikes and steps away.",
+			"art": "ranger",
+			"ai_role": "SKIRMISHER",
+			"base_shares": {
+				"STR": 0.13,
+				"DEX": 0.24,
+				"INT": 0.14,
+				"CONS": 0.15,
+				"PERC": 0.23,
+				"KNOW": 0.11
+			},
+			"growth_shares": {
+				"DEX": 0.4,
+				"PERC": 0.2,
+				"STR": 0.2,
+				"CONS": 0.2
+			},
+			"proficiency": {
+				"dagger": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
+				}
+			},
+			"skill_path": {},
+			"main_hand": "",
+			"off_hand": "",
+			"head": "",
+			"body": "",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": []
+		}
+	]
+}

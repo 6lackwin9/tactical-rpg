@@ -26,6 +26,7 @@ from re-deriving the method each time.
 | [screen_layouts.md](screen_layouts.md) | Split a screen into a view, a layout file and the theme; the components, the check and the preview |
 | [theme_and_tiles.md](theme_and_tiles.md) | Add a runtime theme and frames; lay out a set's tiles, faces and transition pieces; the corner mask convention |
 | [region_grounds.md](region_grounds.md) | Give a walkable map several ground types, its walls a height in storeys and its outer edge its own art; points of interest, look-only points among them |
+| [kit_game.md](kit_game.md) | Start a game on the RPG kit from its sample game (`games/kit_sample/`): manifest, crates, content kinds, the least data a fight needs, the fight, the board, the scenario |
 | [battle_stage.md](battle_stage.md) | Dress the tilted battle board: composed ground sheets, stage sets and `stage.fx.json` (zones, spots, lights, lip, decal density), decor and painted unit sheets |
 | [motion_profiles.md](motion_profiles.md) | Give each portrait face its own motion (breath, lean, bob, entry, rest, shiver, blink, flush) as data |
 | [milestones.md](milestones.md) | Plan the build (foundation, feel prototype, slice on data, playtest, depth, balance and art) and measure throughput |

@@ -153,8 +153,47 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-39` (`TARGET-PRUNE1`) | Built (tools lane) | `develop` | `tools/fc.sh prune [target=] [--dry]` keeps only the newest test binary per name in `target/*/deps` and removes the incremental folders; `tools/fc.sh gate` runs it first when under 6 GB is free (`FC_PRUNE_MB`). FB-469 |
 | `ENGINE-40` (`ENGINE-GUIDE2`) | Built (tools lane) | `develop` | `engine/docs/authoring/battle_stage.md` (composed ground, stage sets and `stage.fx.json`, decor, painted sheets); scenario run keys and `shots diff` in `scenarios.md`; `content refs` / `rename` and look-only points; the sample game's field on the engine's ground composer. FB-471 |
 | `ENGINE-41` (`STAGE-KIT1`) | Built (tools lane) | `develop` | The battle stage module (geometry, `stage.fx.json` reader, composed board, decor, wall-run caps, exit path and gate, draw passes) moved to `rpgkit_ui::stage`; the game re-exports it and gives its sizes through `StageSizes`. Fixture hash, goldens and shots unchanged. FB-473 |
+| `ENGINE-42` (`KIT-SAMPLE1`) | Built (tools lane) | `develop` | `games/kit_sample/`: a two-a-side fight from its own catalog on the kit's battle stage (composed floor, one zone, a lit fire pit), engine and kit crates only; scenario in the gate; `engine/docs/authoring/kit_game.md`. FB-475 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-475: ENGINE-42 KIT-SAMPLE1 built; the kit's sample game
+
+- **Status**: built (tools lane), `develop`. New game folder, one kit change (below); Emberwake goldens unchanged.
+- **Spec**: `docs/READY.md` row `ENGINE-42` (`KIT-SAMPLE1`).
+- **What landed** (`games/kit_sample/`, made with `aegis new game kit_sample`, then given the kit):
+  - `game.json` `"kit": "rpg"`, so the kit library is an asset layer. The crate depends on engine and kit crates only.
+    Its CLI uses the kit's content kinds (`RpgContent`).
+  - Data, all through `kit_sample_cli content upsert`: the 5 skills the kit requires plus `strike`, 2 classes
+    (`ks_fighter`, `ks_shooter`), 4 class-derived units, and the encounter `ks_skirmish` (2 a side, zone
+    `stone_arena`, decor `fire_pit` at (6, 0)). `content check` is clean apart from one warning per default terrain.
+  - The fight (`battle.rs`) is the kit's `Session`, each round drafted by `auto_draft(AUTO_PRESET)` and resolved.
+  - The board (`screens.rs` `draw_stage`) draws the kit stage passes: backdrop, composed ground, light, exit gate,
+    face, then props, decor and bodies in feet order. It uses stage set `ks_stage`: `floor/sheet.png` is a 256 x 192
+    crop of the kit library's floorboards, and `stage.fx.json` gives zone `stone_arena` a tint and a light spot and
+    the `fire_pit` a light of radius 3. Bodies and the prop come from the kit library.
+  - Scenario `kit_sample_fight`: menu, Start, board (shot), a round, to the end (shot), back. It passes, and the gate
+    runs it in `scenarios_all` and `shotsexact`. 5 tests: folder and scenarios, the kit's content check and the art
+    found, the fight ending the same way twice, the stage set's zone and light, and the host.
+  - `engine/docs/authoring/kit_game.md` (new): starting a kit game from the sample. Indexed in the authoring README;
+    `battle_stage.md` links to it.
+  - Kit asset `kits/rpg/assets/ui/views/shop.view.json`: the kit library ships the shop layout, so every kit game's
+    layout check wanted a shop fixture. This is the game's fixture with the names made neutral (Coin, The Counter,
+    Traders); the game's own fixture still overrides it.
+- **Kit change**: `rpgkit_content::source::xp_curve`: a missing `progression/xp_curve.json` now means the default
+  curve with no problem. A file that does not parse or validate is still a problem. Before, a kit game without the
+  file failed `content check`, and the file is no content kind, so there was no sanctioned way to write it. Emberwake
+  ships the file, so nothing changes for it.
+- **Findings** (not changed):
+  - The class-reference message reads "unknown classe" (`singular` of `classes`). It is recorded in
+    `checks_golden`, so fixing it needs a re-record.
+  - Terrain rows are all or nothing (one row makes the other 16 required), so a small game keeps the code defaults
+    and gets 17 warnings.
+  - In this fight the party loses at the round limit. The sample shows the loop, not balance.
+- **Shots**: `/mnt/project-files/build-tools/engine-42/` (board and end).
+- **Docs delta**: `STRUCTURE.md`: a `games/kit_sample/` row beside `games/hello/` ("the RPG kit's sample game,
+  ENGINE-42"). `README.md` / `GAME_BRIEF` games list: the same. `engine/README.md`: link `kit_game.md`.
+  `CLAUDE.md` layers line could name `games/kit_sample/` as the kit's sample game, as it does for hello.
 
 ### FB-473: ENGINE-41 STAGE-KIT1 built; the battle stage drawing is the kit's
 

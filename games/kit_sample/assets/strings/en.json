@@ -1,0 +1,8 @@
+{
+  "menu.start": "Start",
+  "menu.quit": "Quit",
+  "board.round": "Round",
+  "board.to_end": "To the end",
+  "board.back": "Back",
+  "board.no_data": "The data folder did not load, or has no ks_skirmish encounter."
+}

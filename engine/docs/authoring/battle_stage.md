@@ -15,6 +15,8 @@ Where each part lives:
 | Decor placement on a generated board | kit | `rpgkit_battle::encounter::generated_decor` |
 | The stage drawing: geometry, the `stage.fx.json` reader, the composed board, decor, wall-run caps, the exit path and gate, the draw passes | kit | `rpgkit_ui::stage` (ENGINE-41); a game gives its sizes through `StageSizes` and runs the passes from its battle screen |
 
+The kit's sample game (`games/kit_sample/`, [kit_game.md](kit_game.md)) draws a fight with all of it in one screen.
+
 Rule one: **the board's `rows` and terrain alone decide the fight.** A sheet, a tint, a decal, a light or a decor
 piece is a picture.
 

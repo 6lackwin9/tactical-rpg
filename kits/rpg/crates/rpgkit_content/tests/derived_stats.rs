@@ -38,7 +38,7 @@ fn row(v: Value) -> Dict {
     normalize(fields(source::schema(), "content", derived::KIND), &dict(v), false)
 }
 
-/// The load problems of the derived-stat file (a scratch folder also lacks the XP curve, which the loader reports).
+/// The load problems of the derived-stat file (other problems of a scratch folder left out).
 fn derived_errors(src: &source::Source) -> Vec<String> {
     src.errors.iter().filter(|e| e.contains("derived_stats.json")).cloned().collect()
 }

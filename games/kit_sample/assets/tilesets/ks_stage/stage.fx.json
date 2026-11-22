@@ -1,0 +1,11 @@
+{
+  "lip": "#70583a",
+  "decal_density": 0.0,
+  "lights": {"fire_pit": {"color": "#ffb060", "radius": 3.0}},
+  "zones": {
+    "stone_arena": {
+      "tint": "#e8dcc8",
+      "spots": [{"at": [0.5, 0.35]}]
+    }
+  }
+}
