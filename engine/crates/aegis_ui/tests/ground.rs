@@ -1016,7 +1016,7 @@ fn the_job_file_composes_the_games_picture() {
         (json!({"cell": [100000, 100000], "cells": ["a"], "legend": {"a": {"colour": [1, 2, 3]}}}), "cell must be"),
         (json!({"cell": [16.9, 16], "cells": ["a"], "legend": {"a": {"colour": [1, 2, 3]}}}), "cell must be"),
         (json!({"cell": [0, 16], "cells": ["a"], "legend": {"a": {"colour": [1, 2, 3]}}}), "cell must be"),
-        (json!({"cell": [33, 16], "cells": ["a"], "legend": {"a": {"colour": [1, 2, 3]}}}), "cell must be"),
+        (json!({"cell": [CELL_MAX + 1, 16], "cells": ["a"], "legend": {"a": {"colour": [1, 2, 3]}}}), "cell must be"),
         (json!({"cells": ["a"], "legend": {"a": {"colour": [300, 2, 3]}}}), "colour must be"),
         (json!({"cells": ["a"], "legend": {"a": {"colour": [1, -5, 3]}}}), "colour must be"),
         (json!({"cells": ["a"], "legend": {"a": {"colour": [1, 2, 1.5]}}}), "colour must be"),

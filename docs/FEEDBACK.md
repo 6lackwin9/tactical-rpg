@@ -132,8 +132,67 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-74` (`DIORAMA4`) | Built (tools lane) | `develop` | Zone stage sets, tint and terrain overrides (`stage.fx.json` keys for Art/UI), the backdrop band under the boss bar, see-through units in front of the focus, the boss-fight foe card off the party; S5 is an art crop. FB-443 |
 | `PR7-75` (`ACT1-FIX1`) | Built (tools lane) | `develop` | The ending's reason in the results and the log, the boss HP hover and the Hostiles count, a fresh seed on a retry, the talk-first message, no sentinel durations, the guest portrait, the portrait key first. FB-445 |
 | `PR7-77` (`DIORAMA5`) slice 0 | Built (tools lane) | `develop` | The content check and the layered-tree test accept ground sheets, accent decals, lip art and the exit path and gate props; R1 to R5 follow. FB-447 |
+| `PR7-77` (`DIORAMA5`) R1 to R5 | Built (tools lane) | `develop` | The battle ground composed by the region composer from the sheets, hashed variant picks, accent decals, lip art, additive lamp light with `lights`, the exit path decal and gate, rubble on the zone floor. FB-449 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-449: PR7-77 DIORAMA5 R1 to R5 built; composed ground, decals, lips, lamp light, exit path and gate
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `00f2` `PR7-77` (`DIORAMA5`), R1 as amended (the region ground composer), R2 to R5;
+  Art/UI's placeholders from PR #94.
+- **What landed**:
+  - Engine (`aegis_ui`): the composer's `CELL_MAX` is 64 (it was 32), so the board composes at the stage art's own 64 x
+    48 a cell; the region map keeps its own cap of 32 (`ground.rs` `REGION_CELL_MAX` in the game), so region maps are
+    unchanged. `Art::pick_hashed` and `art::cell_hash` (a variant from an integer hash of the cell). `Canvas::add` and
+    `Painter::glow` (an additive light pool with a smooth falloff).
+  - (R1) `stage/composed.rs`: when any ground on the board has a `sheet.png` (override folder, then the zone's set,
+    then the world's, then `common_stage`), the board's ground is one composer job: one layer per ground shown, its
+    sheet as the texture (tinted as the zone), the commonest ground lowest and the others over it with worn edges,
+    strays, a quiet tone and patches; sunken terrains keep to their cell edges (`clamp_water`) so the lips fit. A
+    terrain without a sheet gives its first tile as its texture. The job is rebuilt only when the board, sets, zone look
+    or art change; the composer's cache keeps the picture. Without any sheet the tiles draw as before, now picked by
+    `pick_hashed` instead of (7x + 13y) mod n. Then accent decals: `<terrain>/decal/v*` on ground cells where
+    `cell_hash` falls under `decal_density` (default 10 percent, 35 percent beside a block or a prop; the zone's
+    `decal_density` over the file's). Transition pieces still draw over the result.
+  - (R2) a sunken cell's lip from `lip/<terrain>/v*` (an override `<set>/<name>` reads `<set>/lip/<name>`, then the
+    zone's set, then the world's), cut from its top to the band; the flat fill stays the fallback.
+  - (R3) the lantern pools are additive glows at 150 at the centre (about twice the old rings); with any light the board
+    darkens a little (`DARKEN`, alpha 34) so the pools read. New `stage.fx.json` key `lights`, top level or per zone
+    (the zone's over the file's): `{"cover/v3": {"color": "#ffb060", "radius": 1.5}}`, a prop's `"<prop>/v1"` or bare
+    `"<prop>"`; a matching cover or prop casts a pool on its cell and its neighbours (`stage::lamps`). Radius past 4
+    cells is ignored.
+  - (R4) Stage view, plain exits only (a hold escape's SHUT and OPEN signs stay): the `exit_path` decal on each exit
+    cell at 60 percent with a faint 2.4 s pulse (static under Reduce motion), 92 percent when hovered or when an active
+    hero stands one step from it; mirrored on a west exit, since the chevrons point east. The yellow plate and the ">"
+    sign are gone where the art exists. An `exit_gate` stands beyond each run of exits on the top edge (on the
+    backdrop's foot) and on the side edges (in the wing by the run's lowest cell); none on the bottom (no room under
+    the front face).
+  - (R5) rubble in a zone whose set has no `rubble` draws the zone set's floor (before the world's rubble).
+  - Tools: `fc.sh shots diff` no longer marks a failed base run done in its cache (a full disk had cached an empty
+    base, so every shot came out "new").
+- **Golden**: the `stage.rs` fixture frame hash `TODAYS_FRAME` is re-recorded (`0x2a5309c84d603849` to
+  `0xffa27f50b69d7596`) for the one intended change: the fixture's two grass variants are picked by the cell's hash
+  (R1 c). HISTORY row: "PR7-77 (DIORAMA5 R1): the stage's tile variants are picked by an integer hash of the cell;
+  the (7x + 13y) mod n lattice read as an alternating pattern (user 2026-11-22)".
+- **Changed shots** (`fc.sh shots diff scenarios=diorama_zones,diorama_stage,boss_bar`, base `3c3873a9`): all 7
+  changed; the floors are continuous with ragged joins, the window pools read, the exits show the path and gate.
+  Sheet and shots: `/mnt/project-files/build-tools/pr7-77/`.
+- **For Art/UI**: no `stage.fx.json` has `lights` yet, so no lamp casts a pool today; add e.g. `"lights":
+  {"cover/v3": {"color": "#ffb060", "radius": 1.5}}` to the sets with a lamp post cover. The exit gate is drawn at
+  32 x 36 logical (64 x 72 art). The decal and path have no north or south variant, so a top or bottom exit shows the
+  east chevrons; a `v1` turned that way could be added later.
+- **Guesses** (`[PROVISIONAL]`): (1) "a unit can step there" is an active hero one step away; (2) gates on the top and
+  side edges only; (3) the darkening shows only when the set has spots or lamps; (4) the layer numbers (wear 0.12,
+  tone 0.06, patches 0.12) are the region look, quieter; (5) the glow is a true add (no new blend mode for the board
+  otherwise).
+- **Tests**: `stage.rs`: `the_variant_pick_scatters_with_no_lattice`, `the_sheet_and_the_rubble_ground_follow_the_zone`,
+  `a_ground_sheet_composes_one_continuous_floor`, `decals_fall_by_the_hash_density_and_gather_near_things`,
+  `a_sunken_lip_draws_its_art_before_the_fill`, `a_lamp_prop_casts_its_pool`, `the_exit_reads_as_a_path_and_a_gate`;
+  the lantern test updated for the darkening.
+- **Docs delta**: `engine/README.md` (`aegis_ui`): `ground::CELL_MAX` 64; `Art::pick_hashed`, `art::cell_hash`;
+  `Canvas::add`, `Painter::glow`. SCREEN_CONTRACT_BATTLE 8.1 (or the diorama spec): the composed ground, decals,
+  `decal_density`, `lights`, lip art, exit path and gate. STRUCTURE: `emberwake_gui/src/stage/composed.rs`.
 
 ### FB-447: PR7-77 DIORAMA5 slice 0 built; the new diorama art paths are accepted
 

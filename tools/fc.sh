@@ -571,8 +571,14 @@ shots_diff() {  # PR7-72 (SHOT-DIFF1): the scenarios a change can show, on HEAD'
       [ -f "$cache/.done/$id" ] && continue
       [ -f "$wt/games/emberwake/scenarios/$id.json" ] || { echo "[shots diff] base: no scenario $id"; continue; }
       tmp=$(mktemp -d)
-      (cd "$wt" && CARGO_TARGET_DIR="$td" tools/fc.sh scenario "$id" out="$tmp" > "$tmp.log" 2>&1) || echo "[shots diff] base: $id failed (its shots so far are kept; log $tmp.log)"
-      "$py" tools/planner/shots_diff.py add "$tmp" "$cache" > /dev/null && mkdir -p "$cache/.done" && touch "$cache/.done/$id"
+      # PR7-77: a failed base run (a build error, a full disk) is not marked done, so the next diff runs it again
+      # instead of comparing against an empty base
+      if (cd "$wt" && CARGO_TARGET_DIR="$td" tools/fc.sh scenario "$id" out="$tmp" > "$tmp.log" 2>&1); then
+        "$py" tools/planner/shots_diff.py add "$tmp" "$cache" > /dev/null && mkdir -p "$cache/.done" && touch "$cache/.done/$id"
+      else
+        echo "[shots diff] base: $id failed (its shots so far are kept, not cached; log $tmp.log)"
+        "$py" tools/planner/shots_diff.py add "$tmp" "$cache" > /dev/null
+      fi
       rm -rf "$tmp"
     done
     git worktree remove --force "$wt"

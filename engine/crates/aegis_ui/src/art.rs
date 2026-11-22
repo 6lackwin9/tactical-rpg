@@ -410,6 +410,13 @@ impl Art {
         Some(format!("{dir}/v{v}.png"))
     }
 
+    /// DIORAMA5 R1 (PR7-77): `pick` with the variant from an integer hash of (x, y) (`ground::splitmix64`), so the
+    /// variants scatter with no lattice, unlike the linear (x x 7 + y x 13) mod n. None: no folder has a `v0.png`.
+    pub fn pick_hashed(&mut self, dirs: &[&str], x: i32, y: i32) -> Option<String> {
+        let (dir, n) = dirs.iter().map(|d| (*d, self.variants(d))).find(|(_, n)| *n > 0)?;
+        Some(format!("{dir}/v{}.png", cell_hash(x, y, 0) % n as u64))
+    }
+
     /// The image of `pick` (`dirs`, `variant`, `x`, `y`) downsampled to `w` x `h`.
     pub fn varied(&mut self, dirs: &[&str], variant: Option<u32>, x: i32, y: i32, w: i32, h: i32) -> Option<&Image> {
         let rel = self.pick(dirs, variant, x, y)?;
@@ -424,6 +431,12 @@ impl Art {
         self.varied(&dirs, None, x, y, size, size)
     }
 
+}
+
+/// DIORAMA5 R1: a cell's hash for scatter picks, stream `salt` (one per use, so two picks on one cell are apart): a
+/// pure function of its input.
+pub fn cell_hash(x: i32, y: i32, salt: u64) -> u64 {
+    crate::ground::splitmix64(((x as u32 as u64) << 32 | y as u32 as u64) ^ salt.wrapping_mul(0x9e37_79b9_7f4a_7c15))
 }
 
 /// A PNG's width and height from its header (None: not a readable PNG).

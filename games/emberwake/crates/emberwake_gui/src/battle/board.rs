@@ -702,7 +702,13 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                 stage::draw_ground(&mut ui.p, &mut cx.art, &w.grid, zset, grid_alpha);
                 // DIORAMA3 R3: the lanterns' pools and the vignette, under the marks and the units
                 let spots = stage::light_spots(&mut cx.art, set, &s.def.zone);
-                stage::draw_light(&mut ui.p, &spots);
+                // DIORAMA5 R3: and the lamps among the cover and props (`stage.fx.json` `lights`)
+                let lamps = stage::lamps(&mut cx.art, &w.grid, zset);
+                stage::draw_light(&mut ui.p, &spots, &lamps);
+                // DIORAMA5 R4: a plain exit's gate beyond the board's edge
+                if exit_sign(hold).0 == "EXIT" {
+                    stage::draw_exit_gates(&mut ui.p, &mut cx.art, &w.grid.exits);
+                }
             }
             Pass::Markers => {
                 // HOOKS1-UI slice 1: the ground hazards and the arena's struck cells, under the hover and the tells
@@ -743,9 +749,16 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                         }
                     }
                 }
-                // ENCOUNTER2 H7: a hold escape's shut gate plates its exits red (layer `gate`)
-                let (_, fill, edge) = exit_sign(hold);
+                // ENCOUNTER2 H7: a hold escape's shut gate plates its exits red (layer `gate`). DIORAMA5 R4: a plain exit is
+                // the worn path decal at about 60 percent with a faint pulse, bright when hovered or a hero stands one step
+                // from it (the plate stays without the art)
+                let (word, fill, edge) = exit_sign(hold);
                 for c in w.grid.exits.iter().filter(|c| w.grid.is_valid(**c)) {
+                    let near = w.allies.iter().any(|a| w.units[*a].is_active() && w.grid.pos(*a).is_some_and(|p| (p.x - c.x).abs() + (p.y - c.y).abs() == 1));
+                    let bright = hover_cell == Some(*c) || near;
+                    if word == "EXIT" && stage::draw_exit_path(&mut ui.p, &mut cx.art, *c, stage::exit_alpha(anim_now, reduce, bright)) {
+                        continue;
+                    }
                     plate(&mut ui.p, inset2(geo.cell_rect(*c), 3, 2), with_alpha(fill, 90), with_alpha(edge, 200));
                 }
             }
@@ -936,6 +949,10 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     let sign = Rect::new(cx_ - 11, cy_ - 2 - 5, 22, 9);
                     // ENCOUNTER2 H7: a hold escape's exit reads SHUT or OPEN (layer `gate`)
                     let (word, fill, edge) = exit_sign(hold);
+                    // DIORAMA5 R4: a plain exit with path art has no sign (the decal and the gate say it)
+                    if word == "EXIT" && stage::exit_path_art(&mut cx.art, c.x, c.y).is_some() {
+                        continue;
+                    }
                     ui.p.panel(sign, fill, edge, 2.0);
                     ui.p.text_center(cx_ as f32, sign.y as f32 + (sign.h as f32 - ui.p.line_h(SMALL)) / 2.0, exit_glyph(word), SMALL, th().bg);
                 }

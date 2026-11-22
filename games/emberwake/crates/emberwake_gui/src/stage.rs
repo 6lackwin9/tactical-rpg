@@ -22,6 +22,12 @@ use emberwake_content::art::{battle_backdrop, battle_prop_dirs, battle_stage_dir
 use emberwake_data::ZoneDef;
 use serde_json::Value;
 
+mod composed;
+pub use composed::terrain_dirs;
+
+/// DIORAMA5 R5: the terrain whose zone-set ground falls back to the zone's floor.
+pub const RUBBLE: &str = "rubble";
+
 /// The grid panel's interior (every stage pass is clipped to it).
 pub const INTERIOR: Rect = Rect::new(128, 30, 384, 288);
 /// The zone backdrop over the board's far edge.
@@ -385,7 +391,24 @@ pub struct ZoneLook {
     pub tint: Option<Rgba>,
     /// (terrain id, folder under the assets, its tint)
     pub terrain: Vec<(String, String, Option<Rgba>)>,
+    /// DIORAMA5 R1: the decal share of a ground cell (`decal_density`, the zone's else the file's; None: `DECAL_DENSITY`).
+    pub decal_density: Option<f32>,
+    /// DIORAMA5 R3: the lights of cover and prop art (`lights`: art key, colour, radius in cells; the zone's over the
+    /// file's).
+    pub lights: Vec<Light>,
 }
+
+/// DIORAMA5 R3: a light a cover or prop art casts: its art key (`cover/v3`, a prop's `<prop>/v1`, or a bare `<prop>`
+/// for every variant), its colour and its radius in cells.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Light {
+    pub key: String,
+    pub color: Rgba,
+    pub radius: f32,
+}
+
+/// The most a light's radius reaches, in cells.
+pub const LIGHT_RADIUS_MAX: f32 = 4.0;
 
 impl ZoneLook {
     /// The zone's own stage set, when it names one other than the world's `world` (read first, the world's after).
@@ -435,13 +458,24 @@ pub fn zone_look_of(fx: &Value, world: &str, zone: &str) -> ZoneLook {
                 .collect()
         })
         .unwrap_or_default();
-    ZoneLook { set, tint: hex(&z["tint"]), terrain }
+    let density = |v: &Value| v.as_f64().filter(|d| (0.0..=1.0).contains(d)).map(|d| d as f32);
+    let decal_density = density(&z["decal_density"]).or_else(|| density(&fx["decal_density"]));
+    let mut lights: Vec<Light> = Vec::new();
+    for list in [&fx["lights"], &z["lights"]] {
+        for (key, v) in list.as_object().into_iter().flatten() {
+            let (Some(color), Some(radius)) = (v["color"].as_str().and_then(rpgkit_ui::vignette::hex), v["radius"].as_f64().map(|r| r as f32).filter(|r| *r > 0.0 && *r <= LIGHT_RADIUS_MAX)) else { continue };
+            lights.retain(|l| l.key != *key);
+            lights.push(Light { key: key.clone(), color, radius });
+        }
+    }
+    ZoneLook { set, tint: hex(&z["tint"]), terrain, decal_density, lights }
 }
 
 /// DIORAMA4 S1: `zone_look_of` over world set `set`'s `stage.fx.json` (none: the default look), read once per set and
 /// zone.
 pub fn zone_look(art: &mut Art, set: &str, zone: &str) -> ZoneLook {
-    if set.is_empty() || zone.is_empty() {
+    // DIORAMA5: a fight with no zone still reads the file's own keys (decals, lights)
+    if set.is_empty() {
         return ZoneLook::default();
     }
     thread_local! {
@@ -458,8 +492,11 @@ pub fn zone_look(art: &mut Art, set: &str, zone: &str) -> ZoneLook {
 
 /// DIORAMA4 S1, S2: `tile_art` with zone look `look`: a terrain override's folder first, then the zone's set, then the
 /// world's `set` (and `common_stage`, the flat tiles).
+/// DIORAMA5 R1: the variant by an integer hash of the cell (`Art::pick_hashed`), so variants scatter instead of
+/// alternating; R5: a zone set without `rubble` shows its floor under rubble.
 pub fn zone_tile_art(art: &mut Art, id: &str, set: &str, look: &ZoneLook, x: i32, y: i32) -> TileArt {
-    if let Some(rel) = look.terrain(id).and_then(|(f, _)| art.pick(&[f], None, x, y)).or_else(|| look.pick(art, set, id, x, y)) {
+    let dirs = terrain_dirs(art, id, set, look);
+    if let Some(rel) = art.pick_hashed(&dirs_ref(&dirs), x, y) {
         return TileArt::Stage(rel);
     }
     tile_art(art, id, set, x, y)
@@ -486,11 +523,11 @@ fn put(p: &mut Painter, img: &Image, r: Rect, tint: Option<Rgba>) {
 
 /// 3.2.1: terrain `id`'s tile on cell (x, y), varied by position (LOOK1 5.4: `set`, the world's stage set, first).
 pub fn tile_art(art: &mut Art, id: &str, set: &str, x: i32, y: i32) -> TileArt {
-    if let Some(rel) = art.pick(&dirs_ref(&battle_stage_dirs(id, set)), None, x, y) {
+    if let Some(rel) = art.pick_hashed(&dirs_ref(&battle_stage_dirs(id, set)), x, y) {
         return TileArt::Stage(rel);
     }
     let common: Vec<String> = BATTLE_SETS.iter().map(|s| format!("tilesets/{s}/{id}")).collect();
-    match art.pick(&dirs_ref(&common), None, x, y) {
+    match art.pick_hashed(&dirs_ref(&common), x, y) {
         Some(rel) => TileArt::Common(rel),
         None => TileArt::Colour,
     }
@@ -682,14 +719,19 @@ fn draw_pieces(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, look: &Zo
 
 /// Pass 2: every cell's ground tile (a standing cell with prop art the ground under it, without art the flat tile),
 /// the stage set's transition pieces, the lips of sunken cells, the ground props and the grid lines at `grid_alpha`.
+/// DIORAMA5 R1: with a ground sheet on the board the ground is composed (`composed::draw`), else the tiles as before;
+/// then the accent decals. R2: a lip from art (`lip_art`) before the flat fill.
 pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), grid_alpha: u8) {
-    for y in 0..GRID_H {
-        for x in 0..GRID_W {
-            let c = V2::new(x, y);
-            let shown = tile_shown(art, grid, c);
-            draw_tile(p, art, grid, shown, (set, look), c, stage_cell(c));
+    if !composed::draw(p, art, grid, set, look) {
+        for y in 0..GRID_H {
+            for x in 0..GRID_W {
+                let c = V2::new(x, y);
+                let shown = tile_shown(art, grid, c);
+                draw_tile(p, art, grid, shown, (set, look), c, stage_cell(c));
+            }
         }
     }
+    composed::draw_decals(p, art, grid, set, look);
     draw_pieces(p, art, grid, set, look);
     draw_wall_foot(p, art, grid, set, look);
     for y in 0..GRID_H {
@@ -697,7 +739,12 @@ pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&s
             let c = V2::new(x, y);
             let r = stage_cell(c);
             let (band, bottom) = lips(grid, c);
-            if band > 0 {
+            let t = grid.terrain_id(c);
+            let lip = (band > 0).then(|| lip_art(art, t, set, look, x, y, band)).flatten();
+            if let Some(img) = lip.as_ref() {
+                put(p, img, Rect::new(r.x, r.y, r.w, band), look.tint_of(t));
+                p.fill(Rect::new(r.x, r.y + band, r.w, 1), rgba(60, 40, 26, 110));
+            } else if band > 0 {
                 p.fill(Rect::new(r.x, r.y, r.w, 1), rgb(118, 116, 62));
                 if band > 1 {
                     p.fill(Rect::new(r.x, r.y + 1, r.w, band - 1), rgb(66, 54, 30));
@@ -724,6 +771,35 @@ pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&s
     for k in 0..=GRID_W {
         p.fill(Rect::new(BOARD_X + k * CELL_W, BOARD_Y, 1, GRID_H * CELL_H), line);
     }
+}
+
+/// DIORAMA5 R2: the folders of sunken terrain `id`'s lip art: its override folder's (`<set>/<name>` reads
+/// `<set>/lip/<name>`), the zone set's and the world set's `lip/<id>`.
+pub fn lip_dirs(id: &str, set: &str, look: &ZoneLook) -> Vec<String> {
+    let mut dirs = Vec::new();
+    if let Some((f, _)) = look.terrain(id) {
+        if let Some((base, name)) = f.rsplit_once('/') {
+            dirs.push(format!("{base}/lip/{name}"));
+        }
+    }
+    if let Some(z) = look.zone_set(set) {
+        dirs.push(format!("tilesets/{z}/lip/{id}"));
+    }
+    if !set.is_empty() {
+        dirs.push(format!("tilesets/{set}/lip/{id}"));
+    }
+    dirs
+}
+
+/// DIORAMA5 R2: cell (x, y)'s lip art for sunken terrain `id` under a band `band` logical px high: a `lip_dirs` file
+/// picked by the cell's hash, at the set's art px (64 wide), cut from its top to the band's art rows (all of it when it
+/// is shorter); None: no file (the flat fill).
+pub fn lip_art(art: &mut Art, id: &str, set: &str, look: &ZoneLook, x: i32, y: i32, band: i32) -> Option<Image> {
+    let dirs = lip_dirs(id, set, look);
+    let rel = art.pick_hashed(&dirs_ref(&dirs), x, y)?;
+    let (_, fh) = art.size_of(&rel)?;
+    let img = art.image(&rel, CELL_W * SET_ART_PX, fh)?;
+    Some(img.crop(0, 0, img.w, (band * SET_ART_PX).clamp(1, img.h.max(1))))
 }
 
 /// Pass 5 (props): the contact shadow under each standing prop that has art.
@@ -842,6 +918,59 @@ pub fn cover_art(art: &mut Art, grid: &Grid, set: &str, c: V2) -> Option<String>
     art.pick(&[&format!("tilesets/{set}/cover")], None, c.x, c.y)
 }
 
+/// The cover prop block `c` shows in this zone: the zone set's `cover` first (DIORAMA4 S1), else `cover_art`.
+pub fn shown_cover(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), c: V2) -> Option<String> {
+    let zone_cover = look.zone_set(set).filter(|_| is_block(grid, c) && !outer_wall(grid, c)).and_then(|_| look.pick(art, set, "cover", c.x, c.y));
+    zone_cover.or_else(|| cover_art(art, grid, set, c))
+}
+
+/// DIORAMA5 R3: an art file's light keys: a cover's `cover/v3` (the part after its set), a prop's `<prop>/v1` and its
+/// bare `<prop>`.
+pub fn light_keys(rel: &str) -> Vec<String> {
+    let stem = rel.strip_suffix(".png").unwrap_or(rel);
+    let parts: Vec<&str> = stem.split('/').collect();
+    match parts[..] {
+        ["tilesets", _, kind, v] => vec![format!("{kind}/{v}"), kind.to_string()],
+        ["props", _, prop, v] => vec![format!("{prop}/{v}"), prop.to_string()],
+        _ => Vec::new(),
+    }
+}
+
+/// DIORAMA5 R3: a lamp on the board: the floor point its pool centres on (logical px), its colour and radius (cells).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Lamp {
+    pub x: f32,
+    pub y: f32,
+    pub color: Rgba,
+    pub radius: f32,
+}
+
+/// DIORAMA5 R3: the lamps of this board: each cover prop and prop whose art key the zone's `lights` names, its pool on
+/// its own cell's centre (a lamp lights its cell and its neighbours at a radius of about 1.5).
+pub fn lamps(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook)) -> Vec<Lamp> {
+    let mut out = Vec::new();
+    if look.lights.is_empty() {
+        return out;
+    }
+    for y in 0..GRID_H {
+        for x in 0..GRID_W {
+            let c = V2::new(x, y);
+            let row = stage_of(grid, grid.terrain_id(c));
+            let rel = match row.kind {
+                Kind::Block => shown_cover(art, grid, (set, look), c),
+                _ => row.prop.and_then(|prop| prop_art(art, prop, x, y)).map(|(rel, _)| rel),
+            };
+            let Some(rel) = rel else { continue };
+            let keys = light_keys(&rel);
+            if let Some(l) = keys.iter().find_map(|k| look.lights.iter().find(|l| l.key == *k)) {
+                let r = stage_cell(c);
+                out.push(Lamp { x: r.x as f32 + r.w as f32 / 2.0, y: r.y as f32 + r.h as f32 / 2.0, color: l.color, radius: l.radius });
+            }
+        }
+    }
+    out
+}
+
 /// DIORAMA3 R3: the light spots of stage set `set` for battle zone `zone` from its `stage.fx.json`: `zones.<zone>.spots`
 /// first, else the top-level `spots`; each `at` is [u, v], fractions of the backdrop. Read once per set and zone.
 pub fn light_spots(art: &mut Art, set: &str, zone: &str) -> Vec<(f32, f32)> {
@@ -868,21 +997,30 @@ pub fn light_spots(art: &mut Art, set: &str, zone: &str) -> Vec<(f32, f32)> {
 
 /// DIORAMA3 R3: the amber of a lantern's pool.
 pub const POOL: Rgba = rgb(255, 170, 80);
-/// The pool's half sizes on the floor (logical px) and its rings (alpha each; the centre gathers them).
+/// The pool's half sizes on the floor (logical px).
 pub const POOL_RX: f32 = 46.0;
 pub const POOL_RY: f32 = 18.0;
-const POOL_RINGS: [(f32, u8); 10] = [(1.0, 5), (0.9, 6), (0.8, 6), (0.7, 7), (0.6, 7), (0.5, 8), (0.4, 8), (0.3, 9), (0.2, 9), (0.12, 10)];
+/// DIORAMA5 R3: a pool's strength at its centre, added to the floor (about twice the old rings' 75, which blended over
+/// it), and the board's mild darkening while any light shows, so the pools read.
+pub const POOL_PEAK: u8 = 150;
+pub const LAMP_PEAK: u8 = 130;
+pub const DARKEN: Rgba = rgba(8, 10, 22, 34);
 
-/// DIORAMA3 R3: the light pass after the ground: an amber pool on the floor below each lantern spot (centred on its
-/// `u`, on row 0 and into row 1), then a soft vignette at the stage's edges. Static (no flicker), so it stays on under
+/// DIORAMA3 R3, DIORAMA5 R3: the light pass after the ground: with any light, the board darkened a little; a warm
+/// additive pool on the floor below each lantern spot (centred on its `u`, on row 0 and into row 1) and on each lamp's
+/// cell and neighbours (`lamps`); then a soft vignette at the stage's edges. Static (no flicker), so it stays on under
 /// Reduce motion.
-pub fn draw_light(p: &mut Painter, spots: &[(f32, f32)]) {
+pub fn draw_light(p: &mut Painter, spots: &[(f32, f32)], lamps: &[Lamp]) {
+    if !spots.is_empty() || !lamps.is_empty() {
+        p.fill(BOARD, DARKEN);
+    }
     for &(u, _) in spots {
         let cx = BACKDROP.x as f32 + u * BACKDROP.w as f32;
         let cy = BOARD_Y as f32 + CELL_H as f32 * 0.7;
-        for (k, a) in POOL_RINGS {
-            p.ellipse(cx, cy, POOL_RX * k, POOL_RY * k, rgba(POOL[0], POOL[1], POOL[2], a));
-        }
+        p.glow(cx, cy, POOL_RX, POOL_RY, rgba(POOL[0], POOL[1], POOL[2], POOL_PEAK));
+    }
+    for l in lamps {
+        p.glow(l.x, l.y, l.radius * CELL_W as f32, l.radius * CELL_H as f32, rgba(l.color[0], l.color[1], l.color[2], LAMP_PEAK));
     }
     let clip = STAGE_CLIP;
     for k in 0..VIGNETTE_PX {
@@ -892,6 +1030,103 @@ pub fn draw_light(p: &mut Painter, spots: &[(f32, f32)]) {
         p.fill(Rect::new(clip.x, FRONT_FACE.y - 1 - k, clip.w, 1), col);
         p.fill(Rect::new(INTERIOR.x + k, BOARD_Y, 1, FRONT_FACE.y - BOARD_Y), col);
         p.fill(Rect::new(INTERIOR.x + INTERIOR.w - 1 - k, BOARD_Y, 1, FRONT_FACE.y - BOARD_Y), col);
+    }
+}
+
+// ---- DIORAMA5 R4: the exit marker -----------------------------------------------------------------------------------
+
+/// The exit path decal's alpha at rest (about 60 percent), its pulse's depth and period, and its alpha when bright
+/// (hovered, or a hero one step from it).
+pub const EXIT_ALPHA: u8 = 153;
+pub const EXIT_PULSE: f32 = 0.15;
+pub const EXIT_PULSE_MS: u64 = 2400;
+pub const EXIT_BRIGHT: u8 = 235;
+/// The exit gate's size on the stage (logical px; its art at the set's art px is 64 x 72).
+pub const GATE_W: i32 = 32;
+pub const GATE_H: i32 = 36;
+
+/// R4: the exit path decal on cell (x, y) (`props/<set>/exit_path/v*`, the battle prop sets, picked by the cell's hash).
+pub fn exit_path_art(art: &mut Art, x: i32, y: i32) -> Option<String> {
+    art.pick_hashed(&dirs_ref(&battle_prop_dirs("exit_path")), x, y)
+}
+
+/// R4: the exit gate's art (`props/<set>/exit_gate/v*`, the first variant).
+pub fn exit_gate_art(art: &mut Art) -> Option<String> {
+    art.pick(&dirs_ref(&battle_prop_dirs("exit_gate")), Some(0), 0, 0)
+}
+
+/// R4: the path decal's alpha at `now` ms: `EXIT_BRIGHT` when bright, else `EXIT_ALPHA` with a slow faint pulse (a sine
+/// of `EXIT_PULSE_MS`, `EXIT_PULSE` deep), static under Reduce motion.
+pub fn exit_alpha(now: u64, reduce: bool, bright: bool) -> u8 {
+    if bright {
+        return EXIT_BRIGHT;
+    }
+    if reduce {
+        return EXIT_ALPHA;
+    }
+    let t = (now % EXIT_PULSE_MS) as f32 / EXIT_PULSE_MS as f32;
+    let k = 1.0 - EXIT_PULSE * 0.5 * (1.0 - (t * std::f32::consts::TAU).cos());
+    (EXIT_ALPHA as f32 * k).round() as u8
+}
+
+/// R4: draws the path decal on exit cell `c` at `alpha` (mirrored on a west exit, since the art points east); false
+/// when there is no art (the caller keeps its sign).
+pub fn draw_exit_path(p: &mut Painter, art: &mut Art, c: V2, alpha: u8) -> bool {
+    let Some(rel) = exit_path_art(art, c.x, c.y) else { return false };
+    // the art's chevrons point east: a west exit (column 0) mirrors them
+    let (w, h) = (CELL_W * SET_ART_PX, CELL_H * SET_ART_PX);
+    let img = if c.x == 0 { art.image_mirrored(&rel, w, h) } else { art.image(&rel, w, h) };
+    match img {
+        Some(img) => {
+            p.image_alpha(img, stage_cell(c), alpha);
+            true
+        }
+        None => false,
+    }
+}
+
+/// R4: where the exit gates stand: one per run of exit cells along the board's top, left or right edge (the bottom has
+/// no room under the front face), standing beyond the run's middle cell (top: on the backdrop's foot over it; a side:
+/// in the wing beside its lowest cell). `exits` are the board's exit cells.
+pub fn exit_gates(exits: &[V2]) -> Vec<Rect> {
+    let on = |c: V2| exits.contains(&c);
+    let mut out = Vec::new();
+    let mut runs = |cells: Vec<V2>, gate: &dyn Fn(&[V2]) -> Rect| {
+        let mut run: Vec<V2> = Vec::new();
+        for c in cells {
+            if on(c) {
+                run.push(c);
+            } else if !run.is_empty() {
+                out.push(gate(&run));
+                run.clear();
+            }
+        }
+        if !run.is_empty() {
+            out.push(gate(&run));
+        }
+    };
+    runs((0..GRID_W).map(|x| V2::new(x, 0)).collect(), &|run: &[V2]| {
+        let (a, b) = (stage_cell(run[0]), stage_cell(run[run.len() - 1]));
+        let mid = (a.x + b.x + b.w) / 2;
+        Rect::new(mid - GATE_W / 2, BOARD_Y + 4 - GATE_H, GATE_W, GATE_H)
+    });
+    for (x, gx) in [(0, BOARD_X - GATE_W + 2), (GRID_W - 1, BOARD_X + GRID_W * CELL_W - 2)] {
+        runs((1..GRID_H).map(|y| V2::new(x, y)).collect(), &|run: &[V2]| {
+            let low = stage_cell(run[run.len() - 1]);
+            Rect::new(gx, low.y + low.h - GATE_H, GATE_W, GATE_H)
+        });
+    }
+    out
+}
+
+/// R4: draws the gates of `exit_gates` (none without art).
+pub fn draw_exit_gates(p: &mut Painter, art: &mut Art, exits: &[V2]) {
+    let Some(rel) = exit_gate_art(art) else { return };
+    let gates = exit_gates(exits);
+    if let Some(img) = art.image(&rel, GATE_W * SET_ART_PX, GATE_H * SET_ART_PX) {
+        for r in gates {
+            p.image(img, r);
+        }
     }
 }
 
@@ -993,8 +1228,7 @@ fn draw_block_in(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str
     let t = grid.terrain_id(c);
     let tint = look.tint_of(t);
     // DIORAMA3 R5: a block inside the arena stands as the stage set's cover prop (display only), feet on its bottom edge
-    let zone_cover = look.zone_set(set).filter(|_| is_block(grid, c) && !outer_wall(grid, c)).and_then(|_| look.pick(art, set, "cover", c.x, c.y));
-    if let Some(img) = zone_cover.or_else(|| cover_art(art, grid, set, c)).and_then(|rel| stage_image(art, &rel, (set, look), CELL_W, COVER_H)) {
+    if let Some(img) = shown_cover(art, grid, (set, look), c).and_then(|rel| stage_image(art, &rel, (set, look), CELL_W, COVER_H)) {
         put(p, img, Rect::new(r.x, r.y + r.h - COVER_H, CELL_W, COVER_H), tint);
         if c.y + 1 < GRID_H {
             p.fill(Rect::new(r.x, r.y + r.h, r.w, 3), rgba(0, 0, 0, 70));
@@ -1791,8 +2025,9 @@ pub(crate) mod tests {
     const ZONES: [&str; 5] = ["forest_clearing", "lava_cavern", "river_crossing", "frozen_pass", "stone_arena"];
     /// The fixture layer's frame over `ZONES` before LOOK1-L1 (printed on the code before the change); re-recorded for
     /// DIORAMA4 S1 (PR7-74), the one intended change: a row-0 wall's cap is clipped at the board's top edge (0xe6c3440ef5f1669f
-    /// before).
-    const TODAYS_FRAME: u64 = 0x2a5309c84d603849;
+    /// before); re-recorded for DIORAMA5 R1 (PR7-77), the one intended change: the fixture's two grass variants are
+    /// picked by the cell's hash instead of the (7x + 13y) mod n lattice (0x2a5309c84d603849 before).
+    const TODAYS_FRAME: u64 = 0xffa27f50b69d7596;
 
     /// An empty `stage_set` draws today's frame; so does a set no layer holds, and a `stage_set` draws its own.
     #[test]
@@ -1961,13 +2196,14 @@ pub(crate) mod tests {
         let blank = g.canvas.px.clone();
         let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
         p.clip(Some(STAGE_CLIP));
-        draw_light(&mut p, &[(0.25, 0.3)]);
+        draw_light(&mut p, &[(0.25, 0.3)], &[]);
         let at = |px: &[u8], x: i32, y: i32| px[((y * 640 + x) * 4) as usize..((y * 640 + x) * 4 + 3) as usize].to_vec();
         let (cx, cy) = (BACKDROP.x + BACKDROP.w / 4, BOARD_Y + CELL_H * 7 / 10);
         let lit = at(&g.canvas.px, cx, cy);
         assert!(lit[0] > lit[2] && lit != at(&blank, cx, cy), "amber under the lantern: {lit:?}");
         let far = BACKDROP.x + BACKDROP.w * 3 / 4;
-        assert_eq!(at(&g.canvas.px, far, cy + 40), at(&blank, far, cy + 40), "no light far from it (inside the vignette's margin)");
+        // DIORAMA5 R3: far from it only the board's mild darkening (black stays all but black)
+        assert!(at(&g.canvas.px, far, cy + 40).iter().zip(at(&blank, far, cy + 40)).all(|(a, b)| *a <= b.saturating_add(3)), "no light far from it (inside the vignette's margin)");
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -2043,7 +2279,7 @@ pub(crate) mod tests {
         let look = ZoneLook { set: Some("zz_zone".into()), ..ZoneLook::default() };
         let own = paint_look(&mut art, &grid, ("zz_world", &look), 0, 1, (0, 0));
         assert_eq!(px_at(&own, probe(stone).0, probe(stone).1), [40, 200, 40], "the zone's set first");
-        let look = ZoneLook { set: Some("zz_zone".into()), tint: Some([128, 255, 128, 255]), terrain: vec![("lava".into(), "tilesets/zz_zone/tallow".into(), Some([255, 200, 100, 255]))] };
+        let look = ZoneLook { set: Some("zz_zone".into()), tint: Some([128, 255, 128, 255]), terrain: vec![("lava".into(), "tilesets/zz_zone/tallow".into(), Some([255, 200, 100, 255]))] , ..ZoneLook::default() };
         let tinted_board = paint_look(&mut art, &grid, ("zz_world", &look), 0, 1, (0, 0));
         assert_eq!(px_at(&tinted_board, probe(stone).0, probe(stone).1), [20, 200, 20], "the zone's tint multiplied over the floor");
         assert_eq!(px_at(&tinted_board, probe(lava).0, probe(lava).1), [250, 196, 98], "the override's tile with its own tint");
@@ -2357,5 +2593,195 @@ pub(crate) mod tests {
         let sprite = flat.sprite_px(1, (112, 96), Some(93));
         assert_eq!(sprite, (flat.token_px, 0), "Flat: the token square");
         assert_eq!(flat.sprite_rect_n(c, 1, sprite, 0, 0), flat.token_rect(c, 0, 0));
+    }
+
+    // ---- DIORAMA5 (PR7-77) -------------------------------------------------------------------------------------
+
+    /// R1 (c): the variant pick is an integer hash of the cell, not the (7x + 13y) mod n lattice: every variant shows,
+    /// the pick disagrees with the lattice on many cells and no row repeats with the lattice's period.
+    #[test]
+    fn the_variant_pick_scatters_with_no_lattice() {
+        let root = scratch("hashpick");
+        for v in 0..4 {
+            png(&root, &format!("tilesets/zz_hash/floor/v{v}.png"), 64, 48);
+        }
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let mut seen = [0; 4];
+        let (mut off_lattice, mut aperiodic) = (0, false);
+        for y in 0..GRID_H {
+            let mut row = Vec::new();
+            for x in 0..GRID_W {
+                let TileArt::Stage(rel) = tile_art(&mut art, "floor", "zz_hash", x, y) else { panic!("a stage tile") };
+                let v: usize = rel.trim_end_matches(".png").rsplit('v').next().unwrap().parse().unwrap();
+                seen[v] += 1;
+                off_lattice += (v as i32 != (x * 7 + y * 13).rem_euclid(4)) as i32;
+                row.push(v);
+            }
+            aperiodic |= (0..GRID_W as usize - 4).any(|x| row[x] != row[x + 4]);
+        }
+        assert!(seen.iter().all(|n| *n > 0), "{seen:?}");
+        assert!(off_lattice > GRID_W * GRID_H / 3, "{off_lattice} cells off the lattice");
+        assert!(aperiodic, "a row does not repeat every 4 cells");
+        assert_eq!(art.pick_hashed(&["tilesets/zz_hash/floor"], 3, 5), art.pick_hashed(&["tilesets/zz_hash/floor"], 3, 5), "a pure function of the cell");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// R1 (a): a terrain's sheet is read from its override folder, then the zone's set, then the world's; R5: a zone set
+    /// without `rubble` gives its floor to rubble, before the world's rubble.
+    #[test]
+    fn the_sheet_and_the_rubble_ground_follow_the_zone() {
+        let root = scratch("sheets");
+        png(&root, "tilesets/zz_world/floor/sheet.png", 256, 192);
+        png(&root, "tilesets/zz_world/rubble/v0.png", 64, 48);
+        png(&root, "tilesets/zz_zone/floor/v0.png", 64, 48);
+        png(&root, "tilesets/zz_zone/lava/sheet.png", 128, 96);
+        png(&root, "tilesets/zz_zone/tallow/sheet.png", 64, 48);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let look = ZoneLook { set: Some("zz_zone".into()), terrain: vec![("toxic_bog".into(), "tilesets/zz_zone/tallow".into(), None)], ..ZoneLook::default() };
+        assert_eq!(composed::sheet_of(&mut art, "floor", "zz_world", &look).as_deref(), Some("tilesets/zz_world/floor/sheet.png"), "the world's when the zone has none");
+        assert_eq!(composed::sheet_of(&mut art, "lava", "zz_world", &look).as_deref(), Some("tilesets/zz_zone/lava/sheet.png"));
+        assert_eq!(composed::sheet_of(&mut art, "toxic_bog", "zz_world", &look).as_deref(), Some("tilesets/zz_zone/tallow/sheet.png"), "the override first");
+        assert_eq!(composed::sheet_of(&mut art, "stone", "zz_world", &look), None);
+        assert_eq!(zone_tile_art(&mut art, RUBBLE, "zz_world", &look, 2, 2), TileArt::Stage("tilesets/zz_zone/floor/v0.png".into()), "R5: the zone's floor");
+        assert_eq!(zone_tile_art(&mut art, RUBBLE, "zz_world", &ZoneLook::default(), 2, 2), TileArt::Stage("tilesets/zz_world/rubble/v0.png".into()), "no zone set: the world's rubble");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// R1 (a): with a sheet, the ground is one continuous texture: two cells of one terrain show different parts of it
+    /// (with one tile file they are alike), and the board differs from the tiled one; without a sheet nothing composes.
+    #[test]
+    fn a_ground_sheet_composes_one_continuous_floor() {
+        let tiles = scratch("sheet_tiles");
+        ramp(&tiles, "tilesets/zz_sheet/floor/v0.png", 64, 48, [40, 60, 80]);
+        let grid = board_of(&[]);
+        let mut art = Art::layered(Layers::of(vec![tiles.to_path_buf()]));
+        let tiled = paint(&mut art, &grid, "zz_sheet", 0, 1, (0, 0));
+        let (a, b) = (stage_cell(V2::new(3, 4)), stage_cell(V2::new(4, 4)));
+        let cell_px = |g: &aegis_ui::ui::Gfx, r: Rect| at_px(g, r.x + 10, r.y + 10);
+        assert_eq!(cell_px(&tiled, a), cell_px(&tiled, b), "tiles: every cell alike");
+        let sheet = scratch("sheet_sheet");
+        ramp(&sheet, "tilesets/zz_sheet/floor/sheet.png", 256, 192, [40, 60, 80]);
+        let mut art = Art::layered(Layers::of(vec![sheet.to_path_buf(), tiles.to_path_buf()]));
+        let composed = paint(&mut art, &grid, "zz_sheet", 0, 1, (0, 0));
+        assert_ne!(cell_px(&composed, a), cell_px(&composed, b), "the sheet runs on across the cell edge");
+        assert!(!diff(&tiled, &composed).is_empty());
+        let _ = std::fs::remove_dir_all(&tiles);
+        let _ = std::fs::remove_dir_all(&sheet);
+    }
+
+    /// R1 (b): decals fall on about `decal_density` of the cells (10 percent by default) and about 35 percent beside a
+    /// block or prop, by the cell's hash; the density reads from `stage.fx.json`, the zone's over the file's.
+    #[test]
+    fn decals_fall_by_the_hash_density_and_gather_near_things() {
+        let n = 200 * 200;
+        let share = |density: f32, near: bool| (0..200).flat_map(|y| (0..200).map(move |x| (x, y))).filter(|(x, y)| composed::decal_on(*x, *y, density, near)).count() as f32 / n as f32;
+        let (open, near) = (share(composed::DECAL_DENSITY, false), share(composed::DECAL_DENSITY, true));
+        assert!((0.085..0.115).contains(&open), "{open}");
+        assert!((0.32..0.38).contains(&near), "{near}");
+        assert_eq!(share(0.0, false), 0.0);
+        let fx: Value = serde_json::from_str(r##"{"decal_density": 0.2, "zones": {"vats": {"decal_density": 0.05}, "bad": {"decal_density": 3}}}"##).unwrap();
+        assert_eq!(zone_look_of(&fx, "zz", "vats").decal_density, Some(0.05));
+        assert_eq!(zone_look_of(&fx, "zz", "alley").decal_density, Some(0.2), "the file's");
+        assert_eq!(zone_look_of(&fx, "zz", "bad").decal_density, Some(0.2), "out of 0..1: the file's");
+        // drawn: the decal's colour on a picked open cell, none on an unpicked one
+        let root = scratch("decals");
+        flat_png(&root, "tilesets/zz_decal/floor/v0.png", 64, 48, |_, _| [40, 40, 40]);
+        flat_png(&root, "tilesets/zz_decal/floor/decal/v0.png", 64, 48, |_, _| [250, 10, 10]);
+        let grid = board_of(&[]);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let g = paint(&mut art, &grid, "zz_decal", 0, 1, (0, 0));
+        let open_cells: Vec<V2> = (1..GRID_H - 1).flat_map(|y| (1..GRID_W - 1).map(move |x| V2::new(x, y))).collect();
+        let on = open_cells.iter().find(|c| composed::decal_on(c.x, c.y, composed::DECAL_DENSITY, false)).expect("a decal cell");
+        let off = open_cells.iter().find(|c| !composed::decal_on(c.x, c.y, composed::DECAL_DENSITY, false)).expect("a plain cell");
+        let mid = |c: &V2| { let r = stage_cell(*c); at_px(&g, r.x + 16, r.y + 12) };
+        assert!(mid(on)[0] > 200, "{:?}", mid(on));
+        assert!(mid(off)[0] < 80, "{:?}", mid(off));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// R2: a sunken cell's lip comes from `lip/<terrain>/v*` of the zone's or world's set (an override `<set>/<name>`
+    /// reads `<set>/lip/<name>`), cut to the band; the flat fill stays the fallback.
+    #[test]
+    fn a_sunken_lip_draws_its_art_before_the_fill() {
+        let look = ZoneLook { set: Some("zz_zone".into()), terrain: vec![("lava".into(), "tilesets/zz_zone/tallow".into(), None)], ..ZoneLook::default() };
+        assert_eq!(lip_dirs("lava", "zz_world", &look), ["tilesets/zz_zone/lip/tallow", "tilesets/zz_zone/lip/lava", "tilesets/zz_world/lip/lava"]);
+        let grid = board_of(&[(4, 4, "lava"), (4, 5, "lava")]);
+        let (band, _) = lips(&grid, V2::new(4, 4));
+        assert!(band > 0, "lava under floor has a lip");
+        let root = scratch("lips");
+        flat_png(&root, "tilesets/zz_world/lip/lava/v0.png", 64, 24, |_, _| [20, 200, 220]);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        assert!(lip_art(&mut art, "lava", "zz_world", &ZoneLook::default(), 4, 4, band).is_some_and(|img| img.w == 64 && img.h == band * SET_ART_PX), "cut to the band");
+        let r = stage_cell(V2::new(4, 4));
+        let with = paint(&mut art, &grid, "zz_world", 0, 1, (0, 0));
+        assert_eq!(at_px(&with, r.x + 16, r.y), [20, 200, 220], "the lip art's top row");
+        let none = paint(&mut art, &grid, "zz_other", 0, 1, (0, 0));
+        assert_eq!(at_px(&none, r.x + 16, r.y), [118, 116, 62], "no file: the flat fill");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// R3: `lights` maps a cover or prop art key to a colour and radius (the zone's over the file's; bad rows dropped);
+    /// a lamp cover's cell takes a pool and lights it more than a far cell; with any light the board darkens a little.
+    #[test]
+    fn a_lamp_prop_casts_its_pool() {
+        let fx: Value = serde_json::from_str(r##"{"lights": {"cover/v0": {"color": "#ffb060", "radius": 1.5}, "lamp": {"color": "#ffffff", "radius": 9}}, "zones": {"vats": {"lights": {"cover/v0": {"color": "#60b0ff", "radius": 1}}}}}"##).unwrap();
+        assert_eq!(zone_look_of(&fx, "zz", "alley").lights, [Light { key: "cover/v0".into(), color: rgb(255, 176, 96), radius: 1.5 }], "a radius past the cap is dropped");
+        assert_eq!(zone_look_of(&fx, "zz", "vats").lights[0].color, rgb(96, 176, 255), "the zone's over the file's");
+        assert_eq!(light_keys("tilesets/zz/cover/v3.png"), ["cover/v3", "cover"]);
+        assert_eq!(light_keys("props/common/lamp/v1.png"), ["lamp/v1", "lamp"]);
+        let root = scratch("lamps");
+        ramp(&root, "tilesets/zz_lamp/cover/v0.png", 64, 72, [90, 90, 90]);
+        let mut grid = board_of(&[(6, 4, "wall")]);
+        grid.terrain[0] = grid.terrain[1];
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let look = zone_look_of(&fx, "zz_lamp", "alley");
+        let lamps = lamps(&mut art, &grid, ("zz_lamp", &look));
+        let r = stage_cell(V2::new(6, 4));
+        assert_eq!(lamps, [Lamp { x: (r.x + 16) as f32, y: (r.y + 12) as f32, color: rgb(255, 176, 96), radius: 1.5 }]);
+        assert!(super::lamps(&mut art, &grid, ("zz_lamp", &ZoneLook::default())).is_empty(), "no lights: none");
+        let mut g = crate::hud::hud_tests::gfx();
+        g.canvas = aegis_ui::canvas::Canvas::new(640, 360);
+        g.canvas.px.chunks_exact_mut(4).for_each(|p| p.copy_from_slice(&[60, 60, 60, 255]));
+        g.view = aegis_ui::painter::View::fit(640, 360);
+        let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+        draw_light(&mut p, &[], &lamps);
+        let (near, far) = (at_px(&g, r.x + 16 + CELL_W, r.y + 12), at_px(&g, BOARD_X + 40, BOARD_Y + 8 * CELL_H));
+        assert!(near[0] > 60 && near[0] > near[2], "the neighbour is lit warm: {near:?}");
+        assert!(far[0] < 60, "far from it the board is a little darker: {far:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// R4: the exit decal pulses faintly at about 60 percent (static under Reduce motion), bright when hovered or near;
+    /// it draws only with art; a gate stands beyond each run of exits on the top and side edges, none on the bottom.
+    #[test]
+    fn the_exit_reads_as_a_path_and_a_gate() {
+        assert_eq!(exit_alpha(0, false, false), EXIT_ALPHA);
+        let mid = exit_alpha(EXIT_PULSE_MS / 2, false, false);
+        assert!(mid < EXIT_ALPHA && mid as f32 >= EXIT_ALPHA as f32 * (1.0 - EXIT_PULSE) - 1.0, "{mid}");
+        assert_eq!(exit_alpha(EXIT_PULSE_MS / 2, true, false), EXIT_ALPHA, "static under Reduce motion");
+        assert_eq!(exit_alpha(123, false, true), EXIT_BRIGHT);
+        let exits = [V2::new(5, 0), V2::new(6, 0), V2::new(0, 3), V2::new(0, 4), V2::new(GRID_W - 1, 6), V2::new(4, GRID_H - 1)];
+        let gates = exit_gates(&exits);
+        assert_eq!(gates.len(), 3, "top run, left run, right; the bottom has no room: {gates:?}");
+        assert_eq!(gates[0], Rect::new(BOARD_X + 6 * CELL_W - GATE_W / 2, BOARD_Y + 4 - GATE_H, GATE_W, GATE_H), "centred over the two top cells");
+        let low = stage_cell(V2::new(0, 4));
+        assert_eq!(gates[1], Rect::new(BOARD_X - GATE_W + 2, low.y + low.h - GATE_H, GATE_W, GATE_H), "in the left wing by its lowest cell");
+        let root = scratch("exits");
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let mut g = crate::hud::hud_tests::gfx();
+        g.canvas = aegis_ui::canvas::Canvas::new(640, 360);
+        g.view = aegis_ui::painter::View::fit(640, 360);
+        let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+        assert!(!draw_exit_path(&mut p, &mut art, V2::new(5, 0), EXIT_ALPHA), "no art: the caller keeps its sign");
+        flat_png(&root, "props/common/exit_path/v0.png", 64, 48, |_, _| [200, 180, 90]);
+        flat_png(&root, "props/common/exit_gate/v0.png", 64, 72, |_, _| [90, 70, 50]);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        assert!(draw_exit_path(&mut p, &mut art, V2::new(5, 0), EXIT_ALPHA));
+        draw_exit_gates(&mut p, &mut art, &exits);
+        let c = stage_cell(V2::new(5, 0));
+        let path = at_px(&g, c.x + 16, c.y + 12);
+        assert_eq!(path, [120, 108, 54], "the decal at 60 percent over black");
+        assert_eq!(at_px(&g, gates[0].x + 16, gates[0].y + 18), [90, 70, 50], "the gate");
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

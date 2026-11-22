@@ -266,6 +266,20 @@ impl Canvas {
         self.put(x, y, c);
     }
 
+    /// DIORAMA5 R3: adds `c` scaled by its alpha to the pixel (a light: each channel grows, saturating at 255), inside
+    /// the canvas, `clip` and `bounds`.
+    #[inline]
+    pub fn add(&mut self, x: i32, y: i32, c: Rgba) {
+        if x < 0 || y < 0 || x >= self.w || y >= self.h || c[3] == 0 || self.clip.is_some_and(|r| !r.contains(x, y)) || self.bounds.is_some_and(|r| !r.contains(x, y)) {
+            return;
+        }
+        let i = ((y * self.w + x) * 4) as usize;
+        let a = c[3] as u32;
+        for k in 0..3 {
+            self.px[i + k] = (self.px[i + k] as u32 + (c[k] as u32 * a + 127) / 255).min(255) as u8;
+        }
+    }
+
     /// `blend` on a pixel already known to be inside the canvas, `clip` and `bounds` (`visible`).
     #[inline]
     pub(crate) fn put(&mut self, x: i32, y: i32, c: Rgba) {

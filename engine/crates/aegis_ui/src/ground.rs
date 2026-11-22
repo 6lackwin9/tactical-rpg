@@ -25,14 +25,15 @@ use std::path::Path;
 use std::rc::Rc;
 
 /// Art px per cell: a ground art px is then 1 logical px, always a whole number of physical px at a whole window scale,
-/// and never finer than the units on it. The cap's limit is 32 (the sprites' own density).
+/// and never finer than the units on it. The cap's limit is `CELL_MAX`.
 pub const CELL_PX: i32 = 16;
 /// A texture covers this many cells each way, so it is 64 x 64 square and 64 x 48 tilted.
 pub const TEX_CELLS: i32 = 4;
 /// The tilted form's art px per cell.
 pub const TILTED_CELL: (i32, i32) = (16, 12);
-/// The most art px per cell `compose` takes (the sprites' own density): past it a job composes nothing.
-pub const CELL_MAX: i32 = 32;
+/// The most art px per cell `compose` takes: past it a job composes nothing. 64 since DIORAMA5 R1 (PR7-77): a tilted
+/// battle board composes at its stage art's own density (64 x 48 a cell, two art px a logical px).
+pub const CELL_MAX: i32 = 64;
 /// The most art px a job composes (64 MB of RGBA; the largest shipped map is 368,640): past it a job composes nothing.
 pub const ART_PX_MAX: i64 = 16_000_000;
 /// The most layers a job holds (a rank is a byte): past it a job composes nothing.

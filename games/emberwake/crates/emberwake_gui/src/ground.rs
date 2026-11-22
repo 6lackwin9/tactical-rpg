@@ -18,14 +18,19 @@ use emberwake_world::Data;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
+/// The region map's largest art cell: 32 (the sprites' own density); the composer's `CELL_MAX` is higher for the battle
+/// board (DIORAMA5 R1), and a region map keeps composing at most this.
+pub const REGION_CELL_MAX: i32 = 32;
+
 /// The composer's art px per cell in a view at `q` quarters of zoom: one art px is one logical px, so these equal
-/// `MapGeom::cell_size`, up to the composer's `CELL_MAX` (past it, the picture at `CELL_MAX` stretches on the blit).
+/// `MapGeom::cell_size`, up to `REGION_CELL_MAX` (past it, the picture at that size stretches on the blit).
 fn cell_of(view: View, q: i32) -> (i32, i32) {
     let (w, h) = match view {
         View::Square => (CELL_PX, CELL_PX),
         View::Tilted => TILTED_CELL,
     };
-    let q = q.min(4 * CELL_MAX / CELL_PX);
+    const _: () = assert!(REGION_CELL_MAX <= CELL_MAX);
+    let q = q.min(4 * REGION_CELL_MAX / CELL_PX);
     (w * q / 4, h * q / 4)
 }
 
@@ -236,7 +241,7 @@ mod tests {
             for z in mapview::zoom_steps() {
                 let q = mapview::zoom_of(&json!(z));
                 let (art, cell) = (cell_of(view, q), mapview::cell_of(view, q));
-                assert!(art.0 <= CELL_MAX && art.1 <= CELL_MAX, "{name} {z}: the composer takes it");
+                assert!(art.0 <= REGION_CELL_MAX && art.1 <= REGION_CELL_MAX, "{name} {z}: the composer takes it");
                 assert_eq!(art.0 * cell.1, art.1 * cell.0, "{name} {z}: the same shape as the cell");
                 if q <= 8 {
                     assert_eq!(art, cell, "{name} {z}: one art px is one logical px up to 2x");

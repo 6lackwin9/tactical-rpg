@@ -1138,6 +1138,24 @@ impl<'a> Painter<'a> {
         }
     }
 
+    /// DIORAMA5 R3: a light pool: `col` added (`Canvas::add`) over an ellipse centred on logical (`cx`, `cy`) with radii
+    /// `rx` and `ry`, its strength `col`'s alpha at the centre falling smoothly to 0 at the edge ((1 - d^2)^2), so the
+    /// floor under it brightens instead of being painted over.
+    pub fn glow(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, col: Rgba) {
+        let (x, y, prx, pry) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, (rx * self.v.s).max(0.5), (ry * self.v.s).max(0.5));
+        let (x0, y0, x1, y1) = ((x - prx).floor() as i32, (y - pry).floor() as i32, (x + prx).ceil() as i32, (y + pry).ceil() as i32);
+        for py in y0..=y1 {
+            for px in x0..=x1 {
+                let (ux, uy) = ((px as f32 + 0.5 - x) / prx, (py as f32 + 0.5 - y) / pry);
+                let d2 = ux * ux + uy * uy;
+                if d2 < 1.0 {
+                    let k = (1.0 - d2) * (1.0 - d2);
+                    self.c.add(px, py, [col[0], col[1], col[2], (col[3] as f32 * k).round() as u8]);
+                }
+            }
+        }
+    }
+
     /// A 1 px (old unit) anti-aliased ellipse outline centred on logical (`cx`, `cy`) with radii `rx` and `ry`, no fill
     /// (STAGE1-E: a unit's foot ring). Only pixels within half the stroke plus half a pixel of the edge are touched.
     pub fn ellipse_ring(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, col: Rgba) {
