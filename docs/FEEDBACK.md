@@ -63,6 +63,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-73` (`PAINTED-MAPS1`) | done | `develop` (squash `PR7-73`) | Hub and region maps scale a body with a `foot` row like the battle stage (1.15 of the map's tile width, feet on the tile's foot point); kit unit field `portrait` looked up before the body key; seed `pr7_73` keys the seven painted-body units to the files they already show (Art/UI #87 portraits kept); shots `/mnt/project-files/pr7-73/`; goldens unchanged; `FB-386` |
 | `PR7-76` (`ACT1-FIX2`) | done | `develop` (squash `PR7-76`) | Act 1 agent-run fixes PT-42..63 (Here list usable points and edge arrows, no repeat point answers, roads drawn at rest, vignette two-press, job places and locked reasons, ready quest in legend, Make camp reason, directional exits, walk resumes after a won fight, batched turn-ins, can't-wear badge, dialogue change log, opaque Journal, skill picks logged, Tithing at-0 line); seed `pr7_76_hub_cast` keys five hub NPC bodies; grate silt parked; shots `/mnt/project-files/pr7-76/`; goldens unchanged; `FB-388` |
 | `PR7-78` (`ACT1-DATA1`) | done | `develop` (squash `PR7-78`) | q_a1_m4 already grants its promise (no change); `rec_level` on the eight flag-job quests, with a test; Crucible and Overlook already name the interlude in `closed_text` (no change); seed `pr7_78_quests`; goldens unchanged; `FB-390` |
+| `ENGINE-34` (`BONEMILL-CHECK1`) | Report | `develop` | Bone-Mill won by hand on try 1 at Lv 7 (the auto plan still loses it); the Crucible lost 5 times at Lv 8 (1 auto, 4 hand), so the act's end was not reached; no debug; PT-66..84; `FB-392` |
 | `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
 | `PR7-4` (`SCENARIO-GOLDENS1`) | part 1 done (tools lane); baselines await the user | `develop` (squash `PR7-4` part 1) | Scenario `shot` step `golden` (tolerance, pixels allowance, diff image), `record=1`, launch `save`; every scenario in the gate (`tools/fc.sh scenarios_all`); three screen scenarios (menus, hub, battle; 18 shots) run as review shots until the user approves the baselines (`/mnt/project-files/pr7-4/`); `FB-313` |
 | `ENGINE-1` (`HELLO-GAME1`) | done (tools lane) | `develop` (squash `ENGINE-1`) | Sample game `games/hello/` on engine crates only: menu, walker sprite, one save slot, engine sounds, scenario `hello_walk` in the gate; programs `hello` and `hello_cli`; six RPG leaks listed; `FB-315` |
@@ -301,3 +302,61 @@ This file is the **only doc file edited by the Build Session** under the two-ses
      re-records.
   3. a per-cell cover variant pick for blocked cells: lamps and cover density only, no props on walkable cells.
 - **Docs delta**: Art/UI `code_rows.md` R3(b) assumes lamps can be placed on battle boards; true for region maps only.
+
+### FB-392: ENGINE-34 BONEMILL-CHECK1 report; Bone-Mill won by hand on try 1, Crucible lost 5 times
+
+- **Status**: report only. The Bone-Mill is beatable by hand at Lv 7 on the first try; the auto plan still loses it.
+  The Crucible (`enc_evt_06`, Slag Gate) was lost five times (1 auto, 4 hand), so the act's end was **not reached**.
+  No debug was used anywhere, and no save was edited to skip the Crucible.
+- **Spec**: `docs/READY.md` row `ENGINE-34`; follows `FB-441`.
+- **Run**: develop `61ce531b`, `tools/fc.sh playtest start` and `aegis playtest do`, 1280x720, no window, 08:52 to 10:14
+  UTC. The ENGINE-32 saves were lost with that session, so the whole run was hand-replayed from a new game, following
+  the old log. Folder `/mnt/project-files/build-tools/act1_agent_run2/`: `run_log.md` (and `.jsonl`), 59 shots named by
+  log step, saves `before_kiln`, `before_boss`, `after_bonemill`, `before_crucible`. Fights other than the Bone-Mill and
+  Crucible tries B to E ran on the auto-filled plan.
+- **How far**: prologue, Grate, Cages, Sweep, turn-ins, Fourth Kiln (patrol, Bone-Mill), Vats (Elyse joins), Corvo,
+  the interlude (Fissure fight, debate), Crucible Watchpost (Overlook, picket), then five Crucible losses.
+- **Tithing**: 42 after the prologue, 32 at the Kiln, 23 after the Vats and Corvo, 19 at the Crucible entry; no final
+  count, since the act's end was not reached.
+- **Bone-Mill** (Overseer Grendel; Kaelen, Vesper, Maren, Hollis Lv 7 plus guest Dunstan on AI):
+  - Try 1, hand: **won in 4 rounds**. R1 Hollis's Winch Sunder and the slag vents killed both Dredgers; R2 phase 1
+    broke, Vesper downed by a 386 crit (PT-67); R3 Kaelen's Sunder exposed Grendel, Hollis's crit Sunder and the vents
+    finished him; R4 the Enforcer fell. Tries 2 to 5 not needed.
+  - Comparison, auto plan from `before_boss`: Fled at R6, Grendel 142/304 in phase 2.
+- **Crucible** (Inquisitor-Prelate Nemeth, from `before_crucible`, party Lv 8):
+
+  | Try | Plan | Holder | Result | What happened |
+  | --- | --- | --- | --- | --- |
+  | A | auto | Vesper | Fled R9 | Nemeth untouched, nobody out |
+  | B | hand | Vesper | Fled R7 | Maren out R3, Hollis R4; Vesper downed R5, the gate shut |
+  | C | hand (R4 on, auto) | Kaelen | Fled R9 | the R4 spawn ate Kaelen's move (PT-71); auto walked the holder off |
+  | D | hand (R5 auto, a slip) | Vesper | Fled R6 | Kaelen and Maren out R4; Vesper downed R5; Hollis 1 tile short |
+  | E | hand (R2 auto, PT-79) | Kaelen | gave up R3 | auto R2 left Vesper in melee, downed |
+
+| PT | Sev | Area | Finding | Shots |
+| --- | --- | --- | --- | --- |
+| PT-66 | major | save | "Autosave failed: rolls: 'retry:sunk_ward:enc_evt_03' must be a stream id with a count >= 0." after every lost story fight (PR7-75's retry key); the post-loss state is never saved | steps 1242, 1851, 2279 |
+| PT-67 | major | forecast | The boss blow read "Hammer Strike block 3: -0" for stealthed Vesper, who then took a 386 crit after disengaging one tile | log ~1000-1100 |
+| PT-68 | major | stealth | Ash-Cloud Fade "readies stealth", yet the hero is hit that round and the next (Grendel's jabs; four Heretic's Brand hits on the winch holder, Brand also ends her guard) | 1907, 3171 |
+| PT-69 | major | skills | Winch Sunder did not break the Pulverizer wind-up ("0 of 3 into wind-up"); it landed after a 2-tile push, on Maren with no incoming forecast | log ~1124 |
+| PT-70 | major | movement | A move cut short re-routes the wrong way: Kaelen (5,4) to (4,2) then (3,4); Hollis (5,4) to (5,6) and to (4,4) | 2088 |
+| PT-71 | major | Crucible | R4 reinforcements spawn on the open middle gap (6,4), (7,4) on claimed tiles; the planned move drops with no log line | 2541 |
+| PT-72 | major | planning | A planned move claims every path tile, so a 1-tile gap carries one hero a round across blocks; auto ghost plans claim too; a later pick voids an earlier move, said only at confirm; odd path costs ((7,4) 4, (8,4) 9); "No path" through a foe leaving in B1 | log 2852-2894 |
+| PT-73 | major | balance | Crucible not won in 5 tries at Lv 8: the suggested holder (232 HP) draws both Purifiers and a Footman, the gate shuts when the holder falls, and 2 of 3 out reads plain "Fled", like a wipe | 2273, 3171 |
+| PT-74 | major | auto plan | The auto plan ignores the escape objective: walks the holder off the winch, kites Hollis away from the exits, keeps Vesper in melee; try A never touched Nemeth | 1844, 3247 |
+| PT-75 | minor | UI | After the R4 time phase the boss bar reads "This phase 346/346, In all 484/692" while phase 1 still had 138; is it still owed? | 2154 |
+| PT-76 | minor | UI | The Hostiles list names Tallow Dredgers "Skirmisher" | 846 |
+| PT-77 | minor | board | No Lv on the Bone-Mill, Vats and Crucible main quests (`q_a1_m3..m5` have no `rec_level`) | 308, 1673 |
+| PT-78 | minor | quests | The Crucible lock hint does not name the Bone-Mill and Vats turn-ins; the Wedges job unlocks at the Kiln but is taken only at the hub, 3 days away | 1673, 1301 |
+| PT-79 | minor | input | Enter at "Round over" confirms the next round (cost try E); a party slot click toggles selection; a third Esc opens Settings | 3247 |
+| PT-80 | minor | skills | Ally heals cost far more (Tourniquet 4 blocks/8 AP on an ally vs 2/3 on self; Cauterize 3/7 vs 1/2); after a Move pick rows show "-3 blocks, -3 AP" | 1054 |
+| PT-81 | minor | UI | "Maren has already left the battle." shows while planning an exit | log 2460 |
+| PT-82 | minor | lore | Dunstan's jaw is "wired shut", yet he speaks a battle line | 829 |
+| PT-83 | minor | map | The Watchpost marker "The gorge winch drum" has no Here row | log 1727 |
+| PT-84 | minor | log | "Bailiff Enforcer drags Kaelen 0 tiles" | log ~1150 |
+
+- **Notes**: Vesper's max HP fell from 222 to 186 after being downed (an injury?); Maren's picks may have been empty at
+  confirm in Crucible B R1 (low confidence).
+- **FB-441 items re-checked as fixed**: PT-43, 44, 45, 46, 49, 51, 53, 55, 56, 60, 61, 63; PT-40 partly (the boss HP
+  hover explains the phase span; the auto plan still loses the Bone-Mill).
+- **Docs delta**: none.
