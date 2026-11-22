@@ -47,7 +47,8 @@ Parked for your approval (golden re-records need your word):
   (a) reinforcements stop landing on tiles your planned moves claim (PT-71); (b) a move cut short never ends a block
   farther from its goal (PT-70); (c) path claims: today a planned move claims every tile it walks for the whole round,
   so a 1-tile gap passes one hero a round; recommended: a tile is claimed only in the block it is walked, so a friend
-  can follow a block later (PT-72); (d) the auto plan learns escape objectives (keeps the holder on the winch, sends
+  can follow a block later (PT-72); the same rule would let a route pass a foe's start tile once that foe has
+  left (PT-87, `FB-479`); (d) the auto plan learns escape objectives (keeps the holder on the winch, sends
   escapers to exits), which changes the sim's planner too (PT-74). Recommendation: approve all four as one intended
   re-record of `sim_golden`; they also bear on the Crucible losses.
 - [ ] Diorama battle stage in the game (your 21:46 go-ahead): the first slice landed (`PR7-64`); Fable's in-game review

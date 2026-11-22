@@ -172,7 +172,7 @@ Worked examples (move 2 tiles a block; `ap_regen` 4; AP numbers as AP1, the gaug
 | --- | --- | --- | --- |
 | tl_vanguard, 10, 10, footman 3 tiles away | click footman, Heavy Cleave | b1 approach (2), b2-b5 Heavy Cleave (4), [b6 Shoulder Check (1)] | 10 - 7 = 3, next 7 |
 | same, Auto-fill off | the same | b1 approach, b2-b5 Heavy Cleave, [b6 Rest] | 10 - 6 = 4, next 8 |
-| tl_archer, 10, 10, footman adjacent | click footman, Aimed Shot, Snap Shot | b1 kite (2), b2-b3 Aimed Shot (2), b4 Snap Shot (2), [b5-b6 Aimed Shot (2)] | 10 - 8 = 2, next 6 |
+| tl_archer, 10, 10, footman adjacent | click footman, Aimed Shot, Snap Shot | b1 kite (1), b2-b3 Aimed Shot (2), b4 Snap Shot (2), [b5-b6 Aimed Shot (2)] | 10 - 7 = 3, next 7 (one-step kite since `PR7-88`, 2026-11-22; was 10 - 8 = 2, next 6) |
 | tl_vanguard, 3, 10, footman adjacent, tactic Balanced | click footman, Heavy Cleave | refused: "AP 3 < 4" (row disabled, gauge red on hover); the ghost stays [b1-b3 Shoulder Check (1 each), b4-b6 Rest] | 3 - 3 = 0, next 5 (Rest 3 blocks: +1) |
 
 ## 5. Empty tiles and moves (INPUT1-U)
