@@ -369,3 +369,19 @@ fn an_edge_column_decal_is_not_clipped() {
     let changed = g.canvas.px.chunks(4).zip(before.chunks(4)).enumerate().filter(|(_, (a, b))| a != b).map(|(i, _)| ((i as i32) % w / s, (i as i32) / w / s)).filter(|&(x, y)| plate.contains(x, y)).count();
     assert!(changed > 0, "the decal draws on the edge tile");
 }
+
+/// DIORAMA3 R6: the Board Grid setting (on by default, a Gameplay row) draws the grid lines; off, none (the frame
+/// changes); the grid is stronger while planning than at rest (the tuning's two alphas).
+#[test]
+fn the_board_grid_setting_turns_the_grid_lines_off() {
+    let shot = |on: bool| {
+        let (mut cx, mut g, mut b) = arena(None, "", "stage");
+        assert_eq!(cx.settings.v[crate::battle::BOARD_GRID], json!(true), "on by default");
+        cx.settings.v[crate::battle::BOARD_GRID] = json!(on);
+        crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
+        g.canvas.px.clone()
+    };
+    assert!(shot(true) != shot(false), "the setting shows in the frame");
+    let t = crate::tuning::Tuning::default();
+    assert!(t.grid_alpha_planning > t.grid_alpha && t.grid_alpha <= 40, "faint at rest ({}), stronger planning ({})", t.grid_alpha, t.grid_alpha_planning);
+}

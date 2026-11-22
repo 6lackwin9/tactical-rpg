@@ -116,8 +116,34 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-64` (`DIORAMA1`) | Built (tools lane) | `develop` | Sunk Ward names stage set `sunk_ward_stage` (seed `diorama1`); ground hazards draw their painted decal `props/hazards/<status>/v*` under the icon and rounds left (the tint without a file); row 0's ground cells draw the set's `wall_foot` strip. FB-419 |
 | `PR7-66` (`VNSTAGE1B`) | Built (tools lane) | `develop` | The rest of Act 1's speaking scenes staged (seed `vnstage1b`): the three hub debates and the awakening fissure; data only, no new code. FB-421 |
 | `PR7-67` (`DIORAMA2`) | Built (tools lane) | `develop` | The wall lip in the stage set's tone; the front face from `tilesets/<set>/front_face/<terrain>/`; the stage fills the 888 px panel with faded wings, inside the panel's rim; edge decals unclipped. FB-425 |
+| `PR7-68` (`DIORAMA3`) | Built (tools lane) | `develop` | Amber light pools under the stage set's lantern spots and a soft vignette; a block inside the arena stands as the set's cover prop; the grid faint at rest, stronger while planning, with a Board Grid setting. FB-427 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-427: PR7-68 DIORAMA3 built; the Fable review's R3, R5 and R6
+
+- **Status**: built (tools lane), `develop`. Shots in project files `build-tools/pr7-68_canal.png` (cover props, pools)
+  and `build-tools/pr7-68_alley.png` (planning grid, a lantern pool); scenario `diorama_stage`.
+- **Spec**: `docs/READY.md` row `PR7-68` (`DIORAMA3`).
+- **What landed** (game `stage.rs`, `battle/board.rs`, `tuning.rs`, `menus.rs`, `screens.rs`):
+  - R3: `light_spots` reads the stage set's `stage.fx.json` spots (the zone's own `zones.<zone>.spots` first, else the
+    top level; an `at` outside 0..1 is dropped). Each spot lights an amber pool on the back rows below its `u` (ten soft
+    rings, about 46 x 18 px), then an 18 px vignette darkens the stage's top, bottom and sides. No file: no light.
+  - R5: a wall block not joined to the grid's edge through other blocks (`outer_wall`) is cover: it draws the set's
+    `tilesets/<set>/cover/v*` prop (64 x 72 art, drawn in the block's 32 x 36 box, feet on the cell's bottom, contact
+    shadow kept); blocks of the outer wall, and every block in a set without `cover/`, keep their wall cap. Display
+    only; the rules see the same block.
+  - R6: the board grid uses `grid_alpha` at rest and the new tuning key `grid_alpha_planning` (default 72) while
+    planning; the Gameplay settings tab has a Board Grid toggle (`board_grid`, on by default) that hides it.
+- **Provisional calls** (small; Art/UI or Design can retune): pool size and ring alpha, vignette alpha 70, planning grid
+  alpha 72 (`tuning.json` does not set it yet), outer-wall blocks keep their caps.
+- **Tests**: `a_block_inside_the_arena_stands_as_cover` (outer wall vs free block, only the block's box changes),
+  `the_lanterns_light_pools_under_their_spots` (zone override, default, invalid spot dropped, amber under the spot,
+  nothing far from it), `the_board_grid_setting_turns_the_grid_lines_off` (frame differs, planning alpha above rest).
+  Engine goldens unchanged.
+- **Changed shots** (review only): Stage-view battle shots of sets with `stage.fx.json` spots or `cover/` art (Sunk
+  Ward); planning shots show a slightly stronger grid.
+- **Docs delta**: none.
 
 ### FB-425: PR7-67 DIORAMA2 built; the Fable review's R1, R2, R4 and R7
 

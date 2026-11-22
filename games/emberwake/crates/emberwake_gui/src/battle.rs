@@ -26,6 +26,9 @@
 
 mod beats;
 mod board;
+
+/// DIORAMA3 R6: the setting that shows the battle board's grid lines (on by default).
+pub const BOARD_GRID: &str = "board_grid";
 mod boss_bar;
 mod card;
 mod draw;
