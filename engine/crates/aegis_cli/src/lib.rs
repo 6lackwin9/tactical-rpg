@@ -87,7 +87,7 @@ const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's com
 aegis replay <recording.json> [session=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
 aegis record <requests.json | recording.json> [out=<dir>] [id=<id>]   (play requests on fresh command hosts, save them as a recording)
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
-aegis content check | get <kind> <id> [world=<id>] | get @<list.json> | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>]
+aegis content check | get <kind> <id> [world=<id>] | get @<list.json> | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>] | refs <kind> <id> | rename <kind> <old> <new> [world=<id>] [--apply]
 aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [set=<key>:<value>,...] [audit=1]
 aegis playtest start [save=] [out=] [size=] [shots=each|off] [keep_saves=<dir>] [window=1] | do <command ...> | run <script | -> | stop | status   (an agent plays the real game, logged and screenshot per command)
 aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)
@@ -212,6 +212,11 @@ fn only_fields(hooks: &impl Hooks, dir: &Path, world: Option<&str>, kind: &str, 
     Ok(stored)
 }
 
+/// ENGINE-38: the asset folder beside a game's data folder (`<game>/assets`), where art keyed by ids lives.
+fn asset_roots(data_dir: &Path) -> Vec<PathBuf> {
+    data_dir.parent().map(|g| g.join("assets")).filter(|a| a.is_dir()).into_iter().collect()
+}
+
 /// `aegis content ...`: the data folder edited through the engine's writer (`aegis_content::store` with the game's
 /// hooks), never by hand.
 ///   check                                              the game's warnings, then every problem (exit 1 when any)
@@ -224,6 +229,10 @@ fn only_fields(hooks: &impl Hooks, dir: &Path, world: Option<&str>, kind: &str, 
 ///   manifest --kit <id> [<json | @file>]               show or write a kit manifest, kits/<id>/kit.json (ASSETORG2)
 ///   <sidecar op> <name> [<json | @file>]               PR5-48: show a sidecar of the game's writer, or apply edits to
 ///                                                      it (checked; nothing written when refused; `Hooks::sidecar`)
+///   refs <kind> <id>                                   ENGINE-38: every string naming the id in the data and seeds,
+///                                                      and the asset files named by it (`aegis_content::rename`)
+///   rename <kind> <old> <new> [world=<id>] [--apply]   ENGINE-38: a dry run of the rename (the files and moves), or
+///                                                      with --apply made and kept only when it adds no problem
 fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
     let dir = game.data_dir(args)?;
     let hooks = game.content();
@@ -269,6 +278,52 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
             }
             match content_step(&hooks, &dir, &step) {
                 Ok(line) => Ok(println!("{line}")),
+                Err(e) => fail(e),
+            }
+        }
+        Some("refs") => {
+            let (Some(_kind), Some(id)) = (args.pos(2), args.pos(3)) else { bail!("usage: aegis content refs <kind> <id>") };
+            let found = aegis_content::rename::refs(&dir, &asset_roots(&dir), id);
+            for r in &found {
+                if r.line > 0 {
+                    println!("{}:{}: {}", r.path.display(), r.line, r.text);
+                } else {
+                    println!("{}: asset", r.path.display());
+                }
+            }
+            println!("{} reference(s) to '{id}'", found.len());
+            Ok(())
+        }
+        Some("rename") => {
+            let (Some(kind), Some(old), Some(new)) = (args.pos(2), args.pos(3), args.pos(4)) else { bail!("usage: aegis content rename <kind> <old> <new> [world=<id>] [--apply]") };
+            let world = args.keys.get("world").map(String::as_str);
+            if !aegis_content::rename::plain_id(new) {
+                bail!("'{new}' is not an id (lowercase letters, digits, _, - and .)");
+            }
+            // ENGINE-38: a flag has no entry; every other kind renames a stored entry to an id not taken
+            if kind != "flag" {
+                if !aegis_content::store::contains(&hooks, &dir, world, kind, old) {
+                    bail!("no {kind} entry '{old}' in {}", hooks.file_of(&dir, world, kind).display());
+                }
+                if aegis_content::store::contains(&hooks, &dir, world, kind, new) {
+                    bail!("a {kind} entry '{new}' already exists");
+                }
+            }
+            let roots = asset_roots(&dir);
+            let plan = aegis_content::rename::plan(&dir, &roots, old, new);
+            for (f, n) in &plan.files {
+                println!("{}: {n} string(s)", f.display());
+            }
+            for (from, to) in &plan.moves {
+                println!("move {} -> {}", from.display(), to.display());
+            }
+            if !args.flag("--apply") {
+                println!("dry run: {} file(s), {} move(s); nothing written (add --apply)", plan.files.len(), plan.moves.len());
+                return Ok(());
+            }
+            let before = hooks.check(&dir);
+            match aegis_content::rename::apply(&plan, old, new, &before, || hooks.check(&dir)) {
+                Ok(()) => Ok(println!("renamed '{old}' to '{new}': {} file(s), {} move(s)", plan.files.len(), plan.moves.len())),
                 Err(e) => fail(e),
             }
         }

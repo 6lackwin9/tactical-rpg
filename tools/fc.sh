@@ -45,7 +45,7 @@
 #                                again in games/scaffold_check, about 10 s warm); part of the gate
 #   tools/fc.sh bench [sizes=1280x720,1920x1080] [runs=50]   the painter's benchmarks (ENGINE-2: fill, panels, text; ms per run,
 #                                p10/p50/p95/max, a calibration before and after) in a release build; one JSON line per size; never in the gate
-#   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
+#   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest | refs <kind> <id> | rename <kind> <old> <new> [--apply] (aegis content)
 #   tools/fc.sh rules [--contract]   the ruleset tweak report (aegis rules: register metadata, fields, bundles, tested sets, locked,
 #                                the game's rows); --contract: tunable and locked, one line each
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)

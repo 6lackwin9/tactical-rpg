@@ -8,6 +8,7 @@
 pub mod file;
 pub mod fingerprint;
 pub mod manifest;
+pub mod rename;
 pub mod schema;
 pub mod store;
 pub mod world;

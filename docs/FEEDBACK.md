@@ -148,8 +148,40 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-36` (`TOOLS-REPEATS2`) | Built (tools lane) | `develop` | `scenario shots save=` (a name or a folder path) shoots a map from a save with no scenario file; `seed-from --ids a,b,c`; `playtest start keep_saves=<dir>`. FB-461 |
 | `PR7-87` (`FORECAST-FIX1`) | Built in part (tools lane) | `develop` | The forecast follows disengages, carried moves, pushes and stealth (PT-67, PT-69); every dropped later pick is said at pick time; PT-72's costs and "No path" not reproduced, reported. FB-463 |
 | `ENGINE-37` (`LOOK-POINT1`) | Built (tools lane) | `develop` | A point's `use` may be `look` (listed in Here, answers with its line, sets nothing, never spent); the winch drum uses it and drops `sunk_ward.winch_seen` (seed `engine_37.json`). FB-465 |
+| `ENGINE-38` (`LORE-RENAME1`) | Built (tools lane) | `develop` | `aegis content refs <kind> <id>` lists every reference; `aegis content rename <kind> <old> <new>` is a dry run, `--apply` rewrites data and seeds (only the matching strings) and moves the asset files, kept only when it adds no problem. FB-467 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-467: ENGINE-38 LORE-RENAME1 built; content refs and a dry-run-first rename
+
+- **Status**: built (tools lane), `develop`. Engine only (`aegis_content::rename`, `aegis_cli` content commands).
+- **Spec**: `docs/READY.md` row `ENGINE-38` (`LORE-RENAME1`).
+- **What landed**:
+  - `aegis content refs <kind> <id>` (`tools/fc.sh content refs ...`) prints every JSON string in the data folder
+    (catalogs, worlds, seeds) that names the id, as `file:line: text`, then every asset file or folder under
+    `<game>/assets` named by it.
+  - A string names the id when it is the id, or when one of its `/` or `:` parts is the id or has the id as its stem
+    (`rogue/<id>`, `portraits/<id>.png`, `<world>:<id>`). Prose and longer ids (`<id>_elder`) never match.
+  - `aegis content rename <kind> <old> <new> [world=] [--apply]`. Without `--apply` it lists the files (with string
+    counts) and the asset moves and writes nothing. With `--apply` it rewrites only the matching strings, so each file
+    stays byte for byte otherwise, and moves the asset files or folders. Everything is put back if the game's
+    `content check` then lists a problem it did not list before.
+  - The kind's entry must exist and the new id must be free. `flag` is the kind with no entry.
+- **On the real data**: `refs units tallow_dredger` lists 30 places in 13 files (data and seeds) plus
+  `assets/units/rogue/tallow_dredger/`. An applied rename to `tallow_skimmer` on a copy of the game added no
+  content-check problem and left no reference behind. The shipped data is not changed.
+- **Limits**:
+  - It matches by text across all kinds, so an id shared by two kinds (a unit and a character both called `x`) is
+    renamed in both. The dry run shows each place, so check the list.
+  - Ids inside Rust code, docs, scenarios or playtest recordings are not touched (`tools/fc.sh rename` covers code).
+  - The cloud can't push moved LFS art; the PC push thread lands such a move.
+- **Seam**: reads and probes go through `aegis_core::vfs`; its file writes and moves are native tooling, so
+  `aegis_core/tests/fs_lint.rs` lists `rename.rs` among the writers and allows `rename` beside `write`.
+- **Tests**: `engine/crates/aegis_content/tests/rename.rs` (fixture game: a unit referenced by an encounter, a quest, a
+  seed, an art folder and a portrait path; the dry run writes nothing; refs lists every place; prose and longer ids
+  stay; a rename that adds a problem is put back).
+- **Docs delta**: for `engine/README.md` (content commands) and `docs/STRUCTURE.md` tools list: `aegis content refs`
+  and `aegis content rename` (dry run first).
 
 ### FB-465: ENGINE-37 LOOK-POINT1 built; a look-only point, the winch drum off its flag
 
