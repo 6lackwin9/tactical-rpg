@@ -114,7 +114,8 @@
 			"board": "talia_board",
 			"track": "main",
 			"show_locked": true,
-			"closed_text": "Clear the Sweep and the Cages first."
+			"closed_text": "Clear the Sweep and the Cages first.",
+			"rec_level": 7
 		},
 		{
 			"id": "q_a1_m4",
@@ -162,7 +163,8 @@
 			"board": "talia_board",
 			"track": "main",
 			"show_locked": true,
-			"closed_text": "Clear the Sweep and the Cages first."
+			"closed_text": "Clear the Sweep and the Cages first.",
+			"rec_level": 7
 		},
 		{
 			"id": "q_a1_m5",
@@ -218,7 +220,8 @@
 			"board": "talia_board",
 			"track": "main",
 			"show_locked": true,
-			"closed_text": "Something under the Undercroft must be answered first."
+			"closed_text": "Turn in the Bone-Mill and Vats to Talia. The Undercroft stirs then.",
+			"rec_level": 8
 		},
 		{
 			"id": "q_a1_corvo",
@@ -474,7 +477,7 @@
 			"board": "talia_board",
 			"track": "side",
 			"show_locked": true,
-			"closed_text": "Something under the Undercroft must be answered first.",
+			"closed_text": "Turn in the Bone-Mill and Vats to Talia. The Undercroft stirs then.",
 			"rec_level": 7
 		},
 		{

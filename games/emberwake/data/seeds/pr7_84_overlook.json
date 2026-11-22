@@ -1,0 +1,16 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "quests",
+      "world": "sunk_ward",
+      "fields": [
+        "closed_text"
+      ],
+      "entry": {
+        "id": "q_hook_overlook",
+        "closed_text": "Turn in the Bone-Mill and Vats to Talia. The Undercroft stirs then."
+      }
+    }
+  ]
+}
