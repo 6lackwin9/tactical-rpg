@@ -38,6 +38,7 @@ The core goal of moving from Godot to the custom **Aegis Engine** (`engine/` -> 
 * **Painted sheets (DIORAMA1B, PR7-65):** `clips.json` may give `foot` (the frame row the feet stand on) and `painted` (default false; a painted sheet takes no palette swap); `Clips::foot`, `Clips::painted`; `aegis_ui::art::load_body` skips the swap for a painted sheet.
 * **Tinted images (DIORAMA4, PR7-74):** `Painter::image_tinted(img, r, tint, a)` draws an image multiplied by a colour.
 * **Composed battle ground (DIORAMA5, PR7-77):** `ground::CELL_MAX` 64 (a battle cell composes at 1:1; region maps keep 32); `Art::pick_hashed` and `art::cell_hash` (variant picks by an integer hash of the cell, no lattice); `Canvas::add` and `Painter::glow` (additive light).
+* **Battle stage guide (ENGINE-GUIDE2, ENGINE-40):** `engine/docs/authoring/battle_stage.md` (stage sets, `stage.fx.json` keys, composed ground, decor, painted sheets), beside `region_grounds.md`.
 * **Flipped images (WALLMASS1, PR7-80):** `Image::flipped` and `Art::image_flipped`.
 * **Keyboard focus (PORT-FOCUS):** every screen's clickable widgets, choice fields and sliders take the focus with no
   code of their own (`aegis_ui::focus`, kept in the kit by the shell): Tab / Shift+Tab walk them in drawing order, the

@@ -16,7 +16,7 @@ Builders put code where this file says; if a path is missing, ask Design before 
 | `engine/crates/aegis_host/src/` | Command API protocol (`lib.rs` `Driver`), headless playtest replay (`playtest.rs`), `trail.rs` | done |
 | `engine/crates/aegis_cli/src/` | `aegis` CLI core: `lib.rs` (`serve`, `link`, `content`, `replay`), `scenario.rs`, `bundle.rs` (`AEGISPK1`) | done |
 | `engine/crates/<crate>/tests/` | Engine unit & lint tests (`clock_lint.rs`, `fs_lint.rs`, `formula_marked.rs`, `rng_hash.rs`, `face_fixtures.rs`, `ground.rs`, `portrait_fx.rs`, `portrait_overlays.rs`, `layout_editor.rs`, `music_variants.rs`, `music_loops.rs`, etc.) | done |
-| `engine/docs/`, `engine/assets/` | `ENGINE_SPEC.md`, `PORT_NOTES.md`, `authoring/` (`combat_hooks.md`, `region_grounds.md`); shared fonts (`Open Sans`), `tilesets/common/`, UI WAVs | done |
+| `engine/docs/`, `engine/assets/` | `ENGINE_SPEC.md`, `PORT_NOTES.md`, `authoring/` (`combat_hooks.md`, `region_grounds.md`, `battle_stage.md`); shared fonts (`Open Sans`), `tilesets/common/`, UI WAVs | done |
 | `engine/web/` | Early JS combat prototype | parked |
 
 ## RPG Kit (`kits/rpg/`) & Emberwake Crates (`games/emberwake/crates/`)
