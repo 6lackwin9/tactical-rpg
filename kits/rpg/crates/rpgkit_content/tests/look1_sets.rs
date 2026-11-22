@@ -119,6 +119,14 @@ fn tiles_of_the_wrong_size_are_errors() {
     png(&root.join("tilesets/ward_stage/front_face/floor/v0.png"), 64, 24);
     // DIORAMA3 R5: a stage set's cover prop is 64 x 72
     png(&root.join("tilesets/ward_stage/cover/v0.png"), 64, 72);
+    // DIORAMA4 S2: a terrain override folder's own front face is 64 x 24 too
+    png(&root.join("tilesets/ward_stage/lava/front_face/v0.png"), 64, 24);
+    // DIORAMA5 slice 0: a ground sheet of whole 64 x 48 cells, accent decals at 64 x 48, lips 64 wide up to 48 high
+    png(&root.join("tilesets/ward_stage/grass/sheet.png"), 256, 192);
+    png(&root.join("tilesets/ward_stage/stone/sheet.png"), 100, 48);
+    png(&root.join("tilesets/ward_stage/grass/decal/v0.png"), 64, 48);
+    png(&root.join("tilesets/ward_stage/lip/lava/v0.png"), 64, 12);
+    png(&root.join("tilesets/ward_stage/lip/lava/v1.png"), 32, 12);
     png(&root.join("tilesets/ward/wall_face/v0.png"), 32, 16);
     png(&root.join("tilesets/ward/wall_face/v1.png"), 32, 12);
     png(&root.join("tilesets/ward/wall_face/v2.png"), 32, 32);
@@ -127,6 +135,8 @@ fn tiles_of_the_wrong_size_are_errors() {
         errors,
         ["Tile art 'tilesets/ward/wall/v0.png' is 16x16 px; a region tile wants 32x32 or 32x24.".to_string(),
          "Tile art 'tilesets/ward/wall_face/v2.png' is 32x32 px; a region wall face wants 32x16 or 32x12 or 128x48.".to_string(),
+         "Lip art 'tilesets/ward_stage/lip/lava/v1.png' is 32x12 px; a stage lip is 64 wide and 1 to 48 high.".to_string(),
+         "Ground sheet 'tilesets/ward_stage/stone/sheet.png' is 100x48 px; a stage ground sheet is a whole number of 64x48 cells.".to_string(),
          "Tile art 'tilesets/ward_stage/wall_face/v1.png' is 64x48 px; a stage wall face wants 64x24.".to_string(),
          "Tile art 'tilesets/ward_stage/wall_foot/v1.png' is 64x48 px; a stage wall foot wants 64x16.".to_string()]
     );

@@ -326,9 +326,28 @@ pub fn tileset_errors(v: &View, w: &str) -> Vec<String> {
                 if let Some(size) = png_size(&root.join(&rel)) {
                     let in_set = rel.strip_prefix(&format!("tilesets/{set}/")).unwrap_or(&rel);
                     let tile = in_set.strip_prefix("boundary/").and_then(|b| b.split_once('/')).map_or(in_set, |(_, rest)| rest);
-                    // DIORAMA2 R2: a stage set's front face per terrain (`front_face/<terrain>/`) is a wall face's size
-                    let face = tile.starts_with("wall_face/") || (role == "stage" && tile.starts_with("front_face/"));
-                    let foot = role == "stage" && tile.starts_with("wall_foot/");
+                    // DIORAMA2 R2: a stage set's front face per terrain (`front_face/<terrain>/`) is a wall face's size;
+                    // DIORAMA4 S2: so is a terrain override folder's own (`<terrain>/front_face/`)
+                    let parts: Vec<&str> = tile.split('/').collect();
+                    let stage = role == "stage";
+                    let face = tile.starts_with("wall_face/") || (stage && (tile.starts_with("front_face/") || (parts.len() == 3 && parts[1] == "front_face")));
+                    let foot = stage && tile.starts_with("wall_foot/");
+                    // DIORAMA5 slice 0: a terrain's ground sheet (`<terrain>/sheet.png`, whole 64 x 48 cells) and a sunken
+                    // terrain's lip (`lip/<terrain>/v*`, 64 wide, at most a cell high); `<terrain>/decal/v*` is a stage tile
+                    if stage && parts.len() == 2 && parts[1] == "sheet.png" {
+                        let (cw, ch) = STAGE_TILE_PX[0];
+                        if size.0 == 0 || size.1 == 0 || size.0 % cw != 0 || size.1 % ch != 0 {
+                            out.push(format!("Ground sheet '{rel}' is {}x{} px; a stage ground sheet is a whole number of {cw}x{ch} cells.", size.0, size.1));
+                        }
+                        continue;
+                    }
+                    if stage && parts.first() == Some(&"lip") {
+                        let (cw, ch) = STAGE_TILE_PX[0];
+                        if size.0 != cw || size.1 == 0 || size.1 > ch {
+                            out.push(format!("Lip art '{rel}' is {}x{} px; a stage lip is {cw} wide and 1 to {ch} high.", size.0, size.1));
+                        }
+                        continue;
+                    }
                     let (sizes, what) = if face {
                         (&face_px[..], format!("{role} wall face"))
                     } else if foot {

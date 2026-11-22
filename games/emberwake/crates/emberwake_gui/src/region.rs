@@ -3464,10 +3464,10 @@ mod tests {
     /// REGIONGROUND1: a ground's one texture and a boundary's tiles are in the tree; a ground's other file is a stray.
     #[test]
     fn ground_and_boundary_art_follow_their_patterns() {
-        for ok in ["tilesets/ashlands/ground/mud/v0.png", "tilesets/common/boundary/keep/wall/v0.png", "tilesets/common/boundary/keep/wall_face/v2.png", "tilesets/sunk_ward_stage/front_face/floor/v3.png", "tilesets/sunk_ward_stage/stage.fx.json", "tilesets/sunk_ward_stage/cover/v0.png", "tilesets/sunk_ward_stage/wall_foot/v1.png", "tilesets/sunk_ward_foundry_stage/lava/front_face/v0.png", "tilesets/high_bastion_stage/backdrop_ramparts.png"] {
+        for ok in ["tilesets/ashlands/ground/mud/v0.png", "tilesets/common/boundary/keep/wall/v0.png", "tilesets/common/boundary/keep/wall_face/v2.png", "tilesets/sunk_ward_stage/front_face/floor/v3.png", "tilesets/sunk_ward_stage/stage.fx.json", "tilesets/sunk_ward_stage/cover/v0.png", "tilesets/sunk_ward_stage/wall_foot/v1.png", "tilesets/sunk_ward_foundry_stage/lava/front_face/v0.png", "tilesets/sunk_ward_stage/floor/sheet.png", "tilesets/sunk_ward_stage/floor/decal/v0.png", "tilesets/sunk_ward_stage/lip/lava/v1.png", "props/common/exit_path/v0.png", "props/common/exit_gate/v0.png", "tilesets/sunk_ward_stage/lava/over_floor/m01.png", "tilesets/sunk_ward_foundry_stage/floor/over_lava/m14.png"] {
             assert!(layout_ok(ok), "{ok}");
         }
-        for stray in ["tilesets/ashlands/ground/mud/v1.png", "tilesets/ashlands/ground/mud.png", "tilesets/ashlands/ground/mud/over_ash/m01.png", "tilesets/common/boundary/keep/roof/v0.png", "tilesets/common/boundary/keep/wall/face.png", "tilesets/sunk_ward_stage/front_face/floor.png", "tilesets/sunk_ward_stage/floor/stage.fx.json", "tilesets/high_bastion_stage/ramparts.png", "tilesets/sunk_ward_foundry_stage/lava/front_face/v0.jpg"] {
+        for stray in ["tilesets/ashlands/ground/mud/v1.png", "tilesets/ashlands/ground/mud.png", "tilesets/ashlands/ground/mud/over_ash/m01.png", "tilesets/common/boundary/keep/roof/v0.png", "tilesets/common/boundary/keep/wall/face.png", "tilesets/sunk_ward_stage/front_face/floor.png", "tilesets/sunk_ward_stage/floor/stage.fx.json", "tilesets/high_bastion_stage/backdrop_ramparts.png", "tilesets/sunk_ward_foundry_stage/lava/front_face/v0.jpg", "tilesets/sunk_ward_stage/floor/sheet1.png", "tilesets/sunk_ward_stage/floor/decal/a.png", "tilesets/sunk_ward_stage/lip/lava.png", "tilesets/ashlands/floor/over_mud/m01.png", "tilesets/sunk_ward_stage/lava/over_floor/m15.png", "tilesets/sunk_ward_stage/lava/over_floor/v0.png"] {
             assert!(!layout_ok(stray), "{stray}");
         }
     }
@@ -3549,6 +3549,8 @@ mod tests {
             ["ui", "views", f] => f.ends_with(".view.json"),
             ["ui", "frames", f] => png(f) || f.ends_with(".json"),
             ["ui", "pins" | "badges" | "chips" | "intents" | "hud" | "markers" | "services", f] | ["ui", f] => png(f),
+            // DIORAMA5 slice 0 (PR7-77): a terrain's ground sheet (before the `v*` pattern below)
+            ["tilesets", _, _, "sheet.png"] => true,
             ["tilesets", _, _, f] | ["props", _, _, f] => v(f),
             // REGIONGROUND1: a ground's one texture (only `v0` is read), and a boundary's tiles
             ["tilesets", _, "ground", _, "v0.png"] => true,
@@ -3558,9 +3560,15 @@ mod tests {
             ["tilesets", _, "stage.fx.json"] => true,
             // DIORAMA4 S2 (PR7-74): a zone's terrain override folder's own front face (`<set>/<terrain>/front_face/v*`)
             ["tilesets", _, _, "front_face", f] => v(f),
-            // A stage set's parked placeholder backdrop (`backdrop_<name>.png`, Art/UI PR #91) until its zone exists
-            // and it moves to `backgrounds/battle/<zone>.png` ([PROVISIONAL], FB-445 for Design's ASSETORG2 row)
-            ["tilesets", _, f] => f.starts_with("backdrop_") && png(f),
+            // DIORAMA5 slice 0 (PR7-77): a terrain's ground sheet, its accent decals, a sunken terrain's lip art, and
+            // the exit marker's path decal and gate (`props/common/exit_path/v*`, `exit_gate/v*`, the props pattern)
+            ["tilesets", _, _, "decal", f] => v(f),
+            ["tilesets", _, "lip", _, f] => v(f),
+            // A stage set's transition pieces (`<upper>/over_<lower>/m01..m14`, LOOK1 5.3, 64 x 48), a stopgap for
+            // Art/UI's ragged edges until the composer draws the battle ground; region sets keep refusing them
+            ["tilesets", set, _, over, f] if set.ends_with("_stage") && over.starts_with("over_") => {
+                f.strip_prefix('m').and_then(|n| n.strip_suffix(".png")).filter(|n| n.len() == 2).and_then(|n| n.parse::<u32>().ok()).is_some_and(|n| (1..=14).contains(&n))
+            }
             // MAP-HOOKS1: a location's landmark on the world map, and a world map background with its layout sidecar
             ["map", "landmarks", f] => png(f),
             ["backgrounds", "world_map", f] => png(f) || f.ends_with(".json"),

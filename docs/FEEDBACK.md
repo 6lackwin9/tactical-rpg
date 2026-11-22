@@ -131,8 +131,33 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-32` (`ACT1-AGENT-RUN1`) | Report (tools lane) | `develop` | Agent run of Act 1: 9 quests turned in, then blocked at the Bone-Mill boss for the auto plan; PT-40..PT-65. FB-441 |
 | `PR7-74` (`DIORAMA4`) | Built (tools lane) | `develop` | Zone stage sets, tint and terrain overrides (`stage.fx.json` keys for Art/UI), the backdrop band under the boss bar, see-through units in front of the focus, the boss-fight foe card off the party; S5 is an art crop. FB-443 |
 | `PR7-75` (`ACT1-FIX1`) | Built (tools lane) | `develop` | The ending's reason in the results and the log, the boss HP hover and the Hostiles count, a fresh seed on a retry, the talk-first message, no sentinel durations, the guest portrait, the portrait key first. FB-445 |
+| `PR7-77` (`DIORAMA5`) slice 0 | Built (tools lane) | `develop` | The content check and the layered-tree test accept ground sheets, accent decals, lip art and the exit path and gate props; R1 to R5 follow. FB-447 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-447: PR7-77 DIORAMA5 slice 0 built; the new diorama art paths are accepted
+
+- **Status**: built (tools lane), `develop`, its own commit so Art/UI's placeholder PR can merge. R1 to R5 follow in a
+  later item.
+- **Spec**: `docs/READY.md` row `00f2` `PR7-77` (`DIORAMA5`), slice 0.
+- **Size choice for R1**: `CELL_MAX` is raised (to 64) rather than composing at half size and scaling, so the battle
+  ground composes at the stage art's own resolution (a 64 x 48 cell, 1:1 with the tiles; a half-size compose would blur
+  or double the sheet's pixels). Slice 0's sizes follow: a sheet is whole 64 x 48 cells.
+- **What landed**:
+  - Content check (`rpgkit_content` `check/assets.rs` `tileset_errors`, stage role): `<terrain>/sheet.png` must be a
+    whole number of 64 x 48 cells; `lip/<terrain>/v*` 64 wide and 1 to 48 high; `<terrain>/decal/v*` a stage tile (64 x
+    48); a terrain override's own `<terrain>/front_face/v*` a wall face (64 x 24; it was checked as a 64 x 48 tile).
+  - Layered-tree test (`region.rs` `layout_ok`): `tilesets/<set>/<terrain>/sheet.png`, `tilesets/<set>/<terrain>/decal/v*`
+    and `tilesets/<set>/lip/<terrain>/v*`; `props/common/exit_path/v*` and `exit_gate/v*` were already in the props
+    pattern. As a stopgap for Art/UI's ragged edges, a stage set's (`*_stage`) transition pieces
+    `<upper>/over_<lower>/m01..m14` (checked as 64 x 48 stage tiles); region sets keep refusing `over_*`. The prop
+    sizes (64 x 48, 64 x 72) are not checked (no props size check exists); R4 draws them at their size.
+- **Dropped**: FB-445's provisional `tilesets/<set>/backdrop_<name>.png` allowance, now that Art/UI's PR #93 moved the
+  parked backdrops to `backgrounds/battle/` (a parked backdrop in a set is a stray again, tested).
+- **Tests**: `rpgkit_content/tests/look1_sets.rs` (`tiles_of_the_wrong_size_are_errors`: a good and a bad sheet, a decal,
+  a good and a bad lip, an override front face), `region.rs` `ground_and_boundary_art_follow_their_patterns`.
+- **Docs delta**: ASSETORG2 section 3, the stage set line: add `<terrain>/sheet.png` (whole 64 x 48 cells),
+  `<terrain>/decal/v*` (64 x 48) and `lip/<terrain>/v*` (64 wide); `props/common/exit_path` and `exit_gate`.
 
 ### FB-445: PR7-75 ACT1-FIX1 built; ending reasons, boss HP, retry seed, talk message, durations, portraits
 
