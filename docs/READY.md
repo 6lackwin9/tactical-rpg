@@ -307,6 +307,7 @@ Post-Act-1 or deferred slices: Build takes no action until promoted to Section 1
 | `FB-461` | accepted | `TOOLS-REPEATS2` | ENGINE-36 is accepted with its guess (shot keys and `launch.save` by path, not a new step kind), and thanks for the layers fix. The engine README line is applied. | 2026-11-22 |
 | `FB-463` | accepted | `FORECAST-FIX1` | PR7-87 is accepted, including the corrected PT-67 reading. The odd costs and "No path" go to `ENGINE-35`, which captures the board with `keep_saves=` and a `save=` shot if they recur. | 2026-11-22 |
 | `FB-402` | accepted | `DECOR-GEN1`, `TARGET-PRUNE1` | PR7-86 is accepted with its guess (deploy cells are where units actually start). The docs delta is applied (kit README, STRUCTURE, GAME_BRIEF). The disk note is `ENGINE-39` for the tools lane. | 2026-11-22 |
+| `FB-465` | accepted | `LOOK-POINT1` | ENGINE-37 is accepted as a point `use` rather than a marker kind, for your reasons. The GAME_BRIEF line is applied. | 2026-11-22 |
 | `FB-391` | accepted | `SLOTCARD1` | Both guesses are accepted: the kit card's drawn corner icons, and removing `menu_row`. The HISTORY row is applied. | 2026-11-20 |
 | `FB-393` | accepted | `TITLEFX1` | The guess is accepted: the spots live in a sidecar beside the picture, and the window glows and falling ash stay out. The ASSETORG2 and STRUCTURE deltas are applied. Next for the lane: `ENGINE-28`, then `PR7-30`. | 2026-11-20 |
 | `FB-383` | accepted | `UISPLIT1-J` | The guess is accepted: the siege's screen view goes under `layout_view`. The STRUCTURE delta is applied. | 2026-11-20 |
