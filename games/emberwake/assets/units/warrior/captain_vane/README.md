@@ -1,8 +1,9 @@
 # warrior/captain_vane: the Captain Vane's painted frame sheet (placeholder)
 
-Gemini Style 2 frame sheet (item SW-29, accepted by Art/UI 2026-11-21): Act 1 boss: dented gilded cuirass over the rust-crimson Watch surcoat, plumed kettle helm, grey stubble and a long Watch bill. Keyed, mirrored to face right (the stage
-mirrors it for enemies) and cut to the game's layout. A placeholder until the finals (decision "Placeholder-first
-assets").
+Gemini Style 2 frame sheet (items SW-29 and SW-31, accepted by Art/UI 2026-11-22): Act 1 boss: dented gilded cuirass
+over the rust-crimson Watch surcoat, bareheaded with long swept-back grey hair as in his portrait, grey stubble and a
+long Watch bill. Keyed, mirrored to face right (the stage mirrors it for enemies) and cut to the game's layout. A
+placeholder until the finals (decision "Placeholder-first assets").
 
 - `sheet.png`: 672 x 480, one clip per row, frames left to right, each frame 112 x 96 (`clips.json` `frame`), feet on
   pixel row 93 (`foot`), facing 3/4 right.
