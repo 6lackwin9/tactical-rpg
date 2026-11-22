@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// A body's sheet (palette applied) and its clips.
+/// A body's sheet (palette applied unless `painted`) and its clips.
 struct Body {
     sheet: Image,
     clips: Clips,
@@ -239,7 +239,8 @@ impl Art {
         if !clips.sheet_problem(sheet.w as u32, sheet.h as u32).is_empty() {
             return None;
         }
-        if !palette.is_empty() {
+        // DIORAMA1B: a painted sheet draws as painted (no palette swap)
+        if !palette.is_empty() && !clips.painted {
             if let Some(slots) = assets::read_json(&self.layers, &assets::body_file(key, &format!("palettes/{palette}.json"))).and_then(|v| assets::parse_palette(&v).ok()) {
                 sheet.swap_colours(&assets::palette_pairs(&clips.palette, &slots));
             }

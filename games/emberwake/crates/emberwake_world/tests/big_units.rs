@@ -38,10 +38,17 @@ fn seeded() -> (aegis_core::scratch::Scratch, PathBuf) {
     let dir = t.join("data");
     copy_dir(&data_dir(), &dir);
     let seed: Value = serde_json::from_str(&fs::read_to_string(data_dir().join("seeds/pr7_12.json")).unwrap()).unwrap();
+    // PR7-65 (DIORAMA1B): the unit keeps its shipped `art` (the painted sheet a later seed points at; the scratch folder
+    // has no game assets, so the seed's older body would read as a new problem)
+    let shipped = store::view(&data_dir());
     for step in seed["steps"].as_array().unwrap() {
         assert_eq!(step["op"], "upsert");
         let kind = step["kind"].as_str().unwrap();
-        store::upsert(&dir, None, kind, step["entry"].as_object().unwrap(), None).unwrap_or_else(|e| panic!("seed step: {e:?}"));
+        let mut entry = step["entry"].as_object().unwrap().clone();
+        if let (true, Some(art)) = (entry.contains_key("art"), shipped.get(kind, entry["id"].as_str().unwrap_or("")).get("art")) {
+            entry.insert("art".into(), art.clone());
+        }
+        store::upsert(&dir, None, kind, &entry, None).unwrap_or_else(|e| panic!("seed step: {e:?}"));
     }
     (t, dir)
 }

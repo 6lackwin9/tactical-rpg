@@ -47,6 +47,9 @@ pub const FRONT_FACE: Rect = Rect::new(128, BOARD_Y + GRID_H * CELL_H, 384, FACE
 pub const DROP_SHADOW: Rect = Rect::new(128, BOARD_Y + GRID_H * CELL_H + FACE_H, 384, 8);
 /// How far a block's cap is lifted above its cell.
 pub const BLOCK_LIFT: i32 = 12;
+/// DIORAMA1B (D5): how many cells (`CELL_W`) a body with a `foot` row stands per footprint cell, its frame's top to
+/// its foot row (contract 8.1: about 1.15; a 2 x 2 unit about 2.3).
+pub const PAINTED_CELLS: f32 = 1.15;
 /// The Flat view: square cells at the panel's interior top.
 pub const FLAT_Y: i32 = 30;
 pub const FLAT_CELL: i32 = 32;
@@ -129,6 +132,39 @@ impl Geom {
         match self.view {
             View::Stage => Rect::new(fx - tp / 2 + dx, fy + 1 - tp + dy, tp, tp),
             View::Flat => Rect::new(fx - tp / 2 + dx, fy - tp / 2 + dy, tp, tp),
+        }
+    }
+
+    /// DIORAMA1B (D5, contract 8.1): the sprite square of a unit filling the `n` x `n` square whose body has `frame`
+    /// and a `foot` row, and how far its bottom edge drops under the foot point's row. On the Stage a body with a
+    /// `foot` row is scaled so its frame from the top to the foot row stands `PAINTED_CELLS` cells (`CELL_W`) tall per
+    /// footprint cell (`fit_square` keeps the scale: the square's side is the frame's longer side), the drop being the
+    /// frame rows under the foot row; any other body (and every body Flat) keeps the token square (`token_px` x `n`,
+    /// no drop), as before.
+    pub fn sprite_px(&self, n: i32, frame: (u32, u32), foot: Option<u32>) -> (i32, i32) {
+        let n = n.max(1);
+        match (self.view, foot) {
+            (View::Stage, Some(foot)) if foot > 0 && frame.0 > 0 && frame.1 > 0 => {
+                let long = frame.0.max(frame.1) as f32;
+                let sp = (PAINTED_CELLS * CELL_W as f32 * n as f32 * long / foot as f32).round() as i32;
+                let drop = ((frame.1 - 1).saturating_sub(foot) as f32 * sp as f32 / long).round() as i32;
+                (sp, drop)
+            }
+            _ => (self.token_px * n, 0),
+        }
+    }
+
+    /// DIORAMA1B: `token_rect_n` for a sprite square of side `sp` dropping `drop` px (`sprite_px`): centred on the
+    /// square's foot point across, its bottom edge `1 + drop` px under it (Stage); centred on the square (Flat). With
+    /// the token square and no drop it is `token_rect_n`.
+    pub fn sprite_rect_n(&self, c: V2, n: i32, (sp, drop): (i32, i32), dx: i32, dy: i32) -> Rect {
+        if sp == self.token_px * n.max(1) && drop == 0 {
+            return self.token_rect_n(c, n, dx, dy);
+        }
+        let (fx, fy) = self.foot_n(c, n);
+        match self.view {
+            View::Stage => Rect::new(fx - sp / 2 + dx, fy + 1 + drop - sp + dy, sp, sp),
+            View::Flat => Rect::new(fx - sp / 2 + dx, fy - sp / 2 + dy, sp, sp),
         }
     }
 
@@ -1893,5 +1929,82 @@ mod tests {
         let body = Rect::new(139, 89, 17, 36);
         assert_eq!(unit_rect(cell, body), Rect::new(128, 89, 32, 41));
         assert_eq!(unit_rect(cell, Rect::new(140, 110, 4, 4)), cell, "a body inside the cell");
+    }
+
+    /// DIORAMA1B: a scratch root with body `units/painted/base`: a `w` x `h` frame (one `idle` row, 2 frames) whose
+    /// figure fills columns w/4..3w/4 from row h/8 down to its `foot` row, painted.
+    fn painted_root(name: &str, (w, h): (u32, u32), foot: u32) -> aegis_core::scratch::Scratch {
+        let root = aegis_core::scratch::Scratch::vacant(&format!("stage_painted_{name}"));
+        let sw = 2 * w;
+        let mut px = vec![0u8; (sw * h * 4) as usize];
+        for y in h / 8..=foot {
+            for x in (w / 4..3 * w / 4).chain(w + w / 4..w + 3 * w / 4) {
+                let i = ((y * sw + x) * 4) as usize;
+                px[i..i + 4].copy_from_slice(&[90, 70, 50, 255]);
+            }
+        }
+        let dir = root.join("units/painted/base");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = std::fs::File::create(dir.join("sheet.png")).unwrap();
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(file), sw, h);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&px).unwrap();
+        let clips = json!({"frame": [w, h], "foot": foot, "painted": true, "clips": [{"id": "idle", "frames": 2, "ms": [200, 200]}]});
+        std::fs::write(dir.join("clips.json"), clips.to_string()).unwrap();
+        root
+    }
+
+    /// DIORAMA1B (D5): the drawn frame of a painted body filling the `n` x `n` square at `c`: (frame top to foot row
+    /// in px, the figure's solid bounds placed on the board).
+    fn painted_on(art: &mut Art, g: &Geom, n: i32, c: V2) -> (f32, Rect) {
+        let clips = art.clips("painted/base").expect("the body loads").clone();
+        let foot = clips.foot.expect("a foot row");
+        let sprite = g.sprite_px(n, clips.frame, clips.foot);
+        let tall = foot as f32 * sprite.0 as f32 / clips.frame.0.max(clips.frame.1) as f32;
+        let r = g.sprite_rect_n(c, n, sprite, 0, 0);
+        let b = art.body_clip("painted/base", "", "idle", 0, sprite.0).and_then(|f| f.opaque_bounds(aegis_ui::canvas::OUTLINE_ALPHA)).expect("a figure");
+        (tall, Rect::new(r.x + b.x, r.y + b.y, b.w, b.h))
+    }
+
+    /// DIORAMA1B (D5, contract 8.1): a painted 112 x 96 frame (feet on row 93) stands `PAINTED_CELLS` cells
+    /// (`CELL_W`) tall from its top to its foot row, centred on the cell's foot point with its feet on it; a 2 x 2
+    /// unit's 224 x 192 frame stands twice that on its square's centre foot point.
+    #[test]
+    fn a_painted_frame_stands_1_15_cells_on_its_foot_point() {
+        let g = stage();
+        let c = V2::new(4, 3);
+        let root = painted_root("one", (112, 96), 93);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let (tall, body) = painted_on(&mut art, &g, 1, c);
+        let want = PAINTED_CELLS * CELL_W as f32;
+        assert!((tall - want).abs() <= 1.0, "about 1.15 cells tall: {tall} against {want}");
+        let (fx, fy) = g.foot(c);
+        assert!((body.y + body.h - 1 - fy).abs() <= 1, "the feet on the foot point: bottom row {} against {fy}", body.y + body.h - 1);
+        assert!((body.x + body.w / 2 - fx).abs() <= 1, "centred on the foot point: {} against {fx}", body.x + body.w / 2);
+        let root = painted_root("big", (224, 192), 189);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let (tall, body) = painted_on(&mut art, &g, 2, c);
+        assert!((tall - 2.0 * want).abs() <= 1.0, "a 2 x 2 unit about 2.3 cells tall: {tall} against {}", 2.0 * want);
+        let (fx, fy) = g.foot_n(c, 2);
+        assert!((body.y + body.h - 1 - fy).abs() <= 1, "on the square's foot point: bottom row {} against {fy}", body.y + body.h - 1);
+        assert!((body.x + body.w / 2 - fx).abs() <= 1, "centred on the square: {} against {fx}", body.x + body.w / 2);
+    }
+
+    /// DIORAMA1B: a body without a `foot` row keeps the token square on the Stage (as before), and the Flat view keeps
+    /// the token square for every body (a painted frame fits it like any sheet).
+    #[test]
+    fn a_sheet_without_a_foot_row_and_the_flat_view_keep_the_token_square() {
+        let g = stage();
+        let c = V2::new(2, 5);
+        for n in [1, 2] {
+            let sprite = g.sprite_px(n, (48, 48), None);
+            assert_eq!(sprite, (g.token_px * n, 0));
+            assert_eq!(g.sprite_rect_n(c, n, sprite, 3, -2), g.token_rect_n(c, n, 3, -2), "the old sheet's rect, n = {n}");
+        }
+        let flat = Geom::new(View::Flat, &Tuning::default());
+        let sprite = flat.sprite_px(1, (112, 96), Some(93));
+        assert_eq!(sprite, (flat.token_px, 0), "Flat: the token square");
+        assert_eq!(flat.sprite_rect_n(c, 1, sprite, 0, 0), flat.token_rect(c, 0, 0));
     }
 }

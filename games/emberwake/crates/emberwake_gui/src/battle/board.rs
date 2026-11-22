@@ -548,6 +548,8 @@ struct StageUnit {
     foot: (i32, i32),
     /// The drawn sprite square (slide and hit shake).
     tr: Rect,
+    /// DIORAMA1B: the sprite square's side (`Geom::sprite_px`: the token square, or a painted frame's scale).
+    sp: i32,
     /// The body's solid rect at its place (slide, no shake): the feet pass's rect and half of its widget rect.
     body_rect: Rect,
     /// STATUSFX1: the status looks it draws (none once it has fallen).
@@ -619,18 +621,20 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
         // BIGUNIT1 BU14: a 2 x 2 unit stands on its square's foot point, its sprite scaled to the square
         let n = w.size_of(i);
         let (fx, fy) = geo.foot_n(pos, n);
-        let rest = geo.token_rect_n(pos, n, dx, dy);
+        // DIORAMA1B (D5): a body with a `foot` row stands PAINTED_CELLS cells tall per footprint cell on its foot point
+        let sprite = body.as_deref().and_then(|k| cx.art.clips(k)).map_or((tp * n, 0), |c| geo.sprite_px(n, c.frame, c.foot));
+        let rest = geo.sprite_rect_n(pos, n, sprite, dx, dy);
         // 3.8: the body's solid bounds of its idle frame 0 (animation frames do not move it); DIR4-HB: in the facing's
         // view (the front or back idle while it faces down or up, else the side idle with its left/right); no body:
         // the letter plate.
-        let body_rect = match body.as_deref().and_then(|k| cx.art.body_bounds_facing(k, &palette, tp * n, facing)) {
+        let body_rect = match body.as_deref().and_then(|k| cx.art.body_bounds_facing(k, &palette, sprite.0, facing)) {
             Some(bb) => Rect::new(rest.x + bb.x, rest.y + bb.y, bb.w, bb.h),
             None => rest.inset(4),
         };
         // FX1-L2: a miss's target steps aside and back (its sprite only; its foot keeps its place in the draw order)
         let (sx, sy) = fx::sidestep_of(sidesteps, i, anim_now);
         let looks = status_draws(tokens, i, alive, wall, anim_now, tuning);
-        units.push(StageUnit { i, pos, n, ally, alive, hp, standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.token_rect_n(pos, n, dx + shake + sx, dy + sy), body_rect, looks });
+        units.push(StageUnit { i, pos, n, ally, alive, hp, standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.sprite_rect_n(pos, n, sprite, dx + shake + sx, dy + sy), sp: sprite.0, body_rect, looks });
     }
     let status: Vec<StatusOn> = units.iter().filter(|t| t.alive).map(|t| StatusOn { unit: t.i, foot: (t.foot.0 as f32, t.foot.1 as f32), left: t.facing.left, looks: t.looks.clone() }).collect();
     // 3.7 pass 7: blocks, standing props and units sorted by their feet.
@@ -801,8 +805,9 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                         Item::Prop(c) => stage::draw_prop(&mut ui.p, &mut cx.art, &w.grid, c),
                         Item::Unit(i) => {
                             let Some(t) = unit_of(i) else { continue };
-                            // BIGUNIT1 BU14: a 2 x 2 unit's sprite is its sheet scaled to the square
-                            let tp = tp * t.n;
+                            // BIGUNIT1 BU14: a 2 x 2 unit's sprite is its sheet scaled to the square; DIORAMA1B: a
+                            // painted frame at its own scale (`Geom::sprite_px`)
+                            let tp = t.sp;
                             let a = tokens.anims.get(i).unwrap_or(&still);
                             let ring = if t.ally { crate::tokens::ally() } else { th().foe };
                             let outline = if Some(i) == sel || Some(i) == talker { Some(th().gold) } else if hovered == Some(i) { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
@@ -852,7 +857,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                 for (k, p) in order.iter().enumerate() {
                     let Item::Unit(i) = p.item else { continue };
                     let Some(t) = unit_of(i).filter(|t| t.alive) else { continue };
-                    let tp = tp * t.n;
+                    let tp = t.sp;
                     let (Some(b), Some((_, f))) = (t.body.as_deref(), frames.iter().find(|(j, _)| *j == i)) else { continue };
                     let col = match stage::through(&order, k, Some(i) == sel, hovered == Some(i), reveal) {
                         Some(Through::Side) => with_alpha(if t.ally { crate::tokens::ally() } else { th().foe }, 230),

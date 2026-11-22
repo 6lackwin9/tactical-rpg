@@ -269,12 +269,16 @@ pub struct Clip {
     pub strike: u32,
 }
 
-/// A body's `clips.json`: the frame size, its palette slots and its clips (row order).
+/// A body's `clips.json`: the frame size, its palette slots and its clips (row order). DIORAMA1B (D5): `foot`, the
+/// frame's pixel row the feet stand on (None: not given; a stage may then fit the frame as a token), and `painted`, a
+/// painted sheet that takes no palette swap.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Clips {
     pub frame: (u32, u32),
     pub palette: IndexMap<String, [u8; 3]>,
     pub clips: Vec<Clip>,
+    pub foot: Option<u32>,
+    pub painted: bool,
 }
 
 fn is_snake(s: &str) -> bool {
@@ -287,7 +291,8 @@ impl Clips {
     /// slots `#rrggbb`. DIR4 3.1: a view row carries `of` and `view` together, `view` is `down` or `up`, `of` names a
     /// side clip of the list and the id is `<of>_<view>`; `idle` is a side clip. FX1-L1: `impact`, when present, is a
     /// frame of the clip (0 to frames - 1). WINDUP1 2: `loop_from` (1 to frames - 1, only with `loop` true) and
-    /// `strike` (0 to frames - 1, at most `impact`), both optional. Every problem is listed.
+    /// `strike` (0 to frames - 1, at most `impact`), both optional. DIORAMA1B: `foot` (optional) is a row of the frame
+    /// (0 to h - 1); `painted` a flag (default false). Every problem is listed.
     pub fn parse(v: &Value) -> Result<Clips, Vec<String>> {
         let mut problems = Vec::new();
         let Some(o) = v.as_object() else { return Err(vec!["clips.json must be an object {frame, palette, clips}.".into()]) };
@@ -300,6 +305,24 @@ impl Clips {
             }
         };
         let palette = colours(o.get("palette"), "palette", &mut problems);
+        let foot = match o.get("foot") {
+            None | Some(Value::Null) => None,
+            Some(v) => match v.as_u64().filter(|r| frame.1 > 0 && *r < frame.1 as u64) {
+                Some(r) => Some(r as u32),
+                None => {
+                    problems.push(format!("foot must be a row of the frame (0 to {}).", frame.1.saturating_sub(1)));
+                    None
+                }
+            },
+        };
+        let painted = match o.get("painted") {
+            None | Some(Value::Null) => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => {
+                problems.push("painted must be true or false.".into());
+                false
+            }
+        };
         let mut clips: Vec<Clip> = Vec::new();
         // Per clip: whether it carries both `of` and `view`, and its view when that is valid.
         let mut views: Vec<(bool, Option<View>)> = Vec::new();
@@ -410,7 +433,7 @@ impl Clips {
             problems.push("clips must include 'idle' (the token).".into());
         }
         if problems.is_empty() {
-            Ok(Clips { frame, palette, clips })
+            Ok(Clips { frame, palette, clips, foot, painted })
         } else {
             Err(problems)
         }

@@ -187,6 +187,16 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     }
     // the units the derived-row seed re-ordered, as they stood before it as far as the ruleset rows care: no order
     let shipped_units = store::view(&data_dir());
+    // PR7-65 (DIORAMA1B): a replayed unit keeps its shipped `art` (the painted sheets the pr7_65 seed points at): the
+    // scratch folder has no game assets, so a body the replay changed would read as a new problem; the art is no part
+    // of the ruleset rows this replays
+    let keep_art = |e: &Dict| -> Dict {
+        let mut e = e.clone();
+        if let (Some(art), true) = (shipped_units.get("units", &json::s(&e, "id")).get("art"), e.contains_key("art")) {
+            e.insert("art".into(), art.clone());
+        }
+        e
+    };
     let reordered = seed_rows(DERIVED_ORDERS_SEED, "units");
     assert!(!reordered.is_empty(), "the derived-row seed re-orders unit decks");
     let class_basics = seed_steps(CLASS_BASICS_SEED);
@@ -200,7 +210,7 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         if let Some(Value::Object(deck)) = e.get_mut("deck") {
             deck.shift_remove("order");
         }
-        store::upsert(&tmp, None, "units", &e, None).unwrap_or_else(|err| panic!("unit '{id}' without its order: {err:?}"));
+        store::upsert(&tmp, None, "units", &keep_art(&e), None).unwrap_or_else(|err| panic!("unit '{id}' without its order: {err:?}"));
     }
     for e in &entries {
         store::upsert(&tmp, None, ruleset::KIND, e, None).unwrap_or_else(|err| panic!("seed row '{}': {err:?}", json::s(e, "id")));
@@ -278,7 +288,7 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     assert_eq!(rows(&tmp), pre_class_basics, "the HOOKS1-A, S2.2-S3, R1-BAL, A1.2-S1, W2-4 slice 1, A1.2-K3 and ATTACKLOCK1-O rows over it give the row before CLASS-BASICS");
     // A4.2-K1b: under field_intent the derived-row seed's orders are valid again and give the shipped units back
     for u in &reordered {
-        store::upsert(&tmp, None, "units", u, None).unwrap_or_else(|err| panic!("W2-4 slice 6a unit '{}': {err:?}", json::s(u, "id")));
+        store::upsert(&tmp, None, "units", &keep_art(u), None).unwrap_or_else(|err| panic!("W2-4 slice 6a unit '{}': {err:?}", json::s(u, "id")));
     }
     // R2-W2b CLASS-BASICS: the class-basics seed, in its order, gives the shipped rows and units back. GEAR-REWORK1
     // (PR5-51b) & CLASSPASS1-DATA (PR5-62b): its class rows name gear tokens / skill_paths superseded by the shipped
@@ -310,15 +320,18 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         if kind == "units" && json::s(&e, "id") == "brawler" {
             e.insert("loadout".into(), Value::Array(Vec::new()));
         }
+        if kind == "units" {
+            e = keep_art(&e);
+        }
         store::upsert(&tmp, None, kind, &e, None).unwrap_or_else(|err| panic!("CLASS-BASICS {kind} '{}': {err:?}", json::s(&e, "id")));
     }
     assert_eq!(rows(&tmp), pre_pk1s3, "the CLASS-BASICS seed over it gives the rows before PK1-S3");
     // R4-1 slice 2: the template seed's units (their stat template; no ruleset row changes)
     for e in seed_rows(TEMPLATES_SEED, "units") {
-        store::upsert(&tmp, None, "units", &e, None).unwrap_or_else(|err| panic!("R4-1 unit '{}': {err:?}", json::s(&e, "id")));
+        store::upsert(&tmp, None, "units", &keep_art(&e), None).unwrap_or_else(|err| panic!("R4-1 unit '{}': {err:?}", json::s(&e, "id")));
     }
     for e in seed_rows(R42_SEED, "units") {
-        store::upsert(&tmp, None, "units", &e, None).unwrap_or_else(|err| panic!("R4-2 unit '{}': {err:?}", json::s(&e, "id")));
+        store::upsert(&tmp, None, "units", &keep_art(&e), None).unwrap_or_else(|err| panic!("R4-2 unit '{}': {err:?}", json::s(&e, "id")));
     }
     // PR5-7 (PK1-S3): the seed's rulesets step gives the shipped rows back
     for e in &pk1s3 {
@@ -335,14 +348,14 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     assert!(sunkfix1.iter().any(|e| json::s(e, "id") == "founder_maren"), "the SUNKWARD-FIX1 seed re-decks founder_maren");
     assert!(seed_entries(SUNKFIX1_SEED).is_empty(), "the SUNKWARD-FIX1 seed changes no ruleset row");
     for e in &sunkfix1 {
-        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("SUNKWARD-FIX1 unit '{}': {err:?}", json::s(e, "id")));
+        store::upsert(&tmp, None, "units", &keep_art(e), None).unwrap_or_else(|err| panic!("SUNKWARD-FIX1 unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the SUNKWARD-FIX1 units steps leave the shipped ruleset rows");
     // PR5-41 (ACT1-DATA1): the seed's units steps (tithe_captive no longer flees) over SUNKWARD-FIX1's
     let act1fix1 = seed_rows(ACT1FIX1_SEED, "units");
     assert!(seed_entries(ACT1FIX1_SEED).is_empty(), "the ACT1-DATA1 seed changes no ruleset row");
     for e in &act1fix1 {
-        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("ACT1-DATA1 unit '{}': {err:?}", json::s(e, "id")));
+        store::upsert(&tmp, None, "units", &keep_art(e), None).unwrap_or_else(|err| panic!("ACT1-DATA1 unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the ACT1-DATA1 units steps leave the shipped ruleset rows");
     // PR5-51b (GEAR-REWORK1-DATA): the gear seeds' units steps, in order, over ACT1-DATA1's
@@ -350,7 +363,7 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     for seed in GEARREWORK1_SEEDS {
         assert!(seed_entries(seed).is_empty(), "the {seed} seed changes no ruleset row");
         for e in seed_rows(seed, "units") {
-            store::upsert(&tmp, None, "units", &e, None).unwrap_or_else(|err| panic!("{seed} unit '{}': {err:?}", json::s(&e, "id")));
+            store::upsert(&tmp, None, "units", &keep_art(&e), None).unwrap_or_else(|err| panic!("{seed} unit '{}': {err:?}", json::s(&e, "id")));
             gear.push(json::s(&e, "id"));
         }
     }
@@ -359,41 +372,41 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     let classpass1 = seed_rows(CLASSPASS1_SEED, "units");
     assert!(seed_entries(CLASSPASS1_SEED).is_empty(), "the CLASSPASS1-DATA seed changes no ruleset row");
     for e in &classpass1 {
-        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("CLASSPASS1 unit '{}': {err:?}", json::s(e, "id")));
+        store::upsert(&tmp, None, "units", &keep_art(e), None).unwrap_or_else(|err| panic!("CLASSPASS1 unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the CLASSPASS1-DATA units steps leave the shipped ruleset rows");
     // PR5-62c (TECHNIQUES-GRAFTS-DATA): the seed's units steps over CLASSPASS1-DATA's
     let techniques_grafts = seed_rows(TECHNIQUES_GRAFTS_SEED, "units");
     assert!(seed_entries(TECHNIQUES_GRAFTS_SEED).is_empty(), "the TECHNIQUES-GRAFTS-DATA seed changes no ruleset row");
     for e in &techniques_grafts {
-        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("TECHNIQUES-GRAFTS unit '{}': {err:?}", json::s(e, "id")));
+        store::upsert(&tmp, None, "units", &keep_art(e), None).unwrap_or_else(|err| panic!("TECHNIQUES-GRAFTS unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the TECHNIQUES-GRAFTS-DATA units steps leave the shipped ruleset rows");
     // PR6-5 (ACT2-DROPS-PK2-FLAGS): the seed's units steps over TECHNIQUES-GRAFTS-DATA's
     let pr6_5 = seed_rows(PR6_5_SEED, "units");
     assert!(seed_entries(PR6_5_SEED).is_empty(), "the PR6-5 seed changes no ruleset row");
     for e in &pr6_5 {
-        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("PR6-5 unit '{}': {err:?}", json::s(e, "id")));
+        store::upsert(&tmp, None, "units", &keep_art(e), None).unwrap_or_else(|err| panic!("PR6-5 unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the PR6-5 units steps leave the shipped ruleset rows");
     // PR7-12 (BIGUNIT1 BU16): the seed's units step puts `footprint: 2` on the Amalgam
     let pr7_12 = seed_rows(PR7_12_SEED, "units");
     assert!(seed_entries(PR7_12_SEED).is_empty(), "the PR7-12 seed changes no ruleset row");
     for e in &pr7_12 {
-        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("PR7-12 unit '{}': {err:?}", json::s(e, "id")));
+        store::upsert(&tmp, None, "units", &keep_art(e), None).unwrap_or_else(|err| panic!("PR7-12 unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the PR7-12 units step leaves the shipped ruleset rows");
     // PR7-41 (PT-22): the seed's units steps fill the founders' third active slot
     assert!(seed_entries(PR7_41_DECKS_SEED).is_empty(), "the PR7-41 seed changes no ruleset row");
     for e in &pr7_41 {
-        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("PR7-41 unit '{}': {err:?}", json::s(e, "id")));
+        store::upsert(&tmp, None, "units", &keep_art(e), None).unwrap_or_else(|err| panic!("PR7-41 unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the PR7-41 units steps leave the shipped ruleset rows");
     // PR7-40 (BATTLE-UI2): the seed's units steps set the enemies' short plate names
     let pr7_40 = seed_rows(PR7_40_SEED, "units");
     assert!(seed_entries(PR7_40_SEED).is_empty(), "the PR7-40 seed changes no ruleset row");
     for e in &pr7_40 {
-        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("PR7-40 unit '{}': {err:?}", json::s(e, "id")));
+        store::upsert(&tmp, None, "units", &keep_art(e), None).unwrap_or_else(|err| panic!("PR7-40 unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the PR7-40 units steps leave the shipped ruleset rows");
     // PR5-52 (RULESET-MODES1): the seed removes the classic row and re-saves timeline under modes: the shipped rows

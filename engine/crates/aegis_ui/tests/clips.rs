@@ -89,7 +89,7 @@ fn a_missing_clip_falls_back_to_idle_then_to_the_first_frame() {
     let f = c.frame_at("shield_bash", 150).unwrap();
     assert_eq!((f.row, f.clip.as_str(), f.frame), (0, "idle", 1), "a clip the body lacks plays idle");
     // A body without idle (built by hand: parse refuses it) shows its first clip's first frame, still.
-    let no_idle = Clips { frame: (F, F), palette: Default::default(), clips: vec![Clip { id: "walk".into(), frames: 2, ms: vec![80, 80], looped: true, of: String::new(), view: AssetView::Side, impact: None, loop_from: 0, strike: 0 }] };
+    let no_idle = Clips { frame: (F, F), palette: Default::default(), clips: vec![Clip { id: "walk".into(), frames: 2, ms: vec![80, 80], looped: true, of: String::new(), view: AssetView::Side, impact: None, loop_from: 0, strike: 0 }], ..Default::default() };
     let f = no_idle.frame_at("hurt", 90).unwrap();
     assert_eq!((f.row, f.clip.as_str(), f.frame), (0, "walk", 0));
     assert!(Clips::default().frame_at("idle", 0).is_none(), "no clips: nothing to draw (the caller's fallback)");

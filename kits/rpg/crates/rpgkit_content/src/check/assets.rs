@@ -79,7 +79,7 @@ pub fn passive_icon_errors(v: &View, passive: &Dict) -> Vec<String> {
     }
 }
 
-/// A3, A4 and A5 of a unit (`character` empty) or a world character on base unit `unit`.
+/// A3, A4 and A5 of a unit (`character` empty) or a world character on base unit `unit` (A4 skipped for a painted body).
 pub fn portrait_and_palette_warnings(v: &View, character: &Dict, unit: &Dict) -> Vec<String> {
     let mut out = Vec::new();
     if v.assets.roots.is_empty() {
@@ -102,9 +102,10 @@ pub fn portrait_and_palette_warnings(v: &View, character: &Dict, unit: &Dict) ->
         // A5: a body worn by a common-tier unit or character without its common portrait
         out.push(format!("Body '{body}' has no common portrait; {name} shows {class_id}_base."));
     }
-    // A4: the palette file and its slots
+    // A4: the palette file and its slots (DIORAMA1B: a painted body takes no palette swap, so its palette is not looked up)
     let palette = art::palette_of(character, unit);
-    if !palette.is_empty() {
+    let painted = matches!(body_state(v, &body), Some(Ok(c)) if c.painted);
+    if !palette.is_empty() && !painted {
         let rel = assets::body_file(&body, &format!("palettes/{palette}.json"));
         let problem = match assets::read_json(&v.assets, &rel) {
             None => format!("no file {rel}"),
