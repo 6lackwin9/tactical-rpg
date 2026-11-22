@@ -14,3 +14,6 @@ terrain `zones.foundry.terrain.<terrain>`, `PR7-74` DIORAMA4). What it does not 
 | `lava/front_face/` | 64 x 24 | The rim under the slag: the world set's stone face with a glowing slag lip and drips; read through `zones.foundry.terrain.lava` |
 | `rubble/` | 64 x 48 | The `floor/` tile, so the stones prop sits on the zone's own floor |
 | `floor/over_<terrain>/` | 64 x 48 | Transition pieces m01-m14: the floor's ragged edge over `lava` and `stone` |
+| `<terrain>/sheet.png` | 256 x 192 | Ground master for the composer (`PR7-77` R1): 4 x 4 cells, ten of the base tile and two each of the older crops, the whole sheet flattened at gain .9 so no tile reads as a second set (liquids: the base tile 4 x 4); placeholder |
+| `floor/decal/` | 64 x 48 | Accent marks for the composer (`PR7-77` R1), transparent: v0 a hairline crack, v1 a soft stain, v2 loose grit; drawn by Art/UI, placeholder |
+| `lip/lava/` | 64 x 12 | The slag pit's lip (`PR7-77` R2): the world set's lip stone with an orange glow below; placeholder |
