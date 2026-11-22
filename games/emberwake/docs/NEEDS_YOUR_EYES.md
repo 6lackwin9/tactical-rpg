@@ -38,6 +38,9 @@ Parked for your approval (golden re-records need your word):
   trying the boss by hand (`ENGINE-34`). Recommendation: decide the pacing after your own playtest; meanwhile the
   Tithing HUD says what happens at 0. The Night of the Red Pen resolving in one log line is on the story list for after
   your story playtest.
+  Update 2026-11-22 10:30 (`FB-392`): played by hand, the Bone-Mill boss was won first try at level 7 (the auto plan
+  still loses it); the Crucible was lost 5 of 5 at level 8 (the suggested winch holder draws both Purifiers and a
+  Footman, and the gate shuts when the holder falls). Bugs found there are queued; balance waits for you.
 - [ ] Diorama battle stage in the game (your 21:46 go-ahead): the first slice landed (`PR7-64`); Fable's in-game review
   (https://claude.ai/artifact/GfoCKjXQnVeTbFBBshuRe2) found the UI chrome on contract and the stage about half way to
   the mock. Queued as provisional, to confirm: amber light pools under the lanterns with a soft vignette; cover props
