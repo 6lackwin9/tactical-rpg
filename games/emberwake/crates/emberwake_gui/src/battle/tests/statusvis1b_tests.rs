@@ -165,8 +165,19 @@ fn card_numbers_show_modifiers_and_the_riposte_chip() {
                     continue;
                 }
                 if b.send(&cx, json!({"cmd": "pick", "unit": h, "target": f, "pick": {"skill": sk}}))["ok"] == json!(true) {
-                    found = Some((h, f));
-                    break 'all;
+                    // PR7-90 (PT-85): a hit the forecast reads from a tile next to the foe at its impact (the moves
+                    // booked before it on the board as the round runs), so the riposte answers it
+                    let s = b.session();
+                    let sched = crate::battle_view::round_schedule(s);
+                    let next_to = sched.iter().filter(|a| a.unit == h && !a.cancelled && emberwake_battle::intent::hit_on(&s.w, &sched, a, f).is_some_and(|x| x.fails.is_none())).any(|a| {
+                        let sc = emberwake_battle::intent::scene_at(&s.w, &sched, a, f);
+                        sc.from.dist(sc.at) == 1
+                    });
+                    if next_to {
+                        found = Some((h, f));
+                        break 'all;
+                    }
+                    b.send(&cx, json!({"cmd": "clear", "unit": h}));
                 }
             }
         }

@@ -158,8 +158,37 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-42` (`KIT-SAMPLE1`) | Built (tools lane) | `develop` | `games/kit_sample/`: a two-a-side fight from its own catalog on the kit's battle stage (composed floor, one zone, a lit fire pit), engine and kit crates only; scenario in the gate; `engine/docs/authoring/kit_game.md`. FB-475 |
 | `ENGINE-43` (`TERRAIN-PARTIAL1`) | Built (tools lane) | `develop` | A terrain table may list only the types it changes; the rest take the kit's code defaults with no problem and no warning; a listed row is still checked whole. FB-477 |
 | `PR7-88` (`PLAN-FIX2`) | Built in part (tools lane) | `develop` | PT-86, PT-87 (ghost claims), PT-88, PT-89, PT-91 fixed with tests, goldens unchanged; PT-85 and PT-87's foe start tiles not done (findings in the item). FB-479 |
+| `PR7-90` (`FORECAST-MOVE1`) | Built (tools lane) | `develop` | A hit forecast reads where the target stands in the block the hit lands, after every move booked before it (walks through friends, tiles freed earlier, foes stepping in, re-paths); three logged cases as tests, goldens unchanged. FB-481 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-481: PR7-90 FORECAST-MOVE1 built; a forecast reads the target's tile after every move booked before the hit
+
+- **Status**: built (tools lane), `develop`. Kit battle code and one game test; no data. **Every golden unchanged**
+  (rules, sim, checks, rules contract, journey, timeline, PHASEFOLD; the crate suites of `rpgkit_battle`, `rpgkit_sim`,
+  `rpgkit_host`, `emberwake_battle`, `emberwake_sim`, `emberwake_world`, `emberwake_rules`, `emberwake_content`,
+  `emberwake_gui` pass).
+- **Spec**: `docs/READY.md` row `PR7-90` (`FORECAST-MOVE1`), PT-85 from `FB-406`.
+- **Cause**: `intent::position_at` walked a moving unit with the move preview over the board as it stood at planning.
+  A friend's tile stopped the walk (the real walk passes through it, ESCAPE-PLAN1 (2)); a tile a friend leaves earlier
+  stayed blocked; a foe stepping in front earlier in the block did not stop it; a cut-short walk's next walk did not
+  re-path.
+- **What landed** (`kits/rpg/crates/rpgkit_battle/src/intent.rs`): the forecast walk now plays each booked walk
+  against where every other unit stands at that walk's moment (earlier blocks, and earlier in the same block by
+  initiative): it passes friends mid-route, takes tiles already left, stops before a unit standing there, stops on a
+  sprung trap, steps back off a shared end tile, and re-paths a walk whose start moved, with the same budget as the
+  round. Big units keep the old preview read.
+- **Tests**: `kits/rpg/crates/rpgkit_battle/tests/forecast_move.rs`, one per logged case (try 2 R2 a walk through a
+  friend, try 2 R4 a foe stepping in front, try 3 R1 a tile a friend leaves earlier). Each plays the round and checks
+  the forecast tile against the tile the round leaves the unit on. All three fail on the old `intent.rs` and pass now.
+  `emberwake_gui` `card_numbers_show_modifiers_and_the_riposte_chip` searched for a pick whose forecast showed a riposte;
+  its old pick had the foe walk off before the hit (stepping the round confirmed it, so the old forecast was wrong). The
+  search now takes only a pick whose hit lands from a tile next to the foe.
+- **Replay**: I replayed run 3's inputs (failed lines left out) from `saves/crucible_entry` with `tools/fc.sh playtest
+  run`. Today's build no longer reaches the logged boards: the PR7-88 fixes change the plans from R1, and the script
+  stops at a refused popup in R3. So the three cases are rebuilt as fixed boards in the tests above rather than replayed.
+- **Not done**: PT-87's foe start tiles (waits on the per-block claim rule, per Design).
+- **Docs delta**: none.
 
 ### FB-479: PR7-88 PLAN-FIX2 built in part; five of the six run findings fixed, PT-85 and one PT-87 part left
 

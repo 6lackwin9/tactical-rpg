@@ -520,21 +520,34 @@ pub fn hidden_at(w: &World, sched: &[ScheduledAction], t: UnitId, block: i32) ->
 /// PT-20, PT-17: where `c` stands when a hit lands at `block`: the end tile of its last live move that lands earlier
 /// (`command::walk_preview`), else where it stands now. `sched` is the round as it will run (`planned_schedule` while
 /// planning), so a party member's planned moves count.
+///
+/// PR7-90 (PT-85): each step of a walk is read on the board as it stands when the walk runs (`walk_end_at`): the
+/// tiles the other units hold then (their moves that land earlier, or in the same block ahead of it), a friend's tile
+/// passed through as ESCAPE-PLAN1 walks it, a foe that steps in front stopping it.
 pub fn position_at(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32) -> V2 {
+    position_in(w, sched, c, block, None, true)
+}
+
+/// `position_at`, also counting the moves landing in `block` itself whose command acts before initiative `ahead_of`
+/// (the resolver's order in a block); `aware`: a walk reads the others' tiles then (`walk_end_at`), else the board
+/// now (`walk_preview`, the others' own reads inside `walk_end_at`).
+fn position_in(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32, ahead_of: Option<i32>, aware: bool) -> V2 {
     let mut at = w.grid.pos(c).unwrap_or(NO_CELL);
+    let earlier = |a: &ScheduledAction| a.impact < block || ahead_of.is_some_and(|i| a.impact == block && a.command.initiative(w) > i);
     // HITCALC1: a move that already landed is in the tile it stands on now (mid-round reads)
-    for a in actions_of(c, sched).into_iter().filter(|a| a.start < block && !a.landed) {
+    for a in actions_of(c, sched).into_iter().filter(|a| (a.start < block || earlier(a)) && !a.landed) {
         // PR7-87 (PT-67): a carried Engage moves its unit as it starts
         if let crate::command::Carry::Engage(cell) = a.command.carry {
             if !a.command.started && cell != NO_CELL {
                 at = cell;
             }
         }
-        if a.impact >= block {
+        if !earlier(a) {
             continue;
         }
         match &a.command.kind {
             // each move steps on from where the earlier ones end (the preview's start is the chain's tile)
+            CmdKind::Walk { path, expected_start, goal, .. } if aware => at = walk_end_at(w, sched, c, a, path, (*expected_start, *goal), at),
             CmdKind::Walk { path, .. } => {
                 if let Some(end) = crate::command::walk_preview(w, c, path, at).last() {
                     at = *end;
@@ -562,6 +575,74 @@ pub fn position_at(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32) 
                 at = at + (f.to - f.from);
             }
         }
+    }
+    at
+}
+
+/// PR7-90 (PT-85): the tile walk `a` of `c` (steps `path`, from `from`) ends on, as `command::walk` takes it when it
+/// runs: the other units stand where their moves landing earlier (or in the same block, ahead of it) leave them
+/// (`position_in`, one level: their own walks read the board now); a step onto a foe's tile, a wall or the edge stops
+/// the walk; a party member passes a friend's tile mid-route and steps back to the last tile it held alone when the
+/// walk ends on one (ESCAPE-PLAN1 (2)); an exit it leaves by and a trap it springs end it. A walk that starts off its
+/// planned start (an earlier one was cut short) re-paths to its goal around the others, as `walk` does. A big unit
+/// keeps `walk_preview`.
+fn walk_end_at(w: &World, sched: &[ScheduledAction], c: UnitId, a: &ScheduledAction, path: &[V2], (expected, goal): (V2, V2), from: V2) -> V2 {
+    let preview = || crate::command::walk_preview(w, c, path, from).last().copied().unwrap_or(from);
+    if w.size_of(c) > 1 || !w.units[c].is_active() || !w.has(c) || from == NO_CELL {
+        return preview();
+    }
+    let init = a.command.initiative(w);
+    let others: Vec<(UnitId, V2)> = (0..w.units.len())
+        .filter(|&u| u != c && w.units[u].is_active() && w.has(u))
+        .map(|u| (u, position_in(w, sched, u, a.impact, Some(init), false)))
+        .filter(|(_, p)| *p != NO_CELL)
+        .collect();
+    let holder = |cell: V2| others.iter().find(|(u, p)| crate::grid::square_covers(*p, w.size_of(*u), cell)).map(|(u, _)| *u);
+    // `command::walk`'s re-path: off its planned start, the route to its goal around the others, cut to its budget
+    let repath: Vec<V2>;
+    let path = if expected != NO_CELL && goal != NO_CELL && from != expected {
+        let blocked: crate::path::Cells = others.iter().flat_map(|(u, p)| crate::grid::square_cells(*p, w.size_of(*u))).collect();
+        let goals: crate::path::Cells = [goal].into_iter().collect();
+        let full = crate::path::find_path_sized(&w.grid, from, &goals, &blocked, w.grid.is_exit(goal), &crate::path::Hooks::default(), 1);
+        let budget = w.units[c].move_per_block().max(crate::path::path_cost_sized(&w.grid, expected, path, 1));
+        repath = crate::path::fit_blocks_sized(&w.grid, from, &full, budget, 1, 1).into_iter().take(path.len()).collect();
+        &repath[..]
+    } else {
+        path
+    };
+    let passes = crate::plan::escape_plan1() && w.allies.contains(&c);
+    let friends = w.friends_of(c);
+    let (mut at, mut alone) = (from, from);
+    let n = path.len();
+    for (i, d) in path.iter().enumerate() {
+        let next = at + *d;
+        if w.grid.is_exit(next) || (w.grid.open && !w.grid.is_valid(next)) {
+            if w.hold.as_ref().is_some_and(|g| !g.lets_out(w, c)) {
+                break;
+            }
+            if w.grid.is_valid(next) {
+                at = next;
+                alone = next;
+            }
+            break;
+        }
+        if !w.grid.is_valid(next) || !w.grid.is_walkable(next) {
+            break;
+        }
+        match holder(next) {
+            Some(o) if passes && i + 1 < n && friends.contains(&o) => at = next,
+            Some(_) => break,
+            None => {
+                at = next;
+                alone = next;
+            }
+        }
+        if crate::command::newly_covered(w, c, at - *d, at).iter().any(|&cell| crate::ground::springs(w, c, cell).is_some()) {
+            break;
+        }
+    }
+    if holder(at).is_some() {
+        at = alone;
     }
     at
 }
