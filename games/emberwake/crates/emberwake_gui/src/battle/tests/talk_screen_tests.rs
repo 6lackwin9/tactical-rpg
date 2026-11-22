@@ -284,7 +284,7 @@ fn the_battle_talk_box_reads_clean_at_every_text_size() {
 }
 
 /// VISCLAR1-D: the next round by itself still waits for a talk that opens at its start: the talk comes first, the banner and
-/// the ghosts' draft follow it, and the plan waits for the player after that.
+/// the ghosts' draft follow it, and the plan waits for the player after that. PR7-75 (PT-47): the message bar says so.
 #[test]
 fn a_round_start_talk_goes_before_the_next_rounds_plan() {
     let mut cx = talk_cx();
@@ -304,6 +304,8 @@ fn a_round_start_talk_goes_before_the_next_rounds_plan() {
     assert_eq!(b.session().current_round, 2);
     assert!(b.talk_due(), "the round's talk waits to open");
     assert_ne!(b.ghosted, 2, "no draft under the talk");
+    // PR7-75 (PT-47): the bar says the talk comes first, not "plan your party" over an empty plan
+    assert_eq!(b.message, "Round 2: a talk first; the plan fills when it closes.");
     tick_ready(&mut b, &mut cx);
     assert!(b.talk.is_some(), "the talk opened");
     b.draw(&mut cx, &mut g, (-500, -500), true);
@@ -312,6 +314,7 @@ fn a_round_start_talk_goes_before_the_next_rounds_plan() {
     assert!(b.talk.is_none(), "one line, closed");
     tick_ready(&mut b, &mut cx);
     assert_eq!(b.ghosted, 2, "the draft follows the talk");
+    assert_eq!(b.message, "Round 2: plan your party.", "the prompt once the plan is filled");
     b.draw(&mut cx, &mut g, (-500, -500), true);
     assert_eq!(b.banner.map(|x| x.0), Some(2));
     let confirms = b.host.history.iter().filter(|r| r["cmd"] == json!("confirm")).count();

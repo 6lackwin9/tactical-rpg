@@ -3464,10 +3464,10 @@ mod tests {
     /// REGIONGROUND1: a ground's one texture and a boundary's tiles are in the tree; a ground's other file is a stray.
     #[test]
     fn ground_and_boundary_art_follow_their_patterns() {
-        for ok in ["tilesets/ashlands/ground/mud/v0.png", "tilesets/common/boundary/keep/wall/v0.png", "tilesets/common/boundary/keep/wall_face/v2.png", "tilesets/sunk_ward_stage/front_face/floor/v3.png", "tilesets/sunk_ward_stage/stage.fx.json", "tilesets/sunk_ward_stage/cover/v0.png", "tilesets/sunk_ward_stage/wall_foot/v1.png"] {
+        for ok in ["tilesets/ashlands/ground/mud/v0.png", "tilesets/common/boundary/keep/wall/v0.png", "tilesets/common/boundary/keep/wall_face/v2.png", "tilesets/sunk_ward_stage/front_face/floor/v3.png", "tilesets/sunk_ward_stage/stage.fx.json", "tilesets/sunk_ward_stage/cover/v0.png", "tilesets/sunk_ward_stage/wall_foot/v1.png", "tilesets/sunk_ward_foundry_stage/lava/front_face/v0.png", "tilesets/high_bastion_stage/backdrop_ramparts.png"] {
             assert!(layout_ok(ok), "{ok}");
         }
-        for stray in ["tilesets/ashlands/ground/mud/v1.png", "tilesets/ashlands/ground/mud.png", "tilesets/ashlands/ground/mud/over_ash/m01.png", "tilesets/common/boundary/keep/roof/v0.png", "tilesets/common/boundary/keep/wall/face.png", "tilesets/sunk_ward_stage/front_face/floor.png", "tilesets/sunk_ward_stage/floor/stage.fx.json"] {
+        for stray in ["tilesets/ashlands/ground/mud/v1.png", "tilesets/ashlands/ground/mud.png", "tilesets/ashlands/ground/mud/over_ash/m01.png", "tilesets/common/boundary/keep/roof/v0.png", "tilesets/common/boundary/keep/wall/face.png", "tilesets/sunk_ward_stage/front_face/floor.png", "tilesets/sunk_ward_stage/floor/stage.fx.json", "tilesets/high_bastion_stage/ramparts.png", "tilesets/sunk_ward_foundry_stage/lava/front_face/v0.jpg"] {
             assert!(!layout_ok(stray), "{stray}");
         }
     }
@@ -3556,6 +3556,11 @@ mod tests {
             // DIORAMA2 R2 and DIORAMA3 R3 (ASSETORG2): a stage set's front face per terrain and its light spots
             ["tilesets", _, "front_face", _, f] => v(f),
             ["tilesets", _, "stage.fx.json"] => true,
+            // DIORAMA4 S2 (PR7-74): a zone's terrain override folder's own front face (`<set>/<terrain>/front_face/v*`)
+            ["tilesets", _, _, "front_face", f] => v(f),
+            // A stage set's parked placeholder backdrop (`backdrop_<name>.png`, Art/UI PR #91) until its zone exists
+            // and it moves to `backgrounds/battle/<zone>.png` ([PROVISIONAL], FB-445 for Design's ASSETORG2 row)
+            ["tilesets", _, f] => f.starts_with("backdrop_") && png(f),
             // MAP-HOOKS1: a location's landmark on the world map, and a world map background with its layout sidecar
             ["map", "landmarks", f] => png(f),
             ["backgrounds", "world_map", f] => png(f) || f.ends_with(".json"),

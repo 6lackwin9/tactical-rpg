@@ -1068,7 +1068,9 @@ impl Screen<GameCx> for Results {
             let pr = Rect::new(x0, y + 1, face, face);
             let label = m.map(|m| member_name(cx, m)).or_else(|| row.map(|r| r.name.clone())).unwrap_or_default();
             let px = ui.icon_px(pr);
-            let img = m.and_then(|m| cx.art.first(&Who::of_member(&d, m).chain(""), px, px).cloned());
+            // PT-59: a guest's row (no member) by its catalog unit's portrait
+            let who = m.map(|m| Who::of_member(&d, m)).or_else(|| row.filter(|r| !r.unit.is_empty()).map(|r| Who::of_catalog(&d, &r.unit, &r.name)));
+            let img = who.and_then(|w| cx.art.first(&w.chain(""), px, px).cloned());
             let initial: String = label.chars().take(1).collect();
             aegis_ui::panes::icon_tile(&mut ui, pr, img.as_ref(), &initial);
             let tx = pr.x + face + 6;
@@ -1384,7 +1386,7 @@ mod tests {
     /// A report row (test-only numbers) for `key` (a guest when `key` is empty).
     fn report_row(key: &str, name: &str, dealt: i32, healed: i32) -> emberwake_battle::report::Row {
         emberwake_battle::report::Row {
-            key: key.into(), name: name.into(), guest: key.is_empty(), state: "standing", dealt, dealt_dot: 0, ff_dealt: 0, taken: 7,
+            key: key.into(), name: name.into(), guest: key.is_empty(), unit: String::new(), state: "standing", dealt, dealt_dot: 0, ff_dealt: 0, taken: 7,
             taken_dot: 0, healed, regen: 0, effects: 0, combos: 0, kills: 1, status_counts: Default::default(), combo_counts: Default::default(),
         }
     }
@@ -1426,6 +1428,40 @@ mod tests {
         frame(&mut none, &mut cx, &mut gfx(), 1.0);
         assert!(!none.widgets().iter().any(|x| x["id"].as_str().is_some_and(|id| id.starts_with("results.report.") || id == "results.best")));
         assert!(none.state(&cx).get("report").is_none_or(Value::is_null));
+    }
+
+    /// PT-59 (PR7-75): a guest's results row shows its catalog unit's portrait (the initial only without one).
+    #[test]
+    fn a_guest_row_shows_its_portrait() {
+        let mut cx = party_of(1);
+        cx.art = aegis_ui::art::Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let units: Vec<String> = cx.data.cat.units.keys().cloned().collect();
+        let unit = units.into_iter().find(|u| {
+            let who = Who::of_catalog(&cx.data, u, "Guest");
+            cx.art.first(&who.chain(""), 32, 32).is_some()
+        });
+        let unit = unit.expect("a unit with a portrait");
+        let a = cx.gs().party.members[0].clone();
+        let res = json::obj([("ok", json!(true)), ("xp", json!({a.id.clone(): {"xp": 1, "old_level": 1, "new_level": 1}}))]);
+        let shot = |cx: &mut Cx, unit: &str| {
+            let mut row = report_row("", "Guest", 5, 0);
+            row.unit = unit.into();
+            let report = emberwake_battle::report::Report { outcome: "won".into(), rounds: 1, rows: vec![report_row(&a.id, "A", 1, 0), row], columns: vec!["dealt"], best: String::new() };
+            let mut r = Results::new(&res, "won", &Dict::new()).report(Some(report));
+            let mut g = gfx();
+            frame(&mut r, cx, &mut g, 1.0);
+            let cell = r.widgets().into_iter().find(|w| w["id"] == "results.report.1.dealt").expect("the guest's row");
+            (g.canvas.px.clone(), cell["rect"][1].as_i64().unwrap_or(0) as i32)
+        };
+        let (with, y) = shot(&mut cx, &unit);
+        let (without, _) = shot(&mut cx, "");
+        // the row's portrait well, left of its name, differs from the initial-only well
+        let w = 640usize;
+        let differs = (y..y + 20).any(|py| (0..320).any(|px| {
+            let i = (py as usize * w + px) * 4;
+            with[i..i + 3] != without[i..i + 3]
+        }));
+        assert!(differs, "the guest's portrait draws in place of its initial");
     }
 
     /// PR7-32 (PT-13): Level up now opens the character sheet over the results without closing them (so its Close

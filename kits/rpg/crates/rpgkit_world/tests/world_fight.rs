@@ -89,6 +89,9 @@ fn finish_world_settles_each_runner_exactly_like_its_own_after_fight() {
             let got = battle::finish_world(&d, &mut via_kit, runner, &fight, outcome, None);
             let want = own(&d, &mut direct, &fight, outcome, None);
             assert_eq!(got, want, "{runner} {outcome}: the same result");
+            // PR7-75 (PT-41): the kit's settle also counts a try that was not won (the next try's seed)
+            assert_eq!(battle::retries(&via_kit, "w:enc_loud"), i64::from(outcome != "won"), "{runner} {outcome}");
+            via_kit.rolls.remove(&battle::retry_key("w:enc_loud"));
             assert_eq!(via_kit, direct, "{runner} {outcome}: the same state after");
         }
     }
@@ -390,4 +393,25 @@ fn a_stage_raised_enemy_with_an_explicit_spend_spends_the_extra_points() {
     let mut plain = rpgkit_data::UnitDef::from_obj(&d.character_unit_entry(d.resolve("fw", "characters", "wolf")));
     rpgkit_rules::unit::raise_level(&cat, &mut plain, grown as i32);
     assert!(plain.spend.is_empty(), "a row without spend auto-spends at build time");
+}
+
+/// PR7-75 (PT-41): the first try keeps the encounter's seed; each try after a lost one draws its own (the count hashed
+/// in), the same count gives the same seed, and a won try counts nothing.
+#[test]
+fn a_retry_after_a_lost_try_draws_a_fresh_seed() {
+    let d = data();
+    let mut gs = state(&d);
+    let fight = json::dict(&json!({"source": "explore", "encounter": "w:enc_loud"})).clone();
+    let seed = |gs: &mut GameState| battle::begin_world(&d, gs, &fight).expect("the fight starts").session.def.rng_seed;
+    let first = seed(&mut gs);
+    battle::finish_world(&d, &mut gs, "explore", &fight, "lost", None);
+    let second = seed(&mut gs);
+    assert_ne!(second, first, "a retry rolls differently");
+    assert_eq!(second, battle::retry_seed(first, 1));
+    battle::finish_world(&d, &mut gs, "explore", &fight, "fled", None);
+    let third = seed(&mut gs);
+    assert!(third != second && third != first && third == battle::retry_seed(first, 2), "each retry its own seed");
+    battle::finish_world(&d, &mut gs, "explore", &fight, "won", None);
+    assert_eq!(battle::retries(&gs, "w:enc_loud"), 2, "a win counts nothing");
+    assert_eq!(battle::retry_seed(first, 0), first, "no lost try: the encounter's seed");
 }

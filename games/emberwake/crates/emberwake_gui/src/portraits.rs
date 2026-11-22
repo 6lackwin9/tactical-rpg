@@ -204,6 +204,14 @@ impl Who {
         Who { key: m.id.clone(), tier: kart::portrait_tier(&empty, unit), id: m.base_unit.clone(), body: kart::body_of(&empty, unit, class), name: progression::display_name(d, m), file: String::new(), portrait: kart::portrait_key(&empty, unit) }
     }
 
+    /// PT-59: catalog unit `unit` shown as `name` with no battle (a guest's results row): keyed by the unit id.
+    pub fn of_catalog(d: &Data, unit: &str, name: &str) -> Who {
+        let row = d.entry("units", unit);
+        let class = d.entry("classes", &json::s(row, "class_id"));
+        let empty = Dict::new();
+        Who { key: unit.to_string(), tier: kart::portrait_tier(&empty, row), id: unit.to_string(), body: kart::body_of(&empty, row, class), name: name.to_string(), file: String::new(), portrait: kart::portrait_key(&empty, row) }
+    }
+
     /// Battle unit `i` of `s`, as world character `character` (empty: none): keyed by the character id, else
     /// `<unit id>#<i>` (two units of one catalog row react apart).
     pub fn of_unit(d: &Data, s: &Session, i: usize, character: &Dict) -> Who {

@@ -360,3 +360,27 @@ fn the_board_shifts_down_until_the_bar_covers_no_unit_or_open_tile() {
     assert_eq!(board_lift(&walled, &geo) > 0, open_under, "no kept tile under the bar: no shift");
     assert_eq!(board_lift(w, &Geom::new(View::Flat, &cx.tuning.value)), 0, "the Flat view keeps its place");
 }
+
+/// PR7-75 (PT-40): the "Hostiles N" counter counts the boss with the panel's foes; the bar's HP read-out keeps the
+/// phase's span and its hover gives both the span and the boss's whole HP, so the bar and the unit never disagree.
+#[test]
+fn the_counter_counts_the_boss_and_the_hp_hover_gives_both_numbers() {
+    let (_cx, _g, b) = boss_arena(0, 50);
+    let boss = boss_of(&b);
+    let ses = s(&b);
+    let name = |_: usize| String::new();
+    let full = |_: usize| (String::new(), String::new());
+    let none = |_: usize| None;
+    let about = |_: &str| String::new();
+    let inp = crate::battle_view::Inputs { sel: None, card_foe: None, round_ap: &[], plate_name: &name, full_name: &full, intent_of: &none, open_groups: &[], pinned: None, passive_about: &about };
+    let m = crate::battle_view::model(ses, &inp);
+    let active = ses.w.enemies.iter().filter(|e| ses.w.units[**e].is_active()).count();
+    assert!(ses.w.enemies.contains(&boss) && active >= 1);
+    assert_eq!(m.hostiles, format!("Hostiles {active}"), "the boss counts");
+    let bar = m.boss.expect("the boss bar");
+    let u = &ses.w.units[boss];
+    assert_eq!(bar.whole, (u.hp, u.max_hp));
+    assert_eq!(bar.hp_tip(), vec![format!("This phase: {}", bar.span_text()), format!("In all: {}/{}", u.hp, u.max_hp)]);
+    let tip = b.w.iter().find(|w| w.id == "boss.hp").expect("the read-out").tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>();
+    assert_eq!(tip, bar.hp_tip(), "the read-out's hover");
+}

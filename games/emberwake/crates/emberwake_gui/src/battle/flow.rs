@@ -221,7 +221,12 @@ impl BattleScreen {
         for l in &next {
             cx.log(l.clone());
         }
-        let objective = emberwake_battle::obj_view::result_lines(self.session(), &outcome);
+        // PR7-75 (PT-40): the results say why the fight ended
+        let mut objective = emberwake_battle::obj_view::result_lines(self.session(), &outcome);
+        let reason = self.session().end_reason();
+        if !reason.is_empty() {
+            objective.push(reason);
+        }
         let results = crate::hub::Results::new(&res, &outcome, &fight).after_fight(timed_out, next).objective(objective).report(report).over_battle(cx.settings.reduce_motion(), before);
         cx.nav.push(Nav::Push(Box::new(results)));
     }
@@ -465,7 +470,8 @@ impl BattleScreen {
                 self.pending_next_round = false;
                 let r = self.send(cx, json!({"cmd": "advance"}));
                 if r["ok"] == json!(true) {
-                    self.message = format!("Round {}: plan your party.", self.session().current_round);
+                    // PR7-75 (PT-47): a round-start talk goes first and the plan fills when it closes; the bar says so
+                    self.message = if !self.viewing && !self.auto && self.talk_due() && ri::on(&self.session().w) { talk_first_message(self.session().current_round) } else { plan_message(self.session().current_round) };
                     // VISCLAR1-D: the old round's playback is over: left on, the next tick's `step` would confirm this plan
                     self.playing = false;
                     self.astir_at = Instant::now();
@@ -557,11 +563,19 @@ impl BattleScreen {
         let setting = cx.settings.v[AUTO_CONFIRM].as_bool().unwrap_or(true) && ri::on(&s.w);
         let by_itself = next_round_by_itself(can_advance, self.auto, s.round_locked(), self.viewing, setting);
         let hint = if by_itself { String::new() } else { format!(" {} (or Next) for the next round.", self.keys.key_hint(aegis_ui::screen::Key::Space)) };
-        let message = if s.combat_over {
-            match s.outcome.as_str() {
+        // PR7-75 (PT-40): an ending says why (`end_reason`), in the message and once in the combat log
+        let reason = s.end_reason();
+        let over = s.combat_over;
+        let message = if over {
+            let head = match s.outcome.as_str() {
                 "won" => "Victory!".to_string(),
                 "lost" => "Defeat.".to_string(),
-                o => format!("Battle over: {o}"),
+                o => format!("Battle over: {o}."),
+            };
+            if reason.is_empty() {
+                head
+            } else {
+                format!("{head} {reason}")
             }
         } else if !can_advance {
             "Round limit reached.".into()
@@ -573,6 +587,14 @@ impl BattleScreen {
             }
         };
         self.message = message;
+        if over && !reason.is_empty() {
+            let line = format!("[End] {reason}");
+            let s = self.host.session.as_mut().expect("a session");
+            if !s.encounter_lines.iter().any(|(_, l)| *l == line) {
+                let at = s.resolver.log.len();
+                s.encounter_lines.push((at, line));
+            }
+        }
         if by_itself {
             self.next_at = now + Duration::from_millis(t.round_pause_ms * pace);
             self.pending_next_round = true;
@@ -614,4 +636,14 @@ pub(super) fn sound_of(e: &EventKind) -> Option<&'static str> {
         EventKind::Move => Some("move_step"),
         _ => None,
     }
+}
+
+/// The planning prompt of round `round`.
+pub(super) fn plan_message(round: i32) -> String {
+    format!("Round {round}: plan your party.")
+}
+
+/// PR7-75 (PT-47): the prompt while a round-start talk holds the planning (the plan fills when it closes).
+pub(super) fn talk_first_message(round: i32) -> String {
+    format!("Round {round}: a talk first; the plan fills when it closes.")
 }

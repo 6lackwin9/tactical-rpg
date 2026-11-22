@@ -435,6 +435,8 @@ pub struct BossBar {
     /// The current phase's span: HP left of it and its size ("160/450"), and the HP the plan takes of it.
     pub span_left: i32,
     pub span: i32,
+    /// PR7-75 (PT-40): the boss's whole HP and max (the span is the phase's share; the hover says both).
+    pub whole: (i32, i32),
     pub planned: i32,
     pub poise: Option<BossPoise>,
     /// The boss passives: (display name, description) for the tags (BU4).
@@ -449,6 +451,17 @@ impl BossBar {
     /// "160/450".
     pub fn span_text(&self) -> String {
         format!("{}/{}", self.span_left, self.span)
+    }
+
+    /// PR7-75 (PT-40): the HP read-out's hover: the phase's share and the whole ("This phase: 142/304", "In all:
+    /// 142/608"); one line when they are the same.
+    pub fn hp_tip(&self) -> Vec<String> {
+        let all = format!("In all: {}/{}", self.whole.0, self.whole.1);
+        if self.span == self.whole.1 {
+            vec![all]
+        } else {
+            vec![format!("This phase: {}", self.span_text()), all]
+        }
     }
 }
 
@@ -536,9 +549,9 @@ pub fn tabs_of(w: &World, u: UnitId, planned: &[String]) -> Vec<Tab> {
         .active
         .iter()
         .enumerate()
-        .map(|(k, id)| (0, k, tab(id, st.rounds_left.get(id).copied().filter(|r| *r > 0), false, st.magnitudes.get(id).copied().unwrap_or(0))))
+        .map(|(k, id)| (0, k, tab(id, st.rounds_left.get(id).copied().filter(|r| *r > 0 && !emberwake_battle::trigger::lasts_battle(*r)), false, st.magnitudes.get(id).copied().unwrap_or(0))))
         .collect();
-    all.extend(st.pending.iter().filter(|id| !st.active.contains(*id)).enumerate().map(|(k, id)| (1, k, tab(id, st.pending_rounds.get(id).copied().filter(|r| *r > 0), false, st.pending_magnitudes.get(id).copied().unwrap_or(0)))));
+    all.extend(st.pending.iter().filter(|id| !st.active.contains(*id)).enumerate().map(|(k, id)| (1, k, tab(id, st.pending_rounds.get(id).copied().filter(|r| *r > 0 && !emberwake_battle::trigger::lasts_battle(*r)), false, st.pending_magnitudes.get(id).copied().unwrap_or(0)))));
     for (k, id) in planned.iter().enumerate() {
         if !all.iter().any(|t| &t.2.status == id) {
             all.push((2, k, tab(id, None, true, 0)));
@@ -672,7 +685,8 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
     let phase_bar = s.phase_bar();
     let boss = phase_bar.as_ref().map(|p| p.unit);
     let shown: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| Some(e) != boss && (w.grid.pos(e).is_some() || !w.units[e].is_alive() || w.units[e].is_withdrawn)).collect();
-    let active = shown.iter().filter(|e| w.units[**e].is_active()).count();
+    // PR7-75 (PT-40): the count takes in the boss on the bar while it stands (its plate stays above)
+    let active = shown.iter().chain(boss.as_ref()).filter(|e| w.units[**e].is_active()).count();
     m.hostiles = format!("Hostiles {active}");
     m.reinforce = s.phases.next_reinforcement().map_or_else(String::new, |(n, r)| format!("+{n} round {r}"));
     if boss.is_some() && m.reinforce.is_empty() {
@@ -797,6 +811,7 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
             current: pb.current,
             span_left,
             span,
+            whole: (unit.hp, unit.max_hp),
             planned: if planning { rows.party.total.hp.min(span_left) } else { 0 },
             poise,
             passives,

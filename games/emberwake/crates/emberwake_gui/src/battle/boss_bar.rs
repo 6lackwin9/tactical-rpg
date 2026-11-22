@@ -307,7 +307,8 @@ pub(super) fn draw_bar(ui: &mut Ui<super::Action>, cx: &mut Cx, (faces, small): 
     let nx = r.x + r.w - 5;
     ui.p.text_right(nx as f32, hy as f32 - 3.0, &span_text, SMALL, th().text);
     let sw = ui.p.text_w(&span_text, SMALL).ceil() as i32;
-    ui.push("boss.hp", "label", span_text, Rect::new(nx - sw, hy - 3, sw + 1, 8), true, false, None, Vec::new());
+    let tip = b.hp_tip().into_iter().map(|l| (l, th().text)).collect();
+    ui.push("boss.hp", "label", span_text, Rect::new(nx - sw, hy - 3, sw + 1, 8), true, false, None, tip);
     if b.planned > 0 {
         let loss = format!("-{}", crate::battle_view::impact_num(b.planned));
         ui.p.text_right(nx as f32, hy as f32 + 5.0, &loss, SMALL, th().foe);

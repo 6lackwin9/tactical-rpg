@@ -34,6 +34,8 @@ pub struct Row {
     pub key: String,
     pub name: String,
     pub guest: bool,
+    /// The unit's catalog id (PT-59: a guest's portrait; not in the JSON form).
+    pub unit: String,
     /// "standing", "down" or "left".
     pub state: &'static str,
     pub dealt: i32,
@@ -108,6 +110,7 @@ impl Report {
                 key: s.hero_key(c),
                 name: u.name.clone(),
                 guest: s.guests.contains(&c),
+                unit: u.catalog_id.clone(),
                 state,
                 dealt: rec.dmg_dealt + rec.dot_dealt,
                 dealt_dot: rec.dot_dealt,

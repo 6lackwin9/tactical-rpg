@@ -29,6 +29,12 @@ use serde_json::Value;
 
 /// 8.2: a `grant` of `rounds` -1 lasts the battle.
 pub const BATTLE_ROUNDS: i32 = 999;
+
+/// PR7-75 (PT-48): whether `rounds` left is the battle-long sentinel (`BATTLE_ROUNDS`, counted down by the rounds a
+/// battle can run), so a surface says it lasts instead of showing the number.
+pub fn lasts_battle(rounds: i32) -> bool {
+    rounds > BATTLE_ROUNDS - 100
+}
 /// 8.2: the largest `ap` a trigger gives (PK1-S1: also the largest `set`).
 pub const MAX_AP: i32 = 4;
 /// PK1-S1 (3.4): the most rounds an `ap` `set` lasts.

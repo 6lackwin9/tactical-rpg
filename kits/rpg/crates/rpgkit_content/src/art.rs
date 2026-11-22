@@ -238,15 +238,16 @@ pub fn portrait_chain(tier: &str, id: &str, body: &str) -> Vec<String> {
     portrait_chain_keyed(tier, id, body, "")
 }
 
-/// PAINTED-MAPS1: `portrait_chain` with the unit's portrait key (`portrait_key`; "" none) tried after the unique tier's
-/// own file and before the body's common portrait.
+/// PAINTED-MAPS1: `portrait_chain` with the unit's portrait key (`portrait_key`; "" none) tried first (`FB-386` (3),
+/// PR7-75: an explicit key is the stronger statement, so it ranks above a unique tier's own file), then the unique
+/// file and the body's common portrait.
 pub fn portrait_chain_keyed(tier: &str, id: &str, body: &str, key: &str) -> Vec<String> {
     let mut out = Vec::new();
-    if let Some(folder) = tier_folder(tier) {
-        out.push(format!("portraits/{folder}/{id}.png"));
-    }
     if let Some(own) = keyed_portrait(key) {
         out.push(own);
+    }
+    if let Some(folder) = tier_folder(tier) {
+        out.push(format!("portraits/{folder}/{id}.png"));
     }
     let common = common_portrait(body);
     if !out.contains(&common) {
@@ -287,9 +288,13 @@ pub fn face_chain(tier: &str, id: &str, body: &str, expression: &str) -> Vec<Str
     face_chain_keyed(tier, id, body, "", expression)
 }
 
-/// PAINTED-MAPS1: `face_chain` over `portrait_chain_keyed` (the unit's portrait key `key`, "" none).
+/// PAINTED-MAPS1: `face_chain` over `portrait_chain_keyed` (the unit's portrait key `key`, "" none). PR7-75: a key
+/// ranks first, above the unique tier's frames too (they belong to the unique file it outranks).
 pub fn face_chain_keyed(tier: &str, id: &str, body: &str, key: &str, expression: &str) -> Vec<String> {
     let mut out = Vec::new();
+    if let Some(own) = keyed_portrait(key) {
+        out.push(own);
+    }
     if let Some(folder) = tier_folder(tier) {
         let dir = faces_dir(folder, id);
         if !expression.is_empty() && expression != NEUTRAL {
@@ -297,7 +302,11 @@ pub fn face_chain_keyed(tier: &str, id: &str, body: &str, key: &str, expression:
         }
         out.push(format!("{dir}/{NEUTRAL}.png"));
     }
-    out.extend(portrait_chain_keyed(tier, id, body, key));
+    for rel in portrait_chain_keyed(tier, id, body, key) {
+        if !out.contains(&rel) {
+            out.push(rel);
+        }
+    }
     out
 }
 

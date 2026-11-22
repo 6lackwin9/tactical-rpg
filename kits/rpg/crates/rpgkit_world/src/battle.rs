@@ -901,6 +901,8 @@ pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut Me
         def.zone = zone;
     }
     def.id = format!("{world}:{hit_id}");
+    // PR7-75 (PT-41): a retry after a lost try draws a fresh battle seed (the first try keeps the encounter's)
+    def.rng_seed = retry_seed(def.rng_seed, retries(gs, &enc_ref));
     let grants: Vec<bool> = def.start_status.iter().map(|sb| json::aget(json::dict(sb), "requires_flags").iter().all(|c| quest::condition_met(gs, json::dict(c)))).collect();
     def.start_grant = StartGrant::Only(grants);
     let stage = world_stage(gs);
@@ -1012,6 +1014,12 @@ fn default_tally(d: &Data, gs: &GameState, encounter_qid: &str, outcome: &str) -
 /// party side first, then the rewards, then its clock tick (`apply`). The battle screen and the debug fight popup both
 /// settle through it.
 pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, outcome: &str, tally: Option<&Tally>) -> Dict {
+    // PR7-75 (PT-41): a try that was not won counts toward the encounter's next seed
+    if outcome != rpgkit_battle::encounter::WON {
+        let key = retry_key(&json::s(fight, "encounter"));
+        let n = retries_of(gs, &key);
+        gs.rolls.insert(key, int(n + 1));
+    }
     match runner {
         "travel" => crate::travel::after_fight(d, gs, fight, outcome, tally),
         "dialogue" => crate::dialogue::after_fight(d, gs, fight, outcome, tally),
@@ -1020,6 +1028,34 @@ pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, ou
         crate::siege::FIGHT_SOURCE => crate::siege::after_fight(d, gs, fight, outcome, tally),
         _ => crate::explore::after_fight(d, gs, fight, outcome, tally),
     }
+}
+
+/// PR7-75 (PT-41): the save's count of tries of an encounter that were not won, kept in `gs.rolls` under this stream
+/// and the encounter ref ("retry:<ref>").
+pub const RETRY_STREAM: &str = "retry";
+
+/// The `gs.rolls` key of encounter ref `enc_ref`'s lost tries.
+pub fn retry_key(enc_ref: &str) -> String {
+    format!("{RETRY_STREAM}:{enc_ref}")
+}
+
+fn retries_of(gs: &GameState, key: &str) -> i64 {
+    gs.rolls.get(key).map(json::to_int).unwrap_or(0).max(0)
+}
+
+/// Encounter ref `enc_ref`'s lost tries so far in this save.
+pub fn retries(gs: &GameState, enc_ref: &str) -> i64 {
+    retries_of(gs, &retry_key(enc_ref))
+}
+
+/// PR7-75 (PT-41): the battle seed of a try after `tries` lost ones: the encounter's own seed `base` on the first try,
+/// else `base` and the count hashed (so each retry rolls differently, and the same retry of a save replays alike).
+pub fn retry_seed(base: i64, tries: i64) -> i64 {
+    if tries <= 0 {
+        return base;
+    }
+    use aegis_core::ghash::{hash, GVar};
+    (hash(&GVar::Arr(vec![GVar::Int(base), GVar::Str(RETRY_STREAM.into()), GVar::Int(tries)])) & 0x7fff_ffff) as i64
 }
 
 /// The party side's result keys (`settle_party_side`), carried by every runner's `after_fight`.

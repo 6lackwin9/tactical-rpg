@@ -305,3 +305,20 @@ fn a_masked_enemy_row_shows_only_its_round_target() {
         assert_eq!(open[&crate::timeline_view::track_key(e)], sv::row_aim(&s.w, &planned, e), "unit {e}");
     }
 }
+
+/// PR7-75 (PT-48): a battle-long status (the `BATTLE_ROUNDS` sentinel, counted down) lists as lasting, never as the
+/// number; a real count still shows.
+#[test]
+fn a_battle_long_status_shows_no_sentinel_number() {
+    let (cx, _g, mut b) = arena();
+    let h = b.session().w.allies[0];
+    give(&cx, &mut b, h, "weaken", 10);
+    let st = &mut b.host.session.as_mut().expect("a session").w.units[h].st;
+    st.rounds_left.insert("weaken".into(), emberwake_battle::trigger::BATTLE_ROUNDS - 1);
+    let line = tabs_of(&b.session().w, h, &[]).into_iter().find(|t| t.status == "weaken").expect("the weaken tab").line();
+    assert!(line.ends_with(": lasts") && !line.contains("998"), "{line}");
+    b.host.session.as_mut().expect("a session").w.units[h].st.rounds_left.insert("weaken".into(), 3);
+    let line = tabs_of(&b.session().w, h, &[]).into_iter().find(|t| t.status == "weaken").expect("the weaken tab").line();
+    assert!(line.ends_with(": 3 rounds"), "{line}");
+    assert!(emberwake_battle::trigger::lasts_battle(emberwake_battle::trigger::BATTLE_ROUNDS - 30) && !emberwake_battle::trigger::lasts_battle(99));
+}

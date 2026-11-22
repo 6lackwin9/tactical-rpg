@@ -16,6 +16,7 @@ use std::path::Path;
 fn row(name: &str) -> Row {
     Row {
         key: name.into(),
+        unit: String::new(),
         name: name.into(),
         guest: false,
         state: "standing",

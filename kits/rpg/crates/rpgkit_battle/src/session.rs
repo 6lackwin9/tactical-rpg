@@ -314,6 +314,9 @@ impl Fate {
     }
 }
 
+/// PR7-41: the log line a retreat starts with (PR7-75: `end_reason` reads it).
+pub const RETREAT_LINE: &str = "[Retreat]";
+
 pub struct Session {
     pub def: EncounterDef,
     pub w: World,
@@ -2354,6 +2357,32 @@ impl Session {
         self.outcome.is_empty() && !self.final_outcome().is_empty()
     }
 
+    /// PR7-75 (PT-40): why the battle ended, one line for the results and the log ("" while it goes on, and for a win
+    /// with nothing to add): the party's retreat, the round limit, the objective's own note (a slay target got away, a
+    /// retreat's unit withdrew), the last standing heroes leaving the field, or every hero down.
+    pub fn end_reason(&self) -> String {
+        let out = self.final_outcome();
+        if out.is_empty() {
+            return String::new();
+        }
+        if out == encounter::FLED && self.resolver.log.iter().any(|l| l.starts_with(RETREAT_LINE)) {
+            return "The party retreated from the fight.".into();
+        }
+        if self.timed_out() {
+            return format!("The round limit ran out ({} rounds).", self.def.max_rounds);
+        }
+        if !self.objective.note.is_empty() {
+            return self.objective.note.clone();
+        }
+        let heroes: Vec<UnitId> = self.w.allies.iter().copied().filter(|a| !self.guests.contains(a)).collect();
+        let left: Vec<&str> = heroes.iter().map(|&h| &self.w.units[h]).filter(|u| u.is_alive() && u.is_withdrawn).map(|u| u.name.as_str()).collect();
+        match out.as_str() {
+            encounter::FLED if !left.is_empty() => format!("No hero was left fighting: {} left the field.", left.join(", ")),
+            encounter::LOST if heroes.iter().all(|&h| !self.w.units[h].is_alive()) => "Every hero went down.".into(),
+            _ => String::new(),
+        }
+    }
+
     /// ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the combat log as a reader sees it: the resolver log from line
     /// `from`, with the encounter's own lines (`encounter_lines`) from entry `lines_from` placed where they were said
     /// (one said before resolver line `from` comes first). Without encounter lines it is the resolver log exactly.
@@ -2454,7 +2483,7 @@ impl Session {
         if !self.can_retreat() {
             return Err(if !self.retreat_allowed() { "This fight allows no retreat." } else { "Retreat only while planning a round." }.into());
         }
-        self.resolver.log.push("[Retreat] The party retreats from the fight.".into());
+        self.resolver.log.push(format!("{RETREAT_LINE} The party retreats from the fight."));
         self.outcome = encounter::FLED.into();
         self.combat_over = true;
         self.phase = Phase::Replay;

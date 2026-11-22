@@ -100,7 +100,7 @@ pub(super) fn taunt_badge(ui: &mut Ui<super::Action>, cx: &mut Cx, w: &World, u:
     }
     ui.p.panel(r, rgba(0, 0, 0, 0), rim, 0.0);
     let unit = &w.units[u];
-    let left = unit.st.rounds_left.get(status).copied().filter(|n| *n > 0);
+    let left = unit.st.rounds_left.get(status).copied().filter(|n| *n > 0 && !emberwake_battle::trigger::lasts_battle(*n));
     let rounds = match left {
         Some(1) => "1 round left".to_string(),
         Some(n) => format!("{n} rounds left"),

@@ -996,6 +996,11 @@ impl Screen<GameCx> for BattleScreen {
         if !self.viewing && ri::on(&self.session().w) && self.planning() {
             if self.ghosted != self.session().current_round {
                 self.plan_start(cx);
+                // PR7-75 (PT-47): the talk that held the planning has closed: the prompt asks for the plan again
+                let round = self.session().current_round;
+                if self.message == flow::talk_first_message(round) {
+                    self.message = flow::plan_message(round);
+                }
             } else {
                 let on = cx.settings.v["auto_fill"].as_bool().unwrap_or(true);
                 if self.session().w.autofill != on {

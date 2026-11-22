@@ -130,8 +130,58 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-72` (`SHOT-DIFF1`) | Built (tools lane) | `develop` | `tools/fc.sh shots diff`: the scenarios a change can show, base shots cached per commit, `index.md` and a contact sheet. FB-439 |
 | `ENGINE-32` (`ACT1-AGENT-RUN1`) | Report (tools lane) | `develop` | Agent run of Act 1: 9 quests turned in, then blocked at the Bone-Mill boss for the auto plan; PT-40..PT-65. FB-441 |
 | `PR7-74` (`DIORAMA4`) | Built (tools lane) | `develop` | Zone stage sets, tint and terrain overrides (`stage.fx.json` keys for Art/UI), the backdrop band under the boss bar, see-through units in front of the focus, the boss-fight foe card off the party; S5 is an art crop. FB-443 |
+| `PR7-75` (`ACT1-FIX1`) | Built (tools lane) | `develop` | The ending's reason in the results and the log, the boss HP hover and the Hostiles count, a fresh seed on a retry, the talk-first message, no sentinel durations, the guest portrait, the portrait key first. FB-445 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-445: PR7-75 ACT1-FIX1 built; ending reasons, boss HP, retry seed, talk message, durations, portraits
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `00g` `PR7-75` (`ACT1-FIX1`), from `FB-441`.
+- **What landed**:
+  - (PT-40, why it ended) the kit's `Session::end_reason()` (`rpgkit_battle`): the party's retreat ("The party
+    retreated from the fight."), the round limit ("The round limit ran out (N rounds)."), the objective's own note,
+    the last standing heroes leaving the field ("No hero was left fighting: Ash left the field."), every hero down;
+    empty while the fight goes on. The results' objective lines and the round-over message ("Battle over: Fled. ...")
+    carry it, and the log gets one "[End] ..." line. The run's Fled came from the last two standing heroes withdrawing
+    through the exit, which the kit verdict reads as fled; the line now says so. The retreat log line is the kit's
+    `RETREAT_LINE`.
+  - (PT-40, boss HP) neither max is wrong: the bar shows the current phase's span (contract 9.1, 142/304) and the unit's
+    own card showed the whole (142/608); the boss card already folds into the bar. The bar's HP read-out now has a hover
+    with both ("This phase: 142/304", "In all: 142/608"; one line when they match) (`BossBar.whole`, `hp_tip`).
+  - (PT-40, counter) "Hostiles N" counts the boss with the panel's foes.
+  - (PT-41) a lost (or fled) world fight counts a try in the save (`rolls["retry:<encounter>"]`), and the next start
+    mixes the count into the battle seed (`rpgkit_world` `retry_seed`; the base seed when there are no tries). Sims,
+    replays and the journey keep their seeds: goldens unchanged.
+  - (PT-47) when a talk is due at a round's start, the bar says "Round N: a talk first; the plan fills when it closes."
+    and switches to the plan message once the plan fills after it.
+  - (PT-48) a battle-long duration (the kit's `trigger::lasts_battle`, rounds above `BATTLE_ROUNDS - 100`) shows no
+    number on the status tabs, the pending tabs and the taunt tip.
+  - (PT-59) a guest's results row draws its catalog unit's portrait (`Report` rows keep the unit id, not written to the
+    JSON; `Who::of_catalog`), the initial only without art.
+  - (`FB-386` question 3) `portrait_chain_keyed` and `face_chain_keyed` put a unit's explicit `portrait` key first,
+    above the unique tier's own files (face chain deduplicated).
+- **Gate fix** (develop was red after PRs #90 and #91): the asset tree test (`region.rs` `layout_ok`) now allows a
+  terrain override folder's own front face (`tilesets/<set>/<terrain>/front_face/v*.png`, the PR7-74 key the foundry
+  and tallow sets now use) and, `[PROVISIONAL]`, a stage set's parked placeholder backdrop
+  (`tilesets/<set>/backdrop_<name>.png`, High Bastion's ramparts) until its zone exists. For Design: add both to the
+  ASSETORG2 tree (section 3, the stage set line), or ask Art/UI to park the backdrop under `backgrounds/battle/`.
+- **Goldens**: none re-recorded; sim, rules, checks, journey and the other goldens pass unchanged.
+- **Changed shots** (`fc.sh shots diff`, base `4974bcdf`): one changed, `story_battle_hub` results over the field, but
+  the change is the results report that landed on `develop` after that base; a won rout has no reason line, so this
+  row changes nothing visible there. Sheet: `/mnt/project-files/build-tools/pr7-75/shots_diff_sheet.png`.
+- **Guesses** (`[PROVISIONAL]`): (1) the boss bar keeps the phase span and gains the hover rather than showing the whole
+  (contract 9.1 stands); (2) any outcome but won counts as a try, fled included; (3) a sentinel shows no number rather
+  than "until removed" (the tab's hover already names the status); (4) the reason for a fled that is neither a retreat
+  nor heroes leaving is empty.
+- **Tests**: `rpgkit_battle/tests/end_reason.rs` (6), `rpgkit_world/tests/world_fight.rs`
+  (`a_retry_after_a_lost_try_draws_a_fresh_seed`), `rpgkit_content/tests/portrait_key.rs`, `boss_ui1_tests`
+  (`the_counter_counts_the_boss_and_the_hp_hover_gives_both_numbers`), `statusvis1b_tests`
+  (`a_battle_long_status_shows_no_sentinel_number`), `talk_screen_tests` (both messages), `hub`
+  (`a_guest_row_shows_its_portrait`).
+- **Docs delta**: `engine/README.md` none (no engine change). Kit README lines for Design: `rpgkit_battle` gains
+  `Session::end_reason`, `RETREAT_LINE` and `trigger::lasts_battle`; `rpgkit_world` gains the retry count in the seed
+  (`retry_seed`, save key `retry:<encounter>`). `HISTORY` none.
 
 ### FB-443: PR7-74 DIORAMA4 built; zone looks, backdrop band, see-through units, boss card docking
 
