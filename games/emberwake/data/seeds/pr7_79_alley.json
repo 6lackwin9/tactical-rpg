@@ -1,0 +1,216 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "fields": [
+        "decor"
+      ],
+      "entry": {
+        "id": "enc_pro_0a",
+        "decor": [
+          {
+            "art": "lantern_pole",
+            "x": 1,
+            "y": 1
+          },
+          {
+            "art": "lantern_pole",
+            "x": 10,
+            "y": 1
+          },
+          {
+            "art": "lantern_pole",
+            "x": 1,
+            "y": 6
+          },
+          {
+            "art": "barrel_stack",
+            "x": 4,
+            "y": 1
+          },
+          {
+            "art": "barrel_stack",
+            "x": 8,
+            "y": 1
+          },
+          {
+            "art": "crates_tall",
+            "x": 1,
+            "y": 5
+          },
+          {
+            "art": "crates_tall",
+            "x": 10,
+            "y": 6
+          },
+          {
+            "art": "barrel_stack",
+            "x": 2,
+            "y": 6
+          }
+        ]
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "fields": [
+        "decor"
+      ],
+      "entry": {
+        "id": "enc_job_corvo_gate",
+        "decor": [
+          {
+            "art": "cover/v3",
+            "x": 5,
+            "y": 1
+          },
+          {
+            "art": "cover/v3",
+            "x": 5,
+            "y": 7
+          },
+          {
+            "art": "lantern_pole",
+            "x": 1,
+            "y": 1
+          },
+          {
+            "art": "crates_tall",
+            "x": 9,
+            "y": 1
+          },
+          {
+            "art": "barrel_stack",
+            "x": 9,
+            "y": 7
+          },
+          {
+            "art": "crates_tall",
+            "x": 2,
+            "y": 7
+          },
+          {
+            "art": "cover/v0",
+            "x": 5,
+            "y": 2
+          },
+          {
+            "art": "cover/v1",
+            "x": 5,
+            "y": 6
+          }
+        ]
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "fields": [
+        "decor"
+      ],
+      "entry": {
+        "id": "enc_evt_01",
+        "decor": [
+          {
+            "art": "cover/v3",
+            "x": 6,
+            "y": 1
+          },
+          {
+            "art": "cover/v3",
+            "x": 6,
+            "y": 7
+          },
+          {
+            "art": "lantern_pole",
+            "x": 1,
+            "y": 1
+          },
+          {
+            "art": "crates_tall",
+            "x": 10,
+            "y": 1
+          },
+          {
+            "art": "barrel_stack",
+            "x": 10,
+            "y": 7
+          },
+          {
+            "art": "crates_tall",
+            "x": 1,
+            "y": 7
+          },
+          {
+            "art": "cover/v1",
+            "x": 6,
+            "y": 2
+          },
+          {
+            "art": "cover/v0",
+            "x": 6,
+            "y": 6
+          }
+        ]
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "fields": [
+        "decor"
+      ],
+      "entry": {
+        "id": "enc_evt_02",
+        "decor": [
+          {
+            "art": "cover/v3",
+            "x": 5,
+            "y": 3
+          },
+          {
+            "art": "cover/v3",
+            "x": 6,
+            "y": 5
+          },
+          {
+            "art": "cover/v1",
+            "x": 6,
+            "y": 3
+          },
+          {
+            "art": "cover/v0",
+            "x": 5,
+            "y": 5
+          },
+          {
+            "art": "lantern_pole",
+            "x": 1,
+            "y": 2
+          },
+          {
+            "art": "crates_tall",
+            "x": 10,
+            "y": 1
+          },
+          {
+            "art": "barrel_stack",
+            "x": 1,
+            "y": 7
+          },
+          {
+            "art": "crates_tall",
+            "x": 10,
+            "y": 7
+          }
+        ]
+      }
+    }
+  ]
+}

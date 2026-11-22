@@ -31,6 +31,48 @@
 				"############",
 				"############"
 			],
+			"decor": [
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 1
+				},
+				{
+					"art": "lantern_pole",
+					"x": 10,
+					"y": 1
+				},
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 6
+				},
+				{
+					"art": "barrel_stack",
+					"x": 4,
+					"y": 1
+				},
+				{
+					"art": "barrel_stack",
+					"x": 8,
+					"y": 1
+				},
+				{
+					"art": "crates_tall",
+					"x": 1,
+					"y": 5
+				},
+				{
+					"art": "crates_tall",
+					"x": 10,
+					"y": 6
+				},
+				{
+					"art": "barrel_stack",
+					"x": 2,
+					"y": 6
+				}
+			],
 			"arena_hazards": [],
 			"max_rounds": 6,
 			"total_blocks": 6,
@@ -111,6 +153,48 @@
 				"ooroo##ooooo",
 				"ooooooorooo#",
 				"oooooooooooo"
+			],
+			"decor": [
+				{
+					"art": "cover/v3",
+					"x": 2,
+					"y": 2
+				},
+				{
+					"art": "cover/v3",
+					"x": 8,
+					"y": 1
+				},
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 8
+				},
+				{
+					"art": "cover/v1",
+					"x": 2,
+					"y": 4
+				},
+				{
+					"art": "cover/v0",
+					"x": 10,
+					"y": 3
+				},
+				{
+					"art": "cover/v0",
+					"x": 11,
+					"y": 7
+				},
+				{
+					"art": "barrel_stack",
+					"x": 4,
+					"y": 8
+				},
+				{
+					"art": "crates_tall",
+					"x": 9,
+					"y": 8
+				}
 			],
 			"arena_hazards": [],
 			"max_rounds": 6,
@@ -200,6 +284,48 @@
 				"============",
 				"WWWWWWWWWWWW",
 				"WWWWWWWWWWWW"
+			],
+			"decor": [
+				{
+					"art": "cover/v3",
+					"x": 6,
+					"y": 3
+				},
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 2
+				},
+				{
+					"art": "lantern_pole",
+					"x": 10,
+					"y": 6
+				},
+				{
+					"art": "barrel_stack",
+					"x": 1,
+					"y": 6
+				},
+				{
+					"art": "crates_tall",
+					"x": 2,
+					"y": 2
+				},
+				{
+					"art": "barrel_stack",
+					"x": 2,
+					"y": 6
+				},
+				{
+					"art": "crates_tall",
+					"x": 10,
+					"y": 2
+				},
+				{
+					"art": "cover/v1",
+					"x": 7,
+					"y": 3
+				}
 			],
 			"arena_hazards": [],
 			"max_rounds": 6,
@@ -304,6 +430,48 @@
 				"#....#.....#",
 				"############"
 			],
+			"decor": [
+				{
+					"art": "cover/v3",
+					"x": 5,
+					"y": 1
+				},
+				{
+					"art": "cover/v3",
+					"x": 5,
+					"y": 7
+				},
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 1
+				},
+				{
+					"art": "crates_tall",
+					"x": 9,
+					"y": 1
+				},
+				{
+					"art": "barrel_stack",
+					"x": 9,
+					"y": 7
+				},
+				{
+					"art": "crates_tall",
+					"x": 2,
+					"y": 7
+				},
+				{
+					"art": "cover/v0",
+					"x": 5,
+					"y": 2
+				},
+				{
+					"art": "cover/v1",
+					"x": 5,
+					"y": 6
+				}
+			],
 			"arena_hazards": [],
 			"max_rounds": 8,
 			"total_blocks": 6,
@@ -400,6 +568,48 @@
 				"#.r...#....#",
 				"#.....#..r.#",
 				"####..######"
+			],
+			"decor": [
+				{
+					"art": "cover/v3",
+					"x": 6,
+					"y": 1
+				},
+				{
+					"art": "cover/v3",
+					"x": 6,
+					"y": 7
+				},
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 1
+				},
+				{
+					"art": "crates_tall",
+					"x": 10,
+					"y": 1
+				},
+				{
+					"art": "barrel_stack",
+					"x": 10,
+					"y": 7
+				},
+				{
+					"art": "crates_tall",
+					"x": 1,
+					"y": 7
+				},
+				{
+					"art": "cover/v1",
+					"x": 6,
+					"y": 2
+				},
+				{
+					"art": "cover/v0",
+					"x": 6,
+					"y": 6
+				}
 			],
 			"arena_hazards": [],
 			"max_rounds": 12,
@@ -567,6 +777,48 @@
 				"#...r..r...#",
 				"#.f......f.#",
 				"#....##....#"
+			],
+			"decor": [
+				{
+					"art": "cover/v3",
+					"x": 5,
+					"y": 3
+				},
+				{
+					"art": "cover/v3",
+					"x": 6,
+					"y": 5
+				},
+				{
+					"art": "cover/v1",
+					"x": 6,
+					"y": 3
+				},
+				{
+					"art": "cover/v0",
+					"x": 5,
+					"y": 5
+				},
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 2
+				},
+				{
+					"art": "crates_tall",
+					"x": 10,
+					"y": 1
+				},
+				{
+					"art": "barrel_stack",
+					"x": 1,
+					"y": 7
+				},
+				{
+					"art": "crates_tall",
+					"x": 10,
+					"y": 7
+				}
 			],
 			"arena_hazards": [],
 			"max_rounds": 12,
@@ -775,6 +1027,43 @@
 				"#..LL......#",
 				"############"
 			],
+			"decor": [
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 1
+				},
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 7
+				},
+				{
+					"art": "lantern_pole",
+					"x": 10,
+					"y": 1
+				},
+				{
+					"art": "barrel_stack",
+					"x": 1,
+					"y": 2
+				},
+				{
+					"art": "crates_tall",
+					"x": 1,
+					"y": 6
+				},
+				{
+					"art": "barrel_stack",
+					"x": 10,
+					"y": 7
+				},
+				{
+					"art": "crates_tall",
+					"x": 10,
+					"y": 2
+				}
+			],
 			"arena_hazards": [
 				{
 					"id": "slag_vents",
@@ -938,6 +1227,48 @@
 				"L.r..LL..pp.",
 				"L....==....L",
 				"LLLLLLLLLLLL"
+			],
+			"decor": [
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 1
+				},
+				{
+					"art": "lantern_pole",
+					"x": 10,
+					"y": 1
+				},
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 7
+				},
+				{
+					"art": "barrel_stack",
+					"x": 2,
+					"y": 1
+				},
+				{
+					"art": "crates_tall",
+					"x": 9,
+					"y": 1
+				},
+				{
+					"art": "crates_tall",
+					"x": 9,
+					"y": 7
+				},
+				{
+					"art": "barrel_stack",
+					"x": 2,
+					"y": 7
+				},
+				{
+					"art": "crates_tall",
+					"x": 10,
+					"y": 7
+				}
 			],
 			"arena_hazards": [],
 			"max_rounds": 12,
@@ -1118,6 +1449,48 @@
 				"##....p...##",
 				"############"
 			],
+			"decor": [
+				{
+					"art": "cover/v3",
+					"x": 3,
+					"y": 2
+				},
+				{
+					"art": "cover/v3",
+					"x": 2,
+					"y": 6
+				},
+				{
+					"art": "cover/v3",
+					"x": 9,
+					"y": 2
+				},
+				{
+					"art": "lantern_pole",
+					"x": 2,
+					"y": 1
+				},
+				{
+					"art": "crates_tall",
+					"x": 9,
+					"y": 1
+				},
+				{
+					"art": "crates_tall",
+					"x": 2,
+					"y": 7
+				},
+				{
+					"art": "barrel_stack",
+					"x": 10,
+					"y": 6
+				},
+				{
+					"art": "cover/v0",
+					"x": 8,
+					"y": 6
+				}
+			],
 			"arena_hazards": [],
 			"max_rounds": 12,
 			"total_blocks": 6,
@@ -1281,6 +1654,53 @@
 				"#..f..#....#",
 				"#..........#",
 				"############"
+			],
+			"decor": [
+				{
+					"art": "cover/v3",
+					"x": 6,
+					"y": 2
+				},
+				{
+					"art": "cover/v3",
+					"x": 6,
+					"y": 6
+				},
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 1
+				},
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 7
+				},
+				{
+					"art": "barrel_stack",
+					"x": 3,
+					"y": 1
+				},
+				{
+					"art": "crates_tall",
+					"x": 2,
+					"y": 7
+				},
+				{
+					"art": "crates_tall",
+					"x": 9,
+					"y": 7
+				},
+				{
+					"art": "cover/v1",
+					"x": 6,
+					"y": 3
+				},
+				{
+					"art": "cover/v0",
+					"x": 6,
+					"y": 5
+				}
 			],
 			"arena_hazards": [],
 			"max_rounds": 12,
@@ -1457,6 +1877,53 @@
 				"#..f..#....#",
 				"#..........#",
 				"############"
+			],
+			"decor": [
+				{
+					"art": "cover/v3",
+					"x": 6,
+					"y": 2
+				},
+				{
+					"art": "cover/v3",
+					"x": 6,
+					"y": 6
+				},
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 1
+				},
+				{
+					"art": "lantern_pole",
+					"x": 1,
+					"y": 7
+				},
+				{
+					"art": "barrel_stack",
+					"x": 3,
+					"y": 1
+				},
+				{
+					"art": "crates_tall",
+					"x": 2,
+					"y": 7
+				},
+				{
+					"art": "crates_tall",
+					"x": 9,
+					"y": 7
+				},
+				{
+					"art": "cover/v1",
+					"x": 6,
+					"y": 3
+				},
+				{
+					"art": "cover/v0",
+					"x": 6,
+					"y": 5
+				}
 			],
 			"arena_hazards": [],
 			"max_rounds": 12,

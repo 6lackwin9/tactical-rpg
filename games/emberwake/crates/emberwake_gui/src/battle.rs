@@ -723,6 +723,11 @@ impl BattleScreen {
     /// The Test Arena: the catalog encounter given on the command line (goblin_skirmish by default).
     pub fn sandbox(cx: &Cx) -> Self {
         let mut b = Self::blank(cx, Mode::Arena);
+        // DECOR1 (PR7-79 follow-up): a launch encounter `<world>:<id>` is that world's (its stage set, cover and decor
+        // cover draw), as in `arena_with` and `playback`
+        if let Some((w, e)) = b.encounter.split_once(':').map(|(w, e)| (w.to_string(), e.to_string())) {
+            (b.arena_world, b.encounter) = (Some(w), e);
+        }
         b.start_battle();
         b
     }
