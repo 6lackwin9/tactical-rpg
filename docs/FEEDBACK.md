@@ -62,6 +62,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-69` (`GRATE-GROUND1`) | done | `develop` (squash `PR7-69`) | Seed `pr7_69` retags 107 walkable mud cells of the Grate's north quay (`sunk_ward_runoff_grate`, rows 3-11) to flagstone; the silt bank, soot yard, catwalk and ring road unchanged; shots `/mnt/project-files/pr7-69/`; `FB-384` |
 | `PR7-73` (`PAINTED-MAPS1`) | done | `develop` (squash `PR7-73`) | Hub and region maps scale a body with a `foot` row like the battle stage (1.15 of the map's tile width, feet on the tile's foot point); kit unit field `portrait` looked up before the body key; seed `pr7_73` keys the seven painted-body units to the files they already show (Art/UI #87 portraits kept); shots `/mnt/project-files/pr7-73/`; goldens unchanged; `FB-386` |
 | `PR7-76` (`ACT1-FIX2`) | done | `develop` (squash `PR7-76`) | Act 1 agent-run fixes PT-42..63 (Here list usable points and edge arrows, no repeat point answers, roads drawn at rest, vignette two-press, job places and locked reasons, ready quest in legend, Make camp reason, directional exits, walk resumes after a won fight, batched turn-ins, can't-wear badge, dialogue change log, opaque Journal, skill picks logged, Tithing at-0 line); seed `pr7_76_hub_cast` keys five hub NPC bodies; grate silt parked; shots `/mnt/project-files/pr7-76/`; goldens unchanged; `FB-388` |
+| `PR7-78` (`ACT1-DATA1`) | done | `develop` (squash `PR7-78`) | q_a1_m4 already grants its promise (no change); `rec_level` on the eight flag-job quests, with a test; Crucible and Overlook already name the interlude in `closed_text` (no change); seed `pr7_78_quests`; goldens unchanged; `FB-390` |
 | `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
 | `PR7-4` (`SCENARIO-GOLDENS1`) | part 1 done (tools lane); baselines await the user | `develop` (squash `PR7-4` part 1) | Scenario `shot` step `golden` (tolerance, pixels allowance, diff image), `record=1`, launch `save`; every scenario in the gate (`tools/fc.sh scenarios_all`); three screen scenarios (menus, hub, battle; 18 shots) run as review shots until the user approves the baselines (`/mnt/project-files/pr7-4/`); `FB-313` |
 | `ENGINE-1` (`HELLO-GAME1`) | done (tools lane) | `develop` (squash `ENGINE-1`) | Sample game `games/hello/` on engine crates only: menu, walker sprite, one save slot, engine sounds, scenario `hello_walk` in the gate; programs `hello` and `hello_cli`; six RPG leaks listed; `FB-315` |
@@ -233,3 +234,22 @@ This file is the **only doc file edited by the Build Session** under the two-ses
   - HISTORY: "AO-01(4) world map roads 'focus only, nothing at rest' replaced by open roads drawn at rest (PT-45,
     PR7-76)." and "Vignette press model V3 (one phase per press) replaced for players by two presses a card, with no
     press lost in the fade (PT-46, PR7-76); `press` kept for tools."
+
+### FB-390: PR7-78 ACT1-DATA1 built; job levels guessed, lock text already names the interlude
+
+- **Status**: built, `develop` (squash `PR7-78`). Seed `pr7_78_quests.json`; goldens unchanged.
+- **(a)** No change needed; FB-388 misread it. The poultice is already in `q_a1_m4`'s template `a1_main_raid`
+  (`sulfur_poultice` 1), and the five days of Warded Tallow are the `orlov_stores` chest at the Tallow Vats (`supplies`
+  5, opens on `sunk_ward.m4_done`), as the text says ("wait in Orlov's stores"). A first cut that added 5 supplies at
+  turn-in (doubling the Tallow) was caught in review and dropped.
+- **(b)** `rec_level` is a world quest field, so it is set on the eight quests using an `a1_flag_job*` template, by the
+  place that sets the flag. `[PROVISIONAL]` levels (only crossroads 4 and junction 7 at 5 are shipped bands; the rest
+  follow story order): `q_a1_corvo` 3 (Corvo's gate), `q_a1_red_pen` 4 and `q_hook_rubbings` 4 (crossroads),
+  `q_hook_lock_ciphers` 5 (the Grate, no shipped band), `q_hook_bellows` 5 (junction 7), `q_hook_wedges` 6 (Fourth
+  Kiln), `q_hook_counter_still` 6 (Tallow Vats), `q_hook_overlook` 7 (Crucible watchpost). `q_a1_m3`, `q_a1_m4` and
+  `q_a1_m5` still have no `rec_level` (not in the row).
+- **(c)** No change and no gap: the only lock text field is the quest's `closed_text`, and both `q_a1_m5` and
+  `q_hook_overlook` already say "Something under the Undercroft must be answered first.", which the board shows since
+  PR7-76.
+- **Test**: `emberwake_world/tests/board_rec_level.rs` `every_flag_job_on_a_board_has_a_level` (data-derived).
+- **Docs delta**: none.

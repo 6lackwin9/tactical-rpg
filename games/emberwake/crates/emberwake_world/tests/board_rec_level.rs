@@ -4,7 +4,7 @@
 //! one. No quest, board or level is named: they are read from the data.
 
 use aegis_core::json::{self, Dict};
-use emberwake_world::{board, new_game, Data};
+use emberwake_world::{board, new_game, quest, Data};
 use std::path::Path;
 
 const WORLD: &str = "sunk_ward";
@@ -56,4 +56,22 @@ fn board_rows_show_and_follow_the_recommended_level() {
 fn the_level_reads_as_words() {
     assert_eq!(board::rec_level_text(0), "");
     assert_eq!(board::rec_level_text(5), "Recommended level 5");
+}
+
+/// PR7-78 (ACT1-DATA1, FB-388): every job the board offers that sends the party to set a flag (a quest on a
+/// `flag_job` template) shows a recommended level, so no such job is unrated.
+#[test]
+fn every_flag_job_on_a_board_has_a_level() {
+    let d = data();
+    let gs = new_game::create_for_world(&d, WORLD, 1).expect("a new game");
+    let mut jobs = 0;
+    for b in board::boards(&d, &gs) {
+        for q in board::quests(&d, &gs, &json::s(b, "_qid")) {
+            if json::s(&quest::resolved(&d, &gs, &q), "template").contains("flag_job") {
+                jobs += 1;
+                assert!(board::rec_level(&d, &gs, &q) > 0, "{q}: a flag job shows a recommended level");
+            }
+        }
+    }
+    assert!(jobs > 0, "a {WORLD} board offers a flag job");
 }
