@@ -8367,6 +8367,12 @@ mod act1_fix2_tests {
         bare.shift_remove("use");
         bare.insert("sets_flags".into(), json!([]));
         assert!(!point_listed(&bare, "present"), "a point that only speaks is not listed");
+        // ENGINE-37 (LOOK-POINT1): a look-only point is listed with no flag to set, and acting on it sets nothing
+        bare.insert("use".into(), json!("look"));
+        assert!(point_listed(&bare, "present"), "a look-only point is listed");
+        let flags = cx.gs().flags.clone();
+        act_on_point(&mut cx, &bare);
+        assert_eq!(cx.gs().flags, flags, "a look sets nothing");
         if let Some(talker) = enter_point(&mut cx, |m, st| st == "present" && !point_listed(m, st)) {
             let mut map = RegionMap::new(&mut cx);
             frame(&mut map, &mut cx, &mut g, 1.0);

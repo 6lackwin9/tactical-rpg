@@ -2082,8 +2082,13 @@ pub const BOARD_SERVICE: &str = "board";
 
 /// PR7-37 (PT-03, PT-29): what a point of interest (a `point` marker's `use`) does when the party acts on it (E, or
 /// a click on its marker): "" says its note only; `rest` rests the party there (the campaign's rest rule, as Make
-/// camp); `crypts` says who lies in the crypt places; `stash` opens the party stash. Every point logs its line.
-pub const POINT_USES: [&str; 4] = ["", "rest", "crypts", "stash"];
+/// camp); `crypts` says who lies in the crypt places; `stash` opens the party stash; ENGINE-37 (LOOK-POINT1): `look`
+/// is look-only: it is listed and answers with its line, sets nothing and is never spent (no flag needed to list it).
+/// Every point logs its line.
+pub const POINT_USES: [&str; 5] = ["", "rest", "crypts", "stash", LOOK_USE];
+
+/// ENGINE-37 (LOOK-POINT1): the look-only point use.
+pub const LOOK_USE: &str = "look";
 
 /// The keys a step of `kind` takes (`kind` included; an unknown kind takes only `kind`). STORYMUSIC1: every kind takes
 /// an optional `music` (as a vignette's: "" keeps the music playing).

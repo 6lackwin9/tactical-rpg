@@ -146,8 +146,26 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-83` (`ACT1-FIX3`) | Built in part (tools lane) | `develop` | PT-73, 75, 76, 79, 81, 84 fixed; PT-68 and PT-69 text fixed; PT-70 and PT-71 fixes move the sim golden, so held for Design with options; PT-67, 72, 74, 80 reported. FB-459 |
 | `ENGINE-36` (`TOOLS-REPEATS2`) | Built (tools lane) | `develop` | `scenario shots save=` (a name or a folder path) shoots a map from a save with no scenario file; `seed-from --ids a,b,c`; `playtest start keep_saves=<dir>`. FB-461 |
 | `PR7-87` (`FORECAST-FIX1`) | Built in part (tools lane) | `develop` | The forecast follows disengages, carried moves, pushes and stealth (PT-67, PT-69); every dropped later pick is said at pick time; PT-72's costs and "No path" not reproduced, reported. FB-463 |
+| `ENGINE-37` (`LOOK-POINT1`) | Built (tools lane) | `develop` | A point's `use` may be `look` (listed in Here, answers with its line, sets nothing, never spent); the winch drum uses it and drops `sunk_ward.winch_seen` (seed `engine_37.json`). FB-465 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-465: ENGINE-37 LOOK-POINT1 built; a look-only point, the winch drum off its flag
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `ENGINE-37` (`LOOK-POINT1`).
+- **What landed**: a `point` marker may take `use: "look"` (`rpgkit_data::LOOK_USE`, in `POINT_USES`): it is listed in
+  the Here list (any point with a use is), acting on it logs its line ("The gorge winch drum: Greased iron chain ...")
+  and does nothing else, it sets no flag and is never spent, and it draws the Look glyph. The content check takes it
+  like the other uses. `crucible_watchpost`'s `winch_post` now has `use: "look"` and no `sets_flags`, so
+  `sunk_ward.winch_seen` (read by nothing) is gone. Seed `engine_37.json` writes the location's `markers` field.
+- **My guess**: the row says "a marker kind". I added a point `use` rather than a new marker kind, because a point
+  already has the label, note, Here row and glyph, so one value covers it. Say if a separate kind is wanted.
+- **Tests**: kit `rpgkit_world/tests/points_of_interest.rs` `a_look_only_point_is_present_and_answers_with_its_line`;
+  `rpgkit_content/tests/point_use.rs` covers every use; game `region.rs` `pt43_usable_points_join_the_here_list` (a
+  look point is listed and acting on it sets no flag).
+- **Docs delta**: `GAME_BRIEF` or the authoring notes, if they list point uses: add `look` (listed, answers, sets
+  nothing).
 
 ### FB-463: PR7-87 FORECAST-FIX1 built in part; the forecast follows moves, pushes and stealth
 

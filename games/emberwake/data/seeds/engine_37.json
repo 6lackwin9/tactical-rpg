@@ -1,0 +1,145 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "locations",
+      "world": "sunk_ward",
+      "fields": [
+        "markers"
+      ],
+      "entry": {
+        "id": "crucible_watchpost",
+        "markers": [
+          {
+            "id": "world_map",
+            "kind": "exit",
+            "anchor": "exit_road",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "to": "world_map",
+            "label": "World map: the Crucible"
+          },
+          {
+            "id": "crucible",
+            "kind": "encounter",
+            "anchor": "crucible",
+            "requires_flags": [],
+            "unless_flags": [
+              {
+                "key": "sunk_ward.hollis_overlook",
+                "value": true
+              },
+              {
+                "key": "sunk_ward.m5_done",
+                "value": true
+              }
+            ],
+            "sets_flags": [],
+            "encounter": "enc_evt_06",
+            "trigger": "proximity",
+            "radius": 2,
+            "once": false
+          },
+          {
+            "id": "crucible_overlook",
+            "kind": "encounter",
+            "anchor": "crucible_overlook",
+            "requires_flags": [
+              {
+                "key": "sunk_ward.hollis_overlook",
+                "value": true
+              }
+            ],
+            "unless_flags": [
+              {
+                "key": "sunk_ward.m5_done",
+                "value": true
+              }
+            ],
+            "sets_flags": [],
+            "encounter": "enc_evt_06_overlook",
+            "trigger": "proximity",
+            "radius": 2,
+            "once": false
+          },
+          {
+            "id": "overlook",
+            "kind": "point",
+            "anchor": "overlook",
+            "requires_flags": [
+              {
+                "key": "sunk_ward.interlude_done",
+                "value": true
+              }
+            ],
+            "unless_flags": [
+              {
+                "key": "sunk_ward.hollis_overlook",
+                "value": true
+              }
+            ],
+            "sets_flags": [
+              {
+                "key": "sunk_ward.hollis_overlook",
+                "value": true
+              }
+            ],
+            "label": "The Crag-Sight Overlook",
+            "note": "Hollis climbs the chimney stack and drops the outer counterweight from the gutter. The gate's reinforcements will have to take the long way round."
+          },
+          {
+            "id": "sentry_patrol",
+            "kind": "roamer",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "encounter": "enc_roam_sentries",
+            "path": "sentry_patrol",
+            "radius": 1,
+            "once": true
+          },
+          {
+            "id": "postern",
+            "kind": "exit",
+            "anchor": "postern",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "to": "world_map",
+            "label": "World map: the high gorge"
+          },
+          {
+            "id": "npc_condemned_shrine",
+            "kind": "npc",
+            "anchor": "npc_condemned_shrine",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "character": "cit_condemned_shrine"
+          },
+          {
+            "id": "npc_guardroom",
+            "kind": "npc",
+            "anchor": "npc_guardroom",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "character": "cit_guardroom"
+          },
+          {
+            "id": "winch_post",
+            "kind": "point",
+            "anchor": "winch_post",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "label": "The gorge winch drum",
+            "note": "Greased iron chain locked over the parapet, raising or dropping the Slag Gate below.",
+            "use": "look"
+          }
+        ]
+      }
+    }
+  ]
+}

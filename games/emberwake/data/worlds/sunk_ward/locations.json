@@ -832,14 +832,10 @@
 					"anchor": "winch_post",
 					"requires_flags": [],
 					"unless_flags": [],
-					"sets_flags": [
-						{
-							"key": "sunk_ward.winch_seen",
-							"value": true
-						}
-					],
+					"sets_flags": [],
 					"label": "The gorge winch drum",
-					"note": "Greased iron chain locked over the parapet, raising or dropping the Slag Gate below."
+					"note": "Greased iron chain locked over the parapet, raising or dropping the Slag Gate below.",
+					"use": "look"
 				}
 			],
 			"map_pos": [

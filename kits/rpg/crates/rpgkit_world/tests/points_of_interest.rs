@@ -91,3 +91,17 @@ fn the_crypt_line_counts_the_members_in_crypt_places() {
     assert_eq!(used, 1);
     assert_eq!(roster::crypt_words(&gs, &name), format!("Crypt places: {used} of {} (HERO).", roster::crypt_cap(&gs)), "who lies there, by the caller's names");
 }
+
+/// ENGINE-37 (LOOK-POINT1): a look-only point (`use` look, no flag) reads "Look", stays present (never spent) and answers
+/// with its line.
+#[test]
+fn a_look_only_point_is_present_and_answers_with_its_line() {
+    let d = data();
+    let gs = state(&d);
+    let loc = explore::location(&d, &gs);
+    let m = json::obj([("id", "drum".into()), ("kind", "point".into()), ("use", rpgkit_data::LOOK_USE.into()), ("label", "The drum".into()), ("note", "Chain over the parapet.".into())]);
+    let view = explore::marker_view(&d, &gs, loc, &m);
+    assert_eq!((json::s(&view, "state"), json::s(&view, "verb")), ("present".to_string(), "Look".to_string()));
+    assert_eq!(explore::point_use(&m), "look");
+    assert_eq!(explore::point_line(&m), "The drum: Chain over the parapet.");
+}
