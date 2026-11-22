@@ -357,15 +357,19 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
         None => (TITLE_END - tx) as f32,
     };
-    let round_text = ui.p.fit(&model.top.round, BODY, title_w);
+    // XL-FIX2 (PR7-85, FB-455 a): "R 1/12" at Large and Extra large, where "Round 1 of 12" was always cut
+    let title = strip_title(&model.top, ui.p.fonts.scale);
+    let round_text = ui.p.fit(title, BODY, title_w);
     ui.p.text_face(aegis_ui::painter::Typeface::Display, tx as f32, 3.0, &round_text, BODY, th().gold);
-    // PR7-63: a title cut to its room hovers to the whole of it
+    // PR7-63: a title cut to its room (or shortened) hovers to the whole of it
     let title_tip: Tip = if round_text != model.top.round { vec![(model.top.round.clone(), th().gold)] } else { Vec::new() };
+    let title_h = ui.p.line_h_face(aegis_ui::painter::Typeface::Display, BODY);
     ui.push("strip.title", "label", model.top.round.clone(), Rect::new(tx, 3, title_w as i32, ui.p.line_h(BODY).ceil() as i32), true, false, None, title_tip);
     let line_room = (TITLE_END - tx) as f32;
     // PR7-63 (XL-BATTLE1): the goal and protect lines stack under the title by the text size's line heights (at Normal
-    // the old 11 and 6 px), so at Extra large they no longer run into the title or each other
-    let (goal_y, line_step) = strip_lines(ui.p.line_h(BODY), ui.p.line_h(SMALL));
+    // the old 11 and 6 px), so at Extra large they no longer run into the title or each other; XL-FIX2: the title's
+    // line in the display face it is drawn in
+    let (goal_y, line_step) = strip_lines(title_h, ui.p.line_h(SMALL));
     for (k, (id, text, colour)) in [("strip.goal", &model.top.goal, th().text), ("strip.protect", &model.top.protect, crate::tokens::boss_gold())].into_iter().enumerate() {
         if text.is_empty() {
             continue;
@@ -1614,9 +1618,20 @@ fn impact_tip(t: &Intent, blocks: i32) -> Tip {
 /// BATTLE-UI2 contract 2: the strip's hero portrait and the right end of its title column (the blocks start at 92).
 const STRIP_PORTRAIT: i32 = 18;
 
+/// XL-FIX2 (PR7-85, FB-455 a): the strip's title at text size `scale`: "Round 1 of 12" up to Normal, "R 1/12" from
+/// Large up (the long form hovers).
+pub(super) fn strip_title(top: &crate::battle_view::TopBar, scale: f32) -> &str {
+    if scale > 1.0 + 1e-3 {
+        &top.round_short
+    } else {
+        &top.round
+    }
+}
+
 /// PR7-63 (XL-BATTLE1): the strip's goal line's top and the step to the protect line, for the title's and the small
 /// line's heights: the goal starts where the title's glyphs end (a line's box has room above and below its letters,
 /// about a third of the small line), never above Normal's 11; the step is two thirds of a small line, never under 6.
+/// XL-FIX2: `title_h` is the title's line in the display face it is drawn in, so from Large up the goal clears it.
 pub(super) fn strip_lines(title_h: f32, small_h: f32) -> (i32, i32) {
     let goal = (3.0 + title_h - small_h / 3.0).ceil() as i32;
     (goal.max(11), ((small_h * 2.0 / 3.0).ceil() as i32).max(6))

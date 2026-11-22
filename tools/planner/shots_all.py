@@ -188,7 +188,9 @@ def audit_lines(audits):
     for name, counts, a in rows:
         lines.append("%s (%s) screen %s scale %s" % (name, ", ".join("%s %d" % (k, n) for k, n in counts.items() if n), a.get("screen", "?"), a.get("scale", "?")))
         for c in a.get("cut") or []:
-            lines.append("  cut %r shown %r at %s" % (c.get("text"), c.get("shown"), c.get("at")))
+            # XL-FIX2 (PR7-85): a cut with no hover to its full words says so (`hover` false; absent in older audits)
+            bare = " NO HOVER" if c.get("hover") is False else ""
+            lines.append("  cut %r shown %r at %s%s" % (c.get("text"), c.get("shown"), c.get("at"), bare))
         for e in a.get("edge") or []:
             lines.append("  edge %r at %s" % (e.get("text"), e.get("at")))
         for o in a.get("overlap") or []:

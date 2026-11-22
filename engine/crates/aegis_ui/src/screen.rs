@@ -522,6 +522,12 @@ pub trait Screen<G> {
     fn note_context(&self, _cx: &Cx<G>) -> Value {
         Value::Null
     }
+    /// XL-FIX2 (PR7-85): the widget id prefixes whose boxes the text audit does not take as controls (a board's cell
+    /// widgets, which panels such as a log or a menu are drawn over, so their text would read as spilling out of a
+    /// cell). The layout audit and `ui_tree` see those widgets as ever. Default: none.
+    fn audit_ignores(&self) -> &'static [&'static str] {
+        &[]
+    }
     /// Called when the screen leaves the stack (popped, a new stack, the window closing): its last chance to keep
     /// what it holds (a playtest session).
     fn leave(&mut self, _cx: &mut Cx<G>) {}

@@ -1007,6 +1007,24 @@ fn tip_place(id: &str, r: Rect, mouse: (i32, i32)) -> (i32, i32) {
 /// PR7-37 (PT-07): the gap between the stat table's Total column and the derived list on the Stats tab.
 const DERIVED_GAP: f32 = 18.0;
 
+/// XL-FIX2 (PR7-85, FB-455 b): where a list of `n` stat rows goes, `room` units from its first row's top to its last
+/// row's top: a step of `base`, grown to `need` (a line of the text size and a unit) when that is more, closed up to
+/// fit the room; when one column cannot give the rows `need`, two columns (the first the longer). Answers (columns,
+/// rows per column, step). At Normal text the shipped lists keep one column and their old step.
+pub(crate) fn stat_rows_fit(n: usize, base: f32, room: f32, need: f32) -> (usize, usize, f32) {
+    let step_in = |per: usize| base.max(need).min(room / (per.max(2) - 1) as f32);
+    let one = step_in(n);
+    if one + 1e-3 >= need || n < 2 {
+        (1, n, one)
+    } else {
+        let per = n.div_ceil(2);
+        (2, per, step_in(per))
+    }
+}
+
+/// XL-FIX2 (PR7-85): the Stats tab's derived rows end left of this x (its "Bunks" line's right end and a margin).
+const DERIVED_RIGHT: f32 = 604.0;
+
 /// PR7-37 (PT-07): the y the Stats tab's stat table ends at (its six rows from 158, 15 apart).
 const STATS_TABLE_END: i32 = 158 + 6 * 15;
 
@@ -1064,13 +1082,31 @@ impl Character {
         let label_x = 262f32.max(table_right + DERIVED_GAP);
         let value_x = 325f32.max(label_x + rows.iter().map(|r| ui.p.text_w(&r.label, BODY + 1.0)).fold(0.0, f32::max) + 8.0);
         // DERIVE1 4.4: the built-in rows keep their 15 px step; catalog rows past them close the step up to stay above
-        // the detail pane (the last row starts at 263 at most)
-        let step = 15f32.min(120.0 / (rows.len().max(2) - 1) as f32);
+        // the detail pane (the last row starts at 263 at most). XL-FIX2 (PR7-85): the step grows with the text size,
+        // and when one column has no room for it the list takes a second column beside the first
+        let need = ui.p.line_h(BODY + 1.0) + 1.0;
+        let (ncols, mut per, mut step) = stat_rows_fit(rows.len(), 15.0, 120.0, need);
+        let mut xs = vec![(label_x, value_x)];
+        if ncols == 2 {
+            let widest = |ui: &mut Ui<PAct>, rs: &[DRow], label: bool| rs.iter().map(|r| ui.p.text_w(if label { &r.label } else { &r.shown }, BODY + 1.0)).fold(0.0, f32::max);
+            let vx1 = 325f32.max(label_x + widest(ui, &rows[..per], true) + 8.0);
+            let lx2 = vx1 + widest(ui, &rows[..per], false) + DERIVED_GAP;
+            let vx2 = lx2 + widest(ui, &rows[per..], true) + 8.0;
+            if vx2 + widest(ui, &rows[per..], false) <= DERIVED_RIGHT {
+                xs = vec![(label_x, vx1), (lx2, vx2)];
+            } else {
+                // no room for a second column: one, closed up as before
+                (per, step) = (rows.len(), 15f32.min(120.0 / (rows.len().max(2) - 1) as f32));
+            }
+        }
         for (i, r) in rows.iter().enumerate() {
-            let y = 143.0 + i as f32 * step;
-            ui.p.text(label_x, y, &r.label, BODY + 1.0, th().dim);
-            ui.p.text(value_x, y, &r.shown, BODY + 1.0, th().text);
-            ui.push(format!("stats.derived.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 26, step.min(14.0) as i32), true, false, None, tip(&r.label, &r.desc));
+            let c = (i / per.max(1)).min(xs.len() - 1);
+            let ((lx, vx), y) = (xs[c], 143.0 + (i - c * per) as f32 * step);
+            ui.p.text(lx, y, &r.label, BODY + 1.0, th().dim);
+            ui.p.text(vx, y, &r.shown, BODY + 1.0, th().text);
+            // a row of the first of two columns reaches to the second's labels
+            let rw = xs.get(c + 1).map_or((vx - lx) as i32 + 26, |next| (next.0 - lx) as i32 - 1);
+            ui.push(format!("stats.derived.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(lx as i32 - 2, y as i32 - 2, rw, step.min(14f32.max(need)) as i32), true, false, None, tip(&r.label, &r.desc));
         }
         // AUDIT-04 (PR5-40): the PK2 numbers it has (mastery, techniques, keystone, weapon durability), read only, as one
         // compact line between the stat table (its last row ends at 245) and the passives (256): the derived rows keep
@@ -1087,10 +1123,16 @@ impl Character {
         let names: Vec<String> = owned.iter().map(|p| s_or(d.entry("passives", p), "name", p)).collect();
         // PR7-41 (PT-28): these apply with no slot; the slotted passives and the keystone sit on the Skills tab
         let line = format!("Innate passives (no slot): {}", if names.is_empty() { "none".into() } else { names.join(", ") });
+        let cut = ui.p.fit(&line, BODY + 1.0, label_x - 78.0) != line;
         ui.p.text_fit(68.0, 258.0, &line, BODY + 1.0, label_x - 78.0, th().dim);
         let about: Vec<String> = owned.iter().map(|p| format!("{}: {}", s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"))).collect();
         let line_h = (ui.p.line_h(BODY + 1.0) + 2.0).ceil().max(13.0) as i32;
-        ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, line_h), true, false, None, tip("Innate passives", &format!("{} Slotted passives and the keystone are on the Skills tab.", if about.is_empty() { "None yet: innate passives come from the hero's background, faction, disciplines and named items.".to_string() } else { about.join(" ") })));
+        let mut card = tip("Innate passives", &format!("{} Slotted passives and the keystone are on the Skills tab.", if about.is_empty() { "None yet: innate passives come from the hero's background, faction, disciplines and named items.".to_string() } else { about.join(" ") }));
+        // XL-FIX2 (PR7-85, FB-455 c): a cut line hovers to its full words
+        if cut {
+            card.insert(1, (line.clone(), th().text));
+        }
+        ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, line_h), true, false, None, card);
     }
 
     fn draw_level(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
@@ -1309,7 +1351,12 @@ impl Character {
                 // PR7-41 (PT-28): where this kind comes from, on the header
                 // HITCALC1 (PR7-45): the keystone's header names where the slotted one comes from (class, deck or graft)
                 let source = if kind == "keystone" { list.first().and_then(|k| progression::keystone_source(d, m, k)) } else { None };
-                ui.p.text_fit(150.0, y as f32, &deck_source_hint(kind, level, key_level, source), BODY, 150.0, th().dim);
+                let hint = deck_source_hint(kind, level, key_level, source);
+                ui.p.text_fit(150.0, y as f32, &hint, BODY, 150.0, th().dim);
+                // XL-FIX2 (PR7-85, FB-455 c): a cut hint hovers to its full words
+                if ui.p.fit(&hint, BODY, 150.0) != hint {
+                    ui.push(format!("skills.{kind}.source"), "label", hint.clone(), Rect::new(150, y, 150, ui.p.line_h(BODY).ceil() as i32), true, false, None, vec![(hint, th().text)]);
+                }
             }
             y += 11;
             for i in 0..cap {
@@ -1651,19 +1698,40 @@ impl Character {
         }
         let (lx, lw) = (25, 210);
         ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.class_name(&cx.gs().world_id, &work.class_id(d)), work.level(d)), head, th().info);
-        // DERIVE1 4.4: catalog rows past the built-in ones close the 12 px step up (the last row starts at 260 at most)
-        let step = 12f32.min(102.0 / (now.len().saturating_sub(STATS.len()).max(2) - 1) as f32);
+        // DERIVE1 4.4: catalog rows past the built-in ones close the 12 px step up (the last row starts at 260 at most).
+        // XL-FIX2 (PR7-85, FB-455 b): the rows grow with the text size (a line and a unit); the derived rows start under
+        // the grown core rows and take two columns, like the core rows, when one has no room for the grown step
+        let need = ui.p.line_h(BODY) + 1.0;
+        let core_step = 12f32.max(need.ceil()) as i32;
+        let top = 117 + STATS.len().div_ceil(2) as i32 * core_step + 5;
+        let extra = now.len().saturating_sub(STATS.len());
+        let (ncols, per, step) = stat_rows_fit(extra, 12.0, (260 - top) as f32, need);
+        // two columns: the value leaves room for a change after it, and a label too long for the rest is cut (its row
+        // hovers to it)
+        let delta_room = if ncols == 2 { ui.p.text_w("+99", BODY).ceil() as i32 + 3 } else { 26 };
         for (i, r) in now.iter().enumerate() {
             let core = i < STATS.len();
-            let (x, y, w) = if core { (lx + 3 + (i as i32 % 2) * 104, 117 + (i as i32 / 2) * 12, 100) } else { (lx + 3, 158 + ((i - STATS.len()) as f32 * step) as i32, lw - 6) };
-            ui.p.text(x as f32, y as f32, &r.label, BODY, th().dim);
-            let right = (x + w - 26) as f32;
+            let k = i.saturating_sub(STATS.len());
+            let (x, y, w) = if core {
+                (lx + 3 + (i as i32 % 2) * 104, 117 + (i as i32 / 2) * core_step, 100)
+            } else if ncols == 2 {
+                (lx + 3 + (k / per) as i32 * 104, top + ((k % per) as f32 * step) as i32, 100)
+            } else {
+                (lx + 3, top + (k as f32 * step) as i32, lw - 6)
+            };
+            let right = (x + w - if core { 26 } else { delta_room }) as f32;
+            if !core && ncols == 2 {
+                let room = right - x as f32 - ui.p.text_w(&r.shown, BODY) - 4.0;
+                ui.p.text_fit(x as f32, y as f32, &r.label, BODY, room, th().dim);
+            } else {
+                ui.p.text(x as f32, y as f32, &r.label, BODY, th().dim);
+            }
             ui.p.text_right(right, y as f32, &r.shown, BODY, th().text);
             let delta = then.as_ref().and_then(|t| t.get(i)).map(|t| t.value - r.value).unwrap_or(0);
             if delta != 0 {
                 ui.p.text(right + 3.0, y as f32, &format!("{delta:+}"), BODY, if delta > 0 { th().good } else { th().foe });
             }
-            ui.push(format!("gear.stat.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(x - 2, y - 1, w, if core { 12 } else { step.min(12.0) as i32 }), true, false, None, tip(&r.label, &r.desc));
+            ui.push(format!("gear.stat.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(x - 2, y - 1, w, if core { core_step } else { step.min(core_step as f32) as i32 }), true, false, None, tip(&r.label, &r.desc));
         }
         let dirty = &work != m || stash != cx.gs().party.stash;
         ui.button("gear.reset", Rect::new(68, 312, 70, 18), "Reset", PAct::ResetGear, dirty);
@@ -3775,5 +3843,108 @@ mod fit_tests {
             enc.set_depth(png::BitDepth::Eight);
             enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
         }
+    }
+}
+
+/// XL-FIX2 (PR7-85, FB-455 b and c): the Stats and Gear tabs' stat rows grow with the text size (one under the other
+/// at least a line apart, a second column when one has no room), and every line cut on the Character screen hovers to
+/// its full words, at every text size.
+#[cfg(test)]
+mod xl_rows_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+    use aegis_ui::screen::TEXT_SIZES;
+
+    /// The rule: one column at the base step, closed up to the room, while that holds the rows a line apart; else two,
+    /// the first the longer, at the base step or the line, whichever is more, within the room.
+    #[test]
+    fn stat_rows_take_a_second_column_when_one_cannot_hold_the_line() {
+        let close = |n: usize, base: f32, room: f32| base.min(room / (n - 1) as f32);
+        // lists the room closes up (the room per row under the base step)
+        for (n, base, room) in [(11usize, 15.0f32, 120.0f32), (11, 12.0, 102.0), (14, 12.0, 96.0)] {
+            let one = close(n, base, room);
+            assert_eq!(stat_rows_fit(n, base, room, one - 0.5), (1, n, one), "{n} rows: a short line keeps one column");
+            assert_eq!(stat_rows_fit(n, base, room, one), (1, n, one), "{n} rows: a line the step just holds");
+            let per = n.div_ceil(2);
+            for need in [one + 0.5, base + 1.0] {
+                let (cols, rows, step) = stat_rows_fit(n, base, room, need);
+                assert_eq!((cols, rows), (2, per), "{n} rows, line {need}");
+                assert_eq!(step, base.max(need).min(room / (per - 1) as f32), "{n} rows, line {need}");
+                assert!(step * (per - 1) as f32 <= room + 1e-3, "{n} rows stay in the room");
+            }
+        }
+        assert_eq!(stat_rows_fit(7, 15.0, 120.0, 17.0), (1, 7, 17.0), "a list with room grows its one column");
+        assert_eq!(stat_rows_fit(1, 12.0, 102.0, 30.0).0, 1, "a single row stays one column");
+    }
+
+    /// The line height of `size` at text size `scale` (`Painter::line_h`).
+    fn line_h(g: &mut Gfx, scale: f32, size: f32) -> f32 {
+        g.fonts.scale = scale;
+        let p = aegis_ui::painter::Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+        p.line_h(size)
+    }
+
+    /// At every text size the rows of each column are a line or more apart, no two rows' boxes meet, and every row
+    /// stays above the detail pane (y 275).
+    #[test]
+    fn the_stat_rows_grow_with_the_text_size() {
+        let mut cx = game_cx();
+        let mut g = gfx();
+        let member = cx.gs().party.members[0].id.clone();
+        let mut bad = Vec::new();
+        for (tab, prefix, size) in [("stats", "stats.derived.", BODY + 1.0), ("gear", "gear.stat.", BODY)] {
+            let mut c = Character::new(&cx, &member, tab);
+            for (name, scale) in TEXT_SIZES {
+                frame(&mut c, &mut cx, &mut g, scale as f32);
+                let line = line_h(&mut gfx(), scale as f32, size);
+                let rows: Vec<Rect> = c.w.iter().filter(|w| w.id.starts_with(prefix)).map(|w| w.rect).collect();
+                assert!(rows.len() > STATS.len().min(6), "{tab} at {name}: the rows are drawn");
+                let mut cols: IndexMap<i32, Vec<i32>> = IndexMap::new();
+                for r in &rows {
+                    cols.entry(r.x).or_default().push(r.y);
+                    if r.y + r.h > 275 {
+                        bad.push(format!("{tab} at {name}: a row at {r:?} meets the detail pane"));
+                    }
+                }
+                for ys in cols.values_mut() {
+                    ys.sort();
+                    for pair in ys.windows(2) {
+                        if ((pair[1] - pair[0]) as f32) < line.floor() {
+                            bad.push(format!("{tab} at {name}: rows {} and {} under a line ({line}) apart", pair[0], pair[1]));
+                        }
+                    }
+                }
+                for (i, a) in rows.iter().enumerate() {
+                    for b in &rows[i + 1..] {
+                        let x = a.intersect(*b);
+                        if x.w > 0 && x.h > 0 {
+                            bad.push(format!("{tab} at {name}: rows {a:?} and {b:?} meet"));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// Every text cut on any tab, at any text size, has a widget at it whose hover holds the full words (the engine's
+    /// audit reads it: `bare_cut`).
+    #[test]
+    fn every_cut_on_the_character_screen_hovers_to_its_full_words() {
+        let mut cx = crate::party::fit_tests::full_party_cx(8);
+        let mut g = gfx();
+        let member = cx.gs().party.members[0].id.clone();
+        let mut bad = Vec::new();
+        for (tab, _) in TABS {
+            let mut c = Character::new(&cx, &member, tab);
+            for (name, scale) in TEXT_SIZES {
+                let recs = frame(&mut c, &mut cx, &mut g, scale as f32);
+                let v = aegis_ui::layout_audit::frame_report(g.view, aegis_ui::painter::Grid::Old, &recs, &[], &c.widgets(), &[]).report;
+                if v["bare_cut"] != json!(0) {
+                    bad.push(format!("{tab} at {name}: {}", json!(v["cut"].as_array().map(|a| a.iter().filter(|c| c["hover"] == json!(false)).cloned().collect::<Vec<_>>()))));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 }
