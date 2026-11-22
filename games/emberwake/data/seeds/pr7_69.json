@@ -1,0 +1,36 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "maps",
+      "fields": [
+        "ground"
+      ],
+      "entry": {
+        "id": "sunk_ward_runoff_grate",
+        "ground": [
+          "mmmmmmmmmmmmmmmmmmmmimmmmmmmmmmm",
+          "mmmmmmmmmmmmmmmmmmmmimmmmmmmmmmm",
+          "mmmmmmmmmmmmmmmmmmmwiwmmmmmmmmmm",
+          "mfffffwffffmfffffffwiwfffssssssm",
+          "mfmfmfwffffffffffffwiwfffssssssm",
+          "mfffffwwwffffffffffwiwfffssssssm",
+          "mmmmmffwwwwwwwwwwwwwiwwffssssssm",
+          "mmmmmfffmwwwiiiiiiiiiwwmfssssssm",
+          "mffffffffwwwiiiiiiiiwwwffsiiiiii",
+          "mffffffffwwwiiiiiiiiwwwffssssssm",
+          "mffffffffwwwiiiiiiiiwwwffssssssm",
+          "mfffffffmwwwwwwiiwwwwwwmfffffffm",
+          "mccccccccccccccccccccccccccccccm",
+          "mffffffffffffffffffffffffffffffm",
+          "mccccccccccccccccccccccccccccccm",
+          "mccccccccccccccccccccccccccccccm",
+          "mccccccccccccccccccccccccccccccm",
+          "mccccccccccccccccccccccccccccccm",
+          "mccccccccccccccccccccccccccccccm",
+          "mmmmcmmmmmmmmmmmmmmmmmmmmmmcmmmm"
+        ]
+      }
+    }
+  ]
+}
