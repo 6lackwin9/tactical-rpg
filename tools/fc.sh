@@ -4,6 +4,8 @@
 #                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), every scenario of each game with no window (PR7-4; the sample game games/hello too, ENGINE-1), every scenario again with each shot byte for byte the same (ENGINE-17), a new game from the templates (ENGINE-6),
 #                                the layer check, the screen layout check, the lints, docs --all, tooltests, plannertests, assetlib
 #                                (`auto` is accepted and runs everything)
+#   tools/fc.sh prune [target=<dir>] [--dry]   keep only the newest test binary per name in target/*/deps, drop the incremental
+#                                folders (TARGET-PRUNE1); the gate runs it first when the disk has under FC_PRUNE_MB (default 6000) MB free
 #   tools/fc.sh step <name>      one gate step alone, by its name in tools/gate_steps.txt (the list both gates run, ENGINE-12)
 #   tools/fc.sh golden-bisect <golden> <switch> [--keep DIR] | list   record a golden with a test-only switch
 #                                (aegis_core::switches) off and on, list the fights or runs that move; fixtures restored (ENGINE-14);
@@ -710,6 +712,19 @@ web() {
   echo "[web] ok: $variant build in $out (tools/fc.sh web serve)"
 }
 
+# TARGET-PRUNE1 (ENGINE-39): stale test binaries and incremental folders out of the cargo target folder.
+prune_target() {
+  local py; py=$(python_with "pass") || { echo "[prune] no Python 3 found"; status=1; return; }
+  "$py" tools/planner/prune_target.py "$@" || status=$?
+}
+prune_if_low() {
+  local dir="${CARGO_TARGET_DIR:-target}" avail
+  [ -d "$dir" ] || return 0
+  avail=$(df -Pk "$dir" 2>/dev/null | awk 'NR==2 {print int($4/1024)}')
+  [ -n "$avail" ] && [ "$avail" -lt "${FC_PRUNE_MB:-6000}" ] && { echo "[gate] ${avail} MB free: pruning the target folder first"; prune_target; }
+  return 0
+}
+
 # Low-power laptop (CPU1): cargo runs below normal priority on the desktop, so the machine stays usable; children inherit it.
 case "$1" in gate|build|test|clippy)
   [ -z "${CI:-}" ] && [ -r /proc/$$/winpid ] && powershell -NoProfile -Command "(Get-Process -Id $(cat /proc/$$/winpid)).PriorityClass='BelowNormal'" 2>/dev/null ;;
@@ -719,7 +734,9 @@ case "$1" in
   gate)  # on the desktop a full gate joins the planner's queue, one heavy run at a time (CPU1)
     heavy="tools/planner/heavy.sh"
     [ -z "${CI:-}" ] && [ -f "$heavy" ] && { source "$heavy"; heavy_start "fc.sh gate"; }
+    prune_if_low
     gate ;;
+  prune) prune_target "${@:2}" ;;
   build) build ;;
   step) [ -n "${2:-}" ] || { echo "usage: tools/fc.sh step <name>   (a gate step of tools/gate_steps.txt: $(gate_steps | tr '\n' ' '))"; status=2; }; [ -n "${2:-}" ] && gate_step "$2" ;;
   test) cargo_test "${@:2}" ;;

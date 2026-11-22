@@ -149,8 +149,27 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-87` (`FORECAST-FIX1`) | Built in part (tools lane) | `develop` | The forecast follows disengages, carried moves, pushes and stealth (PT-67, PT-69); every dropped later pick is said at pick time; PT-72's costs and "No path" not reproduced, reported. FB-463 |
 | `ENGINE-37` (`LOOK-POINT1`) | Built (tools lane) | `develop` | A point's `use` may be `look` (listed in Here, answers with its line, sets nothing, never spent); the winch drum uses it and drops `sunk_ward.winch_seen` (seed `engine_37.json`). FB-465 |
 | `ENGINE-38` (`LORE-RENAME1`) | Built (tools lane) | `develop` | `aegis content refs <kind> <id>` lists every reference; `aegis content rename <kind> <old> <new>` is a dry run, `--apply` rewrites data and seeds (only the matching strings) and moves the asset files, kept only when it adds no problem. FB-467 |
+| `ENGINE-39` (`TARGET-PRUNE1`) | Built (tools lane) | `develop` | `tools/fc.sh prune [target=] [--dry]` keeps only the newest test binary per name in `target/*/deps` and removes the incremental folders; `tools/fc.sh gate` runs it first when under 6 GB is free (`FC_PRUNE_MB`). FB-469 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-469: ENGINE-39 TARGET-PRUNE1 built; fc.sh prune and a low-disk prune before the gate
+
+- **Status**: built (tools lane), `develop`. Tools only (`tools/fc.sh`, `tools/planner/prune_target.py`).
+- **Spec**: `docs/READY.md` row `ENGINE-39` (`TARGET-PRUNE1`).
+- **What landed**:
+  - `tools/fc.sh prune [target=<dir>] [--dry]`: in each `<target>/<profile>/deps` it groups the executables named
+    `<name>-<16 hex>` by name, keeps the newest (by modified time) and removes the rest; then it removes each
+    `<target>/<profile>/incremental` folder (the gate builds with `CARGO_INCREMENTAL=0`). Libraries (`.rlib`,
+    `.rmeta`, `.so`, `.d` and the like) and unhashed files stay. `--dry` lists the count and size and removes nothing.
+  - `tools/fc.sh gate` runs it first when the target folder's disk has under `FC_PRUNE_MB` (default 6000) MB free, and
+    says so in one `[gate]` line.
+  - Test: `tools/planner/test_prune_target.py` (a fake target folder: the newest per name stays, libraries stay, a dry
+    run removes nothing, a missing folder is nothing to do), run by `plannertests`.
+- **On this cloud session**: the first run removed 45 stale binaries and folders, 1.16 GB.
+- **Known-issues**: the cloud disk-full row now starts with `tools/fc.sh prune`.
+- **Docs delta**: `docs/workflow/cloud.md` disk note could name `tools/fc.sh prune` (the gate runs it on its own when
+  low). No README change needed (the verb is in `tools/fc.sh` help).
 
 ### FB-467: ENGINE-38 LORE-RENAME1 built; content refs and a dry-run-first rename
 
