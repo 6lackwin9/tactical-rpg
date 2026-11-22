@@ -99,6 +99,8 @@ pub(super) struct Board<'a> {
     pub(super) hold: Option<&'a HoldMarks>,
     /// PK1-S2c (PK1 4.3 item 6, placeholder): the units whose round is a Channel round as the party sees it (the tint).
     pub(super) channel: &'a [usize],
+    /// DIORAMA4 S1: the boss bar's bottom edge on screen while it shows (the backdrop band is kept in view under it)
+    pub(super) bar_bottom: Option<i32>,
 }
 
 /// INPUT1 MR12: `unit` moved in this step by a dash: a command of its whose start is this block made the dash board event
@@ -249,7 +251,7 @@ fn scaled(a: u8, k: u8) -> u8 {
 /// to centre over the units, the cell widgets.
 /// The Flat board; returns the unit whose tile the mouse is over (VC2's hovered unit).
 pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold, channel } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold, channel, bar_bottom: _ } = b;
     let w = &s.w;
     // VISCLAR1 VC2: the unit under the mouse (its tile) joins the focus set; AR3: the arrows of the selected and the
     // inspected unit (Alt: all)
@@ -580,7 +582,7 @@ pub(super) fn with_alpha(c: Rgba, a: u8) -> Rgba {
 /// (front-most last, so it takes the click). `set`: the world's stage set (LOOK1-L1; "" = `common_stage`). Returns the
 /// unit the mouse is over on the board.
 pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold, channel } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold, channel, bar_bottom } = b;
     let w = &s.w;
     // VISCLAR1 AR3: the arrows of the selected and the inspected unit (Alt: all)
     let shown = overlay.map(|o| o.shown(&layers, sel, inspect, alt));
@@ -663,6 +665,13 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     } else {
         None
     };
+    // DIORAMA4 S3: the units standing in front of the selected unit, the hovered one, the inspected one or the
+    // selected unit's target draw see-through
+    let looked_at: Vec<usize> = sel.into_iter().chain(hovered).chain(inspect).chain(sel.and_then(|h| super::draw::round_target(w, h))).collect();
+    let faded = stage::occluders(&order, &looked_at);
+    // DIORAMA4 S1: under the boss bar, the backdrop band down to the first row a unit can stand on (stage coordinates)
+    let occupied: Vec<V2> = (0..w.units.len()).flat_map(|u| w.cells_of(u)).collect();
+    let band = bar_bottom.and_then(|y| stage::boss_band(&w.grid, &occupied, y - shift.1));
     let foot_f = |c: V2| {
         let (x, y) = geo.foot(c);
         (x as f32, y as f32)
@@ -673,7 +682,10 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     // DIORAMA2 R4: the stage reaches into the panel's side gutters (its wings, faded), inside the panel's rim
     ui.p.clip(Some(stage::STAGE_CLIP));
     ui.p.shift(shift.0, shift.1);
-    stage::draw_wings(&mut ui.p, &mut cx.art, &w.grid, set, &s.def.zone, &w.cat.zones, th().game("battle_panel", PANEL));
+    // DIORAMA4 S1, S2: the zone's own stage set, tint and terrain overrides (the world set's `stage.fx.json`)
+    let look = stage::zone_look(&mut cx.art, set, &s.def.zone);
+    let zset = (set, &look);
+    stage::draw_wings(&mut ui.p, &mut cx.art, &w.grid, zset, &s.def.zone, &w.cat.zones, th().game("battle_panel", PANEL));
     for pass in stage::passes() {
         match pass {
             // HOOKS1 ZN3: a data zone row keys its own backdrop and gradient ground (a code zone ignores any row)
@@ -687,7 +699,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                 } else {
                     tuning.grid_alpha
                 };
-                stage::draw_ground(&mut ui.p, &mut cx.art, &w.grid, set, grid_alpha);
+                stage::draw_ground(&mut ui.p, &mut cx.art, &w.grid, zset, grid_alpha);
                 // DIORAMA3 R3: the lanterns' pools and the vignette, under the marks and the units
                 let spots = stage::light_spots(&mut cx.art, set, &s.def.zone);
                 stage::draw_light(&mut ui.p, &spots);
@@ -797,11 +809,16 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     }
                 }
             }
-            Pass::Face => stage::draw_face(&mut ui.p, &mut cx.art, &w.grid, set),
+            Pass::Face => stage::draw_face(&mut ui.p, &mut cx.art, &w.grid, zset),
             Pass::Feet => {
+                if let Some(b) = band {
+                    stage::draw_band(&mut ui.p, &mut cx.art, &w.grid, &s.def.zone, &w.cat.zones, b);
+                }
                 for p in &order {
                     match p.item {
-                        Item::Block(c) => stage::draw_block(&mut ui.p, &mut cx.art, &w.grid, set, c),
+                        // DIORAMA4 S1: the band's rows show the backdrop, not their walls
+                        Item::Block(c) if band.is_some_and(|b| stage::under_band(c, b)) => {}
+                        Item::Block(c) => stage::draw_block(&mut ui.p, &mut cx.art, &w.grid, zset, c),
                         Item::Prop(c) => stage::draw_prop(&mut ui.p, &mut cx.art, &w.grid, c),
                         Item::Unit(i) => {
                             let Some(t) = unit_of(i) else { continue };
@@ -813,6 +830,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                             let outline = if Some(i) == sel || Some(i) == talker { Some(th().gold) } else if hovered == Some(i) { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
                             // STATUSFX1: a stealthed token (sprite and outline) at 55 % alpha
                             let alpha = fx::token_alpha(&t.looks, tuning);
+                            let alpha = if faded.contains(&i) { scaled(alpha, stage::OCCLUDER_ALPHA) } else { alpha };
                             let frame = t.body.as_deref().and_then(|b| token_frame(&mut cx.art, b, &t.palette, &a.player, anim_now, tp, t.facing).map(|(f, img)| {
                                 ui.p.image_alpha(img, t.tr, alpha);
                                 f

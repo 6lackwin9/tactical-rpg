@@ -1110,3 +1110,44 @@ pub(super) fn round_summary_text(s: &Session, layers: &Layers) -> Option<String>
     }
     Some(ri::summary_text(&s.round_summary()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tuning::Tuning;
+    use aegis_core::assets::Layers;
+
+    /// DIORAMA4 S5: a column-0 hazard decal draws whole inside the stage clip (the wings' clip does not cut its left
+    /// edge), on the board at rest and shaken left.
+    #[test]
+    fn a_column_0_decal_is_not_clipped() {
+        let root = aegis_core::scratch::Scratch::new("emberwake_marks_decal");
+        let path = root.join(format!("{DECAL_DIR}/zz_burn/v0.png"));
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(&path).unwrap()), 60, 44);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&[250u8, 0, 250, 255].repeat(60 * 44)).unwrap();
+        let mut art = aegis_ui::art::Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let geo = Geom::new(View::Stage, &Tuning::default());
+        for shake in [0, -3] {
+            let mut g = crate::hud::hud_tests::gfx();
+            let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+            p.clip(Some(crate::stage::STAGE_CLIP));
+            p.shift(shake, 0);
+            let c = V2::new(0, 3);
+            let r = ground_plate(&geo, c);
+            assert!(draw_decal(&mut p, &mut art, "zz_burn", c, r, 255));
+            let w = g.canvas.w as i32;
+            let at = |x: i32, y: i32| {
+                let i = ((y * w + x) * 4) as usize;
+                [g.canvas.px[i], g.canvas.px[i + 1], g.canvas.px[i + 2]]
+            };
+            let (x0, y0) = (r.x + shake, r.y + r.h / 2);
+            assert!(x0 > crate::stage::STAGE_CLIP.x, "the plate inside the clip");
+            assert_eq!(at(x0, y0), [250, 0, 250], "the decal's left edge drawn (shake {shake})");
+            assert_eq!(at(x0 + r.w - 1, y0), [250, 0, 250], "and its right edge");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}

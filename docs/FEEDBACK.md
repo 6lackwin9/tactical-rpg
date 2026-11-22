@@ -128,8 +128,80 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-71` (`CONTROLS-MIGRATE1`) | Built (tools lane) | `develop` | On load, an action on a fixed key goes back to its own key (swap undone), the settings are saved and a notice names it. FB-437 |
 | `PR7-72` (`SHOT-DIFF1`) | Built (tools lane) | `develop` | `tools/fc.sh shots diff`: the scenarios a change can show, base shots cached per commit, `index.md` and a contact sheet. FB-439 |
 | `ENGINE-32` (`ACT1-AGENT-RUN1`) | Report (tools lane) | `develop` | Agent run of Act 1: 9 quests turned in, then blocked at the Bone-Mill boss for the auto plan; PT-40..PT-65. FB-441 |
+| `PR7-74` (`DIORAMA4`) | Built (tools lane) | `develop` | Zone stage sets, tint and terrain overrides (`stage.fx.json` keys for Art/UI), the backdrop band under the boss bar, see-through units in front of the focus, the boss-fight foe card off the party; S5 is an art crop. FB-443 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-443: PR7-74 DIORAMA4 built; zone looks, backdrop band, see-through units, boss card docking
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `00f` `PR7-74` (`DIORAMA4`), with the Design relay of 2026-11-22 on Art/UI's zone sets
+  (PR #88).
+- **Key layout for Art/UI** (in `tilesets/<world set>/stage.fx.json`, which Art/UI owns; nothing of it is shipped by this
+  row, so the game looks as before until the entries land):
+
+  ```json
+  "zones": {
+   "tallow_vats": {
+    "set": "sunk_ward_tallow_vats_stage",
+    "tint": "#rrggbb",
+    "terrain": {"lava": "sunk_ward_tallow_vats_stage/lava"},
+    "spots": []
+   }
+  }
+  ```
+
+  - `set`: a stage set id. Its files are read before the world set's for the floor and every terrain tile, the wall
+    face, the wall foot, cover props, the front face (`front_face/<terrain>`) and the transition pieces (the zone's
+    pieces when it has any, else the world's). A set holding only `floor` and `stone` keeps the world set's walls and
+    front face (then `common_stage`). Its files count at the stage art resolution like the world set's.
+  - `tint`: "#rrggbb", multiplied over every tile, wall, cover prop, wall foot, piece and front face of the zone except
+    terrains with an override.
+  - `terrain.<terrain>`: a folder `<set>/<name>` under `tilesets/` (a bare `<name>` means the zone's set, else the
+    world's), or `{"folder": ..., "tint": "#rrggbb"}`. Its `v*` replace that terrain's tiles in the zone; its
+    `front_face/v*`, when present, the front face under it. The override's tint (none: untinted) replaces the zone's on
+    that terrain. A path with `..` or an empty part is ignored.
+  - Watchpost and the closed alleys: `tint` only. The keys are read once per world set and zone.
+- **What landed**:
+  - (S1) the keys above (`stage.rs` `ZoneLook`, `zone_look`, `zone_tile_art`); the engine gains
+    `Painter::image_tinted` (an image multiplied by a colour). A row-0 wall's cap and cover are clipped at the board's
+    top edge, so they no longer cover the backdrop's foot. While the boss bar shows, the backdrop band is drawn again
+    from the bar's bottom down to the first row holding a walkable cell or a unit (at least 8 px), bottom-aligned, and
+    the walls wholly inside that band are left out (`boss_band`, `draw_band`).
+  - (S2) the terrain override, as above. With a demo entry (`set` and `lava` from PR #88, not committed) Orlov's
+    floor shows the tallow and the zone floor with the world's walls.
+  - (S3) a unit not in focus whose body overlaps a focus unit's and whose feet stand nearer draws at 115/255 (about 45
+    percent): focus is the selected unit, the hovered one, the inspected one and the selected unit's round target
+    (`stage::occluders`, `OCCLUDER_ALPHA`). 1.15 cells kept; the outline-through pass stays; static, so Reduce motion
+    changes nothing.
+  - (S4) in a boss fight the docked foe card counts the party's cells first: the side away from the party (the party's
+    mean column) is tried first, then the other side; the compact card (header and totals, no rows) only when both full
+    sides cover a party cell; ties go by kept-clear cells, then objective tiles (`card::dock`). Outside a boss fight the
+    BU12 rule stands. (The gate's `statusvis1b` caught a first cut that went compact to spare the target cell.)
+  - (S5) no clip in the code: a column-0 decal draws whole inside the stage clip, at rest and shaken (test). The cut
+    in the Fable shot is in the art: `props/hazards/slow/v0.png` and `v2.png` and `poison/v1.png` carry a sliver of the
+    next sprite at their left edge (columns 4 to 7), and `poison/v0.png`, `slow/v1.png` and `slow/v3.png` one at their
+    right edge (columns 52 to 55). For Art/UI: re-crop those six.
+- **Golden**: the `stage.rs` fixture frame hash `TODAYS_FRAME` is re-recorded (`0xe6c3440ef5f1669f` to
+  `0x2a5309c84d603849`) for the one intended change, the row-0 wall clip (checked: with the clip off the old hash
+  holds).
+- **Changed shots** (`fc.sh shots diff scenarios=diorama_zones,diorama_stage,boss_bar`, base `8bc31c0b`): 6 changed, 1
+  new; the boss shots gain the backdrop band under the bar and the units in front of Kaelen fade; the Sunk Ward shots
+  change only along row 0's walls and in front of the selected unit. Sheet and shots:
+  `/mnt/project-files/build-tools/pr7-74/` (`shots_diff_sheet.png`, `vats_boss_no_zone_entry.png`,
+  `vats_boss_with_zone_set_demo.png`). New scenario `diorama_zones` (Orlov's fight in the tallow vats).
+- **Guesses** (`[PROVISIONAL]`): (1) the band shows the backdrop's lower part where it fits rather than moving the board
+  (the board has about 4 px to spare); (2) the tint multiplies, so it can darken and shift a colour but not lighten it;
+  (3) the party side is the mean column of the party; (4) the compact card leaves out the rows that do not fit, with
+  no "more" mark; (5) the demo shows the tallow override's front face falling back to the lava face colour, so a
+  `front_face` folder in the tallow override would finish it (Art/UI).
+- **Tests**: `stage.rs` (the key layout parsed, bad ids and paths left out, the file read; the zone's set before the
+  world's, the tint, the override with its own tint, the wall face from the world's set; a row-0 wall changes nothing
+  above the board; the band's extent and its walls; the occluders), `battle/card.rs` (the dock in and out of a boss
+  fight), `battle/marks.rs` (a column-0 decal whole), `aegis_ui` `fx_loops.rs` (`image_tinted`).
+- **Docs delta**: `HISTORY`: "2026-11-22 `PR7-74`: the `stage.rs` fixture frame hash re-recorded for the row-0 wall
+  clip (DIORAMA4 S1)." `engine/README.md` (aegis_ui painter): "`Painter::image_tinted(img, r, tint, a)`: an image
+  multiplied by a colour." `STRUCTURE`: none.
 
 ### FB-441: ENGINE-32 ACT1-AGENT-RUN1 report; Act 1 blocked at the Bone-Mill boss for the auto plan
 

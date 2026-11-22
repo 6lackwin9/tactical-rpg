@@ -170,6 +170,24 @@ fn e4_image_alpha_scales_every_pixels_alpha() {
     assert!(on_grey(&mut fonts, &|p| p.image_alpha(&img, r, 0)).px == on_grey(&mut fonts, &|_| {}).px, "0 draws nothing");
 }
 
+#[test]
+fn image_tinted_multiplies_every_pixels_colour() {
+    let img = Image { w: 2, h: 2, px: vec![200, 40, 40, 255, 40, 200, 40, 200, 40, 40, 200, 101, 9, 9, 9, 0] };
+    let mut fonts = Fonts::new(&font());
+    let on_grey = |fonts: &mut Fonts, f: &dyn Fn(&mut Painter)| {
+        render(fonts, |p| {
+            p.fill(Rect::new(0, 0, 40, 40), [60, 60, 60, 255]);
+            f(p);
+        })
+    };
+    let r = Rect::new(4, 4, 8, 8);
+    let tint = [255, 128, 0, 255];
+    let mul = Image { px: img.px.chunks(4).flat_map(|p| [p[0], ((p[1] as u32 * 128 + 127) / 255) as u8, 0, p[3]]).collect(), ..img.clone() };
+    assert!(on_grey(&mut fonts, &|p| p.image_tinted(&img, r, tint, 255)).px == on_grey(&mut fonts, &|p| p.image(&mul, r)).px, "each channel times the tint's");
+    assert!(on_grey(&mut fonts, &|p| p.image_tinted(&img, r, [255, 255, 255, 255], 128)).px == on_grey(&mut fonts, &|p| p.image_alpha(&img, r, 128)).px, "white is `image_alpha`");
+    assert!(on_grey(&mut fonts, &|p| p.image_tinted(&img, r, tint, 0)).px == on_grey(&mut fonts, &|_| {}).px, "0 draws nothing");
+}
+
 fn gfx() -> Gfx {
     let mut g = Gfx { canvas: Canvas::new(640, 360), view: View::fit(640, 360), fonts: Fonts::new(&font()), kit: Kit::default() };
     g.canvas.clear(BG);

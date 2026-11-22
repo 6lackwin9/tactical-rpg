@@ -362,6 +362,120 @@ fn dirs_ref(dirs: &[String]) -> Vec<&str> {
     dirs.iter().map(String::as_str).collect()
 }
 
+// ---- DIORAMA4 S1, S2: a battle zone's own look -------------------------------------------------------------------
+
+/// DIORAMA4 S1, S2: battle zone `zone`'s look from the world's stage set's `stage.fx.json` `zones.<zone>`: its own stage
+/// set (`set`, a set id: its floor, wall, wall face, wall foot, cover, front face and transition files are read before
+/// the world set's, so a set holding only floor and stone keeps the world's walls), its tint multiplied over the floor
+/// and walls (`tint`, "#rrggbb") and its terrain overrides (`terrain.<terrain>`: a folder, or `{"folder", "tint"}`,
+/// whose `v*` replace that terrain's stage tiles in the zone and whose `front_face/v*` its front face). A folder is
+/// `<set>/<name>` under `tilesets/` (for example `sunk_ward_tallow_vats_stage/lava`); a bare `<name>` is one of the
+/// zone's set (else the world's).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ZoneLook {
+    pub set: Option<String>,
+    pub tint: Option<Rgba>,
+    /// (terrain id, folder under the assets, its tint)
+    pub terrain: Vec<(String, String, Option<Rgba>)>,
+}
+
+impl ZoneLook {
+    /// The zone's own stage set, when it names one other than the world's `world` (read first, the world's after).
+    pub fn zone_set(&self, world: &str) -> Option<&str> {
+        self.set.as_deref().filter(|z| *z != world)
+    }
+
+    /// A file of the zone's own set under `kind` (`tilesets/<zone set>/<kind>/v*`, picked by (x, y)); None: no zone
+    /// set or no file there (the caller reads the world's set next).
+    pub fn pick(&self, art: &mut Art, world: &str, kind: &str, x: i32, y: i32) -> Option<String> {
+        let z = self.zone_set(world)?;
+        art.pick(&[&format!("tilesets/{z}/{kind}")], None, x, y)
+    }
+
+    /// Terrain `id`'s override in this zone: its folder and tint.
+    pub fn terrain(&self, id: &str) -> Option<(&str, Option<Rgba>)> {
+        self.terrain.iter().find(|t| t.0 == id).map(|t| (t.1.as_str(), t.2))
+    }
+
+    /// The tint over terrain `id`'s art: its override's (none: untinted), else the zone's.
+    pub fn tint_of(&self, id: &str) -> Option<Rgba> {
+        match self.terrain(id) {
+            Some((_, t)) => t,
+            None => self.tint,
+        }
+    }
+}
+
+/// DIORAMA4 S1: zone `zone`'s look in `stage.fx.json` value `fx` of world set `world` (`ZoneLook`); a bad set id or
+/// colour is left out.
+pub fn zone_look_of(fx: &Value, world: &str, zone: &str) -> ZoneLook {
+    let z = &fx["zones"][zone];
+    let hex = |v: &Value| v.as_str().and_then(rpgkit_ui::vignette::hex);
+    let set = z["set"].as_str().filter(|s| emberwake_content::art::set_id_ok(s)).map(str::to_string);
+    let own = set.clone().unwrap_or_else(|| world.to_string());
+    let folder = |f: &str| if f.contains('/') { format!("tilesets/{f}") } else { format!("tilesets/{own}/{f}") };
+    let terrain = z["terrain"]
+        .as_object()
+        .map(|m| {
+            m.iter()
+                .filter_map(|(id, v)| match v {
+                    Value::String(f) => Some((id.clone(), folder(f), None)),
+                    Value::Object(o) => Some((id.clone(), folder(o.get("folder")?.as_str()?), o.get("tint").and_then(hex))),
+                    _ => None,
+                })
+                .filter(|t| !t.1.ends_with('/') && !t.1.contains("..") && !t.1.contains("//"))
+                .collect()
+        })
+        .unwrap_or_default();
+    ZoneLook { set, tint: hex(&z["tint"]), terrain }
+}
+
+/// DIORAMA4 S1: `zone_look_of` over world set `set`'s `stage.fx.json` (none: the default look), read once per set and
+/// zone.
+pub fn zone_look(art: &mut Art, set: &str, zone: &str) -> ZoneLook {
+    if set.is_empty() || zone.is_empty() {
+        return ZoneLook::default();
+    }
+    thread_local! {
+        static LOOKS: std::cell::RefCell<std::collections::HashMap<(String, String), ZoneLook>> = Default::default();
+    }
+    let key = (set.to_string(), zone.to_string());
+    if let Some(v) = LOOKS.with(|m| m.borrow().get(&key).cloned()) {
+        return v;
+    }
+    let v = aegis_core::assets::read_json(art.layers(), &format!("tilesets/{set}/stage.fx.json")).map_or_else(ZoneLook::default, |fx| zone_look_of(&fx, set, zone));
+    LOOKS.with(|m| m.borrow_mut().insert(key, v.clone()));
+    v
+}
+
+/// DIORAMA4 S1, S2: `tile_art` with zone look `look`: a terrain override's folder first, then the zone's set, then the
+/// world's `set` (and `common_stage`, the flat tiles).
+pub fn zone_tile_art(art: &mut Art, id: &str, set: &str, look: &ZoneLook, x: i32, y: i32) -> TileArt {
+    if let Some(rel) = look.terrain(id).and_then(|(f, _)| art.pick(&[f], None, x, y)).or_else(|| look.pick(art, set, id, x, y)) {
+        return TileArt::Stage(rel);
+    }
+    tile_art(art, id, set, x, y)
+}
+
+/// `c` multiplied by `tint` per channel (none: `c`).
+pub fn tinted(c: Rgba, tint: Option<Rgba>) -> Rgba {
+    match tint {
+        Some(t) => {
+            let m = |i: usize| ((c[i] as u32 * t[i] as u32 + 127) / 255) as u8;
+            [m(0), m(1), m(2), c[3]]
+        }
+        None => c,
+    }
+}
+
+/// `img` in `r`, multiplied by `tint` when there is one.
+fn put(p: &mut Painter, img: &Image, r: Rect, tint: Option<Rgba>) {
+    match tint {
+        Some(t) => p.image_tinted(img, r, t, 255),
+        None => p.image(img, r),
+    }
+}
+
 /// 3.2.1: terrain `id`'s tile on cell (x, y), varied by position (LOOK1 5.4: `set`, the world's stage set, first).
 pub fn tile_art(art: &mut Art, id: &str, set: &str, x: i32, y: i32) -> TileArt {
     if let Some(rel) = art.pick(&dirs_ref(&battle_stage_dirs(id, set)), None, x, y) {
@@ -394,16 +508,16 @@ pub fn wall_foot_art(art: &mut Art, set: &str, x: i32) -> Option<String> {
 
 /// DIORAMA1 D4: the strip over row 0's ground cells (`WALL_FOOT_H` tall, at the set's art px), so the floor runs into
 /// the wall band instead of stopping at a line; blocks and standing cells draw their own.
-fn draw_wall_foot(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str) {
+fn draw_wall_foot(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, look: &ZoneLook) {
     for x in 0..GRID_W {
         let c = V2::new(x, 0);
         if !at(grid, c).is_some_and(|t| is_ground(grid, t)) {
             continue;
         }
-        let Some(rel) = wall_foot_art(art, set, x) else { continue };
+        let Some(rel) = look.pick(art, set, "wall_foot", x, 0).or_else(|| wall_foot_art(art, set, x)) else { continue };
         let r = stage_cell(c);
-        if let Some(img) = stage_image(art, &rel, set, CELL_W, WALL_FOOT_H) {
-            p.image(img, Rect::new(r.x, r.y, r.w, WALL_FOOT_H));
+        if let Some(img) = stage_image(art, &rel, (set, look), CELL_W, WALL_FOOT_H) {
+            put(p, img, Rect::new(r.x, r.y, r.w, WALL_FOOT_H), look.tint);
         }
     }
 }
@@ -429,24 +543,27 @@ fn stage_cell(c: V2) -> Rect {
 
 /// A stage file for a `w` x `h` logical rect: a file of the world's set at its art resolution (LOOK1 5.1, so a large
 /// window shows its art px), any other as before.
-fn stage_image<'a>(art: &'a mut Art, rel: &str, set: &str, w: i32, h: i32) -> Option<&'a Image> {
-    let own = !set.is_empty() && rel.strip_prefix("tilesets/").and_then(|r| r.strip_prefix(set)).is_some_and(|r| r.starts_with('/'));
+/// DIORAMA4 S1: the zone's own set counts as the world's.
+fn stage_image<'a>(art: &'a mut Art, rel: &str, (set, look): (&str, &ZoneLook), w: i32, h: i32) -> Option<&'a Image> {
+    let under = |s: &str| !s.is_empty() && rel.strip_prefix("tilesets/").and_then(|r| r.strip_prefix(s)).is_some_and(|r| r.starts_with('/'));
+    let own = under(set) || look.zone_set(set).is_some_and(under);
     let k = if own { SET_ART_PX } else { 1 };
     art.image(rel, w * k, h * k)
 }
 
-fn draw_tile(p: &mut Painter, art: &mut Art, grid: &Grid, id: &str, set: &str, c: V2, r: Rect) {
-    let terrain_color = |id: &str| terrain_color(grid, id);
-    match tile_art(art, id, set, c.x, c.y) {
-        TileArt::Stage(rel) => match stage_image(art, &rel, set, CELL_W, CELL_H) {
-            Some(img) => p.image(img, r),
-            None => p.fill(r, terrain_color(id)),
+fn draw_tile(p: &mut Painter, art: &mut Art, grid: &Grid, id: &str, (set, look): (&str, &ZoneLook), c: V2, r: Rect) {
+    let tint = look.tint_of(id);
+    let colour = tinted(terrain_color(grid, id), tint);
+    match zone_tile_art(art, id, set, look, c.x, c.y) {
+        TileArt::Stage(rel) => match stage_image(art, &rel, (set, look), CELL_W, CELL_H) {
+            Some(img) => put(p, img, r, tint),
+            None => p.fill(r, colour),
         },
         TileArt::Common(rel) => match art.image(&rel, FLAT_CELL, FLAT_CELL) {
-            Some(img) => p.image(img, r),
-            None => p.fill(r, terrain_color(id)),
+            Some(img) => put(p, img, r, tint),
+            None => p.fill(r, colour),
         },
-        TileArt::Colour => p.fill(r, terrain_color(id)),
+        TileArt::Colour => p.fill(r, colour),
     }
 }
 
@@ -537,8 +654,10 @@ pub fn piece_rect(cx: i32, cy: i32) -> Rect {
 }
 
 /// The pieces of `stage_pieces`, clipped to the board (which a camera shake moves) inside the clip already set.
-fn draw_pieces(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str) {
-    let pieces = stage_pieces(art, grid, set);
+fn draw_pieces(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, look: &ZoneLook) {
+    // DIORAMA4 S1: the zone's set's pieces when it has any, else the world's
+    let own = look.zone_set(set).map(|z| stage_pieces(art, grid, z)).unwrap_or_default();
+    let pieces = if own.is_empty() { stage_pieces(art, grid, set) } else { own };
     if pieces.is_empty() {
         return;
     }
@@ -546,8 +665,8 @@ fn draw_pieces(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str) {
     let board = p.v.rect(BOARD);
     p.c.clip = Some(outer.map_or(board, |o| o.intersect(board)));
     for (cx, cy, rel) in &pieces {
-        if let Some(img) = stage_image(art, rel, set, CELL_W, CELL_H) {
-            p.image(img, piece_rect(*cx, *cy));
+        if let Some(img) = stage_image(art, rel, (set, look), CELL_W, CELL_H) {
+            put(p, img, piece_rect(*cx, *cy), look.tint);
         }
     }
     p.c.clip = outer;
@@ -555,16 +674,16 @@ fn draw_pieces(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str) {
 
 /// Pass 2: every cell's ground tile (a standing cell with prop art the ground under it, without art the flat tile),
 /// the stage set's transition pieces, the lips of sunken cells, the ground props and the grid lines at `grid_alpha`.
-pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, grid_alpha: u8) {
+pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), grid_alpha: u8) {
     for y in 0..GRID_H {
         for x in 0..GRID_W {
             let c = V2::new(x, y);
             let shown = tile_shown(art, grid, c);
-            draw_tile(p, art, grid, shown, set, c, stage_cell(c));
+            draw_tile(p, art, grid, shown, (set, look), c, stage_cell(c));
         }
     }
-    draw_pieces(p, art, grid, set);
-    draw_wall_foot(p, art, grid, set);
+    draw_pieces(p, art, grid, set, look);
+    draw_wall_foot(p, art, grid, set, look);
     for y in 0..GRID_H {
         for x in 0..GRID_W {
             let c = V2::new(x, y);
@@ -628,10 +747,10 @@ pub fn face_column(grid: &Grid, x: i32) -> (&str, FaceBody) {
 
 /// Pass 6: the front face (per column: the top row the ground's colour lightened 25 %, the body wall art, water,
 /// lava or earth with flecks), then the drop shadow.
-pub fn draw_face(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str) {
+pub fn draw_face(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook)) {
     for x in 0..GRID_W {
         let r = Rect::new(FRONT_FACE.x + x * CELL_W, FRONT_FACE.y, CELL_W, FACE_H);
-        draw_face_cell(p, art, grid, set, x, x, r);
+        draw_face_cell(p, art, grid, (set, look), x, x, r);
     }
     for k in 0..DROP_SHADOW.h {
         p.fill(Rect::new(DROP_SHADOW.x, DROP_SHADOW.y + k, DROP_SHADOW.w, 1), rgba(0, 0, 0, (120 - 15 * k).max(0) as u8));
@@ -649,10 +768,13 @@ pub fn front_face_art(art: &mut Art, set: &str, top: &str, x: i32) -> Option<Str
 
 /// The front face of column `src` (its terrains) drawn in `r`, the art picked by column `x`: the stage set's front face
 /// for the column's top terrain (DIORAMA2 R2), else today's body by the column's face kind with the top's light line.
-fn draw_face_cell(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, src: i32, x: i32, r: Rect) {
+fn draw_face_cell(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), src: i32, x: i32, r: Rect) {
     let (top, body) = face_column(grid, src);
-    if let Some(img) = front_face_art(art, set, top, x).and_then(|rel| stage_image(art, &rel, set, CELL_W, FACE_H)) {
-        p.image(img, r);
+    let tint = look.tint_of(top);
+    // DIORAMA4 S2: a terrain override's own front face first
+    let own = look.terrain(top).and_then(|(f, _)| art.pick(&[&format!("{f}/front_face")], None, x, GRID_H)).or_else(|| look.pick(art, set, &format!("front_face/{top}"), x, GRID_H));
+    if let Some(img) = own.or_else(|| front_face_art(art, set, top, x)).and_then(|rel| stage_image(art, &rel, (set, look), CELL_W, FACE_H)) {
+        put(p, img, r, tint);
         return;
     }
     let flecks = |p: &mut Painter, col: Rgba| {
@@ -664,18 +786,18 @@ fn draw_face_cell(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, src: i
         }
     };
     match body {
-        FaceBody::Wall => match face_art(art, set, x, GRID_H).and_then(|rel| stage_image(art, &rel, set, CELL_W, FACE_H)) {
-            Some(img) => p.image(img, r),
-            None => p.fill(r, scaled(terrain_color(grid, grid.terrain_id(V2::new(src, GRID_H - 1))), 0.75)),
+        FaceBody::Wall => match look.pick(art, set, "wall_face", x, GRID_H).or_else(|| face_art(art, set, x, GRID_H)).and_then(|rel| stage_image(art, &rel, (set, look), CELL_W, FACE_H)) {
+            Some(img) => put(p, img, r, tint),
+            None => p.fill(r, tinted(scaled(terrain_color(grid, grid.terrain_id(V2::new(src, GRID_H - 1))), 0.75), tint)),
         },
-        FaceBody::Water => p.fill(r, scaled(rgb(30, 54, 110), 0.7)),
+        FaceBody::Water => p.fill(r, tinted(scaled(rgb(30, 54, 110), 0.7), tint)),
         FaceBody::Lava => {
-            p.fill(r, rgb(150, 50, 20));
-            flecks(p, rgb(255, 160, 60));
+            p.fill(r, tinted(rgb(150, 50, 20), tint));
+            flecks(p, tinted(rgb(255, 160, 60), tint));
         }
         FaceBody::Earth => {
-            p.fill(r, rgb(70, 50, 32));
-            flecks(p, rgb(52, 36, 24));
+            p.fill(r, tinted(rgb(70, 50, 32), tint));
+            flecks(p, tinted(rgb(52, 36, 24), tint));
         }
     }
     p.fill(Rect::new(r.x, r.y, r.w, 1), lighten(terrain_color(grid, top), 0.25));
@@ -798,7 +920,7 @@ pub fn lip_colour(art: &mut Art, set: &str) -> Rgba {
 /// DIORAMA2 R4: the stage's wings, the side gutters of the board panel (`STAGE_CLIP` beyond `INTERIOR`), drawn before
 /// the passes: the backdrop repeated beside itself, the edge columns' ground (and row 0's wall foot) one cell further
 /// out, their front face and drop shadow, then a fade to the panel colour `panel` at the outer edge.
-pub fn draw_wings(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, zone: &str, zones: &IndexMap<String, ZoneDef>, panel: Rgba) {
+pub fn draw_wings(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), zone: &str, zones: &IndexMap<String, ZoneDef>, panel: Rgba) {
     let (file, ground) = backdrop_source(art, grid, zone, zones);
     match file.and_then(|rel| art.image(&rel, BACKDROP.w, BACKDROP.h)) {
         Some(img) => {
@@ -821,15 +943,15 @@ pub fn draw_wings(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, zone: 
             let edge = V2::new(src, y);
             let t = if is_block(grid, edge) { ground_under(grid, edge) } else { tile_shown(art, grid, edge) };
             let r = stage_cell(V2::new(x, y));
-            draw_tile(p, art, grid, t, set, V2::new(x, y), r);
+            draw_tile(p, art, grid, t, (set, look), V2::new(x, y), r);
             if y == 0 && is_ground(grid, t) {
-                if let Some(img) = wall_foot_art(art, set, x).and_then(|rel| stage_image(art, &rel, set, CELL_W, WALL_FOOT_H)) {
-                    p.image(img, Rect::new(r.x, r.y, r.w, WALL_FOOT_H));
+                if let Some(img) = look.pick(art, set, "wall_foot", x, 0).or_else(|| wall_foot_art(art, set, x)).and_then(|rel| stage_image(art, &rel, (set, look), CELL_W, WALL_FOOT_H)) {
+                    put(p, img, Rect::new(r.x, r.y, r.w, WALL_FOOT_H), look.tint);
                 }
             }
         }
         let r = Rect::new(FRONT_FACE.x + x * CELL_W, FRONT_FACE.y, CELL_W, FACE_H);
-        draw_face_cell(p, art, grid, set, src, x, r);
+        draw_face_cell(p, art, grid, (set, look), src, x, r);
     }
     for k in 0..DROP_SHADOW.h {
         let a = rgba(0, 0, 0, (120 - 15 * k).max(0) as u8);
@@ -847,32 +969,45 @@ pub fn draw_wings(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, zone: 
 
 /// The feet pass: block `c` (3.3): its cap (the stage tile lifted `BLOCK_LIFT`), its face (the wall face art, else the
 /// cap's top rows at 75 %) with its top line and the shade on the cell south, the cap's highlight and side lines.
-pub fn draw_block(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, c: V2) {
+pub fn draw_block(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), c: V2) {
+    // DIORAMA4 S1: a row-0 block keeps off the backdrop band (its cap and cover clipped at the board's top edge)
+    let outer = p.c.clip;
+    if c.y == 0 {
+        let below = p.v.rect(Rect::new(STAGE_CLIP.x, BOARD_Y, STAGE_CLIP.w, STAGE_CLIP.y + STAGE_CLIP.h - BOARD_Y));
+        p.c.clip = Some(outer.map_or(below, |o| o.intersect(below)));
+    }
+    draw_block_in(p, art, grid, (set, look), c);
+    p.c.clip = outer;
+}
+
+fn draw_block_in(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), c: V2) {
     let r = stage_cell(c);
+    let t = grid.terrain_id(c);
+    let tint = look.tint_of(t);
     // DIORAMA3 R5: a block inside the arena stands as the stage set's cover prop (display only), feet on its bottom edge
-    if let Some(img) = cover_art(art, grid, set, c).and_then(|rel| stage_image(art, &rel, set, CELL_W, COVER_H)) {
-        p.image(img, Rect::new(r.x, r.y + r.h - COVER_H, CELL_W, COVER_H));
+    let zone_cover = look.zone_set(set).filter(|_| is_block(grid, c) && !outer_wall(grid, c)).and_then(|_| look.pick(art, set, "cover", c.x, c.y));
+    if let Some(img) = zone_cover.or_else(|| cover_art(art, grid, set, c)).and_then(|rel| stage_image(art, &rel, (set, look), CELL_W, COVER_H)) {
+        put(p, img, Rect::new(r.x, r.y + r.h - COVER_H, CELL_W, COVER_H), tint);
         if c.y + 1 < GRID_H {
             p.fill(Rect::new(r.x, r.y + r.h, r.w, 3), rgba(0, 0, 0, 70));
         }
         return;
     }
     let cap = Rect::new(r.x, r.y - BLOCK_LIFT, CELL_W, CELL_H);
-    let t = grid.terrain_id(c);
-    draw_tile(p, art, grid, t, set, c, cap);
+    draw_tile(p, art, grid, t, (set, look), c, cap);
     if block_face(grid, c) {
         let face = Rect::new(r.x, r.y + CELL_H - FACE_H, CELL_W, FACE_H);
-        let drawn = match face_art(art, set, c.x, c.y).and_then(|rel| stage_image(art, &rel, set, CELL_W, FACE_H)) {
+        let drawn = match look.pick(art, set, "wall_face", c.x, c.y).or_else(|| face_art(art, set, c.x, c.y)).and_then(|rel| stage_image(art, &rel, (set, look), CELL_W, FACE_H)) {
             Some(img) => {
-                p.image(img, face);
+                put(p, img, face, tint);
                 true
             }
             None => false,
         };
         if !drawn {
-            match darkened_cap(art, t, set, c) {
-                Some(img) => p.image(&img, face),
-                None => p.fill(face, scaled(terrain_color(grid, t), 0.75)),
+            match darkened_cap(art, t, (set, look), c) {
+                Some(img) => put(p, &img, face, tint),
+                None => p.fill(face, tinted(scaled(terrain_color(grid, t), 0.75), tint)),
             }
         }
         p.fill(Rect::new(face.x, face.y, face.w, 1), rgb(24, 24, 30));
@@ -894,8 +1029,8 @@ pub fn draw_block(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, c: V2)
 }
 
 /// The wall face's fallback: the cap tile's top 12 rows at 75 % brightness.
-fn darkened_cap(art: &mut Art, t: &str, set: &str, c: V2) -> Option<Image> {
-    let img = match tile_art(art, t, set, c.x, c.y) {
+fn darkened_cap(art: &mut Art, t: &str, (set, look): (&str, &ZoneLook), c: V2) -> Option<Image> {
+    let img = match zone_tile_art(art, t, set, look, c.x, c.y) {
         TileArt::Stage(rel) => art.image(&rel, CELL_W, CELL_H)?.clone(),
         TileArt::Common(rel) => art.image(&rel, CELL_W, CELL_H)?.clone(),
         TileArt::Colour => return None,
@@ -967,6 +1102,75 @@ pub fn board_items(art: &mut Art, grid: &Grid) -> Vec<Placed> {
 /// A unit in the feet pass: its foot point (with the slide) and body rect.
 pub fn unit_item(i: usize, foot: (i32, i32), body: Rect) -> Placed {
     Placed { item: Item::Unit(i), foot_y: foot.1, x: foot.0, rect: body }
+}
+
+fn overlap(a: Rect, b: Rect) -> bool {
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+}
+
+/// DIORAMA4 S1: the backdrop band kept in view under the boss bar: from `top` (the bar's bottom edge, stage
+/// coordinates) down to the top of the first row holding a walkable cell or a cell in `occupied`, across the stage;
+/// None when that leaves under `BAND_MIN` px.
+pub fn boss_band(grid: &Grid, occupied: &[V2], top: i32) -> Option<Rect> {
+    let open = (0..GRID_H).find(|y| (0..GRID_W).any(|x| grid.is_walkable(V2::new(x, *y)) || occupied.contains(&V2::new(x, *y))))?;
+    let bottom = BOARD_Y + open * CELL_H;
+    let top = top.max(BACKDROP.y);
+    (bottom - top >= BAND_MIN).then(|| Rect::new(STAGE_CLIP.x, top, STAGE_CLIP.w, bottom - top))
+}
+
+/// The shortest band `boss_band` gives.
+pub const BAND_MIN: i32 = 8;
+
+/// DIORAMA4 S1: whether block `c` lies wholly inside band `b` (its wall is left out there).
+pub fn under_band(c: V2, b: Rect) -> bool {
+    BOARD_Y + (c.y + 1) * CELL_H <= b.y + b.h
+}
+
+/// DIORAMA4 S1: the zone's backdrop (and its copies beside it) bottom-aligned in band `b`, clipped to it, with a dark
+/// line along its foot.
+pub fn draw_band(p: &mut Painter, art: &mut Art, grid: &Grid, zone: &str, zones: &IndexMap<String, ZoneDef>, b: Rect) {
+    let outer = p.c.clip;
+    let band = p.v.rect(b);
+    p.c.clip = Some(outer.map_or(band, |o| o.intersect(band)));
+    let dy = b.y + b.h - (BACKDROP.y + BACKDROP.h);
+    p.shift(0, dy);
+    let (file, _) = backdrop_source(art, grid, zone, zones);
+    match file.as_deref().and_then(|rel| art.image(rel, BACKDROP.w, BACKDROP.h)) {
+        Some(img) => {
+            for dx in [-BACKDROP.w, 0, BACKDROP.w] {
+                p.image(img, Rect::new(BACKDROP.x + dx, BACKDROP.y, BACKDROP.w, BACKDROP.h));
+            }
+        }
+        None => {
+            p.fill(Rect::new(STAGE_CLIP.x, BACKDROP.y, STAGE_CLIP.w, BACKDROP.h), NIGHT);
+            draw_backdrop(p, art, grid, zone, zones);
+        }
+    }
+    p.shift(0, -dy);
+    p.fill(Rect::new(b.x, b.y + b.h - 1, b.w, 1), rgba(0, 0, 0, 120));
+    p.c.clip = outer;
+}
+
+/// DIORAMA4 S3: a unit standing in front of a focus unit draws at this alpha (about 45 %).
+pub const OCCLUDER_ALPHA: u8 = 115;
+
+/// DIORAMA4 S3: the units drawn at `OCCLUDER_ALPHA`: each unit (not in `focus`) whose body rect overlaps a `focus`
+/// unit's and whose feet stand nearer (lower on the board). Static: the same at any Reduce motion setting.
+pub fn occluders(items: &[Placed], focus: &[usize]) -> Vec<usize> {
+    let unit = |p: &Placed| match p.item {
+        Item::Unit(i) => Some(i),
+        _ => None,
+    };
+    let focused: Vec<&Placed> = items.iter().filter(|p| unit(p).is_some_and(|i| focus.contains(&i))).collect();
+    let mut out: Vec<usize> = items
+        .iter()
+        .filter_map(|p| unit(p).filter(|i| !focus.contains(i)).map(|i| (i, p)))
+        .filter(|(_, p)| focused.iter().any(|f| p.foot_y > f.foot_y && overlap(p.rect, f.rect)))
+        .map(|(i, _)| i)
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 /// Back to front by feet, then group (board pieces before units), then x, then push order (`DepthList`).
@@ -1333,7 +1537,7 @@ mod tests {
         assert_eq!(tile_art(&mut art, "grass", "", 2, 3), TileArt::Common("tilesets/common/grass/v0.png".into()));
         assert_eq!(tile_art(&mut art, "lava", "", 2, 3), TileArt::Colour, "neither: the colour");
         assert_eq!(face_art(&mut art, "", 2, 3), None, "the face falls back to the darkened cap");
-        assert!(darkened_cap(&mut art, "wall", "", V2::new(2, 3)).is_some_and(|img| img.h == CELL_H / 2 && img.px[0] == 96), "the cap's top rows at 75 %");
+        assert!(darkened_cap(&mut art, "wall", ("", &ZoneLook::default()), V2::new(2, 3)).is_some_and(|img| img.h == CELL_H / 2 && img.px[0] == 96), "the cap's top rows at 75 %");
         assert_eq!(prop_art(&mut art, "tree", 2, 3), None);
         let forest = zone("forest_clearing");
         assert!(board_items(&mut art, &forest).is_empty(), "no tree art: nothing stands");
@@ -1549,6 +1753,11 @@ mod tests {
 
     /// The board's passes on `grid` with stage set `set`, on a canvas `scale` x 640 x 360, shifted by `shift`.
     fn paint(art: &mut Art, grid: &Grid, set: &str, grid_alpha: u8, scale: i32, shift: (i32, i32)) -> aegis_ui::ui::Gfx {
+        paint_look(art, grid, (set, &ZoneLook::default()), grid_alpha, scale, shift)
+    }
+
+    /// `paint` with zone look `look` over stage set `set` (DIORAMA4 S1, S2).
+    fn paint_look(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), grid_alpha: u8, scale: i32, shift: (i32, i32)) -> aegis_ui::ui::Gfx {
         let mut g = crate::hud::hud_tests::gfx();
         g.canvas = aegis_ui::canvas::Canvas::new(640 * scale, 360 * scale);
         g.view = aegis_ui::painter::View::fit((640 * scale) as u32, (360 * scale) as u32);
@@ -1557,13 +1766,13 @@ mod tests {
         let interior = p.c.clip;
         p.shift(shift.0, shift.1);
         draw_backdrop(&mut p, art, grid, "", &IndexMap::new());
-        draw_ground(&mut p, art, grid, set, grid_alpha);
+        draw_ground(&mut p, art, grid, (set, look), grid_alpha);
         assert_eq!(p.c.clip, interior, "the ground pass gives the clip back");
         draw_prop_shadows(&mut p, art, grid);
-        draw_face(&mut p, art, grid, set);
+        draw_face(&mut p, art, grid, (set, look));
         for it in feet_order(&board_items(art, grid)) {
             match it.item {
-                Item::Block(c) => draw_block(&mut p, art, grid, set, c),
+                Item::Block(c) => draw_block(&mut p, art, grid, (set, look), c),
                 Item::Prop(c) => draw_prop(&mut p, art, grid, c),
                 Item::Unit(_) => {}
             }
@@ -1572,8 +1781,10 @@ mod tests {
     }
 
     const ZONES: [&str; 5] = ["forest_clearing", "lava_cavern", "river_crossing", "frozen_pass", "stone_arena"];
-    /// The fixture layer's frame over `ZONES` before LOOK1-L1 (printed on the code before the change).
-    const TODAYS_FRAME: u64 = 0xe6c3440ef5f1669f;
+    /// The fixture layer's frame over `ZONES` before LOOK1-L1 (printed on the code before the change); re-recorded for
+    /// DIORAMA4 S1 (PR7-74), the one intended change: a row-0 wall's cap is clipped at the board's top edge (0xe6c3440ef5f1669f
+    /// before).
+    const TODAYS_FRAME: u64 = 0x2a5309c84d603849;
 
     /// An empty `stage_set` draws today's frame; so does a set no layer holds, and a `stage_set` draws its own.
     #[test]
@@ -1680,7 +1891,7 @@ mod tests {
         let blank = g.canvas.px.clone();
         let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
         p.clip(Some(STAGE_CLIP));
-        draw_wings(&mut p, &mut art, &grid, "", "", &IndexMap::new(), panel);
+        draw_wings(&mut p, &mut art, &grid, ("", &ZoneLook::default()), "", &IndexMap::new(), panel);
         let px = |x: i32, y: i32| g.canvas.px[((y * 640 + x) * 4) as usize..((y * 640 + x) * 4 + 3) as usize].to_vec();
         let painted: Vec<(i32, i32)> = g.canvas.px.chunks(4).zip(blank.chunks(4)).enumerate().filter(|(_, (a, b))| a != b).map(|(i, _)| ((i as i32) % 640, (i as i32) / 640)).collect();
         assert!(!painted.is_empty());
@@ -1750,6 +1961,138 @@ mod tests {
         let far = BACKDROP.x + BACKDROP.w * 3 / 4;
         assert_eq!(at(&g.canvas.px, far, cy + 40), at(&blank, far, cy + 40), "no light far from it (inside the vignette's margin)");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    fn px_at(g: &aegis_ui::ui::Gfx, x: i32, y: i32) -> [u8; 3] {
+        let i = ((y * g.canvas.w as i32 + x) * 4) as usize;
+        [g.canvas.px[i], g.canvas.px[i + 1], g.canvas.px[i + 2]]
+    }
+
+    fn solid(root: &Path, rel: &str, w: u32, h: u32, col: [u8; 3]) {
+        flat_png(root, rel, w, h, |_, _| col);
+    }
+
+    /// A board of `fill` with terrain `other` on the cells `at`.
+    fn filled(fill: &str, other: &str, at: &[V2]) -> Grid {
+        let mut grid = zone("stone_arena");
+        let id = |t: &str| emberwake_battle::grid::TERRAIN_IDS.iter().position(|x| *x == t).unwrap();
+        for c in 0..(GRID_W * GRID_H) as usize {
+            grid.terrain[c] = id(fill);
+        }
+        for c in at {
+            grid.terrain[(c.y * GRID_W + c.x) as usize] = id(other);
+        }
+        grid
+    }
+
+    /// DIORAMA4 S1, S2: `zones.<zone>` gives the zone's set (a bad id left out), its tint and its terrain overrides (a
+    /// folder of the zone's set, a path, or `{folder, tint}`); an override's tint replaces the zone's on its terrain.
+    #[test]
+    fn a_zone_look_reads_its_set_tint_and_terrain() {
+        let fx: Value = serde_json::from_str(r##"{"zones": {"vats": {"set": "zz_vats", "tint": "#808040", "terrain": {"lava": {"folder": "tallow", "tint": "#e0c080"}, "toxic_bog": "props/bog", "cover": "../up", "stone": "/abs", "deep_water": 3}}, "bad": {"set": "Bad Set!", "tint": "red"}}}"##).unwrap();
+        let look = zone_look_of(&fx, "zz_world", "vats");
+        assert_eq!(look.zone_set("zz_world"), Some("zz_vats"), "the zone's set before the world's");
+        assert_eq!(look.zone_set("zz_vats"), None, "the world's own set is no zone set");
+        assert_eq!(look.tint, Some([128, 128, 64, 255]));
+        assert_eq!(look.terrain("lava"), Some(("tilesets/zz_vats/tallow", Some([224, 192, 128, 255]))), "a folder of the zone's set");
+        assert_eq!(look.terrain("toxic_bog"), Some(("tilesets/props/bog", None)), "<set>/<name> under tilesets/");
+        assert_eq!(look.terrain("deep_water"), None, "not a folder");
+        assert_eq!((look.terrain("cover"), look.terrain("stone")), (None, None), "no climbing out, no empty set");
+        assert_eq!(look.tint_of("lava"), Some([224, 192, 128, 255]));
+        assert_eq!(look.tint_of("toxic_bog"), None, "an override without a tint is untinted");
+        assert_eq!(look.tint_of("stone"), look.tint, "the rest takes the zone's");
+        let bad = zone_look_of(&fx, "zz_world", "bad");
+        assert_eq!((bad.zone_set("zz_world"), bad.tint), (None, None), "a bad set id and colour are left out");
+        assert_eq!(zone_look_of(&fx, "zz_world", "none"), ZoneLook::default());
+        // the file: the world set's stage.fx.json, once per set and zone
+        let root = scratch("zone_look");
+        let file = root.join("tilesets/zz_zl/stage.fx.json");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, fx.to_string()).unwrap();
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        assert_eq!(zone_look(&mut art, "zz_zl", "vats").set.as_deref(), Some("zz_vats"));
+        assert_eq!(zone_look(&mut art, "", "vats"), ZoneLook::default(), "no world set");
+        assert_eq!(zone_look(&mut art, "zz_zl_none", "vats"), ZoneLook::default(), "no file");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// DIORAMA4 S1: the zone's set is read before the world's for the floor, and its tint multiplies the floor; S2: a
+    /// terrain override's folder replaces that terrain's tiles with its own tint (the zone's tint off it).
+    #[test]
+    fn the_zone_set_tint_and_terrain_override_draw_on_the_board() {
+        let root = scratch("zone_draw");
+        todays_layer(&root);
+        solid(&root, "tilesets/zz_world/stone/v0.png", 64, 48, [200, 40, 40]);
+        solid(&root, "tilesets/zz_zone/stone/v0.png", 64, 48, [40, 200, 40]);
+        solid(&root, "tilesets/zz_zone/tallow/v0.png", 64, 48, [250, 250, 250]);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let lava = V2::new(4, 5);
+        let grid = filled("stone", "lava", &[lava]);
+        let probe = |c: V2| (BOARD_X + c.x * CELL_W + CELL_W / 2, BOARD_Y + c.y * CELL_H + CELL_H / 2);
+        let stone = V2::new(8, 5);
+        let world = paint_look(&mut art, &grid, ("zz_world", &ZoneLook::default()), 0, 1, (0, 0));
+        assert_eq!(px_at(&world, probe(stone).0, probe(stone).1), [200, 40, 40], "the world's set");
+        let look = ZoneLook { set: Some("zz_zone".into()), ..ZoneLook::default() };
+        let own = paint_look(&mut art, &grid, ("zz_world", &look), 0, 1, (0, 0));
+        assert_eq!(px_at(&own, probe(stone).0, probe(stone).1), [40, 200, 40], "the zone's set first");
+        let look = ZoneLook { set: Some("zz_zone".into()), tint: Some([128, 255, 128, 255]), terrain: vec![("lava".into(), "tilesets/zz_zone/tallow".into(), Some([255, 200, 100, 255]))] };
+        let tinted_board = paint_look(&mut art, &grid, ("zz_world", &look), 0, 1, (0, 0));
+        assert_eq!(px_at(&tinted_board, probe(stone).0, probe(stone).1), [20, 200, 20], "the zone's tint multiplied over the floor");
+        assert_eq!(px_at(&tinted_board, probe(lava).0, probe(lava).1), [250, 196, 98], "the override's tile with its own tint");
+        // the zone's set holds floor and stone only: the wall face comes from the world's set
+        solid(&root, "tilesets/zz_world/wall_face/v0.png", 64, 24, [90, 90, 160]);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        assert_eq!(look.pick(&mut art, "zz_world", "wall_face", 0, 0), None);
+        assert_eq!(look.pick(&mut art, "zz_world", "stone", 0, 0).as_deref(), Some("tilesets/zz_zone/stone/v0.png"));
+        let wall = V2::new(6, 5);
+        let walled = paint_look(&mut art, &filled("stone", "wall", &[wall]), ("zz_world", &look), 0, 1, (0, 0));
+        let face_y = BOARD_Y + wall.y * CELL_H + CELL_H - FACE_H / 2;
+        assert_eq!(px_at(&walled, probe(wall).0, face_y), [45, 90, 80], "the world's wall face under the zone's tint");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// DIORAMA4 S1: a row-0 wall keeps off the backdrop band: nothing above the board's top edge changes.
+    #[test]
+    fn a_row_0_wall_does_not_cover_the_backdrop() {
+        let root = scratch("row0");
+        todays_layer(&root);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        // a few walls (the far ground the backdrop gradient reads stays stone)
+        let row0: Vec<V2> = (2..5).map(|x| V2::new(x, 0)).collect();
+        let open = paint(&mut art, &filled("stone", "stone", &[]), "", 0, 1, (0, 0));
+        let walled = paint(&mut art, &filled("stone", "wall", &row0), "", 0, 1, (0, 0));
+        let changed = diff(&open, &walled);
+        assert!(!changed.is_empty(), "the walls draw");
+        assert!(changed.iter().all(|&(_, y)| y >= BOARD_Y), "none above the board's top edge");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// DIORAMA4 S1: under the boss bar the backdrop band runs from the bar's bottom to the first row a unit can
+    /// stand on (a walkable cell or a unit); the walls wholly inside it are left out; too thin a band is none.
+    #[test]
+    fn the_backdrop_band_stays_under_the_boss_bar() {
+        let walls: Vec<V2> = (0..GRID_W).flat_map(|x| [V2::new(x, 0), V2::new(x, 1)]).collect();
+        let grid = filled("stone", "wall", &walls);
+        let b = boss_band(&grid, &[], 73).unwrap();
+        assert_eq!((b.y, b.y + b.h), (73, BOARD_Y + 2 * CELL_H), "down to row 2's top");
+        assert!(under_band(V2::new(3, 1), b) && under_band(V2::new(3, 0), b) && !under_band(V2::new(3, 2), b));
+        let b1 = boss_band(&grid, &[V2::new(5, 1)], 73).unwrap();
+        assert_eq!(b1.y + b1.h, BOARD_Y + CELL_H, "a unit on row 1 stops it at row 1");
+        assert_eq!(boss_band(&grid, &[V2::new(5, 0)], 76), None, "a unit on row 0: under 8 px");
+        assert_eq!(boss_band(&grid, &[], 20).unwrap().y, BACKDROP.y, "never above the backdrop");
+    }
+
+    /// DIORAMA4 S3: a unit drawn in front of a focus unit (overlapping its body, feet nearer) fades; one behind it, one
+    /// beside it and the focus units themselves do not.
+    #[test]
+    fn a_unit_in_front_of_the_focus_unit_fades() {
+        let body = |x: i32, foot: i32| Rect::new(x, foot - 28, 16, 28);
+        let items = vec![unit_item(0, (100, 150), body(100, 150)), unit_item(1, (104, 170), body(104, 170)), unit_item(2, (102, 130), body(102, 130)), unit_item(3, (160, 170), body(160, 170)), Placed { item: Item::Block(V2::new(0, 0)), foot_y: 180, x: 100, rect: body(100, 180) }];
+        assert_eq!(occluders(&items, &[0]), [1], "in front: faded; behind (2), beside (3) and a block: not");
+        assert_eq!(occluders(&items, &[0, 1]), Vec::<usize>::new(), "a focus unit never fades");
+        assert_eq!(occluders(&items, &[2]), [0], "0 overlaps 2 from in front; 1 stands clear below it");
+        assert_eq!(occluders(&items, &[]), Vec::<usize>::new(), "no focus: none");
+        assert_eq!(OCCLUDER_ALPHA, 115, "about 45 percent");
     }
 
     const UPPER: [u8; 3] = [200, 30, 30];

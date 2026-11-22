@@ -809,6 +809,26 @@ impl<'a> Painter<'a> {
         }
     }
 
+    /// `image_alpha` with each pixel's colour multiplied by `tint` (per channel, `c * t / 255`, rounded; white draws
+    /// exactly as `image_alpha`; the tint's own alpha is ignored).
+    pub fn image_tinted(&mut self, img: &Image, r: Rect, tint: Rgba, a: u8) {
+        let pr = self.v.rect(r);
+        if pr.w <= 0 || pr.h <= 0 || a == 0 {
+            return;
+        }
+        let m = |c: u8, t: u8| ((c as u32 * t as u32 + 127) / 255) as u8;
+        let v = self.c.visible(pr);
+        for py in v.y..v.y + v.h {
+            let sy = (py - pr.y) * img.h / pr.h;
+            for px in v.x..v.x + v.w {
+                let sx = (px - pr.x) * img.w / pr.w;
+                let i = ((sy * img.w + sx) * 4) as usize;
+                let alpha = ((img.px[i + 3] as u32 * a as u32 + 127) / 255) as u8;
+                self.c.put(px, py, [m(img.px[i], tint[0]), m(img.px[i + 1], tint[1]), m(img.px[i + 2], tint[2]), alpha]);
+            }
+        }
+    }
+
     /// Anti-aliased text; (x, y) is the logical top-left of the line box. Returns the logical end x.
     pub fn text(&mut self, x: f32, y: f32, s: &str, size: f32, col: Rgba) -> f32 {
         self.text_face(Typeface::Body, x, y, s, size, col)

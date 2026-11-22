@@ -31,6 +31,31 @@ pub(super) fn card_h(c: &CardView) -> i32 {
     HEAD_H + c.rows.len().max(1) as i32 * ROW_H + FOOT_H
 }
 
+/// DIORAMA4 S4: the card's compact height (the header and the totals, no rows).
+pub(super) const COMPACT_H: i32 = HEAD_H + FOOT_H;
+
+/// Where the docked card goes, given its top-right rect `right`, the board's left edge `left_x` and `cost`, the
+/// (party cells, kept-clear cells, objective tiles) a rect covers. Contract 9.2 (BU12, ESCAPE-PLAN1 (5)): top right
+/// unless top left covers fewer kept-clear cells, then objective tiles. DIORAMA4 S4: in a boss fight (`boss`) the party
+/// cells come first, the side away from the party (`party_left`: the party stands on the board's left half) is tried
+/// first, and the compact card (`COMPACT_H`) only when both full sides cover a party cell; then kept-clear cells and
+/// objective tiles as before.
+pub(super) fn dock(right: Rect, left_x: i32, boss: bool, party_left: bool, cost: impl Fn(Rect) -> (usize, usize, usize)) -> Rect {
+    let left = Rect { x: left_x, ..right };
+    if !boss {
+        let c = |r: Rect| (cost(r).1, cost(r).2);
+        return if c(left) < c(right) { left } else { right };
+    }
+    let (away, near) = if party_left { (right, left) } else { (left, right) };
+    let compact = |r: Rect| Rect { h: r.h.min(COMPACT_H), ..r };
+    let all = [away, near, compact(away), compact(near)];
+    all.iter().enumerate().min_by_key(|(k, r)| {
+        let (party, keep, goals) = cost(**r);
+        (party, *k >= 2, keep, goals, *k)
+    })
+    .map_or(right, |(_, r)| *r)
+}
+
 /// The pips each hit of a row breaks in the poise area at `x` (amber pips, the split shield for the hit that empties
 /// the bar, dimmed on an already broken bar).
 fn poise_area(ui: &mut Ui<super::Action>, cx: &mut Cx, pips: &[(i32, bool, bool)], x: i32, y: i32) {
@@ -269,12 +294,14 @@ pub(super) fn draw_card(ui: &mut Ui<super::Action>, cx: &mut Cx, (faces, small):
     }
     // the rows
     let mut ry = r.y + HEAD_H;
-    if c.rows.is_empty() {
+    // DIORAMA4 S4: the compact card leaves out the rows that do not fit (the totals stay)
+    let fits = ((r.h - HEAD_H - FOOT_H) / ROW_H).max(0) as usize;
+    if c.rows.is_empty() && fits > 0 {
         let note = if c.hero.is_some() { "No hit planned" } else { "No hits planned" };
         ui.p.text(x as f32, ry as f32 + 1.0, note, SMALL, th().dim);
         line_box(ui, "card.empty", note, Rect::new(x, ry, r.w - 10, ROW_H), SMALL);
     }
-    for (k, rw) in c.rows.iter().enumerate() {
+    for (k, rw) in c.rows.iter().enumerate().take(fits) {
         row(ui, cx, small, looks, c, k, rw, x, ry);
         ry += ROW_H;
     }
@@ -298,5 +325,44 @@ pub(super) fn draw_card(ui: &mut Ui<super::Action>, cx: &mut Cx, (faces, small):
             foot(ui, "card.party", "Total", x, fy + 4, SMALL, th().text);
             foot(ui, "card.party_total", &format!("-{party}"), x + 40, fy + 4, BODY, th().foe);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hits(list: &[Rect], r: Rect) -> usize {
+        list.iter().filter(|k| super::super::skill_menu::overlaps(r, **k)).count()
+    }
+
+    /// DIORAMA4 S4: in a boss fight the docked card covers no party cell: the side away from the party first, the
+    /// other side next, else the compact card; outside a boss fight the BU12 rule stands (party cells not counted).
+    #[test]
+    fn the_docked_card_avoids_party_cells_in_a_boss_fight() {
+        let right = Rect::new(380, 76, CARD_W, 120);
+        let left_x = 101;
+        let cell = |x: i32, y: i32| Rect::new(x, y, 32, 24);
+        // the party on the right half under the card's right spot: the card goes left (away from the party)
+        let party = [cell(400, 100)];
+        let r = dock(right, left_x, true, false, |r| (hits(&party, r), 0, 0));
+        assert_eq!(r.x, left_x, "away from the party");
+        assert_eq!(r.h, 120);
+        // a party on both sides under the full card, clear below the compact one: compact, on the away side
+        let party = [cell(400, 160), cell(120, 160)];
+        let r = dock(right, left_x, true, true, |r| (hits(&party, r), 0, 0));
+        assert_eq!((r.x, r.h), (right.x, COMPACT_H), "compact, away from the party (it stands left)");
+        assert_eq!(hits(&party, r), 0, "no party cell under it");
+        // a full card clear of the party beats the compact one, whatever kept-clear cells it covers
+        let party = [cell(120, 100)];
+        let keep = [cell(400, 100)];
+        assert_eq!(dock(right, left_x, true, false, |r| (hits(&party, r), hits(&keep, r), 0)), right, "full, over the target, not compact");
+        // no party cell anywhere: the away side
+        assert_eq!(dock(right, left_x, true, true, |_| (0, 0, 0)), right);
+        assert_eq!(dock(right, left_x, true, false, |_| (0, 0, 0)).x, left_x);
+        // not a boss fight: top right unless top left covers fewer kept-clear cells
+        let keep = [cell(400, 100)];
+        assert_eq!(dock(right, left_x, false, false, |r| (9, hits(&keep, r), 0)).x, left_x);
+        assert_eq!(dock(right, left_x, false, false, |_| (9, 0, 0)), right, "party cells do not count outside a boss fight");
     }
 }

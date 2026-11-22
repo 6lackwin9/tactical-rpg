@@ -1,0 +1,16 @@
+{
+  "id": "diorama_zones",
+  "title": "PR7-74 (DIORAMA4): Guild-Master Orlov's fight in the tallow vats (sunk_ward enc_evt_04) on the Timeline ruleset; the zone's look from stage.fx.json zones.tallow_vats (its set, tint and terrain overrides once Art/UI's entries land), the backdrop band kept under the boss bar, the docked foe card off the party's cells, the units in front of the selected one see-through",
+  "launch": {"screen": "arena", "scene": "sunk_ward:enc_evt_04", "ruleset": "timeline", "seed": 7},
+  "settings": {"reduce_motion": true},
+  "timeout_s": 600,
+  "steps": [
+    {"step": "wait", "until": {"path": "state.ruleset.id", "eq": "timeline"}},
+    {"step": "wait", "until": {"widget": "boss.bar"}},
+    {"step": "pause", "ms": 1500},
+    {"step": "repeat", "times": 8, "until": {"path": "state.talk", "absent": true}, "steps": [{"step": "click", "id": "dialogue.continue"}, {"step": "pause", "ms": 600}]},
+    {"step": "click", "id": "party.0"},
+    {"step": "pause", "ms": 1500},
+    {"step": "shot", "name": "vats_boss"}
+  ]
+}

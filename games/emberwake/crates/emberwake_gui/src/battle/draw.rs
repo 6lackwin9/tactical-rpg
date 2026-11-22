@@ -1036,9 +1036,10 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // targetable tiles; its passes draw shifted and its widgets (tiles, units) are moved with them
     let lift = if model.boss.is_some() && !g.timeline_view_open() { super::boss_bar::board_lift(w, &Geom::new(view, &tuning)) } else { 0 };
     g.board_lift = lift;
+    let bar_bottom = model.boss.as_ref().filter(|_| !g.timeline_view_open()).map(|bb| BOARD.y + super::boss_bar::INSET + super::boss_bar::bar_h(bb));
     let widgets_from = ui.widgets.len();
     ui.mouse.1 -= lift;
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some() || talk_view.is_some(), anim_ms: g.clock.ms, sel, talker, planning, tells: &tells, show_tells, card_hover, inspect: pinned, focus: &focus, fx: &g.fx, shift: (shift.0, shift.1 + lift), sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref(), channel: &channel_units };
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some() || talk_view.is_some(), anim_ms: g.clock.ms, sel, talker, planning, tells: &tells, show_tells, card_hover, inspect: pinned, focus: &focus, fx: &g.fx, shift: (shift.0, shift.1 + lift), sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref(), channel: &channel_units, bar_bottom };
     let (board_hover, flat_hover) = match view {
         View::Stage => (draw_stage(board, &stage_set, &mut ui, cx, &tuning, now), None),
         View::Flat => (None, draw_flat(board, &mut ui, cx, &tuning, now)),
@@ -1174,11 +1175,13 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let keep: Vec<Rect> = card_keep_clear(w, sel).into_iter().map(|c| geo.cell_rect(c)).map(|r| Rect::new(r.x, r.y + lift, r.w, r.h)).collect();
         // ESCAPE-PLAN1 (5): and the objective tiles (a hold's tiles, the exits), on the side covering fewer of them
         let goals: Vec<Rect> = objective_cells(w).into_iter().map(|c| geo.cell_rect(c)).map(|r| Rect::new(r.x, r.y + lift, r.w, r.h)).collect();
-        let cost = |r: Rect| (keep.iter().filter(|k| super::skill_menu::overlaps(r, **k)).count(), goals.iter().filter(|k| super::skill_menu::overlaps(r, **k)).count());
-        let left = Rect { x: BOARD.x + 3, ..r };
-        if cost(left) < cost(r) {
-            r = left;
-        }
+        // DIORAMA4 S4: in a boss fight (the bar shown) the card covers no party cell: away from the party, else compact
+        let boss = model.boss.is_some();
+        let party: Vec<Rect> = if boss { w.allies.iter().filter(|a| w.units[**a].is_alive()).flat_map(|a| w.cells_of(*a)).map(|c| geo.cell_rect(c)).map(|r| Rect::new(r.x, r.y + lift, r.w, r.h)).collect() } else { Vec::new() };
+        let xs: Vec<i32> = w.allies.iter().filter_map(|a| w.grid.pos(*a)).map(|c| c.x).collect();
+        let party_left = !xs.is_empty() && 2 * xs.iter().sum::<i32>() < xs.len() as i32 * (emberwake_battle::grid::GRID_W - 1);
+        let hits = |list: &[Rect], r: Rect| list.iter().filter(|k| super::skill_menu::overlaps(r, **k)).count();
+        r = super::card::dock(r, BOARD.x + 3, boss, party_left, |r| (hits(&party, r), hits(&keep, r), hits(&goals, r)));
         g.panels.push(("intel", r));
         // INPUT1 IS1: a pinned foe's card names it and holds its inspect lines on its hover; the agent link's
         // `intel.unit` is the card under the round intent or a pin (classic: `card.unit`), a pinned member's plate
@@ -1479,11 +1482,15 @@ const MENU_LEFT: bool = false;
 /// BOSSUI1 BU12: the board cells the docked card and the menus keep clear of: the selected hero's and its round target's.
 pub(super) fn card_keep_clear(w: &World, sel: Option<usize>) -> Vec<emberwake_battle::grid::V2> {
     let Some(h) = sel else { return Vec::new() };
-    let target = w.round_states.get(&h).and_then(|r| r.target).and_then(|t| match t {
+    std::iter::once(h).chain(round_target(w, h)).filter_map(|u| w.grid.pos(u)).collect()
+}
+
+/// Hero `h`'s round target unit (none: no round state, or a cell target).
+pub(super) fn round_target(w: &World, h: usize) -> Option<usize> {
+    w.round_states.get(&h).and_then(|r| r.target).and_then(|t| match t {
         ri::RoundTarget::Unit(u) => Some(u),
         _ => None,
-    });
-    std::iter::once(h).chain(target).filter_map(|u| w.grid.pos(u)).collect()
+    })
 }
 
 /// ESCAPE-PLAN1 (5): the objective tiles the docked card keeps clear of: a hold escape's tiles and the board's exits.
