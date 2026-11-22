@@ -41,6 +41,8 @@ Parked for your approval (golden re-records need your word):
   Update 2026-11-22 10:30 (`FB-392`): played by hand, the Bone-Mill boss was won first try at level 7 (the auto plan
   still loses it); the Crucible was lost 5 of 5 at level 8 (the suggested winch holder draws both Purifiers and a
   Footman, and the gate shuts when the holder falls). Bugs found there are queued; balance waits for you.
+  Update 2026-11-22 18:30 (`FB-406`): after the fixes, an agent won the Crucible by hand on its third try at level 8
+  and reached the end of Act 1 with 19 Tithing days left (Kaelen held the winch and was captured).
 - [ ] Battle rule fixes that change the sim golden (`FB-459`, tools lane, all tried and reverted until you say):
   (a) reinforcements stop landing on tiles your planned moves claim (PT-71); (b) a move cut short never ends a block
   farther from its goal (PT-70); (c) path claims: today a planned move claims every tile it walks for the whole round,
