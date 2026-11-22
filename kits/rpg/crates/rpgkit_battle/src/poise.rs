@@ -409,6 +409,9 @@ pub struct StaggerHit {
     /// P13: (chance, roll) when the break chance was rolled.
     pub chance: Option<(i32, i32)>,
     pub broke: Option<Break>,
+    /// P12 (PLAN-FIX2, PT-89): the target could not be broken at the hit (`unbreakable`: steadfast, or an unbreakable
+    /// windup), so a hit into its windup said "unbreakable" instead of breaking.
+    pub held: bool,
 }
 
 /// P9: the log line of a break; R1-BAL (FB-97 (2b)(A)): " (Stagger queued)" when the break queued `stagger`.
@@ -556,6 +559,7 @@ pub fn resolve_hits(res: &mut Resolver, w: &mut World, idx: usize) {
             pips_after: fc.pips_before,
             chance: None,
             broke: None,
+            held: !st.broken && unbreakable(w, &res.scheduled, t, block),
         };
         // P8: a unit broken this round stays at 0 and breaks no further
         if !st.broken {

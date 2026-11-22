@@ -377,7 +377,7 @@ pub fn fill_rest(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), String> {
     let opener = w.round_states.get(&c).and_then(|r| r.opener.clone()).or_else(|| {
         plan.steps_of(c).iter().filter_map(|st| st.skill).find(|&sid| sid < w.cat.skills.len() && round_intent::skill_rows(w, &w.cat.skills[sid]).contains(&b.intent.id())).map(Opener::Skill)
     });
-    let cause = b.fill(plan, &Reserve::default(), &follow_order(w, c, b.intent, opener.as_ref()));
+    let cause = b.fill(plan, &Reserve::default(), &follow_order(w, c, b.intent, opener.as_ref()), None);
     b.rest(plan, &cause);
     Ok(())
 }
@@ -484,6 +484,9 @@ struct Builder<'a> {
     target: RoundTarget,
     kind: ManeuverKind,
     order: Vec<SkillId>,
+    /// PLAN-FIX2 (PT-86): the steps are for the player's picks (GH3), not the planner's own plan: a ranged pick on a foe
+    /// already in its reach does not kite (AS2), and an approach takes the tile with the shortest walk first.
+    hand: bool,
 }
 
 /// The whole auto plan for `c` (its world state holds intent, target, kind and opener).
@@ -500,7 +503,7 @@ fn build(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), String> {
     };
     let reserve = b.reserve(plan);
     // FL2: the opener placed (given, else PL3's) chooses the follow-up list
-    let cause = b.fill(plan, &reserve, &follow_order(w, c, b.intent, Some(&opener)));
+    let cause = b.fill(plan, &reserve, &follow_order(w, c, b.intent, Some(&opener)), None);
     if let Some(step) = reserve.step {
         // PL5: the after-move (or the Disengage jump) right after the fill; dropped when it no longer fits
         let _ = plan.add_step(w, c, step, false);
@@ -525,7 +528,7 @@ impl<'a> Builder<'a> {
         if !p.is_empty() {
             return Err(p);
         }
-        Ok(Self { w, c, intent, target, kind: round_intent::maneuver_of(w, c), order: order(w, c, intent) })
+        Ok(Self { w, c, intent, target, kind: round_intent::maneuver_of(w, c), order: order(w, c, intent), hand: false })
     }
 
     fn skill(&self, sid: SkillId) -> &'a SkillDef {
@@ -644,8 +647,15 @@ impl<'a> Builder<'a> {
     }
 
     /// AS1, SP1, MV10: the standard approach tile (at most the standard move's blocks) with `goal` in `lo..=hi`.
+    /// PLAN-FIX2 (PT-86): for a hand pick only the tiles with the shortest walk are ranked (the player asked for the
+    /// skill, not for a reposition: no walk four tiles away when one step reaches).
     fn approach_tile(&self, plan: &Plan, from: V2, goal: V2, lo: i32, hi: i32) -> Option<V2> {
-        self.best(goal, Aim::Toward, self.walk_tiles(plan, from, goal, lo, hi, crate::plan::MAX_MOVE_BLOCKS))
+        let mut cands = self.walk_tiles(plan, from, goal, lo, hi, crate::plan::MAX_MOVE_BLOCKS);
+        if self.hand {
+            let least = cands.iter().map(|(_, route)| route.len()).min().unwrap_or(0);
+            cands.retain(|(_, route)| route.len() == least);
+        }
+        self.best(goal, Aim::Toward, cands)
     }
 
     // ---- Opener (FU1, PL3, AS1, AS2, GD1, SP1, MV7-MV10) ----------------------------------------------------------
@@ -825,8 +835,15 @@ impl<'a> Builder<'a> {
             return Err(format!("Disengage needs {} within reach of {}.", self.target_name(), s.name));
         }
         // AS2: a ranged unit with its target in the target's melee band kites first, to the farthest band tile
-        if !maneuver && u.attack_range > 1 && d <= round_intent::melee_reach(w, foe) {
+        // PLAN-FIX2 (PT-86): not for a hand pick whose target is already in the skill's reach (no walk asked for)
+        if !maneuver && u.attack_range > 1 && d <= round_intent::melee_reach(w, foe) && !(self.hand && in_band) {
             let cands = self.walk_tiles(plan, st.pos, goal, band.0, band.1, 1);
+            // PLAN-FIX2 (PT-86): a hand pick backs off by the shortest walk that reaches (one step when one does)
+            if self.hand {
+                let least = cands.iter().map(|(_, route)| route.len()).min().ok_or("No tile to kite to.")?;
+                let tile = self.best(goal, Aim::Away, cands.into_iter().filter(|(_, route)| route.len() == least).collect()).ok_or("No tile to kite to.")?;
+                return Ok(vec![tagged(PlanStep::go_to(self.mv(), tile), KITE_IN_MELEE, ""), tagged(PlanStep::engage(sid, foe), OPENER, "")]);
+            }
             let far = cands.iter().map(|(cell, _)| self.gap(*cell, goal)).max().ok_or("No tile to kite to.")?;
             let tile = self.best(goal, Aim::Away, cands.into_iter().filter(|(cell, _)| self.gap(*cell, goal) == far).collect()).ok_or("No tile to kite to.")?;
             return Ok(vec![tagged(PlanStep::go_to(self.mv(), tile), KITE_IN_MELEE, ""), tagged(PlanStep::engage(sid, foe), OPENER, "")]);
@@ -999,8 +1016,11 @@ impl<'a> Builder<'a> {
     /// FU2, FU3: block by block, the first entry of `order` (FL2's `follow_order`: the opener's follow-up list, then
     /// the deck order) that has the intent, fits before the reserve, is affordable without debt (and leaves the
     /// reserve's AP), acts on the target from the unit's tile and is a skill. Returns the first refused entry's cause
-    /// at the block where the fill stops ("" when the blocks ran out).
-    fn fill(&self, plan: &mut Plan, reserve: &Reserve, order: &[SkillId]) -> String {
+    /// at the block where the fill stops ("" when the blocks ran out). PLAN-FIX2 (PT-91): `picked` is the hand-picked
+    /// skills when the fill follows the player's picks (GH3): it then places no skill that only re-grants a status
+    /// (`regrants`, whatever the switch) and no non-attack skill a hand pick already runs this round (a second heal or
+    /// guard); attacks may follow up as before. None (the planner's whole plan) keeps the fill as it was (goldens).
+    fn fill(&self, plan: &mut Plan, reserve: &Reserve, order: &[SkillId], picked: Option<&[SkillId]>) -> String {
         let w = self.w;
         let u = &w.units[self.c];
         let pays = w.pays_ap(self.c);
@@ -1025,7 +1045,10 @@ impl<'a> Builder<'a> {
                 // PR7-41 (PT-22): a status the unit grants itself is granted once: the fill places no skill granting a
                 // status the unit holds or an earlier step of the round grants (a re-grant adds nothing). Behind the
                 // test-only switch `regrant` until the golden ruling (FB-334); off, the fill as before
-                if switches::on("regrant") && regrants(w, self.c, s, st.entries.iter().map(|e| e.skill)) {
+                if (picked.is_some() || switches::on("regrant")) && regrants(w, self.c, s, st.entries.iter().map(|e| e.skill)) {
+                    continue;
+                }
+                if picked.is_some_and(|p| p.contains(&sid)) && skill::kind(s) != Kind::Attack {
                     continue;
                 }
                 // PR7-41 (PT-22): a guard that only covers friends (its every trigger is an `ally_hit`) is not filled
@@ -1786,7 +1809,7 @@ struct Room<'a> {
 fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refusal)> {
     let picks = picks_of(w, c);
     plan.set_steps(c, Vec::new());
-    let b = Builder::new(w, c).ok();
+    let b = Builder::new(w, c).ok().map(|b| Builder { hand: true, ..b });
     let pays = w.pays_ap(c);
     let mv = w.book().lowest(Kind::Move);
     let mut after: Option<After> = None;
@@ -1895,7 +1918,9 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
                 Pick::Skill { skill, .. } => Some(Opener::Skill(*skill)),
                 _ => None,
             });
-            let cause = b.fill(plan, &reserve, &follow_order(w, c, b.intent, opener.as_ref()));
+            // PLAN-FIX2 (PT-91): the fill after hand picks does not repeat them (`fill`'s `picked`)
+            let picked: Vec<SkillId> = picks.iter().filter_map(|p| if let Pick::Skill { skill, .. } = p { Some(*skill) } else { None }).collect();
+            let cause = b.fill(plan, &reserve, &follow_order(w, c, b.intent, opener.as_ref()), Some(&picked));
             if let Some(step) = reserve.step {
                 let _ = plan.add_step(w, c, step, false);
             }

@@ -1515,11 +1515,32 @@ pub(super) fn summary_and_prompt(summary: &str, prompt: &str, room: f32, mut wid
         if width(&line) <= room {
             return line;
         }
-        match kept.rfind(", ") {
+        match last_clause(kept) {
             Some(k) => kept = &kept[..k],
             None => return prompt.to_string(),
         }
     }
+}
+
+/// Where `summary_and_prompt` cuts the last clause of `text`: its last ", " outside parentheses, else (one clause left)
+/// before its parenthesis (PLAN-FIX2: the windup reasons hold commas, "(0 of 3 hits into a wind-up: 2 unbreakable, 1 not
+/// a breaking hit)", and go whole); None when nothing can go.
+fn last_clause(text: &str) -> Option<usize> {
+    let (mut depth, mut comma, mut paren) = (0i32, None, None);
+    for (i, ch) in text.char_indices() {
+        match ch {
+            '(' => {
+                if depth == 0 && i > 0 {
+                    paren = Some(i - 1);
+                }
+                depth += 1;
+            }
+            ')' => depth -= 1,
+            ',' if depth == 0 && text[i..].starts_with(", ") => comma = Some(i),
+            _ => {}
+        }
+    }
+    comma.or(paren.filter(|&k| text[k..].starts_with(" (")))
 }
 
 /// PR7-41 (PT-34): `message` without a lead that repeats the bar's `phase` word ("Round over: 1 break" -> "1 break").

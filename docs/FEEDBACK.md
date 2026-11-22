@@ -156,8 +156,68 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-41` (`STAGE-KIT1`) | Built (tools lane) | `develop` | The battle stage module (geometry, `stage.fx.json` reader, composed board, decor, wall-run caps, exit path and gate, draw passes) moved to `rpgkit_ui::stage`; the game re-exports it and gives its sizes through `StageSizes`. Fixture hash, goldens and shots unchanged. FB-473 |
 | `ENGINE-42` (`KIT-SAMPLE1`) | Built (tools lane) | `develop` | `games/kit_sample/`: a two-a-side fight from its own catalog on the kit's battle stage (composed floor, one zone, a lit fire pit), engine and kit crates only; scenario in the gate; `engine/docs/authoring/kit_game.md`. FB-475 |
 | `ENGINE-43` (`TERRAIN-PARTIAL1`) | Built (tools lane) | `develop` | A terrain table may list only the types it changes; the rest take the kit's code defaults with no problem and no warning; a listed row is still checked whole. FB-477 |
+| `PR7-88` (`PLAN-FIX2`) | Built in part (tools lane) | `develop` | PT-86, PT-87 (ghost claims), PT-88, PT-89, PT-91 fixed with tests, goldens unchanged; PT-85 and PT-87's foe start tiles not done (findings in the item). FB-479 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-479: PR7-88 PLAN-FIX2 built in part; five of the six run findings fixed, PT-85 and one PT-87 part left
+
+- **Status**: built in part (tools lane), `develop`. Kit battle code and one game draw helper; no data. **Every golden
+  unchanged** (rules, sim, checks, rules contract, journey, timeline, PHASEFOLD; the crate suites of `rpgkit_battle`,
+  `rpgkit_sim`, `emberwake_battle`, `emberwake_sim`, `emberwake_world`, `emberwake_gui` pass). Every change applies
+  only to a round with hand picks, which no golden plays.
+- **Spec**: `docs/READY.md` row `PR7-88` (`PLAN-FIX2`), from `FB-406`.
+- **How**: I replayed the run's own inputs (`run_log.jsonl`, failed lines left out) from `saves/crucible_entry` with
+  `tools/fc.sh playtest run` on today's develop. Try 1 R2's refusal came back word for word. I traced it with a
+  temporary state key, since removed.
+- **What landed** (`kits/rpg/crates/rpgkit_battle` unless named):
+  - **PT-88** (the root cause also covers the odd step costs): the planner's hazard penalty stays on a hero once its
+    auto plan has been drafted (`plan.path_penalties`). A hand move then routed around the burning tiles: Maren's
+    (3,5) to (7,7) took 8 tiles, not 6. That made it "too far", and every pick that rebuilt her was refused for it
+    ("Blocked by Maren's plan"). Now a hero with hand picks walks the shortest route; the penalty only breaks ties
+    (`Plan::pass_route`, `route_plain`). The replay now accepts Kaelen's Billhook Sunder there. Test
+    `picks::a_hand_move_takes_the_shortest_route_past_the_planner_penalty`.
+  - **PT-87, the goldens-safe part**: a later member's ghost plan (no picks, so the planner's, rebuilt after the pick
+    by PL8) no longer claims tiles for a hero with hand picks. That member blocks only the tile it stands on
+    (`Plan::blocked_for`). "Claimed by Vesper's move" and the 14-tile detour to the winch go. A hand-picked move still
+    claims. Test `picks::a_ghost_plan_claims_no_tile_a_hand_pick_needs`.
+  - **PT-86**: a crossbow's band starts at 2. The planner's AS2 kite walks to the farthest band tile, up to 4 tiles,
+    and a hand pick used it too. For a hand pick (`Builder::hand`):
+    - with the foe in the band (inside the foe's melee reach), there is no kite;
+    - with the foe adjacent, the shortest step back that reaches;
+    - out of reach, only the tiles with the shortest walk are ranked.
+
+    The planner's own plans are unchanged. Test `picks::a_ranged_pick_walks_no_farther_than_it_must`.
+    **Spec note for Design**: INPUT1 section 4's archer worked example used the old kite (2 tiles, "10 - 8 = 2, next
+    6"). With one step back it reads "10 - 7 = 3, next 7"; `picks.rs` asserts the new numbers. Please update INPUT1.
+  - **PT-91**: the fill after hand picks (`Builder::fill`'s new `picked`) works like this:
+    - It places no skill that only re-grants a status, whatever the `regrant` switch. Vesper's Move here no longer
+      fills 4 Ash-Cloud Fades; the test reproduces exactly that, `move, fade x4` without the fix.
+    - It places no non-attack skill a hand pick already runs, such as a second Tourniquet.
+    - Attacks may still follow up.
+
+    The planner's whole-round fill is unchanged (the switch's golden ruling, FB-334, stays open). Test
+    `auto_plan_fixes::the_fill_after_hand_picks_does_not_repeat_them`.
+  - **PT-89**: a windup hit that breaks nothing now says why in the round summary: "no breaks (0 of 3 hits into a
+    wind-up: 2 unbreakable, 1 not a breaking hit)", or "missed the break roll". It reads a new `StaggerHit::held`
+    (P12) and the counts `RoundSummary::windup_unbreakable / windup_missed_roll / windup_not_breaking`. The log's
+    goldened `Stagger` detail is unchanged. In the run, Decapitation is `unbreakable`, so the line would read "2
+    unbreakable". `emberwake_gui` `draw::summary_and_prompt` drops the parenthesis whole, never at a comma inside
+    it. Tests `poise::a_windup_hit_that_breaks_nothing_says_why` and an extra case in
+    `visclar_d_tests::the_prompt_survives_the_longest_summary`.
+- **Not done (please re-queue or rule)**:
+  - **PT-85** (forecasts on a target that moves): not started. The three cases need the try 2 and try 3 boards. The
+    replay method above reaches them, and `intent::hit_on` with `planned_schedule` is where the forecast reads the
+    target's tile at the impact. The 415-against-277 gap in the same report is a crit (the card shows it apart).
+  - **PT-87, a foe's start tile**: the planner's blocked set holds every foe's start tile (`blocked_for`), with no
+    knowledge of when a foe leaves. Routing through it needs the foes' booked moves plus the per-block claim rule
+    that stays with Tushar. Not changed.
+  - **PT-88's general rule** ("a pick with no move is never refused by another hero's move"): the logged refusal came
+    only from the detour above, now fixed. A real route clash still refuses under ESCAPE-PLAN1 (2) ("a pick never
+    drops another member's hand picks"). Changing that rule is a decision.
+  - **PT-91's AP strip** ("AP -3" while Vesper ended at 1/10): it followed from the 4 Fades. I have no separate
+    repro, so no other change. "A filled Strike spent Ammo" was not looked at.
+- **Docs delta**: none beyond the INPUT1 worked-example note above.
 
 ### FB-477: ENGINE-43 TERRAIN-PARTIAL1 built; partial terrain tables
 

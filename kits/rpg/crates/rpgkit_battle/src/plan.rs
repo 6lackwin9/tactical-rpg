@@ -1606,6 +1606,14 @@ impl Plan {
         path::find_path_sized(&w.grid, from, goals, blocked, goals_are_exits, &hooks, w.size_of(c))
     }
 
+    /// `route` without the planner's hazard penalty (PLAN-FIX2: a hand move's shortest route).
+    fn route_plain(&self, w: &World, c: UnitId, from: V2, goals: &Cells, blocked: &Cells, goals_are_exits: bool) -> Vec<V2> {
+        let shooters = self.goal_preferences.get(&c);
+        let prefer = |cell: V2| cover_pref(w, shooters.unwrap(), cell);
+        let hooks = Hooks { penalty: None, prefer: if shooters.is_some() { Some(&prefer) } else { None } };
+        path::find_path_sized(&w.grid, from, goals, blocked, goals_are_exits, &hooks, w.size_of(c))
+    }
+
     /// One Move entry per cost-chunked block (1 AP per tile).
     fn add_move(&self, w: &World, c: UnitId, st: &mut SimState, dirs: &[V2], chase: Option<UnitId>, index: i32) -> String {
         let mv = w.book().lowest(Kind::Move);
@@ -1811,9 +1819,20 @@ impl Plan {
     /// ESCAPE-PLAN1 (2): the route of a party member's hand move to `goals`: around every unit as `route` has it; when
     /// that finds none or a longer one, through the tiles its friends hold or will hold (their start and planned end
     /// tiles), never ending a move block on one. Other units route as before.
+    ///
+    /// PLAN-FIX2 (PT-88): a member with hand picks walks the shortest route: the planner's hazard penalty (set on the
+    /// member when its auto plan was drafted) only breaks ties, so a hand move is never "too far" for a detour and its
+    /// cost in tiles is its step count.
     pub fn pass_route(&self, w: &World, c: UnitId, from: V2, goals: &Cells, goals_are_exits: bool) -> Vec<V2> {
         let blocked = self.blocked_cells(w, c);
-        let around = self.route(w, c, from, goals, &blocked, goals_are_exits);
+        let mut around = self.route(w, c, from, goals, &blocked, goals_are_exits);
+        let hand = w.allies.contains(&c) && w.round_states.get(&c).is_some_and(|r| !r.picks.is_empty());
+        if hand && self.path_penalties.contains(&c) {
+            let shortest = self.route_plain(w, c, from, goals, &blocked, goals_are_exits);
+            if !shortest.is_empty() && (around.is_empty() || shortest.len() < around.len()) {
+                around = shortest;
+            }
+        }
         if !escape_plan1() || !w.allies.contains(&c) || w.size_of(c) > 1 {
             return around;
         }
@@ -1825,7 +1844,7 @@ impl Plan {
             return around;
         }
         let hard: Cells = blocked.iter().copied().filter(|x| foes.contains(x)).collect();
-        let through = self.route(w, c, from, goals, &hard, goals_are_exits);
+        let through = if hand { self.route_plain(w, c, from, goals, &hard, goals_are_exits) } else { self.route(w, c, from, goals, &hard, goals_are_exits) };
         if through.is_empty() || (!around.is_empty() && around.len() <= through.len()) {
             return around;
         }
@@ -1842,6 +1861,11 @@ impl Plan {
     fn blocked_for(&self, w: &World, c: UnitId, moves: &HashMap<UnitId, FirstMove>) -> Cells {
         let mut blocked = Cells::new();
         let friends = w.friends_of(c);
+        // PLAN-FIX2 (PT-87): for a party member with hand picks, a later member's ghost plan (no picks: the planner's,
+        // rebuilt after this member's pick, PL8) claims no tile; that member blocks only where it stands
+        let has_picks = |u: UnitId| w.round_states.get(&u).is_some_and(|r| !r.picks.is_empty());
+        let at = |u: UnitId| w.allies.iter().position(|&a| a == u);
+        let ghost_later = |u: UnitId| has_picks(c) && !has_picks(u) && at(c).zip(at(u)).is_some_and(|(i, j)| j > i);
         for &other in w.allies.iter().chain(w.enemies.iter()) {
             if other == c || !w.has(other) {
                 continue;
@@ -1849,7 +1873,7 @@ impl Plan {
             // BIGUNIT1 BU4: a big unit blocks every cell of its square
             let start = w.pos(other);
             let n = w.size_of(other);
-            match moves.get(&other).filter(|_| friends.contains(&other)) {
+            match moves.get(&other).filter(|_| friends.contains(&other) && !ghost_later(other)) {
                 Some(m) => {
                     if m.to != NO_CELL {
                         blocked.extend(crate::grid::square_cells(m.to, n));

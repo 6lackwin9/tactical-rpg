@@ -535,13 +535,14 @@ pub(crate) fn collision_stagger(res: &mut Resolver, w: &mut World, v: UnitId, c:
     let taken = poise::stagger_taken(c.stagger.max(0), &f);
     let pips = poise::pips_mode(&w.ruleset.numbers);
     let pips_before = poise::pips_now(&w.ruleset.numbers, &st);
-    let mut hit = StaggerHit { target: v, stagger: c.stagger.max(0), factors: f, windup, taken, before: st.value, after: st.value, pips_before, pips_after: pips_before, chance: None, broke: None };
+    let mut hit = StaggerHit { target: v, stagger: c.stagger.max(0), factors: f, windup, taken, before: st.value, after: st.value, pips_before, pips_after: pips_before, chance: None, broke: None, held: false };
     // P8: a unit broken this round stays at 0 and breaks no further
     if st.broken {
         return Some(hit);
     }
     // S2.2-S2: P7, P12 and P14 (no P13 roll) through the one stagger rule, by pips under modes.poise pips
     let held = poise::unbreakable(w, &res.scheduled, v, block);
+    hit.held = held;
     let terms = poise::Terms { windup, held, sure: sure.then_some(BreakCause::Collision), chance: false };
     let s = poise::settle(&w.ruleset.numbers, &st, taken, terms);
     if let Some(bar) = w.poise.get_mut(&v) {

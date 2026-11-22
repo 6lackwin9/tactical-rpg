@@ -278,3 +278,33 @@ fn a_hero_whose_target_falls_retargets() {
     assert!(!lines.iter().any(|l| l.starts_with("[Rest] p_hero has lost")), "no TG4 rest: {lines:#?}");
     assert!(s.w.units[other].hp < hp_other, "the other foe is hit: {lines:#?}");
 }
+
+/// PLAN-FIX2 (PT-91, FB-406): the fill after hand picks does not repeat them: after "Move here, then Fade" the fill
+/// grants the stealth no second time (whatever the `regrant` switch) and guards with the next skill; a picked guard
+/// that is not an attack is not filled again either.
+#[test]
+fn the_fill_after_hand_picks_does_not_repeat_them() {
+    use rpgkit_battle::round_intent::Pick;
+    use rpgkit_battle::round_intent_plan as rip;
+    let mut s = session();
+    let w = &mut s.w;
+    w.autofill = true;
+    place(w, HERO, 3, 4);
+    place(w, FOE, 9, 4);
+    let mut plan = Plan::new();
+    let (fade, guard) = (skill_id(w, "t_fade"), skill_id(w, "active_guard"));
+    let tile = V2::new(4, 4);
+    let picks = [Pick::MoveHere(tile), Pick::Skill { skill: fade, kind: None }];
+    let (done, _) = rip::pick(w, &mut plan, HERO, RoundTarget::Cell(tile), &picks);
+    assert_eq!(done, Ok(()));
+    let skills = round_skills(w, &plan, HERO);
+    assert_eq!(skills.iter().filter(|s| *s == "t_fade").count(), 1, "the picked stealth is granted once: {skills:?}");
+    assert!(skills.iter().any(|s| s == "active_guard"), "the fill guards with the next skill: {skills:?}");
+
+    let mut plan = Plan::new();
+    let picks = [Pick::Skill { skill: guard, kind: None }];
+    let (done, _) = rip::pick(w, &mut plan, HERO, RoundTarget::Myself, &picks);
+    assert_eq!(done, Ok(()));
+    let skills = round_skills(w, &plan, HERO);
+    assert_eq!(skills.iter().filter(|s| *s == "active_guard").count(), 1, "a picked guard is not filled again: {skills:?}");
+}

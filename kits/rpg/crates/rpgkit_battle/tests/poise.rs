@@ -699,6 +699,33 @@ fn the_round_summary_counts_breaks_windups_and_follow_ups() {
     assert_eq!((sum.flanks, sum.follow_ups), (0, 1), "{sum:?}");
 }
 
+/// PLAN-FIX2 (PT-89, FB-406): a hit into a windup either breaks it or the summary says why not: an unbreakable windup
+/// holds ("unbreakable"), a missed P13 roll ("missed the break roll"), a hit with no roll ("not a breaking hit").
+#[test]
+fn a_windup_hit_that_breaks_nothing_says_why() {
+    let why = |foe_skill: &str, scale: f64, poise: i32, seed: i64| {
+        let s = session(timeline(&[POISE], json!({"break_chance_scale": scale})));
+        let mut w = s.w.clone();
+        let mut res = Resolver::new(BLOCKS, seed);
+        book(&mut res, FOE, hit(&w, FOE, HERO, foe_skill), 1);
+        book(&mut res, HERO, hit(&w, HERO, FOE, "p_jab"), 2);
+        set_poise(&mut w, FOE, poise);
+        run(&mut w, &mut res, 1, 2);
+        round_intent::round_summary(&w, &res.scheduled)
+    };
+    let held = why("p_judgment", 1.0, 5, 1);
+    assert_eq!((held.windup_hits, held.breaks, held.windup_unbreakable), (1, 0, 1), "{held:?}");
+    assert_eq!(round_intent::summary_text(&held), "no breaks (0 of 1 hit into a wind-up: 1 unbreakable)");
+    let plain = why("p_heavy", 0.0, 30, 1);
+    assert_eq!((plain.windup_hits, plain.breaks, plain.windup_not_breaking), (1, 0, 1), "{plain:?}");
+    assert_eq!(round_intent::summary_text(&plain), "no breaks (0 of 1 hit into a wind-up: 1 not a breaking hit)");
+    let missed = (1..=60).map(|seed| why("p_heavy", 0.5, 30, seed)).find(|s| s.breaks == 0).expect("a seed misses the roll");
+    assert_eq!((missed.windup_hits, missed.windup_missed_roll), (1, 1), "{missed:?}");
+    assert_eq!(round_intent::summary_text(&missed), "no breaks (0 of 1 hit into a wind-up: 1 missed the break roll)");
+    let mixed = round_intent::RoundSummary { windup_hits: 3, windup_unbreakable: 2, windup_not_breaking: 1, ..Default::default() };
+    assert_eq!(round_intent::summary_text(&mixed), "no breaks (0 of 3 hits into a wind-up: 2 unbreakable, 1 not a breaking hit)");
+}
+
 /// RULESET1-U slice 6: `forecast_hits` carries the bar along a sequence: two jabs into a winding-up foe forecast one
 /// after the other on the bar the first leaves, each as `forecast` on that bar; after a break the next hit finds the
 /// foe already broken; the summary reads in words as the log writes it.
@@ -722,7 +749,7 @@ fn a_hit_sequence_forecasts_on_the_bar_the_earlier_hits_leave() {
     assert_eq!(seq[2].map(|f| f.verdict), Some(poise::Verdict::AlreadyBroken), "one break a round");
     let no_bar = poise::PlannedHit { target: NO_BAR, ..one };
     assert_eq!(poise::forecast_hits(&w, &res.scheduled, &[no_bar]), vec![None], "no bar, no forecast");
-    let sum = round_intent::RoundSummary { breaks: 1, windup_breaks: 1, windup_hits: 2, flanks: 1, follow_ups: 3, rest_ap: 1 };
+    let sum = round_intent::RoundSummary { breaks: 1, windup_breaks: 1, windup_hits: 2, flanks: 1, follow_ups: 3, rest_ap: 1, ..Default::default() };
     assert_eq!(round_intent::summary_text(&sum), "1 break (1 of 2 hits into a wind-up), 1 flank, 3 follow-ups, Rest +1 AP");
     assert_eq!(round_intent::summary_text(&round_intent::RoundSummary::default()), "no breaks");
 }

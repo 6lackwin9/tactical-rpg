@@ -197,7 +197,10 @@ fn the_worked_examples_and_their_ap_forecast() {
     assert_eq!(r.iter().map(|x| (x.1, x.2)).collect::<Vec<_>>(), [(1, 1), (2, 3), (4, 4), (5, 6)], "b1 kite, b2-b3, b4, [b5-b6]");
     assert_eq!((r[0].5.as_str(), r[2].5.as_str()), (rip::KITE_IN_MELEE, "pick 2"));
     let f = rip::ap_forecast(&s.w, &s.plan, ARCHER);
-    assert_eq!((f.now, f.spent, f.left, f.next), (10, 8, 2, 6), "the spec's row: 10 - 8 = 2, next 6");
+    // PLAN-FIX2 (PT-86): the hand pick's kite is one step back (1 AP), not the planner's farthest band tile (2 AP): the
+    // spec's row was 10 - 8 = 2, next 6 (FB-479 asks Design to update INPUT1 section 4)
+    assert_eq!(r[0].4.dist(V2::new(4, 4)), 1, "one step back");
+    assert_eq!((f.now, f.spent, f.left, f.next), (10, 7, 3, 7), "10 - 7 = 3, next 7");
 
     // tl_vanguard at 3 AP, the footman adjacent: the ghost is the auto plan; Heavy Cleave is refused, the ghost stays
     let mut s = session();
@@ -1207,4 +1210,72 @@ fn pick_hits_are_the_cards_hits_of_the_picked_steps() {
 /// A rest or move entry (lands no hit).
 fn w_rest(w: &World, id: &str) -> bool {
     matches!(skill::kind(&w.cat.skills[sid(w, id)]), Kind::Rest | Kind::Move)
+}
+
+/// PLAN-FIX2 (PT-86, FB-406): a ranged pick walks no farther than it must: on a foe two tiles off (in its band, inside
+/// the foe's melee reach) no kite at all; on an adjacent foe (inside the band's near edge) one step back, not the
+/// planner's farthest kite tile; out of reach the fewest tiles that reach.
+#[test]
+fn a_ranged_pick_walks_no_farther_than_it_must() {
+    let shot_at = |archer: V2, foe_at: V2, melee: Option<i32>| {
+        let mut s = session();
+        place(&mut s.w, ARCHER, archer);
+        place(&mut s.w, FOOTMAN, foe_at);
+        if let Some(r) = melee {
+            s.w.units[FOOTMAN].attack_range = r;
+        }
+        let shot = sk(&s, "tl_aimed_shot");
+        pick(&mut s, ARCHER, foe(FOOTMAN), &[shot]).unwrap();
+        let r = rows(&s.w, &s.plan, ARCHER);
+        r.iter().find(|x| x.0 == "tl_aimed_shot").map(|x| x.4).unwrap_or_else(|| panic!("the shot is planned: {r:?}"))
+    };
+    let from = V2::new(5, 4);
+    assert_eq!(shot_at(from, V2::new(7, 4), Some(2)), from, "in its band: shot from where the archer stands");
+    assert_eq!(shot_at(from, V2::new(6, 4), None).dist(from), 1, "adjacent: one step back");
+    assert_eq!(shot_at(V2::new(2, 4), V2::new(7, 4), None).dist(V2::new(2, 4)), 2, "out of reach 3 of a foe 5 away: two tiles");
+}
+
+/// PLAN-FIX2 (PT-88, FB-406): a hand move walks the shortest route even when the planner's hazard penalty is on the
+/// member (its auto plan drafted it): Move here across one hazard tile at the move's full reach is not refused as "too
+/// far" for the two-tile detour round it, and its moves end on the tile.
+#[test]
+fn a_hand_move_takes_the_shortest_route_past_the_planner_penalty() {
+    use rpgkit_battle::grid::{Hazard, GRID_W, TERRAIN_IDS};
+    let mut s = session();
+    let fire = TERRAIN_IDS.iter().position(|t| *t == "burning_ground").unwrap();
+    s.w.grid.table.rows[fire].hazard = Some(Hazard { status: "burn".into(), potency: 100, magnitude: 0, rounds: 1, on: "both".into() });
+    let most = s.plan.max_move_tiles(&s.w, VANGUARD);
+    let (from, to) = (V2::new(1, 4), V2::new(1 + most, 4));
+    s.w.grid.terrain[(4 * GRID_W + 3) as usize] = fire;
+    place(&mut s.w, VANGUARD, from);
+    s.plan.path_penalties.insert(VANGUARD);
+    pick(&mut s, VANGUARD, RoundTarget::Cell(to), &[Pick::MoveHere(to)]).unwrap();
+    let r = rows(&s.w, &s.plan, VANGUARD);
+    assert_eq!(r.iter().filter(|x| x.0 == "move").last().map(|x| x.4), Some(to), "{r:?}");
+}
+
+/// PLAN-FIX2 (PT-87, FB-406, the goldens-safe part): a later member's ghost plan (no picks, the planner's) does not
+/// claim a tile a hand pick needs: Move here onto the tile the archer's auto Guard round walks to is taken, not
+/// "Claimed by tl_archer's move", and the archer's ghost is rebuilt after it. A hand-picked move still claims.
+#[test]
+fn a_ghost_plan_claims_no_tile_a_hand_pick_needs() {
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(2, 4));
+    place(&mut s.w, ARCHER, V2::new(6, 4));
+    let tile = V2::new(4, 4);
+    round_intent::set_intent(&mut s.w, ARCHER, RoundIntent::Guard).unwrap();
+    round_intent::set_target(&mut s.w, ARCHER, RoundTarget::Cell(tile)).unwrap();
+    rip::plan_unit(&mut s.w, &mut s.plan, ARCHER).unwrap();
+    assert_eq!(s.plan.planned_position(&s.w, ARCHER), tile, "the fixture: the archer's ghost walks to the tile");
+    pick(&mut s, VANGUARD, RoundTarget::Cell(tile), &[Pick::MoveHere(tile)]).unwrap();
+    assert_eq!(s.plan.planned_position(&s.w, VANGUARD), tile);
+    assert_ne!(s.plan.planned_position(&s.w, ARCHER), tile, "the ghost gave the tile up");
+
+    // a hand pick's move still claims its tile from an earlier member
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(2, 4));
+    place(&mut s.w, ARCHER, V2::new(6, 4));
+    pick(&mut s, ARCHER, RoundTarget::Cell(tile), &[Pick::MoveHere(tile)]).unwrap();
+    let refused = pick(&mut s, VANGUARD, RoundTarget::Cell(tile), &[Pick::MoveHere(tile)]).unwrap_err();
+    assert!(refused.contains("Claimed by") || refused.contains("Blocked by"), "{refused}");
 }
