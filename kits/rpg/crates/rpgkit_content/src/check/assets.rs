@@ -92,13 +92,20 @@ pub fn portrait_and_palette_warnings(v: &View, character: &Dict, unit: &Dict) ->
     let tier = art::portrait_tier(character, unit);
     let common = art::common_portrait(&body);
     let (class_id, variant) = art::split_body(&body);
+    // A5 (PAINTED-MAPS1): the unit's portrait key names a file; a key with its file stands in for the body's portrait
+    let key = art::portrait_key(character, unit);
+    let keyed = art::keyed_portrait(&key).filter(|f| v.assets.has(f));
+    if let Some(file) = art::keyed_portrait(&key).filter(|_| keyed.is_none()) {
+        out.push(format!("{name}'s portrait '{key}' has no file {file} (game, kit or engine)."));
+    }
     // A3: a unique tier without its file
     if let Some(folder) = art::tier_folder(&tier) {
         let own = format!("portraits/{folder}/{id}.png");
         if !v.assets.has(&own) {
-            out.push(format!("{name} ({tier}) has no portrait at {own}; it shows the common portrait {class_id}_{variant}."));
+            let shown = if keyed.is_some() { key.clone() } else { format!("{class_id}_{variant}") };
+            out.push(format!("{name} ({tier}) has no portrait at {own}; it shows the common portrait {shown}."));
         }
-    } else if !v.assets.has(&common) && body_state(v, &body).is_some() {
+    } else if keyed.is_none() && !v.assets.has(&common) && body_state(v, &body).is_some() {
         // A5: a body worn by a common-tier unit or character without its common portrait
         out.push(format!("Body '{body}' has no common portrait; {name} shows {class_id}_base."));
     }

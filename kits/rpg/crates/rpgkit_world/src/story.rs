@@ -279,7 +279,7 @@ pub fn card_portrait(d: &Data, home: &str, card: &Dict) -> Vec<String> {
     }
     let unit = d.entry("units", &json::s(c, "base_unit"));
     let class = d.entry("classes", &json::s(unit, "class_id"));
-    art::face_chain(&art::portrait_tier(c, unit), &json::s(c, "id"), &art::body_of(c, unit, class), &json::s(card, "expression"))
+    art::face_chain_keyed(&art::portrait_tier(c, unit), &json::s(c, "id"), &art::body_of(c, unit, class), &art::portrait_key(c, unit), &json::s(card, "expression"))
 }
 
 /// VNSTAGE1 (PR7-27): a story stage actor `who` (a characters ref of world `home`): its shown name and its full-body

@@ -217,14 +217,41 @@ pub fn common_portrait(key: &str) -> String {
     format!("portraits/common/{class}_{variant}.png")
 }
 
+/// PAINTED-MAPS1 (PR7-73): the portrait key a unit (`character` empty) or a world character on base unit `unit` shows:
+/// the unit's own `portrait` when the body worn is the unit's (no character, or a character without its own `art`);
+/// "" otherwise.
+pub fn portrait_key(character: &Dict, unit: &Dict) -> String {
+    if !character.is_empty() && !json::s(character, "art").is_empty() {
+        return String::new();
+    }
+    json::s(unit, "portrait")
+}
+
+/// PAINTED-MAPS1: the file of portrait key `key` (a stem under portraits/common/); None for "".
+pub fn keyed_portrait(key: &str) -> Option<String> {
+    (!key.is_empty()).then(|| format!("portraits/common/{key}.png"))
+}
+
 /// The portraits to try (4.2): a unique tier's own file (`id` = the character id, else the unit id), then the common
 /// portrait of the body, then of its class's base.
 pub fn portrait_chain(tier: &str, id: &str, body: &str) -> Vec<String> {
+    portrait_chain_keyed(tier, id, body, "")
+}
+
+/// PAINTED-MAPS1: `portrait_chain` with the unit's portrait key (`portrait_key`; "" none) tried after the unique tier's
+/// own file and before the body's common portrait.
+pub fn portrait_chain_keyed(tier: &str, id: &str, body: &str, key: &str) -> Vec<String> {
     let mut out = Vec::new();
     if let Some(folder) = tier_folder(tier) {
         out.push(format!("portraits/{folder}/{id}.png"));
     }
-    out.push(common_portrait(body));
+    if let Some(own) = keyed_portrait(key) {
+        out.push(own);
+    }
+    let common = common_portrait(body);
+    if !out.contains(&common) {
+        out.push(common);
+    }
     let base = format!("portraits/common/{}_base.png", split_body(body).0);
     if !out.contains(&base) {
         out.push(base);
@@ -257,6 +284,11 @@ pub fn faces_dir(folder: &str, id: &str) -> String {
 /// then its `neutral` frame, then `portrait_chain`; for "" or `neutral` the `neutral` frame, then `portrait_chain`; a
 /// common tier has no frames (`portrait_chain` alone).
 pub fn face_chain(tier: &str, id: &str, body: &str, expression: &str) -> Vec<String> {
+    face_chain_keyed(tier, id, body, "", expression)
+}
+
+/// PAINTED-MAPS1: `face_chain` over `portrait_chain_keyed` (the unit's portrait key `key`, "" none).
+pub fn face_chain_keyed(tier: &str, id: &str, body: &str, key: &str, expression: &str) -> Vec<String> {
     let mut out = Vec::new();
     if let Some(folder) = tier_folder(tier) {
         let dir = faces_dir(folder, id);
@@ -265,7 +297,7 @@ pub fn face_chain(tier: &str, id: &str, body: &str, expression: &str) -> Vec<Str
         }
         out.push(format!("{dir}/{NEUTRAL}.png"));
     }
-    out.extend(portrait_chain(tier, id, body));
+    out.extend(portrait_chain_keyed(tier, id, body, key));
     out
 }
 

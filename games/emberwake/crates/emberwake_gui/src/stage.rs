@@ -50,6 +50,19 @@ pub const BLOCK_LIFT: i32 = 12;
 /// DIORAMA1B (D5): how many cells (`CELL_W`) a body with a `foot` row stands per footprint cell, its frame's top to
 /// its foot row (contract 8.1: about 1.15; a 2 x 2 unit about 2.3).
 pub const PAINTED_CELLS: f32 = 1.15;
+/// DIORAMA1B (D5), PAINTED-MAPS1: the sprite square of a body with `frame` and a `foot` row standing `PAINTED_CELLS`
+/// tiles `tile_w` wide tall per footprint cell (`n`), its frame's top to its foot row (`fit_square` keeps the scale: the
+/// square's side is the frame's longer side), and how far its bottom edge drops under the foot point's row (the frame
+/// rows under the foot row). None for a body without a `foot` row (it keeps its token square). The battle stage
+/// (`Geom::sprite_px`, `CELL_W`) and the hub and region maps (`mapview::body_rect`, their own tile width) share it.
+pub fn painted_px(tile_w: i32, n: i32, frame: (u32, u32), foot: Option<u32>) -> Option<(i32, i32)> {
+    let foot = foot.filter(|&f| f > 0 && frame.0 > 0 && frame.1 > 0)?;
+    let long = frame.0.max(frame.1) as f32;
+    let sp = (PAINTED_CELLS * tile_w as f32 * n.max(1) as f32 * long / foot as f32).round() as i32;
+    let drop = ((frame.1 - 1).saturating_sub(foot) as f32 * sp as f32 / long).round() as i32;
+    Some((sp, drop))
+}
+
 /// The Flat view: square cells at the panel's interior top.
 pub const FLAT_Y: i32 = 30;
 pub const FLAT_CELL: i32 = 32;
@@ -143,14 +156,9 @@ impl Geom {
     /// no drop), as before.
     pub fn sprite_px(&self, n: i32, frame: (u32, u32), foot: Option<u32>) -> (i32, i32) {
         let n = n.max(1);
-        match (self.view, foot) {
-            (View::Stage, Some(foot)) if foot > 0 && frame.0 > 0 && frame.1 > 0 => {
-                let long = frame.0.max(frame.1) as f32;
-                let sp = (PAINTED_CELLS * CELL_W as f32 * n as f32 * long / foot as f32).round() as i32;
-                let drop = ((frame.1 - 1).saturating_sub(foot) as f32 * sp as f32 / long).round() as i32;
-                (sp, drop)
-            }
-            _ => (self.token_px * n, 0),
+        match self.view {
+            View::Stage => painted_px(CELL_W, n, frame, foot).unwrap_or((self.token_px * n, 0)),
+            View::Flat => (self.token_px * n, 0),
         }
     }
 
@@ -1335,7 +1343,7 @@ pub fn wide_arrow(p: &mut Painter, x0: f32, y0: f32, x1: f32, y1: f32, col: Rgba
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use aegis_core::assets::Layers;
     use emberwake_battle::grid::TerrainTable;
@@ -2276,7 +2284,7 @@ mod tests {
 
     /// DIORAMA1B: a scratch root with body `units/painted/base`: a `w` x `h` frame (one `idle` row, 2 frames) whose
     /// figure fills columns w/4..3w/4 from row h/8 down to its `foot` row, painted.
-    fn painted_root(name: &str, (w, h): (u32, u32), foot: u32) -> aegis_core::scratch::Scratch {
+    pub(crate) fn painted_root(name: &str, (w, h): (u32, u32), foot: u32) -> aegis_core::scratch::Scratch {
         let root = aegis_core::scratch::Scratch::vacant(&format!("stage_painted_{name}"));
         let sw = 2 * w;
         let mut px = vec![0u8; (sw * h * 4) as usize];

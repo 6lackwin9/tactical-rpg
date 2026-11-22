@@ -1432,7 +1432,7 @@ impl Screen<GameCx> for RegionMap {
                     // 2.4: the person's body, else its class body (the chain), else today's token
                     let sprite = cx.art.first_body(&emberwake_content::art::body_chain(&body));
                     if sprite.is_some() {
-                        top = mapview::sprite_rect(r);
+                        top = body_rect_of(cx, sprite.as_deref(), r);
                     }
                     // facing the party while in the conversation (four ways, DIR4-M: up or down when the party is
                     // more above or below, keeping their left or right); else the row's `face`, down by default
@@ -1470,7 +1470,7 @@ impl Screen<GameCx> for RegionMap {
                 }
                 let (body, palette) = crate::bunks::member_art(&d, &gs, m);
                 let sprite = cx.art.first_body(&emberwake_content::art::body_chain(&body));
-                let top = if sprite.is_some() { mapview::sprite_rect(r) } else { mapview::icon_rect(r) };
+                let top = if sprite.is_some() { body_rect_of(cx, sprite.as_deref(), r) } else { mapview::icon_rect(r) };
                 let name = crate::hub::member_name(cx, m);
                 let key = format!("{}{id}", crate::bunks::MEMBER_PREFIX);
                 if waiting.iter().any(|w| w.has(&id)) {
@@ -1537,8 +1537,10 @@ impl Screen<GameCx> for RegionMap {
             // TURNFEEL1: while a turn finishes its leg the sprite faces the way it still goes
             let leader_shown = self.frame_at.and_then(|at| self.glide.heading(at)).map_or(self.leader_face, |d| self.leader_face.toward(d.0, d.1));
             self.leader.set_base(base, now);
-            let drawn_party = if leader_sprite.is_some() { mapview::sprite_rect(pr) } else { pr };
-            let order = crate::props::sorted(&props, &blocks, &marks.iter().map(|m| m.r).collect::<Vec<_>>(), drawn_party);
+            let drawn_party = if leader_sprite.is_some() { body_rect_of(cx, leader_sprite.as_deref(), pr) } else { pr };
+            // PAINTED-MAPS1: the party sorts by its tile's bottom edge (a painted body's frame drops under it)
+            let sort_party = Rect::new(drawn_party.x, pr.y, drawn_party.w, pr.h);
+            let order = crate::props::sorted(&props, &blocks, &marks.iter().map(|m| m.r).collect::<Vec<_>>(), sort_party);
             let idle = ClipPlayer::default();
             let mut sprites = Vec::new();
             let mut party_frame = None;
@@ -2369,11 +2371,11 @@ fn leader_art(cx: &Cx) -> (String, String) {
 
 /// Body `body` standing on tile `r` (spec PLAYUI1 2.4): a foot shadow in `foot`, then the frame `player` plays at
 /// `now` in `face` (`Art::played_facing`, DIR4-M: the up or down row when the body has one, else the side row,
-/// mirrored facing left), filling its rect at the zoomed size (SPRITEFIT1's exact fit). None when it does not play (the
-/// caller draws today's token).
+/// mirrored facing left), filling its rect (`body_rect_of`: PAINTED-MAPS1 scales a painted body by its foot row) at the
+/// zoomed size (SPRITEFIT1's exact fit). None when it does not play (the caller draws today's token).
 #[allow(clippy::too_many_arguments)]
 fn draw_sprite(ui: &mut Ui<RAct>, cx: &mut Cx, body: &str, palette: &str, player: &ClipPlayer, now: u64, face: Facing, r: Rect, foot: Rgba) -> Option<SpriteDrawn> {
-    let sr = mapview::sprite_rect(r);
+    let sr = body_rect_of(cx, Some(body), r);
     let px = (sr.w as f32 * ui.p.v.s).round().max(1.0) as i32;
     let (f, img) = cx.art.played_facing(body, palette, player, now, px, face)?;
     let flip = face.mirrors(&f);
@@ -2382,6 +2384,12 @@ fn draw_sprite(ui: &mut Ui<RAct>, cx: &mut Cx, body: &str, palette: &str, player
     ui.p.image(img, sr);
     let view = if f.side { View::Side } else { face.view };
     Some(SpriteDrawn { body: body.to_string(), clip: f.clip, frame: f.frame, flip, rect: sr, px, face, view })
+}
+
+/// PAINTED-MAPS1 (PR7-73): the drawn square of body `body` (None: no body) on tile `r` (`mapview::body_rect` over its
+/// sheet: a painted body by its foot row, any other the token square).
+fn body_rect_of(cx: &mut Cx, body: Option<&str>, r: Rect) -> Rect {
+    mapview::body_rect(r, body.and_then(|b| cx.art.clips(b)))
 }
 
 /// A marker on its tile: a person's sprite (PLAYUI1-R; their ring and token, or initial, without a body), else the
@@ -4399,8 +4407,66 @@ mod sprite_tests {
         assert_eq!(sp["body"], json!(want));
         assert_eq!((sp["clip"].clone(), sp["left"].clone()), (json!("idle"), json!(false)));
         let (r, t) = (rect_of(&sp), tile_rect(&map, cx.gs().position));
-        assert_eq!((r.w, r.h), (SPRITE, SPRITE), "1.5 tiles tall");
-        assert_eq!((r.y + r.h, r.x + r.w / 2), (t.y + t.h, t.x + t.w / 2), "bottom-centred on the tile");
+        // PAINTED-MAPS1: a painted leader stands by its foot row (`a_painted_leader_stands_on_the_tiles_foot_point`)
+        let clips = cx.art.clips(&want).cloned();
+        assert_eq!(r, mapview::body_rect(t, clips.as_ref()), "the body's rect");
+        if clips.and_then(|c| c.foot).is_none() {
+            assert_eq!((r.w, r.h), (SPRITE, SPRITE), "1.5 tiles tall");
+            assert_eq!((r.y + r.h, r.x + r.w / 2), (t.y + t.h, t.x + t.w / 2), "bottom-centred on the tile");
+        }
+    }
+
+    /// PAINTED-MAPS1 (PR7-73): a catalog unit whose body (as the art resolves it) has a `foot` row (`painted`) or has
+    /// none: its id.
+    fn unit_with(cx: &mut Cx, painted: bool) -> Option<String> {
+        let d = cx.data.clone();
+        let units: Vec<Dict> = d.content.get("units").map(|m| m.values().cloned().collect()).unwrap_or_default();
+        let found = units.into_iter().find(|u| {
+            let body = emberwake_content::art::body_of(&Dict::new(), u, d.entry("classes", &s(u, "class_id")));
+            let shown = cx.art.first_body(&emberwake_content::art::body_chain(&body));
+            shown.and_then(|b| cx.art.clips(&b).map(|k| k.foot.is_some())) == Some(painted)
+        });
+        found.map(|u| s(&u, "id"))
+    }
+
+    /// PAINTED-MAPS1 (PR7-73): under both views, a leader on a unit whose body has a `foot` row (picked by rule) stands
+    /// `stage::PAINTED_CELLS` tile widths tall from its frame's top to its foot row, on the tile's foot point
+    /// (`mapview::body_rect`); one whose body has none keeps the token square, bottom-centred on the tile.
+    #[test]
+    fn a_painted_leader_stands_on_the_tiles_foot_point() {
+        for (view, _) in mapview::VIEWS {
+            for painted in [true, false] {
+                let (mut cx, mut g) = (art_cx(), gfx());
+                cx.settings.v["region_view"] = json!(view);
+                let who = unit_with(&mut cx, painted).expect("a unit with (or without) a painted body");
+                let id = leader_id(&cx);
+                let m = cx.gs_mut().party.member_mut(&id).expect("a leader");
+                // the leader plays no character: its base unit's body (`leader_art`)
+                (m.lore_ref, m.base_unit) = (String::new(), who.clone());
+                let mut map = RegionMap::new(&mut cx);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let sp = sprite(&map, &cx, "party").expect("the leader is a sprite");
+                let body = sp["body"].as_str().unwrap_or_default().to_string();
+                let clips = cx.art.clips(&body).cloned().expect("the body's sheet");
+                assert_eq!(clips.foot.is_some(), painted, "{who}: body {body}");
+                let (r, t) = (rect_of(&sp), tile_rect(&map, cx.gs().position));
+                assert_eq!(r, mapview::body_rect(t, Some(&clips)), "{view} {who}: the drawn rect");
+                if let Some(foot) = clips.foot {
+                    let (long, h) = (clips.frame.0.max(clips.frame.1) as f32, clips.frame.1 as f32);
+                    let k = r.w as f32 / long;
+                    let tall = foot as f32 * k;
+                    let want = crate::stage::PAINTED_CELLS * t.w as f32;
+                    assert!((tall - want).abs() <= 1.0, "{view} {who}: about 1.15 tile widths tall: {tall} against {want}");
+                    // the frame sits on the square's bottom edge, so its foot row is (h - foot) frame rows above it
+                    let foot_y = (r.y + r.h) as f32 - (h - foot as f32) * k;
+                    let (fx, fy) = mapview::body_foot(t);
+                    assert!((foot_y - fy as f32).abs() <= 1.0, "{view} {who}: the foot row on the foot point: {foot_y} against {fy}");
+                    assert_eq!(r.x + r.w / 2, fx, "{view} {who}: centred on it");
+                } else {
+                    assert_eq!(r, mapview::sprite_rect(t), "{view} {who}: the token square");
+                }
+            }
+        }
     }
 
     /// The view a body draws `clip` in for a `facing` (`side`, `down`, `up`): the facing's view when the body has a
