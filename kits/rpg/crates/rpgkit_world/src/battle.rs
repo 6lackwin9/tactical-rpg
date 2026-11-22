@@ -24,7 +24,14 @@ pub use rpgkit_battle::encounter::ESCAPED;
 pub fn encounter_def(d: &Data, world: &str, entry: &Dict) -> EncounterDef {
     let mut def = EncounterDef::from_obj_with(entry, d.ruleset(world));
     def.start_meter = start_meters(d, None, world, entry);
+    def.decor_pool = decor_pool(d, world);
     def
+}
+
+/// DECOR-GEN1 (PR7-86): the decor art keys a generated board of `world` draws from: the nearest non-empty `decor_pool`
+/// of its lineage (the world, then its parents); empty when none names one (no generated decor).
+pub fn decor_pool(d: &Data, world: &str) -> Vec<String> {
+    d.lineage(world).iter().rev().map(|lw| json::sget(d.manifest(lw), rpgkit_battle::encounter::DECOR_POOL)).find(|p| !p.is_empty()).unwrap_or_default()
 }
 
 /// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 1): the battle-start meter grants of encounter row `entry` fought in `world`: the

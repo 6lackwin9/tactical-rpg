@@ -45,3 +45,44 @@ fn cover_decor_draws_through_both_arena_paths_on_the_shipped_boards() {
         }
     }
 }
+
+/// DECOR-GEN1 (PR7-86): a generated board (a world encounter with no rows and no decor) of a world naming a
+/// `decor_pool` draws 2 to 6 of the pool's pieces through both arena paths, the same on both (one seed), and every piece
+/// resolves to art and stands in the feet pass. The encounters are picked by rule, never by id.
+#[test]
+fn generated_boards_draw_their_world_decor_through_both_arena_paths() {
+    let mut cx = crate::hud::hud_tests::game_cx();
+    cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+    let mut picked: Vec<(String, String, Vec<String>)> = Vec::new();
+    for w in cx.data.catalogs.world_ids() {
+        let pool = emberwake_world::battle::decor_pool(&cx.data, &w);
+        if pool.is_empty() || dialogue::stage_set(&cx.data, &w).is_empty() {
+            continue;
+        }
+        for e in cx.data.catalogs.merged_entries(&w, "encounters") {
+            if json::arr(json::get(e, "rows")).is_empty() && json::arr(json::get(e, "decor")).is_empty() {
+                picked.push((w.clone(), json::s(e, "id"), pool.clone()));
+            }
+        }
+    }
+    assert!(picked.iter().any(|(w, _, _)| w == "sunk_ward"), "the Sunk Ward's generated boards draw decor (PR7-86)");
+    for (w, e, pool) in &picked {
+        cx.app.encounter = format!("{w}:{e}");
+        let mut drawn: Vec<Vec<emberwake_battle::encounter::Decor>> = Vec::new();
+        for (path, b) in [("launch", BattleScreen::sandbox(&cx)), ("arena_with", BattleScreen::arena_with(&cx, Some(w.clone()), e, None, "", false))] {
+            let set = b.stage_set(&cx);
+            let s = b.host.session.as_ref().unwrap_or_else(|| panic!("{path} {w}:{e}: {}", b.message));
+            let n = s.def.decor.len() as i32;
+            let (lo, hi) = emberwake_battle::encounter::GENERATED_DECOR;
+            assert!((lo..=hi).contains(&n), "{path} {w}:{e}: {n} decor");
+            let look = stage::zone_look(&mut cx.art, &set, &s.def.zone);
+            let items = stage::decor_items(&mut cx.art, &s.w.grid, (&set, &look), &s.def.decor);
+            for (k, d) in s.def.decor.iter().enumerate() {
+                assert!(pool.contains(&d.art), "{path} {w}:{e}: {d:?} from the pool");
+                assert!(items.iter().any(|p| p.item == Item::Decor(k)), "{path} {w}:{e}: {d:?} draws");
+            }
+            drawn.push(s.def.decor.clone());
+        }
+        assert_eq!(drawn[0], drawn[1], "{w}:{e}: one seed, one layout on both paths");
+    }
+}
