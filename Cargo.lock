@@ -2302,7 +2302,11 @@ dependencies = [
  "aegis_core",
  "aegis_layout",
  "aegis_ui",
+ "indexmap",
  "png",
+ "rpgkit_battle",
+ "rpgkit_content",
+ "rpgkit_data",
  "rpgkit_world",
  "serde_json",
 ]

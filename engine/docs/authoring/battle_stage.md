@@ -13,7 +13,7 @@ Where each part lives:
 | Painted sheets (`clips.json` `foot`, `painted`) | engine | `aegis_core::assets::Clips`, `aegis_ui::art::load_body` |
 | File sizes and the decor checks | kit | `rpgkit_content` (`check/assets.rs`, `check/encounter.rs`) |
 | Decor placement on a generated board | kit | `rpgkit_battle::encounter::generated_decor` |
-| The stage screen that reads `stage.fx.json` | game | the reference game's battle stage screen; a new game writes its own or copies it |
+| The stage drawing: geometry, the `stage.fx.json` reader, the composed board, decor, wall-run caps, the exit path and gate, the draw passes | kit | `rpgkit_ui::stage` (ENGINE-41); a game gives its sizes through `StageSizes` and runs the passes from its battle screen |
 
 Rule one: **the board's `rows` and terrain alone decide the fight.** A sheet, a tint, a decal, a light or a decor
 piece is a picture.
@@ -115,7 +115,7 @@ A unit body sheet's `clips.json` may carry two engine keys:
 
 | Key | Default | Does |
 | --- | --- | --- |
-| `foot` | none | the frame row the feet stand on: a stage that reads it scales the body so frame top to foot row is a set height per footprint cell (the reference stage: 1.15 cells), centred on the foot point |
+| `foot` | none | the frame row the feet stand on: a stage that reads it scales the body so frame top to foot row is a set height per footprint cell (the kit stage: `PAINTED_CELLS`, 1.15 cells), centred on the foot point |
 | `painted` | false | a painted sheet takes no palette swap (`aegis_ui::art::load_body`); the kit's sprite check A4 skips it |
 
 A sheet without `foot` draws in the token square as before. A bad value is a listed problem, not a crash.

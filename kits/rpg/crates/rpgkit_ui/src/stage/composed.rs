@@ -13,8 +13,8 @@ use aegis_ui::art::{cell_hash, Art};
 use aegis_ui::canvas::{Image, Rgba};
 use aegis_ui::ground::{self as composer, GroundJob, GroundKey, GroundLayer, PlacedPatch};
 use aegis_ui::painter::Painter;
-use emberwake_battle::grid::{Grid, V2, GRID_H, GRID_W};
-use emberwake_content::art::battle_stage_dirs;
+use rpgkit_battle::grid::{Grid, V2, GRID_H, GRID_W};
+use rpgkit_content::art::battle_stage_dirs;
 use std::cell::RefCell;
 use std::rc::Rc;
 

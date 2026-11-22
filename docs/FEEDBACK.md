@@ -151,8 +151,37 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-38` (`LORE-RENAME1`) | Built (tools lane) | `develop` | `aegis content refs <kind> <id>` lists every reference; `aegis content rename <kind> <old> <new>` is a dry run, `--apply` rewrites data and seeds (only the matching strings) and moves the asset files, kept only when it adds no problem. FB-467 |
 | `ENGINE-39` (`TARGET-PRUNE1`) | Built (tools lane) | `develop` | `tools/fc.sh prune [target=] [--dry]` keeps only the newest test binary per name in `target/*/deps` and removes the incremental folders; `tools/fc.sh gate` runs it first when under 6 GB is free (`FC_PRUNE_MB`). FB-469 |
 | `ENGINE-40` (`ENGINE-GUIDE2`) | Built (tools lane) | `develop` | `engine/docs/authoring/battle_stage.md` (composed ground, stage sets and `stage.fx.json`, decor, painted sheets); scenario run keys and `shots diff` in `scenarios.md`; `content refs` / `rename` and look-only points; the sample game's field on the engine's ground composer. FB-471 |
+| `ENGINE-41` (`STAGE-KIT1`) | Built (tools lane) | `develop` | The battle stage module (geometry, `stage.fx.json` reader, composed board, decor, wall-run caps, exit path and gate, draw passes) moved to `rpgkit_ui::stage`; the game re-exports it and gives its sizes through `StageSizes`. Fixture hash, goldens and shots unchanged. FB-473 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-473: ENGINE-41 STAGE-KIT1 built; the battle stage drawing is the kit's
+
+- **Status**: built (tools lane), `develop`. No behaviour change.
+- **Spec**: `docs/READY.md` row `ENGINE-41` (`STAGE-KIT1`).
+- **What moved**: the whole stage module, `emberwake_gui/src/stage.rs` and `stage/composed.rs`, to
+  `kits/rpg/crates/rpgkit_ui/src/stage.rs` and `stage/composed.rs` (git moves). It already named no game; it now
+  reads the kit crates directly (`rpgkit_battle`, `rpgkit_content`, `rpgkit_data`, new dependencies of `rpgkit_ui`
+  with `indexmap`). That is the `stage.fx.json` reader (zones, spots, lights, lip, decal density), the composed
+  battle ground, decor drawing, the wall-run caps, the exit path and gate, the geometry and the draw passes.
+- **What the game keeps** (`emberwake_gui/src/stage.rs`): `pub use rpgkit_ui::stage::*`, and `impl StageSizes for
+  Tuning`. `Geom::new(view, &impl StageSizes)` replaces the one reference to the game's `Tuning`, so the 36 call
+  sites are unchanged. The kit also gives plain `Sizes` for a game with no tuning.
+- **Tests**: 44 stage tests moved with the module and pass unchanged, `TODAYS_FRAME` among them. They draw at
+  `SIZES` (40, 28, 5), the game's default tuning, and use a kit-local `gfx()` canvas. Five tests that read the
+  game's own art, data or settings stayed in the game, unchanged: the shipped terrain rows, the two backdrop tests,
+  the feet pass and the cover reveal. So did a copy of `painted_root`, which the map view's test uses. New game test
+  `the_default_tuning_and_settings_match_the_kits_stage_tests` holds the two defaults the kit tests had asserted
+  (Tuning sizes and the `battle_view` setting).
+- **Shots**: `tools/fc.sh shots diff scenarios=all` against `dbb6e8bb`: 128 of 129 unchanged. The one change is
+  the scene runner's developer panel, which prints the data folder's path (the base ran in a scratch worktree). No
+  stage shot moved. Goldens unchanged.
+- **Layers**: one comment example named a game set; it now uses a made-up set name.
+- **Docs**: `engine/docs/authoring/battle_stage.md` now places the stage drawing in the kit.
+- **Docs delta**: `STRUCTURE.md`: `rpgkit_ui` row gains `stage` (the battle stage, ENGINE-41); the `emberwake_gui`
+  `stage.rs` row becomes "re-exports `rpgkit_ui::stage`, `StageSizes` for `Tuning`". `kits/rpg/README.md` UI line:
+  add `stage`. `GAME_BRIEF` lines that point at `emberwake_gui/src/stage.rs` can point at `rpgkit_ui::stage`.
+  `HISTORY.md`: none (a move).
 
 ### FB-471: ENGINE-40 ENGINE-GUIDE2 built; the authoring guide catches up, and hello shows the ground composer
 
