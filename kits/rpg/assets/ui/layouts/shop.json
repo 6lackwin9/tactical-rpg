@@ -1,15 +1,15 @@
 {
   "screen": "shop",
-  "note": "PR7-39 Stage B (UISPLIT1-G): the kit's shop, the three-column trade (shop, trade, stash) in the frame the game centres under its HUD, placed as the hand-drawn shop was (7-unit margins, 6-unit gaps, columns 230 : 150 : 200). A game's own ui/layouts/shop.json replaces it.",
+  "note": "PR7-39 Stage B (UISPLIT1-G): the kit's shop, the three-column trade (shop, trade, stash) in the frame the game centres under its HUD, placed as the hand-drawn shop was (7-unit margins, 6-unit gaps, columns 230 : 150 : 200; 2026-11-22 Art/UI: the trade column starts 4 units later and the action bar is 36 wide so the row steppers and \"Confirm trade\" fit at Extra large text, FB-455). A game's own ui/layouts/shop.json replaces it.",
   "regions": [
     {"id": "frame", "component": "panel_shell", "anchor": "center", "w": "fill", "h": "fill"},
     {"id": "title_text", "component": "heading", "style": "title", "bind": {"text": "title"}, "anchor": "top_left", "w": "60%", "h": 4, "x": 2, "y": 1},
     {"id": "band", "component": "text_block", "style": "right", "bind": {"text": "band"}, "anchor": "top_right", "w": "38%", "h": 3, "x": -2, "y": 2},
     {"id": "shop_head", "component": "heading", "style": "muted", "text": "Shop", "anchor": "top_left", "w": "37%", "h": 2, "x": 2, "y": 6},
-    {"id": "trade_head", "component": "heading", "style": "muted", "text": "Trade", "anchor": "top_left", "w": "24%", "h": 2, "x": 60, "y": 6},
+    {"id": "trade_head", "component": "heading", "style": "muted", "text": "Trade", "anchor": "top_left", "w": "22%", "h": 2, "x": 64, "y": 6},
     {"id": "stash_head", "component": "heading", "style": "muted", "text": "Stash", "anchor": "top_left", "w": "33%", "h": 2, "x": 99, "y": 6},
     {"id": "col_shop", "component": "panel_shell", "style": "box", "fill": "column", "anchor": "top_left", "w": "38%", "h": 54, "x": 2, "y": 8},
-    {"id": "col_trade", "component": "panel_shell", "style": "box", "fill": "column", "anchor": "top_left", "w": "25%", "h": 54, "x": 60, "y": 8},
+    {"id": "col_trade", "component": "panel_shell", "style": "box", "fill": "column", "anchor": "top_left", "w": "21%", "h": 54, "x": 64, "y": 8},
     {"id": "col_stash", "component": "panel_shell", "style": "box", "fill": "column", "anchor": "top_right", "w": "33%", "h": 54, "x": -2, "y": 8},
     {"id": "offers", "in": "col_shop", "component": "list_row", "style": "plain", "row_ids": true, "bind": {"rows": "offers", "select": "buy"}, "anchor": "top_left", "w": "fill", "h": "fill"},
     {"id": "hint", "in": "col_trade", "component": "text_block", "style": "muted", "bind": {"text": "hint"}, "anchor": "top_left", "w": "fill", "h": 3, "x": 1, "y": 1},
@@ -19,6 +19,6 @@
     {"id": "detail", "component": "detail_line", "bind": {"text": "detail"}, "anchor": "top_left", "w": "97%", "h": 3, "x": 2, "y": 63},
     {"id": "errors", "component": "text_block", "bind": {"text": "errors"}, "anchor": "top_left", "w": "97%", "h": 3, "x": 2, "y": 66},
     {"id": "bar_left", "component": "button_bar", "bind": {"actions": ["close"]}, "anchor": "bottom_left", "w": 11, "h": 4, "x": 2, "y": -2},
-    {"id": "bar", "component": "button_bar", "bind": {"actions": ["clear", "confirm"]}, "anchor": "bottom_right", "w": 29, "h": 4, "x": -2, "y": -2}
+    {"id": "bar", "component": "button_bar", "bind": {"actions": ["clear", "confirm"]}, "anchor": "bottom_right", "w": 36, "h": 4, "x": -2, "y": -2}
   ]
 }
