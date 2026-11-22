@@ -214,7 +214,7 @@ pub(super) fn party_plate(ui: &mut Ui<super::Action>, cx: &mut Cx, faces: &mut F
     name_in(&mut ui.p, tx as f32, r.y as f32 + 2.0, &p.name, room, if p.active { super::ally() } else { th().dim });
     // HP: the bar with the incoming loss, its numbers under it
     hp_bar(&mut ui.p, Rect::new(tx, r.y + 13, text_w, 3), p.hp, p.max_hp, if p.active { hp() } else { th().dim }, p.incoming, p.heal);
-    let hp_text = format!("{}/{}", p.hp, p.max_hp);
+    let hp_text = hp_fit(&mut ui.p, p.hp, p.max_hp, p.incoming, p.loss_sign, text_w as f32);
     let hw = ui.p.text_w(&hp_text, SMALL);
     ui.p.text(tx as f32, r.y as f32 + 17.0, &hp_text, SMALL, th().text);
     let mut nx = tx as f32 + hw + 3.0;
@@ -251,6 +251,29 @@ pub(super) fn party_plate(ui: &mut Ui<super::Action>, cx: &mut Cx, faces: &mut F
 
 /// SV6, SV7: the plate's planned loss "-n" at (`x`, `y`): tinted and arrowed by `p.loss_sign`, its hover each hit and
 /// tick with the total (`Plate::loss`). Returns its width.
+/// ENGINE-33 (XL-SWEEP1): a plate's HP numbers in `room`: "hp/max", or only "hp" when "hp/max" and its planned loss
+/// beside it (and its modifier arrow when `sign` is not 0) would run past the plate (Extra large text); the bar still
+/// shows the share and the card the maximum.
+pub(super) fn hp_fit(painter: &mut Painter, hp: i32, max_hp: i32, incoming: i32, sign: i32, room: f32) -> String {
+    let full = format!("{hp}/{max_hp}");
+    if incoming <= 0 {
+        return full;
+    }
+    let need = painter.text_w(&full, SMALL) + 3.0 + painter.text_w(&format!("-{incoming}"), SMALL) + if sign != 0 { LOSS_SIGN_W } else { 0.0 };
+    // the plate's 2-unit inner margin may take the last letter (as before this fit)
+    if need <= room + HP_FIT_SLACK {
+        full
+    } else {
+        hp.to_string()
+    }
+}
+
+/// How far into the plate's inner margin the numbers may run.
+const HP_FIT_SLACK: f32 = 2.0;
+
+/// The room a modifier's arrow beside a planned loss may take (`statusvis::number`).
+const LOSS_SIGN_W: f32 = 6.0;
+
 fn incoming_number(ui: &mut Ui<super::Action>, id: &str, p: &Plate, x: f32, y: f32) -> f32 {
     let t = format!("-{}", p.incoming);
     let tip = super::statusvis::num_tip("Planned loss", &p.loss);
@@ -355,7 +378,7 @@ pub(super) fn foe_plate(ui: &mut Ui<super::Action>, cx: &mut Cx, faces: &mut Fac
     let name_col = if !p.active { th().dim } else if p.boss { boss_gold() } else { th().text };
     name_in(&mut ui.p, tx as f32, r.y as f32 + 2.0, &p.name, text_w as f32, name_col);
     bar(&mut ui.p, Rect::new(tx, r.y + 13, text_w, 3), p.hp, p.max_hp, if p.active { th().foe } else { th().dim }, p.incoming);
-    let hp_text = if p.active { format!("{}/{}", p.hp, p.max_hp) } else { "Down".to_string() };
+    let hp_text = if p.active { hp_fit(&mut ui.p, p.hp, p.max_hp, p.incoming, p.loss_sign, text_w as f32) } else { "Down".to_string() };
     ui.p.text(tx as f32, r.y as f32 + 17.0, &hp_text, SMALL, if p.active { th().text } else { th().dim });
     // SV6, SV7 (PR7-57): the one planned loss beside it, with its hover
     if p.incoming > 0 && p.active {

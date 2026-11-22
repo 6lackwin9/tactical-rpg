@@ -851,7 +851,7 @@ fn start<G: crate::Game>(game: &G, args: &Args, idle_default: u64) -> Result<Ses
         }
     }
     if headless {
-        let o = scenario::Options { game_id: manifest.id.clone(), exe: s.exe.clone(), data: None, out: out.clone(), slow: 1, size: None, sized_ms: 0, window: false, fps: args.keys.get("fps").map(|f| f.parse()).transpose().context("fps=N")?, dpr: None, baselines: None, record: false, saves: None };
+        let o = scenario::Options { game_id: manifest.id.clone(), exe: s.exe.clone(), data: None, out: out.clone(), slow: 1, size: None, sized_ms: 0, window: false, fps: args.keys.get("fps").map(|f| f.parse()).transpose().context("fps=N")?, dpr: None, baselines: None, record: false, saves: None, set: Default::default(), audit: false };
         a.extend(scenario::headless_args(size, &o));
         a.push(format!("idle_exit={idle}"));
     }

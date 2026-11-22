@@ -137,3 +137,45 @@ fn the_boss_above_tag_takes_its_own_row_when_it_would_meet_the_count() {
         assert_eq!(ty > 31, below, "at {scale}: tag at y {ty}");
     }
 }
+
+/// ENGINE-33 (XL-SWEEP1): a plate keeps "hp/max" while it fits beside the planned loss, and drops the maximum when the
+/// two would run past the plate (the sweep's "120/120 -120" on a Hostiles row at Extra large).
+#[test]
+fn a_plate_drops_its_maximum_before_the_loss_runs_past_it() {
+    use crate::battle::plates::hp_fit;
+    let mut g = crate::hud::hud_tests::gfx();
+    let mut fit = |scale: f32, incoming: i32, room: f32| {
+        g.fonts.scale = scale;
+        let mut p = aegis_ui::painter::Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+        hp_fit(&mut p, 120, 120, incoming, 0, room)
+    };
+    assert_eq!(fit(1.0, 0, 10.0), "120/120", "no loss: always the whole numbers");
+    assert_eq!(fit(1.0, 120, 70.0), "120/120", "Normal: both fit");
+    assert_eq!(fit(1.3, 120, 40.0), "120", "Extra large: the maximum goes first");
+}
+
+/// ENGINE-33 (XL-SWEEP1): on the docked card a foe's name stops short of the HP numbers under it at every text size
+/// (the sweep's "Watch Crossbowman" over "136/136" at Extra large), on the Vane fight with each foe's card shown.
+#[test]
+fn the_card_name_stops_short_of_the_hp_numbers() {
+    let mut met = 0;
+    for (_, scale) in aegis_ui::screen::TEXT_SIZES {
+        let (mut cx, mut g, mut b) = fight("enc_evt_01", "stage");
+        let foes: Vec<usize> = b.session().w.enemies.clone();
+        for f in foes {
+            let Some(plate) = b.w.iter().find(|w| w.id == format!("foe.{f}")).map(|w| w.rect) else { continue };
+            crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, scale as f32);
+            b.draw(&mut cx, &mut g, (plate.x + plate.w / 2, plate.y + plate.h / 2), true);
+            let (Some(name), Some(hp)) = (b.w.iter().find(|w| w.id == "card.name").map(|w| (w.rect, w.text.clone())), b.w.iter().find(|w| w.id == "card.hp").map(|w| w.rect)) else { continue };
+            met += 1;
+            let (n, text) = name;
+            let rows_meet = n.y + n.h > hp.y && hp.y + hp.h > n.y;
+            assert!(!rows_meet || n.x + n.w <= hp.x + 1, "at {scale}: {text:?} ({n:?}) runs into the HP ({hp:?})");
+            if let Some(kept) = text.strip_suffix("...") {
+                let w = b.w.iter().find(|w| w.id == "card.name").expect("the name");
+                assert!(w.tip.iter().any(|t| t.0.starts_with(kept) && t.0.len() > kept.len()), "at {scale}: the cut name {text:?} hovers to its full words: {:?}", w.tip);
+            }
+        }
+    }
+    assert!(met > 0, "a card was shown");
+}

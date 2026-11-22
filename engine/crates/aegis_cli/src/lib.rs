@@ -88,7 +88,7 @@ aegis replay <recording.json> [session=K] [until=N] [json] [variant=<file>] [wri
 aegis record <requests.json | recording.json> [out=<dir>] [id=<id>]   (play requests on fresh command hosts, save them as a recording)
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
 aegis content check | get <kind> <id> [world=<id>] | get @<list.json> | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>]
-aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]
+aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [set=<key>:<value>,...] [audit=1]
 aegis playtest start [save=] [out=] [size=] [shots=each|off] [window=1] | do <command ...> | run <script | -> | stop | status   (an agent plays the real game, logged and screenshot per command)
 aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)
 aegis new game <id> [title=<title>] [root=<workspace>]   (a new game folder games/<id>/ on the engine alone: menu, play screen, host, test, scenario)";

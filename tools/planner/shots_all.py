@@ -20,7 +20,12 @@ shows the after dimmed with each changed pixel in red); `sheets=0` writes none. 
 
 `strict=1` (the gate's `shotsexact` step, ENGINE-17: shots on the shot clock are frame-exact, so it runs with tolerance
 0 and pixels 0) exits 1 when any shot changed, is new or is gone.
+
+ENGINE-33 (XL-SWEEP1): a run with `audit=1` leaves `<shot>.audit.json` beside each shot (the text audit of that frame:
+cut, edge, overlap, spill); `collect` copies each beside its shot as `<flat name>.audit.json` and writes `audit.txt`,
+one line per shot with a problem (most first), each problem under it.
 """
+import json
 import shutil
 import struct
 import sys
@@ -167,19 +172,55 @@ def shots(bundles):
     return out
 
 
+AUDIT_KINDS = ("cut", "edge", "overlap", "spill")
+
+
+def audit_lines(audits):
+    """`audit.txt`'s lines from {flat name: audit reply}: a head count, then per shot with a problem (most first) its
+    counts and each problem listed (a cut's full text and what showed; an overlap's two texts)."""
+    rows = []
+    for name, a in audits.items():
+        counts = {k: int((a.get("counts") or {}).get(k, 0)) for k in AUDIT_KINDS}
+        if sum(counts.values()):
+            rows.append((name, counts, a))
+    rows.sort(key=lambda r: (-sum(r[1].values()), r[0]))
+    lines = ["[audit] %d of %d shot(s) with a text problem" % (len(rows), len(audits))]
+    for name, counts, a in rows:
+        lines.append("%s (%s) screen %s scale %s" % (name, ", ".join("%s %d" % (k, n) for k, n in counts.items() if n), a.get("screen", "?"), a.get("scale", "?")))
+        for c in a.get("cut") or []:
+            lines.append("  cut %r shown %r at %s" % (c.get("text"), c.get("shown"), c.get("at")))
+        for e in a.get("edge") or []:
+            lines.append("  edge %r at %s" % (e.get("text"), e.get("at")))
+        for o in a.get("overlap") or []:
+            lines.append("  overlap %r / %r at %s / %s" % (o.get("a"), o.get("b"), o.get("at_a"), o.get("at_b")))
+        for p in a.get("spill") or []:
+            lines.append("  spill %r out of %s at %s" % (p.get("text"), p.get("widget"), p.get("at")))
+    return lines
+
+
 def collect(bundles, out, crop=None):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    for old in list(out.glob("*.png")) + list(out.glob("crops/*.png")):
+    for old in list(out.glob("*.png")) + list(out.glob("crops/*.png")) + list(out.glob("*.audit.json")) + list(out.glob("audit.txt")):
         old.unlink()
     found = shots(bundles)
+    audits = {}
     for name, p in found.items():
         shutil.copyfile(p, out / name)
+        aud = p.with_name(p.stem + ".audit.json")
+        if aud.is_file():
+            shutil.copyfile(aud, out / (name[:-4] + ".audit.json"))
+            try:
+                audits[name] = json.loads(aud.read_text(encoding="utf-8"))
+            except ValueError:
+                audits[name] = {"counts": {}, "screen": "unreadable audit"}
         if crop is not None:
             w, bpp, rows = crop_rows(*png_rows(p), crop)
             if w and rows:
                 write_png(out / "crops" / name, w, [rgb(bpp, r) for r in rows])
     (out / "index.txt").write_text("".join(n + "\n" for n in found), encoding="utf-8")
+    if audits:
+        (out / "audit.txt").write_text("\n".join(audit_lines(audits)) + "\n", encoding="utf-8")
     return sorted(found)
 
 
@@ -224,6 +265,8 @@ def main(argv):
     if len(argv) >= 3 and argv[0] == "collect":
         names = collect(argv[1], argv[2], crop)
         print("[shots-all] %d shot(s) of %d scenario(s) in %s" % (len(names), len({n.split("__")[0] for n in names}), argv[2]))
+        if (Path(argv[2]) / "audit.txt").is_file():
+            print((Path(argv[2]) / "audit.txt").read_text(encoding="utf-8").splitlines()[0] + ": " + str(Path(argv[2]) / "audit.txt"))
         return 0
     if len(argv) >= 3 and argv[0] == "compare":
         tol, px = int(opts.get("tolerance", 8)), int(opts.get("pixels", 300))

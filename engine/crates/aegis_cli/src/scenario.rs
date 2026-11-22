@@ -2,7 +2,7 @@
 //! game's real screens over the agent link and assert state, with no window by default (HEADLESS1), or in a real muted
 //! window that does not take the focus when the file or `window=1` asks.
 //!   aegis scenario check [<file> | all]                                       parse the files; no game starts
-//!   aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]
+//!   aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X] [set=<key>:<value>,...] [audit=1]
 //!   aegis scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...] [the same keys as run]
 //! A scenario is named by where it lies: `<game folder>/scenarios/<id>.json`. The game folder is the one holding the game
 //! manifest the registered game names, and the game's program is the file named as the manifest's id beside this one
@@ -930,6 +930,31 @@ pub struct Options {
     pub record: bool,
     /// PR7-4: where `launch.save` folders lie (`<game folder>/scenarios/saves`).
     pub saves: Option<PathBuf>,
+    /// ENGINE-33: `set=<key>:<value>,...`: settings laid over every scenario's own (a value is JSON, else a string), so
+    /// one sweep runs every screen at, say, the largest text size; the driver's held settings and `mute` stay refused.
+    pub set: Map<String, Value>,
+    /// ENGINE-33: `audit=1`: after every shot, the text audit of that frame (at the run's text size) beside it as
+    /// `<shot>.audit.json` (cut, edge, overlap and spill; `text_audit::issues`), for a sweep to list what a size breaks.
+    pub audit: bool,
+}
+
+/// ENGINE-33: `set=` as settings: `key:value` pairs split on commas (a value parses as JSON, else it is a string); a
+/// held setting, `mute`, an empty key or a pair without `:` is an error.
+pub fn parse_set(list: &str) -> std::result::Result<Map<String, Value>, String> {
+    let mut out = Map::new();
+    for pair in list.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let Some((k, v)) = pair.split_once(':') else { return Err(format!("set: '{pair}' is key:value")) };
+        let k = k.trim();
+        if k.is_empty() {
+            return Err(format!("set: '{pair}' has no key"));
+        }
+        if HELD_SETTINGS.contains(&k) || k == "mute" {
+            return Err(format!("set: '{k}' belongs to the driver"));
+        }
+        let v = v.trim();
+        out.insert(k.to_string(), serde_json::from_str(v).unwrap_or_else(|_| Value::String(v.to_string())));
+    }
+    Ok(out)
 }
 
 /// One size's result.
@@ -968,6 +993,8 @@ struct Run<'a> {
     recorded: Vec<(PathBuf, PathBuf)>,
     /// ENGINE-2: each `perf` step's numbers and verdict, for result.json.
     perf: Vec<Value>,
+    /// ENGINE-33: `Options::audit`.
+    audit: bool,
 }
 
 impl Run<'_> {
@@ -1121,6 +1148,11 @@ impl Run<'_> {
                 let reply = self.ask(label, &json!({"cmd": "screenshot", "path": path.display().to_string(), "max_w": max_w}))?;
                 if reply["ok"] != json!(true) {
                     return Err(Failure { step: label.to_string(), message: format!("the shot {name}: {}", reply["error"]), gone: false });
+                }
+                if self.audit {
+                    // After the shot, so the picture is the plain one; the audit draws a frame of its own and puts it back.
+                    let audit = self.ask(label, &json!({"cmd": "text_audit"}))?;
+                    let _ = std::fs::write(self.bundle.join(format!("{name}.audit.json")), serde_json::to_string_pretty(&audit).unwrap_or_default());
                 }
                 if let Some(tol) = golden {
                     let fail = |message: String| Failure { step: label.to_string(), message, gone: false };
@@ -1353,6 +1385,9 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
         let scratch = std::env::temp_dir().join("aegis_scenario").join(format!("{}_{port}", std::process::id()));
         let _ = std::fs::remove_dir_all(&scratch);
         let mut plan = plan(s, size, &o.game_id, &o.exe, o.data.as_deref(), port, &scratch);
+        for (k, v) in &o.set {
+            plan.settings[k] = v.clone();
+        }
         if headless {
             plan.args.extend(headless_args(size, o));
             // ENGINE-17: a scenario is always on the shot clock, so two runs of a build draw the same frames (the agent
@@ -1416,7 +1451,7 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
         record["capped"] = json!(px != json!([size.0, size.1]));
         let deadline = Instant::now() + s.timeout * slow as u32;
         let golden_dir = o.baselines.as_ref().map(|b| b.join(&s.id).join(format!("{}x{}", size.0, size.1)));
-        let mut run = Run { link: link.as_mut(), game: game.as_mut(), bundle: &bundle, slow, deadline, done: Vec::new(), frame: 0, headless, golden_dir, record: o.record, recorded: Vec::new(), perf: Vec::new() };
+        let mut run = Run { link: link.as_mut(), game: game.as_mut(), bundle: &bundle, slow, deadline, done: Vec::new(), frame: 0, headless, golden_dir, record: o.record, recorded: Vec::new(), perf: Vec::new(), audit: o.audit };
         let walked = s.steps.iter().enumerate().try_for_each(|(i, step)| run.step(&(i + 1).to_string(), step));
         let done = std::mem::take(&mut run.done);
         let to_record = std::mem::take(&mut run.recorded);
@@ -1645,7 +1680,7 @@ fn game_folder<G: crate::Game>(game: &G, args: &Args) -> Result<PathBuf> {
     manifest.parent().map(Path::to_path_buf).with_context(|| format!("{} has no folder", manifest.display()))
 }
 
-const RUN_USAGE: &str = "aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X] [record=1]";
+const RUN_USAGE: &str = "aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X] [record=1] [set=<key>:<value>,...] [audit=1]";
 const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=<id>] [scene=<id>] [ruleset=<id>] [seed=N] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
 
 /// `aegis scenario ...`; returns the exit code.
@@ -1721,7 +1756,12 @@ fn options_of(folder: &Path, args: &Args, out: &str) -> Result<Options> {
         "1" => true,
         other => anyhow::bail!("record is 1 or 0, not '{other}'"),
     };
-    Ok(Options { game_id: manifest.id.clone(), exe, data: args.keys.get("data").map(PathBuf::from), out, slow, size, sized_ms: SIZED_MS, window, fps, dpr: args.keys.get("dpr").cloned(), baselines: Some(folder.join("scenarios").join("baselines")), record, saves: Some(folder.join("scenarios").join("saves")) })
+    let audit = match args.key("audit", "0").as_str() {
+        "0" => false,
+        "1" => true,
+        other => anyhow::bail!("audit is 1 or 0, not '{other}'"),
+    };
+    Ok(Options { game_id: manifest.id.clone(), exe, data: args.keys.get("data").map(PathBuf::from), out, slow, size, sized_ms: SIZED_MS, window, fps, dpr: args.keys.get("dpr").cloned(), baselines: Some(folder.join("scenarios").join("baselines")), record, saves: Some(folder.join("scenarios").join("saves")), set: args.keys.get("set").map(|l| parse_set(l)).transpose().map_err(anyhow::Error::msg)?.unwrap_or_default(), audit })
 }
 
 /// The steps of `do=`, comma separated: `key:<k>`, `click:<id>`, `hover:<id>`, `screen:<id>` (wait for it), `widget:<id>`

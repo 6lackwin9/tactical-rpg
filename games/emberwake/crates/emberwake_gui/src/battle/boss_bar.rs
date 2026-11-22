@@ -281,11 +281,12 @@ pub(super) fn draw_bar(ui: &mut Ui<super::Action>, cx: &mut Cx, (faces, small): 
         ui.push(format!("boss.passive.{k}"), "badge", name.clone(), *tr, true, false, None, t);
     }
     let room = (right - name_x - 2) as f32;
-    let title = ui.p.fit(&b.name, BODY, room);
+    // ENGINE-33 (XL-SWEEP1): fitted in the face it is drawn in (the display face runs wider than the body's)
+    let title = ui.p.fit_face(Typeface::Display, &b.name, BODY, room);
     // PR7-63: the painter returns the end x, so the name's width is that less its start
     let used = (ui.p.text_face(Typeface::Display, name_x as f32, ty as f32 - 1.0, &title, BODY, boss_gold()) - name_x as f32).ceil() as i32;
     let name_tip: Tip = if title != b.name { vec![(b.name.clone(), boss_gold())] } else { Vec::new() };
-    ui.push("boss.name", "label", b.name.clone(), Rect::new(name_x, ty - 1, used.max(1), 10), true, false, None, name_tip);
+    ui.push("boss.name", "label", b.name.clone(), Rect::new(name_x, ty - 1, used.max(1), (ui.p.line_h_face(Typeface::Display, BODY).ceil() as i32).max(10)), true, false, None, name_tip);
     if !b.title.is_empty() && (used as f32) + 20.0 < room {
         let st = ui.p.fit(&b.title, SMALL, room - used as f32 - 6.0);
         ui.p.text((name_x + used + 6) as f32, ty as f32 + 1.0, &st, SMALL, th().dim);

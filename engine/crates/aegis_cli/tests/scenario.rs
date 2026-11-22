@@ -371,7 +371,7 @@ fn launcher() -> FakeLauncher {
 
 /// A real window: the frames are polled for. `no_window` is the run with none.
 fn options(out: &Path) -> Options {
-    Options { game_id: "somegame".into(), exe: PathBuf::from("no_such_exe"), data: None, out: out.to_path_buf(), slow: 1, size: None, sized_ms: 0, window: true, fps: None, dpr: None, baselines: None, record: false, saves: None }
+    Options { game_id: "somegame".into(), exe: PathBuf::from("no_such_exe"), data: None, out: out.to_path_buf(), slow: 1, size: None, sized_ms: 0, window: true, fps: None, dpr: None, baselines: None, record: false, saves: None, set: Default::default(), audit: false }
 }
 
 fn no_window(out: &Path) -> Options {
@@ -590,6 +590,26 @@ fn the_audit_fails_on_the_named_kinds_only() {
     assert_eq!(o.code, 1);
     assert!(o.message.contains("cut 2"), "{}", o.message);
     assert!(std::fs::read_dir(&o.bundle).unwrap().flatten().any(|e| e.file_name().to_string_lossy().starts_with("audit_")), "the audit reply is kept");
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+#[test]
+fn audit_one_keeps_each_shots_text_audit_beside_it() {
+    let out = temp("shotaudit");
+    let mut l = launcher();
+    l.script.borrow_mut().audit_counts = json!({"cut": 1, "edge": 0, "overlap": 0, "spill": 0});
+    let s = scenario_of(json!([{"step": "shot", "name": "talk"}]));
+    let o = scenario::run_size(&s, (1280, 720), &options(&out), &mut l);
+    assert_eq!(o.code, 0, "{}", o.message);
+    assert!(!o.bundle.join("talk.audit.json").exists(), "no audit unless asked");
+    assert_eq!(l.script.borrow().asked.iter().filter(|a| a["cmd"] == "text_audit").count(), 0);
+    let o = scenario::run_size(&s, (1280, 720), &Options { audit: true, ..options(&out) }, &mut l);
+    assert_eq!(o.code, 0, "a problem found is reported, never a failure: {}", o.message);
+    let kept: Value = serde_json::from_str(&std::fs::read_to_string(o.bundle.join("talk.audit.json")).unwrap()).unwrap();
+    assert_eq!(kept["counts"]["cut"], json!(1));
+    let asked = l.script.borrow().asked.clone();
+    let (shot, audit) = (asked.iter().position(|a| a["cmd"] == "screenshot").unwrap(), asked.iter().position(|a| a["cmd"] == "text_audit").unwrap());
+    assert!(shot < audit, "the shot is the plain frame, taken before the audit's");
     std::fs::remove_dir_all(&out).unwrap();
 }
 
@@ -1389,4 +1409,16 @@ fn a_perf_step_asks_with_no_window_keeps_its_numbers_and_judges_a_budget() {
     l.script.borrow_mut().perf = Some(json!({"ok": false, "error": "frames is a whole number from 1 to 2000"}));
     let o = scenario::run_size(&scenario_of(json!([{"step": "perf", "name": "menu"}])), (1280, 720), &no_window(&out), &mut l);
     assert!(o.code == 1 && o.message.contains("frames is a whole number"), "{}", o.message);
+}
+
+/// ENGINE-33: `set=` lays settings over every scenario's own (a JSON value, else a string); the driver's settings and
+/// `mute` are refused, as is a pair without a key.
+#[test]
+fn set_lays_settings_over_the_scenarios() {
+    let m = aegis_cli::scenario::parse_set("text_scale:1.3, reduce_motion:true,theme:dark").unwrap();
+    assert_eq!(serde_json::Value::Object(m), serde_json::json!({"text_scale": 1.3, "reduce_motion": true, "theme": "dark"}));
+    for bad in ["window_size:640x360", "mute:false", ":1", "text_scale"] {
+        assert!(aegis_cli::scenario::parse_set(bad).is_err(), "{bad}");
+    }
+    assert!(aegis_cli::scenario::parse_set("").unwrap().is_empty());
 }

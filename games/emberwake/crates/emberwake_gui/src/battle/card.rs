@@ -17,6 +17,8 @@ use aegis_ui::painter::Typeface;
 use aegis_ui::theme::th;
 use aegis_ui::ui::{Ui, BODY, SMALL};
 
+/// ENGINE-33: the name line's slot over the HP line (old units).
+const NAME_SLOT: f32 = 10.0;
 /// The card's width (316 px), its header's height and a row's.
 pub(super) const CARD_W: i32 = 158;
 const HEAD_H: i32 = 46;
@@ -235,9 +237,15 @@ pub(super) fn draw_card(ui: &mut Ui<super::Action>, cx: &mut Cx, (faces, small):
     }
     let tx = pr.x + pr.w + 4;
     let room = (r.x + r.w - 5 - tx) as f32;
-    let name = ui.p.fit(&c.name, BODY, room);
+    // ENGINE-33 (XL-SWEEP1): with no title line the HP numbers sit right under the name; a name line taller than its
+    // slot (Extra large text) stops short of them
+    let hp_w = ui.p.text_w(&format!("{}/{}", c.read.hp, c.read.max_hp), SMALL).ceil();
+    let name_room = if c.title.is_empty() && ui.p.line_h_face(Typeface::Display, BODY) > NAME_SLOT + 1.0 { room - hp_w - 3.0 } else { room };
+    let name = ui.p.fit_face(Typeface::Display, &c.name, BODY, name_room);
     ui.p.text_face(Typeface::Display, tx as f32, y as f32, &name, BODY, if c.boss { boss_gold() } else { th().gold });
-    line_box(ui, "card.name", &name, Rect::new(tx, y, room as i32, 10), BODY);
+    let name_w = (ui.p.text_w_face(Typeface::Display, &name, BODY).ceil() as i32 + 1).max(1);
+    let name_h = (ui.p.line_h_face(Typeface::Display, BODY).ceil() as i32 + 1).max(NAME_SLOT as i32);
+    ui.push("card.name", "label", name.clone(), Rect::new(tx, y, name_w, name_h), true, false, None, if name != c.name { vec![(c.name.clone(), th().gold)] } else { Vec::new() });
     let mut hy = y + 10;
     if !c.title.is_empty() {
         ui.p.text_fit(tx as f32, hy as f32, &c.title, SMALL, room, th().dim);

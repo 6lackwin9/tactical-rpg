@@ -99,6 +99,21 @@ fn world_help(c: &aegis_ui::controls::Controls) -> Vec<String> {
     ]
 }
 
+/// ENGINE-33 (XL-SWEEP1): the step between wrapped SMALL lines in the side panel: 8 at Normal text, a line's height above.
+fn small_step(p: &aegis_ui::painter::Painter) -> i32 {
+    (p.line_h(SMALL).ceil() as i32).max(8)
+}
+
+/// ENGINE-33: "No open road to <name>." wrapped in the side panel's width (a long place name at Extra large was cut),
+/// 3 below `y`; returns the y under it (12 below at Normal on one line, as before).
+fn no_road_line(p: &mut aegis_ui::painter::Painter, sx: i32, y: i32, name: &str, step: i32) -> i32 {
+    let parts = p.wrap(&format!("No open road to {name}."), SMALL, 130.0);
+    for (i, part) in parts.iter().enumerate() {
+        p.text(sx as f32, (y + 3 + i as i32 * step) as f32, part, SMALL, th().foe);
+    }
+    y + 12 + (parts.len().max(1) as i32 - 1) * step
+}
+
 /// CAMPAIGN1 W5: the arrival of a trip of `time` in a campaign world: "Arrive on day 9, 34 days left." (the days left
 /// of the first running visible countdown by HUD order at arrival; without one only the day); None outside one.
 pub fn arrival(gs: &emberwake_world::GameState, time: i64) -> Option<String> {
@@ -735,6 +750,8 @@ impl WorldMap {
     fn side_panel(&mut self, ui: &mut Ui<WAct>, cx: &mut Cx, d: &emberwake_world::Data, gs: &emberwake_world::GameState, here: &str, ways: &[travel::TravelPath], peek: Option<usize>, hover: Option<&str>) {
         let sx = 504;
         let mut y = 28;
+        // ENGINE-33 (XL-SWEEP1): a wrapped SMALL line's step grows with the text size (8 at Normal, as before)
+        let step = small_step(&ui.p);
         ui.p.text_face(aegis_ui::painter::Typeface::Display, sx as f32, y as f32, "World map", BODY, th().gold);
         ui.p.text_right(W as f32 - 6.0, y as f32, &format!("Time {}", gs.time), BODY, th().text);
         y += 14;
@@ -753,7 +770,7 @@ impl WorldMap {
                     y += 19;
                     if ways.len() > 1 {
                         ui.p.text(sx as f32, y as f32, "Pick a way:", SMALL, th().dim);
-                        y += 8;
+                        y += step;
                     }
                     // each way by what sets it apart, with its days and upkeep; hover previews it, a click picks it
                     let line = ui.p.line_h(SMALL).ceil() as i32;
@@ -771,30 +788,28 @@ impl WorldMap {
                     y += 2;
                 }
                 None => {
-                    ui.p.text_fit(sx as f32, y as f32 + 3.0, &format!("No open road to {name}."), SMALL, 130.0, th().foe);
-                    y += 12;
+                    y = no_road_line(&mut ui.p, sx, y, &name, step);
                     // PR7-37 (PT-08): the next reachable step toward it (a road, then a place's exit)
                     let hint = way_hint(cx, gs, here, &self.selected);
                     for part in ui.p.wrap(&hint, SMALL, 130.0) {
                         ui.p.text(sx as f32, y as f32 + 1.0, &part, SMALL, th().text);
-                        y += 8;
+                        y += step;
                     }
-                    ui.push("world_map.way_hint", "label", hint.clone(), Rect::new(sx, y - 8, 130, 8), true, false, None, Vec::new());
-                    y += 8;
+                    ui.push("world_map.way_hint", "label", hint.clone(), Rect::new(sx, y - step, 130, step), true, false, None, Vec::new());
+                    y += step;
                 }
             }
         } else if let Some(q) = hover.filter(|q| *q != here && !json::b(&travel::trip(d, gs, here, q), "ok", false)) {
             // PR7-76 (PT-45): a place no open road reaches shows the way there while hovered, before any click
             let name = cx.location_name(&gs.world_id, q);
-            ui.p.text_fit(sx as f32, y as f32 + 3.0, &format!("No open road to {name}."), SMALL, 130.0, th().foe);
-            y += 12;
+            y = no_road_line(&mut ui.p, sx, y, &name, step);
             let hint = way_hint(cx, gs, here, q);
             for part in ui.p.wrap(&hint, SMALL, 130.0) {
                 ui.p.text(sx as f32, y as f32 + 1.0, &part, SMALL, th().text);
-                y += 8;
+                y += step;
             }
-            ui.push("world_map.hover_hint", "label", hint.clone(), Rect::new(sx, y - 8, 130, 8), true, false, None, Vec::new());
-            y += 8;
+            ui.push("world_map.hover_hint", "label", hint.clone(), Rect::new(sx, y - step, 130, step), true, false, None, Vec::new());
+            y += step;
         }
         ui.button("world_map.enter", Rect::new(sx, y, 130, 16), &format!("Enter {}", cx.location_name(&gs.world_id, &here)), WAct::Enter, !travel::current_node(&d, &gs).is_empty());
         y += 20;
@@ -806,7 +821,7 @@ impl WorldMap {
             let top = y;
             for part in ui.p.wrap(&camp_tip, SMALL, 130.0) {
                 ui.p.text(sx as f32, y as f32, &part, SMALL, th().dim);
-                y += 8;
+                y += step;
             }
             ui.push("world_map.camp_why", "label", camp_tip.clone(), Rect::new(sx, top, 130, y - top), true, false, None, Vec::new());
             y += 2;
@@ -819,7 +834,7 @@ impl WorldMap {
                     break;
                 }
                 ui.p.text(sx as f32, y as f32, &part, SMALL, th().text);
-                y += 8;
+                y += step;
             }
         }
     }
@@ -1861,6 +1876,23 @@ pub(crate) mod tests {
     use emberwake_world::state::{PartyState, UnitState};
     use emberwake_world::{Data, GameState};
     use std::path::Path;
+
+    /// ENGINE-33 (XL-SWEEP1): the side panel's wrapped lines step 8 at Normal and a whole line at Extra large, and a long
+    /// "No open road to ..." wraps instead of being cut.
+    #[test]
+    fn the_side_panel_lines_grow_with_the_text_size() {
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut at = |scale: f32, name: &str| {
+            g.fonts.scale = scale;
+            let mut p = aegis_ui::painter::Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+            let step = super::small_step(&p);
+            (step, super::no_road_line(&mut p, 504, 100, name, step))
+        };
+        assert_eq!(at(1.0, "Corvo's Gate"), (8, 112), "Normal: as before");
+        let (step, under) = at(1.3, "Alleyway Junction 7 and the Long Way Round");
+        assert!(step >= 10, "a whole line at Extra large: {step}");
+        assert!(under >= 112 + step, "the long name wraps to a second line: {under}");
+    }
 
     fn with_ids(w: &str, rows: Value) -> Value {
         Value::Array(

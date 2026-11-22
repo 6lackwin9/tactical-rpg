@@ -57,7 +57,7 @@
 #   tools/fc.sh bot [seeds=1,2,3] [steps=40]   the seeded UI bot on every start the game names (emberwake_gui tests/ui_bot.rs;
 #                                part of the gate's tests with 3 seeds): presses valid widgets, no step may panic
 #   tools/fc.sh scenario check [<file>|all]   parse games/<id>/scenarios/*.json; no game starts (engine/docs/authoring/scenarios.md)
-#   tools/fc.sh scenario <id|all|file.json> [size=1280x720] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>]   run
+#   tools/fc.sh scenario <id|all|file.json> [size=1280x720] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] [set=<key>:<value>,...] [audit=1]   run
 #                                them with no window, or in real muted windows that do not take the focus where the file or window=1 asks
 #                                (0 pass, 1 a step failed, 2 could not start); the gate runs them all; record=1 writes golden baselines
 #   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [ruleset=<id>] [seed=<n>] [do=<a>,<b>,...] [the keys above]
@@ -531,7 +531,7 @@ shots_all() {  # ENGINE-16: every scenario's shots in one flat folder (tools/pla
   for a in "$@"; do
     case "$a" in out=*) out=${a#out=} ;; compare=*) cmp=${a#compare=} ;; tolerance=*|pixels=*|crop=*|sheets=*) opts+=("$a") ;; *) pass+=("$a") ;; esac
   done
-  [ -n "$out" ] || { echo "usage: tools/fc.sh scenario shots-all out=<dir> [compare=<before dir> [tolerance=8] [pixels=300] [sheets=0]] [crop=x,y,w,h] [size=WxH] [profile=dev|release] [slow=] [data=]"; status=2; return; }
+  [ -n "$out" ] || { echo "usage: tools/fc.sh scenario shots-all out=<dir> [compare=<before dir> [tolerance=8] [pixels=300] [sheets=0]] [crop=x,y,w,h] [size=WxH] [set=k:v,...] [audit=1] [profile=dev|release] [slow=] [data=]"; status=2; return; }
   py=$(python_with "pass") || { echo "[shots-all] no Python 3 found"; status=2; return; }
   [ -z "$cmp" ] || [ -d "$cmp" ] || { echo "[shots-all] no folder $cmp to compare with"; status=2; return; }
   tmp=$(mktemp -d)

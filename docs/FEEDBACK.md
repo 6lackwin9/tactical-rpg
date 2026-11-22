@@ -138,8 +138,53 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-77` (`DIORAMA5`) R1 to R5 | Built (tools lane) | `develop` | The battle ground composed by the region composer from the sheets, hashed variant picks, accent decals, lip art, additive lamp light with `lights`, the exit path decal and gate, rubble on the zone floor. FB-449 |
 | `PR7-77` (`DIORAMA5`) R6 | Built (tools lane) | `develop` | No grid lines at rest, the "Show full grid" setting (off by default), coherent 2 to 4 cell blobs, no edge pieces over the composed ground. FB-451 |
 | `PR7-82` (`RETRY-SAVE-FIX1`) | Built (tools lane) | `develop` | A lost fight's retry count (`retry:<encounter ref>` in the save's `rolls`) passes the save check, so the autosave after a loss works again; the retry seed is unchanged. FB-453 |
+| `ENGINE-33` (`XL-SWEEP1`) | Built (tools lane) | `develop` | Every scenario shot at Normal and Extra large text with a text audit per shot (`set=`, `audit=1`); four small fixes (plate HP, card name, boss name, world map side panel); the shop layout for Art/UI and three findings for Design. FB-455 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-455: ENGINE-33 XL-SWEEP1 built; the Extra large sweep, four fixes, findings
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `ENGINE-33` (`XL-SWEEP1`).
+- **Sheet**: `build-tools/engine-33/xl_sweep_sheet.png` (fixes before and after, then the findings), with the per-shot
+  audit lists `audit_xl.txt` and `audit_normal.txt` beside it.
+- **How it ran** (engine and tools):
+  - `aegis scenario run` (and `fc.sh scenario`, `shots-all`) take `set=<key>:<value>,...`: settings laid over every
+    scenario's own (the driver's held settings and `mute` refused), so one run takes every screen at
+    `set=text_scale:1.3`.
+  - `audit=1`: after every shot the text audit of that frame is kept beside it as `<shot>.audit.json` (cut, edge,
+    overlap, spill); `shots_all.py collect` copies them and writes `audit.txt`, the shots with a problem, most first.
+  - The sweep: all 34 scenarios, 129 shots at 1280x720, at Normal and at Extra large, compared with `compare=` (the
+    sheets of every shot side by side). Extra large raised the shots with a listed problem from 38 to 63.
+- **Fixed here** (tests in `battle/tests/xl_battle_tests.rs` and `worldmap.rs`):
+  - Battle plates (party and Hostiles): "hp/max" with its planned loss ran past the plate ("120/120 -120"); the
+    maximum now drops first ("120 -120") only when the two would not fit (`plates::hp_fit`). Test
+    `a_plate_drops_its_maximum_before_the_loss_runs_past_it`.
+  - The docked unit card: a long name ran into the HP numbers under it ("Watch Crossbowman" over "136/136"); with
+    no title line and a name line taller than its slot, the name stops before the numbers, and a cut name hovers to
+    its full words. Names are now fitted in the display face they are drawn in. Test
+    `the_card_name_stops_short_of_the_hp_numbers` (it fails without the fix).
+  - The boss bar name: fitted in the display face, its box as tall as its line (it spilled at Extra large).
+  - The world map side panel: "No open road to `<place>`." wraps instead of being cut, and wrapped lines step a whole
+    line at larger text (8 at Normal, as before). Test `the_side_panel_lines_grow_with_the_text_size`.
+  - At Normal no text moved (the 16 Normal shots that changed are the ground art from develop).
+- **For Art/UI** (layout file `kits/rpg/assets/ui/layouts/shop.json`, not edited here): at Extra large "Confirm
+  trade" is cut to "Confirm t..." and the shop row's "+10" button sits over the Trade column's edge. A wider Confirm
+  button and a little more room for the row buttons would clear both.
+- **For Design** (bigger than a layout fix; my guesses in brackets):
+  - (a) The battle strip's "Round 1 of 12" is always cut to "Round 1..." at Extra large (the hover has the words) and
+    its line touches the goal line under it. [Shorten to "R 1/12" at large sizes, or rely on the bottom bar's
+    "Round 1/12".]
+  - (b) The Character Stats and Gear stat rows are 12 units high; at Extra large the lines nearly touch and "Debuff
+    resist %" meets its value. Readable, but tight. [Grow the row with the text size.]
+  - (c) Ellipsis cuts by design remain: shop item names, "Party (24 points to spend)" on the hub menu, the save
+    slot's place, skill lines on the Skills tab, the timeline's foe names. Most have a hover; a pass to check each
+    hover is listed in `audit_xl.txt` under `cut`.
+  - (d) Audit noise worth knowing: the board's tile widgets count as controls, so the battle log and the ally menu
+    over the board show as spills; `layout_audit` already skips them, `text_audit` does not. [A later engine row: a
+    screen may name boxes the audit ignores.]
+- **Docs delta**: `engine/README.md` scenario line: add `[set=<key>:<value>,...] [audit=1]` to `aegis scenario run`
+  (settings over every scenario; a text audit beside each shot). `STRUCTURE.md`: none.
 
 ### FB-453: PR7-82 RETRY-SAVE-FIX1 built; the autosave after a lost fight works again
 

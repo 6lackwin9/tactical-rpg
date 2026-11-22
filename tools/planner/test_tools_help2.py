@@ -102,5 +102,35 @@ class ShotsAll(unittest.TestCase):
             self.assertEqual(sa.compare(before, after, pixels=16)[0], [])
             self.assertTrue(sa.report(changed, new, gone, same, 8, 10)[1].endswith("menus__title.png (16 px)"))
 
+    def test_audits_ride_beside_their_shots_and_list_the_problems(self):
+        """ENGINE-33: a run with audit=1 leaves <shot>.audit.json; collect copies it beside the flat shot and lists the
+        shots with a problem, most first, in audit.txt."""
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            b = Path(d) / "b"
+            (b / "hub/1280x720").mkdir(parents=True)
+            (b / "menus/1280x720").mkdir(parents=True)
+            for rel in ["hub/1280x720/talk.png", "hub/1280x720/shop.png", "menus/1280x720/title.png"]:
+                (b / rel).write_bytes(b"x")
+            (b / "hub/1280x720/talk.audit.json").write_text(json.dumps({"screen": "talk", "scale": 1.3, "counts": {"cut": 1, "edge": 0, "overlap": 1, "spill": 0},
+                "cut": [{"text": "Thornwick Gate", "shown": "Thornw...", "at": [1, 2, 3]}], "overlap": [{"a": "Hp", "b": "Name", "at_a": [0, 0, 1], "at_b": [0, 0, 2]}]}))
+            (b / "hub/1280x720/shop.audit.json").write_text(json.dumps({"screen": "shop", "scale": 1.3, "counts": {"cut": 0, "edge": 0, "overlap": 0, "spill": 0}}))
+            (b / "menus/1280x720/title.audit.json").write_text(json.dumps({"screen": "menu", "scale": 1.3, "counts": {"edge": 1}, "edge": [{"text": "Quit", "at": [1280, 0, 30]}]}))
+            out = Path(d) / "out"
+            sa.collect(b, out)
+            self.assertTrue((out / "hub__talk.audit.json").is_file())
+            lines = (out / "audit.txt").read_text().splitlines()
+            self.assertEqual(lines[0], "[audit] 2 of 3 shot(s) with a text problem")
+            self.assertTrue(lines[1].startswith("hub__talk.png (cut 1, overlap 1) screen talk"))
+            self.assertIn("cut 'Thornwick Gate' shown 'Thornw...'", lines[2])
+            self.assertIn("overlap 'Hp' / 'Name'", lines[3])
+            self.assertTrue(lines[4].startswith("menus__title.png (edge 1)"))
+            # a collect without audits writes no audit.txt and clears an old one
+            for f in b.glob("*/*/*.audit.json"):
+                f.unlink()
+            sa.collect(b, out)
+            self.assertFalse((out / "audit.txt").exists())
+            self.assertFalse((out / "hub__talk.audit.json").exists())
+
 if __name__ == "__main__":
     unittest.main()
