@@ -53,6 +53,10 @@ Parked for your approval (golden re-records need your word):
   (before and after in project files `art-ui/explore_style2/grounds_before_after.png`). Art/UI is holding Style 2 walls
   and the Grate's props until you say whether the grounds look right, so one call covers every map. Recommendation:
   keep them.
+- [ ] Later acts, mocked as you allowed at 21:47 (placeholders, no data, nothing locked): Act 2's first region (the Watch
+  Ramparts, High Bastion) has a region-map reference and a battle stage mock, in a colder grey-violet palette with cyan
+  lamps and warm light only at the breach (project files `art-ui/act2_mock/`), plus a stage set cut from it. Look when
+  convenient; nothing waits on it.
 - [ ] Enemy short names for the foe plates (`PR7-40`): Brawler, Berserker, Footman, Enforcer, Husk, Archer,
   Crossbowman, Purifier, Shaman, Skirmisher (also the Tallow Dredger), Scout, Flagellant, Render-Beast, Ash-Crawler;
   bosses by name.
