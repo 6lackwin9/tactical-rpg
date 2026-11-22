@@ -101,7 +101,7 @@ fn a_playback_frame_with_floats_audits_clean_at_every_text_size() {
         assert_eq!(r["ok"], json!(true), "{r}");
         let living: Vec<usize> = b.host.session.as_ref().unwrap().w.units.iter().enumerate().filter(|(_, u)| u.hp > 0).map(|(i, _)| i).collect();
         assert!(!living.is_empty());
-        let (damage, heal) = (cx.tuning.value.damage_color, cx.tuning.value.heal_color);
+        let (damage, heal) = (cx.tuning.value.damage_color, crate::tokens::moss());
         let texts: Vec<String> = living.iter().map(|i| if i % 2 == 0 { format!("-{}", 10 + i) } else { format!("+{}", 10 + i) }).collect();
         for scale in [0.85f32, 1.0, 1.15, 1.3] {
             let audit = |b: &mut BattleScreen, cx: &mut Cx, g: &mut Gfx, floats: bool| {

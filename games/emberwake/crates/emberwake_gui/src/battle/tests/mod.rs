@@ -1193,7 +1193,7 @@ fn mend_motes_rise_at_the_targets_foot_and_its_float_waits_for_the_impact() {
     let mut i = b.impacts.remove(0);
     let target = i.struck[0];
     let cell = b.host.session.as_ref().unwrap().w.grid.pos(target).unwrap();
-    (i.style, i.area, i.to, i.struck, i.floats) = (fx::library::look(fx::DEFAULT_SUPPORT), false, cell, Vec::new(), vec![(target, "+5".into(), cx.tuning.value.heal_color)]);
+    (i.style, i.area, i.to, i.struck, i.floats) = (fx::library::look(fx::DEFAULT_SUPPORT), false, cell, Vec::new(), vec![(target, "+5".into(), crate::tokens::moss())]);
     let at = i.at.unwrap();
     b.floats.clear();
     b.impacts.push(i);

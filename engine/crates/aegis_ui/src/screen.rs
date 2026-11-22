@@ -453,6 +453,12 @@ pub trait Screen<G> {
     fn overlay(&self) -> bool {
         false
     }
+    /// A panel-shell screen (a main panel or a game menu over the map, `panes::panel_shell`). Never stacked
+    /// (STYLE-PASS1B): a panel opened over another panel takes its place on screen; the one under stays in the stack, not
+    /// drawn, and shows again when the top one closes (Back returns to it). See `drawn_screens`.
+    fn panel(&self) -> bool {
+        false
+    }
     fn draw(&mut self, cx: &mut Cx<G>, g: &mut Gfx, mouse: (i32, i32), live: bool);
     fn widgets(&self) -> Vec<Value>;
     fn draw_tip(&self, p: &mut Painter, mouse: (i32, i32));
@@ -555,6 +561,29 @@ pub trait Screen<G> {
     fn desk(&mut self) -> Option<&mut crate::window::Desk> {
         None
     }
+}
+
+/// The stack's screens drawn this frame, bottom first: the top one and the overlays under it down to the first screen
+/// that is not an overlay, less every overlay panel with another panel above it (never stacked, STYLE-PASS1B:
+/// `Screen::panel`). A popup that is not a panel (a question, a notice) still draws over the panel under it, and the
+/// screen at the bottom (the map) always draws.
+pub fn drawn_screens<G>(stack: &[Box<dyn Screen<G>>]) -> Vec<usize> {
+    let Some(top) = stack.len().checked_sub(1) else { return Vec::new() };
+    let mut base = top;
+    while base > 0 && stack[base].overlay() {
+        base -= 1;
+    }
+    let mut panel_above = false;
+    let mut out = Vec::new();
+    for i in (base..=top).rev() {
+        let panel = stack[i].panel();
+        if !(panel && panel_above && stack[i].overlay()) {
+            out.push(i);
+        }
+        panel_above |= panel;
+    }
+    out.reverse();
+    out
 }
 
 /// The widget plumbing every screen shares: its `w` list and `act(cx, action)`. The context type is `Cx` as named

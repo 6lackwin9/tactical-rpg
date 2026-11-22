@@ -1651,6 +1651,10 @@ impl Screen<GameCx> for SettingsScreen {
     fn overlay(&self) -> bool {
         true
     }
+    /// STYLE-PASS1B (`PR7-48` (2)): a panel-shell screen; a panel opened over it takes its place until it closes.
+    fn panel(&self) -> bool {
+        true
+    }
     fn tick(&mut self, cx: &mut Cx) {
         self.tick_at(cx, Instant::now());
     }
