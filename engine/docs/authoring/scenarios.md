@@ -71,6 +71,7 @@ An unknown key or step is a problem, not a thing ignored.
 | `shot` | `name`, `max_w` = 1920, `golden`, `t` = 0 | Screenshot into the bundle, once the frames after the last change are drawn. A blank frame fails the step. `golden`: compared with its baseline (below). `t`: no window only, seconds (0 to 60) the top screen has been open first, on the shot clock (below): a screen that fades in takes the time of its fade |
 | `clip` | `name`, `frames` = 30, `every_ms` = 66, `max_w` = 1280 | No window only. A numbered sequence, `<name>/frame_0001.png` on: at most 120 frames, 10 to 2000 ms apart, 15 s in all |
 | `perf` | `name`, `frames` = 300, `warm` = 60, `budget` | No window only. Frame times (ENGINE-2): see "Frame times" |
+| `feel` | `name`, `script`, `gap` = 2, `budget` | No window only. Input times (ENGINE-45): see "Input times" |
 | `pause` | `ms` | Time passes, for a picture at a moment of an animation, with a look at the game each second; with no window, that much game time on the shot clock, drawn at once. To wait for a result, use `wait` |
 | `audit` | `scales`, `fail` = all of `cut`, `edge`, `overlap`, `spill` | The text audit per text size; a kind in `fail` found fails the step |
 | `repeat` | `times`, `steps`, `until` | A bounded loop. `until` is read before each turn and ends it; turns running out with `until` still false fails |
@@ -146,6 +147,26 @@ A frame with no window is the whole frame's cost (nothing is presented), not the
 slower than a release one, so a budget in a scenario the gate runs is a loose ceiling that catches a gross regression; a tight
 one belongs in a release run (`tools/fc.sh scenario <id> profile=release`). The painter's own costs (fill, panels, text) are
 `tools/fc.sh bench`.
+
+## Input times
+
+A `feel` step (no window only, ENGINE-45 FEEL-PROBE1) replays `script` one input at a time and times each with the shell's
+feel probe (`aegis_ui::feel`). An input is `{"key": name}`, `{"click": widget id}` or `{"pad": button}` (a name the `pad`
+link request takes: `south`, `east`, `dpad_up`...), or `{"frames": n}` (1 to 240 frames drawn, no input), each with an
+optional `times` (1 to 200). After each input the next frame is drawn, then `gap` more (0 to 240) before the next input.
+Each input gets: `to_state_ms` (arrival to its handler done), `to_frame_ms` (to the start of the frame that shows it),
+`to_present_ms` (to that frame done), `frame_ms`, the `tick_ms` and `draw_ms` the screens took in it, and `spent_in` (the
+largest of `handler`, `wait` and `frame`). The step writes `feel_<name>.json` to the bundle and adds it under `perf` in
+`result.json` (`kind` `feel`): `to_state`, `to_present` and `frame_time` each as `count`, `p50`, `p95` and `worst`, every
+input, `flagged_inputs` (input-to-present over 100 ms) and `frames_over` (frames over 33 ms). `budget` takes `input_ms`
+(the worst input-to-present) and `frame_ms` (the worst frame); one over it fails the step. A refused input stops the step
+with its place.
+
+With no window nothing is presented, so a frame is done once drawn; a window adds the copy to the GPU and the present (and
+vsync's wait). The same numbers come from a real window with `--feel` (or `feel=1`) on the game's command line, or the
+setting `"feel": true`: an overlay at the top left (the last frame's ms, the worst frame of the last second, the last
+input's input-to-present ms) and a line per input in `feel.log` beside the run's `game.log`. Use a release build for numbers
+a player would see (`tools/fc.sh scenario <id> profile=release`).
 
 ## The bundle
 

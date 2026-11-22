@@ -123,6 +123,11 @@ struct Shell<G> {
     policy: CanvasPolicy,
     /// INPUT-MAP1: the control map, and the settings value it was read from (None: not read yet; re-read on a change).
     controls: (crate::controls::Controls, Option<Option<Value>>),
+    /// ENGINE-45 (FEEL-PROBE1): input-to-present and frame times (`crate::feel`), its wall-clock start, and whether the
+    /// launch asked for it (`--feel`; the settings' `"feel": true` turns it on too).
+    feel: crate::feel::Probe,
+    feel_t0: Instant,
+    feel_launch: bool,
 }
 
 impl<G: Context> Shell<G> {
@@ -133,11 +138,50 @@ impl<G: Context> Shell<G> {
         let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         gfx.kit.device.dpr = dpr;
         let (policy, offered, window_notices) = read_window_options(&options.canvas, &options.window_sizes);
-        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default() };
+        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked() };
         shell.cx.notice.extend(icon_notice);
         shell.cx.notice.extend(window_notices);
         hold_declared_sizes(&mut shell.cx.settings, &options.window_sizes, &offered);
         shell
+    }
+
+    /// ENGINE-45: ms on the feel probe's wall clock.
+    fn feel_now(&self) -> f64 {
+        crate::perf::ms_since(self.feel_t0)
+    }
+
+    /// ENGINE-45: an input of `kind` arrived now.
+    fn feel_input(&mut self, kind: &str) {
+        let at = self.feel_now();
+        self.feel.input(kind, at);
+    }
+
+    /// ENGINE-45: the latest input's handler is done.
+    fn feel_state(&mut self) {
+        let at = self.feel_now();
+        self.feel.state(at);
+    }
+
+    /// ENGINE-45: the frame that started at `start` (probe ms) is presented now; its inputs' lines go to `feel.log`.
+    fn feel_framed(&mut self, start: f64) {
+        let now = self.feel_now();
+        self.feel.frame(start, now);
+        let lines = std::mem::take(&mut self.feel.lines);
+        #[cfg(not(target_arch = "wasm32"))]
+        crate::crashlog::append_beside(crate::feel::LOG_FILE, &lines);
+        #[cfg(target_arch = "wasm32")]
+        drop(lines);
+    }
+
+    /// ENGINE-45: the feel overlay at the window's top left, over everything (the last numbers known: this frame's own
+    /// time is known only once it is presented).
+    fn draw_feel(&mut self) {
+        let text = self.feel.overlay_text(self.feel_now());
+        let v = self.whole_view();
+        let mut p = Painter { c: &mut self.gfx.canvas, v, fonts: &mut self.gfx.fonts };
+        let w = p.text_w(&text, crate::feel::OVERLAY_SIZE);
+        p.fill(Rect::new(1, 1, w.ceil() as i32 + 6, crate::feel::OVERLAY_SIZE as i32 + 4), rgba(0, 0, 0, 200));
+        p.text(4.0, 2.0, &text, crate::feel::OVERLAY_SIZE, rgba(255, 240, 150, 255));
     }
 
     /// The canvas is now `w` x `h` px.
@@ -287,6 +331,7 @@ impl<G: Context> Shell<G> {
     }
 
     fn frame(&mut self) {
+        self.feel.on = self.feel_launch || self.cx.settings.v["feel"] == json!(true);
         self.settle();
         self.cx.playtest.tick();
         self.track_hover();
@@ -294,13 +339,16 @@ impl<G: Context> Shell<G> {
         // The saved sound levels; a screen may play draft ones for this frame (the settings popup).
         self.cx.audio.set_levels(&self.cx.settings.v);
         let cx = &mut self.cx;
+        let t = self.feel.on.then(Instant::wall);
         self.stack.last_mut().unwrap().tick(cx);
+        self.feel.tick = t.map_or(0.0, crate::perf::ms_since);
         self.settle();
         // LOOK1-E1: the theme in force (the faces follow it; the screens' `Ui` sync them too).
         let theme = th();
         self.gfx.fonts.sync(&theme);
         self.gfx.canvas.clear(theme.bg);
         let n = self.stack.len();
+        let t = self.feel.on.then(Instant::wall);
         for i in self.drawn() {
             let live = i == n - 1;
             self.gfx.view = self.view_of(self.stack[i].grid());
@@ -315,6 +363,7 @@ impl<G: Context> Shell<G> {
                 self.gfx.fonts.layout = paused.1;
             }
         }
+        self.feel.draw = t.map_or(0.0, crate::perf::ms_since);
         self.gfx.canvas.clip = None;
         // The focus ring, the open list, the ghost and the tip are the top screen's: its view stays until the stack changes.
         self.gfx.view = self.view_of(self.stack[n - 1].grid());
@@ -357,6 +406,9 @@ impl<G: Context> Shell<G> {
             let keyed = self.gfx.kit.focus.as_deref().filter(|_| self.gfx.kit.focus_visible && self.stack[n - 1].grid() == Grid::Native);
             let at = keyed.map_or(self.mouse, |f| focus::tip_point(&self.stack[n - 1].widgets(), self.mouse, Some(f)));
             self.stack[n - 1].draw_tip(&mut p, at);
+        }
+        if self.feel.on {
+            self.draw_feel();
         }
         self.settle();
         let cx = &self.cx;
@@ -467,6 +519,7 @@ impl<G: Context> App<G> {
     fn redraw(&mut self) {
         let started = Instant::now();
         let Some(shell) = self.shell.as_mut() else { return };
+        let feel_start = shell.feel_now();
         if let Some(rx) = &self.bridge {
             while let Ok(req) = rx.try_recv() {
                 let reply = shell.bridge(&req.body);
@@ -508,6 +561,7 @@ impl<G: Context> App<G> {
                 let _ = p.render();
             }
         }
+        shell.feel_framed(feel_start);
         self.pacer.framed(started, shell.frame_need());
     }
 
@@ -894,7 +948,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default() };
+        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked() };
         s.frame();
         s
     }

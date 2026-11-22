@@ -1,6 +1,6 @@
 {
   "id": "hello_walk",
-  "title": "The sample game: a new walk, steps and bumps, a save, back to the menu, continue, a walk to a tile",
+  "title": "The sample game: a new walk, steps and bumps, a save, back to the menu, continue, a walk to a tile, the input times of a few steps and a save (ENGINE-45)",
   "steps": [
     {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
     {"step": "assert", "until": {"path": "state.can_continue", "eq": false}},
@@ -29,6 +29,7 @@
     {"step": "link", "body": {"cmd": "walk_to", "x": 9, "y": 2}},
     {"step": "wait", "until": {"all": [{"path": "state.path_left", "eq": 0}, {"path": "state.sliding", "eq": false}]}},
     {"step": "assert", "until": {"all": [{"path": "state.walk.x", "eq": 9}, {"path": "state.walk.y", "eq": 2}, {"path": "state.walk.steps", "eq": 16}]}},
-    {"step": "shot", "name": "walked"}
+    {"step": "shot", "name": "walked"},
+    {"step": "feel", "name": "field", "script": [{"key": "left", "times": 3}, {"key": "right", "times": 3}, {"frames": 4}, {"click": "field.save"}]}
   ]
 }

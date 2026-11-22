@@ -57,6 +57,9 @@ pub const CLIP_BYTES_MAX: u64 = 256 << 20;
 /// A `perf` request's bounds (ENGINE-2): the frames timed and the frames drawn first, untimed.
 pub const PERF_FRAMES_MAX: u64 = 2000;
 pub const PERF_WARM_MAX: u64 = 600;
+/// A `feel` request's frames between two inputs by default, and the most `times` one script input may ask for.
+pub const FEEL_GAP_DEFAULT: u64 = 2;
+pub const FEEL_TIMES_MAX: u64 = 200;
 #[cfg(not(target_arch = "wasm32"))]
 const CLIP_MAX_W: u64 = 1280;
 
@@ -136,7 +139,10 @@ impl<G: Context> Loop<G> {
             aegis_core::clock::advance(self.every);
         }
         let started = Instant::wall();
+        let feel_start = self.shell.feel_now();
         self.shell.frame();
+        // ENGINE-45: nothing is presented with no window; the frame counts as shown once drawn
+        self.shell.feel_framed(feel_start);
         self.shell.pointer_req = None;
         self.apply_settings();
         self.pacer.framed(started, self.shell.frame_need());
@@ -176,6 +182,7 @@ impl<G: Context> Loop<G> {
             Some("frames") => self.frames(&req.body),
             Some("clip") => self.clip(&req.body),
             Some("perf") => self.perf(&req.body),
+            Some("feel") => self.feel(&req.body),
             _ => self.shell.bridge(&req.body),
         };
         let _ = req.reply.send(reply);
@@ -248,6 +255,73 @@ impl<G: Context> Loop<G> {
         let canvas = [self.shell.gfx.canvas.w, self.shell.gfx.canvas.h];
         json!({"ok": true, "stats": crate::perf::Stats::of(&ms).to_json(), "calib_before": r(calib_before), "calib_after": r(calib_after),
             "steady": crate::perf::steady(calib_before, calib_after), "canvas": canvas, "build": if cfg!(debug_assertions) { "dev" } else { "release" }, "frame": self.shell.frames})
+    }
+
+    /// ENGINE-45 (FEEL-PROBE1): `{"cmd": "feel", "script": [...], "gap": g}`: replays the script's inputs one by one, each
+    /// timed by the feel probe (`crate::feel`) from its arrival through its handler to the end of the next frame (drawn:
+    /// nothing is presented with no window), then `gap` more frames (default 2) before the next. An input is
+    /// `{"key": name}`, `{"click": widget id}`, `{"pad": button}` or `{"frames": n}` (frames drawn, no input), each with an
+    /// optional `"times"`. Replies with `feel::report` (p50, p95 and worst of input-to-state, input-to-present and frame
+    /// time, every input, the flagged ones), the canvas and the build. A refused input stops the replay with its error.
+    fn feel(&mut self, body: &Value) -> Value {
+        let Some(script) = body["script"].as_array() else { return json!({"ok": false, "error": "feel needs script: a list of {key|click|pad|frames}"}) };
+        let gap = match body.get("gap") {
+            None => FEEL_GAP_DEFAULT,
+            Some(g) => match g.as_u64().filter(|g| *g <= FRAMES_MAX) {
+                Some(g) => g,
+                None => return json!({"ok": false, "error": format!("gap is a whole number from 0 to {FRAMES_MAX}")}),
+            },
+        };
+        let was_on = self.shell.feel.on;
+        let was_launch = self.shell.feel_launch;
+        self.shell.feel_launch = true;
+        self.shell.feel.on = true;
+        let _ = self.shell.feel.take();
+        let mut done = 0u64;
+        let mut failed = None;
+        'script: for (i, step) in script.iter().enumerate() {
+            let times = step["times"].as_u64().unwrap_or(1).clamp(1, FEEL_TIMES_MAX);
+            let (cmd, kind) = if let Some(k) = step["key"].as_str() {
+                (json!({"cmd": "key", "key": k}), format!("key {k}"))
+            } else if let Some(id) = step["click"].as_str() {
+                (json!({"cmd": "click", "id": id}), format!("click {id}"))
+            } else if let Some(b) = step["pad"].as_str() {
+                (json!({"cmd": "pad", "button": b}), format!("pad {b}"))
+            } else if let Some(n) = step["frames"].as_u64() {
+                for _ in 0..n.min(FRAMES_MAX) * times {
+                    self.draw();
+                }
+                continue;
+            } else {
+                failed = Some(format!("script[{i}]: one of key, click, pad or frames"));
+                break;
+            };
+            for _ in 0..times {
+                self.shell.feel_input(&kind);
+                let reply = self.shell.bridge(&cmd);
+                self.shell.feel_state();
+                if reply["ok"] != json!(true) {
+                    failed = Some(format!("script[{i}] {kind}: {}", reply["error"]));
+                    break 'script;
+                }
+                done += 1;
+                for _ in 0..=gap {
+                    self.draw();
+                }
+            }
+        }
+        let (samples, frames) = self.shell.feel.take();
+        self.shell.feel_launch = was_launch;
+        self.shell.feel.on = was_on;
+        if let Some(e) = failed {
+            return json!({"ok": false, "error": e, "done": done});
+        }
+        let mut out = crate::feel::report(&samples, &frames);
+        out["ok"] = json!(true);
+        out["canvas"] = json!([self.shell.gfx.canvas.w, self.shell.gfx.canvas.h]);
+        out["build"] = json!(if cfg!(debug_assertions) { "dev" } else { "release" });
+        out["frame"] = json!(self.shell.frames);
+        out
     }
 
     /// `{"cmd": "clip", "dir": ..., "frames": n, "every_ms": m, "max_w": w}`: a numbered sequence (`frame_0001.png` on) of

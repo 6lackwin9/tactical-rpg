@@ -56,6 +56,14 @@ fn each_step_parses_with_its_keys_and_defaults() {
     assert_eq!(fail, &["cut", "edge", "overlap", "spill"]);
 }
 
+/// ENGINE-45: the `feel` step takes a script of keys, clicks, pad buttons and frames, a gap (default 2) and a budget.
+#[test]
+fn a_feel_step_parses_its_script_and_budget() {
+    let s = parse("x", &minimal(json!([{"step": "feel", "name": "hub", "script": [{"key": "right", "times": 4}, {"click": "a"}, {"pad": "south"}, {"frames": 3}], "budget": {"input_ms": 100, "frame_ms": 33}}]))).unwrap();
+    let Step::Feel { name, script, gap, input_ms, frame_ms } = &s.steps[0] else { panic!() };
+    assert_eq!((name.as_str(), script.as_array().map(Vec::len), *gap, *input_ms, *frame_ms), ("hub", Some(4), 2, Some(100.0), Some(33.0)));
+}
+
 #[test]
 fn an_unknown_step_or_key_names_its_place() {
     let got = problems_of(minimal(json!([{"step": "back"}, {"step": "dance"}])));
@@ -113,6 +121,14 @@ fn a_bad_file_is_named_and_refused_in_every_field() {
         (minimal(json!([{"step": "perf", "name": "a", "budget": {}}])), "name at least one"),
         (minimal(json!([{"step": "perf", "name": "a", "budget": {"p99_ms": 5}}])), "unknown key 'p99_ms'"),
         (minimal(json!([{"step": "perf", "name": "a", "budget": {"p95_ms": 0}}])), "'p95_ms' is a number"),
+        (minimal(json!([{"step": "feel", "name": "a"}])), "'script' is a list"),
+        (minimal(json!([{"step": "feel", "name": "a", "script": []}])), "'script' is a list"),
+        (minimal(json!([{"step": "feel", "name": "a", "script": [{"key": "up", "click": "b"}]}])), "exactly one of"),
+        (minimal(json!([{"step": "feel", "name": "a", "script": [{"tap": "up"}]}])), "unknown key 'tap'"),
+        (minimal(json!([{"step": "feel", "name": "a", "script": [{"frames": 0}]}])), "'frames' is a whole number"),
+        (minimal(json!([{"step": "feel", "name": "a", "script": [{"key": "up", "times": 201}]}])), "'times' is a whole number"),
+        (minimal(json!([{"step": "feel", "name": "a", "script": [{"key": "up"}], "budget": {"p95_ms": 5}}])), "unknown key 'p95_ms'"),
+        (minimal(json!([{"step": "feel", "name": "a/b", "script": [{"key": "up"}]}])), "becomes a file name"),
     ];
     for (file, wanted) in cases {
         let got = problems_of(file.clone());

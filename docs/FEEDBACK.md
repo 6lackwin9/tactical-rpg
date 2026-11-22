@@ -159,8 +159,63 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-43` (`TERRAIN-PARTIAL1`) | Built (tools lane) | `develop` | A terrain table may list only the types it changes; the rest take the kit's code defaults with no problem and no warning; a listed row is still checked whole. FB-477 |
 | `PR7-88` (`PLAN-FIX2`) | Built in part (tools lane) | `develop` | PT-86, PT-87 (ghost claims), PT-88, PT-89, PT-91 fixed with tests, goldens unchanged; PT-85 and PT-87's foe start tiles not done (findings in the item). FB-479 |
 | `PR7-90` (`FORECAST-MOVE1`) | Built (tools lane) | `develop` | A hit forecast reads where the target stands in the block the hit lands, after every move booked before it (walks through friends, tiles freed earlier, foes stepping in, re-paths); three logged cases as tests, goldens unchanged. FB-481 |
+| `ENGINE-45` (`FEEL-PROBE1`) | Built (tools lane) | `develop` | `aegis_ui::feel` times each input (arrival, handler done, frame start, presented) and every frame; `--feel` or the setting `feel` shows an overlay and writes `feel.log`; scenario step `feel` (p50, p95, worst; in the gate on `hello_walk`); report: battle planning frames 36 to 80 ms and two clicks over 100 ms, the rest under. FB-483 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-483: ENGINE-45 FEEL-PROBE1 built; input and frame times, and where the battle's time goes
+
+- **Status**: built (tools lane), `develop`. Engine code (`aegis_ui`, `aegis_cli`), the sample game's scenario and an
+  authoring doc; no game code or data. **No behaviour change**: the probe only reads the clock, and the overlay draws only
+  when asked. **Every golden unchanged** (the gate passes; `hello_walk`'s new step comes after its last shot).
+- **Spec**: `docs/READY.md` row `ENGINE-45` (`FEEL-PROBE1`).
+- **What landed**:
+  - `aegis_ui::feel` (new): `Probe` notes each input on arrival and when its handler is done, and closes it with the first
+    frame that started after it: `to_state`, `to_frame` (the wait for the frame loop), `to_present`, the frame's own ms and
+    the `tick` and `draw` the screens took in it. `report` gives p50, p95 and worst, every input and the flagged ones
+    (input over 100 ms, frame over 33 ms).
+  - The shell: the window notes key presses, clicks and wheel turns (`window_event`), pad events (the poll that read them)
+    and each redraw up to `render()`; the no-window loop notes each frame drawn. On with `--feel` or `feel=1` on the command
+    line, or the setting `"feel": true`: an overlay at the top left (last frame, worst of the last second, last input's
+    input-to-present) and a line per input in `feel.log` beside `game.log` (`crashlog::dir`, `append_beside`).
+  - Link request `feel` (no window): replays a script of `key`, `click`, `pad` and `frames` with an optional `times`, `gap`
+    frames after each, and replies with the report.
+  - Scenario step `feel` (`name`, `script`, `gap`, `budget` `input_ms` / `frame_ms`): `feel_<name>.json` in the bundle,
+    under `perf` in `result.json` (`kind` `feel`). `games/hello/scenarios/hello_walk.json` ends with one, so it runs in
+    the gate. Doc: `engine/docs/authoring/scenarios.md` "Input times".
+  - Tests: `aegis_ui/tests/feel.rs` (5: an input closes with the first frame after it, two inputs in one frame, off notes
+    nothing, the overlay text, the report and log flags), `aegis_ui/tests/headless.rs` `a_feel_script_replays_and_times_each_input`,
+    `aegis_cli/tests/scenario.rs` (the step parses; eight refusals).
+- **Report** (release build, no window, 1280 x 720, Normal text, this cloud container's CPU; nothing is presented, so a
+  window adds the GPU copy, the present and vsync's wait). Scenario files and every result:
+  `/mnt/project-files/build-tools/feel_probe/`. Overlay shot: `overlay_planning.png` there.
+
+  | Run | Inputs | Input-to-present p50 / p95 / worst (ms) | Frame p50 / p95 / worst (ms) | Frames over 33 ms |
+  | --- | --- | --- | --- | --- |
+  | Hub walk (`hub_start`: arrows, two click-to-walks, E) | 23 | 19.2 / 29.3 / 29.5 | 18.4 / 27.8 / 31.8 | 0 of 222 |
+  | Region walk (`cages_start`, crossroads: arrows) | 20 | 13.5 / 16.8 / 20.3 | 13.2 / 20.6 / 21.2 | 0 of 110 |
+  | Battle plan (Cages: party picks, Tab, Esc, a block) | 11 | 43.9 / 112.7 / 112.7 | 37.7 / 65.3 / 79.9 | 37 of 44 |
+  | Battle resolve (Confirm, then 120 frames) | 1 | 25.2 | 20.1 / 28.4 / 34.3 | 1 of 124 |
+  | Main menu (arrows, New Game) | 7 | 1.3 / 13.4 / 13.4 | 1.2 / 3.7 / 12.5 | 0 of 33 |
+  | Settings (open, five tabs, Esc) | 6 | 12.0 / 56.8 / 56.8 | 11.4 / 50.3 / 56.6 | 2 of 34 |
+
+  Flagged, and where the time went:
+  - **Battle planning frames, 36 to 80 ms**: almost all in the battle screen's `draw` (35 to 76 ms of each; `tick` under
+    0.1 ms). The board, units and forecast marks are redrawn every frame while planning; resolve frames are about 20 ms.
+    This is the main thing a hands-on playtest would feel (under 30 frames a second while planning).
+  - **`click strip.block1`, 112.7 ms**: 64.6 ms in the click's handler (picking a block re-reads the plan and forecast),
+    then a 48 ms frame.
+  - **`key tab` (first in the fight), 84 ms**: 37.7 ms in the handler, then a 46 ms frame. The second Tab took 2 ms in the
+    handler.
+  - **First draw of Settings and of its Controls tab, 50 to 57 ms**: one frame each, in `draw`; the other tabs are 10 to
+    13 ms. The first frame of a screen lays out its text.
+  - A dev build is about 1.5 to 2 times slower (battle plan frames 43 to 76 ms, the hub walk's frames about 33 ms).
+- **Follow-ups (not built; for Design)**: a draw cache for the planning board (draw the static stage once, redraw only the
+  marks and hovered pieces); move the block pick's forecast re-read off the click (or cache it per plan change); warm the
+  Settings text layout before its first frame. Each would land with a `feel` budget in a release scenario.
+- **Docs delta**: `engine/README.md` "No window (HEADLESS1)": add the link request `feel` (a script of keys, clicks and pad
+  buttons, timed; ENGINE-45) beside `frames` and `clip`; a line for the feel probe (`aegis_ui::feel`, `--feel`, overlay,
+  `feel.log`).
 
 ### FB-481: PR7-90 FORECAST-MOVE1 built; a forecast reads the target's tile after every move booked before the hit
 

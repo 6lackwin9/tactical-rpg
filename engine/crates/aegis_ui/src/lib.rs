@@ -27,6 +27,7 @@ pub mod bridge;
 pub mod canvas;
 pub mod depth;
 pub mod edit;
+pub mod feel;
 pub mod focus;
 pub mod frame_tuner;
 pub mod float_panel;

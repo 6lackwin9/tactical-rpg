@@ -470,3 +470,26 @@ fn a_clip_is_numbered_frames_on_time_and_refuses_what_it_cannot_do() {
     g.stop();
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+// ---- ENGINE-45: the feel request ----
+
+/// A script of a click, a key, frames and a pad button replays with each input timed; a bad one stops with its place.
+#[test]
+fn a_feel_script_replays_and_times_each_input() {
+    let mut g = Game::start(FrameNeed::Idle, false, DEFAULT_FPS);
+    g.ask(json!({"cmd": "frames"}));
+    let reply = g.ask(json!({"cmd": "feel", "script": [{"click": "go", "times": 2}, {"key": "x"}, {"frames": 3}, {"pad": "south"}], "gap": 1}));
+    assert_eq!(reply["ok"], json!(true), "{reply}");
+    assert_eq!(reply["to_present"]["count"], json!(4), "two clicks, a key and a pad button: {reply}");
+    for i in reply["inputs"].as_array().unwrap() {
+        let (state, present) = (i["to_state_ms"].as_f64().unwrap(), i["to_present_ms"].as_f64().unwrap());
+        assert!(state <= present && present >= i["frame_ms"].as_f64().unwrap(), "{i}");
+    }
+    assert!(reply["frame_time"]["count"].as_u64().unwrap() >= 4 * 2 + 3, "every frame is timed: {reply}");
+    assert_eq!(g.ask(json!({"cmd": "ui_tree"}))["state"]["clicks"], json!(2), "the clicks reached the screen");
+    let bad = g.ask(json!({"cmd": "feel", "script": [{"click": "gone"}]}));
+    assert_eq!(bad["ok"], json!(false));
+    assert!(bad["error"].as_str().unwrap().contains("script[0] click gone"), "{bad}");
+    assert_eq!(g.ask(json!({"cmd": "feel", "script": "x"}))["ok"], json!(false));
+    g.stop();
+}

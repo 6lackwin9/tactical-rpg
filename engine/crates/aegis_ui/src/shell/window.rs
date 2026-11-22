@@ -240,7 +240,11 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
         #[cfg(windows)]
         let pad_wake = match (self.gamepad.as_mut(), self.shell.as_mut()) {
             (Some(g), Some(s)) => {
+                let at = s.feel_now();
                 if g.poll(s) {
+                    // ENGINE-45: a pad event counts from the poll that read it
+                    s.feel.input("pad", at);
+                    s.feel_state();
                     self.pacer.touch(Instant::now());
                 }
                 g.connected().then(|| g.due().unwrap_or_else(Instant::now).min(Instant::now() + Duration::from_millis(16)))
@@ -263,7 +267,35 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
         }
     }
 
+    /// ENGINE-45 (FEEL-PROBE1): a press, a click or a wheel turn is noted on arrival and once handled (`crate::feel`).
     fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, ev: WindowEvent) {
+        let kind = feel_kind(&ev);
+        if let (Some(k), Some(s)) = (kind.as_deref(), self.shell.as_mut()) {
+            s.feel_input(k);
+        }
+        self.on_window_event(el, ev);
+        if let (Some(_), Some(s)) = (kind, self.shell.as_mut()) {
+            s.feel_state();
+        }
+    }
+}
+
+/// ENGINE-45: what the feel probe calls an input event (None: not one it times; a release or a move is not).
+fn feel_kind(ev: &WindowEvent) -> Option<String> {
+    match ev {
+        WindowEvent::KeyboardInput { event: KeyEvent { logical_key, state: ElementState::Pressed, repeat: false, .. }, .. } => Some(match logical_key {
+            WKey::Named(n) => format!("key {n:?}"),
+            WKey::Character(c) => format!("key {c}"),
+            _ => "key".to_string(),
+        }),
+        WindowEvent::MouseInput { state: ElementState::Pressed, button, .. } => Some(format!("mouse {button:?}")),
+        WindowEvent::MouseWheel { .. } => Some("wheel".to_string()),
+        _ => None,
+    }
+}
+
+impl<G: Context> App<G> {
+    fn on_window_event(&mut self, el: &ActiveEventLoop, ev: WindowEvent) {
         if !matches!(ev, WindowEvent::RedrawRequested) {
             self.pacer.touch(Instant::now());
         }

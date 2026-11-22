@@ -64,6 +64,21 @@ pub fn line(text: &str) {
     log.recent.push_back(l);
 }
 
+/// The open log's folder (None: no log open): where other run files go beside it (ENGINE-45: `feel.log`).
+pub fn dir() -> Option<PathBuf> {
+    LOG.lock().ok().and_then(|g| g.as_ref().map(|l| l.dir.clone()))
+}
+
+/// Adds `lines` to `name` in the log's folder; with no log open it does nothing.
+pub fn append_beside(name: &str, lines: &[String]) {
+    if lines.is_empty() {
+        return;
+    }
+    if let Some(d) = dir() {
+        let _ = dev::append(d.join(name), lines.iter().map(|l| format!("{l}\n")).collect::<String>());
+    }
+}
+
 /// The text of a crash report.
 pub fn report(title: &str, message: &str, place: &str, backtrace: &str, recent: &[String]) -> String {
     let mut out = format!("{title} crashed.\n\nWhat: {message}\nWhere: {place}\nWhen: unix {}\n\nThe last {} log lines:\n", unix_secs(), recent.len());

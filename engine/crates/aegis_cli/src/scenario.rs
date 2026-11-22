@@ -144,6 +144,9 @@ pub enum Step {
     /// ENGINE-2: frame times with no window (`perf` link request); `budget` fails the step when a number is over it on a
     /// steady machine.
     Perf { name: String, frames: u64, warm: u64, budget: Budget },
+    /// ENGINE-45 (FEEL-PROBE1): replays `script` (keys, clicks, pad buttons, frames) with no window and reports input
+    /// and frame times (`feel` link request); `input_ms` / `frame_ms` fail the step when the worst passes them.
+    Feel { name: String, script: Value, gap: u64, input_ms: Option<f64>, frame_ms: Option<f64> },
     Pause { ms: u64 },
     Audit { scales: Vec<f64>, fail: Vec<String> },
     Repeat { times: u64, steps: Vec<Step>, until: Option<Cond> },
@@ -535,6 +538,67 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
             }
             Step::Perf { name, frames, warm, budget }
         }
+        "feel" => {
+            keys(&["name", "script", "gap", "budget"], problems);
+            let name = text_of(o, "name", place, problems);
+            if !name.is_empty() && !plain_name(&name) {
+                problems.push(format!("{place}: 'name' becomes a file name: letters, digits, _ and - only, at most 80"));
+            }
+            let gap = int_of(o, "gap", Some(2), (0, 240), place, problems);
+            let script = o.get("script").cloned().unwrap_or(Value::Null);
+            match script.as_array() {
+                Some(list) if !list.is_empty() && list.len() as u64 <= STEPS_MAX => {
+                    for (i, item) in list.iter().enumerate() {
+                        let at = format!("{place}.script[{i}]");
+                        let Some(m) = item.as_object() else {
+                            problems.push(format!("{at}: an object: one of key, click, pad or frames, and times"));
+                            continue;
+                        };
+                        let named: Vec<&str> = ["key", "click", "pad", "frames"].into_iter().filter(|k| m.contains_key(*k)).collect();
+                        if named.len() != 1 {
+                            problems.push(format!("{at}: exactly one of key, click, pad or frames"));
+                        }
+                        for (k, v) in m {
+                            let fine = match k.as_str() {
+                                "key" | "click" | "pad" => v.as_str().is_some_and(|t| !t.is_empty()),
+                                "frames" => v.as_u64().is_some_and(|n| (1..=240).contains(&n)),
+                                "times" => v.as_u64().is_some_and(|n| (1..=200).contains(&n)),
+                                _ => {
+                                    problems.push(format!("{at}: unknown key '{k}' (key, click, pad, frames, times)"));
+                                    true
+                                }
+                            };
+                            if !fine {
+                                problems.push(format!("{at}: '{k}' is {}", if k == "frames" { "a whole number from 1 to 240" } else if k == "times" { "a whole number from 1 to 200" } else { "a name" }));
+                            }
+                        }
+                    }
+                }
+                _ => problems.push(format!("{place}: 'script' is a list of 1 to {STEPS_MAX} inputs")),
+            }
+            let (mut input_ms, mut frame_ms) = (None, None);
+            match o.get("budget") {
+                None => {}
+                Some(Value::Object(b)) => {
+                    for (k, v) in b {
+                        let slot = match k.as_str() {
+                            "input_ms" => &mut input_ms,
+                            "frame_ms" => &mut frame_ms,
+                            other => {
+                                problems.push(format!("{place}.budget: unknown key '{other}' (input_ms, frame_ms)"));
+                                continue;
+                            }
+                        };
+                        match v.as_f64().filter(|n| *n > 0.0 && *n <= PERF_BUDGET_MS_MAX) {
+                            Some(n) => *slot = Some(n),
+                            None => problems.push(format!("{place}.budget: '{k}' is a number of ms above 0, at most {PERF_BUDGET_MS_MAX}")),
+                        }
+                    }
+                }
+                Some(_) => problems.push(format!("{place}: 'budget' is an object (input_ms, frame_ms)")),
+            }
+            Step::Feel { name, script, gap, input_ms, frame_ms }
+        }
         other => {
             problems.push(format!("{place}: unknown step '{other}'"));
             bad
@@ -558,6 +622,7 @@ fn no_window_step(steps: &[Step]) -> Option<&'static str> {
     steps.iter().find_map(|s| match s {
         Step::Clip { .. } => Some("clip"),
         Step::Perf { .. } => Some("perf"),
+        Step::Feel { .. } => Some("feel"),
         Step::Repeat { steps, .. } => no_window_step(steps),
         _ => None,
     })
@@ -1217,6 +1282,40 @@ impl Run<'_> {
                     return Err(fail(format!("perf {name}: {} (p50 {} ms, p95 {} ms, max {} ms over {frames} frames, canvas {}x{})", misses.join(", "), reply["stats"]["p50"], reply["stats"]["p95"], reply["stats"]["max"], reply["canvas"][0], reply["canvas"][1])));
                 }
             }
+            Step::Feel { name, script, gap, input_ms, frame_ms } => {
+                let fail = |message: String| Failure { step: label.to_string(), message, gone: false };
+                if !self.headless {
+                    return Err(fail("input times are measured in a run with no window".to_string()));
+                }
+                self.settle(label)?;
+                let inputs = script.as_array().map_or(0, |l| l.iter().map(|i| i["times"].as_u64().unwrap_or(1) * (gap + 1).max(i["frames"].as_u64().unwrap_or(0))).sum::<u64>());
+                self.link.patience((REPLY + PERF_FRAME_WAIT * inputs as u32) * self.slow as u32);
+                let reply = self.ask(label, &json!({"cmd": "feel", "script": script, "gap": gap}));
+                self.link.patience(REPLY * self.slow as u32);
+                let reply = reply?;
+                if reply["ok"] != json!(true) {
+                    return Err(fail(format!("feel {name}: {}", reply["error"])));
+                }
+                let mut kept = reply.clone();
+                if let Some(o) = kept.as_object_mut() {
+                    o.remove("ok");
+                    o.insert("name".into(), json!(name));
+                    o.insert("step".into(), json!(label));
+                    o.insert("kind".into(), json!("feel"));
+                }
+                let _ = std::fs::write(self.bundle.join(format!("feel_{name}.json")), serde_json::to_string_pretty(&kept).unwrap_or_default());
+                self.perf.push(kept);
+                let mut misses = Vec::new();
+                if let Some(b) = input_ms.filter(|b| reply["to_present"]["worst"].as_f64().is_some_and(|w| w > *b)) {
+                    misses.push(format!("worst input {} ms over {b} ms", reply["to_present"]["worst"]));
+                }
+                if let Some(b) = frame_ms.filter(|b| reply["frame_time"]["worst"].as_f64().is_some_and(|w| w > *b)) {
+                    misses.push(format!("worst frame {} ms over {b} ms", reply["frame_time"]["worst"]));
+                }
+                if !misses.is_empty() {
+                    return Err(fail(format!("feel {name}: {}", misses.join(", "))));
+                }
+            }
             Step::Audit { scales, fail } => {
                 self.settle(label)?;
                 for scale in scales {
@@ -1269,6 +1368,7 @@ fn kind_of(s: &Step) -> &'static str {
         Step::Shot { .. } => "shot",
         Step::Clip { .. } => "clip",
         Step::Perf { .. } => "perf",
+        Step::Feel { .. } => "feel",
         Step::Pause { .. } => "pause",
         Step::Audit { .. } => "audit",
         Step::Repeat { .. } => "repeat",
