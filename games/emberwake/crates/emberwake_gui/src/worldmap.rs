@@ -88,8 +88,16 @@ pub enum WAct {
     Layout(LayoutAct),
 }
 
-/// The world map's controls (the Help button's hover card and popup).
-const WORLD_HELP: [&str; 5] = ["Click a place to pick it, then Travel", "Pick another way on the map or in the panel", "Enter (button): go into the place the party is at", "P: party   J: journal   I: stash", "Esc: back to the region map"];
+/// The world map's controls (the Help button's hover card and popup), with the keys `c` binds (CONTROLS-UI1B).
+fn world_help(c: &aegis_ui::controls::Controls) -> Vec<String> {
+    vec![
+        "Click a place to pick it, then Travel".into(),
+        "Pick another way on the map or in the panel".into(),
+        format!("{} (button): go into the place the party is at", c.key_hint(Key::Enter)),
+        crate::region::party_keys(c),
+        format!("{}: back to the region map", c.key_hint(Key::Esc)),
+    ]
+}
 
 /// CAMPAIGN1 W5: the arrival of a trip of `time` in a campaign world: "Arrive on day 9, 34 days left." (the days left
 /// of the first running visible countdown by HUD order at arrival; without one only the day); None outside one.
@@ -619,7 +627,7 @@ impl WorldMap {
             }
             WAct::Mode => self.next_mode(cx),
             WAct::Back => cx.nav.push(Nav::Pop),
-            WAct::Hud(h) => hud_open(cx, h, &WORLD_HELP),
+            WAct::Hud(h) => hud_open(cx, h, &world_help(&crate::controls_view::hints(&cx.settings.v))),
             WAct::LegendLock => self.legend.toggle_lock(),
             WAct::LegendMin => self.legend.minimize(),
             WAct::LegendOpen => self.legend.restore(MAP, self.legend_size),
@@ -1332,7 +1340,8 @@ impl Screen<GameCx> for WorldMap {
         // -- HUD bar (PLAYUI1-H): Back and the location name; gold, supplies and the icon buttons at the right
         let back_w = (ui.p.text_w("Back", BODY) + 8.0).ceil().max(26.0) as i32;
         let here_name = cx.location_name(&gs.world_id, &here);
-        hud_bar(&mut ui, cx, back_w + 8, &here_name, ("world_map.menu", ""), "", &WORLD_HELP, WAct::Hud);
+        let help = world_help(&crate::controls_view::hints(&cx.settings.v));
+        hud_bar(&mut ui, cx, back_w + 8, &here_name, ("world_map.menu", None), "", &help, WAct::Hud);
         ui.button("world_map.back", Rect::new(3, 3, back_w, 14), "Back", WAct::Back, true);
         // -- Side panel: the time, actions and the log; PR5-48: the layout editor's controls while editing (debug)
         match self.edit.as_ref() {

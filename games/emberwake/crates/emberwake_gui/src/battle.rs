@@ -261,6 +261,8 @@ enum Mode {
 
 pub struct BattleScreen {
     pub host: Host,
+    /// CONTROLS-UI1B (PR7-49 (1)): the control map in force, re-read each frame; every key hint reads it.
+    keys: aegis_ui::controls::Controls,
     w: Vec<Widget<Action>>,
     mouse: (i32, i32),
     selected: Option<usize>,
@@ -486,6 +488,7 @@ impl BattleScreen {
         crate::fx::install_status_looks(&cx.data.cat.fx_presets);
         Self {
             host: Host::new(Battle::with_data(cx.data.clone())),
+            keys: crate::controls_view::hints(&cx.settings.v),
             w: Vec::new(),
             mouse: (0, 0),
             selected: None,
@@ -1094,8 +1097,8 @@ impl Screen<GameCx> for BattleScreen {
                 cx.settings.v["show_tells"] = serde_json::Value::Bool(!on);
                 self.message = match cx.settings.save() {
                     Err(e) => format!("Tells toggled but the setting was not saved: {e}"),
-                    Ok(()) if on => "Enemy tells hidden (I shows them).".into(),
-                    Ok(()) => "Enemy tells shown (I hides them).".into(),
+                    Ok(()) if on => format!("Enemy tells hidden ({} shows them).", self.keys.key_hint(Key::Char('i'))),
+                    Ok(()) => format!("Enemy tells shown ({} hides them).", self.keys.key_hint(Key::Char('i'))),
                 };
             }
             Key::Char('r') => self.act(cx, Action::Restart),

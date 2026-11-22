@@ -134,23 +134,23 @@ fn key_and_button_labels() {
 #[test]
 fn the_rebind_flow_asks_before_a_swap() {
     let (mut r, mut s) = (Rebind::default(), json!({"volume": 3}));
-    assert_eq!(r.input(&ACTIONS, &mut s, Input::Key(Key::Char('q'))), Outcome::Ignored);
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Key(Key::Char('q'))), Outcome::Ignored);
     r.start(0);
-    assert_eq!(r.input(&ACTIONS, &mut s, Input::Key(Key::Char('q'))), Outcome::Bound);
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Key(Key::Char('q'))), Outcome::Bound);
     assert_eq!(s["controls"]["keys"]["q"], json!("e"));
     r.start(0);
-    assert_eq!(r.input(&ACTIONS, &mut s, Input::Key(Key::Char('z'))), Outcome::Asked);
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Key(Key::Char('z'))), Outcome::Asked);
     assert_eq!(r.step, Step::Clash { at: 0, input: Input::Key(Key::Char('z')), with: 1 });
     let before = s.clone();
-    assert_eq!(r.input(&ACTIONS, &mut s, Input::Key(Key::Esc)), Outcome::Cancelled);
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Key(Key::Esc)), Outcome::Cancelled);
     assert_eq!(s, before);
     r.start(0);
-    r.input(&ACTIONS, &mut s, Input::Key(Key::Char('z')));
-    assert_eq!(r.input(&ACTIONS, &mut s, Input::Pad(Pad::South)), Outcome::Bound, "the pad's confirm answers Swap");
+    r.input(&ACTIONS, &[], &mut s, Input::Key(Key::Char('z')));
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Pad(Pad::South)), Outcome::Bound, "the pad's confirm answers Swap");
     let c = Controls::from_settings(&s).0;
     assert_eq!((c.key_for(Key::Char('e')), c.key_for(Key::Char('z'))), (Some(Key::Char('z')), Some(Key::Char('q'))));
     r.start(2);
-    assert_eq!(r.input(&ACTIONS, &mut s, Input::Pad(Pad::West)), Outcome::Bound, "Space is no listed action");
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Pad(Pad::West)), Outcome::Bound, "Space is no listed action");
     r.reset(&mut s);
     assert_eq!((s, r.capturing()), (json!({"volume": 3}), false));
 }
@@ -161,14 +161,14 @@ fn the_rebind_flow_asks_before_a_swap() {
 fn a_pad_swap_needs_a_button_to_trade() {
     let (mut r, mut s) = (Rebind::default(), json!({}));
     r.start(1);
-    assert_eq!(r.input(&ACTIONS, &mut s, Input::Pad(Pad::South)), Outcome::Refused, "Undo has no button; Pad A is Confirm's");
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Pad(Pad::South)), Outcome::Refused, "Undo has no button; Pad A is Confirm's");
     assert_eq!((r.step, r.refused), (Step::Waiting(1), Some(2)));
     assert_eq!(s, json!({}));
-    assert_eq!(r.input(&ACTIONS, &mut s, Input::Pad(Pad::West)), Outcome::Bound, "Pad X gives no listed action: taken");
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Pad(Pad::West)), Outcome::Bound, "Pad X gives no listed action: taken");
     assert_eq!(Controls::from_settings(&s).0.pad(Pad::West), Key::Char('z'));
     // Undo now has Pad X: Pad A is a swap with Confirm, asked first
     r.start(1);
-    assert_eq!(r.input(&ACTIONS, &mut s, Input::Pad(Pad::South)), Outcome::Asked);
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Pad(Pad::South)), Outcome::Asked);
     assert_eq!(r.step, Step::Clash { at: 1, input: Input::Pad(Pad::South), with: 2 });
     assert_eq!(r.swap(&ACTIONS, &mut s), Outcome::Bound);
     let c = Controls::from_settings(&s).0;
@@ -182,8 +182,62 @@ fn raw_esc_cancels_the_question_and_reset_keeps_the_order() {
     let mut s = json!({"a": 1, "controls": {"keys": {"esc": "q"}}, "b": 2, "c": 3});
     let mut r = Rebind::default();
     r.start(0);
-    assert_eq!(r.input(&ACTIONS, &mut s, Input::Key(Key::Char('z'))), Outcome::Asked);
-    assert_eq!(r.input(&ACTIONS, &mut s, Input::Key(Key::Esc)), Outcome::Cancelled);
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Key(Key::Char('z'))), Outcome::Asked);
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Key(Key::Esc)), Outcome::Cancelled);
     r.reset(&mut s);
     assert_eq!(s.as_object().unwrap().keys().collect::<Vec<_>>(), ["a", "b", "c"]);
+}
+
+// ---- CONTROLS-UI1B: hints, the way out of a waiting rebind, fixed keys -----------------------------------------------
+
+use aegis_ui::controls::{Fixed, WAIT};
+
+/// A hint reads the bound key (and the pad button when the action has one), so a rebind shows on every screen.
+#[test]
+fn a_hint_follows_the_binding() {
+    let mut c = Controls::default();
+    assert_eq!((c.key_hint(Key::Char('p')), c.hint(Key::Char('p'))), ("P".to_string(), "P".to_string()));
+    assert_eq!((c.key_hint(Key::Esc), c.hint(Key::Esc)), ("Esc".to_string(), "Esc / Pad B".to_string()));
+    c.bind_key(Key::Char('p'), Key::Char('k'));
+    c.bind_pad(Key::Esc, Pad::North);
+    assert_eq!((c.hint(Key::Char('p')), c.hint(Key::Char('k'))), ("K".to_string(), "P".to_string()));
+    assert_eq!(c.hint(Key::Esc), "Esc / Pad Y");
+    assert_eq!(c.hint(Key::Tab), "Tab / Pad B", "the swapped action takes the old button");
+}
+
+/// A waiting rebind ends with nothing written on the input the action already has (its key or pad button), and after
+/// `WAIT` with no input (frame-exact on the given instant); an input restarts the wait; the swap question ends too.
+#[test]
+fn a_waiting_rebind_ends_on_its_own_input_or_after_the_wait() {
+    let (mut r, mut s) = (Rebind::default(), json!({}));
+    assert!(!r.expire(Instant::now() + WAIT * 2), "idle: nothing to end");
+    r.start(2);
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Pad(Pad::South)), Outcome::Cancelled, "Pad A is Confirm's own");
+    assert_eq!((s.clone(), r.capturing()), (json!({}), false));
+    r.start(0);
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Key(Key::Char('e'))), Outcome::Cancelled, "E is Use's own");
+    assert_eq!(s, json!({}));
+    r.start(0);
+    let until = r.until.expect("an end");
+    assert!(!r.expire(until - Duration::from_nanos(1)) && r.capturing());
+    assert!(r.expire(until) && !r.capturing() && r.until.is_none());
+    r.start(0);
+    assert_eq!(r.input(&ACTIONS, &[], &mut s, Input::Key(Key::Char('z'))), Outcome::Asked);
+    let until = r.until.unwrap();
+    assert!(r.expire(until) && r.step == Step::Idle);
+    assert_eq!(s, json!({}));
+}
+
+/// A fixed key is refused (its index in `refused_fixed`), the rebind waits and nothing is written; the next input
+/// clears it.
+#[test]
+fn a_fixed_key_is_refused() {
+    const FIXED: [Fixed; 1] = [Fixed { key: Key::Char('y'), label: "Yes", screen: "questions" }];
+    let (mut r, mut s) = (Rebind::default(), json!({}));
+    r.start(0);
+    assert_eq!(r.input(&ACTIONS, &FIXED, &mut s, Input::Key(Key::Char('y'))), Outcome::Refused);
+    assert_eq!((r.step, r.refused_fixed, s.clone()), (Step::Waiting(0), Some(0), json!({})));
+    assert_eq!(r.input(&ACTIONS, &FIXED, &mut s, Input::Key(Key::Char('k'))), Outcome::Bound);
+    assert_eq!(r.refused_fixed, None);
+    assert_eq!(Controls::from_settings(&s).0.key_for(Key::Char('e')), Some(Key::Char('k')));
 }

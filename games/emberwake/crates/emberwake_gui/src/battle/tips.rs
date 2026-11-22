@@ -466,12 +466,18 @@ pub(super) fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Inten
 /// unrevealed plan's skills, blocks or walks, deck, order, AI row or profile): the hover card's lines with its facing,
 /// without the tell's first action and its forecast while the tells are hidden and without the classic "Next:" line;
 /// a party member adds its picks, its plan and its AP numbers (IS3, AP9's lines) while planning under the round intent.
-pub(super) fn inspect_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds: &[Intent], classes: &[String], show_tells: bool) -> Tip {
+#[allow(clippy::too_many_arguments)]
+pub(super) fn inspect_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds: &[Intent], classes: &[String], show_tells: bool, keys: &aegis_ui::controls::Controls) -> Tip {
     let mut t = unit_tip_as(s, i, sel, tells, rounds, classes, Some(show_tells));
     if let Some(head) = t.first_mut() {
-        head.0 = format!("Inspecting {} (Esc clears)", s.w.units[i].name);
+        head.0 = inspecting(&s.w.units[i].name, keys);
     }
     t
+}
+
+/// CONTROLS-UI1B: the pinned intel's header, "Inspecting <name> (Esc clears)", with the key bound to Back.
+pub(crate) fn inspecting(name: &str, keys: &aegis_ui::controls::Controls) -> String {
+    format!("Inspecting {name} ({} clears)", keys.key_hint(aegis_ui::screen::Key::Esc))
 }
 
 /// AP9 (INPUT1 7): a party member's AP numbers, one line each: "AP <now> of <max>", "Plan: <spent> (picked <picked>,

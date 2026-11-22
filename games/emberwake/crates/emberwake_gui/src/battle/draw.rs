@@ -85,6 +85,7 @@ const LOG_DRAG: &str = "battle.log";
 
 pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), live: bool) {
     let now = Instant::now();
+    g.keys = crate::controls_view::hints(&cx.settings.v);
     let tuning = cx.tuning.value.clone();
     gfx.canvas.clear(th().bg);
     // ENCOUNTER2-C DT7: the open talk's game state and view; a new node starts its line and replies at the top
@@ -500,7 +501,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         // INPUT2: a block showing a ghost entry of a party member (planning, no row previewed) accepts the ghost up to it
         let accept = at.filter(|_| ghost && planning && hovered_pick.is_none() && sel.is_some_and(|u| w.allies.contains(&u)));
         if accept.is_some() {
-            tip.push(("Click: accept the auto-fill up to here (F: all of it)".into(), th().dim));
+            tip.push((format!("Click: accept the auto-fill up to here ({}: all of it)", g.keys.key_hint(aegis_ui::screen::Key::Char('f'))), th().dim));
         }
         // BATTLE-UI2 (battle contract 7, FB-358): an empty or a picked block opens the skill menu under it; a ghost block
         // opens it from a right click or the menu key (Tab, pad north)
@@ -508,7 +509,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         if menu {
             tip.push(("Click: the skill menu for this block".into(), th().dim));
         } else if accept.is_some() {
-            tip.push(("Right click or Tab: the skill menu".into(), th().dim));
+            tip.push((format!("Right click or {}: the skill menu", g.keys.hint(aegis_ui::screen::Key::Tab)), th().dim));
         }
         let action = accept.map(Action::GhostSlot).or(menu.then_some(Action::StripMenu(b)));
         // SV5: a locked block's hover names the lock and its blocks; the run's first block holds the whole run
@@ -689,7 +690,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             x += cw + 2;
         }
         if speed == PlaySpeed::Block {
-            ui.button_full("playback.next", Rect::new(x, 6, (end - x).max(10), 16), "Next block", Action::NextBlock, g.waiting.is_some(), false, BODY, vec![("Next block (N)".into(), th().gold), ("Plays the next block, then waits again.".into(), th().text)]);
+            ui.button_full("playback.next", Rect::new(x, 6, (end - x).max(10), 16), "Next block", Action::NextBlock, g.waiting.is_some(), false, BODY, vec![(format!("Next block ({})", g.keys.hint(aegis_ui::screen::Key::Char('n'))), th().gold), ("Plays the next block, then waits again.".into(), th().text)]);
         }
         x = end + 2;
     } else {
@@ -800,7 +801,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let r = Rect::new(px, y + 2, super::plates::PLATE_W, hero_room);
         g.panels.push(("hero", r));
         ui.p.panel(r, th().card, th().edge, RADIUS);
-        self_ally_buttons(&mut ui, w, h, r.x + 4, r.y + 2, planning);
+        self_ally_buttons(&mut ui, &g.keys, w, h, r.x + 4, r.y + 2, planning);
     }
     if let Some(h) = sel.filter(|&h| w.units.get(h).is_some_and(|u| u.is_active()) && 318 - y - 6 >= HERO_MIN_H) {
         let u = &w.units[h];
@@ -819,7 +820,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let row3 = row2 + (ui.p.line_h(SMALL).ceil() as i32).max(8) + 1;
         // INPUT1 IF8, SL4: under the round intent the panel's one control is the Self button (key S)
         let top = if timeline {
-            self_ally_buttons(&mut ui, w, h, tx, row3, planning)
+            self_ally_buttons(&mut ui, &g.keys, w, h, tx, row3, planning)
         } else {
             row3
         };
@@ -1158,7 +1159,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let inset = super::boss_bar::INSET;
         let r = Rect::new(BOARD.x + inset, BOARD.y + inset, BOARD.w - 2 * inset, super::boss_bar::bar_h(bb));
         g.panels.push(("intel", r));
-        let tip = if pinned == Some(bb.unit) { inspect_tip(s, bb.unit, sel, &tells, &rounds, &classes, show_tells) } else { Vec::new() };
+        let tip = if pinned == Some(bb.unit) { inspect_tip(s, bb.unit, sel, &tells, &rounds, &classes, show_tells, &g.keys) } else { Vec::new() };
         if let Some(hr) = super::boss_bar::draw_bar(&mut ui, cx, (&mut g.card_faces, &mut g.mini_faces), &looks, bb, r, tip) {
             g.panels.push(("intel", hr));
         }
@@ -1182,13 +1183,13 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         // INPUT1 IS1: a pinned foe's card names it and holds its inspect lines on its hover; the agent link's
         // `intel.unit` is the card under the round intent or a pin (classic: `card.unit`), a pinned member's plate
         // when a member is inspected (IS3)
-        let (label, tip) = if pinned == Some(c.foe) { (format!("Inspecting {} (Esc clears)", w.units[c.foe].name), inspect_tip(s, c.foe, sel, &tells, &rounds, &classes, show_tells)) } else { (w.units[c.foe].name.clone(), Vec::new()) };
+        let (label, tip) = if pinned == Some(c.foe) { (super::tips::inspecting(&w.units[c.foe].name, &g.keys), inspect_tip(s, c.foe, sel, &tells, &rounds, &classes, show_tells, &g.keys)) } else { (w.units[c.foe].name.clone(), Vec::new()) };
         let id = if (ri::on(w) || pinned.is_some()) && !pinned.is_some_and(|p| w.allies.contains(&p)) { "intel.unit" } else { "card.unit" };
         super::card::draw_card(&mut ui, cx, (&mut g.card_faces, &mut g.mini_faces), &looks, c, r, id, &label, tip);
     }
     if let Some(m) = pinned.filter(|p| w.allies.contains(p)) {
         if let Some(r) = ui.widgets.iter().find(|x| x.id == format!("party.{m}")).map(|x| x.rect) {
-            ui.push("intel.unit", "panel", format!("Inspecting {} (Esc clears)", w.units[m].name), r, true, false, None, inspect_tip(s, m, sel, &tells, &rounds, &classes, show_tells));
+            ui.push("intel.unit", "panel", super::tips::inspecting(&w.units[m].name, &g.keys), r, true, false, None, inspect_tip(s, m, sel, &tells, &rounds, &classes, show_tells, &g.keys));
         }
     }
     g.view_json = crate::battle_view::view(&model).to_json();
@@ -1197,10 +1198,10 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     crate::hud::hud_panel(&mut ui, Rect::new(2, 322, W - 4, 36), th().game("battle_panel", PANEL), th().edge, RADIUS);
     // PR7-41 (PT-32): Restart and Step show only when they work (a world battle never restarts; Step once a round runs)
     if !g.world_mode() {
-        ui.button_full("bar.restart", Rect::new(6, 325, 40, 14), "Restart", Action::Restart, true, false, BODY, vec![("Restart the battle (R)".into(), th().text)]);
+        ui.button_full("bar.restart", Rect::new(6, 325, 40, 14), "Restart", Action::Restart, true, false, BODY, vec![(format!("Restart the battle ({})", g.keys.key_hint(aegis_ui::screen::Key::Char('r'))), th().text)]);
     }
     if !planning {
-        ui.button_full("bar.step", Rect::new(48, 325, 34, 14), "Step", Action::Step, true, false, BODY, vec![("Resolve one action (Space)".into(), th().text)]);
+        ui.button_full("bar.step", Rect::new(48, 325, 34, 14), "Step", Action::Step, true, false, BODY, vec![(format!("Resolve one action ({})", g.keys.hint(aegis_ui::screen::Key::Space)), th().text)]);
     }
     // Test Arena only: leave at any time (Esc does the same); a world battle is left only through its end, and its Menu
     // (PR7-26; Esc with nothing open does the same) opens the in-game Settings popup in the same place.
@@ -1209,9 +1210,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     let bar_label = if g.world_mode() { "Menu" } else { "Exit" };
     let bar_w = 30.max((ui.p.text_w(bar_label, BODY) + ui.m().uf(6.0)).ceil() as i32);
     if g.world_mode() {
-        ui.button_full("bar.menu", Rect::new(84, 325, bar_w, 14), "Menu", Action::Settings, true, false, BODY, vec![("Menu (Esc)".into(), th().gold), ("Settings, Retreat where the fight allows it, and Return to title once the fight is over.".into(), th().text)]);
+        ui.button_full("bar.menu", Rect::new(84, 325, bar_w, 14), "Menu", Action::Settings, true, false, BODY, vec![(format!("Menu ({})", g.keys.hint(aegis_ui::screen::Key::Esc)), th().gold), ("Settings, Retreat where the fight allows it, and Return to title once the fight is over.".into(), th().text)]);
     } else {
-        ui.button_full("bar.exit", Rect::new(84, 325, bar_w, 14), "Exit", Action::Leave, true, false, BODY, vec![("Back to the screen you came from (Esc)".into(), th().text)]);
+        ui.button_full("bar.exit", Rect::new(84, 325, bar_w, 14), "Exit", Action::Leave, true, false, BODY, vec![(format!("Back to the screen you came from ({})", g.keys.hint(aegis_ui::screen::Key::Esc)), th().text)]);
     }
     let ox = 32 + (bar_w - 30);
     let phase = match s.phase {
@@ -1262,7 +1263,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     ui.p.panel(log_r, th().card, th().edge, RADIUS);
     ui.p.text_fit(10.0, 342.5, &last, SMALL, (W - 72) as f32, th().dim);
     ui.push("bar.last", "label", last, log_r, true, false, Some(Action::ToggleLog), card);
-    ui.button_full("bar.log", Rect::new(W - 54, 341, 48, 14), if g.show_log { "Close" } else { "Expand" }, Action::ToggleLog, true, g.show_log, BODY, vec![("Full combat log (L); the wheel scrolls".into(), th().text)]);
+    ui.button_full("bar.log", Rect::new(W - 54, 341, 48, 14), if g.show_log { "Close" } else { "Expand" }, Action::ToggleLog, true, g.show_log, BODY, vec![(format!("Full combat log ({}); the wheel scrolls", g.keys.hint(aegis_ui::screen::Key::Char('l'))), th().text)]);
 
     let outcome = g.outcome();
     // TRANSITIONS1 T2: the victory beat's banner stands in for the outcome panel while it runs
@@ -1617,9 +1618,9 @@ const HERO_BUTTONS_H: i32 = 15;
 
 /// INPUT1 IF8, SL4: the hero panel's Self button (key S) and PR7-41 (PT-23) the Ally button beside it (the members the
 /// hero can use a skill or pouch item on), their row at `y`; the y under the row.
-fn self_ally_buttons(ui: &mut Ui<Action>, w: &World, h: usize, tx: i32, y: i32, planning: bool) -> i32 {
+fn self_ally_buttons(ui: &mut Ui<Action>, keys: &aegis_ui::controls::Controls, w: &World, h: usize, tx: i32, y: i32, planning: bool) -> i32 {
     let u = &w.units[h];
-    let tip = vec![("Self (S)".into(), th().gold), (format!("{} targets itself: its Guard and self skills.", u.name), th().text)];
+    let tip = vec![(format!("Self ({})", keys.hint(aegis_ui::screen::Key::Char('s'))), th().gold), (format!("{} targets itself: its Guard and self skills.", u.name), th().text)];
     let bw = ((ui.p.text_w("Self", SMALL) + 10.0).ceil() as i32).max(30);
     ui.button_full("hero.self", Rect::new(tx, y, bw, 11), "Self", Action::SelfTarget, planning, false, SMALL, tip);
     let others = w.allies.iter().any(|&a| a != h && ((w.units[a].is_active() && w.has(a)) || w.can_revive(a)));

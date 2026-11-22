@@ -1720,6 +1720,16 @@ mod tests {
         assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (None, false), "the default question shows no ring");
         press(&mut s, Key::Enter);
         assert!(s.cx.take_answer("kept") && s.stack.last().unwrap().id() == "form", "Enter: Yes, the question closed");
+        // CONTROLS-UI1B: y and n answer by the raw key: with n and k swapped by the map, k answers nothing, n is No
+        s.cx.settings.v["controls"] = json!({"keys": {"n": "k", "k": "n"}});
+        s.cx.ask_tag("Discard?", "swapped");
+        s.frame();
+        s.press(Key::Char('k'));
+        s.frame();
+        assert_eq!(s.stack.last().unwrap().id(), "ask", "k (the map's n) answers nothing");
+        s.press(Key::Char('n'));
+        s.frame();
+        assert!(!s.cx.take_answer("swapped") && s.stack.last().unwrap().id() == "form", "the raw n: No, the question closed");
     }
 
     #[test]
@@ -3091,7 +3101,7 @@ mod tests {
         }
         fn capture(&mut self, cx: &mut Cx, input: crate::controls::Input) -> bool {
             self.rebind.capturing() && {
-                self.rebind.input(&REBIND_ACTIONS, &mut cx.settings.v, input);
+                self.rebind.input(&REBIND_ACTIONS, &[], &mut cx.settings.v, input);
                 true
             }
         }

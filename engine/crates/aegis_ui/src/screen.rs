@@ -686,6 +686,19 @@ impl<G> Screen<G> for Ask<G> {
     fn pointer_to(&self) -> Option<&str> {
         self.no_default.then_some("ask.no")
     }
+    /// CONTROLS-UI1B: `y` and `n` answer by the raw key, before the control map, so a rebind (`n` is a game's action
+    /// key too) never changes how a question is answered (a key the map turns into `y` or `n` is swallowed); Enter and
+    /// Esc go through the map as every screen's do.
+    fn capture(&mut self, cx: &mut Cx<G>, input: crate::controls::Input) -> bool {
+        match input {
+            crate::controls::Input::Key(Key::Char('y')) => self.act(cx, true),
+            crate::controls::Input::Key(Key::Char('n')) => self.act(cx, false),
+            // a key the map turns into `y` or `n` answers nothing (only the raw keys do)
+            crate::controls::Input::Key(k) => return matches!(crate::controls::Controls::from_settings(&cx.settings.v).0.key(k), Key::Char('y' | 'n')),
+            _ => return false,
+        }
+        true
+    }
     fn key(&mut self, cx: &mut Cx<G>, k: Key) {
         match k {
             Key::Enter => self.act(cx, !self.no_default),

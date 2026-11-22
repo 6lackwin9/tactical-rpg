@@ -825,9 +825,13 @@ impl Screen<GameCx> for Character {
         let unspent = m.unspent(&d);
         let pick = format!("{}  Lv {}{}", crate::hub::member_name(cx, &m), m.level(&d), if unspent > 0 { format!("  +{unspent}") } else { String::new() });
         let pw = ui.p.text_w(&pick, BODY + 1.0) as i32 + 12;
-        ui.p.text(320.0 - pw as f32 / 2.0 - 10.0, 57.0, "Q", BODY + 1.0, th().dim);
-        ui.button_full("character.member", Rect::new(320 - pw / 2, 53, pw, 17), &pick, PAct::Member(1), true, true, BODY + 1.0, tip("Next member (E)", "Q / E cycle the party."));
-        ui.p.text(320.0 + pw as f32 / 2.0 + 4.0, 57.0, "E", BODY + 1.0, th().dim);
+        // CONTROLS-UI1B: the keys beside the name are the bound ones
+        let keys = crate::controls_view::hints(&cx.settings.v);
+        let (q, e) = (keys.key_hint(Key::Char('q')), keys.key_hint(Key::Char('e')));
+        let wider = (ui.p.text_w(&q, BODY + 1.0) - ui.p.text_w("Q", BODY + 1.0)).max(0.0);
+        ui.p.text(320.0 - pw as f32 / 2.0 - 10.0 - wider, 57.0, &q, BODY + 1.0, th().dim);
+        ui.button_full("character.member", Rect::new(320 - pw / 2, 53, pw, 17), &pick, PAct::Member(1), true, true, BODY + 1.0, tip(&format!("Next member ({e})"), &format!("{q} / {e} cycle the party.")));
+        ui.p.text(320.0 + pw as f32 / 2.0 + 4.0, 57.0, &e, BODY + 1.0, th().dim);
         // PORTRAITFX1-R: the member's portrait (its carried HP and conditions hold the state rows; the initial without a
         // file)
         self.faces.begin();

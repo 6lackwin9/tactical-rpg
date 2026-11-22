@@ -1102,11 +1102,13 @@ impl SettingsScreen {
         })
     }
 
-    /// The confirm's timer at `now`: past its end the previous display comes back.
+    /// The confirm's timer at `now`: past its end the previous display comes back. CONTROLS-UI1B: a rebind left
+    /// waiting `controls::WAIT` with no input ends with nothing changed.
     pub fn tick_at(&mut self, cx: &mut Cx, now: Instant) {
         if self.confirm.as_ref().is_some_and(|c| now >= c.until) {
             self.act(cx, SetAct::Revert);
         }
+        self.rebind.expire(now);
     }
 
     fn save(cx: &mut Cx) {
@@ -1511,7 +1513,7 @@ impl SettingsScreen {
                 let on = if k == "fullscreen" { WindowShow::of(&d) == WindowShow::Fullscreen } else { d[k].as_bool().unwrap_or(default) };
                 let t = match k {
                     "auto_fill" => tip("Auto-Fill Remaining Blocks", "After your picks the planner fills the round's free blocks with follow-ups (ghost blocks you can replace). Off: the free blocks Rest."),
-                    crate::battle::AUTO_CONFIRM => tip("Auto-Confirm Next Round", "Timeline battles: after a round plays, the battle goes to the next round's planning by itself; your plan still waits for your Confirm. Off: press Next round (Space) to go on. A recording you watch always waits."),
+                    crate::battle::AUTO_CONFIRM => tip("Auto-Confirm Next Round", &format!("Timeline battles: after a round plays, the battle goes to the next round's planning by itself; your plan still waits for your Confirm. Off: press Next round ({}) to go on. A recording you watch always waits.", crate::controls_view::hints(&cx.settings.v).hint(Key::Space))),
                     portrait_overlays::SETTING => tip("Portrait Effects", "The glows, growing lines, specks and haze over character portraits in talk boxes, scenes, party cards and the timeline. Off: plain portraits; blinks, breathing and expressions stay."),
                     _ => Vec::new(),
                 };
@@ -1642,9 +1644,9 @@ impl SettingsScreen {
 }
 
 impl Screen<GameCx> for SettingsScreen {
-    /// Nothing here moves by itself but the confirm's countdown.
+    /// Nothing here moves by itself but the confirm's countdown and a waiting rebind's end.
     fn frame_need(&self, _cx: &Cx) -> FrameNeed {
-        if self.confirm.is_some() {
+        if self.confirm.is_some() || self.rebind.capturing() {
             FrameNeed::Within(Duration::from_millis(250))
         } else {
             FrameNeed::Idle
@@ -1668,7 +1670,7 @@ impl Screen<GameCx> for SettingsScreen {
         if self.tab != TABS.len() - 1 || !self.rebind.capturing() {
             return false;
         }
-        if self.rebind.input(&crate::controls_view::ACTIONS, &mut cx.settings.v, input) == aegis_ui::controls::Outcome::Bound {
+        if self.rebind.input(&crate::controls_view::ACTIONS, &crate::controls_view::FIXED_KEYS, &mut cx.settings.v, input) == aegis_ui::controls::Outcome::Bound {
             Self::save(cx);
         }
         true
@@ -1825,15 +1827,17 @@ impl Screen<GameCx> for SettingsScreen {
                 WindowShow::Borderless => format!("Borderless · {}", size(v)),
                 WindowShow::Windowed => format!("Windowed · {}", size(v)),
             };
+            // CONTROLS-UI1B: the boxes' key hints read the key bound to Enter
+            let enter = crate::controls_view::hints(&cx.settings.v).key_hint(Key::Enter);
             if let Some(left) = self.confirm_left(Instant::now()) {
                 let lines = [(format!("Display switched to {}.", named(&d)), BODY, t.text), (format!("Reverting to the previous display in {left} s."), BODY, t.foe)];
-                Self::modal(&mut ui, "Keep Display Settings?", &lines, &[("settings.confirm.keep", "Keep changes [Enter]".into(), SetAct::Keep, true), ("settings.confirm.revert", "Revert".into(), SetAct::Revert, false)], SetAct::Revert);
+                Self::modal(&mut ui, "Keep Display Settings?", &lines, &[("settings.confirm.keep", format!("Keep changes [{enter}]"), SetAct::Keep, true), ("settings.confirm.revert", "Revert".into(), SetAct::Revert, false)], SetAct::Revert);
             } else if self.guard.is_some() {
                 let lines = [
                     (format!("You chose {} without pressing Apply.", named(&self.pending)), BODY, t.text),
                     ("All other settings apply at once. Apply or discard the display change before closing?".to_string(), HELP, t.dim),
                 ];
-                let buttons = [("settings.guard.apply", "Apply display [Enter]".to_string(), SetAct::GuardApply, true), ("settings.guard.discard", "Discard & close".to_string(), SetAct::GuardDiscard, false), ("settings.guard.stay", "Stay".to_string(), SetAct::GuardStay, false)];
+                let buttons = [("settings.guard.apply", format!("Apply display [{enter}]"), SetAct::GuardApply, true), ("settings.guard.discard", "Discard & close".to_string(), SetAct::GuardDiscard, false), ("settings.guard.stay", "Stay".to_string(), SetAct::GuardStay, false)];
                 Self::modal(&mut ui, "Unapplied Display Changes?", &lines, &buttons, SetAct::GuardStay);
             }
         }
@@ -2569,7 +2573,9 @@ mod tests {
                 // The ask dialog: its own screen, drawn in old units over the menu.
                 g.view = View::fit(ww as u32, wh as u32);
                 g.fonts.audit = Some(Vec::new());
-                let v = aegis_ui::panes::AskView { ornate: true, ..aegis_ui::panes::AskView::new("Leave this place?", "Anything not saved since the last save is lost. Enter answers the default, y and n answer, Esc is No.") };
+                let keys = crate::controls_view::hints(&cx.settings.v);
+                let question = format!("Anything not saved since the last save is lost. {} answers the default, y and n answer, {} is No.", keys.key_hint(Key::Enter), keys.key_hint(Key::Esc));
+                let v = aegis_ui::panes::AskView { ornate: true, ..aegis_ui::panes::AskView::new("Leave this place?", &question) };
                 let area = Rect::new(0, 0, W, H);
                 let mut ui: Ui<MenuAct> = Ui::new(&mut g, (-1, -1), true);
                 let ask = panes::ask_dialog(&mut ui, "ask", area, &v, MenuAct::Quit, MenuAct::Quit);
@@ -3370,6 +3376,20 @@ mod settings_tests {
             s.click_id(&mut cx, "settings_controls.reset").expect("Reset");
             assert_eq!(saved(&cx, "controls"), Value::Null);
             assert_eq!(Controls::from_settings(&cx.settings.v).0, Controls::default());
+            // CONTROLS-UI1B: the confirm's and the guard's buttons name the key bound to Enter
+            let text = |w: &[Value], id: &str| w.iter().find(|x| x["id"] == id).map(|x| x["text"].as_str().unwrap_or("").to_string()).unwrap_or_default();
+            let mut c = Controls::default();
+            c.bind_key(Key::Enter, Key::Char('k'));
+            cx.settings.v["controls"] = c.to_json();
+            s.confirm = Some(Confirm { before: cx.settings.v.clone(), until: Instant::now() + Duration::from_secs(CONFIRM_SECS) });
+            let w = redraw(&mut s, &mut cx, &mut g);
+            assert_eq!(text(&w, "settings.confirm.keep"), "Keep changes [K]");
+            s.confirm = None;
+            s.guard = Some(Leave::Close);
+            let w = redraw(&mut s, &mut cx, &mut g);
+            assert_eq!(text(&w, "settings.guard.apply"), "Apply display [K]");
+            s.guard = None;
+            cx.settings.v.as_object_mut().unwrap().shift_remove("controls");
         }
     }
 
