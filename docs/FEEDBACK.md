@@ -67,6 +67,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-81` (`DECOR1`) | done | `develop` (squash `PR7-81`) | Display-only encounter field `decor: [{art, x, y}]` (kit schema, typed reader, content check), drawn by the stage with `lights` on its art key; no rule reads it; goldens unchanged; `FB-396` |
 | `PR7-84` (`ACT1-DATA2`) | done | `develop` (squash `PR7-84`) | `rec_level` 7, 7, 8 on the Bone-Mill, Vats and Crucible; the Crucible and Overlook lock hint names the Bone-Mill and Vats turn-ins; the winch drum gets a Here row; Dunstan's battle line is wordless; six `pr7_84_*` seeds; `FB-398` |
 | `PR7-79` (`DIORAMA-DRESS1`) | done | `develop` (squash `PR7-79`) | Ten Act 1 Sunk Ward battle boards dressed through `decor` seeds (`cover/v3` lamps on blocks, edge `lantern_pole`s, edge props), no walkability change; fix: the arena launch path reads `<world>:<id>` so its board gets the world's stage set; shots `/mnt/project-files/pr7-79/`; goldens unchanged; `FB-400` |
+| `PR7-86` (`DECOR-GEN1`) | done | `develop` (squash `PR7-86`) | Generated boards (no `rows`, no `decor`) draw 2 to 6 display-only decor pieces from the world manifest's `decor_pool` on their own seeded stream: cover keys on blocks or edges, props at the back only; seed `pr7_86_decor_pool`; goldens unchanged; `FB-402` |
 | `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
 | `PR7-4` (`SCENARIO-GOLDENS1`) | part 1 done (tools lane); baselines await the user | `develop` (squash `PR7-4` part 1) | Scenario `shot` step `golden` (tolerance, pixels allowance, diff image), `record=1`, launch `save`; every scenario in the gate (`tools/fc.sh scenarios_all`); three screen scenarios (menus, hub, battle; 18 shots) run as review shots until the user approves the baselines (`/mnt/project-files/pr7-4/`); `FB-313` |
 | `ENGINE-1` (`HELLO-GAME1`) | done (tools lane) | `develop` (squash `ENGINE-1`) | Sample game `games/hello/` on engine crates only: menu, walker sprite, one save slot, engine sounds, scenario `hello_walk` in the gate; programs `hello` and `hello_cli`; six RPG leaks listed; `FB-315` |
@@ -636,3 +637,36 @@ This file is the **only doc file edited by the Build Session** under the two-ses
   `enc_evt_06_after_fix.png`.
 - **Docs delta**: STRUCTURE: `emberwake_gui/src/battle/tests/decor_tests.rs` (shipped decor draws on both arena paths).
   GAME_BRIEF, if wanted: an arena launch `scene=<world>:<id>` now opens with that world's stage set, music and talks.
+
+### FB-402: PR7-86 DECOR-GEN1 built; the pool is a world manifest field, props stay at the back
+
+- **Status**: built, `develop` (squash `PR7-86`). Goldens unchanged (sim, checks, timeline, journey, phasefold, store,
+  rules). Shots `/mnt/project-files/pr7-86/` (`enc_roam_watch` before and after).
+- **Finding**: there is no board generator; the 13 Sunk Ward roam, scav and patrol fights have empty `rows`, so
+  `Grid::apply_board` lays out a plain 12 x 9 floor. The rule runs at session start instead.
+- **List**: a kit world manifest field `decor_pool` (strings, decor keys as in FB-396, omitted when empty, the nearest
+  parent world's pool when a world has none), checked by `check::encounter::decor_pool_problems`. Seed
+  `pr7_86_decor_pool` sets Sunk Ward's to `cover/v3`, `lantern_pole`, `barrel_stack`, `crates_tall`. `stage.fx.json`
+  is untouched.
+- **Rule** (`rpgkit_battle::encounter::generated_decor`, called in `Session::start_with`): only for an encounter with no
+  `rows`, no `decor` and a pool; 2 to 6 pieces on a stream hashed from (battle seed, "decor", zone), so no other draw
+  moves and a replay draws the same; cover keys on free blocked inner cells, else any edge cell; prop keys only on back
+  cells (row 0, or columns 0 and 11 in rows 0 to 2), so nothing tall stands in the fight; never exits, start cells,
+  hold or stay-behind tiles, nor two on one cell.
+- **Guesses `[PROVISIONAL]`**: edge means the outer ring; `cover/v3` falls back to an edge floor cell (these boards have
+  no inner blocks); later arrivals may land on decor and draw over it; "generated" means empty `rows`.
+- **Tests**: `rpgkit_battle/tests/generated_decor.rs` (7), `rpgkit_content/tests/decor.rs`
+  `a_world_checks_its_decor_pool`, `emberwake_world/tests/generated_decor.rs`, `emberwake_gui` `decor_tests`
+  `generated_boards_draw_their_world_decor_through_both_arena_paths`.
+- **Docs delta**:
+  - Kit README: "DECOR-GEN1 (PR7-86): world manifest `decor_pool`; a generated board (no `rows`, no `decor`) draws 2 to
+    6 display-only pieces at session start (`rpgkit_battle::encounter::generated_decor`, own seeded stream; cover keys
+    on blocked inner cells else any edge cell; prop keys on back cells only, `is_back_cell`, `BACK_SIDE_ROWS` = 2);
+    `EncounterDef.decor_pool` from `rpgkit_world::battle::decor_pool`; check `decor_pool_problems`."
+  - STRUCTURE: `kits/rpg/crates/rpgkit_battle/tests/generated_decor.rs`,
+    `games/emberwake/crates/emberwake_world/tests/generated_decor.rs`.
+  - GAME_BRIEF, Where to look: "Decor on generated boards (roam, scav, patrol): the world manifest's `decor_pool`,
+    placed by `rpgkit_battle::encounter::generated_decor` (props at the back only); display-only."
+- **Tooling note**: the disk filled twice from stale test binaries in `target/debug/deps` (an `encounter.rs` change
+  rebuilds every downstream test); a `tools/fc.sh` step that keeps only the newest binary per name would help (tools
+  lane, if wanted).

@@ -244,6 +244,31 @@ pub fn decor_problems(v: &View, e: &Dict, base_of: &dyn Fn(&str) -> String, stag
     errors
 }
 
+/// DECOR-GEN1 (PR7-86): a world manifest's `decor_pool` (the decor art keys its generated boards draw from) is absent
+/// or a list of decor art keys, each naming art (with asset layers) in the world's stage set `stage_set` (the nearest
+/// of its lineage) or the prop sets, with no key twice.
+pub fn decor_pool_problems(v: &View, m: &Dict, stage_set: &str) -> Vec<String> {
+    let list = match m.get(rpgkit_battle::encounter::DECOR_POOL) {
+        None | Some(Value::Null) => return Vec::new(),
+        Some(Value::Array(list)) if list.iter().all(Value::is_string) => list,
+        Some(_) => return vec!["Decor pool must be a list of decor art keys.".into()],
+    };
+    let cover_sets = crate::art::decor_cover_sets(&v.assets, stage_set, "");
+    let mut errors = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    for key in list.iter().map(json::gstr) {
+        if seen.contains(&key) {
+            errors.push(format!("Decor pool names '{key}' twice."));
+            continue;
+        }
+        if let Some(problem) = decor_art_problem(v, &key, &cover_sets) {
+            errors.push(format!("Decor pool: {problem}"));
+        }
+        seen.push(key);
+    }
+    errors
+}
+
 /// DECOR1: what keeps decor art key `key` from naming art: not the key form, or (with asset layers) no art for it.
 fn decor_art_problem(v: &View, key: &str, cover_sets: &[String]) -> Option<String> {
     let parsed = crate::art::decor_art(key);

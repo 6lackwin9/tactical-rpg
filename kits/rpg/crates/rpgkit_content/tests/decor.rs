@@ -230,3 +230,29 @@ fn a_world_encounter_checks_its_decor() {
     assert!(of("past").contains("art 'cover/v5' names no cover in the board's stage set (zz_stage)"), "a variant another set has: {found:?}");
     assert!(of("alley_bad").contains("(zz_alley, zz_stage)"), "the zone's set is read first: {found:?}");
 }
+
+/// DECOR-GEN1 (PR7-86): the world manifest's `decor_pool` (strings, default [], stored as no key while empty): the
+/// writer stores it; the check refuses a key that is not a decor key, names no art in the world's stage set or the prop
+/// sets, or comes twice.
+#[test]
+fn a_world_checks_its_decor_pool() {
+    let field = fields(source::schema(), "world", "world").iter().map(json::dict).find(|f| json::s(f, "key") == "decor_pool").cloned().expect("the schema field");
+    assert_eq!(json::s(&field, "type"), "strings");
+    assert_eq!(json::get(&field, "default"), &json!([]));
+    let (_s, data) = scratch("pool");
+    catalog(&data, json!({}));
+    let dir = data.join("worlds").join("vale");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("world.json"), json!({"id": "vale", "name": "Vale", "extends": [], "connects": [], "version": 1, "stage_set": "zz_stage"}).to_string()).unwrap();
+    let pool_problems = |data: &Path| store::check(data).into_iter().filter(|p| p.contains("Decor pool")).collect::<Vec<_>>();
+    store::set_world(&data, "vale", &dict(json!({"decor_pool": ["cover/v3", "zz_lamp"]})), false).expect("a good pool is stored");
+    assert!(fs::read_to_string(dir.join("world.json")).unwrap().contains("decor_pool"));
+    assert_eq!(pool_problems(&data), Vec::<String>::new());
+    let bad = json!({"id": "vale", "name": "Vale", "extends": [], "connects": [], "version": 1, "stage_set": "zz_stage", "decor_pool": ["cover/v5", "zz_none", "props/zz_ward/zz_lamp", "zz_lamp", "zz_lamp"]});
+    fs::write(dir.join("world.json"), bad.to_string()).unwrap();
+    let found = pool_problems(&data);
+    assert_eq!(found.len(), 4, "{found:?}");
+    for want in ["art 'cover/v5' names no cover in the board's stage set (zz_stage)", "art 'zz_none' names no prop art", "'props/zz_ward/zz_lamp' is not a decor art key", "names 'zz_lamp' twice"] {
+        assert!(found.iter().any(|p| p.contains(want)), "{want}: {found:?}");
+    }
+}

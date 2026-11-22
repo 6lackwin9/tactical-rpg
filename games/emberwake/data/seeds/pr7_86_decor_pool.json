@@ -1,0 +1,16 @@
+{
+  "steps": [
+    {
+      "op": "world",
+      "id": "sunk_ward",
+      "fields": {
+        "decor_pool": [
+          "cover/v3",
+          "lantern_pole",
+          "barrel_stack",
+          "crates_tall"
+        ]
+      }
+    }
+  ]
+}

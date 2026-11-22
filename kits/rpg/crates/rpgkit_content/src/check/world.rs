@@ -809,6 +809,9 @@ pub fn manifest_errors(v: &View, w: &str) -> Vec<String> {
     errors.extend(super::assets::tileset_errors(v, w));
     errors.extend(super::assets::ground_errors(v, w));
     errors.extend(super::ground::family_errors(m));
+    // DECOR-GEN1 (PR7-86): the generated boards' decor keys, against the nearest stage set of the lineage
+    let stage_set = v.worlds.lineage(w).iter().rev().map(|l| json::s(v.worlds.manifest(l), "stage_set")).find(|s| !s.is_empty()).unwrap_or_default();
+    errors.extend(encounter::decor_pool_problems(v, m, &stage_set));
     errors
 }
 

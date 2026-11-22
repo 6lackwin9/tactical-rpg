@@ -68,6 +68,73 @@ pub fn decor_of(o: &Obj) -> Vec<Decor> {
         .collect()
 }
 
+/// DECOR-GEN1 (PR7-86): the fewest and most pieces a generated board draws (`generated_decor`).
+pub const GENERATED_DECOR: (i32, i32) = (2, 6);
+/// DECOR-GEN1: the stream name of the generated decor's own draws (`generated_decor`), apart from every rule's.
+pub const DECOR_STREAM: &str = "decor";
+/// DECOR-GEN1: the world manifest field naming a world's generated-board decor keys.
+pub const DECOR_POOL: &str = "decor_pool";
+
+/// DECOR-GEN1: whether decor art key `key` is a cover key (`cover` or `cover/v<N>`: the stage set's cover prop),
+/// which stands on a blocked inner cell (else any edge cell); any other key is a prop, which stands on a back cell
+/// (`is_back_cell`).
+pub fn is_cover_key(key: &str) -> bool {
+    key == "cover" || key.starts_with("cover/")
+}
+
+/// DECOR-GEN1: whether cell `c` is on the board's outer ring (column 0 or 11, row 0 or 8).
+pub fn is_edge_cell(c: V2) -> bool {
+    c.x == 0 || c.y == 0 || c.x == crate::grid::GRID_W - 1 || c.y == crate::grid::GRID_H - 1
+}
+
+/// DECOR-GEN1: the last row of the side columns a prop may stand on (`is_back_cell`).
+pub const BACK_SIDE_ROWS: i32 = 2;
+
+/// DECOR-GEN1: whether cell `c` is at the back of the board, where a generated prop (a tall piece) may stand without
+/// rising into the fight area: row 0, or the side columns (0 and 11) in rows 0 to `BACK_SIDE_ROWS`.
+pub fn is_back_cell(c: V2) -> bool {
+    c.y == 0 || ((c.x == 0 || c.x == crate::grid::GRID_W - 1) && (0..=BACK_SIDE_ROWS).contains(&c.y))
+}
+
+/// DECOR-GEN1 (PR7-86): the display-only decor a generated board (an encounter with no rows and no decor of its own)
+/// draws from `pool` (its world's `decor_pool`), from the battle seed `seed` alone: one `aegis_core::rng::GodotRng`
+/// seeded with hash([seed, `DECOR_STREAM`, `zone`]), so no rule's draw moves and a replay with the same seed draws the
+/// same. It draws a count in `GENERATED_DECOR`, then per piece a key of `pool` and a free cell for it: a cover key on a
+/// blocked inner cell of `grid` (an edge cell when none is free), a prop on a back cell (`is_back_cell`); never on an exit, a cell of
+/// `taken` (the deploy cells and objective tiles), or another piece's cell. Fewer when the cells run out; none for an
+/// empty pool. The rules never read it.
+pub fn generated_decor(grid: &crate::grid::Grid, pool: &[String], seed: i64, zone: &str, taken: &[V2]) -> Vec<Decor> {
+    use aegis_core::ghash::{hash, GVar};
+    let pool: Vec<&String> = pool.iter().filter(|k| !k.trim().is_empty()).collect();
+    if pool.is_empty() {
+        return Vec::new();
+    }
+    let mut rng = aegis_core::rng::GodotRng::from_i64(i64::from(hash(&GVar::Arr(vec![GVar::Int(seed), GVar::Str(DECOR_STREAM.into()), GVar::Str(zone.into())]))));
+    let free = |c: &V2| !grid.is_exit(*c) && !taken.contains(c);
+    let cells: Vec<V2> = (0..crate::grid::GRID_H).flat_map(|y| (0..crate::grid::GRID_W).map(move |x| V2::new(x, y))).filter(free).collect();
+    let edge: Vec<V2> = cells.iter().copied().filter(|c| is_edge_cell(*c)).collect();
+    let back: Vec<V2> = edge.iter().copied().filter(|c| is_back_cell(*c)).collect();
+    let inner: Vec<V2> = cells.iter().copied().filter(|c| !is_edge_cell(*c) && !grid.is_walkable(*c)).collect();
+    let count = rng.randi_range(GENERATED_DECOR.0, GENERATED_DECOR.1);
+    let mut out: Vec<Decor> = Vec::new();
+    for _ in 0..count {
+        let key = pool[rng.randi_range(0, pool.len() as i32 - 1) as usize];
+        let open = |list: &[V2]| -> Vec<V2> { list.iter().copied().filter(|c| out.iter().all(|d| d.at != *c)).collect() };
+        let list = if is_cover_key(key) {
+            let inner = open(&inner);
+            if inner.is_empty() { open(&edge) } else { inner }
+        } else {
+            open(&back)
+        };
+        if list.is_empty() {
+            continue;
+        }
+        let at = list[rng.randi_range(0, list.len() as i32 - 1) as usize];
+        out.push(Decor { art: key.trim().to_string(), at });
+    }
+    out
+}
+
 // ---- Objectives ----------------------------------------------------------------------------------------------
 
 pub const RING: [V2; 2] = [V2 { x: 5, y: 4 }, V2 { x: 6, y: 4 }];

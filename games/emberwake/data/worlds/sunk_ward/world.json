@@ -12,6 +12,12 @@
 	"party_max": 4,
 	"start_gold": 60,
 	"stage_set": "sunk_ward_stage",
+	"decor_pool": [
+		"cover/v3",
+		"lantern_pole",
+		"barrel_stack",
+		"crates_tall"
+	],
 	"start_supplies": 10,
 	"service_lines": {
 		"turned_in": "{npc} scratches a notch off the cipher rod. \"{quest}: done. Read the board again.\""

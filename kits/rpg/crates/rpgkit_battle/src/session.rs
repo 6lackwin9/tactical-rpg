@@ -86,6 +86,10 @@ pub struct EncounterDef {
     pub start_meter: Vec<rpgkit_data::StartMeter>,
     /// DECOR1 (PR7-81): the display-only decor the stage draws (`encounter::decor_of`); the rules never read it.
     pub decor: Vec<encounter::Decor>,
+    /// DECOR-GEN1 (PR7-86): the decor art keys a generated board draws from (`encounter::generated_decor`, at the
+    /// session start when the entry has no rows and no decor); set by its caller (the world bridge from the world's
+    /// `decor_pool`); never read from the row (none by default: no generated decor). Display-only.
+    pub decor_pool: Vec<String>,
     /// The whole entry (objective and morale fields are read from it).
     pub raw: Obj,
 }
@@ -133,6 +137,7 @@ impl EncounterDef {
             bleed_out_rounds: 0,
             start_meter: Vec::new(),
             decor: encounter::decor_of(o),
+            decor_pool: Vec::new(),
             raw: o.clone(),
         }
     }
@@ -694,9 +699,25 @@ impl Session {
                 s.w.hp_floor = Some((t, encounter::floor_hp(s.w.units[t].max_hp, s.objective.hp_floor)));
             }
         }
+        s.generate_decor();
         s.begin_round(1);
         s.apply_start_ap();
         s
+    }
+
+    /// DECOR-GEN1 (PR7-86): a generated board (the entry has no rows and no decor) draws its decor from `decor_pool`
+    /// (`encounter::generated_decor`, on its own seeded stream), off the exits, the cells the units deployed on, a hold's
+    /// tiles and the stay-behind tiles. Display-only: the rules never read `def.decor`.
+    fn generate_decor(&mut self) {
+        if !self.def.rows.is_empty() || !self.def.decor.is_empty() || self.def.decor_pool.is_empty() {
+            return;
+        }
+        let mut taken: Vec<V2> = (0..self.w.units.len()).flat_map(|c| self.w.cells_of(c)).collect();
+        if self.objective.objective == "hold" {
+            taken.extend(&self.objective.tiles);
+        }
+        taken.extend(self.stay.iter().flat_map(|sb| sb.tiles.iter().copied()));
+        self.def.decor = encounter::generated_decor(&self.w.grid, &self.def.decor_pool, self.def.rng_seed, &self.def.zone, &taken);
     }
 
     /// INPUT2: the encounter's `start_ap` (above 0): every unit starts round 1 with at most that much AP (its max stays,
