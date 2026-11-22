@@ -8,5 +8,7 @@ terrain `zones.rooftops.terrain.<terrain>`, `PR7-74` DIORAMA4). What it does not
 
 | Folder | Art size | What |
 | --- | --- | --- |
-| `floor/` | 64 x 48 | Overlapping dark slate roof tiles with moss (SW-39 bottom right), average about 36; v0 tiles with itself, v1 to v3 blend other crops into v0's edges so any mix tiles |
-| `stone/` | 64 x 48 | The floor darker and mirrored |
+| `floor/` | 64 x 48 | Overlapping dark slate roof tiles with moss (SW-39 bottom right), average about 36; one base tile `v0` with its broad tone flattened, no alternating variants (Tushar's diorama notes, 2026-11-22) |
+| `stone/` | 64 x 48 | Another crop of the floor at the same tone |
+| `rubble/` | 64 x 48 | The `floor/` tile, so the stones prop sits on the zone's own floor |
+| `floor/over_<terrain>/` | 64 x 48 | Transition pieces m01-m14: the floor's ragged edge over `stone` |

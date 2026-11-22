@@ -8,7 +8,9 @@ terrain `zones.foundry.terrain.<terrain>`, `PR7-74` DIORAMA4). What it does not 
 
 | Folder | Art size | What |
 | --- | --- | --- |
-| `floor/` | 64 x 48 | Riveted cast-iron floor plates with soot and rust (SW-39 top left), average about 31; v0 tiles with itself, v1 to v3 blend other crops into v0's edges so any mix tiles |
-| `stone/` | 64 x 48 | The floor darker and mirrored |
-| `lava/` | 64 x 48 | Cooling foundry slag: dark crusted plates with thin dull orange cracks (SW-40 right), average about 56; the calmer lava for the foundry zone |
+| `floor/` | 64 x 48 | Riveted cast-iron floor plates with soot and rust (SW-39 top left), average about 31; one base tile `v0` with its broad tone flattened, no alternating variants (Tushar's diorama notes, 2026-11-22) |
+| `stone/` | 64 x 48 | Another crop of the floor at the same tone |
+| `lava/` | 64 x 48 | Cooling foundry slag: dark crusted plates with thin dull orange cracks (SW-40 right), average about 56; the calmer lava for the foundry zone; one flattened tile |
 | `lava/front_face/` | 64 x 24 | The rim under the slag: the world set's stone face with a glowing slag lip and drips; read through `zones.foundry.terrain.lava` |
+| `rubble/` | 64 x 48 | The `floor/` tile, so the stones prop sits on the zone's own floor |
+| `floor/over_<terrain>/` | 64 x 48 | Transition pieces m01-m14: the floor's ragged edge over `lava` and `stone` |

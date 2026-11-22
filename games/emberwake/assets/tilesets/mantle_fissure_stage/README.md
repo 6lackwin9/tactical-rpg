@@ -14,6 +14,6 @@ world names it (`stage_set`) or a zone does (`stage.fx.json` `zones.<zone>.set`)
 | `wall_face/` | 64 x 24 | The rock's dark lower face |
 | `front_face/<terrain>/` | 64 x 24 | The ledge lip of basalt column tops over the drop, for `floor` and `stone` |
 | `cover/` | 64 x 72 | Standing cover, bottom aligned: v0 crate of survey gauges, v1 and v2 ossified rib stubs |
-| `backdrop_chasm.png` | 384 x 52 | The chasm cliff: bone-ivory rib arches, the broken verdigris survey scaffold with gauges, pale green lanterns. It moves to `backgrounds/battle/<zone>.png` once an Act 3 zone exists |
+| `../../backgrounds/battle/mantle_fissure_chasm.png` | 384 x 52 | The chasm cliff: bone-ivory rib arches, the broken verdigris survey scaffold with gauges, pale green lanterns. Parked there under a placeholder name; renamed to the zone id once an Act 3 zone exists |
 
 Mock shots are in project files `art-ui/act3_mock/`.

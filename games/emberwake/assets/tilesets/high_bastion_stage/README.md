@@ -13,7 +13,7 @@ place. No data names it yet: no Act 2 world exists, so the game never reads this
 | `wall_face/` | 64 x 24 | The blocker's dark brick face |
 | `front_face/<terrain>/` | 64 x 24 | The crenellated rampart parapet under the last row, for `floor` and `stone` |
 | `cover/` | 64 x 72 | Standing cover, bottom aligned: v0 stacked ballista-bolt crate, v1 carved stone merlon |
-| `backdrop_ramparts.png` | 384 x 52 | The watch tower far wall (cyan lancet windows, red Clerisy banners, curfew bell). It moves to `backgrounds/battle/<zone>.png` once an Act 2 zone exists |
+| `../../backgrounds/battle/high_bastion_ramparts.png` | 384 x 52 | The watch tower far wall (cyan lancet windows, red Clerisy banners, curfew bell). Parked there under a placeholder name; renamed to the zone id once an Act 2 zone exists |
 
 Region-map reference for the same node (SW-47, Watch Ramparts / Slag Breach) and the mock shots are in project files
 `art-ui/act2_mock/`; it is a design reference, not game art.
