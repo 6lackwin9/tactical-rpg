@@ -30,6 +30,14 @@ Parked for your approval (golden re-records need your word):
   is still won (round 6); the Overlook is lost 3 of 3, because Withdraw can no longer run into AP debt. Recommendation:
   keep "one holds, three get out" and that AP rule, and ease the Overlook itself (exits nearer, or one more founder AP
   there); then the other bosses after you play one.
+- [ ] Act 1 pacing, from an agent's play of Act 1 (`FB-441`, 2026-11-22; run log and shots in project files
+  `build-tools/act1_agent_run/`): the party reached level 7 after the first four quests (rated 4-5) and won every fight
+  up to the Bone-Mill boss, which then beat it three times on the auto plan at level 7-8. Tithing fell from 42 to 17
+  days by the Vats (a day per road and per rest, about 4 days per lost boss trip), and nothing says what happens at 0;
+  Tallow fell from 10 to 1 in the first week. Queued without asking: bug fixes, retries that reroll, and an agent
+  trying the boss by hand (`ENGINE-34`). Recommendation: decide the pacing after your own playtest; meanwhile the
+  Tithing HUD says what happens at 0. The Night of the Red Pen resolving in one log line is on the story list for after
+  your story playtest.
 - [ ] Diorama battle stage in the game (your 21:46 go-ahead): the first slice landed (`PR7-64`); Fable's in-game review
   (https://claude.ai/artifact/GfoCKjXQnVeTbFBBshuRe2) found the UI chrome on contract and the stage about half way to
   the mock. Queued as provisional, to confirm: amber light pools under the lanterns with a soft vignette; cover props
