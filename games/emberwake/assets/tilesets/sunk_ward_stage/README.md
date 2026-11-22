@@ -10,7 +10,7 @@ back to `common_stage`. Spec: `games/emberwake/docs/specs/SCREEN_CONTRACT_BATTLE
 | --- | --- | --- |
 | `floor/` | 64 x 48 | Squared basalt setts on the cell grid (SW-17), average about 30, four crops that tile without seams |
 | `stone/` | 64 x 48 | The setts darker and mirrored |
-| `wall/` | 64 x 48 | Block cap: ward wall brick from SW-03, average about 21 so wall cells read (AI-41) |
+| `wall/` | 64 x 48 | Block cap: the flat top of a thick basalt wall seen from above, no baked light or grates (SW-38, AI-42 item 1), average about 25; v0 plain, v1 to v3 cracked, mossy and stained stones blended into v0's edges so any mix tiles |
 | `wall_face/` | 64 x 24 | Front face and block face: the wall's plinth |
 | `deep_water/` | 64 x 48 | Canal water only, one blue-green hue (SW-04 water band, AI-41) |
 | `wall_foot/` | 64 x 16 | Row 0 strip where the backdrop meets the board (D4, drawn once Build adds it) |
@@ -19,4 +19,6 @@ back to `common_stage`. Spec: `games/emberwake/docs/specs/SCREEN_CONTRACT_BATTLE
 | `lava/` | 64 x 48 | Molten channels between cooled basalt (SW-16 band 1) |
 | `toxic_bog/` | 64 x 48 | Dark olive sludge with ripples (SW-16 band 2) |
 | `burning_ground/` | 64 x 48 | Ward brick with burning seams (SW-16 band 3) |
+| `bridge/` | 64 x 48 | Damp timber plank deck with iron straps (SW-41 rows 1 and 2, AI-42 item 4), average about 40 |
+| `rubble/` | 64 x 48 | Broken basalt on the `floor/` setts (SW-41 rows 3 and 4 pasted into the floor crops, edges kept), average about 32; the stones prop is `props/common/stones` |
 | `cover/` | 64 x 72 | Standing cover props, bottom aligned: v0 roped crates, v1 barrel stack, v2 banded stone pillar, v3 lamp post (SW-20) |
