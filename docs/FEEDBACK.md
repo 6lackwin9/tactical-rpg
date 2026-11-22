@@ -126,8 +126,61 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-32` (`BREPORTUI1`) | Built (tools lane) | `develop` | The results popup shows the battle report table and best moment; F2 panel sized to content, portraits, drop tiles, XP bars; PT-11 and PT-13 fixed. FB-435 |
 | `PR7-71` (`CONTROLS-MIGRATE1`) | Built (tools lane) | `develop` | On load, an action on a fixed key goes back to its own key (swap undone), the settings are saved and a notice names it. FB-437 |
 | `PR7-72` (`SHOT-DIFF1`) | Built (tools lane) | `develop` | `tools/fc.sh shots diff`: the scenarios a change can show, base shots cached per commit, `index.md` and a contact sheet. FB-439 |
+| `ENGINE-32` (`ACT1-AGENT-RUN1`) | Report (tools lane) | `develop` | Agent run of Act 1: 9 quests turned in, then blocked at the Bone-Mill boss for the auto plan; PT-40..PT-65. FB-441 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-441: ENGINE-32 ACT1-AGENT-RUN1 report; Act 1 blocked at the Bone-Mill boss for the auto plan
+
+- **Status**: report (tools lane), no code changes.
+- **Spec**: `docs/READY.md` row `ENGINE-32` (`ACT1-AGENT-RUN1`).
+- **Run**: `aegis playtest` (dev build, no window), a new Sunk Ward game, played through clicks and keys. I read
+  every vignette card, confirmed the auto-filled plan each round, and clicked the board, the turn-ins, level-up, the
+  gear, the shop and the travel; I made no debug jumps. Run log: `/mnt/project-files/build-tools/act1_agent_run/run_log.md` (4,870 commands), with the
+  shots this table cites in the same folder. Saves are kept at the start of the hub, before the Cages, the Sweep, the
+  Kiln, the Vats, and at the end.
+- **How far**: the prologue (opening vignette and four fights), then the Sluice Lock-Ciphers, the Crossroads Cages,
+  the Night of the Red Pen, the Sweep, the Seventh Ward Bellows, Liturgical Cipher Rubbings, the Tallow Vats (Elyse
+  joins) and Corvo's Gate (toll), all turned in. The Bone-Mill Raid was lost three times (PT-40), so the Crucible
+  (Locked) and the act's end were not reached. A player who plans the rounds by hand may get past it; this run used
+  only the auto plan and AUTO.
+- **Time per region** (wall clock, UTC 04:04 to 04:48): prologue to the hub 7 min; hub, board and level-up 3 min;
+  Drowned Runoff Grate 2 min; Ash-Crawl Crossroads (Cages, Red Pen, a patrol) 6 min; Alleyway Junction 7 (the Sweep, a
+  patrol) 4 min; the turn-ins at the hub 4 min; Alleyway again (shop, the Bellows, a patrol) 4 min; the Fourth Kiln
+  (a patrol and the boss twice, then once more) 9 min; the Tallow Vats 3 min; Corvo's Gate 1 min. In game: Tithing 42
+  to 17 days.
+- **Slow frames**: none seen in this headless run; frame times need a windowed run.
+
+| PT | Sev | Area | Finding | Shots (`NNN_*.png`) |
+| --- | --- | --- | --- | --- |
+| PT-40 | blocker | battle | The Bone-Mill boss (Overseer Grendel, phase 2) beats the party three times at Lv 7-8: twice on the auto-filled plan, once on AUTO. Each ends Fled at round 6-7 with two heroes standing and no line on why they fled. The boss card reads 142/608 while the boss bar reads 142/304, and the counter reads Hostiles 0 with the boss up. | 3819, 4191, 4865 |
+| PT-41 | major | battle | A retry replays the same fight: new gear (Slag Plating, Gilded Pavise) and the same plans give the same damage per hero to the point (170/222/104/411/58) and the same Fled at round 6. A player who retries without replanning cannot get a different result. | 3831, 4191 |
+| PT-42 | major | time | Tithing fell from 42 to 17 days by the Vats and Corvo. Each road and each rest costs a day, and a lost boss fight costs about 4 days for the trip home to rest. Nothing says what happens at 0 or how many days the rest of the act needs. | HUD in 4710 |
+| PT-43 | major | region | Quest points (the lock tablet, the toll pen, the rubbings, the bellows cache) are not in the Here list, though NPCs and exits are. The bellows cache is about 25 tiles off screen, with no arrow pointing to it, so finding it means panning the whole map. I walked there by keys. | 2349, 2675, 3416 |
+| PT-44 | major | region | After using a point (the rubbings, the toll pen), the log adds "You can't get there.". That line replaces the quest line in the one-line log bar, so the player sees an error where the quest moved. | 2675 |
+| PT-45 | major | world map | No roads are drawn until a place is picked (roads [] at the start). A new player sees locked places with quest marks and no way to them. The Next hint shows only after clicking a locked place. | 2329, 2331 |
+| PT-46 | minor | story | Each vignette card takes 2-4 Space presses: the first finishes the typing, and presses during the fade seem to be eaten. | 005..066 |
+| PT-47 | minor | battle | A mid-fight talk opens with the round's plan empty (1 Idle .. 6 Idle) and Confirm disabled, while the message bar still says "Round 2: plan your party.". | 1839 |
+| PT-48 | minor | battle | A downed foe lists "Hasted: 998 rounds" (a sentinel duration shown as a number). | 1839 |
+| PT-49 | minor | board | Jobs show no Where line and no level, while the main quests show both. The Crucible reads "Locked: Locked" with no "Opens after" line, and so do the Overlook, Wedges and Counter-Still. | 2252, 3268 |
+| PT-50 | minor | world map | A quest that is ready to turn in (Lock-Ciphers) drops off the Active quests legend. | 2359 |
+| PT-51 | minor | region | Using the lock tablet logs its lore line twice. | 2359 |
+| PT-52 | minor | story | The Night of the Red Pen resolves in one log line on a click (no scene, no fight), though the board sells it as a rescue. | 2675 |
+| PT-53 | minor | world map | Make camp always shows disabled away from a safe place, and the reason ("Rest only at a safe place.") is only in its hover. | 3906 |
+| PT-54 | minor | region | Exits named for a direction ("World map: the alley north", "the road north") all open the same world map at the current place. | 2736 |
+| PT-55 | minor | region | After a patrol fight interrupts a walk to an exit, the walk does not resume (it takes two more clicks). | log |
+| PT-56 | minor | turn-in | Each "We finished" opens its own confirm popup, even with nothing to choose (four popups for four quests). The "Quest complete: 60 XP, 20 Scrap." lines do not name the quest. | 3216 |
+| PT-57 | minor | economy | Tallow fell from 10 to 1 in the first week (1 per road), so I had to make a shopping trip before the Bellows. The shop's "20 of 98" reads oddly. | 3355, 3358 |
+| PT-58 | minor | region | Leaving the Fourth Kiln after the lost boss fight, a patrol jumps a party at 59/1/1/1 HP. There is no rest point there, so the walk out is another fight (Fled again). | log |
+| PT-59 | minor | results | A guest row shows only its initial, though the guest has a portrait in the party list (Dunstan). This is my `PR7-32` drawing guests without art. | 3831 |
+| PT-60 | minor | gear | Equipping an item the hero cannot use opens a notice with a raw id: "Vesper can't wear Marrow Scalpel: untrained in bone_saw (proficiency 0).". The stash list offers the item with no mark. | 3972 |
+| PT-61 | minor | quest | Paying Corvo's toll completes Corvo's Gate with no log line (no "Quest updated", no Scrap line). Only the Journal shows it ready. | 4710 |
+| PT-62 | minor | journal | The journal panel lets the region's Here list and log show through faintly behind the quest text. | 4710 |
+| PT-63 | minor | turn-in | Low confidence: the Tallow Vats pick (`loot_orlovs_retribution`) is missing from its "Quest complete" line, and the stash then holds "Flensing Talon". The Sweep's pick (Gilded Pavise) was listed. | log |
+| PT-64 | note | balance | The party reached Lv 7 after the first four quests, which are rated Lv 4-5, and won every fight up to the Bone-Mill boss in 1-8 rounds on the auto plan. | 2641 |
+| PT-65 | note | flow | The Talia board, the Journal, level-up (Auto, then Confirm, then Yes per member), the turn-in rewards, the chandler shop and the region and world map travel all worked as a player would expect. | 2265, 4710, 3358 |
+
+- **Next**: fixes come back as rows. PT-40 to PT-45 are the ones a player will hit first.
 
 ### FB-439: PR7-72 SHOT-DIFF1 built; `fc.sh shots diff`
 
