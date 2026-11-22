@@ -16,6 +16,7 @@ playtest harness (`tools/fc.sh playtest`) after the prologue; make it again the 
 | `menu_opens` | The main menu to the new game screen and back | 0.8 s |
 | `timeline_fight` | `tl_flank` on the Timeline ruleset, autoplay on screen to a win, with a clip | 13 s |
 | `story_battle_hub` | A new Sunk Ward game: the opening vignette, the battle beat (TRANSITIONS1 T1), the first fight won by the link's `autoplay`, the victory beat and the results over the field (T2), then the prologue's vignettes and fights to the hub | 18 s |
+| `battle_report` | A new game's first fight won by `autoplay`; the results show the battle report (`state.report`, the best-moment line), then Level up now opens the character sheet and Escape comes back to the report (`PR7-32`, PT-13) | 10 s |
 | `screens_menus` | Review shots (PR7-4; golden once the user approves the baselines): main menu, new game, load, the five settings tabs, the Scene Runner | 3 s |
 | `screens_hub` | Review shots from the save `saves/hub_start` (the hub right after the prologue): region map, talk box, notice board, shop, party (stats, skills, gear), world map; plus the game menu and its Party in its place (`game_menu`, `game_menu_party`, PR7-48) | 25 s |
 | `screens_battle` | Review shot: `tl_flank` seed 7 at its start, planning | 4 s |

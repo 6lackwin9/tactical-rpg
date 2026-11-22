@@ -132,7 +132,8 @@
     "talk_box": "#0a0b10fa",
     "talk_veil": "#05060859",
     "timeline_fill": "#0a0b10fa",
-    "worldmap_ground": "#0a0b10"
+    "worldmap_ground": "#0a0b10",
+    "xp_track": "#1e1c1b"
   },
   "fonts": {
     "body": {"file": "fonts/OpenSans-SemiBold.ttf", "scale": 1.0},

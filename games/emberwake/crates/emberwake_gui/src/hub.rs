@@ -514,6 +514,8 @@ pub struct Results {
     /// OBJUI1 (OBJ1 3, MORALE1 3): the objective line ("Objective met: ..." or "The objective failed.") and, after a
     /// win by a break, the break lines (`obj_view::result_lines`; empty outside a battle).
     objective: Vec<String>,
+    /// PR7-32 (BREPORT1-U): the kit's battle report of the fight (None outside a game battle: no report section).
+    report: Option<emberwake_battle::report::Report>,
     w: Vec<Widget<ResAct>>,
 }
 
@@ -730,17 +732,10 @@ pub fn reward_text(rewards: &Dict, outcome: &str, currency: &str, name: &dyn Fn(
     if !bonus.is_empty() {
         lines.push(format!("Objective bonus: {}", bonus.join(", ")));
     }
-    let mut merged: Vec<(String, i64)> = Vec::new();
-    for x in json::aget(rewards, "drops").iter().filter_map(Value::as_object) {
-        let (item, n) = (json::s(x, "item"), json::i(x, "count", 1));
-        match merged.iter_mut().find(|m| m.0 == item) {
-            Some(m) => m.1 += n,
-            None => merged.push((item, n)),
-        }
-    }
+    let merged = merged_drops(rewards);
     if !merged.is_empty() {
         let parts: Vec<String> = merged.iter().map(|(item, n)| if *n > 1 { format!("{} x{n}", name("items", item)) } else { name("items", item) }).collect();
-        lines.push(format!("Dropped: {}", parts.join(", ")));
+        lines.push(format!("{DROPPED}{}", parts.join(", ")));
     }
     let keys: Vec<String> = json::sget(rewards, "key_loot").iter().map(|k| name("loot", k)).collect();
     if !keys.is_empty() {
@@ -750,6 +745,46 @@ pub fn reward_text(rewards: &Dict, outcome: &str, currency: &str, name: &dyn Fn(
         lines.push(format!("Missed: {} (slay {} and win)", name("loot", &json::s(x, "loot")), name("characters", &json::s(x, "kill"))));
     }
     (tally, note.to_string(), lines)
+}
+
+/// PR7-32 (ART-18): the results panel's width, margin to the window, padding, row heights (a 32 px portrait, or the
+/// compact row when the heroes would not fit), a number column's width, the XP bar's width, a drop tile's side, a
+/// button's height.
+const RES_W: i32 = 560;
+const RES_MARGIN: i32 = 10;
+const RES_PAD: i32 = 12;
+const RES_ROW_H: i32 = 34;
+const RES_ROW_COMPACT: i32 = 20;
+const RES_COL_W: i32 = 52;
+const RES_XP_W: i32 = 90;
+const DROP_TILE: i32 = 16;
+const RES_BUTTON_H: i32 = 18;
+/// The rewards line the drop tiles replace (`reward_text`).
+const DROPPED: &str = "Dropped: ";
+
+/// A report column's header (BREPORT1 rule 5).
+pub fn column_label(id: &str) -> &'static str {
+    match id {
+        "dealt" => "Damage",
+        "taken" => "Taken",
+        "healed" => "Healed",
+        "effects" => "Effects",
+        "combos" => "Combos",
+        _ => "",
+    }
+}
+
+/// The drops of `rewards`, one per item with its count, in drop order (as `reward_text` merges them).
+pub fn merged_drops(rewards: &Dict) -> Vec<(String, i64)> {
+    let mut merged: Vec<(String, i64)> = Vec::new();
+    for x in json::aget(rewards, "drops").iter().filter_map(Value::as_object) {
+        let (item, n) = (json::s(x, "item"), json::i(x, "count", 1));
+        match merged.iter_mut().find(|m| m.0 == item) {
+            Some(m) => m.1 += n,
+            None => merged.push((item, n)),
+        }
+    }
+    merged
 }
 
 impl Results {
@@ -779,8 +814,15 @@ impl Results {
             timed_out: false,
             next_lines: Vec::new(),
             objective: Vec::new(),
+            report: None,
             w: Vec::new(),
         }
+    }
+
+    /// PR7-32: the fight's battle report (the per-hero table and the best moment).
+    pub fn report(mut self, report: Option<emberwake_battle::report::Report>) -> Self {
+        self.report = report;
+        self
     }
 
     /// OBJUI1: the objective line and the break lines under it (`obj_view::result_lines`).
@@ -812,6 +854,13 @@ impl Results {
     }
 
     fn act(&mut self, cx: &mut Cx, a: ResAct) {
+        // PR7-32 (PT-13): Level up now opens the character sheet over the results, so its Close comes back to them
+        if let ResAct::LevelUp = a {
+            if self.leaving.is_none() {
+                self.level_up(cx);
+            }
+            return;
+        }
         // TRANSITIONS1 T2 step 3: over a battle, Continue fades to black with the victory stinger first (a press during
         // the fade ends it); Level up now goes at once
         if self.over {
@@ -844,12 +893,33 @@ impl Results {
         self.close(cx, a);
     }
 
-    fn close(&mut self, cx: &mut Cx, a: ResAct) {
+    fn close(&mut self, cx: &mut Cx, _a: ResAct) {
         cx.nav.push(Nav::Pop);
-        if let ResAct::LevelUp = a {
-            let first = cx.gs().party.members.iter().find(|m| self.award.contains_key(&m.id) && m.unspent(&cx.data) > 0).map(|m| m.id.clone()).unwrap_or_default();
-            cx.nav.push(Nav::Push(Box::new(crate::party::Character::new(cx, &first, "level_up"))));
+    }
+
+    /// PT-13: the character sheet's level-up tab on the first awarded member with points to spend, over the results.
+    fn level_up(&mut self, cx: &mut Cx) {
+        let first = cx.gs().party.members.iter().find(|m| self.award.contains_key(&m.id) && m.unspent(&cx.data) > 0).map(|m| m.id.clone()).unwrap_or_default();
+        cx.nav.push(Nav::Push(Box::new(crate::party::Character::new(cx, &first, "level_up"))));
+    }
+
+    /// PR7-32: the table's rows: each party member with an award or a report row (party order), then the report's other
+    /// rows (guests); each with its report row when there is one.
+    fn heroes<'a>(&'a self, gs: &'a GameState) -> Vec<(Option<&'a UnitState>, Option<&'a emberwake_battle::report::Row>)> {
+        let rows: &[emberwake_battle::report::Row] = self.report.as_ref().map_or(&[], |r| r.rows.as_slice());
+        let mut out: Vec<(Option<&UnitState>, Option<&emberwake_battle::report::Row>)> = Vec::new();
+        for m in &gs.party.members {
+            let row = rows.iter().find(|r| !r.guest && r.key == m.id);
+            if self.award.contains_key(&m.id) || row.is_some() {
+                out.push((Some(m), row));
+            }
         }
+        for r in rows {
+            if !out.iter().any(|(_, x)| x.is_some_and(|x| std::ptr::eq(x, r))) {
+                out.push((None, Some(r)));
+            }
+        }
+        out
     }
 }
 
@@ -890,15 +960,7 @@ impl Screen<GameCx> for Results {
         } else {
             ui.p.fill(Rect::new(0, 0, W, H), th().game("result_veil", rgba(10, 14, 24, 235)));
         }
-        ui.p.shift(shift, 0);
-        if self.over {
-            // PR7-36 (ART-02): the results are a main panel: the ornate tier over the panel's fill
-            let r = Rect::new(12, 12, W - 24, H - 34);
-            ui.p.fill(r, th().game("result_panel", rgba(10, 11, 16, 235)));
-            ui.frame_body("ornate", r);
-        }
         let head = outcome_head(&self.outcome, self.timed_out);
-        ui.p.text_face(aegis_ui::painter::Typeface::Display, 24.0, 24.0, head, aegis_ui::ui::HEAD + 4.0, th().gold);
         let world = gs.world_id.clone();
         let name = |kind: &str, id: &str| -> String {
             match kind {
@@ -913,30 +975,21 @@ impl Screen<GameCx> for Results {
         } else if self.timed_out {
             note = timeout_note(&self.rewards).to_string();
         }
-        let line = (ui.p.line_h(BODY + 1.0) + 3.0).ceil() as i32;
-        let mut y = 50;
+        // the text lines above the table, in order, with their inks
+        let mut lines: Vec<(String, aegis_ui::canvas::Rgba)> = Vec::new();
         for (text, col) in [(&tally, th().text), (&note, th().dim)] {
             if !text.is_empty() {
-                ui.p.text(24.0, y as f32, text, BODY + 1.0, col);
-                y += line;
+                lines.push((text.clone(), col));
             }
         }
         // OBJUI1 (OBJ1 3, MORALE1 3): the objective line (gold when met), then a break win's lines
         for (k, text) in self.objective.iter().enumerate() {
             let col = if k > 0 { th().info } else if text == emberwake_battle::obj_view::FAILED_LINE { th().dim } else { th().gold };
-            ui.p.text(24.0, y as f32, text, BODY + 1.0, col);
-            y += line;
+            lines.push((text.clone(), col));
         }
-        // PR7-37 (PT-24): what happens next (the jobs it leaves open)
-        for text in &self.next_lines {
-            ui.p.text(24.0, y as f32, text, BODY + 1.0, th().gold);
-            y += line;
-        }
-        // ENCOUNTER2 W4: who stayed behind ("Kaelen held the winch.")
-        for text in &self.stay_lines {
-            ui.p.text(24.0, y as f32, text, BODY + 1.0, th().info);
-            y += line;
-        }
+        // PR7-37 (PT-24): what happens next; ENCOUNTER2 W4: who stayed behind
+        lines.extend(self.next_lines.iter().map(|t| (t.clone(), th().gold)));
+        lines.extend(self.stay_lines.iter().map(|t| (t.clone(), th().info)));
         // ROSTER1-U: who left (and the keepsake they left), who came home wounded
         for (text, kind) in party_lines(&d, &gs, &self.wounded, &self.departed) {
             let col = match kind {
@@ -944,20 +997,11 @@ impl Screen<GameCx> for Results {
                 PartyLine::Keepsake => th().gold,
                 PartyLine::Wounded => th().dim,
             };
-            ui.p.text(24.0, y as f32, &text, BODY + 1.0, col);
-            y += line;
+            lines.push((text, col));
         }
-        // INTENT2-U: the pouches the stash could not top up to their packed count
-        for text in &self.stash_short {
-            ui.p.text(24.0, y as f32, text, BODY + 1.0, th().dim);
-            y += line;
-        }
-        // PK1-S1: the marks the battle left on members; PR5-26 (PK2-S1): the tracks they moved and the items stashed
-        for text in mark_lines(&d, &gs, &self.marks).into_iter().chain(settle_lines(&d, &gs, &self.tracks, &self.stashed, &self.cleared)) {
-            ui.p.text(24.0, y as f32, &text, BODY + 1.0, th().foe);
-            y += line;
-        }
-        // PR7-3 (review N3): the remains, the weapon mastery gained and the weapons' wear (a dulled one in the foe ink)
+        // INTENT2-U, PK1-S1, PR5-26, PR7-3: stash short, marks, tracks and stashed items, remains, mastery and wear
+        lines.extend(self.stash_short.iter().map(|t| (t.clone(), th().dim)));
+        lines.extend(mark_lines(&d, &gs, &self.marks).into_iter().chain(settle_lines(&d, &gs, &self.tracks, &self.stashed, &self.cleared)).map(|t| (t, th().foe)));
         for (text, kind) in graft_lines(&d, &gs, &self.remains, &self.mastery, &self.wear) {
             let col = match kind {
                 GraftLine::Remains => th().gold,
@@ -965,47 +1009,137 @@ impl Screen<GameCx> for Results {
                 GraftLine::Wear => th().dim,
                 GraftLine::Dulled => th().foe,
             };
-            ui.p.text(24.0, y as f32, &text, BODY + 1.0, col);
-            y += line;
+            lines.push((text, col));
         }
-        let mut prompt = false;
-        for m in &gs.party.members {
-            let Some(a) = self.award.get(&m.id).and_then(Value::as_object) else { continue };
-            let level = m.level(&d);
-            let base = progression::xp_for_level(&d, level);
-            let span = progression::xp_for_level(&d, level + 1) - base;
-            let fill = if span <= 0 { 1.0 } else { ((m.total_xp - base) as f32 / span as f32).clamp(0.0, 1.0) };
-            let (old, new) = (json::i(a, "old_level", 0), json::i(a, "new_level", 0));
-            ui.p.text(24.0, y as f32, &member_name(cx, m), BODY + 1.0, th().info);
-            ui.p.text(130.0, y as f32, &format!("+{} XP", json::i(a, "xp", 0)), BODY + 1.0, th().text);
-            ui.p.text(190.0, y as f32, &if new > old { format!("Level {old} -> {new}!") } else { format!("Level {level}") }, BODY + 1.0, if new > old { th().good } else { th().text });
-            let bar = Rect::new(270, y + 3, 150, 5);
-            ui.p.panel(bar, th().track, th().track, 2.0);
-            ui.p.panel(Rect::new(bar.x, bar.y, (150.0 * fill) as i32, 5), th().gold, th().gold, 2.0);
-            ui.p.text(426.0, y as f32, &format!("{} to next", progression::xp_to_next(&d, m.total_xp)), SMALL, th().dim);
-            if new > old && m.unspent(&d) > 0 {
-                prompt = true;
-            }
-            y += 16;
-        }
-        ui.p.text(24.0, (y + 4) as f32, "Rewards", SMALL, th().info);
-        y += 16;
-        let mut lines = reward_lines;
+        // the rewards: the drops as I2 tiles (ART-18), the other lines as text
+        let drops = merged_drops(&self.rewards);
+        let mut other_rewards: Vec<String> = reward_lines.into_iter().filter(|l| !l.starts_with(DROPPED)).collect();
         if !self.advanced.is_empty() {
             let names: Vec<String> = self.advanced.iter().map(|q| s_or(&quest::resolved(&d, &gs, q), "name", q)).collect();
-            lines.push(format!("Quests advanced: {}", names.join(", ")));
+            other_rewards.push(format!("Quests advanced: {}", names.join(", ")));
         }
-        if lines.is_empty() {
-            lines.push("No other rewards.".into());
+        if other_rewards.is_empty() && drops.is_empty() {
+            other_rewards.push("No other rewards.".into());
         }
-        for l in lines {
-            ui.p.text(24.0, y as f32, &l, BODY + 1.0, if l.starts_with("No other") || l.starts_with("Missed") { th().dim } else { th().text });
+        let heroes = self.heroes(&gs);
+        let prompt = heroes.iter().any(|(m, _)| m.is_some_and(|m| self.award.get(&m.id).and_then(Value::as_object).is_some_and(|a| json::i(a, "new_level", 0) > json::i(a, "old_level", 0)) && m.unspent(&d) > 0));
+        let columns: Vec<&str> = self.report.as_ref().map(|r| r.columns.iter().copied().filter(|c| *c != "name").collect()).unwrap_or_default();
+        let best = self.report.as_ref().map(|r| r.best.clone()).unwrap_or_default();
+        // ART-18: the panel is sized to its content (the rows compact when six or more heroes would not fit)
+        let line = (ui.p.line_h(BODY + 1.0) + 3.0).ceil() as i32;
+        let small = ui.p.line_h(SMALL).ceil() as i32 + 2;
+        let head_h = (ui.p.line_h(aegis_ui::ui::HEAD + 4.0)).ceil() as i32 + 6;
+        let fixed = RES_PAD + head_h + lines.len() as i32 * line + small + if best.is_empty() { 0 } else { line + 2 } + small + if drops.is_empty() { 0 } else { DROP_TILE + 4 } + other_rewards.len() as i32 * line + 8 + RES_BUTTON_H + RES_PAD;
+        let room = H - 2 * RES_MARGIN;
+        let mut row_h = RES_ROW_H;
+        if fixed + heroes.len() as i32 * row_h > room {
+            row_h = RES_ROW_COMPACT;
+        }
+        let ph = (fixed + heroes.len() as i32 * row_h).min(room);
+        let panel = Rect::new((W - RES_W) / 2, RES_MARGIN + (room - ph) / 2, RES_W, ph);
+        // PT-11: the slide-in stops short of the window's edge, so the panel is never cut by it
+        let shift = shift.min(W - 4 - (panel.x + panel.w)).max(0);
+        ui.p.shift(shift, 0);
+        // F2 (ART-02, ART-18): the ornate tier over the panel's fill
+        ui.p.fill(panel, th().game("result_panel", rgba(10, 11, 16, 235)));
+        ui.frame_body("ornate", panel);
+        let x0 = panel.x + RES_PAD;
+        let mut y = panel.y + RES_PAD;
+        ui.p.text_face(aegis_ui::painter::Typeface::Display, x0 as f32, y as f32, head, aegis_ui::ui::HEAD + 4.0, th().gold);
+        y += head_h;
+        for (text, col) in &lines {
+            ui.p.text_fit(x0 as f32, y as f32, text, BODY + 1.0, (panel.w - 2 * RES_PAD) as f32, *col);
             y += line;
         }
-        if prompt {
-            ui.button("results.level_up", Rect::new(24, y + 10, 90, 18), "Level up now", ResAct::LevelUp, true);
+        // the table's header: the report's columns over their numbers
+        let num_x = |k: usize| panel.x + panel.w - RES_PAD - (columns.len() - k) as i32 * RES_COL_W;
+        ui.p.text(x0 as f32, y as f32, "Party", SMALL, th().dim);
+        for (k, c) in columns.iter().enumerate() {
+            ui.p.text_right((num_x(k) + RES_COL_W) as f32, y as f32, column_label(c), SMALL, th().dim);
         }
-        ui.button_full("results.continue", Rect::new(540, 300, 76, 18), "Continue", ResAct::Continue, true, true, BODY + 1.0, Vec::new());
+        y += small;
+        let face = row_h - 2;
+        for (i, (m, row)) in heroes.iter().enumerate() {
+            let r = Rect::new(x0, y, panel.w - 2 * RES_PAD, row_h);
+            if i % 2 == 1 {
+                ui.p.fill(r, rgba(255, 255, 255, 8));
+            }
+            // a 32 px portrait (ART-18), the member's art or a well with the initial
+            let pr = Rect::new(x0, y + 1, face, face);
+            let label = m.map(|m| member_name(cx, m)).or_else(|| row.map(|r| r.name.clone())).unwrap_or_default();
+            let px = ui.icon_px(pr);
+            let img = m.and_then(|m| cx.art.first(&Who::of_member(&d, m).chain(""), px, px).cloned());
+            let initial: String = label.chars().take(1).collect();
+            aegis_ui::panes::icon_tile(&mut ui, pr, img.as_ref(), &initial);
+            let tx = pr.x + face + 6;
+            let state = row.map(|r| r.state).filter(|st| *st != "standing").map(|st| format!(" ({st})")).unwrap_or_default();
+            let guest = if row.is_some_and(|r| r.guest) { " (guest)" } else { "" };
+            ui.p.text_fit(tx as f32, (y + 2) as f32, &format!("{label}{guest}{state}"), BODY + 1.0, (num_x(0) - tx - 6) as f32, th().text);
+            if let Some((m, a)) = m.and_then(|m| self.award.get(&m.id).and_then(Value::as_object).map(|a| (m, a))) {
+                let level = m.level(&d);
+                let base = progression::xp_for_level(&d, level);
+                let span = progression::xp_for_level(&d, level + 1) - base;
+                let fill = if span <= 0 { 1.0 } else { ((m.total_xp - base) as f32 / span as f32).clamp(0.0, 1.0) };
+                let (old, new) = (json::i(a, "old_level", 0), json::i(a, "new_level", 0));
+                let xp_line = if new > old { format!("+{} XP  Level {old} to {new}", json::i(a, "xp", 0)) } else { format!("+{} XP  Level {level}", json::i(a, "xp", 0)) };
+                let ly = y + 2 + ui.p.line_h(BODY + 1.0).ceil() as i32;
+                if row_h >= RES_ROW_H {
+                    ui.p.text(tx as f32, ly as f32, &xp_line, SMALL, if new > old { th().gold } else { th().dim });
+                }
+                // the XP bar: amber on basalt (ART-18)
+                let bar = Rect::new(tx, if row_h >= RES_ROW_H { y + row_h - 7 } else { ly }, RES_XP_W, 4);
+                ui.p.fill(bar, th().game("xp_track", aegis_ui::canvas::rgb(30, 28, 27)));
+                ui.p.fill(Rect::new(bar.x, bar.y, (RES_XP_W as f32 * fill) as i32, bar.h), crate::tokens::accent());
+                let to_next = format!("{} to next", progression::xp_to_next(&d, m.total_xp));
+                ui.push(format!("results.xp.{}", m.id), "label", xp_line.clone(), Rect::new(bar.x, bar.y - 2, bar.w, bar.h + 4), true, false, None, tip(&xp_line, &to_next));
+            }
+            if let Some(row) = row {
+                let tips = [("dealt", emberwake_battle::report::dealt_tip(row)), ("taken", emberwake_battle::report::taken_tip(row)), ("healed", emberwake_battle::report::healed_tip(row)), ("effects", emberwake_battle::report::effects_tip(row)), ("combos", emberwake_battle::report::combos_tip(row))];
+                for (k, c) in columns.iter().enumerate() {
+                    let n = row.number(c);
+                    let text = if n == 0 { "-".to_string() } else { n.to_string() };
+                    let cr = Rect::new(num_x(k), y + 2, RES_COL_W, ui.p.line_h(BODY + 1.0).ceil() as i32);
+                    ui.p.text_right((cr.x + cr.w) as f32, cr.y as f32, &text, BODY + 1.0, if n == 0 { th().dim } else { th().text });
+                    let about = tips.iter().find(|(id, _)| id == c).map(|(_, t)| t.clone()).unwrap_or_default();
+                    let card = if about.is_empty() { Vec::new() } else { tip(&format!("{label}: {} {text}", column_label(c)), &about) };
+                    ui.push(format!("results.report.{i}.{c}"), "label", text, cr, true, false, None, card);
+                }
+            }
+            y += row_h;
+        }
+        // rule 6: the best-moment line
+        if !best.is_empty() {
+            y += 2;
+            ui.p.text_fit(x0 as f32, y as f32, &format!("Best moment: {best}"), BODY + 1.0, (panel.w - 2 * RES_PAD) as f32, th().gold);
+            ui.push("results.best", "label", format!("Best moment: {best}"), Rect::new(x0, y, panel.w - 2 * RES_PAD, line), true, false, None, Vec::new());
+            y += line;
+        }
+        ui.p.text(x0 as f32, y as f32, "Rewards", SMALL, th().dim);
+        y += small;
+        if !drops.is_empty() {
+            let mut x = x0;
+            for (item, n) in &drops {
+                let tr = Rect::new(x, y, DROP_TILE, DROP_TILE);
+                let px = ui.icon_px(tr);
+                let img = cx.art.first(&crate::tokens::item_icons(&d, item), px, px).cloned();
+                aegis_ui::panes::icon_tile(&mut ui, tr, img.as_ref(), "");
+                let label = if *n > 1 { format!("{} x{n}", d.item_name(item)) } else { d.item_name(item) };
+                let end = ui.p.text(x as f32 + DROP_TILE as f32 + 3.0, y as f32 + (DROP_TILE as f32 - ui.p.line_h(BODY + 1.0)) / 2.0, &label, BODY + 1.0, th().text);
+                ui.push(format!("results.drop.{item}"), "label", label.clone(), Rect::new(x, y, end.ceil() as i32 - x, DROP_TILE), true, false, None, tip(&label, &d.item_name(item)));
+                x = end.ceil() as i32 + 10;
+            }
+            y += DROP_TILE + 4;
+        }
+        for l in other_rewards {
+            ui.p.text_fit(x0 as f32, y as f32, &l, BODY + 1.0, (panel.w - 2 * RES_PAD) as f32, if l.starts_with("No other") || l.starts_with("Missed") { th().dim } else { th().text });
+            y += line;
+        }
+        let by = panel.y + panel.h - RES_PAD - RES_BUTTON_H;
+        if prompt {
+            ui.button("results.level_up", Rect::new(x0, by, 90, RES_BUTTON_H), "Level up now", ResAct::LevelUp, true);
+        }
+        ui.button_full("results.continue", Rect::new(panel.x + panel.w - RES_PAD - 76, by, 76, RES_BUTTON_H), "Continue", ResAct::Continue, true, true, BODY + 1.0, Vec::new());
+        let _ = y;
         ui.p.shift(-shift, 0);
         // T2 step 3: Continue's fade to black
         if let Some(ms) = self.leave_ms(now) {
@@ -1027,6 +1161,10 @@ impl Screen<GameCx> for Results {
         // OBJUI1: only after a battle (the state of the other results reads as before)
         if !self.objective.is_empty() {
             out["objective"] = json!(self.objective);
+        }
+        // PR7-32: the battle report, only after a game battle
+        if let Some(r) = &self.report {
+            out["report"] = r.to_json();
         }
         // PK1-S1: only when the battle left marks (the state of a battle without them reads as before)
         if !self.marks.is_empty() {
@@ -1241,6 +1379,95 @@ mod tests {
         let t = texts(&frame(&mut none, &mut cx, &mut gfx(), 1.0));
         assert!(!t.iter().any(|x| x.starts_with("Remains:") || x.contains(" mastery +") || x.contains(" wore ") || x.contains("dulled")), "{t:?}");
         assert!(["remains", "mastery", "wear"].iter().all(|k| none.state(&cx).get(*k).is_none()));
+    }
+
+    /// A report row (test-only numbers) for `key` (a guest when `key` is empty).
+    fn report_row(key: &str, name: &str, dealt: i32, healed: i32) -> emberwake_battle::report::Row {
+        emberwake_battle::report::Row {
+            key: key.into(), name: name.into(), guest: key.is_empty(), state: "standing", dealt, dealt_dot: 0, ff_dealt: 0, taken: 7,
+            taken_dot: 0, healed, regen: 0, effects: 0, combos: 0, kills: 1, status_counts: Default::default(), combo_counts: Default::default(),
+        }
+    }
+
+    /// PR7-32 (BREPORTUI1): the results show the kit's battle report: a row per awarded member then the guests, each
+    /// column's number as a widget with its tip (a 0 reads "-"), the best-moment line and the report in the state; drops
+    /// draw as tiles in place of the "Dropped:" line; without a report there is no table number and no best line.
+    #[test]
+    fn the_results_show_the_battle_report_and_drop_tiles() {
+        let mut cx = party_of(2);
+        let (a, b) = (cx.gs().party.members[0].clone(), cx.gs().party.members[1].clone());
+        let item = cx.data.cat.items.keys().next().expect("an item").clone();
+        let award = json!({a.id.clone(): {"xp": 12, "old_level": 1, "new_level": 1}});
+        let rewards = json!({"drops": [{"item": item, "count": 1}, {"item": item, "count": 2}]});
+        let res = json::obj([("ok", json!(true)), ("xp", award), ("rewards", rewards)]);
+        let report = emberwake_battle::report::Report {
+            outcome: "won".into(), rounds: 3, rows: vec![report_row(&b.id, "B", 40, 0), report_row(&a.id, "A", 25, 9), report_row("", "Ash", 5, 0)],
+            columns: vec!["dealt", "taken", "healed"], best: "A's Cut hit a foe for 30.".into(),
+        };
+        let mut r = Results::new(&res, "won", &Dict::new()).report(Some(report));
+        let t = texts(&frame(&mut r, &mut cx, &mut gfx(), 1.0));
+        let w = r.widgets();
+        let get = |id: &str| w.iter().find(|x| x["id"] == id).unwrap_or_else(|| panic!("{id} in {w:?}")).clone();
+        // party order (a, then b), then the guest
+        assert_eq!(get("results.report.0.dealt")["text"], "25");
+        assert_eq!(get("results.report.1.dealt")["text"], "40");
+        assert_eq!(get("results.report.2.dealt")["text"], "5");
+        assert_eq!(get("results.report.1.healed")["text"], "-", "a 0 reads as a dash");
+        assert!(get("results.report.0.dealt")["tip"].to_string().contains("Damage 25"), "{}", get("results.report.0.dealt"));
+        assert!(t.iter().any(|x| x == "Ash (guest)"), "{t:?}");
+        assert!(["Damage", "Taken", "Healed"].iter().all(|h| t.iter().any(|x| x == h)), "{t:?}");
+        assert_eq!(get("results.best")["text"], "Best moment: A's Cut hit a foe for 30.");
+        assert_eq!(get(&format!("results.drop.{item}"))["text"], format!("{} x3", cx.data.item_name(&item)));
+        assert!(!t.iter().any(|x| x.starts_with(DROPPED)), "the tiles replace the Dropped line: {t:?}");
+        let st = r.state(&cx);
+        assert_eq!((st["report"]["version"].clone(), st["report"]["rows"][0]["name"].clone()), (json!(1), json!("B")), "{st}");
+        assert_clean(&mut r, &mut cx, "results with a report");
+        let mut none = Results::new(&res, "won", &Dict::new());
+        frame(&mut none, &mut cx, &mut gfx(), 1.0);
+        assert!(!none.widgets().iter().any(|x| x["id"].as_str().is_some_and(|id| id.starts_with("results.report.") || id == "results.best")));
+        assert!(none.state(&cx).get("report").is_none_or(Value::is_null));
+    }
+
+    /// PR7-32 (PT-13): Level up now opens the character sheet over the results without closing them (so its Close
+    /// comes back to the report), even over a battle; Continue closes them.
+    #[test]
+    fn level_up_now_keeps_the_results_under_the_character_sheet() {
+        let mut cx = party_of(1);
+        let id = cx.gs().party.members[0].id.clone();
+        let res = json::obj([("ok", json!(true)), ("xp", json!({id: {"xp": 500, "old_level": 1, "new_level": 2}}))]);
+        for over in [false, true] {
+            let mut r = Results::new(&res, "won", &Dict::new());
+            if over {
+                r = r.over_battle(true, None);
+            }
+            cx.nav.clear();
+            r.act(&mut cx, ResAct::LevelUp);
+            assert_eq!(cx.nav.len(), 1, "over {over}: only the sheet opens");
+            let Some(Nav::Push(sheet)) = cx.nav.pop() else { panic!("over {over}: the sheet opens") };
+            assert_eq!(sheet.id(), "character");
+            assert!(r.leaving.is_none(), "over {over}: the results stay");
+        }
+        cx.nav.clear();
+        Results::new(&res, "won", &Dict::new()).act(&mut cx, ResAct::Continue);
+        assert!(matches!(cx.nav.pop(), Some(Nav::Pop)));
+    }
+
+    /// PR7-32 (PT-11): mid-slide over a battle the panel and its Continue stay inside the window.
+    #[test]
+    fn the_sliding_results_stay_inside_the_window() {
+        let mut cx = party_of(1);
+        let id = cx.gs().party.members[0].id.clone();
+        let res = json::obj([("ok", json!(true)), ("xp", json!({id: {"xp": 500, "old_level": 1, "new_level": 2}}))]);
+        let mut r = Results::new(&res, "won", &Dict::new()).over_battle(false, None);
+        for scale in [1.0, 1.3] {
+            r.opened = Instant::now();
+            frame(&mut r, &mut cx, &mut gfx(), scale);
+            for b in ["results.continue", "results.level_up"] {
+                let w = r.widgets().into_iter().find(|w| w["id"] == b).unwrap_or_else(|| panic!("{b}"));
+                let (x, _, ww, _) = crate::hud::hud_tests::rect(&w);
+                assert!(x >= 0 && x + ww <= W as i64, "{b} at {scale}: {x}+{ww}");
+            }
+        }
     }
 
     /// A game whose party has at least `n` members (copies of the first under new ids, test-only members).

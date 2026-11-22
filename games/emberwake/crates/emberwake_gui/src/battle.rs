@@ -807,6 +807,10 @@ impl BattleScreen {
         b.class_world = world;
         b.host.begin(session);
         b.host.restart();
+        // PR7-32 (BREPORT1 rules 1-3): a game battle's metrics follow it live, for the results' battle report
+        if let Some(s) = b.host.session.as_mut() {
+            s.attach_metrics(emberwake_battle::metrics::BattleMetrics::new(), true);
+        }
         b.after_start(&intro);
         if !mods.note.is_empty() {
             b.message = format!("{} {}.", b.message, mods.note);

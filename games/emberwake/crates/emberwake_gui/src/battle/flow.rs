@@ -196,6 +196,11 @@ impl BattleScreen {
             return;
         }
         let d = cx.data.clone();
+        // PR7-32 (BREPORT1 rule 3): the report is built and the metrics frozen once the outcome is known, before settle
+        let report = self.host.session.as_mut().and_then(|s| {
+            s.metrics_end(emberwake_battle::metrics::EndResult::default());
+            s.metrics.as_ref().map(|m| emberwake_battle::report::Report::build(m, s, &outcome))
+        });
         let tally = emberwake_world::battle::Tally::of_world_fight(self.session(), members, &self.class_world);
         let gs = cx.gs_mut();
         let res = emberwake_world::battle::finish_world(&d, gs, runner, fight, &outcome, Some(&tally));
@@ -217,7 +222,7 @@ impl BattleScreen {
             cx.log(l.clone());
         }
         let objective = emberwake_battle::obj_view::result_lines(self.session(), &outcome);
-        let results = crate::hub::Results::new(&res, &outcome, &fight).after_fight(timed_out, next).objective(objective).over_battle(cx.settings.reduce_motion(), before);
+        let results = crate::hub::Results::new(&res, &outcome, &fight).after_fight(timed_out, next).objective(objective).report(report).over_battle(cx.settings.reduce_motion(), before);
         cx.nav.push(Nav::Push(Box::new(results)));
     }
 

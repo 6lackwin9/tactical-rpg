@@ -121,8 +121,37 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-23` (`UISPLIT1-I`) world map | Stage A done (tools lane); ENGINE-23 complete | `develop` | View-model, actions, fixture and tests for the world map; today's drawing kept. FB-429 |
 | `PR7-63` (`XL-BATTLE1`) | Built (tools lane) | `develop` | The battle screen at Extra large: the goal under the title, "Boss above" on its own row, cut texts hover to their words, tags and tabs centred; the boss bar's next blow back on screen. FB-431 |
 | `PR7-70` (`PANELS2`) | Built (tools lane) | `develop` | Save/Load slots, forge, dojo and the services screen are panels; they already filled the screen, so nothing changes on screen. FB-433 |
+| `PR7-32` (`BREPORTUI1`) | Built (tools lane) | `develop` | The results popup shows the battle report table and best moment; F2 panel sized to content, portraits, drop tiles, XP bars; PT-11 and PT-13 fixed. FB-435 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-435: PR7-32 BREPORTUI1 built; the results show the battle report
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `PR7-32` (`BREPORTUI1`), `BREPORT1` rules 5-6, `ART-18`, `PT-11`, `PT-13`; also
+  `PR7-48` item 4 (reward rows).
+- **What landed** (game `battle.rs`, `battle/flow.rs`, `hub.rs`, `assets/ui/theme.json`): a world battle attaches the
+  kit's live metrics when it starts; the settle builds the kit's `Report` and hands it to the results. The results
+  panel is sized to its content and centred, with the ornate (F2) frame and a display-face title; a table lists the
+  report's columns (kit rule: only columns with a non-zero number), one row per awarded or reporting member in party
+  order then the guests, each with a 32 px portrait, its state, its XP line and an amber XP bar on a basalt track
+  (new theme colour `xp_track`); each number is a widget with the kit's tip (a 0 reads "-"); the best-moment line
+  follows; drops draw as item tiles with their counts merged, in place of the "Dropped:" line; Level up now and
+  Continue sit at the bottom. PT-11: the slide-in over the battle stops 4 px short of the window edge. PT-13: Level
+  up now pushes the character sheet over the results (it used to close them first), so Close comes back to the report.
+  The state gains `report` (the kit's `Report::to_json`).
+- **Provisional calls**: (1) the `dealt` column reads "Damage"; (2) when the heroes would overflow the window the rows
+  go compact (no XP line, the bar beside the name); (3) a member with no award and no report row is left out of the
+  table, so XP no longer shows for members who sat out; (4) the results shots in `story_battle_hub` change with the new
+  layout.
+- **Tests**: `hub::tests::the_results_show_the_battle_report_and_drop_tiles` (row order, numbers and tips, guest row,
+  best line, drop tile, state, clean at Normal and Extra large), `level_up_now_keeps_the_results_under_the_character_sheet`,
+  `the_sliding_results_stay_inside_the_window`; scenario `battle_report` (a recorded first fight: report in the state,
+  best line, Level up now then Escape back to the results). Shot: `/mnt/project-files/build-tools/pr7-32_report.png`.
+- **Docs delta**: `GAME_BRIEF` (results line): "The battle results show the kit's battle report: a per-hero table
+  (damage, taken, healed, effects, combos; zero columns hidden) with tips, the best-moment line, drop tiles and XP
+  bars (`PR7-32`)."
+- **Next**: `PR7-39` Stage A for the report can now follow (its row names `PR7-32` as the prerequisite).
 
 ### FB-433: PR7-70 PANELS2 built; the four screens already drew alone
 
