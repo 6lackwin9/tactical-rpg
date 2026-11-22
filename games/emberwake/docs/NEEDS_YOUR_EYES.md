@@ -34,7 +34,13 @@ Parked for your approval (golden re-records need your word):
   (https://claude.ai/artifact/GfoCKjXQnVeTbFBBshuRe2) found the UI chrome on contract and the stage about half way to
   the mock. Queued as provisional, to confirm: amber light pools under the lanterns with a soft vignette; cover props
   (crates, pillars, lamps) drawn on blocked cells inside the arena, display only; a faint grid at rest (Settings can turn
-  it off). Painted founder frames and the Act 1 story staging are on the way; the 17 enemy units need painted sheets.
+  it off). Update 2026-11-22 01:00: all of it has landed (`PR7-67`, `PR7-68`, darker floor); the Act 1 story staging is
+  in (`PR7-66`); every Act 1 foe and boss now has a painted sheet, switched on by `PR7-65` (queued). Fable takes a second
+  pass once that lands.
+- [ ] Style 2 look for the exploration maps: every Sunk Ward map, the hub included, now uses the Style 2 grounds
+  (before and after in project files `art-ui/explore_style2/grounds_before_after.png`). Art/UI is holding Style 2 walls
+  and the Grate's props until you say whether the grounds look right, so one call covers every map. Recommendation:
+  keep them.
 - [ ] Enemy short names for the foe plates (`PR7-40`): Brawler, Berserker, Footman, Enforcer, Husk, Archer,
   Crossbowman, Purifier, Shaman, Skirmisher (also the Tallow Dredger), Scout, Flagellant, Render-Beast, Ash-Crawler;
   bosses by name.
