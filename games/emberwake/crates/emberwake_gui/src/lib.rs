@@ -75,6 +75,7 @@ mod viewkeys;
 #[cfg(target_arch = "wasm32")]
 mod web;
 mod worldmap;
+mod worldmap_view;
 
 use aegis_content::manifest;
 use aegis_ui::art;

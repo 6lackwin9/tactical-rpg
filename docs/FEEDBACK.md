@@ -117,8 +117,38 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-66` (`VNSTAGE1B`) | Built (tools lane) | `develop` | The rest of Act 1's speaking scenes staged (seed `vnstage1b`): the three hub debates and the awakening fissure; data only, no new code. FB-421 |
 | `PR7-67` (`DIORAMA2`) | Built (tools lane) | `develop` | The wall lip in the stage set's tone; the front face from `tilesets/<set>/front_face/<terrain>/`; the stage fills the 888 px panel with faded wings, inside the panel's rim; edge decals unclipped. FB-425 |
 | `PR7-68` (`DIORAMA3`) | Built (tools lane) | `develop` | Amber light pools under the stage set's lantern spots and a soft vignette; a block inside the arena stands as the set's cover prop; the grid faint at rest, stronger while planning, with a Board Grid setting. FB-427 |
+| `ENGINE-23` (`UISPLIT1-I`) world map | Stage A done (tools lane); ENGINE-23 complete | `develop` | View-model, actions, fixture and tests for the world map; today's drawing kept. FB-429 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-429: ENGINE-23 UISPLIT1-I Stage A for the world map; the row is complete
+
+- **Status**: built (tools lane), `develop`. With the party loadout, recipe pane and facility screen (`FB-371`,
+  `FB-379`) every screen of the row now has its Stage A.
+- **Spec**: `docs/READY.md` §3 `ENGINE-23` (`UISPLIT1-I`), ready since `PR7-47` landed.
+- **World map** (`emberwake_gui::worldmap_view`, fixture `ui/views/world_map.view.json` from the shipped Sunk Ward hub
+  with Tier 2 open and the Tallow Vats picked):
+  - Fields: `title`; `here` (the party's place); `time`; `places` (a row per place the map shows, id its qid: name,
+    region line as `sub`, its first hover line as `detail` toned `info` or `dim`, "Quest" as `detail2` in `gold` while
+    it has a quest or job badge, its landmark picture (else its pin), the other hover lines as `note`, selected while
+    picked, off while locked); `trip` (the Travel tip for the chosen way, or "No open road to X." in `foe`); `hint`
+    (the next step toward a pick with no way); `ways` (a row per way, id its index, days and upkeep as `sub`);
+    `quests` (the Legend's rows, id the place, on while the map shows it); `upkeep` (the Legend's 0-upkeep warning in
+    `foe`); `log` (the last 16 lines).
+  - Actions: `place`, `way`, `travel`, `enter`, `camp`, `mode`, `back`; `worldmap_act` maps them to `WAct` (an unknown
+    place, a way past the last or an action that is off maps to nothing).
+  - The agent link's world map state gains `layout_view` (its `view` stays the kit's travel view, as the siege screen).
+  - The trip tip, way tip, mode button, camp button, place hover lines and Legend rows moved into `worldmap.rs`
+    functions the drawing and the view share (`trip_text`, `way_note`, `mode_line`, `camp_line`, `place_lines`,
+    `legend_rows`, `legend_about`, `upkeep_line`); the drawing is unchanged.
+- **Tests**: `worldmap_view` `the_view_lists_the_places_at_rest` (fields, places as drawn, the party's place, locked
+  places off, Travel off, clicks), `a_pick_lists_its_ways_and_the_trip` (ways as `state.ways`, the chosen one selected,
+  Travel on, way clicks), `the_agent_link_has_the_view`, `the_fixture_has_the_view_shape`; an `#[ignore]` test rewrites
+  the fixture. Engine goldens unchanged.
+- **Guesses**: (1) The floating Legend's lock, minimize and drag stay drawing-only (the layout will own the panel), so
+  the view has no actions for them. (2) The HUD bar's icon buttons are the shared HUD's, not the map's, so not in this
+  view. (3) The debug layout editor is not part of the view.
+- **Docs delta**: none. `HISTORY.md`: none.
 
 ### FB-427: PR7-68 DIORAMA3 built; the Fable review's R3, R5 and R6
 

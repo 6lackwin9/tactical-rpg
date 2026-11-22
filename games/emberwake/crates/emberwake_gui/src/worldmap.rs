@@ -121,7 +121,7 @@ fn trip_cost(cx: &Cx, gs: &emberwake_world::GameState, trip: &serde_json::Map<St
 
 /// `time` and `supplies` as the tips say them ("2 days, 2 Tallow" in a campaign world); PR7-42 (PT-19): a trip that
 /// empties the upkeep adds the fight penalty it brings ("1 day, 1 Tallow, -2 AP").
-fn cost_text(cx: &Cx, gs: &emberwake_world::GameState, time: i64, supplies: i64) -> String {
+pub(crate) fn cost_text(cx: &Cx, gs: &emberwake_world::GameState, time: i64, supplies: i64) -> String {
     let length = if gs.campaign.is_some() { crate::runover::days(time) } else { format!("{time} time") };
     let ap = emberwake_world::campaign::purse::starved_ap(&cx.data, gs, emberwake_world::campaign::purse::upkeep_after(gs, supplies));
     let penalty = if ap < 0 { format!(", {ap} AP") } else { String::new() };
@@ -472,11 +472,11 @@ fn node_id(qid: &str) -> String {
 #[derive(Default)]
 pub struct WorldMap {
     w: Vec<Widget<WAct>>,
-    selected: String,
+    pub(crate) selected: String,
     /// MAP-HOOKS1: the layout sidecar, read once per name chain and art generation.
     layout: Option<LayoutCache>,
     /// MAP-HOOKS1: the chosen way to the destination (an index into `travel::paths`; 0, the cheapest, by default).
-    pick: usize,
+    pub(crate) pick: usize,
     /// MAP-HOOKS1: the node marks of the last frame (mark rect, qid), for hover.
     hits: Vec<(Rect, String)>,
     /// MAP-HOOKS1: the floating Legend and its open size in the last frame.
@@ -555,7 +555,7 @@ impl WorldMap {
     }
 
     /// The ways from the party to the destination (`travel::paths`; none without a destination).
-    fn ways(&self, cx: &Cx) -> Vec<travel::TravelPath> {
+    pub(crate) fn ways(&self, cx: &Cx) -> Vec<travel::TravelPath> {
         if self.selected.is_empty() {
             return Vec::new();
         }
@@ -718,29 +718,16 @@ impl WorldMap {
         ui.p.text_right(W as f32 - 6.0, y as f32, &format!("Time {}", gs.time), BODY, th().text);
         y += 14;
         // CAMPAIGN1-TM: the travel mode button (only in a campaign world with modes)
-        let mode = emberwake_world::campaign::purse::travel_mode(&d, &gs);
-        if let Some(m) = &mode {
-            let many = emberwake_world::campaign::purse::travel_modes(&d, &gs.world_id).modes.len() > 1;
-            ui.button_tip("world_map.mode", Rect::new(sx, y, 130, 16), &format!("Travel: {}", m.name), WAct::Mode, many, tip("Travel mode", &mode_tip(m, many)));
+        let mode = emberwake_world::campaign::purse::travel_mode(d, gs);
+        if let Some((label, mtip, many)) = mode_line(cx, gs) {
+            ui.button_tip("world_map.mode", Rect::new(sx, y, 130, 16), &label, WAct::Mode, many, tip("Travel mode", &mtip));
             y += 20;
         }
         if !self.selected.is_empty() {
             let name = cx.location_name(&gs.world_id, &self.selected);
             match ways.get(self.pick) {
                 Some(way) => {
-                    // CAMPAIGN1 W5: the arrival day and the days left in a campaign world; MAP-HOOKS1: of the chosen way
-                    let mut text = format!("{}. Roads can be ambushed.", cost_text(cx, &gs, way.days, way.supplies));
-                    // PR7-42 (PT-19): a trip that empties the upkeep says what the fights after it cost
-                    let left = emberwake_world::campaign::purse::upkeep_after(&gs, way.supplies);
-                    if let Some(line) = starved_line(cx, &gs, left) {
-                        text = format!("{text} On arrival: {line}.");
-                    }
-                    if let Some(m) = &mode {
-                        text = format!("{}: {text}", m.name);
-                    }
-                    if let Some(at) = arrival(&gs, way.days) {
-                        text = format!("{text} {at}");
-                    }
+                    let text = trip_text(cx, gs, way, mode.as_ref());
                     ui.button_tip("world_map.travel", Rect::new(sx, y, 130, 16), &format!("Travel to {name}"), WAct::Travel, true, tip("Travel", &text));
                     y += 19;
                     if ways.len() > 1 {
@@ -756,7 +743,7 @@ impl WorldMap {
                         ui.p.panel(r, if on { rgba(44, 34, 30, 180) } else { rgba(10, 11, 16, 120) }, if on { rgb(217, 119, 6) } else if hot { rgb(180, 83, 9) } else { th().edge }, 0.0);
                         ui.p.text_fit(sx as f32 + 3.0, y as f32 + 1.0, &w.label, SMALL, 124.0, if on { th().gold } else if hot { rgb(253, 230, 138) } else { th().text });
                         ui.p.text_fit(sx as f32 + 3.0, (y + line + 1) as f32, &cost_text(cx, &gs, w.days, w.supplies), SMALL, 124.0, th().dim);
-                        let t = tip(&w.label, &format!("{}. Click to take this way.", cost_text(cx, &gs, w.days, w.supplies)));
+                        let t = tip(&w.label, &way_note(cx, gs, w));
                         ui.push(format!("world_map.way.{i}"), "row", w.label.clone(), r, true, on, Some(WAct::Way(i)), t);
                         y += r.h + 2;
                     }
@@ -778,17 +765,8 @@ impl WorldMap {
         }
         ui.button("world_map.enter", Rect::new(sx, y, 130, 16), &format!("Enter {}", cx.location_name(&gs.world_id, &here)), WAct::Enter, !travel::current_node(&d, &gs).is_empty());
         y += 20;
-        // CAMPAIGN1 P1, R1: the rest's cost in the upkeep's name ("Make camp (3 supplies)" in the Ashlands) and its days
-        let camp = progression::can_camp(&d, &gs);
-        let rule = emberwake_world::campaign::purse::rest_rule(&d, &gs.world_id);
-        // PR6-8: the cost after the facilities' rest upkeep deltas (`rest_cost`; the rule's cost without them)
-        let camp_label = format!("Make camp ({} {})", emberwake_world::campaign::purse::rest_cost(&d, &gs), purse_word(cx, PurseWord::Upkeep));
-        let camp_tip = match (camp.is_empty(), rule.days) {
-            (false, _) => camp.to_string(),
-            (true, n) if n > 0 => format!("Rest every hero to full HP. Takes {}.", crate::runover::days(n as i64)),
-            _ => "Rest every hero to full HP.".to_string(),
-        };
-        ui.button_tip("world_map.camp", Rect::new(sx, y, 130, 16), &camp_label, WAct::Camp, camp.is_empty(), tip("Make camp", &camp_tip));
+        let (camp_label, camp_tip, camp_on) = camp_line(cx, d, gs);
+        ui.button_tip("world_map.camp", Rect::new(sx, y, 130, 16), &camp_label, WAct::Camp, camp_on, tip("Make camp", &camp_tip));
         y += 24;
         let lines: Vec<String> = cx.log.iter().rev().take(16).cloned().collect();
         for l in lines.iter().rev() {
@@ -839,13 +817,161 @@ const NO_WAY: &str = "No way there is known yet.";
 
 /// PR7-37 (PT-08, PT-31): the next reachable step from `here` toward place `to` (`travel::way_toward`, in
 /// `travel::way_words`' words), else `NO_WAY`.
-fn way_hint(cx: &Cx, gs: &emberwake_world::GameState, here: &str, to: &str) -> String {
+pub(crate) fn way_hint(cx: &Cx, gs: &emberwake_world::GameState, here: &str, to: &str) -> String {
     let way = travel::way_toward(&cx.data, gs, here, to);
     let words = travel::way_words(&way, to, &|q: &str| cx.location_name(&gs.world_id, q));
     if words.is_empty() {
         NO_WAY.to_string()
     } else {
         format!("Next: {words}")
+    }
+}
+
+/// The Travel button's hover line for `way` (MAP-HOOKS1: the chosen way): its days and upkeep, the ambush warning, the
+/// fights' cost when it empties the upkeep (PR7-42), the travel mode first and the arrival day last (CAMPAIGN1 W5).
+pub(crate) fn trip_text(cx: &Cx, gs: &emberwake_world::GameState, way: &travel::TravelPath, mode: Option<&emberwake_data::TravelMode>) -> String {
+    let mut text = format!("{}. Roads can be ambushed.", cost_text(cx, gs, way.days, way.supplies));
+    let left = emberwake_world::campaign::purse::upkeep_after(gs, way.supplies);
+    if let Some(line) = starved_line(cx, gs, left) {
+        text = format!("{text} On arrival: {line}.");
+    }
+    if let Some(m) = mode {
+        text = format!("{}: {text}", m.name);
+    }
+    if let Some(at) = arrival(gs, way.days) {
+        text = format!("{text} {at}");
+    }
+    text
+}
+
+/// A way's hover line: its days and upkeep, then how to take it.
+pub(crate) fn way_note(cx: &Cx, gs: &emberwake_world::GameState, w: &travel::TravelPath) -> String {
+    format!("{}. Click to take this way.", cost_text(cx, gs, w.days, w.supplies))
+}
+
+/// The upkeep the legend warns of at 0 (`starved_line` on the party's upkeep now).
+pub(crate) fn upkeep_line(cx: &Cx, gs: &emberwake_world::GameState) -> Option<String> {
+    starved_line(cx, gs, gs.party.supplies)
+}
+
+/// The travel mode button's label and tip, and whether a click changes it (CAMPAIGN1-TM; None outside a world with modes).
+pub(crate) fn mode_line(cx: &Cx, gs: &emberwake_world::GameState) -> Option<(String, String, bool)> {
+    let m = emberwake_world::campaign::purse::travel_mode(&cx.data, gs)?;
+    let many = emberwake_world::campaign::purse::travel_modes(&cx.data, &gs.world_id).modes.len() > 1;
+    Some((format!("Travel: {}", m.name), mode_tip(&m, many), many))
+}
+
+/// Make camp's label (CAMPAIGN1 P1, R1: the rest's cost in the upkeep's name, PR6-8: after the facilities' deltas), its
+/// tip (why not, else what it does and its days) and whether the party can camp.
+pub(crate) fn camp_line(cx: &Cx, d: &emberwake_world::Data, gs: &emberwake_world::GameState) -> (String, String, bool) {
+    let camp = progression::can_camp(d, gs);
+    let rule = emberwake_world::campaign::purse::rest_rule(d, &gs.world_id);
+    let label = format!("Make camp ({} {})", emberwake_world::campaign::purse::rest_cost(d, gs), purse_word(cx, PurseWord::Upkeep));
+    let tip = match (camp.is_empty(), rule.days) {
+        (false, _) => camp.to_string(),
+        (true, n) if n > 0 => format!("Rest every hero to full HP. Takes {}.", crate::runover::days(n as i64)),
+        _ => "Rest every hero to full HP.".to_string(),
+    };
+    (label, tip, camp.is_empty())
+}
+
+/// A place's region line in its hover card: the region, "(not visited)" until the party has been there.
+pub(crate) fn place_region(n: &json::Dict) -> String {
+    format!("{}{}", s(n, "region"), if json::b(n, "visited", false) { "" } else { " (not visited)" })
+}
+
+/// A place's hover lines after its region (node `n` of `travel::view`), each with its theme role: the party here, else
+/// the trip's cost, else no road and (PR7-37, PT-08) the way there; its quest steps, jobs and (STORYUI1 B10, CAMPAIGN1
+/// W5) the checkpoint lines of the quests whose node it is.
+pub(crate) fn place_lines(cx: &Cx, gs: &emberwake_world::GameState, here: &str, n: &json::Dict) -> Vec<(String, PlaceTone)> {
+    let q = s(n, "qid");
+    let mut t = Vec::new();
+    let trip = travel::trip(&cx.data, gs, here, &q);
+    if q == here {
+        t.push(("Your party is here.".to_string(), PlaceTone::Info));
+    } else if json::b(&trip, "ok", false) {
+        t.push((format!("Trip: {}", trip_cost(cx, gs, &trip)), PlaceTone::Info));
+    } else {
+        t.push(("No open road yet.".to_string(), PlaceTone::Dim));
+        let hint = way_hint(cx, gs, here, &q);
+        if !hint.starts_with(NO_WAY) {
+            t.push((hint, PlaceTone::Info));
+        }
+    }
+    for step in travel::quest_steps_at(&cx.data, gs, &q) {
+        t.push((format!("Quest: {step}"), PlaceTone::Gold));
+    }
+    for job in json::sget(n, "jobs") {
+        t.push((format!("Job: {job}"), PlaceTone::Gold));
+    }
+    for due in json::aget(n, "deadlines") {
+        t.push((s(json::dict(due), "text"), PlaceTone::Deadline));
+    }
+    t
+}
+
+/// The colour of a place's hover line (a theme role, or the board's deadline colour).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum PlaceTone {
+    Info,
+    Dim,
+    Gold,
+    Deadline,
+}
+
+impl PlaceTone {
+    pub(crate) fn rgba(self) -> Rgba {
+        match self {
+            PlaceTone::Info => th().info,
+            PlaceTone::Dim => th().dim,
+            PlaceTone::Gold => th().gold,
+            PlaceTone::Deadline => crate::board::DEADLINE,
+        }
+    }
+
+    /// The theme role a layout tones the line with (the deadline as `foe`).
+    pub(crate) fn role(self) -> &'static str {
+        match self {
+            PlaceTone::Info => "info",
+            PlaceTone::Dim => "dim",
+            PlaceTone::Gold => "gold",
+            PlaceTone::Deadline => "foe",
+        }
+    }
+}
+
+/// The Legend's rows (AO-01 (5), PR7-37 PT-31): every active quest once by name (also one whose place the map does not
+/// show, or that has none), then the jobs of the places shown, as (place, text); and each quest row's quest id.
+pub(crate) fn legend_rows(d: &emberwake_world::Data, gs: &emberwake_world::GameState, nodes: &[json::Dict]) -> (Vec<(String, String)>, Vec<String>) {
+    let mut rows: Vec<(String, String)> = Vec::new();
+    let mut quest_of: Vec<String> = Vec::new();
+    for (node, name, qid) in travel::legend_quests(d, gs) {
+        if !rows.iter().any(|(_, t)| *t == name) {
+            rows.push((node, name));
+            quest_of.push(qid);
+        }
+    }
+    for n in nodes {
+        for job in json::sget(n, "jobs") {
+            if !rows.iter().any(|(_, t)| *t == job) {
+                rows.push((s(n, "qid"), job));
+            }
+        }
+    }
+    (rows, quest_of)
+}
+
+/// A Legend row's hover line: where it is (and the pick on a click) while the map shows its place, else the way there,
+/// else (no place) the quest's current objective.
+pub(crate) fn legend_about(cx: &Cx, gs: &emberwake_world::GameState, here: &str, node: &str, shown: bool, quest: Option<&str>) -> String {
+    let place = cx.location_name(&gs.world_id, node);
+    match (shown, node.is_empty()) {
+        (true, _) => format!("At {place}. Click to pick it."),
+        (false, false) => format!("At {place}, not on the map yet. {}", way_hint(cx, gs, here, node)),
+        (false, true) => {
+            let now = quest.map(|q| s(&emberwake_world::quest::current_objective(&cx.data, gs, q), "text")).unwrap_or_default();
+            if now.is_empty() { "No place to travel to for it.".to_string() } else { format!("No place to travel to: {now}") }
+        }
     }
 }
 
@@ -982,7 +1108,7 @@ impl Screen<GameCx> for WorldMap {
             let mut k = 0;
             for rq in &w.routes {
                 for (x, y) in dots(&line_of(rq), 9.0) {
-                    let t = tip(&w.label, &format!("{}. Click to take this way.", cost_text(cx, &gs, w.days, w.supplies)));
+                    let t = tip(&w.label, &way_note(cx, &gs, w));
                     ui.push(format!("world_map.way.{i}.at.{k}"), "backdrop", w.label.clone(), Rect::new(x as i32 - 4, y as i32 - 4, 9, 9), true, false, Some(WAct::Way(i)), t);
                     k += 1;
                 }
@@ -1088,30 +1214,8 @@ impl Screen<GameCx> for WorldMap {
         for m in &marks {
             let n = nodes.iter().find(|n| s(n, "qid") == m.qid).cloned().unwrap_or_default();
             let jobs = json::sget(&n, "jobs");
-            let trip = travel::trip(&d, &gs, &here, &m.qid);
-            let mut t = tip(&m.name, &format!("{}{}", s(&n, "region"), if json::b(&n, "visited", false) { "" } else { " (not visited)" }));
-            if m.is_here {
-                t.push(("Your party is here.".into(), th().info));
-            } else if json::b(&trip, "ok", false) {
-                t.push((format!("Trip: {}", trip_cost(cx, &gs, &trip)), th().info));
-            } else {
-                t.push(("No open road yet.".into(), th().dim));
-                // PR7-37 (PT-08): the way there, when there is one
-                let hint = way_hint(cx, &gs, &here, &m.qid);
-                if !hint.starts_with(NO_WAY) {
-                    t.push((hint, th().info));
-                }
-            }
-            for step in travel::quest_steps_at(&d, &gs, &m.qid) {
-                t.push((format!("Quest: {step}"), th().gold));
-            }
-            for job in &jobs {
-                t.push((format!("Job: {job}"), th().gold));
-            }
-            // STORYUI1 B10, CAMPAIGN1 W5: the checkpoint lines of the quests whose node this is
-            for due in json::aget(&n, "deadlines") {
-                t.push((s(json::dict(due), "text"), crate::board::DEADLINE));
-            }
+            let mut t = tip(&m.name, &place_region(&n));
+            t.extend(place_lines(cx, &gs, &here, &n).into_iter().map(|(l, role)| (l, role.rgba())));
             let job_tip = if jobs.is_empty() { Vec::new() } else { t.clone() };
             ui.push(node_id(&m.qid), "node", m.name.clone(), m.r, true, m.selected, Some(WAct::Node(m.qid.clone())), t);
             hits.push((m.r, m.qid.clone()));
@@ -1123,26 +1227,12 @@ impl Screen<GameCx> for WorldMap {
         // -- the Legend (AO-01 (5), AO-02): the district's quests and the party, floating over the map
         // PR7-37 (PT-31): every active quest, also one whose place the map does not show (or that has none); the row
         // says where it is and the way there
-        let mut rows: Vec<(String, String)> = Vec::new();
-        let mut quest_of: Vec<String> = Vec::new();
-        for (node, name, qid) in travel::legend_quests(&d, &gs) {
-            if !rows.iter().any(|(_, t)| *t == name) {
-                rows.push((node, name));
-                quest_of.push(qid);
-            }
-        }
-        for n in &nodes {
-            for job in json::sget(n, "jobs") {
-                if !rows.iter().any(|(_, t)| *t == job) {
-                    rows.push((s(n, "qid"), job));
-                }
-            }
-        }
+        let (rows, quest_of) = legend_rows(&d, &gs, &nodes);
         let row_h = (ui.p.line_h(SMALL) + 1.0).ceil() as i32;
         let head = "Active quests";
         let head_w = ui.p.text_w(head, SMALL + 1.0) + 2.0 * PANEL_BTN as f32 + 8.0;
         // PR7-42 (PT-19): with the upkeep at 0, the legend's last row says what that costs in a fight
-        let starved = starved_line(cx, &gs, gs.party.supplies);
+        let starved = upkeep_line(cx, &gs);
         let widest = rows.iter().map(|(_, t)| ui.p.text_w(t, SMALL)).fold(head_w, f32::max).max(starved.as_ref().map_or(0.0, |t| ui.p.text_w(t, SMALL)));
         let extra = if starved.is_some() { row_h } else { 0 };
         let size = (((widest + 18.0).ceil() as i32).clamp(96, 150), 4 + row_h + 2 + row_h * rows.len().max(1) as i32 + 3 + row_h + extra + 3);
@@ -1216,15 +1306,7 @@ impl Screen<GameCx> for WorldMap {
                 }
                 let shown = nodes.iter().any(|n| s(n, "qid") == *node);
                 ui.p.text(r.x as f32 + 12.0, r.y as f32, text, SMALL, if on { th().gold } else if shown { th().text } else { th().dim });
-                let place = cx.location_name(&gs.world_id, node);
-                let about = match (shown, node.is_empty()) {
-                    (true, _) => format!("At {place}. Click to pick it."),
-                    (false, false) => format!("At {place}, not on the map yet. {}", way_hint(cx, &gs, &here, node)),
-                    (false, true) => {
-                        let now = quest_of.get(i).map(|q| s(&emberwake_world::quest::current_objective(&d, &gs, q), "text")).unwrap_or_default();
-                        if now.is_empty() { "No place to travel to for it.".to_string() } else { format!("No place to travel to: {now}") }
-                    }
-                };
+                let about = legend_about(cx, &gs, &here, node, shown, quest_of.get(i).map(String::as_str));
                 ui.push(format!("world_map.legend.quest.{i}"), "row", text.clone(), r, true, on, shown.then(|| WAct::Node(node.clone())), tip(text, &about));
                 y += row_h;
             }
@@ -1303,6 +1385,8 @@ impl Screen<GameCx> for WorldMap {
             "locked": self.drawn.iter().filter(|(_, l)| *l).map(|(q, _)| q.clone()).collect::<Vec<_>>(),
             "legend": {"pos": l.pos.map(|p| vec![p.0, p.1]), "locked": l.locked, "minimized": l.minimized},
             "view": travel::view(&cx.data, cx.gs()),
+            // ENGINE-23 (UISPLIT1-I) Stage A: the screen's view-model
+            "layout_view": crate::worldmap_view::view(cx, self).to_json(),
             // PR5-48: the layout being edited in place and the editor's state
             "layout_edit": self.edit.as_ref().map(|e| e.name.clone()),
             aegis_ui::layout_editor::STATE_KEY: self.edit.as_ref().map(|e| e.editor.state()),
@@ -1649,7 +1733,7 @@ impl Screen<GameCx> for MapLayoutScreen {
 /// landmark or pin is drawn in, and the shipped Act 1 sidecar against the shipped world. Expectations follow from the
 /// rules and the fixtures' own numbers.
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use aegis_ui::float_panel::PANEL_MARGIN;
     use aegis_core::assets::Layers;
@@ -1822,17 +1906,17 @@ mod tests {
 
     use crate::hud::hud_tests::{frame, gfx};
 
-    const SW: &str = "sunk_ward";
+    pub(crate) const SW: &str = "sunk_ward";
     /// Act 1's Tier 1 missions and Vesper's lock ciphers (the flags the shipped routes name).
-    const TIER2: [&str; 3] = ["sunk_ward.m1_done", "sunk_ward.m2_done", "sunk_ward.lock_ciphers_done"];
+    pub(crate) const TIER2: [&str; 3] = ["sunk_ward.m1_done", "sunk_ward.m2_done", "sunk_ward.lock_ciphers_done"];
 
-    fn q(id: &str) -> String {
+    pub(crate) fn q(id: &str) -> String {
         format!("{SW}:{id}")
     }
 
     /// The shipped game at the Sunk Ward hub once the Prologue is over, with `flags` set and the places `visited` been
     /// to (the fog lifts one open road past a visited place); the game's art and sidecar when `art`.
-    fn ward_hub(flags: &[&str], visited: &[&str], art: bool) -> Cx {
+    pub(crate) fn ward_hub(flags: &[&str], visited: &[&str], art: bool) -> Cx {
         ward_hub_with(crate::hud::hud_tests::game_cx(), flags, visited, art)
     }
 
