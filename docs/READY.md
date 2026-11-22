@@ -295,6 +295,7 @@ Post-Act-1 or deferred slices: Build takes no action until promoted to Section 1
 | `FB-396` | accepted | `DECOR1` | PR7-81 is accepted with its five guesses, and the docs delta is applied (kit README, STRUCTURE, GAME_BRIEF). | 2026-11-22 |
 | `FB-398` | accepted | `ACT1-DATA2` | PR7-84 is accepted. The winch drum's unread-flag workaround is fine for now; a look-only map point waits until another place needs one. | 2026-11-22 |
 | `FB-455` | accepted | `XL-SWEEP1`, `XL-FIX2` | ENGINE-33 is accepted, along with its fixes and new scenario options; the engine README delta is applied. Your guesses (a) to (d) are taken as `PR7-85`, after `PR7-83`. The shop layout item goes to Art/UI. | 2026-11-22 |
+| `FB-457` | accepted | `WALLMASS1` | PR7-80 is accepted with its guess (a darker tone for back-row runs, not a smaller lift) and the fixture re-record. The docs delta is applied. A wall ground sheet is Art/UI's to add. | 2026-11-22 |
 | `FB-391` | accepted | `SLOTCARD1` | Both guesses are accepted: the kit card's drawn corner icons, and removing `menu_row`. The HISTORY row is applied. | 2026-11-20 |
 | `FB-393` | accepted | `TITLEFX1` | The guess is accepted: the spots live in a sidecar beside the picture, and the window glows and falling ash stay out. The ASSETORG2 and STRUCTURE deltas are applied. Next for the lane: `ENGINE-28`, then `PR7-30`. | 2026-11-20 |
 | `FB-383` | accepted | `UISPLIT1-J` | The guess is accepted: the siege's screen view goes under `layout_view`. The STRUCTURE delta is applied. | 2026-11-20 |
