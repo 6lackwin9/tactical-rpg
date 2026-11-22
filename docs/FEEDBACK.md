@@ -281,3 +281,23 @@ This file is the **only doc file edited by the Build Session** under the two-ses
   PR7-76.
 - **Test**: `emberwake_world/tests/board_rec_level.rs` `every_flag_job_on_a_board_has_a_level` (data-derived).
 - **Docs delta**: none.
+
+### FB-394: PR7-79 DIORAMA-DRESS1 blocked; battle boards have no data lever for lamps or props
+
+- **Status**: blocked (schema gap); nothing changed.
+- **Spec**: `docs/READY.md` row `00b7` `PR7-79` (`DIORAMA-DRESS1`).
+- **Finding**: the encounter schema (`kits/rpg/schema.json`) has `rows`, `exits`, `objective_tiles` and the battle
+  fields, but no `props`, `decor` or lamps (`maps.json` `props` is region maps only). A blocked cell's cover art is
+  picked by position (`stage.rs` `shown_cover` / `cover_art`, `art.pick(.., x, y)`), so `cover/v3` cannot be chosen per
+  cell; a battle prop comes only from a terrain's `prop` (`tree`, `rubble`), and terrain ids are a closed set
+  (`rpgkit_battle` `grid.rs` `TERRAIN_IDS`). Any change would alter walkability, move cost or cover, which the row
+  forbids, so all 24 Sunk Ward battle boards are listed, not changed. `stage.fx.json` `lights` already lights any
+  `cover/v3` or `lantern_pole` that does show.
+- **Options** (a logic row first):
+  1. (recommended) an encounter field `decor: [{art, x, y}]`, display-only for the rules, drawn by the stage with
+     `lights` matched on the art key; the content check refuses exits, deploy cells and objective tiles. Lamps and
+     props both, no golden change.
+  2. new terrain ids copying `floor`/`stone` stats with a `prop`: a larger `TERRAIN_IDS` and terrain-table golden
+     re-records.
+  3. a per-cell cover variant pick for blocked cells: lamps and cover density only, no props on walkable cells.
+- **Docs delta**: Art/UI `code_rows.md` R3(b) assumes lamps can be placed on battle boards; true for region maps only.
