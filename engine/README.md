@@ -34,6 +34,7 @@ The core goal of moving from Godot to the custom **Aegis Engine** (`engine/` -> 
 * **Fixed-key migration (CONTROLS-MIGRATE1, PR7-71):** `controls::release_fixed(settings, fixed)` (and `Controls::release_fixed`) puts an action bound to a fixed key back on its own key; a game runs it when its settings load, and saves if it returns any.
 * **Painted sheets (DIORAMA1B, PR7-65):** `clips.json` may give `foot` (the frame row the feet stand on) and `painted` (default false; a painted sheet takes no palette swap); `Clips::foot`, `Clips::painted`; `aegis_ui::art::load_body` skips the swap for a painted sheet.
 * **Tinted images (DIORAMA4, PR7-74):** `Painter::image_tinted(img, r, tint, a)` draws an image multiplied by a colour.
+* **Composed battle ground (DIORAMA5, PR7-77):** `ground::CELL_MAX` 64 (a battle cell composes at 1:1; region maps keep 32); `Art::pick_hashed` and `art::cell_hash` (variant picks by an integer hash of the cell, no lattice); `Canvas::add` and `Painter::glow` (additive light).
 * **Keyboard focus (PORT-FOCUS):** every screen's clickable widgets, choice fields and sliders take the focus with no
   code of their own (`aegis_ui::focus`, kept in the kit by the shell): Tab / Shift+Tab walk them in drawing order, the
   arrows move to the nearest one that way (a screen that walks or steers with the arrows says `Screen::arrow_focus`

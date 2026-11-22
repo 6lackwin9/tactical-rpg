@@ -181,6 +181,15 @@ LOOK1 stage set art at 2 art px per logical px), so most of it is files:
   sheet lands once Gemini item SW-06 passes its frame consistency pass; Vesper, Maren and Hollis follow (SW-07..09).
 - Exploration maps follow the battle zones, from design reference images (never renders), then built from tiles and
   props as before; a separate row when the first map is ready.
+- Since then (DIORAMA2 to DIORAMA5, `PR7-67`, `PR7-68`, `PR7-74`, `PR7-77`; user notes 2026-11-22 06:53, 06:54, 06:56,
+  08:45): the ground is composed (the region-map composer at 1:1, each terrain's `sheet.png` sampled by board pixel,
+  patches and tone as coherent blobs 2-4 cells across, worn joins between grounds, no transition pieces on a composed
+  board); accent decals `<terrain>/decal/v*` at `stage.fx.json` `decal_density`, gathering near cover and walls;
+  sunken lips from `lip/<terrain>/v*`; light pools from `spots` and from `lights` (a cover or prop key with colour and
+  radius), additive, with a mild darkening away from them when a set has any; zones may name their own `set`, `tint`
+  and terrain overrides (`zones.<zone>`); units in front of the focus unit fade; exits show the `exit_path` decal and
+  an `exit_gate` on the top and side edges, not a bright box; **no grid lines at rest**, and while planning only the
+  hovered, move and target cells are marked; Settings "Show full grid" (off by default) brings the full grid back.
 
 ## 9. Boss bar and full timeline view
 
