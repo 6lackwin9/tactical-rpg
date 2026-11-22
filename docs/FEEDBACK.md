@@ -150,8 +150,35 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-37` (`LOOK-POINT1`) | Built (tools lane) | `develop` | A point's `use` may be `look` (listed in Here, answers with its line, sets nothing, never spent); the winch drum uses it and drops `sunk_ward.winch_seen` (seed `engine_37.json`). FB-465 |
 | `ENGINE-38` (`LORE-RENAME1`) | Built (tools lane) | `develop` | `aegis content refs <kind> <id>` lists every reference; `aegis content rename <kind> <old> <new>` is a dry run, `--apply` rewrites data and seeds (only the matching strings) and moves the asset files, kept only when it adds no problem. FB-467 |
 | `ENGINE-39` (`TARGET-PRUNE1`) | Built (tools lane) | `develop` | `tools/fc.sh prune [target=] [--dry]` keeps only the newest test binary per name in `target/*/deps` and removes the incremental folders; `tools/fc.sh gate` runs it first when under 6 GB is free (`FC_PRUNE_MB`). FB-469 |
+| `ENGINE-40` (`ENGINE-GUIDE2`) | Built (tools lane) | `develop` | `engine/docs/authoring/battle_stage.md` (composed ground, stage sets and `stage.fx.json`, decor, painted sheets); scenario run keys and `shots diff` in `scenarios.md`; `content refs` / `rename` and look-only points; the sample game's field on the engine's ground composer. FB-471 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-471: ENGINE-40 ENGINE-GUIDE2 built; the authoring guide catches up, and hello shows the ground composer
+
+- **Status**: built (tools lane), `develop`. Engine docs and the sample game only; no kit or game code changes.
+- **Spec**: `docs/READY.md` row `ENGINE-40` (`ENGINE-GUIDE2`).
+- **What landed** (`engine/docs/authoring/`):
+  - New `battle_stage.md`: which layer owns each part; stage set files and sizes (`<terrain>/sheet.png`, `decal/`,
+    `front_face/`, `lip/<terrain>/`, `cover/`, transition pieces); the composed ground; every `stage.fx.json` key
+    (`lip`, `spots`, `lights`, `decal_density`, `zones.<zone>.set` / `tint` / `terrain`) with an example; encounter
+    `decor` and world `decor_pool` with the generated-board rule and the checks; painted sheets (`foot`, `painted`).
+  - `scenarios.md`: run-wide `set=`, `audit=1` and `save=` (a name or an absolute folder), a two-size sweep example,
+    and a section on `tools/fc.sh shots diff`.
+  - `naming_and_asset_briefs.md`: "Renaming an id" (`content refs`, `content rename`, `--apply`, the matching rule).
+  - `region_grounds.md`: "Points the party can look at" (every point `use`, `look` among them).
+  - The index (`README.md`) gains the new page and names the new sections.
+- **Sample game** (`games/hello/`): the field's grass and a dirt path are now one picture from the engine's ground
+  composer (`aegis_ui::ground`, textures from `ground::two_tone`, so no files), made once and cached by its key; the
+  walls stay tiles on top and the walk reads only the walls. Test
+  `the_field_ground_composes_the_same_picture_with_a_path_on_it`; `hello_walk` passes (its `field` and `walked`
+  shots change: they show the path). README row "Ground".
+- **Finding for Design**: the code that reads `stage.fx.json`, draws the composed battle ground, the lights and the
+  decor lives in the game's GUI crate (`stage.rs`, `stage/composed.rs`), so a second game on the kit gets the files
+  checked but not drawn. The page says so. A later row could move the stage look reader and the board compose into
+  the kit's UI crate (`rpgkit_ui`); I have not queued or started it.
+- **Docs delta**: `engine/README.md` could link `engine/docs/authoring/battle_stage.md` beside the region grounds
+  line; `STRUCTURE.md` engine docs row: add `battle_stage.md`.
 
 ### FB-469: ENGINE-39 TARGET-PRUNE1 built; fc.sh prune and a low-disk prune before the gate
 

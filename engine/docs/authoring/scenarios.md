@@ -245,6 +245,41 @@ A link request can reach a result without the screen ever showing it: a game's c
 screen, drive what the player drives (`click`, `key`) and `wait` on the state. A game's own notes on this lie beside its scenarios, in
 `games/<id>/scenarios/README.md`.
 
+## Settings, audits and saves for a whole run
+
+Three keys change a run without touching its files (ENGINE-33, ENGINE-36). `set=` and `audit=` go on `run`,
+`tools/fc.sh scenario` and `shots-all`; `save=` goes on `shots`:
+
+| Key | Does |
+| --- | --- |
+| `set=<key>:<value>,...` | Settings laid over each scenario's own `settings`, for example `set=text_scale:1.3` takes every screen at a larger text size. The keys a file may not set are refused here too |
+| `audit=1` | After every shot, the text audit of that frame (cut, edge, overlap, spill) is kept beside it as `<shot>.audit.json`; `shots-all` collects them into `audit.txt`, the shots with a problem first |
+| `save=<name or absolute folder>` | On `shots`: launch from a save. A name is a folder under `scenarios/saves/`; an absolute path is any saves folder, such as one an agent playtest kept (`keep_saves=`, [agent_playtest.md](agent_playtest.md)). A file's `launch.save` takes the same two forms |
+
+A sweep at two text sizes, compared shot by shot:
+
+```sh
+tools/fc.sh scenario shots-all out=target/xl_normal audit=1
+tools/fc.sh scenario shots-all out=target/xl_large set=text_scale:1.3 audit=1 compare=target/xl_normal
+```
+
+## The shots a change moves
+
+`tools/fc.sh shots diff [base=<sha>] [scenarios=a,b or all] [out=<dir>] [tolerance=0] [pixels=0] [limit=12]` shows what a
+change does to the screens before it lands (SHOT-DIFF1):
+
+- With no `scenarios=`, it picks the scenarios the change can show from the paths changed since the base (committed or
+  not, new files too): only the changed scenario files when nothing else changed, else all; a docs-only change runs
+  nothing.
+- It runs them on the working tree and on the base commit (default `origin/develop`). The base's shots are cached in
+  `target/shots_cache/<sha>/`, so the next diff against that commit runs only the working tree.
+- Shots run on the shot clock, so a comparison is exact by default; `tolerance=` and `pixels=` loosen it.
+- The out folder (default `target/shots_diff/`) holds `index.md` (every changed, new and gone shot, most changed first),
+  `sheet.png` (before, after and diff of the most changed shots at half size), `compare/` (each at full size) and
+  `head/`.
+
+Put the sheet beside a change's report; a reviewer sees the screens without running anything.
+
 ## Not here yet
 
 Timing (`perf`) comes with INTEG1-E2. Region map walking (`walk_to`) comes with INTEG1-G. There are no save fixtures or pixel

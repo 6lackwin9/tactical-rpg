@@ -54,3 +54,21 @@ Fill in every row the game has:
 - Characters, places and terms live in one registry with name, id, faction, role and asset brief; the game's glossary
   holds one name per term.
 - Content seeds and asset prompts are written from the registry, never from older docs.
+
+## Renaming an id
+
+A lore revision often renames a unit, character, item, skill, quest, place, encounter or flag. Do it with the engine's
+content commands, never by hand (ENGINE-38):
+
+| Command | Does |
+| --- | --- |
+| `tools/fc.sh content refs <kind> <id>` | Every JSON string in the data folder (catalogs, worlds, seeds) that names the id, as `file:line: text`, then every asset file or folder under the game's `assets/` named by it |
+| `tools/fc.sh content rename <kind> <old> <new> [world=<id>]` | A dry run: the files it would rewrite (with string counts) and the asset moves; writes nothing |
+| `tools/fc.sh content rename <kind> <old> <new> [world=<id>] --apply` | Rewrites only the matching strings (each file stays byte for byte otherwise) and moves the asset files; everything is put back if `content check` then lists a problem it did not list before |
+
+A string names the id when it is the id, or when one of its `/` or `:` parts is the id or has it as its stem
+(`rogue/<id>`, `portraits/<id>.png`, `<world>:<id>`). Prose and longer ids (`<id>_elder`) never match. The old entry must
+exist and the new id must be free; `flag` is the kind with no entry.
+
+Matching is by text across every kind, so an id two kinds share is renamed in both: read the dry run first. Names shown
+to the player (`name`, lines, prose) are not ids; change those with `content upsert`.

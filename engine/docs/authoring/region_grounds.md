@@ -101,3 +101,19 @@ A doorway needs no field today: leave a `.` cell in the wall's `rows` and lay it
 | Legend | warning | a legend entry no cell uses |
 
 A look check (tone, direction, contrast, colour) stays in the art tools, since a pick is judged once.
+
+## Points the party can look at
+
+A `point` marker on a location's `markers` is a point of interest: it shows its label, is listed in the place's
+interaction list when it has a `use`, and logs its line when the party acts on it. Its `use` says what else happens:
+
+| `use` | Does |
+| --- | --- |
+| `""` | Says its note only |
+| `rest` | Rests the party there (the campaign's rest rule) |
+| `crypts` | Says who lies in the crypt places |
+| `stash` | Opens the party stash |
+| `look` | Look-only: listed and answers with its line; it sets no flag, needs none to be listed and is never spent (ENGINE-37) |
+
+Use `look` for flavour a player can stop at (a winch, a mural, a grave). A point that should change the story sets a
+flag through a quest or a talk, not through `look`.

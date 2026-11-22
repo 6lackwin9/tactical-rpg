@@ -13,7 +13,7 @@ from re-deriving the method each time.
 | [layer_rule.md](layer_rule.md) | Decide whether a feature is engine, kit hook, data or game code |
 | [kit_layout.md](kit_layout.md) | Lay out a kit's folders and crates, and extract a kit from a game |
 | [design_library.md](design_library.md) | Set up a game's design library (canon sheet, registry, numbers, glossary, truth, gaps) |
-| [naming_and_asset_briefs.md](naming_and_asset_briefs.md) | Name things and write the asset briefs art is generated from |
+| [naming_and_asset_briefs.md](naming_and_asset_briefs.md) | Name things and write the asset briefs art is generated from; find and rename an id (`content refs`, `content rename`) |
 | [story_guide.md](story_guide.md) | Write a game's story guide: plot, who's who with arcs per act, story elements, reveal timeline, gaps |
 | [lore_modules.md](lore_modules.md) | Write lore and events as independent modules that can be decided alone and connected later |
 | [campaign_structure.md](campaign_structure.md) | Give the player forks and optional missions while checkpoints with deadlines keep the story on time |
@@ -21,11 +21,12 @@ from re-deriving the method each time.
 | [RPG kit: combat_hooks.md](../../../kits/rpg/docs/authoring/combat_hooks.md) | Use the RPG kit's combat hooks as data: forced moves, hazards, triggers, meters, phase effects, AI tactics |
 | [art_bible.md](art_bible.md) | Fix canvas, board, sprite, palette and pipelines before any art is made |
 | [reactive_layout.md](reactive_layout.md) | Write a screen whose positions and sizes are calculated from the selected layout; canvas, units and rounding; sort existing screens |
-| [scenarios.md](scenarios.md) | Scenario files that drive real windows, for agents |
+| [scenarios.md](scenarios.md) | Scenario files that drive real windows, for agents; run-wide settings, text audits and saves; the shots a change moves (`shots diff`) |
 | [agent_playtest.md](agent_playtest.md) | Play the real game as an agent, one command at a time, with a log line and a shot per step |
 | [screen_layouts.md](screen_layouts.md) | Split a screen into a view, a layout file and the theme; the components, the check and the preview |
 | [theme_and_tiles.md](theme_and_tiles.md) | Add a runtime theme and frames; lay out a set's tiles, faces and transition pieces; the corner mask convention |
-| [region_grounds.md](region_grounds.md) | Give a walkable map several ground types, its walls a height in storeys and its outer edge its own art |
+| [region_grounds.md](region_grounds.md) | Give a walkable map several ground types, its walls a height in storeys and its outer edge its own art; points of interest, look-only points among them |
+| [battle_stage.md](battle_stage.md) | Dress the tilted battle board: composed ground sheets, stage sets and `stage.fx.json` (zones, spots, lights, lip, decal density), decor and painted unit sheets |
 | [motion_profiles.md](motion_profiles.md) | Give each portrait face its own motion (breath, lean, bob, entry, rest, shiver, blink, flush) as data |
 | [milestones.md](milestones.md) | Plan the build (foundation, feel prototype, slice on data, playtest, depth, balance and art) and measure throughput |
 

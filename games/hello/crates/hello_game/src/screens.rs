@@ -5,7 +5,8 @@
 use crate::walk::{self, Walk};
 use crate::{play, save, sound, Hello};
 use aegis_core::clock::Instant;
-use aegis_ui::canvas::{rgb, Rect};
+use aegis_ui::canvas::{rgb, Image, Rect, Rgba};
+use aegis_ui::ground::{self, GroundJob, GroundKey, GroundLayer};
 use aegis_ui::pacing::FrameNeed;
 use aegis_ui::screen::{Cx, Key, Nav, Screen};
 use aegis_ui::tilemap::TileLayer;
@@ -122,9 +123,12 @@ pub struct Field {
     status: String,
     /// Steps left of a walk to a clicked tile (taken one per slide).
     path: Vec<(i64, i64)>,
+    /// ENGINE-40: the composed ground's key, made once (it hashes every texture pixel, so never per frame).
+    ground: Option<GroundKey>,
 }
 
-/// The field's tiles: 1 wall, 2 and 3 the two shades of grass.
+/// The field's tiles: 1 wall, 2 and 3 the two shades of grass (the clicks read them; ENGINE-40: only the walls are drawn
+/// from them, over the composed ground).
 pub fn field_layer() -> TileLayer {
     let mut layer = TileLayer::new(walk::COLS as i32, walk::ROWS as i32, TILE);
     for row in 0..walk::ROWS {
@@ -133,6 +137,48 @@ pub fn field_layer() -> TileLayer {
         }
     }
     layer
+}
+
+/// ENGINE-40 (ENGINE-GUIDE2): the path the field's ground shows, as (column, row): a worn dirt road across the field
+/// and a branch down to it. A picture only: the walk never reads it (`walk::blocked` alone decides walking).
+pub fn on_path(col: i64, row: i64) -> bool {
+    row == 2 || (col == 10 && (2..=8).contains(&row)) || (row == 8 && (10..=17).contains(&col))
+}
+
+/// The grass and the dirt: seamless two-tone textures the size the composer samples (`TEX_CELLS` cells of `CELL_PX`).
+const GRASS: (Rgba, Rgba) = (rgb(92, 140, 84), rgb(80, 126, 74));
+const DIRT: (Rgba, Rgba) = (rgb(150, 122, 86), rgb(132, 106, 74));
+const TEX: i32 = ground::TEX_CELLS * ground::CELL_PX;
+
+/// ENGINE-40: the field's ground job, handed to `f`: grass everywhere (walls included, under their tiles) and the dirt
+/// path over it, the two meeting at the composer's worn, generated edge, with a map-wide tone and a few quiet patches
+/// on the grass. The engine's ground composer (`aegis_ui::ground`, the same one a kit's region maps use) turns it into
+/// one picture with no cell edge in it; the walls are drawn as tiles on top.
+pub fn with_field_ground<R>(f: impl FnOnce(&GroundJob) -> R) -> R {
+    let grass_tex: Image = ground::two_tone(TEX, TEX, GRASS.0, GRASS.1, 1);
+    let dirt_tex: Image = ground::two_tone(TEX, TEX, DIRT.0, DIRT.1, 2);
+    let mut cells = Vec::new();
+    let mut blocked = Vec::new();
+    for row in 0..walk::ROWS {
+        for col in 0..walk::COLS {
+            let wall = walk::blocked(col, row);
+            cells.push(u8::from(!wall && on_path(col, row)));
+            blocked.push(wall);
+        }
+    }
+    let grass = GroundLayer { tex: Some(&grass_tex), tone: 0.08, patches: 0.12, ..GroundLayer::flat(0, GRASS.0) };
+    let dirt = GroundLayer { tex: Some(&dirt_tex), wear: 0.12, strays: true, tone: 0.05, ..GroundLayer::flat(1, DIRT.0) };
+    let layers = [grass, dirt];
+    f(&GroundJob {
+        seed: 7,
+        cols: walk::COLS as i32,
+        rows: walk::ROWS as i32,
+        cell: (ground::CELL_PX, ground::CELL_PX),
+        cells: &cells,
+        blocked: &blocked,
+        layers: &layers,
+        placed: &[],
+    })
 }
 
 /// The camera the field is seen through: zoom 1, the whole field in its place on the screen.
@@ -240,7 +286,14 @@ impl Screen<Hello> for Field {
         ui.p.text(ORIGIN.0 as f32, 24.0, "Walk with the arrows or W A S D, or click a tile.", BODY, text);
         ui.p.text(ORIGIN.0 as f32, 38.0, &format!("Steps {}   Tile {}, {}", w.steps, w.x, w.y), BODY, dim);
         let layer = field_layer();
-        layer.draw(&field_camera(&layer), |_, _, v, r| ui.p.fill(r, [rgb(58, 62, 74), rgb(92, 140, 84), rgb(84, 130, 78)][usize::from(v - 1)]));
+        let key = self.ground.get_or_insert_with(|| with_field_ground(|job| GroundKey::of("hello_field", job))).clone();
+        let (_, _, fw, fh) = layer.bounds();
+        ground::draw(&mut ui.p, key, Rect::new(ORIGIN.0, ORIGIN.1, fw as i32, fh as i32), || with_field_ground(ground::compose));
+        layer.draw(&field_camera(&layer), |_, _, v, r| {
+            if v == 1 {
+                ui.p.fill(r, rgb(58, 62, 74));
+            }
+        });
         match &sprite {
             Some(img) => ui.p.image(img, Rect::new(at.0, at.1, TILE, TILE)),
             None => ui.p.fill(Rect::new(at.0 + 4, at.1 + 4, TILE - 8, TILE - 8), rgb(88, 168, 232)),
