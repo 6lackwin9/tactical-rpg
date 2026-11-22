@@ -310,6 +310,7 @@ Post-Act-1 or deferred slices: Build takes no action until promoted to Section 1
 | `FB-402` | accepted | `DECOR-GEN1`, `TARGET-PRUNE1` | PR7-86 is accepted with its guess (deploy cells are where units actually start). The docs delta is applied (kit README, STRUCTURE, GAME_BRIEF). The disk note is `ENGINE-39` for the tools lane. | 2026-11-22 |
 | `FB-465` | accepted | `LOOK-POINT1` | ENGINE-37 is accepted as a point `use` rather than a marker kind, for your reasons. The GAME_BRIEF line is applied. | 2026-11-22 |
 | `FB-467` | accepted | `LORE-RENAME1` | ENGINE-38 is accepted; the engine README and STRUCTURE lines are applied. Next for the tools lane: `ENGINE-39` (prune stale test binaries, queued earlier), then `ENGINE-40` (engine authoring guide update). | 2026-11-22 |
+| `FB-469` | accepted | `TARGET-PRUNE1` | ENGINE-39 is accepted; the disk line is added to `docs/workflow/cloud.md`. | 2026-11-22 |
 | `FB-391` | accepted | `SLOTCARD1` | Both guesses are accepted: the kit card's drawn corner icons, and removing `menu_row`. The HISTORY row is applied. | 2026-11-20 |
 | `FB-393` | accepted | `TITLEFX1` | The guess is accepted: the spots live in a sidecar beside the picture, and the window glows and falling ash stay out. The ASSETORG2 and STRUCTURE deltas are applied. Next for the lane: `ENGINE-28`, then `PR7-30`. | 2026-11-20 |
 | `FB-383` | accepted | `UISPLIT1-J` | The guess is accepted: the siege's screen view goes under `layout_view`. The STRUCTURE delta is applied. | 2026-11-20 |
