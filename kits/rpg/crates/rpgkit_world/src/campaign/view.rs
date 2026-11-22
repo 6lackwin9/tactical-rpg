@@ -58,6 +58,29 @@ pub fn next_point(def: &MeterDef, value: i64, act: i64, running: bool, fired: &[
     }
 }
 
+/// PR7-76 (PT-42): what a countdown does when it runs out in `act`, as its hover line: the rule at its floor (`min`)
+/// for the act, "At 0 days: " and its warning (else "the run ends." for a rule that ends it), then "It then runs again
+/// from N days." for a restart; None when no rule of the act fires there (or it says nothing).
+pub fn end_line(def: &MeterDef, act: i64, unit: &str) -> Option<String> {
+    if !def.countdown {
+        return None;
+    }
+    let r = def.rules.iter().filter(|r| !r.up && r.at <= def.min && (r.acts.is_empty() || r.acts.contains(&act))).max_by_key(|r| r.at)?;
+    let ends = r.effects.iter().any(|f| json::s(f, "effect") == "end");
+    let what = if !r.warn.trim().is_empty() {
+        r.warn.trim().to_string()
+    } else if ends {
+        "the run ends.".to_string()
+    } else {
+        return None;
+    };
+    let again = match r.restart_days {
+        Some(n) if n > 0 && !ends => format!(" It then runs again from {}.", with_unit(n, unit)),
+        _ => String::new(),
+    };
+    Some(format!("At {}: {what}{again}", with_unit(def.min, unit)))
+}
+
 /// A purse tip as hover lines (none for an empty tip).
 fn tip_lines(tip: &str) -> Vec<String> {
     if tip.is_empty() {
@@ -94,6 +117,10 @@ pub fn hud(d: &Data, gs: &GameState) -> Vec<HudChip> {
         if let Some(at) = next_point(def, value, c.act, st.running, &c.fired) {
             let named = def.bands.iter().find(|b| b.from == at).map(|b| format!(" ({})", b.name)).unwrap_or_default();
             lines.push(format!("Next: {}{named}", with_unit(at, &unit)));
+        }
+        // PR7-76 (PT-42): a countdown says what happens when it runs out (as the rules have it)
+        if let Some(line) = end_line(def, c.act, &unit) {
+            lines.push(line);
         }
         let description = json::s(&def.row, "description");
         if !description.is_empty() {

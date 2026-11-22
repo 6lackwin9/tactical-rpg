@@ -5,7 +5,7 @@
 //! back where it stepped from. Every expectation follows from the rule and the fixture's own numbers.
 
 use aegis_core::json;
-use rpgkit_world::campaign::view::{hud, next_point, with_unit, ChipKind};
+use rpgkit_world::campaign::view::{end_line, hud, next_point, with_unit, ChipKind};
 use rpgkit_world::campaign::{self, RUN_OVER_TEXT};
 use rpgkit_world::state::{PartyState, UnitState, SUPPLIES_MAX};
 use rpgkit_world::{explore, save, Data, GameState};
@@ -102,6 +102,29 @@ fn outside_a_campaign_world_the_hud_is_todays_two_counters() {
     assert_eq!(chips[1].lines, vec![rpgkit_data::UPKEEP_TIP.to_string()]);
 }
 
+/// PR7-76 (PT-42): a countdown's hover says what its rule at 0 does in the act: the rule's warning and its restart
+/// (a soft countdown), "the run ends." for an end without a warning, nothing when no rule of the act fires at 0.
+#[test]
+fn a_countdown_says_what_happens_at_zero() {
+    let d = data();
+    let mut gs = state(&d, "camp");
+    set(&mut gs, 0, CLOCK_DAYS);
+    let c = gs.campaign.as_mut().unwrap();
+    let act = c.act;
+    let def = std::sync::Arc::make_mut(&mut c.defs).get_mut("clock").unwrap();
+    assert_eq!(end_line(def, act, "days").as_deref(), Some("At 0 days: the run ends."));
+    let zero = def.rules.iter_mut().find(|r| r.id == "zero").unwrap();
+    zero.effects.clear();
+    zero.warn = "A lesser harvest.".into();
+    zero.restart_days = Some(14);
+    assert_eq!(end_line(def, act, "days").as_deref(), Some("At 0 days: A lesser harvest. It then runs again from 14 days."));
+    def.rules.iter_mut().find(|r| r.id == "zero").unwrap().acts = vec![act + 1];
+    assert_eq!(end_line(def, act, "days"), None, "a rule of another act says nothing here");
+    assert_eq!(end_line(def, act + 1, "days").as_deref(), Some("At 0 days: A lesser harvest. It then runs again from 14 days."));
+    let chips = hud(&d, &gs);
+    assert!(chips.iter().find(|ch| ch.id == "clock").is_some_and(|ch| !ch.lines.iter().any(|l| l.starts_with("At 0"))), "the HUD reads the act in play");
+}
+
 #[test]
 fn a_campaign_hud_is_the_purse_then_the_visible_meters_by_order() {
     let d = data();
@@ -117,7 +140,7 @@ fn a_campaign_hud_is_the_purse_then_the_visible_meters_by_order() {
     assert_eq!((alert.short.as_str(), alert.value.as_str(), alert.tone.as_str(), alert.icon.as_str()), ("Alert", "25%", "calm", "ui/hud/alert.png"));
     assert_eq!(alert.title, "Constabulary Alert");
     assert_eq!(alert.lines, vec!["Band: Guarded".to_string(), format!("Next: {SUSPICIOUS}% (Suspicious)"), "How hard they look.".to_string()]);
-    assert_eq!(clock.lines, vec!["Band: Far".to_string(), format!("Next: {WEEK} days")]);
+    assert_eq!(clock.lines, vec!["Band: Far".to_string(), format!("Next: {WEEK} days"), "At 0 days: the run ends.".to_string()], "PT-42: what 0 does");
     // the band moves with the value; a label replaces the name (K3)
     set(&mut gs, LOCKDOWN, 1);
     gs.campaign.as_mut().unwrap().meters.get_mut("clock").unwrap().label = "The Great Tithing".into();

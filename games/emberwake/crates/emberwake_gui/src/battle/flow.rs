@@ -205,6 +205,10 @@ impl BattleScreen {
         let gs = cx.gs_mut();
         let res = emberwake_world::battle::finish_world(&d, gs, runner, fight, &outcome, Some(&tally));
         cx.set_busy(false);
+        // PR7-76 (PT-55): the region map reads the outcome (a walk the fight broke off goes on after a win)
+        if let Some(g) = cx.game.as_mut() {
+            g.fought = Some(outcome.clone());
+        }
         if !json::b(&res, "ok", false) {
             show_errors(cx, json::sget(&res, "errors"));
         }

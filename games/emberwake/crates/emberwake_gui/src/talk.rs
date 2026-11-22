@@ -369,6 +369,10 @@ pub struct Services {
     /// PR6-8: the open facility pane's last upgrade.
     facility: FacilityPane,
     pending: Option<Dict>,
+    /// PR7-76 (PT-56): the other ready quests the open picker turns in with its own (each with nothing to choose).
+    batch: Vec<String>,
+    /// PR7-76 (PT-56): the name of the quest a confirm is completing (its reward line names it).
+    completing: Option<String>,
     /// CAMPAIGN1 W3: the choice waiting on the ask before its `rest` would end the run (a Yes picks it).
     rest_ask: Option<i64>,
     picks: Vec<String>,
@@ -527,6 +531,26 @@ impl Services {
         let q = quest::resolved(d, gs, &qid);
         let fr = Rect::new(160, 60, 320, 230);
         ui.p.fill(Rect::new(0, 0, W, H), th().game("map_veil", rgba(0, 0, 0, 100)));
+        // PR7-76 (PT-56): several turn-ins with nothing to choose under one confirm, each quest with its rewards
+        if !self.batch.is_empty() {
+            let all: Vec<String> = std::iter::once(qid.clone()).chain(self.batch.iter().cloned()).collect();
+            ui.frame(fr, &format!("Turn in: {} quests", all.len()), false);
+            let mut y = fr.y + 30;
+            for q in &all {
+                let rq = quest::resolved(d, gs, q);
+                let rewards = crate::hub::reward_lines(cx, json::dget(&rq, "rewards"));
+                let line = if rewards.is_empty() { s_or(&rq, "name", q) } else { format!("{}: {}", s_or(&rq, "name", q), rewards.join(", ")) };
+                if y + 14 > fr.y + fr.h - 28 {
+                    break;
+                }
+                ui.p.text_fit(fr.x as f32 + 10.0, y as f32, &line, BODY, (fr.w - 20) as f32, th().text);
+                ui.push(format!("turn_in.quest.{}", q.replace(':', ".")), "label", line.clone(), Rect::new(fr.x + 10, y, fr.w - 20, 13), true, false, None, Vec::new());
+                y += 14;
+            }
+            ui.button("turn_in.cancel", Rect::new(fr.x + fr.w - 120, fr.y + fr.h - 24, 52, 16), "Cancel", A::from(SvcAct::CancelTurnIn), true);
+            ui.button("turn_in.confirm", Rect::new(fr.x + fr.w - 62, fr.y + fr.h - 24, 52, 16), "Confirm", A::from(SvcAct::ConfirmTurnIn), true);
+            return;
+        }
         ui.frame(fr, &format!("Turn in: {}", s_or(&q, "name", &qid)), false);
         let mut y = fr.y + 30;
         let rewards = crate::hub::reward_lines(cx, json::dget(&q, "rewards"));
@@ -602,8 +626,33 @@ impl Services {
     fn choose(&mut self, cx: &mut Cx, i: i64) -> bool {
         let d = cx.data.clone();
         let Some(r) = self.runner.as_mut() else { return false };
+        // PR7-76 (PT-61): what a reply paid or gave and the quests it finished are logged (a toll, a gift)
+        let before = (cx.gs().party.gold, cx.gs().party.supplies, cx.gs().party.stash.clone(), quest::quests_with(&d, cx.gs(), "ready"));
         let res = r.choose(&d, cx.gs_mut(), i);
+        if json::b(&res, "ok", false) && !res.contains_key("pending") {
+            log_purse(cx, before.0, before.1, &before.2);
+            crate::region::log_newly_ready(cx, &before.3);
+        }
         self.dialogue_result(cx, res)
+    }
+
+    /// PR7-76 (PT-56): the other quests turned in to this conversation's person that can go with quest `first` under one
+    /// confirm: ready, with nothing to choose (no loot pick, no recipient), each with its reply here; none when `first`
+    /// itself has something to choose.
+    fn turn_in_batch(&self, cx: &Cx, first: &str) -> Vec<String> {
+        let (d, gs) = (&cx.data, cx.gs());
+        let Some(r) = self.runner.as_ref() else { return Vec::new() };
+        let plain = |q: &str| {
+            let offers = quest::offers(d, gs, q);
+            (quest::picks_allowed(d, gs, q) == 0 || offers.is_empty()) && !quest::needs_recipient(d, gs, json::dget(&quest::resolved(d, gs, q), "rewards"), &offers)
+        };
+        if !plain(first) {
+            return Vec::new();
+        }
+        quest::quests_with(d, gs, "ready")
+            .into_iter()
+            .filter(|q| q != first && emberwake_world::dialogue::turn_in_qid(d, gs, &quest::resolved(d, gs, q)) == r.character_qid && plain(q) && r.turn_in_index(d, gs, q).is_some())
+            .collect()
     }
 
     /// CAMPAIGN1 W3, R3: the question before reply `i` when it rests (the `rest` effect) and the rest's days would end
@@ -620,6 +669,8 @@ impl Services {
 
     /// Handles a dialogue result: fights, the turn-in picker, notes, the end. Whether a fight started.
     fn dialogue_result(&mut self, cx: &mut Cx, res: Dict) -> bool {
+        // PR7-76 (PT-56): the quest a confirm completes names this result's reward line only (taken whatever comes)
+        let completing = self.completing.take();
         if !json::b(&res, "ok", false) {
             for e in json::sget(&res, "errors") {
                 cx.log(e);
@@ -649,13 +700,27 @@ impl Services {
             for (id, n) in json::ints(json::get(g, "items")) {
                 got.push(format!("{} x{n}", cx.data.item_name(&id)));
             }
-            if !got.is_empty() {
-                cx.log(format!("Quest complete: {}.", got.join(", ")));
+            // PR7-76 (PT-63): a skill or passive reward (a loot pick) is named too, with who learned it
+            let who = cx.gs().party.member(&s(g, "recipient")).map(|m| crate::hub::member_name(cx, m)).unwrap_or_default();
+            let to = if who.is_empty() { String::new() } else { format!(" for {who}") };
+            for sk in json::sget(g, "skills") {
+                got.push(format!("{} (skill{to})", cx.data.cat.skill(&sk).map_or(sk.clone(), |x| x.name.clone())));
+            }
+            for pa in json::sget(g, "passives") {
+                got.push(format!("{} (passive{to})", cx.data.cat.passives.get(&pa).map_or(pa.clone(), |x| x.name.clone())));
+            }
+            // PR7-76 (PT-56): the line names its quest (several turn-ins log one each)
+            match (completing, got.is_empty()) {
+                (Some(name), true) => cx.log(format!("Quest complete: {name}.")),
+                (Some(name), false) => cx.log(format!("Quest complete: {name} ({}).", got.join(", "))),
+                (None, false) => cx.log(format!("Quest complete: {}.", got.join(", "))),
+                (None, true) => {}
             }
         }
         if res.contains_key("pending") {
             self.picks.clear();
             self.recipient = 0;
+            self.batch = self.turn_in_batch(cx, &s(&res, "quest"));
             self.pending = Some(res);
             return false;
         }
@@ -784,18 +849,61 @@ impl Services {
             SvcAct::ConfirmTurnIn => {
                 let rec = cx.gs().party.members.get(self.recipient).map(|m| m.id.clone()).unwrap_or_default();
                 let picks = self.picks.clone();
+                let first = self.pending.as_ref().map(|p| s(p, "quest")).unwrap_or_default();
+                let batch = std::mem::take(&mut self.batch);
                 let Some(r) = self.runner.as_mut() else { return false };
                 let res = r.confirm_turn_in(&d, cx.gs_mut(), &rec, &picks);
-                if json::b(&res, "ok", false) {
+                let ok = json::b(&res, "ok", false);
+                if ok {
                     self.pending = None;
+                    self.completing = Some(quest_name(&d, cx.gs(), &first));
                 }
-                self.dialogue_result(cx, res)
+                let mut fought = self.dialogue_result(cx, res);
+                // PR7-76 (PT-56): the others with nothing to choose go under the same confirm, each its own line
+                // the ones the talk could not take (a fight began, the talk closed, the reply is gone or refused) are
+                // named in the log rather than dropped
+                let mut skipped: Vec<&String> = Vec::new();
+                for q in batch.iter().filter(|_| ok) {
+                    let Some(r) = self.runner.as_mut().filter(|r| !r.closed && !fought) else {
+                        skipped.push(q);
+                        continue;
+                    };
+                    let Some(i) = r.turn_in_index(&d, cx.gs(), q) else {
+                        skipped.push(q);
+                        continue;
+                    };
+                    let picked = r.choose(&d, cx.gs_mut(), i);
+                    if !picked.contains_key("pending") {
+                        fought = self.dialogue_result(cx, picked);
+                        continue;
+                    }
+                    let Some(r) = self.runner.as_mut() else {
+                        skipped.push(q);
+                        continue;
+                    };
+                    let res = r.confirm_turn_in(&d, cx.gs_mut(), "", &[]);
+                    if json::b(&res, "ok", false) {
+                        self.completing = Some(quest_name(&d, cx.gs(), q));
+                    } else {
+                        skipped.push(q);
+                        if let Some(r) = self.runner.as_mut() {
+                            r.cancel();
+                        }
+                    }
+                    fought = self.dialogue_result(cx, res);
+                }
+                for q in skipped {
+                    let line = format!("Not turned in: {}. Ask again.", quest_name(&d, cx.gs(), q));
+                    cx.log(line);
+                }
+                fought
             }
             SvcAct::CancelTurnIn => {
                 if let Some(r) = self.runner.as_mut() {
                     r.cancel();
                 }
                 self.pending = None;
+                self.batch.clear();
                 false
             }
         }
@@ -853,6 +961,38 @@ impl Services {
             // ENGINE-25 (UISPLIT1-J Stage A): the talk box's view-model
             "talk_view": crate::talk_view::view(cx, self).to_json(),
             "portraits": if self.talking() && shop_qid.is_empty() && board_qid.is_empty() && self.recipe_npc().is_empty() && self.facility_npc().is_empty() { self.faces.state() } else { json!([]) }})
+    }
+}
+
+/// A quest's display name (its id when it has none).
+fn quest_name(d: &Data, gs: &GameState, qid: &str) -> String {
+    s_or(&quest::resolved(d, gs, qid), "name", qid)
+}
+
+/// PR7-76 (PT-61): what a reply moved in the purse and the stash since `gold`, `supplies` and `stash`: "Paid 30 Scrap.",
+/// "Received 2 Tallow.", "Handed over Rock Salt x1.", "Received Bandage x2." (the purse's names).
+fn log_purse(cx: &mut Cx, gold: i64, supplies: i64, stash: &emberwake_world::party_ops::Stash) {
+    let (now_gold, now_supplies, now_stash) = (cx.gs().party.gold, cx.gs().party.supplies, cx.gs().party.stash.clone());
+    let mut lines = Vec::new();
+    for (delta, which) in [(now_gold - gold, PurseWord::Currency), (now_supplies - supplies, PurseWord::Upkeep)] {
+        let word = purse_word(cx, which);
+        match delta {
+            0 => {}
+            n if n < 0 => lines.push(format!("Paid {} {word}.", -n)),
+            n => lines.push(format!("Received {n} {word}.")),
+        }
+    }
+    for id in stash.keys().chain(now_stash.keys().filter(|k| !stash.contains_key(*k))) {
+        let delta = now_stash.get(id).copied().unwrap_or(0) - stash.get(id).copied().unwrap_or(0);
+        let name = cx.data.item_name(id);
+        match delta {
+            0 => {}
+            n if n < 0 => lines.push(format!("Handed over {name} x{}.", -n)),
+            n => lines.push(format!("Received {name} x{n}.")),
+        }
+    }
+    for l in lines {
+        cx.log(l);
     }
 }
 
@@ -943,6 +1083,160 @@ impl Screen<GameCx> for ServiceScreen {
     }
 
     widget_plumbing!();
+}
+
+/// PR7-76 (ACT1-FIX2) on the shipped game, every quest, person and reply picked by rule: several turn-ins with nothing
+/// to choose share one confirm and each reward line names its quest (PT-56); a reply that pays logs the payment and the
+/// quest it finished (PT-61); a skill pick is named in its quest's line (PT-63).
+#[cfg(test)]
+mod act1_fix2_tests {
+    use super::*;
+    use crate::worldmap::tests::ward_hub;
+
+    fn ready(cx: &mut Cx, qid: &str) {
+        let count = json::aget(&quest::resolved(&cx.data, cx.gs(), qid), "objectives").len();
+        cx.gs_mut().quests.insert(qid.to_string(), json!({"state": "ready", "objective": count}));
+    }
+
+    /// Nothing to choose at its turn-in: no loot pick and no recipient.
+    fn plain(cx: &Cx, q: &str) -> bool {
+        let (d, gs) = (&cx.data, cx.gs());
+        let offers = quest::offers(d, gs, q);
+        (quest::picks_allowed(d, gs, q) == 0 || offers.is_empty()) && !quest::needs_recipient(d, gs, json::dget(&quest::resolved(d, gs, q), "rewards"), &offers)
+    }
+
+    #[test]
+    fn pt56_turn_ins_with_nothing_to_choose_share_one_confirm() {
+        let mut cx = ward_hub(&[], &[], false);
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        // the person most quests turn in to, and two of them with nothing to choose
+        let quests: Vec<String> = d.merged_entries(&world, "quests").iter().map(|q| s(q, "_qid")).collect();
+        let gs0 = cx.gs().clone();
+        let to = |q: &str| emberwake_world::dialogue::turn_in_qid(&d, &gs0, &quest::resolved(&d, &gs0, q));
+        let who = quests.iter().map(|q| to(q)).filter(|w| !w.is_empty()).max_by_key(|w| quests.iter().filter(|q| to(q) == *w && plain(&cx, q)).count()).expect("a turn-in person");
+        let mine: Vec<String> = quests.iter().filter(|q| to(q) == who && plain(&cx, q)).take(2).cloned().collect();
+        assert_eq!(mine.len(), 2, "two plain turn-ins to {who}");
+        for q in &mine {
+            ready(&mut cx, q);
+        }
+        let mut svc = Services::default();
+        svc.talk(&mut cx, &who);
+        let i = svc.runner.as_ref().and_then(|r| r.turn_in_index(&d, cx.gs(), &mine[0])).expect("its reply");
+        svc.act(&mut cx, SvcAct::Choose(i));
+        assert!(svc.pending.is_some(), "the picker opens");
+        assert_eq!(svc.batch, vec![mine[1].clone()], "the other goes with it");
+        cx.log.clear();
+        svc.act(&mut cx, SvcAct::ConfirmTurnIn);
+        for q in &mine {
+            assert_eq!(quest::status(&d, cx.gs(), q), "completed", "{q} turned in by the one confirm");
+            let name = s(&quest::resolved(&d, cx.gs(), q), "name");
+            assert!(cx.log.iter().any(|l| l.starts_with(&format!("Quest complete: {name}"))), "{name}'s line: {:?}", cx.log);
+        }
+        assert!(svc.pending.is_none() && svc.batch.is_empty(), "no second popup");
+        // one with a choice to make is never batched
+        if let Some(pick) = quests.iter().find(|q| to(q) == who && !plain(&cx, q) && quest::picks_allowed(&d, cx.gs(), q) > 0) {
+            assert!(svc.turn_in_batch(&cx, pick).is_empty());
+        }
+    }
+
+    /// PT-56 (review): a batched quest the talk can no longer take (its reply gone) is named in the log, not dropped, and
+    /// no quest name stays behind for a later line.
+    #[test]
+    fn pt56_a_batched_quest_that_cannot_go_is_named() {
+        let mut cx = ward_hub(&[], &[], false);
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        let quests: Vec<String> = d.merged_entries(&world, "quests").iter().map(|q| s(q, "_qid")).collect();
+        let gs0 = cx.gs().clone();
+        let to = |q: &str| emberwake_world::dialogue::turn_in_qid(&d, &gs0, &quest::resolved(&d, &gs0, q));
+        let who = quests.iter().map(|q| to(q)).filter(|w| !w.is_empty()).max_by_key(|w| quests.iter().filter(|q| to(q) == *w && plain(&cx, q)).count()).expect("a turn-in person");
+        let mine: Vec<String> = quests.iter().filter(|q| to(q) == who && plain(&cx, q)).take(2).cloned().collect();
+        assert_eq!(mine.len(), 2, "two plain turn-ins to {who}");
+        for q in &mine {
+            ready(&mut cx, q);
+        }
+        let mut svc = Services::default();
+        svc.talk(&mut cx, &who);
+        let i = svc.runner.as_ref().and_then(|r| r.turn_in_index(&d, cx.gs(), &mine[0])).expect("its reply");
+        svc.act(&mut cx, SvcAct::Choose(i));
+        assert_eq!(svc.batch, vec![mine[1].clone()]);
+        // the second is no longer ready by the confirm: its reply is gone
+        cx.gs_mut().quests.insert(mine[1].clone(), json!({"state": "active", "objective": 0}));
+        cx.log.clear();
+        svc.act(&mut cx, SvcAct::ConfirmTurnIn);
+        assert_eq!(quest::status(&d, cx.gs(), &mine[0]), "completed");
+        let name = s(&quest::resolved(&d, cx.gs(), &mine[1]), "name");
+        assert!(cx.log.iter().any(|l| *l == format!("Not turned in: {name}. Ask again.")), "the skipped one named: {:?}", cx.log);
+        assert!(svc.completing.is_none(), "no name left for a later line");
+    }
+
+    #[test]
+    fn pt61_a_reply_that_pays_logs_the_payment_and_the_quest_it_finished() {
+        let mut cx = ward_hub(&[], &[], false);
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        // a person's reply that takes currency and sets the flag a quest waits on
+        let flag_quest = |key: &str| d.merged_entries(&world, "quests").into_iter().find(|q| json::aget(q, "steps").iter().any(|st| s(json::dict(st), "flag") == key)).map(|q| s(q, "_qid"));
+        let mut found = None;
+        for c in d.merged_entries(&world, "characters") {
+            let tree = d.resolve(&world, "dialogues", &s(c, "dialogue"));
+            for n in json::aget(tree, "nodes") {
+                for ch in json::aget(json::dict(n), "choices") {
+                    let fx = json::aget(json::dict(ch), "effects");
+                    let gold = fx.iter().map(json::dict).find(|f| s(f, "effect") == "take").map(|f| json::i(f, "gold", 0)).unwrap_or(0);
+                    let q = fx.iter().map(json::dict).filter(|f| s(f, "effect") == "set_flag").find_map(|f| flag_quest(&s(f, "key")));
+                    if let (true, Some(q), None) = (gold > 0, q, found.as_ref()) {
+                        found = Some((s(c, "_qid"), s(json::dict(ch), "text"), gold, q));
+                    }
+                }
+            }
+        }
+        let (who, text, gold, qid) = found.expect("a reply that pays and finishes a quest step");
+        cx.gs_mut().quests.insert(qid.clone(), json!({"state": "active", "objective": 0}));
+        cx.gs_mut().party.gold = gold * 10;
+        let mut svc = Services::default();
+        svc.talk(&mut cx, &who);
+        let view = svc.talk_view(&cx).expect("the talk");
+        let i = json::aget(&view, "choices").iter().position(|c| s(json::dict(c), "text").ends_with(&text)).expect("the reply is offered at the start");
+        cx.log.clear();
+        svc.act(&mut cx, SvcAct::Choose(i as i64));
+        let word = purse_word(&cx, PurseWord::Currency);
+        assert!(cx.log.contains(&format!("Paid {gold} {word}.")), "{:?}", cx.log);
+        if quest::status(&d, cx.gs(), &qid) == "ready" {
+            let name = s(&quest::resolved(&d, cx.gs(), &qid), "name");
+            assert!(cx.log.contains(&format!("Quest updated: {name} is ready to turn in.")), "{:?}", cx.log);
+        }
+    }
+
+    #[test]
+    fn pt63_a_skill_pick_is_named_in_its_quests_line() {
+        let mut cx = ward_hub(&[], &[], false);
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        // a quest whose loot pool offers a skill, turned in to someone
+        let skill_loot = |l: &str| s(d.resolve(&world, "loot", l), "reward_kind") == "skill";
+        let qid = d
+            .merged_entries(&world, "quests")
+            .iter()
+            .map(|q| s(q, "_qid"))
+            .find(|q| !emberwake_world::dialogue::turn_in_qid(&d, cx.gs(), &quest::resolved(&d, cx.gs(), q)).is_empty() && json::sget(&quest::resolved(&d, cx.gs(), q), "loot_pool").iter().any(|l| skill_loot(l)))
+            .expect("a quest with a skill pick");
+        ready(&mut cx, &qid);
+        let lq = quest::offers(&d, cx.gs(), &qid).into_iter().find(|l| skill_loot(l)).expect("the skill offered");
+        let skill = d.cat.skill(&s(d.resolve(&world, "loot", &lq), "ref")).map(|x| x.name.clone()).expect("the skill row");
+        let who = emberwake_world::dialogue::turn_in_qid(&d, cx.gs(), &quest::resolved(&d, cx.gs(), &qid));
+        let mut svc = Services::default();
+        svc.talk(&mut cx, &who);
+        let i = svc.runner.as_ref().and_then(|r| r.turn_in_index(&d, cx.gs(), &qid)).expect("its reply");
+        svc.act(&mut cx, SvcAct::Choose(i));
+        svc.act(&mut cx, SvcAct::TogglePick(lq));
+        cx.log.clear();
+        svc.act(&mut cx, SvcAct::ConfirmTurnIn);
+        let name = s(&quest::resolved(&d, cx.gs(), &qid), "name");
+        let line = cx.log.iter().find(|l| l.starts_with(&format!("Quest complete: {name}"))).unwrap_or_else(|| panic!("its line: {:?}", cx.log));
+        assert!(line.contains(&format!("{skill} (skill for ")), "{line}");
+    }
 }
 
 #[cfg(test)]

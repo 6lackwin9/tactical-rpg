@@ -32,7 +32,7 @@ fn data(lines: Value) -> Data {
     let worlds = json!({w: {"manifest": manifest, "own": {
         "locations": with_ids(w, json!([{"id": "hub", "name": "Hub"}])),
         "characters": with_ids(w, json!([{"id": "hero", "name": "Hero", "role": "party"}, {"id": "clerk", "name": "Clerk", "role": "npc"}])),
-        "quests": with_ids(w, json!([{"id": "job_a", "name": "Job A", "template": "job", "turn_in": "clerk"}])),
+        "quests": with_ids(w, json!([{"id": "job_a", "name": "Job A", "template": "job", "turn_in": "clerk"}, {"id": "job_b", "name": "Job B", "template": "job", "turn_in": "clerk"}])),
         "loot": with_ids(w, json!([{"id": "l_item", "name": "Item", "reward_kind": "item", "ref": "x"}, {"id": "l_pass", "name": "Pass", "reward_kind": "passive", "ref": "p"}]))
     }}});
     let catalog = json!({
@@ -81,6 +81,25 @@ fn a_turn_in_says_the_worlds_turned_in_line_once() {
     let mut gs = state(&d);
     let (r, res) = turn_in(&d, &mut gs);
     assert!(!res.contains_key("said") && r.said.is_empty());
+}
+
+/// PR7-76 (PT-56): each ready quest's turn-in reply is found by its quest (`turn_in_index`), so the screens can turn in
+/// several with one confirm; a quest turned in has none left, and a closed conversation offers none.
+#[test]
+fn each_turn_in_reply_is_found_by_its_quest() {
+    let d = data(json!({}));
+    let mut gs = state(&d);
+    gs.quests.insert("w:job_b".into(), json!({"state": "ready", "objective": 1}));
+    let mut r = DialogueRunner::open(&d, &mut gs, "clerk");
+    let services: Vec<String> = json::aget(&r.view(&d, &gs), "choices").iter().map(|c| json::s(json::dict(c), "service")).collect();
+    let (a, b) = (r.turn_in_index(&d, &gs, "w:job_a").expect("job A's reply"), r.turn_in_index(&d, &gs, "w:job_b").expect("job B's reply"));
+    assert!(a != b && services[a as usize] == "turn_in" && services[b as usize] == "turn_in", "{services:?}");
+    assert_eq!(r.turn_in_index(&d, &gs, "w:nothing"), None);
+    let res = r.choose(&d, &mut gs, b);
+    assert_eq!(json::s(&res, "quest"), "w:job_b", "the reply is job B's");
+    assert!(json::b(&r.confirm_turn_in(&d, &mut gs, "", &[]), "ok", false));
+    assert_eq!(r.turn_in_index(&d, &gs, "w:job_b"), None, "turned in: no reply left");
+    assert!(r.turn_in_index(&d, &gs, "w:job_a").is_some(), "the other is still offered");
 }
 
 #[test]

@@ -394,10 +394,20 @@ impl UnitState {
         if rpgkit_rules::unit::forbids_hands(progression::forbid_hands(d, self), def) {
             return Err(format!("{} is two-handed: {} can't wield two-handed items now.", def.name, progression::display_name(d, self)));
         }
-        if let Some(lock) = self.wear_lock(d, def) {
-            return Err(lock.text(&progression::display_name(d, self), &def.name));
+        if let Some(why) = self.wear_refusal(d, def) {
+            return Err(why);
         }
         Ok(())
+    }
+
+    /// PR7-76 (PT-60): the refusal line of the strict gear rule's lock on `item` (`wear_lock`), the gear type named in
+    /// words (its family's name, never its id); None when the item may be worn.
+    pub fn wear_refusal(&self, d: &Data, item: &rpgkit_data::ItemDef) -> Option<String> {
+        let lock = match self.wear_lock(d, item)? {
+            rpgkit_rules::gear::WearLock::Untrained { gear } => rpgkit_rules::gear::WearLock::Untrained { gear: d.family_name(&gear) },
+            other => other,
+        };
+        Some(lock.text(&progression::display_name(d, self), &item.name))
     }
 
     /// GEAR-REWORK1 (PR5-51a, U3.3 1): the strict rule's hard lock on `item` for this member (`gear::wear_lock`): read

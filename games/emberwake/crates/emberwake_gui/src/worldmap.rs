@@ -357,8 +357,9 @@ impl RouteStyle {
 
 /// MAP-HOOKS1 (AO-01 (4), focus only): the roads the map draws, each once, in draw order. `routes` are the view's
 /// (qid, from, to, open); `near` the hovered or focused place; `ways` the ways to the destination (route qids each, as
-/// `travel::paths` ranks them), `pick` the chosen one and `peek` the one previewed. Nothing at rest; the open roads of
-/// `near` dimmed (`Near`), never a locked one; then each other way's roads pale (`Alt`; `Peek` for the previewed one),
+/// `travel::paths` ranks them), `pick` the chosen one and `peek` the one previewed. PR7-76 (PT-45): at rest (nothing
+/// hovered, focused or picked) every open road dimmed (`Near`), so the roads to open places show from the start; else the
+/// open roads of `near` dimmed (`Near`), never a locked one; then each other way's roads pale (`Alt`; `Peek` for the previewed one),
 /// then the chosen way's (`Main`) last, on top. A road of the chosen way is drawn only as `Main`, a road shared by
 /// other ways once (the previewed way first), and a road of any way never as `Near`.
 pub fn route_layers(routes: &[(String, String, String, bool)], near: Option<&str>, ways: &[Vec<String>], pick: usize, peek: Option<usize>) -> Vec<(String, RouteStyle)> {
@@ -371,6 +372,8 @@ pub fn route_layers(routes: &[(String, String, String, bool)], near: Option<&str
                 out.push((rq.clone(), RouteStyle::Near));
             }
         }
+    } else if ways.is_empty() {
+        out.extend(routes.iter().filter(|r| r.3).map(|r| (r.0.clone(), RouteStyle::Near)));
     }
     let mut others: Vec<usize> = (0..ways.len()).filter(|i| *i != pick).collect();
     // the previewed way first, so a road it shares with another pale way is drawn lit
@@ -505,6 +508,16 @@ pub struct WorldMap {
 impl WorldMap {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// PR7-76 (PT-54): the world map opened through exit `marker` of the party's location: a road's exit picks the next
+    /// place that way (`exit_toward`), any other opens with nothing picked.
+    pub fn toward(cx: &Cx, marker: &str) -> Self {
+        let mut m = Self::new();
+        if let Some(q) = cx.game.as_ref().and_then(|g| exit_toward(&cx.data, &g.gs, marker)) {
+            m.selected = q;
+        }
+        m
     }
 
     /// MAP-HOOKS1: the layout sidecar beside background `name` (`read_layout`; MAP-POLISH1: only the name the background
@@ -719,7 +732,7 @@ impl WorldMap {
     /// The side panel: the time, the travel mode, the pick and its ways, Enter, Make camp and the log (above the debug
     /// layout button's row when the build has one).
     #[allow(clippy::too_many_arguments)]
-    fn side_panel(&mut self, ui: &mut Ui<WAct>, cx: &mut Cx, d: &emberwake_world::Data, gs: &emberwake_world::GameState, here: &str, ways: &[travel::TravelPath], peek: Option<usize>) {
+    fn side_panel(&mut self, ui: &mut Ui<WAct>, cx: &mut Cx, d: &emberwake_world::Data, gs: &emberwake_world::GameState, here: &str, ways: &[travel::TravelPath], peek: Option<usize>, hover: Option<&str>) {
         let sx = 504;
         let mut y = 28;
         ui.p.text_face(aegis_ui::painter::Typeface::Display, sx as f32, y as f32, "World map", BODY, th().gold);
@@ -770,12 +783,35 @@ impl WorldMap {
                     y += 8;
                 }
             }
+        } else if let Some(q) = hover.filter(|q| *q != here && !json::b(&travel::trip(d, gs, here, q), "ok", false)) {
+            // PR7-76 (PT-45): a place no open road reaches shows the way there while hovered, before any click
+            let name = cx.location_name(&gs.world_id, q);
+            ui.p.text_fit(sx as f32, y as f32 + 3.0, &format!("No open road to {name}."), SMALL, 130.0, th().foe);
+            y += 12;
+            let hint = way_hint(cx, gs, here, q);
+            for part in ui.p.wrap(&hint, SMALL, 130.0) {
+                ui.p.text(sx as f32, y as f32 + 1.0, &part, SMALL, th().text);
+                y += 8;
+            }
+            ui.push("world_map.hover_hint", "label", hint.clone(), Rect::new(sx, y - 8, 130, 8), true, false, None, Vec::new());
+            y += 8;
         }
         ui.button("world_map.enter", Rect::new(sx, y, 130, 16), &format!("Enter {}", cx.location_name(&gs.world_id, &here)), WAct::Enter, !travel::current_node(&d, &gs).is_empty());
         y += 20;
         let (camp_label, camp_tip, camp_on) = camp_line(cx, d, gs);
         ui.button_tip("world_map.camp", Rect::new(sx, y, 130, 16), &camp_label, WAct::Camp, camp_on, tip("Make camp", &camp_tip));
-        y += 24;
+        y += 18;
+        // PR7-76 (PT-53): an off Make camp says why on the line under it, not only in its hover
+        if !camp_on {
+            let top = y;
+            for part in ui.p.wrap(&camp_tip, SMALL, 130.0) {
+                ui.p.text(sx as f32, y as f32, &part, SMALL, th().dim);
+                y += 8;
+            }
+            ui.push("world_map.camp_why", "label", camp_tip.clone(), Rect::new(sx, top, 130, y - top), true, false, None, Vec::new());
+            y += 2;
+        }
+        y += 6;
         let lines: Vec<String> = cx.log.iter().rev().take(16).cloned().collect();
         for l in lines.iter().rev() {
             for part in ui.p.wrap(l, SMALL, 130.0) {
@@ -818,6 +854,51 @@ pub fn note_new_roads(cx: &mut Cx) -> bool {
     }
     cx.notice.extend(lines);
     true
+}
+
+/// PR7-76 (PT-54) `[PROVISIONAL]`: the place a road's exit heads for. In a location with more than one world-map exit,
+/// each exit but the one named for the map itself (id `world_map`) is a road's: of the places an open road from here
+/// reaches, the one whose direction on the world map (`map_pos`) lies closest to the exit's direction from the region
+/// map's centre, at most 90 degrees off. None otherwise (no exit, the plain one, a single one, nothing that way).
+pub(crate) fn exit_toward(d: &emberwake_world::Data, gs: &emberwake_world::GameState, marker: &str) -> Option<String> {
+    if marker.is_empty() || marker == explore::WORLD_MAP {
+        return None;
+    }
+    let loc = explore::location(d, gs);
+    let t = explore::template_of(d, loc);
+    let exits: Vec<json::Dict> = explore::markers_of(loc).into_iter().filter(|m| s(m, "kind") == "exit" && s(m, "to") == explore::WORLD_MAP).collect();
+    if t.is_empty() || exits.len() < 2 {
+        return None;
+    }
+    let m = exits.iter().find(|m| s(m, "id") == marker)?;
+    let at = explore::marker_pos(t, m, 0);
+    let (w, h) = explore::size_of(t);
+    let way = (at.0 as f32 + 0.5 - w as f32 / 2.0, at.1 as f32 + 0.5 - h as f32 / 2.0);
+    let pos = |q: &str| match json::aget(explore::resolve_location(d, gs, q), "map_pos") {
+        [x, y] => Some((json::to_float_or(x, 0.0) as f32, json::to_float_or(y, 0.0) as f32)),
+        _ => None,
+    };
+    let here = gs.location_id.clone();
+    let from = pos(&here)?;
+    let view = travel::view(d, gs);
+    let mut best: Option<(f32, String)> = None;
+    for r in json::aget(&view, "routes").iter().map(json::dict) {
+        let other = if s(r, "from") == here { s(r, "to") } else if s(r, "to") == here { s(r, "from") } else { continue };
+        if !json::b(r, "open", true) || travel::locked(d, gs, &other) {
+            continue;
+        }
+        let Some(to) = pos(&other) else { continue };
+        let v = (to.0 - from.0, to.1 - from.1);
+        let len = (v.0 * v.0 + v.1 * v.1).sqrt() * (way.0 * way.0 + way.1 * way.1).sqrt();
+        if len <= 0.0 {
+            continue;
+        }
+        let cos = (v.0 * way.0 + v.1 * way.1) / len;
+        if cos > 0.0 && best.as_ref().is_none_or(|(c, _)| cos > *c) {
+            best = Some((cos, other));
+        }
+    }
+    best.map(|(_, q)| q)
 }
 
 /// PR7-37 (PT-08): the hint when no way to a place is known.
@@ -948,14 +1029,26 @@ impl PlaceTone {
     }
 }
 
+/// PR7-76 (PT-50): the mark after a ready quest's name in the Legend.
+pub(crate) const READY_MARK: &str = "(ready)";
+
 /// The Legend's rows (AO-01 (5), PR7-37 PT-31): every active quest once by name (also one whose place the map does not
-/// show, or that has none), then the jobs of the places shown, as (place, text); and each quest row's quest id.
+/// show, or that has none), then (PR7-76, PT-50) each quest ready to turn in, marked ready, at its turn-in place, then the
+/// jobs of the places shown, as (place, text); and each quest row's quest id.
 pub(crate) fn legend_rows(d: &emberwake_world::Data, gs: &emberwake_world::GameState, nodes: &[json::Dict]) -> (Vec<(String, String)>, Vec<String>) {
     let mut rows: Vec<(String, String)> = Vec::new();
     let mut quest_of: Vec<String> = Vec::new();
     for (node, name, qid) in travel::legend_quests(d, gs) {
         if !rows.iter().any(|(_, t)| *t == name) {
             rows.push((node, name));
+            quest_of.push(qid);
+        }
+    }
+    // PR7-76 (PT-50): a quest ready to turn in stays, marked ready, at the place it turns in
+    for (node, name, qid) in travel::legend_ready(d, gs) {
+        let text = format!("{name} {READY_MARK}");
+        if !rows.iter().any(|(_, t)| *t == text) {
+            rows.push((node, text));
             quest_of.push(qid);
         }
     }
@@ -973,6 +1066,14 @@ pub(crate) fn legend_rows(d: &emberwake_world::Data, gs: &emberwake_world::GameS
 /// else (no place) the quest's current objective.
 pub(crate) fn legend_about(cx: &Cx, gs: &emberwake_world::GameState, here: &str, node: &str, shown: bool, quest: Option<&str>) -> String {
     let place = cx.location_name(&gs.world_id, node);
+    // PR7-76 (PT-50): a ready quest says where it turns in
+    if quest.is_some_and(|q| emberwake_world::quest::status(&cx.data, gs, q) == "ready") {
+        return match (shown, node.is_empty()) {
+            (true, _) => format!("Ready to turn in at {place}. Click to pick it."),
+            (false, false) => format!("Ready to turn in at {place}."),
+            (false, true) => "Ready to turn in.".to_string(),
+        };
+    }
     match (shown, node.is_empty()) {
         (true, _) => format!("At {place}. Click to pick it."),
         (false, false) => format!("At {place}, not on the map yet. {}", way_hint(cx, gs, here, node)),
@@ -1093,8 +1194,16 @@ impl Screen<GameCx> for WorldMap {
         if self.pick >= ways.len() {
             self.pick = 0;
         }
-        let routes: Vec<(String, String, String, bool)> =
-            json::aget(&view, "routes").iter().map(|r| json::dict(r)).map(|r| (s(r, "qid"), s(r, "from"), s(r, "to"), json::b(r, "open", true))).collect();
+        // PR7-76 (PT-45): a road is open only between two open places (a locked place's road is not drawn as a way)
+        let routes: Vec<(String, String, String, bool)> = json::aget(&view, "routes")
+            .iter()
+            .map(|r| json::dict(r))
+            .map(|r| {
+                let (from, to) = (s(r, "from"), s(r, "to"));
+                let open = json::b(r, "open", true) && !travel::locked(&d, &gs, &from) && !travel::locked(&d, &gs, &to);
+                (s(r, "qid"), from, to, open)
+            })
+            .collect();
         let way_routes: Vec<Vec<String>> = ways.iter().map(|w| w.routes.clone()).collect();
         let shown = route_layers(&routes, near.as_deref(), &way_routes, self.pick, peek);
         let line_of = |rq: &str| -> Vec<(f32, f32)> {
@@ -1309,7 +1418,9 @@ impl Screen<GameCx> for WorldMap {
                     ui.p.panel(r, rgba(44, 34, 30, 180), rgb(217, 119, 6), 0.0);
                 }
                 let b = Rect::new(r.x + 2, r.y + (row_h - 7) / 2, 7, 7);
-                if let Some(img) = cx.art.image(&crate::region::service_icon("board"), 7, 7) {
+                // PR7-76 (PT-50): a ready quest wears the turn-in icon
+                let ready = quest_of.get(i).is_some_and(|q| emberwake_world::quest::status(&d, &gs, q) == "ready");
+                if let Some(img) = cx.art.image(&crate::region::service_icon(if ready { "turn_in" } else { "board" }), 7, 7) {
                     ui.p.image(img, b);
                 }
                 let shown = nodes.iter().any(|n| s(n, "qid") == *node);
@@ -1350,7 +1461,7 @@ impl Screen<GameCx> for WorldMap {
                 e.editor.draw_stage(&mut ui, &WAct::Layout);
                 e.editor.draw_controls(&mut ui, side, &WAct::Layout);
             }
-            None => self.side_panel(&mut ui, cx, &d, &gs, &here, &ways, peek),
+            None => self.side_panel(&mut ui, cx, &d, &gs, &here, &ways, peek, hovered.as_deref()),
         }
         if crate::DEV_KEYS {
             let (label, t) = if self.edit.is_some() { ("Done editing", tip("Done editing", "Back to the map (F7). Save first: what is not saved is dropped.")) } else { ("Edit layout", tip("Edit layout (debug)", "Edit the landmarks and the roads in place over the map (F7); Save writes the layout sidecar.")) };
@@ -2024,7 +2135,7 @@ pub(crate) mod tests {
         assert_eq!(dots(&[(0.0, 0.0), (3.0, 0.0), (6.0, 0.0)], 4.0), [(0.0, 0.0), (4.0, 0.0)], "the spacing carries over a bend");
     }
 
-    /// AO-01 (4), focus only: nothing at rest; the hovered or focused place's open roads dimmed, never a locked one;
+    /// AO-01 (4), focus only (PR7-76, PT-45: at rest every open road dimmed); the hovered or focused place's open roads dimmed, never a locked one;
     /// with a destination the other ways pale first and the chosen way gold last; the previewed way lit; each road once.
     #[test]
     fn roads_show_on_focus_only_with_the_chosen_way_on_top() {
@@ -2033,7 +2144,7 @@ pub(crate) mod tests {
         let ids = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
         let st = |v: Vec<(String, RouteStyle)>| v.into_iter().map(|(r, s)| (r, s.name())).collect::<Vec<_>>();
         let want = |v: &[(&str, &'static str)]| v.iter().map(|(a, b)| (a.to_string(), *b)).collect::<Vec<_>>();
-        assert!(route_layers(&routes, None, &[], 0, None).is_empty(), "at rest nothing");
+        assert_eq!(st(route_layers(&routes, None, &[], 0, None)), want(&[("r1", "near"), ("r2", "near"), ("r4", "near"), ("r5", "near")]), "PT-45: at rest every open road, dimmed; r3 is locked");
         assert_eq!(st(route_layers(&routes, Some("hub"), &[], 0, None)), want(&[("r1", "near"), ("r4", "near")]), "the hub's open roads; r3 is locked");
         assert_eq!(st(route_layers(&routes, Some("c"), &[], 0, None)), want(&[("r5", "near")]));
         let ways = vec![ids(&["r4"]), ids(&["r1", "r2"])];
@@ -2054,20 +2165,29 @@ pub(crate) mod tests {
         let mut cx = ward_hub(&[], &["drowned_runoff_grate", "corvos_gate"], false);
         let (mut wm, mut g) = (WorldMap::new(), gfx());
         frame(&mut wm, &mut cx, &mut g, 1.0);
-        assert!(roads(&wm, &cx).is_empty(), "at rest no road");
+        // PR7-76 (PT-45): at rest every open road between two open places, dimmed
+        let view = travel::view(&cx.data, cx.gs());
+        let open_set: Vec<String> = json::aget(&view, "routes")
+            .iter()
+            .map(json::dict)
+            .filter(|r| json::b(r, "open", true) && !travel::locked(&cx.data, cx.gs(), &s(r, "from")) && !travel::locked(&cx.data, cx.gs(), &s(r, "to")))
+            .map(|r| s(r, "qid"))
+            .collect();
+        let rest: Vec<(String, String)> = open_set.iter().map(|q| (q.clone(), "near".to_string())).collect();
+        assert!(!rest.is_empty(), "day 1 has open roads");
+        assert_eq!(roads(&wm, &cx), rest, "at rest the open roads");
         let at = centre(&wm, &node_id(&grate));
         hover(&mut wm, &mut cx, &mut g, at);
-        let view = travel::view(&cx.data, cx.gs());
         let (mut open, mut shut) = (Vec::new(), Vec::new());
         for r in json::aget(&view, "routes").iter().map(json::dict).filter(|r| s(r, "from") == grate || s(r, "to") == grate) {
-            if json::b(r, "open", true) { open.push(s(r, "qid")) } else { shut.push(s(r, "qid")) }
+            if open_set.contains(&s(r, "qid")) { open.push(s(r, "qid")) } else { shut.push(s(r, "qid")) }
         }
         assert!(!open.is_empty() && !shut.is_empty(), "the grate has open and shut roads on day 1: {open:?} {shut:?}");
         let got = roads(&wm, &cx);
         assert_eq!(got.iter().map(|(r, _)| r.clone()).collect::<Vec<_>>(), open, "its open roads in view order");
         assert!(got.iter().all(|(_, st)| st == "near"), "dimmed: {got:?}");
         hover(&mut wm, &mut cx, &mut g, (-500, -500));
-        assert!(roads(&wm, &cx).is_empty(), "the pointer gone: nothing");
+        assert_eq!(roads(&wm, &cx), rest, "the pointer gone: the roads at rest again");
         // Tier 2 open: the Tallow Vats by more than one way
         let mut cx = ward_hub(&TIER2, &["drowned_runoff_grate", "alleyway_junction_7", "ash_crawl_crossroads"], false);
         let vats = q("tallow_vats");
@@ -2412,6 +2532,77 @@ pub(crate) mod tests {
         let row = wm.widgets().into_iter().find(|w| w["id"].as_str().is_some_and(|i| i.starts_with("world_map.legend.quest.")) && w["text"] == json!(name)).expect("its row");
         wm.click_id(&mut cx, row["id"].as_str().unwrap()).expect("the row");
         assert_eq!(wm.state(&cx)["selected"], json!(node), "the row picks its place");
+    }
+
+    /// PR7-76 (PT-50): a quest ready to turn in stays in the legend, marked ready, at the place of its turn-in person;
+    /// its hover says so.
+    #[test]
+    fn pt50_a_ready_quest_stays_in_the_legend_marked_ready() {
+        let mut cx = ward_hub(&[], &["drowned_runoff_grate"], false);
+        let d = cx.data.clone();
+        // a quest with a turn-in person, picked by rule, made ready
+        let qid = d.merged_entries(SW, "quests").iter().map(|q| s(q, "_qid")).find(|q| !s(&emberwake_world::quest::resolved(&d, cx.gs(), q), "turn_in").is_empty()).expect("a quest turned in to someone");
+        let count = json::aget(&emberwake_world::quest::resolved(&d, cx.gs(), &qid), "objectives").len();
+        cx.gs_mut().quests.insert(qid.clone(), json!({"state": "ready", "objective": count}));
+        assert_eq!(emberwake_world::quest::status(&d, cx.gs(), &qid), "ready");
+        let name = s(&emberwake_world::quest::resolved(&d, cx.gs(), &qid), "name");
+        let (mut wm, mut g) = (WorldMap::new(), gfx());
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let text = format!("{name} {READY_MARK}");
+        let row = wm.widgets().into_iter().find(|w| w["id"].as_str().is_some_and(|i| i.starts_with("world_map.legend.quest.")) && w["text"] == json!(text)).expect("its ready row");
+        let place = travel::person_place(&d, cx.gs(), &emberwake_world::dialogue::turn_in_qid(&d, cx.gs(), &emberwake_world::quest::resolved(&d, cx.gs(), &qid)));
+        let tip: Vec<String> = row["tip"].as_array().cloned().unwrap_or_default().iter().map(|l| l.to_string()).collect();
+        assert!(tip.iter().any(|l| l.contains("Ready to turn in")), "{tip:?}");
+        if !place.is_empty() {
+            assert!(tip.iter().any(|l| l.contains(&cx.location_name(SW, &place))), "the place named: {tip:?}");
+        }
+    }
+
+    /// PR7-76 (PT-53): away from a safe place an off Make camp says why on the line under it.
+    #[test]
+    fn pt53_an_off_make_camp_says_why_under_it() {
+        let mut cx = ward_hub(&[], &["drowned_runoff_grate"], false);
+        let d = cx.data.clone();
+        let (mut wm, mut g) = (WorldMap::new(), gfx());
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let why = progression::can_camp(&d, cx.gs()).to_string();
+        let shown = wm.widgets().into_iter().find(|w| w["id"] == "world_map.camp_why");
+        assert_eq!(shown.is_some(), !why.is_empty(), "the line shows exactly while camp is off ({why:?})");
+        // a place where camp is refused, picked by rule
+        let refused = travel::nodes(&d, SW).into_iter().find(|q| {
+            let mut gs = cx.gs().clone();
+            gs.location_id = q.clone();
+            !progression::can_camp(&d, &gs).is_empty()
+        });
+        let q = refused.expect("a place on the map where Make camp is refused (rested party, no node, no supplies)");
+        cx.gs_mut().location_id = q;
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let why = progression::can_camp(&d, cx.gs()).to_string();
+        let line = wm.widgets().into_iter().find(|w| w["id"] == "world_map.camp_why").expect("the reason's line");
+        assert_eq!(line["text"], json!(why));
+        let camp = wm.widgets().into_iter().find(|w| w["id"] == "world_map.camp").expect("Make camp");
+        assert!(line["rect"][1].as_i64() > camp["rect"][1].as_i64(), "under the button");
+    }
+
+    /// PR7-76 (PT-45): hovering a place no open road reaches shows its way there in the side panel before any click.
+    #[test]
+    fn pt45_a_place_with_no_road_shows_its_way_on_hover() {
+        let mut cx = ward_hub(&[], &["drowned_runoff_grate"], false);
+        let d = cx.data.clone();
+        let (mut wm, mut g) = (WorldMap::new(), gfx());
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let here = cx.gs().location_id.clone();
+        let far = wm.widgets().iter().filter(|w| w["kind"] == "node").map(|w| s(json::dict(w), "id")).find_map(|id| {
+            let q = travel::nodes(&d, SW).into_iter().find(|q| node_id(q) == id)?;
+            (q != here && !json::b(&travel::trip(&d, cx.gs(), &here, &q), "ok", false)).then_some(q)
+        });
+        let Some(q) = far else { panic!("a place on the map with no open road on day 1") };
+        assert!(wm.widgets().iter().all(|w| w["id"] != "world_map.hover_hint"), "nothing hovered: no hint");
+        let at = centre(&wm, &node_id(&q));
+        hover(&mut wm, &mut cx, &mut g, at);
+        let hint = wm.widgets().into_iter().find(|w| w["id"] == "world_map.hover_hint").expect("the hint on hover");
+        assert_eq!(hint["text"], json!(way_hint(&cx, cx.gs(), &here, &q)));
+        assert_eq!(wm.state(&cx)["selected"], json!(""), "nothing picked");
     }
 
     /// PR7-42 (PT-19): at zero upkeep the legend's last row names the fights' AP change; a trip that empties the purse

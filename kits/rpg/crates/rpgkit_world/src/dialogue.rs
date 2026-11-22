@@ -651,6 +651,15 @@ impl DialogueRunner {
         out
     }
 
+    /// PR7-76 (PT-56): the index of the open turn-in reply ("We finished: ...") of quest `qid` among the visible
+    /// choices (as `choose` counts them); None when this node offers none.
+    pub fn turn_in_index(&self, d: &Data, gs: &GameState, qid: &str) -> Option<i64> {
+        if self.closed {
+            return None;
+        }
+        self.visible(d, gs).iter().position(|(c, locked)| !locked && json::s(c, "_service") == "turn_in" && json::s(c, "_quest") == qid).map(|i| i as i64)
+    }
+
     fn tokens(&self, d: &Data, gs: &GameState, extra: &Dict) -> IndexMap<String, String> {
         let mut values = IndexMap::new();
         values.insert("npc".to_string(), self.character_name.clone());
