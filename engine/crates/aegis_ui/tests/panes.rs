@@ -388,6 +388,29 @@ fn a_slot_card_with_long_names_cuts_them_with_the_full_text_on_hover() {
     }
 }
 
+/// XL-FIX2 (PR7-85, FB-455 c): a list row whose name is cut hovers to the full name when the caller gave it no hover
+/// card; a name that fits adds none, and a caller's own card is kept.
+#[test]
+fn a_list_row_with_a_cut_name_hovers_to_it() {
+    let numbers = vec!["12".to_string()];
+    let look = |name: &'static str| panes::RowLook { icon: None, glyph: "", name, sub: "", numbers: &[], selected: false, enabled: true, columns: &[], bare: true, tone: None, tone2: None, plain: false };
+    let long = "A trade good with a name far too long for its row";
+    for scale in TEXT_SIZES {
+        let mut g = gfx(scale);
+        let (w, audit) = draw(&mut g, (-1, -1), |ui: &mut Ui<&str>| {
+            panes::list_row(ui, "row.long", Rect::new(20, 20, 90, 14), &look(long), Some("pick"), Vec::new());
+            panes::list_row(ui, "row.short", Rect::new(20, 40, 90, 14), &look("Salt"), Some("pick"), Vec::new());
+            let own = panes::RowLook { numbers: &numbers, ..look(long) };
+            panes::list_row(ui, "row.own", Rect::new(20, 60, 90, 14), &own, Some("pick"), aegis_ui::ui::tip("Own card", "its words"));
+        });
+        assert!(audit["counts"]["cut"].as_u64().unwrap() >= 2, "the long names are cut at {scale}: {audit}");
+        let tips = |id: &str| w.iter().find(|x| x.id == id).unwrap().tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>();
+        assert_eq!(tips("row.long"), [long], "at {scale}");
+        assert!(tips("row.short").is_empty(), "at {scale}");
+        assert_eq!(tips("row.own"), ["Own card", "its words"], "at {scale}");
+    }
+}
+
 // ---- the themed ask -----------------------------------------------------------------------------------------------
 
 /// The keys answer as the kit's question does (tests/ask.rs): Enter the default, y Yes, n and Esc No.

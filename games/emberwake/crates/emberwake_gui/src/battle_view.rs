@@ -213,6 +213,8 @@ impl FoeEntry {
 pub struct TopBar {
     /// "Round 1 of 8".
     pub round: String,
+    /// XL-FIX2 (PR7-85, FB-455 a): the title at Large and Extra large text, "R 1/8"; it hovers to `round`.
+    pub round_short: String,
     /// The goal and the protect line ("" none).
     pub goal: String,
     pub protect: String,
@@ -621,6 +623,7 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
     let mut m = BattleModel::default();
     let name_of = |r: &str| s.units_of_ref(r).first().map(|&c| w.units[c].name.clone()).unwrap_or_else(|| r.to_string());
     m.top.round = format!("Round {} of {}", s.current_round.max(1), s.def.max_rounds);
+    m.top.round_short = format!("R {}/{}", s.current_round.max(1), s.def.max_rounds);
     m.top.goal = emberwake_battle::encounter::Objectives::goal_of(&s.def.raw, name_of);
     m.top.protect = emberwake_battle::encounter::Objectives::protect_of(&s.def.raw, name_of);
     m.top.objective = emberwake_battle::encounter::Objectives::text_of(&s.def.raw, name_of);

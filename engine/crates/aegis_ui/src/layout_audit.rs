@@ -245,14 +245,34 @@ pub struct FrameAudit {
     pub found: Vec<Value>,
 }
 
-/// The audits of one frame.
-pub fn frame_report(view: View, grid: Grid, texts: &[TextRec], recs: &[LayoutRec], widgets: &[Value]) -> FrameAudit {
-    let boxes: Vec<(String, f32, f32, f32, f32)> = widgets.iter().filter(|w| w["kind"] != "scroll").map(|w| {
+/// Whether a widget at the cut text `r` hovers to its full words (XL-FIX2, PR7-85): one whose rect meets the text's box
+/// and whose tip holds the full text.
+fn cut_hovers(r: &TextRec, full: &str, widgets: &[Value]) -> bool {
+    widgets.iter().any(|w| {
+        let b = rect_of(w);
+        let meets = (b.x as f32) < r.x + r.w && r.x < (b.x + b.w) as f32 && (b.y as f32) < r.y + r.h && r.y < (b.y + b.h) as f32;
+        meets && w["tip"].as_array().is_some_and(|t| t.iter().filter_map(Value::as_str).collect::<Vec<_>>().join("\n").contains(full))
+    })
+}
+
+/// The audits of one frame. `ignores`: the widget id prefixes the text audit does not take as controls
+/// (`Screen::audit_ignores`). Each listed cut says whether it hovers to its full words (`hover`), and `bare_cut` (beside
+/// `counts`, which keep their four kinds) counts the cuts that do not, all of them, not only those listed.
+pub fn frame_report(view: View, grid: Grid, texts: &[TextRec], recs: &[LayoutRec], widgets: &[Value], ignores: &[&str]) -> FrameAudit {
+    let boxes: Vec<(String, f32, f32, f32, f32)> = widgets.iter().filter(|w| w["kind"] != "scroll").filter(|w| !w["id"].as_str().is_some_and(|id| ignores.iter().any(|p| id.starts_with(p)))).map(|w| {
         let r = rect_of(w);
         (w["id"].as_str().unwrap_or("").to_string(), r.x as f32, r.y as f32, r.w as f32, r.h as f32)
     }).collect();
     let (cw, ch) = view.canvas();
     let mut report = text_audit::issues_on(texts, cw as f32, ch as f32, &boxes, view.g);
+    // the cut records in `issues_on`'s order (live text with a full text)
+    let hovers: Vec<bool> = texts.iter().filter(|r| !r.clipped && !r.covered && !r.transient).filter_map(|r| r.cut.as_ref().map(|full| cut_hovers(r, full, widgets))).collect();
+    if let Some(cut) = report["cut"].as_array_mut() {
+        for (c, h) in cut.iter_mut().zip(&hovers) {
+            c["hover"] = json!(h);
+        }
+    }
+    report["bare_cut"] = json!(hovers.iter().filter(|h| !**h).count());
     if grid != Grid::Native {
         report["layout"] = not_audited(grid);
         return FrameAudit { report, found: Vec::new() };
@@ -346,7 +366,7 @@ pub fn audit_screen<G>(screen: &mut dyn Screen<G>, cx: &mut Cx<G>, g: &mut Gfx, 
         g.fonts.layout = Some(Vec::new());
         screen.draw(cx, g, mouse, true);
         let (texts, recs) = (g.fonts.audit.take().unwrap_or_default(), g.fonts.layout.take().unwrap_or_default());
-        let report = frame_report(g.view, grid, &texts, &recs, &screen.widgets());
+        let report = frame_report(g.view, grid, &texts, &recs, &screen.widgets(), screen.audit_ignores());
         entered.leave(g);
         report
     });

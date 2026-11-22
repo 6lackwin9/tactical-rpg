@@ -75,3 +75,47 @@ fn the_audit_reads_its_tolerances_in_the_units_of_the_grid() {
     let real = [rec(100.0, 100.0, 60.0, "Left"), rec(150.0, 100.0, 60.0, "Right")];
     assert_eq!(issues_on(&real, 1280.0, 720.0, &[], 2)["counts"]["overlap"], 1, "a real collision still counts");
 }
+
+/// A widget as `Screen::widgets` reports it: id, kind, rect and hover lines.
+fn widget(id: &str, r: [i32; 4], tip: &[&str]) -> serde_json::Value {
+    serde_json::json!({"id": id, "kind": "label", "rect": r, "enabled": true, "clickable": false, "tip": tip})
+}
+
+/// XL-FIX2 (PR7-85, FB-455 d): a screen names the boxes the text audit does not take as controls (a board's cells
+/// under a log panel): the log line that spills out of a cell without them reads clean with them, while a spill out of
+/// a control not named stays, and the layout audit answers the same either way.
+#[test]
+fn boxes_a_screen_names_are_not_controls_to_the_text_audit() {
+    use aegis_ui::layout_audit::frame_report;
+    use aegis_ui::painter::Grid;
+    let view = View::fit(640, 360);
+    // a log line over two board cells, and a button label running past its button
+    let texts = [rec(100.0, 100.0, 120.0, "[Move] a log line over the board"), rec(400.0, 200.0, 90.0, "A long button label")];
+    let widgets = [widget("tile.0.0", [96, 96, 20, 20], &[]), widget("tile.1.0", [116, 96, 20, 20], &[]), widget("log", [90, 90, 200, 120], &[]), widget("button", [398, 198, 40, 22], &[])];
+    let all = frame_report(view, Grid::Native, &texts, &[], &widgets, &[]);
+    let named = frame_report(view, Grid::Native, &texts, &[], &widgets, &["tile."]);
+    let spills = |v: &serde_json::Value| v["spill"].as_array().unwrap().iter().map(|s| s["widget"].as_str().unwrap_or("").to_string()).collect::<Vec<_>>();
+    assert_eq!(spills(&all.report), ["tile.0.0", "button"], "{}", all.report);
+    assert_eq!(spills(&named.report), ["button"], "the cell is not the log line's control: {}", named.report);
+    assert_eq!(all.report["layout"], named.report["layout"], "the layout audit reads every widget as before");
+}
+
+/// XL-FIX2 (PR7-85, FB-455 c): each cut says whether a widget at it hovers to its full words, and `bare_cut` counts
+/// the ones that do not; `counts` keep their four kinds.
+#[test]
+fn a_cut_says_whether_it_hovers_to_its_full_words() {
+    use aegis_ui::layout_audit::frame_report;
+    use aegis_ui::painter::Grid;
+    let mut hovered = rec(20.0, 20.0, 60.0, "Tallow-Wax...");
+    hovered.cut = Some("Tallow-Wax Stitch Pack".into());
+    let mut bare = rec(20.0, 60.0, 60.0, "From the he...");
+    bare.cut = Some("From the hero's deck".into());
+    let mut wrong = rec(20.0, 100.0, 60.0, "Amber Le...");
+    wrong.cut = Some("Amber Lens Shard".into());
+    let widgets = [widget("row.0", [18, 18, 100, 20], &["Tallow-Wax Stitch Pack"]), widget("row.2", [18, 98, 100, 20], &["Amber Lens", "a shard of amber"])];
+    let v = frame_report(View::fit(640, 360), Grid::Native, &[hovered, bare, wrong], &[], &widgets, &[]).report;
+    let hovers: Vec<bool> = v["cut"].as_array().unwrap().iter().map(|c| c["hover"].as_bool().unwrap()).collect();
+    assert_eq!(hovers, [true, false, false], "only a hover holding the full text counts: {v}");
+    assert_eq!(v["bare_cut"], 2);
+    assert_eq!(v["counts"], serde_json::json!({"cut": 3, "edge": 0, "overlap": 0, "spill": 0}));
+}

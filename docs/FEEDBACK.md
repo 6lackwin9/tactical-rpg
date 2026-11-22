@@ -68,6 +68,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-84` (`ACT1-DATA2`) | done | `develop` (squash `PR7-84`) | `rec_level` 7, 7, 8 on the Bone-Mill, Vats and Crucible; the Crucible and Overlook lock hint names the Bone-Mill and Vats turn-ins; the winch drum gets a Here row; Dunstan's battle line is wordless; six `pr7_84_*` seeds; `FB-398` |
 | `PR7-79` (`DIORAMA-DRESS1`) | done | `develop` (squash `PR7-79`) | Ten Act 1 Sunk Ward battle boards dressed through `decor` seeds (`cover/v3` lamps on blocks, edge `lantern_pole`s, edge props), no walkability change; fix: the arena launch path reads `<world>:<id>` so its board gets the world's stage set; shots `/mnt/project-files/pr7-79/`; goldens unchanged; `FB-400` |
 | `PR7-86` (`DECOR-GEN1`) | done | `develop` (squash `PR7-86`) | Generated boards (no `rows`, no `decor`) draw 2 to 6 display-only decor pieces from the world manifest's `decor_pool` on their own seeded stream: cover keys on blocks or edges, props at the back only; seed `pr7_86_decor_pool`; goldens unchanged; `FB-402` |
+| `PR7-85` (`XL-FIX2`) | done | `develop` (squash `PR7-85`) | "R 1/12" at Large and Extra large with the goal line clear; Stats and Gear rows grow with text size (second column when needed); every XL cut hovers to its full words; engine `Screen::audit_ignores` and cut `hover`/`bare_cut`; Normal shots unchanged; `FB-404` |
 | `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
 | `PR7-4` (`SCENARIO-GOLDENS1`) | part 1 done (tools lane); baselines await the user | `develop` (squash `PR7-4` part 1) | Scenario `shot` step `golden` (tolerance, pixels allowance, diff image), `record=1`, launch `save`; every scenario in the gate (`tools/fc.sh scenarios_all`); three screen scenarios (menus, hub, battle; 18 shots) run as review shots until the user approves the baselines (`/mnt/project-files/pr7-4/`); `FB-313` |
 | `ENGINE-1` (`HELLO-GAME1`) | done (tools lane) | `develop` (squash `ENGINE-1`) | Sample game `games/hello/` on engine crates only: menu, walker sprite, one save slot, engine sounds, scenario `hello_walk` in the gate; programs `hello` and `hello_cli`; six RPG leaks listed; `FB-315` |
@@ -795,3 +796,38 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 - **Tooling note**: the disk filled twice from stale test binaries in `target/debug/deps` (an `encounter.rs` change
   rebuilds every downstream test); a `tools/fc.sh` step that keeps only the newest binary per name would help (tools
   lane, if wanted).
+
+### FB-404: PR7-85 XL-FIX2 built; FB-455's strip overlap and tile spills no longer showed
+
+- **Status**: built, `develop` (squash `PR7-85`). Normal shots unchanged (`tools/fc.sh shots diff base=HEAD`: 128
+  unchanged, `screens_menus__scene_runner` differs only by the temp data path). Shots `/mnt/project-files/pr7-85/`
+  (Extra large and Large, plus `audit_xl_after.txt`).
+- **Finding**: the strip overlap and tile spills FB-455 listed for (a) and (d) no longer show on today's develop; both
+  are done as asked anyway.
+- **What landed**:
+  - (a) the battle strip title is "Round 1 of 12" at Small and Normal, "R 1/12" above (hovering to the long form); the
+    goal line sits by the title's height in its display face.
+  - (b) Character Stats and Gear rows step at least a line plus one unit apart at every size; a list that has no room
+    takes a second column (`party.rs` `stat_rows_fit`); a label cut there hovers in full (none cut in today's data).
+  - (c) the XL sweep found six cuts with no hover (the Stats passives line, the Skills source hint, shop item names);
+    all hover now, and the sweep shows 0 (`audit.txt` marks NO HOVER).
+  - (d) engine `Screen::audit_ignores()` (widget id prefixes the text audit does not treat as controls; the battle
+    screen names `tile.` and `unit.`); each cut reports `hover`, the reply counts `bare_cut`; `panes::list_row` hovers a
+    cut name when the caller gave no card.
+- **Guesses `[PROVISIONAL]`**: the short form for any size above Normal; "grow" means a line plus one unit with a
+  two-column fallback; unit tokens are ignored by the text audit like tiles. Caveat: at Normal a list of 12 or more
+  rows would also take two columns (today's data stays in one).
+- **Tests**: `aegis_ui/tests/text_audit.rs` (two new), `tests/panes.rs` (one new), `battle/tests/xl_battle_tests.rs`
+  `the_strip_title_shortens_at_large_text_and_clears_the_goal`, `party.rs` `xl_rows_tests` (three).
+- **Docs delta**:
+  - engine/README.md, after the XL-SWEEP1 bullet: "**Audit ignores and cut hovers (XL-FIX2, PR7-85):**
+    `Screen::audit_ignores()` names widget id prefixes the text audit does not take as controls (the battle screen
+    names `tile.` and `unit.`); the layout audit is unchanged. Each audited cut says whether a widget at it hovers to its
+    full words (`hover`), and `bare_cut` counts those that do not; `audit.txt` marks them NO HOVER. `panes::list_row`
+    hovers a cut name when the caller gave none. `layout_audit::frame_report` takes the ignores."
+  - engine/README.md, the link's `text_audit` line: "boxes in `Screen::audit_ignores` are not controls; each cut
+    carries `hover` and the reply `bare_cut`".
+  - GAME_BRIEF (optional): "XL-FIX2: the battle strip reads 'R 1/12' above Normal text; Stats and Gear rows keep a
+    line apart at every size, taking a second column when needed."
+  - EFFICIENCY: `fc.sh scenario` rebuilds the binaries first, so a "before" sweep must be taken before any edit;
+    `shots diff` runs `cargo clean` on the workspace crates.

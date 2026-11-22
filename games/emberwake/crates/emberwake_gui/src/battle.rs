@@ -903,6 +903,13 @@ impl Screen<GameCx> for BattleScreen {
         }
     }
 
+    /// XL-FIX2 (PR7-85, FB-455 d): the board's widgets (its tiles and the unit tokens on them, `unit.<n>`) are not
+    /// controls to the text audit: the log and the ally menu drawn over the board do not spill out of a tile (the layout
+    /// audit already reads them so).
+    fn audit_ignores(&self) -> &'static [&'static str] {
+        &["tile.", "unit."]
+    }
+
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         self.mouse = mouse;
         self.resolve_impacts(cx);

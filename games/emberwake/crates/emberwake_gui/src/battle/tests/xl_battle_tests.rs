@@ -125,6 +125,34 @@ fn the_strip_lines_follow_the_text_size() {
     assert!(goal > 11 && step > 6, "{goal} {step}");
 }
 
+/// XL-FIX2 (PR7-85, FB-455 a): the strip's title reads "Round 1 of N" up to Normal and "R 1/N" at Large and Extra
+/// large, whole (never cut), hovering to the long form when short; the goal line under it is clear of it (no overlap
+/// as the text audit reads one), and at Normal the goal keeps its place (11).
+#[test]
+fn the_strip_title_shortens_at_large_text_and_clears_the_goal() {
+    for (size, scale) in aegis_ui::screen::TEXT_SIZES {
+        let (mut cx, mut g, mut b) = fight("enc_evt_01", "stage");
+        let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, scale as f32);
+        let (round, max) = (b.session().current_round.max(1), b.session().def.max_rounds);
+        let long = format!("Round {round} of {max}");
+        let want = if scale > 1.0 { format!("R {round}/{max}") } else { long.clone() };
+        let title = recs.iter().find(|r| r.y == 3.0 && (r.text.starts_with("Round") || r.text.starts_with("R "))).unwrap_or_else(|| panic!("the title at {size}"));
+        assert_eq!((title.text.as_str(), title.cut.is_none()), (want.as_str(), true), "at {size}");
+        let w = b.widgets().into_iter().find(|w| w["id"] == "strip.title").expect("the title widget");
+        assert_eq!(w["text"], json!(long), "the widget names the long form at {size}");
+        let tip: Vec<String> = json::aget(json::dict(&w), "tip").iter().filter_map(|t| t.as_str().map(str::to_string)).collect();
+        assert_eq!(tip.contains(&long), scale > 1.0, "the short title hovers to the long form at {size}: {tip:?}");
+        let goal = b.widgets().into_iter().find(|w| w["id"] == "strip.goal").expect("the goal line");
+        let (gx, gy, _, _) = crate::hud::hud_tests::rect(&goal);
+        let line = recs.iter().find(|r| r.y == gy as f32 && r.x == gx as f32).expect("the goal's text");
+        let shared = (title.y + title.h).min(line.y + line.h) - line.y;
+        assert!(shared <= aegis_ui::text_audit::OVERLAP_Y * title.h.min(line.h), "at {size}: the goal at {gy} meets the title ({shared} shared)");
+        if (scale - 1.0).abs() < 1e-6 {
+            assert_eq!(gy, 11, "at Normal the goal keeps its place");
+        }
+    }
+}
+
 /// The reinforcement tag keeps its own cell: at Extra large "Boss above" takes a row under "Hostiles N" and the plates
 /// start under it; at Normal it stays beside the count.
 #[test]

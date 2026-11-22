@@ -27,7 +27,8 @@ impl<G: Context> Shell<G> {
         let (recs, laid) = (self.gfx.fonts.audit.take().unwrap_or_default(), self.gfx.fonts.layout.take().unwrap_or_default());
         let top = self.stack.last();
         let (screen, grid, widgets) = (top.map_or("", |s| s.id()), top.map_or(Grid::Old, |s| s.grid()), top.map(|s| s.widgets()).unwrap_or_default());
-        let mut audit = layout_audit::frame_report(self.top_view(), grid, &recs, &laid, &widgets);
+        let ignores = top.map_or(&[][..], |s| s.audit_ignores());
+        let mut audit = layout_audit::frame_report(self.top_view(), grid, &recs, &laid, &widgets, ignores);
         let out = &mut audit.report;
         out["screen"] = json!(screen);
         out["scale"] = json!(self.gfx.fonts.scale);
