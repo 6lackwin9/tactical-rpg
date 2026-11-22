@@ -15,7 +15,7 @@ back to `common_stage`. Spec: `games/emberwake/docs/specs/SCREEN_CONTRACT_BATTLE
 | `deep_water/` | 64 x 48 | Canal water only, one blue-green hue (SW-04 water band, AI-41) |
 | `wall_foot/` | 64 x 16 | Row 0 strip where the backdrop meets the board (D4, drawn once Build adds it) |
 | `front_face/<terrain>/` | 64 x 24 | The front face under row 9 per terrain (AI-41 item 3, for `PR7-67` R2): `floor` and `stone` the pale stone quay lip (SW-02 kerb), `deep_water` water |
-| `stage.fx.json` | - | Lantern spots per zone backdrop (AI-41 item 4, `PR7-68` R3): top-level `spots` for the default wall, `zones.<zone>.spots` per battle zone |
+| `stage.fx.json` | - | Lantern spots per zone backdrop (AI-41 item 4, `PR7-68` R3): top-level `spots` for the default wall, `zones.<zone>.spots` per battle zone; since `PR7-74` (FB-443) also `zones.<zone>.set` (foundry, tallow vats, undercroft, rooftops), `terrain.lava` (foundry slag, boiling tallow, each with a `front_face/`) and `tint` (watchpost `#d4dae4` cool slate, alley `#c8beb4` dim soot) |
 | `lava/` | 64 x 48 | Molten channels between cooled basalt (SW-16 band 1) |
 | `toxic_bog/` | 64 x 48 | Dark olive sludge with ripples (SW-16 band 2) |
 | `burning_ground/` | 64 x 48 | Ward brick with burning seams (SW-16 band 3) |

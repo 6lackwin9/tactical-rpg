@@ -11,3 +11,4 @@ terrain `zones.tallow_vats.terrain.<terrain>`, `PR7-74` DIORAMA4). What it does 
 | `floor/` | 64 x 48 | Greased wooden boards with pale wax drips (SW-39 top right), average about 36; v0 tiles with itself, v1 to v3 blend other crops into v0's edges so any mix tiles |
 | `stone/` | 64 x 48 | The floor darker and mirrored |
 | `lava/` | 64 x 48 | Boiling tallow: pale rendered fat with dull amber depths and slow bubbles (SW-40 left), average about 120; the vats zone lava |
+| `lava/front_face/` | 64 x 24 | The vat rim under the tallow: the world set's stone face with a pale tallow lip and a few drips; read through `zones.tallow_vats.terrain.lava` |
