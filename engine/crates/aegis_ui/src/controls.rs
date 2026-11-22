@@ -249,6 +249,20 @@ impl Controls {
             Input::Pad(p) => self.pad(p),
         }
     }
+
+    /// CONTROLS-UI1B: the key that gives `action`, as an on-screen hint reads it ("P", "Enter"); "no key" when none
+    /// does. A screen's hint goes through here (or `hint`), never a fixed letter, so a rebind shows everywhere.
+    pub fn key_hint(&self, action: Key) -> String {
+        self.key_for(action).map_or_else(|| "no key".to_string(), key_label)
+    }
+
+    /// CONTROLS-UI1B: the key and, when the action has one, the pad button that give `action` ("Esc / Pad B", "P").
+    pub fn hint(&self, action: Key) -> String {
+        match self.pad_for(action) {
+            Some(p) => format!("{} / {}", self.key_hint(action), p.label()),
+            None => self.key_hint(action),
+        }
+    }
 }
 
 /// CONTROLS-UI1: a raw input, before the map: what a rebind captures.
@@ -266,6 +280,19 @@ pub struct Action {
     pub label: &'static str,
     pub key: Key,
 }
+
+/// CONTROLS-UI1B: a key a game's screens read that its table does not list (a question's yes, a number row): a rebind
+/// may not take it, and the refusal names `label` (what it does) and `screen` (where).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Fixed {
+    pub key: Key,
+    pub label: &'static str,
+    pub screen: &'static str,
+}
+
+/// CONTROLS-UI1B: how long a rebind waits with no input before it ends with nothing changed, so a player whose every
+/// button is bindable (a pad-only player) can always leave it.
+pub const WAIT: Duration = Duration::from_secs(5);
 
 /// Where a rebind is: nothing asked, waiting for the input of action `at` (an index into the game's list), or asking
 /// whether `input` may move from action `with` to `at` (a swap).
@@ -285,8 +312,9 @@ pub enum Outcome {
     /// Taken, nothing changed (a key a rebind may not take, or a key the swap question does not answer).
     Held,
     /// Taken and refused: a pad button another listed action holds, for an action with no button to trade
-    /// (`Rebind::refused` names that action); the rebind still waits.
+    /// (`Rebind::refused` names that action), or a fixed key (`Rebind::refused_fixed`); the rebind still waits.
     Refused,
+    /// Ended with nothing changed: Esc, the input the action already has, or `WAIT` with no input (`Rebind::expire`).
     Cancelled,
     /// The input is another action's: the swap question is open.
     Asked,
@@ -295,25 +323,45 @@ pub enum Outcome {
 }
 
 /// CONTROLS-UI1: the rebinding flow over the settings key `controls`, game-agnostic: a game lists its actions (`Action`)
-/// and labels; a click starts a rebind, the next raw key or pad button binds it (Esc cancels), an input that is another
-/// action's asks first and then swaps the two; Reset drops the player's map.
+/// and labels; a click starts a rebind, the next raw key or pad button binds it (Esc, the input the action already has,
+/// or `WAIT` with no input ends it unchanged), an input that is another action's asks first and then swaps the two, a
+/// fixed key (`Fixed`) is refused; Reset drops the player's map.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Rebind {
     pub step: Step,
     /// The listed action whose pad button the last input asked for and could not take (the action waiting has no
     /// button to give it in trade); cleared by the next input, start or cancel.
     pub refused: Option<usize>,
+    /// CONTROLS-UI1B: the fixed key (an index into the game's `Fixed` list) the last input was; cleared as `refused`.
+    pub refused_fixed: Option<usize>,
+    /// CONTROLS-UI1B: when the open rebind ends by itself (`WAIT` after its start or its last input; the shot clock, so
+    /// a stepped run is frame-exact).
+    pub until: Option<Instant>,
 }
 
 impl Rebind {
     pub fn start(&mut self, at: usize) {
         self.step = Step::Waiting(at);
         self.refused = None;
+        self.refused_fixed = None;
+        self.until = Some(Instant::now() + WAIT);
     }
 
     pub fn cancel(&mut self) {
         self.step = Step::Idle;
         self.refused = None;
+        self.refused_fixed = None;
+        self.until = None;
+    }
+
+    /// CONTROLS-UI1B: the open rebind at `now` (a screen's tick): past `until` it ends with nothing changed. True: it
+    /// ended now.
+    pub fn expire(&mut self, now: Instant) -> bool {
+        if self.capturing() && self.until.is_some_and(|u| now >= u) {
+            self.cancel();
+            return true;
+        }
+        false
     }
 
     /// A rebind is open: the shell's raw input comes here first.
@@ -327,11 +375,14 @@ impl Rebind {
         actions.iter().enumerate().find(|(i, a)| *i != at && a.key == d).map(|(i, _)| i)
     }
 
-    /// A raw input while a rebind is open (see `Outcome`); `settings` is the whole settings object.
-    pub fn input(&mut self, actions: &[Action], settings: &mut Value, input: Input) -> Outcome {
+    /// A raw input while a rebind is open (see `Outcome`); `fixed` the game's fixed keys; `settings` is the whole
+    /// settings object. Any input restarts the `WAIT`.
+    pub fn input(&mut self, actions: &[Action], fixed: &[Fixed], settings: &mut Value, input: Input) -> Outcome {
         let c = Controls::from_settings(settings).0;
         if self.step != Step::Idle {
             self.refused = None;
+            self.refused_fixed = None;
+            self.until = Some(Instant::now() + WAIT);
         }
         match self.step {
             Step::Idle => Outcome::Ignored,
@@ -340,9 +391,14 @@ impl Rebind {
                 Outcome::Cancelled
             }
             Step::Waiting(_) if matches!(input, Input::Key(k) if !capturable(k)) => Outcome::Held,
-            Step::Waiting(at) if at >= actions.len() => {
+            Step::Waiting(at) if at >= actions.len() || c.gives(input) == actions[at].key => {
+                // the input the action already has: nothing to change (a pad-only player's way out)
                 self.cancel();
                 Outcome::Cancelled
+            }
+            Step::Waiting(_) if matches!(input, Input::Key(k) if fixed.iter().any(|f| f.key == k)) => {
+                self.refused_fixed = fixed.iter().position(|f| Input::Key(f.key) == input);
+                Outcome::Refused
             }
             Step::Waiting(at) => match Self::clash(&c, actions, at, input) {
                 // a swap would leave `with` with no pad button: refused, rebind `with` first

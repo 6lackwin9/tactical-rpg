@@ -44,6 +44,7 @@ use crate::ground::MapGround;
 use crate::portraits::Faces;
 use crate::talk::{talk_layout, Services, SvcAct};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
+use aegis_ui::controls::Controls;
 use aegis_ui::painter::View as PView;
 use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
@@ -1084,7 +1085,7 @@ impl RegionMap {
             }
             RAct::Hud(h) => {
                 self.walk.clear();
-                hud_open(cx, h, &REGION_HELP);
+                hud_open(cx, h, &region_help(&crate::controls_view::hints(&cx.settings.v)));
             }
             RAct::Svc(a) => {
                 if self.svc.act(cx, a) {
@@ -1767,7 +1768,8 @@ impl Screen<GameCx> for RegionMap {
         // -- HUD bar (PLAYUI1-H): the location name; gold, supplies and the icon buttons at the right
         let name = s_or(loc, "name", "").to_string();
         let why = if modal { "Finish the conversation, shop or page first." } else { "" };
-        hud_bar(&mut ui, cx, 4, &name, ("region.menu", "Esc"), why, &REGION_HELP, RAct::Hud);
+        let help = region_help(&crate::controls_view::hints(&cx.settings.v));
+        hud_bar(&mut ui, cx, 4, &name, ("region.menu", Some(Key::Esc)), why, &help, RAct::Hud);
         // -- The legend (2.1 A) at the top right and the event log ticker (MAPLOG1) at the bottom left; off in a talk
         let mut panes = Vec::new();
         if !t.is_empty() && !talking {
@@ -2141,7 +2143,8 @@ impl RegionMap {
             let ly = (r.y + 3 + i as i32 * lh) as f32;
             ui.p.text_fit((r.x + 15) as f32, ly, l, SMALL, inner as f32, if i + 1 == lines.len() { th().text } else { th().dim });
         }
-        let mut t = tip("Event log (L)", if self.log_open { "Click or press L to show only the latest event." } else { "Click or press L for the last 12 events." });
+        let l = crate::controls_view::hints(&cx.settings.v).key_hint(Key::Char('l'));
+        let mut t = tip(&format!("Event log ({l})"), &if self.log_open { format!("Click or press {l} to show only the latest event.") } else { format!("Click or press {l} for the last 12 events.") });
         if !self.log_open && ui.p.text_w(&latest, SMALL) > inner as f32 {
             t.push((latest.clone(), th().text));
         }
@@ -3381,18 +3384,33 @@ fn draw_talk(ui: &mut Ui<RAct>, cx: &mut Cx, faces: &mut Faces, view: &Dict, b: 
     crate::talk::draw_talk(ui, cx, &gs, faces, view, b, busy, crate::talk::svc_talk_act::<RAct>);
 }
 
-/// The region map's controls (the Help button's hover card and popup).
-pub const REGION_HELP: [&str; 9] = [
-    "Arrows or WASD: move",
-    "E or Enter: use what the party faces",
-    "Click: walk there, or on a marker to use it",
-    "Legend row or edge arrow: look there (again: walk there)",
-    "Q or a click on the leader: the next member leads",
-    "1-9: pick a reply in a conversation",
-    "P: party   J: journal   I: stash",
-    "L: the last events, or only the latest",
-    "Esc: back, or the game menu",
-];
+/// The region map's controls (the Help button's hover card and popup), with the keys `c` binds (CONTROLS-UI1B).
+pub fn region_help(c: &Controls) -> Vec<String> {
+    let k = |ch: char| c.key_hint(Key::Char(ch));
+    vec![
+        format!("Arrows or {}: move", walk_keys(c)),
+        format!("{} or {}: use what the party faces", k('e'), c.key_hint(Key::Enter)),
+        "Click: walk there, or on a marker to use it".into(),
+        "Legend row or edge arrow: look there (again: walk there)".into(),
+        format!("{} or a click on the leader: the next member leads", k('q')),
+        "1-9: pick a reply in a conversation".into(),
+        party_keys(c),
+        format!("{}: the last events, or only the latest", k('l')),
+        format!("{}: back, or the game menu", c.key_hint(Key::Esc)),
+    ]
+}
+
+/// The walk keys as one word ("WASD"), or spaced when one is longer than a letter ("W A S Space").
+pub fn walk_keys(c: &Controls) -> String {
+    let keys: Vec<String> = ['w', 'a', 's', 'd'].map(|ch| c.key_hint(Key::Char(ch))).to_vec();
+    keys.join(if keys.iter().all(|k| k.chars().count() == 1) { "" } else { " " })
+}
+
+/// The HUD keys' help line ("P: party   J: journal   I: stash"), as `c` binds them.
+pub fn party_keys(c: &Controls) -> String {
+    let k = |ch: char| c.key_hint(Key::Char(ch));
+    format!("{}: party   {}: journal   {}: stash", k('p'), k('j'), k('i'))
+}
 
 #[cfg(test)]
 mod tests {

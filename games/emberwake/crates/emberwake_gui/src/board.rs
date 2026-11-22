@@ -260,7 +260,7 @@ impl BoardPane {
         let why = accept_why(&s(&row, "status"), &s(&row, "line"));
         let accept_tip: Tip = if why.is_empty() { tip("Accept", &format!("Take {} on.", s(&row, "name"))) } else { tip("Accept", &why) };
         ui.button_full("board.accept", Rect::new(right - accept_w, bar_y, accept_w, bh), "Accept", wrap(BoardAct::Accept(self.selected.clone())), why.is_empty(), false, BODY, accept_tip);
-        ui.button_full("board.close", Rect::new(x0, bar_y, close_w, bh), "Close", wrap(BoardAct::Close), true, false, BODY, tip("Close", "Back to the conversation (Esc)."));
+        ui.button_full("board.close", Rect::new(x0, bar_y, close_w, bh), "Close", wrap(BoardAct::Close), true, false, BODY, tip("Close", &format!("Back to the conversation ({}).", crate::controls_view::hints(&cx.settings.v).hint(aegis_ui::screen::Key::Esc))));
     }
 
     /// B5, B6: the sections, each a heading and its rows (the name; the node with the deadline at the right; the

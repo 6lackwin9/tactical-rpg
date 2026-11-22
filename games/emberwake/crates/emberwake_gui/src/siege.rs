@@ -151,7 +151,7 @@ pub(crate) fn fight_button(view: &json::Dict) -> (&'static str, SiegeAct, &'stat
     if s(view, "refusal") == siege::ALL_DOWN_TEXT {
         ("Yield the room", SiegeAct::Yield, "Every fighter is down: the room is lost.")
     } else {
-        ("Fight", SiegeAct::Fight, "Fight the next room (Enter).")
+        ("Fight", SiegeAct::Fight, "Fight the next room")
     }
 }
 
@@ -227,7 +227,9 @@ impl Screen<GameCx> for SiegeScreen {
         ui.button_full("siege.restock", Rect::new(x0, bar_y, rw, bh), &restock, SiegeAct::Restock, can_restock, false, BODY, tip("Re-stock", "Top the pouches up from the stash (between rooms)."));
         let (label, act, body) = fight_button(&view);
         let fw = (ui.p.text_w(label, BODY).ceil() as i32 + 16).max(60);
-        ui.button_full("siege.fight", Rect::new(r.x + r.w - PAD - fw, bar_y, fw, bh), label, act, true, false, BODY, tip(label, body));
+        // CONTROLS-UI1B: the key hint reads the bound key
+        let body = if matches!(act, SiegeAct::Fight) { format!("{body} ({}).", crate::controls_view::hints(&cx.settings.v).hint(Key::Enter)) } else { body.to_string() };
+        ui.button_full("siege.fight", Rect::new(r.x + r.w - PAD - fw, bar_y, fw, bh), label, act, true, false, BODY, tip(label, &body));
         self.w = ui.widgets;
     }
 

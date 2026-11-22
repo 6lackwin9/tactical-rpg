@@ -227,7 +227,7 @@ impl RecipePane {
             ui.push("recipe.line", "label", line.clone(), r, true, false, None, Vec::new());
         }
         let close_w = (ui.p.text_w("Close", BODY).ceil() as i32 + 16).max(44);
-        ui.button_full("recipe.close", Rect::new(x0, bar_y, close_w, bh), "Close", wrap(RecipeAct::Close), true, false, BODY, tip("Close", "Back to the conversation (Esc)."));
+        ui.button_full("recipe.close", Rect::new(x0, bar_y, close_w, bh), "Close", wrap(RecipeAct::Close), true, false, BODY, tip("Close", &format!("Back to the conversation ({}).", crate::controls_view::hints(&cx.settings.v).hint(aegis_ui::screen::Key::Esc))));
     }
 }
 

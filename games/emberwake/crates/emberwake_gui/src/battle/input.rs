@@ -400,7 +400,7 @@ impl BattleScreen {
     pub(super) fn inspect_unit(&mut self, u: usize) {
         let (round, name) = (self.session().current_round, self.session().w.units[u].name.clone());
         self.inspect = Some((u, round));
-        self.message = format!("Inspecting {name} (Esc clears).");
+        self.message = format!("{}.", super::tips::inspecting(&name, &self.keys));
     }
 
     /// IS1: the inspected unit while its round lasts (round intent only; None = the panel follows the hover).
@@ -610,7 +610,7 @@ impl BattleScreen {
             // VISCLAR1-C, VISCLAR1-D: Fill on the neutral row, faded with no ghost to take
             let has_ghost = self.deferred.iter().any(|d| d.0 == h) || rip::ghost_entries(w, &s.plan, h).contains(&true);
             let after_move = rip::picks_of(w, h).iter().any(|p| matches!(p, rip::Pick::StepAfter(_)));
-            let mut tip: Tip = vec![("Fill (F)".into(), th().gold), ("Accepts the auto-fill for the rest of the round.".into(), th().text)];
+            let mut tip: Tip = vec![(format!("Fill ({})", self.keys.hint(aegis_ui::screen::Key::Char('f'))), th().gold), ("Accepts the auto-fill for the rest of the round.".into(), th().text)];
             if after_move {
                 tip.push((rip::ONLY_REST.into(), th().foe));
             }

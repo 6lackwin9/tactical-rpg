@@ -298,7 +298,7 @@ impl BattleScreen {
                         if let Some((h, _)) = p.menu {
                             self.move_aim = Some((h, self.session().current_round));
                             self.move_tiles = rip::move_tiles(&self.session().w, &self.session().plan, h);
-                            self.message = format!("{}: click a tile to move there (Esc cancels).", self.session().w.units[h].name);
+                            self.message = format!("{}: click a tile to move there ({} cancels).", self.session().w.units[h].name, self.keys.key_hint(aegis_ui::screen::Key::Esc));
                         }
                     }
                     RowAct::SelectAlly(u) => {
@@ -551,7 +551,7 @@ impl BattleScreen {
         // classic keeps its old flow: only autoplay goes on by itself
         let setting = cx.settings.v[AUTO_CONFIRM].as_bool().unwrap_or(true) && ri::on(&s.w);
         let by_itself = next_round_by_itself(can_advance, self.auto, s.round_locked(), self.viewing, setting);
-        let hint = if by_itself { "" } else { " Space (or Next) for the next round." };
+        let hint = if by_itself { String::new() } else { format!(" {} (or Next) for the next round.", self.keys.key_hint(aegis_ui::screen::Key::Space)) };
         let message = if s.combat_over {
             match s.outcome.as_str() {
                 "won" => "Victory!".to_string(),
