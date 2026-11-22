@@ -97,12 +97,13 @@ pub fn forecast(i: &Intent, hero: usize, hits: &[HitOn]) -> Option<String> {
 }
 
 /// HITCALC1 (PR7-45): how a forecast hit fails at its impact, in words: "dodged", "out of reach", "misses (flank
-/// protected)", "taken by Bryn" or "40% taken by Bryn" (`w` None: "an ally").
+/// protected)", "lost (stealth)", "taken by Bryn" or "40% taken by Bryn" (`w` None: "an ally").
 pub fn fail_words(w: Option<&World>, f: HitFail) -> String {
     match f {
         HitFail::Dodged => "dodged".into(),
         HitFail::OutOfReach => "out of reach".into(),
         HitFail::FlankProtected => "misses (flank protected)".into(),
+        HitFail::Hidden => "lost (stealth)".into(),
         HitFail::Intercepted { by, pct } => {
             let who = w.and_then(|w| w.units.get(by)).map_or_else(|| "an ally".to_string(), |u| u.name.clone());
             if pct >= 100 { format!("taken by {who}") } else { format!("{pct}% taken by {who}") }

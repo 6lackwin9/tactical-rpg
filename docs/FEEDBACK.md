@@ -145,8 +145,38 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-80` (`WALLMASS1`) | Built (tools lane) | `develop` | A wall run shares one cap (one variant per run, a ground sheet's cap continuous when there is one, a back-row shade); top and bottom exits draw `exit_path_north` (flipped for the bottom). FB-457 |
 | `PR7-83` (`ACT1-FIX3`) | Built in part (tools lane) | `develop` | PT-73, 75, 76, 79, 81, 84 fixed; PT-68 and PT-69 text fixed; PT-70 and PT-71 fixes move the sim golden, so held for Design with options; PT-67, 72, 74, 80 reported. FB-459 |
 | `ENGINE-36` (`TOOLS-REPEATS2`) | Built (tools lane) | `develop` | `scenario shots save=` (a name or a folder path) shoots a map from a save with no scenario file; `seed-from --ids a,b,c`; `playtest start keep_saves=<dir>`. FB-461 |
+| `PR7-87` (`FORECAST-FIX1`) | Built in part (tools lane) | `develop` | The forecast follows disengages, carried moves, pushes and stealth (PT-67, PT-69); every dropped later pick is said at pick time; PT-72's costs and "No path" not reproduced, reported. FB-463 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-463: PR7-87 FORECAST-FIX1 built in part; the forecast follows moves, pushes and stealth
+
+- **Status**: built in part (tools lane), `develop`; goldens unchanged (`sim_golden`, the timeline forecast-vs-resolve
+  check `hit_forecast_timeline` green).
+- **Spec**: `docs/READY.md` row `00g3b` `PR7-87` (`FORECAST-FIX1`).
+- **Correction to FB-459 (PT-67)**: a shaped blow's forecast already re-reads its shape on the target's tile
+  (`intent::area_cells`, PT-17). The real gaps were in where the forecast puts units at the impact
+  (`intent::position_at`), which only followed Walks, and that it never read stealth. Fixed both:
+  - `position_at` now follows a carried Engage (as it starts), a Disengage (its landing tile) and a carried retreat
+    (after its hit), each landing before the block read. Vesper's Hamstring Sever retreat was invisible to it.
+  - A new fail `HitFail::Hidden` ("lost (stealth)"): an attack on a target, or a blow shaped on it, that holds stealth
+    (now, or granted by its own action landing earlier) and has moved by the impact is forecast lost, as the resolver
+    loses it (`intent::hidden_at`, matching `round_intent::hidden`).
+- **PT-69**: a push or pull from another unit's attack locked on a unit, landing earlier, moves that unit in the
+  forecast (`forced::forecast` steps), so a pushed foe's own blow is read from its new tile and its new target shows
+  the incoming hit.
+- **PT-72 (rest)**:
+  - At pick time the kit already returns every later member's dropped pick, but the battle screen showed only the first.
+    It now shows all of them, each named when there are several (`input::dropped_message`).
+  - An earlier member's hand pick can't be voided: such a pick is refused with the reason. An auto plan that a pick
+    breaks is redrafted at confirm. A sweep of every tile on a test board found no pick that breaks one. I added no
+    second notice, since I couldn't test it.
+  - The odd costs ((7,4) 4, (8,4) 9) and "No path" through a foe leaving in B1: not reproduced. The run log keeps only
+    200 characters per read. Not done; `ENGINE-35` can capture the full board with `keep_saves=` and a `save=` shot.
+- **Tests**: kit `hit_fail.rs` `a_stealthed_target_that_moves_is_forecast_lost`,
+  `a_disengage_before_the_impact_moves_the_forecast_target`, `a_push_before_a_blow_moves_the_forecast_attacker`; game
+  `battle/input.rs` `every_dropped_pick_is_said_at_pick_time`; `hit_forecast_timeline.rs` counts `Hidden` as a fail.
+- **Docs delta**: none.
 
 ### FB-461: ENGINE-36 TOOLS-REPEATS2 built; shots from a save, seed-from for many ids, kept playtest saves
 

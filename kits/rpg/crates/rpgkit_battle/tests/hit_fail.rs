@@ -295,3 +295,66 @@ fn an_intercept_spent_earlier_in_the_round_is_not_forecast_again() {
     run(&mut w, &mut res, 2, 2);
     assert_eq!(w.units[ALLY].hp, ally_hp - f.damage, "the forecast damage lands: {:?}", res.log);
 }
+
+/// PR7-87 (PT-67, GD5): a stealthed target that moves before the impact is lost by an attack on it: forecast `Hidden`
+/// (no damage) before the round, and the swing is lost; without stealth the same swing is forecast to land.
+#[test]
+fn a_stealthed_target_that_moves_is_forecast_lost() {
+    for stealth in [true, false] {
+        let mut w = world(timeline("none"));
+        if stealth {
+            rpgkit_rules::status::grant_now(&mut w.units[FOE], "stealth", 2, 0, "test");
+        }
+        let mut res = Resolver::new(BLOCKS, 1);
+        let a = book(&mut res, HERO, hit(&w, HERO, FOE, "tl_heavy"), 1);
+        // the foe steps round to (4, 3), still beside the hero
+        book(&mut res, FOE, walk(FOE, &[v(0, -1), v(-1, 0)]), 1);
+        let f = forecast(&w, &res, a, FOE);
+        run(&mut w, &mut res, 1, 2);
+        let log = &res.scheduled[a].command.log;
+        if stealth {
+            assert_eq!((f.fails, f.damage), (Some(HitFail::Hidden), 0), "{f:?}");
+            assert!(log.starts_with("[Lost]"), "{log}");
+        } else {
+            assert_eq!(f.fails, None, "{f:?}");
+            assert!(!log.starts_with("[Lost]"), "{log}");
+        }
+    }
+}
+
+/// PR7-87 (PT-67): a disengage landing before the impact moves the target in the forecast as it does in the round:
+/// jumping out of the band is forecast out of reach, and the swing then misses.
+#[test]
+fn a_disengage_before_the_impact_moves_the_forecast_target() {
+    let mut w = world(timeline("none"));
+    let hp = w.units[FOE].hp;
+    let mut res = Resolver::new(BLOCKS, 1);
+    let a = book(&mut res, HERO, hit(&w, HERO, FOE, "tl_heavy"), 1);
+    let mut jump = Command::new(FOE, 0, 1, CmdKind::Disengage { dest: v(7, 4), max_tiles: 2, landed: false, moved_tiles: 0 });
+    jump.name = "Disengage".into();
+    book(&mut res, FOE, jump, 1);
+    let f = forecast(&w, &res, a, FOE);
+    assert_eq!((f.fails, f.damage), (Some(HitFail::OutOfReach), 0), "{f:?}");
+    run(&mut w, &mut res, 1, 2);
+    assert_eq!(w.pos(FOE), v(7, 4), "{:?}", res.log);
+    assert_eq!(w.units[FOE].hp, hp, "{:?}", res.log);
+}
+
+/// PR7-87 (PT-69): a push landing before a pushed foe's own blow moves where the forecast reads that blow from: a
+/// hero the foe could not reach is forecast hit once the push carries the foe beside it, and the blow lands.
+#[test]
+fn a_push_before_a_blow_moves_the_forecast_attacker() {
+    let mut w = world(timeline("none"));
+    w.grid.positions[ALLY] = Some(v(8, 4));
+    let hp = w.units[ALLY].hp;
+    let mut res = Resolver::new(BLOCKS, 1);
+    round_intent::set_target(&mut w, FOE, RoundTarget::Unit(ALLY)).unwrap();
+    let blow = book(&mut res, FOE, hit(&w, FOE, ALLY, "tl_heavy"), 1);
+    let before = intent::hit_on(&w, &res.scheduled, &res.scheduled[blow], ALLY).map(|h| h.fails);
+    assert_eq!(before, Some(Some(HitFail::OutOfReach)), "three tiles off (past its 1-tile chase), no push yet");
+    book(&mut res, HERO, hit(&w, HERO, FOE, "tl_shove"), 1);
+    let f = forecast(&w, &res, blow, ALLY);
+    assert_eq!(f.fails, None, "the push carries the foe beside the ally: {f:?}");
+    run(&mut w, &mut res, 1, 2);
+    assert!(w.units[ALLY].hp < hp, "the blow lands: {:?}", res.log);
+}

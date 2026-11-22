@@ -494,6 +494,27 @@ pub enum HitFail {
     FlankProtected,
     /// HOOKS1 8.4: a friend of the target takes `pct` percent of the hit (`trigger::intercept_of`).
     Intercepted { by: UnitId, pct: i32 },
+    /// PR7-87 (PT-67, GD5): the target holds stealth and has moved this round by the impact, so a single-target attack
+    /// or a blow shaped on it finds nothing (`hidden_at`).
+    Hidden,
+}
+
+/// PR7-87 (PT-67): `round_intent::hidden` read at `block` over the round as it will run: the target holds `stealth`
+/// (now, or granted by its own action landing earlier) and has moved this round (already, or by a move, disengage,
+/// carried Engage or retreat of its own landing earlier).
+pub fn hidden_at(w: &World, sched: &[ScheduledAction], t: UnitId, block: i32) -> bool {
+    if !round_intent::on(w) {
+        return false;
+    }
+    let earlier: Vec<&ScheduledAction> = actions_of(t, sched).into_iter().filter(|a| a.impact < block && !a.landed).collect();
+    let stealth = w.units[t].has_status("stealth") || earlier.iter().any(|a| matches!(&a.command.kind, CmdKind::Defend { grant_status, .. } if grant_status == "stealth"));
+    let moved = w.round_states.get(&t).is_some_and(|r| r.moved)
+        || earlier.iter().any(|a| match &a.command.kind {
+            CmdKind::Walk { path, .. } => !path.is_empty(),
+            CmdKind::Disengage { .. } => true,
+            _ => a.command.carry != crate::command::Carry::None,
+        });
+    stealth && moved
 }
 
 /// PT-20, PT-17: where `c` stands when a hit lands at `block`: the end tile of its last live move that lands earlier
@@ -502,15 +523,57 @@ pub enum HitFail {
 pub fn position_at(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32) -> V2 {
     let mut at = w.grid.pos(c).unwrap_or(NO_CELL);
     // HITCALC1: a move that already landed is in the tile it stands on now (mid-round reads)
-    for a in actions_of(c, sched).into_iter().filter(|a| a.impact < block && !a.landed) {
-        if let CmdKind::Walk { path, .. } = &a.command.kind {
+    for a in actions_of(c, sched).into_iter().filter(|a| a.start < block && !a.landed) {
+        // PR7-87 (PT-67): a carried Engage moves its unit as it starts
+        if let crate::command::Carry::Engage(cell) = a.command.carry {
+            if !a.command.started && cell != NO_CELL {
+                at = cell;
+            }
+        }
+        if a.impact >= block {
+            continue;
+        }
+        match &a.command.kind {
             // each move steps on from where the earlier ones end (the preview's start is the chain's tile)
-            if let Some(end) = crate::command::walk_preview(w, c, path, at).last() {
-                at = *end;
+            CmdKind::Walk { path, .. } => {
+                if let Some(end) = crate::command::walk_preview(w, c, path, at).last() {
+                    at = *end;
+                }
+            }
+            // PR7-87 (PT-67): a disengage lands on its tile at its impact
+            CmdKind::Disengage { dest, .. } if *dest != NO_CELL => at = *dest,
+            _ => {}
+        }
+        // PR7-87 (PT-67): a carried retreat follows its hit
+        if let crate::command::Carry::Retreat(cell) = a.command.carry {
+            if cell != NO_CELL {
+                at = cell;
+            }
+        }
+    }
+    // PR7-87 (PT-69): a push or pull of another unit's attack on `c` landing earlier moves it by the forecast steps
+    // (`forced::forecast` from the tile it stands on now), applied after its own moves
+    if crate::forced::on(w) && w.has(c) {
+        let mut shoves: Vec<&ScheduledAction> = sched.iter().filter(|a| a.unit != c && !a.cancelled && !a.landed && a.impact < block && a.command.forced.is_some() && aims_at(w, a, c)).collect();
+        shoves.sort_by_key(|a| a.impact);
+        for a in shoves {
+            let Some(src_pos) = w.grid.pos(a.unit) else { continue };
+            if let Some(f) = crate::forced::forecast(w, sched, a.unit, src_pos, &a.command, a.impact, &[c]).into_iter().next() {
+                at = at + (f.to - f.from);
             }
         }
     }
     at
+}
+
+/// PR7-87 (PT-69): scheduled action `a` is locked on `c`: a single-target attack on it (or its lock), or a blow shaped
+/// on it.
+fn aims_at(w: &World, a: &ScheduledAction, c: UnitId) -> bool {
+    match &a.command.kind {
+        CmdKind::Attack { target, .. } => target.or(w.units[a.unit].active_target) == Some(c),
+        CmdKind::Area { target, .. } => *target == Some(c),
+        _ => false,
+    }
 }
 
 /// PR7-41 (PT-17): the tiles scheduled area action `a` strikes when it lands, the one area its tell marks. A tile
@@ -644,6 +707,15 @@ pub fn hit_on_adjusted(w: &World, sched: &[ScheduledAction], a: &ScheduledAction
         }
         _ => return None,
     };
+    // PR7-87 (PT-67): a stealthed target that has moved is lost by an attack on it, or a blow shaped on it
+    let aimed = match &a.command.kind {
+        CmdKind::Attack { .. } => true,
+        CmdKind::Area { target, .. } => target.is_some(),
+        _ => false,
+    };
+    if fails.is_none() && aimed && hidden_at(w, sched, t, a.impact) {
+        fails = Some(HitFail::Hidden);
+    }
     if !adj.guard {
         scene.guard = Some(0.0);
     }

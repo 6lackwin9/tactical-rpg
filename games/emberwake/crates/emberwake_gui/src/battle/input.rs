@@ -104,6 +104,31 @@ pub(super) fn pick_json(w: &World, p: &rip::Pick) -> Value {
     }
 }
 
+/// PR7-87 (PT-72): a pick reply's dropped later picks in words, all of them at pick time: one drop by its reason alone,
+/// several each named ("Bryn: ... Dara: ..."); None when nothing dropped.
+pub(crate) fn dropped_message(reply: &Value) -> Option<String> {
+    let dropped: Vec<(String, String)> = reply["dropped"].as_array().map(|a| a.iter().filter_map(|d| Some((d["name"].as_str().unwrap_or("").to_string(), d["reason"].as_str().filter(|t| !t.is_empty())?.to_string()))).collect()).unwrap_or_default();
+    match dropped.as_slice() {
+        [] => None,
+        [(_, only)] => Some(only.clone()),
+        many => Some(many.iter().map(|(who, why)| format!("{who}: {why}")).collect::<Vec<_>>().join(" ")),
+    }
+}
+
+#[cfg(test)]
+mod dropped_tests {
+    use serde_json::json;
+
+    /// PR7-87 (PT-72): every dropped later pick is said, each named when there are several.
+    #[test]
+    fn every_dropped_pick_is_said_at_pick_time() {
+        assert_eq!(super::dropped_message(&json!({"ok": true})), None);
+        assert_eq!(super::dropped_message(&json!({"dropped": [{"name": "Bryn", "reason": "No path."}]})).as_deref(), Some("No path."));
+        let two = json!({"dropped": [{"name": "Bryn", "reason": "No path."}, {"name": "Dara", "reason": "Too far."}]});
+        assert_eq!(super::dropped_message(&two).as_deref(), Some("Bryn: No path. Dara: Too far."));
+    }
+}
+
 /// INPUT1 GH2 b: the intents a round target of this kind tries, in order (an enemy: Assault, else Maneuver; an ally:
 /// Support; the unit itself: Guard, else Support; a tile: Guard, else Assault, else Maneuver). A4.2-K1b (IR19): under
 /// `field_intent` a tile tries Field first (Assault takes no tile there).
@@ -768,8 +793,8 @@ impl BattleScreen {
         self.cleared.retain(|c| *c != h);
         let name = self.session().w.units[h].name.clone();
         let shown = label.split_once(' ').filter(|(d, _)| d.len() == 1 && d.chars().all(|c| c.is_ascii_digit())).map_or(label, |(_, rest)| rest);
-        if let Some(d) = r["dropped"].as_array().and_then(|a| a.first()) {
-            self.message = d["reason"].as_str().unwrap_or("").to_string();
+        if let Some(m) = dropped_message(&r) {
+            self.message = m;
         } else if self.session().events.len() == events {
             self.message = format!("{name}: {shown}");
         }

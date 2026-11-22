@@ -93,7 +93,7 @@ fn check_fight(s: &mut Session, label: &str) -> (usize, usize, Vec<String>) {
                         Some((plain, crit)) => {
                             let h = if crit_on(*u) { crit } else { plain };
                             match h.fails {
-                                Some(HitFail::Dodged | HitFail::OutOfReach | HitFail::FlankProtected) => {
+                                Some(HitFail::Dodged | HitFail::OutOfReach | HitFail::FlankProtected | HitFail::Hidden) => {
                                     failed += 1;
                                     if !struck.is_empty() {
                                         bad.push(format!("{at}: forecast {:?} on {}, struck {struck:?} ({})", h.fails, s.w.units[*u].name, cmd.log));
