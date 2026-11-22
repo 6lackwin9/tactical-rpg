@@ -35,8 +35,12 @@ Parked for your approval (golden re-records need your word):
   the mock. Queued as provisional, to confirm: amber light pools under the lanterns with a soft vignette; cover props
   (crates, pillars, lamps) drawn on blocked cells inside the arena, display only; a faint grid at rest (Settings can turn
   it off). Update 2026-11-22 01:00: all of it has landed (`PR7-67`, `PR7-68`, darker floor); the Act 1 story staging is
-  in (`PR7-66`); every Act 1 foe and boss now has a painted sheet, switched on by `PR7-65` (queued). Fable takes a second
-  pass once that lands.
+  in (`PR7-66`); every Act 1 foe and boss now has a painted sheet (`PR7-65`, landed). Fable's second pass (same report,
+  new section at the top) says the open alley now matches the mock closely. Queued as provisional in `PR7-74`, to
+  confirm: each zone (foundry, watchpost, undercroft, closed alleys) gets its own floor and wall or a tint; the tallow
+  vats stop using the lava art; painted units keep their size (about 1.15 cells) and a unit standing in front of the
+  selected one or its target turns see-through, instead of shrinking everyone to 1 cell; the boss-fight foe card docks
+  away from the party.
 - [ ] Style 2 look for the exploration maps: every Sunk Ward map, the hub included, now uses the Style 2 grounds
   (before and after in project files `art-ui/explore_style2/grounds_before_after.png`). Art/UI is holding Style 2 walls
   and the Grate's props until you say whether the grounds look right, so one call covers every map. Recommendation:
