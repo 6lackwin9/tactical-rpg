@@ -1358,6 +1358,38 @@ fn a_launch_save_names_a_fixture_folder_copied_into_the_scratch_saves() {
     std::fs::remove_dir_all(&saves).unwrap();
 }
 
+/// ENGINE-36 (1): a save may be a folder's absolute path (a kept playtest save), and `shots save=` launches from it,
+/// so a map proof shot from a save needs no scenario file; a relative path that is no plain name is still refused.
+#[test]
+fn a_save_folder_by_path_launches_shots_with_no_scenario_file() {
+    let kept = temp("save_kept");
+    let s = scenario::shots_scenario("map", &keys(&[&format!("save={}", kept.display()), "do=click:menu.continue,screen:region_map,shot:map"])).unwrap();
+    assert_eq!(s.launch.save.as_deref(), Some(kept.to_str().unwrap()));
+    assert!(scenario::shots_scenario("map", &keys(&["save=up/../x"])).is_err(), "a relative path is no save name");
+    let out = temp("save_path_out");
+    let mut l = launcher();
+    let o = Options { saves: None, ..no_window(&out) };
+    let _ = std::fs::remove_dir_all(&kept);
+    let r = scenario::run_size(&scenario_of_launch(&s), (1280, 720), &o, &mut l);
+    assert_eq!(r.code, 2);
+    assert!(r.message.contains("no such folder"), "{}", r.message);
+    std::fs::create_dir_all(&kept).unwrap();
+    std::fs::write(kept.join("slot_0.json"), "{}").unwrap();
+    let mut l = launcher();
+    let r = scenario::run_size(&scenario_of_launch(&s), (1280, 720), &o, &mut l);
+    assert_eq!(r.code, 0, "{}", r.message);
+    assert!(l.plans[0].args.iter().any(|a| a.starts_with("saves=")), "{:?}", l.plans[0].args);
+    let _ = std::fs::remove_dir_all(&out);
+    let _ = std::fs::remove_dir_all(&kept);
+}
+
+/// `s` with its launch kept and its steps one shot (the fake launcher answers no clicks or screen waits).
+fn scenario_of_launch(s: &scenario::Scenario) -> scenario::Scenario {
+    let mut one = scenario_of(json!([{"step": "shot", "name": "map"}]));
+    one.launch = s.launch.clone();
+    one
+}
+
 /// A `perf` reply: frame numbers in ms, and whether the game found the machine steady (its two calibrations close).
 fn perf_reply(p50: f64, p95: f64, max: f64, steady: bool) -> Value {
     json!({"ok": true, "stats": {"count": 30, "p10": p50 / 2.0, "p50": p50, "p95": p95, "max": max, "mean": p50}, "calib_before": 3.0, "calib_after": if steady { 3.1 } else { 4.0 },

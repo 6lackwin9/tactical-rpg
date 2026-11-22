@@ -19,7 +19,7 @@
 #                                string literals and comments left unless asked; legacy, game data and fixtures only listed (ENGINE-16)
 #   tools/fc.sh schema-field <table> <field> <json> [--after <key>] [--replace]   add a field to kits/rpg/schema.json byte for byte
 #                                (<table> content.<kind> / world.<kind>, or a bare kind when unique; ENGINE-15)
-#   tools/fc.sh seed-from <kind> <id> [<world>] [--set k=v]... [--fields a,b] [--out F [--append]]   a seed for `content apply`
+#   tools/fc.sh seed-from <kind> <id>|--ids a,b,c [<world>] [--set k=v]... [--fields a,b] [--out F [--append]]   a seed for `content apply`
 #                                from a current entry with changes (dotted keys, JSON values, `k=` removes; ENGINE-15); --fields
 #                                writes only those fields, so a re-run undoes no later seed (ENGINE-20)
 #   tools/fc.sh seeds [--all]    the seed order check (in the gate): every game's seeds replayed in commit order leave the shipped
@@ -60,9 +60,9 @@
 #   tools/fc.sh scenario <id|all|file.json> [size=1280x720] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] [set=<key>:<value>,...] [audit=1]   run
 #                                them with no window, or in real muted windows that do not take the focus where the file or window=1 asks
 #                                (0 pass, 1 a step failed, 2 could not start); the gate runs them all; record=1 writes golden baselines
-#   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [ruleset=<id>] [seed=<n>] [do=<a>,<b>,...] [the keys above]
+#   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [ruleset=<id>] [seed=<n>] [save=<name|/abs/dir>] [do=<a>,<b>,...] [the keys above]
 #                                proof shots of a named fight or screen, into .agent/shots/<name>/<WxH>/, no window, no script to write
-#   tools/fc.sh playtest [start] [save=<dir|file>] [out=playtests/agent] [size=WxH] [shots=each|off] [window=1] [profile=dev|release]
+#   tools/fc.sh playtest [start] [save=<dir|file>] [out=playtests/agent] [size=WxH] [shots=each|off] [keep_saves=<dir>] [window=1] [profile=dev|release]
 #                                start the game with no window for an agent to play (PR7-22); then playtest do <command ...> (one
 #                                command: a log line and a shot in the run folder), playtest run <script|->, playtest stop | status;
 #                                the commands: engine/docs/authoring/agent_playtest.md; never in the gate
@@ -611,11 +611,11 @@ scenario() {  # the driver lies beside the game's program, so both are built fir
   local a rest=() rel=()
   if [ "${1:-}" = "check" ]; then aegis scenario "$@" || status=$?; return; fi
   if [ "${1:-}" = "shots-all" ]; then shift; shots_all "$@"; return; fi
-  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | shots-all out=<dir> [compare=<dir>] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] | shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...]"; status=2; return; }
+  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | shots-all out=<dir> [compare=<dir>] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] | shots <name> [screen=] [scene=] [ruleset=] [seed=] [save=<name|/abs/dir>] [do=<a>,<b>,...]"; status=2; return; }
   local verb=run
   if [ "$1" = "shots" ]; then
     verb=shots; shift
-    case "${1:-}" in ""|*=*) echo "usage: tools/fc.sh scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...] [size=] [out=] [profile=] [slow=] [data=] [window=1] [fps=]"; status=2; return ;; esac
+    case "${1:-}" in ""|*=*) echo "usage: tools/fc.sh scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [save=<name|/abs/dir>] [do=<a>,<b>,...] [size=] [out=] [profile=] [slow=] [data=] [window=1] [fps=]"; status=2; return ;; esac
   fi
   for a in "$@"; do
     case "$a" in
@@ -634,7 +634,7 @@ scenario() {  # the driver lies beside the game's program, so both are built fir
 # game, through whichever CLI build is there. No verb is `start`.
 playtest() {
   local verb=${1:-start} rel=() prof=debug rest=() a cli
-  case "$verb" in start|run|do|stop|status) shift || true ;; *=*) verb=start ;; *) echo "usage: tools/fc.sh playtest [start] [save=] [out=] [size=] [shots=each|off] [window=1] [profile=dev|release] | do <command ...> | run <script|-> | stop | status"; status=2; return ;; esac
+  case "$verb" in start|run|do|stop|status) shift || true ;; *=*) verb=start ;; *) echo "usage: tools/fc.sh playtest [start] [save=] [out=] [size=] [shots=each|off] [keep_saves=] [window=1] [profile=dev|release] | do <command ...> | run <script|-> | stop | status"; status=2; return ;; esac
   for a in "$@"; do
     case "$a" in
       profile=release) rel=(--release); prof=release ;;

@@ -61,6 +61,17 @@ class SeedFrom(unittest.TestCase):
         with self.assertRaises(ValueError):
             sd.seed_step("units", None, {"id": "w", "deck": 3}, ["deck.size=2"])
 
+    def test_ids_write_one_step_per_id_in_one_call(self):
+        """ENGINE-36 (2): `--ids a,b,c` gives one step per id, each with the same --set and --fields, in order."""
+        rows = {"a": {"id": "a", "short_name": "A", "hp": 5}, "b": {"id": "b", "short_name": "B", "hp": 6}}
+        get = lambda kind, eid, world: dict(rows[eid])
+        steps = sd.steps_for("units", ["b", "a"], None, ["short_name=X"], ["short_name"], get)
+        self.assertEqual([s["entry"] for s in steps], [{"id": "b", "short_name": "X"}, {"id": "a", "short_name": "X"}])
+        self.assertTrue(all(s["fields"] == ["short_name"] for s in steps))
+        for bad in ([], ["a", "a"]):
+            with self.assertRaises(ValueError):
+                sd.steps_for("units", bad, None, [], None, get)
+
 
 if __name__ == "__main__":
     unittest.main()

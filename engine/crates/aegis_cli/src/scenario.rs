@@ -3,7 +3,7 @@
 //! window that does not take the focus when the file or `window=1` asks.
 //!   aegis scenario check [<file> | all]                                       parse the files; no game starts
 //!   aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X] [set=<key>:<value>,...] [audit=1]
-//!   aegis scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...] [the same keys as run]
+//!   aegis scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [save=] [do=<a>,<b>,...] [the same keys as run]
 //! A scenario is named by where it lies: `<game folder>/scenarios/<id>.json`. The game folder is the one holding the game
 //! manifest the registered game names, and the game's program is the file named as the manifest's id beside this one
 //! (`exe=` says otherwise). Exit codes: 0 pass, 1 a step or a file failed, 2 could not start. `tools/fc.sh gate` runs
@@ -619,8 +619,8 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
                 launch.ruleset = aliased_text(l, "ruleset", p);
                 if l.contains_key("save") {
                     let name = text_of(l, "save", "launch", p);
-                    if !name.is_empty() && !plain_name(&name) {
-                        p.push("launch: 'save' names a folder under scenarios/saves/: letters, digits, _ and - only".into());
+                    if !name.is_empty() && !plain_name(&name) && !Path::new(&name).is_absolute() {
+                        p.push("launch: 'save' names a folder under scenarios/saves/ (letters, digits, _ and - only) or is an absolute folder path".into());
                     }
                     launch.save = Some(name);
                 }
@@ -1399,10 +1399,11 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
             break;
         }
         if let Some(name) = &s.launch.save {
-            let from = o.saves.as_ref().map(|d| d.join(name));
+            // ENGINE-36 (1): an absolute path is a save folder anywhere (a kept playtest save in project files)
+            let from = if Path::new(name).is_absolute() { Some(PathBuf::from(name)) } else { o.saves.as_ref().map(|d| d.join(name)) };
             match from.filter(|f| f.is_dir()) {
                 None => {
-                    out.message = format!("launch.save '{name}': no folder scenarios/saves/{name}/");
+                    out.message = if Path::new(name).is_absolute() { format!("launch.save '{name}': no such folder") } else { format!("launch.save '{name}': no folder scenarios/saves/{name}/") };
                     let _ = std::fs::remove_dir_all(&scratch);
                     break;
                 }
@@ -1681,7 +1682,7 @@ fn game_folder<G: crate::Game>(game: &G, args: &Args) -> Result<PathBuf> {
 }
 
 const RUN_USAGE: &str = "aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X] [record=1] [set=<key>:<value>,...] [audit=1]";
-const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=<id>] [scene=<id>] [ruleset=<id>] [seed=N] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
+const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=<id>] [scene=<id>] [ruleset=<id>] [seed=N] [save=<name|/abs/dir>] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
 
 /// `aegis scenario ...`; returns the exit code.
 pub fn command<G: crate::Game>(game: &G, args: &Args) -> Result<i32> {
@@ -1814,6 +1815,11 @@ pub fn shots_scenario(name: &str, args: &Args) -> std::result::Result<Scenario, 
     }
     if let Some(seed) = args.keys.get("seed") {
         launch["seed"] = json!(seed.parse::<u64>().map_err(|_| vec![format!("seed '{seed}' is not a whole number")])?);
+    }
+    // ENGINE-36 (1): a named save (scenarios/saves/<name>) or a save folder's absolute path, so a map or hub proof shot
+    // from a save needs no scenario file (do=click:<continue>,screen:<id>,shot:<name>)
+    if let Some(save) = args.keys.get("save") {
+        launch["save"] = json!(save);
     }
     parse(name, &json!({"id": name, "title": "Proof shots", "launch": launch, "steps": steps}))
 }

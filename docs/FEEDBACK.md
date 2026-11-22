@@ -144,8 +144,35 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-33` (`XL-SWEEP1`) | Built (tools lane) | `develop` | Every scenario shot at Normal and Extra large text with a text audit per shot (`set=`, `audit=1`); four small fixes (plate HP, card name, boss name, world map side panel); the shop layout for Art/UI and three findings for Design. FB-455 |
 | `PR7-80` (`WALLMASS1`) | Built (tools lane) | `develop` | A wall run shares one cap (one variant per run, a ground sheet's cap continuous when there is one, a back-row shade); top and bottom exits draw `exit_path_north` (flipped for the bottom). FB-457 |
 | `PR7-83` (`ACT1-FIX3`) | Built in part (tools lane) | `develop` | PT-73, 75, 76, 79, 81, 84 fixed; PT-68 and PT-69 text fixed; PT-70 and PT-71 fixes move the sim golden, so held for Design with options; PT-67, 72, 74, 80 reported. FB-459 |
+| `ENGINE-36` (`TOOLS-REPEATS2`) | Built (tools lane) | `develop` | `scenario shots save=` (a name or a folder path) shoots a map from a save with no scenario file; `seed-from --ids a,b,c`; `playtest start keep_saves=<dir>`. FB-461 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-461: ENGINE-36 TOOLS-REPEATS2 built; shots from a save, seed-from for many ids, kept playtest saves
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `ENGINE-36` (`TOOLS-REPEATS2`).
+- **What landed** (engine `aegis_cli`, tools):
+  - (1) `scenario shots <name> save=<name or absolute folder>` launches from a save (a name under
+    `scenarios/saves/`, or any folder, such as a kept playtest save), so a map or hub proof shot is one line:
+    `tools/fc.sh scenario shots hub save=/abs/dir do=click:menu.continue,screen:region_map,shot:map`. A scenario
+    file's `launch.save` takes an absolute folder too. It reuses the `do=` steps rather than adding a game-named step
+    (the engine names no menu ids). Live check: `build-tools/engine-36/hub_from_save.png` (the hub from `hub_start`).
+  - (2) `tools/fc.sh seed-from <kind> [<world>] --ids a,b,c [--set k=v]... [--fields a,b]` writes one step per id
+    (same changes for each, in order; an empty or repeated id list is refused).
+  - (3) `tools/fc.sh playtest start keep_saves=<dir>` keeps each `save <name>` also as `<dir>/<run>/<name>` and the
+    saves as the game stops (`stop`, `quit`, the end of `run`) as `<dir>/<run>/last`. A cloud thread passes
+    `/mnt/project-files/build-tools/playtest_saves/`; the engine names no path.
+- **Fix to PR7-83**: its `forced.rs` comment named a hero, which the gate's layers step refuses (the PR7-83 gate stopped
+  early, so I missed it); the comment now names no one. develop failed `layers` between the two landings.
+- **My guess**: (1) read "a scenario step" as the `shots` keys plus `launch.save` taking a folder path, not a new step
+  kind, since loading a save happens at launch. Say if a mid-scenario load step is wanted.
+- **Tests**: `aegis_cli` `tests/scenario.rs` `a_save_folder_by_path_launches_shots_with_no_scenario_file`;
+  `agentplay.rs` `keep_saves_copies_the_saves_beside_the_run` and the session file round trip;
+  `tools/planner/test_tools_help.py` `test_ids_write_one_step_per_id_in_one_call`.
+- **Docs delta**: `engine/docs/authoring/agent_playtest.md` updated here (the `keep_saves=` lines). For `engine/README.md`
+  or `docs/STRUCTURE.md` (tools list), if they list the shots keys: add `save=` to `scenario shots`, `--ids` to
+  `seed-from`, and `keep_saves=` to `playtest start`.
 
 ### FB-459: PR7-83 ACT1-FIX3 built in part; two rule fixes held because they move the sim golden
 

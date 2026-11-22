@@ -12,6 +12,9 @@ ENGINE-20 (TOOLS-HELP3): `--fields a,b` writes only those top-level fields (the 
 just them in the stored entry, a field the entry then leaves out is removed), so the seed changes no more than it means
 to and a later seed's other fields survive a re-run (the seed order check, `tools/fc.sh seeds`). Each `--set` must
 fall inside a named field.
+
+ENGINE-36 (TOOLS-REPEATS2): `seed-from <kind> [<world>] --ids a,b,c ...` writes one step per id (each with the same
+`--set` and `--fields`) in one call, so a multi-unit seed needs no shell loop.
 """
 import json
 import os
@@ -74,6 +77,16 @@ def seed_step(kind, world, entry, sets, fields=None):
     return step
 
 
+def steps_for(kind, ids, world, sets, fields=None, get=None):
+    """One seed step per id in `ids` (in order, each id once), each from its stored entry (`get`, default `stored`)."""
+    get = get or stored
+    if not ids:
+        raise ValueError("--ids names at least one id")
+    if len(set(ids)) != len(ids):
+        raise ValueError("--ids names an id twice")
+    return [seed_step(kind, world, get(kind, eid, world), sets, fields) for eid in ids]
+
+
 def stored(kind, eid, world):
     """The stored entry, through the CLI `tools/fc.sh content` runs (built on demand, so never a stale binary)."""
     cmd = ["cargo", "run", "-q", "-p", "emberwake_host", "--", "content", "get", kind, eid] + (["world=%s" % world] if world else [])
@@ -85,7 +98,7 @@ def stored(kind, eid, world):
 
 
 def main(argv):
-    pos, sets, out, append, fields = [], [], None, False, None
+    pos, sets, out, append, fields, ids = [], [], None, False, None, None
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -96,25 +109,30 @@ def main(argv):
             out, i = Path(argv[i + 1]), i + 2
         elif a == "--fields":
             fields, i = [f for f in argv[i + 1].split(",") if f], i + 2
+        elif a == "--ids":
+            ids, i = [x for x in argv[i + 1].split(",") if x], i + 2
         elif a == "--append":
             append, i = True, i + 1
         else:
             pos.append(a)
             i += 1
-    if len(pos) not in (2, 3):
+    if ids is None and len(pos) in (2, 3):
+        kind, ids, world = pos[0], [pos[1]], (pos[2] if len(pos) == 3 else None)
+    elif ids is not None and len(pos) in (1, 2):
+        kind, world = pos[0], (pos[1] if len(pos) == 2 else None)
+    else:
         print(__doc__)
         return 2
-    kind, eid = pos[0], pos[1]
-    world = pos[2] if len(pos) == 3 else None
+    eid = ",".join(ids)
     try:
-        step = seed_step(kind, world, stored(kind, eid, world), sets, fields)
+        steps = steps_for(kind, ids, world, sets, fields)
     except ValueError as e:
         print("seed-from: %s" % e)
         return 1
-    seed = {"steps": [step]}
+    seed = {"steps": steps}
     if out and append and out.is_file():
         old = json.loads(out.read_text(encoding="utf-8"))
-        seed = {**old, "steps": old.get("steps", []) + [step]}
+        seed = {**old, "steps": old.get("steps", []) + steps}
     text = json.dumps(seed, indent=2, ensure_ascii=False) + "\n"
     if out:
         out.write_text(text, encoding="utf-8")
