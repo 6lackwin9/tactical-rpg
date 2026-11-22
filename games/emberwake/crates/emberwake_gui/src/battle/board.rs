@@ -639,8 +639,12 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
         units.push(StageUnit { i, pos, n, ally, alive, hp, standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.sprite_rect_n(pos, n, sprite, dx + shake + sx, dy + sy), sp: sprite.0, body_rect, looks });
     }
     let status: Vec<StatusOn> = units.iter().filter(|t| t.alive).map(|t| StatusOn { unit: t.i, foot: (t.foot.0 as f32, t.foot.1 as f32), left: t.facing.left, looks: t.looks.clone() }).collect();
-    // 3.7 pass 7: blocks, standing props and units sorted by their feet.
+    // 3.7 pass 7: blocks, standing props, decor (DECOR1) and units sorted by their feet.
+    // DIORAMA4 S1, S2: the zone's own stage set, tint and terrain overrides (the world set's `stage.fx.json`)
+    let look = stage::zone_look(&mut cx.art, set, &s.def.zone);
+    let zset = (set, &look);
     let mut items = stage::board_items(&mut cx.art, &w.grid);
+    items.extend(stage::decor_items(&mut cx.art, &w.grid, zset, &s.def.decor));
     items.extend(units.iter().filter(|t| t.standing).map(|t| stage::unit_item(t.i, t.foot, t.body_rect)));
     let order = stage::feet_order(&items);
     let unit_of = |i: usize| units.iter().find(|t| t.i == i);
@@ -682,9 +686,6 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     // DIORAMA2 R4: the stage reaches into the panel's side gutters (its wings, faded), inside the panel's rim
     ui.p.clip(Some(stage::STAGE_CLIP));
     ui.p.shift(shift.0, shift.1);
-    // DIORAMA4 S1, S2: the zone's own stage set, tint and terrain overrides (the world set's `stage.fx.json`)
-    let look = stage::zone_look(&mut cx.art, set, &s.def.zone);
-    let zset = (set, &look);
     stage::draw_wings(&mut ui.p, &mut cx.art, &w.grid, zset, &s.def.zone, &w.cat.zones, th().game("battle_panel", PANEL));
     for pass in stage::passes() {
         match pass {
@@ -704,7 +705,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                 // DIORAMA3 R3: the lanterns' pools and the vignette, under the marks and the units
                 let spots = stage::light_spots(&mut cx.art, set, &s.def.zone);
                 // DIORAMA5 R3: and the lamps among the cover and props (`stage.fx.json` `lights`)
-                let lamps = stage::lamps(&mut cx.art, &w.grid, zset);
+                // DECOR1: and the lamps among the encounter's decor
+                let lamps = stage::lamps_with(&mut cx.art, &w.grid, zset, &s.def.decor);
                 stage::draw_light(&mut ui.p, &spots, &lamps);
                 // DIORAMA5 R4: a plain exit's gate beyond the board's edge
                 if exit_sign(hold).0 == "EXIT" {
@@ -832,8 +834,12 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     match p.item {
                         // DIORAMA4 S1: the band's rows show the backdrop, not their walls
                         Item::Block(c) if band.is_some_and(|b| stage::under_band(c, b)) => {}
+                        // DECOR1: a decor piece stands in place of an inner block's cover prop
+                        Item::Block(c) if !stage::block_shown(&mut cx.art, &w.grid, zset, &s.def.decor, c) => {}
                         Item::Block(c) => stage::draw_block(&mut ui.p, &mut cx.art, &w.grid, zset, c),
                         Item::Prop(c) => stage::draw_prop(&mut ui.p, &mut cx.art, &w.grid, c),
+                        Item::Decor(k) if band.is_some_and(|b| stage::under_band(s.def.decor[k].at, b)) => {}
+                        Item::Decor(k) => stage::draw_decor(&mut ui.p, &mut cx.art, &w.grid, zset, &s.def.decor[k]),
                         Item::Unit(i) => {
                             let Some(t) = unit_of(i) else { continue };
                             // BIGUNIT1 BU14: a 2 x 2 unit's sprite is its sheet scaled to the square; DIORAMA1B: a

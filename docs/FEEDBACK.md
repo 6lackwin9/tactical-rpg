@@ -64,6 +64,8 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-76` (`ACT1-FIX2`) | done | `develop` (squash `PR7-76`) | Act 1 agent-run fixes PT-42..63 (Here list usable points and edge arrows, no repeat point answers, roads drawn at rest, vignette two-press, job places and locked reasons, ready quest in legend, Make camp reason, directional exits, walk resumes after a won fight, batched turn-ins, can't-wear badge, dialogue change log, opaque Journal, skill picks logged, Tithing at-0 line); seed `pr7_76_hub_cast` keys five hub NPC bodies; grate silt parked; shots `/mnt/project-files/pr7-76/`; goldens unchanged; `FB-388` |
 | `PR7-78` (`ACT1-DATA1`) | done | `develop` (squash `PR7-78`) | q_a1_m4 already grants its promise (no change); `rec_level` on the eight flag-job quests, with a test; Crucible and Overlook already name the interlude in `closed_text` (no change); seed `pr7_78_quests`; goldens unchanged; `FB-390` |
 | `ENGINE-34` (`BONEMILL-CHECK1`) | Report | `develop` | Bone-Mill won by hand on try 1 at Lv 7 (the auto plan still loses it); the Crucible lost 5 times at Lv 8 (1 auto, 4 hand), so the act's end was not reached; no debug; PT-66..84; `FB-392` |
+| `PR7-81` (`DECOR1`) | done | `develop` (squash `PR7-81`) | Display-only encounter field `decor: [{art, x, y}]` (kit schema, typed reader, content check), drawn by the stage with `lights` on its art key; no rule reads it; goldens unchanged; `FB-396` |
+| `PR7-84` (`ACT1-DATA2`) | done | `develop` (squash `PR7-84`) | `rec_level` 7, 7, 8 on the Bone-Mill, Vats and Crucible; the Crucible and Overlook lock hint names the Bone-Mill and Vats turn-ins; the winch drum gets a Here row; Dunstan's battle line is wordless; six `pr7_84_*` seeds; `FB-398` |
 | `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
 | `PR7-4` (`SCENARIO-GOLDENS1`) | part 1 done (tools lane); baselines await the user | `develop` (squash `PR7-4` part 1) | Scenario `shot` step `golden` (tolerance, pixels allowance, diff image), `record=1`, launch `save`; every scenario in the gate (`tools/fc.sh scenarios_all`); three screen scenarios (menus, hub, battle; 18 shots) run as review shots until the user approves the baselines (`/mnt/project-files/pr7-4/`); `FB-313` |
 | `ENGINE-1` (`HELLO-GAME1`) | done (tools lane) | `develop` (squash `ENGINE-1`) | Sample game `games/hello/` on engine crates only: menu, walker sprite, one save slot, engine sounds, scenario `hello_walk` in the gate; programs `hello` and `hello_cli`; six RPG leaks listed; `FB-315` |
@@ -421,4 +423,53 @@ This file is the **only doc file edited by the Build Session** under the two-ses
   confirm in Crucible B R1 (low confidence).
 - **FB-441 items re-checked as fixed**: PT-43, 44, 45, 46, 49, 51, 53, 55, 56, 60, 61, 63; PT-40 partly (the boss HP
   hover explains the phase span; the auto plan still loses the Bone-Mill).
+- **Docs delta**: none.
+
+### FB-396: PR7-81 DECOR1 built; decor key format for the asset lane, five guesses
+
+- **Status**: built, `develop` (squash `PR7-81`). Goldens unchanged (sim, checks, rules contract, journey, resave).
+- **Key format**: `decor` is a list of `{"art": KEY, "x": 0-11, "y": 0-8}` on a catalog or world encounter, omitted
+  when empty. KEY is `cover/v<N>` (that cover variant of the board's set, zone set first, then the world's
+  `stage_set`), `cover` (the cell's pick), `<prop>/v<N>` or `<prop>` (`props/common/<prop>/` first, then the other prop
+  sets in name order). Catalog encounters (set "") cannot use cover keys. `stage.fx.json` `lights` match on the
+  resolved key, so `cover/v3` and `lantern_pole` decor cast their pools.
+- **Check** (`rpgkit_content` `check::encounter::decor_problems`): refuses a non-list, unknown keys, off-grid cells,
+  exits, the cells the listed units deploy on, hold tiles and the escape objective's stay-behind tiles, two decor on one
+  cell, and art the board's set does not have.
+- **Guesses `[PROVISIONAL]`**:
+  1. A cover-key decor that resolves to art on an inner block replaces that block's cover (drawing and light); prop
+     decor on a block, and any decor on an outer wall's cap, draws raised on top of the block.
+  2. Deploy cells are the cells the listed party, guests and enemies take; a world fight whose heroes come from the
+     player's party may deploy onto decor, which units draw over.
+  3. Props draw at their PNG size (`lantern_pole` is 64 x 112), so the asset lane may prefer `cover/v3` for lamps.
+  4. Cover decor takes the zone tint for its terrain; props none, like terrain props.
+  5. Decor under the boss band is skipped like blocks.
+- **Tests**: `rpgkit_content/tests/decor.rs` (schema, key forms, writer round trip, board unchanged, refusals, world
+  check, cover sets); `stage::tests` decor drawn on inner and outer blocks, a lamp decor's pool, walkability unchanged.
+- **Docs delta**:
+  - Kit README: "DECOR1 (PR7-81): encounter field `decor: [{art, x, y}]` (catalog and world, omitted when empty),
+    display-only; `rpgkit_battle::encounter::decor_of` / `EncounterDef.decor`; `rpgkit_content::art::decor_art`,
+    `decor_known(layers, key, cover_sets)`, `decor_cover_sets`, `decor_prop_dirs`, `stage_fx`;
+    `check::encounter::decor_problems`; `World::deploy_cells`."
+  - STRUCTURE: `kits/rpg/crates/rpgkit_content/tests/decor.rs` (DECOR1 tests).
+  - GAME_BRIEF, Where to look: "Battle board decor (lamps, props, display-only): encounter `decor`, drawn by
+    `emberwake_gui/src/stage.rs` `decor_items` / `draw_decor` / `lamps_with`; never changes walkability, cover or line
+    of sight."
+
+### FB-398: PR7-84 ACT1-DATA2 built; the winch drum row is a flag workaround
+
+- **Status**: built, `develop` (squash `PR7-84`). Seeds `pr7_84_m3`, `_m4`, `_m5`, `_overlook`, `_winch`, `_dunstan`.
+- **(PT-77)** `rec_level` `[PROVISIONAL]`: `q_a1_m3` (Bone-Mill) 7, `q_a1_m4` (Vats) 7, `q_a1_m5` (Crucible) 8, from
+  the ENGINE-34 party's levels, one above the Kiln and Vats jobs (6) and the Overlook (7).
+- **(PT-78)** `q_a1_m5` and `q_hook_overlook` share the lock `sunk_ward.interlude_done`, set by the interlude after
+  `enc_evt_05`; its trigger `t_interlude` needs `m3_turned_in`, `m4_turned_in` and the two joined flags those fights
+  set. Both `closed_text` now read "Turn in the Bone-Mill and Vats to Talia. The Undercroft stirs then.". The Wedges
+  job at the hub (also PT-78) is not touched.
+- **(PT-83)** The marker `winch_post` had no `use` and no `sets_flags`; the `use` values are rest, crypts and stash
+  only. It now sets `sunk_ward.winch_seen` (read by nothing), so it is listed in Here. A look-only point would be a
+  logic row (a new `use` or a listing rule), if wanted.
+- **(PT-82)** Dunstan's round-1 line in `enc_evt_03` (`dlg_talk_m3_grendel`) now reads "Dunstan grinds his wired jaw
+  and hammers the slag-ladle against the chute rail, twice, hard." in the plain narration style of his other lines.
+- **Test**: `emberwake_world/tests/board_rec_level.rs` `every_flag_job_on_a_board_has_a_level` now also covers main
+  raids.
 - **Docs delta**: none.

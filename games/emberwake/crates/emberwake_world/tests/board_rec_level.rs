@@ -58,8 +58,8 @@ fn the_level_reads_as_words() {
     assert_eq!(board::rec_level_text(5), "Recommended level 5");
 }
 
-/// PR7-78 (ACT1-DATA1, FB-388): every job the board offers that sends the party to set a flag (a quest on a
-/// `flag_job` template) shows a recommended level, so no such job is unrated.
+/// PR7-78 (ACT1-DATA1, FB-388) and PR7-84 (ACT1-DATA2, PT-77): every job the board offers that sends the party to set
+/// a flag (a `flag_job` template) and every main raid (a `main_raid` template) shows a recommended level.
 #[test]
 fn every_flag_job_on_a_board_has_a_level() {
     let d = data();
@@ -67,9 +67,10 @@ fn every_flag_job_on_a_board_has_a_level() {
     let mut jobs = 0;
     for b in board::boards(&d, &gs) {
         for q in board::quests(&d, &gs, &json::s(b, "_qid")) {
-            if json::s(&quest::resolved(&d, &gs, &q), "template").contains("flag_job") {
+            let t = json::s(&quest::resolved(&d, &gs, &q), "template");
+            if t.contains("flag_job") || t.contains("main_raid") {
                 jobs += 1;
-                assert!(board::rec_level(&d, &gs, &q) > 0, "{q}: a flag job shows a recommended level");
+                assert!(board::rec_level(&d, &gs, &q) > 0, "{q}: a flag job or main raid shows a recommended level");
             }
         }
     }

@@ -410,6 +410,18 @@ impl World {
     /// BIGUNIT1 BU3: deploys the units on `grid` as a battle start does (`deploy`, then each side's leftovers) and
     /// returns the indices (allies first) of the 2 x 2 units that found no square where all four cells fit.
     pub fn deploy_misfits(cat: Arc<Catalog>, grid: Grid, party: Vec<Unit>, enemies: Vec<Unit>, deployment: &str) -> Vec<UnitId> {
+        let w = Self::deployed(cat, grid, party, enemies, deployment);
+        (0..w.units.len()).filter(|&c| w.size_of(c) > 1 && !w.has(c)).collect()
+    }
+
+    /// DECOR1 (PR7-81): the cells the units stand on once deployed on `grid` as a battle start places them (`deploy`,
+    /// then each side's leftovers; every cell of a 2 x 2 unit), allies first.
+    pub fn deploy_cells(cat: Arc<Catalog>, grid: Grid, party: Vec<Unit>, enemies: Vec<Unit>, deployment: &str) -> Vec<V2> {
+        let w = Self::deployed(cat, grid, party, enemies, deployment);
+        (0..w.units.len()).flat_map(|c| w.cells_of(c)).collect()
+    }
+
+    fn deployed(cat: Arc<Catalog>, grid: Grid, party: Vec<Unit>, enemies: Vec<Unit>, deployment: &str) -> World {
         let n_allies = party.len();
         let units: Vec<Unit> = party.into_iter().chain(enemies).collect();
         let mut grid = grid;
@@ -419,7 +431,7 @@ impl World {
         w.deploy(&allies, &foes, deployment);
         w.place_leftovers(&allies, true, deployment);
         w.place_leftovers(&foes, false, deployment);
-        (0..w.units.len()).filter(|&c| w.size_of(c) > 1 && !w.has(c)).collect()
+        w
     }
 
     /// U1.2 slice 1 (`FB-04`): unit `c`'s pool `id` through the typed facade: HP and AP from the unit, poise from

@@ -84,6 +84,8 @@ pub struct EncounterDef {
     /// unit_meters); set by its caller (the world bridge from the region and encounter `start_meter` rows); never read
     /// from the row (none by default).
     pub start_meter: Vec<rpgkit_data::StartMeter>,
+    /// DECOR1 (PR7-81): the display-only decor the stage draws (`encounter::decor_of`); the rules never read it.
+    pub decor: Vec<encounter::Decor>,
     /// The whole entry (objective and morale fields are read from it).
     pub raw: Obj,
 }
@@ -130,6 +132,7 @@ impl EncounterDef {
             tactics: Default::default(),
             bleed_out_rounds: 0,
             start_meter: Vec::new(),
+            decor: encounter::decor_of(o),
             raw: o.clone(),
         }
     }
