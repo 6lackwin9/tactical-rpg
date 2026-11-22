@@ -645,6 +645,94 @@ fn draw_face_cell(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, src: i
     p.fill(Rect::new(r.x, r.y, r.w, 1), lighten(terrain_color(grid, top), 0.25));
 }
 
+/// DIORAMA3 R5: a cover prop's height (64 x 72 art at 2 art px: a cell and half a cell above it, the block's own box).
+pub const COVER_H: i32 = CELL_H + BLOCK_LIFT;
+
+/// DIORAMA3 R5: whether block `c` belongs to the arena's outer wall: it is on the grid's edge, or joined to the edge
+/// through other blocks (side by side).
+pub fn outer_wall(grid: &Grid, c: V2) -> bool {
+    let mut seen = vec![c];
+    let mut todo = vec![c];
+    while let Some(at) = todo.pop() {
+        if at.x == 0 || at.y == 0 || at.x == GRID_W - 1 || at.y == GRID_H - 1 {
+            return true;
+        }
+        for n in neighbours(at) {
+            if is_block(grid, n) && !seen.contains(&n) {
+                seen.push(n);
+                todo.push(n);
+            }
+        }
+    }
+    false
+}
+
+/// DIORAMA3 R5: the cover prop block `c` shows, `tilesets/<set>/cover/v*` picked by the cell (v0 crates, v1 barrels,
+/// v2 pillar, v3 lamp post); None: no set, no files, not a block, or a block of the outer wall (its wall cap).
+pub fn cover_art(art: &mut Art, grid: &Grid, set: &str, c: V2) -> Option<String> {
+    if set.is_empty() || !is_block(grid, c) || outer_wall(grid, c) {
+        return None;
+    }
+    art.pick(&[&format!("tilesets/{set}/cover")], None, c.x, c.y)
+}
+
+/// DIORAMA3 R3: the light spots of stage set `set` for battle zone `zone` from its `stage.fx.json`: `zones.<zone>.spots`
+/// first, else the top-level `spots`; each `at` is [u, v], fractions of the backdrop. Read once per set and zone.
+pub fn light_spots(art: &mut Art, set: &str, zone: &str) -> Vec<(f32, f32)> {
+    if set.is_empty() {
+        return Vec::new();
+    }
+    thread_local! {
+        static SPOTS: std::cell::RefCell<std::collections::HashMap<(String, String), Vec<(f32, f32)>>> = Default::default();
+    }
+    let key = (set.to_string(), zone.to_string());
+    if let Some(v) = SPOTS.with(|m| m.borrow().get(&key).cloned()) {
+        return v;
+    }
+    let v = aegis_core::assets::read_json(art.layers(), &format!("tilesets/{set}/stage.fx.json")).map_or_else(Vec::new, |fx| {
+        let own = &fx["zones"][zone]["spots"];
+        let list = if own.is_array() { own } else { &fx["spots"] };
+        list.as_array()
+            .map(|a| a.iter().filter_map(|s| Some((s["at"][0].as_f64()? as f32, s["at"][1].as_f64()? as f32))).filter(|(u, v)| (0.0..=1.0).contains(u) && (0.0..=1.0).contains(v)).collect())
+            .unwrap_or_default()
+    });
+    SPOTS.with(|m| m.borrow_mut().insert(key, v.clone()));
+    v
+}
+
+/// DIORAMA3 R3: the amber of a lantern's pool.
+pub const POOL: Rgba = rgb(255, 170, 80);
+/// The pool's half sizes on the floor (logical px) and its rings (alpha each; the centre gathers them).
+pub const POOL_RX: f32 = 46.0;
+pub const POOL_RY: f32 = 18.0;
+const POOL_RINGS: [(f32, u8); 10] = [(1.0, 5), (0.9, 6), (0.8, 6), (0.7, 7), (0.6, 7), (0.5, 8), (0.4, 8), (0.3, 9), (0.2, 9), (0.12, 10)];
+
+/// DIORAMA3 R3: the light pass after the ground: an amber pool on the floor below each lantern spot (centred on its
+/// `u`, on row 0 and into row 1), then a soft vignette at the stage's edges. Static (no flicker), so it stays on under
+/// Reduce motion.
+pub fn draw_light(p: &mut Painter, spots: &[(f32, f32)]) {
+    for &(u, _) in spots {
+        let cx = BACKDROP.x as f32 + u * BACKDROP.w as f32;
+        let cy = BOARD_Y as f32 + CELL_H as f32 * 0.7;
+        for (k, a) in POOL_RINGS {
+            p.ellipse(cx, cy, POOL_RX * k, POOL_RY * k, rgba(POOL[0], POOL[1], POOL[2], a));
+        }
+    }
+    let clip = STAGE_CLIP;
+    for k in 0..VIGNETTE_PX {
+        let a = ((1.0 - k as f32 / VIGNETTE_PX as f32).powf(2.0) * VIGNETTE_ALPHA as f32).round() as u8;
+        let col = rgba(0, 0, 0, a);
+        p.fill(Rect::new(clip.x, BOARD_Y + k, clip.w, 1), col);
+        p.fill(Rect::new(clip.x, FRONT_FACE.y - 1 - k, clip.w, 1), col);
+        p.fill(Rect::new(INTERIOR.x + k, BOARD_Y, 1, FRONT_FACE.y - BOARD_Y), col);
+        p.fill(Rect::new(INTERIOR.x + INTERIOR.w - 1 - k, BOARD_Y, 1, FRONT_FACE.y - BOARD_Y), col);
+    }
+}
+
+/// DIORAMA3 R3: the vignette's depth at each edge of the board and its darkest alpha.
+pub const VIGNETTE_PX: i32 = 18;
+pub const VIGNETTE_ALPHA: u8 = 70;
+
 /// Today's lip on a wall cell's cap (a set with no `lip` of its own and no set named).
 pub const LIP_TODAY: Rgba = rgb(170, 172, 186);
 /// DIORAMA2 R1 (Fable review): the lip of a stage set with a `stage.fx.json` but no `lip` in it: bronze, not white.
@@ -725,6 +813,14 @@ pub fn draw_wings(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, zone: 
 /// cap's top rows at 75 %) with its top line and the shade on the cell south, the cap's highlight and side lines.
 pub fn draw_block(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, c: V2) {
     let r = stage_cell(c);
+    // DIORAMA3 R5: a block inside the arena stands as the stage set's cover prop (display only), feet on its bottom edge
+    if let Some(img) = cover_art(art, grid, set, c).and_then(|rel| stage_image(art, &rel, set, CELL_W, COVER_H)) {
+        p.image(img, Rect::new(r.x, r.y + r.h - COVER_H, CELL_W, COVER_H));
+        if c.y + 1 < GRID_H {
+            p.fill(Rect::new(r.x, r.y + r.h, r.w, 3), rgba(0, 0, 0, 70));
+        }
+        return;
+    }
     let cap = Rect::new(r.x, r.y - BLOCK_LIFT, CELL_W, CELL_H);
     let t = grid.terrain_id(c);
     draw_tile(p, art, grid, t, set, c, cap);
@@ -1556,6 +1652,67 @@ mod tests {
         let mid = BOARD_Y + 3 * CELL_H;
         assert_eq!(px(STAGE_CLIP.x, mid), vec![20, 22, 30], "the panel colour at the edge");
         assert_ne!(px(INTERIOR.x - 1, mid), vec![20, 22, 30], "the floor where the board starts");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// DIORAMA3 R5: a block joined to the grid's edge (through blocks) is the outer wall; one standing free inside is
+    /// cover, drawn as the stage set's cover prop picked by the cell, in the block's own box; no set: its wall cap.
+    #[test]
+    fn a_block_inside_the_arena_stands_as_cover() {
+        let root = scratch("cover");
+        todays_layer(&root);
+        let mut grid = zone("stone_arena");
+        let idx = |x: i32, y: i32| (y * GRID_W + x) as usize;
+        let id = |t: &str| emberwake_battle::grid::TERRAIN_IDS.iter().position(|x| *x == t).unwrap();
+        for c in 0..(GRID_W * GRID_H) as usize {
+            grid.terrain[c] = id("stone");
+        }
+        grid.terrain[idx(0, 3)] = id("wall");
+        grid.terrain[idx(1, 3)] = id("wall");
+        grid.terrain[idx(6, 4)] = id("wall");
+        assert!(outer_wall(&grid, V2::new(1, 3)), "joined to the edge");
+        assert!(!outer_wall(&grid, V2::new(6, 4)), "free inside");
+        ramp(&root, "tilesets/zz_cover/cover/v0.png", 64, 72, [250, 0, 250]);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        assert_eq!(cover_art(&mut art, &grid, "zz_cover", V2::new(6, 4)).as_deref(), Some("tilesets/zz_cover/cover/v0.png"));
+        assert_eq!(cover_art(&mut art, &grid, "zz_cover", V2::new(1, 3)), None, "the outer wall keeps its cap");
+        assert_eq!(cover_art(&mut art, &grid, "zz_cover", V2::new(5, 4)), None, "not a block");
+        assert_eq!(cover_art(&mut art, &grid, "", V2::new(6, 4)), None, "no set named");
+        let plain = paint(&mut art, &grid, "zz_none", 0, 1, (0, 0));
+        let covered = paint(&mut art, &grid, "zz_cover", 0, 1, (0, 0));
+        let r = stage_cell(V2::new(6, 4));
+        let changed = diff(&plain, &covered);
+        assert!(!changed.is_empty());
+        assert!(changed.iter().all(|&(x, y)| x >= r.x && x < r.x + CELL_W && y >= r.y + r.h - COVER_H && y < r.y + r.h), "only the block's box (its contact shadow stays)");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// DIORAMA3 R3: the light spots come from the stage set's `stage.fx.json`, the zone's own first, else the default;
+    /// an `at` off the backdrop is dropped; no file or no set: none. A pool lights the floor below its `u`.
+    #[test]
+    fn the_lanterns_light_pools_under_their_spots() {
+        let root = scratch("light");
+        let fx = root.join("tilesets/zz_light/stage.fx.json");
+        std::fs::create_dir_all(fx.parent().unwrap()).unwrap();
+        std::fs::write(&fx, r#"{"spots": [{"kind": "lantern", "at": [0.25, 0.3]}, {"kind": "lantern", "at": [1.5, 0.3]}], "zones": {"canal": {"spots": [{"kind": "lantern", "at": [0.75, 0.3]}]}}}"#).unwrap();
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        assert_eq!(light_spots(&mut art, "zz_light", "alley"), [(0.25, 0.3)]);
+        assert_eq!(light_spots(&mut art, "zz_light", "canal"), [(0.75, 0.3)]);
+        assert_eq!(light_spots(&mut art, "zz_light_none", "alley"), []);
+        assert_eq!(light_spots(&mut art, "", "alley"), []);
+        let mut g = crate::hud::hud_tests::gfx();
+        g.canvas = aegis_ui::canvas::Canvas::new(640, 360);
+        g.view = aegis_ui::painter::View::fit(640, 360);
+        let blank = g.canvas.px.clone();
+        let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+        p.clip(Some(STAGE_CLIP));
+        draw_light(&mut p, &[(0.25, 0.3)]);
+        let at = |px: &[u8], x: i32, y: i32| px[((y * 640 + x) * 4) as usize..((y * 640 + x) * 4 + 3) as usize].to_vec();
+        let (cx, cy) = (BACKDROP.x + BACKDROP.w / 4, BOARD_Y + CELL_H * 7 / 10);
+        let lit = at(&g.canvas.px, cx, cy);
+        assert!(lit[0] > lit[2] && lit != at(&blank, cx, cy), "amber under the lantern: {lit:?}");
+        let far = BACKDROP.x + BACKDROP.w * 3 / 4;
+        assert_eq!(at(&g.canvas.px, far, cy + 40), at(&blank, far, cy + 40), "no light far from it (inside the vignette's margin)");
         let _ = std::fs::remove_dir_all(&root);
     }
 

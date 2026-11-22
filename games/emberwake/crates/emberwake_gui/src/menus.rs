@@ -1380,6 +1380,8 @@ impl SettingsScreen {
                 // FB-308 (Design, READY section 4): the rows past the mock's six sit under an Advanced header
                 Row::Heading("Advanced"),
                 Row::Choice("see_through", "Units Behind", "When units hidden behind others are outlined"),
+                // DIORAMA3 R6: the board's grid lines (faint at rest, stronger while planning)
+                Row::Toggle(crate::battle::BOARD_GRID, "Board Grid", "Faint tile lines on the battle board"),
                 Row::Overlays,
             ],
             _ => vec![Row::Controls],

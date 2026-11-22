@@ -55,6 +55,8 @@ pub struct Tuning {
     pub foot_ring_alpha: u8,
     /// STAGE1: the opacity of the Stage grid lines (1-255; always on).
     pub grid_alpha: u8,
+    /// DIORAMA3 R6: the grid lines' alpha while planning (the rest alpha is `grid_alpha`, about 12 %).
+    pub grid_alpha_planning: u8,
     /// SPRITE1-U: how long a moving unit slides to its new tile playing `walk` (0: it jumps).
     pub walk_ms: u64,
     /// SPRITE1-U: how long a fallen unit shows the death clip's last frame before the dead marker.
@@ -103,6 +105,7 @@ impl Default for Tuning {
             shadow_alpha: 120,
             foot_ring_alpha: 200,
             grid_alpha: 34,
+            grid_alpha_planning: 72,
             walk_ms: 360,
             death_hold_ms: 600,
             foot_alpha: 110,
@@ -186,6 +189,7 @@ impl Tuned for Tuning {
             shadow_alpha: u("shadow_alpha", d.shadow_alpha as u64).min(255) as u8,
             foot_ring_alpha: u("foot_ring_alpha", d.foot_ring_alpha as u64).min(255) as u8,
             grid_alpha: u("grid_alpha", d.grid_alpha as u64).clamp(1, 255) as u8,
+            grid_alpha_planning: u("grid_alpha_planning", d.grid_alpha_planning as u64).clamp(1, 255) as u8,
             walk_ms: u("walk_ms", d.walk_ms).min(2000),
             death_hold_ms: u("death_hold_ms", d.death_hold_ms).min(5000),
             foot_alpha: u("foot_alpha", d.foot_alpha as u64).min(255) as u8,
