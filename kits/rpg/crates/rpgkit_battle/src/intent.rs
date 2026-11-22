@@ -429,6 +429,11 @@ pub fn trace(w: &World, intents: &[Intent]) -> serde_json::Value {
 /// PR7-41 (PT-20): the round as it will run: the scheduled actions `sched` (the enemies', drafted first) with `plan`'s
 /// entries booked after them, as `Plan::commit` books them on confirm (planning reads the plan, not the resolver).
 pub fn planned_schedule(w: &World, sched: &[ScheduledAction], plan: &Plan) -> Vec<ScheduledAction> {
+    // ENGINE-46: once per scope on this battle (`memo`)
+    memo::round(w, sched, plan, || planned_schedule_now(w, sched, plan))
+}
+
+fn planned_schedule_now(w: &World, sched: &[ScheduledAction], plan: &Plan) -> Vec<ScheduledAction> {
     let mut res = crate::resolver::Resolver::new(w.total_blocks, 0);
     res.scheduled = sched.to_vec();
     plan.commit(w, &mut res);
@@ -532,6 +537,14 @@ pub fn position_at(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32) 
 /// (the resolver's order in a block); `aware`: a walk reads the others' tiles then (`walk_end_at`), else the board
 /// now (`walk_preview`, the others' own reads inside `walk_end_at`).
 fn position_in(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32, ahead_of: Option<i32>, aware: bool) -> V2 {
+    // the inner reads (the board now) are cheap: only a read that plays the walks is kept
+    if !aware {
+        return position_read(w, sched, c, block, ahead_of, aware);
+    }
+    memo::tile(w, sched, (c, block, ahead_of, aware), || position_read(w, sched, c, block, ahead_of, aware))
+}
+
+fn position_read(w: &World, sched: &[ScheduledAction], c: UnitId, block: i32, ahead_of: Option<i32>, aware: bool) -> V2 {
     let mut at = w.grid.pos(c).unwrap_or(NO_CELL);
     let earlier = |a: &ScheduledAction| a.impact < block || ahead_of.is_some_and(|i| a.impact == block && a.command.initiative(w) > i);
     // HITCALC1: a move that already landed is in the tile it stands on now (mid-round reads)
@@ -1039,4 +1052,160 @@ pub fn foe_card(w: &World, sched: &[ScheduledAction], foe: UnitId) -> FoeCard {
         });
     }
     card
+}
+
+/// ENGINE-46 (FEEL-FIX1): a screen that reads many forecasts over one battle in a row (a frame of the battle while
+/// planning: the plates, the foe card, the strip, the tips, the marks) opens a scope on that battle's world, scheduled
+/// actions and plan (`memo::scope`). While it lives (it borrows them, so none of them can change), the round as it will
+/// run (`planned_schedule`), each member's compiled plan (`Plan::compile`) and each tile read (`position_at`) over that
+/// world are worked out once. Reads over any other world (a preview's copy, a planner's trial) are worked out as before,
+/// and with no scope open (the resolver, the sims, the goldens) nothing is kept: the answers are the same either way.
+pub mod memo {
+    use super::{CmdKind, ScheduledAction, UnitId, World, V2};
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::hash::{Hash, Hasher};
+
+    /// A quick hasher for a round's print (FNV-1a over 8-byte words): the tile reads are many and cheap, so SipHash's
+    /// cost would outweigh what the scope saves.
+    #[derive(Default)]
+    struct Quick(u64);
+
+    impl Hasher for Quick {
+        fn finish(&self) -> u64 {
+            self.0
+        }
+        fn write(&mut self, bytes: &[u8]) {
+            let mut h = if self.0 == 0 { 0xcbf2_9ce4_8422_2325 } else { self.0 };
+            for chunk in bytes.chunks(8) {
+                let mut word = [0u8; 8];
+                word[..chunk.len()].copy_from_slice(chunk);
+                h ^= u64::from_le_bytes(word);
+                h = h.wrapping_mul(0x0000_0100_0000_01b3).rotate_left(5);
+            }
+            self.0 = h;
+        }
+    }
+
+    type Quickly = std::hash::BuildHasherDefault<Quick>;
+
+    #[derive(Default)]
+    struct Memo {
+        /// The open scopes' battles, innermost last: (world, scheduled actions and their count, plan) addresses.
+        open: Vec<(usize, (usize, usize), usize)>,
+        tiles: HashMap<(u64, (UnitId, i32, Option<i32>, bool)), V2, Quickly>,
+        round: Option<Vec<ScheduledAction>>,
+        compiled: HashMap<UnitId, crate::plan::SimState, Quickly>,
+    }
+
+    thread_local!(static MEMO: RefCell<Memo> = RefCell::new(Memo::default()));
+
+    /// While it lives, forecast reads over its battle are kept (see the module).
+    pub struct Scope<'a> {
+        _battle: std::marker::PhantomData<(&'a World, &'a [ScheduledAction], &'a crate::plan::Plan)>,
+    }
+
+    fn id(w: &World, sched: &[ScheduledAction], plan: &crate::plan::Plan) -> (usize, (usize, usize), usize) {
+        (w as *const World as usize, (sched.as_ptr() as usize, sched.len()), plan as *const crate::plan::Plan as usize)
+    }
+
+    /// A scope on battle `w` with its scheduled actions `sched` (the enemies', drafted) and the party's `plan`.
+    pub fn scope<'a>(w: &'a World, sched: &'a [ScheduledAction], plan: &'a crate::plan::Plan) -> Scope<'a> {
+        MEMO.with(|m| {
+            let mut m = m.borrow_mut();
+            let battle = id(w, sched, plan);
+            if m.open.last() != Some(&battle) {
+                m.tiles.clear();
+                m.round = None;
+                m.compiled.clear();
+            }
+            m.open.push(battle);
+        });
+        Scope { _battle: std::marker::PhantomData }
+    }
+
+    impl Drop for Scope<'_> {
+        fn drop(&mut self) {
+            MEMO.with(|m| {
+                let mut m = m.borrow_mut();
+                let gone = m.open.pop();
+                if m.open.last() != gone.as_ref() {
+                    m.tiles.clear();
+                    m.round = None;
+                    m.compiled.clear();
+                }
+            });
+        }
+    }
+
+    fn open_on(w: &World) -> bool {
+        MEMO.with(|m| m.borrow().open.last().is_some_and(|b| b.0 == w as *const World as usize))
+    }
+
+    /// Whether a scope is open on this thread.
+    pub fn open() -> bool {
+        MEMO.with(|m| !m.borrow().open.is_empty())
+    }
+
+    /// A round's print: what a tile read looks at (each action's timing and flags, its walk, disengage, carried move,
+    /// whom it aims at and whether it shoves).
+    fn round_print(sched: &[ScheduledAction]) -> u64 {
+        let mut h = Quick::default();
+        sched.len().hash(&mut h);
+        for a in sched {
+            (a.unit, a.start, a.impact, a.end, a.cancelled, a.landed, a.broken, a.command.started, &a.command.skill, a.command.priority).hash(&mut h);
+            std::mem::discriminant(&a.command.kind).hash(&mut h);
+            match &a.command.kind {
+                CmdKind::Walk { path, expected_start, goal, .. } => (path, expected_start, goal).hash(&mut h),
+                CmdKind::Disengage { dest, .. } => dest.hash(&mut h),
+                CmdKind::Attack { target, .. } | CmdKind::Area { target, .. } => target.hash(&mut h),
+                _ => {}
+            }
+            match a.command.carry {
+                crate::command::Carry::None => 0u8.hash(&mut h),
+                crate::command::Carry::Engage(c) => (1u8, c).hash(&mut h),
+                crate::command::Carry::Retreat(c) => (2u8, c).hash(&mut h),
+            }
+            a.command.forced.is_some().hash(&mut h);
+        }
+        h.finish()
+    }
+
+    pub(super) fn tile(w: &World, sched: &[ScheduledAction], q: (UnitId, i32, Option<i32>, bool), work: impl FnOnce() -> V2) -> V2 {
+        if !open_on(w) {
+            return work();
+        }
+        let key = (round_print(sched), q);
+        if let Some(v) = MEMO.with(|m| m.borrow().tiles.get(&key).copied()) {
+            return v;
+        }
+        let v = work();
+        MEMO.with(|m| m.borrow_mut().tiles.insert(key, v));
+        v
+    }
+
+    pub(super) fn round(w: &World, sched: &[ScheduledAction], plan: &crate::plan::Plan, work: impl FnOnce() -> Vec<ScheduledAction>) -> Vec<ScheduledAction> {
+        if MEMO.with(|m| m.borrow().open.last() != Some(&id(w, sched, plan))) {
+            return work();
+        }
+        if let Some(r) = MEMO.with(|m| m.borrow().round.clone()) {
+            return r;
+        }
+        let r = work();
+        MEMO.with(|m| m.borrow_mut().round = Some(r.clone()));
+        r
+    }
+
+    pub(crate) fn compiled(w: &World, plan: &crate::plan::Plan, c: UnitId, work: impl FnOnce() -> crate::plan::SimState) -> crate::plan::SimState {
+        let here = MEMO.with(|m| m.borrow().open.last().is_some_and(|b| b.0 == w as *const World as usize && b.2 == plan as *const crate::plan::Plan as usize));
+        if !here {
+            return work();
+        }
+        if let Some(st) = MEMO.with(|m| m.borrow().compiled.get(&c).cloned()) {
+            return st;
+        }
+        let st = work();
+        MEMO.with(|m| m.borrow_mut().compiled.insert(c, st.clone()));
+        st
+    }
 }

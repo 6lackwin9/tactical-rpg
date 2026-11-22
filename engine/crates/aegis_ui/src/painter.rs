@@ -363,9 +363,11 @@ impl Fonts {
     }
 }
 
-/// How many averaged frames are kept (a screen shows a few sizes), the oldest dropped first: a window drag cannot pile
-/// them up.
-const REDUCED_MAX: usize = 8;
+/// How many composed frames are kept, the oldest dropped first: a window drag cannot pile them up. ENGINE-46: every
+/// frame is composed once per size now (not only the averaged ones), and a screen like the battle shows a few dozen
+/// panels and buttons, so the list holds that many, under `NINE_CACHE_BYTES` in all.
+pub const NINE_CACHE_MAX: usize = 64;
+pub const NINE_CACHE_BYTES: usize = 64 << 20;
 
 /// What a composed frame's pixels depend on: the picture, the physical size, the physical px per art px (two views can
 /// give one physical size) and the sidecar.
@@ -395,10 +397,46 @@ fn reduced_nine(img: &Image, nine: &Nine, k: f32, pr: Rect, compose: impl FnOnce
         };
         draw(&entry.1);
         cache.push(entry);
-        if cache.len() > REDUCED_MAX {
+        while cache.len() > NINE_CACHE_MAX || (cache.len() > 1 && cache.iter().map(|e| e.1.len()).sum::<usize>() > NINE_CACHE_BYTES) {
             cache.remove(0);
         }
     });
+}
+
+/// ENGINE-46: the nine cells sampled at `pr`'s size (RGBA rows; a pixel no cell covers stays clear): stretch maps the
+/// destination span onto the whole source span (a shrunk corner is sampled down); tile repeats the source at its own size
+/// along the middle column or row.
+fn compose_sampled(img: &Image, nine: &Nine, k: f32, pr: Rect, cols: &[(i32, i32, i32, i32); 3], rows: &[(i32, i32, i32, i32); 3]) -> Vec<u8> {
+    let mut out = vec![0u8; (pr.w * pr.h * 4) as usize];
+    for (j, &(sy, src_h, dy, dst_h)) in rows.iter().enumerate() {
+        for (i, &(sx, src_w, dx, dst_w)) in cols.iter().enumerate() {
+            let (mid_col, mid_row) = (i == 1, j == 1);
+            let fill = if mid_col && mid_row { nine.center } else if mid_col || mid_row { nine.edges } else { NineFill::Stretch };
+            if fill == NineFill::None || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0 {
+                continue;
+            }
+            let tile_x = fill == NineFill::Tile && mid_col;
+            let tile_y = fill == NineFill::Tile && mid_row;
+            for y in 0..dst_h {
+                let oy = if tile_y { ((y as f32 / k) as i32).rem_euclid(src_h) } else { y * src_h / dst_h };
+                let (ty, tx0) = (dy - pr.y + y, dx - pr.x);
+                if ty < 0 || ty >= pr.h {
+                    continue;
+                }
+                for x in 0..dst_w {
+                    let tx = tx0 + x;
+                    if tx < 0 || tx >= pr.w {
+                        continue;
+                    }
+                    let ox = if tile_x { ((x as f32 / k) as i32).rem_euclid(src_w) } else { x * src_w / dst_w };
+                    let at = (((sy + oy) * img.w + sx + ox) * 4) as usize;
+                    let to = ((ty * pr.w + tx) * 4) as usize;
+                    out[to..to + 4].copy_from_slice(&img.px[at..at + 4]);
+                }
+            }
+        }
+    }
+    out
 }
 
 /// The nine cells averaged to their spans, RGBA row by row at `pr`'s size: a stretched cell to its span, a tiled one to
@@ -659,6 +697,22 @@ fn compose_straddle(img: &Image, nine: &Nine, k: f32, p: f32, pr: Rect, reach: i
     out
 }
 
+/// ENGINE-46 (FEEL-FIX1): a layer drawn once and put back while nothing it shows changed (`Painter::cached`): a board's
+/// floor under its marks and units, say. The screen that owns it keeps it (one per layer).
+#[derive(Debug, Clone, Default)]
+pub struct Snapshot {
+    key: Option<(u64, [u32; 3], (i32, i32), (i32, i32))>,
+    rect: Rect,
+    px: Vec<u8>,
+}
+
+impl Snapshot {
+    /// Forgets the layer (the next `cached` draws it).
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+}
+
 pub struct Painter<'a> {
     pub c: &'a mut Canvas,
     pub v: View,
@@ -726,6 +780,22 @@ impl<'a> Painter<'a> {
     }
 
     /// Draws only inside the logical rect `r` from now on (None: everywhere).
+    /// ENGINE-46 (FEEL-FIX1): `draw` draws a layer inside logical `r` (cut to the clip in force); while `key` and the
+    /// view stay the same, the next calls put its pixels back instead of drawing it. `key` is the caller's hash of
+    /// everything the layer shows; `draw` must cover all of `r` and draw nothing outside it (set the clip to `r` first).
+    pub fn cached(&mut self, slot: &mut Snapshot, key: u64, r: Rect, draw: impl FnOnce(&mut Painter)) {
+        let v = self.v;
+        let want = Some((key, [v.s.to_bits(), v.ox.to_bits(), v.oy.to_bits()], v.canvas, (self.c.w, self.c.h)));
+        let at = self.c.visible(v.rect(r));
+        if slot.key == want && slot.rect == at {
+            self.c.put_rgba(slot.rect, &slot.px);
+            return;
+        }
+        draw(self);
+        (slot.rect, slot.px) = self.c.copy_rgba(at);
+        slot.key = want;
+    }
+
     pub fn clip(&mut self, r: Option<Rect>) {
         self.c.clip = r.map(|r| self.v.rect(r));
     }
@@ -957,13 +1027,7 @@ impl<'a> Painter<'a> {
             let p = corner_scale(nine, k, pr);
             let reach = straddle_over(nine, k, p);
             reduced_nine(img, nine, k, pr, || compose_straddle(img, nine, k, p, pr, reach), |px| {
-                let bw = pr.w + 2 * reach;
-                for y in 0..pr.h + 2 * reach {
-                    for x in 0..bw {
-                        let i = ((y * bw + x) * 4) as usize;
-                        self.c.blend(pr.x - reach + x, pr.y - reach + y, [px[i], px[i + 1], px[i + 2], px[i + 3]]);
-                    }
-                }
+                self.c.blend_rgba(pr.x - reach, pr.y - reach, pr.w + 2 * reach, pr.h + 2 * reach, px);
             });
             if nine.center != NineFill::None {
                 self.cover(r, 255);
@@ -986,40 +1050,15 @@ impl<'a> Painter<'a> {
         let cols = [(0, sl, pr.x, dl), (sl, sw, pr.x + dl, dw), (img.w - sr, sr, pr.x + pr.w - dr, dr)];
         let rows = [(0, st, pr.y, dt), (st, sh, pr.y + dt, dh), (img.h - sb, sb, pr.y + pr.h - db, db)];
         if nine.reduce && k < 1.0 {
-            reduced_nine(img, nine, k, pr, || compose_reduced(img, nine, k, pr, &cols, &rows), |px| {
-                for y in 0..pr.h {
-                    for x in 0..pr.w {
-                        let i = ((y * pr.w + x) * 4) as usize;
-                        self.c.blend(pr.x + x, pr.y + y, [px[i], px[i + 1], px[i + 2], px[i + 3]]);
-                    }
-                }
-            });
+            reduced_nine(img, nine, k, pr, || compose_reduced(img, nine, k, pr, &cols, &rows), |px| self.c.blend_rgba(pr.x, pr.y, pr.w, pr.h, px));
             if nine.center != NineFill::None {
                 self.cover(r, 255);
             }
             return;
         }
-        for (j, &(sy, src_h, dy, dst_h)) in rows.iter().enumerate() {
-            for (i, &(sx, src_w, dx, dst_w)) in cols.iter().enumerate() {
-                let (mid_col, mid_row) = (i == 1, j == 1);
-                let fill = if mid_col && mid_row { nine.center } else if mid_col || mid_row { nine.edges } else { NineFill::Stretch };
-                if fill == NineFill::None || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0 {
-                    continue;
-                }
-                // Stretch maps the destination span onto the whole source span (a shrunk corner is sampled down);
-                // tile repeats the source at its own size along the middle column or row.
-                let tile_x = fill == NineFill::Tile && mid_col;
-                let tile_y = fill == NineFill::Tile && mid_row;
-                for y in 0..dst_h {
-                    let oy = if tile_y { ((y as f32 / k) as i32).rem_euclid(src_h) } else { y * src_h / dst_h };
-                    for x in 0..dst_w {
-                        let ox = if tile_x { ((x as f32 / k) as i32).rem_euclid(src_w) } else { x * src_w / dst_w };
-                        let at = (((sy + oy) * img.w + sx + ox) * 4) as usize;
-                        self.c.blend(dx + x, dy + y, [img.px[at], img.px[at + 1], img.px[at + 2], img.px[at + 3]]);
-                    }
-                }
-            }
-        }
+        // ENGINE-46 (FEEL-FIX1): the samples composed once per size (kept with the reduced ones; each pixel takes one
+        // sample, so blending the composed rows is the same as blending each sample), then blended a row at a time
+        reduced_nine(img, nine, k, pr, || compose_sampled(img, nine, k, pr, &cols, &rows), |px| self.c.blend_rgba(pr.x, pr.y, pr.w, pr.h, px));
         if nine.center != NineFill::None {
             self.cover(r, 255);
         }

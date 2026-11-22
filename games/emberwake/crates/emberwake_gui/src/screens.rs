@@ -162,6 +162,13 @@ impl GameCx {
 impl aegis_ui::Context for GameCx {
     const MORE_COMMANDS: &'static str = "battle commands work while a battle is open";
 
+    /// ENGINE-46 (FEEL-FIX1): the Settings screen and popup on every tab (their panels, art and the Controls tab's
+    /// keycaps were a 50 ms first draw).
+    fn warm(cx: &mut aegis_ui::Cx<Self>) -> Vec<Box<dyn aegis_ui::Screen<Self>>> {
+        let tabs = 0..crate::menus::TABS.len();
+        [false, true].into_iter().flat_map(|popup| tabs.clone().map(move |t| (popup, t))).map(|(popup, t)| Box::new(crate::menus::SettingsScreen::on_tab(cx, popup, t)) as Box<dyn aegis_ui::Screen<Self>>).collect()
+    }
+
     fn note(&mut self, line: String) {
         self.log(line);
     }

@@ -56,6 +56,20 @@ fn each_step_parses_with_its_keys_and_defaults() {
     assert_eq!(fail, &["cut", "edge", "overlap", "spill"]);
 }
 
+/// ENGINE-46 (FEEL-FIX1): a `feel` budget is the bar in a release build and stretches by `FEEL_DEV_ALLOWANCE` in a dev
+/// one (the gate's): the same worst numbers pass in dev and fail in release.
+#[test]
+fn a_feel_budget_stretches_in_a_dev_build() {
+    let reply = |build: &str| json!({"build": build, "to_present": {"worst": 120.0}, "frame_time": {"worst": 40.0}});
+    let release = scenario::feel_misses(&reply("release"), Some(100.0), Some(33.0));
+    assert_eq!(release.len(), 2, "both over in release: {release:?}");
+    assert!(release[0].starts_with("worst input 120.0 ms over 100") && release[1].starts_with("worst frame 40.0 ms over 33"), "{release:?}");
+    assert!(scenario::feel_misses(&reply("dev"), Some(100.0), Some(33.0)).is_empty(), "within 2.5 x in dev");
+    let far = json!({"build": "dev", "to_present": {"worst": 300.0}, "frame_time": {"worst": 10.0}});
+    assert_eq!(scenario::feel_misses(&far, Some(100.0), Some(33.0)).len(), 1, "a gross slip still fails in dev");
+    assert!(scenario::feel_misses(&reply("release"), None, None).is_empty(), "no budget, no miss");
+}
+
 /// ENGINE-45: the `feel` step takes a script of keys, clicks, pad buttons and frames, a gap (default 2) and a budget.
 #[test]
 fn a_feel_step_parses_its_script_and_budget() {

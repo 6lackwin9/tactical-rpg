@@ -189,6 +189,24 @@ pub fn perf_verdict(budget: &Budget, reply: &Value) -> (&'static str, Vec<String
     (if misses.is_empty() { "within" } else { "over" }, misses)
 }
 
+/// ENGINE-46 (FEEL-FIX1): how much a `feel` budget stretches in a dev build (the gate's), which draws about twice as
+/// slow as a release one: the release budget stays the bar a player sees, the dev run a loose ceiling on a gross slip.
+pub const FEEL_DEV_ALLOWANCE: f64 = 2.5;
+
+/// A `feel` reply's misses against its budget: the worst input-to-present over `input_ms`, the worst frame over
+/// `frame_ms`, each times `FEEL_DEV_ALLOWANCE` when the reply's `build` is `dev`.
+pub fn feel_misses(reply: &Value, input_ms: Option<f64>, frame_ms: Option<f64>) -> Vec<String> {
+    let (k, build) = if reply["build"] == json!("dev") { (FEEL_DEV_ALLOWANCE, " (dev build: the budget x 2.5)") } else { (1.0, "") };
+    let mut misses = Vec::new();
+    for (budget, key, what) in [(input_ms, "to_present", "input"), (frame_ms, "frame_time", "frame")] {
+        let worst = reply[key]["worst"].as_f64();
+        if let Some(b) = budget.map(|b| b * k).filter(|b| worst.is_some_and(|w| w > *b)) {
+            misses.push(format!("worst {what} {} ms over {b} ms{build}", reply[key]["worst"]));
+        }
+    }
+    misses
+}
+
 /// A `perf` step's bounds (the game's own are the same: `aegis_ui::shell::headless::PERF_*`) and the most a budget says.
 pub const PERF_FRAMES_MAX: u64 = 2000;
 pub const PERF_WARM_MAX: u64 = 600;
@@ -1305,13 +1323,7 @@ impl Run<'_> {
                 }
                 let _ = std::fs::write(self.bundle.join(format!("feel_{name}.json")), serde_json::to_string_pretty(&kept).unwrap_or_default());
                 self.perf.push(kept);
-                let mut misses = Vec::new();
-                if let Some(b) = input_ms.filter(|b| reply["to_present"]["worst"].as_f64().is_some_and(|w| w > *b)) {
-                    misses.push(format!("worst input {} ms over {b} ms", reply["to_present"]["worst"]));
-                }
-                if let Some(b) = frame_ms.filter(|b| reply["frame_time"]["worst"].as_f64().is_some_and(|w| w > *b)) {
-                    misses.push(format!("worst frame {} ms over {b} ms", reply["frame_time"]["worst"]));
-                }
+                let misses = feel_misses(&reply, *input_ms, *frame_ms);
                 if !misses.is_empty() {
                     return Err(fail(format!("feel {name}: {}", misses.join(", "))));
                 }

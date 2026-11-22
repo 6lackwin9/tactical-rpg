@@ -1,0 +1,49 @@
+{
+  "id": "feel_settings",
+  "title": "ENGINE-46 (FEEL-FIX1): input and frame budgets on the settings screen: open it, every tab, back",
+  "timeout_s": 120,
+  "steps": [
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "main_menu"
+      }
+    },
+    {
+      "step": "feel",
+      "name": "menus_settings",
+      "gap": 3,
+      "script": [
+        {
+          "click": "menu.settings"
+        },
+        {
+          "frames": 5
+        },
+        {
+          "click": "settings.tab.sound"
+        },
+        {
+          "click": "settings.tab.gameplay"
+        },
+        {
+          "click": "settings.tab.battle"
+        },
+        {
+          "click": "settings.tab.controls"
+        },
+        {
+          "key": "esc"
+        },
+        {
+          "frames": 5
+        }
+      ],
+      "budget": {
+        "input_ms": 100,
+        "frame_ms": 33
+      }
+    }
+  ]
+}

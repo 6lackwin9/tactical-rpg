@@ -1068,6 +1068,11 @@ impl SettingsScreen {
         Self::open(cx, true)
     }
 
+    /// ENGINE-46 (FEEL-FIX1): the screen open on tab `tab`, for the shell's warm list (`GameCx::warm`).
+    pub fn on_tab(cx: &Cx, popup: bool, tab: usize) -> Self {
+        Self { tab: tab.min(TABS.len() - 1), ..Self::open(cx, popup) }
+    }
+
     fn open(cx: &Cx, popup: bool) -> Self {
         let layouts = aegis_ui::screen_layout::Layouts::new(cx.art.layers().clone());
         Self { tab: 0, popup, web: ON_WEB, pending: staged_of(&cx.settings.v), confirm: None, guard: None, retreat: false, rebind: Default::default(), layouts, w: Vec::new() }

@@ -350,6 +350,11 @@ pub trait Context: Sized + 'static {
     fn agent_summary(&self) -> Value;
     /// The reply to the agent's `game` command.
     fn agent_game(&self) -> Value;
+    /// ENGINE-46 (FEEL-FIX1): screens whose first draw is slow (big panels, art, another face), drawn once unseen before
+    /// the first frame so their first real draw finds the caches full (`Shell::warm`). None by default.
+    fn warm(_cx: &mut Cx<Self>) -> Vec<Box<dyn Screen<Self>>> {
+        Vec::new()
+    }
 }
 
 /// The modifier keys held down right now (the shell keeps it current; all up while the window is out of focus), for

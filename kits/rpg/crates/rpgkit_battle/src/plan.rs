@@ -611,6 +611,15 @@ impl Plan {
     }
 
     pub fn compile(&self, w: &World, c: UnitId) -> SimState {
+        // ENGINE-46 (FEEL-FIX1): once per member inside a forecast scope on this world and plan (`intent::memo`)
+        // (a first-move trial's blocked cells change what it compiles to: not kept)
+        if self.blocked_override.borrow().is_some() {
+            return self.compile_now(w, c);
+        }
+        crate::intent::memo::compiled(w, self, c, || self.compile_now(w, c))
+    }
+
+    fn compile_now(&self, w: &World, c: UnitId) -> SimState {
         let mut st = self.start_state(w, c);
         let steps = self.steps_of(c);
         for (i, step) in steps.iter().enumerate() {

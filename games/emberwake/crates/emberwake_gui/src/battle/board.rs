@@ -576,6 +576,23 @@ pub(super) fn with_alpha(c: Rgba, a: u8) -> Rgba {
     [c[0], c[1], c[2], a]
 }
 
+thread_local! {
+    /// ENGINE-46 (FEEL-FIX1): the Stage's floor layer (`draw_stage`).
+    static FLOOR: std::cell::RefCell<aegis_ui::painter::Snapshot> = Default::default();
+}
+
+/// ENGINE-46 (FEEL-FIX1): a hash of everything the Stage's floor layer shows: the art (its generation), the board's tiles
+/// and exits, the zone, its set and look, the decor, the camera shift, the grid lines, the exit gates and the colours.
+fn floor_key(art: &Art, w: &World, def: &emberwake_battle::session::EncounterDef, (set, look): (&str, &stage::ZoneLook), view: ((i32, i32), u8, bool), colours: (Rgba, Rgba)) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    art.generation().hash(&mut h);
+    (w.grid.open, &w.grid.exits, &w.grid.terrain, format!("{:?}", w.grid.table)).hash(&mut h);
+    (std::sync::Arc::as_ptr(&w.cat) as usize, &def.zone, format!("{:?}", def.decor)).hash(&mut h);
+    (set, format!("{look:?}"), view, colours).hash(&mut h);
+    h.finish()
+}
+
 /// STAGE1 option B, the Stage view: the board tilted to 32 x 24 cells, run as `stage::passes` (backdrop, ground,
 /// markers, ground arrows, shadows, front face, the feet-sorted blocks, props and units, the outlines through what
 /// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
@@ -592,9 +609,6 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
     let reduce = cx.settings.reduce_motion();
     let still = UnitAnim::default();
-    // DIORAMA2 R4: the stage's tray is its clip inside the board panel (no rim of its own past the panel's frame)
-    ui.p.fill(stage::STAGE_CLIP, th().game("board_tray", rgb(8, 10, 16)));
-
     // The units' places this frame (STATUSFX1: and their status looks).
     let wall = tokens.wall_ms(now);
     for a in &mut tokens.anims {
@@ -685,34 +699,47 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     // FX1 4.1: passes 1-9 inside the board's clip, shifted by the camera (the clip stays put)
     // DIORAMA2 R4: the stage reaches into the panel's side gutters (its wings, faded), inside the panel's rim
     ui.p.clip(Some(stage::STAGE_CLIP));
+    // DIORAMA5 R6: no grid lines unless Show full grid is on (then faint at rest, stronger while planning); the cells
+    // that matter keep their own marks (the hover plate, the move tiles, the target plates)
+    let grid_alpha = if !cx.settings.v[super::BOARD_GRID].as_bool().unwrap_or(false) {
+        0
+    } else if planning {
+        tuning.grid_alpha_planning
+    } else {
+        tuning.grid_alpha.max(stage::FULL_GRID_ALPHA)
+    };
+    let gates = exit_sign(hold).0 == "EXIT";
+    let (tray, wing) = (th().game("board_tray", rgb(8, 10, 16)), th().game("battle_panel", PANEL));
+    // ENGINE-46 (FEEL-FIX1): the tray, wings, backdrop and ground (passes 1 and 2) are drawn once and put back while
+    // nothing they show changes (`floor_key`); the marks, arrows and units draw over them every frame
+    let key = floor_key(&cx.art, w, &s.def, (set, &look), (shift, grid_alpha, gates), (tray, wing));
+    FLOOR.with(|slot| {
+        ui.p.cached(&mut slot.borrow_mut(), key, stage::STAGE_CLIP, |p| {
+            let v0 = p.v;
+            // DIORAMA2 R4: the stage's tray is its clip inside the board panel (no rim of its own past the panel's frame)
+            p.fill(stage::STAGE_CLIP, tray);
+            p.shift(shift.0, shift.1);
+            stage::draw_wings(p, &mut cx.art, &w.grid, zset, &s.def.zone, &w.cat.zones, wing);
+            // HOOKS1 ZN3: a data zone row keys its own backdrop and gradient ground (a code zone ignores any row)
+            stage::draw_backdrop(p, &mut cx.art, &w.grid, &s.def.zone, &w.cat.zones);
+            stage::draw_ground(p, &mut cx.art, &w.grid, zset, grid_alpha);
+            // DIORAMA3 R3: the lanterns' pools and the vignette, under the marks and the units
+            let spots = stage::light_spots(&mut cx.art, set, &s.def.zone);
+            // DIORAMA5 R3: and the lamps among the cover and props (`stage.fx.json` `lights`)
+            // DECOR1: and the lamps among the encounter's decor
+            let lamps = stage::lamps_with(&mut cx.art, &w.grid, zset, &s.def.decor);
+            stage::draw_light(p, &spots, &lamps);
+            // DIORAMA5 R4: a plain exit's gate beyond the board's edge
+            if gates {
+                stage::draw_exit_gates(p, &mut cx.art, &w.grid.exits);
+            }
+            p.v = v0;
+        });
+    });
     ui.p.shift(shift.0, shift.1);
-    stage::draw_wings(&mut ui.p, &mut cx.art, &w.grid, zset, &s.def.zone, &w.cat.zones, th().game("battle_panel", PANEL));
     for pass in stage::passes() {
         match pass {
-            // HOOKS1 ZN3: a data zone row keys its own backdrop and gradient ground (a code zone ignores any row)
-            Pass::Backdrop => stage::draw_backdrop(&mut ui.p, &mut cx.art, &w.grid, &s.def.zone, &w.cat.zones),
-            Pass::Ground => {
-                // DIORAMA5 R6: no grid lines unless Show full grid is on (then faint at rest, stronger while planning);
-                // the cells that matter keep their own marks (the hover plate, the move tiles, the target plates)
-                let grid_alpha = if !cx.settings.v[super::BOARD_GRID].as_bool().unwrap_or(false) {
-                    0
-                } else if planning {
-                    tuning.grid_alpha_planning
-                } else {
-                    tuning.grid_alpha.max(stage::FULL_GRID_ALPHA)
-                };
-                stage::draw_ground(&mut ui.p, &mut cx.art, &w.grid, zset, grid_alpha);
-                // DIORAMA3 R3: the lanterns' pools and the vignette, under the marks and the units
-                let spots = stage::light_spots(&mut cx.art, set, &s.def.zone);
-                // DIORAMA5 R3: and the lamps among the cover and props (`stage.fx.json` `lights`)
-                // DECOR1: and the lamps among the encounter's decor
-                let lamps = stage::lamps_with(&mut cx.art, &w.grid, zset, &s.def.decor);
-                stage::draw_light(&mut ui.p, &spots, &lamps);
-                // DIORAMA5 R4: a plain exit's gate beyond the board's edge
-                if exit_sign(hold).0 == "EXIT" {
-                    stage::draw_exit_gates(&mut ui.p, &mut cx.art, &w.grid.exits);
-                }
-            }
+            Pass::Backdrop | Pass::Ground => {}
             Pass::Markers => {
                 // HOOKS1-UI slice 1: the ground hazards and the arena's struck cells, under the hover and the tells
                 draw_hook_marks(&mut ui.p, &mut cx.art, marks, &geo);

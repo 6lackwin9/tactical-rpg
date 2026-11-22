@@ -138,6 +138,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         return;
     };
     let w = &s.w;
+    // ENGINE-46 (FEEL-FIX1): the frame's forecasts over the battle (plates, foe card, strip, tips, marks) read the
+    // round, each member's plan and each tile once
+    let forecasts = emberwake_battle::intent::memo::scope(w, &s.resolver.scheduled, &s.plan);
     let planning = s.phase == Phase::Planning && !s.plan_confirmed;
     let sel = g.selected.filter(|u| w.allies.contains(u));
     // INPUT1 PB1-PB5: the playback aids of a timeline battle; PB2: the block the playback resolves
@@ -1480,6 +1483,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     }
 
     // TRANSITIONS1: the running beat over everything, its full-screen widget last (a click skips it)
+    drop(forecasts);
     g.draw_beat(&mut ui, cx, now);
     g.w = ui.widgets;
 }

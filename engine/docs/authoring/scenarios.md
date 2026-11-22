@@ -159,8 +159,9 @@ Each input gets: `to_state_ms` (arrival to its handler done), `to_frame_ms` (to 
 largest of `handler`, `wait` and `frame`). The step writes `feel_<name>.json` to the bundle and adds it under `perf` in
 `result.json` (`kind` `feel`): `to_state`, `to_present` and `frame_time` each as `count`, `p50`, `p95` and `worst`, every
 input, `flagged_inputs` (input-to-present over 100 ms) and `frames_over` (frames over 33 ms). `budget` takes `input_ms`
-(the worst input-to-present) and `frame_ms` (the worst frame); one over it fails the step. A refused input stops the step
-with its place.
+(the worst input-to-present) and `frame_ms` (the worst frame); one over it fails the step. In a dev build (the gate's) each
+budget counts 2.5 times (`FEEL_DEV_ALLOWANCE`, ENGINE-46): a dev build draws about twice as slow, so the gate catches a gross
+slip while the release run holds the real bar. A refused input stops the step with its place.
 
 With no window nothing is presented, so a frame is done once drawn; a window adds the copy to the GPU and the present (and
 vsync's wait). The same numbers come from a real window with `--feel` (or `feel=1`) on the game's command line, or the

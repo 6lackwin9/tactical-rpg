@@ -161,8 +161,64 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-88` (`PLAN-FIX2`) | Built in part (tools lane) | `develop` | PT-86, PT-87 (ghost claims), PT-88, PT-89, PT-91 fixed with tests, goldens unchanged; PT-85 and PT-87's foe start tiles not done (findings in the item). FB-479 |
 | `PR7-90` (`FORECAST-MOVE1`) | Built (tools lane) | `develop` | A hit forecast reads where the target stands in the block the hit lands, after every move booked before it (walks through friends, tiles freed earlier, foes stepping in, re-paths); three logged cases as tests, goldens unchanged. FB-481 |
 | `ENGINE-45` (`FEEL-PROBE1`) | Built (tools lane) | `develop` | `aegis_ui::feel` times each input (arrival, handler done, frame start, presented) and every frame; `--feel` or the setting `feel` shows an overlay and writes `feel.log`; scenario step `feel` (p50, p95, worst; in the gate on `hello_walk`); report: battle planning frames 36 to 80 ms and two clicks over 100 ms, the rest under. FB-483 |
+| `ENGINE-46` (`FEEL-FIX1`) | Built (tools lane) | `develop` | Stage floor layer cache (`Painter::cached`), panels composed once, per-frame forecast memo (`intent::memo`), Settings warmed before the first frame (`Context::warm`); `feel_battle` and `feel_settings` budgets (100 ms input, 33 ms frame; 2.5 x in dev) pass; planning frames 17 / 28 ms p50 / worst (were 38 / 80), Settings first draw 13 ms (was 57), `strip.block1` 55 to 59 ms (was 113; the guest ghost re-sent each click is reported). FB-485 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-485: ENGINE-46 FEEL-FIX1 built; planning frames under 33 ms, Settings warmed, a stage floor cache
+
+- **Status**: built (tools lane), `develop`. Engine (`aegis_ui`, `aegis_cli`), kit (`rpgkit_battle`) and game GUI code
+  (`emberwake_gui`) plus two game scenarios; no data. **No behaviour change**: every cache gives the pixels and numbers
+  the uncached path gives. **Every golden unchanged**; `tools/fc.sh shots diff` (every scenario, base `b4ad6a83`) is
+  clean: 129 shots, the one difference the Scene Runner's data folder path (the base ran from a scratch worktree).
+- **Spec**: `docs/READY.md` row `ENGINE-46` (`FEEL-FIX1`), the follow-ups of `FB-483`.
+- **What landed**:
+  - **Planning board draw cache** (part 1). `aegis_ui::painter::Snapshot` and `Painter::cached` (new, engine): a layer drawn
+    once and put back (`Canvas::copy_rgba` / `put_rgba`) while its key and the view stay the same. The battle Stage's floor
+    (tray, wings, backdrop, ground, lights, exit gates: passes 1 and 2) is one; its key hashes the art generation, the
+    board's tiles and exits, the zone, set, look and decor, the camera shift, the grid lines and the colours. Marks, ghosts,
+    hover and animation draw over it every frame. Panels: a `nine` panel at any scale is composed once and blitted
+    (`Canvas::blend_rgba`, a row at a time), its cache bounded by count and bytes (`NINE_CACHE_MAX` 64, `NINE_CACHE_BYTES`
+    64 MiB, replacing `REDUCED_MAX` 8).
+  - **Block forecast cache** (part 2). `rpgkit_battle::intent::memo` (new, kit): inside a `memo::scope` over one world,
+    round and plan, `planned_schedule`, `Plan::compile` per member and each forecast tile read are worked out once (they
+    were recomputed about 1200 times a frame). The battle screen's draw opens a scope per frame. Caching applies only to the
+    exact world, round and plan the scope borrows, so a changed plan always reads fresh.
+  - **Settings warm-up** (part 3). `Context::warm` (new, engine, default none): screens the shell draws once, unseen, before
+    the first frame (`Shell::warm`; no tick, no frame counted, audits paused, the canvas cleared after). Emberwake's list
+    is the Settings screen and popup on each of the five tabs (`SettingsScreen::on_tab`): their panels, art, font face and
+    glyphs are cached before the player opens them.
+  - **Budgets**: `games/emberwake/scenarios/feel_battle.json` (cages_start: the plan picks, Tab, Self and the strip block,
+    then a round resolving) and `feel_settings.json` (open, five tabs, back), each `feel` step with `budget` `input_ms` 100
+    and `frame_ms` 33. A dev build (the gate's) judges each budget at 2.5 times (`aegis_cli::scenario::FEEL_DEV_ALLOWANCE`,
+    `feel_misses`); the release run holds the real bar (`tools/fc.sh scenario feel_battle profile=release`). Both pass in
+    release and in the gate. Doc: `engine/docs/authoring/scenarios.md` "Input times"; rows in the scenarios README.
+  - Tests: `aegis_cli/tests/scenario.rs` `a_feel_budget_stretches_in_a_dev_build`; `aegis_ui/tests/theme.rs` (the panel
+    cache stays bounded, now at `NINE_CACHE_MAX`). The goldens and the shot runs check that nothing drawn or forecast moved.
+- **Before and after** (release build, no window, 1280 x 720, this cloud container; `/mnt/project-files/build-tools/feel_fix/`):
+
+  | Run | Before (FB-483) | After |
+  | --- | --- | --- |
+  | Battle planning frames, p50 / worst | 37.7 / 79.9 ms, 37 of 44 over 33 ms | 17 to 18 / 27 to 28 ms, 0 over |
+  | Battle resolve frames, p50 / worst | 20.1 / 34.3 ms | 13.5 to 14.3 / 18.6 to 21.6 ms |
+  | `click strip.block1`, input to present | 112.7 ms | 55 to 59 ms |
+  | First `key tab` in the fight | 84 ms | 61 to 64 ms |
+  | Settings first draw, Controls tab first draw | 50 to 57 ms | 9 to 13 ms |
+  | Battle plan, worst input to present | 112.7 ms | 58.5 ms |
+
+- **Not under 50 ms: `strip.block1` (55 to 59 ms), for Design.** The click's handler takes about 37 ms, nearly all in
+  re-drafting the ghosts of the members after the one changed (`reghost_after`: each later member's tactic preset planned
+  on a copy, `ai::plan_party_intents`, 2 to 9 ms each). About 21 ms of it is one finding: **the guest (fifth member) on
+  cages_start is re-sent on every plan click**: its drafted plan never equals the plan it was given, because the preset
+  planned from plan A gives plan B and from B gives A. Its ghost rows and round target (a tile and Myself) alternate on each
+  click; a player would see the guest's ghost flip. Making the preset draft settle (draft from the member's plan cleared,
+  or keep the last draft while its inputs hold) would cut the click to about 35 ms but changes what the guest plans, so it
+  is not in this row (behaviour unchanged here). The rest of the AI's cost is `Plan::blocked_cells` working out every
+  ally's first move again for each route it tries (`ally_moves`, over half of a draft); a cache there would need the plan's
+  steps to stop fixing their tiles while compiling (`PlanStep::cell`). Both are proposed as rows if Design wants them.
+- **Docs delta**: `engine/README.md` "Feel probe (FEEL-PROBE1)": add "`Context::warm` draws a game's listed screens once
+  before the first frame; `Painter::cached` keeps a layer drawn once (ENGINE-46); a `feel` budget counts 2.5 times in a dev
+  build". `games/emberwake/docs/GAME_BRIEF.md`: none.
 
 ### FB-483: ENGINE-45 FEEL-PROBE1 built; input and frame times, and where the battle's time goes
 

@@ -142,7 +142,30 @@ impl<G: Context> Shell<G> {
         shell.cx.notice.extend(icon_notice);
         shell.cx.notice.extend(window_notices);
         hold_declared_sizes(&mut shell.cx.settings, &options.window_sizes, &offered);
+        shell.warm();
         shell
+    }
+
+    /// ENGINE-46 (FEEL-FIX1): draws the game's warm list (`Context::warm`) once, unseen, before the first frame, so the
+    /// art, panel and glyph caches a screen's first draw would fill are filled already. The screens are dropped and the
+    /// canvas cleared; nothing else changes (no tick, no frame counted, the audits paused).
+    fn warm(&mut self) {
+        let screens = G::warm(&mut self.cx);
+        if screens.is_empty() {
+            return;
+        }
+        let (nav, notices) = (self.cx.nav.len(), self.cx.notice.len());
+        let paused = (self.gfx.fonts.audit.take(), self.gfx.fonts.layout.take());
+        self.gfx.fonts.sync(&th());
+        for mut s in screens {
+            self.gfx.view = self.view_of(s.grid());
+            s.draw(&mut self.cx, &mut self.gfx, (-1, -1), false);
+        }
+        (self.gfx.fonts.audit, self.gfx.fonts.layout) = paused;
+        self.gfx.canvas.clip = None;
+        self.gfx.canvas.clear(th().bg);
+        self.cx.nav.truncate(nav);
+        self.cx.notice.truncate(notices);
     }
 
     /// ENGINE-45: ms on the feel probe's wall clock.

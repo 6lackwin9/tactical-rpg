@@ -320,6 +320,64 @@ impl Canvas {
         Rect::new(x0, y0, x1 - x0, y1 - y0)
     }
 
+    /// ENGINE-46 (FEEL-FIX1): `blend` of each pixel of `px` (RGBA rows, `w` x `h`) at (`x`, `y`) on, a row at a time
+    /// over the part that can be drawn (`visible`): the same pixels as a `blend` per pixel, without its checks per pixel.
+    pub fn blend_rgba(&mut self, x: i32, y: i32, w: i32, h: i32, px: &[u8]) {
+        let v = self.visible(Rect::new(x, y, w, h));
+        if v.w <= 0 || v.h <= 0 || px.len() < (w.max(0) * h.max(0) * 4) as usize {
+            return;
+        }
+        for yy in v.y..v.y + v.h {
+            let row = ((yy - y) * w) as usize;
+            let mut xx = v.x;
+            while xx < v.x + v.w {
+                let i = (row + (xx - x) as usize) * 4;
+                // a run of opaque pixels is copied as it is (what `put` does with each of them)
+                if px[i + 3] == 255 {
+                    let mut end = xx + 1;
+                    while end < v.x + v.w && px[(row + (end - x) as usize) * 4 + 3] == 255 {
+                        end += 1;
+                    }
+                    let (from, to) = (i, ((yy * self.w + xx) * 4) as usize);
+                    let n = ((end - xx) * 4) as usize;
+                    self.px[to..to + n].copy_from_slice(&px[from..from + n]);
+                    xx = end;
+                    continue;
+                }
+                self.put(xx, yy, [px[i], px[i + 1], px[i + 2], px[i + 3]]);
+                xx += 1;
+            }
+        }
+    }
+
+    /// ENGINE-46 (FEEL-FIX1): the pixels of `r` (in px, cut to what can be drawn, `visible`) as RGBA rows, with the rect
+    /// they cover; `put_rgba` puts them back as they were.
+    pub fn copy_rgba(&self, r: Rect) -> (Rect, Vec<u8>) {
+        let v = self.visible(r);
+        if v.w <= 0 || v.h <= 0 {
+            return (Rect::new(v.x, v.y, 0, 0), Vec::new());
+        }
+        let mut out = Vec::with_capacity((v.w * v.h * 4) as usize);
+        for y in v.y..v.y + v.h {
+            let at = ((y * self.w + v.x) * 4) as usize;
+            out.extend_from_slice(&self.px[at..at + (v.w * 4) as usize]);
+        }
+        (v, out)
+    }
+
+    /// Puts `px` (RGBA rows of `r`, as `copy_rgba` gave them) back as they are, no blending; nothing when they do not fit
+    /// the canvas.
+    pub fn put_rgba(&mut self, r: Rect, px: &[u8]) {
+        if r.w <= 0 || r.h <= 0 || r.x < 0 || r.y < 0 || r.x + r.w > self.w || r.y + r.h > self.h || px.len() != (r.w * r.h * 4) as usize {
+            return;
+        }
+        let n = (r.w * 4) as usize;
+        for (k, row) in px.chunks_exact(n).enumerate() {
+            let at = (((r.y + k as i32) * self.w + r.x) * 4) as usize;
+            self.px[at..at + n].copy_from_slice(row);
+        }
+    }
+
     /// `blend` over `r`, a row at a time (the same pixels; VISCLAR1-C: a whole frame's panels spent most of it here).
     pub fn fill(&mut self, r: Rect, c: Rgba) {
         let v = self.visible(r);

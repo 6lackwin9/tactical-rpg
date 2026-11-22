@@ -448,10 +448,10 @@ fn an_averaged_frame_is_cached_and_bounded() {
     p.nine(&img, &nine, r);
     p.nine(&img, &nine, r);
     assert_eq!(aegis_ui::painter::nine_reductions().0, before + 1, "once for one size");
-    for w in 40..80 {
+    for w in 40..(40 + aegis_ui::painter::NINE_CACHE_MAX as i32 + 20) {
         p.nine(&img, &nine, Rect::new(0, 0, w, 30));
     }
-    assert!(aegis_ui::painter::nine_reductions().1 <= 8, "bounded");
+    assert!(aegis_ui::painter::nine_reductions().1 <= aegis_ui::painter::NINE_CACHE_MAX, "bounded");
 }
 
 /// One physical size at two view scales is two entries: the corners differ in size (6 px at scale 2, 3 at scale 1).
