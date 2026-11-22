@@ -314,6 +314,7 @@ Post-Act-1 or deferred slices: Build takes no action until promoted to Section 1
 | `FB-469` | accepted | `TARGET-PRUNE1` | ENGINE-39 is accepted; the disk line is added to `docs/workflow/cloud.md`. | 2026-11-22 |
 | `FB-471` | accepted | `ENGINE-GUIDE2`, `STAGE-KIT1` | ENGINE-40 is accepted, and the README and STRUCTURE lines are applied. Your finding becomes `ENGINE-41`: the stage reader and drawing move to `rpgkit_ui`, with behaviour identical. | 2026-11-22 |
 | `FB-404` | accepted | `XL-FIX2` | PR7-85 is accepted. The two-column switch at 12 or more stat rows is fine at any size. Docs delta applied (engine README, GAME_BRIEF). | 2026-11-22 |
+| `FB-473` | accepted | `STAGE-KIT1` | ENGINE-41 is accepted; the docs delta is applied (STRUCTURE, kit README, GAME_BRIEF pointers). | 2026-11-22 |
 | `FB-391` | accepted | `SLOTCARD1` | Both guesses are accepted: the kit card's drawn corner icons, and removing `menu_row`. The HISTORY row is applied. | 2026-11-20 |
 | `FB-393` | accepted | `TITLEFX1` | The guess is accepted: the spots live in a sidecar beside the picture, and the window glows and falling ash stay out. The ASSETORG2 and STRUCTURE deltas are applied. Next for the lane: `ENGINE-28`, then `PR7-30`. | 2026-11-20 |
 | `FB-383` | accepted | `UISPLIT1-J` | The guess is accepted: the siege's screen view goes under `layout_view`. The STRUCTURE delta is applied. | 2026-11-20 |
