@@ -415,3 +415,25 @@ fn a_retry_after_a_lost_try_draws_a_fresh_seed() {
     assert_eq!(battle::retries(&gs, "w:enc_loud"), 2, "a win counts nothing");
     assert_eq!(battle::retry_seed(first, 0), first, "no lost try: the encounter's seed");
 }
+
+/// PR7-82 (RETRY-SAVE-FIX1): a lost fight's retry count passes the save's check, survives a save and a load, and the
+/// loaded save rolls the same retry seed; a malformed retry key is still refused.
+#[test]
+fn a_lost_fight_saves_and_reloads_with_its_retry_count() {
+    let d = data();
+    let mut gs = state(&d);
+    let fight = json::dict(&json!({"source": "explore", "encounter": "w:enc_loud"})).clone();
+    let first = battle::begin_world(&d, &mut gs, &fight).expect("the fight starts").session.def.rng_seed;
+    battle::finish_world(&d, &mut gs, "explore", &fight, "lost", None);
+    assert_eq!(battle::retries(&gs, "w:enc_loud"), 1);
+    let errors = gs.validate(&d);
+    assert!(errors.iter().all(|e| !e.starts_with("rolls")), "the retry count saves: {errors:?}");
+    let saved = gs.to_value();
+    let mut back = GameState::from_dict(&d, saved.as_object().expect("a save is an object"));
+    assert_eq!(battle::retries(&back, "w:enc_loud"), 1, "the count comes back");
+    let retry = battle::begin_world(&d, &mut back, &fight).expect("the retry starts").session.def.rng_seed;
+    assert_eq!(retry, battle::retry_seed(first, 1), "the loaded save rolls the same retry");
+    for (key, ok) in [("retry:w:enc_loud", true), ("retry:enc_loud", true), ("loot_rolls", true), ("retry:", false), ("retry:W:x", false), ("retry:a:b:c", false), ("other:w:x", false)] {
+        assert_eq!(rpgkit_world::state::roll_key_ok(key), ok, "{key}");
+    }
+}

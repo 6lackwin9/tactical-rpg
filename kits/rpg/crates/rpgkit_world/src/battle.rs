@@ -1014,9 +1014,11 @@ fn default_tally(d: &Data, gs: &GameState, encounter_qid: &str, outcome: &str) -
 /// party side first, then the rewards, then its clock tick (`apply`). The battle screen and the debug fight popup both
 /// settle through it.
 pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, outcome: &str, tally: Option<&Tally>) -> Dict {
-    // PR7-75 (PT-41): a try that was not won counts toward the encounter's next seed
-    if outcome != rpgkit_battle::encounter::WON {
-        let key = retry_key(&json::s(fight, "encounter"));
+    // PR7-75 (PT-41): a try that was not won counts toward the encounter's next seed (PR7-82: a fight with no encounter
+    // ref has no seed to vary and writes no key the save would refuse)
+    let enc_ref = json::s(fight, "encounter");
+    if outcome != rpgkit_battle::encounter::WON && !enc_ref.is_empty() {
+        let key = retry_key(&enc_ref);
         let n = retries_of(gs, &key);
         gs.rolls.insert(key, int(n + 1));
     }

@@ -137,8 +137,25 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-77` (`DIORAMA5`) slice 0 | Built (tools lane) | `develop` | The content check and the layered-tree test accept ground sheets, accent decals, lip art and the exit path and gate props; R1 to R5 follow. FB-447 |
 | `PR7-77` (`DIORAMA5`) R1 to R5 | Built (tools lane) | `develop` | The battle ground composed by the region composer from the sheets, hashed variant picks, accent decals, lip art, additive lamp light with `lights`, the exit path decal and gate, rubble on the zone floor. FB-449 |
 | `PR7-77` (`DIORAMA5`) R6 | Built (tools lane) | `develop` | No grid lines at rest, the "Show full grid" setting (off by default), coherent 2 to 4 cell blobs, no edge pieces over the composed ground. FB-451 |
+| `PR7-82` (`RETRY-SAVE-FIX1`) | Built (tools lane) | `develop` | A lost fight's retry count (`retry:<encounter ref>` in the save's `rolls`) passes the save check, so the autosave after a loss works again; the retry seed is unchanged. FB-453 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-453: PR7-82 RETRY-SAVE-FIX1 built; the autosave after a lost fight works again
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `00f3` `PR7-82` (`FB-392` PT-66).
+- **Cause**: `PR7-75` keeps an encounter's lost tries in `gs.rolls` under `retry:<encounter ref>` (for example
+  `retry:sunk_ward:enc_evt_03`), but the save's check took only a plain stream id as a `rolls` key, so every save after
+  a lost or fled fight was refused.
+- **What landed** (kit, `rpgkit_world`):
+  - `state::roll_key_ok`: a `rolls` key is a stream id or `retry:<ref>`, the ref a qualified id `world:id` or a plain
+    id; the check uses it, and its message names both forms. The key and the count stay as they were, so
+    `retry_seed` gives the same seed for the same count, and an old save (with no retry keys) loads as before.
+  - A fight with no encounter ref no longer writes a `retry:` key (it has no seed to vary, and the key was invalid).
+- **Test**: `rpgkit_world/tests/world_fight.rs` `a_lost_fight_saves_and_reloads_with_its_retry_count` (a loss
+  validates, saves, reloads with its count and rolls the same retry seed; malformed keys still refused).
+- **Docs delta**: none (no README names the `rolls` keys).
 
 ### FB-451: PR7-77 DIORAMA5 R6 built; no grid at rest, coherent blobs, no pieces over the blend
 

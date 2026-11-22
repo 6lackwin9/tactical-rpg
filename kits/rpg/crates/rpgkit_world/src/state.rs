@@ -1999,6 +1999,12 @@ pub fn flag_value_ok(v: &Value) -> bool {
 }
 
 /// QuestRules.blob_key_ok: exactly one ':' between two ids.
+/// PR7-82 (RETRY-SAVE-FIX1): a `rolls` key: a stream id, or an encounter's lost-try count `retry:<ref>`
+/// (`battle::retry_key`; the ref a qualified id world:id or a plain id). PR7-75 wrote the second and the save refused it.
+pub fn roll_key_ok(key: &str) -> bool {
+    json::id_ok(key) || key.strip_prefix(crate::battle::RETRY_STREAM).and_then(|r| r.strip_prefix(':')).is_some_and(|r| json::id_ok(r) || qid_ok(r))
+}
+
 pub fn qid_ok(key: &str) -> bool {
     let parts: Vec<&str> = key.split(':').collect();
     parts.len() == 2 && json::id_ok(parts[0]) && json::id_ok(parts[1])
@@ -2263,8 +2269,8 @@ impl GameState {
             errors.push(format!("rng_seed must be 0..{SEED_MAX}."));
         }
         for (k, v) in &self.rolls {
-            if !json::id_ok(k) || !json::is_int(v) || json::to_int(v) < 0 {
-                errors.push(format!("rolls: '{k}' must be a stream id with a count >= 0."));
+            if !roll_key_ok(k) || !json::is_int(v) || json::to_int(v) < 0 {
+                errors.push(format!("rolls: '{k}' must be a stream id (or retry:<encounter ref>) with a count >= 0."));
             }
         }
         for (k, v) in &self.shops {
