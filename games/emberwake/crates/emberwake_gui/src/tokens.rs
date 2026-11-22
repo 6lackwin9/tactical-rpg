@@ -39,6 +39,11 @@ pub fn accent() -> Rgba {
     th().focus
 }
 
+/// STYLE-PASS1B (`PR7-48`, FB-366): the ring on a click-to-walk's destination tile: the one amber (`accent`).
+pub fn walk_ring() -> Rgba {
+    accent()
+}
+
 /// PR7-36 (ART-05): the icon files to try for item `id` (its family's folder, then the type's and any base).
 pub fn item_icons(d: &emberwake_world::Data, id: &str) -> Vec<String> {
     let item = d.entry("items", id);

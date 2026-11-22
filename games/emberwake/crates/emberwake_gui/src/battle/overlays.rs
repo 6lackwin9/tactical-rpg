@@ -122,7 +122,7 @@ pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 23] = [
     ("pushes", "Push forecasts", "Where the selected hero's planned pushes and pulls would move their targets, and what they would collide with.", true),
     // ENCOUNTER2-U: a hold escape's marks (ENCOUNTER2 H7)
     ("hold", "Hold tiles", "The tiles a hold escape's holder keeps, with the holder's name on their card.", true),
-    ("gate", "Gate state", "A hold escape's exits read SHUT (red) until the holder stands on a hold tile, then OPEN (green).", true),
+    ("gate", "Gate state", "A hold escape's exits read SHUT (oxblood) until the holder stands on a hold tile, then OPEN (amber).", true),
     // INPUT1 PB1: the playback's impact tracers
     ("tracers", "Impact tracers", "A short line from each actor to what its action hit, during playback.", true),
 ];

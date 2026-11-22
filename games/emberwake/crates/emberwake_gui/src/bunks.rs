@@ -748,6 +748,10 @@ impl Screen<GameCx> for BunkCard {
     fn overlay(&self) -> bool {
         true
     }
+    /// STYLE-PASS1B (`PR7-48` (2)): a panel-shell screen; a panel opened over it takes its place until it closes.
+    fn panel(&self) -> bool {
+        true
+    }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let d = cx.data.clone();
         let gs = cx.gs().clone();
@@ -1540,6 +1544,38 @@ pub(crate) mod tests {
             assert!(map.svc.talking(), "{id}: one click talks on arrival (at {:?})", cx.gs().position);
             map.svc.end(&mut cx);
         }
+    }
+
+    /// STYLE-PASS1B (`PR7-48`, FB-366): a walk-and-talk in the hub rings the NPC's own tile in amber while the party
+    /// walks there (`walk_ring` beside `walk_to`) and the ring is gone once the talk opens on arrival.
+    #[test]
+    fn style_pass1b_a_walk_and_talk_rings_the_npcs_tile_until_arrival() {
+        let (mut cx, _) = hub_cx(false);
+        let mut g = gfx_720();
+        let d = cx.data.clone();
+        let loc = explore::location(&d, cx.gs()).clone();
+        let t = explore::template_of(&d, &loc).clone();
+        let steps = cx.gs().explore_int("loc_steps");
+        let npc = explore::markers_of(&loc).into_iter().find(|m| json::s(m, "kind") == "npc" && explore::presence(&d, cx.gs(), &json::s(&loc, "_qid"), m) == "present").expect("a hub NPC");
+        let (id, tile) = (json::s(&npc, "id"), explore::marker_pos(&t, &npc, steps));
+        cx.gs_mut().position = ROOM;
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let mut now = Instant::now() + Duration::from_secs(1);
+        map.tick_at(&mut cx, now);
+        assert_eq!(map.state(&cx)["walk_ring"], Value::Null);
+        map.click_id(&mut cx, &format!("marker.{id}")).unwrap();
+        let st = map.state(&cx);
+        assert_eq!((st["walk_to"].clone(), st["walk_ring"].clone()), (json!(id), json!([tile.0, tile.1])), "the NPC's tile");
+        let mut ticks = 0;
+        while !map.svc.talking() && ticks < 400 {
+            now += Duration::from_millis(500);
+            map.tick_at(&mut cx, now);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            ticks += 1;
+        }
+        assert!(map.svc.talking(), "the talk opens on arrival");
+        assert_eq!(map.state(&cx)["walk_ring"], Value::Null, "arrived: no ring");
     }
 
     /// FOOTLOCKER1 (3): the stash chest left the hub map: no point there opens the stash, no chest marker is drawn (the

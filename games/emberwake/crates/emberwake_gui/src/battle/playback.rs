@@ -91,7 +91,7 @@ impl BattleScreen {
                         fell.push(i);
                     }
                 } else if new > old {
-                    floats.push((i, format!("+{}", new - old), t.heal_color));
+                    floats.push((i, format!("+{}", new - old), crate::tokens::moss()));
                 }
             }
         }
@@ -119,7 +119,7 @@ impl BattleScreen {
         }
         self.phase_shakes(cx);
         // INPUT1 PB1: the popped action's impact tracers (timeline battles): with its impact, else at once
-        let traces = self.new_traces(cx);
+        let traces = self.new_traces();
         // PB3, PB5: a step that finished its block may hold the playback at the block's end
         self.note_block_end();
         let pending = if skip || self.req_cmd != "step" { None } else { self.popped_impact(t.walk_ms) };
@@ -701,7 +701,7 @@ impl BattleScreen {
 
     /// PB1: the tracers of the action the last step popped (once each; none outside timeline battles or for any other
     /// request).
-    fn new_traces(&mut self, cx: &Cx) -> Vec<fx::Trace> {
+    fn new_traces(&mut self) -> Vec<fx::Trace> {
         let Some(s) = self.host.session.as_ref() else { return Vec::new() };
         let popped = s.last_popped;
         let fresh = popped.filter(|p| self.req_cmd == "step" && Some(*p) != self.traced && p.0 == s.current_round);
@@ -709,7 +709,7 @@ impl BattleScreen {
         let Some((_, _, idx)) = fresh.filter(|_| self.playback_aids()) else { return Vec::new() };
         let tokens = &self.tokens;
         let at = |u: usize| s.w.grid.pos(u).or(tokens.anims.get(u).and_then(|a| a.seen.pos));
-        traces_of(s, idx, &at, cx.tuning.value.heal_color)
+        traces_of(s, idx, &at, crate::tokens::moss())
     }
 
     /// PB1: the live tracers as the agent link reads them (`overlay.tracers`: from, to, alpha now, dashed); none with

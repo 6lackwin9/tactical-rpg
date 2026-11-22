@@ -802,6 +802,10 @@ impl Screen<GameCx> for Character {
     fn overlay(&self) -> bool {
         true
     }
+    /// STYLE-PASS1B (`PR7-48` (2)): a panel-shell screen; a panel opened over it takes its place until it closes.
+    fn panel(&self) -> bool {
+        true
+    }
 
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         self.take_answers(cx);

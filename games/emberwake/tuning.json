@@ -24,7 +24,6 @@
     "tremor": {"px": 2, "ms": 1400, "axis": "y", "envelope": "swell", "step_ms": 45},
     "quake": {"px": 3, "ms": 900, "axis": "both", "envelope": "ease_out", "step_ms": 35}
   },
-  "heal_color": [96, 220, 120],
   "damage_color": [255, 96, 80],
   "crit_color": [255, 210, 60],
   "intent_arrows": true,

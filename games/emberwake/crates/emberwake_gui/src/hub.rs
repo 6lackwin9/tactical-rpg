@@ -200,6 +200,10 @@ impl Screen<GameCx> for Hub {
     fn overlay(&self) -> bool {
         true
     }
+    /// STYLE-PASS1B (`PR7-48` (2)): a panel-shell screen; a panel opened over it takes its place until it closes.
+    fn panel(&self) -> bool {
+        true
+    }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<HubAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), th().game("popup_veil", rgba(0, 0, 0, 110)));
@@ -360,6 +364,10 @@ impl Screen<GameCx> for Journal {
         "journal"
     }
     fn overlay(&self) -> bool {
+        true
+    }
+    /// STYLE-PASS1B (`PR7-48` (2)): a panel-shell screen; a panel opened over it takes its place until it closes.
+    fn panel(&self) -> bool {
         true
     }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
@@ -866,6 +874,10 @@ impl Screen<GameCx> for Results {
     fn overlay(&self) -> bool {
         true
     }
+    /// STYLE-PASS1B (`PR7-48` (2)): a panel-shell screen; a panel opened over it takes its place until it closes.
+    fn panel(&self) -> bool {
+        true
+    }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let d = cx.data.clone();
         let gs = cx.gs().clone();
@@ -1300,6 +1312,26 @@ mod tests {
         let mark = hub.w.iter().find(|w| w.id == format!("hub.wounded.{id}")).expect("the mark's hover");
         assert!(mark.tip.iter().any(|(l, _)| l.contains(&format!("{cut} of {full} max HP"))), "{:?}", mark.tip);
         assert_clean(&mut hub, &mut cx, "six members, bunks 6, one wounded");
+    }
+
+    /// STYLE-PASS1B (`PR7-48` (2), never stacked): the game menu's Party opens the Character window in the menu's place:
+    /// over the map only the Character window draws, the menu stays in the stack and Back shows it again. Settings takes
+    /// its place the same way.
+    #[test]
+    fn the_game_menu_then_party_shows_one_panel_and_back_returns_to_the_menu() {
+        let mut cx = party_of(2);
+        let mut stack: Vec<Box<dyn Screen<GameCx>>> = vec![Box::new(crate::menus::MainMenu::default()), Box::new(Hub::default())];
+        assert_eq!(aegis_ui::screen::drawn_screens(&stack), [0, 1]);
+        for (act, id) in [(HubAct::Party, "character"), (HubAct::Settings, "settings")] {
+            cx.nav.clear();
+            Hub::default().act(&mut cx, act);
+            let Some(Nav::Push(opened)) = cx.nav.pop() else { panic!("{id}: a screen opens") };
+            assert_eq!((opened.id(), opened.overlay(), opened.panel()), (id, true, true));
+            stack.push(opened);
+            assert_eq!(aegis_ui::screen::drawn_screens(&stack), [0, 2], "{id}: one panel over the map");
+            stack.pop();
+            assert_eq!(aegis_ui::screen::drawn_screens(&stack), [0, 1], "{id}: Back returns to the game menu");
+        }
     }
 
     /// ROSTER1-U on the results: after the stay-behind lines, a line per departure (its life), the keepsake its record

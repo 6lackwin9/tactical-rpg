@@ -110,6 +110,9 @@ pub struct RegionMap {
     pub(crate) lore: Option<(String, String)>,
     walk: Vec<Pos>,
     walk_target: Option<String>,
+    /// STYLE-PASS1B (`PR7-48`, FB-366): the tile a click-to-walk heads for (a marker's own tile for a walk-and-talk);
+    /// its amber ring shows while the walk lasts (`walk_ring`).
+    walk_dest: Option<Pos>,
     next_walk: Instant,
     /// WALK2, VIEWKEYS1: the time between steps, read from the settings each frame.
     step: mapview::WalkStep,
@@ -548,6 +551,7 @@ impl RegionMap {
             lore: None,
             walk: Vec::new(),
             walk_target: None,
+            walk_dest: None,
             next_walk: Instant::now(),
             step: mapview::WalkStep::of(&cx.settings.v, cx.held.shift),
             hold: false,
@@ -830,6 +834,12 @@ impl RegionMap {
         }
     }
 
+    /// STYLE-PASS1B (`PR7-48`, FB-366): the tile of the click-to-walk under way, ringed in amber until the walk arrives,
+    /// stops or a new order replaces it (none for a key step or a walk already over).
+    fn walk_ring(&self) -> Option<Pos> {
+        self.walk_dest.filter(|_| !self.walk.is_empty())
+    }
+
     /// Whether the leader walks at the clock's now: on a walked path, or within a step and `WALK_LINGER_MS` of the last step
     /// (that step's own time: Shift pressed during it must not end it early, TURNFEEL1).
     fn moving(&self) -> bool {
@@ -987,6 +997,7 @@ impl RegionMap {
                 Some(path) => {
                     self.walk = path;
                     self.walk_target = Some(id.to_string());
+                    self.walk_dest = Some(at);
                 }
                 None => cx.log("You can't get there."),
             }
@@ -1003,6 +1014,7 @@ impl RegionMap {
             Some(path) if !path.is_empty() => {
                 self.walk = path;
                 self.walk_target = if solid { Some(id.to_string()) } else { None };
+                self.walk_dest = Some(at);
             }
             _ => cx.log("You can't get there."),
         }
@@ -1021,6 +1033,7 @@ impl RegionMap {
                     Some(path) => {
                         self.walk = path;
                         self.walk_target = None;
+                        self.walk_dest = Some((tx, ty));
                     }
                     None => cx.log("You can't get there."),
                 }
@@ -1497,6 +1510,11 @@ impl Screen<GameCx> for RegionMap {
                     }
                 }
             }
+            // STYLE-PASS1B (`PR7-48`, FB-366): the click-to-walk's destination, a small amber ring on the floor under
+            // whatever stands there (static: no Reduce motion variant)
+            if let Some(dest) = self.walk_ring() {
+                draw_walk_ring(&mut ui.p, geo.cell(dest.0 as i32, dest.1 as i32));
+            }
             // the sorted pass (PROPS1 4.4): standing props, markers and the party back to front by their feet (the
             // sprites stand on their tiles, so lower rows cover upper ones, spec PLAYUI1 2.4)
             // REGIONVIEW1: the party's cell where it is drawn, and the view that puts it on its own physical px
@@ -1892,6 +1910,8 @@ impl Screen<GameCx> for RegionMap {
             "walking": !self.walk.is_empty(),
             // BUNKS-FIX1 (`PR7-46` (3)): the marker the walk acts on when it arrives (a talk, a point; "" none)
             "walk_to": self.walk_target.clone().unwrap_or_default(),
+            // STYLE-PASS1B (`PR7-48`): the tile the walk's amber ring marks (null: none)
+            "walk_ring": self.walk_ring().map(|p| json!([p.0, p.1])),
             "log": cx.log.iter().rev().take(8).rev().collect::<Vec<_>>(),
             "dialogue": svc["dialogue"], "turn_in": svc["turn_in"],
             "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
@@ -3255,6 +3275,22 @@ fn glyph_rows(g: MapGlyph) -> [&'static str; 8] {
         MapGlyph::Look => ["........", "...##...", "..#..#..", ".#.##.#.", ".#.##.#.", "..#..#..", "...##...", "........"],
     }
 }
+
+/// STYLE-PASS1B (`PR7-48`, FB-366): the walk destination's ring in cell `r`: a flat amber ellipse on the floor where a
+/// sprite's feet stand (the lower part of the cell, wider than a foot shadow so it shows around one), two strokes thick
+/// (the outer full, the inner softer).
+pub(crate) fn draw_walk_ring(p: &mut aegis_ui::painter::Painter, r: Rect) {
+    let col = crate::tokens::walk_ring();
+    let (w, h) = (r.w as f32, r.h as f32);
+    let (cx, cy) = (r.x as f32 + w / 2.0, r.y as f32 + h * WALK_RING.0);
+    let (rx, ry) = (w * WALK_RING.1, h * WALK_RING.2);
+    p.ellipse_ring(cx, cy, rx, ry, col);
+    p.ellipse_ring(cx, cy, rx - 1.0, (ry - 1.0).max(1.0), rgba(col[0], col[1], col[2], 150));
+}
+
+/// The walk ring as shares of the cell (STYLE-PASS1B): its centre's height from the cell's top, its half width and its
+/// half height.
+pub(crate) const WALK_RING: (f32, f32, f32) = (0.75, 0.48, 0.22);
 
 /// Draws glyph `g` in `col` on a dark plate filling `r` (a marker icon's rect), its cells whole logical px.
 pub(crate) fn draw_map_glyph(p: &mut aegis_ui::painter::Painter, r: Rect, g: MapGlyph, col: Rgba) {
@@ -5575,6 +5611,69 @@ mod view_tests {
             let pressed = map.frame_at.expect("the frame's clock");
             assert_eq!(cx.gs().position, (at.0 + 3, at.1));
             assert_eq!(map.next_walk, pressed + ms(run / speed), "the held key's run at {speed}x");
+        }
+    }
+
+    /// STYLE-PASS1B (`PR7-48`, FB-366): a click on a floor tile rings that tile in amber while the walk lasts: the ring
+    /// draws only inside the destination cell, a new click moves it to the new tile, and arrival clears it (state
+    /// `walk_ring`). Static, so the same under Reduce motion.
+    #[test]
+    fn a_click_to_walk_rings_its_tile_until_arrival_or_a_new_order() {
+        for still in [false, true] {
+            let (mut cx, mut g) = (game_cx(), gfx());
+            cx.settings.v["reduce_motion"] = json!(still);
+            let mut map = RegionMap::new(&mut cx);
+            let d = cx.data.clone();
+            let start = cx.gs().clone();
+            let t = explore::template_of(&d, explore::location(&d, &start)).clone();
+            let (w, h) = explore::size_of(&t);
+            let marked: Vec<Pos> = explore::markers_of(explore::location(&d, &start)).iter().map(|m| explore::marker_pos(&t, m, start.explore_int("loc_steps"))).collect();
+            let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+            let at = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| (0..5).all(|i| free((x + i, y)))).expect("a free row");
+            cx.gs_mut().position = at;
+            for _ in 0..3 {
+                frame(&mut map, &mut cx, &mut g, 1.0);
+            }
+            assert_eq!((map.walk_ring(), map.state(&cx)["walk_ring"].clone()), (None, Value::Null), "no walk, no ring");
+            let click = |map: &mut RegionMap, cx: &mut Cx, p: Pos| {
+                let r = map.geo.cell(p.0 as i32, p.1 as i32);
+                map.mouse = (r.x + r.w / 2, r.y + r.h / 2);
+                map.act(cx, RAct::MapClick);
+            };
+            let dest = (at.0 + 4, at.1);
+            click(&mut map, &mut cx, dest);
+            assert_eq!(map.walk_ring(), Some(dest), "the clicked tile");
+            assert_eq!(map.state(&cx)["walk_ring"], json!([dest.0, dest.1]));
+            // the ring draws in the destination cell only, in the amber
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let ringed = g.canvas.px.clone();
+            let kept = map.walk_dest.take();
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let plain = g.canvas.px.clone();
+            map.walk_dest = kept;
+            let cw = g.canvas.w as usize;
+            let changed: Vec<(usize, usize)> = (0..ringed.len() / 4).filter(|i| ringed[i * 4..i * 4 + 3] != plain[i * 4..i * 4 + 3]).map(|i| (i % cw, i / cw)).collect();
+            assert!(!changed.is_empty(), "the ring draws");
+            let cell = map.geo.cell(dest.0 as i32, dest.1 as i32);
+            let v = g.view;
+            let (x0, y0, x1, y1) = (v.x(cell.x as f32) - 2, v.y(cell.y as f32) - 2, v.x((cell.x + cell.w) as f32) + 2, v.y((cell.y + cell.h) as f32) + 2);
+            assert!(changed.iter().all(|&(x, y)| (x0..=x1).contains(&(x as i32)) && (y0..=y1).contains(&(y as i32))), "inside the cell {cell:?}");
+            let amber = crate::tokens::walk_ring();
+            let near = changed.iter().map(|&(x, y)| (0..3).map(|c| (ringed[(y * cw + x) * 4 + c] as i32 - amber[c] as i32).abs()).sum::<i32>()).min().unwrap();
+            assert!(near <= 60, "the amber (an anti-aliased line: nearest {near})");
+            // a new order moves the ring; arrival clears it
+            let dest2 = (at.0 + 3, at.1);
+            click(&mut map, &mut cx, dest2);
+            assert_eq!(map.walk_ring(), Some(dest2), "a new order: its tile");
+            let mut now = Instant::now() + Duration::from_secs(1);
+            let mut ticks = 0;
+            while !map.walk.is_empty() && ticks < 50 {
+                now += Duration::from_millis(500);
+                map.tick_at(&mut cx, now);
+                ticks += 1;
+            }
+            assert_eq!(cx.gs().position, dest2, "arrived");
+            assert_eq!((map.walk_ring(), map.state(&cx)["walk_ring"].clone()), (None, Value::Null), "arrival clears the ring");
         }
     }
 

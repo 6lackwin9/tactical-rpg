@@ -269,13 +269,10 @@ impl<G: Context> Shell<G> {
         self.gfx.kit.edit = Some(Edit::new(crate::notes::TEXT_ID, "", true));
     }
 
-    /// The lowest screen drawn: the top one and those under it down to the first that is not an overlay.
-    fn drawn_from(&self) -> usize {
-        let mut base = self.stack.len() - 1;
-        while base > 0 && self.stack[base].overlay() {
-            base -= 1;
-        }
-        base
+    /// The screens drawn: the top one and those under it down to the first that is not an overlay, less a panel under
+    /// another panel (never stacked, `screen::drawn_screens`).
+    fn drawn(&self) -> Vec<usize> {
+        crate::screen::drawn_screens(&self.stack)
     }
 
     /// What the frame loop owes what is on screen now (FPSCAP1): every frame while the shell's own work runs (a text field
@@ -286,7 +283,7 @@ impl<G: Context> Shell<G> {
         if own || self.cx.audio.fading() || !self.cx.nav.is_empty() || !self.cx.notice.is_empty() {
             return FrameNeed::Full;
         }
-        self.stack[self.drawn_from()..].iter().fold(FrameNeed::Idle, |need, s| need.and(s.frame_need(&self.cx)))
+        self.drawn().into_iter().fold(FrameNeed::Idle, |need, i| need.and(self.stack[i].frame_need(&self.cx)))
     }
 
     fn frame(&mut self) {
@@ -304,7 +301,7 @@ impl<G: Context> Shell<G> {
         self.gfx.fonts.sync(&theme);
         self.gfx.canvas.clear(theme.bg);
         let n = self.stack.len();
-        for i in self.drawn_from()..n {
+        for i in self.drawn() {
             let live = i == n - 1;
             self.gfx.view = self.view_of(self.stack[i].grid());
             let mouse = if live { self.mouse } else { (-1, -1) };
@@ -971,6 +968,70 @@ mod tests {
     fn press(s: &mut Shell<App>, k: Key) {
         s.key(k);
         s.frame();
+    }
+
+    /// A screen that logs each draw ("drew <id>"), an overlay and a panel as asked (STYLE-PASS1B).
+    struct Layer {
+        id: &'static str,
+        overlay: bool,
+        panel: bool,
+        w: Vec<Widget<()>>,
+    }
+
+    impl Layer {
+        fn new(id: &'static str, overlay: bool, panel: bool) -> Self {
+            Self { id, overlay, panel, w: Vec::new() }
+        }
+        fn act(&mut self, _cx: &mut Cx, _a: ()) {}
+    }
+
+    impl Screen<App> for Layer {
+        fn id(&self) -> &'static str {
+            self.id
+        }
+        fn overlay(&self) -> bool {
+            self.overlay
+        }
+        fn panel(&self) -> bool {
+            self.panel
+        }
+        fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let ui: Ui<()> = Ui::new(g, mouse, live);
+            self.w = ui.widgets;
+            cx.app.log.push(format!("drew {}", self.id));
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    /// The draws of one frame, bottom first.
+    fn drew(s: &mut Shell<App>) -> Vec<String> {
+        s.cx.app.log.clear();
+        s.frame();
+        s.cx.app.log.iter().filter_map(|l| l.strip_prefix("drew ").map(String::from)).collect()
+    }
+
+    /// STYLE-PASS1B (`PR7-48` (2), never stacked): a panel opened over a panel takes its place on screen (the map still
+    /// under it), a question over the panel draws over it, and closing the top panel shows the one under again; an
+    /// overlay that is not a panel keeps drawing under a panel.
+    #[test]
+    fn a_panel_over_a_panel_takes_its_place_and_back_returns_to_it() {
+        let mut s = shell();
+        s.stack = vec![Box::new(Layer::new("map", false, false)), Box::new(Layer::new("menu", true, true))];
+        assert_eq!(drew(&mut s), ["map", "menu"]);
+        s.cx.nav.push(Nav::Push(Box::new(Layer::new("party", true, true))));
+        assert_eq!(drew(&mut s), ["map", "party"], "one panel shows");
+        assert_eq!(s.stack.len(), 3, "the menu stays in the stack");
+        s.cx.ask("Sure?", |_| {});
+        assert_eq!(drew(&mut s), ["map", "party"], "the panel stays drawn under a question");
+        assert_eq!(s.stack.last().map(|t| t.id()), Some("ask"));
+        s.cx.nav.push(Nav::Pop);
+        s.cx.nav.push(Nav::Pop);
+        assert_eq!(drew(&mut s), ["map", "menu"], "Back returns to the menu");
+        s.cx.nav.push(Nav::Push(Box::new(Layer::new("veil", true, false))));
+        s.cx.nav.push(Nav::Push(Box::new(Layer::new("journal", true, true))));
+        assert_eq!(drew(&mut s), ["map", "veil", "journal"], "a plain overlay between still draws");
+        let none: Vec<Box<dyn Screen<App>>> = Vec::new();
+        assert!(crate::screen::drawn_screens(&none).is_empty());
     }
 
     /// A screen with one label that fits at Normal text size and is cut at Extra large (TEXTFIT1 audit).
