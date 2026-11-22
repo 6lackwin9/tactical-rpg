@@ -1,3 +1,4 @@
+mod decor_tests;
 mod statusvis1b_tests;
 mod pacing_tests;
 mod battle_ui2b_tests;

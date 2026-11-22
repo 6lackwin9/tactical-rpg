@@ -2997,6 +2997,9 @@ pub(crate) mod tests {
         let on_top = [Decor { art: "zz_post".into(), at: wall }];
         assert!(block_shown(&mut art, &grid, zset, &on_top, wall), "a prop does not replace the cover");
         assert!(lamps_with(&mut art, &grid, zset, &on_top).iter().any(|l| (l.x, l.y) == centre(wall) && l.color == rgb(255, 176, 96)), "the cover still lights");
+        // cover decor on a walkable cell draws there, a cell wide and COVER_H tall
+        let floor_cover = decor_items(&mut art, &grid, zset, &[Decor { art: "cover/v1".into(), at: post }]);
+        assert_eq!(floor_cover.iter().map(|p| p.rect).collect::<Vec<_>>(), [prop_rect(pr, (CELL_W, COVER_H))]);
         // an outer wall block: the decor stands on its cap, lifted, and sorts after the block at the block's feet
         let edge = V2::new(0, 5);
         let outer = board_of(&[(0, 5, "wall")]);

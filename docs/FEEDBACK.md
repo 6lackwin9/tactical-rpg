@@ -66,6 +66,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-34` (`BONEMILL-CHECK1`) | Report | `develop` | Bone-Mill won by hand on try 1 at Lv 7 (the auto plan still loses it); the Crucible lost 5 times at Lv 8 (1 auto, 4 hand), so the act's end was not reached; no debug; PT-66..84; `FB-392` |
 | `PR7-81` (`DECOR1`) | done | `develop` (squash `PR7-81`) | Display-only encounter field `decor: [{art, x, y}]` (kit schema, typed reader, content check), drawn by the stage with `lights` on its art key; no rule reads it; goldens unchanged; `FB-396` |
 | `PR7-84` (`ACT1-DATA2`) | done | `develop` (squash `PR7-84`) | `rec_level` 7, 7, 8 on the Bone-Mill, Vats and Crucible; the Crucible and Overlook lock hint names the Bone-Mill and Vats turn-ins; the winch drum gets a Here row; Dunstan's battle line is wordless; six `pr7_84_*` seeds; `FB-398` |
+| `PR7-79` (`DIORAMA-DRESS1`) | done | `develop` (squash `PR7-79`) | Ten Act 1 Sunk Ward battle boards dressed through `decor` seeds (`cover/v3` lamps on blocks, edge `lantern_pole`s, edge props), no walkability change; fix: the arena launch path reads `<world>:<id>` so its board gets the world's stage set; shots `/mnt/project-files/pr7-79/`; goldens unchanged; `FB-400` |
 | `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
 | `PR7-4` (`SCENARIO-GOLDENS1`) | part 1 done (tools lane); baselines await the user | `develop` (squash `PR7-4` part 1) | Scenario `shot` step `golden` (tolerance, pixels allowance, diff image), `record=1`, launch `save`; every scenario in the gate (`tools/fc.sh scenarios_all`); three screen scenarios (menus, hub, battle; 18 shots) run as review shots until the user approves the baselines (`/mnt/project-files/pr7-4/`); `FB-313` |
 | `ENGINE-1` (`HELLO-GAME1`) | done (tools lane) | `develop` (squash `ENGINE-1`) | Sample game `games/hello/` on engine crates only: menu, walker sprite, one save slot, engine sounds, scenario `hello_walk` in the gate; programs `hello` and `hello_cli`; six RPG leaks listed; `FB-315` |
@@ -501,3 +502,24 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 - **Test**: `emberwake_world/tests/board_rec_level.rs` `every_flag_job_on_a_board_has_a_level` now also covers main
   raids.
 - **Docs delta**: none.
+
+### FB-400: PR7-79 DIORAMA-DRESS1 built; roam and patrol boards not dressed; arena path fix
+
+- **Status**: built, `develop` (squash `PR7-79`). Seeds `pr7_79_alley`, `_rooftops`, `_canal`, `_foundry`, `_vats`,
+  `_undercroft`, `_watchpost`; goldens unchanged (sim, checks).
+- **Boards** (6 to 9 pieces each): `enc_pro_0a/0b/0c`, `enc_job_corvo_gate`, `enc_evt_01` to `enc_evt_05`,
+  `enc_evt_06` and `enc_evt_06_overlook` (one layout). `cover/v3` lamps and `cover/v0`/`v1` on inner blocked cells where
+  a board has them; `lantern_pole` only at edge columns, back rows or the top row; props (`barrel_stack`, `crates_tall`) at
+  the edges too, kept off the fight lane (the check refuses exits, deploy cells and objectives); a first cut with poles
+  in the fight lane was redone.
+- **Listed, not changed**: the 12 roam, scav and patrol encounters have empty `rows` (generated boards), so decor has
+  no fixed cells there. Dressing them needs a rule (decor by generator) if wanted.
+- **Fix found on the way**: an arena launch with `scene=<world>:<id>` and no `ruleset` (`BattleScreen::sandbox`) read
+  the whole string as the encounter id, so the board had no stage set and drew no cover art at all (blocks or decor).
+  `sandbox()` now splits world and id like `arena_with` and `playback`. World fights were never affected. Test
+  `battle/tests/decor_tests.rs` opens every shipped encounter with cover decor through both paths.
+- **Guess**: `cover/v3` on a walkable cell draws (cover size) and is not refused by the check.
+- **Shots**: `/mnt/project-files/pr7-79/` before and after for `enc_pro_0a`, `enc_evt_03`, `enc_evt_06`, plus
+  `enc_evt_06_after_fix.png`.
+- **Docs delta**: STRUCTURE: `emberwake_gui/src/battle/tests/decor_tests.rs` (shipped decor draws on both arena paths).
+  GAME_BRIEF, if wanted: an arena launch `scene=<world>:<id>` now opens with that world's stage set, music and talks.
