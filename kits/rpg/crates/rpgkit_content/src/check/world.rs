@@ -619,10 +619,14 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     }
     errors.extend(encounter::rows_problems(v, e));
     // BIGUNIT1 BU3: the 2 x 2 units deploy where they fit (a character plays as its base unit)
-    errors.extend(encounter::footprint_problems(v, e, &|r: &str| {
+    let base_of = |r: &str| {
         let c = v.worlds.resolve(w, "characters", r);
         if c.is_empty() { r.to_string() } else { json::s(c, "base_unit") }
-    }));
+    };
+    errors.extend(encounter::footprint_problems(v, e, &base_of));
+    // DECOR1: the display-only decor (a character deploys as its base unit)
+    let stage_set = v.worlds.lineage(w).iter().rev().map(|l| json::s(v.worlds.manifest(l), "stage_set")).find(|s| !s.is_empty()).unwrap_or_default();
+    errors.extend(encounter::decor_problems(v, e, &base_of, &stage_set));
     // ENCOUNTER2 S1 and section 6: unkillable refs and the stay-behind block (flag and then are a world encounter's)
     errors.extend(encounter::unkillable_problems(e));
     errors.extend(encounter::stay_behind_problems(v, e, true));

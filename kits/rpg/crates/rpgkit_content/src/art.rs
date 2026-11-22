@@ -479,6 +479,73 @@ pub fn battle_prop_dirs(art: &str) -> Vec<String> {
     BATTLE_SETS.iter().map(|set| format!("props/{set}/{art}")).collect()
 }
 
+/// DECOR1 (PR7-81): what a decor art key names: the stage set's cover prop (`cover`, `cover/v<N>`) or a prop
+/// (`<prop>`, `<prop>/v<N>`); the variant None is picked by the cell.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DecorArt {
+    Cover(Option<u32>),
+    Prop(String, Option<u32>),
+}
+
+/// DECOR1: the cover kind of a decor art key (`tilesets/<stage set>/cover/v*`).
+pub const DECOR_COVER: &str = "cover";
+
+/// DECOR1: decor art key `key` parsed (`cover`, `cover/v<N>`, `<prop>` or `<prop>/v<N>`, a prop a set id); None: not
+/// that form.
+pub fn decor_art(key: &str) -> Option<DecorArt> {
+    let (name, variant) = match key.split_once('/') {
+        Some((name, v)) => {
+            let digits = v.strip_prefix('v').filter(|d| !d.is_empty() && d.len() <= 3 && d.bytes().all(|b| b.is_ascii_digit()))?;
+            (name, Some(digits.parse::<u32>().ok()?))
+        }
+        None => (key, None),
+    };
+    if !set_id_ok(name) {
+        return None;
+    }
+    Some(if name == DECOR_COVER { DecorArt::Cover(variant) } else { DecorArt::Prop(name.to_string(), variant) })
+}
+
+/// DECOR1: the folders a decor prop's art is read from: `props/<set>/<prop>` over `BATTLE_SETS` first, then every
+/// other prop set the layers hold (sorted); the first holding `v0.png` gives the prop.
+pub fn decor_prop_dirs(layers: &aegis_core::assets::Layers, prop: &str) -> Vec<String> {
+    let others = layers.dirs("props").into_iter().filter(|s| !BATTLE_SETS.contains(&s.as_str()));
+    BATTLE_SETS.iter().map(|s| s.to_string()).chain(others).map(|set| format!("props/{set}/{prop}")).collect()
+}
+
+/// DECOR1: a battle stage set's look file (`tilesets/<set>/stage.fx.json`), whose `zones.<zone>.set` names a battle
+/// zone's own stage set.
+pub fn stage_fx(set: &str) -> String {
+    format!("tilesets/{set}/stage.fx.json")
+}
+
+/// DECOR1: the stage sets a board's cover decor reads, in the stage's order: battle zone `zone`'s own set (its world
+/// set's `stage.fx.json` `zones.<zone>.set`, when another valid id) then the world's battle stage set `stage_set`;
+/// none without a world stage set (a catalog encounter's board shows no cover).
+pub fn decor_cover_sets(layers: &aegis_core::assets::Layers, stage_set: &str, zone: &str) -> Vec<String> {
+    if stage_set.is_empty() {
+        return Vec::new();
+    }
+    let zone_set = aegis_core::assets::read_json(layers, &stage_fx(stage_set)).and_then(|fx| fx["zones"][zone]["set"].as_str().map(str::to_string)).filter(|z| set_id_ok(z) && z != stage_set);
+    zone_set.into_iter().chain(std::iter::once(stage_set.to_string())).collect()
+}
+
+/// DECOR1: whether decor art key `key` names art the layers hold: a cover variant of the first of `cover_sets`
+/// (`decor_cover_sets`) holding a `cover` folder (`cover` alone: any variant), or a prop (its variant within the first
+/// folder of `decor_prop_dirs` holding it).
+pub fn decor_known(layers: &aegis_core::assets::Layers, key: &str, cover_sets: &[String]) -> bool {
+    let within = |dir: &str, v: Option<u32>| {
+        let n = layers.variants(dir);
+        n > 0 && v.is_none_or(|v| (v as usize) < n)
+    };
+    let first = |dirs: Vec<String>| dirs.into_iter().find(|d| layers.variants(d) > 0);
+    match decor_art(key) {
+        Some(DecorArt::Cover(v)) => first(cover_sets.iter().map(|s| format!("tilesets/{s}/{DECOR_COVER}")).collect()).is_some_and(|d| within(&d, v)),
+        Some(DecorArt::Prop(prop, v)) => first(decor_prop_dirs(layers, &prop)).is_some_and(|d| within(&d, v)),
+        None => false,
+    }
+}
+
 /// STAGE1 4.4: a battle zone's backdrop over the board's far edge (384 x 52).
 pub fn battle_backdrop(zone: &str) -> String {
     format!("backgrounds/battle/{zone}.png")

@@ -18,7 +18,8 @@ use aegis_ui::depth::DepthList;
 use aegis_ui::painter::Painter;
 use emberwake_battle::grid::{data_zone, Grid, V2, GRID_H, GRID_W};
 use indexmap::IndexMap;
-use emberwake_content::art::{battle_backdrop, battle_prop_dirs, battle_stage_dirs, transition_piece, zone_backdrop, BATTLE_SETS};
+use emberwake_battle::encounter::Decor;
+use emberwake_content::art::{battle_backdrop, battle_prop_dirs, battle_stage_dirs, decor_prop_dirs, transition_piece, zone_backdrop, DecorArt, BATTLE_SETS, DECOR_COVER};
 use emberwake_data::ZoneDef;
 use serde_json::Value;
 
@@ -978,6 +979,110 @@ pub fn lamps(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook)) -> Vec<
     out
 }
 
+// ---- DECOR1 (PR7-81): the encounter's display-only decor --------------------------------------------------------
+
+/// DECOR1: decor art key `key`'s file on cell `c` and its drawn size: a cover key the stage set's cover prop
+/// (`tilesets/<zone set, then world set>/cover/v<N>`, a cell wide and `COVER_H` tall), a prop key the prop's PNG at its
+/// size (`decor_prop_dirs`: the battle prop sets, then the other prop sets); the variant left out is picked by the cell
+/// (as a block's cover or a terrain's prop). None: a bad key or no art.
+pub fn decor_art(art: &mut Art, key: &str, (set, look): (&str, &ZoneLook), c: V2) -> Option<(String, (i32, i32))> {
+    match emberwake_content::art::decor_art(key)? {
+        DecorArt::Cover(v) => {
+            let dirs: Vec<String> = look.zone_set(set).into_iter().chain((!set.is_empty()).then_some(set)).map(|s| format!("tilesets/{s}/{DECOR_COVER}")).collect();
+            let rel = art.pick(&dirs_ref(&dirs), v, c.x, c.y)?;
+            Some((rel, (CELL_W, COVER_H)))
+        }
+        DecorArt::Prop(prop, v) => {
+            let dirs = decor_prop_dirs(art.layers(), &prop);
+            let rel = art.pick(&dirs_ref(&dirs), v, c.x, c.y)?;
+            let size = art.size_of(&rel)?;
+            Some((rel, size))
+        }
+    }
+}
+
+/// DECOR1: whether decor piece `d` stands in place of its block's cover prop: a cover key with art, on an inner block
+/// showing cover art. Any other decor on a block (a prop, or cover on an outer wall's cap) stands on top of it.
+fn replaces_cover(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), d: &Decor) -> bool {
+    matches!(emberwake_content::art::decor_art(&d.art), Some(DecorArt::Cover(_)))
+        && is_block(grid, d.at)
+        && shown_cover(art, grid, (set, look), d.at).is_some()
+        && decor_art(art, &d.art, (set, look), d.at).is_some()
+}
+
+/// DECOR1: the cell rect decor piece `d` stands on: lifted `BLOCK_LIFT` onto a block it stands on top of, else its
+/// cell.
+fn decor_cell(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), d: &Decor) -> Rect {
+    let r = stage_cell(d.at);
+    if is_block(grid, d.at) && !replaces_cover(art, grid, (set, look), d) {
+        Rect::new(r.x, r.y - BLOCK_LIFT, r.w, r.h)
+    } else {
+        r
+    }
+}
+
+/// DECOR1: the decor pieces (with art, on the grid) in the feet pass, by index into `decor`: foot y its cell's bottom
+/// edge (a lifted piece's too, so it draws after the block it stands on), x its left edge; pushed after the board's
+/// pieces they sort after a block at equal feet and before units (a unit on the same cell draws over its decor).
+pub fn decor_items(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), decor: &[Decor]) -> Vec<Placed> {
+    let mut out = Vec::new();
+    for (i, d) in decor.iter().enumerate() {
+        if !grid.is_valid(d.at) {
+            continue;
+        }
+        let Some((_, size)) = decor_art(art, &d.art, (set, look), d.at) else { continue };
+        let r = decor_cell(art, grid, (set, look), d);
+        let cell = stage_cell(d.at);
+        out.push(Placed { item: Item::Decor(i), foot_y: cell.y + cell.h, x: cell.x, rect: prop_rect(r, size) });
+    }
+    out
+}
+
+/// DECOR1: whether block `c` is drawn in the feet pass: not when a cover decor stands in place of its cover prop.
+pub fn block_shown(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), decor: &[Decor], c: V2) -> bool {
+    !decor.iter().any(|d| d.at == c && replaces_cover(art, grid, (set, look), d))
+}
+
+/// The feet pass: decor piece `d` (cover art at the set's art px with its cell's tint as a block's, a prop at its PNG
+/// size), with the cover's dark line below it where it stands in place of a block's cover.
+pub fn draw_decor(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), d: &Decor) {
+    let Some((rel, size)) = decor_art(art, &d.art, (set, look), d.at) else { return };
+    let r = decor_cell(art, grid, (set, look), d);
+    let rect = prop_rect(r, size);
+    let cover = matches!(emberwake_content::art::decor_art(&d.art), Some(DecorArt::Cover(_)));
+    let tint = look.tint_of(grid.terrain_id(d.at));
+    let img = if cover { stage_image(art, &rel, (set, look), size.0, size.1) } else { art.image(&rel, size.0, size.1) };
+    if let Some(img) = img {
+        put(p, img, rect, if cover { tint } else { None });
+    }
+    if replaces_cover(art, grid, (set, look), d) && d.at.y + 1 < GRID_H {
+        p.fill(Rect::new(r.x, r.y + r.h, r.w, 3), rgba(0, 0, 0, 70));
+    }
+}
+
+/// DECOR1: the board's lamps with its decor (`lamps`; a cover a cover decor replaces casts none), then each decor piece
+/// whose art key the zone's `lights` names (`light_keys` of its file), its pool on its own cell's centre.
+pub fn lamps_with(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), decor: &[Decor]) -> Vec<Lamp> {
+    let mut out = lamps(art, grid, (set, look));
+    if look.lights.is_empty() || decor.is_empty() {
+        return out;
+    }
+    let centre = |c: V2| {
+        let r = stage_cell(c);
+        (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0)
+    };
+    let hidden: Vec<(f32, f32)> = decor.iter().filter(|d| grid.is_valid(d.at) && replaces_cover(art, grid, (set, look), d)).map(|d| centre(d.at)).collect();
+    out.retain(|l| !hidden.contains(&(l.x, l.y)));
+    for d in decor.iter().filter(|d| grid.is_valid(d.at)) {
+        let Some((rel, _)) = decor_art(art, &d.art, (set, look), d.at) else { continue };
+        if let Some(l) = light_keys(&rel).iter().find_map(|k| look.lights.iter().find(|l| l.key == *k)) {
+            let (x, y) = centre(d.at);
+            out.push(Lamp { x, y, color: l.color, radius: l.radius });
+        }
+    }
+    out
+}
+
 /// DIORAMA3 R3: the light spots of stage set `set` for battle zone `zone` from its `stage.fx.json`: `zones.<zone>.spots`
 /// first, else the top-level `spots`; each `at` is [u, v], fractions of the backdrop. Read once per set and zone.
 pub fn light_spots(art: &mut Art, set: &str, zone: &str) -> Vec<(f32, f32)> {
@@ -1310,6 +1415,8 @@ pub fn draw_prop(p: &mut Painter, art: &mut Art, grid: &Grid, c: V2) {
 pub enum Item {
     Block(V2),
     Prop(V2),
+    /// DECOR1: a decor piece by its index in the encounter's decor.
+    Decor(usize),
     /// A unit by its battle index.
     Unit(usize),
 }
@@ -2023,7 +2130,7 @@ pub(crate) mod tests {
             match it.item {
                 Item::Block(c) => draw_block(&mut p, art, grid, (set, look), c),
                 Item::Prop(c) => draw_prop(&mut p, art, grid, c),
-                Item::Unit(_) => {}
+                Item::Decor(_) | Item::Unit(_) => {}
             }
         }
         g
@@ -2755,6 +2862,73 @@ pub(crate) mod tests {
         let (near, far) = (at_px(&g, r.x + 16 + CELL_W, r.y + 12), at_px(&g, BOARD_X + 40, BOARD_Y + 8 * CELL_H));
         assert!(near[0] > 60 && near[0] > near[2], "the neighbour is lit warm: {near:?}");
         assert!(far[0] < 60, "far from it the board is a little darker: {far:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// DECOR1 (PR7-81): an encounter's decor draws on its cell in the feet pass (a prop from any prop set at its PNG
+    /// size; a cover key the set's cover variant, standing in place of an inner block's own cover prop), sorts before a
+    /// unit on the same cell, and a decor whose art key `lights` names casts its pool (the cover it replaces casts
+    /// none); the grid is only read (its walkability is the same after).
+    #[test]
+    fn decor_draws_on_its_cell_and_a_lamp_decor_casts_its_pool() {
+        let root = scratch("decor");
+        flat_png(&root, "tilesets/zz_lamp/cover/v0.png", 64, 72, |_, _| [90, 90, 90]);
+        flat_png(&root, "tilesets/zz_lamp/cover/v1.png", 64, 72, |_, _| [30, 200, 60]);
+        flat_png(&root, "props/zz_ward/zz_post/v0.png", 32, 48, |_, _| [220, 40, 200]);
+        let grid = board_of(&[(6, 4, "wall")]);
+        let walkable = |g: &Grid| (0..GRID_H).flat_map(|y| (0..GRID_W).map(move |x| g.is_walkable(V2::new(x, y)))).collect::<Vec<_>>();
+        let before = walkable(&grid);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let fx: Value = serde_json::from_str(r##"{"lights": {"cover/v0": {"color": "#ffb060", "radius": 1.5}, "zz_post": {"color": "#60b0ff", "radius": 1}}}"##).unwrap();
+        let look = zone_look_of(&fx, "zz_lamp", "alley");
+        let zset = ("zz_lamp", &look);
+        let (post, wall) = (V2::new(2, 6), V2::new(6, 4));
+        let decor = vec![Decor { art: "zz_post".into(), at: post }, Decor { art: "cover/v1".into(), at: wall }, Decor { art: "zz_none".into(), at: V2::new(1, 1) }, Decor { art: "zz_post".into(), at: V2::new(GRID_W, 0) }];
+        assert!(shown_cover(&mut art, &grid, zset, wall).is_some_and(|r| r.ends_with("cover/v0.png")), "the wall's own cover is v0");
+        // the feet pass: the two with art and on the grid; the unit on the post's cell after it
+        let items = decor_items(&mut art, &grid, zset, &decor);
+        let pr = stage_cell(post);
+        assert_eq!(items, [Placed { item: Item::Decor(0), foot_y: pr.y + pr.h, x: pr.x, rect: prop_rect(pr, (32, 48)) }, Placed { item: Item::Decor(1), foot_y: stage_cell(wall).y + CELL_H, x: stage_cell(wall).x, rect: prop_rect(stage_cell(wall), (CELL_W, COVER_H)) }]);
+        let mut all = items.clone();
+        all.push(unit_item(0, (pr.x + 16, pr.y + pr.h), Rect::new(pr.x + 8, pr.y - 20, 16, 40)));
+        let order: Vec<Item> = feet_order(&all).iter().map(|p| p.item).collect();
+        assert!(order.iter().position(|i| *i == Item::Decor(0)) < order.iter().position(|i| *i == Item::Unit(0)), "the unit draws over its cell's decor: {order:?}");
+        assert!(!block_shown(&mut art, &grid, zset, &decor, wall) && block_shown(&mut art, &grid, zset, &[], wall), "the cover decor stands in place of the wall's cover");
+        // drawn: the prop's colour on the post's cell, the v1 cover's on the wall's
+        let mut g = paint_look(&mut art, &grid, zset, 0, 1, (0, 0));
+        {
+            let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+            for d in &decor {
+                draw_decor(&mut p, &mut art, &grid, zset, d);
+            }
+        }
+        assert_eq!(at_px(&g, pr.x + 16, pr.y + pr.h - 10), [220, 40, 200], "the prop decor");
+        let wr = stage_cell(wall);
+        assert_eq!(at_px(&g, wr.x + 16, wr.y + wr.h - 10), [30, 200, 60], "the cover decor");
+        // the lights: the post's pool on its cell; the wall's v0 cover pool gone with it
+        let centre = |c: V2| (stage_cell(c).x as f32 + 16.0, stage_cell(c).y as f32 + 12.0);
+        assert_eq!(lamps(&mut art, &grid, zset).iter().map(|l| (l.x, l.y)).collect::<Vec<_>>(), [centre(wall)], "without decor the v0 cover lights");
+        let lit = lamps_with(&mut art, &grid, zset, &decor);
+        assert_eq!(lit, [Lamp { x: centre(post).0, y: centre(post).1, color: rgb(96, 176, 255), radius: 1.0 }]);
+        assert_eq!(walkable(&grid), before, "walkability unchanged");
+        // a prop decor on an inner block stands on top of its cover (the block still draws, its cover still lights)
+        let on_top = [Decor { art: "zz_post".into(), at: wall }];
+        assert!(block_shown(&mut art, &grid, zset, &on_top, wall), "a prop does not replace the cover");
+        assert!(lamps_with(&mut art, &grid, zset, &on_top).iter().any(|l| (l.x, l.y) == centre(wall) && l.color == rgb(255, 176, 96)), "the cover still lights");
+        // an outer wall block: the decor stands on its cap, lifted, and sorts after the block at the block's feet
+        let edge = V2::new(0, 5);
+        let outer = board_of(&[(0, 5, "wall")]);
+        assert!(outer_wall(&outer, edge));
+        let capped = [Decor { art: "zz_post".into(), at: edge }];
+        let er = stage_cell(edge);
+        let mut all = board_items(&mut art, &outer);
+        let block = *all.iter().find(|p| p.item == Item::Block(edge)).expect("the wall block");
+        let placed = decor_items(&mut art, &outer, zset, &capped);
+        assert_eq!(placed, [Placed { item: Item::Decor(0), foot_y: block.foot_y, x: er.x, rect: prop_rect(Rect::new(er.x, er.y - BLOCK_LIFT, er.w, er.h), (32, 48)) }]);
+        all.extend(placed);
+        let order: Vec<Item> = feet_order(&all).iter().map(|p| p.item).collect();
+        assert!(order.iter().position(|i| *i == Item::Block(edge)) < order.iter().position(|i| *i == Item::Decor(0)), "the cap draws first: {order:?}");
+        assert!(block_shown(&mut art, &outer, zset, &[Decor { art: "cover/v1".into(), at: edge }], edge), "cover on an outer wall stands on the cap");
         let _ = std::fs::remove_dir_all(&root);
     }
 

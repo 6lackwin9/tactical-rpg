@@ -148,6 +148,8 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
     }
     errors.extend(rows_problems(v, e));
     errors.extend(footprint_problems(v, e, &|r: &str| r.to_string()));
+    // DECOR1: the display-only decor
+    errors.extend(decor_problems(v, e, &|r: &str| r.to_string(), ""));
     // ENCOUNTER2 S1 and section 6: unkillable refs and the stay-behind block
     errors.extend(unkillable_problems(e));
     errors.extend(stay_behind_problems(v, e, false));
@@ -176,6 +178,86 @@ pub fn footprint_problems(v: &View, e: &Dict, base_of: &dyn Fn(&str) -> String) 
     let refs: Vec<&String> = party.iter().chain(&foes).collect();
     let misfits = rpgkit_battle::world::World::deploy_misfits(std::sync::Arc::new(v.typed.clone()), grid, party.iter().map(unit).collect(), foes.iter().map(unit).collect(), &def.deployment);
     misfits.into_iter().map(|c| format!("'{}' fills 2 x 2 cells and finds no free 2 x 2 square to deploy on (all four cells inside the arena, walkable, not an exit, clear of other units).", refs[c])).collect()
+}
+
+/// DECOR1 (PR7-81): the display-only `decor` list (catalog and world encounters; `base_of` maps a party, guest or
+/// enemy ref to its unit row's id; `stage_set` the world's battle stage set, "" for a catalog encounter): each entry
+/// `{art, x, y}` on the 12x9 grid, one per cell, not on an exit, a deploy cell (where a battle start places the listed
+/// party, guests and enemies), a hold's objective tile or an escape's stay-behind tile, its `art` a decor art key
+/// (`cover`, `cover/v<N>`, `<prop>`, `<prop>/v<N>`) the asset layers hold, a cover key in the board's stage set
+/// (`art::decor_cover_sets`; unchecked with no layers). Absent or empty: nothing.
+pub fn decor_problems(v: &View, e: &Dict, base_of: &dyn Fn(&str) -> String, stage_set: &str) -> Vec<String> {
+    let list = match e.get(rpgkit_battle::encounter::DECOR) {
+        None | Some(Value::Null) => return Vec::new(),
+        Some(Value::Array(list)) => list,
+        Some(_) => return vec!["Decor must be a list of {art, x, y} entries.".into()],
+    };
+    if list.is_empty() {
+        return Vec::new();
+    }
+    let def = rpgkit_battle::session::EncounterDef::from_obj_with(e, Default::default());
+    let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&v.typed), 0);
+    grid.apply_board(&def.zone, &def.rows, &v.typed.zones);
+    let mut objective = if json::s_or(e, "objective", "rout") == "hold" { rpgkit_battle::encounter::Objectives::create(e).tiles } else { Vec::new() };
+    objective.extend(rpgkit_battle::encounter::StayBehind::read(e).map(|b| b.tiles).unwrap_or_default());
+    let cover_sets = crate::art::decor_cover_sets(&v.assets, stage_set, &def.zone);
+    let mut seen: Vec<(V2, usize)> = Vec::new();
+    let deployed = {
+        let (party, foes) = (strings(json::get(e, "party")).into_iter().chain(strings(json::get(e, "guests"))).collect::<Vec<_>>(), strings(json::get(e, "enemies")));
+        let unit = |r: &String| v.typed.units.get(&base_of(r)).map_or_else(|| rpgkit_rules::Unit::stand_in(r, 1, 1), |u| rpgkit_rules::unit::build_unit(&v.typed, u, 0));
+        rpgkit_battle::world::World::deploy_cells(std::sync::Arc::new(v.typed.clone()), grid.clone(), party.iter().map(unit).collect(), foes.iter().map(unit).collect(), &def.deployment)
+    };
+    let mut errors = Vec::new();
+    for (n, raw) in list.iter().enumerate() {
+        let tag = format!("Decor {}", n + 1);
+        let Some(d) = raw.as_object() else {
+            errors.push(format!("{tag} is not an {{art, x, y}} entry."));
+            continue;
+        };
+        let extra: Vec<&String> = d.keys().filter(|k| !rpgkit_battle::encounter::DECOR_KEYS.contains(&k.as_str())).collect();
+        if !extra.is_empty() {
+            errors.push(format!("{tag}: unknown keys {extra:?} (decor holds art, x and y)."));
+        }
+        let key = json::s(d, "art");
+        if let Some(problem) = decor_art_problem(v, &key, &cover_sets) {
+            errors.push(format!("{tag}: {problem}"));
+        }
+        let (Some(x), Some(y)) = (d.get("x").filter(|x| json::is_int(x)), d.get("y").filter(|y| json::is_int(y))) else {
+            errors.push(format!("{tag}: x and y must be whole cell numbers."));
+            continue;
+        };
+        let c = V2::new(json::to_int(x) as i32, json::to_int(y) as i32);
+        if !on_grid(c) {
+            errors.push(format!("{tag} at {c} is off the 12x9 grid."));
+        } else if grid.is_exit(c) {
+            errors.push(format!("{tag} at {c} is on an exit."));
+        } else if deployed.contains(&c) {
+            errors.push(format!("{tag} at {c} is on a deploy cell."));
+        } else if objective.contains(&c) {
+            errors.push(format!("{tag} at {c} is on an objective tile."));
+        }
+        match seen.iter().find(|(at, _)| *at == c) {
+            Some((_, first)) => errors.push(format!("{tag} at {c} shares its cell with decor {first}.")),
+            None => seen.push((c, n + 1)),
+        }
+    }
+    errors
+}
+
+/// DECOR1: what keeps decor art key `key` from naming art: not the key form, or (with asset layers) no art for it.
+fn decor_art_problem(v: &View, key: &str, cover_sets: &[String]) -> Option<String> {
+    let parsed = crate::art::decor_art(key);
+    if parsed.is_none() {
+        return Some(format!("art '{key}' is not a decor art key (cover, cover/v<N>, <prop> or <prop>/v<N>)."));
+    }
+    if v.assets.roots.is_empty() || crate::art::decor_known(&v.assets, key, cover_sets) {
+        return None;
+    }
+    Some(match parsed {
+        Some(crate::art::DecorArt::Cover(_)) if cover_sets.is_empty() => format!("art '{key}' needs a world stage set (a catalog encounter's board shows no cover)."),
+        Some(crate::art::DecorArt::Cover(_)) => format!("art '{key}' names no cover in the board's stage set ({}).", cover_sets.join(", ")),
+        _ => format!("art '{key}' names no prop art."),
+    })
 }
 
 /// ENCOUNTER2 R0: `rows` is empty (the zone's rows) or GRID_H strings of GRID_W known terrain glyphs (catalog and

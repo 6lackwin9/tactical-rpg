@@ -38,6 +38,36 @@ pub fn floor_hp(max_hp: i32, pct: i32) -> i32 {
     (max_hp.max(1) * pct / 100).max(1)
 }
 
+// ---- Decor (DECOR1) ------------------------------------------------------------------------------------------
+
+/// DECOR1 (PR7-81): an encounter's display-only decor field, `decor: [{art, x, y}]`; stored as no key when empty.
+pub const DECOR: &str = "decor";
+/// DECOR1: the keys a decor entry holds.
+pub const DECOR_KEYS: [&str; 3] = ["art", "x", "y"];
+
+/// DECOR1: one decor piece: display-only art (`art`, a decor art key: `cover`, `cover/v<N>`, `<prop>` or
+/// `<prop>/v<N>`) drawn by the stage on cell `at`. It never changes walkability, move cost, cover or line of sight;
+/// the rules never read it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Decor {
+    pub art: String,
+    pub at: V2,
+}
+
+/// DECOR1: encounter `o`'s decor, in order (an entry without a string `art` or whole `x` and `y` is left out; the
+/// content check refuses it).
+pub fn decor_of(o: &Obj) -> Vec<Decor> {
+    value::array(o, DECOR)
+        .iter()
+        .filter_map(Value::as_object)
+        .filter_map(|d| {
+            let art = d.get("art")?.as_str()?.trim().to_string();
+            let (x, y) = (d.get("x")?.as_i64()?, d.get("y")?.as_i64()?);
+            (!art.is_empty()).then(|| Decor { art, at: V2::new(x as i32, y as i32) })
+        })
+        .collect()
+}
+
 // ---- Objectives ----------------------------------------------------------------------------------------------
 
 pub const RING: [V2; 2] = [V2 { x: 5, y: 4 }, V2 { x: 6, y: 4 }];
