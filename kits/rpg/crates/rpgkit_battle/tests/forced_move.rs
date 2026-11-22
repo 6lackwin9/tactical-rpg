@@ -336,7 +336,7 @@ fn hazards_moves_and_stealth() {
     let lands = roll <= status::apply_chance(&s.w.units[FOE], "slow", 100);
     assert_eq!(res.rng.randi(), floor.rng.randi(), "one roll for the mud tile");
     assert_eq!(w.units[FOE].st.has_any("slow"), lands, "roll {roll}");
-    assert_eq!(res.log.iter().any(|l| l.starts_with("[Push]") && l.contains("[Hazard] p_foe is Slowed")), lands, "{:?}", res.log);
+    assert_eq!(res.log.iter().any(|l| l.starts_with("[Push]") && l.contains("[Hazard] p_foe is caught in Mud: Slowed")), lands, "{:?}", res.log);
 
     for walker in [true, false] {
         let mut w = s.w.clone();

@@ -84,6 +84,37 @@ pub fn award_encounter_pct(d: &Data, party: &mut PartyState, enemies: &[(i64, St
     out
 }
 
+/// ACT1-FIX4 (PT-95): `award_encounter_pct` paid to the members who fought (`fielded` ids): each one still in the
+/// party (party order), then each who left in that fight (its latest `party.departed` record, e.g. a captured
+/// stayer, keeps its XP; a dead one gets none); a member who did not fight gets none (a benched member auto-filled
+/// into a freed slot).
+/// Empty `fielded` = no party side: the active members, as `award_encounter_pct`.
+pub fn award_fielded_pct(d: &Data, party: &mut PartyState, fielded: &[String], enemies: &[(i64, String)], pct: i64) -> Dict {
+    if fielded.is_empty() {
+        return award_encounter_pct(d, party, enemies, pct);
+    }
+    let mut out = Dict::new();
+    let pay = |out: &mut Dict, m: &mut UnitState| {
+        let full = encounter_xp(d, enemies, m.level(d));
+        let xp = if pct >= 100 { full } else { full * pct.max(0) / 100 };
+        let mut res = award(d, m, xp);
+        res.insert("xp".into(), int(xp));
+        out.insert(m.id.clone(), Value::Object(res));
+    };
+    for m in party.members.iter_mut().filter(|m| fielded.contains(&m.id)) {
+        pay(&mut out, m);
+    }
+    for id in fielded {
+        if out.contains_key(id) {
+            continue;
+        }
+        if let Some(rec) = party.departed.iter_mut().rev().find(|r| &r.member.id == id && r.life != "dead") {
+            pay(&mut out, &mut rec.member);
+        }
+    }
+    out
+}
+
 /// Adds `draft` (stat -> points) to the spend; errors leave the state untouched.
 pub fn confirm(d: &Data, state: &mut UnitState, draft: &Dict) -> Vec<String> {
     let mut errors = Vec::new();

@@ -320,7 +320,7 @@ fn newest_replaces_and_terrain_acts_first() {
         assert_eq!(res.rng.randi(), probe.randi(), "seed {seed}: two draws");
         if mud_lands && grease_lands {
             let line = res.log.iter().find(|l| l.starts_with("[Move]") && l.contains("p_foe")).expect("the walk's line").clone();
-            let (mud, grease) = (line.find("by Mud").expect(&line), line.find("enters Scalding Grease").expect(&line));
+            let (mud, grease) = (line.find("caught in Mud").expect(&line), line.find("enters Scalding Grease").expect(&line));
             assert!(mud < grease, "terrain first: {line}");
         }
     }

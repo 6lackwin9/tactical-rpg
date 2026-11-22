@@ -109,7 +109,7 @@ fn describes(kind: &EventKind, line: &str, s: &Session) -> bool {
         EventKind::Guard { broken } => tag(line) == "Defend" && line.contains("guard was broken") == *broken,
         EventKind::Focus => tag(line) == "Focus",
         EventKind::Support => tag(line) == "Support",
-        EventKind::Move => matches!(tag(line), "Move" | "Move Cut Short" | "Withdrawal" | "Disengage" | "Dash" | "Chase"),
+        EventKind::Move => matches!(tag(line), "Move" | "Move Cut Short" | "Withdrawal" | "Escape" | "Disengage" | "Dash" | "Chase"),
         EventKind::Break { unit } => tag(line) == "Break" && line.starts_with(&format!("[Break] {}", s.w.units[*unit].name)),
     }
 }
@@ -136,7 +136,7 @@ fn check_events(s: &Session, counts: &mut IndexMap<&'static str, usize>) {
         *counts.entry(key).or_insert(0) += 1;
     }
     for (i, line) in log.iter().enumerate() {
-        if matches!(tag(line), "Attack" | "Break" | "Defend" | "Focus" | "Support" | "Move" | "Move Cut Short" | "Withdrawal" | "Disengage" | "Dash" | "Chase") {
+        if matches!(tag(line), "Attack" | "Break" | "Defend" | "Focus" | "Support" | "Move" | "Move Cut Short" | "Withdrawal" | "Escape" | "Disengage" | "Dash" | "Chase") {
             assert!(seen.contains(&i), "line {i} has no event: {line:?}");
         }
     }

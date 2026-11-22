@@ -1177,6 +1177,17 @@ impl Session {
             .collect()
     }
 
+    /// ACT1-FIX4 (PT-93): enemy-side unit `c` left the field alive on its own (by an exit; `Fate::Fled` in `fates`):
+    /// not one that surrendered or a retreat target driven to its HP floor.
+    pub fn foe_escaped(&self, c: UnitId) -> bool {
+        let u = &self.w.units[c];
+        !self.w.allies.contains(&c)
+            && u.is_alive()
+            && u.is_withdrawn
+            && !self.w.hp_floor.is_some_and(|(t, _)| t == c)
+            && !self.unit_keys.get(&c).is_some_and(|k| self.morale.surrendered.contains(k))
+    }
+
     /// Fires phase `id` at [round, block] (block 0 = round start): wave, status, enrage, the phase's cell, then each
     /// `kill` (ENCOUNTER2 P1); marked fired last (its group's unfired phases drop, P2).
     fn fire_phase(&mut self, id: &str, round: i32, block: i32) {
@@ -2250,6 +2261,9 @@ impl Session {
         let label = p.effects_of("wave").next().map(|fx| value::string(fx, "label", "")).unwrap_or_default();
         self.append(crate::log::Entry::event(round, block, &p.name, false, &label, "Wave", "ARRIVED", &format!("{} join the battle.", names.join(", ")), &format!("{} more hostiles", names.len())));
         self.events.push(format!("{label}: {} join the battle.", names.join(", ")));
+        // ACT1-FIX4 (PT-92): the arrival in the combat log too (the encounter's own lines; the resolver log is untouched)
+        let said = if label.is_empty() { p.name.clone() } else { label };
+        self.encounter_lines.push((self.resolver.log.len(), format!("[Wave] {said}: {} join the battle.", names.join(", "))));
         self.phases.mark_fired(id, round, block);
     }
 

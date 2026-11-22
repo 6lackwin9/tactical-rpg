@@ -386,3 +386,36 @@ fn the_board_grid_setting_turns_the_grid_lines_off() {
     assert_eq!(t.grid_alpha, 0, "no grid at rest");
     assert!(t.grid_alpha_planning > crate::stage::FULL_GRID_ALPHA, "the full grid is stronger while planning ({})", t.grid_alpha_planning);
 }
+
+/// ACT1-FIX4 (PT-93): a foe that escaped by an exit leaves the foe panel; a surrendered foe (also off the field and
+/// alive) stays on it. The first catalog encounter with two copies of its first enemy and morale on (the unit keys).
+#[test]
+fn an_escaped_foe_leaves_the_hostiles_list_and_a_surrendered_one_stays() {
+    let mut cx = crate::hud::hud_tests::game_cx();
+    let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+    std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").edit_cat(|c| {
+        let row = c.encounters.get_mut(&encounter).expect("the row");
+        let first = row["enemies"][0].clone();
+        row.insert("enemies".into(), json!([first.clone(), first]));
+        row.insert("morale".into(), json!(true));
+    });
+    let mut b = BattleScreen::arena_with(&cx, None, &encounter, Some(TIMELINE.to_string()), "", false);
+    let ses = b.host.session.as_mut().expect("the battle starts");
+    let (r, list) = ses.units_by_ref.iter().find(|(_, l)| l.len() == 2).map(|(r, l)| (r.clone(), l.clone())).expect("two of one ref");
+    let (gone, gave_up) = (list[0], list[1]);
+    for u in [gone, gave_up] {
+        ses.w.units[u].is_withdrawn = true;
+        ses.w.grid.positions[u] = None;
+    }
+    ses.morale.surrendered.push(format!("{r}#1"));
+    assert!(ses.foe_escaped(gone) && !ses.foe_escaped(gave_up));
+    let name = |_: usize| String::new();
+    let full = |_: usize| (String::new(), String::new());
+    let none = |_: usize| None;
+    let about = |_: &str| String::new();
+    let inp = crate::battle_view::Inputs { sel: None, card_foe: None, round_ap: &[], plate_name: &name, full_name: &full, intent_of: &none, open_groups: &[], pinned: None, passive_about: &about };
+    let m = crate::battle_view::model(s(&b), &inp);
+    let listed: Vec<usize> = m.foes.iter().flat_map(|f| f.units()).collect();
+    assert!(!listed.contains(&gone), "the escaped foe leaves the list: {listed:?}");
+    assert!(listed.contains(&gave_up), "the surrendered foe stays: {listed:?}");
+}

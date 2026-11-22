@@ -40,7 +40,7 @@ mod prose {
             "Defend" if !line.contains("guard was broken") => Some("defend"),
             "Focus" => Some("buff"),
             "Support" => Some("heal"),
-            "Move" | "Move Cut Short" | "Withdrawal" | "Dash" | "Chase" | "Disengage" => Some("move_step"),
+            "Move" | "Move Cut Short" | "Withdrawal" | "Escape" | "Dash" | "Chase" | "Disengage" => Some("move_step"),
             _ => None,
         }
     }

@@ -522,6 +522,12 @@ fn claimable(d: &Data, gs: &GameState, world: &str, r: &str) -> String {
 /// side (`settle_party_side`: the tally's fielded members settled by `roster::settle_party`, the stay-behind flag) and
 /// its keys `party_fates`, `stay_lines`, `wounded`, `departed` (`PARTY_KEYS`).
 pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, tally: &Tally) -> Dict {
+    apply_paying(d, gs, encounter_qid, outcome, tally, false)
+}
+
+/// `apply`; `defaulted` = the tally is a fight settled without a battle (`default_tally`): its XP goes to the active
+/// members as before ACT1-FIX4 (`default_ends` holds only the members that would take the field).
+fn apply_paying(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, tally: &Tally, defaulted: bool) -> Dict {
     let done = |ok: bool, errors: &[String], xp: Dict, advanced: &[String]| {
         let mut out = json::ok_result(ok, errors);
         out.insert("xp".into(), Value::Object(xp));
@@ -549,8 +555,10 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     let defeated: Vec<bool> = fates.iter().map(|f| f.defeated() && !escaped).collect();
     // 2. XP for the defeated enemies only (none: no award at all). A won fight whose roster does not resolve from the
     // party's world (a road fight on another world's route) gives every member a 0 award, as before REWARD1 (Godot).
+    // ACT1-FIX4 (PT-95): to the members who fought (a captured stayer included), not who is active after the settle
+    let fielded: Vec<String> = if defaulted { Vec::new() } else { tally.party.iter().map(|e| e.member.clone()).collect() };
     let levels: Vec<(i64, String)> = roster.iter().zip(&defeated).filter(|(_, d)| **d).map(|(f, _)| (f.level, f.tier.clone())).collect();
-    let xp = if levels.is_empty() && !(won && roster.is_empty()) { Dict::new() } else { progression::award_encounter_pct(d, &mut gs.party, &levels, tally.xp_pct.unwrap_or(100)) };
+    let xp = if levels.is_empty() && !(won && roster.is_empty()) { Dict::new() } else { progression::award_fielded_pct(d, &mut gs.party, &fielded, &levels, tally.xp_pct.unwrap_or(100)) };
     // 3. the quest hook
     let advanced = if won { quest::on_encounter_won(d, gs, encounter_qid) } else { Vec::new() };
     // 4. the purse share
@@ -990,7 +998,7 @@ pub fn settle(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, 
         Some(t) => apply(d, gs, encounter_qid, outcome, t),
         None => {
             let t = default_tally(d, gs, encounter_qid, outcome);
-            apply(d, gs, encounter_qid, outcome, &t)
+            apply_paying(d, gs, encounter_qid, outcome, &t, true)
         }
     }
 }
@@ -1002,7 +1010,7 @@ pub fn settle_xp_pct(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome:
         None => default_tally(d, gs, encounter_qid, outcome),
     };
     t.xp_pct = Some(xp_pct.clamp(0, 100));
-    apply(d, gs, encounter_qid, outcome, &t)
+    apply_paying(d, gs, encounter_qid, outcome, &t, tally.is_none())
 }
 
 /// The tally of a fight settled without one (`settle`'s `None`).

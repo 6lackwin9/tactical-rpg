@@ -248,3 +248,26 @@ fn session_with_rows(rows: Vec<Value>, board: &[String]) -> Session {
     let row = json!({"id": "t_board", "name": "Board", "party": ["t_hero"], "enemies": ["t_foe"], "total_blocks": BLOCKS, "unit_ap": 10, "max_rounds": 2, "rows": board});
     Session::start(Arc::new(cat), EncounterDef::from_obj(row.as_object().unwrap()), &IndexMap::new())
 }
+
+/// ACT1-FIX4 (PT-92): a terrain hazard's line names the terrain the unit is caught in, then the status ("X is caught
+/// in Bog: <Status>"); a row with no `name` reads as its id in words ("Toxic Bog"), never "Floor" (was "X is <Status>
+/// by Floor").
+#[test]
+fn a_terrain_hazard_line_names_the_terrain_and_the_status() {
+    let st = status::ROWS.iter().find(|r| r.resistable).expect("a resistable row").id;
+    let bog = index("toxic_bog");
+    let cell = V2::new(4, 4);
+    for (row_name, label) in [(Some("Bog"), "Bog"), (None, "Toxic Bog")] {
+        let mut rows = bare_rows();
+        let mut row = json!({"id": "toxic_bog", "hazard_status": st, "hazard_potency": 100_000, "hazard_rounds": 2, "hazard_magnitude": 0, "hazard_on": "both"});
+        if let Some(n) = row_name {
+            row["name"] = json!(n);
+        }
+        rows[bog] = row;
+        let mut s = session(rows);
+        s.w.grid.terrain[(cell.y * rpgkit_battle::grid::GRID_W + cell.x) as usize] = bog;
+        let name = s.w.units[HERO].name.clone();
+        let lines = hazard_on_enter(&mut s.w, &mut GodotRng::new(1), HERO, &[cell]);
+        assert_eq!(lines, [format!("[Hazard] {name} is caught in {label}: {}", status::display_name(st))], "{row_name:?}");
+    }
+}

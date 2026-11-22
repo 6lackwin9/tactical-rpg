@@ -1,0 +1,54 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "locations",
+      "world": "sunk_ward",
+      "fields": [
+        "markers"
+      ],
+      "entry": {
+        "id": "slag_gate",
+        "markers": [
+          {
+            "id": "exit_gorge",
+            "kind": "exit",
+            "anchor": "exit_gorge",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "to": "world_map",
+            "label": "World map: the high gorge"
+          },
+          {
+            "id": "portcullis",
+            "kind": "point",
+            "anchor": "portcullis",
+            "requires_flags": [
+              {
+                "key": "sunk_ward.m5_done",
+                "value": true
+              }
+            ],
+            "unless_flags": [],
+            "sets_flags": [],
+            "label": "The Slag Gate portcullis",
+            "note": "The winch has been turned and the road is cleared. Beyond the chain-teeth, it climbs toward Upper Cinderreach.",
+            "use": "look"
+          },
+          {
+            "id": "crucible_watchpost",
+            "kind": "exit",
+            "anchor": "exit_crucible",
+            "requires_flags": [],
+            "unless_flags": [],
+            "sets_flags": [],
+            "to": "crucible_watchpost",
+            "label": "Back down to the Crucible",
+            "to_anchor": "postern_in"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "skills",
+      "fields": [
+        "description"
+      ],
+      "entry": {
+        "id": "billhook_sunder",
+        "description": "Assault, Heavy: {name}, {power} power, {stagger} stagger; exposes the target for {rounds}."
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "skills",
+      "fields": [
+        "description"
+      ],
+      "entry": {
+        "id": "hamstring_sever",
+        "description": "Maneuver, Snap: dash up to {dash} and cut the leg, {power} power; slows the target; hits harder on a flanked foe."
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "skills",
+      "fields": [
+        "description"
+      ],
+      "entry": {
+        "id": "orlovs_retribution",
+        "description": "Maneuver, Standard: {name}, {power} power; dash {dash} after the strike; harder on a staggered or pinned foe."
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "skills",
+      "fields": [
+        "description"
+      ],
+      "entry": {
+        "id": "martyrs_rush",
+        "description": "Maneuver, Snap: dash up to {dash} and strike, {power} power; costs 10 HP."
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "skills",
+      "fields": [
+        "description"
+      ],
+      "entry": {
+        "id": "boning_knife_flurry",
+        "description": "Maneuver, Snap: {name}, dash up to {dash}, {power} power; bleeds; hits harder on a flanked foe."
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "skills",
+      "fields": [
+        "description"
+      ],
+      "entry": {
+        "id": "throat_clamp_pounce",
+        "description": "Maneuver, Snap: {name}, dash up to {dash}, {power} power, {stagger} stagger; roots the target."
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "skills",
+      "fields": [
+        "description"
+      ],
+      "entry": {
+        "id": "burrow_ambush",
+        "description": "Maneuver, Snap: dash up to {dash}, {power} power; may stagger."
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "skills",
+      "fields": [
+        "description"
+      ],
+      "entry": {
+        "id": "traitors_parry",
+        "description": "Guard, Snap: -{mitigation} damage; grants riposte for {rounds}."
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "skills",
+      "fields": [
+        "description"
+      ],
+      "entry": {
+        "id": "inquisitorial_parry",
+        "description": "Guard, Snap: -{mitigation} damage; grants riposte for {rounds}."
+      }
+    }
+  ]
+}

@@ -329,8 +329,23 @@ pub enum JAct {
 #[derive(Default)]
 pub struct Journal {
     selected: String,
+    /// ACT1-FIX4 (PT-98): the quest list's scroll (px from its top) when it is taller than its room above Back, and
+    /// the selection it last followed (a new selection scrolls into view; the wheel scrolls freely).
+    top: i32,
+    followed: String,
+    /// The list's height and room as last drawn (the wheel's clamp).
+    list_h: i32,
     w: Vec<Widget<JAct>>,
 }
+
+/// ACT1-FIX4 (PT-98): the quest list's top, the Back button's top and the gap kept above it; a group label and a quest
+/// row's steps.
+const JOURNAL_LIST_Y: i32 = 50;
+const JOURNAL_BACK_Y: i32 = 318;
+const JOURNAL_LIST_ROOM: i32 = JOURNAL_BACK_Y - 4 - JOURNAL_LIST_Y;
+const JOURNAL_LABEL_STEP: i32 = 13;
+const JOURNAL_ROW_STEP: i32 = 22;
+const JOURNAL_ROW_H: i32 = 18;
 
 impl Journal {
     fn act(&mut self, cx: &mut Cx, a: JAct) {
@@ -385,15 +400,62 @@ impl Screen<GameCx> for Journal {
         if !all.contains(&self.selected) {
             self.selected = all.first().cloned().unwrap_or_default();
         }
-        let mut y = 50;
+        // ACT1-FIX4 (PT-98): the list keeps above Back: taller than its room it scrolls (the selection kept in view, the
+        // wheel), and only whole rows inside the room are drawn, with a "more" mark at a cut edge
+        let mut items: Vec<(i32, Option<&str>, &str)> = Vec::new();
+        let mut h = 0;
         for (_, label, ids) in &groups {
-            ui.p.text(25.0, y as f32, label, BODY + 1.0, th().info);
-            y += 13;
+            items.push((h, None, label.as_str()));
+            h += JOURNAL_LABEL_STEP;
             for q in ids {
-                let name = s_or(&quest::resolved(&d, &gs, q), "name", q);
-                ui.button_full(&format!("journal.quest.{}", q.replace(':', ".")), Rect::new(25, y, 130, 18), &format!("> {name}"), JAct::Select(q.clone()), true, *q == self.selected, BODY + 1.0, Vec::new());
-                y += 22;
+                items.push((h, Some(q.as_str()), ""));
+                h += JOURNAL_ROW_STEP;
             }
+        }
+        self.list_h = h;
+        let max_top = (h - JOURNAL_LIST_ROOM).max(0);
+        if self.followed != self.selected {
+            self.followed = self.selected.clone();
+            if let Some(&(at, _, _)) = items.iter().find(|(_, q, _)| *q == Some(self.selected.as_str())) {
+                // its group label too when that is the row just above
+                let label_above = items.iter().any(|(y, q, _)| q.is_none() && *y == at - JOURNAL_LABEL_STEP);
+                let from = if label_above { at - JOURNAL_LABEL_STEP } else { at };
+                if from < self.top {
+                    self.top = from;
+                } else if at + JOURNAL_ROW_H > self.top + JOURNAL_LIST_ROOM {
+                    self.top = at + JOURNAL_ROW_H - JOURNAL_LIST_ROOM;
+                }
+            }
+        }
+        self.top = self.top.clamp(0, max_top);
+        let (mut above, mut below) = (false, false);
+        for &(at, q, label) in &items {
+            let tall = if q.is_some() { JOURNAL_ROW_H } else { JOURNAL_LABEL_STEP };
+            let y = at - self.top;
+            if y < 0 {
+                above = true;
+                continue;
+            }
+            if y + tall > JOURNAL_LIST_ROOM {
+                below = true;
+                continue;
+            }
+            let y = JOURNAL_LIST_Y + y;
+            match q {
+                None => {
+                    ui.p.text(25.0, y as f32, label, BODY + 1.0, th().info);
+                }
+                Some(q) => {
+                    let name = s_or(&quest::resolved(&d, &gs, q), "name", q);
+                    ui.button_full(&format!("journal.quest.{}", q.replace(':', ".")), Rect::new(25, y, 130, JOURNAL_ROW_H), &format!("> {name}"), JAct::Select(q.to_string()), true, q == self.selected, BODY + 1.0, Vec::new());
+                }
+            }
+        }
+        if above {
+            ui.p.text(160.0, JOURNAL_LIST_Y as f32, "more above", SMALL, th().dim);
+        }
+        if below {
+            ui.p.text(160.0, (JOURNAL_LIST_Y + JOURNAL_LIST_ROOM - 10) as f32, "more below", SMALL, th().dim);
         }
         if all.is_empty() {
             ui.p.text(25.0, 50.0, "No quests yet.", BODY + 1.0, th().dim);
@@ -441,7 +503,7 @@ impl Screen<GameCx> for Journal {
                 ui.p.text(x as f32, y as f32, "On hold.", BODY + 1.0, th().dim);
             }
         }
-        ui.button("journal.back", Rect::new(25, 318, 130, 18), "Back", JAct::Back, true);
+        ui.button("journal.back", Rect::new(25, JOURNAL_BACK_Y, 130, 18), "Back", JAct::Back, true);
         self.w = ui.widgets;
     }
     fn key(&mut self, cx: &mut Cx, k: Key) {
@@ -457,8 +519,12 @@ impl Screen<GameCx> for Journal {
         };
         self.selected = all[(at + step).clamp(0, all.len() as i64 - 1) as usize].clone();
     }
+    /// ACT1-FIX4 (PT-98): the wheel scrolls a list taller than its room (a row per line; up = toward the top, as the forge).
+    fn wheel(&mut self, _cx: &mut Cx, lines: i32) {
+        self.top = (self.top - lines * JOURNAL_ROW_STEP).clamp(0, (self.list_h - JOURNAL_LIST_ROOM).max(0));
+    }
     fn state(&self, _cx: &Cx) -> Value {
-        json!({"selected": self.selected})
+        json!({"selected": self.selected, "scroll": self.top})
     }
     widget_plumbing!();
 }
@@ -927,19 +993,22 @@ impl Results {
     }
 
     /// PR7-32: the table's rows: each party member with an award or a report row (party order), then the report's other
-    /// rows (guests); each with its report row when there is one.
+    /// rows (guests); each with its report row when there is one. ACT1-FIX4 (PT-95): with a report, only who fought
+    /// has a row (a member not in the fight gets none); a hero who left in it (captured) is its departed record, so its
+    /// XP line shows.
     fn heroes<'a>(&'a self, gs: &'a GameState) -> Vec<(Option<&'a UnitState>, Option<&'a emberwake_battle::report::Row>)> {
         let rows: &[emberwake_battle::report::Row] = self.report.as_ref().map_or(&[], |r| r.rows.as_slice());
         let mut out: Vec<(Option<&UnitState>, Option<&emberwake_battle::report::Row>)> = Vec::new();
         for m in &gs.party.members {
             let row = rows.iter().find(|r| !r.guest && r.key == m.id);
-            if self.award.contains_key(&m.id) || row.is_some() {
+            if row.is_some() || (self.report.is_none() && self.award.contains_key(&m.id)) {
                 out.push((Some(m), row));
             }
         }
         for r in rows {
             if !out.iter().any(|(_, x)| x.is_some_and(|x| std::ptr::eq(x, r))) {
-                out.push((None, Some(r)));
+                let gone = if r.guest { None } else { gs.party.departed.iter().rev().find(|x| x.member.id == r.key).map(|x| &x.member) };
+                out.push((gone, Some(r)));
             }
         }
         out
@@ -1045,7 +1114,7 @@ impl Screen<GameCx> for Results {
             other_rewards.push("No other rewards.".into());
         }
         let heroes = self.heroes(&gs);
-        let prompt = heroes.iter().any(|(m, _)| m.is_some_and(|m| self.award.get(&m.id).and_then(Value::as_object).is_some_and(|a| json::i(a, "new_level", 0) > json::i(a, "old_level", 0)) && m.unspent(&d) > 0));
+        let prompt = heroes.iter().any(|(m, _)| m.is_some_and(|m| gs.party.member(&m.id).is_some() && self.award.get(&m.id).and_then(Value::as_object).is_some_and(|a| json::i(a, "new_level", 0) > json::i(a, "old_level", 0)) && m.unspent(&d) > 0));
         let columns: Vec<&str> = self.report.as_ref().map(|r| r.columns.iter().copied().filter(|c| *c != "name").collect()).unwrap_or_default();
         let best = self.report.as_ref().map(|r| r.best.clone()).unwrap_or_default();
         // ART-18: the panel is sized to its content (the rows compact when six or more heroes would not fit)
@@ -1248,6 +1317,51 @@ mod tests {
         let (light, dark) = (spot(&mut cx, [255, 255, 255, 255]), spot(&mut cx, [0, 0, 0, 255]));
         aegis_ui::theme::set_theme(aegis_ui::theme::Theme::default());
         assert_eq!(light, dark, "nothing shows through");
+    }
+
+    /// ACT1-FIX4 (PT-98): with every quest of the world completed, no quest row overlaps the Back button (rows past
+    /// the room above it are not drawn); when the list is taller than its room it scrolls, and walking the selection
+    /// to the last quest brings that row into view above Back.
+    #[test]
+    fn pt98_the_journal_list_keeps_clear_of_back() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        // the playable world with the most quests (picked by rule, not by name)
+        let d = cx.data.clone();
+        let most = emberwake_world::new_game::playable_worlds(&d).into_iter().max_by_key(|w| d.merged_entries(w, "quests").len()).expect("a world");
+        *cx.gs_mut() = emberwake_world::new_game::create_for_world(&d, &most, 1).expect("a new game");
+        let gs = cx.gs().clone();
+        let all: Vec<String> = cx.data.merged_entries(&gs.world_id, "quests").iter().map(|e| s(e, "_qid")).collect();
+        for q in &all {
+            cx.gs_mut().quests.insert(q.clone(), json!({"state": "completed"}));
+        }
+        let shown: Vec<String> = Journal::shown(&cx).into_iter().flat_map(|g| g.2).collect();
+        assert!(!shown.is_empty());
+        let rect = |w: &Value| (w["rect"][0].as_i64().unwrap() as i32, w["rect"][1].as_i64().unwrap() as i32, w["rect"][2].as_i64().unwrap() as i32, w["rect"][3].as_i64().unwrap() as i32);
+        let mut j = Journal::default();
+        let mut g = crate::hud::hud_tests::gfx();
+        j.draw(&mut cx, &mut g, (-500, -500), true);
+        let check = |j: &Journal| {
+            let w = j.widgets();
+            let back = rect(w.iter().find(|x| x["id"] == "journal.back").expect("Back"));
+            for row in w.iter().filter(|x| x["id"].as_str().is_some_and(|id| id.starts_with("journal.quest."))) {
+                let r = rect(row);
+                assert!(r.1 + r.3 <= back.1, "{} overlaps Back {back:?}: {r:?}", row["id"]);
+                assert!(r.1 >= JOURNAL_LIST_Y, "{} above the list: {r:?}", row["id"]);
+            }
+        };
+        check(&j);
+        if j.list_h > JOURNAL_LIST_ROOM {
+            for _ in 0..shown.len() {
+                j.key(&mut cx, Key::Down);
+            }
+            j.draw(&mut cx, &mut g, (-500, -500), true);
+            check(&j);
+            let last = format!("journal.quest.{}", shown.last().unwrap().replace(':', "."));
+            assert!(j.widgets().iter().any(|x| x["id"] == last), "the selected last quest is in view");
+            assert!(j.top > 0, "scrolled");
+            j.wheel(&mut cx, 100);
+            assert_eq!(j.top, 0, "the wheel up scrolls back to the top");
+        }
     }
 
     fn name(kind: &str, id: &str) -> String {
@@ -1487,6 +1601,33 @@ mod tests {
         frame(&mut none, &mut cx, &mut gfx(), 1.0);
         assert!(!none.widgets().iter().any(|x| x["id"].as_str().is_some_and(|id| id.starts_with("results.report.") || id == "results.best")));
         assert!(none.state(&cx).get("report").is_none_or(Value::is_null));
+    }
+
+    /// ACT1-FIX4 (PT-95): with a report, a member who did not fight has no row even with an award, and a hero who left
+    /// in the fight (a departed record, e.g. captured) has its XP line from the award.
+    #[test]
+    fn the_results_rows_are_who_fought_and_a_captured_hero_keeps_his_xp_line() {
+        let mut cx = party_of(3);
+        let (a, b, c) = (cx.gs().party.members[0].clone(), cx.gs().party.members[1].clone(), cx.gs().party.members[2].clone());
+        // c left in the fight (captured): its record, out of the members
+        cx.gs_mut().party.members.retain(|m| m.id != c.id);
+        cx.gs_mut().party.departed.push(emberwake_world::state::Departed { member: c.clone(), life: "captured".into(), cause: "stayed".into(), encounter: String::new(), day: 0, keepsake: String::new() });
+        let award = json!({a.id.clone(): {"xp": 12, "old_level": 1, "new_level": 1}, b.id.clone(): {"xp": 9, "old_level": 1, "new_level": 1}, c.id.clone(): {"xp": 7, "old_level": 1, "new_level": 1}});
+        let res = json::obj([("ok", json!(true)), ("xp", award)]);
+        let report = emberwake_battle::report::Report {
+            outcome: "won".into(), rounds: 3, rows: vec![report_row(&a.id, "A", 25, 0), report_row(&c.id, "C", 5, 0)],
+            columns: vec!["dealt", "taken", "healed"], best: String::new(),
+        };
+        let mut r = Results::new(&res, "won", &Dict::new()).report(Some(report));
+        frame(&mut r, &mut cx, &mut gfx(), 1.0);
+        let w = r.widgets();
+        let has = |id: String| w.iter().any(|x| x["id"] == id);
+        assert!(has(format!("results.xp.{}", a.id)), "a fought: {w:?}");
+        assert!(!has(format!("results.xp.{}", b.id)), "b did not fight: no row, no XP line");
+        assert!(!has("results.report.2.dealt".into()), "two rows only");
+        let xp = w.iter().find(|x| x["id"] == format!("results.xp.{}", c.id)).unwrap_or_else(|| panic!("the captured hero's XP line: {w:?}"));
+        assert!(xp["text"].as_str().is_some_and(|t| t.starts_with("+7 XP")), "{xp}");
+        assert_eq!(w.iter().find(|x| x["id"] == "results.report.1.dealt").map(|x| x["text"].clone()), Some(json!("5")), "the captured hero's numbers");
     }
 
     /// PT-59 (PR7-75): a guest's results row shows its catalog unit's portrait (the initial only without one).

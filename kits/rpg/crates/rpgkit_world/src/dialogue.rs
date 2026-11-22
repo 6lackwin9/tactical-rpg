@@ -1357,18 +1357,46 @@ pub fn member_from_flag(d: &Data, gs: &GameState, key: &str) -> Option<String> {
     gs.party.members.iter().find(|m| m.id == r || (!c.is_empty() && (m.id == id || m.lore_ref == qid))).map(|m| m.id.clone())
 }
 
+/// ACT1-FIX4 (PT-90): the index in `party.departed` of the latest record of the character flag `key` names (same
+/// matching as `member_from_flag`); None when the flag is not text or names nobody who left.
+pub fn departed_from_flag(d: &Data, gs: &GameState, key: &str) -> Option<usize> {
+    let held = gs.read_flag(key)?;
+    let r = held.as_str().filter(|r| !r.is_empty())?;
+    let c = d.resolve(&gs.world_id, "characters", r);
+    let (id, qid) = (json::s(c, "id"), json::s(c, "_qid"));
+    gs.party.departed.iter().rposition(|x| x.member.id == r || (!c.is_empty() && (x.member.id == id || x.member.lore_ref == qid)))
+}
+
 /// ACT1-HOOKS2 (FB-244 (1)): the `install` effect (`rpgkit_data::INSTALL_EFFECT`): graft `item` into a body slot of the
 /// member `member_from_flag` names (`slot`, or "" = the first empty slot in catalog order that takes it) through the
 /// recipe's install path (`UnitState::install_graft`: an occupied named slot is overwritten and its graft destroyed).
 /// A member who already carries the item changes nothing (a replayed list installs once); so does a flag naming no
 /// member or a graft that does not fit: each with a note, never a refusal.
+/// ACT1-FIX4 (PT-90): a flag naming a member who has left (`party.departed`, e.g. captured at a stay-behind) installs
+/// into that departed record (a living one: a dead member's record gets nothing, with a note): what was given stays
+/// with the member and returns with them; nobody else gets it.
 fn install(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<String>) {
     let (key, item) = (json::s(fx, "member_from_flag"), json::s(fx, "item"));
-    let Some(id) = member_from_flag(d, gs, &key) else {
-        notes.push(format!("Flag '{key}' names no party member; nothing is installed."));
-        return;
+    let present = member_from_flag(d, gs, &key);
+    let gone = if present.is_none() { departed_from_flag(d, gs, &key) } else { None };
+    let mut away = String::new();
+    let m = if let Some(at) = gone {
+        let rec = &mut gs.party.departed[at];
+        if rec.life == "dead" {
+            let who = progression::display_name(d, &rec.member);
+            notes.push(format!("Flag '{key}' names {who}, who is dead; nothing is installed."));
+            return;
+        }
+        away = rec.life.clone();
+        &mut rec.member
+    } else {
+        let Some(id) = present else {
+            notes.push(format!("Flag '{key}' names no party member; nothing is installed."));
+            return;
+        };
+        let Some(m) = gs.party.member_mut(&id) else { return };
+        m
     };
-    let Some(m) = gs.party.member_mut(&id) else { return };
     let who = progression::display_name(d, m);
     let name = d.item_name(&item);
     if m.body.values().any(|held| *held == item) {
@@ -1387,7 +1415,11 @@ fn install(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<String>) {
             if let Some(old) = old {
                 notes.push(format!("{} is destroyed.", d.item_name(&old)));
             }
-            notes.push(format!("{who} takes {name}."));
+            if away.is_empty() {
+                notes.push(format!("{who} takes {name}."));
+            } else {
+                notes.push(format!("{who} is {away}; {name} stays with them and returns with them."));
+            }
         }
     }
 }

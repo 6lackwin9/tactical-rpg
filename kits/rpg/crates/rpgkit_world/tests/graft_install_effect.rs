@@ -167,3 +167,39 @@ fn a_sequence_effects_step_installs_too() {
     assert_eq!(body(&gs, "lead"), [pair("s_a", "g_two")]);
     assert!(notes.contains(&"Lead takes Graft g_two.".to_string()), "{notes:?}");
 }
+
+/// ACT1-FIX4 (PT-90): the flag names a member who left (captured at a stay-behind): the graft goes into that departed
+/// record (it stays with them and returns with them), nobody in the party gets it, and the note says so; replayed, it
+/// installs once.
+#[test]
+fn a_flag_naming_a_departed_member_installs_into_their_record() {
+    let d = data(json!([install(json!({}))]));
+    let mut gs = state(&d);
+    let at = gs.party.members.iter().position(|m| m.id == "second").expect("second");
+    let member = gs.party.members.remove(at);
+    gs.party.departed.push(rpgkit_world::state::Departed { member, life: "captured".into(), cause: "stayed".into(), encounter: "e".into(), day: 1, keepsake: String::new() });
+    let notes = choose(&d, &mut gs, "second");
+    let held: Vec<(String, String)> = gs.party.departed[0].member.body.iter().map(|(s, i)| (s.clone(), i.clone())).collect();
+    assert_eq!(held, [pair("s_a", "g_one")], "in the departed record");
+    assert!(body(&gs, "lead").is_empty(), "not passed to another member");
+    assert!(notes.contains(&"Second is captured; Graft g_one stays with them and returns with them.".to_string()), "{notes:?}");
+    assert!(!notes.iter().any(|n| n.contains("names no party member")), "{notes:?}");
+    let notes = choose(&d, &mut gs, "w:second");
+    assert_eq!(gs.party.departed[0].member.body.len(), 1, "a replayed list installs once");
+    assert!(notes.contains(&"Second already carries Graft g_one.".to_string()), "{notes:?}");
+}
+
+/// ACT1-FIX4 review: a flag naming a member who died installs nothing (the dead record is untouched, nobody else gets
+/// it) and says so.
+#[test]
+fn a_flag_naming_a_dead_member_installs_nothing() {
+    let d = data(json!([install(json!({}))]));
+    let mut gs = state(&d);
+    let at = gs.party.members.iter().position(|m| m.id == "second").expect("second");
+    let member = gs.party.members.remove(at);
+    gs.party.departed.push(rpgkit_world::state::Departed { member, life: "dead".into(), cause: "stood".into(), encounter: "e".into(), day: 1, keepsake: String::new() });
+    let notes = choose(&d, &mut gs, "second");
+    assert!(gs.party.departed[0].member.body.is_empty(), "the dead record is untouched");
+    assert!(body(&gs, "lead").is_empty(), "not passed to another member");
+    assert!(notes.iter().any(|n| n.contains("who is dead; nothing is installed")), "{notes:?}");
+}

@@ -161,3 +161,45 @@ fn the_objective_line_names_the_unit_and_the_floor() {
     let text = Objectives::text_of(o.as_object().unwrap(), |r| if r == "k_boss" { "Commander".into() } else { r.into() });
     assert_eq!(text, "Drive Commander back to 30% HP, or defeat every enemy.");
 }
+
+/// ACT1-FIX4 (PT-93): a foe that walks onto an exit escapes: its line reads as a foe escaping (not a hero's
+/// "WITHDREW"), `foe_escaped` holds (the screens leave it off the Hostiles list) and `fates` reads it fled; a
+/// surrendered foe or the retreat target at its floor is no escape, and a hero walking out still withdraws.
+#[test]
+fn a_foe_leaving_by_an_exit_escapes() {
+    use aegis_core::rng::GodotRng;
+    use rpgkit_battle::command::{CmdKind, Command};
+    use rpgkit_battle::grid::NO_CELL;
+    let walk = |c: UnitId| {
+        let mut cmd = Command::new(c, 0, 1, CmdKind::Walk { path: vec![V2::new(1, 0)], expected_start: NO_CELL, goal: NO_CELL, approach: None, moved_tiles: 0, cut_short: false, blocked_by: String::new() });
+        cmd.name = "Move".into();
+        cmd
+    };
+    let mut s = session(row(json!({"exits": [[11, 4]]})));
+    s.w.grid.positions[GUARD] = Some(V2::new(10, 4));
+    assert!(!s.foe_escaped(GUARD), "on the field");
+    let mut cmd = walk(GUARD);
+    cmd.execute(&mut s.w, &mut GodotRng::new(1));
+    assert!(s.w.units[GUARD].is_withdrawn, "it left by the exit");
+    assert_eq!(cmd.log, "[Escape] Guard moved from (10, 4) and escaped through the exit.");
+    assert!(s.foe_escaped(GUARD));
+    assert_eq!(s.fates()[0], ("k_guard".to_string(), Fate::Fled));
+    // a hero walking out still withdraws
+    s.w.grid.positions[0] = Some(V2::new(10, 4));
+    let mut cmd = walk(0);
+    cmd.execute(&mut s.w, &mut GodotRng::new(1));
+    assert_eq!(cmd.log, "[Withdrawal] Ash moved from (10, 4) and safely WITHDREW through Exit!");
+    assert!(!s.foe_escaped(0), "a hero is no foe");
+    // the retreat target driven to its floor withdraws, it does not escape
+    let mut s = retreat(json!({}));
+    s.w.damage(BOSS, 10 * BOSS_HP, false);
+    play_round(&mut s);
+    assert!(s.w.units[BOSS].is_withdrawn && !s.foe_escaped(BOSS));
+    // a surrendered foe (off the field, alive) did not escape: it stays a surrender
+    let mut s = session(row(json!({"morale": true})));
+    s.morale.surrendered.push("k_guard#0".into());
+    s.w.units[GUARD].is_withdrawn = true;
+    s.w.grid.positions[GUARD] = None;
+    assert!(!s.foe_escaped(GUARD), "a surrender is no escape");
+    assert_eq!(s.fates()[0], ("k_guard".to_string(), Fate::Surrendered));
+}

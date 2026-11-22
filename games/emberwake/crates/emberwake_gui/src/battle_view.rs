@@ -694,7 +694,8 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
     // BOSSUI1 (contract 9.1): a boss on the bar leaves the foe panel
     let phase_bar = s.phase_bar();
     let boss = phase_bar.as_ref().map(|p| p.unit);
-    let shown: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| Some(e) != boss && (w.grid.pos(e).is_some() || !w.units[e].is_alive() || w.units[e].is_withdrawn)).collect();
+    // ACT1-FIX4 (PT-93): a foe that escaped by an exit leaves the list (a surrendered one stays)
+    let shown: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| Some(e) != boss && !s.foe_escaped(e) && (w.grid.pos(e).is_some() || !w.units[e].is_alive() || w.units[e].is_withdrawn)).collect();
     // PR7-75 (PT-40): the count takes in the boss on the bar while it stands (its plate stays above)
     let active = shown.iter().chain(boss.as_ref()).filter(|e| w.units[**e].is_active()).count();
     m.hostiles = format!("Hostiles {active}");

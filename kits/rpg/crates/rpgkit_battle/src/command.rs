@@ -927,7 +927,10 @@ impl Command {
                 let (moved, cut, blocker, notes) = walk(w, rng, src, &path, expected_start, goal);
                 let end = w.grid.pos(src).unwrap_or(NO_CELL);
                 self.cue = Some(crate::event::EventKind::Move);
-                self.log = if w.units[src].is_withdrawn {
+                self.log = if w.units[src].is_withdrawn && !w.allies.contains(&src) {
+                    // ACT1-FIX4 (PT-93): a foe leaving by an exit escapes (not a hero's withdrawal)
+                    format!("[Escape] {src_name} moved from {start} and escaped through the exit.")
+                } else if w.units[src].is_withdrawn {
                     format!("[Withdrawal] {src_name} moved from {start} and safely WITHDREW through Exit!")
                 } else if moved == 0 && cut {
                     format!("[Move Cut Short] {src_name} couldn't move from {start} ({}).", blocked_words(&blocker))
@@ -1886,7 +1889,26 @@ fn hazard_roll(w: &mut World, rng: &mut GodotRng, u: UnitId, h: &crate::grid::Ha
     if !status::apply_effect(&mut w.units[u], &spec, status::Timing::Next, 0.0, Some(rng)) {
         return None;
     }
-    Some(format!("[Hazard] {} is {} by {}", w.units[u].name, status::display_name(&h.status), terrain_name(w, cell)))
+    // ACT1-FIX4 (PT-92): "X is caught in Burning Ground: Burning" (was "X is Burning by Floor": terrain rows have no name)
+    Some(format!("[Hazard] {} is caught in {}: {}", w.units[u].name, terrain_label(w, cell), status::display_name(&h.status)))
+}
+
+/// ACT1-FIX4 (PT-92): the tile's terrain as a hazard line names it: the catalog row's `name`, else its id in words
+/// ("burning_ground" -> "Burning Ground").
+pub fn terrain_label(w: &World, cell: V2) -> String {
+    let id = w.grid.terrain_id(cell);
+    let named = w.cat.terrain.get(id).map(|r| aegis_core::value::string(r, "name", "")).unwrap_or_default();
+    if !named.is_empty() {
+        return named;
+    }
+    id.split('_')
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            let mut cs = p.chars();
+            cs.next().map(|c| c.to_uppercase().chain(cs).collect::<String>()).unwrap_or_default()
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Terrain.display_name of the tile's terrain (the catalog's name, else Floor).

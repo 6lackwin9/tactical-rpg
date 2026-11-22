@@ -328,6 +328,9 @@ fn an_arrival_counts_as_a_foe_before_it_comes_and_a_phase_wave_does_not() {
     assert_eq!((cell.round, cell.block, cell.actor.as_str(), cell.skill.as_str(), cell.subtype.as_str(), cell.outcome.as_str()), (2, 1, "Reinforcements", "Here!", "Wave", "ARRIVED"));
     let name = s.w.units[arrival[0]].name.clone();
     assert_eq!(s.events.last().unwrap(), &format!("Here!: {name} join the battle."));
+    // ACT1-FIX4 (PT-92): the arrival is a combat log line too, in round 2's block 1 part
+    let wave_line = format!("[Wave] Here!: {name} join the battle.");
+    assert!(s.log_groups().iter().any(|g| (g.round, g.block) == (2, 1) && g.lines.contains(&wave_line)), "{:?}", s.log_groups());
     assert_eq!(s.phases.fired.get("reinforcements"), Some(&(2, 1)));
     s.w.units[arrival[0]].hp = 0;
     for _ in 0..600 {

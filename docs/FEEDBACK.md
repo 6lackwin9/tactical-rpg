@@ -70,6 +70,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-86` (`DECOR-GEN1`) | done | `develop` (squash `PR7-86`) | Generated boards (no `rows`, no `decor`) draw 2 to 6 display-only decor pieces from the world manifest's `decor_pool` on their own seeded stream: cover keys on blocks or edges, props at the back only; seed `pr7_86_decor_pool`; goldens unchanged; `FB-402` |
 | `PR7-85` (`XL-FIX2`) | done | `develop` (squash `PR7-85`) | "R 1/12" at Large and Extra large with the goal line clear; Stats and Gear rows grow with text size (second column when needed); every XL cut hovers to its full words; engine `Screen::audit_ignores` and cut `hover`/`bare_cut`; Normal shots unchanged; `FB-404` |
 | `ENGINE-35` (`ACT1-END-RUN1`) | Report | `develop` | Crucible won by hand on try 3 at Lv 8 (no debug); Act 1's end reached at Tithing 19; Kaelen held the winch and was captured; PT-85..100; `FB-406` |
+| `PR7-89` (`ACT1-FIX4`) | done | `develop` (squash `PR7-89`) | Captured hero keeps the dose; `[Wave]`, `[Hazard]` and foe `[Escape]` log lines; results list who fought and a captured hero's XP; Journal scrolls clear of Back; hover cards close at battle end; doubled words fixed; portcullis is a look point matched to its art; the post-act road starts at the Undercroft; goldens unchanged; `FB-408` |
 | `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
 | `PR7-4` (`SCENARIO-GOLDENS1`) | part 1 done (tools lane); baselines await the user | `develop` (squash `PR7-4` part 1) | Scenario `shot` step `golden` (tolerance, pixels allowance, diff image), `record=1`, launch `save`; every scenario in the gate (`tools/fc.sh scenarios_all`); three screen scenarios (menus, hub, battle; 18 shots) run as review shots until the user approves the baselines (`/mnt/project-files/pr7-4/`); `FB-313` |
 | `ENGINE-1` (`HELLO-GAME1`) | done (tools lane) | `develop` (squash `ENGINE-1`) | Sample game `games/hello/` on engine crates only: menu, walker sprite, one save slot, engine sounds, scenario `hello_walk` in the gate; programs `hello` and `hello_cli`; six RPG leaks listed; `FB-315` |
@@ -1009,3 +1010,41 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 - **Not done**: odd costs could not be kept as a mid-battle save (saves are the campaign slot); the tree file captures
   the R2 board. The Overlook and Wedges jobs remain open; Act 2 not played past the Slag Gate.
 - **Docs delta**: none.
+
+### FB-408: PR7-89 ACT1-FIX4 built; the win banner did not reproduce; three questions
+
+- **Status**: built, `develop` (squash `PR7-89`). Goldens unchanged (sim, rules, contract, checks, journey, PHASEFOLD,
+  timeline, resave). Seeds `pr7_89_text`, `pr7_89_portcullis`, `pr7_89_road`. Shots `/mnt/project-files/pr7-89/`.
+- **PT-90** `[PROVISIONAL]`: the dose stays with the captured hero and returns with him. `dlg_int_dose` ends "The vial
+  goes down a throat", and `vg_m5_gate` says Nemeth "took the stayer alive"; nothing passes it on. `install` on a flag
+  naming a departed member grafts into the departed record (`rpgkit_world::dialogue::departed_from_flag`); the note
+  reads "Kaelen is captured; Optic Graft stays with them and returns with them.". There is no rejoin yet.
+- **PT-92**: reinforcements log "[Wave] `label`: A, B join the battle."; hazards log "[Hazard] X is caught in Burning
+  Ground: Burning" (`command::terrain_label`, the terrain row's name or its id in words).
+- **PT-93**: a foe leaving by an exit logs "[Escape] ... escaped through the exit." and leaves the Hostiles list
+  (`Session::foe_escaped`); a surrendered foe stays listed.
+- **PT-94**: the `{rounds}` and `{dash}` tokens already add their unit, so nine skill texts doubled it; the trailing
+  words are dropped in data. No other doubled word found.
+- **PT-95**: encounter XP goes to the members who fought (`progression::award_fielded_pct`; Dunstan's +35 came from the
+  bench filling the captured hero's slot); a captured hero keeps his XP in his departed record and has a results row;
+  a member not in the fight has none. **The win banner did not reproduce**: a won world fight plays the "Victory" beat
+  for about 1.8 s, then opens the results; the run's wait swallowed it (`win_banner.png`).
+- **PT-96**: the Slag Gate marker uses `use: "look"`; there is no raised-portcullis art, so the text now matches the
+  lowered bars: "The Slag Gate portcullis", "The winch has been turned and the road is cleared. Beyond the
+  chain-teeth, it climbs toward Upper Cinderreach.". Raised art would be an Art/UI request.
+- **PT-97**: route `high_gorge` now runs from `sluice_undercroft` (where `seq_after_m5` leaves the party) to the Slag
+  Gate; it no longer starts at the Watchpost. A second route from the Watchpost would be a design call.
+- **PT-98**: the Journal list stays above Back and scrolls (selection kept in view, wheel, "more above/below" marks).
+- **PT-99**: when the outcome panel shows, a veil over the board stops stale hover cards covering the banner.
+- **Questions**:
+  1. Should a win hold its Victory banner until a click, as a loss does (TRANSITIONS1 T2)?
+  2. Should the round banner hide during the Victory beat? It draws over it now.
+  3. Should blocker and forced-move lines also name the terrain instead of "Floor"? That changes log text.
+- **Guess**: benched members no longer get XP from a fight they were not in. Fights settled without a battle (the default
+  tally) still pay every active member; a member who died in the fight gets none; `install` on a flag naming a dead
+  member installs nothing, with a note.
+- **Docs delta**: GAME_BRIEF, combat log: "Reinforcements log `[Wave]`; terrain hazards `[Hazard] X is caught in
+  Terrain: Status`; a foe leaving by an exit logs `[Escape]` and leaves the Hostiles list (`Session::foe_escaped`)."
+  Rewards: "Encounter XP goes to the members who fought (`progression::award_fielded_pct`); a captured member keeps his
+  XP in his departed record." Story effects: "`install` on a flag naming a departed member grafts into the departed
+  record (`dialogue::departed_from_flag`)."

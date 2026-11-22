@@ -432,3 +432,28 @@ fn review_shots_of_the_beats() {
     at_ms(&mut b, tr::PLAIN_MS / 2);
     save_shot(&mut [&mut b], &mut cx, &out, "t1_reduce_motion_fade");
 }
+
+/// ACT1-FIX4 (PT-99): once the battle is over and the outcome panel shows, the board's hover cards close: a mouse
+/// resting on any board widget with a card shows none (a backdrop with no card covers the board under the banner),
+/// while the banner's Continue still takes the click.
+#[test]
+fn hover_cards_close_when_the_battle_ends() {
+    let (mut cx, mut g) = (beat_cx(false, false), gfx());
+    let mut b = battle(&mut cx, "map");
+    frame(&mut b, &mut cx, &mut g, 1.0);
+    let board = crate::battle::draw::BOARD;
+    let carded: Vec<(i32, i32)> = b.w.iter().filter(|w| !w.tip.is_empty() && board.contains(w.rect.x + w.rect.w / 2, w.rect.y + w.rect.h / 2)).map(|w| (w.rect.x + w.rect.w / 2, w.rect.y + w.rect.h / 2)).collect();
+    assert!(!carded.is_empty(), "the live board has hover cards");
+    win(&mut b, &mut cx);
+    b.tick(&mut cx);
+    b.skip_beat(&mut cx);
+    cx.nav.clear();
+    assert!(b.beat.is_none());
+    frame(&mut b, &mut cx, &mut g, 1.0);
+    assert!(widget(&b, "banner.continue").is_some(), "the outcome panel shows");
+    for at in carded {
+        assert!(aegis_ui::ui::tip_widget(&b.w, at).is_none_or(|w| w.id.starts_with("banner.")), "a card at {at:?} after the end");
+    }
+    let c = b.w.iter().find(|w| w.id == "banner.continue").expect("Continue").rect;
+    assert!(aegis_ui::ui::hit(&b.w, (c.x + c.w / 2, c.y + c.h / 2)).is_some(), "Continue still clicks");
+}

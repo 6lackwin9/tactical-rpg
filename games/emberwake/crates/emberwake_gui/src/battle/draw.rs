@@ -1275,6 +1275,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     let outcome = g.outcome();
     // TRANSITIONS1 T2: the victory beat's banner stands in for the outcome panel while it runs
     if !outcome.is_empty() && g.beat.is_none_or(|b| b.kind != crate::transitions::Kind::Victory) {
+        // ACT1-FIX4 (PT-99): the battle is over, so the board's hover cards close (a card from a token the mouse still
+        // rests on hid the banner's title): a backdrop with no card over the board, under the banner's buttons
+        ui.push("banner.veil", "backdrop", String::new(), BOARD, true, false, None, Vec::new());
         let r = Rect::new(GRID_X + 92, GRID_Y + 110, 200, 56);
         ui.p.panel(r, th().game("outcome_fill", rgba(10, 14, 22, 240)), th().gold, 4.0);
         let (title, col) = match outcome.as_str() {

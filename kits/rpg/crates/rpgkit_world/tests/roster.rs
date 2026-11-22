@@ -1274,3 +1274,69 @@ fn a_procedural_keepsake_is_a_wear_legal_accessory_once_per_member() {
     assert!(plain["party"].get("pool").is_none() && plain["party"].get("keepsakes").is_none());
     assert!(["name", "housing", "fuse", "origin", "temperament", "template"].iter().all(|k| plain["party"]["members"][0].get(*k).is_none()));
 }
+
+// ---- ACT1-FIX4 (PT-95): encounter XP goes to who fought -------------------------------------------------------------
+
+/// Total XP of member `id`, in the party or in its latest departed record.
+fn total_xp(gs: &GameState, id: &str) -> i64 {
+    gs.party.member(id).or_else(|| gs.party.departed_of(id).map(|r| &r.member)).map_or(-1, |m| m.total_xp)
+}
+
+/// The XP `apply` paid `id` (None: not paid).
+fn paid(res: &Dict, id: &str) -> Option<i64> {
+    res.get("xp").and_then(|x| x.get(id)).map(|a| a["xp"].as_i64().unwrap_or(-1))
+}
+
+#[test]
+fn a_captured_stayer_keeps_his_xp_and_the_bench_filler_gets_none() {
+    // the founder holds the winch and is captured, the second escapes; the benched third may fill the freed slot after
+    // the settle but did not fight: no XP. The captured founder's departed record gains what `apply` paid him.
+    let d = data();
+    let mut gs = cell(&d, "w", 0);
+    let max = max_of(&d, &gs, "founder");
+    let before: Vec<i64> = ["founder", "second", "third"].iter().map(|id| total_xp(&gs, id)).collect();
+    let tally = Tally { party: held(max), world: "w".into(), ..Tally::default_for(&d, "w", "w:winch", "won") };
+    let res = battle::apply(&d, &mut gs, "w:winch", "won", &tally);
+    assert!(gs.party.departed_of("founder").is_some_and(|r| r.life == "captured"), "{res:?}");
+    let founder = paid(&res, "founder").expect("the captured stayer is paid");
+    assert!(founder > 0, "{res:?}");
+    assert_eq!(total_xp(&gs, "founder"), before[0] + founder, "into the departed record");
+    let second = paid(&res, "second").expect("the escaper is paid");
+    assert_eq!(total_xp(&gs, "second"), before[1] + second);
+    assert_eq!(paid(&res, "third"), None, "the bench member did not fight: {res:?}");
+    assert_eq!(total_xp(&gs, "third"), before[2]);
+}
+
+#[test]
+fn a_fielded_member_who_dies_gets_no_xp() {
+    // `then: kill`: the stander departs dead in the settle; the XP pays the living only (no XP into a dead record)
+    let d = data_with(|_, worlds| {
+        worlds["w"]["own"]["encounters"][2]["stay_behind"]["then"] = json!("kill");
+    });
+    let mut gs = cell(&d, "w", 0);
+    let max = max_of(&d, &gs, "founder");
+    let before = total_xp(&gs, "founder");
+    let party = vec![fated("founder", 9, max, PartyFate::Stood), fated("second", 9, max, PartyFate::Escaped)];
+    let tally = Tally { party, world: "w".into(), ..Tally::default_for(&d, "w", "w:winch", "won") };
+    let res = battle::apply(&d, &mut gs, "w:winch", "won", &tally);
+    assert!(gs.party.departed_of("founder").is_some_and(|r| r.life == "dead"), "{res:?}");
+    assert_eq!(paid(&res, "founder"), None, "{res:?}");
+    assert_eq!(total_xp(&gs, "founder"), before);
+    assert!(paid(&res, "second").is_some_and(|x| x > 0), "{res:?}");
+}
+
+#[test]
+fn a_fight_settled_without_a_battle_pays_every_active_member() {
+    // a ruled world's default tally carries only the members that build (`default_ends`); its XP still goes to every
+    // active member, as before ACT1-FIX4 (the journey settles fights this way); the bench gets none
+    let d = data();
+    let mut gs = cell(&d, "cw", 1);
+    gs.party.members.push(UnitState::create("ghost", "no_such_unit"));
+    gs.party.active_ids.push("ghost".into());
+    assert!(roster::default_ends(&d, &gs, "cw", "won").iter().all(|e| e.member != "ghost"), "the ghost does not build");
+    let res = battle::settle(&d, &mut gs, "cw:fight", "won", None);
+    for id in ["founder", "second", "ghost"] {
+        assert!(paid(&res, id).is_some(), "{id}: {res:?}");
+    }
+    assert_eq!(paid(&res, "third"), None, "{res:?}");
+}
