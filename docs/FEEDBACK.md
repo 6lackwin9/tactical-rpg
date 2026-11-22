@@ -135,8 +135,36 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-75` (`ACT1-FIX1`) | Built (tools lane) | `develop` | The ending's reason in the results and the log, the boss HP hover and the Hostiles count, a fresh seed on a retry, the talk-first message, no sentinel durations, the guest portrait, the portrait key first. FB-445 |
 | `PR7-77` (`DIORAMA5`) slice 0 | Built (tools lane) | `develop` | The content check and the layered-tree test accept ground sheets, accent decals, lip art and the exit path and gate props; R1 to R5 follow. FB-447 |
 | `PR7-77` (`DIORAMA5`) R1 to R5 | Built (tools lane) | `develop` | The battle ground composed by the region composer from the sheets, hashed variant picks, accent decals, lip art, additive lamp light with `lights`, the exit path decal and gate, rubble on the zone floor. FB-449 |
+| `PR7-77` (`DIORAMA5`) R6 | Built (tools lane) | `develop` | No grid lines at rest, the "Show full grid" setting (off by default), coherent 2 to 4 cell blobs, no edge pieces over the composed ground. FB-451 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-451: PR7-77 DIORAMA5 R6 built; no grid at rest, coherent blobs, no pieces over the blend
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `00f2` `PR7-77` R6 (user 2026-11-22 08:45), with Art/UI's continuous cobbles (PR #95).
+- **What landed**:
+  - Grid: `tuning.json` `grid_alpha` 0 (the tuning now takes 0). The Settings row is "Show full grid" (same key
+    `board_grid`), off by default; on, the full grid shows faint at rest (`stage::FULL_GRID_ALPHA` 34) and at
+    `grid_alpha_planning` while planning. Off, no lines at rest or while planning: the cells that matter keep the marks
+    they already had (the hover plate, the Move's tiles while it waits, the target and area plates), so no new outline
+    was added.
+  - Blobs: the composer's random patches (about a cell each) are off on the battle board; instead up to 3 placed
+    patches 2 to 4 cells wide and 2 to 3 high, picked by the board's seed, each on one open non-sunken ground with a
+    ring of that ground (`composed::blobs`, `BLOB_STRENGTH` 0.14). The composer's tone noise and edges were already
+    sampled by art pixel over the whole board.
+  - Sheets were already sampled by board pixel with a seeded offset (the composer's texture offset), so their seams do
+    not sit on cell lines (unless the offset falls on a multiple of 64, one chance in 64 per axis).
+  - No `over_*` transition piece draws when the ground is composed; a board without sheets keeps them.
+- **Changed shots** (`fc.sh shots diff scenarios=diorama_zones,diorama_stage,boss_bar`, base `8c261fcc`): all 7, the grid
+  gone and the edge pieces gone on the composed boards. `/mnt/project-files/build-tools/pr7-77-r6/`.
+- **Guesses** (`[PROVISIONAL]`): (1) existing marks count as the outlines of the hovered, move and target cells; (2) a
+  player who had the old Board Grid on keeps the key's saved value, so their full grid stays on.
+- **Tests**: `battle_ui2c_tests` `the_board_grid_setting_turns_the_grid_lines_off` (off by default, 0 at rest, full
+  grid stronger while planning), `stage.rs` `the_patches_are_a_few_coherent_blobs`.
+- **Docs delta**: SCREEN_CONTRACT_BATTLE / the diorama spec: the grid off at rest, "Show full grid", blobs, no pieces
+  over the composed ground. HISTORY row: "PR7-68 R6's faint grid at rest is replaced by no grid (PR7-77 R6, user
+  2026-11-22: the grid kept the board from reading like the reference)".
 
 ### FB-449: PR7-77 DIORAMA5 R1 to R5 built; composed ground, decals, lips, lamp light, exit path and gate
 

@@ -52,9 +52,9 @@ pub struct Tuning {
     pub shadow_alpha: u8,
     /// STAGE1: the opacity of a Stage unit's side-coloured foot ring.
     pub foot_ring_alpha: u8,
-    /// STAGE1: the opacity of the Stage grid lines (1-255; always on).
+    /// STAGE1: the opacity of the Stage grid lines at rest (0-255; DIORAMA5 R6: 0, none at rest).
     pub grid_alpha: u8,
-    /// DIORAMA3 R6: the grid lines' alpha while planning (the rest alpha is `grid_alpha`, about 12 %).
+    /// DIORAMA3 R6: the grid lines' alpha while planning with Show full grid on (DIORAMA5 R6).
     pub grid_alpha_planning: u8,
     /// SPRITE1-U: how long a moving unit slides to its new tile playing `walk` (0: it jumps).
     pub walk_ms: u64,
@@ -102,7 +102,7 @@ impl Default for Tuning {
             foot_inset_px: 5,
             shadow_alpha: 120,
             foot_ring_alpha: 200,
-            grid_alpha: 34,
+            grid_alpha: 0,
             grid_alpha_planning: 72,
             walk_ms: 360,
             death_hold_ms: 600,
@@ -185,7 +185,7 @@ impl Tuned for Tuning {
             foot_inset_px: i("foot_inset_px", d.foot_inset_px).clamp(2, 10),
             shadow_alpha: u("shadow_alpha", d.shadow_alpha as u64).min(255) as u8,
             foot_ring_alpha: u("foot_ring_alpha", d.foot_ring_alpha as u64).min(255) as u8,
-            grid_alpha: u("grid_alpha", d.grid_alpha as u64).clamp(1, 255) as u8,
+            grid_alpha: u("grid_alpha", d.grid_alpha as u64).min(255) as u8,
             grid_alpha_planning: u("grid_alpha_planning", d.grid_alpha_planning as u64).clamp(1, 255) as u8,
             walk_ms: u("walk_ms", d.walk_ms).min(2000),
             death_hold_ms: u("death_hold_ms", d.death_hold_ms).min(5000),

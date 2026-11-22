@@ -11,7 +11,7 @@
 use super::{at, ground_under, is_block, put, stage_cell, stage_image, stage_of, tile_shown, Kind, ZoneLook, BOARD, CELL_H, CELL_W, SET_ART_PX};
 use aegis_ui::art::{cell_hash, Art};
 use aegis_ui::canvas::{Image, Rgba};
-use aegis_ui::ground::{self as composer, GroundJob, GroundKey, GroundLayer};
+use aegis_ui::ground::{self as composer, GroundJob, GroundKey, GroundLayer, PlacedPatch};
 use aegis_ui::painter::Painter;
 use emberwake_battle::grid::{Grid, V2, GRID_H, GRID_W};
 use emberwake_content::art::battle_stage_dirs;
@@ -26,7 +26,12 @@ pub const DECAL_NEAR: f32 = 0.35;
 /// The layer numbers of a ground and of a sunken terrain on the board (the region map's look, quieter).
 const WEAR: f32 = 0.12;
 const TONE: f32 = 0.06;
-const PATCHES: f32 = 0.12;
+/// R6: the board's patches are a few coherent blobs 2 to 4 cells across (placed patches the board's seed picks), not
+/// the composer's random per-cell patches: at most this many, this dark.
+pub const BLOBS_MAX: usize = 3;
+pub const BLOB_STRENGTH: f32 = 0.14;
+/// The candidate rects tried for blobs.
+const BLOB_TRIES: u64 = 48;
 /// The hash stream of the decal pick's "whether" (its "which" is `Art::pick_hashed`'s stream 0).
 const DECAL_WHETHER: u64 = 1;
 
@@ -81,6 +86,7 @@ struct Picture {
     blocked: Vec<bool>,
     /// Per layer: order, texture, flat colour, sunken.
     layers: Vec<(i32, Option<Image>, Rgba, bool)>,
+    placed: Vec<PlacedPatch>,
     seed: u64,
 }
 
@@ -98,7 +104,6 @@ impl Picture {
                 } else {
                     l.wear = WEAR;
                     l.strays = true;
-                    l.patches = PATCHES;
                     l.contact = true;
                 }
                 l
@@ -107,7 +112,7 @@ impl Picture {
     }
 
     fn job<'a>(&'a self, layers: &'a [GroundLayer<'a>]) -> GroundJob<'a> {
-        GroundJob { seed: self.seed, cols: GRID_W, rows: GRID_H, cell: ART_CELL, cells: &self.cells, blocked: &self.blocked, layers, placed: &[] }
+        GroundJob { seed: self.seed, cols: GRID_W, rows: GRID_H, cell: ART_CELL, cells: &self.cells, blocked: &self.blocked, layers, placed: &self.placed }
     }
 }
 
@@ -155,7 +160,37 @@ fn picture(art: &mut Art, grid: &Grid, set: &str, look: &ZoneLook, seed: u64) ->
         layers.push((order, tex.map(|i| tinted_image(&i, tint)), colour, stage_of(grid, t).kind == Kind::Sunken));
     }
     let index = |t: &str| ids.iter().position(|i| *i == t).unwrap_or(0) as u8;
-    Some(Picture { cells: cells.iter().map(|(t, _)| index(t)).collect(), blocked: cells.iter().map(|(_, b)| *b).collect(), layers, seed })
+    let (cells, blocked): (Vec<u8>, Vec<bool>) = cells.iter().map(|(t, b)| (index(t), *b)).unzip();
+    let sunken: Vec<bool> = layers.iter().map(|l| l.3).collect();
+    let placed = blobs(&cells, &blocked, &sunken, seed);
+    Some(Picture { cells, blocked, layers, placed, seed })
+}
+
+/// R6: up to `BLOBS_MAX` placed patches 2 to 4 cells wide and 2 to 3 high, from candidates the board's seed picks: each
+/// on one non-sunken ground with a ring of one cell (cut at the board's edge) of that ground, free of blocked cells and
+/// apart from the others (the composer's own rule for a placed patch).
+pub fn blobs(cells: &[u8], blocked: &[bool], sunken: &[bool], seed: u64) -> Vec<PlacedPatch> {
+    let at = |x: i32, y: i32| (y * GRID_W + x) as usize;
+    let mut out: Vec<PlacedPatch> = Vec::new();
+    for i in 0..BLOB_TRIES {
+        if out.len() >= BLOBS_MAX {
+            break;
+        }
+        let h = cell_hash(i as i32, (seed >> 32) as i32 ^ seed as i32, 7);
+        let (w, hh) = (2 + (h % 3) as i32, 2 + ((h >> 8) % 2) as i32);
+        let (x, y) = (((h >> 16) % (GRID_W - w + 1) as u64) as i32, ((h >> 32) % (GRID_H - hh + 1) as u64) as i32);
+        let ground = cells[at(x, y)];
+        if sunken.get(ground as usize).copied().unwrap_or(true) {
+            continue;
+        }
+        let (x0, y0, x1, y1) = ((x - 1).max(0), (y - 1).max(0), (x + w).min(GRID_W - 1), (y + hh).min(GRID_H - 1));
+        let clean = (y0..=y1).all(|cy| (x0..=x1).all(|cx| cells[at(cx, cy)] == ground && !blocked[at(cx, cy)]));
+        let apart = out.iter().all(|o| x + w + 1 <= o.x || o.x + o.w + 1 <= x || y + hh + 1 <= o.y || o.y + o.h + 1 <= y);
+        if clean && apart {
+            out.push(PlacedPatch { x, y, w, h: hh, strength: BLOB_STRENGTH });
+        }
+    }
+    out
 }
 
 /// What the kept job was made from (compared each frame).

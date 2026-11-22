@@ -370,18 +370,19 @@ fn an_edge_column_decal_is_not_clipped() {
     assert!(changed > 0, "the decal draws on the edge tile");
 }
 
-/// DIORAMA3 R6: the Board Grid setting (on by default, a Gameplay row) draws the grid lines; off, none (the frame
-/// changes); the grid is stronger while planning than at rest (the tuning's two alphas).
+/// DIORAMA3 R6, DIORAMA5 R6: the Show full grid setting (off by default, a Gameplay row) draws the grid lines; off,
+/// none at rest or planning (the frame changes); on, stronger while planning than at rest.
 #[test]
 fn the_board_grid_setting_turns_the_grid_lines_off() {
     let shot = |on: bool| {
         let (mut cx, mut g, mut b) = arena(None, "", "stage");
-        assert_eq!(cx.settings.v[crate::battle::BOARD_GRID], json!(true), "on by default");
+        assert_eq!(cx.settings.v[crate::battle::BOARD_GRID], json!(false), "off by default");
         cx.settings.v[crate::battle::BOARD_GRID] = json!(on);
         crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
         g.canvas.px.clone()
     };
     assert!(shot(true) != shot(false), "the setting shows in the frame");
     let t = crate::tuning::Tuning::default();
-    assert!(t.grid_alpha_planning > t.grid_alpha && t.grid_alpha <= 40, "faint at rest ({}), stronger planning ({})", t.grid_alpha, t.grid_alpha_planning);
+    assert_eq!(t.grid_alpha, 0, "no grid at rest");
+    assert!(t.grid_alpha_planning > crate::stage::FULL_GRID_ALPHA, "the full grid is stronger while planning ({})", t.grid_alpha_planning);
 }

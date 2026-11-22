@@ -25,6 +25,9 @@ use serde_json::Value;
 mod composed;
 pub use composed::terrain_dirs;
 
+/// DIORAMA5 R6: the grid lines' alpha at rest when Show full grid is on (the tuning's rest alpha is 0).
+pub const FULL_GRID_ALPHA: u8 = 34;
+
 /// DIORAMA5 R5: the terrain whose zone-set ground falls back to the zone's floor.
 pub const RUBBLE: &str = "rubble";
 
@@ -722,7 +725,9 @@ fn draw_pieces(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, look: &Zo
 /// DIORAMA5 R1: with a ground sheet on the board the ground is composed (`composed::draw`), else the tiles as before;
 /// then the accent decals. R2: a lip from art (`lip_art`) before the flat fill.
 pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), grid_alpha: u8) {
-    if !composed::draw(p, art, grid, set, look) {
+    // the composer's worn edges replace the transition pieces (their per-corner art pinches at every cell edge)
+    let composed = composed::draw(p, art, grid, set, look);
+    if !composed {
         for y in 0..GRID_H {
             for x in 0..GRID_W {
                 let c = V2::new(x, y);
@@ -732,7 +737,9 @@ pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&s
         }
     }
     composed::draw_decals(p, art, grid, set, look);
-    draw_pieces(p, art, grid, set, look);
+    if !composed {
+        draw_pieces(p, art, grid, set, look);
+    }
     draw_wall_foot(p, art, grid, set, look);
     for y in 0..GRID_H {
         for x in 0..GRID_W {
@@ -2783,5 +2790,36 @@ pub(crate) mod tests {
         assert_eq!(path, [120, 108, 54], "the decal at 60 percent over black");
         assert_eq!(at_px(&g, gates[0].x + 16, gates[0].y + 18), [90, 70, 50], "the gate");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// R6: the board's patches are a few coherent blobs 2 to 4 cells wide on one ground, a ring of that ground round
+    /// each, apart, none on a sunken ground or a blocked cell; the same board gives the same blobs.
+    #[test]
+    fn the_patches_are_a_few_coherent_blobs() {
+        let n = (GRID_W * GRID_H) as usize;
+        let mut cells = vec![0u8; n];
+        let mut blocked = vec![false; n];
+        for x in 0..GRID_W {
+            cells[(4 * GRID_W + x) as usize] = 1;
+        }
+        blocked[(2 * GRID_W + 6) as usize] = true;
+        let sunken = [false, true];
+        let at = |x: i32, y: i32| (y * GRID_W + x) as usize;
+        for seed in 0..20u64 {
+            let b = composed::blobs(&cells, &blocked, &sunken, seed * 977);
+            assert!(b.len() <= composed::BLOBS_MAX);
+            assert_eq!(b, composed::blobs(&cells, &blocked, &sunken, seed * 977), "a pure function of the board");
+            for p in &b {
+                assert!((2..=4).contains(&p.w) && (2..=3).contains(&p.h), "{p:?}");
+                let ring = ((p.x - 1).max(0)..=(p.x + p.w).min(GRID_W - 1)).flat_map(|x| ((p.y - 1).max(0)..=(p.y + p.h).min(GRID_H - 1)).map(move |y| (x, y)));
+                assert!(ring.into_iter().all(|(x, y)| cells[at(x, y)] == 0 && !blocked[at(x, y)]), "one open ground with its ring: {p:?}");
+            }
+            for (i, a) in b.iter().enumerate() {
+                for o in &b[i + 1..] {
+                    assert!(a.x + a.w < o.x || o.x + o.w < a.x || a.y + a.h < o.y || o.y + o.h < a.y, "apart: {a:?} {o:?}");
+                }
+            }
+        }
+        assert!((0..20u64).any(|s| !composed::blobs(&cells, &blocked, &sunken, s * 977).is_empty()), "boards do get blobs");
     }
 }

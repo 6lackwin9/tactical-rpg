@@ -1388,7 +1388,7 @@ impl SettingsScreen {
                 Row::Heading("Advanced"),
                 Row::Choice("see_through", "Units Behind", "When units hidden behind others are outlined"),
                 // DIORAMA3 R6: the board's grid lines (faint at rest, stronger while planning)
-                Row::Toggle(crate::battle::BOARD_GRID, "Board Grid", "Faint tile lines on the battle board"),
+                Row::Toggle(crate::battle::BOARD_GRID, "Show full grid", "Tile lines across the whole battle board (off: only the cells that matter are marked)"),
                 Row::Overlays,
             ],
             _ => vec![Row::Controls],

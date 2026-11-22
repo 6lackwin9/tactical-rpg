@@ -691,13 +691,14 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
             // HOOKS1 ZN3: a data zone row keys its own backdrop and gradient ground (a code zone ignores any row)
             Pass::Backdrop => stage::draw_backdrop(&mut ui.p, &mut cx.art, &w.grid, &s.def.zone, &w.cat.zones),
             Pass::Ground => {
-                // DIORAMA3 R6: the grid faint at rest, stronger while planning, none with the Board Grid setting off
-                let grid_alpha = if !cx.settings.v[super::BOARD_GRID].as_bool().unwrap_or(true) {
+                // DIORAMA5 R6: no grid lines unless Show full grid is on (then faint at rest, stronger while planning);
+                // the cells that matter keep their own marks (the hover plate, the move tiles, the target plates)
+                let grid_alpha = if !cx.settings.v[super::BOARD_GRID].as_bool().unwrap_or(false) {
                     0
                 } else if planning {
                     tuning.grid_alpha_planning
                 } else {
-                    tuning.grid_alpha
+                    tuning.grid_alpha.max(stage::FULL_GRID_ALPHA)
                 };
                 stage::draw_ground(&mut ui.p, &mut cx.art, &w.grid, zset, grid_alpha);
                 // DIORAMA3 R3: the lanterns' pools and the vignette, under the marks and the units
