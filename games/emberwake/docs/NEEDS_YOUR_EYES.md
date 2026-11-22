@@ -41,6 +41,13 @@ Parked for your approval (golden re-records need your word):
   Update 2026-11-22 10:30 (`FB-392`): played by hand, the Bone-Mill boss was won first try at level 7 (the auto plan
   still loses it); the Crucible was lost 5 of 5 at level 8 (the suggested winch holder draws both Purifiers and a
   Footman, and the gate shuts when the holder falls). Bugs found there are queued; balance waits for you.
+- [ ] Battle rule fixes that change the sim golden (`FB-459`, tools lane, all tried and reverted until you say):
+  (a) reinforcements stop landing on tiles your planned moves claim (PT-71); (b) a move cut short never ends a block
+  farther from its goal (PT-70); (c) path claims: today a planned move claims every tile it walks for the whole round,
+  so a 1-tile gap passes one hero a round; recommended: a tile is claimed only in the block it is walked, so a friend
+  can follow a block later (PT-72); (d) the auto plan learns escape objectives (keeps the holder on the winch, sends
+  escapers to exits), which changes the sim's planner too (PT-74). Recommendation: approve all four as one intended
+  re-record of `sim_golden`; they also bear on the Crucible losses.
 - [ ] Diorama battle stage in the game (your 21:46 go-ahead): the first slice landed (`PR7-64`); Fable's in-game review
   (https://claude.ai/artifact/GfoCKjXQnVeTbFBBshuRe2) found the UI chrome on contract and the stage about half way to
   the mock. Queued as provisional, to confirm: amber light pools under the lanterns with a soft vignette; cover props
