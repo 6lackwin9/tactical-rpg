@@ -26,6 +26,11 @@ use serde_json::Value;
 pub const INTERIOR: Rect = Rect::new(128, 30, 384, 288);
 /// The zone backdrop over the board's far edge.
 pub const BACKDROP: Rect = Rect::new(128, 30, 384, 52);
+/// DIORAMA2 R4: the stage's clip inside the board panel's frame (the panel `Rect(98, 28, 444, 290)` inset 2): the
+/// backdrop, floor and front face reach into the side gutters (`WING` px each side) and fade there, and nothing of the
+/// stage covers the panel's rim.
+pub const STAGE_CLIP: Rect = Rect::new(100, 30, 440, 286);
+pub const WING: i32 = INTERIOR.x - STAGE_CLIP.x;
 pub const BOARD_X: i32 = 128;
 pub const BOARD_Y: i32 = 82;
 pub const CELL_W: i32 = 32;
@@ -590,34 +595,129 @@ pub fn face_column(grid: &Grid, x: i32) -> (&str, FaceBody) {
 pub fn draw_face(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str) {
     for x in 0..GRID_W {
         let r = Rect::new(FRONT_FACE.x + x * CELL_W, FRONT_FACE.y, CELL_W, FACE_H);
-        let (top, body) = face_column(grid, x);
-        let flecks = |p: &mut Painter, col: Rgba| {
-            let mut fx = 0;
-            while fx < CELL_W {
-                let bx = x * CELL_W + fx;
-                p.fill(Rect::new(r.x + fx, r.y + 2 + (bx * 7).rem_euclid(6), 2, 1), col);
-                fx += 7;
-            }
-        };
-        match body {
-            FaceBody::Wall => match face_art(art, set, x, GRID_H).and_then(|rel| stage_image(art, &rel, set, CELL_W, FACE_H)) {
-                Some(img) => p.image(img, r),
-                None => p.fill(r, scaled(terrain_color(grid, grid.terrain_id(V2::new(x, GRID_H - 1))), 0.75)),
-            },
-            FaceBody::Water => p.fill(r, scaled(rgb(30, 54, 110), 0.7)),
-            FaceBody::Lava => {
-                p.fill(r, rgb(150, 50, 20));
-                flecks(p, rgb(255, 160, 60));
-            }
-            FaceBody::Earth => {
-                p.fill(r, rgb(70, 50, 32));
-                flecks(p, rgb(52, 36, 24));
-            }
-        }
-        p.fill(Rect::new(r.x, r.y, r.w, 1), lighten(terrain_color(grid, top), 0.25));
+        draw_face_cell(p, art, grid, set, x, x, r);
     }
     for k in 0..DROP_SHADOW.h {
         p.fill(Rect::new(DROP_SHADOW.x, DROP_SHADOW.y + k, DROP_SHADOW.w, 1), rgba(0, 0, 0, (120 - 15 * k).max(0) as u8));
+    }
+}
+
+/// DIORAMA2 R2: the front face's art for column `x`'s top terrain `top`: the stage set's
+/// `tilesets/<set>/front_face/<top>/v*` (picked by the column); None: no set, or no file for that terrain.
+pub fn front_face_art(art: &mut Art, set: &str, top: &str, x: i32) -> Option<String> {
+    if set.is_empty() {
+        return None;
+    }
+    art.pick(&[&format!("tilesets/{set}/front_face/{top}")], None, x, GRID_H)
+}
+
+/// The front face of column `src` (its terrains) drawn in `r`, the art picked by column `x`: the stage set's front face
+/// for the column's top terrain (DIORAMA2 R2), else today's body by the column's face kind with the top's light line.
+fn draw_face_cell(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, src: i32, x: i32, r: Rect) {
+    let (top, body) = face_column(grid, src);
+    if let Some(img) = front_face_art(art, set, top, x).and_then(|rel| stage_image(art, &rel, set, CELL_W, FACE_H)) {
+        p.image(img, r);
+        return;
+    }
+    let flecks = |p: &mut Painter, col: Rgba| {
+        let mut fx = 0;
+        while fx < CELL_W {
+            let bx = x * CELL_W + fx;
+            p.fill(Rect::new(r.x + fx, r.y + 2 + (bx * 7).rem_euclid(6), 2, 1), col);
+            fx += 7;
+        }
+    };
+    match body {
+        FaceBody::Wall => match face_art(art, set, x, GRID_H).and_then(|rel| stage_image(art, &rel, set, CELL_W, FACE_H)) {
+            Some(img) => p.image(img, r),
+            None => p.fill(r, scaled(terrain_color(grid, grid.terrain_id(V2::new(src, GRID_H - 1))), 0.75)),
+        },
+        FaceBody::Water => p.fill(r, scaled(rgb(30, 54, 110), 0.7)),
+        FaceBody::Lava => {
+            p.fill(r, rgb(150, 50, 20));
+            flecks(p, rgb(255, 160, 60));
+        }
+        FaceBody::Earth => {
+            p.fill(r, rgb(70, 50, 32));
+            flecks(p, rgb(52, 36, 24));
+        }
+    }
+    p.fill(Rect::new(r.x, r.y, r.w, 1), lighten(terrain_color(grid, top), 0.25));
+}
+
+/// Today's lip on a wall cell's cap (a set with no `lip` of its own and no set named).
+pub const LIP_TODAY: Rgba = rgb(170, 172, 186);
+/// DIORAMA2 R1 (Fable review): the lip of a stage set with a `stage.fx.json` but no `lip` in it: bronze, not white.
+pub const LIP_BRONZE: Rgba = rgb(112, 88, 54);
+
+/// DIORAMA2 R1: the lip line on a wall cell's cap: the stage set's `lip` (a "#rrggbb" in its `stage.fx.json`), else
+/// `LIP_BRONZE` when the set has a `stage.fx.json`, else `LIP_TODAY` (no set, or a set without the file: today's
+/// frame). Read once per set.
+pub fn lip_colour(art: &mut Art, set: &str) -> Rgba {
+    if set.is_empty() {
+        return LIP_TODAY;
+    }
+    thread_local! {
+        static LIPS: std::cell::RefCell<std::collections::HashMap<String, Rgba>> = Default::default();
+    }
+    if let Some(c) = LIPS.with(|l| l.borrow().get(set).copied()) {
+        return c;
+    }
+    let c = match aegis_core::assets::read_json(art.layers(), &format!("tilesets/{set}/stage.fx.json")) {
+        Some(v) => v["lip"].as_str().and_then(rpgkit_ui::vignette::hex).unwrap_or(LIP_BRONZE),
+        None => LIP_TODAY,
+    };
+    LIPS.with(|l| l.borrow_mut().insert(set.to_string(), c));
+    c
+}
+
+/// DIORAMA2 R4: the stage's wings, the side gutters of the board panel (`STAGE_CLIP` beyond `INTERIOR`), drawn before
+/// the passes: the backdrop repeated beside itself, the edge columns' ground (and row 0's wall foot) one cell further
+/// out, their front face and drop shadow, then a fade to the panel colour `panel` at the outer edge.
+pub fn draw_wings(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, zone: &str, zones: &IndexMap<String, ZoneDef>, panel: Rgba) {
+    let (file, ground) = backdrop_source(art, grid, zone, zones);
+    match file.and_then(|rel| art.image(&rel, BACKDROP.w, BACKDROP.h)) {
+        Some(img) => {
+            for dx in [-BACKDROP.w, BACKDROP.w] {
+                p.image(img, Rect::new(BACKDROP.x + dx, BACKDROP.y, BACKDROP.w, BACKDROP.h));
+            }
+        }
+        None => {
+            let bottom = lerp(NIGHT, terrain_color(grid, ground), 0.4);
+            for k in 0..BACKDROP.h {
+                let t = k as f32 / (BACKDROP.h - 1) as f32;
+                for x0 in [STAGE_CLIP.x, INTERIOR.x + INTERIOR.w] {
+                    p.fill(Rect::new(x0, BACKDROP.y + k, WING, 1), lerp(NIGHT, bottom, t));
+                }
+            }
+        }
+    }
+    for (x, src) in [(-1, 0), (GRID_W, GRID_W - 1)] {
+        for y in 0..GRID_H {
+            let edge = V2::new(src, y);
+            let t = if is_block(grid, edge) { ground_under(grid, edge) } else { tile_shown(art, grid, edge) };
+            let r = stage_cell(V2::new(x, y));
+            draw_tile(p, art, grid, t, set, V2::new(x, y), r);
+            if y == 0 && is_ground(grid, t) {
+                if let Some(img) = wall_foot_art(art, set, x).and_then(|rel| stage_image(art, &rel, set, CELL_W, WALL_FOOT_H)) {
+                    p.image(img, Rect::new(r.x, r.y, r.w, WALL_FOOT_H));
+                }
+            }
+        }
+        let r = Rect::new(FRONT_FACE.x + x * CELL_W, FRONT_FACE.y, CELL_W, FACE_H);
+        draw_face_cell(p, art, grid, set, src, x, r);
+    }
+    for k in 0..DROP_SHADOW.h {
+        let a = rgba(0, 0, 0, (120 - 15 * k).max(0) as u8);
+        p.fill(Rect::new(STAGE_CLIP.x, DROP_SHADOW.y + k, WING, 1), a);
+        p.fill(Rect::new(INTERIOR.x + INTERIOR.w, DROP_SHADOW.y + k, WING, 1), a);
+    }
+    // the fade: the panel colour, full at the panel's edge, gone where the board starts
+    for k in 0..WING {
+        let a = (255.0 * (1.0 - k as f32 / WING as f32).powf(1.4)).round() as u8;
+        let col = rgba(panel[0], panel[1], panel[2], a);
+        p.fill(Rect::new(STAGE_CLIP.x + k, STAGE_CLIP.y, 1, STAGE_CLIP.h), col);
+        p.fill(Rect::new(STAGE_CLIP.x + STAGE_CLIP.w - 1 - k, STAGE_CLIP.y, 1, STAGE_CLIP.h), col);
     }
 }
 
@@ -649,7 +749,7 @@ pub fn draw_block(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, c: V2)
         }
     }
     if !is_block(grid, V2::new(c.x, c.y - 1)) {
-        p.fill(Rect::new(cap.x, cap.y, cap.w, 1), rgb(170, 172, 186));
+        p.fill(Rect::new(cap.x, cap.y, cap.w, 1), lip_colour(art, set));
     }
     let side = rgb(30, 30, 38);
     let h = block_rect(grid, c).h;
@@ -1380,6 +1480,82 @@ mod tests {
         }
         assert!(!changed.is_empty(), "the strip shows");
         assert!(changed.iter().all(|&(x, y)| (BOARD_Y..BOARD_Y + WALL_FOOT_H).contains(&y) && (BOARD_X..BOARD_X + GRID_W * CELL_W).contains(&x)), "only the top of row 0");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The pixels where two canvases of the same size differ, as (x, y) in canvas px.
+    fn diff(a: &aegis_ui::ui::Gfx, b: &aegis_ui::ui::Gfx) -> Vec<(i32, i32)> {
+        let w = a.canvas.w;
+        a.canvas.px.chunks(4).zip(b.canvas.px.chunks(4)).enumerate().filter(|(_, (x, y))| x != y).map(|(i, _)| ((i as i32) % w, (i as i32) / w)).collect()
+    }
+
+    /// DIORAMA2 R2: a stage set's `front_face/<terrain>/` replaces the front face under the columns whose top is that
+    /// terrain, and only there (the face band); a terrain without one keeps today's face.
+    #[test]
+    fn the_front_face_comes_from_the_stage_set_with_todays_fallback() {
+        let root = scratch("front_face");
+        todays_layer(&root);
+        let grid = zone("stone_arena");
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let before = paint(&mut art, &grid, "zz_face", 0, 1, (0, 0));
+        let (top, _) = face_column(&grid, 0);
+        let top = top.to_string();
+        assert_eq!(front_face_art(&mut art, "zz_face", &top, 0), None);
+        ramp(&root, &format!("tilesets/zz_face/front_face/{top}/v0.png"), 64, 24, [250, 0, 250]);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        assert_eq!(front_face_art(&mut art, "zz_face", &top, 3), Some(format!("tilesets/zz_face/front_face/{top}/v0.png")));
+        assert_eq!(front_face_art(&mut art, "", &top, 3), None, "no set named: today's face");
+        let after = paint(&mut art, &grid, "zz_face", 0, 1, (0, 0));
+        let changed = diff(&before, &after);
+        assert!(!changed.is_empty(), "the face shows");
+        assert!(changed.iter().all(|&(_, y)| (FRONT_FACE.y..FRONT_FACE.y + FACE_H).contains(&y)), "only the face band");
+        let cols: Vec<i32> = (0..GRID_W).filter(|x| face_column(&grid, *x).0 == top).collect();
+        assert!(changed.iter().all(|&(x, _)| cols.contains(&((x - BOARD_X) / CELL_W))), "only the columns topped by {top}: {cols:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// DIORAMA2 R1: the wall cap's lip: today's with no set or a set without a `stage.fx.json`, the set's own `lip`
+    /// from it, bronze when it names none.
+    #[test]
+    fn the_wall_lip_takes_the_stage_sets_tone() {
+        let root = scratch("lip");
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        assert_eq!(lip_colour(&mut art, ""), LIP_TODAY);
+        assert_eq!(lip_colour(&mut art, "zz_lip_none"), LIP_TODAY, "a set without the file: today's frame");
+        for (set, body) in [("zz_lip_own", r##"{"lip": "#4a5060", "spots": []}"##), ("zz_lip_bare", r##"{"spots": []}"##)] {
+            let fx = root.join(format!("tilesets/{set}/stage.fx.json"));
+            std::fs::create_dir_all(fx.parent().unwrap()).unwrap();
+            std::fs::write(&fx, body).unwrap();
+        }
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        assert_eq!(lip_colour(&mut art, "zz_lip_own"), rgb(0x4a, 0x50, 0x60));
+        assert_eq!(lip_colour(&mut art, "zz_lip_bare"), LIP_BRONZE);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// DIORAMA2 R4: the wings draw only in the side gutters (`STAGE_CLIP` beyond `INTERIOR`), full panel colour at the
+    /// panel's edge and the stage's own colours where the board starts.
+    #[test]
+    fn the_wings_fill_the_gutters_and_fade_to_the_panel() {
+        let root = scratch("wings");
+        todays_layer(&root);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let grid = zone("stone_arena");
+        let panel = rgb(20, 22, 30);
+        let mut g = crate::hud::hud_tests::gfx();
+        g.canvas = aegis_ui::canvas::Canvas::new(640, 360);
+        g.view = aegis_ui::painter::View::fit(640, 360);
+        let blank = g.canvas.px.clone();
+        let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+        p.clip(Some(STAGE_CLIP));
+        draw_wings(&mut p, &mut art, &grid, "", "", &IndexMap::new(), panel);
+        let px = |x: i32, y: i32| g.canvas.px[((y * 640 + x) * 4) as usize..((y * 640 + x) * 4 + 3) as usize].to_vec();
+        let painted: Vec<(i32, i32)> = g.canvas.px.chunks(4).zip(blank.chunks(4)).enumerate().filter(|(_, (a, b))| a != b).map(|(i, _)| ((i as i32) % 640, (i as i32) / 640)).collect();
+        assert!(!painted.is_empty());
+        assert!(painted.iter().all(|&(x, y)| STAGE_CLIP.contains(x, y) && !INTERIOR.contains(x, y)), "only the gutters");
+        let mid = BOARD_Y + 3 * CELL_H;
+        assert_eq!(px(STAGE_CLIP.x, mid), vec![20, 22, 30], "the panel colour at the edge");
+        assert_ne!(px(INTERIOR.x - 1, mid), vec![20, 22, 30], "the floor where the board starts");
         let _ = std::fs::remove_dir_all(&root);
     }
 

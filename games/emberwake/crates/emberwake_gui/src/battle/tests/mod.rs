@@ -1291,7 +1291,9 @@ fn the_camera_shakes_the_board_only() {
         let board = crate::stage::INTERIOR;
         let moved = (board.y..board.y + board.h).any(|y| (board.x..board.x + board.w).any(|x| at(&before, x, y) != pixel(&g, x, y)));
         assert!(moved, "{view}: a board pixel moved");
-        for r in [Rect::new(2, 2, aegis_ui::ui::W - 4, 24), Rect::new(aegis_ui::ui::W - 126, 28, 124, 290)] {
+        // DIORAMA2 R4: the hostile cards' own panel (the board panel, with the stage's wings, ends left of it)
+        let hostiles = b.panels.iter().find(|p| p.0 == "hostiles").map(|p| p.1).expect("the hostile panel");
+        for r in [Rect::new(2, 2, aegis_ui::ui::W - 4, 24), hostiles] {
             let same = (r.y..r.y + r.h).all(|y| (r.x..r.x + r.w).all(|x| at(&before, x, y) == pixel(&g, x, y)));
             assert!(same, "{view}: the HUD at {r:?} does not shake");
         }

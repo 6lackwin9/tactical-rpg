@@ -343,3 +343,29 @@ fn the_dev_link_puts_a_ground_hazard() {
     assert_eq!(s(&b).w.grid.ground.get(&cell).map(|p| p.def.status.as_str()), Some("burn"));
     assert_eq!(b.debug_ground(&cx, &json!({"cmd": "debug_ground", "at": [-1, 0], "status": "burn"}))["ok"], json!(false));
 }
+
+/// DIORAMA2 R7: a hazard's decal on the first or last column lies inside the stage's clip (the panel's gutters, past
+/// the board), so its edge is not cut; and it draws there (the frame changes with it).
+#[test]
+fn an_edge_column_decal_is_not_clipped() {
+    let (mut cx, mut g, mut b) = arena(None, "+ground_hazards", "stage");
+    cx.settings.v["battle_overlays"] = json!({"test_hazards": true});
+    let geo = Geom::new(View::Stage, &cx.tuning.value);
+    let before = {
+        crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
+        g.canvas.px.clone()
+    };
+    let sess = b.host.session.as_mut().unwrap();
+    let cell = free_cells(sess).into_iter().find(|c| c.x == 0 || c.x == GRID_W - 1).expect("a free edge tile");
+    let plate = ground_plate(&geo, cell);
+    let clip = crate::stage::STAGE_CLIP;
+    assert!(clip.contains(plate.x - 2, plate.y) && clip.contains(plate.x + plate.w + 1, plate.y + plate.h - 1), "{plate:?} inside {clip:?} with room");
+    let (by, round) = (sess.w.allies[0], sess.current_round);
+    let row = json!({"id": "t_burn", "name": "Test Burn", "on": "enter", "damage": 5, "status": "burn", "potency": 60, "affects": "foes", "duration": 3, "tint": "#ff8000", "glyph": "B"});
+    sess.w.grid.ground.insert(cell, Placed { def: HazardDef::from_obj(row.as_object().unwrap()), by, round, last_round: round + 2 });
+    crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
+    let w = g.canvas.w;
+    let s = (w / 640).max(1);
+    let changed = g.canvas.px.chunks(4).zip(before.chunks(4)).enumerate().filter(|(_, (a, b))| a != b).map(|(i, _)| ((i as i32) % w / s, (i as i32) / w / s)).filter(|&(x, y)| plate.contains(x, y)).count();
+    assert!(changed > 0, "the decal draws on the edge tile");
+}

@@ -115,8 +115,35 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-27` (`VNSTAGE1`) | Built (tools lane) | `develop` | The story stage: cards carry actors (full-body pictures, a code-drawn figure where none exists) who enter left and exit right, met ones pinned right; cameras Static, Scroll and Pan; dialogue and narration keep the scene's backdrop dimmed; the cutscene bar gains Auto and Log; born split (view `vignette` and its fixture). Seed `vnstage1` stages the meat market and the mortuary cart. FB-417 |
 | `PR7-64` (`DIORAMA1`) | Built (tools lane) | `develop` | Sunk Ward names stage set `sunk_ward_stage` (seed `diorama1`); ground hazards draw their painted decal `props/hazards/<status>/v*` under the icon and rounds left (the tint without a file); row 0's ground cells draw the set's `wall_foot` strip. FB-419 |
 | `PR7-66` (`VNSTAGE1B`) | Built (tools lane) | `develop` | The rest of Act 1's speaking scenes staged (seed `vnstage1b`): the three hub debates and the awakening fissure; data only, no new code. FB-421 |
+| `PR7-67` (`DIORAMA2`) | Built (tools lane) | `develop` | The wall lip in the stage set's tone; the front face from `tilesets/<set>/front_face/<terrain>/`; the stage fills the 888 px panel with faded wings, inside the panel's rim; edge decals unclipped. FB-425 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-425: PR7-67 DIORAMA2 built; the Fable review's R1, R2, R4 and R7
+
+- **Status**: built (tools lane), `develop`. Before and after (left: before, right: after; alley above, canal below) in
+  project files `build-tools/pr7-67_before_after.png`; scenario `diorama_stage`.
+- **Spec**: `docs/READY.md` row 00d `PR7-67` (`DIORAMA2`); slice 0 (the content check and layout test) landed first
+  (`FB-423`).
+- **What landed** (game `stage.rs`, `battle/board.rs`):
+  - R1: a wall cell cap's lip line is `lip_colour`: the stage set's `lip` ("#rrggbb") in its `stage.fx.json`, bronze
+    `rgb(112, 88, 54)` when the file names none (Sunk Ward today), today's pale line with no set or a set without the
+    file (so the empty-set frame test holds). Provisional: Art/UI can set `lip` in `stage.fx.json` to retune it.
+  - R2: the front face under row 9 takes `tilesets/<set>/front_face/<top terrain>/v*` (64 x 24 art, drawn 32 x 12,
+    picked by the column); a terrain without files keeps today's face and its light line.
+  - R4: the stage's clip is the board panel inset 2 (`STAGE_CLIP` 100, 30, 440 x 286), so nothing of the stage covers
+    the panel's rim; the old tray (whose rounded edge ran past the panel's bottom) is now that rect filled. New
+    `draw_wings` before the passes: the backdrop repeated beside itself, the edge columns' ground (and row 0's wall
+    foot) one cell further out, their front face and drop shadow, then a fade to the panel colour over the 28 px gutters.
+  - R7: with the wider clip a decal on column 0 or the last column is not cut; a test checks the edge plate sits inside
+    the clip with room and draws.
+- **Tests**: `the_front_face_comes_from_the_stage_set_with_todays_fallback` (only the face band of the columns topped by
+  that terrain changes), `the_wall_lip_takes_the_stage_sets_tone`, `the_wings_fill_the_gutters_and_fade_to_the_panel`
+  (only the gutters, panel colour at the edge), `an_edge_column_decal_is_not_clipped`. `the_camera_shakes_the_board_only`
+  now reads the hostile panel's own rect (its old fixed rect began inside the board panel, where the wings shake).
+  Engine goldens unchanged.
+- **Changed shots** (review only): every Stage-view battle shot (the wider stage), the Sunk Ward ones most.
+- **Docs delta**: none.
 
 ### FB-423: develop's content check refused Art/UI's front-face files; fixed in the check (PR7-67 slice 0)
 

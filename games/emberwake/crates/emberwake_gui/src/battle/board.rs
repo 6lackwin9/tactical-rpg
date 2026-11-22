@@ -4,7 +4,7 @@ use aegis_ui::theme::th;
 use super::marks::{bars_shown, break_plate, broken_units, draw_arrows, draw_hold_tiles, draw_hook_marks, draw_pushes, exit_glyph, exit_sign, poise_bar, poise_shown, HoldMarks, HookMarks};
 use super::overlays::{draw_overlay, Layers, Overlay};
 use super::skill_menu::{CHANNEL_TINT, CHANNEL_TINT_ALPHA};
-use super::{Action, AMBER, DASH_MS, GRID_X, GRID_Y, TILE};
+use super::{Action, AMBER, DASH_MS, GRID_X, GRID_Y, PANEL, TILE};
 use super::tips::{intent_glyph, intent_ring_color, ring_intent, unit_tip};
 use super::tokens::{body_keys, hit_flash, token_frame, token_outline, Float, Tokens, UnitAnim};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
@@ -588,7 +588,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
     let reduce = cx.settings.reduce_motion();
     let still = UnitAnim::default();
-    ui.p.panel(Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4), th().game("board_tray", rgb(8, 10, 16)), th().edge, RADIUS);
+    // DIORAMA2 R4: the stage's tray is its clip inside the board panel (no rim of its own past the panel's frame)
+    ui.p.fill(stage::STAGE_CLIP, th().game("board_tray", rgb(8, 10, 16)));
 
     // The units' places this frame (STATUSFX1: and their status looks).
     let wall = tokens.wall_ms(now);
@@ -665,8 +666,10 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     let mut frames: Vec<(usize, ClipFrame)> = Vec::new();
 
     // FX1 4.1: passes 1-9 inside the board's clip, shifted by the camera (the clip stays put)
-    ui.p.clip(Some(stage::INTERIOR));
+    // DIORAMA2 R4: the stage reaches into the panel's side gutters (its wings, faded), inside the panel's rim
+    ui.p.clip(Some(stage::STAGE_CLIP));
     ui.p.shift(shift.0, shift.1);
+    stage::draw_wings(&mut ui.p, &mut cx.art, &w.grid, set, &s.def.zone, &w.cat.zones, th().game("battle_panel", PANEL));
     for pass in stage::passes() {
         match pass {
             // HOOKS1 ZN3: a data zone row keys its own backdrop and gradient ground (a code zone ignores any row)
