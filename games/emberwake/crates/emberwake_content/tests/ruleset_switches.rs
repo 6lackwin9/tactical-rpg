@@ -189,11 +189,16 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     let shipped_units = store::view(&data_dir());
     // PR7-65 (DIORAMA1B): a replayed unit keeps its shipped `art` (the painted sheets the pr7_65 seed points at): the
     // scratch folder has no game assets, so a body the replay changed would read as a new problem; the art is no part
-    // of the ruleset rows this replays
+    // of the ruleset rows this replays. PR7-73 (PAINTED-MAPS1): likewise its shipped `portrait` key (the pr7_73 seed's
+    // field-only steps), art too
     let keep_art = |e: &Dict| -> Dict {
         let mut e = e.clone();
-        if let (Some(art), true) = (shipped_units.get("units", &json::s(&e, "id")).get("art"), e.contains_key("art")) {
+        let shipped = shipped_units.get("units", &json::s(&e, "id"));
+        if let (Some(art), true) = (shipped.get("art"), e.contains_key("art")) {
             e.insert("art".into(), art.clone());
+        }
+        if let Some(portrait) = shipped.get("portrait").filter(|p| p.as_str().is_some_and(|p| !p.is_empty())) {
+            e.insert("portrait".into(), portrait.clone());
         }
         e
     };

@@ -89,6 +89,29 @@ fn portraits_and_palettes_warn() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// PAINTED-MAPS1 (PR7-73): a unit's portrait key with its file stands in for the body's common portrait (no A5, for the
+/// unit and a character wearing its body; A3 names it); a key without its file warns, and the body's A5 stays.
+#[test]
+fn a_portrait_key_is_checked_and_stands_in_for_the_body_portrait() {
+    let root = layer("a5_key");
+    png(&root.join("portraits/common/goblin_brawler_cut.png"), 240, 240);
+    let v = view(&root);
+    let unit = json::obj([("id", json!("goblin_brawler")), ("name", json!("Goblin Brawler")), ("class_id", json!("brawler")), ("tier", json!("minion")), ("art", json!("brawler/goblin"))]);
+    let a5 = "Body 'brawler/goblin' has no common portrait; Goblin Brawler shows brawler_base.".to_string();
+    assert_eq!(assets::portrait_and_palette_warnings(&v, &Dict::new(), &unit), [a5.clone()], "no key: A5");
+    let keyed = with(&unit, json!({"portrait": "goblin_brawler_cut"}));
+    assert!(assets::portrait_and_palette_warnings(&v, &Dict::new(), &keyed).is_empty(), "the key's file is there");
+    let mob = json::obj([("id", json!("ash_brawler")), ("name", json!("Ash Brawler")), ("role", json!("enemy")), ("art", json!(""))]);
+    assert!(assets::portrait_and_palette_warnings(&v, &mob, &keyed).is_empty(), "a character wearing the unit's body");
+    let own = with(&mob, json!({"art": "brawler/goblin"}));
+    assert_eq!(assets::portrait_and_palette_warnings(&v, &own, &keyed), ["Body 'brawler/goblin' has no common portrait; Ash Brawler shows brawler_base."], "its own art: the key is not its");
+    let elite = with(&mob, json!({"portrait_tier": "elite"}));
+    assert_eq!(assets::portrait_and_palette_warnings(&v, &elite, &keyed), ["Ash Brawler (elite) has no portrait at portraits/elites/ash_brawler.png; it shows the common portrait goblin_brawler_cut."], "A3 names the key");
+    let missing = with(&unit, json!({"portrait": "nope"}));
+    assert_eq!(assets::portrait_and_palette_warnings(&v, &Dict::new(), &missing), ["Goblin Brawler's portrait 'nope' has no file portraits/common/nope.png (game, kit or engine).".to_string(), a5], "a key without its file");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 #[test]
 fn art_offers_the_bodies_and_skips_the_enum_check() {
     let root = layer("options");

@@ -187,7 +187,7 @@ pub fn character_art(d: &Data, character: &aegis_core::json::Dict) -> (String, S
     let body = art::body_of(character, unit, class);
     let palette = art::palette_of(character, unit);
     let tier = art::portrait_tier(character, unit);
-    let portraits = art::portrait_chain(&tier, &aegis_core::json::s(character, "id"), &body);
+    let portraits = art::portrait_chain_keyed(&tier, &aegis_core::json::s(character, "id"), &body, &art::portrait_key(character, unit));
     (body, palette, portraits)
 }
 

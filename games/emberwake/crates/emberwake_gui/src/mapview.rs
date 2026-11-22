@@ -606,6 +606,25 @@ pub fn sprite_rect(cell: Rect) -> Rect {
     Rect::new(cell.x + (cell.w - side) / 2, cell.y + cell.h - side, side, side)
 }
 
+/// PAINTED-MAPS1 (PR7-73): the foot point of a body standing on `cell`: centred across, an eighth of the cell's width
+/// above its bottom edge (the foot shadow's centre).
+pub fn body_foot(cell: Rect) -> (i32, i32) {
+    (cell.x + cell.w / 2, cell.y + cell.h - cell.w / 8)
+}
+
+/// PAINTED-MAPS1 (PR7-73): the drawn square of a body whose sheet is `clips` (None: unknown) standing on `cell`: a body
+/// with a `foot` row stands `stage::PAINTED_CELLS` cell widths tall from its frame's top to its foot row, the foot row on
+/// `body_foot` (`stage::painted_px`, as the battle stage scales it); any other sheet keeps `sprite_rect`.
+pub fn body_rect(cell: Rect, clips: Option<&aegis_core::assets::Clips>) -> Rect {
+    match clips.and_then(|c| crate::stage::painted_px(cell.w, 1, c.frame, c.foot)) {
+        Some((sp, drop)) => {
+            let (fx, fy) = body_foot(cell);
+            Rect::new(fx - sp / 2, fy + 1 + drop - sp, sp, sp)
+        }
+        None => sprite_rect(cell),
+    }
+}
+
 /// A marker icon (or its stand-in) standing on `cell` (in the square view, the cell itself).
 pub fn icon_rect(cell: Rect) -> Rect {
     let side = ICON * cell.w / CELL_W;
@@ -1258,5 +1277,33 @@ mod tests {
         assert_eq!(base(json!(most), true), most);
         assert_eq!(base(json!(most), false), default, "a release build");
         assert_eq!(crate::screens::default_settings()[WALK_STEP_KEY], json!(default), "the settings' default");
+    }
+
+    /// PAINTED-MAPS1 (PR7-73): on a map tile (both views, every zoom step) a painted body (a 112 x 96 frame, feet on row
+    /// 93) stands `stage::PAINTED_CELLS` tile widths tall from its frame's top to its foot row, its figure's feet and
+    /// centre on the tile's foot point (`body_foot`); a sheet without a foot row, or no sheet, keeps the token square.
+    #[test]
+    fn a_painted_body_stands_1_15_tile_widths_on_its_foot_point() {
+        let root = crate::stage::tests::painted_root("map", (112, 96), 93);
+        let mut art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.to_path_buf()]));
+        let clips = art.clips("painted/base").expect("the body loads").clone();
+        let token = aegis_core::assets::Clips { frame: (48, 48), ..Default::default() };
+        let (least, most, _) = ZOOM_QUARTERS;
+        for view in [View::Square, View::Tilted] {
+            for q in least..=most {
+                let g = MapGeom { view, ox: 7, oy: 50, q };
+                let cell = g.cell(5, 4);
+                let r = body_rect(cell, Some(&clips));
+                let tall = 93.0 * r.w as f32 / 112.0;
+                let want = crate::stage::PAINTED_CELLS * cell.w as f32;
+                assert!((tall - want).abs() <= 1.0, "{view:?} q{q}: about 1.15 tile widths tall: {tall} against {want}");
+                let b = art.body_clip("painted/base", "", "idle", 0, r.w).and_then(|f| f.opaque_bounds(aegis_ui::canvas::OUTLINE_ALPHA)).expect("a figure");
+                let (fx, fy) = body_foot(cell);
+                assert!((r.y + b.y + b.h - 1 - fy).abs() <= 1, "{view:?} q{q}: the feet on the foot point: {} against {fy}", r.y + b.y + b.h - 1);
+                assert!((r.x + b.x + b.w / 2 - fx).abs() <= 1, "{view:?} q{q}: centred on it: {} against {fx}", r.x + b.x + b.w / 2);
+                assert_eq!(body_rect(cell, Some(&token)), sprite_rect(cell), "{view:?} q{q}: a sheet without a foot row keeps the token square");
+                assert_eq!(body_rect(cell, None), sprite_rect(cell), "{view:?} q{q}: no sheet");
+            }
+        }
     }
 }

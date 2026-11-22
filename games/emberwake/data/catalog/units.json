@@ -1616,6 +1616,7 @@
 			"art": "warrior/castellan_footman",
 			"palette": "castellan_watch",
 			"portrait_tier": "",
+			"portrait": "warrior_castellan_footman",
 			"skill_cap": 0,
 			"extra_skills": [
 				"heavy_bill_thrust",
@@ -1690,6 +1691,7 @@
 			"art": "ranger/watch_crossbowman",
 			"palette": "castellan_watch",
 			"portrait_tier": "",
+			"portrait": "ranger_watch_crossbowman",
 			"skill_cap": 0,
 			"extra_skills": [
 				"aimed_bolt",
@@ -1833,6 +1835,7 @@
 			"art": "rogue/tallow_dredger",
 			"palette": "tallow_guild",
 			"portrait_tier": "",
+			"portrait": "rogue_tallow_dredger",
 			"skill_cap": 0,
 			"extra_skills": [
 				"scalding_grease_pot",
@@ -1913,6 +1916,7 @@
 			"art": "beast/render_beast_painted",
 			"palette": "",
 			"portrait_tier": "",
+			"portrait": "beast_render_beast_painted",
 			"skill_cap": 0,
 			"extra_skills": [
 				"throat_clamp_pounce"
@@ -1986,6 +1990,7 @@
 			"art": "crawler/ash_crawler_painted",
 			"palette": "",
 			"portrait_tier": "",
+			"portrait": "crawler_ash_crawler_painted",
 			"skill_cap": 0,
 			"extra_skills": [
 				"burrow_ambush",
@@ -2062,6 +2067,7 @@
 			"art": "warrior/calcified_husk",
 			"palette": "calcified",
 			"portrait_tier": "",
+			"portrait": "warrior_calcified_husk",
 			"skill_cap": 0,
 			"extra_skills": [
 				"bone_club_slam"
@@ -2720,6 +2726,7 @@
 			"art": "rogue/mortuary_flagellant",
 			"palette": "flagellant",
 			"portrait_tier": "",
+			"portrait": "rogue_mortuary_flagellant",
 			"skill_cap": 0,
 			"extra_skills": [
 				"scourge_lash",
