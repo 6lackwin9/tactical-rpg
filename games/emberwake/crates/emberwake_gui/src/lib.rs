@@ -208,6 +208,15 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
     let mut settings = launch.settings(default_settings());
     settings.keep_window_size(&screens::WINDOW_SIZES);
     force_shipped_views(&mut settings.v, arg(args, "screen"));
+    // CONTROLS-MIGRATE1 (PR7-71): an action a file from before the fixed keys put on one goes back to its own key
+    let moved = aegis_ui::controls::release_fixed(&mut settings.v, &controls_view::FIXED_KEYS);
+    if !moved.is_empty() {
+        let names: Vec<String> = moved.iter().map(|k| controls_view::ACTIONS.iter().find(|a| a.key == *k).map_or_else(|| aegis_ui::controls::key_label(*k), |a| a.label.to_string())).collect();
+        notices.push(format!("Controls: {} went back to {} own key (that key is fixed).", names.join(", "), if names.len() == 1 { "its" } else { "their" }));
+        if let Err(e) = settings.save() {
+            notices.push(format!("Saving the settings: {e}"));
+        }
+    }
     // Playtest recordings are never on in the web build (WEBREL1 6.1, `vfs::dev::ON`), so its data is never hashed.
     let record = aegis_core::vfs::dev::ON && settings.v["record_playtests"].as_bool().unwrap_or(cfg!(debug_assertions));
     // The data fingerprint a recording carries; hashed only while recording is on.

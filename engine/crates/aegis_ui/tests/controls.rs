@@ -241,3 +241,33 @@ fn a_fixed_key_is_refused() {
     assert_eq!(r.refused_fixed, None);
     assert_eq!(Controls::from_settings(&s).0.key_for(Key::Char('e')), Some(Key::Char('k')));
 }
+
+/// CONTROLS-MIGRATE1 (PR7-71): a settings file from before the fixed keys, with an action on `r`, loads with that action
+/// on its own key and `r` giving `r` again (the swap's other half goes back too); a hand-written entry with no swap
+/// half is dropped the same way; a map with no fixed key is left as it was (nothing written).
+#[test]
+fn an_action_on_a_fixed_key_goes_back_to_its_own_key() {
+    use aegis_ui::controls::Fixed;
+    const FIXED: [Fixed; 2] = [Fixed { key: Key::Char('r'), label: "Restart", screen: "battle" }, Fixed { key: Key::Char('1'), label: "Pick", screen: "talk" }];
+    // the swap a rebind of Tab onto r wrote before r was fixed, and i rebound to Up
+    let mut s = json!({"volume": 3, "controls": {"keys": {"i": "up", "r": "tab", "tab": "r"}, "pad": {}}});
+    assert_eq!(controls::release_fixed(&mut s, &FIXED), [Key::Tab]);
+    let c = Controls::from_settings(&s).0;
+    assert_eq!((c.key(Key::Char('r')), c.key(Key::Tab), c.key(Key::Char('i'))), (Key::Char('r'), Key::Tab, Key::Up));
+    assert_eq!(c.key_for(Key::Tab), Some(Key::Tab));
+    assert_eq!(s["controls"]["keys"], json!({"i": "up"}));
+    assert_eq!(s["volume"], json!(3), "the other settings stay");
+    // a lone entry (no swap half) and a digit
+    let mut s = json!({"controls": {"keys": {"1": "enter"}}});
+    assert_eq!(controls::release_fixed(&mut s, &FIXED), [Key::Enter]);
+    assert_eq!(Controls::from_settings(&s).0.key(Key::Char('1')), Key::Char('1'));
+    assert_eq!(Controls::from_settings(&s).0.key_for(Key::Enter), Some(Key::Enter));
+    // nothing on a fixed key: untouched
+    let before = json!({"controls": {"keys": {"i": "up"}}});
+    let mut s = before.clone();
+    assert!(controls::release_fixed(&mut s, &FIXED).is_empty());
+    assert_eq!(s, before);
+    let mut none = json!({});
+    assert!(controls::release_fixed(&mut none, &FIXED).is_empty());
+    assert_eq!(none, json!({}), "no map, nothing written");
+}

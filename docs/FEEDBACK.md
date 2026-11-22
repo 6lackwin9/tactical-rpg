@@ -123,8 +123,27 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-63` (`XL-BATTLE1`) | Built (tools lane) | `develop` | The battle screen at Extra large: the goal under the title, "Boss above" on its own row, cut texts hover to their words, tags and tabs centred; the boss bar's next blow back on screen. FB-431 |
 | `PR7-70` (`PANELS2`) | Built (tools lane) | `develop` | Save/Load slots, forge, dojo and the services screen are panels; they already filled the screen, so nothing changes on screen. FB-433 |
 | `PR7-32` (`BREPORTUI1`) | Built (tools lane) | `develop` | The results popup shows the battle report table and best moment; F2 panel sized to content, portraits, drop tiles, XP bars; PT-11 and PT-13 fixed. FB-435 |
+| `PR7-71` (`CONTROLS-MIGRATE1`) | Built (tools lane) | `develop` | On load, an action on a fixed key goes back to its own key (swap undone), the settings are saved and a notice names it. FB-437 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-437: PR7-71 CONTROLS-MIGRATE1 built; fixed-key bindings reset on load
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `PR7-71` (`CONTROLS-MIGRATE1`), `FB-380` gap.
+- **What landed**: engine `aegis_ui::controls`: `Controls::release_fixed(fixed)` puts each action a fixed key gives
+  back on its own key through `bind_key`'s swap (the existing clash rule: the key that held the action's own key gets
+  its old action back), and the fixed key gives itself again; `controls::release_fixed(settings, fixed)` does it on
+  the settings object and writes the map back only when something moved. Game `lib.rs`: when the settings load, it
+  runs with `FIXED_KEYS`; when an action moved, the settings are saved again and the first screen's notice reads
+  `Controls: <action> went back to its own key (that key is fixed).`
+- **Guesses** (`[PROVISIONAL]`): (1) the player is told by a launch notice (the row did not say); (2) only keyboard
+  bindings are checked: the fixed keys are keys, and a pad button giving `r` or a digit is not a binding on a fixed key.
+- **Tests**: engine `tests/controls.rs::an_action_on_a_fixed_key_goes_back_to_its_own_key` (an old file binding Tab to
+  `r` with its swap half, a lone digit entry, a map with no fixed key left untouched, no map nothing written).
+- **Docs delta**: engine README, after the CONTROLS-UI1B line: "* **Fixed-key migration (CONTROLS-MIGRATE1, PR7-71):**
+  `controls::release_fixed(settings, fixed)` (and `Controls::release_fixed`) puts an action a fixed key gives back on
+  its own key; a game runs it when its settings load and saves when it returns any."
 
 ### FB-435: PR7-32 BREPORTUI1 built; the results show the battle report
 

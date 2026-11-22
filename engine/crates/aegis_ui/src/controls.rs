@@ -226,6 +226,23 @@ impl Controls {
         }
     }
 
+    /// CONTROLS-MIGRATE1: each action a fixed key gives (a map saved before `fixed` refused it) goes back to its own key,
+    /// by `bind_key`'s swap (so the key that held that key gets its old action back), and the fixed key gives itself
+    /// again; returns those actions in the map's order.
+    pub fn release_fixed(&mut self, fixed: &[Fixed]) -> Vec<Key> {
+        let mut out = Vec::new();
+        // each pass frees one fixed key; a swap can re-take another fixed key, so the passes are bounded
+        for _ in 0..=self.keys.len() + fixed.len() {
+            let Some(&(f, t)) = self.keys.iter().find(|(f, _)| fixed.iter().any(|x| x.key == *f)) else { break };
+            self.bind_key(t, t);
+            if self.key(f) != f {
+                self.set_key(f, f);
+            }
+            out.push(t);
+        }
+        out
+    }
+
     /// Button `new` gives `action` from now on; the button that gave it takes what `new` gave.
     pub fn bind_pad(&mut self, action: Key, new: Pad) {
         let (cur, displaced) = (self.pad_for(action), self.pad(new));
@@ -288,6 +305,18 @@ pub struct Fixed {
     pub key: Key,
     pub label: &'static str,
     pub screen: &'static str,
+}
+
+/// CONTROLS-MIGRATE1: the settings' control map with every action on a fixed key put back on its own key
+/// (`Controls::release_fixed`), written back only when something moved; returns the actions moved (empty: the settings
+/// are untouched). A game calls it when its settings load, and saves them when it returns any.
+pub fn release_fixed(settings: &mut Value, fixed: &[Fixed]) -> Vec<Key> {
+    let mut c = Controls::from_settings(settings).0;
+    let moved = c.release_fixed(fixed);
+    if !moved.is_empty() {
+        settings[SETTINGS_KEY] = c.to_json();
+    }
+    moved
 }
 
 /// CONTROLS-UI1B: how long a rebind waits with no input before it ends with nothing changed, so a player whose every
