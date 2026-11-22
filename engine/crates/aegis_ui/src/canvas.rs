@@ -98,6 +98,16 @@ impl Image {
         Image { w: self.w, h: self.h, px }
     }
 
+    /// The image flipped top to bottom (PR7-80: a south-facing copy of a north-facing decal).
+    pub fn flipped(&self) -> Image {
+        let row = (self.w * 4) as usize;
+        let mut px = Vec::with_capacity(self.px.len());
+        for y in (0..self.h as usize).rev() {
+            px.extend_from_slice(&self.px[y * row..(y + 1) * row]);
+        }
+        Image { w: self.w, h: self.h, px }
+    }
+
     /// Every pixel of exactly a `from` colour (any alpha) takes its `to` colour (ASSETORG2 palettes).
     pub fn swap_colours(&mut self, pairs: &[([u8; 3], [u8; 3])]) {
         for p in self.px.chunks_exact_mut(4) {

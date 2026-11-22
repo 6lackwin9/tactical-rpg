@@ -171,6 +171,16 @@ impl Art {
         self.mirrors.get(&key).and_then(|i| i.as_ref())
     }
 
+    /// `image` flipped top to bottom (cached apart, beside the mirrored copies).
+    pub fn image_flipped(&mut self, rel: &str, w: i32, h: i32) -> Option<&Image> {
+        let key = (format!("{rel}#flipped"), w, h);
+        if !self.mirrors.contains_key(&key) {
+            let img = self.image(rel, w, h).map(|i| i.flipped());
+            self.mirrors.insert(key.clone(), img);
+        }
+        self.mirrors.get(&key).and_then(|i| i.as_ref())
+    }
+
     /// The pixel size of the PNG at `rel` (in the first layer holding it) as stored, read from its header; cached.
     pub fn size_of(&mut self, rel: &str) -> Option<(i32, i32)> {
         if let Some(&s) = self.sizes.get(rel) {

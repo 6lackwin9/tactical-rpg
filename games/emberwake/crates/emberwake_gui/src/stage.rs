@@ -1162,6 +1162,33 @@ pub fn exit_path_art(art: &mut Art, x: i32, y: i32) -> Option<String> {
     art.pick_hashed(&dirs_ref(&battle_prop_dirs("exit_path")), x, y)
 }
 
+/// PR7-80 (WALLMASS1): the path decal of a top or bottom exit (`props/<set>/exit_path_north/v*`, its chevrons pointing
+/// north); None: no art (the caller falls back to `exit_path_art`).
+pub fn exit_path_north_art(art: &mut Art, x: i32, y: i32) -> Option<String> {
+    art.pick_hashed(&dirs_ref(&battle_prop_dirs("exit_path_north")), x, y)
+}
+
+/// PR7-80: how an exit cell's path decal is drawn: the north art on the top row (flipped on the bottom row), else the
+/// east art (mirrored on column 0).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExitLook {
+    North(String),
+    South(String),
+    East(String),
+    West(String),
+}
+
+/// PR7-80: exit cell `c`'s decal and its turn; None: no art.
+pub fn exit_look(art: &mut Art, c: V2) -> Option<ExitLook> {
+    if c.y == 0 || c.y == GRID_H - 1 {
+        if let Some(rel) = exit_path_north_art(art, c.x, c.y) {
+            return Some(if c.y == 0 { ExitLook::North(rel) } else { ExitLook::South(rel) });
+        }
+    }
+    let rel = exit_path_art(art, c.x, c.y)?;
+    Some(if c.x == 0 { ExitLook::West(rel) } else { ExitLook::East(rel) })
+}
+
 /// R4: the exit gate's art (`props/<set>/exit_gate/v*`, the first variant).
 pub fn exit_gate_art(art: &mut Art) -> Option<String> {
     art.pick(&dirs_ref(&battle_prop_dirs("exit_gate")), Some(0), 0, 0)
@@ -1181,13 +1208,17 @@ pub fn exit_alpha(now: u64, reduce: bool, bright: bool) -> u8 {
     (EXIT_ALPHA as f32 * k).round() as u8
 }
 
-/// R4: draws the path decal on exit cell `c` at `alpha` (mirrored on a west exit, since the art points east); false
-/// when there is no art (the caller keeps its sign).
+/// R4: draws the path decal on exit cell `c` at `alpha` (`exit_look`: PR7-80 the north art on the top and bottom rows,
+/// else the east art, mirrored on a west exit); false when there is no art (the caller keeps its sign).
 pub fn draw_exit_path(p: &mut Painter, art: &mut Art, c: V2, alpha: u8) -> bool {
-    let Some(rel) = exit_path_art(art, c.x, c.y) else { return false };
-    // the art's chevrons point east: a west exit (column 0) mirrors them
+    let Some(look) = exit_look(art, c) else { return false };
+    // the east art's chevrons point east (a west exit mirrors them); the north art's point north (a south exit flips them)
     let (w, h) = (CELL_W * SET_ART_PX, CELL_H * SET_ART_PX);
-    let img = if c.x == 0 { art.image_mirrored(&rel, w, h) } else { art.image(&rel, w, h) };
+    let img = match &look {
+        ExitLook::North(rel) | ExitLook::East(rel) => art.image(rel, w, h),
+        ExitLook::South(rel) => art.image_flipped(rel, w, h),
+        ExitLook::West(rel) => art.image_mirrored(rel, w, h),
+    };
     match img {
         Some(img) => {
             p.image_alpha(img, stage_cell(c), alpha);
@@ -1348,7 +1379,17 @@ fn draw_block_in(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str
         return;
     }
     let cap = Rect::new(r.x, r.y - BLOCK_LIFT, CELL_W, CELL_H);
-    draw_tile(p, art, grid, t, (set, look), c, cap);
+    // PR7-80 (WALLMASS1): a run of blocks shares one cap: the terrain's ground sheet sampled at the cell's place on the
+    // board when it has one, else one tile variant for the whole run (picked at its root), so no seam changes art
+    // between neighbours; a run along the board's back edge takes the back rows' darker tone
+    let root = run_root(grid, c);
+    match sheet_cap(art, t, (set, look), c) {
+        Some(img) => put(p, &img, cap, tint),
+        None => draw_tile(p, art, grid, t, (set, look), root, cap),
+    }
+    if root.y == 0 {
+        p.fill(cap, OUTER_CAP_SHADE);
+    }
     if block_face(grid, c) {
         let face = Rect::new(r.x, r.y + CELL_H - FACE_H, CELL_W, FACE_H);
         let drawn = match look.pick(art, set, "wall_face", c.x, c.y).or_else(|| face_art(art, set, c.x, c.y)).and_then(|rel| stage_image(art, &rel, (set, look), CELL_W, FACE_H)) {
@@ -1380,6 +1421,45 @@ fn draw_block_in(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str
     if !is_block(grid, V2::new(c.x + 1, c.y)) {
         p.fill(Rect::new(cap.x + cap.w - 1, cap.y, 1, h), side);
     }
+}
+
+/// PR7-80 (WALLMASS1): the shade over the caps of a run along the board's back edge (row 0), toward the back rows'
+/// darker look.
+pub const OUTER_CAP_SHADE: Rgba = rgba(0, 0, 0, 46);
+
+/// PR7-80: the root of block `c`'s run (the blocks joined side by side): its topmost, then leftmost cell. A run's caps
+/// pick their tile variant there, so the whole run shows one art.
+pub fn run_root(grid: &Grid, c: V2) -> V2 {
+    let mut seen = vec![c];
+    let mut todo = vec![c];
+    while let Some(at) = todo.pop() {
+        for n in neighbours(at) {
+            if is_block(grid, n) && !seen.contains(&n) {
+                seen.push(n);
+                todo.push(n);
+            }
+        }
+    }
+    seen.into_iter().min_by_key(|v| (v.y, v.x)).unwrap_or(c)
+}
+
+/// PR7-80: block `c`'s cap cut from terrain `t`'s ground sheet (`composed::sheet_of`) at the cell's place on the board
+/// (a cell's art size per cell, wrapping), so neighbouring caps continue one picture; None: no sheet.
+pub fn sheet_cap(art: &mut Art, t: &str, (set, look): (&str, &ZoneLook), c: V2) -> Option<Image> {
+    let rel = composed::sheet_of(art, t, set, look)?;
+    let (sw, sh) = art.size_of(&rel)?;
+    let sheet = art.image(&rel, sw, sh)?;
+    let (cw, ch) = composed::ART_CELL;
+    let mut out = Image { w: cw, h: ch, px: vec![0; (cw * ch * 4) as usize] };
+    let (ox, oy) = ((c.x * cw).rem_euclid(sheet.w.max(1)), (c.y * ch).rem_euclid(sheet.h.max(1)));
+    for y in 0..ch {
+        for x in 0..cw {
+            let (sx, sy) = ((ox + x) % sheet.w, (oy + y) % sheet.h);
+            let (i, o) = (((sy * sheet.w + sx) * 4) as usize, ((y * cw + x) * 4) as usize);
+            out.px[o..o + 4].copy_from_slice(&sheet.px[i..i + 4]);
+        }
+    }
+    Some(out)
 }
 
 /// The wall face's fallback: the cap tile's top 12 rows at 75 % brightness.
@@ -2140,8 +2220,10 @@ pub(crate) mod tests {
     /// The fixture layer's frame over `ZONES` before LOOK1-L1 (printed on the code before the change); re-recorded for
     /// DIORAMA4 S1 (PR7-74), the one intended change: a row-0 wall's cap is clipped at the board's top edge (0xe6c3440ef5f1669f
     /// before); re-recorded for DIORAMA5 R1 (PR7-77), the one intended change: the fixture's two grass variants are
-    /// picked by the cell's hash instead of the (7x + 13y) mod n lattice (0x2a5309c84d603849 before).
-    const TODAYS_FRAME: u64 = 0xffa27f50b69d7596;
+    /// picked by the cell's hash instead of the (7x + 13y) mod n lattice (0x2a5309c84d603849 before); re-recorded for
+    /// WALLMASS1 (PR7-80), the one intended change: a wall run's caps take one variant (picked at the run's root) and a
+    /// run on the back row takes the back shade (0xffa27f50b69d7596 before).
+    const TODAYS_FRAME: u64 = 0x7898f381e249352d;
 
     /// An empty `stage_set` draws today's frame; so does a set no layer holds, and a `stage_set` draws its own.
     #[test]
@@ -2963,6 +3045,74 @@ pub(crate) mod tests {
         let path = at_px(&g, c.x + 16, c.y + 12);
         assert_eq!(path, [120, 108, 54], "the decal at 60 percent over black");
         assert_eq!(at_px(&g, gates[0].x + 16, gates[0].y + 18), [90, 70, 50], "the gate");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// PR7-80 (WALLMASS1): two side-by-side walls are one run: one root, one tile variant, no side line between them,
+    /// and a ground sheet's cap runs on across their edge; a lone wall keeps its outline; a run on the back row takes the
+    /// back shade.
+    #[test]
+    fn adjacent_walls_share_one_cap_and_a_lone_wall_keeps_its_outline() {
+        let grid = board_of(&[(3, 4, "wall"), (4, 4, "wall"), (8, 4, "wall"), (6, 0, "wall")]);
+        assert_eq!((run_root(&grid, V2::new(4, 4)), run_root(&grid, V2::new(3, 4)), run_root(&grid, V2::new(8, 4))), (V2::new(3, 4), V2::new(3, 4), V2::new(8, 4)));
+        let tiles = scratch("wallmass_tiles");
+        for (i, col) in [[200, 40, 40], [40, 40, 200], [40, 200, 40], [200, 200, 40]].iter().enumerate() {
+            flat_png(&tiles, &format!("tilesets/zz_wall/wall/v{i}.png"), 64, 48, |_, _| *col);
+        }
+        let mut art = Art::layered(Layers::of(vec![tiles.to_path_buf()]));
+        let g = paint(&mut art, &grid, "zz_wall", 0, 1, (0, 0));
+        let cap = |c: V2| {
+            let r = stage_cell(c);
+            Rect::new(r.x, r.y - BLOCK_LIFT, r.w, r.h)
+        };
+        let (a, b, lone) = (cap(V2::new(3, 4)), cap(V2::new(4, 4)), cap(V2::new(8, 4)));
+        assert_eq!(at_px(&g, a.x + 10, a.y + 6), at_px(&g, b.x + 10, b.y + 6), "one variant across the run");
+        let side = [30, 30, 38];
+        assert_ne!(at_px(&g, b.x, b.y + 6), side, "no side line where the two walls meet");
+        assert_ne!(at_px(&g, a.x + a.w - 1, a.y + 6), side);
+        assert_eq!(at_px(&g, a.x, a.y + 6), side, "the run's outline keeps its side line");
+        assert_eq!((at_px(&g, lone.x, lone.y + 6), at_px(&g, lone.x + lone.w - 1, lone.y + 6)), (side, side), "a lone wall keeps both");
+        // a ground sheet for the wall: the caps continue one picture across the edge
+        let sheet = scratch("wallmass_sheet");
+        ramp(&sheet, "tilesets/zz_wall/wall/sheet.png", 256, 192, [40, 60, 80]);
+        let mut art = Art::layered(Layers::of(vec![sheet.to_path_buf(), tiles.to_path_buf()]));
+        let look = ZoneLook::default();
+        let (l, r) = (sheet_cap(&mut art, "wall", ("zz_wall", &look), V2::new(3, 4)).expect("a sheet cap"), sheet_cap(&mut art, "wall", ("zz_wall", &look), V2::new(4, 4)).expect("a sheet cap"));
+        let red = |img: &Image, x: i32, y: i32| img.px[((y * img.w + x) * 4) as usize];
+        assert_eq!(red(&r, 0, 5), red(&l, l.w - 1, 5).wrapping_add(3), "the right cap starts where the left one ends on the sheet");
+        // the back row's run is shaded; a run in the middle is not
+        let shaded = paint(&mut Art::layered(Layers::of(vec![tiles.to_path_buf()])), &board_of(&[(6, 1, "wall")]), "zz_wall", 0, 1, (0, 0));
+        let back = paint(&mut Art::layered(Layers::of(vec![tiles.to_path_buf()])), &board_of(&[(6, 0, "wall"), (6, 1, "wall")]), "zz_wall", 0, 1, (0, 0));
+        let c1 = cap(V2::new(6, 1));
+        assert_ne!(at_px(&shaded, c1.x + 10, c1.y + 20), at_px(&back, c1.x + 10, c1.y + 20), "joined to the back row: the back shade");
+        let _ = std::fs::remove_dir_all(&tiles);
+        let _ = std::fs::remove_dir_all(&sheet);
+    }
+
+    /// PR7-80 (b): a top exit draws the north path art, a bottom exit the same art flipped; the side exits keep the east
+    /// art (mirrored on the west); without the north art a top exit falls back to the east art.
+    #[test]
+    fn top_and_bottom_exits_take_the_north_art_flipped_for_the_south() {
+        let root = scratch("exits_north");
+        flat_png(&root, "props/common/exit_path/v0.png", 64, 48, |_, _| [200, 180, 90]);
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        assert!(matches!(exit_look(&mut art, V2::new(5, 0)), Some(ExitLook::East(_))), "no north art: the east art");
+        flat_png(&root, "props/common/exit_path_north/v0.png", 64, 48, |_, y| if y < 24 { [250, 250, 250] } else { [10, 10, 10] });
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let north = "props/common/exit_path_north/v0.png".to_string();
+        assert_eq!(exit_look(&mut art, V2::new(5, 0)), Some(ExitLook::North(north.clone())));
+        assert_eq!(exit_look(&mut art, V2::new(4, GRID_H - 1)), Some(ExitLook::South(north)));
+        assert!(matches!(exit_look(&mut art, V2::new(0, 3)), Some(ExitLook::West(_))));
+        assert!(matches!(exit_look(&mut art, V2::new(GRID_W - 1, 3)), Some(ExitLook::East(_))));
+        let mut g = crate::hud::hud_tests::gfx();
+        g.canvas = aegis_ui::canvas::Canvas::new(640, 360);
+        g.view = aegis_ui::painter::View::fit(640, 360);
+        let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+        assert!(draw_exit_path(&mut p, &mut art, V2::new(5, 0), 255));
+        assert!(draw_exit_path(&mut p, &mut art, V2::new(4, GRID_H - 1), 255));
+        let (top, bottom) = (stage_cell(V2::new(5, 0)), stage_cell(V2::new(4, GRID_H - 1)));
+        assert_eq!((at_px(&g, top.x + 10, top.y + 2), at_px(&g, top.x + 10, top.y + top.h - 3)), ([250, 250, 250], [10, 10, 10]), "north: light on top");
+        assert_eq!((at_px(&g, bottom.x + 10, bottom.y + 2), at_px(&g, bottom.x + 10, bottom.y + bottom.h - 3)), ([10, 10, 10], [250, 250, 250]), "south: flipped");
         let _ = std::fs::remove_dir_all(&root);
     }
 

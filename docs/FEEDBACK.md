@@ -141,8 +141,36 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-77` (`DIORAMA5`) R6 | Built (tools lane) | `develop` | No grid lines at rest, the "Show full grid" setting (off by default), coherent 2 to 4 cell blobs, no edge pieces over the composed ground. FB-451 |
 | `PR7-82` (`RETRY-SAVE-FIX1`) | Built (tools lane) | `develop` | A lost fight's retry count (`retry:<encounter ref>` in the save's `rolls`) passes the save check, so the autosave after a loss works again; the retry seed is unchanged. FB-453 |
 | `ENGINE-33` (`XL-SWEEP1`) | Built (tools lane) | `develop` | Every scenario shot at Normal and Extra large text with a text audit per shot (`set=`, `audit=1`); four small fixes (plate HP, card name, boss name, world map side panel); the shop layout for Art/UI and three findings for Design. FB-455 |
+| `PR7-80` (`WALLMASS1`) | Built (tools lane) | `develop` | A wall run shares one cap (one variant per run, a ground sheet's cap continuous when there is one, a back-row shade); top and bottom exits draw `exit_path_north` (flipped for the bottom). FB-457 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-457: PR7-80 WALLMASS1 built; wall runs as one mass, north and south exit paths
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `00g2` `PR7-80` (`WALLMASS1`).
+- **What landed** (game `stage.rs`, engine `aegis_ui`):
+  - (a) A run of blocks (side by side) shares one cap: the cap's tile variant is picked at the run's root (its
+    topmost, then leftmost cell), so neighbours never change art at their seam (`stage::run_root`). When the wall
+    terrain has a ground sheet (`<dir>/wall/sheet.png`, none ships yet), each cap is cut from the sheet at its place
+    on the board, so the caps continue one picture (`stage::sheet_cap`); Art/UI can add one per set. Side lines and
+    the top lip were already drawn only on the run's outline, and stay so. A run joined to the back row takes a
+    darker shade (`OUTER_CAP_SHADE`, alpha 46) toward the back rows' look. No walkability change.
+  - (b) Top and bottom exits draw `props/<set>/exit_path_north/v*` (the bottom one flipped top to bottom); the side
+    exits keep `exit_path` (mirrored on the west); a set without the north art falls back to the east art
+    (`stage::exit_look`). Engine: `Image::flipped` and `Art::image_flipped` (cached beside the mirrored copies).
+- **My guess**: "the cap lowered toward the back rows' look" read as a darker tone on back-row runs, not a smaller
+  lift (a lower lift moves every block's rect, decor on blocks and the depth sort). Say if a real lowering is wanted.
+- **Golden**: `stage.rs` `TODAYS_FRAME` re-recorded `0xffa27f50b69d7596` -> `0x7898f381e249352d`, the one intended
+  change (one variant per wall run, the back-row shade).
+- **Tests** (`stage.rs`): `adjacent_walls_share_one_cap_and_a_lone_wall_keeps_its_outline` (one root and variant, no
+  side line between neighbours, a lone wall keeps both, a sheet's caps continue across the edge, the back shade);
+  `top_and_bottom_exits_take_the_north_art_flipped_for_the_south`.
+- **Shots** (`fc.sh shots diff`, base `83c8e910`): 12 of 18 changed, all on the walls (one brick variant per run, the
+  darker back band). Sheet `build-tools/pr7-80/shots_diff_sheet.png`, with two before | after crops beside it.
+- **Docs delta**: `docs/HISTORY.md` row: "2026-11-22 PR7-80 WALLMASS1: the stage frame golden re-recorded for one tile
+  variant per wall run and the back-row shade." `engine/README.md` `aegis_ui` line: add `Image::flipped`,
+  `Art::image_flipped`.
 
 ### FB-455: ENGINE-33 XL-SWEEP1 built; the Extra large sweep, four fixes, findings
 
