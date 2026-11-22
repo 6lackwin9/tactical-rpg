@@ -84,6 +84,7 @@ To let Tushar iterate on **Artwork, Character Sprite Animations, VN Stage Choreo
 - **Full Screen Flow Mock UI**: `py -3.12 -m tools.mock_ui --out <path> [--rebuild-assets]`
 - **Sunk Ward Prop & Tile Cutters**: `art_src/prompts/cut_props.py`, `art_src/prompts/cut_ai_sheets.py`, `art_src/region_maps/render_map.py`, `tools/tiles/{cut,seam,flatten,groundcheck}.py`
 - **Docs Lint Gate**: `tools/fc.sh docs`
+- **Act 2 mock (placeholder, 2026-11-22)**: Gemini items SW-47 (Watch Ramparts / Slag Breach region-map reference) and SW-48 (ramparts battle stage mock), shots in project files `art-ui/act2_mock/`; stage set `games/emberwake/assets/tilesets/high_bastion_stage/` (no data until an Act 2 world exists).
 - **Staging & Retired Probe Index**: [art_src/ARCHIVE_INDEX.md](../../../art_src/ARCHIVE_INDEX.md) (lists active sheets vs superseded first takes / probes kept cleanly on disk so script paths stay intact).
 
 ## 6. Retired Inbox Completions Log (2026-11-15, Phase 2–3)
