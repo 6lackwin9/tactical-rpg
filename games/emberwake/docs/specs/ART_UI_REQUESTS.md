@@ -7,6 +7,8 @@ The hand-off file between the Artwork & Mock UI Session and the Design Session (
 
 Placeholders (decision "Placeholder-first assets"): when Build lands a feature with a placeholder asset (a copy at the final path), an Inbox row asks Art/UI to replace that file **in place**; keep the path, format and frame layout so nothing needs rebuilding (an integration pass checks the replacements later).
 
+New folder kinds (Design 2026-11-22, from `FB-423`): the content check measures every file under a stage set or tileset by its folder. Before dropping a new folder kind or a new size there (as `front_face/` was), write an Outbox row so Design can first queue the check's size row for Build; and run `tools/fc.sh content check` and `tools/fc.sh layers` before every PR.
+
 ## Inbox (for Art/UI)
 
 | Id | Task | Why / blocks | Files | Status |
