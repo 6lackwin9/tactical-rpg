@@ -7,10 +7,10 @@
 //! an encounter's rows place and the battle reads like any other.
 
 use indexmap::IndexMap;
-use rpgkit_battle::command::Command;
+use rpgkit_battle::command::{terrain_name, CmdKind, Command};
 use aegis_core::rng::GodotRng;
 use rpgkit_battle::command::{hazard_on_enter, hazard_round_end};
-use rpgkit_battle::grid::{terrain_walk_keys, terrain_walkable, Grid, TerrainTable, TERRAIN_IDS, V2};
+use rpgkit_battle::grid::{terrain_walk_keys, terrain_walkable, Grid, TerrainTable, NO_CELL, TERRAIN_IDS, V2};
 use rpgkit_battle::path::{self, Cells, Hooks};
 use rpgkit_battle::plan::{Plan, PlanStep};
 use rpgkit_battle::resolver::Resolver;
@@ -270,4 +270,50 @@ fn a_terrain_hazard_line_names_the_terrain_and_the_status() {
         let lines = hazard_on_enter(&mut s.w, &mut GodotRng::new(1), HERO, &[cell]);
         assert_eq!(lines, [format!("[Hazard] {name} is caught in {label}: {}", status::display_name(st))], "{row_name:?}");
     }
+}
+
+/// Rows of every terrain type with no `name` (as the shipped terrain rows are written).
+fn nameless_rows() -> Vec<Value> {
+    TERRAIN_IDS.iter().map(|id| json!({"id": id})).collect()
+}
+
+/// The hero walks one tile east into `terrain` on (5, 4) (the foe moved away): what the walk says blocked it.
+fn walk_into(rows: Vec<Value>, terrain: &str) -> String {
+    let mut s = session(rows);
+    s.w.grid.positions[FOE] = Some(V2::new(10, 0));
+    s.w.grid.terrain[(4 * rpgkit_battle::grid::GRID_W + 5) as usize] = index(terrain);
+    let mut cmd = Command::new(HERO, 0, 1, CmdKind::Walk { path: vec![V2::new(1, 0)], expected_start: NO_CELL, goal: NO_CELL, approach: None, moved_tiles: 0, cut_short: false, blocked_by: String::new() });
+    cmd.name = "Move".into();
+    let mut res = Resolver::new(BLOCKS, 1);
+    assert!(res.schedule(HERO, cmd, 1));
+    for i in res.prepare_block(&mut s.w, 1) {
+        res.execute_single(&mut s.w, i);
+    }
+    assert_eq!(s.w.pos(HERO), V2::new(4, 4), "the walk is refused");
+    let CmdKind::Walk { cut_short, blocked_by, .. } = &res.scheduled[0].command.kind else { panic!("a walk") };
+    assert!(*cut_short);
+    blocked_by.clone()
+}
+
+/// ACT1-FIX5 (PR7-91): blocker and forced-move lines name the terrain by its display name as hazard lines do
+/// (`command::terrain_label`): a row's `name`, else its id in words ("Lava", "Rubble"; was "Floor" for every row with
+/// no name); a plain floor tile still reads "Floor".
+#[test]
+fn blocker_and_forced_move_lines_name_the_terrain() {
+    assert_eq!(walk_into(nameless_rows(), "lava"), "Lava", "a walk into lava");
+    let mut deep = nameless_rows();
+    deep[index("deep_water")]["name"] = json!("The Sump");
+    assert_eq!(walk_into(deep, "deep_water"), "The Sump", "a row's own name wins");
+    assert_eq!(walk_into(nameless_rows(), "deep_water"), "Deep Water", "an id in words");
+
+    let mut rubble = nameless_rows();
+    rubble[index("rubble")]["stops_forced_move"] = json!(true);
+    assert_eq!(push_into(rubble, "rubble"), (V2::new(6, 4), "the rubble".to_string()), "a push stopped by rubble");
+    assert_eq!(push_into(nameless_rows(), "lava"), (V2::new(6, 4), "the lava".to_string()), "a push stopped by lava");
+
+    let s = session(nameless_rows());
+    assert_eq!(s.w.grid.terrain_id(V2::new(0, 0)), "floor");
+    assert_eq!(terrain_name(&s.w, V2::new(0, 0)), "Floor", "a plain floor tile");
+    let s = session(Vec::new());
+    assert_eq!(terrain_name(&s.w, V2::new(0, 0)), "Floor", "a floor with no terrain rows");
 }

@@ -20,6 +20,7 @@
     {"step": "wait", "until": {"path": "state.outcome", "ne": ""}, "timeout_ms": 60000},
     {"step": "assert", "until": {"path": "state.outcome", "eq": "won"}},
     {"step": "wait", "until": {"path": "state.beat.kind", "eq": "victory"}, "timeout_ms": 10000},
+    {"step": "assert", "until": {"path": "state.round_banner", "absent": true}},
     {"step": "shot", "name": "t2_victory_beat"},
     {"step": "wait", "until": {"path": "screen", "eq": "battle_results"}, "timeout_ms": 10000},
     {"step": "assert", "until": {"path": "stack", "has": "battle"}},

@@ -469,7 +469,7 @@ fn move_line(w: &World, m: &Moved, notes: &[String]) -> String {
 }
 
 /// FM4: what refused a step into `cell`: the unit there, the arena edge, the exit, else the tile's terrain (its catalog
-/// name, else its id: "the wall").
+/// display name, `command::terrain_name`: "the wall").
 fn obstacle(w: &World, cell: V2) -> String {
     if let Some(o) = w.occupant(cell) {
         return w.units[o].name.clone();
@@ -480,9 +480,8 @@ fn obstacle(w: &World, cell: V2) -> String {
     if w.grid.is_exit(cell) {
         return "the exit".into();
     }
-    let id = w.grid.terrain_id(cell);
-    let name = if w.cat.terrain.contains_key(id) { terrain_name(w, cell) } else { id.replace('_', " ") };
-    format!("the {}", name.to_lowercase())
+    // ACT1-FIX5 (PR7-91): the terrain's display name as hazard lines give it ("the rubble", "the lava"; was "the floor")
+    format!("the {}", terrain_name(w, cell).to_lowercase())
 }
 
 /// FM4: one collision hit on `v` (`moved`: the unit that was moved; else the unit that blocked it): the damage (HP lost
