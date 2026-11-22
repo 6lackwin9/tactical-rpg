@@ -76,6 +76,8 @@ const CLASS_BASICS_SEED: &str = "classbasics.json";
 const PR7_41_DECKS_SEED: &str = "pr7_41_decks.json";
 /// PR7-40 (BATTLE-UI2): the enemies' short plate names.
 const PR7_40_SEED: &str = "pr7_40.json";
+/// PR7-83 (PT-76): the seed's `fields` step for a unit's short name (its keys over the stored row).
+const PR7_83_SEED: &str = "pr7_83.json";
 
 /// R4-1 slice 2 (FB-144): the seed that set `template` on the caster units (after the class-basics seed).
 const TEMPLATES_SEED: &str = "r41s2.json";
@@ -414,6 +416,14 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         store::upsert(&tmp, None, "units", &keep_art(e), None).unwrap_or_else(|err| panic!("PR7-40 unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the PR7-40 units steps leave the shipped ruleset rows");
+    // PR7-83 (PT-76): the seed's units `fields` steps (their keys over the stored row)
+    for step in seed_rows(PR7_83_SEED, "units") {
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(store::file_of(&tmp, None, "units")).unwrap()).unwrap();
+        let mut e = json::aget(json::dict(&file), "entries").iter().map(json::dict).find(|r| json::s(r, "id") == json::s(&step, "id")).cloned().expect("the stored unit");
+        e.extend(step.clone());
+        store::upsert(&tmp, None, "units", &e, None).unwrap_or_else(|err| panic!("PR7-83 unit '{}': {err:?}", json::s(&e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the PR7-83 units steps leave the shipped ruleset rows");
     // PR5-52 (RULESET-MODES1): the seed removes the classic row and re-saves timeline under modes: the shipped rows
     let text = std::fs::read_to_string(data_dir().join("seeds").join(RULESETMODES1_SEED)).expect("the RULESET-MODES1 seed");
     let seed: Value = serde_json::from_str(&text).expect("seed JSON");

@@ -231,7 +231,7 @@ impl BattleScreen {
         if !reason.is_empty() {
             objective.push(reason);
         }
-        let results = crate::hub::Results::new(&res, &outcome, &fight).after_fight(timed_out, next).objective(objective).report(report).over_battle(cx.settings.reduce_motion(), before);
+        let results = crate::hub::Results::new(&res, &outcome, &fight).after_fight(timed_out, next).partly_escaped(self.session().partial_escape().is_some()).objective(objective).report(report).over_battle(cx.settings.reduce_motion(), before);
         cx.nav.push(Nav::Push(Box::new(results)));
     }
 
@@ -239,6 +239,8 @@ impl BattleScreen {
 
     /// A player's action (a click or a key): the playback controls click (SoundEvents ui_click), then `run`.
     pub(super) fn act(&mut self, cx: &mut Cx, a: Action) {
+        // PR7-83 (PT-79): any action ends a run of Escs (`escape`)
+        self.esc_closed = false;
         // TRANSITIONS1: during a beat any press skips it (T1: control starts; T2: the results open) and does nothing else
         if self.beat.is_some() && !matches!(a, Action::Talk(_)) {
             self.skip_beat(cx);
@@ -276,8 +278,8 @@ impl BattleScreen {
                         return;
                     }
                 }
-                let again = self.selected == Some(u) && self.host.session.as_ref().is_some_and(|s| ri::on(&s.w));
-                self.selected = if again { None } else { Some(u) };
+                // PR7-83 (PT-79): a click on the selected hero's card keeps it selected (it toggled the selection off)
+                self.selected = Some(u);
                 self.popup = None;
             }
             Action::UnitClick(u) => self.unit_click(cx, u),

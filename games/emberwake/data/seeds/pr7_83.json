@@ -1,0 +1,37 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "units",
+      "entry": {
+        "id": "tallow_dredger",
+        "short_name": "Tallow Dredger"
+      },
+      "fields": [
+        "short_name"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "skills",
+      "entry": {
+        "id": "ash_cloud_fade",
+        "description": "Guard, Snap: -{mitigation} damage; for {rounds}, a single-target attack cannot find you in a round you moved; leaves Soot Smoke on the 3x3 around you."
+      },
+      "fields": [
+        "description"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "skills",
+      "entry": {
+        "id": "heavy_winch_sunder",
+        "description": "Assault, Heavy: {name}, {power} power, {stagger} stagger; breaks a windup outright (not an unbreakable one), exposes and knocks the target back 2 tiles."
+      },
+      "fields": [
+        "description"
+      ]
+    }
+  ]
+}

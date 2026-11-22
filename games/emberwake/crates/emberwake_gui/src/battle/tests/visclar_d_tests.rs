@@ -692,7 +692,9 @@ fn a_late_space_does_not_confirm_the_next_plan() {
     assert_eq!(b.message, message, "the round's summary stays");
     b.advanced_at = None;
     b.key(&mut cx, Key::Enter);
-    assert_eq!(requests(&b, "confirm"), confirms + 1, "Enter is the plan's key");
+    assert_eq!(requests(&b, "confirm"), confirms, "PR7-83 (PT-79): the first Enter only dismisses the round's summary");
+    b.key(&mut cx, Key::Enter);
+    assert_eq!(requests(&b, "confirm"), confirms + 1, "then Enter is the plan's key");
 }
 
 /// The second Space, or the Next round click, right after a Space that played the round's last step (the screen's playback

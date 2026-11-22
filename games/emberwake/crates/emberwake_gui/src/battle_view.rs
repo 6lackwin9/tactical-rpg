@@ -437,6 +437,9 @@ pub struct BossBar {
     pub span: i32,
     /// PR7-75 (PT-40): the boss's whole HP and max (the span is the phase's share; the hover says both).
     pub whole: (i32, i32),
+    /// PR7-83 (PT-75): HP carried above the phase's span from a phase that ended unfinished (a time phase): still owed,
+    /// so the read-out shows it ("346/346 +138") and the hover names it.
+    pub carried: i32,
     pub planned: i32,
     pub poise: Option<BossPoise>,
     /// The boss passives: (display name, description) for the tags (BU4).
@@ -450,18 +453,22 @@ pub struct BossBar {
 impl BossBar {
     /// "160/450".
     pub fn span_text(&self) -> String {
-        format!("{}/{}", self.span_left, self.span)
+        if self.carried > 0 {
+            format!("{}/{} +{}", self.span_left, self.span, self.carried)
+        } else {
+            format!("{}/{}", self.span_left, self.span)
+        }
     }
 
     /// PR7-75 (PT-40): the HP read-out's hover: the phase's share and the whole ("This phase: 142/304", "In all:
     /// 142/608"); one line when they are the same.
     pub fn hp_tip(&self) -> Vec<String> {
         let all = format!("In all: {}/{}", self.whole.0, self.whole.1);
-        if self.span == self.whole.1 {
-            vec![all]
-        } else {
-            vec![format!("This phase: {}", self.span_text()), all]
+        let mut out = if self.span == self.whole.1 { vec![all] } else { vec![format!("This phase: {}/{}", self.span_left, self.span), all] };
+        if self.carried > 0 {
+            out.push(format!("Carried over: {} HP from an earlier phase that ended by time, still to take.", self.carried));
         }
+        out
     }
 }
 
@@ -812,6 +819,7 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
             span_left,
             span,
             whole: (unit.hp, unit.max_hp),
+            carried: (unit.hp - pb.top).max(0),
             planned: if planning { rows.party.total.hp.min(span_left) } else { 0 },
             poise,
             passives,

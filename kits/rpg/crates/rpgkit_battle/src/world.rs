@@ -1281,6 +1281,13 @@ impl World {
     /// CatalogEncounter._place_leftovers (standard deployment): units off the grid take the free tile on their half
     /// nearest the centre.
     pub fn place_leftovers(&mut self, units: &[UnitId], party_side: bool, deployment: &str) {
+        self.place_leftovers_avoiding(units, party_side, deployment, &[]);
+    }
+
+    /// PR7-83 (PT-71): `place_leftovers`, passing over the `avoid` tiles (the tiles planned moves claim) while another
+    /// tile on the half is free; a unit takes an avoided tile only when nothing else is left (not yet wired to the
+    /// arrival: it moves the sim golden, FB-459).
+    pub fn place_leftovers_avoiding(&mut self, units: &[UnitId], party_side: bool, deployment: &str, avoid: &[V2]) {
         if !party_side && deployment != "standard" {
             let mut turn = 0;
             for &c in units {
@@ -1305,7 +1312,8 @@ impl World {
                     if Grid::is_party_half(cell) != party_side || !self.open_for(c, cell) {
                         continue;
                     }
-                    let score = Grid::centre_distance(cell) * 1000 + y * 20 + x;
+                    let avoided = if avoid.contains(&cell) { 1 << 20 } else { 0 };
+                    let score = avoided + Grid::centre_distance(cell) * 1000 + y * 20 + x;
                     if score < best_score {
                         best_score = score;
                         best = cell;

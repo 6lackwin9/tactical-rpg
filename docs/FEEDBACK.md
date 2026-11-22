@@ -142,8 +142,64 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-82` (`RETRY-SAVE-FIX1`) | Built (tools lane) | `develop` | A lost fight's retry count (`retry:<encounter ref>` in the save's `rolls`) passes the save check, so the autosave after a loss works again; the retry seed is unchanged. FB-453 |
 | `ENGINE-33` (`XL-SWEEP1`) | Built (tools lane) | `develop` | Every scenario shot at Normal and Extra large text with a text audit per shot (`set=`, `audit=1`); four small fixes (plate HP, card name, boss name, world map side panel); the shop layout for Art/UI and three findings for Design. FB-455 |
 | `PR7-80` (`WALLMASS1`) | Built (tools lane) | `develop` | A wall run shares one cap (one variant per run, a ground sheet's cap continuous when there is one, a back-row shade); top and bottom exits draw `exit_path_north` (flipped for the bottom). FB-457 |
+| `PR7-83` (`ACT1-FIX3`) | Built in part (tools lane) | `develop` | PT-73, 75, 76, 79, 81, 84 fixed; PT-68 and PT-69 text fixed; PT-70 and PT-71 fixes move the sim golden, so held for Design with options; PT-67, 72, 74, 80 reported. FB-459 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-459: PR7-83 ACT1-FIX3 built in part; two rule fixes held because they move the sim golden
+
+- **Status**: built in part (tools lane), `develop`; **needs Design** on PT-70, PT-71, PT-72 and PT-74 below.
+- **Spec**: `docs/READY.md` row `00g3` `PR7-83` (`ACT1-FIX3`, `FB-392` findings).
+- **Fixed** (goldens unchanged):
+  - PT-73: a partial escape (some heroes out, fewer than needed, none left fighting) reads "Partly escaped" on the
+    banner and the results, with the reason "2 of 3 got out; the escape needed 3." (kit `Session::partial_escape`,
+    used by `end_reason`; game `hub::PARTLY_ESCAPED`). A retreat or a round-limit end is never partial.
+  - PT-75: the boss bar's span shows HP carried over from a phase that ended by time (" +138"), and its hover says
+    "This phase: left/span" and "Carried over: n HP from an earlier phase that ended by time, still to take."
+  - PT-76: `tallow_dredger` short name "Tallow Dredger" (seed `pr7_83.json`, fields only).
+  - PT-79: Enter at "Round over" only dismisses the summary (a second Enter confirms); a party slot click always
+    selects (no toggle off); Escape steps back one layer at a time and stops once with nothing open before it leaves.
+  - PT-81: planning a second exit move reads "{name} leaves by the exit earlier in this plan; nothing can follow."
+  - PT-84: a pull or push of 0 tiles with nothing stopped logs nothing.
+  - PT-68 (text): stealth hides a unit only from single-target attacks, and only in a round it moved
+    (`round_intent::hidden`); Ash-Cloud Fade now says so ("for 2 rounds, a single-target attack cannot find you
+    in a round you moved"; the old text also read "2 rounds rounds"). The hits in the run were area attacks (Heretic's
+    Brand, Hammer Strike) or rounds Vesper did not move.
+  - PT-69 (text): the Pulverizer is `unbreakable`, so `sure_break` cannot break its wind-up; Winch Sunder now says
+    "breaks a windup outright (not an unbreakable one)".
+- **Held for Design** (each tried, each moves `sim_golden`; reverted, per "goldens unchanged"):
+  - PT-71: an arriving wave passing over the tiles the party's planned walks claim. Tried the whole path, then the goal
+    only: both change `sim_golden` (the sim's waves land on claimed tiles). The kit helper
+    `World::place_leftovers_avoiding` is in, tested and unwired. Options: (A) wire it, re-record `sim_golden` as the
+    intended change (recommended: one line, low undo cost); (B) leave spawns as they are. On the "dropped move with no
+    log line": every cut walk logs "[Move Cut Short] ..."; the run log keeps only 200 characters of each read, so I
+    could not find the dropped line. `ENGINE-35` could capture the full log.
+  - PT-70: a re-route that would end a block farther from the goal stays put (tried for every unit, then the party
+    only: both change `sim_golden`). On open ground a cut walk already re-routes toward its goal (test below); the
+    run's "wrong way" looks like the long way round a closed gap. Options: (A) party walks never end a block farther
+    from the goal, re-record `sim_golden` (recommended); (B) keep the shortest route even when it starts away.
+- **Reported, not changed**:
+  - PT-72, the path-claim rule (no change made). Today a planned move claims every path tile for the round, so a
+    1-tile gap passes one hero a round. Options: (A) keep; (B) a move claims each tile only in the block it walks it,
+    so a friend may follow a block later (recommended: matches what players expect, friends already pass mid-block);
+    (C) claim only block-end tiles. The rest of PT-72 (the "voided by a later pick" line at pick time, odd costs,
+    "No path" through a foe leaving in B1) is not done: the pick already returns the dropped later picks
+    (`Session::pick`), the game does not show them at pick time yet. A follow-up row.
+  - PT-74: the auto plan is the sim's planner, so teaching it the escape objective changes `sim_golden` by
+    construction. Not started; it needs an intended re-record.
+  - PT-67: my reading (not proven by a test): Hammer Strike is a shaped Assault, so at impact its shape is re-read on
+    its target's tile (`CmdKind::Area.target`); the forecast reads the cells fixed at planning, so a disengage looked
+    safe ("-0") while the blow followed Vesper. Fix: the forecast follows the target the same way. Not done this row.
+  - PT-69 (forecast part): a pushed skill's new target showing an incoming forecast is not done.
+  - PT-80: data, not a rule. Tourniquet is 3 AP, 2 blocks and Cauterize (brimstone) 2 AP, 1 block on every target;
+    both reach 2 tiles, so a far ally adds the walk to reach (my reading of the 8 AP and 4 blocks; not traced in a
+    test). The "-3 blocks, -3 AP" rows after a Move pick show what that Move already spends.
+- **Tests**: kit `escape_plan.rs` `an_escape_short_of_its_count_reads_as_partly_escaped`,
+  `an_arrival_passes_over_a_claimed_tile`, `a_move_cut_short_reroutes_toward_its_goal`; game `hub.rs`
+  `a_partial_escape_reads_partly_escaped`, `boss_ui1_tests.rs` (carried HP), `input1_tests.rs`
+  (`a_fresh_escape_with_nothing_open_leaves_at_once`, `enter_at_round_over_only_dismisses_the_summary`, the
+  Escape steps), `visclar_d_tests.rs` (the second Enter confirms).
+- **Docs delta**: none.
 
 ### FB-457: PR7-80 WALLMASS1 built; wall runs as one mass, north and south exit paths
 

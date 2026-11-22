@@ -643,7 +643,8 @@ impl Plan {
     fn apply(&self, w: &World, c: UnitId, st: &mut SimState, step: &Step, index: i32) -> String {
         let u = &w.units[c];
         if st.withdrawn {
-            return format!("{} has already left the battle.", u.name);
+            // PR7-83 (PT-81): the leaving is planned, not done: a step after the plan's exit move says so
+            return format!("{} leaves by the exit earlier in this plan; nothing can follow.", u.name);
         }
         if !u.is_active() || st.pos == NO_CELL {
             return format!("{} is not on the field.", u.name);

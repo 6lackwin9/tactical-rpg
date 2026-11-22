@@ -1820,7 +1820,7 @@
 		{
 			"id": "tallow_dredger",
 			"name": "Tallow Dredger",
-			"short_name": "Skirmisher",
+			"short_name": "Tallow Dredger",
 			"side": "enemy",
 			"description": "Tallow Dredger.",
 			"class_id": "rogue",

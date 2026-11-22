@@ -514,6 +514,8 @@ pub struct Results {
     /// leaves open (`open_jobs_lines`).
     timed_out: bool,
     next_lines: Vec<String>,
+    /// PR7-83 (PT-73): an escape that got only some of the heroes it needed out (it reads "Partly escaped").
+    partly: bool,
     /// OBJUI1 (OBJ1 3, MORALE1 3): the objective line ("Objective met: ..." or "The objective failed.") and, after a
     /// win by a break, the break lines (`obj_view::result_lines`; empty outside a battle).
     objective: Vec<String>,
@@ -524,6 +526,8 @@ pub struct Results {
 
 /// PR7-37 (PT-02): the outcome label of a fight that ran out of rounds (whatever its `timeout_outcome` settles it as).
 pub const OUT_OF_TIME: &str = "Out of time";
+/// PR7-83 (PT-73): the head of an escape that got only some of the heroes it needed out.
+pub const PARTLY_ESCAPED: &str = "Partly escaped";
 /// ENRAGE2 EN9: the head of a random fight whose foes slipped away at its round cap.
 pub const SLIPPED_AWAY: &str = "They slipped away";
 /// ENRAGE2 EN9: its note.
@@ -815,6 +819,7 @@ impl Results {
             opened: Instant::now(),
             leaving: None,
             timed_out: false,
+            partly: false,
             next_lines: Vec::new(),
             objective: Vec::new(),
             report: None,
@@ -839,6 +844,21 @@ impl Results {
         self.timed_out = timed_out;
         self.next_lines = next_lines;
         self
+    }
+
+    /// PR7-83 (PT-73): the fight was an escape that got only some of the heroes it needed out.
+    pub fn partly_escaped(mut self, partly: bool) -> Self {
+        self.partly = partly;
+        self
+    }
+
+    /// The results' head (`outcome_head`, or "Partly escaped" for a partial escape).
+    fn head(&self) -> &str {
+        if self.partly && self.outcome == "fled" {
+            PARTLY_ESCAPED
+        } else {
+            outcome_head(&self.outcome, self.timed_out)
+        }
     }
 
     /// TRANSITIONS1 T2: the results over the battle that settled (`plain`: Reduce motion), with the hub's view as the
@@ -963,7 +983,7 @@ impl Screen<GameCx> for Results {
         } else {
             ui.p.fill(Rect::new(0, 0, W, H), th().game("result_veil", rgba(10, 14, 24, 235)));
         }
-        let head = outcome_head(&self.outcome, self.timed_out);
+        let head = self.head().to_string();
         let world = gs.world_id.clone();
         let name = |kind: &str, id: &str| -> String {
             match kind {
@@ -1048,7 +1068,7 @@ impl Screen<GameCx> for Results {
         ui.frame_body("ornate", panel);
         let x0 = panel.x + RES_PAD;
         let mut y = panel.y + RES_PAD;
-        ui.p.text_face(aegis_ui::painter::Typeface::Display, x0 as f32, y as f32, head, aegis_ui::ui::HEAD + 4.0, th().gold);
+        ui.p.text_face(aegis_ui::painter::Typeface::Display, x0 as f32, y as f32, &head, aegis_ui::ui::HEAD + 4.0, th().gold);
         y += head_h;
         for (text, col) in &lines {
             ui.p.text_fit(x0 as f32, y as f32, text, BODY + 1.0, (panel.w - 2 * RES_PAD) as f32, *col);
@@ -1158,7 +1178,7 @@ impl Screen<GameCx> for Results {
         }
     }
     fn state(&self, _cx: &Cx) -> Value {
-        let mut out = json!({"outcome": self.outcome, "head": outcome_head(&self.outcome, self.timed_out), "next": self.next_lines, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards, "stay_lines": self.stay_lines, "wounded": self.wounded, "departed": self.departed, "stash_short": self.stash_short});
+        let mut out = json!({"outcome": self.outcome, "head": self.head(), "next": self.next_lines, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards, "stay_lines": self.stay_lines, "wounded": self.wounded, "departed": self.departed, "stash_short": self.stash_short});
         // TRANSITIONS1 T2: only over a battle (the state of the other results reads as before)
         if self.over {
             out["over_battle"] = json!({"plain": self.plain, "arrives": self.before.is_some(), "leaving": self.leave_ms(Instant::now())});
@@ -1260,6 +1280,16 @@ mod tests {
         assert_eq!(outcome_head("won", true), "Victory");
         assert!(timeout_note(&rewards(0, 0, 0, json!({}))).contains("No foe was defeated"));
         assert!(timeout_note(&rewards(1, 0, 0, json!({}))).contains("keeps the rewards"));
+    }
+
+    /// PR7-83 (PT-73): a partial escape heads "Partly escaped"; a whole flight stays "Fled", and the flag reads only on a
+    /// flight.
+    #[test]
+    fn a_partial_escape_reads_partly_escaped() {
+        let res = json::obj([("ok", json!(true))]);
+        assert_eq!(Results::new(&res, "fled", &Dict::new()).partly_escaped(true).head(), PARTLY_ESCAPED);
+        assert_eq!(Results::new(&res, "fled", &Dict::new()).head(), "Fled");
+        assert_eq!(Results::new(&res, "won", &Dict::new()).partly_escaped(true).head(), "Victory");
     }
 
     /// REWARD1 section 7: the tally line, each outcome's note, and the reward lines in order.

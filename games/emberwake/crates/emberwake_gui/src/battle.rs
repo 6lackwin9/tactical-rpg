@@ -450,6 +450,8 @@ pub struct BattleScreen {
     /// VISCLAR1-D: the round's summary shown before the next round's prompt while that prompt stands (prompt, summary), and
     /// when the last advance of a timeline battle came (`CONFIRM_GUARD_MS`).
     round_note: Option<(String, String)>,
+    /// PR7-83 (PT-79): the last Esc closed something (any other key or click clears it): see `escape`.
+    esc_closed: bool,
     advanced_at: Option<Instant>,
     /// TRANSITIONS1 (`beats.rs`): the running beat (T1 the battle beat of a story fight, T2 the victory beat), T1's
     /// banner, whether its walk-in started, whether T2 ran, the ash wipe's cover cache, and the hub's view as the fight
@@ -591,6 +593,7 @@ impl BattleScreen {
             channel_units: Vec::new(),
             banner: None,
             round_note: None,
+            esc_closed: false,
             advanced_at: None,
             beat: None,
             intro_card: Default::default(),
@@ -1069,6 +1072,7 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn key(&mut self, cx: &mut Cx, k: Key) {
+        self.esc_closed = false;
         if crate::viewkeys::window_key(cx, k, crate::viewkeys::Shown::Notice) {
             return;
         }
@@ -1089,6 +1093,11 @@ impl Screen<GameCx> for BattleScreen {
             return;
         }
         match k {
+            // PR7-83 (PT-79): while the last round's summary still shows, Enter only dismisses it (a quick Enter after
+            // "Round over" confirmed the next, empty round)
+            Key::Enter if self.planning() && self.round_note.as_ref().is_some_and(|n| n.0 == self.message) => {
+                self.round_note = None;
+            }
             Key::Enter if self.planning() => self.act(cx, Action::Confirm),
             Key::Enter if !self.outcome().is_empty() && self.world_mode() => self.act(cx, Action::Continue),
             Key::Space => self.act(cx, Action::Step),
@@ -1165,6 +1174,9 @@ impl Screen<GameCx> for BattleScreen {
         if self.talk.is_some() {
             return;
         }
+        // PR7-83 (PT-79): Esc stops at the last panel: after a run of Escs that closed things, the next one with nothing
+        // left to close does nothing; only the Esc after that opens Settings
+        let streak = std::mem::replace(&mut self.esc_closed, true);
         // INPUT1 SL3 (round intent): the menu, the log, the inspected unit, then the selection; then as before. TV1: an
         // open timeline view closes first
         let timeline = self.host.session.as_ref().is_some_and(|s| ri::on(&s.w));
@@ -1182,11 +1194,15 @@ impl Screen<GameCx> for BattleScreen {
             self.message = "Inspect cleared.".into();
         } else if timeline && self.selected.is_some() {
             self.selected = None;
+        } else if streak {
+            self.esc_closed = false;
         } else if !self.world_mode() {
+            self.esc_closed = false;
             cx.nav.push(Nav::Pop);
         } else {
             // PR7-26: nothing open in a world battle: the in-game Settings popup (its Return to title keeps the hub's
             // busy and unsaved checks)
+            self.esc_closed = false;
             self.act(cx, Action::Settings);
         }
     }

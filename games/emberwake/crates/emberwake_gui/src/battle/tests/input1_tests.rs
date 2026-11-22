@@ -486,7 +486,8 @@ fn clicks_select_target_and_inspect() {
     b.run(&mut cx, Action::UnitClick(h));
     assert_eq!(b.selected, Some(h), "SL5: an ally is selected");
     b.run(&mut cx, Action::Select(h));
-    assert_eq!(b.selected, None, "SL4: the selected hero's card selects nothing");
+    assert_eq!(b.selected, Some(h), "SL4, PR7-83 (PT-79): a click on the selected hero's card keeps it selected");
+    b.selected = None;
     b.run(&mut cx, Action::Select(h));
     assert_eq!(b.selected, Some(h), "SL6: a card selects");
     let state = b.state(&cx);
@@ -558,7 +559,32 @@ fn escape_steps_back_one_layer_at_a_time() {
     assert_eq!(b.selected, None, "then the selection");
     assert!(cx.nav.is_empty(), "nothing left yet");
     b.escape(&mut cx);
+    assert!(cx.nav.is_empty(), "PR7-83 (PT-79): Esc stops at the last panel: the next one with nothing to close does nothing");
+    b.escape(&mut cx);
     assert!(!cx.nav.is_empty(), "then the Arena leaves, as before");
+}
+
+/// PR7-83 (PT-79): an Esc after another key or click (no run of closing Escs) leaves at once, as before.
+#[test]
+fn a_fresh_escape_with_nothing_open_leaves_at_once() {
+    let (mut cx, _g, mut b) = planning();
+    b.selected = None;
+    b.run(&mut cx, Action::ToggleLog);
+    b.run(&mut cx, Action::ToggleLog);
+    b.escape(&mut cx);
+    assert!(!cx.nav.is_empty(), "nothing was closed by Esc just before: it leaves");
+}
+
+/// PR7-83 (PT-79): while the last round's summary shows, Enter only dismisses it; the next Enter confirms.
+#[test]
+fn enter_at_round_over_only_dismisses_the_summary() {
+    let (mut cx, _g, mut b) = planning();
+    let round = b.session().current_round;
+    b.round_note = Some((b.message.clone(), "Round over: 2 hits".into()));
+    b.key(&mut cx, crate::screens::Key::Enter);
+    assert_eq!((b.session().current_round, b.planning(), b.round_note.is_none()), (round, true, true), "dismissed, not confirmed: {}", b.message);
+    b.key(&mut cx, crate::screens::Key::Enter);
+    assert!(!b.planning() || b.session().current_round > round, "the next Enter confirms: {}", b.message);
 }
 
 /// IS1, IS2: the inspected enemy pins the intel panel ("Inspecting <name> (Esc clears)") over the hovered unit until

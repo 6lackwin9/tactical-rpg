@@ -383,4 +383,10 @@ fn the_counter_counts_the_boss_and_the_hp_hover_gives_both_numbers() {
     assert_eq!(bar.hp_tip(), vec![format!("This phase: {}", bar.span_text()), format!("In all: {}/{}", u.hp, u.max_hp)]);
     let tip = b.w.iter().find(|w| w.id == "boss.hp").expect("the read-out").tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>();
     assert_eq!(tip, bar.hp_tip(), "the read-out's hover");
+    assert_eq!(bar.carried, (u.hp - ses.phase_bar().map_or(u.hp, |p| p.top)).max(0));
+    // PR7-83 (PT-75): HP carried over from a phase that ended by time reads beside the span and on the hover
+    let mut carried = bar.clone();
+    carried.carried = 138;
+    assert_eq!(carried.span_text(), format!("{}/{} +138", carried.span_left, carried.span));
+    assert!(carried.hp_tip().last().is_some_and(|l| l.starts_with("Carried over: 138 HP")), "{:?}", carried.hp_tip());
 }

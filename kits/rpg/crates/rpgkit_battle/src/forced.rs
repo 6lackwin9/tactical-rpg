@@ -279,7 +279,11 @@ pub fn shove_unit(res: &mut Resolver, w: &mut World, t: UnitId, by: Option<UnitI
         m.stopped = stop_walks(res, t);
     }
     m.line = move_line(w, &m, &notes);
-    res.log.push(m.line.clone());
+    // PR7-83 (PT-84): a move of 0 tiles that cancels nothing and enters no hazard is no event ("drags Kaelen 0 tiles");
+    // a collision still logs its own hit lines below
+    if m.tiles > 0 || m.stopped > 0 || !notes.is_empty() {
+        res.log.push(m.line.clone());
+    }
     if let Some(&cell) = refused.first() {
         m.blocked_by = obstacle(w, cell);
         m.blockers = blockers_of(w, t, &refused);

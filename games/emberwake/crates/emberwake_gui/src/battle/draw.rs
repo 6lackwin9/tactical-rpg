@@ -1280,6 +1280,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             // PR7-37 (PT-02): the round limit ran out (nobody fled)
             _ if g.timed_out() => (crate::hub::OUT_OF_TIME, th().gold),
             "lost" => ("Defeat", th().foe),
+            // PR7-83 (PT-73): an escape that got only some of the heroes it needed out
+            "fled" if g.session().partial_escape().is_some() => (crate::hub::PARTLY_ESCAPED, th().gold),
             "fled" => ("Fled", th().gold),
             _ => ("Battle over", th().gold),
         };

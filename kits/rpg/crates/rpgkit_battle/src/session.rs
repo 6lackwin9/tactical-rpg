@@ -2360,6 +2360,16 @@ impl Session {
         self.outcome.is_empty() && !self.final_outcome().is_empty()
     }
 
+    /// PR7-83 (PT-73): an escape that ended with some heroes out but fewer than it needed (and none left fighting):
+    /// (heroes out alive, heroes needed); None for any other end (a retreat too), and while the battle goes on.
+    pub fn partial_escape(&self) -> Option<(i32, i32)> {
+        if self.objective.objective != "escape" || self.final_outcome() != encounter::FLED || self.timed_out() || self.resolver.log.iter().any(|l| l.starts_with(RETREAT_LINE)) {
+            return None;
+        }
+        let got = self.w.allies.iter().filter(|a| !self.guests.contains(a)).map(|&h| &self.w.units[h]).filter(|u| u.is_alive() && u.is_withdrawn).count() as i32;
+        (got > 0 && got < self.objective.count).then_some((got, self.objective.count))
+    }
+
     /// PR7-75 (PT-40): why the battle ended, one line for the results and the log ("" while it goes on, and for a win
     /// with nothing to add): the party's retreat, the round limit, the objective's own note (a slay target got away, a
     /// retreat's unit withdrew), the last standing heroes leaving the field, or every hero down.
@@ -2376,6 +2386,9 @@ impl Session {
         }
         if !self.objective.note.is_empty() {
             return self.objective.note.clone();
+        }
+        if let Some((got, needed)) = self.partial_escape() {
+            return format!("{got} of {needed} got out; the escape needed {needed}.");
         }
         let heroes: Vec<UnitId> = self.w.allies.iter().copied().filter(|a| !self.guests.contains(a)).collect();
         let left: Vec<&str> = heroes.iter().map(|&h| &self.w.units[h]).filter(|u| u.is_alive() && u.is_withdrawn).map(|u| u.name.as_str()).collect();

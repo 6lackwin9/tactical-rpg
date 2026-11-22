@@ -171,3 +171,54 @@ fn a_heros_withdraw_spends_no_ap_it_lacks() {
     s.w.units[ASH].ap = 0;
     assert_eq!(s.plan.add_step(&s.w, ASH, PlanStep::withdraw(), true), "Not enough AP to withdraw.");
 }
+
+/// PR7-83 (PT-73): an escape that ends with two heroes out of the three it needed (the rest down) reads as a partial
+/// escape with its own reason; one with every hero it needed out, or none, is not partial.
+#[test]
+fn an_escape_short_of_its_count_reads_as_partly_escaped() {
+    let mut s = session(floor(), json!({}), [V2 { x: 1, y: 1 }, V2 { x: 1, y: 3 }, V2 { x: 1, y: 5 }, V2 { x: 1, y: 7 }, V2 { x: 6, y: 4 }]);
+    assert_eq!(s.partial_escape(), None, "nothing while the battle goes on");
+    s.w.withdraw_in_place(ASH);
+    s.w.withdraw_in_place(BRYN);
+    s.w.units[COLE].hp = 0;
+    s.w.units[DARA].hp = 0;
+    s.outcome = "fled".into();
+    assert_eq!(s.partial_escape(), Some((2, 3)));
+    assert_eq!(s.end_reason(), "2 of 3 got out; the escape needed 3.");
+    s.w.units[COLE].hp = 10;
+    s.w.withdraw_in_place(COLE);
+    assert_eq!(s.partial_escape(), None, "three out is the escape it needed");
+}
+
+/// PR7-83 (PT-71): an arriving unit passes over a tile a planned move claims and takes the next free one; with no
+/// tile avoided it takes the usual one.
+#[test]
+fn an_arrival_passes_over_a_claimed_tile() {
+    let s = session(floor(), json!({}), [V2 { x: 1, y: 1 }, V2 { x: 1, y: 3 }, V2 { x: 1, y: 5 }, V2 { x: 1, y: 7 }, V2 { x: 6, y: 4 }]);
+    let mut usual = s.w.clone();
+    usual.grid.positions[FOE] = None;
+    let mut avoiding = usual.clone();
+    usual.place_leftovers(&[FOE], false, "standard");
+    let first = usual.grid.positions[FOE].expect("a free tile");
+    avoiding.place_leftovers_avoiding(&[FOE], false, "standard", &[first]);
+    let second = avoiding.grid.positions[FOE].expect("another free tile");
+    assert_ne!(second, first, "the claimed tile is passed over");
+}
+
+/// PR7-83 (PT-70): on open ground a move cut short (at its first step, mid path or at its goal) never ends farther from
+/// its goal than it began (a long way round a wall is FB-459's open question).
+#[test]
+fn a_move_cut_short_reroutes_toward_its_goal() {
+    for (blocker, label) in [(V2::new(2, 4), "first step"), (V2::new(4, 4), "mid path"), (V2::new(5, 4), "goal")] {
+        let mut s = session(floor(), json!({"exits": []}), [V2::new(1, 4), V2::new(0, 0), V2::new(0, 1), V2::new(0, 2), V2::new(11, 8)]);
+        let to = V2::new(5, 4);
+        assert_eq!(s.pick(ASH, RoundTarget::Cell(to), &[Pick::MoveHere(to)]).0, Ok(()));
+        assert!(s.confirm_plan(), "the plan is confirmed");
+        s.w.grid.positions[FOE] = Some(blocker);
+        while s.phase != Phase::Replay {
+            s.step_next();
+        }
+        let end = s.w.pos(ASH);
+        assert!(end.dist(to) <= V2::new(1, 4).dist(to), "{label}: Ash never ends farther from the goal: {end}");
+    }
+}

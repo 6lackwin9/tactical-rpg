@@ -1399,7 +1399,7 @@
 			"level": 1,
 			"ap_cost": 2,
 			"blocks": 1,
-			"description": "Guard, Snap: -{mitigation} damage; grants stealth for {rounds} rounds and leaves Soot Smoke on the 3x3 around you.",
+			"description": "Guard, Snap: -{mitigation} damage; for {rounds}, a single-target attack cannot find you in a round you moved; leaves Soot Smoke on the 3x3 around you.",
 			"learned_only": true,
 			"round_intent": "guard",
 			"status_rounds": 2,
@@ -1616,7 +1616,7 @@
 			"level": 2,
 			"ap_cost": 5,
 			"blocks": 4,
-			"description": "Assault, Heavy: {name}, {power} power, {stagger} stagger; breaks a windup outright, exposes and knocks the target back 2 tiles.",
+			"description": "Assault, Heavy: {name}, {power} power, {stagger} stagger; breaks a windup outright (not an unbreakable one), exposes and knocks the target back 2 tiles.",
 			"learned_only": true,
 			"round_intent": "assault",
 			"weapon_types": [
