@@ -447,6 +447,43 @@ impl<G: Context> Cx<G> {
     }
 }
 
+/// ENGINE-56 (AUDIO-FEEL2): what the shell answers a press with by sound (`Screen::ui_sound`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UiCue {
+    /// A button (or another kind of `UI_SOUND_KINDS`) pressed and taken.
+    Confirm,
+    /// Esc, the pad's B or a right click that closed something (a screen, an open choice list).
+    Back,
+    /// A press on a disabled button.
+    Error,
+}
+
+impl UiCue {
+    /// The engine's sound for the cue (`engine/assets/audio/sfx`; a game's file of the same name plays over it).
+    pub fn file(self) -> &'static str {
+        match self {
+            UiCue::Confirm => "sfx/ui_confirm.wav",
+            UiCue::Back => "sfx/ui_back.wav",
+            UiCue::Error => "sfx/ui_error.wav",
+        }
+    }
+}
+
+/// ENGINE-56: a screen's answer to `Screen::ui_sound`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UiSound {
+    /// The cue's own file (`UiCue::file`).
+    Rule,
+    /// Nothing (the screen plays its own).
+    Silent,
+    /// This file on the interface bus.
+    File(&'static str),
+}
+
+/// ENGINE-56: the widget kinds a press of answers by rule: buttons (framed, text or icon), tabs, checkboxes, choice
+/// fields and their options, sections; not sliders, rows, cards, board cells, drag handles or text fields.
+pub const UI_SOUND_KINDS: [&str; 8] = ["button", "text_button", "icon_button", "tab", "checkbox", "dropdown", "option", "section"];
+
 pub trait Screen<G> {
     fn id(&self) -> &'static str;
     /// The units this screen writes its rects in, for as long as it lives (LAYOUT720-E1; the shell gives it the view
@@ -581,6 +618,18 @@ pub trait Screen<G> {
     /// chosen as the music is: the topmost screen's wish plays, None lets the screen below choose, and `Some("")` is
     /// silence (a battle over a region, say).
     fn ambience(&self, _cx: &Cx<G>) -> Option<String> {
+        None
+    }
+    /// ENGINE-56 (AUDIO-FEEL2): the sound the shell plays for `cue` on widget `id` of this screen (empty for a back):
+    /// the rule (`UiSound::Rule`: `UiCue::file`), none (the screen plays its own, as a battle's round controls do), or
+    /// another file. The shell asks before the press runs and plays after it, only when it went through (a confirm),
+    /// was refused (an error) or closed something (a back).
+    fn ui_sound(&self, _cx: &Cx<G>, _id: &str, _cue: UiCue) -> UiSound {
+        UiSound::Rule
+    }
+    /// ENGINE-56: how long this screen's music (`music`) fades in when it starts, in seconds; None: the engine's (2 s
+    /// from silence, 1 s over another track). The track it replaces fades out as ever.
+    fn music_fade_in(&self, _cx: &Cx<G>) -> Option<f32> {
         None
     }
     /// Drag and drop (UIKIT2): whether payload `from` (`Ui::draggable`) may be dropped on the target `to`

@@ -38,6 +38,13 @@ pub(super) fn info_at(infos: &[Value], pos: (i32, i32)) -> Option<&Value> {
     infos.iter().rev().filter(|w| w["kind"] == "option").find(under).or_else(|| infos.iter().rev().find(under))
 }
 
+/// ENGINE-56 (AUDIO-FEEL2): the widget a click at `pos` presses for its sound: `at` (`info_at`) when it answers by
+/// rule (`UI_SOUND_KINDS`, clickable), else the topmost disabled one of those kinds there (a refused press).
+pub(super) fn sound_target<'a>(infos: &'a [Value], at: Option<&'a Value>, pos: (i32, i32)) -> Option<&'a Value> {
+    let kind = |w: &Value| w["clickable"] == json!(true) && UI_SOUND_KINDS.contains(&w["kind"].as_str().unwrap_or(""));
+    at.filter(|w| kind(w)).or_else(|| infos.iter().rev().find(|w| w["enabled"] != json!(true) && kind(w) && info_rect(w).contains(pos.0, pos.1)))
+}
+
 /// A widget's agent info as a playtest trail control: {path (its id), cls (its kind), text (40 chars), tip (60),
 /// interactive}.
 pub(super) fn trail_ctl(w: &Value) -> Value {
@@ -302,6 +309,8 @@ impl<G: Context> Shell<G> {
         if k == Key::Esc {
             if let Some(field) = self.gfx.kit.open.take() {
                 // Back on the field the list belongs to.
+                let cue = self.ui_cue(&field, UiCue::Back);
+                self.play_cue(cue, true);
                 self.open_focus = None;
                 if self.gfx.kit.focus_visible {
                     self.gfx.kit.focus = Some(field);
@@ -313,13 +322,16 @@ impl<G: Context> Shell<G> {
             self.settle();
             return;
         }
-        let cx = &mut self.cx;
-        let top = self.stack.last_mut().unwrap();
         if k == Key::Esc {
-            top.escape(cx);
-        } else {
-            top.key(cx, k);
+            self.back_by(|s| {
+                let cx = &mut s.cx;
+                s.stack.last_mut().unwrap().escape(cx);
+                s.settle();
+            });
+            return;
         }
+        let cx = &mut self.cx;
+        self.stack.last_mut().unwrap().key(cx, k);
         self.settle();
     }
 
@@ -388,12 +400,14 @@ impl<G: Context> Shell<G> {
             "slider" => {}
             kind => {
                 let picked = kind == "option";
+                let cue = self.press_cue(infos.iter().find(|w| w["id"] == id.as_str()));
                 let cx = &mut self.cx;
                 let top = self.stack.last_mut().unwrap();
                 if !picked && top.press_focus(cx, &id, k) {
                     return true;
                 }
-                let _ = top.click_id(cx, &id);
+                let taken = top.click_id(cx, &id).is_ok();
+                self.play_cue(cue, taken);
                 if picked {
                     // Back on the field the list belongs to.
                     self.gfx.kit.focus = self.gfx.kit.open.take().or(self.open_focus.take());
@@ -470,8 +484,10 @@ impl<G: Context> Shell<G> {
         if self.gfx.kit.open.take().is_some() {
             // An open list: a pick goes through, any other click only closes it.
             if kind == "option" {
+                let cue = self.press_cue(at.as_ref());
                 let cx = &mut self.cx;
-                self.stack.last_mut().unwrap().click(cx, pos);
+                let taken = self.stack.last_mut().unwrap().click(cx, pos);
+                self.play_cue(cue, taken);
             }
             self.settle();
             return true;
@@ -512,8 +528,10 @@ impl<G: Context> Shell<G> {
                 self.drag = Some((slider.to_string(), id.clone()));
             }
         }
+        let cue = self.press_cue(sound_target(&infos, at.as_ref(), pos));
         let cx = &mut self.cx;
         let handled = self.stack.last_mut().unwrap().click(cx, pos);
+        self.play_cue(cue, handled);
         self.settle();
         handled
     }
@@ -664,12 +682,19 @@ impl<G: Context> Shell<G> {
             let ctl = info_at(&infos, self.mouse).map(trail_ctl).unwrap_or(Value::Null);
             self.cx.playtest.trail(json!({"type": "click", "button": "right", "pos": [self.mouse.0, self.mouse.1], "ctl": ctl, "handled": true}));
         }
-        if self.cancel_drag() || self.gfx.kit.open.take().is_some() {
+        if self.cancel_drag() {
             return;
         }
-        let cx = &mut self.cx;
-        self.stack.last_mut().unwrap().back(cx);
-        self.settle();
+        if let Some(field) = self.gfx.kit.open.take() {
+            let cue = self.ui_cue(&field, UiCue::Back);
+            self.play_cue(cue, true);
+            return;
+        }
+        self.back_by(|s| {
+            let cx = &mut s.cx;
+            s.stack.last_mut().unwrap().back(cx);
+            s.settle();
+        });
     }
 }
 
@@ -723,5 +748,42 @@ impl<G: Context> Shell<G> {
         self.cancel_drag();
         self.settle();
         true
+    }
+}
+
+impl<G: Context> Shell<G> {
+    /// ENGINE-56 (AUDIO-FEEL2): the sound the top screen answers `cue` on widget `id` with (`Screen::ui_sound`), asked
+    /// before the press runs; None: silent.
+    pub(super) fn ui_cue(&self, id: &str, cue: UiCue) -> Option<(UiCue, &'static str)> {
+        match self.stack.last().unwrap().ui_sound(&self.cx, id, cue) {
+            UiSound::Rule => Some((cue, cue.file())),
+            UiSound::Silent => None,
+            UiSound::File(f) => Some((cue, f)),
+        }
+    }
+
+    /// ENGINE-56: the cue for a press on widget `w` (its `info`): a confirm on an enabled one, an error on a disabled
+    /// one, nothing for a kind outside `UI_SOUND_KINDS` or a widget that takes no click.
+    pub(super) fn press_cue(&self, w: Option<&Value>) -> Option<(UiCue, &'static str)> {
+        let w = w.filter(|w| w["clickable"] == json!(true) && UI_SOUND_KINDS.contains(&w["kind"].as_str().unwrap_or("")))?;
+        let cue = if w["enabled"] == json!(true) { UiCue::Confirm } else { UiCue::Error };
+        self.ui_cue(w["id"].as_str().unwrap_or(""), cue)
+    }
+
+    /// ENGINE-56: plays a press's cue once the press ran: a confirm only when it was `taken`, an error always.
+    pub(super) fn play_cue(&self, cue: Option<(UiCue, &'static str)>, taken: bool) {
+        if let Some((c, file)) = cue {
+            if c != UiCue::Confirm || taken {
+                self.cx.audio.play(crate::audio::Bus::Ui, file);
+            }
+        }
+    }
+
+    /// ENGINE-56: a back (Esc, the pad's B, a right click) through `f`; its cue plays when the stack got shorter.
+    pub(super) fn back_by(&mut self, f: impl FnOnce(&mut Self)) {
+        let cue = self.ui_cue("", UiCue::Back);
+        let depth = self.stack.len();
+        f(self);
+        self.play_cue(cue.filter(|_| self.stack.len() < depth), true);
     }
 }

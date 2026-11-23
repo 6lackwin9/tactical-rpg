@@ -254,7 +254,7 @@ impl BattleScreen {
         if a == Action::Confirm && self.advanced_at.is_some_and(|t| t.elapsed() < Duration::from_millis(CONFIRM_GUARD_MS)) {
             return;
         }
-        if matches!(a, Action::Confirm | Action::Step | Action::Autoplay | Action::NextRound | Action::PlaybackSpeed(_) | Action::NextBlock | Action::Skip) {
+        if a.clicks() {
             cx.audio.play(Bus::Ui, "sfx/ui_click.wav");
         }
         self.run(cx, a);

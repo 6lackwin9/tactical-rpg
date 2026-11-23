@@ -1042,6 +1042,7 @@ fn preview_of(key: &str) -> Option<(Bus, &'static str)> {
         "effects" => Some((Bus::Sfx, "sfx/hit.wav")),
         "interface" => Some((Bus::Ui, "sfx/ui_click.wav")),
         "ambience" => Some((Bus::Ambience, "sfx/ui_confirm.wav")),
+        crate::mapview::FOOTSTEPS_KEY => Some((Bus::Sfx, crate::mapview::MAP_STEP)),
         _ => None,
     }
 }
@@ -1320,7 +1321,8 @@ impl SettingsScreen {
                 Self::commit(cx, k, if lo == 0.0 { json!(v.round() as i64) } else { json!((v * 100.0).round() / 100.0) });
                 if let Some((bus, sample)) = preview_of(k) {
                     cx.audio.set_levels(&cx.settings.v);
-                    cx.audio.preview(bus, sample);
+                    let gain = if k == crate::mapview::FOOTSTEPS_KEY { crate::mapview::footstep_gain(&cx.settings.v) } else { 1.0 };
+                    cx.audio.preview_gain(bus, sample, gain);
                 }
             }
             SetAct::Pick(k, i) => self.pick(cx, k, i),
@@ -1426,6 +1428,8 @@ impl SettingsScreen {
                 Row::Volume("master", "Master Volume", "Overall game audio output"),
                 Row::Volume("music", "Music Volume", "Orchestral and hurdy-gurdy ward score"),
                 Row::Volume("effects", "Effects Volume", "Combat steel clashes, billhooks and chains"),
+                // ENGINE-56 (AUDIO-FEEL2): the map footstep's own volume, a share of Effects
+                Row::Volume(crate::mapview::FOOTSTEPS_KEY, "Footsteps", "The party's steps on the maps, under Effects"),
                 Row::Volume("interface", "Interface Volume", "Menu chimes, card clicks and roll ticks"),
                 // PR7-34 (AMBIENCE1): the settings mock's row
                 Row::Volume("ambience", "Ward Ambience", "Canal rain, distant bells and furnace rumble"),
@@ -1702,6 +1706,15 @@ impl SettingsScreen {
 }
 
 impl Screen<GameCx> for SettingsScreen {
+    /// ENGINE-56 (AUDIO-FEEL2): a volume's `<` and `>` play the volume's own sample (`preview_of`), as its slider does.
+    fn ui_sound(&self, _cx: &Cx, id: &str, cue: aegis_ui::UiCue) -> aegis_ui::UiSound {
+        let volume = id.strip_prefix("settings.").and_then(|k| k.strip_suffix(".down").or_else(|| k.strip_suffix(".up"))).is_some_and(|k| preview_of(k).is_some());
+        if volume && cue == aegis_ui::UiCue::Confirm {
+            aegis_ui::UiSound::Silent
+        } else {
+            aegis_ui::UiSound::Rule
+        }
+    }
     /// Nothing here moves by itself but the confirm's countdown and a waiting rebind's end.
     fn frame_need(&self, _cx: &Cx) -> FrameNeed {
         if self.confirm.is_some() || self.rebind.capturing() {
@@ -1918,7 +1931,7 @@ const VOLUME_STEP: f64 = 5.0;
 const WALK_STEP_STEP: f64 = 10.0;
 
 fn static_key(k: &str) -> &'static str {
-    ["master", "music", "effects", "interface", "ambience"].into_iter().find(|x| *x == k).unwrap_or("master")
+    ["master", "music", "effects", crate::mapview::FOOTSTEPS_KEY, "interface", "ambience"].into_iter().find(|x| *x == k).unwrap_or("master")
 }
 
 #[cfg(test)]

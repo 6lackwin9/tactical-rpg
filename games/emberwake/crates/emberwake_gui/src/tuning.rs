@@ -58,6 +58,9 @@ pub struct Tuning {
     pub grid_alpha_planning: u8,
     /// SPRITE1-U: how long a moving unit slides to its new tile playing `walk` (0: it jumps).
     pub walk_ms: u64,
+    /// ENGINE-56 (AUDIO-FEEL2): how long a battle's music fades in (0-3000 ms; other tracks 2 s from silence, 1 s over
+    /// another; `Screen::music_fade_in`).
+    pub battle_music_fade_ms: u64,
     /// SPRITE1-U: how long a fallen unit shows the death clip's last frame before the dead marker.
     pub death_hold_ms: u64,
     /// SPRITE1-U: the opacity (0-255) of the side-coloured ellipse under a unit's feet (the Flat view).
@@ -105,6 +108,7 @@ impl Default for Tuning {
             grid_alpha: 0,
             grid_alpha_planning: 72,
             walk_ms: 360,
+            battle_music_fade_ms: 400,
             death_hold_ms: 600,
             foot_alpha: 110,
             hover_outline_alpha: 110,
@@ -188,6 +192,7 @@ impl Tuned for Tuning {
             grid_alpha: u("grid_alpha", d.grid_alpha as u64).min(255) as u8,
             grid_alpha_planning: u("grid_alpha_planning", d.grid_alpha_planning as u64).clamp(1, 255) as u8,
             walk_ms: u("walk_ms", d.walk_ms).min(2000),
+            battle_music_fade_ms: u("battle_music_fade_ms", d.battle_music_fade_ms).min(3000),
             death_hold_ms: u("death_hold_ms", d.death_hold_ms).min(5000),
             foot_alpha: u("foot_alpha", d.foot_alpha as u64).min(255) as u8,
             hover_outline_alpha: u("hover_outline_alpha", d.hover_outline_alpha as u64).min(255) as u8,

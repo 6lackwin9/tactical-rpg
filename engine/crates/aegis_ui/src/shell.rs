@@ -14,7 +14,7 @@ use crate::focus;
 use crate::canvas::{Canvas, Image};
 use crate::layout_audit::{self, Profile};
 use crate::painter::{CanvasPolicy, Fonts, Grid, Painter, View};
-use crate::screen::{read_window_sizes, Settings, WINDOW_SIZES, Context, Cx, Held, Key, Nav, Notice, PointerPhase, Screen};
+use crate::screen::{read_window_sizes, Settings, WINDOW_SIZES, Context, Cx, Held, Key, Nav, Notice, PointerPhase, Screen, UiCue, UiSound, UI_SOUND_KINDS};
 // The window's show, size and place (DISPLAY2): the desktop only; the web page owns its canvas (WEBREL1-E2).
 #[cfg(not(target_arch = "wasm32"))]
 use crate::screen::{window_capped, window_centred, window_kept_in, window_size_of, ScreenRect};
@@ -521,8 +521,8 @@ impl<G: Context> Shell<G> {
     /// The music and ambience the stack wants now (the topmost screen naming one); a change starts at once.
     fn follow_music(&self) {
         let cx = &self.cx;
-        let track = self.stack.iter().rev().find_map(|s| s.music(cx));
-        cx.audio.music(track.as_deref());
+        let track = self.stack.iter().rev().find_map(|s| s.music(cx).map(|m| (m, s.music_fade_in(cx))));
+        cx.audio.music_faded(track.as_ref().map(|(m, _)| m.as_str()), track.as_ref().and_then(|(_, f)| *f));
         let bed = self.stack.iter().rev().find_map(|s| s.ambience(cx)).filter(|b| !b.is_empty());
         cx.audio.ambience(bed.as_deref());
     }
@@ -1062,6 +1062,75 @@ mod tests {
         let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false };
         s.frame();
         s
+    }
+
+    /// ENGINE-56: a menu over the board: an enabled button, a disabled one, one that plays its own sound, a slider.
+    #[derive(Default)]
+    struct Menu {
+        w: Vec<Widget<&'static str>>,
+    }
+
+    impl Menu {
+        fn act(&mut self, cx: &mut Cx, a: &'static str) {
+            cx.app.log.push(format!("click {a}"));
+        }
+    }
+
+    impl Screen<App> for Menu {
+        fn id(&self) -> &'static str {
+            "menu"
+        }
+        fn overlay(&self) -> bool {
+            true
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let mut ui: Ui<&'static str> = Ui::new(g, mouse, live);
+            ui.button("ok", Rect::new(10, 100, 60, 14), "OK", "ok", true);
+            ui.button("off", Rect::new(80, 100, 60, 14), "Off", "off", false);
+            ui.button("own", Rect::new(150, 100, 60, 14), "Own", "own", true);
+            ui.slider("vol", Rect::new(10, 130, 100, 14), 1, 2, "40%", |i| if i == 0 { "v0" } else { "v1" }, true);
+            self.w = ui.widgets;
+        }
+        fn ui_sound(&self, _cx: &Cx, id: &str, _cue: UiCue) -> UiSound {
+            if id == "own" { UiSound::Silent } else { UiSound::Rule }
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    /// ENGINE-56 (AUDIO-FEEL2): a press answers by rule: confirm on a button taken (by a click, the keyboard or the agent
+    /// link), error on a disabled one, back when Esc or a right click closed the screen, nothing where the screen plays
+    /// its own, on a slider, or on a back that closed nothing.
+    #[test]
+    fn presses_answer_by_rule_unless_the_screen_names_its_own() {
+        let mut s = shell();
+        let engine = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        s.cx.audio = Audio::virtual_layers(&aegis_core::assets::Layers::of(vec![engine]));
+        s.stack.push(Box::new(Menu::default()));
+        s.frame();
+        let t0 = Instant::wall();
+        let heard = |s: &Shell<App>| s.cx.audio.sounds_since(t0).into_iter().map(|x| x.0).collect::<Vec<_>>();
+        let at = |s: &mut Shell<App>, pos: (i32, i32)| {
+            s.mouse = pos;
+            s.click();
+            s.frame();
+        };
+        at(&mut s, (20, 105));
+        at(&mut s, (90, 105));
+        at(&mut s, (160, 105));
+        at(&mut s, (20, 135));
+        assert_eq!(heard(&s), ["sfx/ui_confirm.wav", "sfx/ui_error.wav"], "the slider and the screen's own say nothing");
+        assert_eq!(s.cx.app.log, ["click ok", "click own", "click v0"]);
+        let r = s.bridge(&json!({"cmd": "click", "id": "ok"}));
+        assert_eq!(r["ok"], json!(true));
+        let r = s.bridge(&json!({"cmd": "click", "id": "off"}));
+        assert_eq!(r["ok"], json!(false));
+        assert_eq!(heard(&s)[2..], ["sfx/ui_confirm.wav", "sfx/ui_error.wav"], "the link's clicks too");
+        s.key(Key::Esc);
+        assert_eq!((s.stack.len(), heard(&s).last().map(String::as_str)), (1, Some("sfx/ui_back.wav")), "Esc closed the menu");
+        let n = heard(&s).len();
+        s.back();
+        s.key(Key::Esc);
+        assert_eq!(heard(&s).len(), n, "a back that closes nothing is silent");
     }
 
     /// Press at `from`, move to `to` in steps, release (the window's mouse path).

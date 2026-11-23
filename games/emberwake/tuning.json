@@ -34,6 +34,7 @@
   "foot_ring_alpha": 200,
   "grid_alpha": 0,
   "walk_ms": 360,
+  "battle_music_fade_ms": 400,
   "death_hold_ms": 600,
   "foot_alpha": 110,
   "hover_outline_alpha": 110,

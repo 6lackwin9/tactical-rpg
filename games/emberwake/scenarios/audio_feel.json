@@ -1,6 +1,6 @@
 {
  "id": "audio_feel",
- "title": "ENGINE-55 (AUDIO-FEEL1): sounds timed from the input or frame that asks for them to their first audible sample, on the virtual device: the title's Continue and The Sweep's start (music changes, the combat sting), then a round confirmed and played (the interface click, footsteps, hits); interface sounds under 50 ms after their input, effects within a frame of their frame, no underrun",
+ "title": "ENGINE-55 (AUDIO-FEEL1), ENGINE-56 (AUDIO-FEEL2): sounds timed from the input or frame that asks for them to their first audible sample, on the virtual device: the title's Continue (its confirm, the map's music), the game menu opened, its party screen and both closed by Esc (confirms and backs), a few steps on the map (the footstep), The Sweep's start (music changes, the combat sting), then a round confirmed and played (the interface click, footsteps, hits); interface sounds under 50 ms after their input, effects within a frame of their frame, no underrun",
  "launch": {
   "save": "sweep_start"
  },
@@ -33,6 +33,7 @@
     }
    ],
    "budget": {
+    "ui_sound_ms": 50,
     "music_ms": 50,
     "underruns": 0
    }
@@ -48,6 +49,79 @@
   {
    "step": "pause",
    "ms": 800
+  },
+  {
+   "step": "feel",
+   "name": "menu_confirm_back",
+   "step_ms": 16.667,
+   "gap": 0,
+   "script": [
+    {
+     "click": "region.menu"
+    },
+    {
+     "wait_ms": 500
+    },
+    {
+     "click": "hub.party"
+    },
+    {
+     "wait_ms": 500
+    },
+    {
+     "key": "esc"
+    },
+    {
+     "wait_ms": 500
+    },
+    {
+     "key": "esc"
+    },
+    {
+     "wait_ms": 500
+    }
+   ],
+   "budget": {
+    "ui_sound_ms": 50,
+    "underruns": 0
+   }
+  },
+  {
+   "step": "feel",
+   "name": "map_step",
+   "step_ms": 16.667,
+   "gap": 0,
+   "motion": true,
+   "script": [
+    {
+     "press": "left"
+    },
+    {
+     "wait_ms": 700
+    },
+    {
+     "release": "left"
+    },
+    {
+     "wait_ms": 400
+    },
+    {
+     "press": "right"
+    },
+    {
+     "wait_ms": 700
+    },
+    {
+     "release": "right"
+    },
+    {
+     "wait_ms": 400
+    }
+   ],
+   "budget": {
+    "hit_beat_ms": 16.7,
+    "underruns": 0
+   }
   },
   {
    "step": "click",

@@ -153,8 +153,11 @@ impl<G: Context> Shell<G> {
                 } else {
                     // Any other click closes an open list (a pick from it still goes through).
                     self.gfx.kit.open = None;
+                    let cue = self.press_cue(target.as_ref());
                     let cx = &mut self.cx;
-                    match self.stack.last_mut().unwrap().click_id(cx, id) {
+                    let done = self.stack.last_mut().unwrap().click_id(cx, id);
+                    self.play_cue(cue, done.is_ok());
+                    match done {
                         Ok(()) => json!({"ok": true, "clicked": id}),
                         Err(e) => json!({"ok": false, "error": e}),
                     }

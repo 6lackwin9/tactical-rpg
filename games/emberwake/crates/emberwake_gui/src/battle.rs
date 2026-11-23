@@ -74,6 +74,7 @@ use aegis_ui::fx::{Camera, Clock, Fx};
 use aegis_ui::pacing::{FrameNeed, SLOW_LIFE};
 use crate::stage::View;
 use crate::screens::{Cx, GameCx, Key, Nav, Screen};
+use aegis_ui::{UiCue, UiSound};
 use aegis_ui::ui::{Gfx, Widget};
 use emberwake_battle::grid::V2;
 use emberwake_battle::round_intent::{self as ri};
@@ -219,6 +220,14 @@ pub enum Action {
     /// BATTLE-UI2 contract 4 (PR7-40 part 2): a click on a foe group (its catalog unit) opens it into compact plates; a
     /// click on the open group's header closes it.
     FoeGroup(String),
+}
+
+impl Action {
+    /// The round's playback controls, which click on a player's press (SoundEvents `ui_click`, `flow::act`); the shell's
+    /// press sound leaves them be (ENGINE-56, `Screen::ui_sound`).
+    pub fn clicks(&self) -> bool {
+        matches!(self, Action::Confirm | Action::Step | Action::Autoplay | Action::NextRound | Action::PlaybackSpeed(_) | Action::NextBlock | Action::Skip)
+    }
 }
 
 /// ENGINE-53 (SWITCH-AHEAD1): a world fight started ahead, on a copy of the game, while the map idles near it: the game
@@ -554,6 +563,12 @@ impl BattleScreen {
     }
 
     fn blank(cx: &Cx, mode: Mode) -> Self {
+        // ENGINE-56 (AUDIO-FEEL2): a world fight's stings decode on a thread as the screen is made (ahead, unseen, when
+        // the map warms it), so their first play is a cached one
+        if matches!(mode, Mode::World { .. }) {
+            cx.audio.warm(crate::transitions::COMBAT_STING);
+            cx.audio.warm(crate::transitions::VICTORY_STINGER);
+        }
         // PR5-53 (VFX-DATA1): the tokens' status looks from the game's effect presets
         crate::fx::install_status_looks(&cx.data.cat.fx_presets);
         Self {
@@ -1499,6 +1514,21 @@ impl Screen<GameCx> for BattleScreen {
             _ => ("", ""),
         };
         music::battle_track(cx, ctx, world, location, self.music_request, seed)
+    }
+
+    /// ENGINE-56 (AUDIO-FEEL2): the battle's music fades in over `battle_music_fade_ms`.
+    fn music_fade_in(&self, cx: &Cx) -> Option<f32> {
+        Some(cx.tuning.value.battle_music_fade_ms as f32 / 1000.0)
+    }
+
+    /// ENGINE-56: the round controls play their own click (`Action::clicks`); every other button answers by the rule.
+    fn ui_sound(&self, _cx: &Cx, id: &str, cue: UiCue) -> UiSound {
+        let own = self.w.iter().find(|w| w.id == id).and_then(|w| w.action.as_ref()).is_some_and(Action::clicks);
+        if own && cue == UiCue::Confirm {
+            UiSound::Silent
+        } else {
+            UiSound::Rule
+        }
     }
 
     aegis_ui::widget_plumbing!();

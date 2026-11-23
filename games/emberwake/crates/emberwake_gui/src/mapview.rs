@@ -27,6 +27,17 @@ pub const SPRITE: i32 = 24;
 pub const ICON: i32 = 16;
 /// How far a wall's cap is lifted over its cell, and the height of its south face (STAGE1 3.3 at half size).
 pub const BLOCK_LIFT: i32 = 6;
+/// ENGINE-56 (AUDIO-FEEL2): the party's footstep on the hub and region maps (a soft variant of the battle's
+/// `move_step`; a placeholder until Art/UI's), on the Effects bus at the `FOOTSTEPS_KEY` volume under it.
+pub const MAP_STEP: &str = "sfx/map_step.wav";
+/// ENGINE-56: the settings key of the map footstep's volume (0-100, a share of Effects).
+pub const FOOTSTEPS_KEY: &str = "footsteps";
+
+/// ENGINE-56: the map footstep's gain under Effects, from the settings (0-1).
+pub fn footstep_gain(settings: &serde_json::Value) -> f32 {
+    (settings[FOOTSTEPS_KEY].as_f64().unwrap_or(60.0) / 100.0).clamp(0.0, 1.0) as f32
+}
+
 #[cfg(test)]
 pub const FACE_H: i32 = 6;
 /// The shade a wall's face drops on the cell south.

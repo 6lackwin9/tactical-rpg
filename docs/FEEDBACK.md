@@ -172,8 +172,53 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-53` (`SWITCH-AHEAD1`) | Built (tools lane) | `develop` | the composer's fields' blur, rims and contact lines on threads (same bytes); built ahead at idle (`Screen::warm_next`, `ground::keep`): the title's Continue map (ground composed on a thread, map drawn once unseen), a fight the party walks into or stands near and the fight after a vignette (started on a copy of the game, taken when not stale); Continue 19 to 22 ms, The Sweep 27 to 30 ms; test that a fight built ahead equals one built on the switch; `switch_feel` budgets 120 ms; goldens unchanged. FB-501 |
 | `ENGINE-54` (`WARM-SPREAD1`) | Built (tools lane) | `develop` | build-ahead work on threads (decodes, grounds, fight starts; the kit's round plan `Send`), the rest drawn unseen in slices one a frame behind an empty canvas `bounds` after 300 ms still, none on a frame with input; no frame over 33 ms while warming (worst 22 ms by The Sweep on cold art), two cold slices of the fight 9 to 18 ms; Continue 19 ms, The Sweep 21 ms; new `walk_feel_fight`, `switch_feel` `title_warm`; goldens unchanged. FB-503 |
 | `ENGINE-55` (`AUDIO-FEEL1`) | Built (tools lane) | `develop` | `feel` times each sound from its input or frame to its first audible sample, with the output's buffer and underruns; UI sounds 12 to 20 ms, hits within 6 ms of their frame, music 15 to 30 ms after its ask (was 96 ms on Continue), no underruns in release; music asked before the draw, decoding off the frame, a fixed 512-frame buffer; audio budgets on `feel` steps, new `audio_feel`; goldens unchanged. FB-504 |
+| `ENGINE-56` (`AUDIO-FEEL2`) | Built (tools lane) | `develop` | menus answer by sound by rule (confirm, back, error; `Screen::ui_sound` overrides, the round controls and volume steps keep theirs); a soft map footstep with its own Footsteps volume under Effects (placeholder `map_step.wav`); battle music fades in over 0.4 s (`battle_music_fade_ms`); stings warmed with the battle screen; `audio_feel` gains a confirm, a back and a map step; goldens unchanged. FB-505 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-505: ENGINE-56 AUDIO-FEEL2 built; menus answer by sound, map footsteps, battle music in 0.4 s, stings warmed
+
+- **Status**: built (tools lane), `develop`. Engine (`aegis_ui` screen, shell input and link, audio), game GUI
+  (`emberwake_gui` battle, settings, region map, map view, defaults, tuning), kit asset `kits/rpg/assets/audio/sfx/
+  map_step.wav` (placeholder), game `tuning.json` (`battle_music_fade_ms` 400), scenario `audio_feel`; no catalog data.
+  **Every golden unchanged**. Shots diff: `screens_menus__settings_sound.png` (the new Footsteps row, intended) and
+  `screens_menus__scene_runner.png` (its known artifact).
+- **Spec**: `docs/READY.md` row `ENGINE-56` (`AUDIO-FEEL2`).
+- **(4) Menu sounds by rule** (engine): the shell answers a press with `ui_confirm` when a button is pressed and taken
+  (a click, Enter or Space on the focus, the agent link), `ui_error` on a disabled one, and `ui_back` when Esc, the pad's
+  B or a right click closed a screen or an open choice list (a back that closes nothing is silent). Buttons are the kinds
+  in `UI_SOUND_KINDS` (button, text button, icon button, tab, checkbox, choice field and option, section); sliders, rows,
+  cards and board cells say nothing. A screen overrides per widget with `Screen::ui_sound` (the rule, none, or its own
+  file): the battle's round controls keep their `ui_click` (`Action::clicks`), the Settings volumes' `<` and `>` keep
+  their sample like the sliders. The files are the engine's (`engine/assets/audio/sfx`); a game's of the same name plays
+  over them.
+- **(3) Map footstep** (game): a soft step on each step of the party on the hub and region maps (`mapview::MAP_STEP`,
+  Effects bus), at a new `Footsteps` volume under Effects (settings `footsteps`, default 60, a share of Effects; its row
+  sits under Effects Volume on the Sound tab and previews the step). The file is a placeholder at its final path: the
+  kit's `move_step.wav` low-passed at 45 % (Art/UI replaces it and adds its line to the kit's sfx README).
+- **(2) Battle music fade**: a screen may name its music's fade-in (`Screen::music_fade_in`, `Audio::music_faded`); the
+  battle names `battle_music_fade_ms` (tuning, 400). I read "from silence" as the battle track's own fade-in wherever it
+  starts: The Sweep's track starts over the map's, so it now comes in over 0.4 s while the map's fades out over 1 s
+  as before. Other tracks keep 2 s from silence and 1 s over another.
+- **(5) Stings warmed**: a world battle screen decodes `combat_sting` and `victory_stinger` on a thread as it is made
+  (`Audio::warm`; the map makes it ahead, unseen); the first combat sting in `switch_feel_story` played from the cache
+  (0.08 ms on the ask, heard 24 ms after it).
+- **Measured** (release, no window, 3 runs of `audio_feel`):
+  - **Confirm**: 13 to 22 ms after the click (Continue, the game menu, its party screen); **back**: 16 to 21 ms after Esc.
+  - **Map footstep**: within 3.5 to 5.5 ms of its frame; the first step of a key press is asked between frames and
+    heard 21 ms after the key.
+  - Round controls, hits and music as in FB-504.
+  - Underruns: none in three runs. One release run had a single underrun in `battle_round` with a 6 ms buffer mix
+    (the virtual device's thread preempted on this container); not seen again in three more.
+- **Scenarios**: `audio_feel` gains `menu_confirm_back` (interface sounds 50 ms) and `map_step` (footsteps 16.7 ms off
+  their frame), and `title_to_map` budgets Continue's confirm; README row.
+- **Tests**: the shell's rule (confirm by click, Enter and the link, error on a disabled button, back only when
+  something closed, nothing on a slider or where the screen plays its own); `warm`, `music_faded` and `play_gain`.
+- **Found, not mine**: `switch_feel_story` fails in a release run at its step 4 (New Game opens a vignette, not the new
+  game screen) on develop before this change too; it passes in the dev build the gate runs.
+- **Docs delta (engine/README.md)**: in the audio bullet add "; since ENGINE-56 the shell answers presses by sound
+  (`ui_confirm`, `ui_back`, `ui_error`; `Screen::ui_sound`, `UI_SOUND_KINDS`), a screen may name its music's fade-in
+  (`Screen::music_fade_in`), `Audio::warm` decodes a sound ahead and `Audio::play_gain` plays under a bus's level".
 
 ### FB-504: ENGINE-55 AUDIO-FEEL1 built; interface sounds 12 to 20 ms, hits within 6 ms of their frame, no underruns
 

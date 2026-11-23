@@ -310,9 +310,52 @@ impl Audio {
         self.play_at(bus, rel, level);
     }
 
+    /// ENGINE-56 (AUDIO-FEEL2): `play` at `gain` (0-1) of the bus's level: a sound with a volume of its own under the
+    /// bus's (a game's footstep volume under Effects).
+    pub fn play_gain(&self, bus: Bus, rel: &str, gain: f32) {
+        let level = self.state.borrow().levels.of(bus) * gain.clamp(0.0, 1.0);
+        self.play_at(bus, rel, level);
+    }
+
+    /// ENGINE-56: decodes `rel` whole on a thread for its first play (a sting a screen will play soon), so that play
+    /// starts like a cached one (`pcm`). Nothing offline, on the web, or when it is decoded or decoding already.
+    pub fn warm(&self, rel: &str) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if self.device.is_none() {
+                return;
+            }
+            let slot = {
+                let st = self.state.borrow();
+                if st.pcm.contains_key(rel) || st.pcm_later.contains_key(rel) {
+                    return;
+                }
+                drop(st);
+                let Some(bytes) = self.bytes(rel) else { return };
+                let slot = Arc::new(std::sync::Mutex::new(None));
+                self.state.borrow_mut().pcm_later.insert(rel.to_string(), slot.clone());
+                (slot, bytes)
+            };
+            let (slot, bytes) = slot;
+            let _ = std::thread::Builder::new().name("aegis-sound".into()).spawn(move || {
+                let pcm = Decoder::new(Cursor::new(bytes)).ok().map(|d| Arc::new(Pcm::of(d)));
+                if let (Some(pcm), Ok(mut s)) = (pcm, slot.lock()) {
+                    *s = Some(pcm);
+                }
+            });
+        }
+        #[cfg(target_arch = "wasm32")]
+        let _ = rel;
+    }
+
     /// A volume slider moved: its sample plays on `bus` at the levels set now (the screen sets the draft levels
     /// first), at most every PREVIEW_INTERVAL. Like Godot's bus, the music sample plays without the music track's -6 dB.
     pub fn preview(&self, bus: Bus, rel: &str) {
+        self.preview_gain(bus, rel, 1.0);
+    }
+
+    /// ENGINE-56: `preview` at `gain` (0-1) of the bus's level (`play_gain`: a volume under a bus's).
+    pub fn preview_gain(&self, bus: Bus, rel: &str, gain: f32) {
         let level = {
             let mut st = self.state.borrow_mut();
             let now = Instant::now();
@@ -320,7 +363,7 @@ impl Audio {
                 return;
             }
             st.last_preview = Some(now);
-            st.levels.of(bus)
+            st.levels.of(bus) * gain.clamp(0.0, 1.0)
         };
         self.play_at(bus, rel, level);
     }
@@ -435,6 +478,12 @@ impl Audio {
     /// The music track wanted now (`None`: silence); a new track fades in over the old one, which fades out. A track
     /// tagged with loop points (`loop_points`) plays its intro once and then loops the tagged span; others loop whole.
     pub fn music(&self, rel: Option<&str>) {
+        self.music_faded(rel, None);
+    }
+
+    /// ENGINE-56 (AUDIO-FEEL2): `music` with the new track fading in over `fade_in` seconds (None: 2 s from silence,
+    /// 1 s over another track; `Screen::music_fade_in`); the old one fades out over 1 s as ever.
+    pub fn music_faded(&self, rel: Option<&str>, fade_in: Option<f32>) {
         let mut st = self.state.borrow_mut();
         if st.wanted.as_deref() == rel {
             return;
@@ -450,13 +499,14 @@ impl Audio {
         }
         let Some(rel) = rel else { return };
         drop(st);
-        if let Some(track) = self.start_loop(rel, was_silent, Bus::Music) {
+        let fade = fade_in.filter(|f| *f > 0.0).unwrap_or(if was_silent { FIRST_FADE_SEC } else { CROSSFADE_SEC });
+        if let Some(track) = self.start_loop(rel, fade, Bus::Music) {
             self.state.borrow_mut().tracks.push(track);
         }
     }
 
-    /// A looped track of `rel` at gain 0, fading in (from silence slower); None offline or when it does not play.
-    fn start_loop(&self, rel: &str, was_silent: bool, bus: Bus) -> Option<Track> {
+    /// A looped track of `rel` at gain 0, fading in over `fade` seconds; None offline or when it does not play.
+    fn start_loop(&self, rel: &str, fade: f32, bus: Bus) -> Option<Track> {
         let device = self.device.as_ref()?;
         let asked = Instant::wall();
         let bytes = self.bytes(rel)?;
@@ -481,7 +531,7 @@ impl Audio {
         start.ok()?;
         let decode_ms = asked.wall_elapsed().as_secs_f64() * 1000.0;
         self.note(SoundRec { rel: rel.to_string(), bus, asked, decode_ms, heard: Some(heard) });
-        Some(Track { sink, gain: 0.0, target: 1.0, rate: 1.0 / if was_silent { FIRST_FADE_SEC } else { CROSSFADE_SEC } })
+        Some(Track { sink, gain: 0.0, target: 1.0, rate: 1.0 / fade })
     }
 
     /// The ambience loop wanted now (AMBIENCE1; `None`: none), on its own channel beside the music: a new loop fades in
@@ -499,7 +549,7 @@ impl Audio {
         }
         let Some(rel) = rel else { return };
         drop(st);
-        if let Some(track) = self.start_loop(rel, was_silent, Bus::Ambience) {
+        if let Some(track) = self.start_loop(rel, if was_silent { FIRST_FADE_SEC } else { CROSSFADE_SEC }, Bus::Ambience) {
             self.state.borrow_mut().beds.push(track);
         }
     }
@@ -908,6 +958,40 @@ mod tests {
         let t = Instant::wall();
         a.music(Some("sfx/click.wav"));
         assert!(heard_all(t).iter().any(|s| s.1 == Bus::Music && s.3.is_some()), "a track heard, its decoder made on a thread");
+    }
+
+    /// ENGINE-56 (AUDIO-FEEL2): `warm` decodes a sound on a thread before its first play; `music_faded` sets the new
+    /// track's fade-in, from silence or over another; `play_gain` plays under the bus's level.
+    #[test]
+    fn a_warmed_sound_is_decoded_ahead_and_a_screen_sets_its_music_fade() {
+        let root = aegis_core::scratch::Scratch::new("audio_warm");
+        let wav = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/audio/sfx/ui_click.wav")).unwrap();
+        std::fs::create_dir_all(root.join("sfx")).unwrap();
+        std::fs::write(root.join("sfx/sting.snd"), &wav).unwrap();
+        std::fs::write(root.join("sfx/a.wav"), &wav).unwrap();
+        std::fs::write(root.join("sfx/b.wav"), &wav).unwrap();
+        let a = Audio { roots: vec![root.to_path_buf()], device: Some(Output::virtual_device()), waiting: false, state: RefCell::new(State::new()) };
+        a.warm("sfx/sting.snd");
+        a.warm("sfx/none.snd");
+        let w = Instant::wall();
+        while a.pcm("sfx/sting.snd").is_none() && w.wall_elapsed() < Duration::from_secs(3) {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        assert!(a.pcm("sfx/sting.snd").is_some(), "decoded ahead, kept for its first play");
+        assert!(!a.state.borrow().pcm_later.contains_key("sfx/none.snd"), "a missing file: nothing");
+        a.music_faded(Some("sfx/a.wav"), Some(0.4));
+        assert!((a.state.borrow().tracks[0].rate - 2.5).abs() < 1e-4, "0.4 s from silence");
+        a.music_faded(Some("sfx/b.wav"), Some(0.4));
+        let rates: Vec<f32> = a.state.borrow().tracks.iter().map(|t| t.rate).collect();
+        assert!((rates[0] - 1.0 / CROSSFADE_SEC).abs() < 1e-4 && (rates[1] - 2.5).abs() < 1e-4, "the old fades out as ever, the new in 0.4 s: {rates:?}");
+        a.music(None);
+        a.music(Some("sfx/a.wav"));
+        assert!((a.state.borrow().tracks.last().unwrap().rate - 1.0 / FIRST_FADE_SEC).abs() < 1e-4, "no fade named: 2 s from silence");
+        a.set_levels(&json!({"effects": 80}));
+        let t = Instant::wall();
+        a.play_gain(Bus::Sfx, "sfx/a.wav", 0.5);
+        let voice = a.state.borrow().sfx.last().map(|v| v.0.volume());
+        assert!(voice.is_some_and(|v| (v - 0.4).abs() < 1e-4) && a.sounds_since(t).len() == 1, "half of Effects' 80 %: {voice:?}");
     }
 
     #[test]

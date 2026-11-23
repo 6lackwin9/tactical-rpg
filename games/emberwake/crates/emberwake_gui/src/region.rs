@@ -859,6 +859,8 @@ impl RegionMap {
             }
             self.moved_at = Some((self.anim_ms, self.leg.anim));
             self.pan = None;
+            // ENGINE-56 (AUDIO-FEEL2): a soft footstep on each step, at its own volume under Effects
+            cx.audio.play_gain(aegis_ui::audio::Bus::Sfx, crate::mapview::MAP_STEP, crate::mapview::footstep_gain(&cx.settings.v));
         }
         if !json::b(&res, "ok", false) {
             for e in json::sget(&res, "errors") {
