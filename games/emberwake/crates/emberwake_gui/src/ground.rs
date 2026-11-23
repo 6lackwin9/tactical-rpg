@@ -179,6 +179,11 @@ impl MapGround {
         true
     }
 
+    /// ENGINE-50 (MAP-FRAME1): whether this map has a composed ground (`draw` draws it).
+    pub fn has(&self) -> bool {
+        self.job.is_some()
+    }
+
     /// The agent link's `state.ground`: `{"layers": n}`, or null on a map without ground.
     pub fn state(&self) -> Value {
         self.job.as_ref().map_or(Value::Null, |(p, _)| json!({"layers": p.plan.layers.len()}))

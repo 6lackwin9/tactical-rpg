@@ -1,6 +1,6 @@
 {
  "id": "walk_feel",
- "title": "ENGINE-49 (WALK-FEEL1): the Sluice Undercroft walked by click, keys and d-pad; the first move on the next frame, no step after a release, an even beat, the camera within a tile",
+ "title": "ENGINE-49 (WALK-FEEL1): the Sluice Undercroft walked by click, keys and d-pad; the first move on the next frame, no step after a release, an even beat, the camera within a tile; ENGINE-50 (MAP-FRAME1): the median frame under 16.7 ms and none over 33 ms, and a press during a 250 ms hitch takes no quick step to catch up",
  "launch": {
   "save": "hub_start"
  },
@@ -57,7 +57,9 @@
     "cadence_spread_ms": 17,
     "stutters": 0,
     "camera_lag_tiles": 1,
-    "camera_jump_tiles": 0.5
+    "camera_jump_tiles": 0.5,
+    "frame_ms": 33,
+    "frame_p50_ms": 16.7
    }
   },
   {
@@ -167,6 +169,9 @@
      "wait_ms": 500
     },
     {
+     "stall_ms": 250
+    },
+    {
      "press": "left"
     },
     {
@@ -197,7 +202,9 @@
     "cadence_spread_ms": 17,
     "stutters": 0,
     "camera_lag_tiles": 1,
-    "camera_jump_tiles": 0.5
+    "camera_jump_tiles": 0.5,
+    "frame_ms": 33,
+    "frame_p50_ms": 16.7
    }
   }
  ]

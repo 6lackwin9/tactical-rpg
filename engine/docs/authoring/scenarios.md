@@ -160,14 +160,16 @@ Each input gets: `to_state_ms` (arrival to its handler done), `to_frame_ms` (to 
 largest of `handler`, `wait` and `frame`). The step writes `feel_<name>.json` to the bundle and adds it under `perf` in
 `result.json` (`kind` `feel`): `to_state`, `to_present` and `frame_time` each as `count`, `p50`, `p95` and `worst`, every
 input, `flagged_inputs` (input-to-present over 100 ms) and `frames_over` (frames over 33 ms). `budget` takes `input_ms`
-(the worst input-to-present) and `frame_ms` (the worst frame); one over it fails the step. In a dev build (the gate's) each
+(the worst input-to-present), `frame_ms` (the worst frame) and `frame_p50_ms` (the median frame, ENGINE-50); one over it
+fails the step. In a dev build (the gate's) each
 budget counts 2.5 times (`FEEL_DEV_ALLOWANCE`, ENGINE-46): a dev build draws about twice as slow, so the gate catches a gross
 slip while the release run holds the real bar. A refused input stops the step with its place.
 
 Movement (ENGINE-49 WALK-FEEL1): the script also takes `{"press": key}` and `{"release": key}` (a movement key held down
 and let go, as a window's key down and up: `Held::dir` follows the latest held), `{"pad_press": button}` and
 `{"pad_release": button}` (a d-pad direction the same way), `{"wait_ms": n}` (frames drawn for n ms of the run's clock,
-1 to 60000) and `{"spike_ms": n}` (one frame that takes n ms, 1 to 2000). `step_ms` (1 to 200) sets the shot clock's frame
+1 to 60000), `{"spike_ms": n}` (one frame that takes n ms, 1 to 2000) and `{"stall_ms": n}` (ENGINE-50 MAP-FRAME1: the
+clock moves n ms with no frame drawn, 1 to 2000, so the next input arrives during a hitch and its frame comes after it). `step_ms` (1 to 200) sets the shot clock's frame
 step for the replay (16.667 for 60 frames a second). With `motion` true the top screen's `Screen::motion` is read after
 every frame and the reply's `motion` (`aegis_ui::walkfeel::report`) gives, per input, `to_move_ms` (to the first frame the
 mover is drawn elsewhere) and `to_step_ms` (to its first new cell), a turn's `turn_ms` and `turn_gap_ms` (a press while

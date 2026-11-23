@@ -45,7 +45,7 @@ use crate::portraits::Faces;
 use crate::talk::{talk_layout, Services, SvcAct};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::controls::Controls;
-use aegis_ui::painter::View as PView;
+use aegis_ui::painter::{Snapshot, View as PView};
 use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_ui::float_panel::{FloatPanel, PANEL_BTN};
@@ -53,7 +53,9 @@ use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_world::explore::{self, Pos};
 use emberwake_world::quest;
 use serde_json::{json, Value};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
+use emberwake_world::GameState;
 #[cfg(test)]
 use std::time::Duration;
 use aegis_core::clock::Instant;
@@ -151,10 +153,20 @@ pub struct RegionMap {
     arrows: Vec<Value>,
     /// REGIONGROUND1-L: the map's composed ground, kept while its job stands.
     ground: MapGround,
+    /// ENGINE-50 (MAP-FRAME1): the map's still layers (ground, tiles, walls, border, dressing, shadows, ground props) as
+    /// last drawn; under a moving camera only what comes into view is drawn (`Painter::scroll_begin`).
+    floor: Snapshot,
+    /// The data the floor was keyed on, held so that a reload cannot reuse its address (`floor_key`).
+    floor_data: Option<Arc<emberwake_world::Data>>,
+    /// ENGINE-50: the markers' views and services for one game state (`MarkerMemo`).
+    marker_memo: MarkerMemo,
     /// REGIONVIEW1: this frame's wall time (set by the tick; None before the first: no time has passed, all at rest).
     frame_at: Option<Instant>,
     /// The scheduled time of a step taken since the last frame.
     step_at: Option<Instant>,
+    /// ENGINE-50 (MAP-FRAME1): a key press's step since the last frame, dated at that frame (`tick_at` dates it now when
+    /// that frame was long ago).
+    press_at: Option<Instant>,
     /// That step's times (TURNFEEL1).
     leg: mapview::Leg,
     /// When the last step was taken (`state.walk_feel`, under `camera_trail` as it is a clock reading: what a render
@@ -588,7 +600,11 @@ impl RegionMap {
             pan_loc: String::new(),
             arrows: Vec::new(),
             ground: MapGround::default(),
+            floor: Snapshot::default(),
+            floor_data: None,
+            marker_memo: MarkerMemo::default(),
             frame_at: None,
+            press_at: None,
             step_at: None,
             leg: mapview::Leg::plain(0.0),
             last_step: None,
@@ -808,6 +824,18 @@ impl RegionMap {
     /// A frame's tick at wall time `now` (the frame's clock: the glide and the camera read it in `draw`).
     pub(crate) fn tick_at(&mut self, cx: &mut Cx, now: Instant) {
         let prev = self.frame_at.replace(now);
+        // ENGINE-50 (MAP-FRAME1): a key press steps as of the last frame, so the next frame shows it moving; no more than
+        // `CLICK_STEP_BACK` before this one (as a click): dated back across a long frame, its glide would jump ahead and
+        // the walk would take a quick step to catch up
+        if let Some(at) = self.press_at.take() {
+            let late = now.saturating_duration_since(at);
+            if late > CLICK_STEP_BACK && self.last_step == Some(at) {
+                let moved = late - CLICK_STEP_BACK;
+                self.step_at = self.step_at.map(|a| a + moved);
+                self.last_step = Some(at + moved);
+                self.next_walk += moved;
+            }
+        }
         // PLAYUI1-R: the sprites play on their own clock at the animation speed setting (as the battle tokens)
         let speed = mapview::anim_speed(&cx.settings.v);
         // WALKRUN1: Shift held runs; the pace of a step is set as it is taken, so a release counts from the next step
@@ -1297,7 +1325,7 @@ impl Screen<GameCx> for RegionMap {
             ui.p.v = map_view;
             // REGIONGROUND1-L: the composed ground under everything; it stands in for the `.` and `~` tiles below
             self.ground.sync(cx, t, &sets, view, q);
-            let has_ground = self.ground.draw(&mut ui.p, &geo);
+            let has_ground = self.ground.has();
             // the cells to draw: those meeting the area, by a logical px more (the camera's rest can bring one in)
             let paint_area = Rect::new(map_area.x - 1, map_area.y - 1, map_area.w + 2, map_area.h + 2);
             let (x0, x1) = geo.cols(paint_area);
@@ -1328,82 +1356,6 @@ impl Screen<GameCx> for RegionMap {
             let is_wall = |x: i32, y: i32| ch_at(x, y) == '#' && !freestanding.contains(&(x, y));
             let mw_i = map_w as i32;
             let mh_i = map_h as i32;
-            for y in y0..=y1 {
-                for x in x0..=x1 {
-                    let r = geo.cell(x, y);
-                    let ch = ch_at(x, y);
-                    let vis_ch = if ch == '#' && freestanding.contains(&(x, y)) { '.' } else { ch };
-                    // the border draws after this pass; tilted, a wall is a block in the sorted pass below
-                    if border_at(x, y) || (tilted && vis_ch == '#') {
-                        continue;
-                    }
-                    if has_ground && matches!(vis_ch, '.' | '~') {
-                        continue;
-                    }
-                    if !tilted && wall_face_tiles > 0 && vis_ch == '#' {
-                        let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
-                        let is_face = |nx: i32, ny: i32| wall_depth_at(nx, ny, wall_face_tiles, (mw_i, mh_i), &is_wall) > 0;
-                        let wa = wall_art_at(x, y);
-                        if depth > 0 {
-                            let up_face = is_face(x, y - 1);
-                            draw_wall_face_at(&mut ui, cx, wa, false, x, y, r, r.h, depth == 1 && up_face, !up_face, !is_face(x + 1, y), !is_face(x - 1, y));
-                        } else {
-                            let tile = emberwake_content::art::region_tile('#').unwrap_or("wall");
-                            match cx.art.tile_in(&wa.sets, tile, x, y, art_size) {
-                                Some(img) => ui.p.image(img, r),
-                                None => ui.p.fill(r, WALL_FILL),
-                            }
-                            draw_wall_cap_edges(&mut ui, r, r.h, !is_wall(x, y - 1), !is_wall(x - 1, y) || is_face(x - 1, y), !is_wall(x + 1, y) || is_face(x + 1, y));
-                        }
-                        continue;
-                    }
-                    let tile = emberwake_content::art::region_tile(vis_ch);
-                    // REVEAL1 1.1: a wall beside an indoor zone draws its wall set first
-                    let tile_sets = if vis_ch == '#' { &wall_art_at(x, y).sets } else { &set_refs };
-                    match tile.and_then(|t| cx.art.tile_in(tile_sets, t, x, y, art_size)) {
-                        Some(img) => ui.p.image(img, r),
-                        None => ui.p.fill(r, match vis_ch {
-                            '.' => rgb(70, 90, 64),
-                            '#' => WALL_FILL,
-                            '~' => rgb(40, 90, 100),
-                            _ => rgb(20, 20, 24),
-                        }),
-                    }
-                    if tilted && vis_ch == '~' && wall_face_tiles == 0 {
-                        draw_lips(&mut ui, r, ch_at(x, y - 1) != '~', ch_at(x, y + 1) != '~');
-                    }
-                }
-            }
-            // REGIONVIEW1: the border, flat so that it ends on the map's edge: tilted, a wall on an open cell keeps its
-            // face and the shade it drops, inside its own cell and the cell south (the row above the area can shade the
-            // first one)
-            for y in (if tilted { y0 - 1 } else { y0 })..=y1 {
-                for x in x0..=x1 {
-                    if border_at(x, y) {
-                        if wall_face_tiles > 0 && x >= 0 && y >= 0 && x < mw_i && y < mh_i {
-                            let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
-                            let is_face = |nx: i32, ny: i32| wall_depth_at(nx, ny, wall_face_tiles, (mw_i, mh_i), &is_wall) > 0;
-                            let r = geo.cell(x, y);
-                            if depth > 0 {
-                                let up_face = is_face(x, y - 1);
-                                draw_wall_face_at(&mut ui, cx, &walls, true, x, y, r, r.h, depth == 1 && up_face, !up_face, !is_face(x + 1, y), !is_face(x - 1, y));
-                            } else {
-                                draw_border(&mut ui, cx, &walls, x, y, r, art_size, false);
-                                draw_wall_cap_edges(&mut ui, r, r.h, !is_wall(x, y - 1), !is_wall(x - 1, y) || is_face(x - 1, y), !is_wall(x + 1, y) || is_face(x + 1, y));
-                            }
-                        } else {
-                            draw_border(&mut ui, cx, &walls, x, y, geo.cell(x, y), art_size, tilted && !is_wall(x, y + 1));
-                        }
-                    }
-                }
-            }
-            // REVEAL1 2.2: the boundary's edge dressing over the cells past the map (art only: no widget)
-            if !boundary.is_empty() {
-                draw_dressing(&mut ui, cx, &lineage, &boundary, &geo, (map_w, map_h), (x0, x1), (y0, y1));
-            }
-            if wall_face_tiles > 0 {
-                draw_depth_floor_shadows_and_water(&mut ui, &geo, (mw_i, mh_i), (x0, x1), (y0, y1), has_ground, &ch_at, &is_wall);
-            }
             if !modal {
                 ui.push("map", "map", s_or(loc, "name", ""), map_area, true, false, Some(RAct::MapClick), Vec::new());
             }
@@ -1442,9 +1394,108 @@ impl Screen<GameCx> for RegionMap {
             // REGIONVIEW1: past the map is boundary art only: a prop's art that overhangs it is cut there (a footprint
             // cannot leave the map: check P8)
             let map_rect = Rect::new(geo.ox, geo.oy, map_w as i32 * geo.cell_size().0, map_h as i32 * geo.cell_size().1);
-            for p in props.iter().filter(|p| p.ground) {
-                draw_prop(&mut ui, cx, p, None, false, map_rect, q);
+            // ENGINE-50 (MAP-FRAME1): the still layers (the ground, tiles, walls, border, dressing, shadows and ground props)
+            // are kept from the last frame and moved with the camera; only the strips that came into view are drawn (all
+            // of it when anything they show changed: `floor_key`)
+            let key = floor_key(cx, &gs.location_id, (view, q), &sets, has_ground, state_t.as_ref().unwrap_or(base_t));
+            self.floor_data = Some(cx.data.clone());
+            ui.p.v = base_view;
+            let strips = ui.p.scroll_begin(&mut self.floor, key, map_area, camera);
+            let kept_clip = ui.p.c.clip;
+            let ground_fill = th().game("map_ground", rgb(14, 18, 26));
+            for strip in strips {
+                ui.p.c.clip = Some(strip.px);
+                ui.p.v = map_view;
+                // the strip in the map's logical px, by one more (the camera's rest is under a logical px)
+                let area = Rect::new(strip.area.x - 1, strip.area.y - 1, strip.area.w + 2, strip.area.h + 2);
+                ui.p.fill(area, ground_fill);
+                self.ground.draw(&mut ui.p, &geo);
+                let (x0, x1) = geo.cols(area);
+                let (y0, y1) = geo.rows(area);
+                for y in y0..=y1 {
+                    for x in x0..=x1 {
+                        let r = geo.cell(x, y);
+                        let ch = ch_at(x, y);
+                        let vis_ch = if ch == '#' && freestanding.contains(&(x, y)) { '.' } else { ch };
+                        // the border draws after this pass; tilted, a wall is a block in the sorted pass below
+                        if border_at(x, y) || (tilted && vis_ch == '#') {
+                            continue;
+                        }
+                        if has_ground && matches!(vis_ch, '.' | '~') {
+                            continue;
+                        }
+                        if !tilted && wall_face_tiles > 0 && vis_ch == '#' {
+                            let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
+                            let is_face = |nx: i32, ny: i32| wall_depth_at(nx, ny, wall_face_tiles, (mw_i, mh_i), &is_wall) > 0;
+                            let wa = wall_art_at(x, y);
+                            if depth > 0 {
+                                let up_face = is_face(x, y - 1);
+                                draw_wall_face_at(&mut ui, cx, wa, false, x, y, r, r.h, depth == 1 && up_face, !up_face, !is_face(x + 1, y), !is_face(x - 1, y));
+                            } else {
+                                let tile = emberwake_content::art::region_tile('#').unwrap_or("wall");
+                                match cx.art.tile_in(&wa.sets, tile, x, y, art_size) {
+                                    Some(img) => ui.p.image(img, r),
+                                    None => ui.p.fill(r, WALL_FILL),
+                                }
+                                draw_wall_cap_edges(&mut ui, r, r.h, !is_wall(x, y - 1), !is_wall(x - 1, y) || is_face(x - 1, y), !is_wall(x + 1, y) || is_face(x + 1, y));
+                            }
+                            continue;
+                        }
+                        let tile = emberwake_content::art::region_tile(vis_ch);
+                        // REVEAL1 1.1: a wall beside an indoor zone draws its wall set first
+                        let tile_sets = if vis_ch == '#' { &wall_art_at(x, y).sets } else { &set_refs };
+                        match tile.and_then(|t| cx.art.tile_in(tile_sets, t, x, y, art_size)) {
+                            Some(img) => ui.p.image(img, r),
+                            None => ui.p.fill(r, match vis_ch {
+                                '.' => rgb(70, 90, 64),
+                                '#' => WALL_FILL,
+                                '~' => rgb(40, 90, 100),
+                                _ => rgb(20, 20, 24),
+                            }),
+                        }
+                        if tilted && vis_ch == '~' && wall_face_tiles == 0 {
+                            draw_lips(&mut ui, r, ch_at(x, y - 1) != '~', ch_at(x, y + 1) != '~');
+                        }
+                    }
+                }
+                // REGIONVIEW1: the border, flat so that it ends on the map's edge: tilted, a wall on an open cell keeps its
+                // face and the shade it drops, inside its own cell and the cell south (the row above the area can shade the
+                // first one)
+                for y in (if tilted { y0 - 1 } else { y0 })..=y1 {
+                    for x in x0..=x1 {
+                        if border_at(x, y) {
+                            if wall_face_tiles > 0 && x >= 0 && y >= 0 && x < mw_i && y < mh_i {
+                                let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
+                                let is_face = |nx: i32, ny: i32| wall_depth_at(nx, ny, wall_face_tiles, (mw_i, mh_i), &is_wall) > 0;
+                                let r = geo.cell(x, y);
+                                if depth > 0 {
+                                    let up_face = is_face(x, y - 1);
+                                    draw_wall_face_at(&mut ui, cx, &walls, true, x, y, r, r.h, depth == 1 && up_face, !up_face, !is_face(x + 1, y), !is_face(x - 1, y));
+                                } else {
+                                    draw_border(&mut ui, cx, &walls, x, y, r, art_size, false);
+                                    draw_wall_cap_edges(&mut ui, r, r.h, !is_wall(x, y - 1), !is_wall(x - 1, y) || is_face(x - 1, y), !is_wall(x + 1, y) || is_face(x + 1, y));
+                                }
+                            } else {
+                                draw_border(&mut ui, cx, &walls, x, y, geo.cell(x, y), art_size, tilted && !is_wall(x, y + 1));
+                            }
+                        }
+                    }
+                }
+                // REVEAL1 2.2: the boundary's edge dressing over the cells past the map (art only: no widget)
+                if !boundary.is_empty() {
+                    draw_dressing(&mut ui, cx, &lineage, &boundary, &geo, (map_w, map_h), (x0, x1), (y0, y1));
+                }
+                if wall_face_tiles > 0 {
+                    draw_depth_floor_shadows_and_water(&mut ui, &geo, (mw_i, mh_i), (x0, x1), (y0, y1), has_ground, &ch_at, &is_wall);
+                }
+                for p in props.iter().filter(|p| p.ground) {
+                    draw_prop(&mut ui, cx, p, None, false, map_rect, q);
+                }
+                ui.p.v = base_view;
             }
+            ui.p.c.clip = kept_clip;
+            ui.p.scroll_end(&mut self.floor);
+            ui.p.v = map_view;
             // BUNKS1 BK3, BK4, BK8: each bunk's click area (its drawn art; under the markers and the party), its hover
             // name and condition, and whether a talk waits on its member (a candle, drawn over the scene below)
             let waiting = if self.hub.on() { emberwake_world::talks::waiting(&d, &gs) } else { Vec::new() };
@@ -1479,7 +1530,7 @@ impl Screen<GameCx> for RegionMap {
             let mut hits: Vec<MarkHit> = Vec::new();
             for raw in json::aget(loc, "markers") {
                 let m = explore::marker_full(json::dict(raw));
-                let view = explore::marker_view(&d, &gs, loc, &m);
+                let (view, memo_services) = self.marker_memo.get(&d, &gs, loc, &m);
                 let state = s(&view, "state");
                 if state == "absent" {
                     continue;
@@ -1506,7 +1557,7 @@ impl Screen<GameCx> for RegionMap {
                 let mut top = mapview::icon_rect(r);
                 if kind == "npc" {
                     let who = d.resolve(&gs.world_id, "characters", &s(&m, "character"));
-                    services = explore::npc_services(&d, &gs, &s(who, "_qid"));
+                    services = memo_services;
                     let (body, palette, _) = crate::screens::character_art(&d, who);
                     // 2.4: the person's body, else its class body (the chain), else today's token
                     let sprite = cx.art.first_body(&emberwake_content::art::body_chain(&body));
@@ -1947,9 +1998,11 @@ impl Screen<GameCx> for RegionMap {
             let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs()));
             if !t.is_empty() {
                 self.step = mapview::WalkStep::of(&cx.settings.v, cx.held.shift);
-                // the frame's clock: the press moves from this frame on, and the steps chain from it
+                // the frame's clock: the press moves from this frame on, and the steps chain from it (ENGINE-50: the
+                // next tick dates it now when that frame was long ago)
                 let at = self.frame_at.unwrap_or_else(Instant::now);
                 self.plan_step(cx, at, dir);
+                self.press_at = Some(at);
                 self.hold = self.step(cx, dir);
             }
         } else if k == Key::Char('e') || k == Key::Enter {
@@ -2094,13 +2147,12 @@ impl RegionMap {
         // (id, kind, state, label, verb, services, a point's use)
         let mut rows: Vec<(String, String, String, String, String, Vec<&'static str>, String)> = Vec::new();
         for m in explore::markers_of(loc) {
-            let view = explore::marker_view(&d, &gs, loc, &m);
+            let (view, services) = self.marker_memo.get(&d, &gs, loc, &m);
             let (kind, state) = (s(&m, "kind"), s(&view, "state"));
             // PR7-76 (PT-43): a point of interest the party can use now is listed too
             if state == "absent" || (kind == "point" && !point_listed(&m, &state)) {
                 continue;
             }
-            let services = if kind == "npc" { explore::npc_services(&d, &gs, &s(d.resolve(&gs.world_id, "characters", &s(&m, "character")), "_qid")) } else { Vec::new() };
             rows.push((s(&m, "id"), kind, state, s(&view, "label"), s(&view, "verb"), services, explore::point_use(&m)));
         }
         let open = cx.settings.v["map_legend_open"].as_bool().unwrap_or(true);
@@ -2239,6 +2291,47 @@ impl RegionMap {
 /// A marker for the sorted pass (PROPS1 4.4): its id, tile, the top of what is drawn there (a sprite's head, else the
 /// tile; badges and names sit over it), kind and state; a person's art; the first service's badge (drawn with the
 /// overlays).
+/// ENGINE-50 (MAP-FRAME1): the key of the map's still layers (`RegionMap::floor`): the data and art loaded, the theme,
+/// the location, view and zoom, the tile sets, whether a composed ground is under the tiles, and the props shown (a
+/// hub's bunk states among them). The view and canvas are `Painter::scroll_begin`'s own part of the key.
+fn floor_key(cx: &Cx, location: &str, (view, q): (mapview::View, i32), sets: &[String], has_ground: bool, props_t: &Dict) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (Arc::as_ptr(&cx.data) as usize, cx.art.generation(), std::rc::Rc::as_ptr(&th()) as usize).hash(&mut h);
+    (location, view.name(), q, sets, has_ground).hash(&mut h);
+    json::get(props_t, "props").to_string().hash(&mut h);
+    h.finish()
+}
+
+/// ENGINE-50 (MAP-FRAME1): each marker's view (`explore::marker_view`) and a person's services (`explore::npc_services`,
+/// none for another kind) for one game state and data, which are all they read. The map and the legend asked for each
+/// marker every frame, most of a walking frame; now once per state (a step changes it).
+#[derive(Default)]
+struct MarkerMemo {
+    data: Option<Arc<emberwake_world::Data>>,
+    gs: Option<GameState>,
+    rows: HashMap<String, (Dict, Vec<&'static str>)>,
+}
+
+impl MarkerMemo {
+    /// Marker `m`'s (full, `explore::marker_full`) view and services at `loc` in `gs`.
+    fn get(&mut self, d: &Arc<emberwake_world::Data>, gs: &GameState, loc: &Dict, m: &Dict) -> (Dict, Vec<&'static str>) {
+        if !self.data.as_ref().is_some_and(|k| Arc::ptr_eq(k, d)) || self.gs.as_ref() != Some(gs) {
+            (self.data, self.gs) = (Some(d.clone()), Some(gs.clone()));
+            self.rows.clear();
+        }
+        let read = || {
+            let services = if s(m, "kind") == "npc" { explore::npc_services(d, gs, &s(d.resolve(&gs.world_id, "characters", &s(m, "character")), "_qid")) } else { Vec::new() };
+            (explore::marker_view(d, gs, loc, m), services)
+        };
+        let id = s(m, "id");
+        if id.is_empty() {
+            return read();
+        }
+        self.rows.entry(id).or_insert_with(read).clone()
+    }
+}
+
 struct MarkDraw {
     id: String,
     r: Rect,
@@ -4687,6 +4780,38 @@ mod sprite_tests {
         let late = t0 + Duration::from_millis(300);
         map.tick_at(&mut cx, late);
         assert_ne!(map.last_step, Some(t0), "a long frame: not dated back to the frame before");
+    }
+
+    /// ENGINE-50 (MAP-FRAME1): a key press is dated at the frame before it when that frame was just before, and no more
+    /// than `CLICK_STEP_BACK` back after a long frame (a 250 ms hitch), so a hitch adds no quick step to catch up.
+    #[test]
+    fn a_key_press_after_a_long_frame_is_dated_now() {
+        let (mut cx, mut g) = (art_cx(), gfx());
+        let _ = RegionMap::new(&mut cx);
+        let start = cx.gs().clone();
+        let d = cx.data.clone();
+        let loc = explore::location(&d, &start);
+        let t = explore::template_of(&d, loc).clone();
+        let marked: Vec<Pos> = explore::markers_of(loc).iter().map(|m| explore::marker_pos(&t, m, start.explore_int("loc_steps"))).collect();
+        let (w, h) = explore::size_of(&t);
+        let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+        let from = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| free((x, y)) && free((x + 1, y))).expect("two free tiles side by side");
+        let t0 = Instant::now();
+        for (gap, dated) in [(17u64, 0u64), (25, 0), (250, 225)] {
+            let mut map = RegionMap::new(&mut cx);
+            cx.gs_mut().position = from;
+            map.tick_at(&mut cx, t0);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            map.key(&mut cx, Key::Right);
+            assert_eq!(cx.gs().position, (from.0 + 1, from.1), "the press steps");
+            let beat = map.next_walk.saturating_duration_since(t0);
+            let now = t0 + Duration::from_millis(gap);
+            map.tick_at(&mut cx, now);
+            let at = t0 + Duration::from_millis(dated);
+            assert_eq!((map.last_step, map.step_at), (Some(at), Some(at)), "{gap} ms after the frame: dated {dated} ms on");
+            assert_eq!(map.next_walk, at + beat, "{gap} ms: the next step a beat after it");
+            frame(&mut map, &mut cx, &mut g, 1.0);
+        }
     }
 
     /// WALK2: a held movement key steps at once on the press (no key-repeat delay), chains a step every `step`

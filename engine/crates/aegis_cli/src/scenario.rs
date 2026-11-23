@@ -145,8 +145,9 @@ pub enum Step {
     /// steady machine.
     Perf { name: String, frames: u64, warm: u64, budget: Budget },
     /// ENGINE-45 (FEEL-PROBE1): replays `script` (keys, clicks, pad buttons, frames) with no window and reports input
-    /// and frame times (`feel` link request); `input_ms` / `frame_ms` fail the step when the worst passes them.
-    Feel { name: String, script: Value, gap: u64, input_ms: Option<f64>, frame_ms: Option<f64>, step_ms: Option<f64>, motion: bool, motion_budget: Value },
+    /// and frame times (`feel` link request); `input_ms` / `frame_ms` fail the step when the worst passes them,
+    /// `frame_p50_ms` (ENGINE-50) when the median frame does.
+    Feel { name: String, script: Value, gap: u64, input_ms: Option<f64>, frame_ms: Option<f64>, frame_p50_ms: Option<f64>, step_ms: Option<f64>, motion: bool, motion_budget: Value },
     /// ENGINE-48 (INPUT-REACH1): the top screen's reach report with no window (`reach` link request): what a mouse can use
     /// that the keys or a pad cannot reach, a focus that does not show, and with `back` what one Esc does. `fail`: the
     /// step fails on a dead end whose widget id (or `back`) is not in `allow`.
@@ -198,14 +199,15 @@ pub fn perf_verdict(budget: &Budget, reply: &Value) -> (&'static str, Vec<String
 pub const FEEL_DEV_ALLOWANCE: f64 = 2.5;
 
 /// A `feel` reply's misses against its budget: the worst input-to-present over `input_ms`, the worst frame over
-/// `frame_ms`, each times `FEEL_DEV_ALLOWANCE` when the reply's `build` is `dev`.
-pub fn feel_misses(reply: &Value, input_ms: Option<f64>, frame_ms: Option<f64>) -> Vec<String> {
+/// `frame_ms`, the median frame over `frame_p50_ms` (ENGINE-50), each times `FEEL_DEV_ALLOWANCE` when the reply's
+/// `build` is `dev`.
+pub fn feel_misses(reply: &Value, input_ms: Option<f64>, frame_ms: Option<f64>, frame_p50_ms: Option<f64>) -> Vec<String> {
     let (k, build) = if reply["build"] == json!("dev") { (FEEL_DEV_ALLOWANCE, " (dev build: the budget x 2.5)") } else { (1.0, "") };
     let mut misses = Vec::new();
-    for (budget, key, what) in [(input_ms, "to_present", "input"), (frame_ms, "frame_time", "frame")] {
-        let worst = reply[key]["worst"].as_f64();
-        if let Some(b) = budget.map(|b| b * k).filter(|b| worst.is_some_and(|w| w > *b)) {
-            misses.push(format!("worst {what} {} ms over {b} ms{build}", reply[key]["worst"]));
+    for (budget, key, stat, what) in [(input_ms, "to_present", "worst", "worst input"), (frame_ms, "frame_time", "worst", "worst frame"), (frame_p50_ms, "frame_time", "p50", "median frame")] {
+        let got = reply[key][stat].as_f64();
+        if let Some(b) = budget.map(|b| b * k).filter(|b| got.is_some_and(|w| w > *b)) {
+            misses.push(format!("{what} {} ms over {b} ms{build}", reply[key][stat]));
         }
     }
     misses
@@ -227,7 +229,7 @@ pub fn reach_dead_ends(reply: &Value) -> Vec<String> {
 }
 
 /// ENGINE-49 (WALK-FEEL1): the inputs of a `feel` script.
-const FEEL_INPUTS: &str = "key, click, pad, frames, press, release, pad_press, pad_release, wait_ms or spike_ms";
+const FEEL_INPUTS: &str = "key, click, pad, frames, press, release, pad_press, pad_release, wait_ms, spike_ms or stall_ms";
 
 /// ENGINE-49: the movement budgets of a `feel` step with `motion` (`aegis_ui::walkfeel::over_budget`).
 pub const MOTION_BUDGETS: [&str; 6] = ["first_move_ms", "overshoot_steps", "cadence_spread_ms", "stutters", "camera_lag_tiles", "camera_jump_tiles"];
@@ -659,7 +661,7 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
                             problems.push(format!("{at}: an object: one of {FEEL_INPUTS}, and times"));
                             continue;
                         };
-                        let named: Vec<&str> = ["key", "click", "pad", "frames", "press", "release", "pad_press", "pad_release", "wait_ms", "spike_ms"].into_iter().filter(|k| m.contains_key(*k)).collect();
+                        let named: Vec<&str> = ["key", "click", "pad", "frames", "press", "release", "pad_press", "pad_release", "wait_ms", "spike_ms", "stall_ms"].into_iter().filter(|k| m.contains_key(*k)).collect();
                         if named.len() != 1 {
                             problems.push(format!("{at}: exactly one of {FEEL_INPUTS}"));
                         }
@@ -669,7 +671,7 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
                                 "frames" => v.as_u64().is_some_and(|n| (1..=240).contains(&n)),
                                 "times" => v.as_u64().is_some_and(|n| (1..=200).contains(&n)),
                                 "wait_ms" => v.as_f64().is_some_and(|n| (1.0..=60_000.0).contains(&n)),
-                                "spike_ms" => v.as_f64().is_some_and(|n| (1.0..=2000.0).contains(&n)),
+                                "spike_ms" | "stall_ms" => v.as_f64().is_some_and(|n| (1.0..=2000.0).contains(&n)),
                                 _ => {
                                     problems.push(format!("{at}: unknown key '{k}' ({FEEL_INPUTS}, times)"));
                                     true
@@ -683,7 +685,7 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
                 }
                 _ => problems.push(format!("{place}: 'script' is a list of 1 to {STEPS_MAX} inputs")),
             }
-            let (mut input_ms, mut frame_ms) = (None, None);
+            let (mut input_ms, mut frame_ms, mut frame_p50_ms) = (None, None, None);
             let mut motion_budget = serde_json::Map::new();
             match o.get("budget") {
                 None => {}
@@ -702,8 +704,9 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
                         let slot = match k.as_str() {
                             "input_ms" => &mut input_ms,
                             "frame_ms" => &mut frame_ms,
+                            "frame_p50_ms" => &mut frame_p50_ms,
                             other => {
-                                problems.push(format!("{place}.budget: unknown key '{other}' (input_ms, frame_ms, {})", MOTION_BUDGETS.join(", ")));
+                                problems.push(format!("{place}.budget: unknown key '{other}' (input_ms, frame_ms, frame_p50_ms, {})", MOTION_BUDGETS.join(", ")));
                                 continue;
                             }
                         };
@@ -713,9 +716,9 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
                         }
                     }
                 }
-                Some(_) => problems.push(format!("{place}: 'budget' is an object (input_ms, frame_ms)")),
+                Some(_) => problems.push(format!("{place}: 'budget' is an object (input_ms, frame_ms, frame_p50_ms)")),
             }
-            Step::Feel { name, script, gap, input_ms, frame_ms, step_ms, motion, motion_budget: Value::Object(motion_budget) }
+            Step::Feel { name, script, gap, input_ms, frame_ms, frame_p50_ms, step_ms, motion, motion_budget: Value::Object(motion_budget) }
         }
         other => {
             problems.push(format!("{place}: unknown step '{other}'"));
@@ -1401,7 +1404,7 @@ impl Run<'_> {
                     return Err(fail(format!("perf {name}: {} (p50 {} ms, p95 {} ms, max {} ms over {frames} frames, canvas {}x{})", misses.join(", "), reply["stats"]["p50"], reply["stats"]["p95"], reply["stats"]["max"], reply["canvas"][0], reply["canvas"][1])));
                 }
             }
-            Step::Feel { name, script, gap, input_ms, frame_ms, step_ms, motion, motion_budget } => {
+            Step::Feel { name, script, gap, input_ms, frame_ms, frame_p50_ms, step_ms, motion, motion_budget } => {
                 let fail = |message: String| Failure { step: label.to_string(), message, gone: false };
                 if !self.headless {
                     return Err(fail("input times are measured in a run with no window".to_string()));
@@ -1429,7 +1432,7 @@ impl Run<'_> {
                 }
                 let _ = std::fs::write(self.bundle.join(format!("feel_{name}.json")), serde_json::to_string_pretty(&kept).unwrap_or_default());
                 self.perf.push(kept);
-                let mut misses = feel_misses(&reply, *input_ms, *frame_ms);
+                let mut misses = feel_misses(&reply, *input_ms, *frame_ms, *frame_p50_ms);
                 if *motion {
                     if reply["motion"]["frames"].as_u64().unwrap_or(0) == 0 {
                         misses.push("the top screen reports no motion".to_string());

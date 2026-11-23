@@ -701,9 +701,38 @@ fn compose_straddle(img: &Image, nine: &Nine, k: f32, p: f32, pr: Rect, reach: i
 /// floor under its marks and units, say. The screen that owns it keeps it (one per layer).
 #[derive(Debug, Clone, Default)]
 pub struct Snapshot {
-    key: Option<(u64, [u32; 3], (i32, i32), (i32, i32))>,
+    key: SnapKey,
     rect: Rect,
     px: Vec<u8>,
+    /// ENGINE-50 (MAP-FRAME1): where a scrolled layer's origin was (physical px), and the frame `scroll_begin` opened
+    /// (its key, rect and origin) until `scroll_end` keeps it.
+    origin: (i32, i32),
+    open: Option<(SnapKey, Rect, (i32, i32))>,
+}
+
+/// A layer's caller key, the view (scale and offset bits), its canvas and the canvas size.
+type SnapKey = Option<(u64, [u32; 3], (i32, i32), (i32, i32))>;
+
+/// ENGINE-50 (MAP-FRAME1): a part of a scrolled layer still to draw (`Painter::scroll_begin`): its physical px, and the
+/// logical rect (in the view in force at `scroll_begin`) that covers them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Strip {
+    pub px: Rect,
+    pub area: Rect,
+}
+
+/// The parts of `at` outside `keep` (which lies inside it): the bands above and below, then left and right of `keep`.
+fn around(at: Rect, keep: Rect) -> Vec<Rect> {
+    let (ax1, ay1, kx1, ky1) = (at.x + at.w, at.y + at.h, keep.x + keep.w, keep.y + keep.h);
+    [
+        Rect::new(at.x, at.y, at.w, keep.y - at.y),
+        Rect::new(at.x, ky1, at.w, ay1 - ky1),
+        Rect::new(at.x, keep.y, keep.x - at.x, keep.h),
+        Rect::new(kx1, keep.y, ax1 - kx1, keep.h),
+    ]
+    .into_iter()
+    .filter(|r| r.w > 0 && r.h > 0)
+    .collect()
 }
 
 impl Snapshot {
@@ -784,9 +813,8 @@ impl<'a> Painter<'a> {
     /// view stay the same, the next calls put its pixels back instead of drawing it. `key` is the caller's hash of
     /// everything the layer shows; `draw` must cover all of `r` and draw nothing outside it (set the clip to `r` first).
     pub fn cached(&mut self, slot: &mut Snapshot, key: u64, r: Rect, draw: impl FnOnce(&mut Painter)) {
-        let v = self.v;
-        let want = Some((key, [v.s.to_bits(), v.ox.to_bits(), v.oy.to_bits()], v.canvas, (self.c.w, self.c.h)));
-        let at = self.c.visible(v.rect(r));
+        let want = self.snap_key(key);
+        let at = self.c.visible(self.v.rect(r));
         if slot.key == want && slot.rect == at {
             self.c.put_rgba(slot.rect, &slot.px);
             return;
@@ -794,6 +822,61 @@ impl<'a> Painter<'a> {
         draw(self);
         (slot.rect, slot.px) = self.c.copy_rgba(at);
         slot.key = want;
+    }
+
+    fn snap_key(&self, key: u64) -> SnapKey {
+        let v = self.v;
+        Some((key, [v.s.to_bits(), v.ox.to_bits(), v.oy.to_bits()], v.canvas, (self.c.w, self.c.h)))
+    }
+
+    /// ENGINE-50 (MAP-FRAME1): `cached` for a layer that scrolls, such as a map under a moving camera. The layer inside
+    /// logical `r` (cut to the clip in force) shows its content with its origin at `origin` (physical px: whole px, so
+    /// the content moves rigidly). While `key` and the view stay the same, the pixels kept from the last frame are put
+    /// back moved by the origin's change, and only the parts newly in view are left to draw: the caller draws each
+    /// returned strip with the canvas clip set to its `px` (all of it, and opaque: the strip held old pixels), then calls
+    /// `scroll_end`. None returned: all was put back. A changed key or view returns all of `r` as one strip.
+    pub fn scroll_begin(&mut self, slot: &mut Snapshot, key: u64, r: Rect, origin: (i32, i32)) -> Vec<Strip> {
+        let want = self.snap_key(key);
+        let at = self.c.visible(self.v.rect(r));
+        let mut todo = vec![at];
+        if slot.key == want && at.w > 0 && at.h > 0 && slot.px.len() == (slot.rect.w * slot.rect.h * 4) as usize {
+            let moved = Rect::new(slot.rect.x + origin.0 - slot.origin.0, slot.rect.y + origin.1 - slot.origin.1, slot.rect.w, slot.rect.h);
+            let keep = moved.intersect(at);
+            if keep.w > 0 && keep.h > 0 {
+                let (sx, sy, n) = ((keep.x - moved.x) as usize, (keep.y - moved.y) as usize, (keep.w * 4) as usize);
+                for row in 0..keep.h as usize {
+                    let from = ((sy + row) * slot.rect.w as usize + sx) * 4;
+                    let to = (((keep.y as usize + row) * self.c.w as usize) + keep.x as usize) * 4;
+                    self.c.px[to..to + n].copy_from_slice(&slot.px[from..from + n]);
+                }
+                todo = around(at, keep);
+            }
+        }
+        slot.open = (!todo.is_empty() || slot.rect != at || slot.origin != origin).then_some((want, at, origin));
+        todo.into_iter().filter(|p| p.w > 0 && p.h > 0).map(|px| Strip { px, area: self.logical_cover(px) }).collect()
+    }
+
+    /// ENGINE-50: keeps the layer `scroll_begin` opened, as drawn now (nothing when it put all back unmoved).
+    pub fn scroll_end(&mut self, slot: &mut Snapshot) {
+        let Some((key, at, origin)) = slot.open.take() else { return };
+        let mut px = std::mem::take(&mut slot.px);
+        px.clear();
+        if at.w > 0 && at.h > 0 {
+            px.reserve((at.w * at.h * 4) as usize);
+            for y in at.y..at.y + at.h {
+                let from = ((y * self.c.w + at.x) * 4) as usize;
+                px.extend_from_slice(&self.c.px[from..from + (at.w * 4) as usize]);
+            }
+        }
+        (slot.key, slot.rect, slot.px, slot.origin) = (key, at, px, origin);
+    }
+
+    /// The smallest logical rect whose physical rect covers physical `px`.
+    fn logical_cover(&self, px: Rect) -> Rect {
+        let v = self.v;
+        let (x0, y0) = (((px.x as f32 - v.ox) / v.s).floor() as i32, ((px.y as f32 - v.oy) / v.s).floor() as i32);
+        let (x1, y1) = ((((px.x + px.w) as f32 - v.ox) / v.s).ceil() as i32, (((px.y + px.h) as f32 - v.oy) / v.s).ceil() as i32);
+        Rect::new(x0, y0, x1 - x0, y1 - y0)
     }
 
     pub fn clip(&mut self, r: Option<Rect>) {
@@ -1367,6 +1450,62 @@ mod tests {
     use super::*;
 
     const W: Rgba = [255, 255, 255, 255];
+
+    /// ENGINE-50 (MAP-FRAME1): a scrolled layer puts back what it kept, moved with its origin, and leaves only the
+    /// parts newly in view to draw; the result is the same pixels as drawing it all again, at any scale.
+    #[test]
+    fn a_scrolled_layer_draws_only_what_came_into_view() {
+        let font = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/OpenSans-SemiBold.ttf")).unwrap();
+        let mut fonts = Fonts::new(&font);
+        // the layer's colour at physical px (x, y) with its origin at `o`
+        let colour = |x: i32, y: i32, o: (i32, i32)| -> Rgba { [((x - o.0) * 7).rem_euclid(256) as u8, ((y - o.1) * 13).rem_euclid(256) as u8, 40, 255] };
+        // draws physical `px` of the layer, counting the pixels drawn
+        let paint = |p: &mut Painter, px: Rect, o: (i32, i32), drawn: &mut i32| {
+            for y in px.y..px.y + px.h {
+                for x in px.x..px.x + px.w {
+                    p.c.fill(Rect::new(x, y, 1, 1), colour(x, y, o));
+                    *drawn += 1;
+                }
+            }
+        };
+        for s in [1.0f32, 2.0] {
+            let view = View { s, ox: 0.0, oy: 0.0, g: 1, canvas: (40, 30) };
+            let r = Rect::new(2, 3, 30, 20);
+            let mut canvas = crate::canvas::Canvas::new((40.0 * s) as i32, (30.0 * s) as i32);
+            let mut slot = Snapshot::default();
+            let frame = |fonts: &mut Fonts, canvas: &mut crate::canvas::Canvas, slot: &mut Snapshot, key: u64, o: (i32, i32)| -> (Vec<Strip>, i32) {
+                let mut p = Painter { c: canvas, v: view, fonts };
+                p.c.clear([0, 0, 0, 255]);
+                let strips = p.scroll_begin(slot, key, r, o);
+                let mut drawn = 0;
+                for st in &strips {
+                    assert!(view.rect(st.area).x <= st.px.x && view.rect(st.area).y <= st.px.y, "the area covers the strip");
+                    paint(&mut p, st.px, o, &mut drawn);
+                }
+                p.scroll_end(slot);
+                (strips, drawn)
+            };
+            let pr = view.rect(r);
+            let whole = pr.w * pr.h;
+            let (strips, drawn) = frame(&mut fonts, &mut canvas, &mut slot, 1, (0, 0));
+            assert_eq!((strips.len(), drawn), (1, whole), "the first frame draws it all");
+            let (strips, drawn) = frame(&mut fonts, &mut canvas, &mut slot, 1, (3, -2));
+            assert_eq!(drawn, whole - (pr.w - 3) * (pr.h - 2), "{s}x: only the new columns and rows ({strips:?})");
+            let mut fresh = crate::canvas::Canvas::new(canvas.w, canvas.h);
+            {
+                let mut p = Painter { c: &mut fresh, v: view, fonts: &mut fonts };
+                p.c.clear([0, 0, 0, 255]);
+                paint(&mut p, pr, (3, -2), &mut 0);
+            }
+            assert!(canvas.px == fresh.px, "{s}x: the same pixels as a full draw");
+            let (strips, _) = frame(&mut fonts, &mut canvas, &mut slot, 1, (3, -2));
+            assert!(strips.is_empty() && canvas.px == fresh.px, "{s}x: unmoved, all is put back");
+            let (strips, drawn) = frame(&mut fonts, &mut canvas, &mut slot, 2, (3, -2));
+            assert_eq!((strips.len(), drawn), (1, whole), "{s}x: a new key draws it all");
+            let (_, drawn) = frame(&mut fonts, &mut canvas, &mut slot, 2, (500, 0));
+            assert_eq!(drawn, whole, "{s}x: a move past the layer draws it all");
+        }
+    }
 
     #[test]
     fn markup_becomes_styled_spans_and_unknown_tags_stay_text() {

@@ -366,6 +366,16 @@ impl<G: Context> Loop<G> {
                 }
                 continue;
             }
+            if let Some(ms) = step["stall_ms"].as_f64() {
+                // ENGINE-50 (MAP-FRAME1): the clock moves `ms` with no frame drawn, so the next input arrives during a
+                // hitch (its frame comes after it, `ms` after the last)
+                let held_now = !held.is_empty();
+                self.mark(&mut rec, "stall", &format!("stall {ms} ms"), None, held_now, held_now);
+                if self.stepped {
+                    aegis_core::clock::advance(Duration::from_secs_f64(ms.clamp(0.0, 2000.0) / 1000.0));
+                }
+                continue;
+            }
             if let Some(ms) = step["spike_ms"].as_f64() {
                 // a frame that takes `ms` (the shot clock moves that much more before it)
                 let held_now = !held.is_empty();
@@ -388,7 +398,7 @@ impl<G: Context> Loop<G> {
                 }
                 continue;
             } else {
-                failed = Some(format!("script[{i}]: one of key, click, pad, frames, press, release, pad_press, pad_release, wait_ms or spike_ms"));
+                failed = Some(format!("script[{i}]: one of key, click, pad, frames, press, release, pad_press, pad_release, wait_ms, spike_ms or stall_ms"));
                 break;
             };
             for _ in 0..times {

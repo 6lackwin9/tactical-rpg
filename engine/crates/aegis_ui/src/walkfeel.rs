@@ -36,8 +36,8 @@ impl Frame {
     }
 }
 
-/// An input of the replay: when, what (`press`, `release`, `pad_press`, `pad_release`, `click`, `key`, `pad`, `spike`), the
-/// direction it gives (a movement key), and whether a direction was held before it and is held after it.
+/// An input of the replay: when, what (`press`, `release`, `pad_press`, `pad_release`, `click`, `key`, `pad`, `spike`,
+/// `stall`), the direction it gives (a movement key), and whether a direction was held before it and is held after it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Mark {
     pub t: f64,

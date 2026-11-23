@@ -166,8 +166,58 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-48` (`INPUT-REACH1`) | Built (tools lane) | `develop` | Scenario step `reach` (keys and pad reach, focus shown, back) in the gate on `reach_menus`; every screen walked; fixed a cutscene focus ring off the canvas and dead arrows on cutscenes and in hub talk, board and shop; party skill and gear slots mouse only, for Design; goldens unchanged. FB-489 |
 | `PR7-92` (`INPUT-REACH2`) | Built (tools lane) | `develop` | Skill, gear, pouch and loadout slots pick (Enter), place or swap (Enter), drop the pick (Esc) and empty (Space, pad X) by key, hint line names the keys; the battle board is one Tab stop with an arrow tile cursor (ring 121 to 14); `reach_party` and `reach_battle` gate scenarios with `fail` on; goldens unchanged. FB-491 |
 | `ENGINE-49` (`WALK-FEEL1`) | Built (tools lane) | `develop` | `feel` measures movement (held keys and d-pad, long frames, `motion`: first move, beat, overshoot, turns, camera); hub and Cages map meet every target; click to walk moved a frame late (fixed); `walk_feel` gate scenario with budgets; six feel choices for Design; goldens unchanged. FB-493 |
+| `ENGINE-50` (`MAP-FRAME1`) | Built (tools lane) | `develop` | the region map's still layers kept and moved with the camera (engine `Painter::scroll_begin`), marker views read once per state: release median 18 to 6.8 ms, worst 51 to 19 ms on the hub; `frame_p50_ms` budget, `walk_feel` holds 16.7 / 33 ms; a key press after a long frame dated at most 25 ms back (`stall_ms` input tests it); shots diff clean; goldens unchanged. FB-495 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-495: ENGINE-50 MAP-FRAME1 built; the region map's frame cut to a third, a key press after a hitch takes no catch-up step
+
+- **Status**: built (tools lane), `develop`. Engine (`aegis_ui` painter and the headless `feel` replay; `aegis_cli` the
+  `feel` step), game GUI (`emberwake_gui` region map) and the `walk_feel` scenario; no data. **Every golden unchanged**.
+  Shots diff against `8277b246`: 128 unchanged, 1 changed (`screens_menus__scene_runner.png`, the known artifact).
+- **Spec**: `docs/READY.md` row `ENGINE-50` (`MAP-FRAME1`).
+- **Where the frame went** (release build, no window, 1280 x 720, the hub walked by `walk_feel`): about 18 ms a frame,
+  of which the map's still layers (ground, tiles, walls, border, dressing, shadows, ground props) about 3.5 ms, the
+  markers' pass about 5 ms and the "Here" legend about 5.5 ms; the last two asked `explore::marker_view` and
+  `explore::npc_services` (quest scans) for every marker, twice a frame.
+- **(1) Still layers drawn once**: a map's camera moves every frame while walking, so `Painter::cached` (keyed on the
+  view) would redraw every frame. New engine `Painter::scroll_begin` / `scroll_end` with `Strip`: a layer keyed as
+  `cached` plus an origin in whole physical px; the pixels kept from the last frame are put back moved by the origin's
+  change and only the strips newly in view are left to draw (a key or view change draws it all). The region map
+  (`RegionMap::floor`, the hub too) draws its still layers into those strips under their clip; `floor_key` holds the
+  data, art generation, theme, location, view, zoom, tile sets, composed ground and the props shown (a hub's bunk states
+  among them). Test: `aegis_ui` painter `a_scrolled_layer_draws_only_what_came_into_view` (at 1x and 2x: only the new
+  columns and rows drawn, the same pixels as a full draw, unmoved all put back, a new key or a jump past it draws all).
+- **(1b) Marker views per state**: `MarkerMemo` keeps each marker's view and services for one game state and data (all
+  they read; compared each frame, so a step or any change reads them again). Same results, read once instead of twice a
+  frame.
+- **Frame times** (release, no window; median / p95 / worst ms):
+
+  | Run | Before | After |
+  | --- | --- | --- |
+  | Hub, click walk | 18.0 / 26.7 / 29.0 | 6.8 / 12.6 / 19.0 |
+  | Hub, keys and d-pad | 17.8 / 22.2 / 50.8 | 6.7 / 10.2 / 15.6 |
+  | Crossroads Cages map, keys | 11.9 / 16.4 / 86.2 | 5.4 / 11.8 / 79.5 |
+
+  The Cages run's worst frame is the map's first draw inside the replay (a cold start: the ground composed and the art
+  read; 51 ms of it the first full draw of the still layers), not a walking frame. The gate's dev build on the hub:
+  median 30 to 16.4 ms, worst 54 to 25 ms. Results in `/mnt/project-files/build-tools/map_frame/`.
+- **Budgets**: the `feel` step's `budget` takes `frame_p50_ms` (the median frame; 2.5 times in a dev build like the
+  others). `walk_feel` now holds `frame_p50_ms` 16.7 and `frame_ms` 33 on both its runs.
+- **(2) A key press after a long frame**: a press stepped as of the last frame however long ago it was; after a hitch its
+  glide jumped ahead and the held walk took a quick step to catch up (66 ms after the step, not a beat). Now the next
+  tick dates it no more than `CLICK_STEP_BACK` (25 ms) back, as a click (`RegionMap::press_at`), and the next step comes
+  a beat after that. Tests: `emberwake_gui` `a_key_press_after_a_long_frame_is_dated_now` (17, 25 and 250 ms after the
+  frame); `walk_feel` presses during a 250 ms hitch through the new `feel` input `stall_ms` (the clock moves with no frame
+  drawn, so the input arrives in the hitch): the first move is on the next frame and the beat stays even (without the
+  fix the step fails with `cadence_spread_ms 66.67 over 17`). The held walk's own on-schedule steps (`step_time`) are
+  unchanged: bounding those would slow walking at 30 frames a second.
+- **Docs**: `engine/docs/authoring/scenarios.md` ("Input times": `frame_p50_ms`, `stall_ms`), the scenarios README row.
+- **Docs delta (engine/README.md, Feel probe bullet)**: after "`Painter::cached` keeps a layer drawn once (ENGINE-46)"
+  add ", and `Painter::scroll_begin` / `scroll_end` keep one that scrolls (ENGINE-50: the kept pixels move with the
+  layer's origin and only the strips newly in view are drawn)"; after "a `feel` budget counts 2.5 times in a dev build"
+  add ", `frame_p50_ms` holds the median frame".
+- **Free-port flake**: not seen again (this row's gate passed first time).
 
 ### FB-493: ENGINE-49 WALK-FEEL1 built; walking measured on two maps, every target met after one fix, feel choices listed
 
