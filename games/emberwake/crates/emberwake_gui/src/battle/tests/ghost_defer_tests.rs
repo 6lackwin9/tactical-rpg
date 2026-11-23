@@ -26,7 +26,7 @@ fn arena() -> (Cx, Gfx, BattleScreen) {
 
 /// Everything a plan and its ghosts show: the host's plan view, each member's picks, ghost entries and round state,
 /// and the ghosts waiting for Confirm.
-fn board(b: &mut BattleScreen) -> Value {
+pub(super) fn board(b: &mut BattleScreen) -> Value {
     let plan = b.host.handle(&json!({"cmd": "plan_view"}));
     let s = b.host.session.as_ref().unwrap();
     let w = &s.w;

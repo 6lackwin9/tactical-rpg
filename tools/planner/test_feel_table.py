@@ -29,7 +29,7 @@ class FeelTable(unittest.TestCase):
         rows = ft.rows_of(SCENARIO, [result([FEEL_A, reach], ok=False, message="feel b: worst frame 50 ms over 33 ms")])
         self.assertEqual([r[0] for r in rows], ["s/a", "s/r", "s/b", "s/c"])
         a = dict(zip(["step", "result"] + [c[0] for c in ft.COLUMNS] + ["dead ends"], rows[0]))
-        self.assertEqual((a["result"], a["input"], a["frame max"], a["ui snd"], a["underruns"], a["hit"]), ("ok", "12.0", "40.2*", "18.0", "0", "-"))
+        self.assertEqual((a["result"], a["input"], a["frame max"], a["ui snd"], a["underruns"], a["hit"], a["stalls"]), ("ok", "12.0", "40.2*", "18.0", "0", "-", "-"))
         self.assertEqual((rows[1][1], rows[1][-1]), ("ok", "2"), "a reach step: its dead ends")
         self.assertEqual(rows[2][1], "FAIL: worst frame 50 ms over 33 ms")
         self.assertEqual(rows[3][1], "not run")
@@ -49,6 +49,14 @@ class FeelTable(unittest.TestCase):
             self.assertEqual(bad, 1, "t did not run")
             self.assertIn("t: no result (it did not start)", text)
             self.assertIn("5 step(s), 1 measured", text)
+
+    def test_stalls_are_counted_and_listed_apart(self):
+        """ENGINE-60: a step's stalled frames and stalled underruns count in `stalls` and are listed under the table."""
+        feel = dict(FEEL_A, stall_count=1, stalls=[{"start_ms": 5.0, "frame_ms": 41.0, "cpu_ms": 20.5}], audio={"underruns": 0, "underruns_stalled": 1})
+        rows = ft.rows_of(SCENARIO, [result([feel])])
+        a = dict(zip(["step", "result"] + [c[0] for c in ft.COLUMNS] + ["dead ends"], rows[0]))
+        self.assertEqual((a["result"], a["underruns"], a["stalls"]), ("ok", "0", "2"))
+        self.assertEqual(ft.stall_lines(SCENARIO, [result([feel])]), ["stall s/a: frames 41.0 ms (cpu 20.5); 1 underrun(s)"])
 
 
 if __name__ == "__main__":

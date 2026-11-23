@@ -4,7 +4,10 @@ each, from the bundles a release run wrote (`<out>/<scenario id>/<WxH>/result.js
     feel_table.py list <scenarios dir>...       the scenario files with a feel or reach step, one per line
     feel_table.py table <out> <scenario file>...   the table; exit 1 when a scenario failed or did not run
 
-A value over the step's own budget ends in `*` (engine/docs/authoring/scenarios.md "Reading the feel table")."""
+A value over the step's own budget ends in `*` (engine/docs/authoring/scenarios.md "Reading the feel table").
+ENGINE-60 (PLAN-START2): `stalls` counts a step's stalled frames (over 33 ms, under half of it on the CPU: the machine
+stopped the game, not its own work) and the underruns heard during one; they are in no other column and fail nothing,
+and the table lists them apart under it."""
 import json
 import sys
 from pathlib import Path
@@ -22,7 +25,30 @@ COLUMNS = [
     ("hit", "hit_beat_ms", lambda p: (p.get("audio") or {}).get("hit_beat_ms")),
     ("music", "music_ms", lambda p: (p.get("audio") or {}).get("music_ms")),
     ("underruns", "underruns", lambda p: (p.get("audio") or {}).get("underruns")),
+    ("stalls", None, lambda p: stalls_of(p)),
 ]
+
+
+def stalls_of(p):
+    """A feel step's stalled frames plus the underruns heard during one (None when the run does not mark stalls)."""
+    if "stall_count" not in p:
+        return None
+    return int(p.get("stall_count") or 0) + int((p.get("audio") or {}).get("underruns_stalled") or 0)
+
+
+def stall_lines(scenario, results):
+    """One line per feel step with stalls: its stalled frames (wall and CPU ms) and stalled underruns."""
+    sid = scenario.get("id", "?")
+    out = []
+    for res in results:
+        for p in res.get("perf", []):
+            if p.get("kind") != "feel" or not stalls_of(p):
+                continue
+            frames = ", ".join(f"{s.get('frame_ms', 0):.1f} ms (cpu {s.get('cpu_ms', 0):.1f})" for s in p.get("stalls") or [])
+            under = int((p.get("audio") or {}).get("underruns_stalled") or 0)
+            parts = ([f"frames {frames}"] if frames else []) + ([f"{under} underrun(s)"] if under else [])
+            out.append(f"stall {sid}/{p.get('name', '')}: " + "; ".join(parts))
+    return out
 
 
 def steps_of(scenario):
@@ -87,12 +113,13 @@ def render(rows):
 
 
 def table(out, files):
-    rows, bad, notes = [], 0, []
+    rows, bad, notes, stalls = [], 0, [], []
     for f in files:
         scenario = json.loads(Path(f).read_text(encoding="utf-8"))
         sid = scenario.get("id", "")
         results = [json.loads(p.read_text(encoding="utf-8")) for p in sorted((Path(out) / sid).glob("*/result.json"))]
         rows += rows_of(scenario, results)
+        stalls += stall_lines(scenario, results)
         if not results:
             notes.append(f"{sid}: no result (it did not start)")
         for r in results:
@@ -100,8 +127,8 @@ def table(out, files):
                 notes.append(f"{sid} {r.get('size', '')}: step {r.get('step')}: {r.get('message', '')}")
         bad += (not results) or any(r.get("result") != "pass" for r in results)
     ran = sum(1 for r in rows if r[1] != "not run")
-    foot = f"{len(rows)} step(s), {ran} measured, {bad} scenario(s) failed or did not run; ms; * over the step's budget"
-    return "\n".join([render(rows), "", foot] + notes), bad
+    foot = f"{len(rows)} step(s), {ran} measured, {bad} scenario(s) failed or did not run, {len(stalls)} step(s) with stalls; ms; * over the step's budget"
+    return "\n".join([render(rows), "", foot] + notes + stalls), bad
 
 
 def main(argv):

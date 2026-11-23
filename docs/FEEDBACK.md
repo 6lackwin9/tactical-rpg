@@ -176,8 +176,48 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-57` (`FEEL-RELEASE1`) | Built (tools lane) | `develop` | `switch_feel_story`'s release failure: a release build hides the developer surfaces, so New Game skipped the world picker; `dev=1` (dev tools builds only) shows them and every scenario launch passes it; `tools/fc.sh feel` runs every feel and reach scenario in release and prints one table (38 of 39 steps pass; `feel_battle` `battle_block` 51 to 74 ms against 50); goldens unchanged. FB-506 |
 | `ENGINE-58` (`BLOCK-CLICK2`) | Built (tools lane) | `develop` | The block click answers in 21 to 33 ms in release (was 44 to 51): the later members' ghosts are drafted on the frames after the click's answer is drawn, one step a frame, and any request, key or Confirm finishes them first; a same-board test; a game with no window settles its screens before requested frames, so shots stay the same; `feel_battle` block budget 35 ms; goldens unchanged. FB-507 |
 | `ENGINE-59` (`BATTLE-FRAME2`) | Built in part (tools lane) | `develop` | Slow battle frames named: the round's planning start drafts the whole party's ghosts in one tick (31 to 45 ms; deferring them changed 11 shots, so it waits for a call); a queued ghost step on a heavy frame now waits for a frame with room. 5 of 5 release feel runs passed; the container's own stalls are named with options; goldens unchanged. FB-508 |
+| `ENGINE-60` (`PLAN-START2`) | Built (tools lane) | `develop` | The round's planning start drafts each ghost once when no buff would drop (33 to 17-19 ms; same-ghosts tests incl. the Crucible hold pick); the feel table lists frames mostly off the CPU as stalls apart, real misses still fail. 6 of 10 release feel runs passed (3 audio-thread underruns, 2 frames 1-2 ms over), options given; goldens unchanged. FB-509 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-509: ENGINE-60 PLAN-START2 built; the planning start halved, stalls listed apart, 6 of 10 runs pass
+
+- **Status**: built (tools lane), `develop`. Game GUI (`emberwake_gui` battle input) for (b); engine (`aegis_ui` feel
+  probe, headless feel request, `perf::thread_cpu_ms`) and `tools/planner/feel_table.py` for (d). **Every golden
+  unchanged**; shots diff clean against `2434ef66` except the known `screens_menus__scene_runner`. **The 10-run target is
+  not met**: 6 of 10 release `tools/fc.sh feel` runs passed with stalls listed; the 4 misses are below, with options.
+- **Spec**: `docs/READY.md` row `ENGINE-60` (`PLAN-START2`).
+- **(b) built**: the round's planning start drafts a member's tactic ghost once, in the host, when the member has no
+  buff the tactic would drop and no planned rows; otherwise it keeps the copy draft as before. `plan_start` fell from
+  about 33 ms to 17 to 19 ms in release (all 6 members took the single draft in `feel_battle`). Same-ghosts tests
+  (`battle/tests/plan_start_tests.rs`): a timeline fight over rounds 1 to 3, and the Crucible exit hold pick (pick
+  waiting, stay, round 2), each checking the board and the host's request history against the old path drafted in
+  full. No planning-start frame went over 33 ms in the 10 runs (no `battle_resolve` miss, where the next round's start
+  falls).
+- **(d) built**: a frame over 33 ms that spent under half its wall time on the CPU (`STALL_CPU_SHARE` 0.5; thread CPU
+  from `/proc/thread-self/schedstat` on Linux, none elsewhere, so nothing is marked there) is a stall: it leaves the
+  step's frame stats and flagged inputs and is listed in the result's `stalls`. An audio underrun inside a stall (from
+  its start to two buffers after its end) moves to `underruns_stalled`. The feel table gains a `stalls` column, a
+  `stall <scenario>/<step>: frames X ms (cpu Y)` line per stalled step and a footer count. Real misses still fail.
+  Tests: 2 in `aegis_ui/tests/feel.rs`, 1 in `tools/planner/test_feel_table.py`.
+- **10 release runs** (`tools/fc.sh feel`): runs 1, 3, 5, 7, 8 and 10 passed; stalls listed in 5, 7 and 8 (most often
+  `audio_feel/title_to_map`, a 44 to 50 ms frame with 20 to 23 ms of CPU). The misses:
+  - Audio underruns, 1 each, in runs 2 (`audio_feel/battle_round`), 6 (`switch_feel/menus`) and 9
+    (`audio_feel/battle_round`). None fell in a main-thread stall window: the audio thread itself was starved, which
+    the main thread's CPU time can't see.
+  - Frames 1 to 2 ms over with the CPU busy: run 4 `switch_feel/title_warm` 34.9 ms, run 9 `feel_battle/battle_block`
+    34.4 ms. Real by the stall rule.
+- **Options** (Design's call):
+  - (g) Mark an underrun as stalled when the audio thread's own callback shows the same wall-versus-CPU gap (time each
+    mix callback with the thread's CPU clock). A small engine change in `aegis_audio` and the feel request.
+  - (e) A row cuts the battle draw (16 to 24 ms; strip and board the largest parts) and the title warm slice, to leave
+    the 2 ms these frames lack.
+  - (c), held: the planning start no longer misses, so not needed now.
+  - (f) Release feel runs on the PC.
+  - Recommendation: (g) then (e).
+- **Docs delta**: `engine/docs/authoring/scenarios.md` "Reading the feel table" gained the `stalls` column and stall
+  lines (tools-lane file, edited here). `engine/README.md` (Design): in the feel line, add "frames mostly off the CPU
+  are listed as stalls, not misses (ENGINE-60)".
 
 ### FB-508: ENGINE-59 BATTLE-FRAME2 built in part; the slow battle frames named, one cause fixed, one needs a call
 

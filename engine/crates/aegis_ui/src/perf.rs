@@ -45,6 +45,15 @@ pub fn ms_since(t: Instant) -> f64 {
     t.wall_elapsed().as_secs_f64() * 1000.0
 }
 
+/// ENGINE-60 (PLAN-START2): the calling thread's CPU time so far in ms, where the platform tells it (Linux:
+/// `/proc/thread-self/schedstat`); None elsewhere.
+pub fn thread_cpu_ms() -> Option<f64> {
+    #[cfg(target_os = "linux")]
+    return aegis_core::vfs::read_to_string("/proc/thread-self/schedstat").ok()?.split_whitespace().next()?.parse::<f64>().ok().map(|ns| ns / 1e6);
+    #[cfg(not(target_os = "linux"))]
+    None
+}
+
 /// Rounds of the calibration workload: a few ms in a release build.
 pub const CALIB_ROUNDS: u64 = 2_000_000;
 

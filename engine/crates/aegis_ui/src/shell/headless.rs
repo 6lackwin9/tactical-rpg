@@ -181,7 +181,10 @@ impl<G: Context> Loop<G> {
         }
         let started = Instant::wall();
         let feel_start = self.shell.feel_now();
+        // ENGINE-60: the frame's CPU time, for the probe's stall mark
+        let cpu0 = self.shell.feel.on.then(crate::perf::thread_cpu_ms).flatten();
         self.shell.frame();
+        self.shell.feel.cpu = cpu0.zip(crate::perf::thread_cpu_ms()).map(|(a, b)| (b - a).max(0.0));
         // ENGINE-45: nothing is presented with no window; the frame counts as shown once drawn
         self.shell.feel_framed(feel_start);
         self.shell.pointer_req = None;
@@ -320,6 +323,7 @@ impl<G: Context> Loop<G> {
         self.shell.feel_launch = true;
         self.shell.feel.on = true;
         let _ = self.shell.feel.take();
+        let _ = self.shell.feel.take_stalls();
         // ENGINE-49 (WALK-FEEL1): `step_ms` sets the shot clock's frame step for this replay; `motion` reads the top
         // screen's `motion` after every frame for the movement report (`crate::walkfeel`)
         let every = self.every;
@@ -456,7 +460,9 @@ impl<G: Context> Loop<G> {
         self.shell.cx.held.dir = None;
         self.every = every;
         let heard = self.heard.take();
+        let heard_t0 = heard.as_ref().map(|h| h.t0);
         let (samples, frames) = self.shell.feel.take();
+        let stalls = self.shell.feel.take_stalls();
         self.shell.feel_launch = was_launch;
         self.shell.feel.on = was_on;
         if let Some(e) = failed {
@@ -472,6 +478,17 @@ impl<G: Context> Loop<G> {
         }
         if let (Some(h), Some(_)) = (heard, self.shell.cx.audio.output()) {
             out["audio"] = self.heard_report(h, body["step_ms"].as_f64().unwrap_or(every.as_secs_f64() * 1000.0));
+        }
+        // ENGINE-60: the stalled frames apart, and the underruns heard during one (or within two buffers after it)
+        out["stalls"] = json!(stalls.iter().map(crate::feel::Stall::to_json).collect::<Vec<_>>());
+        out["stall_count"] = json!(stalls.len());
+        if let (Some(t0), Some(audio)) = (heard_t0, out.get_mut("audio").filter(|a| a.is_object())) {
+            let offset = t0.saturating_duration_since(self.shell.feel_t0).as_secs_f64() * 1000.0;
+            let (stalled, real) = stalled_underruns(audio, &stalls, offset);
+            audio["underruns"] = json!(real.len());
+            audio["underrun_ms"] = json!(real);
+            audio["underruns_stalled"] = json!(stalled.len());
+            audio["underrun_stalled_ms"] = json!(stalled);
         }
         if switching {
             // a dev build draws about twice as slow: its long frames and budgets stretch as the feel budgets do
@@ -683,6 +700,17 @@ impl ClipPlan {
         }
         Ok(Self { dir, frames, every: Duration::from_millis(every_ms), max_w: max_w as i32 })
     }
+}
+
+/// ENGINE-60 (PLAN-START2): a sound report's underruns (`underrun_ms`, ms from the replay's start) split into those heard
+/// during a stalled frame or within two output buffers after it, and the rest. `offset`: the replay's start in probe
+/// ms (the stalls' clock).
+pub fn stalled_underruns(audio: &Value, stalls: &[crate::feel::Stall], offset: f64) -> (Vec<f64>, Vec<f64>) {
+    let reach = 2.0 * audio["buffer_ms"].as_f64().unwrap_or(0.0);
+    audio["underrun_ms"].as_array().into_iter().flatten().filter_map(Value::as_f64).partition(|u| {
+        let at = u + offset;
+        stalls.iter().any(|s| s.start <= at && at <= s.end + reach)
+    })
 }
 
 /// What is past a clip's limits, if anything: large frames written slowly or at length must not run away.

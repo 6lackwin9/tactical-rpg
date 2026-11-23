@@ -50,6 +50,20 @@ pub(super) enum Deferred {
 /// its draw); a step with nothing to do (a member on manual, a draft that changes nothing) costs far less and shares one.
 const GHOST_FRAME_US: u128 = 1000;
 
+#[cfg(test)]
+thread_local! {
+    /// ENGINE-60: a test's planning starts draft every member through the copy, as before (`start_ghost`).
+    pub(super) static START_COPIES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// ENGINE-60: the planning start drafts every member through the copy (a test comparing the two ways).
+fn start_copies() -> bool {
+    #[cfg(test)]
+    return START_COPIES.with(std::cell::Cell::get);
+    #[cfg(not(test))]
+    false
+}
+
 /// ENGINE-59 (BATTLE-FRAME2): a frame starts a waiting-ghost step only while the last draw plus the last step fit in
 /// this much (the frame target is 33 ms; the rest of the frame takes a few). A step that does not fit waits for a
 /// lighter frame, `GHOST_WAIT_MAX` frames at most, so the ghosts always land.
@@ -555,8 +569,29 @@ impl BattleScreen {
             self.send(cx, json!({"cmd": "autofill", "on": on}));
         }
         for m in self.session().w.allies.clone() {
-            self.draft_ghost(cx, m);
+            self.start_ghost(cx, m);
         }
+    }
+
+    /// ENGINE-60 (PLAN-START2): `draft_ghost` at a round's planning start, without its copy when the copy can decide
+    /// nothing: the member holds no buff a new intent would drop (`ri::would_drop` is empty for every intent) and has
+    /// no planned row yet, so the draft always changes its plan and is sent as it is. Otherwise as `draft_ghost`.
+    /// True: sent without the copy.
+    fn start_ghost(&mut self, cx: &Cx, m: usize) -> bool {
+        if !self.tactic_ghost(m) || !self.session().w.autofill {
+            return false;
+        }
+        let s = self.session();
+        let st = &s.w.units[m].st;
+        let can_drop = st.intents.keys().any(|id| st.has_any(id));
+        if can_drop || !plan_rows(&s.w, &s.plan, m).is_empty() || start_copies() {
+            self.draft_ghost(cx, m);
+            return false;
+        }
+        self.deferred.retain(|d| d.0 != m);
+        let draft = Deferred::Preset(TACTICS[self.tactic_of(m)]);
+        self.send(cx, draft.req(m));
+        true
     }
 
     /// GH7: the setting changed while planning: every member's ghost is rebuilt at once.

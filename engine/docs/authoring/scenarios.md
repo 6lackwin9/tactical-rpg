@@ -250,10 +250,14 @@ Each row is one step, named `<scenario>/<step>`. The columns:
   - `hit`: the worst effect off its frame, either way.
   - `music`: the worst track after its ask.
 - `underruns` is a count.
+- `stalls` is a count (ENGINE-60): the step's stalled frames plus the underruns heard during one. A stalled frame took
+  over 33 ms but ran on the CPU for under half of it, so the machine stopped the game rather than the game working that
+  long (Linux reads the CPU time; elsewhere nothing is marked). A stall is in no other column and fails nothing.
 - `dead ends` is the count on a `reach` row; its other columns are `-`.
 - `-` means nothing measured it.
 
-Under the table you get a count of the steps, then one line for each failed scenario with its step number and message.
+Under the table you get a count of the steps, then one line for each failed scenario with its step number and message,
+then one `stall` line for each step with stalls (each stalled frame's wall and CPU ms, and its stalled underruns).
 The bundles and each scenario's log stay under `out`. Open `feel_<step>.json` to see which input or frame made a number.
 A row that fails here but passes in the gate is over its release budget: the dev build's 2.5 times hides it.
 
