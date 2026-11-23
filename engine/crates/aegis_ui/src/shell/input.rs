@@ -359,11 +359,16 @@ impl<G: Context> Shell<G> {
         if let Some(m) = m {
             // The first key only shows where the focus is.
             let from = if visible { current.as_deref() } else { None };
+            let group = self.stack.last().unwrap().focus_group();
             let next = match (from, current.as_deref()) {
                 (None, Some(c)) if !matches!(m, focus::Move::Next | focus::Move::Prev) => Some(c.to_string()),
-                _ => focus::step(&infos, from, m, open),
+                _ => focus::step_grouped(&infos, from, m, open, group, self.group_keep.as_deref()),
             };
             if next.is_some() {
+                // PR7-92: the group member last focused, where Tab lands on the group again
+                if let Some(w) = next.as_deref().and_then(|n| infos.iter().find(|w| w["id"] == n)).filter(|w| focus::in_group(w, group)) {
+                    self.group_keep = w["id"].as_str().map(String::from);
+                }
                 self.gfx.kit.focus = next;
                 self.gfx.kit.focus_visible = true;
                 return true;
@@ -384,7 +389,11 @@ impl<G: Context> Shell<G> {
             kind => {
                 let picked = kind == "option";
                 let cx = &mut self.cx;
-                let _ = self.stack.last_mut().unwrap().click_id(cx, &id);
+                let top = self.stack.last_mut().unwrap();
+                if !picked && top.press_focus(cx, &id, k) {
+                    return true;
+                }
+                let _ = top.click_id(cx, &id);
                 if picked {
                     // Back on the field the list belongs to.
                     self.gfx.kit.focus = self.gfx.kit.open.take().or(self.open_focus.take());

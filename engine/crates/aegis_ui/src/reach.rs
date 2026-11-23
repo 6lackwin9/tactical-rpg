@@ -110,13 +110,41 @@ impl Device {
 /// What `device` reaches on a screen whose widgets are `infos` (`arrow_focus`: its arrows move the focus; `start`: the
 /// opening focus): the ring with Tab, else what the arrows walk to, else nothing.
 pub fn device_reach(infos: &[Value], device: Device, arrow_focus: bool, start: Option<&str>) -> BTreeSet<String> {
-    if device.tab {
-        tab_reach(infos)
-    } else if device.arrows && arrow_focus {
-        arrow_reach(infos, start)
-    } else {
-        BTreeSet::new()
+    device_reach_grouped(infos, device, arrow_focus, start, &[])
+}
+
+/// `device_reach` on a screen with a focus group (`Screen::focus_group`, PR7-92): every widget the device's moves walk
+/// to, as the shell makes them (`focus::step_grouped`): Tab and Shift+Tab when it has them, the arrows when it has them
+/// and the screen lets them move the focus (inside the group they walk its members).
+pub fn device_reach_grouped(infos: &[Value], device: Device, arrow_focus: bool, start: Option<&str>, group: &[&str]) -> BTreeSet<String> {
+    let arrows = device.arrows && arrow_focus;
+    if !device.tab && !arrows {
+        return BTreeSet::new();
     }
+    let mut moves: Vec<focus::Move> = Vec::new();
+    if device.tab {
+        moves.extend([focus::Move::Next, focus::Move::Prev]);
+    }
+    if arrows {
+        moves.extend([(0, -1), (0, 1), (-1, 0), (1, 0)].map(|(dx, dy)| focus::Move::Dir(dx, dy)));
+    }
+    let ring: BTreeSet<String> = focus::ring(infos, false).iter().map(|w| id(w).to_string()).collect();
+    let first = start.filter(|s| ring.contains(*s)).map(String::from).or_else(|| focus::step_grouped(infos, None, focus::Move::Next, false, group, None));
+    let mut seen = BTreeSet::new();
+    let mut todo: Vec<String> = first.into_iter().collect();
+    while let Some(at) = todo.pop() {
+        if !seen.insert(at.clone()) {
+            continue;
+        }
+        for m in &moves {
+            if let Some(n) = focus::step_grouped(infos, Some(&at), *m, false, group, None) {
+                if !seen.contains(&n) {
+                    todo.push(n);
+                }
+            }
+        }
+    }
+    seen
 }
 
 /// The mouse widgets `reached` misses (a slider's steps count as reached with their slider): (id, kind, use).
@@ -127,13 +155,19 @@ pub fn unreached(infos: &[Value], reached: &BTreeSet<String>) -> Vec<(String, St
 /// The report's part that needs no frame: the mouse set, the ring, what keys, the d-pad alone and a pad reach, and the
 /// dead ends of each (`{id, kind, use}`).
 pub fn report(infos: &[Value], arrow_focus: bool, start: Option<&str>, pad: Device) -> Value {
+    report_grouped(infos, arrow_focus, start, pad, &[])
+}
+
+/// `report` on a screen with a focus group (`group`, PR7-92): its `ring` holds the group once, `group` its prefixes.
+pub fn report_grouped(infos: &[Value], arrow_focus: bool, start: Option<&str>, pad: Device, group: &[&str]) -> Value {
     let list = |v: Vec<(String, String, &'static str)>| v.into_iter().map(|(i, k, u)| json!({"id": i, "kind": k, "use": u})).collect::<Vec<_>>();
-    let keys = device_reach(infos, Device::keys(), arrow_focus, start);
-    let pad_reach = device_reach(infos, pad, arrow_focus, start);
-    let dpad = if arrow_focus { arrow_reach(infos, start) } else { BTreeSet::new() };
+    let keys = device_reach_grouped(infos, Device::keys(), arrow_focus, start, group);
+    let pad_reach = device_reach_grouped(infos, pad, arrow_focus, start, group);
+    let dpad = device_reach_grouped(infos, Device { tab: false, arrows: true, confirm: true, back: true }, arrow_focus, start, group);
     json!({
         "mouse": mouse_set(infos).len(),
-        "ring": tab_reach(infos).into_iter().collect::<Vec<_>>(),
+        "ring": focus::ring_grouped(infos, false, group, start, None).iter().map(|w| id(w).to_string()).collect::<Vec<_>>(),
+        "group": group,
         "arrow_focus": arrow_focus,
         "keys_miss": list(unreached(infos, &keys)),
         "pad_miss": list(unreached(infos, &pad_reach)),
@@ -170,6 +204,24 @@ mod tests {
         let dpad_only = Device { tab: false, arrows: true, confirm: true, back: true };
         assert_eq!(device_reach(&g, dpad_only, true, None).len(), 3, "the arrows walk down to c");
         assert!(device_reach(&g, dpad_only, false, None).is_empty(), "a screen that steers with the arrows: a pad with no Tab reaches nothing");
+    }
+
+    #[test]
+    fn a_focus_group_is_one_tab_stop_and_the_arrows_walk_inside_it() {
+        // a 3 x 2 board of tiles, then two buttons under it
+        let mut g: Vec<Value> = (0..6).map(|i| w(&format!("tile.{i}"), "button", 10 + (i % 3) * 20, 10 + (i / 3) * 20, )).collect();
+        g.push(w("end", "button", 10, 100));
+        g.push(w("menu", "button", 60, 100));
+        let group: &[&str] = &["tile."];
+        let ring: Vec<String> = focus::ring_grouped(&g, false, group, None, None).iter().map(|x| id(x).to_string()).collect();
+        assert_eq!(ring, ["tile.0", "end", "menu"], "the board is one stop");
+        assert_eq!(focus::step_grouped(&g, Some("tile.0"), focus::Move::Next, false, group, None).as_deref(), Some("end"));
+        assert_eq!(focus::step_grouped(&g, Some("end"), focus::Move::Prev, false, group, Some("tile.4")).as_deref(), Some("tile.4"), "Tab lands on the member last focused");
+        assert_eq!(focus::step_grouped(&g, Some("tile.3"), focus::Move::Dir(0, 1), false, group, None).as_deref(), Some("tile.3"), "the arrows stay on the board at its edge");
+        assert_eq!(focus::step_grouped(&g, Some("tile.0"), focus::Move::Dir(1, 0), false, group, None).as_deref(), Some("tile.1"));
+        let keys = device_reach_grouped(&g, Device::keys(), true, None, group);
+        assert_eq!(keys.len(), 8, "Tab and the arrows still reach every tile: {keys:?}");
+        assert!(device_reach_grouped(&g, Device::keys(), false, None, group).len() == 3, "without arrows only the stop");
     }
 
     #[test]

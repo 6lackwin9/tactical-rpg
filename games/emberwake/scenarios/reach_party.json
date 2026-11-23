@@ -1,0 +1,115 @@
+{
+ "id": "reach_party",
+ "title": "PR7-92: party skills, gear and the bunk loadout walked by keys and pad; anything only a mouse reaches, a focus that does not show or a dead back press fails",
+ "launch": {
+  "save": "hub_start"
+ },
+ "settings": {
+  "reduce_motion": true
+ },
+ "timeout_s": 600,
+ "steps": [
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "main_menu"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "click",
+   "id": "menu.continue"
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "region_map"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "wait",
+   "until": {
+    "widget": "bunk.bunk_1"
+   }
+  },
+  {
+   "step": "click",
+   "id": "hud.party"
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "character"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "reach",
+   "name": "party_stats",
+   "back": false,
+   "fail": true
+  },
+  {
+   "step": "click",
+   "id": "character.tab.skills"
+  },
+  {
+   "step": "reach",
+   "name": "party_skills",
+   "back": false,
+   "fail": true
+  },
+  {
+   "step": "click",
+   "id": "character.tab.gear"
+  },
+  {
+   "step": "reach",
+   "name": "party_gear",
+   "back": true,
+   "fail": true
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "region_map"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "click",
+   "id": "locker.maren"
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "character"
+   },
+   "timeout_ms": 15000
+  },
+  {
+   "step": "pause",
+   "ms": 600
+  },
+  {
+   "step": "reach",
+   "name": "loadout",
+   "back": true,
+   "fail": true
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "region_map"
+   },
+   "timeout_ms": 20000
+  }
+ ]
+}

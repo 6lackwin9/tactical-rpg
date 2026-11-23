@@ -75,6 +75,9 @@ pub enum PAct {
     FollowAdd(String, String),
     /// Takes place `.1` out of opener `.0`'s list (a right click).
     FollowRemove(String, usize),
+    /// PR7-92 (INPUT-REACH2): a slot or a list pressed with no drag (widget id): picks a filled slot, or puts the pick
+    /// there (`Character::slot_enter`).
+    SlotPress(String),
     /// "Use the <Intent> order": empties opener `.0`'s list.
     FollowClear(String),
 }
@@ -112,7 +115,23 @@ pub struct Character {
     follow_open: Option<String>,
     /// PORTRAITFX1-R: the shown member's portrait (surface `roster`); cycling members drops the old one's.
     faces: crate::portraits::Faces,
+    /// PR7-92 (INPUT-REACH2): the slot picked with Enter, waiting for where it goes.
+    pick: Option<Pick>,
     w: Vec<Widget<PAct>>,
+}
+
+/// PR7-92: a picked slot: its widget, the payload a drag of it carries and the drop key it takes.
+#[derive(Debug, Clone, PartialEq)]
+struct Pick {
+    id: String,
+    from: String,
+    to: String,
+}
+
+/// PR7-92: whether drop key `k` is a slot (a skill, gear or pouch slot) rather than a list, an order or a follow-up
+/// place: the slots the keys pick, place and empty.
+fn is_slot_key(k: &str) -> bool {
+    (k.starts_with("deck.") && k != "deck.list" && !k.starts_with("deck.own.")) || k.starts_with("slot.") || k.starts_with("pouch.")
 }
 
 /// One derived row as a screen lists it: the header, the value, the value as shown (with the row's suffix) and the
@@ -348,7 +367,7 @@ impl Character {
         let first = gs.party.members.first().map(|m| m.id.clone()).unwrap_or_default();
         let member = if gs.party.member(member).is_some() { member.to_string() } else { first };
         let tab = TABS.iter().find(|t| t.0 == tab).map(|t| t.0).unwrap_or("stats");
-        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, gear_stacks: false, gear_world: String::new(), pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", follow_open: None, faces: crate::portraits::Faces::default(), w: Vec::new() }
+        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, gear_stacks: false, gear_world: String::new(), pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", follow_open: None, faces: crate::portraits::Faces::default(), pick: None, w: Vec::new() }
     }
 
     /// ENGINE-23: the Gear tab's draft as the loadout view reads it: the open draft (the member and the stash), else
@@ -426,6 +445,7 @@ impl Character {
     }
 
     fn drop_drafts(&mut self) {
+        self.pick = None;
         self.draft.clear();
         self.skills_loaded = false;
         self.gear = None;
@@ -528,6 +548,9 @@ impl Character {
     pub(crate) fn act(&mut self, cx: &mut Cx, a: PAct) {
         let d = cx.data.clone();
         match a {
+            PAct::SlotPress(id) => {
+                self.slot_enter(cx, &id);
+            }
             PAct::Member(step) => {
                 let ids: Vec<String> = cx.gs().party.members.iter().map(|m| m.id.clone()).collect();
                 if ids.len() < 2 {
@@ -766,6 +789,59 @@ impl Character {
         self.gear_stacks
     }
 
+    /// PR7-92: the drop key of the open tab's list (emptying a slot puts what it holds there).
+    fn list_key(&self) -> &'static str {
+        match self.tab {
+            "gear" => "stash",
+            _ if self.terms.is_some() => "deck.list",
+            _ => "list",
+        }
+    }
+
+    /// PR7-92 (INPUT-REACH2): Enter (or a press with no drag) on widget `id`. On a slot: with no pick a filled slot is
+    /// picked; with one, the pick goes there (a move, or a swap when filled; the same move as a drag) and the same slot
+    /// drops it. On a list row with a pick: that row goes into the picked slot. On the list itself with a pick: the
+    /// picked slot is emptied. False: nothing for the keys to do here (the press stays a click).
+    pub(crate) fn slot_enter(&mut self, cx: &mut Cx, id: &str) -> bool {
+        let Some(w) = self.w.iter().find(|w| w.id == id) else { return false };
+        let (drag, drop) = (w.drag.clone(), w.drop.clone());
+        if let Some(to) = drop.clone().filter(|k| is_slot_key(k)) {
+            match self.pick.take() {
+                None => self.pick = drag.map(|from| Pick { id: id.to_string(), from, to }),
+                Some(p) if p.id == id => {}
+                Some(p) => self.accept_drop(cx, &p.from, &to),
+            }
+            return true;
+        }
+        let Some(p) = self.pick.clone() else { return false };
+        if drop.as_deref() == Some(self.list_key()) {
+            self.pick = None;
+            self.accept_drop(cx, &p.from, self.list_key());
+            return true;
+        }
+        if let Some(from) = drag {
+            self.pick = None;
+            self.accept_drop(cx, &from, &p.to);
+            return true;
+        }
+        false
+    }
+
+    /// PR7-92: Space (pad X) on slot widget `id`: a filled slot is emptied (what a drag to the list does), the pick
+    /// dropped. False when `id` is not a slot.
+    pub(crate) fn slot_empty(&mut self, cx: &mut Cx, id: &str) -> bool {
+        let Some(w) = self.w.iter().find(|w| w.id == id) else { return false };
+        if !w.drop.as_deref().is_some_and(is_slot_key) {
+            return false;
+        }
+        let drag = w.drag.clone();
+        self.pick = None;
+        if let Some(from) = drag {
+            self.accept_drop(cx, &from, self.list_key());
+        }
+        true
+    }
+
     /// The draft after the drop of payload `from` on target `to` (GEARUI1 drag and drop), or why it can't be done.
     fn after_drop(&self, d: &Data, from: &str, to: &str) -> Result<(UnitState, Stash), String> {
         let (mut work, mut stash) = self.gear.clone().ok_or("No gear draft.")?;
@@ -851,12 +927,28 @@ impl Screen<GameCx> for Character {
             "skills" => self.draw_skills(&mut ui, cx, &m),
             _ => self.draw_gear(&mut ui, cx, &m),
         }
+        // PR7-92: the picked slot is outlined while it waits (dropped when what it held has gone)
+        let picked = self.pick.as_ref().and_then(|p| ui.widgets.iter().find(|w| w.id == p.id && w.drag.as_deref() == Some(p.from.as_str()))).map(|w| (w.rect, w.text.clone()));
+        if picked.is_none() {
+            self.pick = None;
+        }
+        if let Some((r, _)) = picked {
+            ui.p.panel(Rect::new(r.x - 1, r.y - 1, r.w + 2, r.h + 2), rgba(0, 0, 0, 0), th().gold, 2.0);
+        }
         let dbox = Rect::new(25, 275, 590, 31);
         ui.p.panel(dbox, th().game("party_box", rgba(20, 28, 46, 255)), th().edge, 2.0);
         // while dragging on the Skills tab the pane says where the skill can go (SKILLUI1), not the hovered card
         let dragging_skill = self.tab == "skills" && ui.dragging().is_some() && !self.detail.is_empty();
+        // PR7-92: the hint line names the keys of a pick, or of the slot the keyboard focus is on
+        let (enter, space, esc) = (keys.key_hint(Key::Enter), keys.key_hint(Key::Space), keys.key_hint(Key::Esc));
+        let on_slot = ui.focus_id().and_then(|f| ui.widgets.iter().find(|w| w.id == f)).is_some_and(|w| w.drop.as_deref().is_some_and(is_slot_key));
+        let key_hint = match &picked {
+            Some((_, label)) if ui.dragging().is_none() => Some(format!("Picked {label}: {enter} on a slot or a list row puts it there (a swap when the slot is filled); {esc} drops the pick.")),
+            None if on_slot => Some(format!("{enter} picks this slot, then {enter} on a list row or another slot places or swaps it; {space} (pad X) empties it.")),
+            _ => None,
+        };
         let hovered = ui.widgets.iter().rev().find(|w| !dragging_skill && w.rect.contains(mouse.0, mouse.1) && w.tip.len() > 1).map(|w| w.tip[1].0.clone());
-        let text = hovered.unwrap_or_else(|| if self.detail.is_empty() { "Move to a row to read what it does.".into() } else { self.detail.clone() });
+        let text = key_hint.or(hovered).unwrap_or_else(|| if self.detail.is_empty() { "Move to a row to read what it does.".into() } else { self.detail.clone() });
         ui.para(30, 279, 580, &text, BODY, th().text);
         self.w = ui.widgets;
     }
@@ -874,9 +966,22 @@ impl Screen<GameCx> for Character {
         }
     }
 
-    /// Esc always closes (the right-click unslot of `back` is for the mouse only, SKILLUI1 Q4).
+    /// Esc drops a pick (PR7-92), else closes (the right-click unslot of `back` is for the mouse only, SKILLUI1 Q4).
     fn escape(&mut self, cx: &mut Cx) {
+        if self.pick.take().is_some() {
+            return;
+        }
         self.act(cx, PAct::Close);
+    }
+
+    /// PR7-92 (INPUT-REACH2): Enter picks and places slots (`slot_enter`), Space empties one (`slot_empty`); elsewhere
+    /// both press as a click.
+    fn press_focus(&mut self, cx: &mut Cx, id: &str, k: Key) -> bool {
+        match k {
+            Key::Enter => self.slot_enter(cx, id),
+            Key::Space => self.slot_empty(cx, id),
+            _ => false,
+        }
     }
 
     /// A right click: on the Skills tab over a filled slot it takes the skill out (SKILLUI1 Q4); anywhere else it closes.
@@ -960,7 +1065,7 @@ impl Screen<GameCx> for Character {
     }
 
     fn state(&self, cx: &Cx) -> Value {
-        let mut out = json!({"member": self.member, "tab": self.tab, "draft": self.draft.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<String, Value>>(), "has_draft": self.has_draft(cx), "portraits": self.faces.state()});
+        let mut out = json!({"pick": self.pick.as_ref().map(|p| p.id.clone()), "member": self.member, "tab": self.tab, "draft": self.draft.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<String, Value>>(), "has_draft": self.has_draft(cx), "portraits": self.faces.state()});
         // ENGINE-21 (UISPLIT1-H Stage A): the window's view-model and the open tab's (ENGINE-23: the loadout's on the Gear
         // tab)
         out["shell"] = crate::character_view::character(cx, self).to_json();
@@ -1216,7 +1321,7 @@ impl Character {
                     ui.p.panel(r, th().game("slot_empty", rgba(20, 28, 46, 120)), th().game("slot_empty_edge", rgba(58, 78, 116, 120)), 2.0);
                     ui.p.text(r.x as f32 + 4.0, r.y as f32 + 3.0, "Empty", BODY, th().dim);
                     let label = if class { "class" } else { "extra" };
-                    ui.push(id, "row", "Empty", r, true, false, None, tip(&format!("Empty {label} slot"), "Drag a skill here, or click a skill in the list."));
+                    ui.push(id.clone(), "row", "Empty", r, true, false, Some(PAct::SlotPress(id)), tip(&format!("Empty {label} slot"), "Drag a skill here, or click a skill in the list."));
                     ui.drop_target(format!("slot.{g}.{i}"));
                     continue;
                 };
@@ -1231,7 +1336,7 @@ impl Character {
                 ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
                 ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &fam_name(f), BODY, 112.0, th().text);
                 let card = vec![(fam_name(f), th().gold), (desc.clone(), th().text), ("Drag to another slot or back to the list. Right click takes it out.".into(), th().dim)];
-                ui.push(id, "row", fam_name(f), r, true, false, None, card);
+                ui.push(id.clone(), "row", fam_name(f), r, true, false, Some(PAct::SlotPress(id)), card);
                 ui.draggable(format!("slot.{g}.{i}"));
                 ui.drop_target(format!("slot.{g}.{i}"));
                 // < Rank >: step over the unlocked ranks; GOLD when kept below the highest unlocked rank
@@ -1262,7 +1367,7 @@ impl Character {
         // Right: the owned skills; the whole column takes slots dropped back (recorded under the rows).
         let list_area = Rect::new(310, 114, 294, 156);
         ui.p.text(310.0, 104.0, "Owned skills (drag onto a slot or click)", BODY + 1.0, th().info);
-        ui.push("skills.list", "panel", "Owned skills", list_area, true, false, None, tip("Owned skills", "Drop a slot here to take the skill out."));
+        ui.push("skills.list", "panel", "Owned skills", list_area, true, false, Some(PAct::SlotPress("skills.list".into())), tip("Owned skills", "Drop a slot here to take the skill out."));
         ui.drop_target("list");
         let owned: Vec<String> = u.owned_families(cat).into_iter().filter(|f| !cat.is_basic_family(f)).collect();
         // AUDIT-05 (OFFHAND1): the worn items' skills close the list, read-only: open while worn, no slot
@@ -1373,7 +1478,7 @@ impl Character {
                         } else {
                             format!("Holds one of the hero's {takes}: drag one here, or click it in the owned list.")
                         };
-                        ui.push(id, "row", "Empty", r, true, false, None, tip(&format!("Empty {kind} slot"), &help));
+                        ui.push(id.clone(), "row", "Empty", r, true, false, Some(PAct::SlotPress(id)), tip(&format!("Empty {kind} slot"), &help));
                     }
                     Some(f) => {
                         ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
@@ -1388,7 +1493,10 @@ impl Character {
                             ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &name, BODY, 228.0, th().text);
                             vec![(name, th().gold), (desc, th().text), ("Applies only while slotted. Drag to another slot or back to the list. Right click takes it out.".into(), th().dim)]
                         };
-                        ui.push(id, "row", name_of(kind, f), r, true, false, None, card);
+                        if ui.hover(r) {
+                            ui.p.panel(r, rgba(0, 0, 0, 0), th().edge_hot, 2.0);
+                        }
+                        ui.push(id.clone(), "row", name_of(kind, f), r, true, false, Some(PAct::SlotPress(id)), card);
                         ui.draggable(key.clone());
                     }
                 }
@@ -1514,7 +1622,7 @@ impl Character {
             }
         } else {
             let list_area = Rect::new(310, 114, 294, 158);
-            ui.push("skills.list", "panel", "Owned", list_area, true, false, None, tip("Owned", "Drop a slot here to take it out."));
+            ui.push("skills.list", "panel", "Owned", list_area, true, false, Some(PAct::SlotPress("skills.list".into())), tip("Owned", "Drop a slot here to take it out."));
             ui.drop_target("deck.list");
             let owned: Vec<(&'static str, String)> = DECK_KINDS.iter().flat_map(|k| t.owned(k.0).iter().map(move |id| (k.0, id.clone()))).collect();
             // U3.2-S4 (OFFHAND1): the worn items' skills close the list, read-only: open while worn, no slot
@@ -1612,7 +1720,9 @@ impl Character {
             };
             // PR7-36 (ART-05): the slot's tile (the item's icon, an empty-slot glyph) at the row's left
             item_tile(ui, cx, Rect::new(mx, y, 14, 14), shown.as_deref());
-            ui.row(&format!("gear.slot.{slot}"), Rect::new(mx + 16, y, mw - 16, 14), &label, if explicit.is_some() { th().text } else { th().dim }, explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())), false, card);
+            let id = format!("gear.slot.{slot}");
+            let act = explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())).unwrap_or_else(|| PAct::SlotPress(id.clone()));
+            ui.row(&id, Rect::new(mx + 16, y, mw - 16, 14), &label, if explicit.is_some() { th().text } else { th().dim }, Some(act), false, card);
             if let Some((b, _)) = &badge {
                 ui.p.text_right((mx + mw - 3) as f32, y as f32 + 2.0, b, SMALL, th().foe);
             }
@@ -1634,7 +1744,9 @@ impl Character {
                     None => tip(&label, POUCH_EMPTY_HELP),
                 };
                 item_tile(ui, cx, Rect::new(mx, y, 14, 14), item.map(String::as_str));
-                ui.row(&format!("gear.pouch.{i}"), Rect::new(mx + 16, y, mw - 16, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card);
+                let id = format!("gear.pouch.{i}");
+                let act = item.map(|_| PAct::PouchRemove(i)).unwrap_or_else(|| PAct::SlotPress(id.clone()));
+                ui.row(&id, Rect::new(mx + 16, y, mw - 16, 14), &label, if item.is_some() { th().text } else { th().dim }, Some(act), false, card);
                 if item.is_some() {
                     ui.draggable(format!("pouch.{i}"));
                 }
@@ -1646,7 +1758,7 @@ impl Character {
         ui.p.text(sx as f32 + 2.0, 102.0, "Party stash", head, th().info);
         let area = Rect::new(sx, 114, sw, 156);
         ui.p.panel(area, th().game("party_area", rgba(20, 28, 46, 160)), th().edge, 2.0);
-        ui.push("gear.stash", "panel", "Party stash", area, true, false, None, tip("Party stash", "Drop a worn or pouch item here to take it off."));
+        ui.push("gear.stash", "panel", "Party stash", area, true, false, Some(PAct::SlotPress("gear.stash".into())), tip("Party stash", "Drop a worn or pouch item here to take it off."));
         ui.drop_target("stash");
         let ids = stash_ids(d, &stash);
         let ids: Vec<&String> = ids.iter().collect();
@@ -1758,7 +1870,9 @@ impl Character {
                 Some(item) => item_tip(d, item, &stack_help(work, stash, item)),
                 None => tip(&label, STACK_EMPTY_HELP),
             };
-            ui.row(&format!("gear.pouch.{i}"), Rect::new(mx, y, name_w, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card.clone());
+            let id = format!("gear.pouch.{i}");
+            let act = item.map(|_| PAct::PouchRemove(i)).unwrap_or_else(|| PAct::SlotPress(id.clone()));
+            ui.row(&id, Rect::new(mx, y, name_w, 14), &label, if item.is_some() { th().text } else { th().dim }, Some(act), false, card.clone());
             if item.is_some() {
                 ui.draggable(format!("pouch.{i}"));
             }
@@ -3128,7 +3242,7 @@ mod tests {
 
     /// A game on the shipped data in a world that plays under the deck rule (`deck` true) or without it, and its first
     /// member.
-    fn deck_cx(deck: bool) -> (Cx, String) {
+    pub(super) fn deck_cx(deck: bool) -> (Cx, String) {
         // The test bed (decision "Ashlands is a test bed"), by name: a pick by rule follows whichever world sorts first,
         // and sunk_ward's empty class paths leave a member no actives. It plays classic, so the deck case gives this
         // test's own copy of its manifest the timeline row.
@@ -3946,5 +4060,125 @@ mod xl_rows_tests {
             }
         }
         assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+}
+
+/// PR7-92 (INPUT-REACH2): slots without a mouse.
+#[cfg(test)]
+mod reach_slot_tests {
+    use super::*;
+    use super::tests::deck_cx;
+
+    // ---- PR7-92 (INPUT-REACH2): slots without a mouse ------------------------------------------------------------
+
+    fn widget_of<'a>(c: &'a Character, id: &str) -> Option<&'a Widget<PAct>> {
+        c.w.iter().find(|w| w.id == id)
+    }
+
+    /// What the keys miss on the open tab (`aegis_ui::reach`): a mouse-only widget.
+    fn keys_miss(c: &Character) -> Vec<String> {
+        let infos = c.widgets();
+        aegis_ui::reach::unreached(&infos, &aegis_ui::reach::tab_reach(&infos)).into_iter().map(|u| u.0).collect()
+    }
+
+    /// Enter picks a filled deck slot and puts it on another slot (a swap) or puts a list row in it; Esc drops the pick
+    /// and leaves the window open; Space empties a slot; every slot and the list are in the keys' reach.
+    #[test]
+    fn the_keys_pick_place_swap_and_empty_deck_slots() {
+        let (mut cx, member) = deck_cx(true);
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut c = Character::new(&cx, &member, "skills");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert_eq!(keys_miss(&c), Vec::<String>::new(), "the keys reach every slot and the list");
+        let t = c.terms.clone().expect("deck terms");
+        let shown = |c: &Character| t.shown(&c.deck).active.clone();
+        let before = shown(&c);
+        assert!(before.len() >= 2, "two actives to swap: {before:?}");
+        assert!(c.press_focus(&mut cx, "skills.active.0", Key::Enter) && c.pick.as_ref().is_some_and(|p| p.id == "skills.active.0"), "Enter picks a filled slot");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(c.press_focus(&mut cx, "skills.active.1", Key::Enter) && c.pick.is_none());
+        assert_eq!(shown(&c)[..2], [before[1].clone(), before[0].clone()], "Enter on another slot swaps the two");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        c.press_focus(&mut cx, "skills.active.0", Key::Enter);
+        c.escape(&mut cx);
+        assert!(c.pick.is_none() && cx.nav.is_empty(), "Esc drops the pick; the window stays");
+        // a list row into the picked slot
+        let spare = t.owned("active").iter().find(|f| !shown(&c).contains(f)).cloned();
+        if let Some(f) = spare {
+            crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+            c.press_focus(&mut cx, "skills.active.0", Key::Enter);
+            assert!(c.press_focus(&mut cx, &format!("skills.owned.active.{f}"), Key::Enter), "a list row takes the key while a pick waits");
+            assert_eq!(shown(&c)[0], f, "the row went into the picked slot");
+        }
+        // Space empties
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        let n = shown(&c).len();
+        assert!(c.press_focus(&mut cx, &format!("skills.active.{}", n - 1), Key::Space));
+        assert_eq!(shown(&c).len(), n - 1, "Space takes the skill out");
+        // an empty slot with no pick: taken, nothing picked
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(c.press_focus(&mut cx, &format!("skills.active.{}", n - 1), Key::Enter) && c.pick.is_none());
+        // the hint line names the keys while a pick waits
+        c.press_focus(&mut cx, "skills.active.0", Key::Enter);
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        let hint = c.w.iter().filter(|w| w.kind == "label" || w.kind == "para").map(|w| w.text.clone()).collect::<Vec<_>>().join(" ");
+        assert!(c.pick.is_some() && (hint.contains("Picked") || hint.is_empty()), "{hint}");
+        assert!(!c.press_focus(&mut cx, "character.tab.stats", Key::Enter), "elsewhere Enter stays a click");
+    }
+
+    /// The gear slots and the pouch follow the same rule; the stash takes a pick back (unequip), a stash row goes into
+    /// the picked slot.
+    #[test]
+    fn the_keys_pick_place_and_empty_gear_slots() {
+        let (mut cx, member) = deck_cx(false);
+        // gear the member may wear, in the stash
+        let d = cx.data.clone();
+        let m = cx.gs().party.member(&member).unwrap().clone();
+        let mut ids: Vec<String> = d.cat.items.iter().filter(|(_, i)| i.is_equipment() && m.wear_refusal(&d, i).is_none()).map(|(id, _)| id.clone()).collect();
+        ids.sort();
+        for id in ids.iter().take(6) {
+            cx.gs_mut().party.stash.insert(id.clone(), 1);
+        }
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut c = Character::new(&cx, &member, "gear");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert_eq!(keys_miss(&c), Vec::<String>::new(), "the keys reach every slot, the pouch and the stash");
+        let filled = |c: &Character| c.w.iter().filter(|w| w.id.starts_with("gear.slot.") && w.drag.is_some()).map(|w| w.id.clone()).collect::<Vec<_>>();
+        if filled(&c).is_empty() {
+            // wear one the way a drag does, then confirm it
+            let pair = c.w.iter().filter_map(|w| w.drag.clone()).filter(|f| f.starts_with("stash.")).find_map(|f| c.w.iter().filter_map(|w| w.drop.clone()).find(|t| t.starts_with("slot.") && c.can_drop(&cx, &f, t)).map(|t| (f.clone(), t)));
+            let (f, t) = pair.expect("a stash item that fits a slot");
+            c.accept_drop(&mut cx, &f, &t);
+            c.act(&mut cx, PAct::ConfirmGear);
+            crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        }
+        let slot = filled(&c).first().cloned().expect("a worn item");
+        assert!(c.press_focus(&mut cx, &slot, Key::Enter) && c.pick.is_some(), "Enter picks a worn item (a click would take it off)");
+        assert!(filled(&c).contains(&slot), "picking moves nothing");
+        c.escape(&mut cx);
+        assert!(c.pick.is_none() && cx.nav.is_empty());
+        c.press_focus(&mut cx, &slot, Key::Enter);
+        assert!(c.press_focus(&mut cx, "gear.stash", Key::Enter), "the stash takes the pick");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(!filled(&c).contains(&slot), "Enter on the stash takes it off");
+        // a stash row into the emptied slot
+        let to = widget_of(&c, &slot).and_then(|w| w.drop.clone()).expect("a drop key");
+        c.act(&mut cx, PAct::ResetGear);
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(c.press_focus(&mut cx, &slot, Key::Space), "Space on a worn item");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(!filled(&c).contains(&slot), "Space takes it off");
+        c.act(&mut cx, PAct::ResetGear);
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        let row = c.w.iter().find(|w| w.id.starts_with("gear.stash.") && w.drag.as_deref().is_some_and(|f| c.can_drop(&cx, f, &to))).map(|w| w.id.clone());
+        {
+            let row = row.expect("a stash item for the slot");
+            let was = widget_of(&c, &slot).unwrap().text.clone();
+            c.press_focus(&mut cx, &slot, Key::Enter);
+            assert!(c.press_focus(&mut cx, &row, Key::Enter));
+            crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+            assert_ne!(widget_of(&c, &slot).unwrap().text, was, "the stash row went into the picked slot");
+        }
     }
 }

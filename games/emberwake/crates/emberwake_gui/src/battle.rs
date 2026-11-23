@@ -864,11 +864,20 @@ impl BattleScreen {
     }
 }
 
+/// PR7-92: the board's widget id prefixes, one keyboard stop (`Screen::focus_group`).
+pub(crate) const BOARD_GROUP: &[&str] = &["tile.", "unit."];
+
 impl Screen<GameCx> for BattleScreen {
     /// A4.2-K1b: while the selected hero plans a Field round the arrows aim its source (`field_nudge`), so they do not
     /// move the keyboard focus then; any other time they do, as before.
     fn arrow_focus(&self) -> bool {
         !self.field_aiming()
+    }
+
+    /// PR7-92 (INPUT-REACH2, FB-489 call 4): the board (its tiles and the unit tokens on them) is one Tab stop; while
+    /// the focus is on it the arrows move the tile cursor and Enter presses the tile or token as a click.
+    fn focus_group(&self) -> &'static [&'static str] {
+        BOARD_GROUP
     }
 
     /// BATTLE-UI2 (battle contract 7, FB-358): whatever the player's control map turns into Tab (by default the Tab key

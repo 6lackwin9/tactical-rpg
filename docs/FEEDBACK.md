@@ -164,8 +164,61 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-46` (`FEEL-FIX1`) | Built (tools lane) | `develop` | Stage floor layer cache (`Painter::cached`), panels composed once, per-frame forecast memo (`intent::memo`), Settings warmed before the first frame (`Context::warm`); `feel_battle` and `feel_settings` budgets (100 ms input, 33 ms frame; 2.5 x in dev) pass; planning frames 17 / 28 ms p50 / worst (were 38 / 80), Settings first draw 13 ms (was 57), `strip.block1` 55 to 59 ms (was 113; the guest ghost re-sent each click is reported). FB-485 |
 | `ENGINE-47` (`GHOST-SETTLE1`) | Built (tools lane) | `develop` | The guest's ghost was not flipping (a draft settles on its own board; test added); `ally_moves` kept while nothing it reads changes (a run that fixes a step's tile is not kept, so plans stay bit for bit); `strip.block1` 43 to 46 ms against a 50 ms `feel` budget; goldens unchanged. FB-487 |
 | `ENGINE-48` (`INPUT-REACH1`) | Built (tools lane) | `develop` | Scenario step `reach` (keys and pad reach, focus shown, back) in the gate on `reach_menus`; every screen walked; fixed a cutscene focus ring off the canvas and dead arrows on cutscenes and in hub talk, board and shop; party skill and gear slots mouse only, for Design; goldens unchanged. FB-489 |
+| `PR7-92` (`INPUT-REACH2`) | Built (tools lane) | `develop` | Skill, gear, pouch and loadout slots pick (Enter), place or swap (Enter), drop the pick (Esc) and empty (Space, pad X) by key, hint line names the keys; the battle board is one Tab stop with an arrow tile cursor (ring 121 to 14); `reach_party` and `reach_battle` gate scenarios with `fail` on; goldens unchanged. FB-491 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-491: PR7-92 INPUT-REACH2 built; slots pick, place and empty by key, the battle board one Tab stop
+
+- **Status**: built (tools lane), `develop`. Engine (`aegis_ui`: focus, shell, reach), game GUI (`emberwake_gui`:
+  the party window, the battle screen) and two game scenarios; no data. **Every golden unchanged** (rules, sim, checks,
+  rules contract, journey, timeline, PHASEFOLD). Shots diff: see the last line.
+- **Spec**: `docs/READY.md` row `PR7-92` (`INPUT-REACH2`), from `FB-489` calls 1, 2 and 4.
+- **Slots without a mouse (calls 1, 2)**, one rule for the skill slots (deck and classic), the gear slots, the pouch and
+  the bunk loadout (the same Gear tab):
+  - Enter on a filled slot picks it (outlined in gold); Enter on another slot then moves or swaps it there, Enter on a
+    list row (owned skill, stash item) puts that row in the picked slot (a swap when filled), Enter on the list itself
+    (the owned list, the stash) empties the picked slot, and Enter on the picked slot again drops the pick. Each place is
+    the same move a drag makes (`accept_drop`), so the rules and refusals are the drag's.
+  - Esc drops a pick (the window stays open); with no pick Esc closes as before.
+  - Space (pad X) on a focused filled slot empties it (unslot or unequip, as a drag to the list).
+  - The hint line (the window's detail box) names the keys while the focus is on a slot or a pick waits, from the
+    player's bindings.
+  - Every slot, empty ones too, and both lists are now in the keyboard ring. A mouse click is unchanged on a worn item
+    and a pouch item (it takes it off); a click on a skill slot or an empty slot does what Enter does.
+  - Engine: `Screen::press_focus(id, key)`, Enter or Space on a focused widget before the shell clicks it (true takes
+    the key).
+  - Tests: `emberwake_gui` `party::reach_slot_tests` `the_keys_pick_place_swap_and_empty_deck_slots` and
+    `the_keys_pick_place_and_empty_gear_slots`.
+- **The battle board is one Tab stop (call 4)**: `Screen::focus_group` (new, engine) names id prefixes of widgets that
+  make one keyboard stop; the battle screen (story and Test Arena) gives its tiles and unit tokens. Tab and Shift+Tab land
+  on the board once (on the tile last focused) and go on to the strip, panels and End turn; on the board the arrows move
+  the tile cursor (the focus ring) among its tiles and tokens only, staying put at the edge; Enter presses the tile or
+  token as a click. The ring of the Test Arena's plan went from 121 stops to 14. Engine: `focus::step_grouped`,
+  `ring_grouped`, `in_group`; the shell keeps the member last focused. Tests: `aegis_ui` `reach` unit test
+  `a_focus_group_is_one_tab_stop_and_the_arrows_walk_inside_it`; `emberwake_gui` `board_focus_tests`
+  `the_board_is_one_tab_stop_and_the_arrows_walk_it`.
+- **Reach**: the report reads the focus group (`report_grouped`, `device_reach_grouped`; `ring` holds the group once,
+  `group` its prefixes). New gate scenarios with `fail` on: `reach_party` (stats, skills, gear, the bunk loadout) and
+  `reach_battle` (the plan before and after a hero is picked, a round resolving). Release run, no window:
+
+  | Screen | Mouse | Ring | Misses |
+  | --- | --- | --- | --- |
+  | Party: stats | 7 | 7 | none |
+  | Party: skills | 22 | 22 (was 15) | none (was 7) |
+  | Party: gear, and the bunk loadout | 17 | 17 (was 7) | none (was 10) |
+  | Battle plan, and a hero picked | 121 | 14 (was 121) | none |
+  | Battle resolve | 14 | 11 | none |
+
+- **Call 3**: the region map is unchanged (d-pad walks, Y gives Tab).
+- **Docs delta**: `engine/README.md`, the screen trait's list: add `Screen::focus_group` (a group of widgets that is one
+  keyboard stop; `focus::step_grouped`) and `Screen::press_focus` (Enter or Space on the focus before its click); the
+  reach line: the report reads the focus group. `docs/STRUCTURE.md`: none.
+- **Shots diff** (every scenario, base `62e57a92`): 129 shots, the one difference the Scene Runner's data folder path (the
+  base ran from a scratch worktree); no shot shows a pick or a moved ring.
+- **Gate**: one run failed on `aegis_cli` `tests/scenario.rs` `each_start_gets_a_free_port_of_its_own_and_a_real_one_is_never_used`
+  ("scratch is gone after"), code this row does not touch; it passed 5 runs of its own and the next full gate. A flake to
+  watch (a scratch folder still there when checked); for the known-issues table if it comes back.
 
 ### FB-489: ENGINE-48 INPUT-REACH1 built; a `reach` step, every screen walked, three dead ends fixed, four for Design
 

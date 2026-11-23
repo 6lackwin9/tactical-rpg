@@ -114,6 +114,55 @@ pub fn step(infos: &[Value], current: Option<&str>, m: Move, options: bool) -> O
     Some(id(ring[pick]).to_string())
 }
 
+/// Whether `w` belongs to the focus group named by id prefixes `group` (`Screen::focus_group`).
+pub fn in_group(w: &Value, group: &[&str]) -> bool {
+    group.iter().any(|p| id(w).starts_with(p))
+}
+
+/// The group member that stands for the whole group in the ring: `current` when it is a member, else `keep` (the one
+/// last focused) while it can take the focus, else the group's first.
+fn group_stand<'a>(infos: &'a [Value], current: Option<&str>, options: bool, group: &[&str], keep: Option<&str>) -> Option<&'a Value> {
+    let members: Vec<&Value> = ring(infos, options).into_iter().filter(|w| in_group(w, group)).collect();
+    [current, keep].into_iter().flatten().find_map(|c| members.iter().find(|w| id(w) == c).copied()).or(members.first().copied())
+}
+
+/// The ring (`ring`) with a focus group collapsed to one stop (`group_stand`), at the place of its first member.
+pub fn ring_grouped<'a>(infos: &'a [Value], options: bool, group: &[&str], current: Option<&str>, keep: Option<&str>) -> Vec<&'a Value> {
+    let stand = group_stand(infos, current, options, group, keep).map(|w| id(w).to_string());
+    let mut out: Vec<&Value> = Vec::new();
+    for w in ring(infos, options) {
+        if in_group(w, group) {
+            if !out.iter().any(|o| in_group(o, group)) {
+                if let Some(s) = stand.as_deref().and_then(|s| infos.iter().find(|x| id(x) == s)) {
+                    out.push(s);
+                }
+            }
+        } else {
+            out.push(w);
+        }
+    }
+    out
+}
+
+/// PR7-92 (INPUT-REACH2): `step` on a screen with a focus group (id prefixes `group`; empty: plain `step`). Tab and
+/// Shift+Tab treat the group as one stop (`ring_grouped`, landing on `keep` when it is still there); with the focus in
+/// the group the arrows move among its members only, staying put at its edge; from outside, the arrows reach the
+/// group at that one stop.
+pub fn step_grouped(infos: &[Value], current: Option<&str>, m: Move, options: bool, group: &[&str], keep: Option<&str>) -> Option<String> {
+    if group.is_empty() || options {
+        return step(infos, current, m, options);
+    }
+    let inside = current.and_then(|c| infos.iter().find(|w| id(w) == c)).is_some_and(|w| in_group(w, group));
+    let pool: Vec<Value> = if inside && matches!(m, Move::Dir(..)) {
+        // the members only, with every popup backdrop so a covered member stays out of reach
+        infos.iter().filter(|w| in_group(w, group) || w["kind"] == "backdrop").cloned().collect()
+    } else {
+        let stand = group_stand(infos, current, options, group, keep).map(|w| id(w).to_string());
+        infos.iter().filter(|w| !in_group(w, group) || stand.as_deref() == Some(id(w))).cloned().collect()
+    };
+    step(&pool, current, m, options)
+}
+
 /// Where a widget stands for the arrow keys, doubled to stay whole: its centre. A `text_button`'s rect is as wide as its
 /// label, so rows of one column have different centres: it stands at its left edge, which they share.
 fn anchor(w: &Value) -> (i32, i32) {

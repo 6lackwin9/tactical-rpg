@@ -176,8 +176,9 @@ A `reach` step (no window only, ENGINE-48 INPUT-REACH1) walks the top screen as 
 request `reach`, `aegis_ui::reach`). A mouse reaches every enabled widget it can click, pick, drag, drop on or type into,
 less what a popup's backdrop covers. Keys reach the focus ring (Tab walks all of it). A pad reaches what its buttons map to
 in the player's `controls`: the ring when a button gives Tab, else what its d-pad walks to from the opening focus, and only
-on a screen whose arrows move the focus (`Screen::arrow_focus`). The step writes `reach_<name>.json` to the bundle and adds
-it under `perf` in `result.json` (`kind` `reach`): `mouse` (a count), `ring`, `keys_miss`, `pad_miss` and `dpad_miss` (each
+on a screen whose arrows move the focus (`Screen::arrow_focus`); a focus group (a board, PR7-92) is one Tab stop whose
+members the arrows walk. The step writes `reach_<name>.json` to the bundle and adds
+it under `perf` in `result.json` (`kind` `reach`): `mouse` (a count), `ring` (a focus group, `Screen::focus_group`, once; its prefixes in `group`), `keys_miss`, `pad_miss` and `dpad_miss` (each
 `{id, kind, use}`), `invisible` (ring widgets whose focus draws nothing within `REACH_MARGIN_PX` of their box), `unsure`
 (the box changes from frame to frame, so it cannot tell) and, with `back` true, what one Esc did: `quits`, `closed`,
 `opened`, `swapped`, `changed` (the same screen drew differently) or `nothing`, and the top screen after it. `dead_ends`

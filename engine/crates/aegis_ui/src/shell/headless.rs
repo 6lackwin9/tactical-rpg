@@ -353,10 +353,10 @@ impl<G: Context> Loop<G> {
         use crate::reach;
         let shell = &mut self.shell;
         let top = shell.stack.last().unwrap();
-        let (screen, infos, arrows, grid) = (top.id(), top.widgets(), top.arrow_focus(), top.grid());
+        let (screen, infos, arrows, grid, group) = (top.id(), top.widgets(), top.arrow_focus(), top.grid(), top.focus_group());
         let start = top.focus_first().map(String::from).or_else(|| shell.gfx.kit.focus.clone());
         let pad_keys: Vec<crate::screen::Key> = crate::controls::PADS.iter().map(|(p, _)| shell.controls().pad(*p)).collect();
-        let mut out = reach::report(&infos, arrows, start.as_deref(), reach::Device::pad(&pad_keys));
+        let mut out = reach::report_grouped(&infos, arrows, start.as_deref(), reach::Device::pad(&pad_keys), group);
         // the focus check: frames with the focus shown and hidden, the mouse away
         let saved = (shell.gfx.kit.focus.clone(), shell.gfx.kit.focus_visible, shell.mouse);
         shell.mouse = (-10_000, -10_000);

@@ -476,6 +476,18 @@ pub trait Screen<G> {
     fn capture(&mut self, _cx: &mut Cx<G>, _input: crate::controls::Input) -> bool {
         false
     }
+    /// PR7-92 (INPUT-REACH2): the id prefixes of a group of widgets that is one keyboard stop (a board's tiles and the
+    /// tokens on them): Tab and Shift+Tab land on the group once, and while the focus is in it the arrows move it among
+    /// the group's widgets only (`focus::step_grouped`). Empty: no group.
+    fn focus_group(&self) -> &'static [&'static str] {
+        &[]
+    }
+    /// PR7-92 (INPUT-REACH2): Enter or Space (`k`) on widget `id` with a visible keyboard focus, before the shell
+    /// presses it as a click: true takes the key (no click). A screen whose keys do more than a click there (pick a slot
+    /// on Enter, empty it on Space) says so; the default leaves both to `click_id`.
+    fn press_focus(&mut self, _cx: &mut Cx<G>, _id: &str, _k: Key) -> bool {
+        false
+    }
     /// Whether the arrow keys move the keyboard focus (PORT-FOCUS); a screen that walks or steers with them says no
     /// (Tab and Shift+Tab still move it).
     fn arrow_focus(&self) -> bool {

@@ -1,0 +1,60 @@
+{
+ "id": "reach_battle",
+ "title": "PR7-92: the Test Arena's battle plan (the board one Tab stop) and resolve walked by keys and pad; a dead end fails",
+ "launch": {
+  "screen": "arena",
+  "scene": "tl_flank",
+  "seed": 7
+ },
+ "settings": {
+  "reduce_motion": true
+ },
+ "timeout_s": 600,
+ "steps": [
+  {
+   "step": "wait",
+   "until": {
+    "path": "state.outcome",
+    "eq": ""
+   }
+  },
+  {
+   "step": "pause",
+   "ms": 1500
+  },
+  {
+   "step": "reach",
+   "name": "battle_plan",
+   "back": false,
+   "fail": true
+  },
+  {
+   "step": "click",
+   "id": "party.0"
+  },
+  {
+   "step": "pause",
+   "ms": 300
+  },
+  {
+   "step": "reach",
+   "name": "battle_plan_selected",
+   "back": false,
+   "fail": true
+  },
+  {
+   "step": "click",
+   "id": "strip.confirm"
+  },
+  {
+   "step": "pause",
+   "ms": 600
+  },
+  {
+   "step": "reach",
+   "name": "battle_resolve",
+   "back": false,
+   "fail": true
+  }
+ ]
+}

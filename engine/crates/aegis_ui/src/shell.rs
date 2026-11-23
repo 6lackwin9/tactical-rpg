@@ -101,6 +101,9 @@ struct Shell<G> {
     win_drag: Option<(String, Grab, (i32, i32))>,
     /// The choice field whose list the keyboard opened (its option takes the focus once the list is drawn).
     open_focus: Option<String>,
+    /// PR7-92: the member of the top screen's focus group (`Screen::focus_group`) the focus was last on, where Tab
+    /// lands on the group again.
+    group_keep: Option<String>,
     /// Playtest trail: the control under the pointer, since when, and its trail form.
     hover: Option<(String, aegis_core::clock::Instant, Value)>,
     /// Shift is held (a Shift+click in a text field extends its selection).
@@ -138,7 +141,7 @@ impl<G: Context> Shell<G> {
         let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         gfx.kit.device.dpr = dpr;
         let (policy, offered, window_notices) = read_window_options(&options.canvas, &options.window_sizes);
-        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked() };
+        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked() };
         shell.cx.notice.extend(icon_notice);
         shell.cx.notice.extend(window_notices);
         hold_declared_sizes(&mut shell.cx.settings, &options.window_sizes, &offered);
@@ -975,7 +978,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked() };
+        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked() };
         s.frame();
         s
     }
