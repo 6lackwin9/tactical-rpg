@@ -454,7 +454,7 @@ impl SimState {
 }
 
 /// A unit's opening move: destination (None = withdraws), end block, block it leaves its tile.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct FirstMove {
     to: V2,
     leave: i32,
@@ -468,9 +468,17 @@ pub struct Plan {
     pub goal_preferences: IndexMap<UnitId, Vec<UnitId>>,
     pub ai_pressure: IndexSet<UnitId>,
     blocked_override: RefCell<Option<Rc<Cells>>>,
+    /// ENGINE-47 (GHOST-SETTLE1): the last `ally_moves` and the hash of what it read (`moves_key`).
+    moves_memo: RefCell<Option<(u64, Rc<HashMap<UnitId, FirstMove>>)>>,
 }
 
 pub const AI_HAZARD_PENALTY: i32 = 3;
+
+/// ENGINE-47: `RPGKIT_MOVES_CHECK` set: every kept `ally_moves` is checked against a fresh one (a test run's audit).
+fn moves_check() -> bool {
+    thread_local!(static ON: bool = std::env::var_os("RPGKIT_MOVES_CHECK").is_some());
+    ON.with(|o| *o)
+}
 
 /// The AI cover preference: the cover a cell gives against the ranged foe nearest to it.
 pub fn cover_pref(w: &World, shooters: &[UnitId], cell: V2) -> f64 {
@@ -1901,7 +1909,49 @@ impl Plan {
     }
 
     /// Each planning unit's opening move, fastest first (ties in planning order); each sees earlier claims.
-    fn ally_moves(&self, w: &World) -> HashMap<UnitId, FirstMove> {
+    /// ENGINE-47 (GHOST-SETTLE1): `ally_moves_now`, kept while nothing it reads changes (`moves_key`): a draft asks for it
+    /// on every route it tries. A run that changes what it reads (a first compile fixes a step's tile, `PlanStep::cell`)
+    /// is not kept, so the next call works it out again as before; under a trial's blocked cells it is never kept.
+    fn ally_moves(&self, w: &World) -> Rc<HashMap<UnitId, FirstMove>> {
+        if self.blocked_override.borrow().is_some() {
+            return Rc::new(self.ally_moves_now(w));
+        }
+        let key = self.moves_key(w);
+        let kept = self.moves_memo.borrow().as_ref().filter(|(k, _)| *k == key).map(|(_, m)| m.clone());
+        if let Some(m) = kept {
+            if moves_check() {
+                assert_eq!(*m, self.ally_moves_now(w), "ENGINE-47: a kept ally_moves differs from a fresh one");
+            }
+            return m;
+        }
+        let moves = Rc::new(self.ally_moves_now(w));
+        if self.moves_key(w) == key {
+            *self.moves_memo.borrow_mut() = Some((key, moves.clone()));
+        }
+        moves
+    }
+
+    /// What `ally_moves_now` reads: each unit's steps (all of each, the tiles they fixed too) in plan order, the draft
+    /// preferences, every round state and lock, and where every unit stands.
+    fn moves_key(&self, w: &World) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (std::sync::Arc::as_ptr(&w.cat) as usize, w.units.len(), &w.grid.positions, &w.allies, &w.enemies).hash(&mut h);
+        for u in &w.units {
+            u.active_target.hash(&mut h);
+        }
+        format!("{:?}", w.round_states).hash(&mut h);
+        for (c, steps) in &self.sequences {
+            c.hash(&mut h);
+            for s in steps.iter() {
+                (format!("{:?}", s.mode), s.skill, s.target, s.direction, s.tiles, s.cell.get(), &s.item_id, s.after, s.ghost.get(), s.stay.get()).hash(&mut h);
+            }
+        }
+        (self.path_penalties.iter().collect::<Vec<_>>(), format!("{:?}", self.goal_preferences)).hash(&mut h);
+        h.finish()
+    }
+
+    fn ally_moves_now(&self, w: &World) -> HashMap<UnitId, FirstMove> {
         let mut moves: HashMap<UnitId, FirstMove> = HashMap::new();
         let mut units: Vec<UnitId> = Vec::new();
         let mut order: HashMap<UnitId, usize> = HashMap::new();

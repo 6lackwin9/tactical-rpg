@@ -1,6 +1,6 @@
 {
   "id": "feel_battle",
-  "title": "ENGINE-46 (FEEL-FIX1): input and frame budgets in The Crossroads Cages from saves/cages_start: the planning picks and menus, then a round resolving",
+  "title": "ENGINE-46 (FEEL-FIX1): input and frame budgets in The Crossroads Cages from saves/cages_start: the planning picks and menus, then a round resolving; the strip block pick within 50 ms (ENGINE-47)",
   "launch": {
     "save": "cages_start"
   },
@@ -98,7 +98,18 @@
         },
         {
           "key": "esc"
-        },
+        }
+      ],
+      "budget": {
+        "input_ms": 100,
+        "frame_ms": 33
+      }
+    },
+    {
+      "step": "feel",
+      "name": "battle_block",
+      "gap": 3,
+      "script": [
         {
           "click": "strip.block1"
         },
@@ -107,7 +118,7 @@
         }
       ],
       "budget": {
-        "input_ms": 100,
+        "input_ms": 50,
         "frame_ms": 33
       }
     },

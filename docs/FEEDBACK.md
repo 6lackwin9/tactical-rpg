@@ -162,8 +162,50 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-90` (`FORECAST-MOVE1`) | Built (tools lane) | `develop` | A hit forecast reads where the target stands in the block the hit lands, after every move booked before it (walks through friends, tiles freed earlier, foes stepping in, re-paths); three logged cases as tests, goldens unchanged. FB-481 |
 | `ENGINE-45` (`FEEL-PROBE1`) | Built (tools lane) | `develop` | `aegis_ui::feel` times each input (arrival, handler done, frame start, presented) and every frame; `--feel` or the setting `feel` shows an overlay and writes `feel.log`; scenario step `feel` (p50, p95, worst; in the gate on `hello_walk`); report: battle planning frames 36 to 80 ms and two clicks over 100 ms, the rest under. FB-483 |
 | `ENGINE-46` (`FEEL-FIX1`) | Built (tools lane) | `develop` | Stage floor layer cache (`Painter::cached`), panels composed once, per-frame forecast memo (`intent::memo`), Settings warmed before the first frame (`Context::warm`); `feel_battle` and `feel_settings` budgets (100 ms input, 33 ms frame; 2.5 x in dev) pass; planning frames 17 / 28 ms p50 / worst (were 38 / 80), Settings first draw 13 ms (was 57), `strip.block1` 55 to 59 ms (was 113; the guest ghost re-sent each click is reported). FB-485 |
+| `ENGINE-47` (`GHOST-SETTLE1`) | Built (tools lane) | `develop` | The guest's ghost was not flipping (a draft settles on its own board; test added); `ally_moves` kept while nothing it reads changes (a run that fixes a step's tile is not kept, so plans stay bit for bit); `strip.block1` 43 to 46 ms against a 50 ms `feel` budget; goldens unchanged. FB-487 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-487: ENGINE-47 GHOST-SETTLE1 built; the guest's ghost was not flipping, ally_moves kept, strip.block1 under 50 ms
+
+- **Status**: built (tools lane), `develop`. Kit battle code (`rpgkit_battle`), one kit test and the game's `feel_battle`
+  scenario; no data. **No behaviour change**, so **every golden is unchanged** (rules, sim, checks, rules contract, journey,
+  timeline, PHASEFOLD). `tools/fc.sh shots diff` over every scenario (base `16d0aa02`) is clean: 129 shots, the one
+  difference being the Scene Runner's data folder path (the base ran from a scratch worktree).
+- **Spec**: `docs/READY.md` row `ENGINE-47` (`GHOST-SETTLE1`), from `FB-485`.
+- **Part 1, correcting FB-485: the guest's ghost does not flip.** On cages_start each draft was applied to a copy and
+  drafted again; all 16 drafts in the run came back the same on the same board. A preset already drafts from the member's
+  plan cleared (`ai::plan_round_intent` clears it first), and the battle screen already skips re-sending a member whose
+  draft equals what it holds (`draft_ghost`'s `same`). The guest changed on every click because those clicks (`hero.self`,
+  the strip block) changed the first member's plan, and the members after a changed one are redrafted by design (PL8,
+  `reghost_after`). Nothing to change; the new test pins it: `rpgkit_battle/tests/intent_ai.rs`
+  `a_tactic_draft_settles_on_the_board_it_left` drafts each member again under six tactics and finds the same intent,
+  target, steps and planned tiles.
+- **Part 2: `ally_moves` is worked out once while nothing it reads changes** (`Plan::ally_moves`, `moves_key`,
+  `moves_memo`). It is kept with a hash of what it reads: every unit's steps in plan order (each field, the tiles they
+  fixed included), the draft preferences, every round state, every unit's lock and where every unit stands. **The step
+  tile is handled without moving it**: a run that fixes a step's tile (`PlanStep::cell`, set on first compile) changes the
+  key, so that run is not kept and the next call works it out again exactly as before. Under a trial's blocked cells it is
+  never kept. This keeps the planner's results bit for bit (no move of `cell` out of compile, which could have shifted the
+  sim's plans and its goldens). Audit: with `RPGKIT_MOVES_CHECK=1` every kept value is checked against a fresh one; the
+  suites of `rpgkit_battle`, `rpgkit_sim`, `rpgkit_host`, `emberwake_battle`, `emberwake_sim`, `emberwake_rules`,
+  `emberwake_world` and `emberwake_content` pass that way. A first try keyed only each unit's first step and failed the
+  audit (`tactics_map_to_intents`): the first step's compile reads later steps too, so every step is keyed.
+- **Budget**: `feel_battle.json` has a step for the strip block alone (`battle_block`, `input_ms` 50, `frame_ms` 33); the
+  rest of the planning script keeps 100 ms.
+- **Before and after** (release build, no window, 1280 x 720, this cloud container; `/mnt/project-files/build-tools/ghost_settle/`):
+
+  | Input | ENGINE-46 | Now |
+  | --- | --- | --- |
+  | `click strip.block1`, input to present | 55 to 59 ms | 43 to 46 ms |
+  | First `key tab` | 61 to 64 ms | 45 to 46 ms |
+  | `click hero.self` | 52 to 54 ms | 38 to 42 ms |
+  | Planning frames, p50 / worst | 17 / 28 ms | 17 / 24 ms |
+  | Resolve frames, p50 / worst | 14 / 20 ms | 14 / 20 ms |
+
+  The block pick's margin under 50 ms is small on this container (46 ms worst of three runs); the gate's dev build judges
+  it at 125 ms.
+- **Docs delta**: none.
 
 ### FB-485: ENGINE-46 FEEL-FIX1 built; planning frames under 33 ms, Settings warmed, a stage floor cache
 

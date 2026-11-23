@@ -745,3 +745,35 @@ fn classic_keeps_no_guard_memory() {
     w.hits.guarded_last_round = vec![BRUTE];
     assert_eq!(draft(w), plain);
 }
+
+/// ENGINE-47 (GHOST-SETTLE1): a tactic draft settles: drafting a member again on the board its draft left gives the same
+/// round (intent, target, steps and the tiles the party will stand on), for every member and tactic, so a ghost redrafted
+/// with nothing changed is not sent again. The run also checks each kept `ally_moves` against a fresh one.
+#[test]
+fn a_tactic_draft_settles_on_the_board_it_left() {
+    std::env::set_var("RPGKIT_MOVES_CHECK", "1");
+    for tactic in ["balanced", "aggressive", "focus_weakest", "defensive", "ranged_kite", "economy"] {
+        let mut s = session(timeline());
+        {
+            let w = &mut s.w;
+            place(w, BLADE, V2::new(4, 4));
+            place(w, BOW, V2::new(7, 7));
+            place(w, DANCER, V2::new(7, 2));
+            place(w, BRUTE, V2::new(6, 4));
+            place(w, SKULK, V2::new(7, 6));
+            place(w, ARCHER, V2::new(8, 2));
+            hurt(w, SKULK, 0.5);
+        }
+        s.plan_apply_preset_all(tactic);
+        let allies = s.w.allies.clone();
+        let round = |s: &Session| {
+            let rows: Vec<_> = allies.iter().map(|&a| (round_intent::intent_of(&s.w, a), s.w.round_states.get(&a).and_then(|r| r.target), rows(&s.w, &s.plan, a))).collect();
+            (rows, allies.iter().map(|&a| s.plan.planned_position(&s.w, a)).collect::<Vec<_>>())
+        };
+        for &m in &allies {
+            let before = round(&s);
+            s.plan_apply_preset(m, tactic);
+            assert_eq!(round(&s), before, "{tactic}: drafting member {m} again changed the round");
+        }
+    }
+}
