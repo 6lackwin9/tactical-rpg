@@ -483,6 +483,9 @@ pub struct BattleScreen {
     reghost: std::collections::VecDeque<input::GhostStep>,
     /// ENGINE-58: the frame that shows the change that queued `reghost` has been drawn.
     reghost_drawn: bool,
+    /// ENGINE-59 (BATTLE-FRAME2): the last frame's draw and the last waiting-ghost step, in wall µs, and the frames a
+    /// step has waited for room (`ghost_tick`).
+    ghost_room: (u128, u128, u8),
     /// ENGINE-58: a waiting ghost is being drafted (its own request does not draft the rest).
     drafting: bool,
     /// The round whose planning start drafted the ghosts (GH2 a, GH6).
@@ -661,6 +664,7 @@ impl BattleScreen {
             deferred: Vec::new(),
             reghost: std::collections::VecDeque::new(),
             reghost_drawn: true,
+            ghost_room: (0, input::GHOST_STEP_GUESS_US, 0),
             drafting: false,
             ghosted: 0,
             preview: None,
@@ -1038,7 +1042,9 @@ impl Screen<GameCx> for BattleScreen {
         self.resolve_impacts(cx);
         self.react_start_portraits(cx);
         self.follow_round_banner();
+        let t0 = aegis_core::clock::Instant::wall();
         draw(self, cx, g, mouse, live);
+        self.ghost_room.0 = t0.wall_elapsed().as_micros();
     }
 
     fn leave(&mut self, cx: &mut Cx) {
@@ -1491,6 +1497,8 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn command(&mut self, cx: &Cx, body: &Value) -> Option<Value> {
+        // ENGINE-59: an agent-link request sees every waiting ghost drafted, as a player's does (`send`)
+        self.settle_ghosts(cx);
         // PR7-57 (STATUSVIS1-B): the dev tools' status grant for proof shots (not a battle command: the host never sees it)
         if body["cmd"] == json!("debug_status") {
             return Some(self.debug_status(cx, body));

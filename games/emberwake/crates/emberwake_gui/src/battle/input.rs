@@ -50,6 +50,14 @@ pub(super) enum Deferred {
 /// its draw); a step with nothing to do (a member on manual, a draft that changes nothing) costs far less and shares one.
 const GHOST_FRAME_US: u128 = 1000;
 
+/// ENGINE-59 (BATTLE-FRAME2): a frame starts a waiting-ghost step only while the last draw plus the last step fit in
+/// this much (the frame target is 33 ms; the rest of the frame takes a few). A step that does not fit waits for a
+/// lighter frame, `GHOST_WAIT_MAX` frames at most, so the ghosts always land.
+const GHOST_ROOM_US: u128 = 26_000;
+const GHOST_WAIT_MAX: u8 = 3;
+/// ENGINE-59: the cost guessed for a step before one has been timed (release: 2 to 9 ms).
+pub(super) const GHOST_STEP_GUESS_US: u128 = 6_000;
+
 /// ENGINE-58: a step of the later members' ghosts waiting for the next frames (`BattleScreen::reghost`).
 #[derive(Debug, Clone)]
 pub(super) enum GhostStep {
@@ -601,11 +609,23 @@ impl BattleScreen {
         if !self.reghost_drawn {
             return;
         }
+        // ENGINE-59: a step waits (a few frames at most) while the last draw and the last step would not fit the frame
+        let (draw_us, step_us, waited) = self.ghost_room;
+        if self.reghost.is_empty() {
+            return;
+        }
+        if draw_us + step_us > GHOST_ROOM_US && waited < GHOST_WAIT_MAX {
+            self.ghost_room.2 += 1;
+            return;
+        }
+        self.ghost_room.2 = 0;
         // real time: a scenario's shot clock stands still within a frame
         let t0 = aegis_core::clock::Instant::wall();
         while t0.wall_elapsed().as_micros() < GHOST_FRAME_US {
-            let Some(step) = self.reghost.pop_front() else { return };
+            let Some(step) = self.reghost.pop_front() else { break };
+            let ts = aegis_core::clock::Instant::wall();
             self.ghost_step(cx, step);
+            self.ghost_room.1 = ts.wall_elapsed().as_micros();
         }
     }
 

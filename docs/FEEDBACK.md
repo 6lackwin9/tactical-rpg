@@ -175,8 +175,50 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-56` (`AUDIO-FEEL2`) | Built (tools lane) | `develop` | menus answer by sound by rule (confirm, back, error; `Screen::ui_sound` overrides, the round controls and volume steps keep theirs); a soft map footstep with its own Footsteps volume under Effects (placeholder `map_step.wav`); battle music fades in over 0.4 s (`battle_music_fade_ms`); stings warmed with the battle screen; `audio_feel` gains a confirm, a back and a map step; goldens unchanged. FB-505 |
 | `ENGINE-57` (`FEEL-RELEASE1`) | Built (tools lane) | `develop` | `switch_feel_story`'s release failure: a release build hides the developer surfaces, so New Game skipped the world picker; `dev=1` (dev tools builds only) shows them and every scenario launch passes it; `tools/fc.sh feel` runs every feel and reach scenario in release and prints one table (38 of 39 steps pass; `feel_battle` `battle_block` 51 to 74 ms against 50); goldens unchanged. FB-506 |
 | `ENGINE-58` (`BLOCK-CLICK2`) | Built (tools lane) | `develop` | The block click answers in 21 to 33 ms in release (was 44 to 51): the later members' ghosts are drafted on the frames after the click's answer is drawn, one step a frame, and any request, key or Confirm finishes them first; a same-board test; a game with no window settles its screens before requested frames, so shots stay the same; `feel_battle` block budget 35 ms; goldens unchanged. FB-507 |
+| `ENGINE-59` (`BATTLE-FRAME2`) | Built in part (tools lane) | `develop` | Slow battle frames named: the round's planning start drafts the whole party's ghosts in one tick (31 to 45 ms; deferring them changed 11 shots, so it waits for a call); a queued ghost step on a heavy frame now waits for a frame with room. 5 of 5 release feel runs passed; the container's own stalls are named with options; goldens unchanged. FB-508 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-508: ENGINE-59 BATTLE-FRAME2 built in part; the slow battle frames named, one cause fixed, one needs a call
+
+- **Status**: built in part (tools lane), `develop`. Game GUI (`emberwake_gui` battle input and agent requests); no
+  engine, data or scenario change. **Every golden unchanged**; shots diff clean against `d17386c4` except the known
+  `screens_menus__scene_runner`. This change passed 5 of 5 release `tools/fc.sh feel` runs in a row. **The 10-run target
+  is not proven**: with the logs below, this container misses about 1 run in 3 to 5 on causes the row can't fix. One
+  battle cause needs Design's call. The row stops here after two targeted fixes (feedback rule).
+- **Spec**: `docs/READY.md` row `ENGINE-59` (`BATTLE-FRAME2`).
+- **How it was found**: a temporary log (removed before landing) printed every frame over 30 ms with its parts (input,
+  tick, music, warm slice, draw, and the battle draw's sections). It also printed the thread's CPU time
+  (`/proc/thread-self/schedstat`), context switches and page faults. About 40 `feel_battle` runs and 22
+  `tools/fc.sh feel` runs.
+- **Cause 1, named, not fixed: the round's planning start** drafts every member's tactic ghost in one tick, 31 to 45 ms
+  (33.3 ms logged in `plan_start` alone), then the draw. Round 1's falls just before `battle_plan` is measured
+  (frame 74 to 81 against a window from 97), so it rarely counts. The next round's start falls inside `battle_resolve`
+  when the playback ends early enough. **Tried and taken back**: queueing those ghosts on ENGINE-58's queue made the
+  frames short and ended on the same board (a same-board test passed). But it changed 11 battle shots: the tokens turn
+  and step a few frames later, and the crucible exit hold pick showed no ghosts at all. Both break "what is drawn
+  unchanged". **Options** (Design's call):
+  - (a) Queue them anyway and accept that the ghosts land over the first 100 to 200 ms of a round, re-recording the
+    11 shots (and finding the hold-pick case first).
+  - (b) Halve the cost in the same frame: the start drafts each member twice, once on a copy to check buffs it would drop
+    and once in the host. Skipping the copy when the member has no buff to drop keeps one draft each.
+  - (c) Draft the copies on a worker thread while the round banner shows, and apply them in order on the main thread.
+  - Recommendation: (b), then measure again.
+- **Cause 2, fixed: a queued ghost step on a heavy frame** (ENGINE-58's block queue): a step costs 2 to 9 ms most of the
+  time but 15 to 20 ms in this container's slow spells, so a step plus a 20 ms draw reached 35 to 47 ms (`battle_plan`,
+  `battle_block`). **Fix**: a step starts only while the last draw plus the last step fit in 26 ms; one that does not
+  fit waits for a lighter frame, 3 frames at most, so the ghosts always land. Also: an agent-link request now finishes
+  the waiting ghosts first, as a player's request does (a scenario's `link` step could otherwise run past them).
+- **Misses that are not the game's code**:
+  - Container stalls: a 34 to 53 ms battle draw that spent only 18 to 21 ms on the CPU with no context switch. The thread
+    was stopped by the host; the guest sees no steal time.
+  - One audio underrun in `switch_feel` in 2 runs of 10 (budget 0), likely the same stall starving the virtual device.
+  - The first map frame (75 to 100 ms at `region_map` frame 4, about half of it off the CPU), outside any measured step.
+- **Options for those** (Design's call): (d) the feel table marks a frame with much less CPU time than wall time as
+  `stall`, not a miss (`/proc/thread-self/schedstat` on Linux), so the target reads "no miss of the code's own";
+  (e) a follow-up row cuts the battle draw (16 to 24 ms, the strip and the board the largest parts) to leave room;
+  (f) release feel runs on the PC. Recommendation: (d).
+- **Docs delta**: none.
 
 ### FB-507: ENGINE-58 BLOCK-CLICK2 built; the block click answers in 21 to 33 ms in release, later ghosts follow on the next frames
 
