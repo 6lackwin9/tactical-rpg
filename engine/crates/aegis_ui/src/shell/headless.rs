@@ -15,7 +15,7 @@
 //! none of which the web build has. `Headless` and its argument parsing stay on every target; on the web `run` refuses.
 
 use super::Options;
-use crate::screen::{Context, Cx, Screen};
+use crate::screen::{Context, Cx, Key, Screen};
 use aegis_core::clock::Duration;
 use anyhow::{bail, Context as _, Result};
 #[cfg(not(target_arch = "wasm32"))]
@@ -129,6 +129,15 @@ impl Headless {
         };
         Ok(Some(Self { size, fps, dpr, idle: Duration::from_secs(idle_s), stepped }))
     }
+}
+
+/// ENGINE-49: what a `feel` replay with `motion` records: its start (the run's clock), every frame's motion and every
+/// input.
+#[cfg(not(target_arch = "wasm32"))]
+struct MotionRec {
+    t0: Instant,
+    frames: Vec<crate::walkfeel::Frame>,
+    marks: Vec<crate::walkfeel::Mark>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -295,26 +304,95 @@ impl<G: Context> Loop<G> {
         self.shell.feel_launch = true;
         self.shell.feel.on = true;
         let _ = self.shell.feel.take();
+        // ENGINE-49 (WALK-FEEL1): `step_ms` sets the shot clock's frame step for this replay; `motion` reads the top
+        // screen's `motion` after every frame for the movement report (`crate::walkfeel`)
+        let every = self.every;
+        if let Some(ms) = body["step_ms"].as_f64() {
+            if !(1.0..=200.0).contains(&ms) || !self.stepped {
+                return json!({"ok": false, "error": "step_ms is from 1 to 200, with the shot clock on (a scenario run)"});
+            }
+            self.every = Duration::from_secs_f64(ms / 1000.0);
+        }
+        let mut rec = (body["motion"] == json!(true)).then(|| MotionRec { t0: Instant::now(), frames: Vec::new(), marks: Vec::new() });
+        // where things stand before the first input (the last frame drawn)
+        if let Some(r) = rec.as_mut() {
+            r.frames.extend(crate::walkfeel::Frame::of(0.0, &self.shell.stack.last().unwrap().motion()));
+        }
+        let mut held: Vec<Key> = Vec::new();
         let mut done = 0u64;
         let mut failed = None;
         'script: for (i, step) in script.iter().enumerate() {
             let times = step["times"].as_u64().unwrap_or(1).clamp(1, FEEL_TIMES_MAX);
-            let (cmd, kind) = if let Some(k) = step["key"].as_str() {
-                (json!({"cmd": "key", "key": k}), format!("key {k}"))
+            let dir_key = |name: Option<&str>| name.and_then(Key::parse).filter(|k| k.dir().is_some());
+            let pad_key = |name: Option<&str>, shell: &mut Shell<G>| name.and_then(crate::controls::Pad::parse).map(|p| shell.controls().pad(p)).filter(|k| k.dir().is_some());
+            // a held direction: pressed (as a window's key down, kept held) or let go
+            let hold = match (step["press"].as_str(), step["release"].as_str(), step["pad_press"].as_str(), step["pad_release"].as_str()) {
+                (Some(n), _, _, _) => Some(("press", n, dir_key(Some(n)), true)),
+                (_, Some(n), _, _) => Some(("release", n, dir_key(Some(n)), false)),
+                (_, _, Some(n), _) => Some(("pad_press", n, pad_key(Some(n), &mut self.shell), true)),
+                (_, _, _, Some(n)) => Some(("pad_release", n, pad_key(Some(n), &mut self.shell), false)),
+                _ => None,
+            };
+            if let Some((kind, name, k, down)) = hold {
+                let Some(k) = k else {
+                    failed = Some(format!("script[{i}] {kind}: '{name}' is no movement key or d-pad direction"));
+                    break;
+                };
+                let before = !held.is_empty();
+                held.retain(|h| *h != k);
+                if down {
+                    held.push(k);
+                }
+                self.shell.cx.held.dir = held.last().and_then(|h| h.dir());
+                let what = format!("{kind} {name}");
+                self.mark(&mut rec, kind, &what, k.dir(), before, !held.is_empty());
+                if down {
+                    self.shell.feel_input(&what);
+                    self.shell.key(k);
+                    self.shell.feel_state();
+                }
+                done += 1;
+                for _ in 0..=gap {
+                    self.feel_draw(&mut rec);
+                }
+                continue;
+            }
+            if let Some(ms) = step["wait_ms"].as_f64() {
+                let until = Instant::now() + Duration::from_secs_f64(ms.clamp(0.0, 60_000.0) / 1000.0);
+                let mut n = 0;
+                while Instant::now() < until && n < 60 * 60 {
+                    self.feel_draw(&mut rec);
+                    n += 1;
+                }
+                continue;
+            }
+            if let Some(ms) = step["spike_ms"].as_f64() {
+                // a frame that takes `ms` (the shot clock moves that much more before it)
+                let held_now = !held.is_empty();
+                self.mark(&mut rec, "spike", &format!("spike {ms} ms"), None, held_now, held_now);
+                if self.stepped {
+                    aegis_core::clock::advance(Duration::from_secs_f64(ms.clamp(0.0, 2000.0) / 1000.0).saturating_sub(self.every));
+                }
+                self.feel_draw(&mut rec);
+                continue;
+            }
+            let (cmd, kind, mark) = if let Some(k) = step["key"].as_str() {
+                (json!({"cmd": "key", "key": k}), format!("key {k}"), ("key", Key::parse(k).and_then(|k| k.dir())))
             } else if let Some(id) = step["click"].as_str() {
-                (json!({"cmd": "click", "id": id}), format!("click {id}"))
+                (json!({"cmd": "click", "id": id}), format!("click {id}"), ("click", None))
             } else if let Some(b) = step["pad"].as_str() {
-                (json!({"cmd": "pad", "button": b}), format!("pad {b}"))
+                (json!({"cmd": "pad", "button": b}), format!("pad {b}"), ("pad", pad_key(Some(b), &mut self.shell).and_then(|k| k.dir())))
             } else if let Some(n) = step["frames"].as_u64() {
                 for _ in 0..n.min(FRAMES_MAX) * times {
-                    self.draw();
+                    self.feel_draw(&mut rec);
                 }
                 continue;
             } else {
-                failed = Some(format!("script[{i}]: one of key, click, pad or frames"));
+                failed = Some(format!("script[{i}]: one of key, click, pad, frames, press, release, pad_press, pad_release, wait_ms or spike_ms"));
                 break;
             };
             for _ in 0..times {
+                self.mark(&mut rec, mark.0, &kind, mark.1, !held.is_empty(), !held.is_empty());
                 self.shell.feel_input(&kind);
                 let reply = self.shell.bridge(&cmd);
                 self.shell.feel_state();
@@ -324,10 +402,12 @@ impl<G: Context> Loop<G> {
                 }
                 done += 1;
                 for _ in 0..=gap {
-                    self.draw();
+                    self.feel_draw(&mut rec);
                 }
             }
         }
+        self.shell.cx.held.dir = None;
+        self.every = every;
         let (samples, frames) = self.shell.feel.take();
         self.shell.feel_launch = was_launch;
         self.shell.feel.on = was_on;
@@ -339,7 +419,29 @@ impl<G: Context> Loop<G> {
         out["canvas"] = json!([self.shell.gfx.canvas.w, self.shell.gfx.canvas.h]);
         out["build"] = json!(if cfg!(debug_assertions) { "dev" } else { "release" });
         out["frame"] = json!(self.shell.frames);
+        if let Some(r) = rec {
+            out["motion"] = crate::walkfeel::report(&r.frames, &r.marks, body["step_ms"].as_f64().unwrap_or(every.as_secs_f64() * 1000.0));
+        }
         out
+    }
+
+    /// ENGINE-49: a frame of a `feel` replay, and the top screen's `motion` after it when the replay records it.
+    fn feel_draw(&mut self, rec: &mut Option<MotionRec>) {
+        self.draw();
+        if let Some(r) = rec.as_mut() {
+            let t = Instant::now().saturating_duration_since(r.t0).as_secs_f64() * 1000.0;
+            if let Some(f) = crate::walkfeel::Frame::of(t, &self.shell.stack.last().unwrap().motion()) {
+                r.frames.push(f);
+            }
+        }
+    }
+
+    /// ENGINE-49: notes an input of a `feel` replay for the movement report.
+    fn mark(&self, rec: &mut Option<MotionRec>, kind: &str, what: &str, dir: Option<(i64, i64)>, held_before: bool, held_after: bool) {
+        if let Some(r) = rec.as_mut() {
+            let t = Instant::now().saturating_duration_since(r.t0).as_secs_f64() * 1000.0;
+            r.marks.push(crate::walkfeel::Mark { t, kind: kind.into(), what: what.into(), dir, held_before, held_after });
+        }
     }
 
     /// ENGINE-48 (INPUT-REACH1): `{"cmd": "reach", "back": b}`: the top screen's reach report (`crate::reach::report`:

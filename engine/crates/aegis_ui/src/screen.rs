@@ -476,6 +476,12 @@ pub trait Screen<G> {
     fn capture(&mut self, _cx: &mut Cx<G>, _input: crate::controls::Input) -> bool {
         false
     }
+    /// ENGINE-49 (WALK-FEEL1): what this screen moves, as of the last frame, for a `feel` replay's movement report
+    /// (`crate::walkfeel::Frame::of`): `{"cell": [x, y], "drawn": [x, y] (in cells, between two while it glides),
+    /// "cam": [x, y], "target": [x, y] (the camera and where it wants to be, physical px), "tile": px}`. Null: nothing.
+    fn motion(&self) -> Value {
+        Value::Null
+    }
     /// PR7-92 (INPUT-REACH2): the id prefixes of a group of widgets that is one keyboard stop (a board's tiles and the
     /// tokens on them): Tab and Shift+Tab land on the group once, and while the focus is in it the arrows move it among
     /// the group's widgets only (`focus::step_grouped`). Empty: no group.

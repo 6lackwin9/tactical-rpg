@@ -178,6 +178,9 @@ pub struct RegionMap {
     bunk_walls: Vec<Rect>,
     /// BUNKS-UPGRADE-PROPS1: the props holding a bunk's place drawn last frame (`{prop, until_bunk, file}`).
     bunk_held: Vec<Value>,
+    /// ENGINE-49 (WALK-FEEL1): the last frame's party cell, drawn place, camera and the camera's wanted place
+    /// (`Screen::motion`); null with no map drawn.
+    motion: Value,
     /// FOOTLOCKER1 (`PR7-51`): the footlockers drawn last frame (member, the tile it stands on, its logical rect, its
     /// file), and the member whose footlocker is open (their loadout is open over the map; "" none: it closes when the
     /// map is the top screen again).
@@ -208,6 +211,10 @@ struct CamShot {
     party: (i32, i32),
     scale: f32,
 }
+
+/// ENGINE-49 (WALK-FEEL1): how far back a click walk's first step may be dated (the frame before, at 60 frames a second
+/// or more; after a longer frame it is dated now, as before).
+const CLICK_STEP_BACK: std::time::Duration = std::time::Duration::from_millis(25);
 
 /// The frames `state.camera.trail` keeps.
 const CAM_TRAIL: usize = 240;
@@ -595,6 +602,7 @@ impl RegionMap {
             bunks_drawn: Vec::new(),
             bunk_walls: Vec::new(),
             bunk_held: Vec::new(),
+            motion: Value::Null,
             lockers: Vec::new(),
             locker_open: String::new(),
             locker_beat: None,
@@ -799,7 +807,7 @@ impl RegionMap {
 
     /// A frame's tick at wall time `now` (the frame's clock: the glide and the camera read it in `draw`).
     pub(crate) fn tick_at(&mut self, cx: &mut Cx, now: Instant) {
-        self.frame_at = Some(now);
+        let prev = self.frame_at.replace(now);
         // PLAYUI1-R: the sprites play on their own clock at the animation speed setting (as the battle tokens)
         let speed = mapview::anim_speed(&cx.settings.v);
         // WALKRUN1: Shift held runs; the pace of a step is set as it is taken, so a release counts from the next step
@@ -872,7 +880,14 @@ impl RegionMap {
         if self.walk.is_empty() || self.modal() || now < self.next_walk {
             return;
         }
-        let at = self.step_time(now);
+        // ENGINE-49 (WALK-FEEL1): a walk ordered while the party stood (a click since the last frame) takes its first step
+        // as of that frame, as a key press does, so the next frame already shows it moving (it was a frame late). Only
+        // from a frame just before (`CLICK_STEP_BACK`): after a long frame the step would be dated far back and the walk
+        // would run to catch up.
+        let at = match prev {
+            Some(p) if p >= self.next_walk && p < now && now.saturating_duration_since(p) <= CLICK_STEP_BACK => p,
+            _ => self.step_time(now),
+        };
         let dir = self.walk.remove(0);
         self.plan_step(cx, at, dir);
         if !self.step(cx, dir) {
@@ -1194,6 +1209,10 @@ impl Screen<GameCx> for RegionMap {
     }
     fn id(&self) -> &'static str {
         "region_map"
+    }
+    /// ENGINE-49 (WALK-FEEL1): the party's cell, where it is drawn and the camera, for a `feel` replay's movement report.
+    fn motion(&self) -> Value {
+        self.motion.clone()
     }
 
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
@@ -1583,6 +1602,7 @@ impl Screen<GameCx> for RegionMap {
             let party_view = PView { ox: base_view.ox + party_shift.0, oy: base_view.oy + party_shift.1, ..base_view };
             let shot = CamShot { px: camera, party: (party_view.x(pr.x as f32), party_view.y(pr.y as f32)), scale };
             self.cam = shot;
+            self.motion = json!({"cell": [gs.position.0, gs.position.1], "drawn": [drawn.0, drawn.1], "cam": [camera.0, camera.1], "target": [target.0, target.1], "tile": ts as f32 * scale});
             if let Some(now) = self.frame_at.filter(|_| cx.settings.v["camera_trail"] == json!(true)) {
                 self.cam_trail.push_back((now.saturating_duration_since(self.opened_at).as_secs_f64(), shot));
                 if self.cam_trail.len() > CAM_TRAIL {
@@ -4632,6 +4652,41 @@ mod sprite_tests {
         let view = drawn_view(&mut cx, &s(json::dict(&sp), "body"), "idle", "up");
         let want = if view == "side" { "idle".to_string() } else { format!("idle_{view}") };
         assert_eq!((sp["clip"].clone(), sp["view"].clone()), (json!(want), json!(view)), "standing still");
+    }
+
+    /// ENGINE-49 (WALK-FEEL1): a click walk ordered while the party stands shows the party moving on the very next
+    /// frame, as a key press does (its first step is taken as of the frame the click came after; it showed a frame late).
+    #[test]
+    fn a_click_walk_moves_on_the_next_frame() {
+        let (mut cx, mut g) = (art_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        let d = cx.data.clone();
+        let start = cx.gs().clone();
+        let loc = explore::location(&d, &start);
+        let t = explore::template_of(&d, loc).clone();
+        let t0 = Instant::now();
+        map.tick_at(&mut cx, t0);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let far = explore::markers_of(loc).into_iter().map(|m| s(&m, "id")).find(|id| map.path_to(&cx, explore::marker_pos(&t, &explore::markers_of(loc).into_iter().find(|m| s(m, "id") == *id).unwrap(), start.explore_int("loc_steps")), true).is_some_and(|p| p.len() >= 3)).expect("a marker three steps away or more");
+        let before = map.motion["drawn"].clone();
+        let far_id = far.clone();
+        map.act(&mut cx, RAct::Marker(far));
+        assert!(!map.walk.is_empty(), "a walk is ordered");
+        let next = t0 + Duration::from_millis(17);
+        map.tick_at(&mut cx, next);
+        assert_eq!(map.last_step, Some(t0), "the first step is dated at the frame the click came after");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_ne!(map.motion["drawn"], before, "the next frame shows the party moving");
+        assert_eq!(map.step_at, None, "the glide took the step");
+        // after a long frame the first step is dated now (dated back, the walk would run to catch up)
+        let (mut cx, mut g) = (art_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        map.tick_at(&mut cx, t0);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        map.act(&mut cx, RAct::Marker(far_id.clone()));
+        let late = t0 + Duration::from_millis(300);
+        map.tick_at(&mut cx, late);
+        assert_ne!(map.last_step, Some(t0), "a long frame: not dated back to the frame before");
     }
 
     /// WALK2: a held movement key steps at once on the press (no key-repeat delay), chains a step every `step`

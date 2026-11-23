@@ -165,8 +165,73 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-47` (`GHOST-SETTLE1`) | Built (tools lane) | `develop` | The guest's ghost was not flipping (a draft settles on its own board; test added); `ally_moves` kept while nothing it reads changes (a run that fixes a step's tile is not kept, so plans stay bit for bit); `strip.block1` 43 to 46 ms against a 50 ms `feel` budget; goldens unchanged. FB-487 |
 | `ENGINE-48` (`INPUT-REACH1`) | Built (tools lane) | `develop` | Scenario step `reach` (keys and pad reach, focus shown, back) in the gate on `reach_menus`; every screen walked; fixed a cutscene focus ring off the canvas and dead arrows on cutscenes and in hub talk, board and shop; party skill and gear slots mouse only, for Design; goldens unchanged. FB-489 |
 | `PR7-92` (`INPUT-REACH2`) | Built (tools lane) | `develop` | Skill, gear, pouch and loadout slots pick (Enter), place or swap (Enter), drop the pick (Esc) and empty (Space, pad X) by key, hint line names the keys; the battle board is one Tab stop with an arrow tile cursor (ring 121 to 14); `reach_party` and `reach_battle` gate scenarios with `fail` on; goldens unchanged. FB-491 |
+| `ENGINE-49` (`WALK-FEEL1`) | Built (tools lane) | `develop` | `feel` measures movement (held keys and d-pad, long frames, `motion`: first move, beat, overshoot, turns, camera); hub and Cages map meet every target; click to walk moved a frame late (fixed); `walk_feel` gate scenario with budgets; six feel choices for Design; goldens unchanged. FB-493 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-493: ENGINE-49 WALK-FEEL1 built; walking measured on two maps, every target met after one fix, feel choices listed
+
+- **Status**: built (tools lane), `develop`. Engine (`aegis_ui`: new `walkfeel`, `Screen::motion`, the headless `feel`
+  replay; `aegis_cli`: the `feel` step), game GUI (`emberwake_gui` region map) and one game scenario; no data. **Every
+  golden unchanged**. Shots diff: see the last line.
+- **Spec**: `docs/READY.md` row `ENGINE-49` (`WALK-FEEL1`).
+- **What landed (the measure)**: the `feel` step takes held keys and d-pad directions (`press`, `release`, `pad_press`,
+  `pad_release`, as a window's key down and up), `wait_ms`, `spike_ms` (one long frame), `step_ms` (the shot clock's
+  frame step: 16.667 for 60 frames a second) and `motion` (the top screen's `Screen::motion` read after every frame:
+  the mover's cell, where it is drawn, the camera and where it wants to be). `aegis_ui::walkfeel::report` reads first move,
+  cadence, overshoot, turns, long frames and camera lag and jumps; movement budgets fail the step. Documented in
+  `engine/docs/authoring/scenarios.md` ("Input times"). Tests: `aegis_ui` `walkfeel` (4 unit tests); `aegis_cli`
+  `tests/scenario.rs` `a_feel_step_takes_movement_inputs_and_budgets`.
+- **Gate**: `games/emberwake/scenarios/walk_feel.json` on the Sluice Undercroft (the hub, save `hub_start`), with budgets
+  first move 17 ms, overshoot 0, cadence spread 17 ms, stutters 0, camera lag 1 tile, camera jump 0.5 tile a frame.
+- **Report** (release build, no window, 60 frames a second on the shot clock, so the step times are exact; the hub and
+  the Crossroads Cages map from `cages_start`; scenarios, every `feel_*.json` and shots in
+  `/mnt/project-files/build-tools/walk_feel/`):
+
+  | Measure | Target | Hub | Cages map |
+  | --- | --- | --- | --- |
+  | (a) Press to first visible move: keys, d-pad | next frame | 16.7 ms (1 frame) | 16.7 ms |
+  | (a) Same, a tap (press and let go) | next frame | 16.7 ms | 16.7 ms |
+  | (b) Beat while held | even | 200 ms, spread one frame (183 to 200) | same |
+  | (b) Across a 250 ms frame | even | late step at 250 ms, then back on the beat (383, 583) | same |
+  | (c) Steps after release | 0 | 0 in every release | 0 |
+  | (d) Turn mid-walk (keys, d-pad) | answers, no drop | steps at once (16.7 ms); none dropped | same |
+  | (d) Two keys at once (up, then left a frame later) | - | up steps, left steps a frame later; letting left go resumes up on the beat | same |
+  | (e) Click to walk: first move | next frame | was 33 ms (2 frames), **now 16.7 ms** | (keys only) |
+  | (e) A second click mid-walk | no stall | the walk turns at the next step (83 ms, the step in progress), on the beat | - |
+  | (f) Camera lag | within a tile | 0 tiles (locked on the party) | 0 tiles |
+  | (f) Camera jump in a frame | none | 0.09 tile a frame at most, at the edges too | 0.13 tile |
+  | Input to drawn frame (feel probe) | - | 19 to 22 ms | 12 to 14 ms |
+  | Frames over 33 ms | - | 1 a run (p50 18.6 ms, worst 39 ms) | 1 (p50 11.8 ms, worst 80 ms) |
+
+- **Fix (no design call)**: **click to walk showed its first move a frame late**. A click walk took its first step on the
+  next frame's tick, dated at that frame, so that frame drew the party not yet moving; a key press steps dated at the
+  frame it came after. Now a walk ordered while the party stands takes its first step as of the frame the click came
+  after (`RegionMap::tick_at`), when that frame is at most `CLICK_STEP_BACK` (25 ms) back; after a longer frame it is
+  dated now as before (a first try with no bound dated it far back after a long frame and the walk ran to catch up: the
+  shots diff caught it in `sweep_telegraph`). Test: `emberwake_gui`
+  `region::sprite_tests::a_click_walk_moves_on_the_next_frame` (fails without the fix; also covers the long frame).
+  A key press is dated at the last frame with no such bound (`RegionMap::key`); after a long hitch a held walk could take
+  one quick catch-up step. Not changed here (the walk tests run on their own clock there); a candidate if the PC shows it.
+- **For Design (feel choices, nothing changed)**:
+  1. **Walk speed**: one tile every 200 ms (5 tiles a second); Shift runs (WALKRUN1). Keep, or another pace?
+  2. **No acceleration**: full speed from the first step and a dead stop on release (no ease in or out of a walk).
+     Keep, or a short ease?
+  3. **A turn steps at once**: a new direction pressed mid-walk steps on the next frame, not after the step in progress,
+     so a turn makes a short step (33 ms after the last one); two keys pressed together step twice within a frame or
+     two. Keep (snappy), or queue the turn to the end of the step in progress (even beat)?
+  4. **Hold to run**: running is Shift held; the pad has no run button. Give the pad one (a shoulder or a trigger), or a
+     run after holding a direction a while?
+  5. **Four directions only**: two keys held walk the latest pressed, no diagonal steps.
+  6. **The camera is locked on the party** (no follow lag or look-ahead) and stops at the map's edges. Keep, or a soft
+     follow?
+- **Not in this row**: the hub's frames run about 18.6 ms at p50 in this container's software draw (over 16.7 ms for 60
+  a second); one frame a run over 33 ms on each map. A frame-time row could follow if the PC shows the same.
+- **Docs delta**: `engine/README.md` "No window (HEADLESS1)": the `feel` link request also takes `press` / `release` /
+  `pad_press` / `pad_release` / `wait_ms` / `spike_ms`, `step_ms` and `motion` (ENGINE-49), and `aegis_ui::walkfeel`;
+  the screen trait's list: `Screen::motion`. `docs/STRUCTURE.md`: none.
+- **Shots diff** (every scenario, base `fd88cc64`): 129 shots, the one difference the Scene Runner's data folder path (the
+  base ran from a scratch worktree).
 
 ### FB-491: PR7-92 INPUT-REACH2 built; slots pick, place and empty by key, the battle board one Tab stop
 

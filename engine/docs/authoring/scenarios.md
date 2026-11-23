@@ -71,7 +71,7 @@ An unknown key or step is a problem, not a thing ignored.
 | `shot` | `name`, `max_w` = 1920, `golden`, `t` = 0 | Screenshot into the bundle, once the frames after the last change are drawn. A blank frame fails the step. `golden`: compared with its baseline (below). `t`: no window only, seconds (0 to 60) the top screen has been open first, on the shot clock (below): a screen that fades in takes the time of its fade |
 | `clip` | `name`, `frames` = 30, `every_ms` = 66, `max_w` = 1280 | No window only. A numbered sequence, `<name>/frame_0001.png` on: at most 120 frames, 10 to 2000 ms apart, 15 s in all |
 | `perf` | `name`, `frames` = 300, `warm` = 60, `budget` | No window only. Frame times (ENGINE-2): see "Frame times" |
-| `feel` | `name`, `script`, `gap` = 2, `budget` | No window only. Input times (ENGINE-45): see "Input times" |
+| `feel` | `name`, `script`, `gap` = 2, `budget`, `step_ms`, `motion` = false | No window only. Input times (ENGINE-45) and movement (ENGINE-49): see "Input times" |
 | `reach` | `name`, `back` = false, `fail` = false, `allow` = [] | No window only. What keys and a pad reach (ENGINE-48): see "Input reach" |
 | `pause` | `ms` | Time passes, for a picture at a moment of an animation, with a look at the game each second; with no window, that much game time on the shot clock, drawn at once. To wait for a result, use `wait` |
 | `audit` | `scales`, `fail` = all of `cut`, `edge`, `overlap`, `spill` | The text audit per text size; a kind in `fail` found fails the step |
@@ -163,6 +163,21 @@ input, `flagged_inputs` (input-to-present over 100 ms) and `frames_over` (frames
 (the worst input-to-present) and `frame_ms` (the worst frame); one over it fails the step. In a dev build (the gate's) each
 budget counts 2.5 times (`FEEL_DEV_ALLOWANCE`, ENGINE-46): a dev build draws about twice as slow, so the gate catches a gross
 slip while the release run holds the real bar. A refused input stops the step with its place.
+
+Movement (ENGINE-49 WALK-FEEL1): the script also takes `{"press": key}` and `{"release": key}` (a movement key held down
+and let go, as a window's key down and up: `Held::dir` follows the latest held), `{"pad_press": button}` and
+`{"pad_release": button}` (a d-pad direction the same way), `{"wait_ms": n}` (frames drawn for n ms of the run's clock,
+1 to 60000) and `{"spike_ms": n}` (one frame that takes n ms, 1 to 2000). `step_ms` (1 to 200) sets the shot clock's frame
+step for the replay (16.667 for 60 frames a second). With `motion` true the top screen's `Screen::motion` is read after
+every frame and the reply's `motion` (`aegis_ui::walkfeel::report`) gives, per input, `to_move_ms` (to the first frame the
+mover is drawn elsewhere) and `to_step_ms` (to its first new cell), a turn's `turn_ms` and `turn_gap_ms` (a press while
+another direction is held), `after_release_steps`, a long frame's `next_steps_ms`; and over the run `first_move_ms` (the
+worst first move; a press that moves nothing, into a wall, counts under `still`), `cadence_ms` and `cadence_spread_ms`
+(the gaps between steps with no input between them; the stretch after a long frame is read apart), `overshoot_steps`,
+`stutters` (a turn later than a usual gap allows while walking), `camera_lag_tiles` (the camera's distance from where it
+wants to be) and `camera_jump_tiles` (its largest move in a frame, per frame of `step_ms`), and `path` (each step's time
+and cell). `budget` takes each of `first_move_ms`, `overshoot_steps`, `cadence_spread_ms`, `stutters`,
+`camera_lag_tiles` and `camera_jump_tiles`; one over fails the step, as does a screen that reports no motion.
 
 With no window nothing is presented, so a frame is done once drawn; a window adds the copy to the GPU and the present (and
 vsync's wait). The same numbers come from a real window with `--feel` (or `feel=1`) on the game's command line, or the

@@ -74,8 +74,25 @@ fn a_feel_budget_stretches_in_a_dev_build() {
 #[test]
 fn a_feel_step_parses_its_script_and_budget() {
     let s = parse("x", &minimal(json!([{"step": "feel", "name": "hub", "script": [{"key": "right", "times": 4}, {"click": "a"}, {"pad": "south"}, {"frames": 3}], "budget": {"input_ms": 100, "frame_ms": 33}}]))).unwrap();
-    let Step::Feel { name, script, gap, input_ms, frame_ms } = &s.steps[0] else { panic!() };
-    assert_eq!((name.as_str(), script.as_array().map(Vec::len), *gap, *input_ms, *frame_ms), ("hub", Some(4), 2, Some(100.0), Some(33.0)));
+    let Step::Feel { name, script, gap, input_ms, frame_ms, motion, .. } = &s.steps[0] else { panic!() };
+    assert_eq!((name.as_str(), script.as_array().map(Vec::len), *gap, *input_ms, *frame_ms, *motion), ("hub", Some(4), 2, Some(100.0), Some(33.0), false));
+}
+
+/// ENGINE-49 (WALK-FEEL1): held keys and d-pad directions, waits and long frames, the frame step, `motion` and its
+/// budgets; a movement budget needs `motion`, and each over its budget names itself.
+#[test]
+fn a_feel_step_takes_movement_inputs_and_budgets() {
+    let script = json!([{"press": "right"}, {"wait_ms": 500}, {"spike_ms": 250}, {"release": "right"}, {"pad_press": "dpad_up"}, {"pad_release": "dpad_up"}]);
+    let s = parse("x", &minimal(json!([{"step": "feel", "name": "walk", "step_ms": 16.667, "motion": true, "script": script, "budget": {"first_move_ms": 17, "overshoot_steps": 0}}]))).unwrap();
+    let Step::Feel { step_ms, motion, motion_budget, .. } = &s.steps[0] else { panic!() };
+    assert_eq!((*step_ms, *motion), (Some(16.667), true));
+    assert_eq!(motion_budget["overshoot_steps"], json!(0));
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "script": [{"press": "right"}], "budget": {"overshoot_steps": 0}}])));
+    assert!(got.contains("needs 'motion' true"), "{got}");
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "step_ms": 500, "script": [{"wait_ms": 0}]}])));
+    assert!(got.contains("'step_ms' is a number of ms from 1 to 200") && got.contains("'wait_ms'"), "{got}");
+    let report = json!({"first_move_ms": 33.3, "overshoot_steps": 0, "camera_lag_tiles": 0.0});
+    assert_eq!(scenario::motion_misses(&report, &json!({"first_move_ms": 17, "overshoot_steps": 0})), ["first_move_ms 33.3 over 17"]);
 }
 
 #[test]

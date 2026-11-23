@@ -61,6 +61,7 @@ pub mod tilemap;
 pub mod timeline;
 pub mod tuning;
 pub mod ui;
+pub mod walkfeel;
 pub mod window;
 pub mod world_camera;
 
