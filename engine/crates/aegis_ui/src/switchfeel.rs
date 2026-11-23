@@ -50,6 +50,9 @@ pub struct Switch {
     /// The screen it is meant to reach (the script item's `to`): it settles on that screen's first quick frame and is
     /// followed no further (a screen opening after it on its own, a next fight, is not part of it). None: the last.
     pub to: Option<String>,
+    /// A frame of the new screen this quick counts as settled: `SETTLED_FRAME_MS`, times the dev build's allowance in a
+    /// dev build (ENGINE-52: its frames take about twice as long, so few came under 33 ms).
+    pub settled_frame_ms: f64,
 }
 
 impl Switch {
@@ -58,15 +61,15 @@ impl Switch {
         self.frames.iter().position(|f| (f.top.as_str(), f.depth) != (self.from.0.as_str(), self.from.1))
     }
 
-    /// The first frame of the last screen it came to drawn in a frame's time.
+    /// The first frame of the last screen it came to drawn in a frame's time (`settled_frame_ms`).
     pub fn settled(&self) -> Option<usize> {
         self.first()?;
         if let Some(to) = &self.to {
-            return self.frames.iter().position(|f| &f.top == to && f.wall_ms <= SETTLED_FRAME_MS);
+            return self.frames.iter().position(|f| &f.top == to && f.wall_ms <= self.settled_frame_ms);
         }
         let at = |i: usize| (self.frames[i].top.as_str(), self.frames[i].depth);
         let last = (1..self.frames.len()).rev().find(|&i| at(i) != at(i - 1)).unwrap_or(0);
-        (last..self.frames.len()).find(|&i| self.frames[i].wall_ms <= SETTLED_FRAME_MS && at(i) != (self.from.0.as_str(), self.from.1))
+        (last..self.frames.len()).find(|&i| self.frames[i].wall_ms <= self.settled_frame_ms && at(i) != (self.from.0.as_str(), self.from.1))
     }
 
     /// Whether the replay can stop following it: settled and quiet `QUIET_FRAMES` since (settled on its `to`: at once),
@@ -174,7 +177,7 @@ mod tests {
     }
 
     fn switch(handler: f64, frames: Vec<Frame>, budget: Option<f64>) -> Switch {
-        Switch { what: "click go".into(), handler_ms: handler, from: ("a".into(), 1), from_transition: None, frames, budget_ms: budget, to: None }
+        Switch { what: "click go".into(), handler_ms: handler, from: ("a".into(), 1), from_transition: None, frames, budget_ms: budget, to: None, settled_frame_ms: SETTLED_FRAME_MS }
     }
 
     #[test]
@@ -241,6 +244,14 @@ mod tests {
         assert_eq!((row["to"].clone(), row["chain"].clone()), (json!(["map", 1]), json!([["results", 3], ["map", 1]])));
         sw.to = None;
         assert_eq!(sw.settled(), Some(5), "without it the fight is where it ends");
+    }
+
+    #[test]
+    fn a_dev_build_settles_on_its_stretched_frame() {
+        let frames = vec![frame(100.0, "b", 1, None), frame(45.0, "b", 1, None), frame(45.0, "b", 1, None)];
+        assert_eq!(switch(1.0, frames.clone(), None).settled(), None, "no frame under 33 ms");
+        let dev = Switch { settled_frame_ms: SETTLED_FRAME_MS * DEV_ALLOWANCE, ..switch(1.0, frames, None) };
+        assert_eq!(dev.settled(), Some(1));
     }
 
     #[test]

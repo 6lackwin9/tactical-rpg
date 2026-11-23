@@ -24,7 +24,7 @@ use rpgkit_data::ZoneDef;
 use serde_json::Value;
 
 mod composed;
-pub use composed::terrain_dirs;
+pub use composed::{compose_board, terrain_dirs};
 
 /// DIORAMA5 R6: the grid lines' alpha at rest when Show full grid is on (the tuning's rest alpha is 0).
 pub const FULL_GRID_ALPHA: u8 = 34;

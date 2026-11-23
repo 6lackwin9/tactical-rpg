@@ -168,8 +168,55 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-49` (`WALK-FEEL1`) | Built (tools lane) | `develop` | `feel` measures movement (held keys and d-pad, long frames, `motion`: first move, beat, overshoot, turns, camera); hub and Cages map meet every target; click to walk moved a frame late (fixed); `walk_feel` gate scenario with budgets; six feel choices for Design; goldens unchanged. FB-493 |
 | `ENGINE-50` (`MAP-FRAME1`) | Built (tools lane) | `develop` | the region map's still layers kept and moved with the camera (engine `Painter::scroll_begin`), marker views read once per state: release median 18 to 6.8 ms, worst 51 to 19 ms on the hub; `frame_p50_ms` budget, `walk_feel` holds 16.7 / 33 ms; a key press after a long frame dated at most 25 ms back (`stall_ms` input tests it); shots diff clean; goldens unchanged. FB-495 |
 | `ENGINE-51` (`SWITCH-FEEL1`) | Built (tools lane) | `develop` | every screen switch timed to its first settled frame (`feel` `switch`, `aegis_ui::switchfeel`, `Screen::transition`): all under target in release, no uncovered frame over 100 ms; fixes: double decodes, a fight's sheets decoded side by side, Save/Load warmed, the world map's background read ahead, the ground's noise side by side; gate scenarios `switch_feel`, `switch_feel_story`; goldens unchanged. FB-497 |
+| `ENGINE-52` (`COMPOSE-PAR1`) | Built (tools lane) | `develop` | the ground composer's per-pixel pass and noise in bands of rows on up to 4 threads, the same bytes (tests on two maps, battle boards, an engine job); compose 40 to 26 ms alone; Continue (107 to 124 ms) and a fight with no intro (101 to 135 ms) miss 60 ms, reported with options; `switch_feel` budgets for both 200 ms; goldens unchanged. FB-499 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-499: ENGINE-52 COMPOSE-PAR1 built; the ground composer runs its rows on threads, same pixels; both switches miss 60 ms
+
+- **Status**: built (tools lane), `develop`. Engine (`aegis_ui` ground composer), kit (`rpgkit_ui` stage
+  `compose_board`, for tests), game tests and the `switch_feel` budgets; no data. **Every golden unchanged** (the
+  composer's pinned fixtures too). Shots diff: 128 unchanged, 1 changed
+  (`screens_menus__scene_runner.png`, the known artifact); in that run `switch_feel` itself failed once (the party
+  popup 411 ms against 375 in the dev build while the diff ran two builds' scenarios side by side; alone it is 110 to
+  142 ms), so its budgets are load-sensitive on a shared machine.
+- **Spec**: `docs/READY.md` row `ENGINE-52` (`COMPOSE-PAR1`).
+- **Built**: the per-pixel pass and every noise pass (`add_noise`, so the patchy blobs too) run in bands of whole rows
+  on up to `COMPOSE_THREADS` (4) threads (`ground::by_rows`; one on the web, one for a job under `PAR_MIN_PX` 16 K px a
+  thread). Each pixel or noise row reads the shared fields and writes only itself, so the result is the one pass's
+  bytes. `ground::with_compose_threads(n, ..)` caps it (tests). Tests: `aegis_ui` ground
+  `a_job_is_the_same_on_one_thread_and_many` (three grounds with textures, wear, strays, tone, patchy and patches, square
+  and tilted, 1 / 2 / 4 threads); `emberwake_gui` `a_maps_ground_is_the_same_on_one_thread_and_many` (Warden Keep and
+  Junction 7, both views) and `a_battle_boards_ground_is_the_same_on_one_thread_and_many` (two Sunk Ward fights and the
+  Ashlands courtyard, through the new kit `stage::compose_board`).
+- **Measured** (release, no window, 1280 x 720, on this 4-core container):
+  - The composer alone (Junction 7, 896 x 576 art px): 40 -> 26 ms (noise 12.8 -> 7, the per-pixel pass 14 -> 7; the
+    fields' blur 3, the rims 2.5 and the dressing 5 to 7 stay on one thread). In the game the same compose took 42 to
+    50 ms on 4 threads against 45 to 55 on one: the threads share the cores with the rest of the run.
+  - **Continue to the region map: 107 to 124 ms to settled** (first frame 90 to 107 ms; about 45 of it the ground,
+    about 40 the rest of the map's first draw: the tiles, walls, markers, legend and HUD). **Misses 60 ms.**
+  - **The Sweep from the map, no intro: 101 to 135 ms** (own part; building the fight in the tick about 25 to 35 ms,
+    its first draw 45 to 50). **Misses 60 ms.**
+  - As asked, no cue added. Neither reaches 60 ms without moving most of a map's or fight's first draw off the input
+    frame; listed below.
+- **Still layers on the input frame**: not done. The region map's ground job is made in its first draw (`MapGround::sync`)
+  and the ground is the first thing that draw paints, so starting it earlier on a thread overlaps only the 5 ms before
+  it. A real gain needs the job made on the input (Continue's handler, a fight's start) and the map's other first-draw
+  work moved beside it; that is a restructure of the region map's draw, not this row.
+- **What would reach 60 ms** (for a Design call): (a) the region map's first frame drawn in two: the ground composed on a
+  thread from the input while a plain floor shows one frame (a visible step, so a cue by another name); (b) the composer's
+  remaining serial parts (fields, rims, dressing) on threads: about 10 ms more; (c) a fight built ahead while its marker
+  is approached (the 25 to 35 ms tick). Each is a row of its own.
+- **Budgets**: `switch_feel`'s Continue and The Sweep inputs 400 -> 200 ms (`own_ms`; 500 in the gate's dev build).
+  Release runs of Continue occasionally show its first frame just over 100 ms (101 to 107), which a release run of
+  `switch_feel` counts as an uncovered frame; the gate's dev run allows 250.
+- **Fix found by the gate**: the switch probe counted a frame as settled under 33 ms in a dev build too, where a
+  world map's frames take 34 to 54 ms, so the gate's second run of `switch_feel` read the world map as settling 1.5 s
+  late. A switch now settles on a frame under 33 ms times the dev allowance (82.5 ms) in a dev build
+  (`Switch::settled_frame_ms`); test `a_dev_build_settles_on_its_stretched_frame`; `scenarios.md` says so.
+- **Docs**: the scenarios README row. **Docs delta (engine/README.md)**: in the ground composer's bullet add "its
+  per-pixel pass and noise run in bands of rows on up to 4 threads, the same bytes (ENGINE-52,
+  `ground::with_compose_threads`)".
 
 ### FB-497: ENGINE-51 SWITCH-FEEL1 built; every screen switch timed and within its target, no uncovered frame over 100 ms
 

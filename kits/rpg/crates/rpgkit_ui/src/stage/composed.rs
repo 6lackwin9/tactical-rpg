@@ -240,6 +240,15 @@ pub fn draw(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, look: &ZoneL
     true
 }
 
+/// ENGINE-52 (COMPOSE-PAR1): the composed ground `draw` would show for `grid` in this zone, uncached (None: the board
+/// draws its tiles); for tests and timings.
+pub fn compose_board(art: &mut Art, grid: &Grid, set: &str, look: &ZoneLook) -> Option<Image> {
+    let terrain: Vec<String> = (0..GRID_H).flat_map(|y| (0..GRID_W).map(move |x| V2::new(x, y))).map(|c| grid.terrain_id(c).to_string()).collect();
+    let pic = picture(art, grid, set, look, seed_of(&terrain, set, look))?;
+    let layers = pic.ground_layers();
+    Some(composer::compose(&pic.job(&layers)))
+}
+
 /// R1: whether a cell beside `c` (eight around) holds a block, a cover prop or a prop, where wear gathers.
 fn near_things(grid: &Grid, c: V2) -> bool {
     (-1..=1).flat_map(|dy| (-1..=1).map(move |dx| (dx, dy))).filter(|d| *d != (0, 0)).any(|(dx, dy)| {

@@ -279,28 +279,27 @@ fn add_noise(out: &mut [f32], w: i32, h: i32, seed: u64, ch: u64, step: (i32, i3
         }
     }
     let (wx, wy) = (catmull_rom(sx), catmull_rom(sy));
-    let mut col = vec![0.0f32; nx];
-    for ay in 0..h {
+    // ENGINE-52 (COMPOSE-PAR1): a row reads the lattice and writes only itself, so the rows run in bands (`by_rows`)
+    let mut none: Vec<u8> = vec![0; h.max(0) as usize];
+    by_rows(h.max(0) as usize, &mut out[..(w.max(0) * h.max(0)) as usize], w.max(0) as usize, &mut none, 1, |ay, row, _| {
+        let ay = ay as i32;
         let base = (ay / sy) as usize * nx;
         let k = wy[(ay % sy) as usize];
-        for (c, v) in col.iter_mut().enumerate() {
-            *v = k[0] * lat[base + c] + k[1] * lat[base + nx + c] + k[2] * lat[base + 2 * nx + c] + k[3] * lat[base + 3 * nx + c];
-        }
-        let row = &mut out[(ay * w) as usize..((ay + 1) * w) as usize];
+        let col: Vec<f32> = (0..nx).map(|c| k[0] * lat[base + c] + k[1] * lat[base + nx + c] + k[2] * lat[base + 2 * nx + c] + k[3] * lat[base + 3 * nx + c]).collect();
         for (ax, o) in row.iter_mut().enumerate() {
             let lx = ax / sx as usize;
             let t = wx[ax % sx as usize];
             let v = t[0] * col[lx] + t[1] * col[lx + 1] + t[2] * col[lx + 2] + t[3] * col[lx + 3];
             *o += weight * v.clamp(0.0, 1.0);
         }
-    }
+    });
 }
 
 /// One `add_noise` pass: its channel, lattice step and weight.
 type Pass = (u64, (i32, i32), f32);
 
 /// ENGINE-51 (SWITCH-FEEL1): the `w` x `h` noise fields of `specs`, each its `add_noise` passes in order over zeros (no
-/// passes: an empty field), made side by side on threads (on one on the web): each exactly as made alone.
+/// passes: an empty field); ENGINE-52: one after another, each pass's rows in bands on threads (`add_noise`).
 fn noise_fields<const N: usize>(w: i32, h: i32, seed: u64, specs: [Vec<Pass>; N]) -> [Vec<f32>; N] {
     let make = move |passes: &[Pass]| {
         if passes.is_empty() {
@@ -312,10 +311,60 @@ fn noise_fields<const N: usize>(w: i32, h: i32, seed: u64, specs: [Vec<Pass>; N]
         }
         f
     };
-    if cfg!(target_arch = "wasm32") || specs.iter().filter(|s| !s.is_empty()).count() <= 1 {
-        return specs.map(|s| make(&s));
+    specs.map(|s| make(&s))
+}
+
+/// ENGINE-52 (COMPOSE-PAR1): the threads `by_rows` uses at most.
+pub const COMPOSE_THREADS: usize = 4;
+
+thread_local! {
+    /// ENGINE-52: this thread's cap on `compose_threads` (tests compare one thread with many).
+    static THREAD_CAP: Cell<usize> = const { Cell::new(COMPOSE_THREADS) };
+}
+
+/// ENGINE-52: runs `f` with the composer on at most `n` threads (1: one pass on this thread), then restores the cap.
+pub fn with_compose_threads<R>(n: usize, f: impl FnOnce() -> R) -> R {
+    let was = THREAD_CAP.with(|c| c.replace(n.max(1)));
+    let r = f();
+    THREAD_CAP.with(|c| c.set(was));
+    r
+}
+
+/// The threads the composer uses for `work` items: up to the machine's and this thread's cap, one on the web, one for
+/// a small job (`PAR_MIN_PX` pixels a thread at least, where spawning costs more than it saves).
+fn compose_threads(work: usize) -> usize {
+    if cfg!(target_arch = "wasm32") {
+        return 1;
     }
-    std::thread::scope(|s| specs.each_ref().map(|p| s.spawn(move || make(p))).map(|t| t.join().expect("a noise field")))
+    let cap = THREAD_CAP.with(|c| c.get()).min(std::thread::available_parallelism().map_or(1, |n| n.get()));
+    cap.min(work / PAR_MIN_PX).max(1)
+}
+
+/// Pixels a composer thread takes at least.
+const PAR_MIN_PX: usize = 16 * 1024;
+
+/// ENGINE-52 (COMPOSE-PAR1): `f(y, a_row, b_row)` for each of `rows` rows, `a` cut in rows of `a_stride` and `b` of
+/// `b_stride`, in bands of whole rows on `compose_threads` threads; each row is written by one call only, so the result
+/// is the one pass's.
+fn by_rows<A: Send, B: Send>(rows: usize, a: &mut [A], a_stride: usize, b: &mut [B], b_stride: usize, f: impl Fn(usize, &mut [A], &mut [B]) + Sync) {
+    let band_rows = |n: usize| rows.div_ceil(n.max(1)).max(1);
+    let run = |y0: usize, a: &mut [A], b: &mut [B]| {
+        for (k, (ar, br)) in a.chunks_mut(a_stride.max(1)).zip(b.chunks_mut(b_stride.max(1))).enumerate() {
+            f(y0 + k, ar, br);
+        }
+    };
+    let n = compose_threads(rows * a_stride.max(b_stride));
+    if n <= 1 || rows < 2 || a_stride == 0 || b_stride == 0 {
+        run(0, a, b);
+        return;
+    }
+    let band = band_rows(n);
+    std::thread::scope(|s| {
+        for (k, (ab, bb)) in a.chunks_mut(band * a_stride).zip(b.chunks_mut(band * b_stride)).enumerate() {
+            let run = &run;
+            s.spawn(move || run(k * band, ab, bb));
+        }
+    });
 }
 
 /// One centred box pass of width `2 r + 1` over `src`, a running sum in integers; only `r..len - r` is written.
@@ -642,9 +691,11 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
         }
     }
 
+    // ENGINE-52 (COMPOSE-PAR1): each pixel reads the shared fields and writes only its own, so the rows run in bands
+    // on threads (`by_rows`); the same pixels as one pass
     let mut px = vec![0u8; uw * uh * 4];
     let mut top = vec![0u8; uw * uh];
-    for ay in 0..h {
+    let pixel_row = |ay: i32, px: &mut [u8], top: &mut [u8]| {
         let row = ay as usize * uw;
         let cy = (ay / ch) as usize;
         for ax in 0..w {
@@ -681,7 +732,7 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
                     (g, vg) = (own_rank, 1.0);
                 }
             }
-            top[i] = g as u8;
+            top[ax as usize] = g as u8;
             let (ux, uy) = (ax as usize, ay as usize);
             let mut c = times(paints[g].at(ux, uy, t), 1.0 - wear);
             if stray.is_none() {
@@ -720,9 +771,10 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
                     c = times(uc, 0.95);
                 }
             }
-            put(&mut px, i, c);
+            put(px, ax as usize, c);
         }
-    }
+    };
+    by_rows(uh, &mut px, uw * 4, &mut top, uw, |ay, px, top| pixel_row(ay as i32, px, top));
 
     // The sunken rims & stone land-water rims: when `stone_rim` is on, water edges bordering unblocked non-sunken
     // land take a pale stone lip on the water side and a subtle dark line on the land side; legacy `sunken` layers

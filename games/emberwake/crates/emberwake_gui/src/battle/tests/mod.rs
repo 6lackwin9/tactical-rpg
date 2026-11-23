@@ -1310,3 +1310,23 @@ mod objui1_tests;
 mod floatpanels_tests;
 mod xl_battle_tests;
 mod board_focus_tests;
+
+/// ENGINE-52 (COMPOSE-PAR1): a shipped fight's composed stage ground is the same on one thread and on many.
+#[test]
+fn a_battle_boards_ground_is_the_same_on_one_thread_and_many() {
+    let dir = Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
+    let d = Data::open(&dir).expect("data").0;
+    let mut art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+    let mut composed = 0;
+    for (world, id) in [("sunk_ward", "enc_pro_0a"), ("sunk_ward", "enc_evt_01"), ("ashlands", "courtyard_skirmish")] {
+        let def = EncounterDef::from_obj(d.resolve(world, "encounters", id));
+        let s = Session::start(d.cat.clone(), def, &WorldRoster::new(&d, world));
+        let set = emberwake_world::dialogue::stage_set(&d, world);
+        let look = crate::stage::zone_look(&mut art, &set, &s.def.zone);
+        let one = aegis_ui::ground::with_compose_threads(1, || crate::stage::compose_board(&mut art, &s.w.grid, &set, &look));
+        let many = aegis_ui::ground::with_compose_threads(aegis_ui::ground::COMPOSE_THREADS, || crate::stage::compose_board(&mut art, &s.w.grid, &set, &look));
+        assert!(one == many, "{world} {id}: the same pixels");
+        composed += one.is_some() as usize;
+    }
+    assert!(composed >= 1, "at least one board composes its ground");
+}

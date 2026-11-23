@@ -89,6 +89,25 @@ fn a_job_is_a_pure_function_of_its_inputs() {
     assert_eq!(tilted.w * 3, tilted.h * 4 * 20 / 12, "a 4:3 cell, a 4:3 image per cell");
 }
 
+/// ENGINE-52 (COMPOSE-PAR1): a job big enough for bands of rows (three grounds, textures, wear, strays, tone, patchy
+/// with an under ground, patches) composes the same bytes on one thread, two and the most.
+#[test]
+fn a_job_is_the_same_on_one_thread_and_many() {
+    let (cols, rows): (i32, i32) = (48, 30);
+    let cells: Vec<u8> = (0..rows).flat_map(|y| (0..cols).map(move |x| if (x - 20).abs() + (y - 12).abs() < 9 { 2 } else { (x >= 30) as u8 })).collect();
+    let tex = ground::two_tone(64, 64, [90, 80, 70, 255], [84, 74, 64, 255], 1);
+    let layers = [
+        GroundLayer { tex: Some(&tex), tone: 0.13, patches: 0.4, ..GroundLayer::flat(0, LOW) },
+        GroundLayer { wear: 0.1, strays: true, tone: 0.13, ..GroundLayer::flat(1, UP) },
+        GroundLayer { patchy: 0.5, under_colour: [60, 50, 40, 255], ..GroundLayer::flat(2, THIRD) },
+    ];
+    let one = ground::with_compose_threads(1, || compose(9, cols, rows, SQUARE, &cells, &layers));
+    for n in [2, ground::COMPOSE_THREADS] {
+        assert!(one == ground::with_compose_threads(n, || compose(9, cols, rows, SQUARE, &cells, &layers)), "{n} threads: the same bytes");
+        assert!(ground::with_compose_threads(1, || compose(9, cols, rows, TILTED_CELL, &cells, &layers)) == ground::with_compose_threads(n, || compose(9, cols, rows, TILTED_CELL, &cells, &layers)), "{n} threads tilted");
+    }
+}
+
 /// Compares a composed image with its pinned file, `tests/fixtures/ground/<name>.png`, and names the first differing
 /// pixel. With `AEGIS_GROUND_WRITE_PINS` set it writes the file instead: only after tuning the method's numbers on purpose.
 fn pin(name: &str, img: &Image) {

@@ -309,6 +309,29 @@ mod tests {
         }
     }
 
+    /// ENGINE-52 (COMPOSE-PAR1): two shipped maps' grounds (both views) compose to the same pixels on one thread and on
+    /// many (the rows in bands).
+    #[test]
+    fn a_maps_ground_is_the_same_on_one_thread_and_many() {
+        let mut cx = game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let d = cx.data.clone();
+        for (world, map) in [("ashlands", "ashlands_warden_keep"), ("sunk_ward", "sunk_ward_junction_7")] {
+            let loc = d.merged_entries(world, "locations").into_iter().find(|l| json::s(l, "map") == map).expect("the map's location");
+            let t = emberwake_world::explore::template_of(&d, loc).clone();
+            let mut lineage = d.lineage(world);
+            lineage.reverse();
+            let sets = emberwake_content::art::region_sets(&lineage, &json::s(loc, "tileset"));
+            for view in [View::Square, View::Tilted] {
+                let p = picture(&mut cx, &t, &sets, view, mapview::zoom_of(&json!(1.0))).expect("a picture");
+                let one = composer::with_compose_threads(1, || p.compose());
+                let many = composer::with_compose_threads(composer::COMPOSE_THREADS, || p.compose());
+                assert!(one.w > 0 && one.h > 0, "{map} {view:?}: a ground");
+                assert!(one == many, "{map} {view:?}: the same pixels");
+            }
+        }
+    }
+
     /// A row's numbers reach the composer as they are, in `plan`'s order (a texture's offset depends on it), water sunken.
     #[test]
     fn a_rows_numbers_reach_the_composer() {

@@ -184,7 +184,7 @@ and cell). `budget` takes each of `first_move_ms`, `overshoot_steps`, `cadence_s
 Screen switches (ENGINE-51 SWITCH-FEEL1): with `switch` true each key, click or pad input is followed, frame by frame,
 until its new screen settles (`aegis_ui::switchfeel`), and the reply's `switch` gives per input `from` and `to` (top
 screen and stack depth), `handler_ms`, `first_ms` (to the first frame of another screen, or the same at another depth),
-`settled_ms` (to the first frame of the last screen it came to drawn in 33 ms: its loads are done), `own_ms` (from the old
+`settled_ms` (to the first frame of the last screen it came to drawn in 33 ms, 82.5 in a dev build: its loads are done), `own_ms` (from the old
 screen's last frame to settled: a walk to an exit or the old screen's fade out left out), `chain` (a story card that
 hands over to a stage, the stage to a fight), `worst_frame_ms`, `long_frames` (over 100 ms, the handler counted with the
 first; each with `covered_by`, the transition shown before it, `Screen::transition`, or null) and `transitions`; over the

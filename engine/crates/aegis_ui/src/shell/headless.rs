@@ -419,7 +419,7 @@ impl<G: Context> Loop<G> {
                 }
                 done += 1;
                 if switching {
-                    let mut sw = crate::switchfeel::Switch { what: kind.clone(), handler_ms, from, from_transition, frames: Vec::new(), budget_ms: step["switch_ms"].as_f64(), to: step["to"].as_str().map(String::from) };
+                    let mut sw = crate::switchfeel::Switch { what: kind.clone(), handler_ms, from, from_transition, frames: Vec::new(), budget_ms: step["switch_ms"].as_f64(), to: step["to"].as_str().map(String::from), settled_frame_ms: crate::switchfeel::SETTLED_FRAME_MS * if cfg!(debug_assertions) { crate::switchfeel::DEV_ALLOWANCE } else { 1.0 } };
                     while !sw.done() {
                         let t = Instant::wall();
                         self.feel_draw(&mut rec);
