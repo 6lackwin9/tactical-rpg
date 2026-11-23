@@ -992,3 +992,14 @@ fn the_log_auto_and_the_view() {
     assert!(s.player.auto && s.state(&cx)["auto"] == json!(true));
     assert_eq!(s.state(&cx)["view"]["screen"], json!("vignette"));
 }
+
+/// ENGINE-48 (INPUT-REACH1): the arrows (a pad's d-pad) move the focus over Next, Skip, Log and Auto; they did nothing.
+#[test]
+fn the_arrows_reach_every_button_of_the_cutscene_bar() {
+    let (mut cx, mut g) = (cx(), gfx());
+    let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![card("Salve.")]), TextSpeed::Normal, |_, _| {});
+    s.draw(&mut cx, &mut g, (-1, -1), true);
+    assert!(s.arrow_focus(), "the arrows move the focus");
+    let reached = aegis_ui::reach::arrow_reach(&s.widgets(), None);
+    assert_eq!(reached.into_iter().collect::<Vec<_>>(), ["vignette.auto", "vignette.log", "vignette.next", "vignette.skip"]);
+}

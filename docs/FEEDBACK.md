@@ -163,8 +163,85 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-45` (`FEEL-PROBE1`) | Built (tools lane) | `develop` | `aegis_ui::feel` times each input (arrival, handler done, frame start, presented) and every frame; `--feel` or the setting `feel` shows an overlay and writes `feel.log`; scenario step `feel` (p50, p95, worst; in the gate on `hello_walk`); report: battle planning frames 36 to 80 ms and two clicks over 100 ms, the rest under. FB-483 |
 | `ENGINE-46` (`FEEL-FIX1`) | Built (tools lane) | `develop` | Stage floor layer cache (`Painter::cached`), panels composed once, per-frame forecast memo (`intent::memo`), Settings warmed before the first frame (`Context::warm`); `feel_battle` and `feel_settings` budgets (100 ms input, 33 ms frame; 2.5 x in dev) pass; planning frames 17 / 28 ms p50 / worst (were 38 / 80), Settings first draw 13 ms (was 57), `strip.block1` 55 to 59 ms (was 113; the guest ghost re-sent each click is reported). FB-485 |
 | `ENGINE-47` (`GHOST-SETTLE1`) | Built (tools lane) | `develop` | The guest's ghost was not flipping (a draft settles on its own board; test added); `ally_moves` kept while nothing it reads changes (a run that fixes a step's tile is not kept, so plans stay bit for bit); `strip.block1` 43 to 46 ms against a 50 ms `feel` budget; goldens unchanged. FB-487 |
+| `ENGINE-48` (`INPUT-REACH1`) | Built (tools lane) | `develop` | Scenario step `reach` (keys and pad reach, focus shown, back) in the gate on `reach_menus`; every screen walked; fixed a cutscene focus ring off the canvas and dead arrows on cutscenes and in hub talk, board and shop; party skill and gear slots mouse only, for Design; goldens unchanged. FB-489 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-489: ENGINE-48 INPUT-REACH1 built; a `reach` step, every screen walked, three dead ends fixed, four for Design
+
+- **Status**: built (tools lane), `develop`. Engine (`aegis_ui`, `aegis_cli`), kit UI (`rpgkit_ui`) and game GUI code
+  (`emberwake_gui`) plus one game scenario; no data. **Every golden unchanged** (rules, sim, checks, rules contract,
+  journey, timeline, PHASEFOLD). `tools/fc.sh shots diff` over every scenario (base `16d0aa02`): 129 shots, the one
+  difference the Scene Runner's data folder path (the base ran from a scratch worktree). The ring clamp moves no shot: no
+  scenario shot shows a focus ring on a whole-canvas widget.
+- **Spec**: `docs/READY.md` row `ENGINE-48` (`INPUT-REACH1`), from `FB-487`.
+- **What landed**:
+  - **`aegis_ui::reach`** (new, engine): pure functions over a screen's widget infos. The mouse set (every enabled widget
+    a mouse can click, pick, drag, drop on or type into, less what a popup's backdrop covers), the Tab ring, what the
+    arrows walk to from the opening focus (each move as the shell makes it), and what a pad reaches from its buttons in
+    the player's `controls` (the ring when a button gives Tab, else its d-pad, and only where `Screen::arrow_focus` is
+    true). Three unit tests.
+  - **Link request `reach`** (no window, `shell/headless.rs`): the report above, plus a frame per ring widget with its
+    focus shown, compared with a frame with none within `REACH_MARGIN_PX` (8) of its box: no change lists it under
+    `invisible`, a box that changes between two plain frames under `unsure`. With `back` it presses Esc once and says what
+    happened (`quits`, `closed`, `opened`, `swapped`, `changed`, `nothing`) and the top screen after.
+  - **Scenario step `reach`** (`name`, `back`, `fail`, `allow`): writes `reach_<name>.json`, adds it under `perf`
+    (`kind` `reach`) with `dead_ends`; `fail` fails the step on a dead end that `allow` does not name. Documented in
+    `engine/docs/authoring/scenarios.md` ("Input reach").
+  - **Gate scenario** `games/emberwake/scenarios/reach_menus.json` (`fail` on): the main menu, load slots, every settings
+    tab and Controls; back closes the load slots and Controls; Esc on the main menu is allowed to do nothing.
+  - Test `aegis_ui/tests/headless.rs` `the_reach_report_names_what_only_a_mouse_reaches` (a drop-only slot is named, a
+    whole-canvas widget's focus shows, a back press reports).
+- **Fixes (no design call)**, each with a test:
+  1. **A whole-canvas widget's focus ring drew off the canvas** (the cutscene's `vignette.next` stage: focus invisible).
+     `draw_ring` clamps the ring to the canvas. Covered by the headless test above.
+  2. **The arrows did nothing on a cutscene** (`rpgkit_ui` vignette, `arrow_focus` false and no other use of them): now
+     they move the focus. `rpgkit_ui/tests/vignette.rs` `the_arrows_reach_every_button_of_the_cutscene_bar`.
+  3. **The arrows walked the party during a conversation, the notice board and a shop on the region map**, so a d-pad
+     could not pick a reply or an item (the walk is held while those are open). `arrow_focus` is now true while one is
+     open. `emberwake_gui` `map_tests::the_arrows_move_the_focus_in_a_conversation`.
+- **Report** (release build, no window, 1280 x 720; scenarios and every `reach_*.json` in
+  `/mnt/project-files/build-tools/input_reach/`, `summary.txt` the table's source). Mouse = widgets a mouse can use;
+  ring = Tab stops. No screen showed an invisible focus after fix 1.
+
+  | Screen | Mouse | Ring | Keys and pad miss | Back (Esc) |
+  | --- | --- | --- | --- | --- |
+  | Title (main menu) | 4 | 4 | none | nothing (root screen) |
+  | Load slots | 1 | 1 | none | closes to the main menu |
+  | Settings: Display, Sound, Gameplay, Battle | 26, 24, 13, 22 | same | none | not pressed per tab |
+  | Settings: Controls | 21 | 21 | none | closes to the main menu |
+  | Cutscene (story card) | 4 | 4 | none (after fixes 1, 2) | opens the skip question |
+  | Skip question | 2 | 2 | none | closes to the cutscene |
+  | Story battle, plan | 126 | 126 | none | not pressed |
+  | Battle results | 2 | 2 | none | not pressed |
+  | Test Arena, plan (and a unit picked) | 121 | 121 | none | not pressed |
+  | Test Arena, resolve | 14 | 14 | none | not pressed |
+  | Region map (hub) | 35 | 35 | d-pad alone: all 35 (the arrows walk; Y gives Tab) | not pressed |
+  | Region map: talk, notice board, shop | 6, 11, 14 | same | none (after fix 3) | board and shop close |
+  | Bunk card | 3 | 3 | none | closes to the region map |
+  | Party: stats | 7 | 7 | none | not pressed |
+  | Party: skills | 22 | 15 | 7 (below) | not pressed |
+  | Party: gear, and the bunk loadout | 17 | 7 | 10 (below) | closes to the region map |
+  | Game menu | 7 | 7 | none | closes to the region map |
+  | World map | 27 | 27 | none | closes to the region map |
+
+  Shops: the region shop above; no separate shop screen was reached in Act 1 play. The pad map is the default (A Enter,
+  B Esc, X Space, Y Tab, LB/RB page, d-pad arrows), so the pad reaches what the keys reach.
+- **For Design** (each needs a call):
+  1. **Party skills: unslotting and reordering are mouse only.** The five slots (`skills.active.0..2`,
+     `skills.passive.0..1`) are drag sources only, and `skills.keystone.0` and `skills.list` drop targets only. Slotting an
+     owned skill by click works. Options: make a slot clickable (pick it, then Enter on a list row swaps; Enter on the
+     slot again unslots), or a context action on the focused slot.
+  2. **Party gear and the bunk loadout: unequipping is mouse only.** Ten drop-only slots (`gear.slot.main_hand`,
+     `off_hand`, `head`, `body`, `accessory_1`, `accessory_2`, `gear.pouch.0..2`, `gear.stash`). Equipping from the list by
+     click works. Same options as 1.
+  3. **Region map on a pad: the d-pad walks, so markers, bunks and the HUD are reached only through Y (Tab).** By design
+     today; confirm, or add a pad button that jumps between markers.
+  4. **The battle plan's ring is about 120 stops** (about 108 of them board tiles), so Tab to the strip or the end turn
+     button is long. Options: tiles out of the Tab ring (arrows only), or LB/RB to jump between board and panels.
+  Esc on the title doing nothing is left as is (the root screen; no quit by Esc).
+- **Docs delta**: `engine/README.md` "No window (HEADLESS1)": add link `reach` (keys and pad reach, focus shown, back;
+  ENGINE-48) beside `feel`, and `aegis_ui::reach`. `docs/STRUCTURE.md`: none.
 
 ### FB-487: ENGINE-47 GHOST-SETTLE1 built; the guest's ghost was not flipping, ally_moves kept, strip.block1 under 50 ms
 

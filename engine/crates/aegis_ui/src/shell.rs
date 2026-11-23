@@ -754,7 +754,11 @@ fn draw_ring(p: &mut Painter, r: Rect) {
     let t = th();
     let m = Metrics::of(&t, p.v);
     let (out, wide, radius) = (m.u(2), m.u(4), m.radius + m.uf(1.0));
-    p.panel(Rect::new(r.x - out, r.y - out, r.w + wide, r.h + wide), rgba(0, 0, 0, 0), t.ring, radius);
+    // ENGINE-48 (INPUT-REACH1): a widget at the canvas's edge (a whole-stage click area) keeps its ring on the canvas
+    let (cw, ch) = p.v.canvas;
+    let (x0, y0) = ((r.x - out).max(0), (r.y - out).max(0));
+    let (x1, y1) = ((r.x - out + r.w + wide).min(cw), (r.y - out + r.h + wide).min(ch));
+    p.panel(Rect::new(x0, y0, x1 - x0, y1 - y0), rgba(0, 0, 0, 0), t.ring, radius);
 }
 
 /// A valid drop target's outline while dragging, the one under the cursor lit in gold.

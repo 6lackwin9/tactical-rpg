@@ -1270,8 +1270,9 @@ impl<G: Context> Screen<G> for VignetteScreen<G> {
         self.w = ui.widgets;
     }
 
+    /// ENGINE-48 (INPUT-REACH1): the arrows move the focus over Next, Skip, Log and Auto (they did nothing here).
     fn arrow_focus(&self) -> bool {
-        false
+        true
     }
 
     fn key(&mut self, cx: &mut Cx<G>, k: Key) {

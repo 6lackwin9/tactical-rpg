@@ -42,12 +42,14 @@ struct Probe {
     need: FrameNeed,
     blank: bool,
     clicks: u32,
+    /// ENGINE-48: key `e` adds a button over the whole canvas and a drop slot (the reach report's cases).
+    edge: bool,
     w: Vec<aegis_ui::ui::Widget<&'static str>>,
 }
 
 impl Probe {
     fn new(need: FrameNeed, blank: bool) -> Self {
-        Self { need, blank, clicks: 0, w: Vec::new() }
+        Self { need, blank, clicks: 0, edge: false, w: Vec::new() }
     }
     fn act(&mut self, _cx: &mut AppCx, _a: &'static str) {
         self.clicks += 1;
@@ -66,6 +68,13 @@ impl Screen<App> for Probe {
         if !self.blank {
             let mut ui: Ui<&'static str> = Ui::new(g, mouse, live);
             ui.row("go", Rect::new(10, 10, 60, 14), "Go", TEXT, Some("go"), false, Vec::new());
+            if self.edge {
+                ui.push("stage", "stage", "", Rect::new(0, 0, 4000, 4000), true, false, Some("stage"), Vec::new());
+                ui.push("slot", "slot", "", Rect::new(100, 40, 40, 14), true, false, None, Vec::new());
+                if let Some(w) = ui.widgets.last_mut() {
+                    w.drop = Some("gear".into());
+                }
+            }
             self.w = ui.widgets;
         }
     }
@@ -73,6 +82,9 @@ impl Screen<App> for Probe {
     fn key(&mut self, cx: &mut AppCx, k: Key) {
         if k == Key::Char('s') {
             cx.settings.v["window_size"] = json!("960x540");
+        }
+        if k == Key::Char('e') {
+            self.edge = true;
         }
     }
     /// A command of the screen's own, under the name a game's battle uses.
@@ -491,5 +503,24 @@ fn a_feel_script_replays_and_times_each_input() {
     assert_eq!(bad["ok"], json!(false));
     assert!(bad["error"].as_str().unwrap().contains("script[0] click gone"), "{bad}");
     assert_eq!(g.ask(json!({"cmd": "feel", "script": "x"}))["ok"], json!(false));
+    g.stop();
+}
+
+/// ENGINE-48 (INPUT-REACH1): the reach report: the ring, what the keys and a pad miss (a drop slot is mouse only), and a
+/// focus that shows on every widget, a whole-canvas one too (its ring is kept on the canvas).
+#[test]
+fn the_reach_report_names_what_only_a_mouse_reaches() {
+    let mut g = Game::start(FrameNeed::Idle, false, DEFAULT_FPS);
+    g.ask(json!({"cmd": "frames"}));
+    let plain = g.ask(json!({"cmd": "reach"}));
+    assert_eq!((plain["ok"].clone(), plain["screen"].clone(), plain["ring"].clone()), (json!(true), json!("probe"), json!(["go"])), "{plain}");
+    assert_eq!((plain["keys_miss"].clone(), plain["invisible"].clone(), plain.get("back").cloned()), (json!([]), json!([]), None), "{plain}");
+    g.ask(json!({"cmd": "key", "key": "e"}));
+    g.ask(json!({"cmd": "frames"}));
+    let edge = g.ask(json!({"cmd": "reach"}));
+    assert_eq!(edge["ring"], json!(["go", "stage"]), "{edge}");
+    assert_eq!(edge["keys_miss"], json!([{"id": "slot", "kind": "slot", "use": "drop"}]), "{edge}");
+    assert_eq!(edge["pad_miss"], edge["keys_miss"], "the default pad has Tab (Y)");
+    assert_eq!(edge["invisible"], json!([]), "the whole-canvas widget's ring is drawn on the canvas: {edge}");
     g.stop();
 }

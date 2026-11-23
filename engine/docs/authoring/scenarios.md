@@ -72,6 +72,7 @@ An unknown key or step is a problem, not a thing ignored.
 | `clip` | `name`, `frames` = 30, `every_ms` = 66, `max_w` = 1280 | No window only. A numbered sequence, `<name>/frame_0001.png` on: at most 120 frames, 10 to 2000 ms apart, 15 s in all |
 | `perf` | `name`, `frames` = 300, `warm` = 60, `budget` | No window only. Frame times (ENGINE-2): see "Frame times" |
 | `feel` | `name`, `script`, `gap` = 2, `budget` | No window only. Input times (ENGINE-45): see "Input times" |
+| `reach` | `name`, `back` = false, `fail` = false, `allow` = [] | No window only. What keys and a pad reach (ENGINE-48): see "Input reach" |
 | `pause` | `ms` | Time passes, for a picture at a moment of an animation, with a look at the game each second; with no window, that much game time on the shot clock, drawn at once. To wait for a result, use `wait` |
 | `audit` | `scales`, `fail` = all of `cut`, `edge`, `overlap`, `spill` | The text audit per text size; a kind in `fail` found fails the step |
 | `repeat` | `times`, `steps`, `until` | A bounded loop. `until` is read before each turn and ends it; turns running out with `until` still false fails |
@@ -168,6 +169,20 @@ vsync's wait). The same numbers come from a real window with `--feel` (or `feel=
 setting `"feel": true`: an overlay at the top left (the last frame's ms, the worst frame of the last second, the last
 input's input-to-present ms) and a line per input in `feel.log` beside the run's `game.log`. Use a release build for numbers
 a player would see (`tools/fc.sh scenario <id> profile=release`).
+
+## Input reach
+
+A `reach` step (no window only, ENGINE-48 INPUT-REACH1) walks the top screen as a keyboard and as a pad would (the link
+request `reach`, `aegis_ui::reach`). A mouse reaches every enabled widget it can click, pick, drag, drop on or type into,
+less what a popup's backdrop covers. Keys reach the focus ring (Tab walks all of it). A pad reaches what its buttons map to
+in the player's `controls`: the ring when a button gives Tab, else what its d-pad walks to from the opening focus, and only
+on a screen whose arrows move the focus (`Screen::arrow_focus`). The step writes `reach_<name>.json` to the bundle and adds
+it under `perf` in `result.json` (`kind` `reach`): `mouse` (a count), `ring`, `keys_miss`, `pad_miss` and `dpad_miss` (each
+`{id, kind, use}`), `invisible` (ring widgets whose focus draws nothing within `REACH_MARGIN_PX` of their box), `unsure`
+(the box changes from frame to frame, so it cannot tell) and, with `back` true, what one Esc did: `quits`, `closed`,
+`opened`, `swapped`, `changed` (the same screen drew differently) or `nothing`, and the top screen after it. `dead_ends`
+lists `keys <id>`, `pad <id>`, `invisible <id>`, `back nothing` and `back quits`. With `fail` true a dead end fails the step
+unless `allow` names its widget id, or `back` for a back press (a root screen where Esc rightly does nothing).
 
 ## The bundle
 

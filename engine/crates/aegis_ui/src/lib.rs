@@ -46,6 +46,7 @@ pub mod perf;
 pub mod panes;
 pub mod playtest;
 pub mod preview;
+pub mod reach;
 pub mod recordings;
 pub mod screen;
 pub mod screen_layout;

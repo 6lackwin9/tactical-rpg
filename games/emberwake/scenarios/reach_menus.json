@@ -1,0 +1,125 @@
+{
+ "id": "reach_menus",
+ "title": "ENGINE-48: the menus walked by keys and pad; anything only a mouse reaches, a focus that does not show or a dead back press fails",
+ "settings": {
+  "reduce_motion": true
+ },
+ "timeout_s": 600,
+ "steps": [
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "main_menu"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "reach",
+   "name": "main_menu",
+   "back": false,
+   "fail": true
+  },
+  {
+   "step": "click",
+   "id": "menu.load"
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "load_slots"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "reach",
+   "name": "load_slots",
+   "back": true,
+   "fail": true
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "main_menu"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "click",
+   "id": "menu.settings"
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "settings"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "reach",
+   "name": "settings_display",
+   "back": false,
+   "fail": true
+  },
+  {
+   "step": "click",
+   "id": "settings.tab.sound"
+  },
+  {
+   "step": "reach",
+   "name": "settings_sound",
+   "back": false,
+   "fail": true
+  },
+  {
+   "step": "click",
+   "id": "settings.tab.gameplay"
+  },
+  {
+   "step": "reach",
+   "name": "settings_gameplay",
+   "back": false,
+   "fail": true
+  },
+  {
+   "step": "click",
+   "id": "settings.tab.battle"
+  },
+  {
+   "step": "reach",
+   "name": "settings_battle",
+   "back": false,
+   "fail": true
+  },
+  {
+   "step": "click",
+   "id": "settings.tab.controls"
+  },
+  {
+   "step": "reach",
+   "name": "settings_controls",
+   "back": true,
+   "fail": true
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "main_menu"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "reach",
+   "name": "main_menu_esc",
+   "back": true,
+   "fail": true,
+   "allow": [
+    "back"
+   ]
+  }
+ ]
+}

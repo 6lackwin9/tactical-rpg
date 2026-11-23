@@ -1184,9 +1184,10 @@ impl RegionMap {
 }
 
 impl Screen<GameCx> for RegionMap {
-    /// The arrow keys walk the party.
+    /// The arrow keys walk the party; ENGINE-48 (INPUT-REACH1): while a conversation (its shop, board, recipes or facility)
+    /// or a lore card is open, nothing walks, so they move the focus over its replies and rows.
     fn arrow_focus(&self) -> bool {
-        false
+        self.svc.talking() || self.lore.is_some()
     }
     fn hold_walk(&self) -> bool {
         true
@@ -3876,6 +3877,32 @@ mod map_tests {
         map.click_id(&mut cx, "log.panel.open").expect("open");
         frame(&mut map, &mut cx, &mut g, 1.0);
         assert_eq!(at(&map, "log.panel.min"), min, "restored in place");
+    }
+
+    /// ENGINE-48 (INPUT-REACH1): the arrows walk the party, but in a conversation (nothing walks) they move the focus over
+    /// its replies, so a pad's d-pad can pick one.
+    #[test]
+    fn the_arrows_move_the_focus_in_a_conversation() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert!(!map.arrow_focus(), "on the map the arrows walk");
+        let world = cx.gs().world_id.clone();
+        let people: Vec<String> = cx.data.merged_entries(&world, "characters").iter().map(|c| s(c, "id")).collect();
+        for p in people {
+            map.talk(&mut cx, &p);
+            if map.svc.talking() {
+                break;
+            }
+        }
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert!(map.svc.talking() && map.arrow_focus(), "in a conversation the arrows move the focus");
+        let infos = map.widgets();
+        // the replies that can be picked (one may be shut: its widget is off)
+        let choices: Vec<String> = infos.iter().filter(|w| aegis_ui::focus::focusable(w, false)).filter_map(|w| w["id"].as_str()).filter(|i| i.starts_with("choice.")).map(String::from).collect();
+        assert!(choices.len() > 1, "the conversation offers replies: {choices:?}");
+        let reached = aegis_ui::reach::arrow_reach(&infos, choices.first().map(String::as_str));
+        assert!(choices.iter().all(|c| reached.contains(c)), "the arrows reach every reply: {choices:?} in {reached:?}");
     }
 
     #[test]

@@ -30,6 +30,23 @@ use {
     std::sync::mpsc::RecvTimeoutError,
 };
 
+/// ENGINE-48: how far around a widget its focus mark may be drawn, in px.
+pub const REACH_MARGIN_PX: i32 = 8;
+
+/// ENGINE-48: whether two frames (width, height, RGBA) of one size differ inside `r` (px, cut to the canvas).
+#[cfg(not(target_arch = "wasm32"))]
+fn region_differs(a: &(i32, i32, Vec<u8>), b: &(i32, i32, Vec<u8>), r: crate::canvas::Rect) -> bool {
+    let (w, h) = (a.0, a.1);
+    if (w, h) != (b.0, b.1) {
+        return true;
+    }
+    let (x0, y0, x1, y1) = (r.x.max(0), r.y.max(0), (r.x + r.w).min(w), (r.y + r.h).min(h));
+    (y0..y1).any(|y| {
+        let (i, j) = (((y * w + x0) * 4) as usize, ((y * w + x1.max(x0)) * 4) as usize);
+        a.2[i..j] != b.2[i..j]
+    })
+}
+
 /// The default frame rate.
 pub const DEFAULT_FPS: u32 = 15;
 /// The lowest asked for: a clock that limits how much wall time one frame adds (a common guard against a stall) must not
@@ -183,6 +200,7 @@ impl<G: Context> Loop<G> {
             Some("clip") => self.clip(&req.body),
             Some("perf") => self.perf(&req.body),
             Some("feel") => self.feel(&req.body),
+            Some("reach") => self.reach(&req.body),
             _ => self.shell.bridge(&req.body),
         };
         let _ = req.reply.send(reply);
@@ -321,6 +339,77 @@ impl<G: Context> Loop<G> {
         out["canvas"] = json!([self.shell.gfx.canvas.w, self.shell.gfx.canvas.h]);
         out["build"] = json!(if cfg!(debug_assertions) { "dev" } else { "release" });
         out["frame"] = json!(self.shell.frames);
+        out
+    }
+
+    /// ENGINE-48 (INPUT-REACH1): `{"cmd": "reach", "back": b}`: the top screen's reach report (`crate::reach::report`:
+    /// what a mouse can use that the keys, the d-pad alone or a pad cannot reach), then whether the focus shows on each
+    /// widget of the ring (a frame with it against one without, around the widget: `invisible` when nothing changed,
+    /// `unsure` when the screen moves there by itself), then with `back` (default false) one Esc through the control map
+    /// and what it did: `closed` (a screen left), `opened` (one came over it), `swapped`, `changed` (the same screen with
+    /// other widgets), `nothing` or `quits` (the game asked to quit: the run is kept going). The focus is put back after
+    /// the focus check; the Esc is not undone.
+    fn reach(&mut self, body: &Value) -> Value {
+        use crate::reach;
+        let shell = &mut self.shell;
+        let top = shell.stack.last().unwrap();
+        let (screen, infos, arrows, grid) = (top.id(), top.widgets(), top.arrow_focus(), top.grid());
+        let start = top.focus_first().map(String::from).or_else(|| shell.gfx.kit.focus.clone());
+        let pad_keys: Vec<crate::screen::Key> = crate::controls::PADS.iter().map(|(p, _)| shell.controls().pad(*p)).collect();
+        let mut out = reach::report(&infos, arrows, start.as_deref(), reach::Device::pad(&pad_keys));
+        // the focus check: frames with the focus shown and hidden, the mouse away
+        let saved = (shell.gfx.kit.focus.clone(), shell.gfx.kit.focus_visible, shell.mouse);
+        shell.mouse = (-10_000, -10_000);
+        let view = shell.view_of(grid);
+        let frame = |shell: &mut Shell<G>, focus: Option<&str>| {
+            shell.gfx.kit.focus = focus.map(String::from);
+            shell.gfx.kit.focus_visible = focus.is_some();
+            shell.frame();
+            (shell.gfx.canvas.w, shell.gfx.canvas.h, shell.gfx.canvas.px.clone())
+        };
+        let base = frame(shell, None);
+        let again = frame(shell, None);
+        let (mut invisible, mut unsure) = (Vec::new(), Vec::new());
+        for w in crate::focus::ring(&infos, false) {
+            let wid = w["id"].as_str().unwrap_or("");
+            let r = |i: usize| w["rect"][i].as_i64().unwrap_or(0) as i32;
+            let px = view.rect(crate::canvas::Rect::new(r(0), r(1), r(2), r(3)));
+            let around = crate::canvas::Rect::new(px.x - REACH_MARGIN_PX, px.y - REACH_MARGIN_PX, px.w + 2 * REACH_MARGIN_PX, px.h + 2 * REACH_MARGIN_PX);
+            let shown = frame(shell, Some(wid));
+            if !region_differs(&base, &shown, around) {
+                invisible.push(json!({"id": wid, "kind": w["kind"]}));
+            } else if region_differs(&base, &again, around) {
+                unsure.push(json!({"id": wid, "kind": w["kind"]}));
+            }
+        }
+        (shell.gfx.kit.focus, shell.gfx.kit.focus_visible, shell.mouse) = saved;
+        out["invisible"] = json!(invisible);
+        out["unsure"] = json!(unsure);
+        if body["back"] == json!(true) {
+            let before = (shell.stack.len(), screen, infos.iter().map(|w| w["id"].clone()).collect::<Vec<_>>());
+            shell.press(crate::screen::Key::Esc);
+            self.draw();
+            let shell = &mut self.shell;
+            let quits = std::mem::take(&mut shell.cx.quit);
+            let top = shell.stack.last().unwrap();
+            let after = (shell.stack.len(), top.id(), top.widgets().iter().map(|w| w["id"].clone()).collect::<Vec<_>>());
+            let did = if quits {
+                "quits"
+            } else if after.0 < before.0 {
+                "closed"
+            } else if after.0 > before.0 {
+                "opened"
+            } else if after.1 != before.1 {
+                "swapped"
+            } else if after.2 != before.2 {
+                "changed"
+            } else {
+                "nothing"
+            };
+            out["back"] = json!({"did": did, "to": after.1});
+        }
+        out["screen"] = json!(screen);
+        out["ok"] = json!(true);
         out
     }
 

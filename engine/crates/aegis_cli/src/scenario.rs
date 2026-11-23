@@ -147,6 +147,10 @@ pub enum Step {
     /// ENGINE-45 (FEEL-PROBE1): replays `script` (keys, clicks, pad buttons, frames) with no window and reports input
     /// and frame times (`feel` link request); `input_ms` / `frame_ms` fail the step when the worst passes them.
     Feel { name: String, script: Value, gap: u64, input_ms: Option<f64>, frame_ms: Option<f64> },
+    /// ENGINE-48 (INPUT-REACH1): the top screen's reach report with no window (`reach` link request): what a mouse can use
+    /// that the keys or a pad cannot reach, a focus that does not show, and with `back` what one Esc does. `fail`: the
+    /// step fails on a dead end whose widget id (or `back`) is not in `allow`.
+    Reach { name: String, back: bool, fail: bool, allow: Vec<String> },
     Pause { ms: u64 },
     Audit { scales: Vec<f64>, fail: Vec<String> },
     Repeat { times: u64, steps: Vec<Step>, until: Option<Cond> },
@@ -205,6 +209,27 @@ pub fn feel_misses(reply: &Value, input_ms: Option<f64>, frame_ms: Option<f64>) 
         }
     }
     misses
+}
+
+/// ENGINE-48: a `reach` reply's dead ends, each `"<what> <id>"`: `keys` (a mouse widget the keys cannot reach), `pad`
+/// (nor a pad), `invisible` (its focus does not show) and `back nothing` / `back quits`.
+pub fn reach_dead_ends(reply: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    for (key, what) in [("keys_miss", "keys"), ("pad_miss", "pad"), ("invisible", "invisible")] {
+        for w in reply[key].as_array().into_iter().flatten() {
+            out.push(format!("{what} {}", w["id"].as_str().unwrap_or("?")));
+        }
+    }
+    if let Some(did) = reply["back"]["did"].as_str().filter(|d| *d == "nothing" || *d == "quits") {
+        out.push(format!("back {did}"));
+    }
+    out
+}
+
+/// ENGINE-48: whether `allow` covers a dead end (`reach_dead_ends`): its widget id is listed, or `back` for a back press.
+pub fn reach_allowed(end: &str, allow: &[String]) -> bool {
+    let (what, id) = end.split_once(' ').unwrap_or((end, ""));
+    allow.iter().any(|a| if what == "back" { a == "back" } else { a == id })
 }
 
 /// A `perf` step's bounds (the game's own are the same: `aegis_ui::shell::headless::PERF_*`) and the most a budget says.
@@ -504,6 +529,33 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
             };
             Step::Audit { scales, fail }
         }
+        "reach" => {
+            keys(&["name", "back", "fail", "allow"], problems);
+            let name = text_of(o, "name", place, problems);
+            if !name.is_empty() && !plain_name(&name) {
+                problems.push(format!("{place}: 'name' becomes a file name: letters, digits, _ and - only, at most 80"));
+            }
+            let flag = |k: &str, problems: &mut Vec<String>| match o.get(k) {
+                None => false,
+                Some(Value::Bool(b)) => *b,
+                Some(_) => {
+                    problems.push(format!("{place}: '{k}' is true or false"));
+                    false
+                }
+            };
+            let (back, fail) = (flag("back", problems), flag("fail", problems));
+            let allow: Vec<String> = match o.get("allow") {
+                None => Vec::new(),
+                Some(list) => {
+                    let names: Vec<String> = list.as_array().map(|a| a.iter().filter_map(|k| k.as_str().map(String::from)).collect()).unwrap_or_default();
+                    if list.as_array().is_none_or(|a| a.len() != names.len()) {
+                        problems.push(format!("{place}: 'allow' is a list of widget ids (and 'back')"));
+                    }
+                    names
+                }
+            };
+            Step::Reach { name, back, fail, allow }
+        }
         "repeat" => {
             keys(&["times", "steps", "until"], problems);
             let times = int_of(o, "times", None, (1, STEPS_MAX), place, problems);
@@ -641,6 +693,7 @@ fn no_window_step(steps: &[Step]) -> Option<&'static str> {
         Step::Clip { .. } => Some("clip"),
         Step::Perf { .. } => Some("perf"),
         Step::Feel { .. } => Some("feel"),
+        Step::Reach { .. } => Some("reach"),
         Step::Repeat { steps, .. } => no_window_step(steps),
         _ => None,
     })
@@ -1328,6 +1381,32 @@ impl Run<'_> {
                     return Err(fail(format!("feel {name}: {}", misses.join(", "))));
                 }
             }
+            Step::Reach { name, back, fail: must, allow } => {
+                let fail = |message: String| Failure { step: label.to_string(), message, gone: false };
+                if !self.headless {
+                    return Err(fail("the reach report is made in a run with no window".to_string()));
+                }
+                self.settle(label)?;
+                let reply = self.ask(label, &json!({"cmd": "reach", "back": back}))?;
+                if reply["ok"] != json!(true) {
+                    return Err(fail(format!("reach {name}: {}", reply["error"])));
+                }
+                let mut kept = reply.clone();
+                let ends = reach_dead_ends(&reply);
+                if let Some(o) = kept.as_object_mut() {
+                    o.remove("ok");
+                    o.insert("name".into(), json!(name));
+                    o.insert("step".into(), json!(label));
+                    o.insert("kind".into(), json!("reach"));
+                    o.insert("dead_ends".into(), json!(ends));
+                }
+                let _ = std::fs::write(self.bundle.join(format!("reach_{name}.json")), serde_json::to_string_pretty(&kept).unwrap_or_default());
+                self.perf.push(kept);
+                let left: Vec<&String> = ends.iter().filter(|e| !reach_allowed(e, allow)).collect();
+                if *must && !left.is_empty() {
+                    return Err(fail(format!("reach {name} on {}: {}", reply["screen"], left.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("; "))));
+                }
+            }
             Step::Audit { scales, fail } => {
                 self.settle(label)?;
                 for scale in scales {
@@ -1381,6 +1460,7 @@ fn kind_of(s: &Step) -> &'static str {
         Step::Clip { .. } => "clip",
         Step::Perf { .. } => "perf",
         Step::Feel { .. } => "feel",
+        Step::Reach { .. } => "reach",
         Step::Pause { .. } => "pause",
         Step::Audit { .. } => "audit",
         Step::Repeat { .. } => "repeat",
