@@ -14,7 +14,7 @@ use aegis_ui::canvas::{Image, Rect, Rgba};
 use aegis_ui::ground::{self as composer, GroundJob, GroundKey, GroundLayer, PlacedPatch, ART_PX_MAX, CELL_MAX, CELL_PX, TEX_CELLS, TILTED_CELL};
 use aegis_ui::painter::Painter;
 use emberwake_content::ground::{plan, GroundPlan};
-use emberwake_world::Data;
+use emberwake_world::{Data, GameState};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -137,6 +137,47 @@ fn picture(cx: &mut Cx, t: &Dict, sets: &[String], view: View, q: i32) -> Option
     }
     let placed = plan.placed.iter().map(|p| PlacedPatch { x: p.x, y: p.y, w: p.w, h: p.h, strength: p.strength }).collect();
     Some(Picture { plan, textures, colours, under_textures, under_colours, placed, cell })
+}
+
+/// ASSETORG2 4.5, LOOK1 5.4: the tile sets location `loc` of `gs` draws from: its `tileset`, the world lineage's sets
+/// child first, then common, as the region map's draw finds them (its test holds the two the same).
+pub fn sets_of(d: &Data, gs: &GameState, loc: &Dict) -> Vec<String> {
+    let mut lineage = d.lineage(&gs.world_id);
+    lineage.reverse();
+    emberwake_content::art::region_sets(&lineage, &json::s(loc, "tileset"))
+}
+
+/// ENGINE-53 (SWITCH-AHEAD1): a ground composed ahead on a thread: its key and art image.
+pub type Ahead = std::thread::JoinHandle<(GroundKey, Image)>;
+
+/// ENGINE-53: starts composing, on a thread, the ground the region map would compose on its first frame for `gs` (its
+/// location, sets, the view and zoom in the settings), so the title can make Continue's map job while it shows. The
+/// textures are read here (from `Art`, as the map's own `sync` reads them); the hash and the compose run on the thread.
+/// None: no thread on the web, a location without a map, or a map with no ground. `keep_ahead` hands the result to the
+/// composer's cache; if anything the job depends on changed by then, its key matches nothing and it is never drawn.
+pub fn compose_ahead(cx: &mut Cx, gs: &GameState) -> Option<Ahead> {
+    if cfg!(target_arch = "wasm32") {
+        return None;
+    }
+    let d = cx.data.clone();
+    let loc = emberwake_world::explore::location(&d, gs);
+    let t = emberwake_world::explore::template_of(&d, loc);
+    if t.is_empty() {
+        return None;
+    }
+    let view = View::of_setting(&cx.settings.v["region_view"]);
+    let q = crate::mapview::zoom_of(&cx.settings.v["map_zoom"]);
+    let sets = sets_of(&d, gs, loc);
+    let p = picture(cx, t, &sets, view, q)?;
+    let map = json::s(t, "id");
+    Some(std::thread::spawn(move || (p.key(&map), p.compose())))
+}
+
+/// ENGINE-53: waits for a ground composed ahead and keeps it in the composer's cache (`composer::keep`).
+pub fn keep_ahead(job: Ahead) {
+    if let Ok((key, img)) = job.join() {
+        composer::keep(key, img);
+    }
 }
 
 /// A region map screen's ground: the kept job and key.
@@ -330,6 +371,38 @@ mod tests {
                 assert!(one == many, "{map} {view:?}: the same pixels");
             }
         }
+    }
+
+    /// ENGINE-53 (SWITCH-AHEAD1): the ground the title composes ahead for a save is the one the region map makes on its
+    /// first frame (the same key, sets and pixels), so the map finds it in the cache; another view's is never used.
+    #[test]
+    fn a_ground_composed_ahead_is_the_one_the_map_draws() {
+        let mut cx = game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let d = cx.data.clone();
+        let (world, map) = ("sunk_ward", "sunk_ward_junction_7");
+        let loc = d.merged_entries(world, "locations").into_iter().find(|l| json::s(l, "map") == map).expect("the map's location");
+        let mut gs = cx.gs().clone();
+        gs.world_id = world.into();
+        gs.location_id = json::s(loc, "id");
+        let t = emberwake_world::explore::template_of(&d, loc).clone();
+        let mut lineage = d.lineage(world);
+        lineage.reverse();
+        let sets = emberwake_content::art::region_sets(&lineage, &json::s(loc, "tileset"));
+        assert_eq!(sets_of(&d, &gs, loc), sets, "the region map's sets");
+        let view = View::of_setting(&cx.settings.v["region_view"]);
+        let q = mapview::zoom_of(&cx.settings.v["map_zoom"]);
+        let job = compose_ahead(&mut cx, &gs).expect("a ground ahead");
+        let (key, img) = job.join().expect("the thread");
+        let mut ground = MapGround::default();
+        ground.sync(&mut cx, &t, &sets, view, q);
+        assert_eq!(ground.key(), Some(&key), "the map's own key");
+        assert!(img == picture(&mut cx, &t, &sets, view, q).expect("a picture").compose(), "the same pixels");
+        composer::keep(key.clone(), img);
+        assert!(composer::held(&key), "kept for the map's first draw");
+        let other = if view == View::Square { View::Tilted } else { View::Square };
+        ground.sync(&mut cx, &t, &sets, other, q);
+        assert!(ground.key().is_some_and(|k| !composer::held(k)), "a changed view is another job");
     }
 
     /// A row's numbers reach the composer as they are, in `plan`'s order (a texture's offset depends on it), water sunken.

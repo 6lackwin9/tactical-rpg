@@ -54,12 +54,15 @@ pub struct Game {
     /// PR7-76 (PT-55): the outcome of the last world fight settled ("won", "lost", ...), taken by the region map (a walk
     /// the fight broke off goes on after a win).
     pub fought: Option<String>,
+    /// ENGINE-53 (SWITCH-AHEAD1): a fight the map started ahead on a copy of this game (`BattleScreen::world` takes it
+    /// when it is not stale).
+    pub fight_ahead: Option<crate::battle::FightAhead>,
 }
 
 impl Game {
     pub fn new(gs: GameState, slot: i64, sample: bool) -> Self {
         let clean = gs.to_value();
-        Self { gs, slot, clean, busy: false, sample, notices: Vec::new(), arrival: None, fought: None }
+        Self { gs, slot, clean, busy: false, sample, notices: Vec::new(), arrival: None, fought: None, fight_ahead: None }
     }
 }
 

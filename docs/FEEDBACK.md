@@ -169,8 +169,61 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-50` (`MAP-FRAME1`) | Built (tools lane) | `develop` | the region map's still layers kept and moved with the camera (engine `Painter::scroll_begin`), marker views read once per state: release median 18 to 6.8 ms, worst 51 to 19 ms on the hub; `frame_p50_ms` budget, `walk_feel` holds 16.7 / 33 ms; a key press after a long frame dated at most 25 ms back (`stall_ms` input tests it); shots diff clean; goldens unchanged. FB-495 |
 | `ENGINE-51` (`SWITCH-FEEL1`) | Built (tools lane) | `develop` | every screen switch timed to its first settled frame (`feel` `switch`, `aegis_ui::switchfeel`, `Screen::transition`): all under target in release, no uncovered frame over 100 ms; fixes: double decodes, a fight's sheets decoded side by side, Save/Load warmed, the world map's background read ahead, the ground's noise side by side; gate scenarios `switch_feel`, `switch_feel_story`; goldens unchanged. FB-497 |
 | `ENGINE-52` (`COMPOSE-PAR1`) | Built (tools lane) | `develop` | the ground composer's per-pixel pass and noise in bands of rows on up to 4 threads, the same bytes (tests on two maps, battle boards, an engine job); compose 40 to 26 ms alone; Continue (107 to 124 ms) and a fight with no intro (101 to 135 ms) miss 60 ms, reported with options; `switch_feel` budgets for both 200 ms; goldens unchanged. FB-499 |
+| `ENGINE-53` (`SWITCH-AHEAD1`) | Built (tools lane) | `develop` | the composer's fields' blur, rims and contact lines on threads (same bytes); built ahead at idle (`Screen::warm_next`, `ground::keep`): the title's Continue map (ground composed on a thread, map drawn once unseen), a fight the party walks into or stands near and the fight after a vignette (started on a copy of the game, taken when not stale); Continue 19 to 22 ms, The Sweep 27 to 30 ms; test that a fight built ahead equals one built on the switch; `switch_feel` budgets 120 ms; goldens unchanged. FB-501 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-501: ENGINE-53 SWITCH-AHEAD1 built; Continue 19 to 22 ms and The Sweep 27 to 30 ms, both under 60 ms
+
+- **Status**: built (tools lane), `develop`. Engine (`aegis_ui` ground composer, `Screen::warm_next`, the shell), game
+  GUI (`emberwake_gui` title, region map, story stage, battle start, map ground), the `switch_feel` scenario; no data.
+  **Every golden unchanged** (the composer's pinned fixtures too). Shots diff: clean (only the known `screens_menus__scene_runner.png` artifact).
+- **Spec**: `docs/READY.md` row `ENGINE-53` (`SWITCH-AHEAD1`), options (b) and (c).
+- **(b) The composer's serial parts on threads**: the fields' blur (`grounds()` and the other fields, new `par_map`: one
+  field a thread) and the sunken rims and contact lines (bands of rows, `by_rows`) run on up to `COMPOSE_THREADS`; each
+  writes only its own field or row from what it reads, so the bytes are the one pass's (the ENGINE-52 tests, three
+  grounds and two shipped maps on 1 / 2 / 4 threads, pass unchanged). The stone rim and the dressing (groups, placed
+  patches, marks) stay on one thread: they read what their neighbours wrote. (Not timed apart: the switches below no longer compose on their frame.)
+- **(c) Built ahead at idle**:
+  - New engine hook `Screen::warm_next`: a screen may hand the shell a screen it may open next; the shell draws it once
+    unseen at the start of a frame (after the tick), as it draws the warm list before the first frame (ENGINE-46), and
+    drops what it asked for (navigation, notices). Asked of the top screen, then down the stack until one gives one.
+  - Ground composed ahead: `ground::keep(key, img)` puts an image composed elsewhere in the composer's cache
+    (`ground::held` tells); a stale one is never drawn, its key matching nothing.
+  - **Continue**: on the title's third tick it reads the newest save (not entering it), starts its map ground on a
+    thread (`emberwake_gui::ground::compose_ahead`, the same key and pixels as the map's own: test
+    `a_ground_composed_ahead_is_the_one_the_map_draws`), keeps it when done, then draws the map once unseen
+    (`region::Rehearsal`, on a game of its own swapped in for that draw; the log given back). Continue then finds every
+    cache full. The title's `state.ahead` reads `waiting`, `composing`, `drawing` or `ready`. Continue also reads the
+    newest slot the menu already found instead of parsing every slot again.
+  - **A fight on the map**: the game keeps one `battle::FightAhead`: a world fight started on a copy of the game (the
+    copy before and after, and what the start built). During a click walk, once per walk, its steps are tried on a copy
+    (`explore::step`) and the fight they end in is started ahead; standing still 10 frames on a tile, the walk to the
+    nearest encounter marker is tried the same way and the fight is also drawn once unseen (bodies, board ground, panels).
+    `BattleScreen::world` takes it when the game, the fight and the runner are exactly those it was started from, and
+    otherwise starts the fight as before (stale: dropped).
+  - **A scripted fight**: while a story vignette shows (10 frames in, once a step), a fight step right after it is
+    started ahead on a copy with the vignette's step done, and drawn once unseen.
+  - Test (as asked): `transitions_tests::a_fight_built_ahead_equals_one_built_on_the_switch`: the same battle state, game
+    and log after the start, the game untouched until taken, another runner or a changed game stale and started anew.
+- **Measured** (release, no window, 1280 x 720, this 4-core container; `own_ms`):
+  - **Title Continue to the map: 19 to 22 ms** (was 107 to 124; its first frame 17 to 18 ms).
+  - **The Sweep from the map, no intro: 27 to 30 ms** (was 101 to 135; the fight's start 0.2 ms, its first draw 15 ms).
+  - Story card to the stage to the fight (with its beat), dev build: 50 ms (was 94 in release).
+  - No release first frame over 100 ms in `switch_feel`; every other switch as before (within noise).
+  - **The cost moved to idle** (not a switch, listed as asked): the title draws the map once unseen in one frame of about
+    50 ms after its ground is kept (about 0.3 s after it opens); a map draws a fight once unseen in one frame of about
+    100 to 140 ms the first time the party stands still 10 frames near an encounter (cold art: decoding its bodies, its
+    board ground, its panels; about 20 ms once the art is warm); a vignette the same once, 10 frames in. A click walk
+    toward a fight adds about 12 to 20 ms to one walk frame (the fight started on the copy). None is a cue, and `walk_feel`
+    stays within its budgets.
+- **Budgets**: `switch_feel` waits for the title's `state.ahead` to read `ready` before Continue, and its Continue and
+  The Sweep inputs go 200 -> 120 ms (300 in the gate's dev build).
+- **Docs**: the scenarios README row. **Docs delta (engine/README.md)**: (1) in the ground composer's bullet, after the
+  ENGINE-52 clause add "; its fields' blur, sunken rims and contact lines too, and `ground::keep` takes an image composed
+  ahead (ENGINE-53)"; (2) in the screens / shell bullet add "`Screen::warm_next` hands the shell a screen to draw once
+  unseen at the start of a frame, so a screen's first draw finds its caches full (ENGINE-53: the title's Continue map, a
+  fight near the party, the fight after a vignette)".
 
 ### FB-499: ENGINE-52 COMPOSE-PAR1 built; the ground composer runs its rows on threads, same pixels; both switches miss 60 ms
 

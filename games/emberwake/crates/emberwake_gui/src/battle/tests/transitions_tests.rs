@@ -520,3 +520,31 @@ fn the_round_banner_hides_once_the_battle_is_over() {
     frame(&mut b, &mut cx, &mut g, 1.0);
     assert!(b.state(&cx)["round_banner"].is_object(), "back on the next battle: {}", b.state(&cx)["round_banner"]);
 }
+
+/// ENGINE-53 (SWITCH-AHEAD1): a fight started ahead, on a copy of the game, is the fight a start on the switch makes
+/// (the same battle, the same game and log after it) and leaves the game itself untouched until it is taken; a game that
+/// changed since makes it stale, and the fight is started anew from the game as it is.
+#[test]
+fn a_fight_built_ahead_equals_one_built_on_the_switch() {
+    let (mut fresh, mut ahead) = (beat_cx(false, false), beat_cx(false, false));
+    let d = ahead.data.clone();
+    let kept = crate::battle::FightAhead::start(&d, ahead.gs(), &fight(), "map").expect("the fight starts ahead");
+    assert!(ahead.gs() == fresh.gs(), "the game itself untouched");
+    assert!(kept.fits(ahead.gs(), &fight(), "map"));
+    assert!(!kept.fits(ahead.gs(), &fight(), "explore"), "another runner");
+    ahead.game.as_mut().expect("a game").fight_ahead = Some(kept);
+    let on_switch = BattleScreen::world(&mut fresh, &fight(), "map").expect("the world fight starts");
+    let built_ahead = BattleScreen::world(&mut ahead, &fight(), "map").expect("the world fight starts");
+    assert!(ahead.game.as_ref().expect("a game").fight_ahead.is_none(), "taken");
+    assert_eq!(built_ahead.state(&ahead), on_switch.state(&fresh), "the same battle");
+    assert!(ahead.gs() == fresh.gs(), "the same game after the start");
+    assert_eq!(ahead.log, fresh.log, "the same log");
+    // stale: the game changed after the fight was started ahead
+    let mut stale = beat_cx(false, false);
+    let kept = crate::battle::FightAhead::start(&d, stale.gs(), &fight(), "map").expect("the fight starts ahead");
+    stale.gs_mut().party.gold += 7;
+    assert!(!kept.fits(stale.gs(), &fight(), "map"), "stale");
+    stale.game.as_mut().expect("a game").fight_ahead = Some(kept);
+    BattleScreen::world(&mut stale, &fight(), "map").expect("the world fight starts");
+    assert_eq!(stale.gs().party.gold, fresh.gs().party.gold + 7, "started from the game as it is");
+}

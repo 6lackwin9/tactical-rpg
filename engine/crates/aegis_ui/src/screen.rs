@@ -532,6 +532,15 @@ pub trait Screen<G> {
     }
     fn wheel(&mut self, _cx: &mut Cx<G>, _lines: i32) {}
     fn tick(&mut self, _cx: &mut Cx<G>) {}
+    /// ENGINE-53 (SWITCH-AHEAD1): a screen this one may open next, for the shell to draw once unseen at the start of
+    /// this frame (after the tick), as it draws the warm list before the first frame (`Context::warm`): the art, panel
+    /// and glyph caches its first real draw would fill are filled while this screen idles. Asked of the top screen each
+    /// frame, then each screen under it down the stack until one gives one (so a screen under a popup or a card it
+    /// opened can still get ready); give one only now and then (a slow screen costs its first draw here). None by
+    /// default.
+    fn warm_next(&mut self, _cx: &mut Cx<G>) -> Option<Box<dyn Screen<G>>> {
+        None
+    }
     /// What the frame loop owes this screen now (FPSCAP1). Default: every frame. Say less only when `tick` and `draw` have
     /// nothing to do until input or the time named; the shell asks every screen it draws, after each frame.
     fn frame_need(&self, _cx: &Cx<G>) -> FrameNeed {

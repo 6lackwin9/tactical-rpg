@@ -159,11 +159,18 @@ pub struct StoryStage {
     /// Why a step could not run (shown with a way back to the main menu).
     error: Vec<String>,
     w: Vec<Widget<StAct>>,
+    /// ENGINE-53 (SWITCH-AHEAD1): the running step (sequence, step) whose next fight was looked for, and the frames its
+    /// vignette has shown.
+    ahead_step: Option<(String, i64)>,
+    ahead_frames: u32,
 }
+
+/// ENGINE-53: the frames a vignette shows before the fight after it is started ahead.
+const AHEAD_FRAMES: u32 = 10;
 
 impl StoryStage {
     pub fn new(cx: &Cx) -> Self {
-        let mut stage = Self { waiting: false, music: crate::music::game_track(cx, crate::music::MENU), step_seen: None, error: Vec::new(), w: Vec::new() };
+        let mut stage = Self { waiting: false, music: crate::music::game_track(cx, crate::music::MENU), step_seen: None, error: Vec::new(), w: Vec::new(), ahead_step: None, ahead_frames: 0 };
         stage.take_step_music(cx);
         stage
     }
@@ -294,6 +301,40 @@ impl StoryStage {
 impl Screen<GameCx> for StoryStage {
     fn id(&self) -> &'static str {
         "story_stage"
+    }
+
+    /// ENGINE-53 (SWITCH-AHEAD1): while a step's vignette shows (`AHEAD_FRAMES` frames in, once per step), a fight
+    /// step right after it: started ahead on a copy of the game with the vignette's step done (the game's
+    /// `fight_ahead`), and drawn once unseen (its bodies, board ground, beat and panels).
+    fn warm_next(&mut self, cx: &mut Cx) -> Option<Box<dyn Screen<GameCx>>> {
+        if !self.waiting || !self.error.is_empty() {
+            self.ahead_frames = 0;
+            return None;
+        }
+        let g = cx.game.as_ref()?;
+        let at = g.gs.story.running.as_ref().map(|r| (r.sequence.clone(), r.step))?;
+        if self.ahead_step.as_ref() == Some(&at) {
+            return None;
+        }
+        self.ahead_frames += 1;
+        if self.ahead_frames < AHEAD_FRAMES {
+            return None;
+        }
+        self.ahead_step = Some(at);
+        self.ahead_frames = 0;
+        let d = cx.data.clone();
+        if !matches!(story::current(&d, &g.gs), Some(Step::Vignette { .. })) {
+            return None;
+        }
+        let mut after = g.gs.clone();
+        if !json::b(&story::step_done(&d, &mut after), "ok", false) || !matches!(story::current(&d, &after), Some(Step::Fight { .. })) {
+            return None;
+        }
+        let fight = story::fight(&d, &after)?;
+        let ahead = crate::battle::FightAhead::start(&d, &after, &fight, story::FIGHT_SOURCE)?;
+        let slot = g.slot;
+        cx.game.as_mut()?.fight_ahead = Some(ahead);
+        Some(Box::new(crate::region::Rehearsal::fight(&after, slot, &fight, story::FIGHT_SOURCE)))
     }
 
     fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {

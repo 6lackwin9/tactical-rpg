@@ -149,7 +149,16 @@ pub struct MainMenu {
     /// TITLEFX1 (PR7-28): the title backdrop's fire layer, its spots read once; the picture the menu drew last.
     fire: Option<crate::title_fx::TitleFx>,
     picture: &'static str,
+    /// ENGINE-53 (SWITCH-AHEAD1): Continue's map ground, composed on a thread while the title shows (tried once per
+    /// showing, from the menu's `AHEAD_AFTER`th tick), kept in the composer's cache when done or when Continue is chosen.
+    ahead: Option<crate::ground::Ahead>,
+    ahead_ticks: u32,
+    /// ENGINE-53: the map Continue opens, to draw once unseen when its ground is kept (`Screen::warm_next`).
+    rehearse: Option<crate::region::Rehearsal>,
 }
+
+/// ENGINE-53: the title's ticks before it starts Continue's map ground ahead, so its own first frames come first.
+const AHEAD_AFTER: u32 = 3;
 
 /// TITLEFX1: the fire layer's frame pacing (about 30 frames a second).
 const FIRE_FRAME_MS: u64 = 33;
@@ -160,10 +169,37 @@ impl MainMenu {
         self.fire.as_ref().is_some_and(|f| f.on(self.picture, cx.settings.reduce_motion()))
     }
 
+    /// ENGINE-53 (SWITCH-AHEAD1): on the `AHEAD_AFTER`th tick, reads the newest save (not entering it) and starts its
+    /// map ground on a thread; on a later tick, once the thread is done, keeps the ground in the composer's cache. A
+    /// result made stale by then (another save, view or zoom) is never drawn: its key matches nothing.
+    fn ahead_tick(&mut self, cx: &mut Cx) {
+        if self.ahead_ticks < AHEAD_AFTER {
+            self.ahead_ticks += 1;
+            if self.ahead_ticks == AHEAD_AFTER {
+                let slot = *self.newest.get_or_insert_with(|| save::newest_slot(&cx.data, &cx.save_dir));
+                if slot >= 0 {
+                    if let Ok(l) = save::read(&cx.data, &cx.save_dir, slot) {
+                        self.rehearse = crate::region::Rehearsal::of(cx, &l.state, slot);
+                        self.ahead = crate::ground::compose_ahead(cx, &l.state);
+                    }
+                }
+            }
+        }
+        if self.ahead.as_ref().is_some_and(|j| j.is_finished()) {
+            if let Some(job) = self.ahead.take() {
+                crate::ground::keep_ahead(job);
+            }
+        }
+    }
+
     fn act(&mut self, cx: &mut Cx, a: MenuAct) {
         match a {
             MenuAct::Continue => {
-                let slot = save::newest_slot(&cx.data, &cx.save_dir);
+                // ENGINE-53: the map ground composed ahead, waited for (only what is left of it) and kept
+                if let Some(job) = self.ahead.take() {
+                    crate::ground::keep_ahead(job);
+                }
+                let slot = self.newest.unwrap_or_else(|| save::newest_slot(&cx.data, &cx.save_dir));
                 if slot < 0 {
                     show_errors(cx, vec!["There is no save to continue.".into()]);
                 } else {
@@ -385,33 +421,58 @@ impl Screen<GameCx> for MainMenu {
         ui.p.text_right((foot.x + foot.w) as f32, version_y, "Version dev · Aegis engine", m.small, dim);
         self.w = ui.widgets;
     }
+    /// ENGINE-53 (SWITCH-AHEAD1): the map Continue opens, once, after its ground is composed ahead and kept (so the
+    /// unseen draw composes nothing).
+    fn warm_next(&mut self, _cx: &mut Cx) -> Option<Box<dyn Screen<GameCx>>> {
+        if self.ahead.is_some() || self.ahead_ticks < AHEAD_AFTER {
+            return None;
+        }
+        self.rehearse.take().map(|r| Box::new(r) as Box<dyn Screen<GameCx>>)
+    }
     /// The peek's portraits breathe and the title's fire moves on the menu's clock.
-    fn tick(&mut self, _cx: &mut Cx) {
+    fn tick(&mut self, cx: &mut Cx) {
         self.faces.tick();
         if let Some(f) = self.fire.as_mut() {
             f.tick();
         }
+        self.ahead_tick(cx);
     }
     /// The picture, the logo and the entries stand still; the peek's portraits move, and the title's fire at about
     /// 30 frames a second while it shows (TITLEFX1: never under Reduce motion).
     fn frame_need(&self, cx: &Cx) -> FrameNeed {
         if self.peek.is_some() {
             FrameNeed::Full
-        } else if self.fire_on(cx) {
+        } else if self.fire_on(cx) || self.ahead.is_some() || self.ahead_ticks < AHEAD_AFTER || self.rehearse.is_some() {
+            // ENGINE-53: frames on while Continue's map ground is being composed ahead, so the tick hands it over
             FrameNeed::Within(Duration::from_millis(FIRE_FRAME_MS))
         } else {
             FrameNeed::Idle
         }
     }
-    /// The agent link's reading: the title's fire layer (on or off, its spots).
+    /// The agent link's reading: the title's fire layer (on or off, its spots) and what Continue's map still needs made
+    /// ahead (ENGINE-53).
     fn state(&self, cx: &Cx) -> Value {
-        json!({"title_fx": self.fire.as_ref().map(|f| f.state(self.fire_on(cx)))})
+        // ENGINE-53: what Continue's map still needs made ahead ("ready" once nothing is left)
+        let ahead = if self.ahead_ticks < AHEAD_AFTER {
+            "waiting"
+        } else if self.ahead.is_some() {
+            "composing"
+        } else if self.rehearse.is_some() {
+            "drawing"
+        } else {
+            "ready"
+        };
+        json!({"title_fx": self.fire.as_ref().map(|f| f.state(self.fire_on(cx))), "ahead": ahead})
     }
     /// Back on the menu: the newest save may have changed, and the focus opens on Continue again.
     fn resume(&mut self, _cx: &mut Cx) {
         self.peek = None;
         self.newest = None;
         self.moved = false;
+        // ENGINE-53: the newest save may have changed, so its map ground is made ahead again
+        self.ahead = None;
+        self.ahead_ticks = 0;
+        self.rehearse = None;
     }
     /// The menu starts with the first entry focused (the kit's focus: arrows, Tab, Enter).
     fn auto_focus(&self) -> bool {
@@ -2305,6 +2366,14 @@ mod tests {
         cx.gs_mut().time = 50;
         let mut m = MainMenu::default();
         assert!(get(&menu_frame(&mut m, &mut cx, &mut g, (-1, -1)), "menu.peek").is_none(), "idle: no peek");
+        // ENGINE-53: frames go on until Continue's map is made ahead (its ground composed, its drawing handed over)
+        assert_ne!(m.frame_need(&cx), FrameNeed::Idle, "ENGINE-53: Continue's map is being made ahead");
+        let t0 = std::time::Instant::now();
+        while m.state(&cx)["ahead"] != json!("ready") {
+            m.tick(&mut cx);
+            drop(m.warm_next(&mut cx));
+            assert!(t0.elapsed().as_secs() < 30, "Continue's map made ahead");
+        }
         assert_eq!(m.frame_need(&cx), FrameNeed::Idle, "FPSCAP1: nothing moves on the menu without a peek");
         let w = menu_frame(&mut m, &mut cx, &mut g, OVER_FIRST);
         let p = get(&w, "menu.peek").expect("hovered: the peek");

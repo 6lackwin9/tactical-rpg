@@ -221,6 +221,32 @@ pub enum Action {
     FoeGroup(String),
 }
 
+/// ENGINE-53 (SWITCH-AHEAD1): a world fight started ahead, on a copy of the game, while the map idles near it: the game
+/// it was started from (`pre`), the game after its start (`post`) and what the start built. `BattleScreen::world` takes
+/// it instead of starting the fight again when the game, the fight and the runner are still exactly those (so the
+/// battle is the one a start on the switch makes); anything else drops it as stale.
+pub struct FightAhead {
+    fight: Dict,
+    runner: String,
+    pre: emberwake_world::GameState,
+    post: emberwake_world::GameState,
+    started: emberwake_world::battle::WorldFight,
+}
+
+impl FightAhead {
+    /// `fight` (a fight event or row) by `runner`, started on a copy of `gs`; None when the start refuses it.
+    pub fn start(d: &emberwake_world::Data, gs: &emberwake_world::GameState, fight: &Dict, runner: &str) -> Option<Self> {
+        let mut post = gs.clone();
+        let started = emberwake_world::battle::begin_world_with(d, &mut post, fight, &mut |world, m| member_art(d, world, m)).ok()?;
+        Some(Self { fight: fight.clone(), runner: runner.to_string(), pre: gs.clone(), post, started })
+    }
+
+    /// Started from `gs` for this fight and runner (not stale).
+    pub fn fits(&self, gs: &emberwake_world::GameState, fight: &Dict, runner: &str) -> bool {
+        self.runner == runner && self.fight == *fight && self.pre == *gs
+    }
+}
+
 /// ASSETORG2: a fielded member's body and palette in world `world` (the kit's `begin_world_with` art callback): its
 /// character's, else its base unit's (its class's body when the unit has none).
 fn member_art(d: &emberwake_world::Data, world: &str, m: &emberwake_world::UnitState) -> (String, String) {
@@ -808,7 +834,15 @@ impl BattleScreen {
         let d = cx.data.clone();
         // TRANSITIONS1 T2 step 4: the hub's view before the fight (the arrival lists what changed)
         let before = crate::transitions::snapshot(&d, cx.gs());
-        let started = emberwake_world::battle::begin_world_with(&d, cx.gs_mut(), fight, &mut |world, m| member_art(&d, world, m))?;
+        // ENGINE-53 (SWITCH-AHEAD1): the fight started ahead, when it was started from this very game; else started now
+        let ahead = cx.game.as_mut().and_then(|g| g.fight_ahead.take()).filter(|a| a.fits(cx.gs(), fight, runner));
+        let started = match ahead {
+            Some(a) => {
+                *cx.gs_mut() = a.post;
+                a.started
+            }
+            None => emberwake_world::battle::begin_world_with(&d, cx.gs_mut(), fight, &mut |world, m| member_art(&d, world, m))?,
+        };
         let emberwake_world::battle::WorldFight { session, world, members, stash_short, mods, intro, .. } = started;
         // CAMPAIGN1 P3, W6: at zero upkeep the party starts with less AP (read before the session, logged once)
         if !mods.note.is_empty() {

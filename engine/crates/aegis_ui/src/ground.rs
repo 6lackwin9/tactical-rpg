@@ -367,6 +367,21 @@ fn by_rows<A: Send, B: Send>(rows: usize, a: &mut [A], a_stride: usize, b: &mut 
     });
 }
 
+/// ENGINE-53 (SWITCH-AHEAD1): `f(0..n)` in order, the items side by side on up to `compose_threads` threads (each item
+/// about `px` pixels of work); each item's value is the one call's.
+fn par_map<T: Send>(n: usize, px: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    let threads = compose_threads(px.saturating_mul(n)).min(n);
+    if threads <= 1 {
+        return (0..n).map(f).collect();
+    }
+    let per = n.div_ceil(threads);
+    let f = &f;
+    std::thread::scope(|s| {
+        let parts: Vec<_> = (0..threads).map(|k| s.spawn(move || (k * per..((k + 1) * per).min(n)).map(f).collect::<Vec<T>>())).collect();
+        parts.into_iter().flat_map(|p| p.join().expect("a composer thread")).collect()
+    })
+}
+
 /// One centred box pass of width `2 r + 1` over `src`, a running sum in integers; only `r..len - r` is written.
 fn box_pass(src: &[i32], dst: &mut [i32], r: usize) {
     if src.len() < 2 * r + 1 {
@@ -604,7 +619,8 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
     let ranks = by_rank.len();
     let at = |rank: u8, x: i32, y: i32| cell_rank[(y * job.cols + x) as usize] >= rank;
 
-    let fields: Vec<Option<Field>> = (0..ranks).map(|k| if k == 0 { None } else { Field::blur(|x, y| at(k as u8, x, y), job.cols, job.rows, cell, w, h) }).collect();
+    // ENGINE-53 (SWITCH-AHEAD1): one rank's field a thread (`par_map`)
+    let fields: Vec<Option<Field>> = par_map(ranks, (w * h).max(0) as usize, |k| if k == 0 { None } else { Field::blur(|x, y| at(k as u8, x, y), job.cols, job.rows, cell, w, h) });
     let paints: Vec<Paint> = by_rank.iter().map(|i| Paint::new(&job.layers[*i], *i, seed, w, h)).collect();
     let wears: Vec<f32> = by_rank.iter().map(|i| job.layers[*i].wear).collect();
     let strays: Vec<bool> = by_rank.iter().map(|i| job.layers[*i].strays).collect();
@@ -783,7 +799,9 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
     let stone_rim: Vec<bool> = by_rank.iter().map(|i| job.layers[*i].stone_rim).collect();
     if sunken.iter().zip(&stone_rim).any(|(s, r)| *s && !*r) {
         let other = |ax: i32, ay: i32, g: u8| ax >= 0 && ay >= 0 && ax < w && ay < h && top[(ay * w + ax) as usize] != g;
-        for ay in 0..h {
+        // ENGINE-53: a row reads `top` and writes only itself (`by_rows`)
+        by_rows(uh, &mut px, uw * 4, &mut vec![(); uh], 1, |ay, row, _| {
+            let ay = ay as i32;
             for ax in 0..w {
                 let i = (ay * w + ax) as usize;
                 let g = top[i];
@@ -798,9 +816,9 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
                     continue;
                 };
                 let t = if any_tone { tone[i] - 0.5 } else { 0.0 };
-                put(&mut px, i, times(paints[g as usize].at(ax as usize, ay as usize, t), k));
+                put(row, ax as usize, times(paints[g as usize].at(ax as usize, ay as usize, t), k));
             }
-        }
+        });
     }
     if stone_rim.iter().any(|r| *r) {
         let lx = (cw / 8).max(2).min(cw);
@@ -858,7 +876,9 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
             let n = top[(ay * w + ax) as usize];
             n < g && !sunken[n as usize] && (contact[g as usize] || contact[n as usize])
         };
-        for ay in 0..h {
+        // ENGINE-53: a row reads `top` and writes only itself (`by_rows`)
+        by_rows(uh, &mut px, uw * 4, &mut vec![(); uh], 1, |ay, row, _| {
+            let ay = ay as i32;
             for ax in 0..w {
                 let i = (ay * w + ax) as usize;
                 let g = top[i];
@@ -866,10 +886,10 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
                     continue;
                 }
                 if lower(g, ax - 1, ay) || lower(g, ax + 1, ay) || lower(g, ax, ay - 1) || lower(g, ax, ay + 1) {
-                    dim(&mut px, i, CONTACT_DIM);
+                    dim(row, ax as usize, CONTACT_DIM);
                 }
             }
-        }
+        });
     }
     Base { w, h, px, top, by_rank, cell_rank }
 }
@@ -893,20 +913,19 @@ fn patch_noise(job: &GroundJob, w: i32, h: i32) -> Vec<f32> {
 
 /// `o_g` of each rank `wanted` says: the blurred mask of cells that are not that ground or are blocked. None also means no
 /// such cell, so 0 everywhere.
-fn other_fields(job: &GroundJob, b: &Base, wanted: impl Fn(usize) -> bool) -> Vec<Option<Field>> {
+fn other_fields(job: &GroundJob, b: &Base, wanted: impl Fn(usize) -> bool + Sync) -> Vec<Option<Field>> {
     let (w, h, cols) = (b.w, b.h, job.cols);
-    (0..b.by_rank.len())
-        .map(|g| {
-            if !wanted(g) {
-                return None;
-            }
-            let other = |x: i32, y: i32| {
-                let i = (y * cols + x) as usize;
-                b.cell_rank[i] as usize != g || job.blocked[i]
-            };
-            Field::blur(other, cols, job.rows, job.cell, w, h)
-        })
-        .collect()
+    // ENGINE-53: one rank's field a thread (`par_map`)
+    par_map(b.by_rank.len(), (w * h).max(0) as usize, |g| {
+        if !wanted(g) {
+            return None;
+        }
+        let other = |x: i32, y: i32| {
+            let i = (y * cols + x) as usize;
+            b.cell_rank[i] as usize != g || job.blocked[i]
+        };
+        Field::blur(other, cols, job.rows, job.cell, w, h)
+    })
 }
 
 #[inline]
@@ -1278,6 +1297,28 @@ fn blit_scaled(c: &mut Canvas, pr: Rect, art: &Image) {
             d.copy_from_slice(&src[*x..*x + 4]);
         }
     }
+}
+
+/// ENGINE-53 (SWITCH-AHEAD1): puts an art image composed ahead (on a thread, while another screen shows) in this
+/// thread's cache under `key`, as `draw` keeps one it composed on a miss; a key already held is left as it is. So the
+/// screen that draws it next finds it and composes nothing. A stale image (its job changed since) is never drawn: its key
+/// no longer matches, and it is dropped among the oldest.
+pub fn keep(key: GroundKey, img: Image) {
+    ART.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if cache.iter().any(|e| e.0 == key) {
+            return;
+        }
+        cache.push((key, Rc::new(img)));
+        if cache.len() > ART_MAX {
+            cache.remove(0);
+        }
+    });
+}
+
+/// ENGINE-53: whether this thread's cache holds `key`'s art image (`draw` would compose nothing).
+pub fn held(key: &GroundKey) -> bool {
+    ART.with(|cache| cache.borrow().iter().any(|e| &e.0 == key))
 }
 
 /// The ground on `r`: the art image of `key` from the cache (`job` composes it on a miss), its physical copy from the

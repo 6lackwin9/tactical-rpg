@@ -1,6 +1,6 @@
 {
  "id": "switch_feel",
- "title": "ENGINE-51 (SWITCH-FEEL1): each screen switch timed from the input to the first settled frame of the new screen (its own part, a walk or a fade out before it left out): popups and menus under 150 ms, maps and battles under 400 ms (ENGINE-52: Continue to the map and a fight with no intro under 200 ms), no frame over 100 ms that no transition covers; title to the Sunk Ward, the party screens, the hub menu, Save, Settings, the world map and back, a fight from the map (no intro), its results and back to the map",
+ "title": "ENGINE-51 (SWITCH-FEEL1): each screen switch timed from the input to the first settled frame of the new screen (its own part, a walk or a fade out before it left out): popups and menus under 150 ms, maps and battles under 400 ms (ENGINE-53: Continue to the map, once the title has made it ahead, and a fight with no intro, started ahead while the party stood still, under 120 ms), no frame over 100 ms that no transition covers; title to the Sunk Ward, the party screens, the hub menu, Save, Settings, the world map and back, a fight from the map (no intro), its results and back to the map",
  "launch": {
   "save": "sweep_start"
  },
@@ -16,8 +16,12 @@
    "timeout_ms": 20000
   },
   {
-   "step": "pause",
-   "ms": 500
+   "step": "wait",
+   "until": {
+    "path": "state.ahead",
+    "eq": "ready"
+   },
+   "timeout_ms": 20000
   },
   {
    "step": "feel",
@@ -28,7 +32,7 @@
    "script": [
     {
      "click": "menu.continue",
-     "switch_ms": 200
+     "switch_ms": 120
     }
    ],
    "budget": {
@@ -162,7 +166,7 @@
    "script": [
     {
      "click": "here.sweep",
-     "switch_ms": 200,
+     "switch_ms": 120,
      "to": "battle"
     }
    ],

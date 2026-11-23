@@ -154,6 +154,12 @@ impl<G: Context> Shell<G> {
     /// canvas cleared; nothing else changes (no tick, no frame counted, the audits paused).
     fn warm(&mut self) {
         let screens = G::warm(&mut self.cx);
+        self.warm_screens(screens);
+    }
+
+    /// ENGINE-46, ENGINE-53: draws `screens` once each, unseen, then clears the canvas and drops what they asked of the
+    /// shell (navigation, notices): only the caches they filled stay.
+    fn warm_screens(&mut self, screens: Vec<Box<dyn Screen<G>>>) {
         if screens.is_empty() {
             return;
         }
@@ -369,6 +375,11 @@ impl<G: Context> Shell<G> {
         self.stack.last_mut().unwrap().tick(cx);
         self.feel.tick = t.map_or(0.0, crate::perf::ms_since);
         self.settle();
+        // ENGINE-53 (SWITCH-AHEAD1): a screen one in the stack may open next (the top asked first), drawn once unseen
+        let cx = &mut self.cx;
+        if let Some(next) = self.stack.iter_mut().rev().find_map(|s| s.warm_next(cx)) {
+            self.warm_screens(vec![next]);
+        }
         // LOOK1-E1: the theme in force (the faces follow it; the screens' `Ui` sync them too).
         let theme = th();
         self.gfx.fonts.sync(&theme);
