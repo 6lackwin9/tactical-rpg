@@ -47,7 +47,7 @@ The core goal of moving from Godot to the custom **Aegis Engine** (`engine/` -> 
   code of their own (`aegis_ui::focus`, kept in the kit by the shell): Tab / Shift+Tab walk them in drawing order, the
   arrows move to the nearest one that way (a screen that walks or steers with the arrows says `Screen::arrow_focus`
   false: the region map, the journal), Enter or Space presses the focused one (a choice field opens its list and the
-  arrows pick in it; Left / Right step a slider). A white ring shows the focus after a key moved it; a click hides it.
+  arrows pick in it; Left / Right step a slider). `Screen::focus_group` makes a group of widgets one keyboard stop that the arrows walk inside (`focus::step_grouped`; the battle board); `Screen::press_focus` lets a screen take Enter or Space on the focus before its click (slot pick and empty, PR7-92); the reach report reads the focus group. A white ring shows the focus after a key moved it; a click hides it.
   `Screen::auto_focus` starts a keyboard menu focused (the main menu) on its first widget, or on
   `Screen::focus_first` when set. A question shows Yes then No, left to right, in both forms. A destructive question
   (`Cx::ask_no` / `ask_tag_no`, ASKNO1 and ASKNO2) opens with No focused, Enter = No and `y` = Yes, and through
