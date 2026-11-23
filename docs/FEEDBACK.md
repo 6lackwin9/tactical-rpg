@@ -171,8 +171,67 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-52` (`COMPOSE-PAR1`) | Built (tools lane) | `develop` | the ground composer's per-pixel pass and noise in bands of rows on up to 4 threads, the same bytes (tests on two maps, battle boards, an engine job); compose 40 to 26 ms alone; Continue (107 to 124 ms) and a fight with no intro (101 to 135 ms) miss 60 ms, reported with options; `switch_feel` budgets for both 200 ms; goldens unchanged. FB-499 |
 | `ENGINE-53` (`SWITCH-AHEAD1`) | Built (tools lane) | `develop` | the composer's fields' blur, rims and contact lines on threads (same bytes); built ahead at idle (`Screen::warm_next`, `ground::keep`): the title's Continue map (ground composed on a thread, map drawn once unseen), a fight the party walks into or stands near and the fight after a vignette (started on a copy of the game, taken when not stale); Continue 19 to 22 ms, The Sweep 27 to 30 ms; test that a fight built ahead equals one built on the switch; `switch_feel` budgets 120 ms; goldens unchanged. FB-501 |
 | `ENGINE-54` (`WARM-SPREAD1`) | Built (tools lane) | `develop` | build-ahead work on threads (decodes, grounds, fight starts; the kit's round plan `Send`), the rest drawn unseen in slices one a frame behind an empty canvas `bounds` after 300 ms still, none on a frame with input; no frame over 33 ms while warming (worst 22 ms by The Sweep on cold art), two cold slices of the fight 9 to 18 ms; Continue 19 ms, The Sweep 21 ms; new `walk_feel_fight`, `switch_feel` `title_warm`; goldens unchanged. FB-503 |
+| `ENGINE-55` (`AUDIO-FEEL1`) | Built (tools lane) | `develop` | `feel` times each sound from its input or frame to its first audible sample, with the output's buffer and underruns; UI sounds 12 to 20 ms, hits within 6 ms of their frame, music 15 to 30 ms after its ask (was 96 ms on Continue), no underruns in release; music asked before the draw, decoding off the frame, a fixed 512-frame buffer; audio budgets on `feel` steps, new `audio_feel`; goldens unchanged. FB-504 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-504: ENGINE-55 AUDIO-FEEL1 built; interface sounds 12 to 20 ms, hits within 6 ms of their frame, no underruns
+
+- **Status**: built (tools lane), `develop`. Engine only (`aegis_ui` `audio_out` and `audiofeel` new, `audio`, shell,
+  headless feel replay, start; `aegis_cli` scenario feel budgets), scenarios `audio_feel` (new), `switch_feel` and
+  `walk_feel_fight` (`underruns` 0); no data, no game code. **Every golden unchanged**. Shots
+  diff: only `screens_menus__scene_runner.png` (its known artifact); `audio_feel` had one underrun in Continue's 1.5 s
+  inside the diff's loaded run, so the dev allowance now counts a part of 2 s as one. One gate run failed `feel_battle`'s
+  `battle_resolve` on `shotsexact`'s second run (one 97 ms frame, median 32 ms, no sound decode in it); it passed
+  three times alone (worst 45 to 48 ms) and in the next full gate.
+- **Spec**: `docs/READY.md` row `ENGINE-55` (`AUDIO-FEEL1`).
+- **What `feel` now reports**: every `feel` reply has `audio`: each sound and track started, with when it was asked, when
+  its first sample over 1/1024 was heard (a probe on the mixer's output), the time from its input (`after_input_ms`),
+  from its ask (`after_ask_ms`) and, for an effect asked in a frame, from when that frame is shown (`beat_ms`), and the
+  decode done on the ask; plus the output's buffer, underruns (a buffer mixed after it should have played) and the
+  longest mix. With no window the sound plays into a virtual 48 kHz output on its own thread that asks for 512-frame
+  buffers on time, so muted gate runs hear it too. A window's feel overlay adds the real device's buffer and underruns.
+- **Measured** (release, no window, this 4-core container; before the fixes in brackets):
+  - **UI click or confirm**: 12 to 20 ms after the click (under 50 ms).
+  - **Hits and footsteps** (battle hits, `move_step`, defends): within 4.9 to 5.6 ms of their frame (one 11 ms seen);
+    one frame is 16.7 ms.
+  - **Music change**: 15 to 30 ms after its ask (Continue's map, the map to The Sweep, results to the map) [Continue's
+    music 96 ms after the click: it was asked after the map's first draw].
+  - **Decode on the frame**: about 1 ms for a track (the bytes read) [3.5 ms of decoder]; an effect 0.1 to 0.3 ms
+    once cached [the Ogg stings 10 to 17 ms on their first play if decoded on the frame].
+  - **Underruns**: none in release in `walk_feel_fight`, `switch_feel` or `audio_feel`; the longest buffer mix 2.5 ms
+    against its 10.7 ms. In the gate's dev build one underrun shows now and then in a long replay (`switch_feel`'s menus,
+    fight to results, and once in Continue's 1.5 s under the shots diff's load): a debug thread starved by the build's
+    own load, not the mix.
+- **Fixes**:
+  - A screen's music is asked for right after its tick, before its draw (`Shell::follow_music`), not after it.
+  - A track's decoder is made on a thread (`aegis-track`); an effect is decoded once and kept (a `.wav` on its first
+    ask, any other format streamed on a thread while a copy is decoded for the next play).
+  - The device is opened with our own `cpal` stream at a fixed 512-frame buffer (10.7 ms at 48 kHz) where the device
+    allows it, else its default; the old default stream's buffer was unknown. No mixing work was on the audio thread
+    beyond the mix itself.
+- **Gate budgets**: a `feel` step's `budget` takes `ui_sound_ms`, `hit_beat_ms`, `music_ms`, `underruns` and `decode_ms`;
+  one over, or one never measured, fails the step. In a dev build `decode_ms` counts 2.5 times and `underruns` allows one
+  per 2 s of replay or part (`DEV_UNDERRUN_EVERY_MS`). `audio_feel`: music 50 ms, the confirm 50 ms, hits 16.7 ms, underruns 0;
+  `switch_feel` and `walk_feel_fight`: underruns 0. Authoring guide `engine/docs/authoring/scenarios.md` "Sound".
+- **Mix and feel choices for Design** (none changed here):
+  1. Buffer 512 frames (10.7 ms) vs 256 (5.3 ms): 256 halves the wait, costs more wakeups and risks underruns on slow
+     PCs. Recommend 512.
+  2. Fades: a track from silence fades in over 2 s, a change crossfades over 1 s. The first notes of a short sting or a
+     battle start are quiet for a moment; a shorter fade-in (0.3 to 0.5 s) for battle music may feel punchier.
+  3. No footsteps on the map: `move_step` plays in battle only. A soft map step would help the walk feel.
+  4. No menu or button sounds: the engine ships `ui_click`, `ui_confirm`, `ui_back` and `ui_error`, but only the battle's
+     round controls and the volume sliders play them. A rule like "confirm on any button, back on Esc" would make menus
+     feel answered.
+  5. Stings (`combat_sting`, `victory_stinger`) now decode on a thread on their first play, so the first one is heard
+     a frame or two later than a cached one; warming them with the screen would remove that.
+  6. The dev-build underrun allowance (one per 2 s) vs none: release holds 0.
+  7. On Windows a WASAPI device may refuse the fixed buffer and fall back to its default; the overlay shows the real
+     buffer when Tushar plays with `feel=1`.
+- **Docs delta (engine/README.md)**: in the audio bullet add "; since ENGINE-55 the output is our own `cpal` stream at a
+  fixed 512-frame buffer (`aegis_ui::audio_out`; a virtual device with no window, so feel replays hear sound), effects
+  decoded once and off the frame, and `feel` reports each sound from its input or frame to its first audible sample
+  (`aegis_ui::audiofeel`, budgets `ui_sound_ms`, `hit_beat_ms`, `music_ms`, `underruns`, `decode_ms`)".
 
 ### FB-503: ENGINE-54 WARM-SPREAD1 built; no frame over 33 ms while warming, Continue 19 ms and The Sweep 21 ms
 

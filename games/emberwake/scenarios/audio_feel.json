@@ -1,0 +1,122 @@
+{
+ "id": "audio_feel",
+ "title": "ENGINE-55 (AUDIO-FEEL1): sounds timed from the input or frame that asks for them to their first audible sample, on the virtual device: the title's Continue and The Sweep's start (music changes, the combat sting), then a round confirmed and played (the interface click, footsteps, hits); interface sounds under 50 ms after their input, effects within a frame of their frame, no underrun",
+ "launch": {
+  "save": "sweep_start"
+ },
+ "settings": {},
+ "timeout_s": 600,
+ "steps": [
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "main_menu"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "pause",
+   "ms": 1500
+  },
+  {
+   "step": "feel",
+   "name": "title_to_map",
+   "step_ms": 16.667,
+   "gap": 0,
+   "script": [
+    {
+     "click": "menu.continue"
+    },
+    {
+     "wait_ms": 1500
+    }
+   ],
+   "budget": {
+    "music_ms": 50,
+    "underruns": 0
+   }
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "region_map"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "pause",
+   "ms": 800
+  },
+  {
+   "step": "click",
+   "id": "here.sweep"
+  },
+  {
+   "step": "pause",
+   "ms": 1500
+  },
+  {
+   "step": "feel",
+   "name": "map_to_fight",
+   "step_ms": 16.667,
+   "gap": 0,
+   "script": [
+    {
+     "click": "here.sweep"
+    },
+    {
+     "wait_ms": 3000
+    }
+   ],
+   "budget": {
+    "music_ms": 50,
+    "underruns": 0
+   }
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "battle"
+   },
+   "timeout_ms": 40000
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "state.beat",
+    "absent": true
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "click",
+   "id": "dialogue.continue"
+  },
+  {
+   "step": "pause",
+   "ms": 800
+  },
+  {
+   "step": "feel",
+   "name": "battle_round",
+   "step_ms": 16.667,
+   "gap": 0,
+   "script": [
+    {
+     "click": "strip.confirm"
+    },
+    {
+     "wait_ms": 8000
+    }
+   ],
+   "budget": {
+    "ui_sound_ms": 50,
+    "hit_beat_ms": 16.7,
+    "underruns": 0
+   }
+  }
+ ]
+}

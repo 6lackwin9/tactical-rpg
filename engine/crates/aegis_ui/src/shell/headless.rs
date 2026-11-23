@@ -154,7 +154,22 @@ struct Loop<G> {
     /// The top screen (stack depth and id) and when it opened, on the run's clock: `frames` `since_open_ms` reads it.
     top: (usize, &'static str),
     opened: Instant,
+    /// ENGINE-55 (AUDIO-FEEL1): during a `feel` replay, when each input came and each frame started and ended (wall
+    /// clock), for its sound report (`crate::audiofeel`).
+    heard: Option<HeardRec>,
 }
+
+/// ENGINE-55: what a `feel` replay records for its sound report.
+#[cfg(not(target_arch = "wasm32"))]
+struct HeardRec {
+    t0: Instant,
+    inputs: Vec<Instant>,
+    frames: Vec<(Instant, Instant)>,
+}
+
+/// ENGINE-55: how long a replay's end waits, at most, for the sounds it asked for to be mixed (two buffers and more).
+#[cfg(not(target_arch = "wasm32"))]
+const HEARD_WAIT: Duration = Duration::from_millis(150);
 
 #[cfg(not(target_arch = "wasm32"))]
 impl<G: Context> Loop<G> {
@@ -324,6 +339,9 @@ impl<G: Context> Loop<G> {
         let mut held: Vec<Key> = Vec::new();
         let mut done = 0u64;
         let mut failed = None;
+        // ENGINE-55: the sounds of this replay, timed from its inputs and frames
+        self.shell.cx.audio.reset_output();
+        self.heard = Some(HeardRec { t0: Instant::wall(), inputs: Vec::new(), frames: Vec::new() });
         'script: for (i, step) in script.iter().enumerate() {
             let times = step["times"].as_u64().unwrap_or(1).clamp(1, FEEL_TIMES_MAX);
             let dir_key = |name: Option<&str>| name.and_then(Key::parse).filter(|k| k.dir().is_some());
@@ -350,6 +368,7 @@ impl<G: Context> Loop<G> {
                 let what = format!("{kind} {name}");
                 self.mark(&mut rec, kind, &what, k.dir(), before, !held.is_empty());
                 if down {
+                    self.heard_input();
                     self.shell.feel_input(&what);
                     self.shell.key(k);
                     self.shell.feel_state();
@@ -408,6 +427,7 @@ impl<G: Context> Loop<G> {
                 self.mark(&mut rec, mark.0, &kind, mark.1, !held.is_empty(), !held.is_empty());
                 let from = (self.top_id(), self.shell.stack.len());
                 let from_transition = self.transition_shown();
+                self.heard_input();
                 self.shell.feel_input(&kind);
                 let handler = Instant::wall();
                 let reply = self.shell.bridge(&cmd);
@@ -434,6 +454,7 @@ impl<G: Context> Loop<G> {
         }
         self.shell.cx.held.dir = None;
         self.every = every;
+        let heard = self.heard.take();
         let (samples, frames) = self.shell.feel.take();
         self.shell.feel_launch = was_launch;
         self.shell.feel.on = was_on;
@@ -448,12 +469,34 @@ impl<G: Context> Loop<G> {
         if let Some(r) = rec {
             out["motion"] = crate::walkfeel::report(&r.frames, &r.marks, body["step_ms"].as_f64().unwrap_or(every.as_secs_f64() * 1000.0));
         }
+        if let (Some(h), Some(_)) = (heard, self.shell.cx.audio.output()) {
+            out["audio"] = self.heard_report(h, body["step_ms"].as_f64().unwrap_or(every.as_secs_f64() * 1000.0));
+        }
         if switching {
             // a dev build draws about twice as slow: its long frames and budgets stretch as the feel budgets do
             let k = if cfg!(debug_assertions) { crate::switchfeel::DEV_ALLOWANCE } else { 1.0 };
             out["switch"] = crate::switchfeel::report(&switches, body["step_ms"].as_f64().unwrap_or(every.as_secs_f64() * 1000.0), k);
         }
         out
+    }
+
+    /// ENGINE-55: an input of a `feel` replay came now.
+    fn heard_input(&mut self) {
+        if let Some(h) = self.heard.as_mut() {
+            h.inputs.push(Instant::wall());
+        }
+    }
+
+    /// ENGINE-55: the replay's sound report (`audiofeel::report`), once the sounds it asked for are mixed (waiting at
+    /// most `HEARD_WAIT`).
+    fn heard_report(&mut self, h: HeardRec, period_ms: f64) -> Value {
+        let audio = &self.shell.cx.audio;
+        let wait = Instant::wall();
+        while audio.sounds_since(h.t0).iter().any(|s| s.3.is_none()) && wait.wall_elapsed() < HEARD_WAIT {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        let Some(out) = audio.output() else { return Value::Null };
+        crate::audiofeel::report(&audio.sounds_since(h.t0), h.t0, &h.inputs, &h.frames, &out, period_ms)
     }
 
     /// ENGINE-51: the top screen's id.
@@ -468,7 +511,11 @@ impl<G: Context> Loop<G> {
 
     /// ENGINE-49: a frame of a `feel` replay, and the top screen's `motion` after it when the replay records it.
     fn feel_draw(&mut self, rec: &mut Option<MotionRec>) {
+        let start = Instant::wall();
         self.draw();
+        if let Some(h) = self.heard.as_mut() {
+            h.frames.push((start, Instant::wall()));
+        }
         if let Some(r) = rec.as_mut() {
             let t = Instant::now().saturating_duration_since(r.t0).as_secs_f64() * 1000.0;
             if let Some(f) = crate::walkfeel::Frame::of(t, &self.shell.stack.last().unwrap().motion()) {
@@ -667,7 +714,7 @@ pub(super) fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options
     }
     let shell = Shell::open(cx, stack, options, h.size, h.dpr, icon_notice);
     let every = Duration::from_micros(1_000_000 / u64::from(h.fps));
-    let mut game = Loop { shell, pacer: Pacer::default(), every, applied: None, asked_at: Instant::wall(), stepped: h.stepped, top: (0, ""), opened: Instant::now() };
+    let mut game = Loop { shell, pacer: Pacer::default(), every, applied: None, asked_at: Instant::wall(), stepped: h.stepped, top: (0, ""), opened: Instant::now(), heard: None };
     if h.stepped {
         // One frame at the start, as the pace would draw: the first `ui_tree` has a screen to read.
         game.draw();

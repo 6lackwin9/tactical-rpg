@@ -99,6 +99,25 @@ fn a_feel_step_takes_movement_inputs_and_budgets() {
     assert_eq!(scenario::motion_misses(&report, &json!({"first_move_ms": 17, "overshoot_steps": 0})), ["first_move_ms 33.3 over 17"]);
 }
 
+/// ENGINE-55 (AUDIO-FEEL1): the sound budgets: each over its budget names itself, one never measured says so, a dev
+/// build stretches `decode_ms` and allows an underrun per `DEV_UNDERRUN_EVERY_MS` of the replay.
+#[test]
+fn a_feel_step_takes_sound_budgets() {
+    let s = parse("x", &minimal(json!([{"step": "feel", "name": "round", "script": [{"click": "strip.confirm"}], "budget": {"ui_sound_ms": 50, "hit_beat_ms": 16.7, "underruns": 0}}]))).unwrap();
+    let Step::Feel { audio_budget, .. } = &s.steps[0] else { panic!() };
+    assert_eq!(audio_budget, &json!({"ui_sound_ms": 50, "hit_beat_ms": 16.7, "underruns": 0}));
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "script": [{"frames": 1}], "budget": {"underruns": -1}}])));
+    assert!(got.contains("'underruns' is a number from 0"), "{got}");
+    // 4 s of replay: 375 buffers of 10.667 ms
+    let report = json!({"ui_sound_ms": 61.0, "hit_beat_ms": null, "decode_ms": 3.0, "underruns": 2, "buffers": 375, "buffer_ms": 10.667});
+    let budget = json!({"ui_sound_ms": 50, "hit_beat_ms": 16.7, "decode_ms": 2, "underruns": 0});
+    assert_eq!(scenario::audio_misses(&report, &budget, 1.0), ["ui_sound_ms 61 over 50", "hit_beat_ms: nothing measured it (no such sound heard)", "underruns 2 over 0", "decode_ms 3 over 2"]);
+    assert_eq!(scenario::audio_misses(&report, &budget, 2.5), ["ui_sound_ms 61 over 50", "hit_beat_ms: nothing measured it (no such sound heard)"], "dev: decode 5 ms, 2 underruns in 4 s");
+    let short = json!({"underruns": 1, "buffers": 140, "buffer_ms": 10.667});
+    assert!(scenario::audio_misses(&short, &json!({"underruns": 0}), 2.5).is_empty(), "dev: one in a 1.5 s replay");
+    assert_eq!(scenario::audio_misses(&Value::Null, &json!({"underruns": 0}), 1.0), ["underruns: no sound output"]);
+}
+
 /// ENGINE-51 (SWITCH-FEEL1): `switch` follows each input until its new screen settles; an input's `switch_ms` needs it.
 #[test]
 fn a_feel_step_takes_switch_budgets() {

@@ -149,7 +149,7 @@ pub enum Step {
     /// `frame_p50_ms` (ENGINE-50) when the median frame does. `switch` (ENGINE-51): each key, click or pad input is
     /// followed until its new screen settles; an input's `switch_ms` fails the step past it and its `to` names the screen it reaches
     /// (`aegis_ui::switchfeel`).
-    Feel { name: String, script: Value, gap: u64, input_ms: Option<f64>, frame_ms: Option<f64>, frame_p50_ms: Option<f64>, step_ms: Option<f64>, motion: bool, motion_budget: Value, switch: bool, uncovered_frames: Option<u64> },
+    Feel { name: String, script: Value, gap: u64, input_ms: Option<f64>, frame_ms: Option<f64>, frame_p50_ms: Option<f64>, step_ms: Option<f64>, motion: bool, motion_budget: Value, switch: bool, uncovered_frames: Option<u64>, audio_budget: Value },
     /// ENGINE-48 (INPUT-REACH1): the top screen's reach report with no window (`reach` link request): what a mouse can use
     /// that the keys or a pad cannot reach, a focus that does not show, and with `back` what one Esc does. `fail`: the
     /// step fails on a dead end whose widget id (or `back`) is not in `allow`.
@@ -244,6 +244,41 @@ pub fn motion_misses(report: &Value, budget: &Value) -> Vec<String> {
         (Some(b), Some(v)) if v > b => Some(format!("{k} {v} over {b}")),
         _ => None,
     }).collect()
+}
+
+/// ENGINE-55 (AUDIO-FEEL1): the sound budgets of a `feel` step (`aegis_ui::audiofeel::AUDIO_BUDGETS`): the worst interface
+/// sound after its input, the worst effect off its frame (either way), the worst music change after its ask (ms),
+/// underruns (count) and the worst decode on an ask (ms).
+pub const AUDIO_BUDGETS: [&str; 5] = ["ui_sound_ms", "hit_beat_ms", "music_ms", "underruns", "decode_ms"];
+
+/// ENGINE-55: in a dev build (the gate's) a replay may have one underrun per this many ms of it (or part) over its budget: the
+/// virtual device's thread runs at a normal priority (a device's runs at the system's audio priority) beside a build
+/// that draws about twice as slow, and the scheduler now and then wakes it a buffer late. A gross slip (mixing or
+/// decoding too slow for the buffer) underruns at nearly every buffer, about 90 a second; a release build has none.
+pub const DEV_UNDERRUN_EVERY_MS: f64 = 2000.0;
+
+/// ENGINE-55: a `feel` reply's sound report (`audio`) against `budget`: a measure over its budget, or budgeted and never
+/// measured (no such sound heard in the replay, or no sound output at all). `decode_ms` stretches by `dev` (the dev
+/// build's allowance, 1 in a release build) and `underruns` by `DEV_UNDERRUN_EVERY_MS`; the times through the output do
+/// not depend on the build.
+pub fn audio_misses(report: &Value, budget: &Value, dev: f64) -> Vec<String> {
+    let mut out = Vec::new();
+    let replay_ms = report["buffers"].as_f64().unwrap_or(0.0) * report["buffer_ms"].as_f64().unwrap_or(0.0);
+    for k in AUDIO_BUDGETS {
+        let Some(b) = budget[k].as_f64() else { continue };
+        let b = match k {
+            "decode_ms" => b * dev,
+            "underruns" if dev > 1.0 => b + (replay_ms / DEV_UNDERRUN_EVERY_MS).ceil(),
+            _ => b,
+        };
+        match report[k].as_f64() {
+            Some(v) if v > b => out.push(format!("{k} {v} over {b}")),
+            Some(_) => {}
+            None if report.is_null() => out.push(format!("{k}: no sound output")),
+            None => out.push(format!("{k}: nothing measured it (no such sound heard)")),
+        }
+    }
+    out
 }
 
 /// ENGINE-48: whether `allow` covers a dead end (`reach_dead_ends`): its widget id is listed, or `back` for a back press.
@@ -702,6 +737,7 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
             let (mut input_ms, mut frame_ms, mut frame_p50_ms) = (None, None, None);
             let mut uncovered_frames = None;
             let mut motion_budget = serde_json::Map::new();
+            let mut audio_budget = serde_json::Map::new();
             match o.get("budget") {
                 None => {}
                 Some(Value::Object(b)) => {
@@ -712,6 +748,15 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
                                     motion_budget.insert(k.clone(), v.clone());
                                 }
                                 Some(_) => problems.push(format!("{place}.budget: '{k}' is a movement budget: it needs 'motion' true")),
+                                None => problems.push(format!("{place}.budget: '{k}' is a number from 0 to {PERF_BUDGET_MS_MAX}")),
+                            }
+                            continue;
+                        }
+                        if AUDIO_BUDGETS.contains(&k.as_str()) {
+                            match v.as_f64().filter(|n| *n >= 0.0 && *n <= PERF_BUDGET_MS_MAX) {
+                                Some(_) => {
+                                    audio_budget.insert(k.clone(), v.clone());
+                                }
                                 None => problems.push(format!("{place}.budget: '{k}' is a number from 0 to {PERF_BUDGET_MS_MAX}")),
                             }
                             continue;
@@ -729,7 +774,7 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
                             "frame_ms" => &mut frame_ms,
                             "frame_p50_ms" => &mut frame_p50_ms,
                             other => {
-                                problems.push(format!("{place}.budget: unknown key '{other}' (input_ms, frame_ms, frame_p50_ms, uncovered_frames, {})", MOTION_BUDGETS.join(", ")));
+                                problems.push(format!("{place}.budget: unknown key '{other}' (input_ms, frame_ms, frame_p50_ms, uncovered_frames, {}, {})", MOTION_BUDGETS.join(", "), AUDIO_BUDGETS.join(", ")));
                                 continue;
                             }
                         };
@@ -741,7 +786,7 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
                 }
                 Some(_) => problems.push(format!("{place}: 'budget' is an object (input_ms, frame_ms, frame_p50_ms)")),
             }
-            Step::Feel { name, script, gap, input_ms, frame_ms, frame_p50_ms, step_ms, motion, motion_budget: Value::Object(motion_budget), switch, uncovered_frames }
+            Step::Feel { name, script, gap, input_ms, frame_ms, frame_p50_ms, step_ms, motion, motion_budget: Value::Object(motion_budget), switch, uncovered_frames, audio_budget: Value::Object(audio_budget) }
         }
         other => {
             problems.push(format!("{place}: unknown step '{other}'"));
@@ -1427,7 +1472,7 @@ impl Run<'_> {
                     return Err(fail(format!("perf {name}: {} (p50 {} ms, p95 {} ms, max {} ms over {frames} frames, canvas {}x{})", misses.join(", "), reply["stats"]["p50"], reply["stats"]["p95"], reply["stats"]["max"], reply["canvas"][0], reply["canvas"][1])));
                 }
             }
-            Step::Feel { name, script, gap, input_ms, frame_ms, frame_p50_ms, step_ms, motion, motion_budget, switch, uncovered_frames } => {
+            Step::Feel { name, script, gap, input_ms, frame_ms, frame_p50_ms, step_ms, motion, motion_budget, switch, uncovered_frames, audio_budget } => {
                 let fail = |message: String| Failure { step: label.to_string(), message, gone: false };
                 if !self.headless {
                     return Err(fail("input times are measured in a run with no window".to_string()));
@@ -1463,6 +1508,10 @@ impl Run<'_> {
                         misses.push("the top screen reports no motion".to_string());
                     }
                     misses.extend(motion_misses(&reply["motion"], motion_budget));
+                }
+                if audio_budget.as_object().is_some_and(|b| !b.is_empty()) {
+                    let dev = if reply["build"] == json!("dev") { FEEL_DEV_ALLOWANCE } else { 1.0 };
+                    misses.extend(audio_misses(&reply["audio"], audio_budget, dev));
                 }
                 if *switch {
                     misses.extend(reply["switch"]["misses"].as_array().into_iter().flatten().filter_map(|m| m.as_str().map(String::from)));

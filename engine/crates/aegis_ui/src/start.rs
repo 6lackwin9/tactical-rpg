@@ -78,10 +78,13 @@ impl Start {
         Settings::load(aegis_save::user_dir(&self.id).join("settings.json"), defaults)
     }
 
-    /// The sounds over the asset layers; silent with no window.
+    /// The sounds over the asset layers; with no window on a virtual device (ENGINE-55: mixed and timed, unheard).
     pub fn audio(&self) -> Audio {
         if self.options.headless.is_some() {
-            Audio::offline_layers(&self.layers)
+            #[cfg(not(target_arch = "wasm32"))]
+            return Audio::virtual_layers(&self.layers);
+            #[cfg(target_arch = "wasm32")]
+            return Audio::offline_layers(&self.layers);
         } else {
             Audio::of_layers(&self.layers)
         }

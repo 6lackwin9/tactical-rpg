@@ -195,6 +195,19 @@ input with a `to` also waits for a walk to the exit, up to 600 frames, where one
 other screen). `budget` takes `uncovered_frames` (long frames no transition covered). The dev build's allowance stretches
 `switch_ms` and the 100 ms alike.
 
+Sound (ENGINE-55 AUDIO-FEEL1): every `feel` reply also has `audio` (`aegis_ui::audiofeel`). With no window the sound
+plays into a virtual output (`aegis_ui::audio_out`, a 48 kHz stereo device on its own thread asking for 512-frame
+buffers on time, so a sound is heard when its buffer plays, even in a muted run). Each sound and track started in the
+replay gets `rel`, `bus`, `asked_ms`, `heard_ms` (its first sample over 1/1024), `after_ask_ms`, `after_input_ms` (from
+the last input within 250 ms before the ask), `beat_ms` (an effect asked in a frame, heard minus that frame's start plus
+one period: when the frame is shown) and `decode_ms` (reading or decoding on the ask); over the run `ui_sound_ms` (the
+worst interface sound after its input), `hit_beat_ms` (the worst effect off its frame, either way), `music_ms` (the worst
+track after its ask), `decode_ms`, `unheard`, `underruns` (a buffer mixed after it should have played) with
+`underrun_ms`, `buffer_frames`, `buffer_ms`, `buffers` and `worst_fill_ms`. `budget` takes each of `ui_sound_ms`,
+`hit_beat_ms`, `music_ms`, `underruns` and `decode_ms`; one over, or one nothing measured, fails the step. In a dev build
+`decode_ms` counts 2.5 times and `underruns` allows one more per 2 s of replay or part of it (`DEV_UNDERRUN_EVERY_MS`: a starved
+debug thread). A window's feel overlay adds the real device's buffer and underruns.
+
 With no window nothing is presented, so a frame is done once drawn; a window adds the copy to the GPU and the present (and
 vsync's wait). The same numbers come from a real window with `--feel` (or `feel=1`) on the game's command line, or the
 setting `"feel": true`: an overlay at the top left (the last frame's ms, the worst frame of the last second, the last

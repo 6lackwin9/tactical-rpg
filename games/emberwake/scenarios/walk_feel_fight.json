@@ -83,7 +83,8 @@
     "camera_lag_tiles": 1,
     "camera_jump_tiles": 0.5,
     "frame_ms": 33,
-    "frame_p50_ms": 16.7
+    "frame_p50_ms": 16.7,
+    "underruns": 0
    }
   }
  ]

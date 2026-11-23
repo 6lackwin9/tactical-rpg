@@ -19,6 +19,8 @@
 
 pub mod art;
 pub mod audio;
+pub mod audio_out;
+pub mod audiofeel;
 pub mod autotile;
 pub mod controls;
 #[cfg(not(target_arch = "wasm32"))]

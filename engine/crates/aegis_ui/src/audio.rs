@@ -15,8 +15,13 @@
 //! AMBIENCE1: an ambience loop (a place's wind, crowd or water, `Screen::ambience`) plays on its own channel beside the
 //! music, on the `Ambience` bus (the settings key `ambience`): one loop wanted at a time, crossfaded and looped like the
 //! music, so a change of music never cuts it and a change of place never cuts the music.
+//!
+//! ENGINE-55 (AUDIO-FEEL1): the sounds play on the engine's own output (`crate::audio_out`: its buffer, a virtual device
+//! with no window), each through a probe that times its first audible sample (`sounds_since`); an effect is decoded once
+//! and kept (`Pcm`), so a second play decodes nothing and no effect is decoded on the audio thread.
 
-use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
+use crate::audio_out::{Heard, Output, Pcm};
+use rodio::{Decoder, Sink, Source};
 use serde_json::Value;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -73,7 +78,8 @@ impl Levels {
 }
 
 struct Track {
-    sink: Sink,
+    /// ENGINE-55: shared with the thread that makes its decoder (`start_loop`).
+    sink: Arc<Sink>,
     gain: f32,
     target: f32,
     /// Gain change per second toward `target`.
@@ -84,8 +90,8 @@ struct State {
     levels: Levels,
     /// The window has the focus (the shell's `set_focused`; true until told otherwise).
     focused: bool,
-    sfx: Vec<(Sink, Instant)>,
-    ui: Vec<(Sink, Instant)>,
+    sfx: Vec<(Arc<Sink>, Instant)>,
+    ui: Vec<(Arc<Sink>, Instant)>,
     tracks: Vec<Track>,
     wanted: Option<String>,
     /// The ambience channel (AMBIENCE1): its loops fading in and out, and the one wanted.
@@ -94,6 +100,11 @@ struct State {
     last_tick: Instant,
     last_preview: Option<Instant>,
     cache: HashMap<String, Option<Arc<[u8]>>>,
+    /// ENGINE-55: the effects decoded (`pcm`), and those a thread is decoding (`decode_later`).
+    pcm: HashMap<String, Option<Arc<Pcm>>>,
+    pcm_later: HashMap<String, Arc<std::sync::Mutex<Option<Arc<Pcm>>>>>,
+    /// ENGINE-55: the sounds started, latest `SOUNDS_KEPT` (`sounds_since`).
+    sounds: Vec<SoundRec>,
     found: HashMap<String, bool>,
     /// A track's variant pool (`music_variants`), listed once until the next mount.
     pools: HashMap<String, Vec<String>>,
@@ -117,23 +128,39 @@ struct Pick {
     played: bool,
 }
 
-struct Device {
-    _stream: OutputStream,
-    handle: OutputStreamHandle,
+/// ENGINE-55: a sound started (`Audio::sounds_since`).
+pub struct SoundRec {
+    pub rel: String,
+    pub bus: Bus,
+    /// When it was asked for (wall clock).
+    pub asked: Instant,
+    /// The ms its file took to read and decode on this ask (0 when it was decoded already; a track's: its decoder made).
+    pub decode_ms: f64,
+    heard: Option<Heard>,
 }
+
+impl SoundRec {
+    /// When its first audible sample plays (None: not yet, or no output).
+    pub fn heard(&self) -> Option<Instant> {
+        self.heard.as_ref().and_then(|h| h.at())
+    }
+}
+
+/// ENGINE-55: the sounds kept for `sounds_since` (the latest).
+const SOUNDS_KEPT: usize = 512;
 
 pub struct Audio {
     /// The audio folders in lookup order (ASSETORG2: the game's, its kit's, the engine's `assets/audio`).
     roots: Vec<PathBuf>,
-    device: Option<Device>,
+    device: Option<Output>,
     /// The device opens at the first gesture (`unlock`; the web): until then nothing plays.
     waiting: bool,
     state: RefCell<State>,
 }
 
 /// The default output device; None when there is none.
-fn open_device() -> Option<Device> {
-    OutputStream::try_default().ok().map(|(stream, handle)| Device { _stream: stream, handle })
+fn open_device() -> Option<Output> {
+    Output::device()
 }
 
 impl Audio {
@@ -182,9 +209,41 @@ impl Audio {
         Self { roots, device: None, waiting: false, state: RefCell::new(State::new()) }
     }
 
-    /// The audio folders of asset `layers` without a device (a run with no window: no sound device is opened or needed).
+    /// The audio folders of asset `layers` without a device (tests, tools: nothing plays).
     pub fn offline_layers(layers: &aegis_core::assets::Layers) -> Self {
         Self::offline_layered(layers.roots.iter().map(|r| r.join("audio")).collect())
+    }
+
+    /// ENGINE-55 (AUDIO-FEEL1): the audio folders of asset `layers` on a virtual device (a run with no window: the
+    /// sounds are mixed in real time on a thread as a device would, unheard, so they can be timed; `audio_out`).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn virtual_layers(layers: &aegis_core::assets::Layers) -> Self {
+        Self { roots: layers.roots.iter().map(|r| r.join("audio")).collect(), device: Some(Output::virtual_device()), waiting: false, state: RefCell::new(State::new()) }
+    }
+
+    /// ENGINE-55: what the output did since `reset_output` (None without one).
+    pub fn output(&self) -> Option<crate::audio_out::Snapshot> {
+        self.device.as_ref().map(|d| d.snapshot())
+    }
+
+    /// ENGINE-55: forgets the output's underruns and worst fill (a feel replay starts).
+    pub fn reset_output(&self) {
+        if let Some(d) = &self.device {
+            d.reset();
+        }
+    }
+
+    /// ENGINE-55: the sounds and tracks started at or after `t` (wall clock), oldest first.
+    pub fn sounds_since(&self, t: Instant) -> Vec<(String, Bus, Instant, Option<Instant>, f64)> {
+        self.state.borrow().sounds.iter().filter(|s| s.asked >= t).map(|s| (s.rel.clone(), s.bus, s.asked, s.heard(), s.decode_ms)).collect()
+    }
+
+    fn note(&self, rec: SoundRec) {
+        let mut st = self.state.borrow_mut();
+        if st.sounds.len() >= SOUNDS_KEPT {
+            st.sounds.remove(0);
+        }
+        st.sounds.push(rec);
     }
 
     /// The first folder's file at `rel`.
@@ -268,14 +327,21 @@ impl Audio {
 
     fn play_at(&self, bus: Bus, rel: &str, volume: f32) {
         let Some(device) = &self.device else { return };
-        if volume <= 0.0 {
+        // ENGINE-55: the virtual device plays a sound at any level (a run is muted, and is timed all the same)
+        if volume <= 0.0 && !device.is_virtual() {
             return;
         }
-        let Some(bytes) = self.bytes(rel) else { return };
-        let Ok(source) = Decoder::new(Cursor::new(bytes)) else { return };
-        let Ok(sink) = Sink::try_new(&device.handle) else { return };
+        let asked = Instant::wall();
+        let sink = Arc::new(device.sink());
         sink.set_volume(volume);
-        sink.append(source);
+        let heard = Heard::new(device.stats().clone());
+        if let Some(pcm) = self.pcm(rel) {
+            sink.append(heard.probe(pcm.play()));
+        } else if !self.decode_later(rel, &sink, &heard) {
+            return;
+        }
+        let decode_ms = asked.wall_elapsed().as_secs_f64() * 1000.0;
+        self.note(SoundRec { rel: rel.to_string(), bus, asked, decode_ms, heard: Some(heard) });
         let mut st = self.state.borrow_mut();
         let (voices, max) = match bus {
             Bus::Sfx | Bus::Ambience => (&mut st.sfx, SFX_VOICES),
@@ -384,18 +450,37 @@ impl Audio {
         }
         let Some(rel) = rel else { return };
         drop(st);
-        if let Some(track) = self.start_loop(rel, was_silent) {
+        if let Some(track) = self.start_loop(rel, was_silent, Bus::Music) {
             self.state.borrow_mut().tracks.push(track);
         }
     }
 
     /// A looped track of `rel` at gain 0, fading in (from silence slower); None offline or when it does not play.
-    fn start_loop(&self, rel: &str, was_silent: bool) -> Option<Track> {
-        let (Some(device), Some(bytes)) = (&self.device, self.bytes(rel)) else { return None };
-        let points = loop_points(&bytes);
-        let (Ok(source), Ok(sink)) = (Decoder::new(Cursor::new(bytes)), Sink::try_new(&device.handle)) else { return None };
+    fn start_loop(&self, rel: &str, was_silent: bool, bus: Bus) -> Option<Track> {
+        let device = self.device.as_ref()?;
+        let asked = Instant::wall();
+        let bytes = self.bytes(rel)?;
+        let sink = Arc::new(device.sink());
         sink.set_volume(0.0);
-        sink.append(looped(source, points));
+        let heard = Heard::new(device.stats().clone());
+        // ENGINE-55 (AUDIO-FEEL1): the decoder (its headers and codebooks, a few ms) is made on a thread, not on the
+        // frame; the track joins the mix once it is ready (silent at first anyway: it fades in)
+        let start = {
+            let (sink, heard) = (sink.clone(), heard.clone());
+            move || {
+                let points = loop_points(&bytes);
+                if let Ok(source) = Decoder::new(Cursor::new(bytes)) {
+                    sink.append(heard.probe(looped(source, points)));
+                }
+            }
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        let start = std::thread::Builder::new().name("aegis-track".into()).spawn(start).map(drop).map_err(|_| ());
+        #[cfg(target_arch = "wasm32")]
+        let start: Result<(), ()> = Ok(start());
+        start.ok()?;
+        let decode_ms = asked.wall_elapsed().as_secs_f64() * 1000.0;
+        self.note(SoundRec { rel: rel.to_string(), bus, asked, decode_ms, heard: Some(heard) });
         Some(Track { sink, gain: 0.0, target: 1.0, rate: 1.0 / if was_silent { FIRST_FADE_SEC } else { CROSSFADE_SEC } })
     }
 
@@ -414,7 +499,7 @@ impl Audio {
         }
         let Some(rel) = rel else { return };
         drop(st);
-        if let Some(track) = self.start_loop(rel, was_silent) {
+        if let Some(track) = self.start_loop(rel, was_silent, Bus::Ambience) {
             self.state.borrow_mut().beds.push(track);
         }
     }
@@ -466,6 +551,7 @@ impl Audio {
             }
             st.mounted = now;
             st.cache.retain(|_, read| read.is_some());
+            st.pcm.retain(|_, read| read.is_some());
             st.found.retain(|_, hit| *hit);
             st.pools.clear();   // a new part may bring variants
             let music = if st.tracks.iter().any(|t| t.target > 0.0) { None } else { Some(st.wanted.take()) };
@@ -478,6 +564,61 @@ impl Audio {
         if let Some(b) = wanted.1 {
             self.ambience(b.as_deref());
         }
+    }
+
+    /// ENGINE-55: the effect `rel` decoded, once: a WAV file on the ask (tens of µs), any other once a thread has
+    /// decoded it (`decode_later`: an Ogg sting takes 10 to 20 ms); None until then, and for a file that does not read
+    /// or decode (remembered until the next mount). A second play decodes nothing.
+    fn pcm(&self, rel: &str) -> Option<Arc<Pcm>> {
+        let done = self.state.borrow().pcm_later.get(rel).and_then(|slot| slot.lock().ok()?.take());
+        if let Some(pcm) = done {
+            let mut st = self.state.borrow_mut();
+            st.pcm_later.remove(rel);
+            st.pcm.insert(rel.to_string(), Some(pcm));
+        }
+        if let Some(hit) = self.state.borrow().pcm.get(rel) {
+            return hit.clone();
+        }
+        if !rel.to_ascii_lowercase().ends_with(".wav") && cfg!(not(target_arch = "wasm32")) {
+            return None;
+        }
+        let pcm = self.bytes(rel).and_then(|b| Decoder::new(Cursor::new(b)).ok()).map(|d| Arc::new(Pcm::of(d)));
+        self.state.borrow_mut().pcm.insert(rel.to_string(), pcm.clone());
+        pcm
+    }
+
+    /// ENGINE-55: plays `rel` on `sink` from a thread that makes its decoder (a few ms) and streams it, then decodes it
+    /// whole for the next plays (`pcm`); nothing of it on the frame. False when the file does not read.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn decode_later(&self, rel: &str, sink: &Arc<Sink>, heard: &Heard) -> bool {
+        let Some(bytes) = self.bytes(rel) else { return false };
+        let slot = {
+            let mut st = self.state.borrow_mut();
+            let fresh = !st.pcm_later.contains_key(rel);
+            let slot = st.pcm_later.entry(rel.to_string()).or_default().clone();
+            fresh.then_some(slot)
+        };
+        // the thread holds the sink until its sound is in (a voice taken back before then stops it after)
+        let (queue, heard) = (sink.clone(), heard.clone());
+        std::thread::Builder::new()
+            .name("aegis-sound".into())
+            .spawn(move || {
+                if let Ok(source) = Decoder::new(Cursor::new(bytes.clone())) {
+                    queue.append(heard.probe(source));
+                }
+                if let Some(slot) = slot {
+                    let pcm = Decoder::new(Cursor::new(bytes)).ok().map(|d| Arc::new(Pcm::of(d)));
+                    if let (Some(pcm), Ok(mut s)) = (pcm, slot.lock()) {
+                        *s = Some(pcm);
+                    }
+                }
+            })
+            .is_ok()
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn decode_later(&self, _rel: &str, _sink: &Arc<Sink>, _heard: &Heard) -> bool {
+        false
     }
 
     /// The bytes of `rel`, read once (a missing or unreadable file is remembered as None, until the next mount).
@@ -505,6 +646,9 @@ impl State {
             last_tick: Instant::now(),
             last_preview: None,
             cache: HashMap::new(),
+            pcm: HashMap::new(),
+            pcm_later: HashMap::new(),
+            sounds: Vec::new(),
             found: HashMap::new(),
             pools: HashMap::new(),
             picks: HashMap::new(),
@@ -728,6 +872,43 @@ impl<S: Source<Item = i16>> Source for IntroLoop<S> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// ENGINE-55 (AUDIO-FEEL1): on the virtual device, a muted effect still plays (timed), heard; a WAV is decoded on
+    /// its first play and kept; another format is decoded on a thread (its first play streams from there) and kept for
+    /// the next; a track's decoder is made on a thread too.
+    #[test]
+    fn effects_are_decoded_once_and_never_on_the_frame_but_a_wav() {
+        let root = aegis_core::scratch::Scratch::new("audio_pcm");
+        let wav = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/audio/sfx/ui_click.wav")).unwrap();
+        std::fs::create_dir_all(root.join("sfx")).unwrap();
+        std::fs::write(root.join("sfx/click.wav"), &wav).unwrap();
+        std::fs::write(root.join("sfx/click.snd"), &wav).unwrap();
+        let a = Audio { roots: vec![root.to_path_buf()], device: Some(Output::virtual_device()), waiting: false, state: RefCell::new(State::new()) };
+        a.set_levels(&json!({"mute": true}));
+        let heard_all = |t: Instant| {
+            let w = Instant::wall();
+            while a.sounds_since(t).iter().any(|s| s.3.is_none()) && w.wall_elapsed() < Duration::from_secs(3) {
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            a.sounds_since(t)
+        };
+        let t = Instant::wall();
+        a.play(Bus::Ui, "sfx/click.wav");
+        a.play(Bus::Ui, "sfx/click.snd");
+        let first = heard_all(t);
+        assert_eq!(first.len(), 2, "muted, both played on the virtual device");
+        assert!(first.iter().all(|s| s.3.is_some()), "both heard");
+        assert!(a.state.borrow().pcm.get("sfx/click.wav").is_some_and(|p| p.is_some()), "the WAV kept");
+        assert!(!a.state.borrow().pcm.contains_key("sfx/click.snd"), "the other not decoded on the frame");
+        let w = Instant::wall();
+        while a.pcm("sfx/click.snd").is_none() && w.wall_elapsed() < Duration::from_secs(3) {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        assert!(a.pcm("sfx/click.snd").is_some(), "decoded on its thread, then kept");
+        let t = Instant::wall();
+        a.music(Some("sfx/click.wav"));
+        assert!(heard_all(t).iter().any(|s| s.1 == Bus::Music && s.3.is_some()), "a track heard, its decoder made on a thread");
+    }
 
     #[test]
     fn silent_audio_tracks_the_wanted_music_and_ignores_sounds() {

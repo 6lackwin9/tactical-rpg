@@ -264,7 +264,11 @@ impl<G: Context> Shell<G> {
     /// ENGINE-45: the feel overlay at the window's top left, over everything (the last numbers known: this frame's own
     /// time is known only once it is presented).
     fn draw_feel(&mut self) {
-        let text = self.feel.overlay_text(self.feel_now());
+        let mut text = self.feel.overlay_text(self.feel_now());
+        // ENGINE-55 (AUDIO-FEEL1): a real device's buffer and its underruns since the window opened
+        if let Some(out) = self.cx.audio.output().filter(|o| !o.virtual_device) {
+            text.push_str(&format!("  audio {:.1} ms x {}, underruns {}", out.buffer_ms(), out.buffer_frames, out.underruns.len()));
+        }
         let v = self.whole_view();
         let mut p = Painter { c: &mut self.gfx.canvas, v, fonts: &mut self.gfx.fonts };
         let w = p.text_w(&text, crate::feel::OVERLAY_SIZE);
@@ -431,6 +435,8 @@ impl<G: Context> Shell<G> {
         self.stack.last_mut().unwrap().tick(cx);
         self.feel.tick = t.map_or(0.0, crate::perf::ms_since);
         self.settle();
+        // ENGINE-55 (AUDIO-FEEL1): a screen opened by an input or the tick starts its music before the frame is drawn
+        self.follow_music();
         // ENGINE-53 (SWITCH-AHEAD1), ENGINE-54 (WARM-SPREAD1): a screen one in the stack may open next (the top asked
         // first), warmed one slice a frame
         let cx = &mut self.cx;
@@ -507,13 +513,18 @@ impl<G: Context> Shell<G> {
             self.draw_feel();
         }
         self.settle();
+        self.follow_music();
+        self.cx.audio.tick();
+        self.frames += 1;
+    }
+
+    /// The music and ambience the stack wants now (the topmost screen naming one); a change starts at once.
+    fn follow_music(&self) {
         let cx = &self.cx;
         let track = self.stack.iter().rev().find_map(|s| s.music(cx));
         cx.audio.music(track.as_deref());
         let bed = self.stack.iter().rev().find_map(|s| s.ambience(cx)).filter(|b| !b.is_empty());
         cx.audio.ambience(bed.as_deref());
-        cx.audio.tick();
-        self.frames += 1;
     }
 
 }
