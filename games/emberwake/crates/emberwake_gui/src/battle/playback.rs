@@ -578,6 +578,7 @@ impl BattleScreen {
         if self.tokens.poses.len() == s.w.units.len() {
             return false;
         }
+        load_bodies(cx, s);
         self.tokens.poses = s.w.units.iter().enumerate().map(|(i, u)| cx.art.first_body(&body_keys(&s.art[i], u)).and_then(|b| cx.art.clips(&b).map(PoseSet::of)).unwrap_or_default()).collect();
         true
     }
@@ -728,4 +729,17 @@ impl BattleScreen {
             (a > 0).then(|| json!({"from": cell(t.from), "to": cell(t.to), "alpha": a, "dashed": t.dashed}))
         }).collect())
     }
+}
+
+/// ENGINE-51 (SWITCH-FEEL1): every unit's body (bare, for its clips, and in its palette, as its token draws) loaded at
+/// once, the sheets decoded side by side (`Art::load_bodies`), before the battle's first draw.
+pub(super) fn load_bodies(cx: &mut Cx, s: &emberwake_battle::session::Session) {
+    let mut wanted: Vec<(String, String)> = Vec::new();
+    for (i, u) in s.w.units.iter().enumerate() {
+        if let Some(key) = body_keys(&s.art[i], u).into_iter().find(|k| cx.art.has(&aegis_core::assets::body_file(k, "clips.json"))) {
+            wanted.push((key.clone(), String::new()));
+            wanted.push((key, s.palettes.get(i).cloned().unwrap_or_default()));
+        }
+    }
+    cx.art.load_bodies(&wanted);
 }

@@ -71,7 +71,7 @@ An unknown key or step is a problem, not a thing ignored.
 | `shot` | `name`, `max_w` = 1920, `golden`, `t` = 0 | Screenshot into the bundle, once the frames after the last change are drawn. A blank frame fails the step. `golden`: compared with its baseline (below). `t`: no window only, seconds (0 to 60) the top screen has been open first, on the shot clock (below): a screen that fades in takes the time of its fade |
 | `clip` | `name`, `frames` = 30, `every_ms` = 66, `max_w` = 1280 | No window only. A numbered sequence, `<name>/frame_0001.png` on: at most 120 frames, 10 to 2000 ms apart, 15 s in all |
 | `perf` | `name`, `frames` = 300, `warm` = 60, `budget` | No window only. Frame times (ENGINE-2): see "Frame times" |
-| `feel` | `name`, `script`, `gap` = 2, `budget`, `step_ms`, `motion` = false | No window only. Input times (ENGINE-45) and movement (ENGINE-49): see "Input times" |
+| `feel` | `name`, `script`, `gap` = 2, `budget`, `step_ms`, `motion` = false, `switch` = false | No window only. Input times (ENGINE-45), movement (ENGINE-49) and screen switches (ENGINE-51): see "Input times" |
 | `reach` | `name`, `back` = false, `fail` = false, `allow` = [] | No window only. What keys and a pad reach (ENGINE-48): see "Input reach" |
 | `pause` | `ms` | Time passes, for a picture at a moment of an animation, with a look at the game each second; with no window, that much game time on the shot clock, drawn at once. To wait for a result, use `wait` |
 | `audit` | `scales`, `fail` = all of `cut`, `edge`, `overlap`, `spill` | The text audit per text size; a kind in `fail` found fails the step |
@@ -180,6 +180,20 @@ worst first move; a press that moves nothing, into a wall, counts under `still`)
 wants to be) and `camera_jump_tiles` (its largest move in a frame, per frame of `step_ms`), and `path` (each step's time
 and cell). `budget` takes each of `first_move_ms`, `overshoot_steps`, `cadence_spread_ms`, `stutters`,
 `camera_lag_tiles` and `camera_jump_tiles`; one over fails the step, as does a screen that reports no motion.
+
+Screen switches (ENGINE-51 SWITCH-FEEL1): with `switch` true each key, click or pad input is followed, frame by frame,
+until its new screen settles (`aegis_ui::switchfeel`), and the reply's `switch` gives per input `from` and `to` (top
+screen and stack depth), `handler_ms`, `first_ms` (to the first frame of another screen, or the same at another depth),
+`settled_ms` (to the first frame of the last screen it came to drawn in 33 ms: its loads are done), `own_ms` (from the old
+screen's last frame to settled: a walk to an exit or the old screen's fade out left out), `chain` (a story card that
+hands over to a stage, the stage to a fight), `worst_frame_ms`, `long_frames` (over 100 ms, the handler counted with the
+first; each with `covered_by`, the transition shown before it, `Screen::transition`, or null) and `transitions`; over the
+run `worst_settled_ms`, `uncovered` and `misses`. A script item takes `switch_ms` (the input's `own_ms` past it fails
+the step, as does no other screen coming up) and `to` (the screen it is meant to reach: it settles on that screen's first
+quick frame and is followed no further, so a fight that opens on its own after a results screen is not part of it; an
+input with a `to` also waits for a walk to the exit, up to 600 frames, where one without stops after 180 frames with no
+other screen). `budget` takes `uncovered_frames` (long frames no transition covered). The dev build's allowance stretches
+`switch_ms` and the 100 ms alike.
 
 With no window nothing is presented, so a frame is done once drawn; a window adds the copy to the GPU and the present (and
 vsync's wait). The same numbers come from a real window with `--feel` (or `feel=1`) on the game's command line, or the

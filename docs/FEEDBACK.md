@@ -167,8 +167,77 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `PR7-92` (`INPUT-REACH2`) | Built (tools lane) | `develop` | Skill, gear, pouch and loadout slots pick (Enter), place or swap (Enter), drop the pick (Esc) and empty (Space, pad X) by key, hint line names the keys; the battle board is one Tab stop with an arrow tile cursor (ring 121 to 14); `reach_party` and `reach_battle` gate scenarios with `fail` on; goldens unchanged. FB-491 |
 | `ENGINE-49` (`WALK-FEEL1`) | Built (tools lane) | `develop` | `feel` measures movement (held keys and d-pad, long frames, `motion`: first move, beat, overshoot, turns, camera); hub and Cages map meet every target; click to walk moved a frame late (fixed); `walk_feel` gate scenario with budgets; six feel choices for Design; goldens unchanged. FB-493 |
 | `ENGINE-50` (`MAP-FRAME1`) | Built (tools lane) | `develop` | the region map's still layers kept and moved with the camera (engine `Painter::scroll_begin`), marker views read once per state: release median 18 to 6.8 ms, worst 51 to 19 ms on the hub; `frame_p50_ms` budget, `walk_feel` holds 16.7 / 33 ms; a key press after a long frame dated at most 25 ms back (`stall_ms` input tests it); shots diff clean; goldens unchanged. FB-495 |
+| `ENGINE-51` (`SWITCH-FEEL1`) | Built (tools lane) | `develop` | every screen switch timed to its first settled frame (`feel` `switch`, `aegis_ui::switchfeel`, `Screen::transition`): all under target in release, no uncovered frame over 100 ms; fixes: double decodes, a fight's sheets decoded side by side, Save/Load warmed, the world map's background read ahead, the ground's noise side by side; gate scenarios `switch_feel`, `switch_feel_story`; goldens unchanged. FB-497 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-497: ENGINE-51 SWITCH-FEEL1 built; every screen switch timed and within its target, no uncovered frame over 100 ms
+
+- **Status**: built (tools lane), `develop`. Engine (`aegis_ui` the new `switchfeel`, `Screen::transition`, `Art`
+  read-ahead, the ground composer's noise; `aegis_cli` the `feel` step), game GUI (`emberwake_gui` battle, results,
+  region map, world map, the warm list) and two new gate scenarios; no data. **Every golden unchanged**. Shots diff:
+  128 unchanged, 1 changed (`screens_menus__scene_runner.png`, the known artifact).
+- **Spec**: `docs/READY.md` row `ENGINE-51` (`SWITCH-FEEL1`).
+- **The probe**: a `feel` step with `switch` true follows each key, click or pad input frame by frame until its new screen
+  settles (`aegis_ui::switchfeel`): `first_ms` (input to the first frame of another screen, or the same at another stack
+  depth, so a popup counts), `settled_ms` (to the first frame of the last screen it came to drawn in 33 ms: the loads are
+  done; a story card that hands over to a stage and a fight is one chain), `own_ms` (from the old screen's last frame: a
+  walk to an exit or the results' fade out is play, not loading), `long_frames` over 100 ms with the transition shown
+  before each (new `Screen::transition`: the battle beat and the results' fade out report theirs). A script item's
+  `switch_ms` fails the step when `own_ms` passes it, `to` names the screen it should reach (so a fight that opens on its
+  own after the results is not counted in it), and `budget.uncovered_frames` limits long frames nothing covered. Tests:
+  `aegis_ui` switchfeel (6), `aegis_cli` `a_feel_step_takes_switch_budgets`.
+- **Measured** (release build, no window, 1280 x 720; own ms, worst frame ms; before -> after where a fix moved it):
+
+  | Switch | Own | Worst frame |
+  | --- | --- | --- |
+  | Title Continue to the map | 85 to 107 | 84 to 90 |
+  | Party screen, hub menu, its party, Settings, back | 17 to 62 | 46 |
+  | Hub Save | 90 to 124 -> 17 | 107 -> 11 |
+  | Title Settings, Load, New Game | 17 to 79 -> 17 | 62 -> 13 |
+  | Region map to world map (after the walk) | 90 to 123 -> 25 | 102 -> 25 |
+  | World map Enter to the map | 19 | 11 |
+  | Region map to a fight, no intro (after the walk) | 113 to 146 -> 119 to 128 | 97 to 128 -> 75 |
+  | Story card to stage to fight, with its beat | 81 to 119 -> 94 | 86 -> 61 |
+  | Fight to results | 31 to 69 | 50 |
+  | Results to the map (after the 500 ms fade out) | 17 to 20 | 36 |
+  | Results to stage to the next story card | 42 | 26 |
+
+  Every switch is under its target (menus and popups 150 ms, maps and fights 400 ms) and no frame over 100 ms is left
+  uncovered in the release runs.
+- **Fixes** (clear misses):
+  - (1) Duplicated work: every body sheet and icon was decoded twice (once to read its clips or size, once to draw).
+    `Art` keeps a small file's decoded pixels (`RAW_KEEP_PX`, a megapixel) so the second reads them.
+  - (2) A fight's bodies at once: new engine `Art::load_bodies` decodes the sheets a screen opens on side by side
+    (`decode_all`, up to `DECODE_THREADS` 4; one on the web); a world fight loads its units' bodies before its first
+    frame (`battle/playback.rs` `load_bodies`). The fight's first frame 102 to 128 -> about 75 to 90 ms.
+  - (3) Earlier, by warm: the Save and Load slots join the start's warm list (`Context::warm`, ENGINE-46): their slot
+    panels' frames were a 50 ms first draw, a 107 ms frame opening Save.
+  - (4) Earlier, by idle loading: new engine `Art::want_fit` starts reading a big picture on a thread for a screen that
+    may open next (nothing on the web); the region map asks for the world map's background after its first frame
+    (`worldmap::want_background`), so the world map opens in 25 ms instead of reading 36 ms and scaling 13 ms.
+  - (5) The ground composer's four noise fields are made side by side (`ground::noise_fields`, the same values): the
+    region map's ground compose 64 -> 43 ms, its noise 37 -> 16 ms.
+- **Needs a loading cue or a later row (nothing over target now, listed as asked)**:
+  - The title's Continue: the region map's first frame is 84 to 90 ms, of which composing its ground about 43 ms (its
+    per-pixel pass 13, the noise 16) and its still layers' first full draw. Close to 100 ms on a slower machine. A cue
+    (a short fade from the title) or a row parallelising the composer's per-pixel pass by rows (pure, so the same pixels)
+    would hold it.
+  - The region map to a fight with no intro: the fight's first frame 75 to 90 ms (building the fight about 25 ms in the
+    tick, its stage ground about 11 ms). A fight that has the battle beat is covered by it; one without has nothing
+    covering it. A cue is the same call as above.
+  - The character popup (46 ms) and the results (50 ms) spend about 30 ms composing their framed panels on first open;
+    within target, could join the warm list when they need no game.
+- **Gate scenarios**: `switch_feel` (the save `saves/sweep_start`: Continue, the party screen, the hub menu, Save,
+  Settings, the world map and back, The Sweep with no intro, results, back to the map) and `switch_feel_story` (a new
+  game: Settings, Load, New Game, the story cards into the first fight and its beat, results, the next card), each input
+  with `switch_ms` 150 (menus, popups) or 400 (maps, fights) and `uncovered_frames` 0; 2.5 times in the gate's dev build.
+  Gate time about 80 s and 45 s.
+- **Docs**: `engine/docs/authoring/scenarios.md` ("Input times": screen switches), the scenarios README rows.
+- **Docs delta (engine/README.md, Feel probe bullet)**: after the ENGINE-50 clause add "; a `feel` step with `switch`
+  times each screen switch to its first settled frame (ENGINE-51: `aegis_ui::switchfeel`, `Screen::transition` names a
+  covering fade or beat; `switch_ms`, `to` and `uncovered_frames` budgets), and `Art::load_bodies` (sheets decoded side by
+  side) and `Art::want_fit` (a picture read ahead on a thread) move loads off a switch's first frame".
 
 ### FB-495: ENGINE-50 MAP-FRAME1 built; the region map's frame cut to a third, a key press after a hitch takes no catch-up step
 

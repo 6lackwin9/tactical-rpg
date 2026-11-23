@@ -60,14 +60,41 @@ pub struct Art {
     body_rects: HashMap<(String, String, i32, Facing), Option<Rect>>,
     /// PNG rel -> its face sidecar from the PNG's own layer (PORTRAITFX1-E `face`).
     faces: HashMap<String, Option<Face>>,
+    /// ENGINE-51 (SWITCH-FEEL1): path -> a small file's decoded pixels (at most `RAW_KEEP_PX`), so a file drawn at two
+    /// sizes or a body sheet under two palettes is decoded once (a first fight decoded each body twice).
+    raw: HashMap<std::path::PathBuf, Option<Image>>,
+    /// ENGINE-51: pictures `want_fit` is decoding off the frame (a thread each), by file and size, until `image_fit`
+    /// takes one.
+    pending: Vec<(String, (i32, i32), std::thread::JoinHandle<Option<Image>>)>,
     /// Which `Art` this is (`generation`).
     generation: u64,
 }
+
+/// ENGINE-51: the largest file (in pixels) whose decoded pixels `Art` keeps for its next size or palette: a body sheet,
+/// an icon or a portrait; a window-sized background is decoded each time it is asked for at a new size.
+pub const RAW_KEEP_PX: i64 = 1024 * 1024;
 
 /// The next `Art::generation`.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// Decodes a PNG into RGBA (palette, grey and RGB inputs are expanded).
+/// ENGINE-51: how many threads `decode_all` uses at most.
+pub const DECODE_THREADS: usize = 4;
+
+/// ENGINE-51 (SWITCH-FEEL1): `load_png` of each of `paths`, in order; side by side on up to `DECODE_THREADS` threads
+/// (the files are read through the thread-safe vfs), on one on the web.
+pub fn decode_all(paths: &[PathBuf]) -> Vec<Option<Image>> {
+    let threads = if cfg!(target_arch = "wasm32") { 1 } else { std::thread::available_parallelism().map_or(1, |n| n.get()).min(DECODE_THREADS) };
+    if threads <= 1 || paths.len() <= 1 {
+        return paths.iter().map(|p| load_png(p)).collect();
+    }
+    let per = paths.len().div_ceil(threads);
+    std::thread::scope(|s| {
+        let parts: Vec<_> = paths.chunks(per).map(|part| s.spawn(move || part.iter().map(|p| load_png(p)).collect::<Vec<_>>())).collect();
+        parts.into_iter().flat_map(|h| h.join().unwrap_or_default()).collect()
+    })
+}
+
 pub fn load_png(path: &Path) -> Option<Image> {
     let bytes = vfs::read(path).ok()?;
     let mut dec = png::Decoder::new(std::io::Cursor::new(bytes));
@@ -94,7 +121,7 @@ impl Art {
     }
 
     pub fn layered(layers: Layers) -> Self {
-        Self { layers, files: HashMap::new(), fits: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), silhouettes: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new(), faces: HashMap::new(), generation: GENERATION.fetch_add(1, Ordering::Relaxed) }
+        Self { layers, files: HashMap::new(), fits: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), silhouettes: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new(), faces: HashMap::new(), raw: HashMap::new(), pending: Vec::new(), generation: GENERATION.fetch_add(1, Ordering::Relaxed) }
     }
 
     pub fn layers(&self) -> &Layers {
@@ -141,10 +168,35 @@ impl Art {
     /// pile up a copy per size (a new size reads the file again).
     pub fn image_fit(&mut self, rel: &str, w: i32, h: i32) -> Option<&Image> {
         if self.fits.get(rel).is_none_or(|(size, _)| *size != (w, h)) {
-            let img = self.scaled(rel, w, h);
+            // ENGINE-51: a picture `want_fit` started is taken when done (waited for when not yet); others of the file dropped
+            let started = self.pending.iter().position(|p| p.0 == rel && p.1 == (w, h)).map(|at| self.pending.remove(at).2);
+            self.pending.retain(|p| p.0 != rel);
+            let img = match started.and_then(|t| t.join().ok().flatten()) {
+                Some(img) => Some(img),
+                None => self.scaled(rel, w, h),
+            };
             self.fits.insert(rel.to_string(), ((w, h), img));
         }
         self.fits.get(rel).and_then(|(_, i)| i.as_ref())
+    }
+
+    /// ENGINE-51 (SWITCH-FEEL1): starts reading the picture `image_fit(rel, w, h)` will ask for, on a thread of its own,
+    /// so a screen that opens later on a big picture finds it read (a map opens on its background): a screen calls it
+    /// for what may open next. Nothing when it is held or started already, the file is missing, or on the web (no
+    /// threads: `image_fit` reads it then). The same pixels as `image_fit` alone.
+    pub fn want_fit(&mut self, rel: &str, w: i32, h: i32) {
+        let held = self.fits.get(rel).is_some_and(|(size, _)| *size == (w, h)) || self.pending.iter().any(|p| p.0 == rel && p.1 == (w, h));
+        if held || cfg!(target_arch = "wasm32") {
+            return;
+        }
+        if let Some(path) = self.layers.find(rel) {
+            self.pending.push((rel.to_string(), (w, h), std::thread::spawn(move || load_png(&path).map(|i| i.downsample(w, h)))));
+        }
+    }
+
+    /// The pictures `want_fit` is reading now.
+    pub fn wanted_count(&self) -> usize {
+        self.pending.len()
     }
 
     /// The pictures `image_fit` holds, one per file.
@@ -152,9 +204,21 @@ impl Art {
         self.fits.len()
     }
 
-    fn scaled(&self, rel: &str, w: i32, h: i32) -> Option<Image> {
+    /// ENGINE-51: the file at `path` decoded, from `raw` when it was decoded before (kept when small).
+    fn decoded(&mut self, path: &Path) -> Option<Image> {
+        if let Some(img) = self.raw.get(path) {
+            return img.clone();
+        }
+        let img = load_png(path);
+        if img.as_ref().is_none_or(|i| (i.w as i64) * (i.h as i64) <= RAW_KEEP_PX) {
+            self.raw.insert(path.to_path_buf(), img.clone());
+        }
+        img
+    }
+
+    fn scaled(&mut self, rel: &str, w: i32, h: i32) -> Option<Image> {
         let path = self.layers.find(rel);
-        let img = path.as_ref().and_then(|p| load_png(p)).map(|i| i.downsample(w, h));
+        let img = path.as_ref().and_then(|p| self.decoded(p)).map(|i| i.downsample(w, h));
         if img.is_none() && !self.layers.roots.is_empty() {
             crate::playtest::report_asset("file", rel, "", if path.is_some() { "load_failed" } else { "missing_file" });
         }
@@ -243,9 +307,37 @@ impl Art {
         self.bodies.get(&k).and_then(|b| b.as_ref())
     }
 
-    fn load_body(&self, key: &str, palette: &str) -> Option<Body> {
+    /// ENGINE-51 (SWITCH-FEEL1): loads every body of `wanted` (key, palette) not loaded yet, as `body` would one by
+    /// one, with their sheets decoded side by side on up to `DECODE_THREADS` threads first (one thread on the web); a
+    /// screen that opens on many bodies (a battle) calls it once before its first draw. The same bodies as `body`.
+    pub fn load_bodies(&mut self, wanted: &[(String, String)]) {
+        let mut paths: Vec<PathBuf> = Vec::new();
+        for (key, palette) in wanted {
+            if self.bodies.contains_key(&(key.clone(), palette.clone())) {
+                continue;
+            }
+            if let Some(p) = self.layers.find(&assets::body_file(key, "sheet.png")) {
+                if !self.raw.contains_key(&p) && !paths.contains(&p) {
+                    paths.push(p);
+                }
+            }
+        }
+        let decoded = decode_all(&paths);
+        // the big sheets go back out of `raw` once their bodies hold them (as `decoded` keeps only small files)
+        let big: Vec<PathBuf> = paths.iter().zip(&decoded).filter(|(_, i)| i.as_ref().is_some_and(|i| (i.w as i64) * (i.h as i64) > RAW_KEEP_PX)).map(|(p, _)| p.clone()).collect();
+        self.raw.extend(paths.into_iter().zip(decoded));
+        for (key, palette) in wanted {
+            self.body(key, palette);
+        }
+        for p in big {
+            self.raw.remove(&p);
+        }
+    }
+
+    fn load_body(&mut self, key: &str, palette: &str) -> Option<Body> {
         let clips = Clips::parse(&assets::read_json(&self.layers, &assets::body_file(key, "clips.json"))?).ok()?;
-        let mut sheet = load_png(&self.layers.find(&assets::body_file(key, "sheet.png"))?)?;
+        let path = self.layers.find(&assets::body_file(key, "sheet.png"))?;
+        let mut sheet = self.decoded(&path)?;
         if !clips.sheet_problem(sheet.w as u32, sheet.h as u32).is_empty() {
             return None;
         }
@@ -561,6 +653,50 @@ mod tests {
         let at = |x: i32, y: i32| &d.px[((y * 16 + x) * 4) as usize..((y * 16 + x) * 4 + 4) as usize];
         assert_eq!((at(0, 0), at(1, 1), at(2, 2), at(15, 15)), (&[0xe0, 0xb4, 0x3c, 255][..], &[0xe0, 0xb4, 0x3c, 255][..], &[0xa8, 0x30, 0x28, 255][..], &[0xa8, 0x30, 0x28, 255][..]));
         assert!(art.has_body("knight") && !art.has_body("rogue"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_wanted_picture_is_read_ahead_and_is_the_same() {
+        let root = aegis_core::scratch::Scratch::vacant("art_want");
+        let px: Vec<u8> = (0..64 * 32 * 4).map(|i| (i * 7 % 251) as u8).collect();
+        write_png(&root.join("bg.png"), 64, 32, &px);
+        let mut ahead = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        ahead.want_fit("bg.png", 16, 8);
+        ahead.want_fit("bg.png", 16, 8);
+        ahead.want_fit("none.png", 16, 8);
+        assert_eq!(ahead.wanted_count(), 1, "once, and nothing for a missing file");
+        let mut plain = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        assert_eq!(ahead.image_fit("bg.png", 16, 8).cloned().map(|i| i.px), plain.image_fit("bg.png", 16, 8).cloned().map(|i| i.px));
+        assert_eq!(ahead.wanted_count(), 0, "taken");
+        ahead.want_fit("bg.png", 16, 8);
+        assert_eq!(ahead.wanted_count(), 0, "held already");
+        ahead.want_fit("bg.png", 32, 16);
+        assert!(ahead.image_fit("bg.png", 8, 4).is_some() && ahead.wanted_count() == 0, "another size drops it");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn bodies_loaded_together_are_the_bodies_loaded_one_by_one() {
+        let root = body_tree("bodies");
+        let base = root.join("units/knight/base");
+        for k in ["squire", "page", "herald"] {
+            let dir = root.join(format!("units/knight/{k}"));
+            std::fs::create_dir_all(dir.join("palettes")).unwrap();
+            for f in ["sheet.png", "clips.json", "palettes/blue.json"] {
+                std::fs::copy(base.join(f), dir.join(f)).unwrap();
+            }
+        }
+        let keys = ["knight", "knight/squire", "knight/page", "knight/herald", "rogue"];
+        let wanted: Vec<(String, String)> = keys.iter().flat_map(|k| [(k.to_string(), String::new()), (k.to_string(), "blue".to_string())]).collect();
+        let mut together = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        together.load_bodies(&wanted);
+        assert_eq!(together.bodies.len(), wanted.len(), "every one asked for is kept, a missing one as missing");
+        let mut alone = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        for (k, p) in &wanted {
+            assert_eq!(together.body_frame(k, p, "idle", 0).map(|i| i.px), alone.body_frame(k, p, "idle", 0).map(|i| i.px), "{k} {p}");
+        }
+        assert!(together.has_body("knight/herald") && !together.has_body("rogue"));
         let _ = std::fs::remove_dir_all(&root);
     }
 

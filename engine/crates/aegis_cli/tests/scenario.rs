@@ -99,6 +99,24 @@ fn a_feel_step_takes_movement_inputs_and_budgets() {
     assert_eq!(scenario::motion_misses(&report, &json!({"first_move_ms": 17, "overshoot_steps": 0})), ["first_move_ms 33.3 over 17"]);
 }
 
+/// ENGINE-51 (SWITCH-FEEL1): `switch` follows each input until its new screen settles; an input's `switch_ms` needs it.
+#[test]
+fn a_feel_step_takes_switch_budgets() {
+    let s = parse("x", &minimal(json!([{"step": "feel", "name": "switch", "switch": true, "script": [{"click": "hud.party", "switch_ms": 150}, {"key": "esc", "switch_ms": 150}], "budget": {"uncovered_frames": 0}}]))).unwrap();
+    let Step::Feel { switch, script, uncovered_frames, .. } = &s.steps[0] else { panic!() };
+    assert_eq!((*switch, *uncovered_frames), (true, Some(0)));
+    assert_eq!(script[0]["switch_ms"], json!(150));
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "script": [{"click": "a", "switch_ms": 150}]}])));
+    assert!(got.contains("needs 'switch' true"), "{got}");
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "switch": "yes", "script": [{"click": "a"}]}])));
+    assert!(got.contains("'switch' is true or false"), "{got}");
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "switch": true, "script": [{"click": "a", "switch_ms": -1}]}])));
+    assert!(got.contains("'switch_ms' is a number of ms above 0"), "{got}");
+    assert!(parse("x", &minimal(json!([{"step": "feel", "name": "w", "switch": true, "script": [{"key": "enter", "switch_ms": 400, "to": "region_map"}]}]))).is_ok());
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "script": [{"key": "enter", "to": "region_map"}]}])));
+    assert!(got.contains("'to' names the screen a switch reaches"), "{got}");
+}
+
 #[test]
 fn an_unknown_step_or_key_names_its_place() {
     let got = problems_of(minimal(json!([{"step": "back"}, {"step": "dance"}])));

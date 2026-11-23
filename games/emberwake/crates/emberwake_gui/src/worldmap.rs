@@ -1099,6 +1099,25 @@ pub(crate) fn legend_about(cx: &Cx, gs: &emberwake_world::GameState, here: &str,
     }
 }
 
+/// The rect background `rel` covers the map viewport with and its size in physical px at view scale `s`.
+fn background_fit(cx: &mut Cx, rel: &str, s: f32) -> (Rect, (i32, i32)) {
+    let (iw, ih) = cx.art.size_of(rel).unwrap_or((MAP.w, MAP.h));
+    let r = cover_rect(iw, ih, MAP);
+    (r, (((r.w as f32) * s).round().max(1.0) as i32, ((r.h as f32) * s).round().max(1.0) as i32))
+}
+
+/// ENGINE-51 (SWITCH-FEEL1): starts reading the background the world map would open on now, at view scale `s`
+/// (`Art::want_fit`), so its first frame finds it read (it was a 36 ms read and a 13 ms scale in that frame); the
+/// region map calls it, the screen the world map opens from.
+pub fn want_background(cx: &mut Cx, s: f32) {
+    let d = cx.data.clone();
+    let backgrounds: Vec<String> = map_names(&d, cx.gs()).iter().map(|n| emberwake_content::art::world_map_background(n)).collect();
+    if let Some(rel) = cx.art.first_rel(&backgrounds) {
+        let (_, (pw, ph)) = background_fit(cx, &rel, s);
+        cx.art.want_fit(&rel, pw, ph);
+    }
+}
+
 /// The act background, covering the map viewport (the preview's `object-fit: cover`), at the size it is drawn.
 fn draw_background(ui: &mut Ui<WAct>, cx: &mut Cx, backgrounds: &[String]) {
     let Some(rel) = cx.art.first_rel(backgrounds) else {
@@ -1109,10 +1128,7 @@ fn draw_background(ui: &mut Ui<WAct>, cx: &mut Cx, backgrounds: &[String]) {
         }
         return;
     };
-    let (iw, ih) = cx.art.size_of(&rel).unwrap_or((MAP.w, MAP.h));
-    let r = cover_rect(iw, ih, MAP);
-    let s = ui.p.v.s;
-    let (pw, ph) = (((r.w as f32) * s).round().max(1.0) as i32, ((r.h as f32) * s).round().max(1.0) as i32);
+    let (r, (pw, ph)) = background_fit(cx, &rel, ui.p.v.s);
     match cx.art.image_fit(&rel, pw, ph) {
         Some(img) => {
             ui.p.clip(Some(MAP));

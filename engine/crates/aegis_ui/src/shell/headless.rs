@@ -314,6 +314,9 @@ impl<G: Context> Loop<G> {
             self.every = Duration::from_secs_f64(ms / 1000.0);
         }
         let mut rec = (body["motion"] == json!(true)).then(|| MotionRec { t0: Instant::now(), frames: Vec::new(), marks: Vec::new() });
+        // ENGINE-51 (SWITCH-FEEL1): with `switch`, each key, click or pad input is followed until its new screen settles
+        let switching = body["switch"] == json!(true);
+        let mut switches: Vec<crate::switchfeel::Switch> = Vec::new();
         // where things stand before the first input (the last frame drawn)
         if let Some(r) = rec.as_mut() {
             r.frames.extend(crate::walkfeel::Frame::of(0.0, &self.shell.stack.last().unwrap().motion()));
@@ -403,14 +406,27 @@ impl<G: Context> Loop<G> {
             };
             for _ in 0..times {
                 self.mark(&mut rec, mark.0, &kind, mark.1, !held.is_empty(), !held.is_empty());
+                let from = (self.top_id(), self.shell.stack.len());
+                let from_transition = self.transition_shown();
                 self.shell.feel_input(&kind);
+                let handler = Instant::wall();
                 let reply = self.shell.bridge(&cmd);
+                let handler_ms = crate::perf::ms_since(handler);
                 self.shell.feel_state();
                 if reply["ok"] != json!(true) {
                     failed = Some(format!("script[{i}] {kind}: {}", reply["error"]));
                     break 'script;
                 }
                 done += 1;
+                if switching {
+                    let mut sw = crate::switchfeel::Switch { what: kind.clone(), handler_ms, from, from_transition, frames: Vec::new(), budget_ms: step["switch_ms"].as_f64(), to: step["to"].as_str().map(String::from) };
+                    while !sw.done() {
+                        let t = Instant::wall();
+                        self.feel_draw(&mut rec);
+                        sw.frames.push(crate::switchfeel::Frame { wall_ms: crate::perf::ms_since(t), top: self.top_id(), depth: self.shell.stack.len(), transition: self.transition_shown() });
+                    }
+                    switches.push(sw);
+                }
                 for _ in 0..=gap {
                     self.feel_draw(&mut rec);
                 }
@@ -432,7 +448,22 @@ impl<G: Context> Loop<G> {
         if let Some(r) = rec {
             out["motion"] = crate::walkfeel::report(&r.frames, &r.marks, body["step_ms"].as_f64().unwrap_or(every.as_secs_f64() * 1000.0));
         }
+        if switching {
+            // a dev build draws about twice as slow: its long frames and budgets stretch as the feel budgets do
+            let k = if cfg!(debug_assertions) { crate::switchfeel::DEV_ALLOWANCE } else { 1.0 };
+            out["switch"] = crate::switchfeel::report(&switches, body["step_ms"].as_f64().unwrap_or(every.as_secs_f64() * 1000.0), k);
+        }
         out
+    }
+
+    /// ENGINE-51: the top screen's id.
+    fn top_id(&self) -> String {
+        self.shell.stack.last().map_or("", |s| s.id()).to_string()
+    }
+
+    /// ENGINE-51: the transition a screen of the stack shows now, the topmost first (`Screen::transition`).
+    fn transition_shown(&self) -> Option<String> {
+        self.shell.stack.iter().rev().find_map(|s| s.transition(&self.shell.cx)).map(String::from)
     }
 
     /// ENGINE-49: a frame of a `feel` replay, and the top screen's `motion` after it when the replay records it.

@@ -482,6 +482,11 @@ pub trait Screen<G> {
     fn motion(&self) -> Value {
         Value::Null
     }
+    /// ENGINE-51 (SWITCH-FEEL1): the name of a transition this screen shows over itself now (a fade, a wipe, an entry
+    /// beat), for a `feel` replay's switch report (`crate::switchfeel`): a long frame after one is covered. None: nothing.
+    fn transition(&self, _cx: &Cx<G>) -> Option<&'static str> {
+        None
+    }
     /// PR7-92 (INPUT-REACH2): the id prefixes of a group of widgets that is one keyboard stop (a board's tiles and the
     /// tokens on them): Tab and Shift+Tab land on the group once, and while the focus is in it the arrows move it among
     /// the group's widgets only (`focus::step_grouped`). Empty: no group.

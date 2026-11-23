@@ -167,6 +167,9 @@ pub struct RegionMap {
     /// ENGINE-50 (MAP-FRAME1): a key press's step since the last frame, dated at that frame (`tick_at` dates it now when
     /// that frame was long ago).
     press_at: Option<Instant>,
+    /// ENGINE-51 (SWITCH-FEEL1): the location and view scale the world map's background was last asked ahead for
+    /// (`worldmap::want_background`); None before this map's first frame, then empty until its second.
+    map_wanted: Option<(String, f32)>,
     /// That step's times (TURNFEEL1).
     leg: mapview::Leg,
     /// When the last step was taken (`state.walk_feel`, under `camera_trail` as it is a clock reading: what a render
@@ -605,6 +608,7 @@ impl RegionMap {
             marker_memo: MarkerMemo::default(),
             frame_at: None,
             press_at: None,
+            map_wanted: None,
             step_at: None,
             leg: mapview::Leg::plain(0.0),
             last_step: None,
@@ -1266,6 +1270,17 @@ impl Screen<GameCx> for RegionMap {
         // the open conversation; a new node starts its line and its replies scrolled to the top; PORTRAITFX1-D: a
         // portrait left out of the last frame (the conversation ended or hid) is dropped
         let talk_view = self.svc.begin_frame(g, &d, &gs);
+        // ENGINE-51: once this map has drawn a frame, the world map's background is read ahead (the map opens from
+        // here); not in the first, whose own reads it would slow
+        let wanted = (cx.gs().location_id.clone(), g.view.s);
+        match &self.map_wanted {
+            None => self.map_wanted = Some((String::new(), 0.0)),
+            Some(was) if *was != wanted => {
+                crate::worldmap::want_background(cx, wanted.1);
+                self.map_wanted = Some(wanted);
+            }
+            Some(_) => {}
+        }
         let mut ui: Ui<RAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), th().game("map_ground", rgb(14, 18, 26)));
         let loc = explore::location(&d, &gs);

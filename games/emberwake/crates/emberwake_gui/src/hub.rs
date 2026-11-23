@@ -1016,6 +1016,11 @@ impl Results {
 }
 
 impl Screen<GameCx> for Results {
+    /// ENGINE-51 (SWITCH-FEEL1): Continue's fade out (TRANSITIONS1 T2) while it runs, for the switch report.
+    fn transition(&self, _cx: &Cx) -> Option<&'static str> {
+        self.leaving.as_ref().map(|_| "fade_out")
+    }
+
     /// Nothing here moves by itself, but the slide over the battle and Continue's fade (TRANSITIONS1 T2).
     fn frame_need(&self, _cx: &Cx) -> FrameNeed {
         let sliding = !self.plain && self.opened.elapsed().as_millis() as u64 <= crate::transitions::RESULTS_SLIDE_MS;

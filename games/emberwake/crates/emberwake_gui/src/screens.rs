@@ -163,10 +163,13 @@ impl aegis_ui::Context for GameCx {
     const MORE_COMMANDS: &'static str = "battle commands work while a battle is open";
 
     /// ENGINE-46 (FEEL-FIX1): the Settings screen and popup on every tab (their panels, art and the Controls tab's
-    /// keycaps were a 50 ms first draw).
+    /// keycaps were a 50 ms first draw); ENGINE-51 (SWITCH-FEEL1): the Save and Load slots (their slot panels' frames
+    /// were a 50 ms first draw, a 107 ms frame opening Save).
     fn warm(cx: &mut aegis_ui::Cx<Self>) -> Vec<Box<dyn aegis_ui::Screen<Self>>> {
         let tabs = 0..crate::menus::TABS.len();
-        [false, true].into_iter().flat_map(|popup| tabs.clone().map(move |t| (popup, t))).map(|(popup, t)| Box::new(crate::menus::SettingsScreen::on_tab(cx, popup, t)) as Box<dyn aegis_ui::Screen<Self>>).collect()
+        let mut screens: Vec<Box<dyn aegis_ui::Screen<Self>>> = [false, true].into_iter().flat_map(|popup| tabs.clone().map(move |t| (popup, t))).map(|(popup, t)| Box::new(crate::menus::SettingsScreen::on_tab(cx, popup, t)) as Box<dyn aegis_ui::Screen<Self>>).collect();
+        screens.extend([true, false].map(|saving| Box::new(crate::menus::Slots::new(saving)) as Box<dyn aegis_ui::Screen<Self>>));
+        screens
     }
 
     fn note(&mut self, line: String) {

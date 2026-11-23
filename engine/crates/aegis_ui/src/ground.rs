@@ -296,6 +296,28 @@ fn add_noise(out: &mut [f32], w: i32, h: i32, seed: u64, ch: u64, step: (i32, i3
     }
 }
 
+/// One `add_noise` pass: its channel, lattice step and weight.
+type Pass = (u64, (i32, i32), f32);
+
+/// ENGINE-51 (SWITCH-FEEL1): the `w` x `h` noise fields of `specs`, each its `add_noise` passes in order over zeros (no
+/// passes: an empty field), made side by side on threads (on one on the web): each exactly as made alone.
+fn noise_fields<const N: usize>(w: i32, h: i32, seed: u64, specs: [Vec<Pass>; N]) -> [Vec<f32>; N] {
+    let make = move |passes: &[Pass]| {
+        if passes.is_empty() {
+            return Vec::new();
+        }
+        let mut f = vec![0.0f32; w.max(0) as usize * h.max(0) as usize];
+        for (ch, step, weight) in passes {
+            add_noise(&mut f, w, h, seed, *ch, *step, *weight);
+        }
+        f
+    };
+    if cfg!(target_arch = "wasm32") || specs.iter().filter(|s| !s.is_empty()).count() <= 1 {
+        return specs.map(|s| make(&s));
+    }
+    std::thread::scope(|s| specs.each_ref().map(|p| s.spawn(move || make(p))).map(|t| t.join().expect("a noise field")))
+}
+
 /// One centred box pass of width `2 r + 1` over `src`, a running sum in integers; only `r..len - r` is written.
 fn box_pass(src: &[i32], dst: &mut [i32], r: usize) {
     if src.len() < 2 * r + 1 {
@@ -543,26 +565,15 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
     let any_strays = fields.iter().zip(&strays).any(|(f, s)| f.is_some() && *s);
     let any_tone = by_rank.iter().any(|i| job.layers[*i].tone != 0.0);
     let field = || vec![0.0f32; uw * uh];
-    let mut edge = Vec::new();
-    let mut bite = Vec::new();
-    if any_upper {
-        edge = field();
-        add_noise(&mut edge, w, h, seed, 1, steps(10, cell), 0.6);
-        add_noise(&mut edge, w, h, seed, 2, steps(4, cell), 0.4);
-        bite = field();
-        add_noise(&mut bite, w, h, seed, 4, steps(3, cell), 1.0);
-    }
-    let mut stray_noise = Vec::new();
-    if any_strays {
-        stray_noise = field();
-        add_noise(&mut stray_noise, w, h, seed, 3, steps(3, cell), 1.0);
-    }
-    let mut tone = Vec::new();
-    if any_tone {
-        tone = field();
-        add_noise(&mut tone, w, h, seed, 7, steps(48, cell), 0.7);
-        add_noise(&mut tone, w, h, seed, 8, steps(20, cell), 0.3);
-    }
+    // ENGINE-51 (SWITCH-FEEL1): the four fields made side by side (`noise_fields`)
+    let pick = |on: bool, passes: Vec<Pass>| if on { passes } else { Vec::new() };
+    let specs = [
+        pick(any_upper, vec![(1, steps(10, cell), 0.6), (2, steps(4, cell), 0.4)]),
+        pick(any_upper, vec![(4, steps(3, cell), 1.0)]),
+        pick(any_strays, vec![(3, steps(3, cell), 1.0)]),
+        pick(any_tone, vec![(7, steps(48, cell), 0.7), (8, steps(20, cell), 0.3)]),
+    ];
+    let [edge, bite, stray_noise, tone] = noise_fields(w, h, seed, specs);
 
     // A rank's mask holds every rank above it (a lower ground runs under the upper ones), so where two grounds meet a
     // middle one's mask reads the same though none of its cells is near. Its worn band, strays and bites read its own

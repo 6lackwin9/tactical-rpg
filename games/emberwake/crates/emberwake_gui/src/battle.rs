@@ -835,6 +835,7 @@ impl BattleScreen {
         if runner == story::FIGHT_SOURCE {
             b.start_intro(cx);
         }
+        playback::load_bodies(cx, b.session());
         cx.set_busy(true);
         Ok(b)
     }
@@ -868,6 +869,11 @@ impl BattleScreen {
 pub(crate) const BOARD_GROUP: &[&str] = &["tile.", "unit."];
 
 impl Screen<GameCx> for BattleScreen {
+    /// ENGINE-51 (SWITCH-FEEL1): the battle beat while it runs (TRANSITIONS1 T1 intro, T2 victory), for the switch report.
+    fn transition(&self, _cx: &Cx) -> Option<&'static str> {
+        self.beat.map(|b| b.kind.name())
+    }
+
     /// A4.2-K1b: while the selected hero plans a Field round the arrows aim its source (`field_nudge`), so they do not
     /// move the keyboard focus then; any other time they do, as before.
     fn arrow_focus(&self) -> bool {

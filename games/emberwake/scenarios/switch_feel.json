@@ -1,0 +1,257 @@
+{
+ "id": "switch_feel",
+ "title": "ENGINE-51 (SWITCH-FEEL1): each screen switch timed from the input to the first settled frame of the new screen (its own part, a walk or a fade out before it left out): popups and menus under 150 ms, maps and battles under 400 ms, no frame over 100 ms that no transition covers; title to the Sunk Ward, the party screens, the hub menu, Save, Settings, the world map and back, a fight from the map (no intro), its results and back to the map",
+ "launch": {
+  "save": "sweep_start"
+ },
+ "settings": {},
+ "timeout_s": 600,
+ "steps": [
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "main_menu"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "pause",
+   "ms": 500
+  },
+  {
+   "step": "feel",
+   "name": "title_to_map",
+   "step_ms": 16.667,
+   "switch": true,
+   "gap": 2,
+   "script": [
+    {
+     "click": "menu.continue",
+     "switch_ms": 400
+    }
+   ],
+   "budget": {
+    "uncovered_frames": 0
+   }
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "region_map"
+   },
+   "timeout_ms": 60000
+  },
+  {
+   "step": "pause",
+   "ms": 800
+  },
+  {
+   "step": "feel",
+   "name": "menus",
+   "step_ms": 16.667,
+   "switch": true,
+   "gap": 2,
+   "script": [
+    {
+     "click": "hud.party",
+     "switch_ms": 150
+    },
+    {
+     "key": "esc",
+     "switch_ms": 150
+    },
+    {
+     "click": "region.menu",
+     "switch_ms": 150
+    },
+    {
+     "click": "hub.party",
+     "switch_ms": 150
+    },
+    {
+     "key": "esc",
+     "switch_ms": 150
+    },
+    {
+     "click": "hub.save",
+     "switch_ms": 150
+    },
+    {
+     "click": "slots.back",
+     "switch_ms": 150
+    },
+    {
+     "click": "hub.settings",
+     "switch_ms": 150
+    },
+    {
+     "key": "esc",
+     "switch_ms": 150
+    },
+    {
+     "key": "esc",
+     "switch_ms": 150
+    }
+   ],
+   "budget": {
+    "uncovered_frames": 0
+   }
+  },
+  {
+   "step": "pause",
+   "ms": 500
+  },
+  {
+   "step": "click",
+   "id": "here.world_map"
+  },
+  {
+   "step": "pause",
+   "ms": 2500
+  },
+  {
+   "step": "feel",
+   "name": "world_map",
+   "step_ms": 16.667,
+   "switch": true,
+   "gap": 2,
+   "script": [
+    {
+     "click": "here.world_map",
+     "switch_ms": 400,
+     "to": "world_map"
+    },
+    {
+     "click": "world_map.enter",
+     "switch_ms": 400,
+     "to": "region_map"
+    }
+   ],
+   "budget": {
+    "uncovered_frames": 0
+   }
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "region_map"
+   },
+   "timeout_ms": 60000
+  },
+  {
+   "step": "pause",
+   "ms": 800
+  },
+  {
+   "step": "click",
+   "id": "here.sweep"
+  },
+  {
+   "step": "pause",
+   "ms": 1500
+  },
+  {
+   "step": "feel",
+   "name": "map_to_fight",
+   "step_ms": 16.667,
+   "switch": true,
+   "gap": 2,
+   "script": [
+    {
+     "click": "here.sweep",
+     "switch_ms": 400,
+     "to": "battle"
+    }
+   ],
+   "budget": {
+    "uncovered_frames": 0
+   }
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "battle"
+   },
+   "timeout_ms": 60000
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "state.beat",
+    "absent": true
+   },
+   "timeout_ms": 60000
+  },
+  {
+   "step": "pause",
+   "ms": 800
+  },
+  {
+   "step": "link",
+   "body": {
+    "cmd": "autoplay",
+    "rounds": 5
+   }
+  },
+  {
+   "step": "link",
+   "body": {
+    "cmd": "autoplay",
+    "preset": "defensive"
+   }
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "state.outcome",
+    "ne": ""
+   },
+   "timeout_ms": 240000
+  },
+  {
+   "step": "pause",
+   "ms": 800
+  },
+  {
+   "step": "feel",
+   "name": "fight_to_results",
+   "step_ms": 16.667,
+   "switch": true,
+   "gap": 2,
+   "script": [
+    {
+     "key": "enter",
+     "switch_ms": 150
+    }
+   ],
+   "budget": {
+    "uncovered_frames": 0
+   }
+  },
+  {
+   "step": "pause",
+   "ms": 1500
+  },
+  {
+   "step": "feel",
+   "name": "results_to_map",
+   "step_ms": 16.667,
+   "switch": true,
+   "gap": 2,
+   "script": [
+    {
+     "key": "enter",
+     "switch_ms": 400,
+     "to": "region_map"
+    }
+   ],
+   "budget": {
+    "uncovered_frames": 0
+   }
+  }
+ ]
+}

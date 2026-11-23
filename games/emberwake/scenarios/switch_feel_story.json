@@ -1,0 +1,189 @@
+{
+ "id": "switch_feel_story",
+ "title": "ENGINE-51 (SWITCH-FEEL1): the title's Settings, Load and New Game (under 150 ms), a new Sunk Ward game started and its story cards line by line into the story fight and its battle beat, the results and on to the next story card (under 400 ms), no frame over 100 ms that no transition covers",
+ "launch": {},
+ "settings": {},
+ "timeout_s": 900,
+ "steps": [
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "main_menu"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "pause",
+   "ms": 500
+  },
+  {
+   "step": "feel",
+   "name": "title_menus",
+   "step_ms": 16.667,
+   "switch": true,
+   "gap": 2,
+   "script": [
+    {
+     "click": "menu.settings",
+     "switch_ms": 150
+    },
+    {
+     "key": "esc",
+     "switch_ms": 150
+    },
+    {
+     "click": "menu.load",
+     "switch_ms": 150
+    },
+    {
+     "key": "esc",
+     "switch_ms": 150
+    },
+    {
+     "click": "menu.new_game",
+     "switch_ms": 150
+    }
+   ],
+   "budget": {
+    "uncovered_frames": 0
+   }
+  },
+  {
+   "step": "wait",
+   "until": {
+    "widget": "world.sunk_ward"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "click",
+   "id": "world.sunk_ward"
+  },
+  {
+   "step": "feel",
+   "name": "start_game",
+   "step_ms": 16.667,
+   "switch": true,
+   "gap": 2,
+   "script": [
+    {
+     "click": "new_game.start",
+     "switch_ms": 400,
+     "to": "vignette"
+    }
+   ],
+   "budget": {
+    "uncovered_frames": 0
+   }
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "vignette"
+   },
+   "timeout_ms": 60000
+  },
+  {
+   "step": "pause",
+   "ms": 1500
+  },
+  {
+   "step": "repeat",
+   "times": 40,
+   "until": {
+    "path": "screen",
+    "eq": "battle"
+   },
+   "steps": [
+    {
+     "step": "feel",
+     "name": "story_cards",
+     "step_ms": 16.667,
+     "switch": true,
+     "gap": 2,
+     "script": [
+      {
+       "key": "space"
+      }
+     ],
+     "budget": {
+      "uncovered_frames": 0
+     }
+    }
+   ]
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "state.beat",
+    "absent": true
+   },
+   "timeout_ms": 60000
+  },
+  {
+   "step": "link",
+   "body": {
+    "cmd": "autoplay",
+    "rounds": 5
+   }
+  },
+  {
+   "step": "link",
+   "body": {
+    "cmd": "autoplay",
+    "preset": "defensive"
+   }
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "state.outcome",
+    "ne": ""
+   },
+   "timeout_ms": 240000
+  },
+  {
+   "step": "pause",
+   "ms": 800
+  },
+  {
+   "step": "feel",
+   "name": "fight_to_results",
+   "step_ms": 16.667,
+   "switch": true,
+   "gap": 2,
+   "script": [
+    {
+     "key": "enter",
+     "switch_ms": 150
+    }
+   ],
+   "budget": {
+    "uncovered_frames": 0
+   }
+  },
+  {
+   "step": "pause",
+   "ms": 1500
+  },
+  {
+   "step": "feel",
+   "name": "results_to_story",
+   "step_ms": 16.667,
+   "switch": true,
+   "gap": 2,
+   "script": [
+    {
+     "click": "results.continue",
+     "switch_ms": 400,
+     "to": "vignette"
+    }
+   ],
+   "budget": {
+    "uncovered_frames": 0
+   }
+  }
+ ]
+}

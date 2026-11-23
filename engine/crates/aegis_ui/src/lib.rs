@@ -62,6 +62,7 @@ pub mod timeline;
 pub mod tuning;
 pub mod ui;
 pub mod walkfeel;
+pub mod switchfeel;
 pub mod window;
 pub mod world_camera;
 
