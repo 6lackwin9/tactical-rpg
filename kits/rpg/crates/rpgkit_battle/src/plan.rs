@@ -16,9 +16,11 @@ use rpgkit_rules::damage::{self, HitInput};
 use rpgkit_rules::ruleset::{self, Chase};
 use rpgkit_rules::{status, Stance};
 use indexmap::{IndexMap, IndexSet};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::collections::HashMap;
-use std::rc::Rc;
+// ENGINE-54 (WARM-SPREAD1): shared plan steps are `Arc`, so a started fight can be built on a thread
+use std::sync::Arc as Rc;
 
 /// ESCAPE-PLAN1 (2), (4) (`PR7-60`): on (the default) a party member's hand move may walk through a friend's tile and
 /// its Withdraw spends no AP it lacks; off = the moves as before the row. Test-only: the goldens recorded before the row
@@ -57,7 +59,7 @@ pub struct PlanStep {
     pub direction: V2,
     pub tiles: i32,
     /// GOTO / AREA destination, or the approach / landing tile fixed when first compiled.
-    pub cell: Cell<V2>,
+    pub cell: TileCell,
     /// ITEM: the catalog consumable id used from the battle pouch.
     pub item_id: String,
     /// GOTO only (RULESET1_INTENT AS3, rule `round_intent`): an after-move, one move block that may follow the unit's
@@ -70,13 +72,55 @@ pub struct PlanStep {
     pub move_reason: String,
     /// INPUT1 GH1: the planner placed the step after a member's picks (a ghost block: a real step all the same).
     /// Display only: compiling never reads it.
-    pub ghost: Cell<bool>,
+    pub ghost: Flag,
     /// Decision "Auto-fill keeps a flank": an auto-filled follow-up (or one accepted from the ghost): a carried Engage hits
     /// from its flank or behind tile (`round_intent::keeps_flank`) rather than moving to its own position.
-    pub stay: Cell<bool>,
+    pub stay: Flag,
 }
 
 pub type Step = Rc<PlanStep>;
+
+/// ENGINE-54 (WARM-SPREAD1): a step's tile, settable through a shared step like a `Cell` but one a thread may hold
+/// (relaxed atomics; a plan is only ever used on one thread at a time), so a started fight can be built on a thread.
+#[derive(Debug)]
+pub struct TileCell(AtomicU64);
+
+impl TileCell {
+    pub fn new(v: V2) -> Self {
+        Self(AtomicU64::new(Self::pack(v)))
+    }
+
+    pub fn get(&self) -> V2 {
+        let n = self.0.load(Ordering::Relaxed);
+        V2::new((n >> 32) as u32 as i32, n as u32 as i32)
+    }
+
+    pub fn set(&self, v: V2) {
+        self.0.store(Self::pack(v), Ordering::Relaxed);
+    }
+
+    fn pack(v: V2) -> u64 {
+        ((v.x as u32 as u64) << 32) | v.y as u32 as u64
+    }
+}
+
+/// ENGINE-54: a step's flag, as `TileCell` (a `Cell<bool>` a thread may hold).
+#[derive(Debug)]
+pub struct Flag(AtomicBool);
+
+impl Flag {
+    pub fn new(v: bool) -> Self {
+        Self(AtomicBool::new(v))
+    }
+
+    pub fn get(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+
+    pub fn set(&self, v: bool) {
+        self.0.store(v, Ordering::Relaxed);
+    }
+}
 
 impl PlanStep {
     /// PlanStep.title: "⚔ Strike → Wolf", "➜ Move →2", "Use Potion → Bryn" (the sim's PLAN FAIL lines).
@@ -118,24 +162,24 @@ impl PlanStep {
     }
 
     fn make(mode: Mode, skill: Option<SkillId>, target: Option<UnitId>, cell: V2) -> Step {
-        Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+        Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: TileCell::new(cell), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Flag::new(false), stay: Flag::new(false) })
     }
     pub fn engage(skill: SkillId, target: UnitId) -> Step {
         Self::make(Mode::Engage, Some(skill), Some(target), NO_CELL)
     }
     pub fn mv(skill: SkillId, direction: V2, tiles: i32) -> Step {
-        Rc::new(PlanStep { mode: Mode::Move, skill: Some(skill), target: None, direction, tiles, cell: Cell::new(NO_CELL), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+        Rc::new(PlanStep { mode: Mode::Move, skill: Some(skill), target: None, direction, tiles, cell: TileCell::new(NO_CELL), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Flag::new(false), stay: Flag::new(false) })
     }
     pub fn go_to(skill: SkillId, cell: V2) -> Step {
         Self::make(Mode::Goto, Some(skill), None, cell)
     }
     /// RULESET1_INTENT AS3: an after-move to `cell` (a kite step after the attacks; rule `round_intent`).
     pub fn after_move(skill: SkillId, cell: V2) -> Step {
-        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: true, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: 1, cell: TileCell::new(cell), item_id: String::new(), after: true, reason: String::new(), move_reason: String::new(), ghost: Flag::new(false), stay: Flag::new(false) })
     }
     /// VISCLAR1-D: the player's Move after a skill: an after-move of up to `blocks` move blocks (kept in `tiles`).
     pub fn after_move_up_to(skill: SkillId, cell: V2, blocks: i32) -> Step {
-        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: blocks, cell: Cell::new(cell), item_id: String::new(), after: true, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: blocks, cell: TileCell::new(cell), item_id: String::new(), after: true, reason: String::new(), move_reason: String::new(), ghost: Flag::new(false), stay: Flag::new(false) })
     }
     pub fn area_at(skill: SkillId, cell: V2) -> Step {
         Self::make(Mode::Area, Some(skill), None, cell)
@@ -158,11 +202,11 @@ impl PlanStep {
     /// ITEMUSE1 1.3: use pouch item `item_id` on `target` (the user itself for self items). Skill-less step.
     /// A1.2-K3 (INTENT2 section 6, IR2): an area item's Field row aimed at the source tile `cell`.
     pub fn use_item_at(item_id: &str, cell: V2) -> Step {
-        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: None, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: None, direction: ZERO, tiles: 1, cell: TileCell::new(cell), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new(), ghost: Flag::new(false), stay: Flag::new(false) })
     }
 
     pub fn use_item(item_id: &str, target: UnitId) -> Step {
-        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: Some(target), direction: ZERO, tiles: 1, cell: Cell::new(NO_CELL), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: Some(target), direction: ZERO, tiles: 1, cell: TileCell::new(NO_CELL), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new(), ghost: Flag::new(false), stay: Flag::new(false) })
     }
 }
 

@@ -813,6 +813,10 @@ impl<'a> Painter<'a> {
     /// view stay the same, the next calls put its pixels back instead of drawing it. `key` is the caller's hash of
     /// everything the layer shows; `draw` must cover all of `r` and draw nothing outside it (set the clip to `r` first).
     pub fn cached(&mut self, slot: &mut Snapshot, key: u64, r: Rect, draw: impl FnOnce(&mut Painter)) {
+        // ENGINE-54 (WARM-SPREAD1): a warm draw (nothing drawn) draws the layer for what it caches and keeps nothing
+        if self.c.hidden() {
+            return draw(self);
+        }
         let want = self.snap_key(key);
         let at = self.c.visible(self.v.rect(r));
         if slot.key == want && slot.rect == at {
@@ -836,6 +840,13 @@ impl<'a> Painter<'a> {
     /// returned strip with the canvas clip set to its `px` (all of it, and opaque: the strip held old pixels), then calls
     /// `scroll_end`. None returned: all was put back. A changed key or view returns all of `r` as one strip.
     pub fn scroll_begin(&mut self, slot: &mut Snapshot, key: u64, r: Rect, origin: (i32, i32)) -> Vec<Strip> {
+        // ENGINE-54: a warm draw gets the whole layer (in the canvas) as one strip, so it asks for all its art; nothing
+        // is kept
+        if self.c.hidden() {
+            slot.open = None;
+            let px = self.v.rect(r).intersect(Rect::new(0, 0, self.c.w, self.c.h));
+            return [px].into_iter().filter(|p| p.w > 0 && p.h > 0).map(|px| Strip { px, area: self.logical_cover(px) }).collect();
+        }
         let want = self.snap_key(key);
         let at = self.c.visible(self.v.rect(r));
         let mut todo = vec![at];
@@ -901,6 +912,10 @@ impl<'a> Painter<'a> {
         let (cx, cy) = (pr.x as f32 + hw, pr.y as f32 + hh);
         // VISCLAR1-C: a pixel centre at least `rad` + 1.5 from every edge is all fill and no border, so the middle is
         // filled at once; only the border band needs the distance. The same pixels, in far less time
+        if self.c.hidden() {
+            self.cover(r, fill[3]);
+            return;
+        }
         let band = rad.ceil() as i32 + 1;
         let middle = Rect::new(pr.x + band, pr.y + band, pr.w - 2 * band, pr.h - 2 * band);
         let solid = middle.w > 0 && middle.h > 0;
@@ -993,8 +1008,14 @@ impl<'a> Painter<'a> {
         let ascent = px as f32 * 0.95;
         let mut pen = self.v.ox + x * self.v.s;
         let base = self.v.oy + y * self.v.s + ascent;
+        // ENGINE-54: a warm draw rasterizes each glyph (cached) but blends none
+        let hidden = self.c.hidden();
         for ch in s.chars() {
             let (m, bitmap) = self.fonts.glyph(face, ch, px);
+            if hidden {
+                pen += m.advance_width;
+                continue;
+            }
             let gx = (pen + m.xmin as f32).round() as i32;
             let gy = (base - m.height as f32 - m.ymin as f32).round() as i32;
             for row in 0..m.height {
@@ -1243,6 +1264,9 @@ impl<'a> Painter<'a> {
 
     /// A filled, anti-aliased ellipse centred on logical (`cx`, `cy`) with radii `rx` and `ry` (a unit's foot shadow).
     pub fn ellipse(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, col: Rgba) {
+        if self.c.hidden() {
+            return;
+        }
         let (x, y, prx, pry) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, (rx * self.v.s).max(0.5), (ry * self.v.s).max(0.5));
         let (x0, y0, x1, y1) = ((x - prx - 1.0).floor() as i32, (y - pry - 1.0).floor() as i32, (x + prx + 1.0).ceil() as i32, (y + pry + 1.0).ceil() as i32);
         for py in y0..=y1 {
@@ -1264,6 +1288,9 @@ impl<'a> Painter<'a> {
     /// `rx` and `ry`, its strength `col`'s alpha at the centre falling smoothly to 0 at the edge ((1 - d^2)^2), so the
     /// floor under it brightens instead of being painted over.
     pub fn glow(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, col: Rgba) {
+        if self.c.hidden() {
+            return;
+        }
         let (x, y, prx, pry) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, (rx * self.v.s).max(0.5), (ry * self.v.s).max(0.5));
         let (x0, y0, x1, y1) = ((x - prx).floor() as i32, (y - pry).floor() as i32, (x + prx).ceil() as i32, (y + pry).ceil() as i32);
         for py in y0..=y1 {
@@ -1281,6 +1308,9 @@ impl<'a> Painter<'a> {
     /// A 1 px (old unit) anti-aliased ellipse outline centred on logical (`cx`, `cy`) with radii `rx` and `ry`, no fill
     /// (STAGE1-E: a unit's foot ring). Only pixels within half the stroke plus half a pixel of the edge are touched.
     pub fn ellipse_ring(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, col: Rgba) {
+        if self.c.hidden() {
+            return;
+        }
         let (x, y, prx, pry) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, (rx * self.v.s).max(0.5), (ry * self.v.s).max(0.5));
         let t = self.v.old_scale().max(1.0);
         let pad = t / 2.0 + 1.0;
@@ -1301,6 +1331,9 @@ impl<'a> Painter<'a> {
     }
 
     pub fn circle(&mut self, cx: f32, cy: f32, r: f32, col: Rgba) {
+        if self.c.hidden() {
+            return;
+        }
         let (x, y, pr) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, r * self.v.s);
         let t = (self.v.old_scale() * 0.5).max(1.0);
         let (x0, y0, x1, y1) = ((x - pr - 2.0) as i32, (y - pr - 2.0) as i32, (x + pr + 2.0) as i32, (y + pr + 2.0) as i32);

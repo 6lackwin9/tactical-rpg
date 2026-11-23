@@ -308,6 +308,12 @@ impl Canvas {
         self.px[i + 3] = 255;
     }
 
+    /// ENGINE-54 (WARM-SPREAD1): nothing can be drawn (an empty `clip` or `bounds`: a warm draw, whose shapes and
+    /// glyphs skip their pixel work and keep only what they cache).
+    pub fn hidden(&self) -> bool {
+        [self.clip, self.bounds].into_iter().flatten().any(|r| r.w <= 0 || r.h <= 0)
+    }
+
     /// The part of `r` that can be drawn: inside the canvas, `clip` and `bounds` (its `w` or `h` is 0 or less when none is).
     pub(crate) fn visible(&self, r: Rect) -> Rect {
         let (mut x0, mut y0, mut x1, mut y1) = (r.x.max(0), r.y.max(0), (r.x + r.w).min(self.w), (r.y + r.h).min(self.h));
@@ -402,6 +408,9 @@ impl Canvas {
 
     /// Bresenham line; `dash` > 0 draws dash-on / dash-off segments.
     pub fn line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, c: Rgba, dash: i32) {
+        if self.hidden() {
+            return;
+        }
         let (dx, dy) = ((x1 - x0).abs(), -(y1 - y0).abs());
         let (sx, sy) = (if x0 < x1 { 1 } else { -1 }, if y0 < y1 { 1 } else { -1 });
         let (mut x, mut y, mut err, mut n) = (x0, y0, dx + dy, 0);

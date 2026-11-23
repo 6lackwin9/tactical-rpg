@@ -80,6 +80,12 @@ pub struct Options {
     pub headless: Option<headless::Headless>,
 }
 
+/// ENGINE-54 (WARM-SPREAD1): the art loads one warm slice may make on the frame, in µs (its draw's own cost comes on
+/// top; a slice keeps under 8 ms on a screen whose unseen draw is cheap).
+const WARM_ART_US: u64 = 2000;
+/// ENGINE-54: the most slices one warming gets (a screen that keeps leaving work is dropped after it).
+const WARM_SLICES_MAX: u32 = 240;
+
 struct Shell<G> {
     cx: Cx<G>,
     gfx: Gfx,
@@ -131,6 +137,11 @@ struct Shell<G> {
     feel: crate::feel::Probe,
     feel_t0: Instant,
     feel_launch: bool,
+    /// ENGINE-54 (WARM-SPREAD1): the screen being warmed (`Screen::warm_next`), one slice a frame, how many slices it has
+    /// had, and whether an input came since the last frame (a slice waits a frame after one).
+    warming: Option<Box<dyn Screen<G>>>,
+    warm_slices: u32,
+    input_seen: bool,
 }
 
 impl<G: Context> Shell<G> {
@@ -141,7 +152,7 @@ impl<G: Context> Shell<G> {
         let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         gfx.kit.device.dpr = dpr;
         let (policy, offered, window_notices) = read_window_options(&options.canvas, &options.window_sizes);
-        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked() };
+        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false };
         shell.cx.notice.extend(icon_notice);
         shell.cx.notice.extend(window_notices);
         hold_declared_sizes(&mut shell.cx.settings, &options.window_sizes, &offered);
@@ -177,6 +188,50 @@ impl<G: Context> Shell<G> {
         self.cx.notice.truncate(notices);
     }
 
+    /// ENGINE-54 (WARM-SPREAD1): one slice of warming the screen `warm_next` gave: the files and grounds done off the
+    /// frame are taken in (`Art::warm_poll`, `ground::poll_later`), then the screen is drawn unseen (an empty `bounds`, no
+    /// mouse) with its art loads limited to `WARM_ART_US` and its decodes and composes sent to threads (`Art::defer`,
+    /// `ground::set_deferring`). What the slice left comes in a later one, once the threads are done; a slice with nothing left ends the warming. A
+    /// frame after an input has no slice (the input never waits on one). Nothing it asks for (navigation, notices) stays.
+    fn warm_slice(&mut self) {
+        let input = std::mem::take(&mut self.input_seen);
+        if cfg!(target_arch = "wasm32") {
+            self.warming = None;
+            return;
+        }
+        if self.cx.art.warming() {
+            self.cx.art.warm_poll();
+        }
+        if crate::ground::composing() {
+            crate::ground::poll_later();
+        }
+        // the next slice waits for the files and grounds the last one asked for (a slice drawn sooner would only ask
+        // again, a full draw's cost each frame)
+        if input || self.warming.is_none() || self.cx.art.warming() || crate::ground::composing() {
+            return;
+        }
+        let Some(mut s) = self.warming.take() else { return };
+        let (nav, notices) = (self.cx.nav.len(), self.cx.notice.len());
+        let paused = (self.gfx.fonts.audit.take(), self.gfx.fonts.layout.take());
+        self.gfx.view = self.view_of(s.grid());
+        // nothing drawn: an empty outer limit (the screen sets and lifts its own clips)
+        let bounds = self.gfx.canvas.bounds.replace(Rect::new(0, 0, 0, 0));
+        self.cx.art.defer(std::time::Duration::from_micros(WARM_ART_US));
+        crate::ground::set_deferring(true);
+        s.draw(&mut self.cx, &mut self.gfx, (-1, -1), false);
+        let left = self.cx.art.undefer() + crate::ground::left_later();
+        crate::ground::set_deferring(false);
+        (self.gfx.fonts.audit, self.gfx.fonts.layout) = paused;
+        self.gfx.canvas.bounds = bounds;
+        self.gfx.canvas.clip = None;
+        self.cx.nav.truncate(nav);
+        self.cx.notice.truncate(notices);
+        self.warm_slices += 1;
+        if left > 0 && self.warm_slices < WARM_SLICES_MAX {
+            self.warming = Some(s);
+        }
+    }
+
     /// ENGINE-45: ms on the feel probe's wall clock.
     fn feel_now(&self) -> f64 {
         crate::perf::ms_since(self.feel_t0)
@@ -184,6 +239,7 @@ impl<G: Context> Shell<G> {
 
     /// ENGINE-45: an input of `kind` arrived now.
     fn feel_input(&mut self, kind: &str) {
+        self.input_seen = true;
         let at = self.feel_now();
         self.feel.input(kind, at);
     }
@@ -375,11 +431,14 @@ impl<G: Context> Shell<G> {
         self.stack.last_mut().unwrap().tick(cx);
         self.feel.tick = t.map_or(0.0, crate::perf::ms_since);
         self.settle();
-        // ENGINE-53 (SWITCH-AHEAD1): a screen one in the stack may open next (the top asked first), drawn once unseen
+        // ENGINE-53 (SWITCH-AHEAD1), ENGINE-54 (WARM-SPREAD1): a screen one in the stack may open next (the top asked
+        // first), warmed one slice a frame
         let cx = &mut self.cx;
         if let Some(next) = self.stack.iter_mut().rev().find_map(|s| s.warm_next(cx)) {
-            self.warm_screens(vec![next]);
+            self.warming = Some(next);
+            self.warm_slices = 0;
         }
+        self.warm_slice();
         // LOOK1-E1: the theme in force (the faces follow it; the screens' `Ui` sync them too).
         let theme = th();
         self.gfx.fonts.sync(&theme);
@@ -989,7 +1048,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked() };
+        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false };
         s.frame();
         s
     }

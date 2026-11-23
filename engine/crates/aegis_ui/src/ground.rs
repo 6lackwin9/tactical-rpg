@@ -1208,6 +1208,12 @@ thread_local! {
     static ART: RefCell<Vec<(GroundKey, Rc<Image>)>> = const { RefCell::new(Vec::new()) };
     static COPY: RefCell<Option<Physical>> = const { RefCell::new(None) };
     static COMPOSES: Cell<u64> = const { Cell::new(0) };
+    /// ENGINE-54 (WARM-SPREAD1): a warm draw is under way (`set_deferring`): a ground not cached is composed on a thread
+    /// (`compose_later`) or left, never on the frame; `LATER` counts what it left.
+    static DEFERRING: Cell<bool> = const { Cell::new(false) };
+    static LATER: Cell<u64> = const { Cell::new(0) };
+    /// ENGINE-54: grounds composing on a thread, by key, until done (`poll_later`) or drawn.
+    static COMPOSING: RefCell<Vec<(GroundKey, std::thread::JoinHandle<Image>)>> = const { RefCell::new(Vec::new()) };
     static EXPANDS: Cell<u64> = const { Cell::new(0) };
 }
 
@@ -1299,6 +1305,55 @@ fn blit_scaled(c: &mut Canvas, pr: Rect, art: &Image) {
     }
 }
 
+/// ENGINE-54 (WARM-SPREAD1): starts or ends a warm draw on this thread (the shell's slices). While it lasts `draw`
+/// composes nothing on the frame: a ground a caller can hand over (`compose_later`) composes on a thread, any other is
+/// left (counted); a ground composing is waited for only outside it.
+pub fn set_deferring(on: bool) {
+    DEFERRING.with(|d| d.set(on));
+    LATER.with(|n| n.set(0));
+}
+
+/// ENGINE-54: a warm draw is under way (a caller with an owned job hands it to `compose_later`).
+pub fn deferring() -> bool {
+    DEFERRING.with(|d| d.get())
+}
+
+/// ENGINE-54: the grounds the warm draw under way left for later (0: every ground it drew was ready).
+pub fn left_later() -> u64 {
+    LATER.with(|n| n.get())
+}
+
+/// ENGINE-54: composes `key`'s art image on a thread (`job`, owning what it reads), unless it is held or composing
+/// already; `poll_later` keeps it when done, and `draw` waits for it outside a warm draw. On the web (no threads) the
+/// ground is left for its draw.
+pub fn compose_later(key: GroundKey, job: impl FnOnce() -> Image + Send + 'static) {
+    LATER.with(|n| n.set(n.get() + 1));
+    if cfg!(target_arch = "wasm32") || held(&key) || COMPOSING.with(|c| c.borrow().iter().any(|e| e.0 == key)) {
+        return;
+    }
+    COMPOSING.with(|c| c.borrow_mut().push((key, std::thread::spawn(job))));
+}
+
+/// ENGINE-54: keeps the grounds done composing on threads (`keep`); cheap, each frame while `composing`.
+pub fn poll_later() {
+    let done: Vec<(GroundKey, std::thread::JoinHandle<Image>)> = COMPOSING.with(|c| {
+        let mut c = c.borrow_mut();
+        let (done, going): (Vec<_>, Vec<_>) = c.drain(..).partition(|e| e.1.is_finished());
+        *c = going;
+        done
+    });
+    for (key, job) in done {
+        if let Ok(img) = job.join() {
+            keep(key, img);
+        }
+    }
+}
+
+/// ENGINE-54: grounds are composing on threads.
+pub fn composing() -> bool {
+    COMPOSING.with(|c| !c.borrow().is_empty())
+}
+
 /// ENGINE-53 (SWITCH-AHEAD1): puts an art image composed ahead (on a thread, while another screen shows) in this
 /// thread's cache under `key`, as `draw` keeps one it composed on a miss; a key already held is left as it is. So the
 /// screen that draws it next finds it and composes nothing. A stale image (its job changed since) is never drawn: its key
@@ -1346,8 +1401,23 @@ pub fn draw(p: &mut Painter, key: GroundKey, r: Rect, job: impl FnOnce() -> Imag
         cache.push(entry);
         Some(img)
     });
+    // ENGINE-54: a ground composing on a thread: a warm draw leaves it, any other waits for what is left of it
+    let held = held.or_else(|| {
+        let job = COMPOSING.with(|c| {
+            let mut c = c.borrow_mut();
+            let at = c.iter().position(|e| e.0 == key)?;
+            (!deferring() || c[at].1.is_finished()).then(|| c.remove(at).1)
+        })?;
+        let img = job.join().ok()?;
+        keep(key.clone(), img);
+        ART.with(|cache| cache.borrow().iter().find(|e| e.0 == key).map(|e| e.1.clone()))
+    });
     let art = match held {
         Some(img) => img,
+        None if deferring() => {
+            LATER.with(|n| n.set(n.get() + 1));
+            return;
+        }
         None => {
             COMPOSES.with(|n| n.set(n.get() + 1));
             let img = Rc::new(job());

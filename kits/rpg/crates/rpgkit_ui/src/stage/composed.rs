@@ -81,6 +81,7 @@ fn board_cells<'g>(art: &mut Art, grid: &'g Grid) -> Vec<(&'g str, bool)> {
 }
 
 /// One board's job, owning what the composer borrows.
+#[derive(Clone)]
 struct Picture {
     cells: Vec<u8>,
     blocked: Vec<bool>,
@@ -224,7 +225,13 @@ pub fn draw(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, look: &ZoneL
         Some(j) => j,
         None => {
             let seed = seed_of(&seen.terrain, set, look);
-            let j = picture(art, grid, set, look, seed).map(|pic| {
+            // ENGINE-54: a warm draw whose textures are not all loaded yet keeps no job (a later slice builds it)
+            let left = art.left();
+            let pic = picture(art, grid, set, look, seed);
+            if art.left() != left {
+                return true;
+            }
+            let j = pic.map(|pic| {
                 let layers = pic.ground_layers();
                 let key = GroundKey::of("battle_stage", &pic.job(&layers));
                 drop(layers);
@@ -236,6 +243,12 @@ pub fn draw(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, look: &ZoneL
     };
     let Some(job) = job else { return false };
     let (pic, key) = &*job;
+    // ENGINE-54 (WARM-SPREAD1): a warm draw composes the board's ground on a thread
+    if composer::deferring() && !composer::held(key) {
+        let pic = pic.clone();
+        composer::compose_later(key.clone(), move || composer::compose(&pic.job(&pic.ground_layers())));
+        return true;
+    }
     composer::draw(p, key.clone(), BOARD, || composer::compose(&pic.job(&pic.ground_layers())));
     true
 }

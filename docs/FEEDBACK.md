@@ -170,8 +170,52 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-51` (`SWITCH-FEEL1`) | Built (tools lane) | `develop` | every screen switch timed to its first settled frame (`feel` `switch`, `aegis_ui::switchfeel`, `Screen::transition`): all under target in release, no uncovered frame over 100 ms; fixes: double decodes, a fight's sheets decoded side by side, Save/Load warmed, the world map's background read ahead, the ground's noise side by side; gate scenarios `switch_feel`, `switch_feel_story`; goldens unchanged. FB-497 |
 | `ENGINE-52` (`COMPOSE-PAR1`) | Built (tools lane) | `develop` | the ground composer's per-pixel pass and noise in bands of rows on up to 4 threads, the same bytes (tests on two maps, battle boards, an engine job); compose 40 to 26 ms alone; Continue (107 to 124 ms) and a fight with no intro (101 to 135 ms) miss 60 ms, reported with options; `switch_feel` budgets for both 200 ms; goldens unchanged. FB-499 |
 | `ENGINE-53` (`SWITCH-AHEAD1`) | Built (tools lane) | `develop` | the composer's fields' blur, rims and contact lines on threads (same bytes); built ahead at idle (`Screen::warm_next`, `ground::keep`): the title's Continue map (ground composed on a thread, map drawn once unseen), a fight the party walks into or stands near and the fight after a vignette (started on a copy of the game, taken when not stale); Continue 19 to 22 ms, The Sweep 27 to 30 ms; test that a fight built ahead equals one built on the switch; `switch_feel` budgets 120 ms; goldens unchanged. FB-501 |
+| `ENGINE-54` (`WARM-SPREAD1`) | Built (tools lane) | `develop` | build-ahead work on threads (decodes, grounds, fight starts; the kit's round plan `Send`), the rest drawn unseen in slices one a frame behind an empty canvas `bounds` after 300 ms still, none on a frame with input; no frame over 33 ms while warming (worst 22 ms by The Sweep on cold art), two cold slices of the fight 9 to 18 ms; Continue 19 ms, The Sweep 21 ms; new `walk_feel_fight`, `switch_feel` `title_warm`; goldens unchanged. FB-503 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-503: ENGINE-54 WARM-SPREAD1 built; no frame over 33 ms while warming, Continue 19 ms and The Sweep 21 ms
+
+- **Status**: built (tools lane), `develop`. Engine (`aegis_ui` art, ground composer, canvas and painter, shell), kit
+  (`rpgkit_battle` plan, `rpgkit_ui` composed board), game GUI (`emberwake_gui` title, region map, story stage, battle
+  start, map ground), scenarios `walk_feel_fight` (new) and `switch_feel`; no data. **Every golden unchanged**. Shots
+  diff: only `screens_menus__scene_runner.png` (its known artifact) and the new scenario's shots; `feel_battle` failed
+  once inside the diff's loaded dev run (a 105 ms frame) and passed twice alone.
+- **Spec**: `docs/READY.md` row `ENGINE-54` (`WARM-SPREAD1`).
+- **Build-ahead work on threads**:
+  - Decodes: in a warm draw (`Art::defer`) a file not decoded yet is asked for and decoded on a thread (up to
+    `DECODE_THREADS` at once); `Art::warm_poll` takes the finished ones in. Nothing built from a file left for later is
+    cached (each cache checks `Art::left`).
+  - Grounds: in a warm draw (`ground::set_deferring`) a ground not composed yet is composed on a thread
+    (`ground::compose_later`, `ground::poll_later`): the map's ground and the fight's board ground. The map ground's
+    ENGINE-53 path of its own (`compose_ahead`) is gone: the title's unseen map draw composes it the same way.
+  - Fight starts: a fight the party walks toward or stands near, and the fight after a vignette, start on a thread
+    (`battle::FightAhead::spawn`; the kit's round plan is now `Send`: `Arc` and atomics for its `Rc` and `Cell`s,
+    same values).
+- **The rest in slices**: the screen `warm_next` gives is drawn unseen one slice a frame (`Shell::warm_slice`): nothing
+  can be drawn (an empty canvas `bounds`, which the screen's own clips cannot lift; shapes and glyph blits skip their
+  pixels, a cached or scrolled layer is drawn whole for what it asks and keeps nothing), art made on the frame limited
+  to 2 ms a slice (`WARM_ART_US`), the screen made on one slice and drawn from the next. A slice that left something
+  waits for the threads it started before the next one; one that left nothing ends the warming.
+- **When**: the title 300 ms after it shows (was its third frame); the map after the party has stood still 300 ms on a
+  tile (was 10 frames; a fight already drawn unseen on this map is only started ahead, not drawn again); a vignette
+  300 ms in. A frame after an input has no slice, and nothing waits on one.
+- **Measured** (release, no window, 1280 x 720, this 4-core container):
+  - **No frame over 33 ms while warming**: `walk_feel_fight` (new, cold art by The Sweep's marker, click walk
+    included) worst 22 ms, median 5.3 ms; `walk_feel` worst 21 ms (click) and 17 ms (keys); the title while it makes
+    Continue's map (`switch_feel`'s new `title_warm`) worst 19 ms, median 1 ms.
+  - **Slices**: the fight's unseen draw once its art is in 3 to 4 ms; **two slices are over 8 ms**: the first draw on
+    cold art, 16 to 18 ms (the battle's board asks for about 200 files), and the next, 9 to 14 ms (the bodies made from
+    them). That work is the board's own first draw, not art the 2 ms limit counts; the frames stay under 33 ms
+    with it. Splitting it further would need the battle's draw to stop part way; not done (a follow-up if wanted).
+  - **Continue 18.6 to 21.5 ms; The Sweep 21 to 22 ms** (own part, both under 60 ms); in one `switch_feel` run of
+    four The Sweep took 98 ms (two frames, worst 47 ms; under its 120 ms budget, not reproduced in three more runs).
+- **Scenarios**: new `walk_feel_fight` (budgets of `walk_feel`); `switch_feel` gains `title_warm` (frames 33 ms).
+  Scenarios README rows.
+- **Docs delta (engine/README.md)**: in the screens / shell bullet, after the ENGINE-53 `Screen::warm_next` clause add
+  "; since ENGINE-54 drawn in slices of one a frame, unseen behind an empty canvas `bounds`, once the screen has been
+  still 300 ms and never on a frame with input: decodes (`Art::defer`, `Art::warm_poll`) and grounds
+  (`ground::compose_later`) go to threads, and a slice that left something waits for them".
 
 ### FB-501: ENGINE-53 SWITCH-AHEAD1 built; Continue 19 to 22 ms and The Sweep 27 to 30 ms, both under 60 ms
 

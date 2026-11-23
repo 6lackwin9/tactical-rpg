@@ -245,6 +245,48 @@ impl FightAhead {
     pub fn fits(&self, gs: &emberwake_world::GameState, fight: &Dict, runner: &str) -> bool {
         self.runner == runner && self.fight == *fight && self.pre == *gs
     }
+
+    /// ENGINE-54 (WARM-SPREAD1): on a thread of its own, `find` (on that thread: the game a fight would start from and
+    /// the fight, or None) and that fight by `runner` started ahead, twice when `twice` (the second for a warm draw);
+    /// nothing on the frame. `FightAheadJob::take` hands it over once done. None on the web (no threads).
+    pub fn spawn(d: std::sync::Arc<emberwake_world::Data>, runner: &str, twice: bool, find: impl FnOnce(&emberwake_world::Data) -> Option<(emberwake_world::GameState, Dict)> + Send + 'static) -> Option<FightAheadJob> {
+        if cfg!(target_arch = "wasm32") {
+            return None;
+        }
+        let runner = runner.to_string();
+        Some(FightAheadJob(std::thread::spawn(move || {
+            let found = find(&d).and_then(|(gs, fight)| {
+                let ahead = Self::start(&d, &gs, &fight, &runner)?;
+                let second = if twice { Self::start(&d, &gs, &fight, &runner) } else { None };
+                Some(Found { gs, fight, ahead, second })
+            });
+            found
+        })))
+    }
+}
+
+/// ENGINE-54: what a `FightAhead::spawn` thread found: the game the fight starts from, the fight, and the fight started
+/// ahead (and a second start for a warm draw).
+pub struct Found {
+    pub gs: emberwake_world::GameState,
+    pub fight: Dict,
+    pub ahead: FightAhead,
+    pub second: Option<FightAhead>,
+}
+
+/// ENGINE-54: a `FightAhead::spawn` thread.
+pub struct FightAheadJob(std::thread::JoinHandle<Option<Found>>);
+
+impl FightAheadJob {
+    /// Done (`take` will not wait).
+    pub fn done(&self) -> bool {
+        self.0.is_finished()
+    }
+
+    /// What it found (None: nothing, or the thread failed); waits only if not done.
+    pub fn take(self) -> Option<Found> {
+        self.0.join().ok().flatten()
+    }
 }
 
 /// ASSETORG2: a fielded member's body and palette in world `world` (the kit's `begin_world_with` art callback): its

@@ -21,7 +21,8 @@ use crate::skill::{self, Kind, SkillId};
 use crate::world::{UnitId, World};
 use aegis_core::switches;
 use rpgkit_data::{Deck, SkillDef};
-use std::rc::Rc;
+// ENGINE-54 (WARM-SPREAD1): shared plan steps are `Arc`, so a started fight can be built on a thread
+use std::sync::Arc as Rc;
 
 /// PL6 reason tags.
 pub const APPROACH: &str = "approach";

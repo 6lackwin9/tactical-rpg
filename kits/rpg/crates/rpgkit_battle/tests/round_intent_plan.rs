@@ -17,7 +17,8 @@ use rpgkit_battle::world::{UnitId, World};
 use rpgkit_data::{Catalog, ItemDef};
 use rpgkit_rules::ruleset::{Ruleset, AP_COST, FLANK, ROUND_INTENT, TIMELINE};
 use serde_json::json;
-use std::rc::Rc;
+// ENGINE-54 (WARM-SPREAD1): shared plan steps are `Arc`, so a started fight can be built on a thread
+use std::sync::Arc as Rc;
 use std::sync::Arc;
 
 const BLOCKS: i32 = 6;

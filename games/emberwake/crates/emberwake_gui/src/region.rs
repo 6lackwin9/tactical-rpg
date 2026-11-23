@@ -219,14 +219,21 @@ pub struct RegionMap {
     resume: Option<(String, Pos, Pos, Option<String>)>,
     /// ENGINE-53 (SWITCH-AHEAD1): where the party stands still (location, tile) and for how many frames; the nearest
     /// fight is started ahead once there (`ahead_fight`), and its drawing comes on the next frame.
-    still: (String, Pos, u32),
+    /// ENGINE-54 (WARM-SPREAD1): since when (and whether its fight was looked for).
+    still: (String, Pos, Option<Instant>, bool),
     rehearse: Option<Rehearsal>,
+    /// ENGINE-54: the fights this map has drawn unseen already (their art and board ground stay in the caches, so
+    /// another start of one, from another tile, is only started ahead, not drawn again).
+    rehearsed: Vec<Dict>,
     /// ENGINE-53: the click walk (its tile, and where it started) whose fight was last looked for.
     ahead_walk: Option<(Option<Pos>, Pos)>,
+    /// ENGINE-54: the thread starting a fight ahead, and whether its warm draw follows.
+    ahead_job: Option<(crate::battle::FightAheadJob, bool)>,
 }
 
-/// ENGINE-53: frames the party stands still (no walk, no step showing) before the nearest fight is started ahead.
-const AHEAD_STILL: u32 = 10;
+/// ENGINE-54 (WARM-SPREAD1): how long the party stands still (no walk, no step showing) before the nearest fight is
+/// started ahead and warmed.
+const AHEAD_STILL_MS: u64 = 300;
 
 /// One frame's camera as the agent link reports it.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -640,47 +647,57 @@ impl RegionMap {
             ticker_forced: false,
             point_fired: None,
             resume: None,
-            still: (String::new(), (0, 0), 0),
+            still: (String::new(), (0, 0), None, false),
             rehearse: None,
+            rehearsed: Vec::new(),
             ahead_walk: None,
+            ahead_job: None,
         }
     }
 
-    /// ENGINE-53 (SWITCH-AHEAD1): a fight the party is about to walk into, started ahead (the game's `fight_ahead`).
-    /// During a click walk, once per walk: its steps tried on a copy of the game, and the fight they end in (as
-    /// `explore::step` tells it) started on that copy. Standing still `AHEAD_STILL` frames on a tile (no walk, no step
-    /// showing, nothing open), once per tile: the same for the walk to the nearest encounter marker, and its drawing kept
-    /// for the next frame (`warm_next`), so its bodies, board ground and panels are in their caches. A walk that goes
-    /// another way, or anything else that changes the game first, leaves it stale (`FightAhead::fits`).
+    /// ENGINE-53 (SWITCH-AHEAD1), ENGINE-54 (WARM-SPREAD1): a fight the party is about to walk into, started ahead on a
+    /// thread (`FightAhead::spawn`; nothing of it on the frame) and kept as the game's `fight_ahead`. During a click walk,
+    /// once per walk: its steps tried on a copy of the game and the fight they end in (as `explore::step` tells it)
+    /// started on that copy. Standing still `AHEAD_STILL_MS` on a tile (no walk, no step showing, nothing open), once per
+    /// tile: the same for the walk to the nearest encounter marker, and a second start warmed unseen in slices
+    /// (`warm_next`, `Rehearsal`), so its bodies, board ground and panels are in their caches. A walk that goes another
+    /// way, or anything else that changes the game first, leaves it stale (`FightAhead::fits`); a fight that starts
+    /// before the thread is done never waits on it.
     fn ahead_fight(&mut self, cx: &mut Cx) {
+        if self.ahead_job.as_ref().is_some_and(|(job, _)| job.done()) {
+            if let Some((job, draw)) = self.ahead_job.take() {
+                self.take_ahead(cx, job, draw);
+            }
+        }
         let Some(g) = cx.game.as_ref() else { return };
         if self.modal() || g.busy || g.sample {
-            self.still.2 = 0;
+            self.still.2 = None;
             return;
         }
         let (loc, at) = (g.gs.location_id.clone(), g.gs.position);
         if self.still.0 != loc || self.still.1 != at {
-            self.still = (loc, at, 0);
+            self.still = (loc, at, None, false);
         }
         if !self.walk.is_empty() {
             if self.ahead_walk.is_none_or(|w| w.0 != self.walk_dest) {
                 self.ahead_walk = Some((self.walk_dest, at));
                 let path = self.walk.clone();
-                self.start_ahead(cx, &path, false);
+                self.start_ahead(cx, path, false);
             }
             return;
         }
         self.ahead_walk = None;
         if self.moving() {
-            self.still.2 = 0;
+            self.still.2 = None;
             return;
         }
-        self.still.2 += 1;
-        if self.still.2 != AHEAD_STILL {
+        let since = *self.still.2.get_or_insert_with(Instant::now);
+        if self.still.3 || Instant::now().saturating_duration_since(since).as_millis() < AHEAD_STILL_MS as u128 {
             return;
         }
+        self.still.3 = true;
         if let Some(path) = self.nearest_fight_walk(cx) {
-            self.start_ahead(cx, &path, true);
+            self.start_ahead(cx, path, true);
         }
     }
 
@@ -702,42 +719,49 @@ impl RegionMap {
         self.path_to(cx, nearest, false).filter(|p| !p.is_empty())
     }
 
-    /// ENGINE-53: `path`'s steps on a copy of the game; the fight they end in started on the copy after them (kept as the
-    /// game's `fight_ahead` unless the one kept already fits), and with `draw` its drawing kept for the next frame.
-    fn start_ahead(&mut self, cx: &mut Cx, path: &[Pos], draw: bool) {
-        let d = cx.data.clone();
+    /// ENGINE-54: starts the thread that tries `path`'s steps on a copy of the game and starts the fight they end in
+    /// (twice with `draw`: the second for the warm draw); one at a time (a newer one replaces it, the older left to end
+    /// on its own).
+    fn start_ahead(&mut self, cx: &Cx, path: Vec<Pos>, draw: bool) {
         let Some(g) = cx.game.as_ref() else { return };
-        let mut after = g.gs.clone();
-        let mut fight = None;
-        for &dir in path {
-            let res = explore::step(&d, &mut after, dir);
-            if !json::b(&res, "ok", false) {
-                return;
+        let gs = g.gs.clone();
+        let job = crate::battle::FightAhead::spawn(cx.data.clone(), "explore", draw, move |d| {
+            let mut after = gs;
+            for dir in path {
+                let res = explore::step(d, &mut after, dir);
+                if !json::b(&res, "ok", false) {
+                    return None;
+                }
+                let events = json::aget(&res, "events");
+                if let Some(e) = events.iter().map(json::dict).find(|e| s(e, "kind") == "fight") {
+                    return Some((after, e.clone()));
+                }
+                if events.iter().map(json::dict).any(|e| ["exit", "blocked", "locked"].contains(&s(e, "kind").as_str())) {
+                    return None;
+                }
             }
-            let events = json::aget(&res, "events");
-            if let Some(e) = events.iter().map(json::dict).find(|e| s(e, "kind") == "fight") {
-                fight = Some(e.clone());
-                break;
-            }
-            if events.iter().map(json::dict).any(|e| ["exit", "blocked", "locked"].contains(&s(e, "kind").as_str())) {
-                return;
-            }
+            None
+        });
+        self.ahead_job = job.map(|j| (j, draw));
+    }
+
+    /// ENGINE-54: a done thread's fight kept as the game's `fight_ahead` (unless one kept already fits, or a fight is
+    /// on), and with `draw` its second start handed to the warm draw.
+    fn take_ahead(&mut self, cx: &mut Cx, job: crate::battle::FightAheadJob, draw: bool) {
+        let Some(found) = job.take() else { return };
+        let Some(g) = cx.game.as_mut() else { return };
+        if g.busy {
+            return;
         }
-        let Some(fight) = fight else { return };
         let slot = g.slot;
-        let kept = g.fight_ahead.as_ref().is_some_and(|a| a.fits(&after, &fight, "explore"));
-        if !kept {
-            let ahead = crate::battle::FightAhead::start(&d, &after, &fight, "explore");
-            let started = ahead.is_some();
-            if let Some(g) = cx.game.as_mut() {
-                g.fight_ahead = ahead;
-            }
-            if !started {
-                return;
-            }
+        if !g.fight_ahead.as_ref().is_some_and(|a| a.fits(&found.gs, &found.fight, "explore")) {
+            g.fight_ahead = Some(found.ahead);
         }
-        if draw {
-            self.rehearse = Some(Rehearsal::fight(&after, slot, &fight, "explore"));
+        if draw && !self.rehearsed.iter().any(|f| f == &found.fight) {
+            if let Some(second) = found.second {
+                self.rehearsed.push(found.fight.clone());
+                self.rehearse = Some(Rehearsal::fight(found.gs, slot, found.fight, "explore", second));
+            }
         }
     }
 
@@ -1338,7 +1362,7 @@ impl RegionMap {
 }
 
 impl Screen<GameCx> for RegionMap {
-    /// ENGINE-53 (SWITCH-AHEAD1): the nearest fight, started ahead, drawn once unseen (its first draw's caches).
+    /// ENGINE-53 (SWITCH-AHEAD1), ENGINE-54: the nearest fight, started ahead on a thread, warmed unseen in slices.
     fn warm_next(&mut self, cx: &mut Cx) -> Option<Box<dyn Screen<GameCx>>> {
         if let Some(r) = self.rehearse.take() {
             return Some(Box::new(r));
@@ -2673,20 +2697,21 @@ fn leader_art(cx: &Cx) -> (String, String) {
     }
 }
 
-/// Body `body` standing on tile `r` (spec PLAYUI1 2.4): a foot shadow in `foot`, then the frame `player` plays at
-/// `now` in `face` (`Art::played_facing`, DIR4-M: the up or down row when the body has one, else the side row,
-/// mirrored facing left), filling its rect (`body_rect_of`: PAINTED-MAPS1 scales a painted body by its foot row) at the
-/// zoomed size (SPRITEFIT1's exact fit). None when it does not play (the caller draws today's token).
-#[allow(clippy::too_many_arguments)]
-/// ENGINE-53 (SWITCH-AHEAD1): the region map a save opens on, drawn once unseen while the title shows
-/// (`Screen::warm_next`), so its first draw's art (bodies, markers, props, roofs) and text are in their caches before
-/// Continue. It draws over a game of its own, swapped in for that draw only (the title has none), and gives back the
-/// log; the shell drops what it asked for (navigation, notices). A save opening on a story stage is not rehearsed. A fight
-/// started ahead is drawn the same way (`fight`).
+/// ENGINE-53 (SWITCH-AHEAD1), ENGINE-54 (WARM-SPREAD1): the region map a save opens on, drawn unseen in the shell's
+/// warm slices while the title shows (`Screen::warm_next`), so its first draw's art (bodies, markers, props, roofs) and
+/// ground are in their caches before Continue. It draws over a game of its own, swapped in for each slice only (the
+/// title has none), and gives back the log; the shell drops what it asked for (navigation, notices). A save opening on a
+/// story stage is not rehearsed. A fight started ahead is warmed the same way (`fight`).
 pub struct Rehearsal {
     game: Option<crate::screens::Game>,
     /// A fight (its event or row, and runner) to start on that game and draw instead of the map (a fight started ahead).
     fight: Option<(Dict, String)>,
+    /// ENGINE-54 (WARM-SPREAD1): the screen drawn, made on the first slice and kept for the next ones (None after a
+    /// start that failed).
+    inner: Option<Box<dyn Screen<GameCx>>>,
+    made: bool,
+    /// ENGINE-54: set once a slice drew it with nothing left for later (the warming is done).
+    done: std::rc::Rc<std::cell::Cell<bool>>,
 }
 
 impl Rehearsal {
@@ -2699,12 +2724,20 @@ impl Rehearsal {
         if emberwake_world::travel::roads_seen(&gs).is_none() {
             emberwake_world::travel::note_new_roads(&cx.data.clone(), &mut gs);
         }
-        Some(Self { game: Some(crate::screens::Game::new(gs, slot, false)), fight: None })
+        Some(Self { game: Some(crate::screens::Game::new(gs, slot, false)), fight: None, inner: None, made: false, done: Default::default() })
     }
 
-    /// ENGINE-53: `fight` by `runner` started on a copy of `gs` and drawn once (its bodies, board ground, panels).
-    pub fn fight(gs: &GameState, slot: i64, fight: &Dict, runner: &str) -> Self {
-        Self { game: Some(crate::screens::Game::new(gs.clone(), slot, false)), fight: Some((fight.clone(), runner.to_string())) }
+    /// ENGINE-53, ENGINE-54: `fight` by `runner` on a copy of `gs`, started already (`ahead`, on a thread: its slices
+    /// never start a fight on the frame), drawn unseen (its bodies, board ground, panels).
+    pub fn fight(gs: GameState, slot: i64, fight: Dict, runner: &str, ahead: crate::battle::FightAhead) -> Self {
+        let mut game = crate::screens::Game::new(gs, slot, false);
+        game.fight_ahead = Some(ahead);
+        Self { game: Some(game), fight: Some((fight, runner.to_string())), inner: None, made: false, done: Default::default() }
+    }
+
+    /// ENGINE-54: set once the warming is done (a slice drew it with nothing left for later).
+    pub fn done_flag(&self) -> std::rc::Rc<std::cell::Cell<bool>> {
+        self.done.clone()
     }
 }
 
@@ -2716,13 +2749,24 @@ impl Screen<GameCx> for Rehearsal {
         let Some(game) = self.game.take() else { return };
         let kept = cx.game.replace(game);
         let log = cx.log.clone();
-        match &self.fight {
-            None => RegionMap::new(cx).draw(cx, g, (-1, -1), false),
-            Some((fight, runner)) => {
-                if let Ok(mut b) = crate::battle::BattleScreen::world(cx, fight, runner) {
-                    b.draw(cx, g, (-1, -1), false);
-                }
-            }
+        // the screen is made on one slice and drawn from the next (each its own frame)
+        if !self.made {
+            self.made = true;
+            self.inner = match &self.fight {
+                None => Some(Box::new(RegionMap::new(cx))),
+                Some((fight, runner)) => crate::battle::BattleScreen::world(cx, fight, runner).ok().map(|b| Box::new(b) as Box<dyn Screen<GameCx>>),
+            };
+            cx.art.more();
+            cx.log = log;
+            self.game = std::mem::replace(&mut cx.game, kept);
+            return;
+        }
+        let left = (cx.art.left(), aegis_ui::ground::left_later());
+        if let Some(inner) = self.inner.as_mut() {
+            inner.draw(cx, g, (-1, -1), false);
+        }
+        if (cx.art.left(), aegis_ui::ground::left_later()) == left {
+            self.done.set(true);
         }
         cx.log = log;
         self.game = std::mem::replace(&mut cx.game, kept);
@@ -2742,6 +2786,11 @@ impl Screen<GameCx> for Rehearsal {
     }
 }
 
+/// Body `body` standing on tile `r` (spec PLAYUI1 2.4): a foot shadow in `foot`, then the frame `player` plays at
+/// `now` in `face` (`Art::played_facing`, DIR4-M: the up or down row when the body has one, else the side row,
+/// mirrored facing left), filling its rect (`body_rect_of`: PAINTED-MAPS1 scales a painted body by its foot row) at the
+/// zoomed size (SPRITEFIT1's exact fit). None when it does not play (the caller draws today's token).
+#[allow(clippy::too_many_arguments)]
 fn draw_sprite(ui: &mut Ui<RAct>, cx: &mut Cx, body: &str, palette: &str, player: &ClipPlayer, now: u64, face: Facing, r: Rect, foot: Rgba) -> Option<SpriteDrawn> {
     let sr = body_rect_of(cx, Some(body), r);
     let px = (sr.w as f32 * ui.p.v.s).round().max(1.0) as i32;

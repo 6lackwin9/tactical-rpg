@@ -16,7 +16,8 @@ use aegis_core::sort::godot_sort;
 use rpgkit_rules::damage;
 use rpgkit_rules::status;
 use std::collections::HashMap;
-use std::rc::Rc;
+// ENGINE-54 (WARM-SPREAD1): shared plan steps are `Arc`, so a started fight can be built on a thread
+use std::sync::Arc as Rc;
 
 pub const MAX_STEPS: usize = 16;
 pub const MAX_HEALS: usize = 2;
