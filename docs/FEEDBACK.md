@@ -174,8 +174,44 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-55` (`AUDIO-FEEL1`) | Built (tools lane) | `develop` | `feel` times each sound from its input or frame to its first audible sample, with the output's buffer and underruns; UI sounds 12 to 20 ms, hits within 6 ms of their frame, music 15 to 30 ms after its ask (was 96 ms on Continue), no underruns in release; music asked before the draw, decoding off the frame, a fixed 512-frame buffer; audio budgets on `feel` steps, new `audio_feel`; goldens unchanged. FB-504 |
 | `ENGINE-56` (`AUDIO-FEEL2`) | Built (tools lane) | `develop` | menus answer by sound by rule (confirm, back, error; `Screen::ui_sound` overrides, the round controls and volume steps keep theirs); a soft map footstep with its own Footsteps volume under Effects (placeholder `map_step.wav`); battle music fades in over 0.4 s (`battle_music_fade_ms`); stings warmed with the battle screen; `audio_feel` gains a confirm, a back and a map step; goldens unchanged. FB-505 |
 | `ENGINE-57` (`FEEL-RELEASE1`) | Built (tools lane) | `develop` | `switch_feel_story`'s release failure: a release build hides the developer surfaces, so New Game skipped the world picker; `dev=1` (dev tools builds only) shows them and every scenario launch passes it; `tools/fc.sh feel` runs every feel and reach scenario in release and prints one table (38 of 39 steps pass; `feel_battle` `battle_block` 51 to 74 ms against 50); goldens unchanged. FB-506 |
+| `ENGINE-58` (`BLOCK-CLICK2`) | Built (tools lane) | `develop` | The block click answers in 21 to 33 ms in release (was 44 to 51): the later members' ghosts are drafted on the frames after the click's answer is drawn, one step a frame, and any request, key or Confirm finishes them first; a same-board test; a game with no window settles its screens before requested frames, so shots stay the same; `feel_battle` block budget 35 ms; goldens unchanged. FB-507 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-507: ENGINE-58 BLOCK-CLICK2 built; the block click answers in 21 to 33 ms in release, later ghosts follow on the next frames
+
+- **Status**: built (tools lane), `develop`. Game GUI (`emberwake_gui` battle input, flow, a new test file), engine UI
+  (`aegis_ui` `Screen::settle`, the shell with no window), `feel_battle` budget; no data. **Every golden unchanged**; the
+  sim's planner untouched (the change is the screen's order of work only).
+- **Spec**: `docs/READY.md` row `ENGINE-58` (`BLOCK-CLICK2`).
+- **1. Profile** (release, `feel_battle` `battle_block`): the `strip.block1` handler spent 41 to 52 ms, almost all of it
+  redrafting the later members' ghosts (each one a draft on a copy, about 2 to 11 ms, then the host's `preset`, about
+  2 to 16 ms) after the clicked member's own change (a few ms). The forecasts and compiles the row named were small next
+  to that.
+- **2. Approach: defer the later members' ghosts**. The clicked member's change is sent at once, as before. The later
+  members wait in a queue (`reghost`) of steps, each member's draft worked out on one step and its send (when it changes
+  the plan) on the next. The queue starts on the frame after the click's own answer is drawn, and a frame does one step
+  (more only while they cost under 1 ms), so each frame stays near its draw. Anything that reads or changes the plan
+  first finishes the queue: any request to the host, a key, a click, Confirm (`run`, `act`). A queued member that a
+  newer change touches again is drafted again. A send worked out before that change is dropped.
+- **3. Same board**: `ghost_defer_tests` `a_ghost_click_drafts_later_ghosts_on_the_next_frames_and_ends_on_the_same_board`
+  plays one ghost click on two identical arenas, one settled at once and one over the frames. The clicked member's picks
+  match straight away. Once the queue is empty, the host's plan view, every member's picks, ghosts and round states, and
+  the waiting (buff-dropping) drafts are equal.
+- **4. Shots stay machine-independent**: a game with no window settles every screen before the frames a `frames` request
+  draws (`Screen::settle`, default nothing; the battle finishes its queue). Without this, `ally_support_menu`'s shot
+  missed a forecast segment the debug build had not drafted yet. Test: `aegis_ui` headless
+  `a_frames_request_settles_the_screens_first`. Shots diff against `1cf978aa`: only the known `screens_menus__scene_runner`.
+- **5. Budget**: `feel_battle` `battle_block` `input_ms` 50 to 35. Release runs (this container, the 5 of 6 that reached it): click to
+  present 21.0 to 33.2 ms, worst frame 22.8 to 28.6 ms (develop before: 44.4 to 51.4 ms, one of 5 over 50).
+- **Timing note**: a scenario run steps the game's clock (`aegis_core::clock::Instant::now` stands still within a frame),
+  so the per-frame time limit reads the wall clock (`Instant::wall`); with `now` every waiting ghost landed on one frame.
+- **Open (not this row)**: in about 1 run in 4 here one frame between inputs of `battle_plan` or `battle_resolve` goes
+  over 33 ms (34 to 45 ms); develop before this change does the same (`battle_plan` 44.7 ms in 1 of 5). The block step
+  passed its budgets in every run that reached it (11 runs). A follow-up row could find that frame; `tools/fc.sh feel`
+  passes when it does not come.
+- **Docs delta**: `engine/README.md` (Design): the `Screen` trait gains `settle` (finish now the work a screen spreads over
+  the frames after an input; the shell with no window calls it before a `frames` request draws).
 
 ### FB-506: ENGINE-57 FEEL-RELEASE1 built; release scenario runs take the dev path, `tools/fc.sh feel` prints one table
 

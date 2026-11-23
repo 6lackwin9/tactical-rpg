@@ -239,6 +239,8 @@ impl BattleScreen {
 
     /// A player's action (a click or a key): the playback controls click (SoundEvents ui_click), then `run`.
     pub(super) fn act(&mut self, cx: &mut Cx, a: Action) {
+        // ENGINE-58 (BLOCK-CLICK2): an action reads and changes the plan as it would with every ghost drafted at once
+        self.settle_ghosts(cx);
         // PR7-83 (PT-79): any action ends a run of Escs (`escape`)
         self.esc_closed = false;
         // TRANSITIONS1: during a beat any press skips it (T1: control starts; T2: the results open) and does nothing else
@@ -262,6 +264,7 @@ impl BattleScreen {
 
     /// An action, from the player or chained by another action or autoplay.
     pub(super) fn run(&mut self, cx: &mut Cx, a: Action) {
+        self.settle_ghosts(cx);
         match a {
             Action::Select(u) => {
                 // INPUT1 SL4, SL6 (round intent): a party card always selects; the selected hero's card selects nothing.

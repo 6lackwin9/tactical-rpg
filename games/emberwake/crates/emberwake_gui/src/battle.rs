@@ -477,6 +477,14 @@ pub struct BattleScreen {
     /// GH2 a, IN6 (decision "INPUT1 answers, part 4" Q18): members whose ghost would change their intent and drop
     /// intent-bound buffs: the change that realizes it waits for Confirm, the ghost shows on copies meanwhile.
     deferred: Vec<(usize, Deferred)>,
+    /// ENGINE-58 (BLOCK-CLICK2): the later members whose ghosts a player's change redrafts (`reghost_after`), in order,
+    /// drafted on the next frames (`ghost_tick`) so the click's own answer is drawn first; any request to the host
+    /// drafts the rest first (`send`), so every plan and ghost ends as it would drafted at once.
+    reghost: std::collections::VecDeque<input::GhostStep>,
+    /// ENGINE-58: the frame that shows the change that queued `reghost` has been drawn.
+    reghost_drawn: bool,
+    /// ENGINE-58: a waiting ghost is being drafted (its own request does not draft the rest).
+    drafting: bool,
     /// The round whose planning start drafted the ghosts (GH2 a, GH6).
     ghosted: i32,
     /// IF5: the hovered menu row's preview (revision, row, the plan as if picked); MR13 reads it too.
@@ -559,7 +567,7 @@ impl BattleScreen {
     pub(crate) fn at_rest(&self) -> bool {
         self.host.session.is_some() && !self.viewing && !self.playing && !self.auto && !self.pending_next_round && self.talk.is_none()
             && self.impacts_done(Instant::now()) && self.fx.is_empty() && self.floats.is_empty() && self.flashes.is_empty() && self.tracers.is_empty() && self.sidesteps.is_empty()
-            && !self.round_banner_alive() && !self.pips_moving() && self.beat.is_none()
+            && !self.round_banner_alive() && !self.pips_moving() && self.beat.is_none() && self.reghost.is_empty()
     }
 
     fn blank(cx: &Cx, mode: Mode) -> Self {
@@ -651,6 +659,9 @@ impl BattleScreen {
             member_tactic: Default::default(),
             open_groups: Vec::new(),
             deferred: Vec::new(),
+            reghost: std::collections::VecDeque::new(),
+            reghost_drawn: true,
+            drafting: false,
             ghosted: 0,
             preview: None,
             deferred_view: None,
@@ -941,6 +952,10 @@ impl BattleScreen {
 
     /// Sends one request through the command API and turns HP changes into floating numbers.
     fn send(&mut self, cx: &Cx, req: Value) -> Value {
+        // ENGINE-58: a request sees every ghost drafted, as before the drafts waited for the next frames
+        if !self.drafting {
+            self.settle_ghosts(cx);
+        }
         self.flush(cx);
         self.req_cmd = req["cmd"].as_str().unwrap_or("").to_string();
         self.note_step();
@@ -1017,6 +1032,8 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        // ENGINE-58: the waiting ghosts are drafted from the next frame's tick on
+        self.reghost_drawn = true;
         self.mouse = mouse;
         self.resolve_impacts(cx);
         self.react_start_portraits(cx);
@@ -1040,8 +1057,14 @@ impl Screen<GameCx> for BattleScreen {
         json!({"session": self.slot.map_or(-1, |i| i as i64), "round": s.current_round, "block": s.current_block, "phase": phase})
     }
 
+    /// ENGINE-58: the later members' ghosts still waiting are drafted now (a requested frame, a shot).
+    fn settle(&mut self, cx: &mut Cx) {
+        self.settle_ghosts(cx);
+    }
+
     fn tick(&mut self, cx: &mut Cx) {
         let now = Instant::now();
+        self.ghost_tick(cx);
         if !self.at_rest() {
             self.astir_at = now;
         }
@@ -1190,6 +1213,8 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn key(&mut self, cx: &mut Cx, k: Key) {
+        // ENGINE-58: a key reads the plan as drafted (Esc, `escape`, only closes or steps back and needs no draft)
+        self.settle_ghosts(cx);
         self.esc_closed = false;
         if crate::viewkeys::window_key(cx, k, crate::viewkeys::Shown::Notice) {
             return;

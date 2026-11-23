@@ -262,6 +262,7 @@ impl<G: Context> Loop<G> {
                 None => return json!({"ok": false, "error": format!("frames is a whole number from 1 to {FRAMES_MAX}")}),
             },
         };
+        self.shell.settle_screens();
         for _ in 0..frames {
             self.draw();
         }

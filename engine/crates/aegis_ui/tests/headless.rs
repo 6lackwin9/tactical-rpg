@@ -44,12 +44,15 @@ struct Probe {
     clicks: u32,
     /// ENGINE-48: key `e` adds a button over the whole canvas and a drop slot (the reach report's cases).
     edge: bool,
+    /// ENGINE-58: key `w` leaves work for the frames after it; `Screen::settle` finishes it (and counts the times).
+    waiting: bool,
+    settled: u32,
     w: Vec<aegis_ui::ui::Widget<&'static str>>,
 }
 
 impl Probe {
     fn new(need: FrameNeed, blank: bool) -> Self {
-        Self { need, blank, clicks: 0, edge: false, w: Vec::new() }
+        Self { need, blank, clicks: 0, edge: false, waiting: false, settled: 0, w: Vec::new() }
     }
     fn act(&mut self, _cx: &mut AppCx, _a: &'static str) {
         self.clicks += 1;
@@ -64,6 +67,11 @@ impl Screen<App> for Probe {
         self.need
     }
     fn tick(&mut self, _cx: &mut AppCx) {}
+    fn settle(&mut self, _cx: &mut AppCx) {
+        if std::mem::take(&mut self.waiting) {
+            self.settled += 1;
+        }
+    }
     fn draw(&mut self, _cx: &mut AppCx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         if !self.blank {
             let mut ui: Ui<&'static str> = Ui::new(g, mouse, live);
@@ -86,6 +94,9 @@ impl Screen<App> for Probe {
         if k == Key::Char('e') {
             self.edge = true;
         }
+        if k == Key::Char('w') {
+            self.waiting = true;
+        }
     }
     /// A command of the screen's own, under the name a game's battle uses.
     fn command(&mut self, _cx: &AppCx, body: &Value) -> Option<Value> {
@@ -95,7 +106,7 @@ impl Screen<App> for Probe {
         })
     }
     fn state(&self, _cx: &AppCx) -> Value {
-        json!({"clicks": self.clicks})
+        json!({"clicks": self.clicks, "waiting": self.waiting, "settled": self.settled})
     }
     aegis_ui::widget_plumbing!(AppCx);
 }
@@ -273,6 +284,20 @@ fn a_screens_own_step_reaches_it_and_does_not_draw_in_its_place() {
     let drawn = g.ask(json!({"cmd": "frames", "frames": 3}));
     assert!(drawn["frame"].as_u64().unwrap() >= before + 3, "{drawn}");
     assert_eq!(g.ask(json!({"cmd": "ui_tree"}))["state"]["clicks"], json!(100), "frames reach no screen command");
+    g.stop();
+}
+
+/// ENGINE-58: work a screen leaves for the frames after an input is done before the frames a `frames` request draws, so
+/// what the requests before changed is all on the canvas whatever the machine's speed.
+#[test]
+fn a_frames_request_settles_the_screens_first() {
+    let mut g = Game::start(FrameNeed::Idle, false, DEFAULT_FPS);
+    g.ask(json!({"cmd": "key", "key": "w"}));
+    let state = |g: &mut Game| g.ask(json!({"cmd": "ui_tree"}))["state"].clone();
+    assert_eq!(state(&mut g)["waiting"], json!(true), "the paced frames leave it");
+    g.ask(json!({"cmd": "frames"}));
+    let s = state(&mut g);
+    assert_eq!((s["waiting"].clone(), s["settled"].clone()), (json!(false), json!(1)));
     g.stop();
 }
 

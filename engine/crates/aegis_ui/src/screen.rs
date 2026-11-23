@@ -569,6 +569,10 @@ pub trait Screen<G> {
     }
     fn wheel(&mut self, _cx: &mut Cx<G>, _lines: i32) {}
     fn tick(&mut self, _cx: &mut Cx<G>) {}
+    /// ENGINE-58: finish now the work this screen spreads over the frames after an input (so each of those frames stays
+    /// short). A game with no window calls it on every screen before the frames a `frames` request draws, so what the
+    /// requests before changed is all on the canvas on any machine (a shot never depends on how fast the frames came).
+    fn settle(&mut self, _cx: &mut Cx<G>) {}
     /// ENGINE-53 (SWITCH-AHEAD1): a screen this one may open next, for the shell to draw once unseen at the start of
     /// this frame (after the tick), as it draws the warm list before the first frame (`Context::warm`): the art, panel
     /// and glyph caches its first real draw would fill are filled while this screen idles. Asked of the top screen each

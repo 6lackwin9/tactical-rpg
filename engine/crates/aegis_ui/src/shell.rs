@@ -276,6 +276,13 @@ impl<G: Context> Shell<G> {
         p.text(4.0, 2.0, &text, crate::feel::OVERLAY_SIZE, rgba(255, 240, 150, 255));
     }
 
+    /// ENGINE-58: every screen finishes the work it spreads over the frames after an input (`Screen::settle`).
+    fn settle_screens(&mut self) {
+        for s in self.stack.iter_mut() {
+            s.settle(&mut self.cx);
+        }
+    }
+
     /// The canvas is now `w` x `h` px.
     fn resize_canvas(&mut self, w: u32, h: u32) {
         self.gfx.canvas = Canvas::new(w as i32, h as i32);

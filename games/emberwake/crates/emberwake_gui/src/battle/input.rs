@@ -45,6 +45,20 @@ pub(super) enum Deferred {
     Round(rip::RoundSet),
 }
 
+/// ENGINE-58 (BLOCK-CLICK2): a frame keeps working on waiting ghosts while it has spent less than this on them (one
+/// step at least). A step costs 2 to 9 ms in release, so in practice each takes a frame of its own (the frame stays near
+/// its draw); a step with nothing to do (a member on manual, a draft that changes nothing) costs far less and shares one.
+const GHOST_FRAME_US: u128 = 1000;
+
+/// ENGINE-58: a step of the later members' ghosts waiting for the next frames (`BattleScreen::reghost`).
+#[derive(Debug, Clone)]
+pub(super) enum GhostStep {
+    /// Work out member's draft (`draft_view`).
+    Draft(usize),
+    /// Send member's draft, worked out on the frame before.
+    Send(usize, Deferred),
+}
+
 impl Deferred {
     /// The host request Confirm sends for member `m`.
     pub(super) fn req(&self, m: usize) -> Value {
@@ -495,19 +509,29 @@ impl BattleScreen {
     /// waits for Confirm (IN6, Q18 a: the panel warns "Changing loses ..." meanwhile); a draft equal to the plan is not
     /// sent again. Auto-fill off: nothing (the kit rests every free block).
     fn draft_ghost(&mut self, cx: &Cx, m: usize) {
+        if let Some(draft) = self.draft_view(m) {
+            self.send(cx, draft.req(m));
+        }
+    }
+
+    /// `draft_ghost`'s first half (ENGINE-58: a waiting ghost's view and its send may fall on two frames): the draft
+    /// worked out on a copy; a draft that would drop buffs waits for Confirm; Some: the draft to send (it changes the
+    /// plan).
+    fn draft_view(&mut self, m: usize) -> Option<Deferred> {
         if !self.tactic_ghost(m) || !self.session().w.autofill {
-            return;
+            return None;
         }
         let draft = Deferred::Preset(TACTICS[self.tactic_of(m)]);
         let s = self.session();
-        let Some((w2, p2)) = draft.view(s, m) else { return };
+        let (w2, p2) = draft.view(s, m)?;
         let drops = ri::intent_of(&w2, m).map(|i| ri::would_drop(&s.w, m, i)).unwrap_or_default();
         let same = ri::intent_of(&w2, m) == ri::intent_of(&s.w, m) && plan_rows(&w2, &p2, m) == plan_rows(&s.w, &s.plan, m) && w2.round_states.get(&m).and_then(|r| r.target) == s.w.round_states.get(&m).and_then(|r| r.target);
         self.deferred.retain(|d| d.0 != m);
         if !drops.is_empty() {
             self.deferred.push((m, draft));
-        } else if !same {
-            self.send(cx, draft.req(m));
+            None
+        } else {
+            (!same).then_some(draft)
         }
     }
 
@@ -540,10 +564,56 @@ impl BattleScreen {
 
     /// PL8, GH2: after `h`'s round changed, the members after it that show their tactic's ghost draft it again (the kit
     /// rebuilt them by their intent).
-    pub(super) fn reghost_after(&mut self, cx: &Cx, h: usize) {
+    pub(super) fn reghost_after(&mut self, _cx: &Cx, h: usize) {
+        // ENGINE-58 (BLOCK-CLICK2): drafted from the next frame on (`ghost_tick`), each in turn as before; the change
+        // that called this is already made
         let later: Vec<usize> = self.session().w.allies.iter().copied().skip_while(|&m| m != h).skip(1).collect();
         for m in later {
-            self.draft_ghost(cx, m);
+            // a send worked out before this change is stale: work the draft out again
+            self.reghost.retain(|s| !matches!(s, GhostStep::Send(x, _) if *x == m));
+            if !self.reghost.iter().any(|s| matches!(s, GhostStep::Draft(x) if *x == m)) {
+                self.reghost.push_back(GhostStep::Draft(m));
+            }
+        }
+        self.reghost_drawn = false;
+    }
+
+    /// ENGINE-58: one waiting step: a member's draft worked out (its send, when it changes the plan, waits as the next
+    /// step), or that send.
+    fn ghost_step(&mut self, cx: &Cx, step: GhostStep) {
+        self.drafting = true;
+        match step {
+            GhostStep::Draft(m) => {
+                if let Some(d) = self.draft_view(m) {
+                    self.reghost.push_front(GhostStep::Send(m, d));
+                }
+            }
+            GhostStep::Send(m, d) => {
+                self.send(cx, d.req(m));
+            }
+        }
+        self.drafting = false;
+    }
+
+    /// ENGINE-58: a frame drafts the next waiting ghost (`reghost`), then more while under `GHOST_FRAME_US`.
+    pub(super) fn ghost_tick(&mut self, cx: &Cx) {
+        // not before the change that queued them is drawn
+        if !self.reghost_drawn {
+            return;
+        }
+        // real time: a scenario's shot clock stands still within a frame
+        let t0 = aegis_core::clock::Instant::wall();
+        while t0.wall_elapsed().as_micros() < GHOST_FRAME_US {
+            let Some(step) = self.reghost.pop_front() else { return };
+            self.ghost_step(cx, step);
+        }
+    }
+
+    /// ENGINE-58: every waiting ghost drafted now, in order (before any request to the host, and when a test reads the
+    /// plan right after a change).
+    pub(crate) fn settle_ghosts(&mut self, cx: &Cx) {
+        while let Some(step) = self.reghost.pop_front() {
+            self.ghost_step(cx, step);
         }
     }
 

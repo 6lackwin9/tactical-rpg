@@ -118,7 +118,7 @@
         }
       ],
       "budget": {
-        "input_ms": 50,
+        "input_ms": 35,
         "frame_ms": 33
       }
     },
