@@ -748,6 +748,8 @@ fn the_scratch_profile_is_muted_windowed_and_keeps_the_focus_away() {
     assert_eq!((v["text_scale"].clone(), v["map_zoom"].clone(), v["mute"].clone()), (json!(1.3), json!(3), json!(true)), "merged over the profile");
 }
 
+/// ENGINE-57: every launch also asks for the game's developer surfaces (`dev=1`), so a release run takes the dev
+/// build's path.
 #[test]
 fn everything_the_game_writes_lies_under_the_scratch_folder() {
     let scratch = Path::new("scratch_root");
@@ -758,7 +760,7 @@ fn everything_the_game_writes_lies_under_the_scratch_folder() {
     let p = scenario::plan(&s, (1280, 720), "somegame", Path::new("game.exe"), Some(Path::new("copy/data")), 4567, scratch);
     assert_eq!(p.appdata, scratch);
     assert!(p.settings_path.starts_with(scratch) && p.recordings.starts_with(scratch));
-    for want in ["port=4567".to_string(), format!("saves={}", scratch.join("saves").display()), "screen=runner".into(), "scene=e1".into(), "seed=9".into(), "data=copy/data".into()] {
+    for want in ["port=4567".to_string(), format!("saves={}", scratch.join("saves").display()), "screen=runner".into(), "scene=e1".into(), "seed=9".into(), "data=copy/data".into(), "dev=1".into()] {
         assert!(p.args.contains(&want), "{want} in {:?}", p.args);
     }
     let dir = temp("write");

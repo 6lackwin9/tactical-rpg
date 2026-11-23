@@ -205,12 +205,9 @@ impl MainMenu {
             }
             // PR7-37 (PT-01): a player's New game starts the game's one start world at once (the world picker, with the
             // test worlds, in a dev build or when the game offers more than one)
-            MenuAct::NewGame => match new_game_worlds(&cx.data).as_slice() {
-                [only] if !crate::DEV_BUILD => {
-                    let only = only.clone();
-                    start_new_game(cx, &only);
-                }
-                _ => cx.nav.push(Nav::Push(Box::new(NewGameScreen::new(cx)))),
+            MenuAct::NewGame => match at_once(&new_game_worlds(&cx.data), crate::dev_build()) {
+                Some(only) => start_new_game(cx, &only),
+                None => cx.nav.push(Nav::Push(Box::new(NewGameScreen::new(cx)))),
             },
             MenuAct::Load => cx.nav.push(Nav::Push(Box::new(Slots::new(false)))),
             MenuAct::Settings => cx.nav.push(Nav::Push(Box::new(SettingsScreen::new(cx)))),
@@ -391,9 +388,9 @@ impl Screen<GameCx> for MainMenu {
             MenuItem::new("settings", "Settings", None, MenuAct::Settings),
         ]);
         // WEBREL1-G1: the dev tools (the Scene Runner) only in a build with them (`crate::DEV_TOOLS`)
-        // PR7-37 (PT-14): and only in a dev build (`crate::DEV_BUILD`); a player never sees it
+        // PR7-37 (PT-14): and only in a dev build (`crate::dev_build()`); a player never sees it
         #[cfg(feature = "dev_tools")]
-        if crate::DEV_BUILD {
+        if crate::dev_build() {
             items.push(MenuItem::new("tools", "Tools (Forge, Dojo, Test Arena)", None, MenuAct::Tools));
         }
         // WEBREL1 6.2 (`FB-157`): no Quit on the web, where a page cannot close its own tab
@@ -577,10 +574,19 @@ impl NewGameScreen {
 /// PR7-37 (PT-01): the worlds New game offers: in a dev build every playable world (the test worlds too), else the
 /// game's start worlds (`new_game::player_worlds`).
 pub fn new_game_worlds(d: &emberwake_world::Data) -> Vec<String> {
-    if crate::DEV_BUILD {
+    if crate::dev_build() {
         new_game::playable_worlds(d)
     } else {
         new_game::player_worlds(d)
+    }
+}
+
+/// PR7-37 (PT-01): the world a player's New game starts at once: the one world of `worlds`, unless the developer
+/// surfaces are shown (`dev`: the world picker with the test worlds; ENGINE-57: also in a release scenario run).
+fn at_once(worlds: &[String], dev: bool) -> Option<String> {
+    match worlds {
+        [only] if !dev => Some(only.clone()),
+        _ => None,
     }
 }
 
@@ -1474,7 +1480,7 @@ impl SettingsScreen {
             Row::Overlays => {
                 let head = ui.p.line_h(BODY + 1.0).ceil() as i32 + 4;
                 let groups = crate::battle::settings_overlay_groups().len().div_ceil(2) as i32 * OVERLAY_PITCH;
-                head + groups + if crate::DEV_BUILD { OVERLAY_PITCH + 4 } else { 0 }
+                head + groups + if crate::dev_build() { OVERLAY_PITCH + 4 } else { 0 }
             }
             // CONTROLS-UI1: the default takes its whole height (the body scrolls it); a layout file places its own
             Row::Controls => aegis_ui::screen_layout::default_height(ui, &crate::controls_view::view(&cx.settings.v, &self.rebind), w),
@@ -1625,8 +1631,8 @@ impl SettingsScreen {
                     }
                 }
                 // VISCLAR1 VC4, VC5: the debug-build-only row (never in a release build); PR7-37 (PT-33): a dev build's
-                // only (`crate::DEV_BUILD`)
-                if crate::DEV_BUILD {
+                // only (`crate::dev_build()`)
+                if crate::dev_build() {
                     let y = y + groups.len().div_ceil(2) as i32 * OVERLAY_PITCH + 2;
                     ui.p.text(x as f32, y as f32, "Debug", BODY + 1.0, th().gold);
                     // VIEWKEYS1: the walk's base step time (a release build uses the default), beside the heading
@@ -2171,6 +2177,17 @@ mod tests {
     }
 
     // ---- LOOK1-M1: the main menu on the panes -------------------------------------------------------------------
+
+    /// ENGINE-57 (FEEL-RELEASE1): New game starts the one world at once for a player, and opens the picker while the
+    /// developer surfaces show (a dev build, or a release scenario run's `dev=1`) or when there are more worlds.
+    #[test]
+    fn new_game_starts_the_one_world_unless_the_developer_surfaces_show() {
+        let one = vec!["sunk_ward".to_string()];
+        assert_eq!(at_once(&one, false).as_deref(), Some("sunk_ward"), "a player");
+        assert_eq!(at_once(&one, true), None, "the picker, as the gate's dev build shows it");
+        assert_eq!(at_once(&[one[0].clone(), "x".into()], false), None);
+        assert!(crate::dev_build(), "a test build is a dev build");
+    }
 
     const MENU_IDS: [&str; 5] = ["menu.new_game", "menu.load", "menu.settings", "menu.tools", "menu.quit"];
 

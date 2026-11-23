@@ -1130,7 +1130,9 @@ pub fn free_port() -> std::io::Result<u16> {
 
 pub fn plan(s: &Scenario, size: (u32, u32), game_id: &str, exe: &Path, data: Option<&Path>, port: u16, scratch: &Path) -> Plan {
     let user = user_dir_under(scratch, game_id);
-    let mut args = vec![format!("port={port}"), format!("saves={}", scratch.join("saves").display()), format!("screen={}", s.launch.screen)];
+    // ENGINE-57 (FEEL-RELEASE1): `dev=1`: a game shows its developer surfaces in a release build too (when it has them),
+    // as the gate's dev build does, so one script takes one path in either profile
+    let mut args = vec![format!("port={port}"), format!("saves={}", scratch.join("saves").display()), format!("screen={}", s.launch.screen), "dev=1".to_string()];
     if let Some(e) = &s.launch.scene {
         args.push(format!("scene={e}"));
     }

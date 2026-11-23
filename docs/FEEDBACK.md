@@ -173,8 +173,37 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-54` (`WARM-SPREAD1`) | Built (tools lane) | `develop` | build-ahead work on threads (decodes, grounds, fight starts; the kit's round plan `Send`), the rest drawn unseen in slices one a frame behind an empty canvas `bounds` after 300 ms still, none on a frame with input; no frame over 33 ms while warming (worst 22 ms by The Sweep on cold art), two cold slices of the fight 9 to 18 ms; Continue 19 ms, The Sweep 21 ms; new `walk_feel_fight`, `switch_feel` `title_warm`; goldens unchanged. FB-503 |
 | `ENGINE-55` (`AUDIO-FEEL1`) | Built (tools lane) | `develop` | `feel` times each sound from its input or frame to its first audible sample, with the output's buffer and underruns; UI sounds 12 to 20 ms, hits within 6 ms of their frame, music 15 to 30 ms after its ask (was 96 ms on Continue), no underruns in release; music asked before the draw, decoding off the frame, a fixed 512-frame buffer; audio budgets on `feel` steps, new `audio_feel`; goldens unchanged. FB-504 |
 | `ENGINE-56` (`AUDIO-FEEL2`) | Built (tools lane) | `develop` | menus answer by sound by rule (confirm, back, error; `Screen::ui_sound` overrides, the round controls and volume steps keep theirs); a soft map footstep with its own Footsteps volume under Effects (placeholder `map_step.wav`); battle music fades in over 0.4 s (`battle_music_fade_ms`); stings warmed with the battle screen; `audio_feel` gains a confirm, a back and a map step; goldens unchanged. FB-505 |
+| `ENGINE-57` (`FEEL-RELEASE1`) | Built (tools lane) | `develop` | `switch_feel_story`'s release failure: a release build hides the developer surfaces, so New Game skipped the world picker; `dev=1` (dev tools builds only) shows them and every scenario launch passes it; `tools/fc.sh feel` runs every feel and reach scenario in release and prints one table (38 of 39 steps pass; `feel_battle` `battle_block` 51 to 74 ms against 50); goldens unchanged. FB-506 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-506: ENGINE-57 FEEL-RELEASE1 built; release scenario runs take the dev path, `tools/fc.sh feel` prints one table
+
+- **Status**: built (tools lane), `develop`. Game GUI (`emberwake_gui` launch, menus, battle overlays), engine CLI
+  (`aegis_cli` scenario launch), `tools/fc.sh feel`, `tools/planner/feel_table.py` with its tests, authoring guide
+  `engine/docs/authoring/scenarios.md`; no data. **Every golden unchanged**.
+- **Spec**: `docs/READY.md` row `ENGINE-57` (`FEEL-RELEASE1`); the approach agreed with Design in the thread.
+- **1. The cause of `switch_feel_story`'s release failure**: the game shows its developer surfaces only in a debug build
+  with the dev tools (`DEV_BUILD`, PR7-37 PT-01 and PT-14). A release build is a player build, so New Game starts the one
+  player world at once (its opening vignette) where the gate's dev build opens the world picker the scenario clicks.
+  **Fix**: a build with the dev tools shows them when launched with `dev=1` (`dev_build()`; `DEV_KEYS`, the F-keys, stay
+  debug only), and the scenario driver passes `dev=1` on every launch, so one script takes one path in either profile.
+  A shipped player build (no dev tools) ignores `dev=1`. Tests: `dev_1_shows_the_developer_surfaces_only_with_the_dev_tools`
+  (lib; fails without the fix), `new_game_starts_the_one_world_unless_the_developer_surfaces_show` (menus, `at_once`),
+  and the driver's launch keys (`aegis_cli` scenario). `switch_feel_story` now passes in release.
+- **2. `tools/fc.sh feel [out=<dir>]`**: every scenario with a `feel` or `reach` step, each game (Emberwake's 10, `hello_walk`),
+  no window, release build, release budgets; one table, one row per step: result, input, frame p50 and max, switch (own
+  part), move, interface sound, hit, music, underruns, reach dead ends; `*` over the step's budget; exit 1 on a failed
+  scenario. Not in the gate; a few minutes.
+- **3. Reading it**: `engine/docs/authoring/scenarios.md` "Reading the feel table"; its "What a run owns" table gains the
+  virtual sound device (ENGINE-55) and the developer surfaces.
+- **First table** (this container): 38 of 39 steps pass their release budgets. **`feel_battle` `battle_block` misses**: the
+  click on `strip.block1` takes 51 to 74 ms in its handler against `input_ms` 50 (4 runs); develop before this change
+  measured 50 and 53 ms (one pass, one fail), so it sits on the line already. The gate's dev allowance (125 ms) hides it.
+  A follow-up row could find what the block click does on the frame; not done here. Next highest: `switch_feel` menus
+  and fight to results switches 62 to 65 ms (budget 150), `feel_battle` plan input 50.4 ms (budget 100), the
+  `audio_feel` Continue input 59 ms (no input budget).
+- **Docs delta**: none for the shared READMEs; `tools/fc.sh feel` is in `fc.sh`'s help.
 
 ### FB-505: ENGINE-56 AUDIO-FEEL2 built; menus answer by sound, map footsteps, battle music in 0.4 s, stings warmed
 

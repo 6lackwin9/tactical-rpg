@@ -106,7 +106,8 @@ the `game` reply. Only `absent` passes on a missing path, so a mistyped path nev
 | Port | From the OS per start. If it answers for another process, that process is left alone and the next port is tried, 3 at most |
 | Profile | A scratch folder as the game's `APPDATA` and `saves=`, removed after; the real profile is never read or written |
 | Settings | `mute` true, windowed at the size, `vsync` false, `record_playtests` true, `start_inactive` true |
-| Sound | No window: no device is opened or needed. A real window: muted |
+| Sound | No window: a virtual output device on its own thread (ENGINE-55), so `feel` hears sounds while muted. A real window: muted |
+| Developer surfaces | `dev=1` on every launch (ENGINE-57): a game with dev tools in the build shows them in a release run too, as the gate's dev build does. One script then takes the same path in either profile. A build without the dev tools ignores the key |
 | Process | Only the one it started: asked to leave over the link, killed after 5 s times `slow`. If the driver itself is killed, a game with no window leaves on its own (see below); a real window stays open until it is closed |
 
 ## Golden shots
@@ -228,6 +229,33 @@ it under `perf` in `result.json` (`kind` `reach`): `mouse` (a count), `ring` (a 
 `opened`, `swapped`, `changed` (the same screen drew differently) or `nothing`, and the top screen after it. `dead_ends`
 lists `keys <id>`, `pad <id>`, `invisible <id>`, `back nothing` and `back quits`. With `fail` true a dead end fails the step
 unless `allow` names its widget id, or `back` for a back press (a root screen where Esc rightly does nothing).
+
+## Reading the feel table
+
+`tools/fc.sh feel [out=<dir>]` (ENGINE-57 FEEL-RELEASE1) runs every scenario that has a `feel` or `reach` step, in each
+game, with no window and in a release build. Release budgets apply: none of the dev build's allowances. It then prints one
+table (`tools/planner/feel_table.py`) and exits 1 when a scenario failed. It takes a few minutes and is never in the gate.
+Run it on a quiet machine, and run a scenario again alone before trusting a single slow row.
+
+Each row is one step, named `<scenario>/<step>`. The columns:
+
+- `result`: `ok`, `FAIL: <why>` on the step that failed, or `not run` for the steps after a failure (also when the
+  scenario did not start).
+- Times are in ms, and a value over that step's own budget ends in `*`.
+  - `input`: the worst input to present.
+  - `frame p50` and `frame max`: the median and the worst frame.
+  - `switch`: the worst switch's own part.
+  - `move`: the worst first move.
+  - `ui snd`: the worst interface sound after its input.
+  - `hit`: the worst effect off its frame, either way.
+  - `music`: the worst track after its ask.
+- `underruns` is a count.
+- `dead ends` is the count on a `reach` row; its other columns are `-`.
+- `-` means nothing measured it.
+
+Under the table you get a count of the steps, then one line for each failed scenario with its step number and message.
+The bundles and each scenario's log stay under `out`. Open `feel_<step>.json` to see which input or frame made a number.
+A row that fails here but passes in the gate is over its release budget: the dev build's 2.5 times hides it.
 
 ## The bundle
 

@@ -104,6 +104,23 @@ pub(crate) const DEV_KEYS: bool = cfg!(all(debug_assertions, feature = "dev_tool
 /// the Settings rows for testing (the "(testing)" overlays, the Debug row). Any other build hides them.
 pub(crate) const DEV_BUILD: bool = DEV_KEYS;
 
+/// ENGINE-57 (FEEL-RELEASE1): a launch asked for the developer surfaces (`dev_asked`).
+static DEV_ASKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The developer surfaces are shown (`DEV_BUILD`): a debug build with the dev tools, or (ENGINE-57) a build with the dev
+/// tools launched with `dev=1`, as every scenario run is (the scenario driver passes it), so one script takes one path
+/// in a dev and a release build. A player's release build never shows them; the debug build's dev keys stay
+/// `DEV_KEYS`.
+pub(crate) fn dev_build() -> bool {
+    DEV_BUILD || DEV_ASKED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// ENGINE-57: whether the launch keys `args` ask for the developer surfaces: `dev=1`, in a build with the dev tools
+/// (`tools`, `DEV_TOOLS`); a build without them never shows them.
+fn dev_asked(args: &[(String, String)], tools: bool) -> bool {
+    tools && arg(args, "dev") == Some("1")
+}
+
 fn arg<'a>(args: &'a [(String, String)], k: &str) -> Option<&'a str> {
     args.iter().find(|(a, _)| a == k).map(|(_, v)| v.as_str())
 }
@@ -182,6 +199,7 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
     // engine's game start; the data, the tuning, the launch keys and the first screens are the game's.
     let engine = engine_dir.unwrap_or_else(|| PathBuf::from("."));
     let mut launch = aegis_ui::start::Start::new(GAME_ID, game_dir.clone(), &engine, args, headless);
+    DEV_ASKED.store(dev_asked(args, DEV_TOOLS), std::sync::atomic::Ordering::Relaxed);
     notices.append(&mut launch.notice);
     if arg(args, "saves").is_none() {
         if let Err(e) = aegis_save::adopt_shared(GAME_ID) {
@@ -301,6 +319,17 @@ pub fn bot_run(start: &str, data: &Path, scratch: &Path, bot: &aegis_ui::shell::
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// ENGINE-57 (FEEL-RELEASE1): `dev=1` shows the developer surfaces in a build with the dev tools (a release
+    /// scenario run, which then takes the dev build's path: New game opens the world picker); a shipped player build,
+    /// without the dev tools, ignores it.
+    #[test]
+    fn dev_1_shows_the_developer_surfaces_only_with_the_dev_tools() {
+        let args = |list: &[(&str, &str)]| list.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect::<Vec<_>>();
+        assert!(dev_asked(&args(&[("dev", "1")]), true), "a release build with the dev tools");
+        assert!(!dev_asked(&args(&[("dev", "1")]), false), "a shipped player build ignores it");
+        assert!(!dev_asked(&args(&[("dev", "0")]), true) && !dev_asked(&args(&[]), true));
+    }
 
     #[test]
     fn a_launch_ruleset_comes_with_the_arena_only() {

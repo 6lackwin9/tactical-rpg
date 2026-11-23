@@ -45,6 +45,9 @@
 #                                off, and no unused dependency (tools/deps/unused_deps.py, its tests); part of the gate
 #   tools/fc.sh newgame          `aegis new game` still makes a game that builds, tests and plays its scenario (made and removed
 #                                again in games/scaffold_check, about 10 s warm); part of the gate
+#   tools/fc.sh feel [out=<dir>]   every feel and reach scenario of each game with no window in a release build with release
+#                                budgets (ENGINE-57), one table of the numbers (engine/docs/authoring/scenarios.md "Reading the feel
+#                                table"); exit 1 when a scenario failed; never in the gate
 #   tools/fc.sh bench [sizes=1280x720,1920x1080] [runs=50]   the painter's benchmarks (ENGINE-2: fill, panels, text; ms per run,
 #                                p10/p50/p95/max, a calibration before and after) in a release build; one JSON line per size; never in the gate
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest | refs <kind> <id> | rename <kind> <old> <new> [--apply] (aegis content)
@@ -514,6 +517,33 @@ shots_exact() {  # ENGINE-17 (SHOT-CLOCK1): every scenario run again; each shot 
   done
 }
 
+feel() {  # ENGINE-57 (FEEL-RELEASE1): every feel and reach scenario of each game, no window, release build, release budgets;
+  # one table (tools/planner/feel_table.py; reading it: engine/docs/authoring/scenarios.md); never in the gate
+  local py out bin="${CARGO_TARGET_DIR:-$PWD/target}/release" d name cli f files all=() a
+  py=$(python_with "pass") || { echo "[feel] no Python 3 found"; status=2; return; }
+  out=""
+  for a in "$@"; do
+    case "$a" in out=*) out="${a#out=}" ;; *) echo "usage: tools/fc.sh feel [out=<dir>]"; status=2; return ;; esac
+  done
+  [ -n "$out" ] || out=$(mktemp -d)
+  mkdir -p "$out"
+  for d in games/*/; do
+    name=$(basename "$d"); [ -f "$d/game.json" ] && [ -d "$d/scenarios" ] || continue
+    mapfile -t files < <("$py" tools/planner/feel_table.py list "${d}scenarios")
+    [ ${#files[@]} -gt 0 ] || continue
+    cli=$(game_cli "$d")
+    cargo build -q --release --bin "$cli" --bin "$name" || { echo "[feel] FAIL: the release build of $name"; status=2; return; }
+    for f in "${files[@]}"; do
+      echo "[feel] $name: $(basename "$f" .json)"
+      "$bin/$cli" scenario run "$f" out="$out" > "$out/$(basename "$f" .json).txt" 2>&1 || true
+    done
+    all+=("${files[@]}")
+  done
+  echo
+  "$py" tools/planner/feel_table.py table "$out" "${all[@]}" || status=1
+  echo "[feel] bundles and logs under $out"
+}
+
 aegis() {  # the CLI, built on demand
   cargo run -q -p emberwake_host -- "$@"
 }
@@ -760,6 +790,7 @@ case "$1" in
   repro) repro ;;
   bot) bot "${@:2}" ;;
   scenario) scenario "${@:2}" ;;
+  feel) feel "${@:2}" ;;
   shots) shots "${@:2}" ;;
   playtest) playtest "${@:2}" ;;
   assetlib) assetlib ;;
