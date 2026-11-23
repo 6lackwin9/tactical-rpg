@@ -127,6 +127,7 @@ Scene Runner > Exploration, on Warden Keep.
 - [ ] F7 flips Tilted and Square. Which view do you want? Decides EXPLOREVIEW1-R.
 - [ ] Zoom, F6: does the whole scene hold up at 1.5x and 2x?
 - [ ] NPCs face down, and turn to you while talking. Look right?
+- [ ] Walk feel, measured 2026-11-23 (`FB-493`; every input moves on the next frame, no step after release, even 200 ms beat): (a) full speed from the first step and a dead stop, no ease in or out; keep? (b) a turn pressed mid-walk steps at once (snappy, can make a short step) instead of waiting for the beat; keep? (c) the pad has no run button (Shift only); give it a shoulder button? (d) four directions only, no diagonals; keep? (e) the camera is locked on the party, no soft follow; keep? My recommendation: keep all five as they are and judge them in your hands-on playtest; (c) is the one I'd add (a shoulder for run), if you agree.
 
 ## Windows and menus
 
