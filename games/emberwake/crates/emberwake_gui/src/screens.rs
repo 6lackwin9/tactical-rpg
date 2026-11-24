@@ -179,6 +179,12 @@ impl aegis_ui::Context for GameCx {
         self.log(line);
     }
 
+    /// ENGINE-62 (CRASH-SAFE1): the game in play, written to the rescue save (a save write and nothing more).
+    fn rescue(&self) -> Option<Vec<String>> {
+        let g = self.game.as_ref()?;
+        Some(emberwake_world::save::write_keyed(&self.data, &self.save_dir, &g.gs, aegis_save::RESCUE_KEY, 0))
+    }
+
     fn agent_summary(&self) -> Value {
         match self.game.as_ref() {
             Some(g) => json!({"world": g.gs.world_id, "location": g.gs.location_id, "position": [g.gs.position.0, g.gs.position.1], "gold": g.gs.party.gold,

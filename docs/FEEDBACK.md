@@ -178,8 +178,50 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-59` (`BATTLE-FRAME2`) | Built in part (tools lane) | `develop` | Slow battle frames named: the round's planning start drafts the whole party's ghosts in one tick (31 to 45 ms; deferring them changed 11 shots, so it waits for a call); a queued ghost step on a heavy frame now waits for a frame with room. 5 of 5 release feel runs passed; the container's own stalls are named with options; goldens unchanged. FB-508 |
 | `ENGINE-60` (`PLAN-START2`) | Built (tools lane) | `develop` | The round's planning start drafts each ghost once when no buff would drop (33 to 17-19 ms; same-ghosts tests incl. the Crucible hold pick); the feel table lists frames mostly off the CPU as stalls apart, real misses still fail. 6 of 10 release feel runs passed (3 audio-thread underruns, 2 frames 1-2 ms over), options given; goldens unchanged. FB-509 |
 | `ENGINE-61` (`FEEL-CLOSE1`) | Built (tools lane) | `develop` | Underruns of a stalled audio thread listed as stalls; the canvas row blend made branch-free with the same bytes, cutting 4 to 6 ms of panels from every frame (battle draw 16-24 to 12-16 ms, warm frames at most 25 ms). 9 of 10 release feel runs passed, the miss judged container noise; the feel run moves to Tushar's PC. Goldens unchanged. FB-510 |
+| `ENGINE-62` (`CRASH-SAFE1`) | Built (tools lane) | `develop` | A caught panic writes the report (now with build, top screen and `feel.log` tail) and the game's rescue save (`Context::rescue`, keyed `rescue`); the next start shows one line with the report path and Open folder (any game, the hello sample included); Emberwake's title offers the rescue beside Continue. Saves keep `<file>.prev`; a damaged slot is kept, named and loads its copy. Goldens unchanged. FB-511 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-511: ENGINE-62 CRASH-SAFE1 built; crash report, rescue save and damaged-save fallback
+
+- **Status**: built (tools lane), `develop`. Engine (`aegis_ui` crash log, shell, screen; `aegis_save`), kit
+  (`rpgkit_world::save` read and peek) and game (Emberwake's rescue hook, title item and slot card). **Every golden
+  unchanged**, the store resave golden included. Gate clean.
+- **Spec**: `docs/READY.md` row `ENGINE-62` (`CRASH-SAFE1`).
+- **(1) Report and rescue**: the panic hook (`crashlog::arm`, set when the shell opens) notes every panic. With a log
+  open it writes the report, which now also gives the build (dev or release, engine version, `AEGIS_COMMIT` when set
+  at build time, else "unknown"), the top screen (`crashlog::set_top`, on every screen change) and the last 40 lines of
+  `feel.log`. The shell catches a panic coming back from a window event or frame, and from a no-window run's request or
+  frame. It then calls the new `Context::rescue` (default None; Emberwake writes the game in play with
+  `save::write_keyed` under `aegis_save::RESCUE_KEY`, outside the slot range). Next, `crashlog::crashed` writes the
+  report if none exists yet (a no-window run has no log, so it goes to `<settings dir>/logs/`) and leaves
+  `crashed.json` there. The panic then carries on as before. Report names stay `crash-<unix seconds>.txt`, the
+  existing ROBUST1 naming, not `crash_<time>.txt`.
+- **(2) Next start**: the shell reads and removes `crashed.json`. It shows a one-line overlay over the first screen
+  (`crash_note`): "The game closed unexpectedly. A report is at PATH." with Open folder (`recordings::open_folder`)
+  and OK; Enter or Esc closes it. Emberwake's title adds "Continue from the rescue save" under Continue while the
+  rescue exists. Taking it loads that game and removes the rescue. A plain Continue that loads also removes it.
+- **(3) Damaged saves**: the atomic write copies the save it replaces to `<file>.prev` (`slot_1.json.prev`), only when
+  that save reads. `aegis_save::read` / `read_keyed` fall back to the copy when the file is not JSON. `damage` gives
+  the reason and `peek_slot` reads the header from the copy. A read never deletes. The player's `delete` removes the
+  copy too, and there is a new `delete_keyed`. The kit's `save::read` also falls back when the slot reads but does not
+  load (refused version, failed migration), with a warning. Its `peek` adds `damaged`, and Emberwake's slot card shows
+  "Damaged (reason); loads the previous save: ..." (or "Damaged (reason)" when there is no copy). Not on the web: the
+  web store writes whole, with no temp file and no copy, to keep the quota.
+- **(4) Tests**: `aegis_ui/tests/crash_safe.rs` (a forced panic in a no-window run leaves the report with build and
+  screen, `crashed.json` and the rescue keyed save; the next start shows `crash_note` once, and OK closes it);
+  `aegis_save/tests/prev_copy.rs` (copy kept, truncated slot reads the copy, damage named, a damaged save never copied
+  over a good one, delete takes the copy, rescue is keyed); `rpgkit_world/tests/save_versions.rs` (truncated and
+  refused-version slots load the previous save); `hello_game/tests/crash.rs` (the sample game, with no code of its
+  own, shows the crash line over its menu after a forced panic, and has no rescue); Emberwake menus (rescue offered
+  beside Continue and loaded once; damaged slot card). The forced panic is the agent link's `{"cmd": "panic"}`, dev
+  builds only.
+- **Not covered**: the Windows pad poll in `about_to_wait` is outside the catch (a panic there still writes the report
+  through the hook, but no rescue).
+- **Docs delta**: new `engine/docs/authoring/crash_safety.md` and its row in the authoring README (tools-lane files,
+  edited here). `engine/README.md` (Design): a line under the shell or save sections: "crash safety (ENGINE-62): a
+  caught panic writes the report and the game's rescue save (`Context::rescue`, keyed `rescue`), the next start shows
+  where the report is; saves keep `<file>.prev` and a damaged slot loads it (`engine/docs/authoring/crash_safety.md`)".
 
 ### FB-510: ENGINE-61 FEEL-CLOSE1 built; 9 of 10 release runs pass, the one miss container noise
 

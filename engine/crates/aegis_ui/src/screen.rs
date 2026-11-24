@@ -355,6 +355,12 @@ pub trait Context: Sized + 'static {
     fn warm(_cx: &mut Cx<Self>) -> Vec<Box<dyn Screen<Self>>> {
         Vec::new()
     }
+    /// ENGINE-62 (CRASH-SAFE1): after a panic the shell caught, writes the game in play to the rescue save
+    /// (`aegis_save::RESCUE_KEY`, never a player's slot) with nothing more than a save write: None when there is nothing
+    /// to save, else the write's problems (empty: written). None by default.
+    fn rescue(&self) -> Option<Vec<String>> {
+        None
+    }
 }
 
 /// The modifier keys held down right now (the shell keeps it current; all up while the window is out of focus), for
@@ -859,6 +865,83 @@ impl<G> Screen<G> for Notice {
     }
     fn state(&self, _cx: &Cx<G>) -> Value {
         json!({"lines": self.lines})
+    }
+    widget_plumbing!(Cx<G>);
+}
+
+// ---- CrashNote: the last run closed on a crash (ENGINE-62, CRASH-SAFE1) ---------------------------------------
+
+/// The line a start shows over its first screen after a caught crash (`crashlog::take_crashed`): where the report is,
+/// with Open folder and OK. Shell-made: a game needs no code of its own for it.
+pub struct CrashNote {
+    pub report: std::path::PathBuf,
+    /// A rescue save was written (the game's Continue offers it).
+    pub rescue: bool,
+    /// Open folder's refusal, shown in the line's place.
+    problem: String,
+    w: Vec<Widget<CrashAct>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum CrashAct {
+    Open,
+    Close,
+}
+
+/// The line's words: the report's path stands at its end.
+pub const CRASH_LINE: &str = "The game closed unexpectedly. A report is at";
+
+impl CrashNote {
+    pub fn new(report: std::path::PathBuf, rescue: bool) -> Self {
+        Self { report, rescue, problem: String::new(), w: Vec::new() }
+    }
+    /// The whole line as shown.
+    pub fn line(&self) -> String {
+        format!("{CRASH_LINE} {}.", self.report.display())
+    }
+    fn act<G>(&mut self, cx: &mut Cx<G>, a: CrashAct) {
+        match a {
+            CrashAct::Open => {
+                let dir = self.report.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+                if let Err(e) = crate::recordings::open_folder(&dir) {
+                    self.problem = e;
+                }
+            }
+            CrashAct::Close => cx.nav.push(Nav::Pop),
+        }
+    }
+}
+
+impl<G> Screen<G> for CrashNote {
+    fn id(&self) -> &'static str {
+        "crash_note"
+    }
+    fn frame_need(&self, _cx: &Cx<G>) -> FrameNeed {
+        FrameNeed::Idle
+    }
+    fn overlay(&self) -> bool {
+        true
+    }
+    fn draw(&mut self, _cx: &mut Cx<G>, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        let mut ui: Ui<CrashAct> = Ui::new(g, mouse, live);
+        let r = Rect::new(6, H - 26, W - 12, 20);
+        ui.frame(r, "", false);
+        let (open_w, ok_w) = (64, 34);
+        let room = (r.w - open_w - ok_w - 24) as f32;
+        let (text, col) = if self.problem.is_empty() { (self.line(), ui.t.text) } else { (self.problem.clone(), ui.t.foe) };
+        ui.p.text_fit(r.x as f32 + 8.0, r.y as f32 + 5.0, &text, BODY, room, col);
+        ui.push("crash.line", "label", self.line(), Rect::new(r.x + 6, r.y + 2, room as i32, 16), true, false, None, Vec::new());
+        ui.button("crash.open", Rect::new(r.x + r.w - open_w - ok_w - 12, r.y + 3, open_w, 14), "Open folder", CrashAct::Open, true);
+        ui.button("crash.ok", Rect::new(r.x + r.w - ok_w - 6, r.y + 3, ok_w, 14), "OK", CrashAct::Close, true);
+        self.w = ui.widgets;
+    }
+    fn key(&mut self, cx: &mut Cx<G>, k: Key) {
+        if matches!(k, Key::Enter | Key::Space | Key::Esc) {
+            self.act(cx, CrashAct::Close);
+        }
+    }
+    fn state(&self, _cx: &Cx<G>) -> Value {
+        json!({"line": self.line(), "report": self.report.display().to_string(), "rescue": self.rescue})
     }
     widget_plumbing!(Cx<G>);
 }

@@ -220,6 +220,15 @@ impl<G: Context> Loop<G> {
     }
 
     /// A request, answered at once whatever the pace; it counts as a change a frame must show, as it does in a window.
+    /// ENGINE-62 (CRASH-SAFE1): runs `f` on the loop; a panic in it ends the run as before, after the shell's rescue save
+    /// and report (`Shell::on_panic`).
+    fn guard(&mut self, f: impl FnOnce(&mut Self)) {
+        if let Err(p) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(self))) {
+            self.shell.on_panic();
+            std::panic::resume_unwind(p);
+        }
+    }
+
     fn serve(&mut self, req: bridge::Request) {
         self.pacer.touch(Instant::wall());
         let reply = match req.body["cmd"].as_str() {
@@ -750,25 +759,25 @@ pub(super) fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options
     let mut game = Loop { shell, pacer: Pacer::default(), every, applied: None, asked_at: Instant::wall(), stepped: h.stepped, top: (0, ""), opened: Instant::now(), heard: None };
     if h.stepped {
         // One frame at the start, as the pace would draw: the first `ui_tree` has a screen to read.
-        game.draw();
+        game.guard(Loop::draw);
     }
     loop {
         if let Ok(req) = link.try_recv() {
-            game.serve(req);
+            game.guard(|g| g.serve(req));
         }
         if game.stepped && !game.shell.cx.quit {
             // No pace: frames come only with the requests that ask for them.
             match link.recv_timeout(Duration::from_millis(250)) {
-                Ok(req) => game.serve(req),
+                Ok(req) => game.guard(|g| g.serve(req)),
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => std::thread::sleep(Duration::from_millis(250)),
             }
         } else if !game.shell.cx.quit {
             let now = Instant::now();
             match game.pacer.decide(now, Some(every)) {
-                Pace::Redraw => game.draw(),
+                Pace::Redraw => game.guard(Loop::draw),
                 Pace::WaitUntil(at) => match link.recv_timeout(at.saturating_duration_since(now)) {
-                    Ok(req) => game.serve(req),
+                    Ok(req) => game.guard(|g| g.serve(req)),
                     Err(RecvTimeoutError::Timeout) => {}
                     // No listener any more: only the pace wakes the loop, and it must still sleep.
                     Err(RecvTimeoutError::Disconnected) => std::thread::sleep(at.saturating_duration_since(now)),
@@ -782,7 +791,7 @@ pub(super) fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options
         if game.asked_at.wall_elapsed() >= h.idle {
             // A request already waiting means its driver is still there.
             if let Ok(req) = link.try_recv() {
-                game.serve(req);
+                game.guard(|g| g.serve(req));
                 continue;
             }
             game.shell.leave_all();

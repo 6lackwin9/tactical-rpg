@@ -77,3 +77,31 @@ fn an_older_slot_is_not_readable_and_the_newest_pick_skips_it() {
     assert_eq!((head["ok"].clone(), head["error"].clone()), (json!(false), json!("older version")));
     assert_eq!(save::newest_slot(&d, dir.path()), 1, "the older slot is newer by time but not readable");
 }
+
+/// ENGINE-62 (CRASH-SAFE1): a slot cut short loads its previous save with a warning and says "damaged" on its header;
+/// one that no longer loads (here a version below the oldest) loads its previous save too; the file stays.
+#[test]
+fn a_damaged_slot_loads_its_previous_save() {
+    let d = data();
+    let mut gs = state(&d);
+    let dir = scratch("damaged");
+    assert!(save::write(&d, dir.path(), &gs, 1, 5).is_empty());
+    let first = gs.clone();
+    gs.party.gold += 40;
+    assert!(save::write(&d, dir.path(), &gs, 1, 6).is_empty());
+    let path = save::path_for(dir.path(), 1);
+    let text = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(&path, &text[..text.len() / 3]).unwrap();
+    let back = save::read(&d, dir.path(), 1).expect("the previous save");
+    assert_eq!(back.state, first);
+    assert!(back.warnings.iter().any(|w| w.contains("damaged")), "{:?}", back.warnings);
+    let head = save::peek(&d, dir.path(), 1);
+    assert_eq!((head["ok"].clone(), head["saved_at"].clone()), (json!(true), json!(5)), "the header is the previous save's");
+    assert!(head["damaged"].as_str().is_some_and(|s| !s.is_empty()));
+    assert!(path.exists(), "never deleted");
+    // A save that reads but no longer loads (a refused version) falls back the same way.
+    std::fs::write(&path, envelope(1, &gs.to_value(), 7)).unwrap();
+    let back = save::read(&d, dir.path(), 1).expect("the previous save");
+    assert_eq!(back.state, first);
+    assert!(back.warnings.iter().any(|w| w.contains("didn't load")), "{:?}", back.warnings);
+}

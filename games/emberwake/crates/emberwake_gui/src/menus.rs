@@ -45,6 +45,8 @@ pub fn datetime(unix: i64) -> String {
 #[derive(Debug, Clone, Copy)]
 pub enum MenuAct {
     Continue,
+    /// ENGINE-62 (CRASH-SAFE1): the rescue save the last run wrote as it crashed (`aegis_save::RESCUE_KEY`).
+    Rescue,
     NewGame,
     Load,
     Settings,
@@ -201,8 +203,19 @@ impl MainMenu {
                     show_errors(cx, vec!["There is no save to continue.".into()]);
                 } else {
                     load_slot(cx, slot);
+                    // ENGINE-62: the last save taken over the rescue: the rescue is not offered again
+                    if cx.has_game() {
+                        let _ = aegis_save::delete_keyed(&cx.save_dir, aegis_save::RESCUE_KEY);
+                    }
                 }
             }
+            MenuAct::Rescue => match save::read_keyed(&cx.data, &cx.save_dir, aegis_save::RESCUE_KEY) {
+                Ok(l) => {
+                    crate::screens::enter_game(cx, l.state, -1, l.warnings);
+                    let _ = aegis_save::delete_keyed(&cx.save_dir, aegis_save::RESCUE_KEY);
+                }
+                Err(errors) => show_errors(cx, errors),
+            },
             // PR7-37 (PT-01): a player's New game starts the game's one start world at once (the world picker, with the
             // test worlds, in a dev build or when the game offers more than one)
             MenuAct::NewGame => match at_once(&new_game_worlds(&cx.data), crate::dev_build()) {
@@ -381,6 +394,10 @@ impl Screen<GameCx> for MainMenu {
         let mut items: Vec<MenuItem<MenuAct>> = Vec::new();
         if newest >= 0 {
             items.push(MenuItem::new("continue", "Continue", None, MenuAct::Continue));
+        }
+        // ENGINE-62 (CRASH-SAFE1): after a crash, Continue offers the rescue save beside the last save
+        if save::exists_keyed(&cx.save_dir, aegis_save::RESCUE_KEY) {
+            items.push(MenuItem::new("continue_rescue", "Continue from the rescue save", None, MenuAct::Rescue));
         }
         items.extend([
             MenuItem::new("new_game", "New game", None, MenuAct::NewGame),
@@ -816,6 +833,13 @@ pub(crate) fn slot_text(cx: &Cx, slot: i64, head: &Dict) -> (String, String) {
         format!("Can't load ({})", s(head, "error"))
     } else {
         "Empty".into()
+    };
+    // ENGINE-62 (CRASH-SAFE1): a damaged save is kept and named; its previous copy (the header above) loads instead
+    let damaged = s(head, "damaged");
+    let status = match (damaged.is_empty(), ok) {
+        (true, _) => status,
+        (false, true) => format!("Damaged ({damaged}); loads the previous save: {status}"),
+        (false, false) => format!("Damaged ({damaged})"),
     };
     (label, status)
 }
@@ -2367,6 +2391,36 @@ mod tests {
         cx.gs_mut().time = 99;
         m.click_id(&mut cx, "menu.continue").unwrap();
         assert_eq!(cx.gs().time, 3, "Continue loads the newest save");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// ENGINE-62 (CRASH-SAFE1): the rescue save a crash wrote (`Context::rescue`) is offered beside Continue and loads the
+    /// game it held, once; a damaged slot says so on its card.
+    #[test]
+    fn the_rescue_save_is_offered_beside_continue_and_a_damaged_slot_says_so() {
+        use aegis_ui::Context as _;
+        let dir = scratch("rescue");
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
+        write_fixture(&mut cx, 3);
+        cx.gs_mut().time = 42;
+        assert_eq!(cx.app.rescue(), Some(Vec::new()), "the game in play is written");
+        assert!(save::exists_keyed(&dir, aegis_save::RESCUE_KEY) && !save::exists(&dir, 1));
+        let mut m = MainMenu::default();
+        let w = menu_frame(&mut m, &mut cx, &mut g, (-1, -1));
+        assert_eq!(&buttons(&w)[..2], ["menu.continue", "menu.continue_rescue"]);
+        cx.app.game.as_mut().unwrap().clean = cx.gs().to_value();
+        cx.gs_mut().time = 1;
+        m.click_id(&mut cx, "menu.continue_rescue").unwrap();
+        assert_eq!(cx.gs().time, 42, "the rescued game");
+        assert!(!save::exists_keyed(&dir, aegis_save::RESCUE_KEY), "offered once");
+        // a slot cut short: kept, and its card names the damage and the save it loads instead
+        let slot = save::newest_slot(&cx.data, &dir);
+        assert!(save::write(&cx.data, &dir, cx.gs(), slot, 0).is_empty());
+        let path = save::path_for(&dir, slot);
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(&path, &text[..text.len() / 2]).unwrap();
+        let (_, status) = slot_text(&cx, slot, &save::peek(&cx.data, &dir, slot));
+        assert!(status.starts_with("Damaged (the file is cut short or garbled); loads the previous save"), "{status}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

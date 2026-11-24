@@ -273,7 +273,14 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
         if let (Some(k), Some(s)) = (kind.as_deref(), self.shell.as_mut()) {
             s.feel_input(k);
         }
-        self.on_window_event(el, ev);
+        // ENGINE-62 (CRASH-SAFE1): a panic in an event or a frame gets the rescue save and the report, then goes on
+        let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.on_window_event(el, ev)));
+        if let Err(p) = caught {
+            if let Some(s) = self.shell.as_mut() {
+                s.on_panic();
+            }
+            std::panic::resume_unwind(p);
+        }
         if let (Some(_), Some(s)) = (kind, self.shell.as_mut()) {
             s.feel_state();
         }

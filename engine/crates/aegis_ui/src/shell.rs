@@ -141,6 +141,8 @@ struct Shell<G> {
     /// had, and whether an input came since the last frame (a slice waits a frame after one).
     warming: Option<Box<dyn Screen<G>>>,
     warm_slices: u32,
+    /// ENGINE-62 (CRASH-SAFE1): the game's title, for a crash report written with no log open.
+    title: String,
     input_seen: bool,
 }
 
@@ -152,12 +154,45 @@ impl<G: Context> Shell<G> {
         let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         gfx.kit.device.dpr = dpr;
         let (policy, offered, window_notices) = read_window_options(&options.canvas, &options.window_sizes);
-        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false };
+        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false, title: String::new() };
         shell.cx.notice.extend(icon_notice);
         shell.cx.notice.extend(window_notices);
         hold_declared_sizes(&mut shell.cx.settings, &options.window_sizes, &offered);
+        shell.title = options.title.clone();
+        crate::crashlog::set_top(shell.stack.last().map_or("", |s| s.id()));
+        // ENGINE-62 (CRASH-SAFE1): panics are noted for `on_panic`; a crash the last run caught shows its line once
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            crate::crashlog::arm();
+            if let Some((report, rescue)) = crate::crashlog::take_crashed(&shell.logs_dir()) {
+                shell.stack.push(Box::new(crate::screen::CrashNote::new(report, rescue)));
+            }
+        }
         shell.warm();
         shell
+    }
+
+    /// ENGINE-62: the folder of the run's log and crash reports, beside the player's settings.
+    fn logs_dir(&self) -> PathBuf {
+        crate::crashlog::dir().unwrap_or_else(|| self.cx.settings.path().parent().map_or_else(|| PathBuf::from("logs"), |d| d.join("logs")))
+    }
+
+    /// ENGINE-62 (CRASH-SAFE1): a panic came back to the shell: the game writes its rescue save (`Context::rescue`, its
+    /// save write only), then the report and `crashed.json` are left for the next start. Returns the report's path.
+    pub(crate) fn on_panic(&mut self) -> Option<PathBuf> {
+        let rescue = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.cx.app.rescue())) {
+            Ok(Some(problems)) if problems.is_empty() => true,
+            Ok(Some(problems)) => {
+                log(&format!("rescue save refused: {}", problems.join("; ")));
+                false
+            }
+            Ok(None) => false,
+            Err(_) => {
+                log("rescue save panicked");
+                false
+            }
+        };
+        crate::crashlog::crashed(&self.logs_dir(), &self.title, rescue)
     }
 
     /// ENGINE-46 (FEEL-FIX1): draws the game's warm list (`Context::warm`) once, unseen, before the first frame, so the
@@ -348,6 +383,10 @@ impl<G: Context> Shell<G> {
                 self.cx.playtest.trail(json!({"type": "modal", "ctl": screen_ctl("notice"), "open": true}));
                 self.stack.push(Box::new(Notice::new(lines)));
             }
+        }
+        if guard > 0 {
+            // ENGINE-62: a crash report names the screen on top
+            crate::crashlog::set_top(self.stack.last().map_or("", |s| s.id()));
         }
         self.follow_top();
     }
@@ -1066,7 +1105,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false };
+        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false, title: String::new() };
         s.frame();
         s
     }

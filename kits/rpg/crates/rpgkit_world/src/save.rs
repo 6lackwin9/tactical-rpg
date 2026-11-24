@@ -117,8 +117,27 @@ pub fn read(d: &Data, dir: &Path, slot: i64) -> Result<Loaded, Vec<String>> {
 pub type KeyAlias = (&'static str, &'static str);
 
 /// LAYER-DOWN-1: `read` with the game's renamed deck keys (`KeyAlias`).
+/// ENGINE-62 (CRASH-SAFE1): a slot whose save is damaged or fails to load (a failed migration) loads its previous copy
+/// instead when that one does, with a warning; the slot's file is never deleted.
 pub fn read_with(d: &Data, dir: &Path, slot: i64, deck_aliases: &[KeyAlias]) -> Result<Loaded, Vec<String>> {
-    decode_with(d, &aegis_save::read(dir, slot)?, deck_aliases)
+    let first = decode_with(d, &aegis_save::read(dir, slot)?, deck_aliases);
+    let damaged = aegis_save::damage(&SAVES, dir, slot);
+    match first {
+        Ok(mut loaded) => {
+            if let Some(why) = damaged {
+                loaded.warnings.push(format!("Slot {slot} is damaged ({why}); its previous save was loaded."));
+            }
+            Ok(loaded)
+        }
+        Err(problems) if damaged.is_none() && aegis_save::has_prev(dir, slot) => match decode_with(d, &aegis_save::read_prev(dir, slot)?, deck_aliases) {
+            Ok(mut loaded) => {
+                loaded.warnings.push(format!("Slot {slot} didn't load ({}); its previous save was loaded.", problems.join("; ")));
+                Ok(loaded)
+            }
+            Err(_) => Err(problems),
+        },
+        Err(problems) => Err(problems),
+    }
 }
 
 /// LAYER-DOWN-1: every `deck` object inside `v` (party and departed members): an old key of `aliases` becomes its new
@@ -233,7 +252,8 @@ fn migrate_with<C>(fmt: &Format, oldest: i64, steps: &[(i64, Step<C>)], cx: &C, 
 
 /// A slot header without loading: {exists, ok, slot, saved_at, version, world_id, location_id, party: [{id, base_unit,
 /// level}], error ("unreadable" | "newer version" |
-/// "older version" | "")}.
+/// "older version" | ""), damaged (ENGINE-62: why the slot's file is damaged, "" when it is not; the header is then its
+/// previous copy's, `aegis_save::peek_slot`)}.
 pub fn peek(d: &Data, dir: &Path, slot: i64) -> Dict {
     let mut out = json::obj([
         ("exists", Value::Bool(exists(dir, slot))),
@@ -245,9 +265,19 @@ pub fn peek(d: &Data, dir: &Path, slot: i64) -> Dict {
         ("location_id", "".into()),
         ("party", Value::Array(Vec::new())),
         ("error", "".into()),
+        ("damaged", "".into()),
     ]);
-    let envelope = match aegis_save::peek(&SAVES, dir, slot) {
-        Peek::Missing => return out,
+    let (found, damaged) = aegis_save::peek_slot(&SAVES, dir, slot);
+    if let Some(why) = damaged {
+        out.insert("damaged".into(), why.into());
+    }
+    let envelope = match found {
+        // a damaged file with no previous copy reads as unreadable, as before
+        Peek::Missing if json::s(&out, "damaged").is_empty() => return out,
+        Peek::Missing => {
+            out.insert("error".into(), "unreadable".into());
+            return out;
+        }
         Peek::Unreadable => {
             out.insert("error".into(), "unreadable".into());
             return out;

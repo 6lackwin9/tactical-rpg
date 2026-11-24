@@ -22,6 +22,7 @@ from re-deriving the method each time.
 | [art_bible.md](art_bible.md) | Fix canvas, board, sprite, palette and pipelines before any art is made |
 | [reactive_layout.md](reactive_layout.md) | Write a screen whose positions and sizes are calculated from the selected layout; canvas, units and rounding; sort existing screens |
 | [scenarios.md](scenarios.md) | Scenario files that drive real windows, for agents; run-wide settings, text audits and saves; the shots a change moves (`shots diff`) |
+| [crash_safety.md](crash_safety.md) | Know what a crash leaves (report, rescue save, the line at the next start) and how damaged saves fall back to their previous copy |
 | [agent_playtest.md](agent_playtest.md) | Play the real game as an agent, one command at a time, with a log line and a shot per step |
 | [screen_layouts.md](screen_layouts.md) | Split a screen into a view, a layout file and the theme; the components, the check and the preview |
 | [theme_and_tiles.md](theme_and_tiles.md) | Add a runtime theme and frames; lay out a set's tiles, faces and transition pieces; the corner mask convention |

@@ -362,6 +362,9 @@ impl<G: Context> Shell<G> {
                 self.cx.quit = true;
                 json!({"ok": true})
             }
+            // ENGINE-62 (CRASH-SAFE1): a forced panic in a dev build (tests of the crash path: report, rescue, next start)
+            "panic" if cfg!(debug_assertions) => panic!("{}", body["message"].as_str().unwrap_or("a forced panic (the agent link's panic command)")),
+            "panic" => json!({"ok": false, "error": "panic works in a dev build only"}),
             "_bad" => json!({"ok": false, "error": body["error"]}),
             _ => {
                 let cx = &self.cx;
