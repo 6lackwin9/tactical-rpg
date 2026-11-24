@@ -47,12 +47,14 @@ struct Probe {
     /// ENGINE-58: key `w` leaves work for the frames after it; `Screen::settle` finishes it (and counts the times).
     waiting: bool,
     settled: u32,
+    /// ENGINE-63: each held direction and stick a frame saw, when it changed.
+    held: Vec<String>,
     w: Vec<aegis_ui::ui::Widget<&'static str>>,
 }
 
 impl Probe {
     fn new(need: FrameNeed, blank: bool) -> Self {
-        Self { need, blank, clicks: 0, edge: false, waiting: false, settled: 0, w: Vec::new() }
+        Self { need, blank, clicks: 0, edge: false, waiting: false, settled: 0, held: Vec::new(), w: Vec::new() }
     }
     fn act(&mut self, _cx: &mut AppCx, _a: &'static str) {
         self.clicks += 1;
@@ -66,7 +68,12 @@ impl Screen<App> for Probe {
     fn frame_need(&self, _cx: &AppCx) -> FrameNeed {
         self.need
     }
-    fn tick(&mut self, _cx: &mut AppCx) {}
+    fn tick(&mut self, cx: &mut AppCx) {
+        let now = format!("{:?} {:?}", cx.held.dir, cx.held.stick);
+        if self.held.last() != Some(&now) {
+            self.held.push(now);
+        }
+    }
     fn settle(&mut self, _cx: &mut AppCx) {
         if std::mem::take(&mut self.waiting) {
             self.settled += 1;
@@ -106,7 +113,7 @@ impl Screen<App> for Probe {
         })
     }
     fn state(&self, _cx: &AppCx) -> Value {
-        json!({"clicks": self.clicks, "waiting": self.waiting, "settled": self.settled})
+        json!({"clicks": self.clicks, "waiting": self.waiting, "settled": self.settled, "held": self.held})
     }
     aegis_ui::widget_plumbing!(AppCx);
 }
@@ -528,6 +535,35 @@ fn a_feel_script_replays_and_times_each_input() {
     assert_eq!(bad["ok"], json!(false));
     assert!(bad["error"].as_str().unwrap().contains("script[0] click gone"), "{bad}");
     assert_eq!(g.ask(json!({"cmd": "feel", "script": "x"}))["ok"], json!(false));
+    g.stop();
+}
+
+/// ENGINE-63 (PAD-TUNE1): the left stick replayed: a direction past the dead zone is held and sent like a d-pad press,
+/// a move along it sends nothing, a new one turns, and inside the dead zone lets go; the movement report reads them as
+/// presses and a release.
+#[test]
+fn a_feel_script_replays_the_stick_as_a_held_direction() {
+    let mut g = Game::start(FrameNeed::Idle, false, DEFAULT_FPS);
+    g.ask(json!({"cmd": "frames"}));
+    let script = json!([{"stick": [0.3, 0.1]}, {"stick": [0.9, 0.1]}, {"stick": [0.95, 0.3]}, {"stick": [0.1, -0.8]}, {"stick": [0.2, 0.1]}]);
+    let reply = g.ask(json!({"cmd": "feel", "script": script, "gap": 0, "motion": true}));
+    assert_eq!(reply["ok"], json!(true), "{reply}");
+    let held = g.ask(json!({"cmd": "ui_tree"}))["state"]["held"].clone();
+    let want = ["None (0.3, 0.1)", "Some((1, 0)) (0.9, 0.1)", "Some((1, 0)) (0.95, 0.3)", "Some((0, 1)) (0.1, -0.8)", "None (0.2, 0.1)"];
+    let seen: Vec<&str> = held.as_array().unwrap().iter().map(|h| h.as_str().unwrap()).skip_while(|h| *h != want[0]).collect();
+    assert_eq!(seen, want, "the stick held as a direction past the dead zone, let go inside it: {held}");
+    assert_eq!(reply["to_present"]["count"], json!(2), "a key sent for each new direction only: {reply}");
+    g.ask(json!({"cmd": "frames"}));
+    assert_eq!(g.ask(json!({"cmd": "ui_tree"}))["state"]["held"].as_array().unwrap().last(), Some(&json!("None (0.0, 0.0)")), "the replay leaves the stick at rest");
+    let inputs = reply["motion"]["inputs"].as_array().expect("the movement report").clone();
+    let what: Vec<&str> = inputs.iter().map(|i| i["what"].as_str().unwrap()).collect();
+    assert_eq!(what, ["stick 0.3 0.1", "stick 0.9 0.1", "stick 0.95 0.3", "stick 0.1 -0.8", "stick 0.2 0.1"]);
+    assert!(inputs.iter().all(|i| i["input"] == json!("stick")));
+    assert!(inputs[3].get("turn_ms").is_some(), "a new direction while one is held is a turn: {}", inputs[3]);
+    assert_eq!(inputs[4]["after_release_steps"], json!(0), "the dead zone lets go: {}", inputs[4]);
+    assert!(inputs[0].get("after_release_steps").is_none(), "a stick that held nothing before lets nothing go");
+    let bad = g.ask(json!({"cmd": "feel", "script": [{"stick": "right"}]}));
+    assert!(bad["error"].as_str().unwrap().contains("script[0] stick"), "{bad}");
     g.stop();
 }
 

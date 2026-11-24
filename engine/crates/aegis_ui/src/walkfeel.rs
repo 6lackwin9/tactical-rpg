@@ -36,8 +36,8 @@ impl Frame {
     }
 }
 
-/// An input of the replay: when, what (`press`, `release`, `pad_press`, `pad_release`, `click`, `key`, `pad`, `spike`,
-/// `stall`), the direction it gives (a movement key), and whether a direction was held before it and is held after it.
+/// An input of the replay: when, what (`press`, `release`, `pad_press`, `pad_release`, `stick`, `click`, `key`, `pad`,
+/// `spike`, `stall`; ENGINE-63: a `stick` with a direction is a press, one that leaves nothing held a release), the direction it gives (a movement key), and whether a direction was held before it and is held after it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Mark {
     pub t: f64,
@@ -96,7 +96,8 @@ pub fn report(frames: &[Frame], marks: &[Mark], frame_ms: f64) -> Value {
         let end = marks.get(i + 1).map_or(f64::INFINITY, |n| n.t);
         let base = at_or_before(m.t);
         let mut row = json!({"t_ms": r2(m.t), "input": m.kind, "what": m.what});
-        let moves = matches!(m.kind.as_str(), "press" | "pad_press" | "click" | "key" | "pad");
+        let stick_press = m.kind == "stick" && m.dir.is_some();
+        let moves = stick_press || matches!(m.kind.as_str(), "press" | "pad_press" | "click" | "key" | "pad");
         if let (true, Some(b)) = (moves, base) {
             let moved = frames.iter().find(|f| f.t > m.t && f.t <= end && f.drawn != b.drawn).map(|f| f.t - m.t);
             let stepped = steps.iter().find(|s| s.0 > m.t && s.0 <= end).map(|s| s.0 - m.t);
@@ -109,7 +110,7 @@ pub fn report(frames: &[Frame], marks: &[Mark], frame_ms: f64) -> Value {
                 _ => {}
             }
         }
-        if let (Some(d), true, true) = (m.dir, m.held_before, matches!(m.kind.as_str(), "press" | "pad_press" | "key" | "pad")) {
+        if let (Some(d), true, true) = (m.dir, m.held_before, stick_press || matches!(m.kind.as_str(), "press" | "pad_press" | "key" | "pad")) {
             // a turn: the first step its way, and the gap before it
             let turned = steps.iter().find(|s| s.0 > m.t && s.0 <= end && (s.2 .0 - s.1 .0, s.2 .1 - s.1 .1) == d);
             if let Some(s) = turned {
@@ -130,7 +131,7 @@ pub fn report(frames: &[Frame], marks: &[Mark], frame_ms: f64) -> Value {
             let next: Vec<f64> = steps.iter().filter(|s| s.0 > m.t && s.0 <= end).take(3).map(|s| r2(s.0 - m.t)).collect();
             row["next_steps_ms"] = json!(next);
         }
-        if matches!(m.kind.as_str(), "release" | "pad_release") && !m.held_after {
+        if (matches!(m.kind.as_str(), "release" | "pad_release") || (m.kind == "stick" && m.held_before)) && !m.held_after {
             // a step that starts after the release (one under way at the release already counts as taken)
             let n = steps.iter().filter(|s| s.0 > m.t + frame_ms * 0.5 && s.0 <= end).count() as u64;
             row["after_release_steps"] = json!(n);

@@ -1,9 +1,11 @@
 //! INPUT-MAP1 (ENGINE-7): the gamepad, on Windows (`gilrs`, Windows.Gaming.Input). Buttons go through the control map
 //! (`controls::Controls::pad`); the d-pad and the left stick are a held direction that repeats as arrow keys
 //! (`controls::Repeat`) and sets `Held::dir` for screens that walk on a held key. With no pad connected nothing runs.
+//! ENGINE-63 (PAD-TUNE1): the dead zone and the repeat are the player's (`controls::PadTuning`, read at each poll), and
+//! the stick's place is `Held::stick` (the Controls tab's live test).
 
 use super::*;
-use crate::controls::{stick_dir, Pad, Repeat};
+use crate::controls::{Pad, PadTuning, Repeat};
 
 /// A pad's state between events.
 pub(super) struct Gamepad {
@@ -52,6 +54,8 @@ impl Gamepad {
     /// Reads the pad's events into `s`. Returns whether anything happened (the pacer wakes for it).
     pub(super) fn poll<G: Context>(&mut self, s: &mut Shell<G>) -> bool {
         let now = Instant::now();
+        let tuning = PadTuning::of(&s.cx.settings.v);
+        self.repeat.tune(tuning);
         let mut any = false;
         let mut dir_changed = false;
         while let Some(ev) = self.gilrs.next_event() {
@@ -96,7 +100,8 @@ impl Gamepad {
             }
         }
         if dir_changed {
-            let want = self.dpad.last().copied().or_else(|| stick_dir(self.stick.0, self.stick.1));
+            s.cx.held.stick = self.stick;
+            let want = self.dpad.last().copied().or_else(|| tuning.stick_dir(self.stick.0, self.stick.1));
             if let Some(k) = self.repeat.set(want, now) {
                 s.key(k);
             }

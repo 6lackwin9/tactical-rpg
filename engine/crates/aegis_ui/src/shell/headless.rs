@@ -316,7 +316,8 @@ impl<G: Context> Loop<G> {
     /// timed by the feel probe (`crate::feel`) from its arrival through its handler to the end of the next frame (drawn:
     /// nothing is presented with no window), then `gap` more frames (default 2) before the next. An input is
     /// `{"key": name}`, `{"click": widget id}`, `{"pad": button}` or `{"frames": n}` (frames drawn, no input), each with an
-    /// optional `"times"`. Replies with `feel::report` (p50, p95 and worst of input-to-state, input-to-present and frame
+    /// optional `"times"`; a held direction is `{"press"|"release": key}`, `{"pad_press"|"pad_release": button}` or
+    /// `{"stick": [x, y]}` (ENGINE-63: the left stick, read under the player's dead zone; `[0, 0]` lets go). Replies with `feel::report` (p50, p95 and worst of input-to-state, input-to-present and frame
     /// time, every input, the flagged ones), the canvas and the build. A refused input stops the replay with its error.
     fn feel(&mut self, body: &Value) -> Value {
         let Some(script) = body["script"].as_array() else { return json!({"ok": false, "error": "feel needs script: a list of {key|click|pad|frames}"}) };
@@ -351,6 +352,8 @@ impl<G: Context> Loop<G> {
             r.frames.extend(crate::walkfeel::Frame::of(0.0, &self.shell.stack.last().unwrap().motion()));
         }
         let mut held: Vec<Key> = Vec::new();
+        // the direction the replay's stick holds (one of `held`)
+        let mut stick: Option<Key> = None;
         let mut done = 0u64;
         let mut failed = None;
         // ENGINE-55: the sounds of this replay, timed from its inputs and frames
@@ -382,6 +385,44 @@ impl<G: Context> Loop<G> {
                 let what = format!("{kind} {name}");
                 self.mark(&mut rec, kind, &what, k.dir(), before, !held.is_empty());
                 if down {
+                    self.heard_input();
+                    self.shell.feel_input(&what);
+                    self.shell.key(k);
+                    self.shell.feel_state();
+                }
+                done += 1;
+                for _ in 0..=gap {
+                    self.feel_draw(&mut rec);
+                }
+                continue;
+            }
+            if let Some(xy) = step.get("stick") {
+                // ENGINE-63 (PAD-TUNE1): the left stick moved to (x, y): the direction it reads under the player's dead
+                // zone (`controls::PadTuning`) is held as a pad's is (a new one pressed, the old one let go; centred lets go)
+                let (Some(x), Some(y)) = (xy[0].as_f64(), xy[1].as_f64()) else {
+                    failed = Some(format!("script[{i}] stick: [x, y], each from -1 to 1"));
+                    break;
+                };
+                let (x, y) = (x.clamp(-1.0, 1.0) as f32, y.clamp(-1.0, 1.0) as f32);
+                let want = crate::controls::PadTuning::of(&self.shell.cx.settings.v).stick_dir(x, y);
+                self.shell.cx.held.stick = (x, y);
+                let before = !held.is_empty();
+                let changed = want != stick;
+                if changed {
+                    if let Some(old) = stick {
+                        held.retain(|h| *h != old);
+                    }
+                    if let Some(k) = want {
+                        held.retain(|h| *h != k);
+                        held.push(k);
+                    }
+                    stick = want;
+                }
+                self.shell.cx.held.dir = held.last().and_then(|h| h.dir());
+                let what = format!("stick {x} {y}");
+                // the direction only when it changed (a turn or a new hold); a release when it let go
+                self.mark(&mut rec, "stick", &what, want.filter(|_| changed).and_then(|k| k.dir()), before, !held.is_empty());
+                if let (true, Some(k)) = (changed, want) {
                     self.heard_input();
                     self.shell.feel_input(&what);
                     self.shell.key(k);
@@ -434,7 +475,7 @@ impl<G: Context> Loop<G> {
                 }
                 continue;
             } else {
-                failed = Some(format!("script[{i}]: one of key, click, pad, frames, press, release, pad_press, pad_release, wait_ms, spike_ms or stall_ms"));
+                failed = Some(format!("script[{i}]: one of key, click, pad, frames, press, release, pad_press, pad_release, stick, wait_ms, spike_ms or stall_ms"));
                 break;
             };
             for _ in 0..times {
@@ -467,6 +508,7 @@ impl<G: Context> Loop<G> {
             }
         }
         self.shell.cx.held.dir = None;
+        self.shell.cx.held.stick = (0.0, 0.0);
         self.every = every;
         let heard = self.heard.take();
         let heard_t0 = heard.as_ref().map(|h| h.t0);

@@ -168,7 +168,10 @@ slip while the release run holds the real bar. A refused input stops the step wi
 
 Movement (ENGINE-49 WALK-FEEL1): the script also takes `{"press": key}` and `{"release": key}` (a movement key held down
 and let go, as a window's key down and up: `Held::dir` follows the latest held), `{"pad_press": button}` and
-`{"pad_release": button}` (a d-pad direction the same way), `{"wait_ms": n}` (frames drawn for n ms of the run's clock,
+`{"pad_release": button}` (a d-pad direction the same way), `{"stick": [x, y]}` (ENGINE-63 PAD-TUNE1: the left stick
+moved to x, y, each from -1 to 1, y up; the direction it reads under the player's dead zone (`controls::PadTuning`) is
+held the same way, a new one replacing the old, and inside the dead zone it lets go; the report reads a stick that gives
+a direction as a press and one that lets go as a release), `{"wait_ms": n}` (frames drawn for n ms of the run's clock,
 1 to 60000), `{"spike_ms": n}` (one frame that takes n ms, 1 to 2000) and `{"stall_ms": n}` (ENGINE-50 MAP-FRAME1: the
 clock moves n ms with no frame drawn, 1 to 2000, so the next input arrives during a hitch and its frame comes after it). `step_ms` (1 to 200) sets the shot clock's frame
 step for the replay (16.667 for 60 frames a second). With `motion` true the top screen's `Screen::motion` is read after

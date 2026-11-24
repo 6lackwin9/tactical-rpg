@@ -1024,6 +1024,25 @@ pub fn start_web<G: Context>(mut cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, opti
     Ok(())
 }
 
+/// ENGINE-63 (PAD-TUNE1): what holds the shell the catch (`guard`) writes the rescue save through: the window's loop.
+trait HasShell<G: Context> {
+    fn shell_mut(&mut self) -> Option<&mut Shell<G>>;
+}
+
+/// ENGINE-62, ENGINE-63: runs `f` on `state` inside the frame's catch (the window's events, its pad poll): a panic gets
+/// the rescue save and the report (`Shell::on_panic`), then goes on unwinding.
+fn guard<G: Context, T: HasShell<G>, R>(state: &mut T, f: impl FnOnce(&mut T) -> R) -> R {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(&mut *state))) {
+        Ok(r) => r,
+        Err(p) => {
+            if let Some(s) = state.shell_mut() {
+                s.on_panic();
+            }
+            std::panic::resume_unwind(p)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1108,6 +1127,39 @@ mod tests {
         let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false, title: String::new() };
         s.frame();
         s
+    }
+
+    /// ENGINE-63 (PAD-TUNE1): what runs inside the frame's catch (`guard`: the window's events and its pad poll) hands
+    /// its value back; a panic in it (a pad poll that panics) leaves the crash note beside the logs, then still unwinds.
+    #[test]
+    fn a_panic_in_the_pad_poll_is_caught_like_a_frame() {
+        struct Looper {
+            shell: Option<Shell<App>>,
+            polls: u32,
+        }
+        impl HasShell<App> for Looper {
+            fn shell_mut(&mut self) -> Option<&mut Shell<App>> {
+                self.shell.as_mut()
+            }
+        }
+        let dir = aegis_core::scratch::Scratch::vacant("shell_pad_catch");
+        let mut s = shell();
+        s.cx.settings = Settings::load(dir.join("settings.json"), json!({}));
+        let logs = s.logs_dir();
+        let mut l = Looper { shell: Some(s), polls: 0 };
+        let wake = guard(&mut l, |l| {
+            l.polls += 1;
+            Some(16)
+        });
+        assert_eq!((wake, l.polls), (Some(16), 1), "a poll that goes well hands its wake back");
+        assert!(!logs.join(crate::crashlog::CRASHED_FILE).exists());
+        let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            guard(&mut l, |_| -> Option<u64> { panic!("the pad driver went away") })
+        }));
+        assert!(caught.is_err(), "the panic goes on unwinding after the rescue");
+        assert!(logs.join(crate::crashlog::CRASHED_FILE).is_file(), "the crash note is written for the next start");
+        let (report, rescue) = crate::crashlog::take_crashed(&logs).expect("the note names its report");
+        assert!(report.is_file() && !rescue, "the report, and no rescue save (this game has none): {}", report.display());
     }
 
     /// ENGINE-56: a menu over the board: an enabled button, a disabled one, one that plays its own sound, a slider.

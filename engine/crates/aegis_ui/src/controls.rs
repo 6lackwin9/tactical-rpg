@@ -494,18 +494,24 @@ pub const REPEAT_EVERY: Duration = Duration::from_millis(110);
 pub const STICK_DEAD: f32 = 0.5;
 
 /// A held pad direction (the d-pad or the left stick) as repeated arrow keys: `press` when it starts, `poll` each frame.
+/// ENGINE-63 (PAD-TUNE1): its delay and rate are the player's (`PadTuning`, `tune`); the defaults are today's.
 #[derive(Debug, Default)]
 pub struct Repeat {
     held: Option<(Key, Instant)>,
+    tuning: PadTuning,
 }
 
 impl Repeat {
+    /// The delay and the rate from now on (a direction held already keeps the wait it has).
+    pub fn tune(&mut self, t: PadTuning) {
+        self.tuning = t;
+    }
     /// The direction changed to `k` (None: let go). Returns the key to send now.
     pub fn set(&mut self, k: Option<Key>, now: Instant) -> Option<Key> {
         if self.held.map(|(h, _)| h) == k {
             return None;
         }
-        self.held = k.map(|k| (k, now + REPEAT_FIRST));
+        self.held = k.map(|k| (k, now + self.tuning.repeat_delay));
         k
     }
     /// The key a held direction repeats now, if its time has come.
@@ -514,7 +520,7 @@ impl Repeat {
         if now < at {
             return None;
         }
-        self.held = Some((k, now + REPEAT_EVERY));
+        self.held = Some((k, now + self.tuning.repeat_every));
         Some(k)
     }
     /// The held direction, for the walk (`Held::dir`).
@@ -527,9 +533,125 @@ impl Repeat {
     }
 }
 
-/// The left stick's direction: the larger axis past the dead zone (y up is positive, as pads report it).
+/// ENGINE-63 (PAD-TUNE1): the settings key of the gamepad's tuning, apart from `controls` (the bindings):
+/// `{"gamepad": {"dead_zone": 0.5, "repeat_delay_ms": 350, "repeat_every_ms": 110}}`. A missing entry is its default; a
+/// value out of range is clamped onto its steps. The keyboard's own repeat stays the system's.
+pub const PAD_TUNING_KEY: &str = "gamepad";
+
+/// One tunable of the gamepad, for a settings screen: its key in `PAD_TUNING_KEY`, words, range, step, default and unit.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PadSetting {
+    pub key: &'static str,
+    pub label: &'static str,
+    pub help: &'static str,
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
+    pub default: f64,
+    /// "ms", or "" for a share of the stick's reach.
+    pub unit: &'static str,
+}
+
+impl PadSetting {
+    /// `v` clamped to the range and put on the nearest step.
+    pub fn snap(&self, v: f64) -> f64 {
+        let n = ((v.clamp(self.min, self.max) - self.min) / self.step).round();
+        ((self.min + n * self.step) * 1000.0).round() / 1000.0
+    }
+    /// How many steps the range has (a slider's positions).
+    pub fn steps(&self) -> usize {
+        ((self.max - self.min) / self.step).round() as usize + 1
+    }
+    /// The step `v` is on (a slider's index).
+    pub fn index(&self, v: f64) -> usize {
+        ((self.snap(v) - self.min) / self.step).round() as usize
+    }
+    /// The value at step `i`.
+    pub fn at(&self, i: usize) -> f64 {
+        self.snap(self.min + i as f64 * self.step)
+    }
+    /// `v` in the setting's words ("0.50", "350 ms").
+    pub fn text(&self, v: f64) -> String {
+        if self.unit.is_empty() {
+            format!("{v:.2}")
+        } else {
+            format!("{v:.0} {}", self.unit)
+        }
+    }
+}
+
+/// The gamepad's tunables, in the order a settings screen lists them (ranges from the PAD-TUNE1 row: the dead zone 0.15
+/// to 0.6; the repeat's delay and rate around today's 350 ms and 110 ms).
+pub const PAD_SETTINGS: [PadSetting; 3] = [
+    PadSetting { key: "dead_zone", label: "Stick Dead Zone", help: "How far the left stick goes before it counts as a direction", min: 0.15, max: 0.6, step: 0.05, default: STICK_DEAD as f64, unit: "" },
+    PadSetting { key: "repeat_delay_ms", label: "Repeat Delay", help: "How long a held d-pad or stick direction waits before it repeats", min: 150.0, max: 600.0, step: 25.0, default: REPEAT_FIRST.as_millis() as f64, unit: "ms" },
+    PadSetting { key: "repeat_every_ms", label: "Repeat Rate", help: "The time between repeats of a held d-pad or stick direction", min: 50.0, max: 250.0, step: 10.0, default: REPEAT_EVERY.as_millis() as f64, unit: "ms" },
+];
+
+/// ENGINE-63 (PAD-TUNE1): the gamepad's tuning in force: the stick's dead zone and the held direction's repeat.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PadTuning {
+    pub dead_zone: f32,
+    pub repeat_delay: Duration,
+    pub repeat_every: Duration,
+}
+
+impl Default for PadTuning {
+    fn default() -> Self {
+        PadTuning { dead_zone: STICK_DEAD, repeat_delay: REPEAT_FIRST, repeat_every: REPEAT_EVERY }
+    }
+}
+
+impl PadTuning {
+    /// The tuning `settings` (the whole object) gives: each entry clamped onto its steps, a missing one its default.
+    pub fn of(settings: &Value) -> PadTuning {
+        let v = |i: usize| PadTuning::value(settings, PAD_SETTINGS[i].key);
+        PadTuning { dead_zone: v(0) as f32, repeat_delay: Duration::from_millis(v(1) as u64), repeat_every: Duration::from_millis(v(2) as u64) }
+    }
+    /// One tunable's value in `settings` (snapped; its default when unset or no number). An unknown key is 0.
+    pub fn value(settings: &Value, key: &str) -> f64 {
+        let Some(p) = PAD_SETTINGS.iter().find(|p| p.key == key) else { return 0.0 };
+        settings.get(PAD_TUNING_KEY).and_then(|g| g.get(key)).and_then(Value::as_f64).map_or(p.default, |v| p.snap(v))
+    }
+    /// Writes one tunable into `settings` (snapped). False for a key `PAD_SETTINGS` does not name, or no change.
+    pub fn set(settings: &mut Value, key: &str, v: f64) -> bool {
+        let Some(p) = PAD_SETTINGS.iter().find(|p| p.key == key) else { return false };
+        let v = p.snap(v);
+        if settings.get(PAD_TUNING_KEY).and_then(|g| g.get(key)).and_then(Value::as_f64) == Some(v) {
+            return false;
+        }
+        if !settings.is_object() {
+            *settings = json!({});
+        }
+        if !settings[PAD_TUNING_KEY].is_object() {
+            settings[PAD_TUNING_KEY] = json!({});
+        }
+        settings[PAD_TUNING_KEY][key] = if p.unit.is_empty() { json!(v) } else { json!(v as i64) };
+        true
+    }
+    /// The left stick's direction under this dead zone (`stick_dir`).
+    pub fn stick_dir(&self, x: f32, y: f32) -> Option<Key> {
+        stick_dir_past(x, y, self.dead_zone)
+    }
+    /// The live Test line: where the stick is and the direction it reads ("none" inside the dead zone).
+    pub fn test_line(&self, stick: (f32, f32)) -> String {
+        let (x, y) = stick;
+        let dir = match self.stick_dir(x, y) {
+            Some(k) => key_label(k),
+            None => "none".to_string(),
+        };
+        format!("Stick x {x:+.2}  y {y:+.2}  reads {dir}  (dead zone {:.2})", self.dead_zone)
+    }
+}
+
+/// The left stick's direction: the larger axis past the default dead zone (y up is positive, as pads report it).
 pub fn stick_dir(x: f32, y: f32) -> Option<Key> {
-    if x.abs() < STICK_DEAD && y.abs() < STICK_DEAD {
+    stick_dir_past(x, y, STICK_DEAD)
+}
+
+/// The left stick's direction: the larger axis past the dead zone `dead`.
+pub fn stick_dir_past(x: f32, y: f32, dead: f32) -> Option<Key> {
+    if x.abs() < dead && y.abs() < dead {
         return None;
     }
     Some(if x.abs() > y.abs() {

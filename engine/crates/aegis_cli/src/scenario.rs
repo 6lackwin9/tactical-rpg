@@ -231,7 +231,7 @@ pub fn reach_dead_ends(reply: &Value) -> Vec<String> {
 }
 
 /// ENGINE-49 (WALK-FEEL1): the inputs of a `feel` script.
-const FEEL_INPUTS: &str = "key, click, pad, frames, press, release, pad_press, pad_release, wait_ms, spike_ms or stall_ms";
+const FEEL_INPUTS: &str = "key, click, pad, frames, press, release, pad_press, pad_release, stick, wait_ms, spike_ms or stall_ms";
 
 /// ENGINE-49: the movement budgets of a `feel` step with `motion` (`aegis_ui::walkfeel::over_budget`).
 pub const MOTION_BUDGETS: [&str; 6] = ["first_move_ms", "overshoot_steps", "cadence_spread_ms", "stutters", "camera_lag_tiles", "camera_jump_tiles"];
@@ -700,7 +700,7 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
                             problems.push(format!("{at}: an object: one of {FEEL_INPUTS}, and times"));
                             continue;
                         };
-                        let named: Vec<&str> = ["key", "click", "pad", "frames", "press", "release", "pad_press", "pad_release", "wait_ms", "spike_ms", "stall_ms"].into_iter().filter(|k| m.contains_key(*k)).collect();
+                        let named: Vec<&str> = ["key", "click", "pad", "frames", "press", "release", "pad_press", "pad_release", "stick", "wait_ms", "spike_ms", "stall_ms"].into_iter().filter(|k| m.contains_key(*k)).collect();
                         if named.len() != 1 {
                             problems.push(format!("{at}: exactly one of {FEEL_INPUTS}"));
                         }
@@ -708,6 +708,8 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
                             let fine = match k.as_str() {
                                 "key" | "click" | "pad" | "press" | "release" | "pad_press" | "pad_release" => v.as_str().is_some_and(|t| !t.is_empty()),
                                 "frames" => v.as_u64().is_some_and(|n| (1..=240).contains(&n)),
+                                // ENGINE-63 (PAD-TUNE1): the left stick's place, [x, y] each from -1 to 1
+                                "stick" => v.as_array().is_some_and(|a| a.len() == 2 && a.iter().all(|n| n.as_f64().is_some_and(|n| (-1.0..=1.0).contains(&n)))),
                                 "times" => v.as_u64().is_some_and(|n| (1..=200).contains(&n)),
                                 "switch_ms" if !switch => {
                                     problems.push(format!("{at}: 'switch_ms' is a switch budget: it needs 'switch' true"));

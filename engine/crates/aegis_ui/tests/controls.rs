@@ -62,6 +62,54 @@ fn the_stick_counts_past_its_dead_zone_along_its_larger_axis() {
     assert_eq!(controls::stick_dir(0.3, -0.7), Some(Key::Down));
 }
 
+// ---- ENGINE-63 (PAD-TUNE1): the gamepad's tuning -------------------------------------------------------------------
+
+use aegis_ui::controls::{PadTuning, PAD_SETTINGS, PAD_TUNING_KEY};
+
+#[test]
+fn the_pad_tuning_round_trips_through_settings_clamped_onto_its_steps() {
+    // no setting: today's values
+    let none = PadTuning::of(&json!({}));
+    assert_eq!(none, PadTuning::default());
+    assert_eq!((none.dead_zone, none.repeat_delay, none.repeat_every), (controls::STICK_DEAD, controls::REPEAT_FIRST, controls::REPEAT_EVERY));
+    // written, saved as JSON text, read back
+    let mut s = json!({"volume": 80});
+    assert!(PadTuning::set(&mut s, "dead_zone", 0.3));
+    assert!(PadTuning::set(&mut s, "repeat_delay_ms", 260.0), "260 goes onto the 25 ms steps");
+    assert!(PadTuning::set(&mut s, "repeat_every_ms", 75.0));
+    assert!(!PadTuning::set(&mut s, "repeat_every_ms", 80.0), "the same step again is no change");
+    assert!(!PadTuning::set(&mut s, "rumble", 1.0), "an unknown tunable is refused");
+    let back: serde_json::Value = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+    let t = PadTuning::of(&back);
+    assert_eq!((t.dead_zone, t.repeat_delay, t.repeat_every), (0.3, Duration::from_millis(250), Duration::from_millis(80)));
+    assert_eq!(back[PAD_TUNING_KEY], json!({"dead_zone": 0.3, "repeat_delay_ms": 250, "repeat_every_ms": 80}));
+    assert_eq!(back["volume"], json!(80), "the rest of the settings stay");
+    // out of range: clamped to the row's ranges (dead zone 0.15 to 0.6)
+    let wild = PadTuning::of(&json!({PAD_TUNING_KEY: {"dead_zone": 0.9, "repeat_delay_ms": 5, "repeat_every_ms": "fast"}}));
+    assert_eq!((wild.dead_zone, wild.repeat_delay, wild.repeat_every), (0.6, Duration::from_millis(150), controls::REPEAT_EVERY));
+    assert_eq!(PadTuning::of(&json!({PAD_TUNING_KEY: {"dead_zone": 0.0}})).dead_zone, 0.15);
+    // the slider's steps
+    let dz = PAD_SETTINGS[0];
+    assert_eq!((dz.steps(), dz.index(0.5), dz.at(dz.index(0.5)), dz.text(0.5)), (10, 7, 0.5, "0.50".to_string()));
+    assert_eq!(PAD_SETTINGS[1].text(350.0), "350 ms");
+}
+
+#[test]
+fn the_tuning_moves_the_dead_zone_and_the_repeat() {
+    let t = PadTuning::of(&json!({PAD_TUNING_KEY: {"dead_zone": 0.2, "repeat_delay_ms": 200, "repeat_every_ms": 50}}));
+    assert_eq!(controls::stick_dir(0.3, 0.1), None, "inside the default dead zone");
+    assert_eq!(t.stick_dir(0.3, 0.1), Some(Key::Right), "past a smaller one");
+    assert_eq!(t.test_line((0.3, 0.1)), "Stick x +0.30  y +0.10  reads Right  (dead zone 0.20)");
+    assert!(PadTuning::default().test_line((0.3, 0.1)).contains("reads none"));
+    let t0 = Instant::now();
+    let mut r = Repeat::default();
+    r.tune(t);
+    assert_eq!(r.set(Some(Key::Down), t0), Some(Key::Down));
+    assert_eq!(r.poll(t0 + Duration::from_millis(199)), None);
+    assert_eq!(r.poll(t0 + Duration::from_millis(200)), Some(Key::Down));
+    assert_eq!(r.poll(t0 + Duration::from_millis(250)), Some(Key::Down));
+}
+
 // ---- CONTROLS-UI1 (PR7-44): rebinding -------------------------------------------------------------------------------
 
 use aegis_ui::controls::{capturable, key_label, Action, Input, Outcome, Rebind, Step};

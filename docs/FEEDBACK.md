@@ -179,8 +179,49 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-60` (`PLAN-START2`) | Built (tools lane) | `develop` | The round's planning start drafts each ghost once when no buff would drop (33 to 17-19 ms; same-ghosts tests incl. the Crucible hold pick); the feel table lists frames mostly off the CPU as stalls apart, real misses still fail. 6 of 10 release feel runs passed (3 audio-thread underruns, 2 frames 1-2 ms over), options given; goldens unchanged. FB-509 |
 | `ENGINE-61` (`FEEL-CLOSE1`) | Built (tools lane) | `develop` | Underruns of a stalled audio thread listed as stalls; the canvas row blend made branch-free with the same bytes, cutting 4 to 6 ms of panels from every frame (battle draw 16-24 to 12-16 ms, warm frames at most 25 ms). 9 of 10 release feel runs passed, the miss judged container noise; the feel run moves to Tushar's PC. Goldens unchanged. FB-510 |
 | `ENGINE-62` (`CRASH-SAFE1`) | Built (tools lane) | `develop` | A caught panic writes the report (now with build, top screen and `feel.log` tail) and the game's rescue save (`Context::rescue`, keyed `rescue`); the next start shows one line with the report path and Open folder (any game, the hello sample included); Emberwake's title offers the rescue beside Continue. Saves keep `<file>.prev`; a damaged slot is kept, named and loads its copy. Goldens unchanged. FB-511 |
+| `ENGINE-63` (`PAD-TUNE1`) | Built (tools lane) | `develop` | Settings > Controls has a Gamepad group: stick dead zone (0.15 to 0.6), d-pad and stick repeat delay and rate (today's values by default), saved under `gamepad` (`aegis_ui::controls::PadTuning`), and a live stick Test line. The Windows pad poll runs inside the frame's catch. The feel script replays `{"stick": [x, y]}`; `walk_feel` has a stick case. Goldens unchanged. FB-512 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-512: ENGINE-63 PAD-TUNE1 built; gamepad tuning, stick test, pad poll in the catch, stick replay
+
+- **Status**: built (tools lane), `develop`. Engine (`aegis_ui` controls, gamepad, shell, feel; `aegis_cli` scenario
+  check) and game (Emberwake's Controls tab rows, `walk_feel` stick case). **Every golden unchanged.** Shots diff
+  against `3a70b1be`: only the Controls tab shots move (8 shots, 228 px each: the scroll thumb, the list is longer),
+  plus the known `screens_menus__scene_runner`. Reach scenarios (`reach_menus` with `settings_controls`), `controls_rebind`,
+  `feel_settings` and `walk_feel` pass. Gate clean.
+- **Spec**: `docs/READY.md` row `ENGINE-63` (`PAD-TUNE1`).
+- **(1) Settings**: `aegis_ui::controls::PadTuning` under its own settings key `gamepad` (`PAD_TUNING_KEY`), apart from
+  `controls`, so the bindings' problem report is untouched: `dead_zone` 0.15 to 0.6 step 0.05 (default 0.5),
+  `repeat_delay_ms` 150 to 600 step 25 (default 350), `repeat_every_ms` 50 to 250 step 10 (default 110). Missing
+  means today's value; out of range is clamped onto the steps. `PAD_SETTINGS` lists each with label, help, range and
+  unit for any game's UI. `Repeat::tune` takes the delay and rate; the pad poll reads the tuning at each poll, so a
+  change applies at once. `stick_dir_past(x, y, dead)` beside `stick_dir`. The keyboard's repeat stays the OS's.
+- **(2) Controls tab**: a "Gamepad" heading under the bindings with three slider rows (`<` and `>` step, the ends
+  disabled) and a "Stick Test" row whose line is `PadTuning::test_line`: "Stick x +0.47  y -0.20  reads Right  (dead
+  zone 0.45)", live from the new `Held::stick` (the pad poll sets it; `Held` drops `Eq`, its f32s). Ids
+  `settings.gamepad.<key>[.down|.up]`, `settings.gamepad.test`. The screen's Reset to defaults resets them too; the
+  bindings' own Reset leaves them. Drawn as Settings rows, not through the `settings_controls` view, so no fixture or
+  layout change.
+- **(3) Catch**: `shell::guard` runs a closure inside the catch (`on_panic` then `resume_unwind`); the window's events
+  and the Windows pad poll (`App::poll_pad`) both go through it.
+- **(4) Replay**: the feel script takes `{"stick": [x, y]}` (each -1 to 1): the direction it reads under the player's
+  dead zone is held like a d-pad press (a new one replaces the old and sends its key once; the same direction again
+  sends nothing; inside the dead zone lets go). The movement report reads a stick with a direction as a press (first
+  move, turn) and one that lets go as a release (`after_release_steps`). `walk_feel` gains stick left, turn up, centre:
+  first move 16.67 ms, turn 16.67 ms with a 33.33 ms gap, no overshoot, the same as its d-pad case.
+- **(5) Tests**: `aegis_ui/tests/controls.rs` (settings round trip through JSON text, clamping and steps; the tuned dead
+  zone and repeat), `aegis_ui/tests/headless.rs` (`a_feel_script_replays_the_stick_as_a_held_direction`), shell unit
+  test `a_panic_in_the_pad_poll_is_caught_like_a_frame` (the guard hands back a value; a panic writes `crashed.json`
+  and the report, then unwinds), `aegis_cli/tests/scenario.rs` (stick accepted, bad sticks named), Emberwake menus
+  `the_gamepad_group_tunes_the_pad_and_tests_the_stick`.
+- **Not covered**: no real pad in the container; the Windows poll path is compiled only on Windows (the catch helper is
+  tested on its own).
+- **Docs delta**: `engine/docs/authoring/scenarios.md` (stick step) and `crash_safety.md` (pad poll in the catch),
+  tools-lane files, edited here. `engine/README.md` (Design): "Gamepad tuning (PAD-TUNE1, ENGINE-63):
+  `controls::{PadTuning, PadSetting, PAD_SETTINGS, PAD_TUNING_KEY}` (settings key `gamepad`: dead zone, repeat delay
+  and rate), `Repeat::tune`, `stick_dir_past`, `Held::stick` for a live stick test; the pad poll runs inside the
+  frame's catch; the feel script's `{"stick": [x, y]}`."
 
 ### FB-511: ENGINE-62 CRASH-SAFE1 built; crash report, rescue save and damaged-save fallback
 

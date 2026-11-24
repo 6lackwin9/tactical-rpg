@@ -86,13 +86,16 @@ fn a_feel_step_parses_its_script_and_budget() {
 /// budgets; a movement budget needs `motion`, and each over its budget names itself.
 #[test]
 fn a_feel_step_takes_movement_inputs_and_budgets() {
-    let script = json!([{"press": "right"}, {"wait_ms": 500}, {"spike_ms": 250}, {"stall_ms": 250}, {"release": "right"}, {"pad_press": "dpad_up"}, {"pad_release": "dpad_up"}]);
+    let script = json!([{"press": "right"}, {"wait_ms": 500}, {"spike_ms": 250}, {"stall_ms": 250}, {"release": "right"}, {"pad_press": "dpad_up"}, {"pad_release": "dpad_up"}, {"stick": [0.9, -0.1]}, {"stick": [0, 0]}]);
     let s = parse("x", &minimal(json!([{"step": "feel", "name": "walk", "step_ms": 16.667, "motion": true, "script": script, "budget": {"first_move_ms": 17, "overshoot_steps": 0}}]))).unwrap();
     let Step::Feel { step_ms, motion, motion_budget, .. } = &s.steps[0] else { panic!() };
     assert_eq!((*step_ms, *motion), (Some(16.667), true));
     assert_eq!(motion_budget["overshoot_steps"], json!(0));
     let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "script": [{"press": "right"}], "budget": {"overshoot_steps": 0}}])));
     assert!(got.contains("needs 'motion' true"), "{got}");
+    // ENGINE-63 (PAD-TUNE1): a stick is [x, y], each from -1 to 1
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "script": [{"stick": [2, 0]}, {"stick": "right"}]}])));
+    assert!(got.contains("script[0]") && got.contains("script[1]"), "{got}");
     let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "step_ms": 500, "script": [{"wait_ms": 0}]}])));
     assert!(got.contains("'step_ms' is a number of ms from 1 to 200") && got.contains("'wait_ms'"), "{got}");
     let report = json!({"first_move_ms": 33.3, "overshoot_steps": 0, "camera_lag_tiles": 0.0});

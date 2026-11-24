@@ -365,7 +365,7 @@ pub trait Context: Sized + 'static {
 
 /// The modifier keys held down right now (the shell keeps it current; all up while the window is out of focus), for
 /// hold-to-show controls such as revealing what is hidden while a key is held.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Held {
     pub shift: bool,
     pub ctrl: bool,
@@ -373,6 +373,9 @@ pub struct Held {
     /// The step direction (`Key::dir`) of the movement key (arrows, W A S D) held down, the latest pressed when
     /// several are; None when none is. For screens that walk while a key is held (`Screen::hold_walk`).
     pub dir: Option<(i64, i64)>,
+    /// ENGINE-63 (PAD-TUNE1): the left stick of a pad (x, y from -1 to 1, y up positive; (0, 0) at rest or with no pad),
+    /// for a live stick test (`controls::PadTuning::test_line`).
+    pub stick: (f32, f32),
 }
 
 /// PR5-48: where a pointer drag on a `handle` widget (`Ui::handle`) is (`Screen::pointer`): the press, a move while the

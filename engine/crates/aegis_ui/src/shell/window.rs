@@ -139,6 +139,28 @@ impl<G: Context> App<G> {
     }
 }
 
+impl<G: Context> HasShell<G> for App<G> {
+    fn shell_mut(&mut self) -> Option<&mut Shell<G>> {
+        self.shell.as_mut()
+    }
+}
+
+impl<G: Context> App<G> {
+    /// INPUT-MAP1: reads a connected pad; returns when the loop must wake for it next (None: no pad).
+    #[cfg(windows)]
+    fn poll_pad(&mut self) -> Option<Instant> {
+        let (Some(g), Some(s)) = (self.gamepad.as_mut(), self.shell.as_mut()) else { return None };
+        let at = s.feel_now();
+        if g.poll(s) {
+            // ENGINE-45: a pad event counts from the poll that read it
+            s.feel.input("pad", at);
+            s.feel_state();
+            self.pacer.touch(Instant::now());
+        }
+        g.connected().then(|| g.due().unwrap_or_else(Instant::now).min(Instant::now() + Duration::from_millis(16)))
+    }
+}
+
 impl<G: Context> ApplicationHandler<Wake> for App<G> {
     fn resumed(&mut self, el: &ActiveEventLoop) {
         if self.window.is_some() {
@@ -236,21 +258,10 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
     /// FPSCAP1: asked after every wake. A flood of events only asks again: the cap's deadline counts from the last frame.
     /// Unlimited draws as fast as presenting allows (vsync waits for the screen); the redraw itself wakes the loop.
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-        // INPUT-MAP1: a connected pad is read here; the loop wakes for it at least every 16 ms (gilrs does not wake it)
+        // INPUT-MAP1: a connected pad is read here; the loop wakes for it at least every 16 ms (gilrs does not wake it).
+        // ENGINE-63 (PAD-TUNE1): inside the frame's catch, as the window's events are
         #[cfg(windows)]
-        let pad_wake = match (self.gamepad.as_mut(), self.shell.as_mut()) {
-            (Some(g), Some(s)) => {
-                let at = s.feel_now();
-                if g.poll(s) {
-                    // ENGINE-45: a pad event counts from the poll that read it
-                    s.feel.input("pad", at);
-                    s.feel_state();
-                    self.pacer.touch(Instant::now());
-                }
-                g.connected().then(|| g.due().unwrap_or_else(Instant::now).min(Instant::now() + Duration::from_millis(16)))
-            }
-            _ => None,
-        };
+        let pad_wake = super::guard(self, |a| a.poll_pad());
         #[cfg(not(windows))]
         let pad_wake: Option<Instant> = None;
         match self.pacer.decide(Instant::now(), self.frame_every) {
@@ -274,13 +285,7 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
             s.feel_input(k);
         }
         // ENGINE-62 (CRASH-SAFE1): a panic in an event or a frame gets the rescue save and the report, then goes on
-        let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.on_window_event(el, ev)));
-        if let Err(p) = caught {
-            if let Some(s) = self.shell.as_mut() {
-                s.on_panic();
-            }
-            std::panic::resume_unwind(p);
-        }
+        super::guard(self, |a| a.on_window_event(el, ev));
         if let (Some(_), Some(s)) = (kind, self.shell.as_mut()) {
             s.feel_state();
         }
@@ -349,7 +354,7 @@ impl<G: Context> App<G> {
                 self.alt = m.state().alt_key();
                 if let Some(s) = self.shell.as_mut() {
                     s.shift = self.shift;
-                    s.cx.held = Held { shift: self.shift, ctrl: self.ctrl, alt: self.alt, dir: s.cx.held.dir };
+                    s.cx.held = Held { shift: self.shift, ctrl: self.ctrl, alt: self.alt, ..s.cx.held };
                 }
             }
             WindowEvent::Focused(false) => {

@@ -1044,6 +1044,8 @@ pub enum SetAct {
     GuardApply,
     /// CONTROLS-UI1 (PR7-44): an action of the Controls tab's view (`controls_view`).
     View(aegis_ui::screen_layout::Act),
+    /// ENGINE-63 (PAD-TUNE1): a gamepad tunable (`aegis_ui::controls::PAD_SETTINGS`, its key) set to a value.
+    Pad(&'static str, f64),
 }
 
 /// The settings keys Display Mode and Resolution stage until Apply (DISPLAY2's `fullscreen` and `borderless`, and
@@ -1130,6 +1132,9 @@ enum Row {
     /// The battle overlay groups (and the debug row in a debug build).
     Overlays,
     Controls,
+    /// ENGINE-63 (PAD-TUNE1): a gamepad tunable (its place in `aegis_ui::controls::PAD_SETTINGS`) and the live stick test.
+    PadTune(usize),
+    PadTest,
     /// A section header over the rows after it (FB-308: the Battle tab's "Advanced").
     Heading(&'static str),
 }
@@ -1355,6 +1360,11 @@ impl SettingsScreen {
                     cx.audio.preview_gain(bus, sample, gain);
                 }
             }
+            SetAct::Pad(k, v) => {
+                if aegis_ui::controls::PadTuning::set(&mut cx.settings.v, k, v) {
+                    Self::save(cx);
+                }
+            }
             SetAct::Pick(k, i) => self.pick(cx, k, i),
             SetAct::Step(k, d) => {
                 let (labels, at) = self.options(cx, k);
@@ -1483,7 +1493,13 @@ impl SettingsScreen {
                 Row::Toggle(crate::battle::BOARD_GRID, "Show full grid", "Tile lines across the whole battle board (off: only the cells that matter are marked)"),
                 Row::Overlays,
             ],
-            _ => vec![Row::Controls],
+            // ENGINE-63 (PAD-TUNE1): the Gamepad group under the bindings
+            _ => {
+                let mut r = vec![Row::Controls, Row::Heading("Gamepad")];
+                r.extend((0..aegis_ui::controls::PAD_SETTINGS.len()).map(Row::PadTune));
+                r.push(Row::PadTest);
+                r
+            }
         }
     }
 
@@ -1673,6 +1689,23 @@ impl SettingsScreen {
             }
             // drawn by `draw` through its view (CONTROLS-UI1)
             Row::Controls => {}
+            Row::PadTune(i) => {
+                let Some(p) = aegis_ui::controls::PAD_SETTINGS.get(i) else { return };
+                let vw = if self.popup { 150 } else { 170 };
+                self.label(ui, r, p.label, p.help, vw, true);
+                let v = aegis_ui::controls::PadTuning::value(&d, p.key);
+                let x = r.x + r.w - vw - 6;
+                let id = format!("settings.gamepad.{}", p.key);
+                ui.button(&format!("{id}.down"), Rect::new(x, cy, 13, ch), "<", SetAct::Pad(p.key, v - p.step), v > p.min);
+                ui.slider(&id, Rect::new(x + 15, cy, vw - 30, ch), p.index(v), p.steps(), &p.text(v), |i| SetAct::Pad(p.key, p.at(i)), true);
+                ui.button(&format!("{id}.up"), Rect::new(x + vw - 13, cy, 13, ch), ">", SetAct::Pad(p.key, v + p.step), v < p.max);
+            }
+            Row::PadTest => {
+                // the live stick: where it is and the direction it reads under the dead zone set above
+                let line = aegis_ui::controls::PadTuning::of(&d).test_line(cx.held.stick);
+                self.label(ui, r, "Stick Test", &line, 0, true);
+                ui.push("settings.gamepad.test".to_string(), "label", &line, r, true, false, None, Vec::new());
+            }
         }
     }
 
@@ -3555,6 +3588,37 @@ mod settings_tests {
             s.guard = None;
             cx.settings.v.as_object_mut().unwrap().shift_remove("controls");
         }
+    }
+
+    /// ENGINE-63 (PAD-TUNE1): the Controls tab's Gamepad group: the dead zone, the repeat delay and rate (today's values
+    /// until set), saved at once and read back from the file, and the live stick Test line under them.
+    #[test]
+    fn the_gamepad_group_tunes_the_pad_and_tests_the_stick() {
+        use aegis_ui::controls::{PadTuning, PAD_SETTINGS, PAD_TUNING_KEY};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut s = SettingsScreen::new(&cx);
+        redraw(&mut s, &mut cx, &mut g);
+        s.click_id(&mut cx, "settings.tab.controls").expect("the tab");
+        let w = redraw(&mut s, &mut cx, &mut g);
+        let text = |w: &[Value], id: &str| w.iter().find(|x| x["id"] == id).map(|x| x["text"].as_str().unwrap_or("").to_string()).unwrap_or_else(|| panic!("no {id}"));
+        assert_eq!(text(&w, "settings.heading.gamepad"), "Gamepad");
+        assert_eq!((text(&w, "settings.gamepad.dead_zone"), text(&w, "settings.gamepad.repeat_delay_ms"), text(&w, "settings.gamepad.repeat_every_ms")), ("0.50".into(), "350 ms".into(), "110 ms".into()), "today's values");
+        assert!(text(&w, "settings.gamepad.test").contains("reads none"), "a pad at rest");
+        // the arrows step and save; the slider sets
+        s.click_id(&mut cx, "settings.gamepad.dead_zone.down").expect("<");
+        s.click_id(&mut cx, "settings.gamepad.repeat_delay_ms.up").expect(">");
+        redraw(&mut s, &mut cx, &mut g);
+        s.act(&mut cx, SetAct::Pad(PAD_SETTINGS[2].key, PAD_SETTINGS[2].at(0)));
+        assert_eq!(saved(&cx, PAD_TUNING_KEY), json!({"dead_zone": 0.45, "repeat_delay_ms": 375, "repeat_every_ms": 50}), "saved at once");
+        let back = Settings::load(cx.shot_dir.join("settings.json"), default_settings());
+        assert_eq!(PadTuning::of(&back.v), PadTuning::of(&cx.settings.v), "the file reads back the same");
+        // the live stick under the new dead zone
+        cx.held.stick = (0.47, -0.2);
+        let w = redraw(&mut s, &mut cx, &mut g);
+        assert_eq!(text(&w, "settings.gamepad.test"), "Stick x +0.47  y -0.20  reads Right  (dead zone 0.45)");
+        // the whole screen's Reset to defaults puts today's values back
+        s.act(&mut cx, SetAct::Defaults);
+        assert_eq!(PadTuning::of(&cx.settings.v), PadTuning::default());
     }
 
     /// Every tab, the confirm and the guard fit at the four text sizes, full screen and popup: no text spills out of
