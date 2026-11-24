@@ -279,7 +279,7 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
 /// The desktop program (`src/main.rs`): the launch keys from the command line, the folders found from the working
 /// folder or the program's, a window (or none, `headless=`).
 ///
-/// Offline full-map capture (for `aegis align-map`): `render_map=<id> out=<file.png> [fx=<path|none>] [map_override=<json>] [view=square|tilted]`
+/// Offline full-map capture (for `aegis align-map`): `render_map=<id> out=<file.png> [fx=<path|none>] [layers=shell|ground|unlit|full] [map_override=<json>] [view=square|tilted]`
 /// renders the full static map at 32 px/tile with no window or HUD and exits.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run_native() -> Result<()> {
@@ -312,6 +312,13 @@ fn render_map_native(args: &[(String, String)], map_id: &str) -> Result<()> {
             region::StaticFx::Override(fx)
         }
     };
+    let layers = match arg(args, "layers").unwrap_or("full") {
+        "shell" => region::StaticLayers::Shell,
+        "ground" => region::StaticLayers::Ground,
+        "unlit" => region::StaticLayers::Unlit,
+        "full" => region::StaticLayers::Full,
+        other => anyhow::bail!("render_map: unknown layers '{other}' (expected shell, ground, unlit, full)"),
+    };
     let map_override = match arg(args, "map_override") {
         None => None,
         Some(p) => {
@@ -320,7 +327,7 @@ fn render_map_native(args: &[(String, String)], map_id: &str) -> Result<()> {
             Some(val.as_object().cloned().context("map_override must be a JSON object")?)
         }
     };
-    let canvas = region::render_static_map(&mut cx, &options.font, map_id, view, fx_mode, map_override.as_ref())?;
+    let canvas = region::render_static_map(&mut cx, &options.font, map_id, view, fx_mode, layers, map_override.as_ref())?;
     let out_path = Path::new(out);
     if let Some(parent) = out_path.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent)?;

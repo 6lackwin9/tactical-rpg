@@ -1,9 +1,10 @@
 //! `aegis align-map`: game-agnostic diorama-to-map reference validation and closed-loop alignment tool.
 //!
 //! Subcommands:
-//!   aegis align-map refspec   map=<id> [draft=<art_draft.json>] [out=<dir>]
-//!   aegis align-map check-ref ref=<img.png|jpg> spec=<refspec.json> [map=<id>] [out=<dir>]
-//!   aegis align-map enqueue   map=<id> [name=<stem>] [draft=<draft.json>] [style_ref=<img.png|jpg>] [audit=<ref_audit.json>] [aspect=16:9|4:3|1:1] [n=1] [pipeline=<dir>] [out=<dir>] [dry_run=1]
+//!   aegis align-map refspec   map=<id> [stage=full|cleanplate|propped|lit] [draft=<art_draft.json>] [out=<dir>]
+//!   aegis align-map check-ref ref=<img.png|jpg> spec=<refspec.json> [stage=full|cleanplate|propped|lit] [prev_ref=<img.png|jpg>] [map=<id>] [out=<dir>]
+//!   aegis align-map enqueue   map=<id> [stage=full|cleanplate|propped|lit] [prev_ref=<img.png|jpg>] [session_ref=<req_name>] [name=<stem>] [draft=<draft.json>] [style_ref=<img.png|jpg>] [audit=<ref_audit.json>] [aspect=16:9|4:3|1:1] [n=1] [pipeline=<dir>] [out=<dir>] [dry_run=1]
+//!   aegis align-map layers    map=<id> (ref=<img.png|jpg> | ref_l1=<clean.png> [ref_l2=<propped.png>] [ref_l3=<lit.png>]) [out=<dir>] [view=square|tilted] [fx=<path|none>] [exe=<game exe>]
 //!   aegis align-map score     ref=<img.png|jpg> render=<map.png> map=<id> [pass=1|2|all] [out=<dir>]
 //!   aegis align-map patch     map=<id> ref=<img.png|jpg> [render=<map.png>] [mode=ground|props|both] [zone=<id>] [rows=y0..y1] [only_from=<g>] [only_to=<g>] [out=<seed.json>] [apply=0|1]
 //!   aegis align-map run       ref=<img.png|jpg> map=<id> [out=<dir>] [apply_fx=0|1] [view=square|tilted] [exe=<game exe>]
@@ -26,18 +27,49 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // ---- CLI entry point -----------------------------------------------------------------------------------------------
 
 const ALIGN_USAGE: &str = "usage:
-  aegis align-map refspec   map=<id> [draft=<draft.json>] [out=<dir>]
-  aegis align-map check-ref ref=<img.png|jpg> spec=<refspec.json> [map=<id>] [out=<dir>]
-  aegis align-map enqueue   map=<id> [name=<stem>] [draft=<draft.json>] [style_ref=<img.png|jpg>] [audit=<ref_audit.json>] [aspect=16:9|4:3|1:1] [n=1] [pipeline=<dir>] [out=<dir>] [dry_run=1]
+  aegis align-map refspec   map=<id> [stage=full|cleanplate|propped|lit] [draft=<draft.json>] [out=<dir>]
+  aegis align-map check-ref ref=<img.png|jpg> spec=<refspec.json> [stage=full|cleanplate|propped|lit] [prev_ref=<img.png|jpg>] [map=<id>] [out=<dir>]
+  aegis align-map enqueue   map=<id> [stage=full|cleanplate|propped|lit] [prev_ref=<img.png|jpg>] [session_ref=<req_name>] [name=<stem>] [draft=<draft.json>] [style_ref=<img.png|jpg>] [audit=<ref_audit.json>] [aspect=16:9|4:3|1:1] [n=1] [pipeline=<dir>] [out=<dir>] [dry_run=1]
+  aegis align-map layers    map=<id> (ref=<img.png|jpg> | ref_l1=<clean.png> [ref_l2=<propped.png>] [ref_l3=<lit.png>]) [out=<dir>] [view=square|tilted] [fx=<path|none>] [exe=<game exe>]
   aegis align-map score     ref=<img.png|jpg> render=<map.png> map=<id> [pass=1|2|all] [out=<dir>]
   aegis align-map patch     map=<id> ref=<img.png|jpg> [render=<map.png>] [mode=ground|props|both] [zone=<id>] [rows=y0..y1] [only_from=<g>] [only_to=<g>] [out=<seed.json>] [apply=0|1]
   aegis align-map run       ref=<img.png|jpg> map=<id> [out=<dir>] [apply_fx=0|1] [view=square|tilted] [exe=<game exe>]";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefStage {
+    Full,
+    CleanPlate,
+    Propped,
+    Lit,
+}
+
+impl RefStage {
+    pub fn parse(s: &str) -> Result<Self> {
+        match s {
+            "full" => Ok(Self::Full),
+            "cleanplate" | "clean_plate" | "l1" => Ok(Self::CleanPlate),
+            "propped" | "props" | "l2" => Ok(Self::Propped),
+            "lit" | "lighting" | "l3" => Ok(Self::Lit),
+            other => bail!("unknown stage '{other}' (expected full, cleanplate, propped, lit)"),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::CleanPlate => "cleanplate",
+            Self::Propped => "propped",
+            Self::Lit => "lit",
+        }
+    }
+}
 
 pub fn command<G: Game>(game: &G, args: &Args) -> Result<()> {
     match args.pos(1) {
         Some("refspec") => cmd_refspec(game, args),
         Some("check-ref") => cmd_check_ref(game, args),
         Some("enqueue") => cmd_enqueue(game, args),
+        Some("layers") => cmd_layers(game, args),
         Some("score") => cmd_score(game, args),
         Some("patch") => cmd_patch(game, args),
         Some("run") => cmd_run(game, args),
@@ -50,6 +82,7 @@ pub fn command<G: Game>(game: &G, args: &Args) -> Result<()> {
 
 fn cmd_refspec<G: Game>(game: &G, args: &Args) -> Result<()> {
     let map_id = args.keys.get("map").context("refspec requires map=<id>")?;
+    let stage = RefStage::parse(&args.key("stage", "full"))?;
     let data_dir = game.data_dir(args)?;
     let draft = args.keys.get("draft").map(PathBuf::from);
     let out_dir = PathBuf::from(args.key("out", &format!("out/align/{map_id}")));
@@ -57,12 +90,13 @@ fn cmd_refspec<G: Game>(game: &G, args: &Args) -> Result<()> {
 
     let model = MapModel::load(&data_dir, map_id, draft.as_deref())?;
     let spec = build_refspec(&model);
-    let prompt = render_prompt(&model, &spec);
-    let blockout = render_blockout(&model, 32);
+    let prompt = render_prompt_for_stage(&model, &spec, stage);
+    let blockout = render_blockout_for_stage(&model, 32, stage);
 
+    let suffix = if stage == RefStage::Full { String::new() } else { format!(".{}", stage.as_str()) };
     let spec_path = out_dir.join(format!("{map_id}.refspec.json"));
-    let prompt_path = out_dir.join(format!("{map_id}.prompt.txt"));
-    let blockout_path = out_dir.join(format!("{map_id}.blockout.png"));
+    let prompt_path = out_dir.join(format!("{map_id}{suffix}.prompt.txt"));
+    let blockout_path = out_dir.join(format!("{map_id}{suffix}.blockout.png"));
     std::fs::write(&spec_path, serde_json::to_string_pretty(&spec)? + "\n")?;
     std::fs::write(&prompt_path, prompt)?;
     save_png(&blockout, &blockout_path)?;
@@ -70,7 +104,8 @@ fn cmd_refspec<G: Game>(game: &G, args: &Args) -> Result<()> {
     let hard_n = spec["required_clauses"].as_array().map_or(0, |a| a.iter().filter(|c| c["severity"] == "HARD").count());
     let exit_n = spec["exits"].as_array().map_or(0, Vec::len);
     println!(
-        "refspec ok: {map_id} ({}x{}, {} zones, {exit_n} exits, {hard_n} HARD clauses)\n  spec:     {}\n  prompt:   {}\n  blockout: {}",
+        "refspec ok: {map_id} [stage={}] ({}x{}, {} zones, {exit_n} exits, {hard_n} HARD clauses)\n  spec:     {}\n  prompt:   {}\n  blockout: {}",
+        stage.as_str(),
         model.cols,
         model.rows,
         model.zone_defs.len(),
@@ -84,6 +119,7 @@ fn cmd_refspec<G: Game>(game: &G, args: &Args) -> Result<()> {
 fn cmd_check_ref<G: Game>(game: &G, args: &Args) -> Result<()> {
     let ref_path = PathBuf::from(args.keys.get("ref").context("check-ref requires ref=<img.png|jpg>")?);
     let spec_path = PathBuf::from(args.keys.get("spec").context("check-ref requires spec=<refspec.json>")?);
+    let stage = RefStage::parse(&args.key("stage", "full"))?;
     let spec: Value = serde_json::from_str(&std::fs::read_to_string(&spec_path).with_context(|| format!("reading {}", spec_path.display()))?)?;
     let map_id = args
         .keys
@@ -97,7 +133,11 @@ fn cmd_check_ref<G: Game>(game: &G, args: &Args) -> Result<()> {
     let data_dir = game.data_dir(args)?;
     let model = MapModel::load(&data_dir, &map_id, None)?;
     let ref_img = load_image(&ref_path)?;
-    let audit = check_reference(&ref_img, &model, &spec, &out_dir)?;
+    let prev_img = match args.keys.get("prev_ref") {
+        Some(p) => Some(load_image(Path::new(p))?),
+        None => None,
+    };
+    let audit = check_reference_staged(&ref_img, &model, &spec, &out_dir, stage, prev_img.as_ref())?;
 
     let audit_path = out_dir.join("ref_audit.json");
     std::fs::write(&audit_path, serde_json::to_string_pretty(&audit)? + "\n")?;
@@ -188,7 +228,23 @@ pub fn build_enqueue_request(
     aspect: &str,
     n: u32,
 ) -> (String, Value) {
-    let mut prompt = render_prompt(model, spec);
+    build_enqueue_request_staged(model, spec, RefStage::Full, blockout_path, None, style_ref, None, audit, aspect, n)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_enqueue_request_staged(
+    model: &MapModel,
+    spec: &Value,
+    stage: RefStage,
+    blockout_path: &Path,
+    prev_ref: Option<&Path>,
+    style_ref: Option<&Path>,
+    session_ref: Option<&str>,
+    audit: Option<&Value>,
+    aspect: &str,
+    n: u32,
+) -> (String, Value) {
+    let mut prompt = render_prompt_for_stage(model, spec, stage);
     if let Some(a) = audit {
         let mut fixes = Vec::new();
         if let Some(checks) = a["deterministic_checks"].as_array() {
@@ -221,10 +277,29 @@ pub fn build_enqueue_request(
         }
     }
 
-    let mut refs = vec![posix_path(&blockout_path.canonicalize().unwrap_or_else(|_| blockout_path.to_path_buf()))];
+    // Reference order: for img2img edit stages (propped/lit), prev_ref goes first as the locked base image.
+    let mut refs = Vec::new();
+    if let Some(pr) = prev_ref {
+        refs.push(posix_path(&pr.canonicalize().unwrap_or_else(|_| pr.to_path_buf())));
+    }
+    if stage != RefStage::Lit {
+        refs.push(posix_path(&blockout_path.canonicalize().unwrap_or_else(|_| blockout_path.to_path_buf())));
+    }
     if let Some(sr) = style_ref {
         refs.push(posix_path(&sr.canonicalize().unwrap_or_else(|_| sr.to_path_buf())));
     }
+    let mut record = Map::new();
+    record.insert("map_id".into(), json!(model.id));
+    record.insert("stage".into(), json!(stage.as_str()));
+    record.insert("source_refs".into(), json!(refs));
+    if let Some(sref) = session_ref.filter(|s| !s.trim().is_empty()) {
+        record.insert("session_ref".into(), json!(sref));
+    }
+    let asset_id = if stage == RefStage::Full {
+        format!("{}_ref", model.id)
+    } else {
+        format!("{}_ref_{}", model.id, stage.as_str())
+    };
     let req = json!({
         "prompt": prompt,
         "aspect_ratio": aspect,
@@ -232,14 +307,11 @@ pub fn build_enqueue_request(
         "references": refs,
         "n": n.max(1),
         "metadata": {
-            "asset_id": format!("{}_ref", model.id),
+            "asset_id": asset_id,
             "task": "align_map",
             "target": Value::Null,
             "route": "other",
-            "record": {
-                "map_id": model.id,
-                "source_refs": refs,
-            }
+            "record": Value::Object(record),
         }
     });
     (prompt, req)
@@ -247,9 +319,17 @@ pub fn build_enqueue_request(
 
 fn cmd_enqueue<G: Game>(game: &G, args: &Args) -> Result<()> {
     let map_id = args.keys.get("map").context("enqueue requires map=<id>")?;
+    let stage = RefStage::parse(&args.key("stage", "full"))?;
     let data_dir = game.data_dir(args)?;
     let draft = args.keys.get("draft").map(PathBuf::from);
+    let prev_ref = args.keys.get("prev_ref").map(PathBuf::from);
     let style_ref = args.keys.get("style_ref").map(PathBuf::from);
+    let session_ref = args.keys.get("session_ref").map(String::as_str);
+    if let Some(pr) = &prev_ref {
+        if !pr.is_file() {
+            bail!("enqueue: prev_ref not found: {}", pr.display());
+        }
+    }
     if let Some(sr) = &style_ref {
         if !sr.is_file() {
             bail!("enqueue: style_ref not found: {}", sr.display());
@@ -265,25 +345,48 @@ fn cmd_enqueue<G: Game>(game: &G, args: &Args) -> Result<()> {
     }
     let n: u32 = args.key("n", "1").parse().unwrap_or(1).max(1);
     let dry_run = args.key("dry_run", "0") == "1" || args.flag("--dry-run");
-    let stem = args.key("name", &format!("{map_id}_ref"));
+    let default_stem = if stage == RefStage::Full {
+        format!("{map_id}_ref")
+    } else {
+        format!("{map_id}_ref_{}", stage.as_str())
+    };
+    let stem = args.key("name", &default_stem);
     let out_dir = PathBuf::from(args.key("out", &format!("out/align/{map_id}")));
     std::fs::create_dir_all(&out_dir)?;
 
     let model = MapModel::load(&data_dir, map_id, draft.as_deref())?;
     let spec = build_refspec(&model);
-    let blockout = render_blockout(&model, 32);
+    let blockout = render_blockout_for_stage(&model, 32, stage);
+    let suffix = if stage == RefStage::Full { String::new() } else { format!(".{}", stage.as_str()) };
     let spec_path = out_dir.join(format!("{map_id}.refspec.json"));
-    let blockout_path = out_dir.join(format!("{map_id}.blockout.png"));
+    let blockout_path = out_dir.join(format!("{map_id}{suffix}.blockout.png"));
     std::fs::write(&spec_path, serde_json::to_string_pretty(&spec)? + "\n")?;
     save_png(&blockout, &blockout_path)?;
 
-    let (_prompt, mut req) = build_enqueue_request(&model, &spec, &blockout_path, style_ref.as_deref(), audit.as_ref(), &aspect, n);
+    let (_prompt, mut req) = build_enqueue_request_staged(
+        &model,
+        &spec,
+        stage,
+        &blockout_path,
+        prev_ref.as_deref(),
+        style_ref.as_deref(),
+        session_ref,
+        audit.as_ref(),
+        &aspect,
+        n,
+    );
     let pipe = resolve_pipeline_dir(args.keys.get("pipeline").map(String::as_str))?;
 
     if dry_run {
         let preview = out_dir.join(format!("{stem}.dry_run_request.json"));
         std::fs::write(&preview, serde_json::to_string_pretty(&req)? + "\n")?;
-        println!("enqueue dry-run ({map_id}):\n  target pipeline: {}\n  request preview: {}\n  aspect={aspect}, n={n}, refs={}", pipe.display(), preview.display(), req["references"].as_array().map_or(0, Vec::len));
+        println!(
+            "enqueue dry-run ({map_id}, stage={}):\n  target pipeline: {}\n  request preview: {}\n  aspect={aspect}, n={n}, refs={}",
+            stage.as_str(),
+            pipe.display(),
+            preview.display(),
+            req["references"].as_array().map_or(0, Vec::len)
+        );
         return Ok(());
     }
 
@@ -296,7 +399,12 @@ fn cmd_enqueue<G: Game>(game: &G, args: &Args) -> Result<()> {
 
     let name = pick_request_name(&pipe, &stem);
     let mut stored_refs = Vec::new();
-    stored_refs.push(store_queue_ref(&pipe, &blockout_path)?);
+    if let Some(pr) = &prev_ref {
+        stored_refs.push(store_queue_ref(&pipe, pr)?);
+    }
+    if stage != RefStage::Lit {
+        stored_refs.push(store_queue_ref(&pipe, &blockout_path)?);
+    }
     if let Some(sr) = &style_ref {
         stored_refs.push(store_queue_ref(&pipe, sr)?);
     }
@@ -311,8 +419,13 @@ fn cmd_enqueue<G: Game>(game: &G, args: &Args) -> Result<()> {
         .iter()
         .filter_map(|r| Path::new(r).file_name().and_then(|s| s.to_str()).map(String::from))
         .collect();
-    println!("queued {name} -> {}", dest.display());
-    println!("  attach from refs/: {}", attach_names.join(", "));
+    println!("queued {name} [stage={}] -> {}", stage.as_str(), dest.display());
+    if !attach_names.is_empty() {
+        println!("  attach from refs/: {}", attach_names.join(", "));
+    }
+    if let Some(sref) = session_ref {
+        println!("  session_ref: {sref} (chains directly from previous in-session output)");
+    }
     println!("  next: run 'process image queue' in Gemini Web App Tasks, then 'python tools/portraits/artqueue.py ingest'");
     Ok(())
 }
@@ -672,7 +785,7 @@ fn cmd_patch<G: Game>(game: &G, args: &Args) -> Result<()> {
             };
             let scratch = aegis_core::scratch::Scratch::new("align_patch_render");
             let tmp_png = scratch.path().join("render.png");
-            invoke_render_map(&exe, &data_dir, map_id, "square", Some("none"), &tmp_png)?;
+            invoke_render_map(&exe, &data_dir, map_id, "square", Some("none"), None, &tmp_png)?;
             load_image(&tmp_png)?
         }
     };
@@ -761,7 +874,7 @@ fn cmd_run<G: Game>(game: &G, args: &Args) -> Result<()> {
 
     // Step 1: Baseline render (no MapFx)
     let before_png = out_dir.join("render_before.png");
-    invoke_render_map(&exe, &data_dir, map_id, &view, Some("none"), &before_png)?;
+    invoke_render_map(&exe, &data_dir, map_id, &view, Some("none"), None, &before_png)?;
     let before_img = load_image(&before_png)?;
     let before_dir = out_dir.join("before");
     std::fs::create_dir_all(&before_dir)?;
@@ -775,7 +888,7 @@ fn cmd_run<G: Game>(game: &G, args: &Args) -> Result<()> {
     // Step 2: Re-render with Pass 2 solved MapFx
     let after_png = out_dir.join("render_pass2.png");
     let fx_str = fx_path.to_string_lossy().to_string();
-    invoke_render_map(&exe, &data_dir, map_id, &view, Some(&fx_str), &after_png)?;
+    invoke_render_map(&exe, &data_dir, map_id, &view, Some(&fx_str), None, &after_png)?;
     let after_img = load_image(&after_png)?;
     let after_dir = out_dir.join("after");
     std::fs::create_dir_all(&after_dir)?;
@@ -840,7 +953,7 @@ fn cmd_run<G: Game>(game: &G, args: &Args) -> Result<()> {
     Ok(())
 }
 
-fn invoke_render_map(exe: &Path, data_dir: &Path, map_id: &str, view: &str, fx: Option<&str>, out_png: &Path) -> Result<()> {
+fn invoke_render_map(exe: &Path, data_dir: &Path, map_id: &str, view: &str, fx: Option<&str>, layers: Option<&str>, out_png: &Path) -> Result<()> {
     let mut cmd = Command::new(exe);
     cmd.arg(format!("render_map={map_id}"))
         .arg(format!("out={}", out_png.display()))
@@ -849,12 +962,502 @@ fn invoke_render_map(exe: &Path, data_dir: &Path, map_id: &str, view: &str, fx: 
     if let Some(f) = fx {
         cmd.arg(format!("fx={f}"));
     }
+    if let Some(l) = layers {
+        cmd.arg(format!("layers={l}"));
+    }
     let out = cmd.output().with_context(|| format!("spawning {}", exe.display()))?;
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr);
         let stdout = String::from_utf8_lossy(&out.stdout);
         bail!("render_map failed ({}):\n{stdout}\n{stderr}", out.status);
     }
+    Ok(())
+}
+
+// ---- Layer-Wise Validation (`layers`) ------------------------------------------------------------------------------
+
+pub struct LayerRefInputs<'a> {
+    pub composite: Option<&'a RgbaImg>,
+    pub l1_cleanplate: Option<&'a RgbaImg>,
+    pub l2_propped: Option<&'a RgbaImg>,
+    pub l3_lit: Option<&'a RgbaImg>,
+}
+
+pub struct EngineLayers<'a> {
+    pub shell: &'a RgbaImg,
+    pub ground: &'a RgbaImg,
+    pub unlit: &'a RgbaImg,
+    pub full: &'a RgbaImg,
+}
+
+fn hstack_pair(left: &RgbaImg, right: &RgbaImg, gap: usize) -> RgbaImg {
+    let h = left.h.max(right.h);
+    let lw = if left.h == h { left.w } else { ((left.w as f32 * h as f32 / left.h.max(1) as f32).round() as usize).max(1) };
+    let rw = if right.h == h { right.w } else { ((right.w as f32 * h as f32 / right.h.max(1) as f32).round() as usize).max(1) };
+    let l_img = if left.w == lw && left.h == h { left.clone() } else { left.resize_bilinear(lw, h) };
+    let r_img = if right.w == rw && right.h == h { right.clone() } else { right.resize_bilinear(rw, h) };
+    let mut out = RgbaImg::new(lw + gap + rw, h, [16, 18, 22, 255]);
+    for y in 0..h {
+        for x in 0..lw {
+            out.set(x, y, l_img.get(x, y));
+        }
+        for x in 0..rw {
+            out.set(lw + gap + x, y, r_img.get(x, y));
+        }
+    }
+    out
+}
+
+fn vstack_rows(rows: &[&RgbaImg], gap: usize) -> RgbaImg {
+    let w = rows.iter().map(|r| r.w).max().unwrap_or(1);
+    let total_h: usize = rows.iter().map(|r| r.h).sum::<usize>() + gap * rows.len().saturating_sub(1);
+    let mut out = RgbaImg::new(w, total_h.max(1), [12, 14, 18, 255]);
+    let mut cy = 0usize;
+    for r in rows {
+        for y in 0..r.h {
+            for x in 0..r.w {
+                out.set(x, cy + y, r.get(x, y));
+            }
+        }
+        cy += r.h + gap;
+    }
+    out
+}
+
+/// Masks prop footprints (hatched dark overlay) so L1 ground comparisons focus strictly on exposed floor/water.
+fn apply_prop_mask_overlay(img: &RgbaImg, model: &MapModel, tile_px: usize) -> RgbaImg {
+    let mut out = img.clone();
+    let prop_mask = static_prop_mask(model, 0);
+    for gy in 0..model.rows {
+        for gx in 0..model.cols {
+            if prop_mask[gy * model.cols + gx] {
+                let x0 = gx * tile_px;
+                let y0 = gy * tile_px;
+                for dy in 0..tile_px {
+                    for dx in 0..tile_px {
+                        let stripe = ((dx + dy) / 4) % 2 == 0;
+                        let c = if stripe { [24, 18, 28, 195] } else { [12, 10, 16, 165] };
+                        out.blend(x0 + dx, y0 + dy, c);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Highlights static prop footprints while dimming background cells (programmatic L2 view for single composite refs).
+fn apply_prop_spotlight(img: &RgbaImg, model: &MapModel, tile_px: usize) -> RgbaImg {
+    let mut out = img.clone();
+    let prop_mask = static_prop_mask(model, 0);
+    for gy in 0..model.rows {
+        for gx in 0..model.cols {
+            if !prop_mask[gy * model.cols + gx] {
+                out.fill_rect(gx * tile_px, gy * tile_px, tile_px, tile_px, [10, 12, 18, 175]);
+            }
+        }
+    }
+    for p in &model.props {
+        if !p.dynamic {
+            out.stroke_rect(p.x * tile_px, p.y * tile_px, p.w * tile_px, p.h * tile_px, 2, [255, 210, 70, 220]);
+        }
+    }
+    out
+}
+
+fn median_f32(vals: &[f32]) -> f32 {
+    if vals.is_empty() {
+        return 0.0;
+    }
+    let mut s = vals.to_vec();
+    s.sort_by(f32::total_cmp);
+    s[s.len() / 2]
+}
+
+fn rgb_dist2(a: [f32; 3], b: [f32; 3]) -> f32 {
+    let dr = a[0] - b[0];
+    let dg = a[1] - b[1];
+    let db = a[2] - b[2];
+    dr * dr + dg * dg + db * db
+}
+
+/// Evaluates all 4 layers (L0 Shell, L1 Ground, L2 Props, L3 Lighting) from either staged refs (`ref_l1`/`ref_l2`/`ref_l3`)
+/// or a single composite `ref`, producing side-by-side layer comparison PNGs, a stacked `layer_sheet.png`, and `layers_report.json`.
+pub fn build_layer_validation(
+    refs: &LayerRefInputs<'_>,
+    eng: &EngineLayers<'_>,
+    model: &MapModel,
+    out_dir: &Path,
+) -> Result<Value> {
+    std::fs::create_dir_all(out_dir)?;
+    let tile_px = (eng.full.w / model.cols.max(1)).max(8);
+    let target_w = model.cols * tile_px;
+    let target_h = model.rows * tile_px;
+    let ureg = uniform_registration(target_w, target_h, model.cols, model.rows);
+
+    let norm_eng = |im: &RgbaImg| -> RgbaImg {
+        if im.w == target_w && im.h == target_h { im.clone() } else { im.resize_bilinear(target_w, target_h) }
+    };
+    let e_shell = norm_eng(eng.shell);
+    let e_ground = norm_eng(eng.ground);
+    let e_unlit = norm_eng(eng.unlit);
+    let e_full = norm_eng(eng.full);
+
+    // Resolve the reference image for each layer (staged preferred; single composite fallback)
+    let base_ref = refs
+        .l3_lit
+        .or(refs.composite)
+        .or(refs.l2_propped)
+        .or(refs.l1_cleanplate)
+        .context("layers requires at least one reference image (ref= or ref_l1=/ref_l2=/ref_l3=)")?;
+    let l0_src = refs.l1_cleanplate.unwrap_or(base_ref);
+    let l1_src = refs.l1_cleanplate.unwrap_or(base_ref);
+    let l2_src = refs.l2_propped.unwrap_or(base_ref);
+    let l3_src = refs.l3_lit.unwrap_or(base_ref);
+
+    let reg0 = register_reference(l0_src, model);
+    let reg1 = register_reference(l1_src, model);
+    let reg2 = register_reference(l2_src, model);
+    let reg3 = register_reference(l3_src, model);
+
+    let r_l0 = resample_registered(l0_src, &reg0, model.cols, model.rows, tile_px);
+    let r_l1 = resample_registered(l1_src, &reg1, model.cols, model.rows, tile_px);
+    let r_l2 = resample_registered(l2_src, &reg2, model.cols, model.rows, tile_px);
+    let r_l3 = resample_registered(l3_src, &reg3, model.cols, model.rows, tile_px);
+
+    let staged_prop_diff = refs.l1_cleanplate.is_some() && refs.l2_propped.is_some();
+    let staged_lit_ratio = refs.l2_propped.is_some() && refs.l3_lit.is_some();
+
+    // ---- L0: Shell (aspect, ortho H/V ratio, wall-vs-floor contrast) ----
+    let tw = (reg0.trim.2 - reg0.trim.0) as f64;
+    let th = (reg0.trim.3 - reg0.trim.1) as f64;
+    let ref_aspect = tw / th.max(1.0);
+    let sq_aspect = model.cols as f64 / model.rows as f64;
+    let tilt_aspect = (model.cols as f64 * 32.0) / (model.rows as f64 * 24.0);
+    let aspect_drift_pct = (((ref_aspect - sq_aspect).abs() / sq_aspect).min((ref_aspect - tilt_aspect).abs() / tilt_aspect)) * 100.0;
+    let hv_ratio = orthographic_hv_ratio(l0_src, reg0.trim) as f64;
+    let l0_stats = extract_grid_stats(&r_l0, &ureg, model.cols, model.rows);
+    let (mut w_l, mut wn, mut f_l, mut fn_) = (0.0f64, 0usize, 0.0f64, 0usize);
+    for y in 0..model.rows {
+        for x in 0..model.cols {
+            let l = l0_stats[y * model.cols + x].luma as f64;
+            if model.tile(x, y) == '#' {
+                w_l += l;
+                wn += 1;
+            } else if model.tile(x, y) == '.' {
+                f_l += l;
+                fn_ += 1;
+            }
+        }
+    }
+    let wf_contrast = f_l / fn_.max(1) as f64 - w_l / wn.max(1) as f64;
+    let l0_status = if aspect_drift_pct > 25.0 || hv_ratio < 1.65 {
+        "FAIL"
+    } else if wf_contrast < 8.0 {
+        "WARN"
+    } else {
+        "PASS"
+    };
+    let l0_ref_vis = draw_grid_fit(&r_l0, &ureg, model);
+    let l0_pair = hstack_pair(&l0_ref_vis, &e_shell, 8);
+    let l0_path = out_dir.join("layer_0_shell.png");
+    save_png(&l0_pair, &l0_path)?;
+
+    // ---- L1: Ground (clean plate or prop-masked bare floor comparison) ----
+    let l1_ref_stats = extract_grid_stats(&r_l1, &ureg, model.cols, model.rows);
+    let l1_eng_stats = extract_grid_stats(&e_ground, &ureg, model.cols, model.rows);
+    let prop_mask = static_prop_mask(model, 0);
+    let mut bare_ref_l = Vec::new();
+    let mut bare_eng_l = Vec::new();
+    for y in 0..model.rows {
+        for x in 0..model.cols {
+            let idx = y * model.cols + x;
+            if model.tile(x, y) == '.' && !prop_mask[idx] {
+                bare_ref_l.push(l1_ref_stats[idx].luma);
+                bare_eng_l.push(l1_eng_stats[idx].luma);
+            }
+        }
+    }
+    let scale_l = (median_f32(&bare_ref_l).max(1.0)) / (median_f32(&bare_eng_l).max(1.0));
+    // Build engine ground prototypes on bare floor cells (same calibration as build_pass1_patch)
+    let mut proto_sum: BTreeMap<String, ([f64; 3], usize)> = BTreeMap::new();
+    for y in 0..model.rows {
+        for x in 0..model.cols {
+            let idx = y * model.cols + x;
+            if model.tile(x, y) == '.' && !prop_mask[idx] {
+                let g = model.ground(x, y);
+                if !g.is_empty() {
+                    let c = l1_eng_stats[idx].rgb;
+                    let e = proto_sum.entry(g.to_string()).or_insert(([0.0; 3], 0));
+                    e.0[0] += (c[0] * scale_l).min(255.0) as f64;
+                    e.0[1] += (c[1] * scale_l).min(255.0) as f64;
+                    e.0[2] += (c[2] * scale_l).min(255.0) as f64;
+                    e.1 += 1;
+                }
+            }
+        }
+    }
+    let protos: Vec<(String, [f32; 3])> = proto_sum
+        .into_iter()
+        .map(|(k, (s, n))| (k, [(s[0] / n as f64) as f32, (s[1] / n as f64) as f32, (s[2] / n as f64) as f32]))
+        .collect();
+    let (mut g_match, mut g_total, mut l1_delta_sum) = (0usize, 0usize, 0.0f64);
+    for y in 0..model.rows {
+        for x in 0..model.cols {
+            let idx = y * model.cols + x;
+            if model.tile(x, y) != '.' || (prop_mask[idx] && refs.l1_cleanplate.is_none()) {
+                continue;
+            }
+            let rc = l1_ref_stats[idx].rgb;
+            let ec = l1_eng_stats[idx].rgb;
+            l1_delta_sum += (((rc[0] - ec[0] * scale_l).powi(2) + (rc[1] - ec[1] * scale_l).powi(2) + (rc[2] - ec[2] * scale_l).powi(2)) / 3.0).sqrt() as f64;
+            if protos.len() >= 2 {
+                let cur = model.ground(x, y);
+                if let Some((best, _)) = protos.iter().min_by(|a, b| rgb_dist2(rc, a.1).total_cmp(&rgb_dist2(rc, b.1))) {
+                    if best == cur {
+                        g_match += 1;
+                    }
+                    g_total += 1;
+                }
+            } else {
+                g_match += 1;
+                g_total += 1;
+            }
+        }
+    }
+    let ground_agreement_pct = g_match as f64 / g_total.max(1) as f64 * 100.0;
+    let l1_mean_delta_rgb = l1_delta_sum / g_total.max(1) as f64;
+    let l1_status = if ground_agreement_pct >= 75.0 {
+        "PASS"
+    } else if ground_agreement_pct >= 55.0 {
+        "WARN"
+    } else {
+        "FAIL"
+    };
+    let (l1_ref_vis, l1_eng_vis) = if refs.l1_cleanplate.is_some() {
+        (r_l1.clone(), e_ground.clone())
+    } else {
+        (apply_prop_mask_overlay(&r_l1, model, tile_px), apply_prop_mask_overlay(&e_ground, model, tile_px))
+    };
+    let l1_pair = hstack_pair(&l1_ref_vis, &l1_eng_vis, 8);
+    let l1_path = out_dir.join("layer_1_ground.png");
+    save_png(&l1_pair, &l1_path)?;
+
+    // ---- L2: Props (exact |L2 - L1| diff when staged, or spotlight + fg mask vs |unlit - ground|) ----
+    let eng_prop_diff = compute_abs_diff_image(&e_unlit, &e_ground, 2.2);
+    let (ref_prop_vis, prop_iou, ref_prop_cells, eng_prop_cells) = if staged_prop_diff {
+        let rdiff = compute_abs_diff_image(&r_l2, &r_l1, 2.2);
+        let r_s = extract_grid_stats(&r_l2, &ureg, model.cols, model.rows);
+        let r1_s = extract_grid_stats(&r_l1, &ureg, model.cols, model.rows);
+        let e2_s = extract_grid_stats(&e_unlit, &ureg, model.cols, model.rows);
+        let e1_s = extract_grid_stats(&e_ground, &ureg, model.cols, model.rows);
+        let (mut inter, mut uni, mut rc, mut ec) = (0usize, 0usize, 0usize, 0usize);
+        for i in 0..(model.cols * model.rows) {
+            let rd = ((r_s[i].rgb[0] - r1_s[i].rgb[0]).abs() + (r_s[i].rgb[1] - r1_s[i].rgb[1]).abs() + (r_s[i].rgb[2] - r1_s[i].rgb[2]).abs()) / 3.0;
+            let ed = ((e2_s[i].rgb[0] - e1_s[i].rgb[0]).abs() + (e2_s[i].rgb[1] - e1_s[i].rgb[1]).abs() + (e2_s[i].rgb[2] - e1_s[i].rgb[2]).abs()) / 3.0;
+            let r_on = rd >= 14.0;
+            let e_on = ed >= 8.0;
+            if r_on { rc += 1; }
+            if e_on { ec += 1; }
+            if r_on && e_on { inter += 1; }
+            if r_on || e_on { uni += 1; }
+        }
+        (rdiff, inter as f64 / uni.max(1) as f64, rc, ec)
+    } else {
+        let r_s = extract_grid_stats(&r_l2, &ureg, model.cols, model.rows);
+        let fg_r = compute_foreground_mask(&r_s, model);
+        let e2_s = extract_grid_stats(&e_unlit, &ureg, model.cols, model.rows);
+        let e1_s = extract_grid_stats(&e_ground, &ureg, model.cols, model.rows);
+        let (mut inter, mut uni, mut rc, mut ec) = (0usize, 0usize, 0usize, 0usize);
+        for i in 0..(model.cols * model.rows) {
+            let ed = ((e2_s[i].rgb[0] - e1_s[i].rgb[0]).abs() + (e2_s[i].rgb[1] - e1_s[i].rgb[1]).abs() + (e2_s[i].rgb[2] - e1_s[i].rgb[2]).abs()) / 3.0;
+            let r_on = fg_r[i] > 0.35;
+            let e_on = ed >= 8.0;
+            if r_on { rc += 1; }
+            if e_on { ec += 1; }
+            if r_on && e_on { inter += 1; }
+            if r_on || e_on { uni += 1; }
+        }
+        (apply_prop_spotlight(&r_l2, model, tile_px), inter as f64 / uni.max(1) as f64, rc, ec)
+    };
+    let l2_status = if prop_iou >= 0.45 {
+        "PASS"
+    } else if prop_iou >= 0.25 {
+        "WARN"
+    } else {
+        "FAIL"
+    };
+    let l2_pair = hstack_pair(&ref_prop_vis, &eng_prop_diff, 8);
+    let l2_path = out_dir.join("layer_2_props.png");
+    save_png(&l2_pair, &l2_path)?;
+
+    // ---- L3: Lighting & Mood (exact L3/L2 ratio when staged, or low-pass illumination vs engine full/unlit) ----
+    let eng_lit_ratio = compute_lighting_ratio_image(&e_full, &e_unlit);
+    let ref_lit_vis = if staged_lit_ratio {
+        compute_lighting_ratio_image(&r_l3, &r_l2)
+    } else {
+        box_blur_lowpass(&r_l3, (tile_px / 2).max(4))
+    };
+    let l3_ref_stats = extract_grid_stats(&r_l3, &ureg, model.cols, model.rows);
+    let l3_eng_stats = extract_grid_stats(&e_full, &ureg, model.cols, model.rows);
+    let mut zone_deltas = Vec::new();
+    for zi in model.zone_defs.values() {
+        let mut rl = Vec::new();
+        let mut el = Vec::new();
+        for y in zi.y0..=zi.y1 {
+            for x in zi.x0..=zi.x1 {
+                if model.zone(x, y) == zi.id && model.tile(x, y) == '.' {
+                    rl.push(l3_ref_stats[y * model.cols + x].luma);
+                    el.push(l3_eng_stats[y * model.cols + x].luma);
+                }
+            }
+        }
+        if !rl.is_empty() {
+            zone_deltas.push((median_f32(&rl) - median_f32(&el)).abs() as f64);
+        }
+    }
+    let mean_zone_dl = if zone_deltas.is_empty() { 0.0 } else { zone_deltas.iter().sum::<f64>() / zone_deltas.len() as f64 };
+    let l3_status = if mean_zone_dl <= 6.0 {
+        "PASS"
+    } else if mean_zone_dl <= 14.0 {
+        "WARN"
+    } else {
+        "FAIL"
+    };
+    let eng_l3_vis = if staged_lit_ratio { eng_lit_ratio } else { box_blur_lowpass(&e_full, (tile_px / 2).max(4)) };
+    let l3_pair = hstack_pair(&ref_lit_vis, &eng_l3_vis, 8);
+    let l3_path = out_dir.join("layer_3_lighting.png");
+    save_png(&l3_pair, &l3_path)?;
+
+    // Stacked 4-row master sheet
+    let sheet = vstack_rows(&[&l0_pair, &l1_pair, &l2_pair, &l3_pair], 10);
+    let sheet_path = out_dir.join("layer_sheet.png");
+    save_png(&sheet, &sheet_path)?;
+
+    Ok(json!({
+        "map_id": model.id,
+        "mode": if staged_prop_diff && staged_lit_ratio { "staged_3_layer" } else if staged_prop_diff || staged_lit_ratio { "staged_partial" } else { "composite_decomposed" },
+        "layers": {
+            "L0_shell": {
+                "status": l0_status,
+                "aspect_drift_pct": round2(aspect_drift_pct),
+                "orthographic_hv_ratio": round2(hv_ratio),
+                "wall_floor_contrast": round2(wf_contrast),
+                "image": l0_path.display().to_string(),
+                "next_action": if l0_status == "PASS" { "locked" } else { "retrigger Stage 1 cleanplate (enqueue stage=cleanplate)" },
+            },
+            "L1_ground": {
+                "status": l1_status,
+                "source": if refs.l1_cleanplate.is_some() { "staged_cleanplate" } else { "prop_masked_composite" },
+                "ground_agreement_pct": round2(ground_agreement_pct),
+                "mean_bare_floor_delta_rgb": round2(l1_mean_delta_rgb),
+                "image": l1_path.display().to_string(),
+                "next_action": if l1_status == "PASS" { "locked" } else { "run aegis align-map patch mode=ground" },
+            },
+            "L2_props": {
+                "status": l2_status,
+                "source": if staged_prop_diff { "exact_L2_minus_L1_diff" } else { "composite_fg_mask" },
+                "prop_mask_iou": round3(prop_iou),
+                "ref_prop_cells": ref_prop_cells,
+                "engine_prop_cells": eng_prop_cells,
+                "image": l2_path.display().to_string(),
+                "next_action": if l2_status == "PASS" { "locked" } else { "run aegis align-map patch mode=props or inspect Pass 3 sprite crops" },
+            },
+            "L3_lighting": {
+                "status": l3_status,
+                "source": if staged_lit_ratio { "exact_L3_div_L2_ratio" } else { "lowpass_illumination" },
+                "mean_zone_delta_l": round2(mean_zone_dl),
+                "image": l3_path.display().to_string(),
+                "next_action": if l3_status == "PASS" { "locked" } else { "run aegis align-map run apply_fx=1 to solve MapFx" },
+            }
+        },
+        "layer_sheet": sheet_path.display().to_string(),
+    }))
+}
+
+fn cmd_layers<G: Game>(game: &G, args: &Args) -> Result<()> {
+    let map_id = args.keys.get("map").context("layers requires map=<id>")?;
+    let view = args.key("view", "square");
+    let fx_opt = args.keys.get("fx").map(String::as_str);
+    let out_dir = PathBuf::from(args.key("out", &format!("out/align/{map_id}/layers")));
+    std::fs::create_dir_all(&out_dir)?;
+
+    let ref_comp = match args.keys.get("ref") {
+        Some(p) => Some(load_image(Path::new(p))?),
+        None => None,
+    };
+    let ref_l1 = match args.keys.get("ref_l1") {
+        Some(p) => Some(load_image(Path::new(p))?),
+        None => None,
+    };
+    let ref_l2 = match args.keys.get("ref_l2") {
+        Some(p) => Some(load_image(Path::new(p))?),
+        None => None,
+    };
+    let ref_l3 = match args.keys.get("ref_l3") {
+        Some(p) => Some(load_image(Path::new(p))?),
+        None => None,
+    };
+    if ref_comp.is_none() && ref_l1.is_none() && ref_l2.is_none() && ref_l3.is_none() {
+        bail!("layers requires ref=<img.png|jpg> or staged ref_l1=/ref_l2=/ref_l3=");
+    }
+
+    let data_dir = game.data_dir(args)?;
+    let model = MapModel::load(&data_dir, map_id, None)?;
+    let exe = match args.keys.get("exe") {
+        Some(p) => PathBuf::from(p),
+        None => {
+            let manifest_path = game.manifest_path(args)?;
+            let manifest = Manifest::read(&manifest_path).map_err(anyhow::Error::msg)?;
+            std::env::current_exe()?.with_file_name(format!("{}{}", manifest.id, std::env::consts::EXE_SUFFIX))
+        }
+    };
+
+    let e_shell_p = out_dir.join("engine_L0_shell.png");
+    let e_ground_p = out_dir.join("engine_L1_ground.png");
+    let e_unlit_p = out_dir.join("engine_L2_unlit.png");
+    let e_full_p = out_dir.join("engine_L3_full.png");
+    invoke_render_map(&exe, &data_dir, map_id, &view, Some("none"), Some("shell"), &e_shell_p)?;
+    invoke_render_map(&exe, &data_dir, map_id, &view, Some("none"), Some("ground"), &e_ground_p)?;
+    invoke_render_map(&exe, &data_dir, map_id, &view, Some("none"), Some("unlit"), &e_unlit_p)?;
+    invoke_render_map(&exe, &data_dir, map_id, &view, fx_opt, Some("full"), &e_full_p)?;
+
+    let e_shell = load_image(&e_shell_p)?;
+    let e_ground = load_image(&e_ground_p)?;
+    let e_unlit = load_image(&e_unlit_p)?;
+    let e_full = load_image(&e_full_p)?;
+
+    let inputs = LayerRefInputs {
+        composite: ref_comp.as_ref(),
+        l1_cleanplate: ref_l1.as_ref(),
+        l2_propped: ref_l2.as_ref(),
+        l3_lit: ref_l3.as_ref(),
+    };
+    let eng = EngineLayers { shell: &e_shell, ground: &e_ground, unlit: &e_unlit, full: &e_full };
+    let report = build_layer_validation(&inputs, &eng, &model, &out_dir)?;
+
+    let report_path = out_dir.join("layers_report.json");
+    std::fs::write(&report_path, serde_json::to_string_pretty(&report)? + "\n")?;
+    let l = &report["layers"];
+    println!(
+        "align-map layers ({map_id}, mode={}):\n  L0 shell:    [{}] drift={}% hv={} wf={}\n  L1 ground:   [{}] agree={}% ({})\n  L2 props:    [{}] iou={} ({})\n  L3 lighting: [{}] delta_L={} ({})\n  sheet:  {}\n  report: {}",
+        report["mode"].as_str().unwrap_or(""),
+        l["L0_shell"]["status"].as_str().unwrap_or(""),
+        l["L0_shell"]["aspect_drift_pct"],
+        l["L0_shell"]["orthographic_hv_ratio"],
+        l["L0_shell"]["wall_floor_contrast"],
+        l["L1_ground"]["status"].as_str().unwrap_or(""),
+        l["L1_ground"]["ground_agreement_pct"],
+        l["L1_ground"]["source"].as_str().unwrap_or(""),
+        l["L2_props"]["status"].as_str().unwrap_or(""),
+        l["L2_props"]["prop_mask_iou"],
+        l["L2_props"]["source"].as_str().unwrap_or(""),
+        l["L3_lighting"]["status"].as_str().unwrap_or(""),
+        l["L3_lighting"]["mean_zone_delta_l"],
+        l["L3_lighting"]["source"].as_str().unwrap_or(""),
+        report["layer_sheet"].as_str().unwrap_or(""),
+        report_path.display()
+    );
     Ok(())
 }
 
@@ -1607,11 +2210,47 @@ pub fn build_refspec(model: &MapModel) -> Value {
     })
 }
 
+#[allow(dead_code)]
 fn render_prompt(model: &MapModel, spec: &Value) -> String {
+    render_prompt_for_stage(model, spec, RefStage::Full)
+}
+
+pub fn render_prompt_for_stage(model: &MapModel, spec: &Value, stage: RefStage) -> String {
     let mut out = String::new();
-    out.push_str(&format!("# Reference Diorama Prompt — {} ({})\n", model.name, model.id));
+    let stage_title = match stage {
+        RefStage::Full => "Full Composite",
+        RefStage::CleanPlate => "STAGE 1 — Architectural Clean Plate (L0+L1: Walls, Water & Ground Only)",
+        RefStage::Propped => "STAGE 2 — Furnished Plate (L2: Add Props on Locked Clean Plate, Flat Lighting)",
+        RefStage::Lit => "STAGE 3 — Final Lighting & Mood Pass (L3: Add Lighting on Locked Furnished Plate)",
+    };
+    out.push_str(&format!("# Reference Diorama Prompt — {} ({}) [{}]\n", model.name, model.id, stage_title));
     out.push_str("# Compiled deterministically from maps.json + locations.json. Do not hand-edit without syncing refspec.\n\n");
-    out.push_str("Top-down front-on orthographic 16-bit pixel-art RPG map diorama (south wall faces visible, every wall edge strictly horizontal or vertical, zero isometric tilt, zero characters/NPCs, zero UI/text, zero cast oval shadows).\n");
+
+    match stage {
+        RefStage::Full => {
+            out.push_str("Top-down front-on orthographic 16-bit pixel-art RPG map diorama (south wall faces visible, every wall edge strictly horizontal or vertical, zero isometric tilt, zero characters/NPCs, zero UI/text, zero cast oval shadows).\n");
+        }
+        RefStage::CleanPlate => {
+            out.push_str("STAGE 1 ARCHITECTURAL CLEAN PLATE — Top-down front-on orthographic 16-bit pixel-art RPG map shell and ground surfaces ONLY (south wall faces visible, every wall edge strictly horizontal or vertical, zero isometric tilt).\n");
+            out.push_str("STRICT STAGE 1 RULES:\n");
+            out.push_str("- Draw ONLY the walls, doorways/openings, water basins/channels, and floor/ground materials (stone, planks, mud, moss, puddles).\n");
+            out.push_str("- DO NOT draw any movable furniture, tables, bunks, crates, boats, anvils, torches, lanterns, braziers, or props.\n");
+            out.push_str("- Use EVEN, FLAT, NEUTRAL overcast lighting across every room (NO warm torch glow pools, NO dark vignette, NO dramatic shadows yet).\n");
+        }
+        RefStage::Propped => {
+            out.push_str("STAGE 2 FURNISHED PLATE — Edit the FIRST attached locked clean-plate image; use the SECOND attached blockout guide for exact prop positions and footprints.\n");
+            out.push_str("STRICT STAGE 2 RULES:\n");
+            out.push_str("- Preserve ALL walls, doorways, water boundaries, room proportions, and bare floor materials from the attached clean-plate image PIXEL-FOR-PIXEL (zero layout drift).\n");
+            out.push_str("- Add ONLY the listed static landmarks and props below at their exact blockout cells.\n");
+            out.push_str("- Keep EVEN, FLAT, NEUTRAL lighting from the clean plate (NO glowing torch light pools, NO dim ambience, NO dramatic shadows yet; lamps/braziers/hearths appear unlit or flat-shaded).\n");
+        }
+        RefStage::Lit => {
+            out.push_str("STAGE 3 LIGHTING & ATMOSPHERE PASS — Edit the attached locked furnished plate image.\n");
+            out.push_str("STRICT STAGE 3 RULES:\n");
+            out.push_str("- Preserve EVERY wall, doorway, water edge, floor tile, and prop silhouette PIXEL-FOR-PIXEL (DO NOT move, add, or remove any prop or wall).\n");
+            out.push_str("- Add ONLY canonical lighting, localized warm/cool light pools strictly centered on visible light-emitting props (braziers, hearths, sconces, lanterns, candles), subtle base contact shadows, and per-zone atmospheric brightness/tint contrast.\n");
+        }
+    }
     out.push_str(&format!("Grid proportion: {} columns x {} rows.\n\n", model.cols, model.rows));
 
     out.push_str("ROOMS & MATERIALS:\n");
@@ -1647,16 +2286,18 @@ fn render_prompt(model: &MapModel, spec: &Value) -> String {
         }
     }
 
-    out.push_str("\nREQUIRED STATIC LANDMARKS & PROPS:\n");
-    if let Some(clauses) = spec["required_clauses"].as_array() {
-        for c in clauses {
-            out.push_str(&format!(
-                "- [{}] {} x{} in zone '{}'\n",
-                c["severity"].as_str().unwrap_or("HARD"),
-                c["art"].as_str().unwrap_or(""),
-                c["count"],
-                c["zone"].as_str().unwrap_or("map")
-            ));
+    if stage != RefStage::CleanPlate {
+        out.push_str("\nREQUIRED STATIC LANDMARKS & PROPS:\n");
+        if let Some(clauses) = spec["required_clauses"].as_array() {
+            for c in clauses {
+                out.push_str(&format!(
+                    "- [{}] {} x{} in zone '{}'\n",
+                    c["severity"].as_str().unwrap_or("HARD"),
+                    c["art"].as_str().unwrap_or(""),
+                    c["count"],
+                    c["zone"].as_str().unwrap_or("map")
+                ));
+            }
         }
     }
 
@@ -1666,10 +2307,23 @@ fn render_prompt(model: &MapModel, spec: &Value) -> String {
             out.push_str(&format!("- {}\n", f["rule"].as_str().unwrap_or("")));
         }
     }
+    if stage == RefStage::CleanPlate {
+        out.push_str("- NO furniture, crates, tables, boats, braziers, torches, or movable props in Stage 1.\n");
+        out.push_str("- NO light pools, glow halos, or heavy darkness/vignettes in Stage 1.\n");
+    } else if stage == RefStage::Propped {
+        out.push_str("- NO shifting, resizing, or recoloring of walls/water/floor from Stage 1.\n");
+        out.push_str("- NO warm light pools or dark ambience vignettes in Stage 2.\n");
+    } else if stage == RefStage::Lit {
+        out.push_str("- NO added, removed, or moved props/walls compared to Stage 2.\n");
+    }
     out
 }
 
 pub fn render_blockout(model: &MapModel, tile_px: usize) -> RgbaImg {
+    render_blockout_for_stage(model, tile_px, RefStage::Full)
+}
+
+pub fn render_blockout_for_stage(model: &MapModel, tile_px: usize, stage: RefStage) -> RgbaImg {
     let w = model.cols * tile_px;
     let h = model.rows * tile_px;
     let mut img = RgbaImg::new(w, h, [14, 14, 18, 255]);
@@ -1700,14 +2354,16 @@ pub fn render_blockout(model: &MapModel, tile_px: usize) -> RgbaImg {
             img.stroke_rect(x * tile_px, y * tile_px, tile_px, tile_px, 1, [0, 0, 0, 40]);
         }
     }
-    // Static prop footprints
-    for p in &model.props {
-        if p.dynamic {
-            continue;
+    // Static prop footprints (omitted in CleanPlate stage so the model paints an empty architectural shell)
+    if stage != RefStage::CleanPlate {
+        for p in &model.props {
+            if p.dynamic {
+                continue;
+            }
+            let col = if p.layer == "ground" { [160, 140, 90, 150] } else { [210, 165, 95, 195] };
+            img.fill_rect(p.x * tile_px + 2, p.y * tile_px + 2, (p.w * tile_px).saturating_sub(4), (p.h * tile_px).saturating_sub(4), col);
+            img.stroke_rect(p.x * tile_px + 1, p.y * tile_px + 1, (p.w * tile_px).saturating_sub(2), (p.h * tile_px).saturating_sub(2), 1, [30, 20, 12, 255]);
         }
-        let col = if p.layer == "ground" { [160, 140, 90, 150] } else { [210, 165, 95, 195] };
-        img.fill_rect(p.x * tile_px + 2, p.y * tile_px + 2, (p.w * tile_px).saturating_sub(4), (p.h * tile_px).saturating_sub(4), col);
-        img.stroke_rect(p.x * tile_px + 1, p.y * tile_px + 1, (p.w * tile_px).saturating_sub(2), (p.h * tile_px).saturating_sub(2), 1, [30, 20, 12, 255]);
     }
     // Exits highlighted in bright cyan
     for e in &model.exits {
@@ -2027,12 +2683,165 @@ fn draw_grid_fit(ref_img: &RgbaImg, reg: &GridRegistration, model: &MapModel) ->
     vis
 }
 
+/// Resamples a registered image onto a uniform `(cols * tile_px, rows * tile_px)` pixel grid cell-by-cell
+/// so inter-stage (`L2 - L1`, `L3 / L2`) and ref-vs-engine layer diffs align pixel-for-pixel across every tile.
+pub fn resample_registered(img: &RgbaImg, reg: &GridRegistration, cols: usize, rows: usize, tile_px: usize) -> RgbaImg {
+    let mut out = RgbaImg::new(cols * tile_px, rows * tile_px, [0, 0, 0, 255]);
+    for gy in 0..rows {
+        for gx in 0..cols {
+            let (sx0, sy0, sx1, sy1) = reg.cell_rect(gx, gy);
+            let sw = sx1.saturating_sub(sx0).max(1);
+            let sh = sy1.saturating_sub(sy0).max(1);
+            for dy in 0..tile_px {
+                let sy = (sy0 + (dy * sh) / tile_px).min(img.h.saturating_sub(1));
+                for dx in 0..tile_px {
+                    let sx = (sx0 + (dx * sw) / tile_px).min(img.w.saturating_sub(1));
+                    out.set(gx * tile_px + dx, gy * tile_px + dy, img.get(sx, sy));
+                }
+            }
+        }
+    }
+    out
+}
+
+fn static_prop_mask(model: &MapModel, pad: usize) -> Vec<bool> {
+    let mut mask = vec![false; model.cols * model.rows];
+    for p in &model.props {
+        if p.dynamic {
+            continue;
+        }
+        let x0 = p.x.saturating_sub(pad);
+        let y0 = p.y.saturating_sub(pad);
+        let x1 = (p.x + p.w + pad).min(model.cols);
+        let y1 = (p.y + p.h + pad).min(model.rows);
+        for y in y0..y1 {
+            for x in x0..x1 {
+                mask[y * model.cols + x] = true;
+            }
+        }
+    }
+    mask
+}
+
+fn compute_abs_diff_image(a: &RgbaImg, b: &RgbaImg, gain: f32) -> RgbaImg {
+    let w = a.w.min(b.w);
+    let h = a.h.min(b.h);
+    let mut out = RgbaImg::new(w, h, [0, 0, 0, 255]);
+    for y in 0..h {
+        for x in 0..w {
+            let pa = a.get(x, y);
+            let pb = b.get(x, y);
+            let dr = (pa[0] as f32 - pb[0] as f32).abs();
+            let dg = (pa[1] as f32 - pb[1] as f32).abs();
+            let db = (pa[2] as f32 - pb[2] as f32).abs();
+            let d = ((dr + dg + db) / 3.0 * gain).clamp(0.0, 255.0);
+            // Visualize changed pixels with original color weighted by delta magnitude so props stay legible
+            let alpha = (d / 48.0).clamp(0.0, 1.0);
+            let r = (pa[0] as f32 * alpha + 18.0 * (1.0 - alpha)).clamp(0.0, 255.0) as u8;
+            let g = (pa[1] as f32 * alpha + 18.0 * (1.0 - alpha)).clamp(0.0, 255.0) as u8;
+            let bl = (pa[2] as f32 * alpha + 24.0 * (1.0 - alpha)).clamp(0.0, 255.0) as u8;
+            out.set(x, y, [r, g, bl, 255]);
+        }
+    }
+    out
+}
+
+fn compute_lighting_ratio_image(lit: &RgbaImg, unlit: &RgbaImg) -> RgbaImg {
+    let w = lit.w.min(unlit.w);
+    let h = lit.h.min(unlit.h);
+    let mut out = RgbaImg::new(w, h, [128, 128, 128, 255]);
+    for y in 0..h {
+        for x in 0..w {
+            let pl = lit.get(x, y);
+            let pu = unlit.get(x, y);
+            // Map ratio 0.0..2.0 -> 0..255 (1.0 = neutral 128 grey; >1.0 bright/warm pool; <1.0 dark/shadow)
+            let rr = (pl[0] as f32 / (pu[0] as f32).max(12.0) * 128.0).clamp(0.0, 255.0) as u8;
+            let rg = (pl[1] as f32 / (pu[1] as f32).max(12.0) * 128.0).clamp(0.0, 255.0) as u8;
+            let rb = (pl[2] as f32 / (pu[2] as f32).max(12.0) * 128.0).clamp(0.0, 255.0) as u8;
+            out.set(x, y, [rr, rg, rb, 255]);
+        }
+    }
+    out
+}
+
+fn box_blur_lowpass(img: &RgbaImg, radius: usize) -> RgbaImg {
+    let r = radius.max(1);
+    let mut horiz = RgbaImg::new(img.w, img.h, [0, 0, 0, 255]);
+    for y in 0..img.h {
+        for x in 0..img.w {
+            let x0 = x.saturating_sub(r);
+            let x1 = (x + r + 1).min(img.w);
+            let (mut sr, mut sg, mut sb) = (0u32, 0u32, 0u32);
+            let cnt = (x1 - x0).max(1) as u32;
+            for sx in x0..x1 {
+                let p = img.get(sx, y);
+                sr += p[0] as u32;
+                sg += p[1] as u32;
+                sb += p[2] as u32;
+            }
+            horiz.set(x, y, [(sr / cnt) as u8, (sg / cnt) as u8, (sb / cnt) as u8, 255]);
+        }
+    }
+    let mut out = RgbaImg::new(img.w, img.h, [0, 0, 0, 255]);
+    for y in 0..img.h {
+        let y0 = y.saturating_sub(r);
+        let y1 = (y + r + 1).min(img.h);
+        let cnt = (y1 - y0).max(1) as u32;
+        for x in 0..img.w {
+            let (mut sr, mut sg, mut sb) = (0u32, 0u32, 0u32);
+            for sy in y0..y1 {
+                let p = horiz.get(x, sy);
+                sr += p[0] as u32;
+                sg += p[1] as u32;
+                sb += p[2] as u32;
+            }
+            out.set(x, y, [(sr / cnt) as u8, (sg / cnt) as u8, (sb / cnt) as u8, 255]);
+        }
+    }
+    out
+}
+
+fn pearson_corr(xs: &[f32], ys: &[f32]) -> f32 {
+    let n = xs.len().min(ys.len());
+    if n < 2 {
+        return 0.0;
+    }
+    let mx = xs[..n].iter().sum::<f32>() / n as f32;
+    let my = ys[..n].iter().sum::<f32>() / n as f32;
+    let (mut num, mut dx2, mut dy2) = (0.0f64, 0.0f64, 0.0f64);
+    for i in 0..n {
+        let dx = (xs[i] - mx) as f64;
+        let dy = (ys[i] - my) as f64;
+        num += dx * dy;
+        dx2 += dx * dx;
+        dy2 += dy * dy;
+    }
+    let denom = (dx2 * dy2).sqrt();
+    if denom < 1e-6 {
+        return 0.0;
+    }
+    (num / denom) as f32
+}
+
+#[allow(dead_code)]
 fn check_reference(ref_img: &RgbaImg, model: &MapModel, spec: &Value, out_dir: &Path) -> Result<Value> {
+    check_reference_staged(ref_img, model, spec, out_dir, RefStage::Full, None)
+}
+
+pub fn check_reference_staged(
+    ref_img: &RgbaImg,
+    model: &MapModel,
+    spec: &Value,
+    out_dir: &Path,
+    stage: RefStage,
+    prev_ref: Option<&RgbaImg>,
+) -> Result<Value> {
     let reg = register_reference(ref_img, model);
     let stats = extract_grid_stats(ref_img, &reg, model.cols, model.rows);
     save_png(&draw_grid_fit(ref_img, &reg, model), &out_dir.join("grid_fit.png"))?;
 
     let mut det_checks = Vec::new();
+    let mut stage_artifacts = Map::new();
 
     // 1. Aspect fit
     let tw = (reg.trim.2 - reg.trim.0) as f64;
@@ -2091,6 +2900,7 @@ fn check_reference(ref_img: &RgbaImg, model: &MapModel, spec: &Value, out_dir: &
 
     // 4. Per-zone material/hue & luminance ordering
     let mut zone_metrics: BTreeMap<String, ([f32; 3], f32)> = BTreeMap::new();
+    let mut zone_floor_stds: Vec<f64> = Vec::new();
     let zones_dir = out_dir.join("zones");
     std::fs::create_dir_all(&zones_dir)?;
     for zi in model.zone_defs.values() {
@@ -2115,6 +2925,17 @@ fn check_reference(ref_img: &RgbaImg, model: &MapModel, spec: &Value, out_dir: &
         let kf = keep.max(1) as f32;
         let mean_rgb = [r / kf, g / kf, b / kf];
         let mean_l = l / kf;
+        if keep >= 4 {
+            let var = floor_cells[..keep]
+                .iter()
+                .map(|c| {
+                    let dl = (c.luma - mean_l) as f64;
+                    dl * dl
+                })
+                .sum::<f64>()
+                / keep as f64;
+            zone_floor_stds.push(var.sqrt());
+        }
         zone_metrics.insert(zi.id.clone(), (mean_rgb, mean_l));
 
         let hue = infer_expected_hue(zi);
@@ -2144,18 +2965,90 @@ fn check_reference(ref_img: &RgbaImg, model: &MapModel, spec: &Value, out_dir: &
         }
     }
 
-    if let Some(pairs) = spec["style_checks"]["expected_zone_luma_pairs"].as_array() {
-        for pair in pairs {
-            if let (Some(hi), Some(lo)) = (pair[0].as_str(), pair[1].as_str()) {
-                if let (Some((_, lh)), Some((_, ll))) = (zone_metrics.get(hi), zone_metrics.get(lo)) {
-                    det_checks.push(json!({
-                        "id": format!("zone_luma_order.{hi}_gt_{lo}"),
-                        "status": if lh > ll { "PASS" } else { "FAIL" },
-                        "hi_l": round2(*lh as f64),
-                        "lo_l": round2(*ll as f64),
-                    }));
+    // Stage 1 (CleanPlate) & Stage 2 (Propped): verify lighting is relatively flat/even (no strong glow pools yet)
+    if matches!(stage, RefStage::CleanPlate | RefStage::Propped) && !zone_floor_stds.is_empty() {
+        let mean_std = zone_floor_stds.iter().sum::<f64>() / zone_floor_stds.len() as f64;
+        let status = if mean_std <= 24.0 { "PASS" } else if mean_std <= 34.0 { "WARN" } else { "FAIL" };
+        det_checks.push(json!({
+            "id": "floor_lighting_evenness",
+            "status": status,
+            "mean_zone_floor_luma_std": round2(mean_std),
+            "max_pass_std": 24.0,
+        }));
+    }
+
+    // Zone luma ordering applies to Lit and Full stages (CleanPlate/Propped are flat-lit)
+    if matches!(stage, RefStage::Full | RefStage::Lit) {
+        if let Some(pairs) = spec["style_checks"]["expected_zone_luma_pairs"].as_array() {
+            for pair in pairs {
+                if let (Some(hi), Some(lo)) = (pair[0].as_str(), pair[1].as_str()) {
+                    if let (Some((_, lh)), Some((_, ll))) = (zone_metrics.get(hi), zone_metrics.get(lo)) {
+                        det_checks.push(json!({
+                            "id": format!("zone_luma_order.{hi}_gt_{lo}"),
+                            "status": if lh > ll { "PASS" } else { "FAIL" },
+                            "hi_l": round2(*lh as f64),
+                            "lo_l": round2(*ll as f64),
+                        }));
+                    }
                 }
             }
+        }
+    }
+
+    // 4b. Inter-stage drift & delta extraction when prev_ref is provided
+    let mut cell_prev_diff: Option<Vec<f32>> = None;
+    if let Some(prev) = prev_ref {
+        let prev_reg = register_reference(prev, model);
+        let cur_grid = resample_registered(ref_img, &reg, model.cols, model.rows, 32);
+        let prev_grid = resample_registered(prev, &prev_reg, model.cols, model.rows, 32);
+        let cur_u = uniform_registration(cur_grid.w, cur_grid.h, model.cols, model.rows);
+        let cur_gstats = extract_grid_stats(&cur_grid, &cur_u, model.cols, model.rows);
+        let prev_gstats = extract_grid_stats(&prev_grid, &cur_u, model.cols, model.rows);
+
+        let mut per_cell_diff = vec![0.0f32; model.cols * model.rows];
+        for i in 0..per_cell_diff.len() {
+            let a = cur_gstats[i].rgb;
+            let b = prev_gstats[i].rgb;
+            per_cell_diff[i] = ((a[0] - b[0]).abs() + (a[1] - b[1]).abs() + (a[2] - b[2]).abs()) / 3.0;
+        }
+
+        if stage == RefStage::Propped {
+            let prop_mask = static_prop_mask(model, 1);
+            let (mut non_prop_sum, mut non_prop_n) = (0.0f64, 0usize);
+            for (i, &d) in per_cell_diff.iter().enumerate() {
+                if !prop_mask[i] {
+                    non_prop_sum += d as f64;
+                    non_prop_n += 1;
+                }
+            }
+            let drift = non_prop_sum / non_prop_n.max(1) as f64;
+            let status = if drift <= 18.0 { "PASS" } else if drift <= 28.0 { "WARN" } else { "FAIL" };
+            det_checks.push(json!({
+                "id": "stage_drift_non_prop",
+                "status": status,
+                "mean_non_prop_delta_rgb": round2(drift),
+                "max_pass_delta": 18.0,
+            }));
+            let diff_vis = compute_abs_diff_image(&cur_grid, &prev_grid, 2.0);
+            let diff_path = out_dir.join("prop_diff_mask.png");
+            save_png(&diff_vis, &diff_path)?;
+            stage_artifacts.insert("prop_diff_mask".into(), json!(diff_path.display().to_string()));
+            cell_prev_diff = Some(per_cell_diff);
+        } else if stage == RefStage::Lit {
+            let cur_edges: Vec<f32> = cur_gstats.iter().map(|s| s.edge).collect();
+            let prev_edges: Vec<f32> = prev_gstats.iter().map(|s| s.edge).collect();
+            let corr = pearson_corr(&cur_edges, &prev_edges) as f64;
+            let status = if corr >= 0.72 { "PASS" } else if corr >= 0.55 { "WARN" } else { "FAIL" };
+            det_checks.push(json!({
+                "id": "stage_structure_preservation",
+                "status": status,
+                "edge_correlation_vs_l2": round3(corr),
+                "min_pass_corr": 0.72,
+            }));
+            let ratio_vis = compute_lighting_ratio_image(&cur_grid, &prev_grid);
+            let ratio_path = out_dir.join("lighting_ratio_map.png");
+            save_png(&ratio_vis, &ratio_path)?;
+            stage_artifacts.insert("lighting_ratio_map".into(), json!(ratio_path.display().to_string()));
         }
     }
 
@@ -2182,6 +3075,21 @@ fn check_reference(ref_img: &RgbaImg, model: &MapModel, spec: &Value, out_dir: &
     if let Some(clauses) = spec["required_clauses"].as_array() {
         for c in clauses {
             let zid = c["zone"].as_str().unwrap_or("");
+            if stage == RefStage::CleanPlate {
+                clause_audit.push(json!({
+                    "id": c["id"],
+                    "kind": "prop",
+                    "severity": c["severity"],
+                    "zone": zid,
+                    "art": c["art"],
+                    "expected_count": c["count"],
+                    "zone_crop": if zid.is_empty() { Value::Null } else { json!(format!("zones/{zid}.png")) },
+                    "deterministic_fg_hits": "skipped",
+                    "deterministic_hint": "SKIPPED_STAGE",
+                    "status": "SKIPPED_STAGE",
+                }));
+                continue;
+            }
             let mut present = 0usize;
             let mut total = 0usize;
             if let Some(pls) = c["placements"].as_array() {
@@ -2191,14 +3099,21 @@ fn check_reference(ref_img: &RgbaImg, model: &MapModel, spec: &Value, out_dir: &
                     let pw = p["cell"][2].as_u64().unwrap_or(1) as usize;
                     let ph = p["cell"][3].as_u64().unwrap_or(1) as usize;
                     let mut hit = false;
+                    let mut max_diff = 0.0f32;
                     for dy in 0..ph {
                         for dx in 0..pw {
                             let xx = (px + dx).min(model.cols - 1);
                             let yy = (py + dy).min(model.rows - 1);
-                            if fg_ref[yy * model.cols + xx] > 0.35 || stats[yy * model.cols + xx].edge > 14.0 {
+                            let idx = yy * model.cols + xx;
+                            if let Some(ref diffs) = cell_prev_diff {
+                                max_diff = max_diff.max(diffs[idx]);
+                            } else if fg_ref[idx] > 0.35 || stats[idx].edge > 14.0 {
                                 hit = true;
                             }
                         }
+                    }
+                    if cell_prev_diff.is_some() {
+                        hit = max_diff >= 16.0;
                     }
                     if hit {
                         present += 1;
@@ -2206,6 +3121,15 @@ fn check_reference(ref_img: &RgbaImg, model: &MapModel, spec: &Value, out_dir: &
                     total += 1;
                 }
             }
+            let hint = if cell_prev_diff.is_some() {
+                if present == total { "DIFF_PRESENT" } else if present > 0 { "PARTIAL_DIFF" } else { "SUSPICIOUS_EMPTY" }
+            } else if present == total {
+                "SILHOUETTE_PRESENT"
+            } else if present > 0 {
+                "PARTIAL_PRESENCE"
+            } else {
+                "SUSPICIOUS_EMPTY"
+            };
             clause_audit.push(json!({
                 "id": c["id"],
                 "kind": "prop",
@@ -2215,7 +3139,7 @@ fn check_reference(ref_img: &RgbaImg, model: &MapModel, spec: &Value, out_dir: &
                 "expected_count": c["count"],
                 "zone_crop": if zid.is_empty() { Value::Null } else { json!(format!("zones/{zid}.png")) },
                 "deterministic_fg_hits": format!("{present}/{total}"),
-                "deterministic_hint": if present == total { "SILHOUETTE_PRESENT" } else if present > 0 { "PARTIAL_PRESENCE" } else { "SUSPICIOUS_EMPTY" },
+                "deterministic_hint": hint,
                 "status": "PENDING_VISION",
             }));
         }
@@ -2228,6 +3152,7 @@ fn check_reference(ref_img: &RgbaImg, model: &MapModel, spec: &Value, out_dir: &
 
     Ok(json!({
         "map_id": model.id,
+        "stage": stage.as_str(),
         "deterministic_summary": {
             "pass": pass_n,
             "warn": warn_n,
@@ -2241,6 +3166,7 @@ fn check_reference(ref_img: &RgbaImg, model: &MapModel, spec: &Value, out_dir: &
             "snapped_wall_rows": reg.snapped_rows,
             "grid_fit_image": out_dir.join("grid_fit.png").display().to_string(),
         },
+        "stage_artifacts": Value::Object(stage_artifacts),
         "deterministic_checks": det_checks,
         "clauses": clause_audit,
         "forbidden_clauses": spec["forbidden_clauses"],
@@ -3173,5 +4099,111 @@ mod tests {
         assert_eq!(step["entry"]["ground"][3], "mffffffffm");
         // Wall row 0 stays untouched
         assert_eq!(step["entry"]["ground"][0], "mmmmmmmmmm");
+    }
+
+    #[test]
+    fn staged_refspec_prompts_and_blockouts_differentiate_cleanplate_propped_lit() {
+        let m = sample_model();
+        let spec = build_refspec(&m);
+        let p_clean = render_prompt_for_stage(&m, &spec, RefStage::CleanPlate);
+        let p_prop = render_prompt_for_stage(&m, &spec, RefStage::Propped);
+        let p_lit = render_prompt_for_stage(&m, &spec, RefStage::Lit);
+
+        assert!(p_clean.contains("STAGE 1 ARCHITECTURAL CLEAN PLATE"));
+        assert!(!p_clean.contains("REQUIRED STATIC LANDMARKS & PROPS"));
+        assert!(p_prop.contains("STAGE 2 FURNISHED PLATE"));
+        assert!(p_prop.contains("REQUIRED STATIC LANDMARKS & PROPS"));
+        assert!(p_lit.contains("STAGE 3 LIGHTING & ATMOSPHERE PASS"));
+
+        // CleanPlate blockout omits prop rectangles; Propped blockout includes them
+        let b_clean = render_blockout_for_stage(&m, 16, RefStage::CleanPlate);
+        let b_prop = render_blockout_for_stage(&m, 16, RefStage::Propped);
+        // Prop bench_a sits at (2, 1): pixel (2*16+8, 1*16+8) differs between CleanPlate and Propped
+        assert_ne!(b_clean.get(2 * 16 + 8, 1 * 16 + 8), b_prop.get(2 * 16 + 8, 1 * 16 + 8));
+
+        // Enqueue staged with session_ref populates metadata.record.stage and session_ref
+        let scratch = aegis_core::scratch::Scratch::new("align_stage_enq");
+        let block = scratch.path().join("demo.blockout.png");
+        save_png(&b_prop, &block).unwrap();
+        let (_pr, req) = build_enqueue_request_staged(&m, &spec, RefStage::Propped, &block, None, None, Some("demo_clean_q1"), None, "16:9", 1);
+        assert_eq!(req["metadata"]["record"]["stage"], "propped");
+        assert_eq!(req["metadata"]["record"]["session_ref"], "demo_clean_q1");
+        assert_eq!(req["metadata"]["asset_id"], "demo_vault_ref_propped");
+    }
+
+    #[test]
+    fn staged_check_ref_detects_prop_diff_and_layout_drift() {
+        let m = sample_model();
+        let spec = build_refspec(&m);
+        let (w, h) = (m.cols * 16, m.rows * 16);
+        // L1 cleanplate: crisp ortho walls (20) vs bright/dark floors
+        let mut l1 = RgbaImg::new(w, h, [20, 20, 20, 255]);
+        for y in 0..m.rows {
+            for x in 0..m.cols {
+                if m.tile(x, y) != '#' {
+                    let c = if m.zone(x, y) == "bright_room" { [120, 120, 124, 255] } else { [76, 86, 74, 255] };
+                    l1.fill_rect(x * 16, y * 16, 16, 16, c);
+                }
+            }
+        }
+        // L2 propped: identical to L1 except bench_a at (2..4, 1) and brazier_1 at (8, 2) painted cleanly
+        let mut l2 = l1.clone();
+        l2.fill_rect(2 * 16 + 2, 1 * 16 + 2, 2 * 16 - 4, 16 - 4, [180, 110, 50, 255]);
+        l2.fill_rect(8 * 16 + 2, 2 * 16 + 2, 16 - 4, 16 - 4, [230, 150, 40, 255]);
+
+        let scratch = aegis_core::scratch::Scratch::new("align_stage_check");
+        let a_clean = check_reference_staged(&l1, &m, &spec, &scratch.path().join("s1"), RefStage::CleanPlate, None).unwrap();
+        assert_eq!(a_clean["stage"], "cleanplate");
+        assert!(a_clean["clauses"].as_array().unwrap().iter().any(|c| c["status"] == "SKIPPED_STAGE"));
+
+        let a_prop = check_reference_staged(&l2, &m, &spec, &scratch.path().join("s2"), RefStage::Propped, Some(&l1)).unwrap();
+        let drift_check = a_prop["deterministic_checks"].as_array().unwrap().iter().find(|c| c["id"] == "stage_drift_non_prop").unwrap();
+        assert_eq!(drift_check["status"], "PASS");
+        let prop_clauses: Vec<&Value> = a_prop["clauses"].as_array().unwrap().iter().filter(|c| c["kind"] == "prop").collect();
+        assert!(prop_clauses.iter().all(|c| c["deterministic_hint"] == "DIFF_PRESENT"), "exact L2-L1 diff detects both props: {prop_clauses:?}");
+        assert!(scratch.path().join("s2").join("prop_diff_mask.png").is_file());
+    }
+
+    #[test]
+    fn layer_validation_extracts_exact_prop_diff_and_lighting_ratio_from_staged_refs() {
+        let m = sample_model();
+        let (w, h) = (m.cols * 16, m.rows * 16);
+        let mut l1 = RgbaImg::new(w, h, [22, 22, 26, 255]);
+        for y in 0..m.rows {
+            for x in 0..m.cols {
+                if m.tile(x, y) != '#' {
+                    let c = if m.ground(x, y) == "moss" { [52, 74, 48, 255] } else { [108, 110, 116, 255] };
+                    l1.fill_rect(x * 16, y * 16, 16, 16, c);
+                }
+            }
+        }
+        let mut l2 = l1.clone();
+        l2.fill_rect(2 * 16 + 2, 1 * 16 + 2, 2 * 16 - 4, 16 - 4, [180, 110, 50, 255]);
+        l2.fill_rect(8 * 16 + 2, 2 * 16 + 2, 16 - 4, 16 - 4, [230, 150, 40, 255]);
+        // L3 lit: brighten bright_room slightly, warm-tint around brazier
+        let mut l3 = l2.clone();
+        for y in 0..h {
+            for x in 0..w {
+                let mut p = l3.get(x, y);
+                if x < 5 * 16 {
+                    p[0] = (p[0] as f32 * 1.15).min(255.0) as u8;
+                    p[1] = (p[1] as f32 * 1.15).min(255.0) as u8;
+                    p[2] = (p[2] as f32 * 1.15).min(255.0) as u8;
+                }
+                l3.set(x, y, p);
+            }
+        }
+        let scratch = aegis_core::scratch::Scratch::new("align_layers_test");
+        let refs = LayerRefInputs { composite: None, l1_cleanplate: Some(&l1), l2_propped: Some(&l2), l3_lit: Some(&l3) };
+        let eng = EngineLayers { shell: &l1, ground: &l1, unlit: &l2, full: &l3 };
+        let rep = build_layer_validation(&refs, &eng, &m, scratch.path()).unwrap();
+        assert_eq!(rep["mode"], "staged_3_layer");
+        assert_eq!(rep["layers"]["L0_shell"]["status"], "PASS");
+        assert_eq!(rep["layers"]["L1_ground"]["status"], "PASS");
+        assert_eq!(rep["layers"]["L2_props"]["source"], "exact_L2_minus_L1_diff");
+        assert_eq!(rep["layers"]["L2_props"]["status"], "PASS");
+        assert_eq!(rep["layers"]["L3_lighting"]["source"], "exact_L3_div_L2_ratio");
+        assert_eq!(rep["layers"]["L3_lighting"]["status"], "PASS");
+        assert!(scratch.path().join("layer_sheet.png").is_file());
     }
 }

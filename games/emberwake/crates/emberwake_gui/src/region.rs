@@ -3958,6 +3958,20 @@ pub(crate) enum StaticFx {
     Override(aegis_ui::map_fx::MapFx),
 }
 
+/// Which render passes `render_static_map` includes (used for layer-wise alignment & validation).
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StaticLayers {
+    /// Base tiles, walls, borders, and depth shadows only (no composed ground overlay, no props, no lighting/FX).
+    Shell,
+    /// Composed ground overlay + walls, borders, and depth shadows (no props, no lighting/FX).
+    Ground,
+    /// Ground + walls + all props (no `MapFx` zone grading and no dim ambience/light pools).
+    Unlit,
+    /// Full composite: ground + walls + props + `MapFx` + dim ambience/light pools.
+    Full,
+}
+
 /// Deterministic headless full-map renderer for offline alignment and visual diffs (`emberwake render_map=<id>`).
 ///
 /// Renders the entire map at 32 px per tile (`q = 8`, `scale = 1.0`) using the live `RegionMap` pipeline (composed
@@ -3970,6 +3984,7 @@ pub(crate) fn render_static_map(
     map_id: &str,
     view: mapview::View,
     fx_mode: StaticFx,
+    layers: StaticLayers,
     map_override: Option<&Dict>,
 ) -> anyhow::Result<aegis_ui::canvas::Canvas> {
     let d = cx.data.clone();
@@ -4013,9 +4028,15 @@ pub(crate) fn render_static_map(
         fonts: aegis_ui::painter::Fonts::new(&font_bytes),
         kit: aegis_ui::ui::Kit::default(),
     };
+    let draw_ground_overlay = layers != StaticLayers::Shell;
+    let draw_props = matches!(layers, StaticLayers::Unlit | StaticLayers::Full);
+    let draw_lighting = layers == StaticLayers::Full;
+
     let mut ground = MapGround::default();
-    ground.sync(cx, &t, &sets, view, q);
-    let has_ground = ground.has();
+    if draw_ground_overlay {
+        ground.sync(cx, &t, &sets, view, q);
+    }
+    let has_ground = draw_ground_overlay && ground.has();
     let art_size = if tilted { ART_TILE * q / 4 } else { cw };
     let ch_at = |x: i32, y: i32| explore::tile(&t, x as i64, y as i64).unwrap_or('#');
     let border_at = |x: i32, y: i32| on_border(&t, (map_w, map_h), x as i64, y as i64);
@@ -4045,7 +4066,9 @@ pub(crate) fn render_static_map(
     {
         let mut ui: Ui<RAct> = Ui::new(&mut g, (-1, -1), false);
         ui.p.fill(map_rect, th().game("map_ground", rgb(14, 18, 26)));
-        ground.draw(&mut ui.p, &geo);
+        if draw_ground_overlay {
+            ground.draw(&mut ui.p, &geo);
+        }
         for y in 0..mh_i {
             for x in 0..mw_i {
                 let r = geo.cell(x, y);
@@ -4116,8 +4139,10 @@ pub(crate) fn render_static_map(
         if wall_face_tiles > 0 {
             draw_depth_floor_shadows_and_water(&mut ui, &geo, (mw_i, mh_i), (0, mw_i - 1), (0, mh_i - 1), has_ground, &ch_at, &is_wall);
         }
-        for p in props.iter().filter(|p| p.ground) {
-            draw_prop(&mut ui, cx, p, None, false, map_rect, q);
+        if draw_props {
+            for p in props.iter().filter(|p| p.ground) {
+                draw_prop(&mut ui, cx, p, None, false, map_rect, q);
+            }
         }
         let mut blocks: Vec<Block> = Vec::new();
         if tilted {
@@ -4138,9 +4163,11 @@ pub(crate) fn render_static_map(
         for item in &order {
             match *item {
                 Item::Prop(i) => {
-                    let p = &props[i];
-                    let (fit, mounted) = prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles);
-                    draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
+                    if draw_props {
+                        let p = &props[i];
+                        let (fit, mounted) = prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles);
+                        draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
+                    }
                 }
                 Item::Block(i) => {
                     let b = &blocks[i];
@@ -4153,17 +4180,19 @@ pub(crate) fn render_static_map(
                 Item::Marker(_) | Item::Party => {}
             }
         }
-        let map_fx = match fx_mode {
-            StaticFx::Layered => aegis_ui::map_fx::MapFx::load_layered(cx.art.layers(), map_id),
-            StaticFx::Disabled => None,
-            StaticFx::Override(fx) => Some(fx),
-        };
-        if let Some(fx) = map_fx.as_ref().filter(|f| !f.zones.is_empty()) {
-            apply_map_zone_grades(&mut ui, &t, &geo, map_rect, (mw_i, mh_i), &is_wall, fx);
-        }
-        let effective_dim = map_fx.as_ref().and_then(|f| f.dim_ambience).unwrap_or(dim_ambience);
-        if effective_dim {
-            apply_dim_ambience(&mut ui, &geo, &props, &prop_arts, &[], &is_wall, wall_face_tiles, map_fx.as_ref());
+        if draw_lighting {
+            let map_fx = match fx_mode {
+                StaticFx::Layered => aegis_ui::map_fx::MapFx::load_layered(cx.art.layers(), map_id),
+                StaticFx::Disabled => None,
+                StaticFx::Override(fx) => Some(fx),
+            };
+            if let Some(fx) = map_fx.as_ref().filter(|f| !f.zones.is_empty()) {
+                apply_map_zone_grades(&mut ui, &t, &geo, map_rect, (mw_i, mh_i), &is_wall, fx);
+            }
+            let effective_dim = map_fx.as_ref().and_then(|f| f.dim_ambience).unwrap_or(dim_ambience);
+            if effective_dim {
+                apply_dim_ambience(&mut ui, &geo, &props, &prop_arts, &[], &is_wall, wall_face_tiles, map_fx.as_ref());
+            }
         }
     }
     Ok(g.canvas)
