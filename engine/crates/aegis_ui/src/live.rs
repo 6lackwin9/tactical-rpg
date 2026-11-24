@@ -19,10 +19,6 @@ use std::sync::mpsc;
 pub const POLL: Duration = Duration::from_millis(500);
 /// How long a reload's line shows.
 pub const LINE_FOR: Duration = Duration::from_secs(3);
-/// The theme file over the layers.
-pub const THEME_FILE: &str = "ui/theme.json";
-/// The screen layouts' folder over the layers.
-pub const LAYOUTS_DIR: &str = "ui/layouts/";
 /// The most files one watcher follows (a folder past it is followed in part, with a log line).
 pub const FILES_MAX: usize = 50_000;
 
@@ -93,9 +89,9 @@ impl Changes {
             }
             let Some(rel) = layers.iter().find_map(|r| p.strip_prefix(r).ok()).map(rel_of) else { continue };
             let ext = Path::new(&rel).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-            if rel == THEME_FILE {
+            if rel == crate::theme::FILE {
                 c.theme = true;
-            } else if rel.starts_with(LAYOUTS_DIR) {
+            } else if rel.strip_prefix(crate::screen_layout::LAYOUTS_DIR).is_some_and(|r| r.starts_with('/')) {
                 c.layouts.push(rel);
             } else if matches!(ext.as_str(), "ogg" | "wav" | "mp3" | "flac") {
                 c.sounds.push(rel);

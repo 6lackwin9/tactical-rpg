@@ -88,7 +88,7 @@ impl Switch {
 }
 
 fn r2(x: f64) -> f64 {
-    (x * 100.0).round() / 100.0
+    crate::perf::round_to(x, 2)
 }
 
 /// The report of `switches` at the replay's frame step: per switch `what`, `from`, `to`, `handler_ms`, `first_ms`,

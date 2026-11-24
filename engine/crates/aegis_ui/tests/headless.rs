@@ -147,6 +147,7 @@ fn options(port: u16, h: Headless) -> Options {
         window_sizes: Value::Null,
         headless: Some(h),
         live: false,
+        feel: false,
     }
 }
 

@@ -587,6 +587,7 @@ fn over_the_agent_link_a_hosting_screen_drags_reads_and_sets_the_layout() {
         window_sizes: Value::Null,
         headless: Some(Headless { size: (800, 450), fps: DEFAULT_FPS, dpr: 1.0, idle: Duration::from_secs(IDLE_EXIT_S), stepped: false }),
         live: false,
+        feel: false,
     };
     let thread = std::thread::spawn(move || {
         let host = Host { ed: editor().with_view(Viewport::new(Rect::new(190, 30, 420, 300), (30.0, 20.0))), w: Vec::new() };

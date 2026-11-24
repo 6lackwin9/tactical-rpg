@@ -29,6 +29,9 @@ fn a_game_folder_gives_the_manifest_the_options_and_the_folders() {
     assert!(!d.options.live && !s.options.live);
     assert!(Start::new("salve", Some(t.path_buf()), Path::new("eng"), &args(&[("dev", "1")]), None).options.live);
     assert!(!Start::new("salve", Some(t.path_buf()), Path::new("eng"), &args(&[("dev", "1"), ("live", "0")]), None).options.live, "a scenario run's live=0");
+    // ENGINE-66 (CLN-77): `dev` and `feel` read once here
+    let k = Start::new("salve", Some(t.path_buf()), Path::new("eng"), &args(&[("dev", "1"), ("feel", "1")]), None);
+    assert!(k.dev && k.options.feel && !d.dev && !d.options.feel);
     assert_eq!(arg(&args(&[("a", "1")]), "a"), Some("1"));
 }
 

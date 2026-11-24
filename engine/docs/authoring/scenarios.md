@@ -172,7 +172,8 @@ and let go, as a window's key down and up: `Held::dir` follows the latest held),
 moved to x, y, each from -1 to 1, y up; the direction it reads under the player's dead zone (`controls::PadTuning`) is
 held the same way, a new one replacing the old, and inside the dead zone it lets go; the report reads a stick that gives
 a direction as a press and one that lets go as a release), `{"wait_ms": n}` (frames drawn for n ms of the run's clock,
-1 to 60000), `{"spike_ms": n}` (one frame that takes n ms, 1 to 2000) and `{"stall_ms": n}` (ENGINE-50 MAP-FRAME1: the
+1 to 60000), `{"spike_ms": n}` (one frame that takes n ms, 1 to 2000; a test hook, as `stall_ms` is: both move the
+shot clock, which only a scenario run has, so a player's build never runs them) and `{"stall_ms": n}` (ENGINE-50 MAP-FRAME1: the
 clock moves n ms with no frame drawn, 1 to 2000, so the next input arrives during a hitch and its frame comes after it). `step_ms` (1 to 200) sets the shot clock's frame
 step for the replay (16.667 for 60 frames a second). With `motion` true the top screen's `Screen::motion` is read after
 every frame and the reply's `motion` (`aegis_ui::walkfeel::report`) gives, per input, `to_move_ms` (to the first frame the
@@ -213,8 +214,9 @@ track after its ask), `decode_ms`, `unheard`, `underruns` (a buffer mixed after 
 debug thread). A window's feel overlay adds the real device's buffer and underruns.
 
 With no window nothing is presented, so a frame is done once drawn; a window adds the copy to the GPU and the present (and
-vsync's wait). The same numbers come from a real window with `--feel` (or `feel=1`) on the game's command line, or the
-setting `"feel": true`: an overlay at the top left (the last frame's ms, the worst frame of the last second, the last
+vsync's wait). The same numbers come from a real window with `--feel` (or `feel=1`) on the game's command line (the run's
+switch, read once by `start::Start` into `Options::feel`), or the settings key `"feel": true` (the player's switch: it
+stays on across runs until removed; no Settings row writes it): an overlay at the top left (the last frame's ms, the worst frame of the last second, the last
 input's input-to-present ms) and a line per input in `feel.log` beside the run's `game.log`. Use a release build for numbers
 a player would see (`tools/fc.sh scenario <id> profile=release`).
 

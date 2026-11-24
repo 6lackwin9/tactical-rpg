@@ -44,7 +44,7 @@ fn ms(t: Instant, t0: Instant) -> f64 {
 }
 
 fn r3(x: f64) -> f64 {
-    (x * 1000.0).round() / 1000.0
+    crate::perf::round_to(x, 3)
 }
 
 /// The report: `sounds` (each: `rel`, `bus`, `asked_ms`, `heard_ms`, `after_ask_ms`, `after_input_ms`, `beat_ms`,

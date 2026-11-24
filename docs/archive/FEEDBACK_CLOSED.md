@@ -7008,3 +7008,24 @@ UN-01 to UN-12 are closed and moved to the archive (2026-11-11). New notes start
 | `ENGINE-62` (`CRASH-SAFE1`) | Built (tools lane) | `develop` | A caught panic writes the report (now with build, top screen and `feel.log` tail) and the game's rescue save (`Context::rescue`, keyed `rescue`); the next start shows one line with the report path and Open folder (any game, the hello sample included); Emberwake's title offers the rescue beside Continue. Saves keep `<file>.prev`; a damaged slot is kept, named and loads its copy. Goldens unchanged. FB-511 |
 | `ENGINE-63` (`PAD-TUNE1`) | Built (tools lane) | `develop` | Settings > Controls has a Gamepad group: stick dead zone (0.15 to 0.6), d-pad and stick repeat delay and rate (today's values by default), saved under `gamepad` (`aegis_ui::controls::PadTuning`), and a live stick Test line. The Windows pad poll runs inside the frame's catch. The feel script replays `{"stick": [x, y]}`; `walk_feel` has a stick case. Goldens unchanged. FB-512 |
 | `ENGINE-64` (`LIVE-RELOAD1`) | Built (tools lane) | `develop` | `dev=1` (in a build with the dev tools; never a player build or the web) watches the asset layers and data every 500 ms. Art, theme, layouts and sounds reload in place; data reloads through `Data::open` and is swapped only when it loads clean (the region map rebuilds, a battle keeps its units), else a notice names the file. One line per reload; nothing during a save write; scenario runs pass `live=0`. Goldens unchanged. FB-513 |
+
+## FB-514 (answered in READY @839fbf7b, moved 2026-11-24)
+
+### FB-514: ENGINE-65 TIDY3 done; FEEDBACK.md archived, cleanup pass 4 proposed
+
+- **Status**: closed: accepted (@839fbf7b), follow-up `TIDY4`
+  clean. The gate was not re-run: no code changed since gate97 (`d3e27428`).
+- **Spec**: `docs/READY.md` row `ENGINE-65` (`TIDY3`).
+- **(1) Archive**: `feedback_check.py archive` moved the 50 answered items (FB-388 to FB-513) to
+  `docs/archive/FEEDBACK_CLOSED.md` (Status lines rewritten `closed: accepted (@d5b35cd5)`). The 171 status rows of
+  section 1 moved there too, under "Build status rows through ENGINE-64", and one summary row replaces them.
+  FEEDBACK.md went from 241,859 bytes to about 3 KB, and `feedback_check.py check` is clean (no open items, 180
+  answer rows).
+- **(2) Housekeeper pass 4**: `docs/specs/CLEANUP.md` "Pass 4" lists `CLN-72`..`CLN-81`, all `proposed`. I found no
+  dead modules. The duplicates: the build-name string (x4), ms rounding helpers (x6), two medians (merging moves
+  `walk_feel` numbers; Design call), path constants in `live.rs`, cache clearing in `Audio`. Structure: the 220-line
+  headless `feel` request. Launch keys and settings: `feel` read from process args outside `Start`, `dev=1` parsed
+  twice, the settings `"feel"` key no row sets (Design call). Test hooks in shipped paths: `stall_ms`/`spike_ms`, the
+  release-refused `panic` (keep, document). Unused shipped helper: `controls::stick_dir`. Items that change numbers
+  or API say so.
+- **Docs delta**: none beyond CLEANUP.md (Design's file, written at Design's request for this row).

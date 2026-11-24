@@ -123,6 +123,7 @@ fn start(root: &Path, live: bool) -> (BufReader<TcpStream>, std::thread::JoinHan
         window_sizes: Value::Null,
         headless: Some(Headless { size: (640, 360), fps: 30, dpr: 1.0, idle: Duration::from_secs(60), stepped: true }),
         live,
+        feel: false,
     };
     let root = root.to_path_buf();
     let thread = std::thread::spawn(move || {

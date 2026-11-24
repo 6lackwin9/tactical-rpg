@@ -306,10 +306,10 @@ impl<G: Context> Loop<G> {
             ms.push(crate::perf::ms_since(t));
         }
         let calib_after = crate::perf::calib();
-        let r = |x: f64| (x * 1000.0).round() / 1000.0;
+        let r = |x: f64| crate::perf::round_to(x, 3);
         let canvas = [self.shell.gfx.canvas.w, self.shell.gfx.canvas.h];
         json!({"ok": true, "stats": crate::perf::Stats::of(&ms).to_json(), "calib_before": r(calib_before), "calib_after": r(calib_after),
-            "steady": crate::perf::steady(calib_before, calib_after), "canvas": canvas, "build": if cfg!(debug_assertions) { "dev" } else { "release" }, "frame": self.shell.frames})
+            "steady": crate::perf::steady(calib_before, calib_after), "canvas": canvas, "build": crate::perf::build_name(), "frame": self.shell.frames})
     }
 
     /// ENGINE-45 (FEEL-PROBE1): `{"cmd": "feel", "script": [...], "gap": g}`: replays the script's inputs one by one, each
@@ -381,19 +381,8 @@ impl<G: Context> Loop<G> {
                 if down {
                     held.push(k);
                 }
-                self.shell.cx.held.dir = held.last().and_then(|h| h.dir());
-                let what = format!("{kind} {name}");
-                self.mark(&mut rec, kind, &what, k.dir(), before, !held.is_empty());
-                if down {
-                    self.heard_input();
-                    self.shell.feel_input(&what);
-                    self.shell.key(k);
-                    self.shell.feel_state();
-                }
+                self.hold_input(&mut rec, &held, kind, &format!("{kind} {name}"), k.dir(), before, down.then_some(k), gap);
                 done += 1;
-                for _ in 0..=gap {
-                    self.feel_draw(&mut rec);
-                }
                 continue;
             }
             if let Some(xy) = step.get("stick") {
@@ -418,49 +407,13 @@ impl<G: Context> Loop<G> {
                     }
                     stick = want;
                 }
-                self.shell.cx.held.dir = held.last().and_then(|h| h.dir());
-                let what = format!("stick {x} {y}");
                 // the direction only when it changed (a turn or a new hold); a release when it let go
-                self.mark(&mut rec, "stick", &what, want.filter(|_| changed).and_then(|k| k.dir()), before, !held.is_empty());
-                if let (true, Some(k)) = (changed, want) {
-                    self.heard_input();
-                    self.shell.feel_input(&what);
-                    self.shell.key(k);
-                    self.shell.feel_state();
-                }
+                let dir = want.filter(|_| changed).and_then(|k| k.dir());
+                self.hold_input(&mut rec, &held, "stick", &format!("stick {x} {y}"), dir, before, want.filter(|_| changed), gap);
                 done += 1;
-                for _ in 0..=gap {
-                    self.feel_draw(&mut rec);
-                }
                 continue;
             }
-            if let Some(ms) = step["wait_ms"].as_f64() {
-                let until = Instant::now() + Duration::from_secs_f64(ms.clamp(0.0, 60_000.0) / 1000.0);
-                let mut n = 0;
-                while Instant::now() < until && n < 60 * 60 {
-                    self.feel_draw(&mut rec);
-                    n += 1;
-                }
-                continue;
-            }
-            if let Some(ms) = step["stall_ms"].as_f64() {
-                // ENGINE-50 (MAP-FRAME1): the clock moves `ms` with no frame drawn, so the next input arrives during a
-                // hitch (its frame comes after it, `ms` after the last)
-                let held_now = !held.is_empty();
-                self.mark(&mut rec, "stall", &format!("stall {ms} ms"), None, held_now, held_now);
-                if self.stepped {
-                    aegis_core::clock::advance(Duration::from_secs_f64(ms.clamp(0.0, 2000.0) / 1000.0));
-                }
-                continue;
-            }
-            if let Some(ms) = step["spike_ms"].as_f64() {
-                // a frame that takes `ms` (the shot clock moves that much more before it)
-                let held_now = !held.is_empty();
-                self.mark(&mut rec, "spike", &format!("spike {ms} ms"), None, held_now, held_now);
-                if self.stepped {
-                    aegis_core::clock::advance(Duration::from_secs_f64(ms.clamp(0.0, 2000.0) / 1000.0).saturating_sub(self.every));
-                }
-                self.feel_draw(&mut rec);
+            if self.clock_step(&mut rec, step, !held.is_empty()) {
                 continue;
             }
             let (cmd, kind, mark) = if let Some(k) = step["key"].as_str() {
@@ -522,7 +475,7 @@ impl<G: Context> Loop<G> {
         let mut out = crate::feel::report(&samples, &frames);
         out["ok"] = json!(true);
         out["canvas"] = json!([self.shell.gfx.canvas.w, self.shell.gfx.canvas.h]);
-        out["build"] = json!(if cfg!(debug_assertions) { "dev" } else { "release" });
+        out["build"] = json!(crate::perf::build_name());
         out["frame"] = json!(self.shell.frames);
         if let Some(r) = rec {
             out["motion"] = crate::walkfeel::report(&r.frames, &r.marks, body["step_ms"].as_f64().unwrap_or(every.as_secs_f64() * 1000.0));
@@ -598,6 +551,54 @@ impl<G: Context> Loop<G> {
     }
 
     /// ENGINE-49: notes an input of a `feel` replay for the movement report.
+    /// ENGINE-66 (TIDY4, CLN-75): a step of a `feel` script that only moves time: `wait_ms` (frames drawn for that long
+    /// on the run's clock), `stall_ms` (ENGINE-50 MAP-FRAME1: the clock moves with no frame drawn, so the next input
+    /// arrives during a hitch) or `spike_ms` (one frame that takes that long). `held` says whether a direction is held
+    /// (for the marks). False when `step` is none of them.
+    fn clock_step(&mut self, rec: &mut Option<MotionRec>, step: &Value, held: bool) -> bool {
+        if let Some(ms) = step["wait_ms"].as_f64() {
+            let until = Instant::now() + Duration::from_secs_f64(ms.clamp(0.0, 60_000.0) / 1000.0);
+            let mut n = 0;
+            while Instant::now() < until && n < 60 * 60 {
+                self.feel_draw(rec);
+                n += 1;
+            }
+        } else if let Some(ms) = step["stall_ms"].as_f64() {
+            self.mark(rec, "stall", &format!("stall {ms} ms"), None, held, held);
+            if self.stepped {
+                aegis_core::clock::advance(Duration::from_secs_f64(ms.clamp(0.0, 2000.0) / 1000.0));
+            }
+        } else if let Some(ms) = step["spike_ms"].as_f64() {
+            // the shot clock moves that much more before the frame
+            self.mark(rec, "spike", &format!("spike {ms} ms"), None, held, held);
+            if self.stepped {
+                aegis_core::clock::advance(Duration::from_secs_f64(ms.clamp(0.0, 2000.0) / 1000.0).saturating_sub(self.every));
+            }
+            self.feel_draw(rec);
+        } else {
+            return false;
+        }
+        true
+    }
+
+    /// ENGINE-66 (TIDY4, CLN-75): a held-direction step of a `feel` script (a key or d-pad press or release, a stick
+    /// move) once `held` is updated: `Held::dir` follows the latest held, the input is marked for the movement report
+    /// (`dir`, held before and after), a `press` key is timed and sent, then `gap` + 1 frames are drawn.
+    #[allow(clippy::too_many_arguments)]
+    fn hold_input(&mut self, rec: &mut Option<MotionRec>, held: &[Key], kind: &str, what: &str, dir: Option<(i64, i64)>, before: bool, press: Option<Key>, gap: u64) {
+        self.shell.cx.held.dir = held.last().and_then(|h| h.dir());
+        self.mark(rec, kind, what, dir, before, !held.is_empty());
+        if let Some(k) = press {
+            self.heard_input();
+            self.shell.feel_input(what);
+            self.shell.key(k);
+            self.shell.feel_state();
+        }
+        for _ in 0..=gap {
+            self.feel_draw(rec);
+        }
+    }
+
     fn mark(&self, rec: &mut Option<MotionRec>, kind: &str, what: &str, dir: Option<(i64, i64)>, held_before: bool, held_after: bool) {
         if let Some(r) = rec.as_mut() {
             let t = Instant::now().saturating_duration_since(r.t0).as_secs_f64() * 1000.0;

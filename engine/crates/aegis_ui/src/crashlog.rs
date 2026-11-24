@@ -120,7 +120,7 @@ pub fn append_beside(name: &str, lines: &[String]) {
 /// The text of a crash report. ENGINE-62: with the build (dev or release, its version and commit: `AEGIS_COMMIT` at
 /// build time) and the top screen (`set_top`).
 pub fn report(title: &str, message: &str, place: &str, backtrace: &str, recent: &[String]) -> String {
-    let build = if cfg!(debug_assertions) { "dev" } else { "release" };
+    let build = crate::perf::build_name();
     let commit = option_env!("AEGIS_COMMIT").unwrap_or("unknown");
     let top = TOP.lock().map(|t| t.clone()).unwrap_or_default();
     let mut out = format!(

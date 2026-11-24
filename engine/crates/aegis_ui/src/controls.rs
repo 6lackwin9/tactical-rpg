@@ -556,7 +556,7 @@ impl PadSetting {
     /// `v` clamped to the range and put on the nearest step.
     pub fn snap(&self, v: f64) -> f64 {
         let n = ((v.clamp(self.min, self.max) - self.min) / self.step).round();
-        ((self.min + n * self.step) * 1000.0).round() / 1000.0
+        crate::perf::round_to(self.min + n * self.step, 3)
     }
     /// How many steps the range has (a slider's positions).
     pub fn steps(&self) -> usize {
@@ -644,7 +644,8 @@ impl PadTuning {
     }
 }
 
-/// The left stick's direction: the larger axis past the default dead zone (y up is positive, as pads report it).
+/// The left stick's direction: the larger axis past the default dead zone (y up is positive, as pads report it). The
+/// documented default (ENGINE-66, CLN-80): the shell reads the player's dead zone through `PadTuning::stick_dir`.
 pub fn stick_dir(x: f32, y: f32) -> Option<Key> {
     stick_dir_past(x, y, STICK_DEAD)
 }

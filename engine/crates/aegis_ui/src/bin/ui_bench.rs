@@ -18,7 +18,7 @@ fn main() -> anyhow::Result<()> {
         let before = perf::calib();
         let benches = perf::bench(&ttf, w, h, runs);
         let after = perf::calib();
-        let mut line = json!({"size": size, "runs": runs, "build": if cfg!(debug_assertions) { "dev" } else { "release" }, "calib_before": (before * 1000.0).round() / 1000.0, "calib_after": (after * 1000.0).round() / 1000.0, "steady": perf::steady(before, after)});
+        let mut line = json!({"size": size, "runs": runs, "build": perf::build_name(), "calib_before": perf::round_to(before, 3), "calib_after": perf::round_to(after, 3), "steady": perf::steady(before, after)});
         for b in &benches {
             line[b.name] = b.stats.to_json();
         }

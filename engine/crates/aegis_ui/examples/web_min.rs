@@ -126,7 +126,7 @@ fn context() -> Cx<Last> {
 }
 
 fn options(font: PathBuf) -> Options {
-    Options { title: "Aegis web start".into(), font, port: 0, icon: String::new(), canvas: Value::Null, window_sizes: Value::Null, headless: None, live: false }
+    Options { title: "Aegis web start".into(), font, port: 0, icon: String::new(), canvas: Value::Null, window_sizes: Value::Null, headless: None, live: false, feel: false }
 }
 
 #[cfg(target_arch = "wasm32")]

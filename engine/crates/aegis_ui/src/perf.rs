@@ -35,9 +35,24 @@ impl Stats {
 
     /// The numbers rounded to 0.001 ms, for a reply or a file.
     pub fn to_json(&self) -> Value {
-        let r = |x: f64| (x * 1000.0).round() / 1000.0;
+        let r = |x: f64| crate::perf::round_to(x, 3);
         json!({"count": self.count, "p10": r(self.p10), "p50": r(self.p50), "p95": r(self.p95), "max": r(self.max), "mean": r(self.mean)})
     }
+}
+
+/// ENGINE-66 (TIDY4, CLN-72): the build's name in reports: "dev" (debug assertions on) or "release".
+pub fn build_name() -> &'static str {
+    if cfg!(debug_assertions) {
+        "dev"
+    } else {
+        "release"
+    }
+}
+
+/// ENGINE-66 (CLN-73): `x` rounded to `places` decimals (the reports' ms: 3 places, the movement and switch reports 2).
+pub fn round_to(x: f64, places: i32) -> f64 {
+    let k = 10f64.powi(places);
+    (x * k).round() / k
 }
 
 /// Milliseconds since `t`, as a fraction.

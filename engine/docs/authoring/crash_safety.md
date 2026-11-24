@@ -47,7 +47,7 @@ fn rescue(&self) -> Option<Vec<String>> {
 ## Testing it
 
 - A dev build's agent link takes `{"cmd": "panic", "message": "..."}`. It forces a panic in a no-window run, which
-  exercises the whole path. A release build refuses the command.
+  exercises the whole path. It is a test hook, not a feature: a release build refuses the command.
 - See `engine/crates/aegis_ui/tests/crash_safe.rs` (report, rescue and the next start),
   `engine/crates/aegis_save/tests/prev_copy.rs` (the copy and damage), and the sample game's
   `games/hello/crates/hello_game/tests/crash.rs`.

@@ -90,6 +90,7 @@ fn start(settings: &Path, saves: &Path) -> (BufReader<TcpStream>, std::thread::J
         window_sizes: Value::Null,
         headless: Some(Headless { size: (640, 360), fps: 30, dpr: 1.0, idle: Duration::from_secs(60), stepped: true }),
         live: false,
+        feel: false,
     };
     let (settings, saves) = (settings.to_path_buf(), saves.to_path_buf());
     let thread = std::thread::spawn(move || run(context(&settings, &saves), vec![Box::new(Title { w: Vec::new() }) as Box<dyn Screen<App>>], options));

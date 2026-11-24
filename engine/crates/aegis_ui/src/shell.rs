@@ -82,6 +82,9 @@ pub struct Options {
     /// dev run only (`start::Start` sets it for `dev=1`; a game with dev tools of its own keeps it to the builds with
     /// them, never a player's build).
     pub live: bool,
+    /// ENGINE-45, ENGINE-66 (CLN-77): the launch asked for the feel probe (`start::Start`: `feel=1` or `--feel`); the
+    /// player's settings key `"feel": true` turns it on too.
+    pub feel: bool,
 }
 
 /// ENGINE-54 (WARM-SPREAD1): the art loads one warm slice may make on the frame, in µs (its draw's own cost comes on
@@ -162,7 +165,7 @@ impl<G: Context> Shell<G> {
         let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         gfx.kit.device.dpr = dpr;
         let (policy, offered, window_notices) = read_window_options(&options.canvas, &options.window_sizes);
-        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false, title: String::new(), live: None, live_line: None };
+        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: options.feel, warming: None, warm_slices: 0, input_seen: false, title: String::new(), live: None, live_line: None };
         shell.cx.notice.extend(icon_notice);
         shell.cx.notice.extend(window_notices);
         hold_declared_sizes(&mut shell.cx.settings, &options.window_sizes, &offered);

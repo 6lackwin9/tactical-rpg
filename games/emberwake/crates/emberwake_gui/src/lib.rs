@@ -115,10 +115,10 @@ pub(crate) fn dev_build() -> bool {
     DEV_BUILD || DEV_ASKED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// ENGINE-57: whether the launch keys `args` ask for the developer surfaces: `dev=1`, in a build with the dev tools
-/// (`tools`, `DEV_TOOLS`); a build without them never shows them.
-fn dev_asked(args: &[(String, String)], tools: bool) -> bool {
-    tools && arg(args, "dev") == Some("1")
+/// ENGINE-57: whether the launch asks for the developer surfaces: `dev=1` (`asked`, read by `Start`, ENGINE-66 CLN-77),
+/// in a build with the dev tools (`tools`, `DEV_TOOLS`); a build without them never shows them.
+fn dev_asked(asked: bool, tools: bool) -> bool {
+    tools && asked
 }
 
 fn arg<'a>(args: &'a [(String, String)], k: &str) -> Option<&'a str> {
@@ -199,7 +199,7 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
     // engine's game start; the data, the tuning, the launch keys and the first screens are the game's.
     let engine = engine_dir.unwrap_or_else(|| PathBuf::from("."));
     let mut launch = aegis_ui::start::Start::new(GAME_ID, game_dir.clone(), &engine, args, headless);
-    DEV_ASKED.store(dev_asked(args, DEV_TOOLS), std::sync::atomic::Ordering::Relaxed);
+    DEV_ASKED.store(dev_asked(launch.dev, DEV_TOOLS), std::sync::atomic::Ordering::Relaxed);
     notices.append(&mut launch.notice);
     if arg(args, "saves").is_none() {
         if let Err(e) = aegis_save::adopt_shared(GAME_ID) {
@@ -328,9 +328,10 @@ mod tests {
     #[test]
     fn dev_1_shows_the_developer_surfaces_only_with_the_dev_tools() {
         let args = |list: &[(&str, &str)]| list.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect::<Vec<_>>();
-        assert!(dev_asked(&args(&[("dev", "1")]), true), "a release build with the dev tools");
-        assert!(!dev_asked(&args(&[("dev", "1")]), false), "a shipped player build ignores it");
-        assert!(!dev_asked(&args(&[("dev", "0")]), true) && !dev_asked(&args(&[]), true));
+        let dev = |list: &[(&str, &str)]| aegis_ui::start::Start::new("emberwake", None, std::path::Path::new("."), &args(list), None).dev;
+        assert!(dev_asked(dev(&[("dev", "1")]), true), "a release build with the dev tools");
+        assert!(!dev_asked(dev(&[("dev", "1")]), false), "a shipped player build ignores it");
+        assert!(!dev_asked(dev(&[("dev", "0")]), true) && !dev_asked(dev(&[]), true));
     }
 
     #[test]

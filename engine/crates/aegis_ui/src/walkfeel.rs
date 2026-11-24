@@ -55,7 +55,7 @@ pub const PATH_MAX: usize = 400;
 pub const STUTTER_FACTOR: f64 = 1.5;
 
 fn r2(x: f64) -> f64 {
-    (x * 100.0).round() / 100.0
+    crate::perf::round_to(x, 2)
 }
 
 /// The times (and the step) of every new cell, in order: (t, from, to).

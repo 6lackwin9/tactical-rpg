@@ -119,6 +119,7 @@ fn options() -> Options {
         window_sizes: Value::Null,
         headless: None,
         live: false,
+        feel: false,
     }
 }
 

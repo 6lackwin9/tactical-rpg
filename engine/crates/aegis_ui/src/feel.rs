@@ -2,8 +2,9 @@
 //! (`input`), when its handler has changed the state (`state`), and when the next frame that started after it has been
 //! presented (`frame`: drawn and handed to the renderer in a window; drawn in a run with no window, which presents
 //! nothing). A frame's own time is its start to its present. Nothing here changes what the game does: the probe only
-//! reads the clock, and the shell keeps it off unless the launch says `--feel` (or `feel=1`) or the settings say
-//! `"feel": true`.
+//! reads the clock, and the shell keeps it off unless the launch says `--feel` (or `feel=1`; the run's switch, read
+//! once by `start::Start` into `Options::feel`, ENGINE-66) or the settings say `"feel": true` (the player's switch: it
+//! stays on across runs until removed; no Settings row writes it).
 //!
 //! On, the shell draws a small overlay (`overlay_text`: the last frame's ms, the worst frame of the last second and the
 //! last input's input-to-present ms) and adds a line per input to `feel.log` beside the run's log (`log_line`). The
@@ -34,7 +35,8 @@ pub const LOG_FILE: &str = "feel.log";
 /// The overlay's text size, in the whole window's units.
 pub const OVERLAY_SIZE: f32 = 7.0;
 
-/// Whether the launch asked for the probe: `--feel` or `feel=1` on the command line (none on the web).
+/// Whether the process's command line asks for the probe: `--feel` or `feel=1` (none on the web). `start::Start` reads
+/// it with the parsed launch keys into `Options::feel`.
 pub fn launch_asked() -> bool {
     #[cfg(not(target_arch = "wasm32"))]
     return std::env::args().skip(1).any(|a| a == "--feel" || a == "feel=1");
@@ -86,7 +88,7 @@ pub struct Stall {
 
 impl Stall {
     pub fn to_json(&self) -> Value {
-        let r = |x: f64| (x * 1000.0).round() / 1000.0;
+        let r = |x: f64| crate::perf::round_to(x, 3);
         json!({"start_ms": r(self.start), "frame_ms": r(self.ms), "cpu_ms": r(self.cpu)})
     }
 }
@@ -115,7 +117,7 @@ impl Sample {
     }
 
     pub fn to_json(&self) -> Value {
-        let r = |x: f64| (x * 1000.0).round() / 1000.0;
+        let r = |x: f64| crate::perf::round_to(x, 3);
         json!({"input": self.kind, "to_state_ms": r(self.to_state), "to_frame_ms": r(self.to_frame), "to_present_ms": r(self.to_present), "frame_ms": r(self.frame),
             "tick_ms": r(self.tick), "draw_ms": r(self.draw), "spent_in": self.spent_in(), "flag": self.flagged(), "stall": self.stall})
     }
@@ -231,7 +233,7 @@ impl Probe {
 pub fn report(samples: &[Sample], frames: &[f64]) -> Value {
     let pick = |f: fn(&Sample) -> f64| Stats::of(&samples.iter().filter(|s| !s.stall).map(f).collect::<Vec<_>>());
     let brief = |s: Stats| {
-        let r = |x: f64| (x * 1000.0).round() / 1000.0;
+        let r = |x: f64| crate::perf::round_to(x, 3);
         json!({"count": s.count, "p50": r(s.p50), "p95": r(s.p95), "worst": r(s.max)})
     };
     let slow_frames = frames.iter().filter(|f| **f > FRAME_FLAG_MS).count();

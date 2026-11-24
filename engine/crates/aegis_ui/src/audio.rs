@@ -594,13 +594,8 @@ impl Audio {
     /// listed again.
     pub fn forget(&self, rels: &[String]) {
         let mut st = self.state.borrow_mut();
-        for r in rels {
-            st.cache.remove(r);
-            st.pcm.remove(r);
-            st.pcm_later.remove(r);
-            st.found.remove(r);
-        }
-        st.pools.clear();
+        st.pcm_later.retain(|r, _| !rels.contains(r));
+        st.drop_cached(|r, _| rels.iter().any(|x| x == r));
     }
 
     /// A bundle part was mounted since the caches were filled (WEBREL1-G1: the web build's audio comes as a later part,
@@ -614,10 +609,8 @@ impl Audio {
                 return;
             }
             st.mounted = now;
-            st.cache.retain(|_, read| read.is_some());
-            st.pcm.retain(|_, read| read.is_some());
-            st.found.retain(|_, hit| *hit);
-            st.pools.clear();   // a new part may bring variants
+            // the files remembered as missing (a new part may bring them, and variants)
+            st.drop_cached(|_, known| !known);
             let music = if st.tracks.iter().any(|t| t.target > 0.0) { None } else { Some(st.wanted.take()) };
             let bed = if st.beds.iter().any(|t| t.target > 0.0) { None } else { Some(st.wanted_bed.take()) };
             (music, bed)
@@ -697,6 +690,15 @@ impl Audio {
 }
 
 impl State {
+    /// ENGINE-66 (TIDY4, CLN-81): drops the read and decoded copies and the lookups for which `drop(rel, known)` holds
+    /// (`known`: the file was found), and the variant pools: the one place `forget` and `remounted` clear the caches.
+    fn drop_cached(&mut self, drop: impl Fn(&str, bool) -> bool) {
+        self.cache.retain(|r, read| !drop(r, read.is_some()));
+        self.pcm.retain(|r, read| !drop(r, read.is_some()));
+        self.found.retain(|r, hit| !drop(r, *hit));
+        self.pools.clear();
+    }
+
     fn new() -> Self {
         Self {
             levels: Levels { master: 1.0, music: 0.8, sfx: 0.8, ui: 0.8, ambience: 0.8 },
