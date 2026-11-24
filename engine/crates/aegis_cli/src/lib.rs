@@ -92,7 +92,7 @@ aegis content check | get <kind> <id> [world=<id>] | get @<list.json> | upsert <
 aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [set=<key>:<value>,...] [audit=1]
 aegis playtest start [save=] [out=] [size=] [shots=each|off] [keep_saves=<dir>] [window=1] | do <command ...> | run <script | -> | stop | status   (an agent plays the real game, logged and screenshot per command)
 aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)
-aegis align-map refspec | check-ref | score | run   (reference diorama validation and closed-loop map alignment)
+aegis align-map refspec | check-ref | enqueue | score | patch | run   (reference diorama validation, Drive queue bridge, and closed-loop map alignment)
 aegis new game <id> [title=<title>] [root=<workspace>]   (a new game folder games/<id>/ on the engine alone: menu, play screen, host, test, scenario)";
 
 /// Runs the command line of the process: the game's commands first, then the shell's.

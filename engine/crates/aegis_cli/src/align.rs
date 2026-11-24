@@ -3,35 +3,43 @@
 //! Subcommands:
 //!   aegis align-map refspec   map=<id> [draft=<art_draft.json>] [out=<dir>]
 //!   aegis align-map check-ref ref=<img.png|jpg> spec=<refspec.json> [map=<id>] [out=<dir>]
+//!   aegis align-map enqueue   map=<id> [name=<stem>] [draft=<draft.json>] [style_ref=<img.png|jpg>] [audit=<ref_audit.json>] [aspect=16:9|4:3|1:1] [n=1] [pipeline=<dir>] [out=<dir>] [dry_run=1]
 //!   aegis align-map score     ref=<img.png|jpg> render=<map.png> map=<id> [pass=1|2|all] [out=<dir>]
+//!   aegis align-map patch     map=<id> ref=<img.png|jpg> [render=<map.png>] [mode=ground|props|both] [zone=<id>] [rows=y0..y1] [only_from=<g>] [only_to=<g>] [out=<seed.json>] [apply=0|1]
 //!   aegis align-map run       ref=<img.png|jpg> map=<id> [out=<dir>] [apply_fx=0|1] [view=square|tilted] [exe=<game exe>]
 //!
 //! Pure engine tool: reads standard `maps.json` (`map_templates`), optional world `locations.json`, and
 //! `catalog/grounds.json`, and invokes the game binary's `render_map=<id>` offline hook for closed-loop Pass 2
 //! convergence. Names no game or lore word.
 
-use crate::{Args, Game};
+use crate::{content_step, Args, Game};
 use aegis_content::manifest::Manifest;
+use aegis_content::store::Hooks;
 use anyhow::{bail, Context, Result};
 use indexmap::IndexMap;
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // ---- CLI entry point -----------------------------------------------------------------------------------------------
 
 const ALIGN_USAGE: &str = "usage:
   aegis align-map refspec   map=<id> [draft=<draft.json>] [out=<dir>]
   aegis align-map check-ref ref=<img.png|jpg> spec=<refspec.json> [map=<id>] [out=<dir>]
+  aegis align-map enqueue   map=<id> [name=<stem>] [draft=<draft.json>] [style_ref=<img.png|jpg>] [audit=<ref_audit.json>] [aspect=16:9|4:3|1:1] [n=1] [pipeline=<dir>] [out=<dir>] [dry_run=1]
   aegis align-map score     ref=<img.png|jpg> render=<map.png> map=<id> [pass=1|2|all] [out=<dir>]
+  aegis align-map patch     map=<id> ref=<img.png|jpg> [render=<map.png>] [mode=ground|props|both] [zone=<id>] [rows=y0..y1] [only_from=<g>] [only_to=<g>] [out=<seed.json>] [apply=0|1]
   aegis align-map run       ref=<img.png|jpg> map=<id> [out=<dir>] [apply_fx=0|1] [view=square|tilted] [exe=<game exe>]";
 
 pub fn command<G: Game>(game: &G, args: &Args) -> Result<()> {
     match args.pos(1) {
         Some("refspec") => cmd_refspec(game, args),
         Some("check-ref") => cmd_check_ref(game, args),
+        Some("enqueue") => cmd_enqueue(game, args),
         Some("score") => cmd_score(game, args),
+        Some("patch") => cmd_patch(game, args),
         Some("run") => cmd_run(game, args),
         _ => {
             println!("{ALIGN_USAGE}");
@@ -94,6 +102,612 @@ fn cmd_check_ref<G: Game>(game: &G, args: &Args) -> Result<()> {
     let audit_path = out_dir.join("ref_audit.json");
     std::fs::write(&audit_path, serde_json::to_string_pretty(&audit)? + "\n")?;
     print_ref_audit_summary(&audit, &audit_path);
+    Ok(())
+}
+
+// ---- Enqueue bridge (Drive image_pipeline/queue contract, compatible with artqueue.py) -----------------------------
+
+const QUEUE_FOLDERS: [&str; 5] = ["queue", "processing", "output", "completed", "failed"];
+
+fn resolve_pipeline_dir(explicit: Option<&str>) -> Result<PathBuf> {
+    if let Some(p) = explicit {
+        return Ok(PathBuf::from(p));
+    }
+    if let Ok(env) = std::env::var("AEGIS_IMAGE_PIPELINE").or_else(|_| std::env::var("IMAGE_PIPELINE")) {
+        if !env.trim().is_empty() {
+            return Ok(PathBuf::from(env));
+        }
+    }
+    // Walk up from cwd looking for tools/portraits/artqueue.json (`{"pipeline": "..."}`)
+    let mut cur = std::env::current_dir()?;
+    loop {
+        let cfg = cur.join("tools").join("portraits").join("artqueue.json");
+        if cfg.is_file() {
+            if let Ok(text) = std::fs::read_to_string(&cfg) {
+                if let Ok(v) = serde_json::from_str::<Value>(&text) {
+                    if let Some(p) = v["pipeline"].as_str().filter(|s| !s.trim().is_empty()) {
+                        return Ok(PathBuf::from(p));
+                    }
+                }
+            }
+        }
+        if !cur.pop() {
+            break;
+        }
+    }
+    bail!("no image pipeline folder configured: pass pipeline=<dir>, set AEGIS_IMAGE_PIPELINE, or configure tools/portraits/artqueue.json")
+}
+
+fn store_queue_ref(pipe: &Path, src: &Path) -> Result<String> {
+    let refs_dir = pipe.join("refs");
+    std::fs::create_dir_all(&refs_dir)?;
+    let src_bytes = std::fs::read(src).with_context(|| format!("reading reference {}", src.display()))?;
+    let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("ref");
+    let ext = src.extension().and_then(|s| s.to_str()).unwrap_or("png");
+    let mut dest = refs_dir.join(format!("{stem}.{ext}"));
+    let mut k = 1u32;
+    while dest.exists() {
+        if let Ok(existing) = std::fs::read(&dest) {
+            if existing == src_bytes {
+                break;
+            }
+        }
+        k += 1;
+        dest = refs_dir.join(format!("{stem}_{k}.{ext}"));
+    }
+    if !dest.exists() {
+        std::fs::write(&dest, &src_bytes)?;
+    }
+    let abs = dest.canonicalize().unwrap_or(dest);
+    Ok(posix_path(&abs))
+}
+
+fn posix_path(p: &Path) -> String {
+    let s = p.to_string_lossy().replace('\\', "/");
+    s.strip_prefix("//?/").unwrap_or(&s).to_string()
+}
+
+fn pick_request_name(pipe: &Path, stem: &str) -> String {
+    let mut ts = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    loop {
+        let cand = format!("{stem}_q{ts}");
+        let exists = QUEUE_FOLDERS.iter().any(|f| pipe.join(f).join(format!("{cand}.json")).exists());
+        if !exists {
+            return cand;
+        }
+        ts += 1;
+    }
+}
+
+pub fn build_enqueue_request(
+    model: &MapModel,
+    spec: &Value,
+    blockout_path: &Path,
+    style_ref: Option<&Path>,
+    audit: Option<&Value>,
+    aspect: &str,
+    n: u32,
+) -> (String, Value) {
+    let mut prompt = render_prompt(model, spec);
+    if let Some(a) = audit {
+        let mut fixes = Vec::new();
+        if let Some(checks) = a["deterministic_checks"].as_array() {
+            for c in checks {
+                let st = c["status"].as_str().unwrap_or("");
+                if st == "FAIL" || st == "WARN" {
+                    fixes.push(format!("- Fix deterministic check '{}' ({}): {}", c["id"].as_str().unwrap_or(""), st, c));
+                }
+            }
+        }
+        if let Some(clauses) = a["clauses"].as_array() {
+            for cl in clauses {
+                let st = cl["status"].as_str().unwrap_or("");
+                let hint = cl["deterministic_hint"].as_str().unwrap_or("");
+                if st == "FAIL" || (cl["severity"] == "HARD" && hint.starts_with("SUSPICIOUS")) {
+                    fixes.push(format!(
+                        "- Verify & enforce HARD clause '{}' in zone '{}' (hint={hint})",
+                        cl["id"].as_str().unwrap_or(""),
+                        cl["zone"].as_str().unwrap_or("map")
+                    ));
+                }
+            }
+        }
+        if !fixes.is_empty() {
+            prompt.push_str("\nTARGETED REMEDIATION (previous attempt failed/flagged these clauses — fix every one while keeping passing areas intact):\n");
+            for f in fixes.iter().take(12) {
+                prompt.push_str(f);
+                prompt.push('\n');
+            }
+        }
+    }
+
+    let mut refs = vec![posix_path(&blockout_path.canonicalize().unwrap_or_else(|_| blockout_path.to_path_buf()))];
+    if let Some(sr) = style_ref {
+        refs.push(posix_path(&sr.canonicalize().unwrap_or_else(|_| sr.to_path_buf())));
+    }
+    let req = json!({
+        "prompt": prompt,
+        "aspect_ratio": aspect,
+        "style_hints": "",
+        "references": refs,
+        "n": n.max(1),
+        "metadata": {
+            "asset_id": format!("{}_ref", model.id),
+            "task": "align_map",
+            "target": Value::Null,
+            "route": "other",
+            "record": {
+                "map_id": model.id,
+                "source_refs": refs,
+            }
+        }
+    });
+    (prompt, req)
+}
+
+fn cmd_enqueue<G: Game>(game: &G, args: &Args) -> Result<()> {
+    let map_id = args.keys.get("map").context("enqueue requires map=<id>")?;
+    let data_dir = game.data_dir(args)?;
+    let draft = args.keys.get("draft").map(PathBuf::from);
+    let style_ref = args.keys.get("style_ref").map(PathBuf::from);
+    if let Some(sr) = &style_ref {
+        if !sr.is_file() {
+            bail!("enqueue: style_ref not found: {}", sr.display());
+        }
+    }
+    let audit: Option<Value> = match args.keys.get("audit") {
+        Some(p) => Some(serde_json::from_str(&std::fs::read_to_string(p).with_context(|| format!("reading audit '{p}'"))?)?),
+        None => None,
+    };
+    let aspect = args.key("aspect", "16:9");
+    if !matches!(aspect.as_str(), "1:1" | "16:9" | "9:16" | "4:3" | "3:4") {
+        bail!("enqueue: unsupported aspect '{aspect}' (expected 1:1, 16:9, 9:16, 4:3, 3:4)");
+    }
+    let n: u32 = args.key("n", "1").parse().unwrap_or(1).max(1);
+    let dry_run = args.key("dry_run", "0") == "1" || args.flag("--dry-run");
+    let stem = args.key("name", &format!("{map_id}_ref"));
+    let out_dir = PathBuf::from(args.key("out", &format!("out/align/{map_id}")));
+    std::fs::create_dir_all(&out_dir)?;
+
+    let model = MapModel::load(&data_dir, map_id, draft.as_deref())?;
+    let spec = build_refspec(&model);
+    let blockout = render_blockout(&model, 32);
+    let spec_path = out_dir.join(format!("{map_id}.refspec.json"));
+    let blockout_path = out_dir.join(format!("{map_id}.blockout.png"));
+    std::fs::write(&spec_path, serde_json::to_string_pretty(&spec)? + "\n")?;
+    save_png(&blockout, &blockout_path)?;
+
+    let (_prompt, mut req) = build_enqueue_request(&model, &spec, &blockout_path, style_ref.as_deref(), audit.as_ref(), &aspect, n);
+    let pipe = resolve_pipeline_dir(args.keys.get("pipeline").map(String::as_str))?;
+
+    if dry_run {
+        let preview = out_dir.join(format!("{stem}.dry_run_request.json"));
+        std::fs::write(&preview, serde_json::to_string_pretty(&req)? + "\n")?;
+        println!("enqueue dry-run ({map_id}):\n  target pipeline: {}\n  request preview: {}\n  aspect={aspect}, n={n}, refs={}", pipe.display(), preview.display(), req["references"].as_array().map_or(0, Vec::len));
+        return Ok(());
+    }
+
+    if !pipe.is_dir() {
+        bail!("enqueue: pipeline folder {} does not exist (is Drive mounted? or pass dry_run=1 / pipeline=<dir>)", pipe.display());
+    }
+    for f in QUEUE_FOLDERS {
+        std::fs::create_dir_all(pipe.join(f))?;
+    }
+
+    let name = pick_request_name(&pipe, &stem);
+    let mut stored_refs = Vec::new();
+    stored_refs.push(store_queue_ref(&pipe, &blockout_path)?);
+    if let Some(sr) = &style_ref {
+        stored_refs.push(store_queue_ref(&pipe, sr)?);
+    }
+    req["references"] = json!(stored_refs);
+
+    let dest = pipe.join("queue").join(format!("{name}.json"));
+    let tmp = pipe.join("queue").join(format!("{name}.json.tmp"));
+    std::fs::write(&tmp, serde_json::to_string_pretty(&req)? + "\n")?;
+    std::fs::rename(&tmp, &dest)?;
+
+    let attach_names: Vec<String> = stored_refs
+        .iter()
+        .filter_map(|r| Path::new(r).file_name().and_then(|s| s.to_str()).map(String::from))
+        .collect();
+    println!("queued {name} -> {}", dest.display());
+    println!("  attach from refs/: {}", attach_names.join(", "));
+    println!("  next: run 'process image queue' in Gemini Web App Tasks, then 'python tools/portraits/artqueue.py ingest'");
+    Ok(())
+}
+
+// ---- Pass 1 `aegis content` ground/prop patch emission (`patch`) ---------------------------------------------------
+
+fn parse_row_range(raw: Option<&str>, rows: usize) -> Result<(usize, usize)> {
+    let Some(s) = raw else {
+        return Ok((0, rows.saturating_sub(1)));
+    };
+    let (a, b) = s.split_once("..").context("rows= expects start..end (inclusive), e.g. rows=0..11")?;
+    let y0: usize = a.parse().context("invalid start row")?;
+    let y1: usize = b.parse().context("invalid end row")?;
+    if y0 > y1 || y1 >= rows {
+        bail!("rows={s} out of range 0..{}", rows.saturating_sub(1));
+    }
+    Ok((y0, y1))
+}
+
+#[derive(Debug, Clone)]
+pub struct PatchOutcome {
+    pub seed: Value,
+    pub ground_cells_changed: usize,
+    pub props_shifted: usize,
+    pub details: Vec<String>,
+}
+
+pub fn build_pass1_patch(
+    ref_img: &RgbaImg,
+    render_img: &RgbaImg,
+    model: &MapModel,
+    raw_map_entry: &Value,
+    mode: &str,
+    zone_filter: Option<&str>,
+    row_range: (usize, usize),
+    only_from: Option<&str>,
+    only_to: Option<&str>,
+    min_gain: f32,
+) -> Result<PatchOutcome> {
+    let reg_ref = register_reference(ref_img, model);
+    let reg_ren = uniform_registration(render_img.w, render_img.h, model.cols, model.rows);
+    let ref_stats = extract_grid_stats(ref_img, &reg_ref, model.cols, model.rows);
+    let ren_stats = extract_grid_stats(render_img, &reg_ren, model.cols, model.rows);
+    let fg_ref = compute_foreground_mask(&ref_stats, model);
+    let fg_ren = compute_foreground_mask(&ren_stats, model);
+
+    let do_ground = mode == "ground" || mode == "both";
+    let do_props = mode == "props" || mode == "both";
+
+    let mut fields: Vec<&str> = Vec::new();
+    let mut entry = Map::new();
+    entry.insert("id".into(), json!(model.id));
+    let mut details = Vec::new();
+    let mut ground_cells_changed = 0usize;
+    let mut props_shifted = 0usize;
+
+    // 1. Ground retagging (open land cells only; preserves walls, water, and catwalks; 3x3 majority smoothed)
+    if do_ground {
+        let mut g_legend_rev: BTreeMap<String, char> = BTreeMap::new();
+        let mut g_legend_fwd: BTreeMap<char, String> = BTreeMap::new();
+        if let Some(gl) = raw_map_entry["ground_legend"].as_object() {
+            for (k, v) in gl {
+                if let (Some(ch), Some(gid)) = (k.chars().next(), v.as_str()) {
+                    g_legend_rev.insert(gid.to_string(), ch);
+                    g_legend_fwd.insert(ch, gid.to_string());
+                }
+            }
+        }
+        // Build ground RGB prototypes from RENDERED quiet engine cells (never circularly from mistagged ref cells!)
+        // scaled by the map's overall open-floor luminance ratio (`ref_med_l / ren_med_l`), with catalog fallback.
+        let mut ren_by_g: BTreeMap<String, Vec<[f32; 3]>> = BTreeMap::new();
+        let mut all_ref_l = Vec::new();
+        let mut all_ren_l = Vec::new();
+        for y in 0..model.rows {
+            for x in 0..model.cols {
+                let idx = y * model.cols + x;
+                if model.tile(x, y) == '.' && fg_ref[idx] < 0.35 && fg_ren[idx] < 0.35 {
+                    let g = model.ground(x, y);
+                    if !g.is_empty() {
+                        ren_by_g.entry(g.to_string()).or_default().push(ren_stats[idx].rgb);
+                        all_ref_l.push(ref_stats[idx].luma);
+                        all_ren_l.push(ren_stats[idx].luma);
+                    }
+                }
+            }
+        }
+        let median_of = |mut v: Vec<f32>, def: f32| -> f32 {
+            if v.is_empty() {
+                def
+            } else {
+                v.sort_by(|a, b| a.total_cmp(b));
+                v[v.len() / 2]
+            }
+        };
+        let ref_med_l = median_of(all_ref_l, 55.0);
+        let ren_med_l = median_of(all_ren_l, 55.0).max(10.0);
+        let global_scale = (ref_med_l / ren_med_l).clamp(0.65, 2.2);
+
+        let mut proto: BTreeMap<String, [f32; 3]> = BTreeMap::new();
+        for (gid, samples) in &ren_by_g {
+            if samples.len() >= 4 {
+                let mut med = [0.0f32; 3];
+                for c in 0..3 {
+                    let mut v: Vec<f32> = samples.iter().map(|s| s[c]).collect();
+                    v.sort_by(|a, b| a.total_cmp(b));
+                    med[c] = (v[v.len() / 2] * global_scale).min(240.0);
+                }
+                proto.insert(gid.clone(), med);
+            }
+        }
+        // Catalog fallback for any legend ground lacking sufficient clean rendered samples
+        for gid in g_legend_rev.keys() {
+            if proto.contains_key(gid) || gid == "water" || gid == "iron_catwalk" {
+                continue;
+            }
+            if let Some(&rgb) = model.ground_colors.get(gid) {
+                let cl = luma709(rgb[0] as f32, rgb[1] as f32, rgb[2] as f32).max(12.0);
+                let sc = (ref_med_l / cl).clamp(0.7, 2.2);
+                proto.insert(gid.clone(), [(rgb[0] as f32 * sc).min(240.0), (rgb[1] as f32 * sc).min(240.0), (rgb[2] as f32 * sc).min(240.0)]);
+            }
+        }
+
+        let mut grid: Vec<Vec<char>> = raw_map_entry["ground"]
+            .as_array()
+            .context("map has no 'ground' array to patch")?
+            .iter()
+            .filter_map(Value::as_str)
+            .map(|r| r.chars().collect())
+            .collect();
+        let orig = grid.clone();
+
+        if proto.len() >= 2 && grid.len() == model.rows {
+            let mut proposed = grid.clone();
+            for y in row_range.0..=row_range.1 {
+                if y >= model.rows {
+                    continue;
+                }
+                for x in 0..model.cols {
+                    if x >= grid[y].len() || model.tile(x, y) != '.' {
+                        continue;
+                    }
+                    if let Some(zf) = zone_filter {
+                        if model.zone(x, y) != zf {
+                            continue;
+                        }
+                    }
+                    let cur_ch = orig[y][x];
+                    let cur_g = g_legend_fwd.get(&cur_ch).map(String::as_str).unwrap_or("");
+                    if cur_g == "water" || cur_g == "iron_catwalk" {
+                        continue;
+                    }
+                    if let Some(f) = only_from {
+                        if cur_g != f {
+                            continue;
+                        }
+                    }
+                    let idx = y * model.cols + x;
+                    if fg_ref[idx] > 0.55 {
+                        continue;
+                    }
+                    let c = ref_stats[idx].rgb;
+                    let dist = |p: [f32; 3]| {
+                        let (dr, dg, db) = (c[0] - p[0], c[1] - p[1], c[2] - p[2]);
+                        (dr * dr + dg * dg + db * db).sqrt()
+                    };
+                    let cur_d = proto.get(cur_g).map_or(999.0, |p| dist(*p));
+                    if let Some((best_g, best_p)) = proto
+                        .iter()
+                        .filter(|(gid, _)| gid.as_str() != "water" && gid.as_str() != "iron_catwalk")
+                        .min_by(|a, b| dist(*a.1).total_cmp(&dist(*b.1)))
+                    {
+                        if best_g != cur_g && cur_d > dist(*best_p) + 8.0 {
+                            if let Some(t) = only_to {
+                                if best_g != t {
+                                    continue;
+                                }
+                            }
+                            if let Some(&nch) = g_legend_rev.get(best_g) {
+                                proposed[y][x] = nch;
+                            }
+                        }
+                    }
+                }
+            }
+            // 3x3 majority smoothing: keep a retag only if at least 2 of its 8 neighbours agree (no 1-cell speckles)
+            for y in row_range.0..=row_range.1 {
+                for x in 0..model.cols {
+                    if proposed[y][x] == orig[y][x] {
+                        continue;
+                    }
+                    let target_ch = proposed[y][x];
+                    let mut agree = 0usize;
+                    for dy in -1isize..=1 {
+                        for dx in -1isize..=1 {
+                            if dx == 0 && dy == 0 {
+                                continue;
+                            }
+                            let nx = x as isize + dx;
+                            let ny = y as isize + dy;
+                            if nx >= 0 && ny >= 0 && (nx as usize) < model.cols && (ny as usize) < model.rows {
+                                if proposed[ny as usize][nx as usize] == target_ch {
+                                    agree += 1;
+                                }
+                            }
+                        }
+                    }
+                    if agree >= 2 {
+                        grid[y][x] = target_ch;
+                        ground_cells_changed += 1;
+                    }
+                }
+            }
+        }
+        if ground_cells_changed > 0 {
+            let rows_out: Vec<String> = grid.into_iter().map(|r| r.into_iter().collect()).collect();
+            fields.push("ground");
+            entry.insert("ground".into(), json!(rows_out));
+            details.push(format!("ground: {ground_cells_changed} cell(s) retagged"));
+        }
+    }
+
+    // 2. Prop Tier-1 shifts (bounded +-2 within same zone, anchor + BFS walkability safe)
+    if do_props {
+        if let Some(raw_props) = raw_map_entry["props"].as_array() {
+            let mut new_props = raw_props.clone();
+            for (pi, p) in model.props.iter().enumerate() {
+                if p.dynamic || pi >= new_props.len() {
+                    continue;
+                }
+                // Never pull wall-mounted / architectural wall props off `#` wall cells into open floor
+                let wall_mounted = (0..p.h).any(|dy| {
+                    (0..p.w).any(|dx| {
+                        let xx = (p.x + dx).min(model.cols - 1);
+                        let yy = (p.y + dy).min(model.rows - 1);
+                        model.tile(xx, yy) == '#'
+                    })
+                });
+                if wall_mounted {
+                    continue;
+                }
+                if let Some(zf) = zone_filter {
+                    if p.zone_id != zf {
+                        continue;
+                    }
+                }
+                let eval_iou = |ox: isize, oy: isize| -> f32 {
+                    let (mut inter, mut uni) = (0.0f32, 0.0f32);
+                    for dy in 0..p.h as isize {
+                        for dx in 0..p.w as isize {
+                            let x = ox + dx;
+                            let y = oy + dy;
+                            if x < 0 || y < 0 || x >= model.cols as isize || y >= model.rows as isize {
+                                return 0.0;
+                            }
+                            let idx = y as usize * model.cols + x as usize;
+                            let a = fg_ref[idx].max(if ref_stats[idx].edge > 14.0 { 0.55 } else { 0.0 });
+                            let b = fg_ren[idx].max(if ren_stats[idx].edge > 14.0 { 0.55 } else { 0.0 });
+                            inter += a.min(b);
+                            uni += a.max(b);
+                        }
+                    }
+                    if uni > 1e-4 { inter / uni } else { 0.0 }
+                };
+                let cur_iou = eval_iou(p.x as isize, p.y as isize);
+                let mut best = (0isize, 0isize, cur_iou);
+                if cur_iou < 0.55 {
+                    for dy in -2isize..=2 {
+                        for dx in -2isize..=2 {
+                            if dx == 0 && dy == 0 {
+                                continue;
+                            }
+                            let nx = p.x as isize + dx;
+                            let ny = p.y as isize + dy;
+                            if nx < 0 || ny < 0 || nx + p.w as isize > model.cols as isize || ny + p.h as isize > model.rows as isize {
+                                continue;
+                            }
+                            let cand_cells: Vec<(usize, usize)> = (0..p.h)
+                                .flat_map(|ry| (0..p.w).map(move |rx| (nx as usize + rx, ny as usize + ry)))
+                                .collect();
+                            let same_zone = p.zone_id.is_empty() || cand_cells.iter().any(|&(cx, cy)| model.zone(cx, cy) == p.zone_id);
+                            if !same_zone || !anchors_stay_connected(model, &cand_cells) {
+                                continue;
+                            }
+                            let cand = eval_iou(nx, ny);
+                            if cand > best.2 + min_gain {
+                                best = (dx, dy, cand);
+                            }
+                        }
+                    }
+                }
+                if best.0 != 0 || best.1 != 0 {
+                    if let Some(obj) = new_props[pi].as_object_mut() {
+                        let nx = (p.x as isize + best.0) as u64;
+                        let ny = (p.y as isize + best.1) as u64;
+                        obj.insert("x".into(), json!(nx));
+                        obj.insert("y".into(), json!(ny));
+                        props_shifted += 1;
+                        details.push(format!("prop '{}': ({},{}) -> ({},{}) iou {:.3}->{:.3}", p.id, p.x, p.y, nx, ny, cur_iou, best.2));
+                    }
+                }
+            }
+            if props_shifted > 0 {
+                fields.push("props");
+                entry.insert("props".into(), Value::Array(new_props));
+            }
+        }
+    }
+
+    let seed = if fields.is_empty() {
+        json!({"steps": []})
+    } else {
+        json!({
+            "steps": [{
+                "op": "upsert",
+                "kind": "maps",
+                "fields": fields,
+                "entry": Value::Object(entry),
+            }]
+        })
+    };
+    Ok(PatchOutcome { seed, ground_cells_changed, props_shifted, details })
+}
+
+fn cmd_patch<G: Game>(game: &G, args: &Args) -> Result<()> {
+    let map_id = args.keys.get("map").context("patch requires map=<id>")?;
+    let ref_path = PathBuf::from(args.keys.get("ref").context("patch requires ref=<img.png|jpg>")?);
+    let mode = args.key("mode", "ground");
+    let zone_filter = args.keys.get("zone").map(String::as_str);
+    let only_from = args.keys.get("only_from").map(String::as_str);
+    let only_to = args.keys.get("only_to").map(String::as_str);
+    let min_gain: f32 = args.key("min_gain", "0.12").parse().unwrap_or(0.12);
+    let apply = args.key("apply", "0") == "1";
+    let out_path = PathBuf::from(args.key("out", &format!("out/align/{map_id}/{map_id}_pass1_seed.json")));
+
+    let data_dir = game.data_dir(args)?;
+    let maps_path = data_dir.join("maps").join("maps.json");
+    let maps_val: Value = serde_json::from_str(&std::fs::read_to_string(&maps_path)?)?;
+    let raw_entry = maps_val["entries"]
+        .as_array()
+        .and_then(|arr| arr.iter().find(|e| e["id"].as_str() == Some(map_id)))
+        .with_context(|| format!("map '{map_id}' not found in {}", maps_path.display()))?;
+
+    let model = MapModel::load(&data_dir, map_id, None)?;
+    let row_range = parse_row_range(args.keys.get("rows").map(String::as_str), model.rows)?;
+    let ref_img = load_image(&ref_path)?;
+
+    let render_img = match args.keys.get("render") {
+        Some(p) => load_image(Path::new(p))?,
+        None => {
+            let exe = match args.keys.get("exe") {
+                Some(p) => PathBuf::from(p),
+                None => {
+                    let manifest_path = game.manifest_path(args)?;
+                    let manifest = Manifest::read(&manifest_path).map_err(anyhow::Error::msg)?;
+                    std::env::current_exe()?.with_file_name(format!("{}{}", manifest.id, std::env::consts::EXE_SUFFIX))
+                }
+            };
+            let scratch = aegis_core::scratch::Scratch::new("align_patch_render");
+            let tmp_png = scratch.path().join("render.png");
+            invoke_render_map(&exe, &data_dir, map_id, "square", Some("none"), &tmp_png)?;
+            load_image(&tmp_png)?
+        }
+    };
+
+    let outcome = build_pass1_patch(&ref_img, &render_img, &model, raw_entry, &mode, zone_filter, row_range, only_from, only_to, min_gain)?;
+    if let Some(p) = out_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(p)?;
+    }
+    std::fs::write(&out_path, serde_json::to_string_pretty(&outcome.seed)? + "\n")?;
+    println!(
+        "patch ({map_id}, mode={mode}): ground_cells_changed={}, props_shifted={}\n  seed: {}",
+        outcome.ground_cells_changed,
+        outcome.props_shifted,
+        out_path.display()
+    );
+    for d in &outcome.details {
+        println!("  - {d}");
+    }
+
+    if apply && (outcome.ground_cells_changed > 0 || outcome.props_shifted > 0) {
+        let hooks = game.content();
+        if let Some(steps) = outcome.seed["steps"].as_array() {
+            for step in steps {
+                match content_step(&hooks, &data_dir, step) {
+                    Ok(line) => println!("  applied: {line}"),
+                    Err(errs) => bail!("content_step refused patch: {}", errs.join("; ")),
+                }
+            }
+        }
+        let problems = hooks.check(&data_dir);
+        if !problems.is_empty() {
+            bail!("aegis content check failed after patch ({} problem(s)): {}", problems.len(), problems.join("; "));
+        }
+        println!("  content check ok");
+    }
     Ok(())
 }
 
@@ -2464,5 +3078,100 @@ mod tests {
         assert!(!anchors_stay_connected(&m, &[(5, 3)]));
         // Blocking an off-corridor tile (1,1) keeps connectivity intact
         assert!(anchors_stay_connected(&m, &[(1, 1)]));
+    }
+
+    #[test]
+    fn enqueue_builds_artqueue_contract_and_appends_audit_remediation() {
+        let m = sample_model();
+        let spec = build_refspec(&m);
+        let scratch = aegis_core::scratch::Scratch::new("align_enqueue");
+        let pipe = scratch.path().join("pipe");
+        let block = scratch.path().join("demo_vault.blockout.png");
+        save_png(&render_blockout(&m, 8), &block).unwrap();
+        let audit = json!({
+            "deterministic_checks": [{"id": "wall_floor_contrast", "status": "WARN", "contrast": 4.0}],
+            "clauses": [{"id": "bright_room.work_bench", "zone": "bright_room", "severity": "HARD", "status": "PENDING_VISION", "deterministic_hint": "SUSPICIOUS_EMPTY"}]
+        });
+        let (prompt, req) = build_enqueue_request(&m, &spec, &block, None, Some(&audit), "16:9", 1);
+        assert!(prompt.contains("TARGETED REMEDIATION"));
+        assert!(prompt.contains("bright_room.work_bench"));
+        assert_eq!(req["aspect_ratio"], "16:9");
+        assert_eq!(req["metadata"]["route"], "other");
+        assert_eq!(req["metadata"]["task"], "align_map");
+
+        // Store ref twice with identical bytes: reused without duplicating
+        let r1 = store_queue_ref(&pipe, &block).unwrap();
+        let r2 = store_queue_ref(&pipe, &block).unwrap();
+        assert_eq!(r1, r2);
+        assert!(pipe.join("refs").join("demo_vault.blockout.png").is_file());
+    }
+
+    #[test]
+    fn patch_emits_fields_scoped_ground_seed_retagging_mud_to_flagstone() {
+        // Synthetic map: north half mistagged as mud ('m'), south half flagstone ('f'); reference shows flagstone everywhere.
+        let raw = json!({
+            "id": "quay_demo",
+            "name": "Quay Demo",
+            "rows": [
+                "##########",
+                "#........#",
+                "#........#",
+                "#........#",
+                "#........#",
+                "#........#",
+                "#........#",
+                "##########"
+            ],
+            "zones": [
+                "----------",
+                "-aaaaaaaa-",
+                "-aaaaaaaa-",
+                "-aaaaaaaa-",
+                "-aaaaaaaa-",
+                "-aaaaaaaa-",
+                "-aaaaaaaa-",
+                "----------"
+            ],
+            "zone_legend": { "a": {"id": "quay", "kind": "safe", "indoor": false} },
+            "ground": [
+                "mmmmmmmmmm",
+                "mmmmmmmmmm",
+                "mmmmmmmmmm",
+                "mmmmmmmmmm",
+                "mffffffffm",
+                "mffffffffm",
+                "mffffffffm",
+                "mmmmmmmmmm"
+            ],
+            "ground_legend": { "m": "mud", "f": "flagstone" },
+            "anchors": [{"id": "spawn", "x": 2, "y": 2}],
+            "props": []
+        });
+        let mut gcol = IndexMap::new();
+        gcol.insert("mud".into(), [32, 24, 18]);
+        gcol.insert("flagstone".into(), [96, 100, 108]);
+        let m = MapModel::from_json(&raw, None, gcol, &BTreeMap::new()).unwrap();
+
+        let (w, h) = (m.cols * 16, m.rows * 16);
+        let mut ren = RgbaImg::new(w, h, [20, 20, 20, 255]);
+        let mut ref_img = RgbaImg::new(w, h, [20, 20, 20, 255]);
+        for y in 1..m.rows - 1 {
+            for x in 1..m.cols - 1 {
+                let c_ren = if y <= 3 { [32, 24, 18, 255] } else { [96, 100, 108, 255] };
+                ren.fill_rect(x * 16, y * 16, 16, 16, c_ren);
+                ref_img.fill_rect(x * 16, y * 16, 16, 16, [98, 102, 110, 255]);
+            }
+        }
+        let outcome = build_pass1_patch(&ref_img, &ren, &m, &raw, "ground", None, (1, 3), Some("mud"), Some("flagstone"), 0.12).unwrap();
+        assert_eq!(outcome.ground_cells_changed, 24, "all 3x8 open north-quay mud cells retagged to flagstone");
+        let step = &outcome.seed["steps"][0];
+        assert_eq!(step["op"], "upsert");
+        assert_eq!(step["kind"], "maps");
+        assert_eq!(step["fields"], json!(["ground"]));
+        assert_eq!(step["entry"]["ground"][1], "mffffffffm");
+        assert_eq!(step["entry"]["ground"][2], "mffffffffm");
+        assert_eq!(step["entry"]["ground"][3], "mffffffffm");
+        // Wall row 0 stays untouched
+        assert_eq!(step["entry"]["ground"][0], "mmmmmmmmmm");
     }
 }
