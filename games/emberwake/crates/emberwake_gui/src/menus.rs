@@ -2027,6 +2027,44 @@ mod tests {
         assert!(broken.action.is_none() && broken.lock && broken.delete, "an unreadable manual save can still be locked or deleted");
     }
 
+    /// ENGINE-64 (LIVE-RELOAD1): the game's data reload: a good edit (an item renamed) is swapped in and the game in
+    /// play stays; a broken file keeps the old data and the error names it; the data folder is the one watched.
+    #[test]
+    fn live_reload_swaps_good_data_and_keeps_the_old_on_a_broken_file() {
+        fn copy_dir(from: &Path, to: &Path) {
+            std::fs::create_dir_all(to).unwrap();
+            for e in std::fs::read_dir(from).unwrap() {
+                let p = e.unwrap().path();
+                let dest = to.join(p.file_name().unwrap());
+                if p.is_dir() {
+                    copy_dir(&p, &dest);
+                } else {
+                    std::fs::copy(&p, &dest).unwrap();
+                }
+            }
+        }
+        use aegis_ui::screen::Context;
+        let t = aegis_core::scratch::Scratch::new("emberwake_live_data");
+        let mut cx = cx(t.path().join("saves"));
+        let data = t.path().join("data");
+        copy_dir(&cx.data_dir, &data);
+        cx.data_dir = data.clone();
+        assert_eq!(cx.app.data_dirs(), [data.clone()]);
+        let name = |cx: &Cx| cx.data.cat.items.get("wpn_claymore").map(|i| i.name.clone());
+        assert_eq!(name(&cx).as_deref(), Some("Iron Claymore"));
+        let world = cx.gs().world_id.clone();
+        let items = data.join("catalog/items.json");
+        let text = std::fs::read_to_string(&items).unwrap();
+        std::fs::write(&items, text.replacen("\"Iron Claymore\"", "\"Tempered Claymore\"", 1)).unwrap();
+        assert_eq!(GameCx::reload_data(&mut cx, &[items.clone()]), Ok(Vec::new()));
+        assert_eq!(name(&cx).as_deref(), Some("Tempered Claymore"), "the next screen reads the renamed item");
+        assert_eq!(cx.gs().world_id, world, "the game in play stays");
+        std::fs::write(&items, "{\"kind\": \"items\", \"entries\": [").unwrap();
+        let err = GameCx::reload_data(&mut cx, &[items]).expect_err("a broken file is refused");
+        assert!(err.contains("items.json"), "the error names the file: {err}");
+        assert_eq!(name(&cx).as_deref(), Some("Tempered Claymore"), "the old data stays");
+    }
+
     fn cx(save_dir: PathBuf) -> Cx {
         let data_dir = emberwake_world::Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
         let data = emberwake_world::Data::open(&data_dir).expect("data").0;

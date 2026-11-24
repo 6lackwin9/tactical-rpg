@@ -69,6 +69,9 @@ impl Start {
             canvas: manifest.canvas.clone(),
             window_sizes: manifest.window_sizes.clone(),
             headless,
+            // ENGINE-64 (LIVE-RELOAD1): `dev=1` watches the files (`live=0` not: a scenario run's shots never move); a game
+            // with dev tools of its own keeps it to the builds with them
+            live: arg(args, "dev") == Some("1") && arg(args, "live") != Some("0"),
         };
         Start { id: id.into(), manifest, game_dir, layers, notice, save_dir, shot_dir, options }
     }

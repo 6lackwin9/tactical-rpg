@@ -1552,10 +1552,11 @@ fn shape_of(view: &View) -> String {
     format!("{}|{}", fields.join(","), actions.join(","))
 }
 
-/// The layout file's change time, in a native debug build (layouts reload on save); None elsewhere (loaded once).
+/// The layout file's change time, in a native debug build or with live reload on (ENGINE-64: layouts reload on save);
+/// None elsewhere (loaded once).
 #[cfg(not(target_arch = "wasm32"))]
 fn stamp(layers: &Layers, screen: &str) -> Option<u128> {
-    if !cfg!(debug_assertions) {
+    if !cfg!(debug_assertions) && !crate::live::on() {
         return None;
     }
     let path = layers.find(&format!("{LAYOUTS_DIR}/{screen}.json"))?;

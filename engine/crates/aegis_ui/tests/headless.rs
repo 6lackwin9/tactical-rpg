@@ -146,6 +146,7 @@ fn options(port: u16, h: Headless) -> Options {
         canvas: Value::Null,
         window_sizes: Value::Null,
         headless: Some(h),
+        live: false,
     }
 }
 

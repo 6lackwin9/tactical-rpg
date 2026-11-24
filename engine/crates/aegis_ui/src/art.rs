@@ -212,6 +212,32 @@ impl Art {
         self.generation
     }
 
+    /// ENGINE-64 (LIVE-RELOAD1): the files at `rels` changed on disk: what was made from them is dropped (their scaled,
+    /// fitted, mirrored and decoded copies, sizes and face sidecars), and so is every body (a few sheets, fitted again
+    /// from the decoded copies that stay) and the lookups of which files exist. The generation moves on, so what was
+    /// made from pictures and kept (a composed ground) is made again. Everything else stays cached.
+    pub fn forget(&mut self, rels: &[String]) {
+        if rels.is_empty() {
+            return;
+        }
+        let hit = |rel: &str| rels.iter().any(|r| r == rel || r.strip_suffix(".json").is_some_and(|stem| rel.strip_suffix(".png") == Some(stem)));
+        self.files.retain(|k, _| !hit(&k.0));
+        self.fits.retain(|k, _| !hit(k));
+        self.mirrors.retain(|k, _| !hit(&k.0));
+        self.sizes.retain(|k, _| !hit(k));
+        self.faces.retain(|k, _| !hit(k));
+        self.raw.retain(|p, _| !rels.iter().any(|r| p.ends_with(r)));
+        self.pending.retain(|(rel, _, _)| !hit(rel));
+        self.present.clear();
+        self.variant_counts.clear();
+        self.bodies.clear();
+        self.frames.clear();
+        self.outlines.clear();
+        self.silhouettes.clear();
+        self.body_rects.clear();
+        self.generation = GENERATION.fetch_add(1, Ordering::Relaxed);
+    }
+
     /// Whether a layer holds `rel` (cached: screens ask every frame).
     pub fn has(&mut self, rel: &str) -> bool {
         if let Some(&hit) = self.present.get(rel) {

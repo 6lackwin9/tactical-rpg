@@ -41,6 +41,7 @@ pub mod layout_audit;
 pub mod layout_editor;
 pub mod layout_gallery;
 pub mod layout_specimen;
+pub mod live;
 pub mod notes;
 pub mod pacing;
 pub mod painter;

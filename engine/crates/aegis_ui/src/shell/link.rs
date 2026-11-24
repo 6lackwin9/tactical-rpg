@@ -97,6 +97,10 @@ impl<G: Context> Shell<G> {
             "frame": self.frames, "px": [self.gfx.canvas.w, self.gfx.canvas.h],
             "music": cx.audio.wanted_music(), "ambience": cx.audio.wanted_ambience(), "focus": self.gfx.kit.focus, "focus_visible": self.gfx.kit.focus_visible, "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets(),
             "edit": self.gfx.kit.edit.as_ref().map(|e| json!({"id": e.id, "caret": e.caret, "selection": e.selection(), "selected": e.selected(), "undo": e.history().0}))});
+        // ENGINE-64 (LIVE-RELOAD1): the last live reload's line while it shows
+        if let Some((line, _)) = &self.live_line {
+            out["live"] = json!(line);
+        }
         #[cfg(not(target_arch = "wasm32"))]
         {
             out["pid"] = json!(std::process::id());

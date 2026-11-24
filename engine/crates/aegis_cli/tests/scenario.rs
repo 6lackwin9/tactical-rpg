@@ -763,7 +763,7 @@ fn everything_the_game_writes_lies_under_the_scratch_folder() {
     let p = scenario::plan(&s, (1280, 720), "somegame", Path::new("game.exe"), Some(Path::new("copy/data")), 4567, scratch);
     assert_eq!(p.appdata, scratch);
     assert!(p.settings_path.starts_with(scratch) && p.recordings.starts_with(scratch));
-    for want in ["port=4567".to_string(), format!("saves={}", scratch.join("saves").display()), "screen=runner".into(), "scene=e1".into(), "seed=9".into(), "data=copy/data".into(), "dev=1".into()] {
+    for want in ["port=4567".to_string(), format!("saves={}", scratch.join("saves").display()), "screen=runner".into(), "scene=e1".into(), "seed=9".into(), "data=copy/data".into(), "dev=1".into(), "live=0".into()] {
         assert!(p.args.contains(&want), "{want} in {:?}", p.args);
     }
     let dir = temp("write");

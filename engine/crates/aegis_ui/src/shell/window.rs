@@ -146,6 +146,17 @@ impl<G: Context> HasShell<G> for App<G> {
 }
 
 impl<G: Context> App<G> {
+    /// ENGINE-64 (LIVE-RELOAD1): reloads what changed (`Shell::live_poll`); returns when the loop must wake next (None:
+    /// live reload is off).
+    fn poll_live(&mut self) -> Option<Instant> {
+        let s = self.shell.as_mut()?;
+        s.live.as_ref()?;
+        if s.live_poll() {
+            self.pacer.touch(Instant::now());
+        }
+        Some(Instant::now() + crate::live::POLL)
+    }
+
     /// INPUT-MAP1: reads a connected pad; returns when the loop must wake for it next (None: no pad).
     #[cfg(windows)]
     fn poll_pad(&mut self) -> Option<Instant> {
@@ -264,6 +275,12 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
         let pad_wake = super::guard(self, |a| a.poll_pad());
         #[cfg(not(windows))]
         let pad_wake: Option<Instant> = None;
+        // ENGINE-64 (LIVE-RELOAD1): with live reload on, the loop wakes every half second to reload what changed
+        let live_wake = super::guard(self, |a| a.poll_live());
+        let pad_wake = match (pad_wake, live_wake) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
         match self.pacer.decide(Instant::now(), self.frame_every) {
             Pace::Redraw => {
                 el.set_control_flow(match pad_wake {

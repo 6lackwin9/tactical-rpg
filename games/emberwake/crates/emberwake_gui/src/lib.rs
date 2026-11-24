@@ -244,7 +244,9 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
     let audio = launch.audio();
     launch.notice = notices;
     #[allow(unused_mut)]
-    let (mut cx, options) = launch.cx(settings, art::Art::new(project), audio, playtest, game);
+    let (mut cx, mut options) = launch.cx(settings, art::Art::new(project), audio, playtest, game);
+    // ENGINE-64 (LIVE-RELOAD1): `dev=1` reloads edited files only in a build with the dev tools, never a player's
+    options.live &= DEV_TOOLS;
     #[allow(unused_mut)]
     let mut stack: Vec<Box<dyn Screen<GameCx>>> = vec![Box::new(menus::MainMenu::default())];
     match arg(args, "screen") {

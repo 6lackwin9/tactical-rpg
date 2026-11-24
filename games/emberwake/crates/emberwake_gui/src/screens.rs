@@ -185,6 +185,23 @@ impl aegis_ui::Context for GameCx {
         Some(emberwake_world::save::write_keyed(&self.data, &self.save_dir, &g.gs, aegis_save::RESCUE_KEY, 0))
     }
 
+    /// ENGINE-64 (LIVE-RELOAD1): the data folder, watched in a dev run.
+    fn data_dirs(&self) -> Vec<PathBuf> {
+        vec![self.data_dir.clone()]
+    }
+
+    /// ENGINE-64: the data read again as at a start (`Data::open`). A load problem (a file that does not parse, an entry
+    /// skipped) keeps the old data and names the first; otherwise the new data is swapped in and the game state stays.
+    fn reload_data(cx: &mut Cx, _changed: &[PathBuf]) -> Result<Vec<String>, String> {
+        let (d, problems) = emberwake_world::Data::open(&cx.data_dir).map_err(|e| format!("{e:#}"))?;
+        if let Some(first) = problems.first() {
+            let more = if problems.len() > 1 { format!(" (and {} more)", problems.len() - 1) } else { String::new() };
+            return Err(format!("{first}{more}"));
+        }
+        cx.data = Arc::new(d);
+        Ok(Vec::new())
+    }
+
     fn agent_summary(&self) -> Value {
         match self.game.as_ref() {
             Some(g) => json!({"world": g.gs.world_id, "location": g.gs.location_id, "position": [g.gs.position.0, g.gs.position.1], "gold": g.gs.party.gold,

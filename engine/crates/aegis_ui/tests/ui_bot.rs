@@ -118,6 +118,7 @@ fn options() -> Options {
         canvas: Value::Null,
         window_sizes: Value::Null,
         headless: None,
+        live: false,
     }
 }
 

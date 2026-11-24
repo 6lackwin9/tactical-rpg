@@ -589,6 +589,20 @@ impl Audio {
         }
     }
 
+    /// ENGINE-64 (LIVE-RELOAD1): the sound files at `rels` changed on disk: their read and decoded copies are dropped, so
+    /// the next play reads them again (a sound or track playing now plays on as it was), and the variant pools are
+    /// listed again.
+    pub fn forget(&self, rels: &[String]) {
+        let mut st = self.state.borrow_mut();
+        for r in rels {
+            st.cache.remove(r);
+            st.pcm.remove(r);
+            st.pcm_later.remove(r);
+            st.found.remove(r);
+        }
+        st.pools.clear();
+    }
+
     /// A bundle part was mounted since the caches were filled (WEBREL1-G1: the web build's audio comes as a later part,
     /// while the game already runs): the files remembered as missing are looked up again, and the wanted music, when
     /// it has no track yet (its file was missing), starts now.

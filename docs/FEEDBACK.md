@@ -180,8 +180,51 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-61` (`FEEL-CLOSE1`) | Built (tools lane) | `develop` | Underruns of a stalled audio thread listed as stalls; the canvas row blend made branch-free with the same bytes, cutting 4 to 6 ms of panels from every frame (battle draw 16-24 to 12-16 ms, warm frames at most 25 ms). 9 of 10 release feel runs passed, the miss judged container noise; the feel run moves to Tushar's PC. Goldens unchanged. FB-510 |
 | `ENGINE-62` (`CRASH-SAFE1`) | Built (tools lane) | `develop` | A caught panic writes the report (now with build, top screen and `feel.log` tail) and the game's rescue save (`Context::rescue`, keyed `rescue`); the next start shows one line with the report path and Open folder (any game, the hello sample included); Emberwake's title offers the rescue beside Continue. Saves keep `<file>.prev`; a damaged slot is kept, named and loads its copy. Goldens unchanged. FB-511 |
 | `ENGINE-63` (`PAD-TUNE1`) | Built (tools lane) | `develop` | Settings > Controls has a Gamepad group: stick dead zone (0.15 to 0.6), d-pad and stick repeat delay and rate (today's values by default), saved under `gamepad` (`aegis_ui::controls::PadTuning`), and a live stick Test line. The Windows pad poll runs inside the frame's catch. The feel script replays `{"stick": [x, y]}`; `walk_feel` has a stick case. Goldens unchanged. FB-512 |
+| `ENGINE-64` (`LIVE-RELOAD1`) | Built (tools lane) | `develop` | `dev=1` (in a build with the dev tools; never a player build or the web) watches the asset layers and data every 500 ms. Art, theme, layouts and sounds reload in place; data reloads through `Data::open` and is swapped only when it loads clean (the region map rebuilds, a battle keeps its units), else a notice names the file. One line per reload; nothing during a save write; scenario runs pass `live=0`. Goldens unchanged. FB-513 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-513: ENGINE-64 LIVE-RELOAD1 built; art, theme, layouts, sound and data reload in a dev run
+
+- **Status**: built (tools lane), `develop`. Engine (`aegis_ui` new `live` module, shell, art, audio, layouts, start;
+  `aegis_core::vfs::dev::stamp`; `aegis_save::writing`; `aegis_cli` scenario launch) and game (Emberwake's data hook,
+  region map rebuild, battle line). **Every golden unchanged.** No draw changes without a reload, and scenario runs
+  pass `live=0`, so no shot can move (no shots diff run). Gate clean.
+- **Spec**: `docs/READY.md` row `ENGINE-64` (`LIVE-RELOAD1`).
+- **(1) On**: `Options::live`, set by `start::Start` for `dev=1` unless `live=0`. Every game that starts through
+  `Start` (hello and kit_sample too) gets art reload with no code of its own. Emberwake keeps it to builds with its dev
+  tools (`options.live &= DEV_TOOLS`), so a player's build never watches. The web never watches (no dev files).
+  Scenario runs add `live=0`: a file touched during the gate can never move a shot.
+- **(2) Watch**: a thread (`live::Watch`) scans the asset layer roots and `Context::data_dirs` every 500 ms by change
+  time and length (`vfs::dev::stamp`; about 2,100 files for Emberwake, a few ms), with no new crate. The shell's
+  `live_poll` runs before each frame (and the window wakes every 500 ms for it). It sorts the paths: pictures and
+  sidecars go to `Art::forget` (that file's scaled, fitted, mirrored and decoded copies; bodies refit from the kept
+  decodes; the generation moves on, so a composed ground is made again); `ui/theme.json` to `theme::reload`; layouts
+  (`Layouts` reads a changed file again whenever live reload is on, not only in debug builds); sounds to
+  `Audio::forget` (a sound playing now plays on).
+- **(3) Data**: `Context::reload_data` (default: none). Emberwake runs `Data::open` as at start; any load problem keeps
+  the old data and returns the first problem with its file, otherwise it swaps `cx.data`. On success the shell drops
+  the screen being warmed ahead and asks each screen `Screen::data_reloaded(cx, top)`. Emberwake's region map, on top
+  with no conversation or card open, rebuilds from the game state (the party stays where it is). A battle returns
+  "this battle keeps its units until it ends". On an error a notice says "Data not reloaded: ...".
+- **(4) Line**: one line per reload for 3 s at the bottom left ("Reloaded 1 art file", "Data reloaded; this battle
+  keeps its units until it ends"), and `ui_tree`'s `live` while it shows. Nothing reloads while `aegis_save::writing()`
+  (a counter around every save write): the finds wait for the next frame.
+- **(5) Tests**: `aegis_ui/tests/live_reload.rs` (in a no-window run, a picture saved over draws its new pixels with the
+  game state kept and the line shown; a good data edit renames the item on screen and every screen is told; a broken
+  edit keeps the old data and a notice names `items.json`; a run without live reload keeps what it read; finds wait
+  while a save is written; paths sorted by kind; scan sees changed, new and gone files), `start.rs` (`dev=1`, `live=0`),
+  `aegis_cli` scenario plan (`live=0`), Emberwake menus `live_reload_swaps_good_data_and_keeps_the_old_on_a_broken_file`
+  (a copied data folder: Iron Claymore renamed and swapped with the game kept; a broken `items.json` refused).
+- **Calls (`[PROVISIONAL]`)**: success is a short line, not a notice popup (a popup per save would block play); a
+  refused data reload is a notice. Any data load problem refuses the swap, because start data has none today (the test
+  checks this).
+- **Docs delta**: new `engine/docs/authoring/live_reload.md` and its row in the authoring README (tools-lane files,
+  edited here). `engine/README.md` (Design): "Live reload (LIVE-RELOAD1, ENGINE-64): `dev=1` (`Options::live`, never a
+  player build or the web) watches the asset layers and `Context::data_dirs` every 500 ms. Art (`Art::forget`), theme,
+  layouts and sounds (`Audio::forget`) reload in place, data through `Context::reload_data` and
+  `Screen::data_reloaded`, one line per reload, nothing during a save write (`aegis_save::writing`)
+  (`engine/docs/authoring/live_reload.md`)".
 
 ### FB-512: ENGINE-63 PAD-TUNE1 built; gamepad tuning, stick test, pad poll in the catch, stick replay
 

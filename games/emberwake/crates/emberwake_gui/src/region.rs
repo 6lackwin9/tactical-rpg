@@ -1383,6 +1383,16 @@ impl Screen<GameCx> for RegionMap {
     fn id(&self) -> &'static str {
         "region_map"
     }
+    /// ENGINE-64 (LIVE-RELOAD1): on top, with no conversation or card open, the map is built again from the game state
+    /// over the new data (where the party stands stays); under another screen it reads the new data as it draws.
+    fn data_reloaded(&mut self, cx: &mut Cx, top: bool) -> Option<String> {
+        if top && !self.svc.talking() && self.lore.is_none() && cx.has_game() {
+            let map = RegionMap::new(cx);
+            cx.nav.push(Nav::Reset(Box::new(map)));
+        }
+        None
+    }
+
     /// ENGINE-49 (WALK-FEEL1): the party's cell, where it is drawn and the camera, for a `feel` replay's movement report.
     fn motion(&self) -> Value {
         self.motion.clone()

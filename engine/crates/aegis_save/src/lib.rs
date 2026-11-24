@@ -201,7 +201,32 @@ pub fn write(fmt: &Format, dir: &Path, slot: i64, saved_at: i64, state: impl FnO
 /// Writes `state` in the envelope to `final_path` through a temp file and a rename (directly on a store that
 /// `writes_whole`, the web: no temp key, so a save needs only its own size in the quota); problem strings, empty =
 /// written.
+/// ENGINE-64 (LIVE-RELOAD1): how many save writes are under way (a dev run's live reload waits while one is).
+static WRITING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// ENGINE-64: a save is being written right now (on any thread).
+pub fn writing() -> bool {
+    WRITING.load(std::sync::atomic::Ordering::Acquire) > 0
+}
+
+/// Counts a write while it lives (`writing`).
+struct Writing;
+
+impl Writing {
+    fn start() -> Writing {
+        WRITING.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        Writing
+    }
+}
+
+impl Drop for Writing {
+    fn drop(&mut self) {
+        WRITING.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    }
+}
+
 fn write_envelope(fmt: &Format, dir: &Path, final_path: &Path, saved_at: i64, state: Value) -> Vec<String> {
+    let _writing = Writing::start();
     let envelope = json::obj([
         ("format", fmt.tag.into()),
         ("version", int(fmt.version)),

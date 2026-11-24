@@ -24,6 +24,11 @@ fn a_game_folder_gives_the_manifest_the_options_and_the_folders() {
     let d = Start::new("salve", Some(t.path_buf()), Path::new("eng"), &[], None);
     assert_eq!(d.options.port, aegis_ui::bridge::DEFAULT_PORT);
     assert!(d.save_dir.ends_with("saves"));
+    // ENGINE-64 (LIVE-RELOAD1): `dev=1` turns live reload on for every game that starts here (art reload with no code
+    // of its own); none by default
+    assert!(!d.options.live && !s.options.live);
+    assert!(Start::new("salve", Some(t.path_buf()), Path::new("eng"), &args(&[("dev", "1")]), None).options.live);
+    assert!(!Start::new("salve", Some(t.path_buf()), Path::new("eng"), &args(&[("dev", "1"), ("live", "0")]), None).options.live, "a scenario run's live=0");
     assert_eq!(arg(&args(&[("a", "1")]), "a"), Some("1"));
 }
 

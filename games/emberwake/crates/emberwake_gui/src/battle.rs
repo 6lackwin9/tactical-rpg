@@ -979,6 +979,11 @@ impl BattleScreen {
 pub(crate) const BOARD_GROUP: &[&str] = &["tile.", "unit."];
 
 impl Screen<GameCx> for BattleScreen {
+    /// ENGINE-64 (LIVE-RELOAD1): a fight under way keeps the units and skills it was built with until it ends.
+    fn data_reloaded(&mut self, _cx: &mut Cx, _top: bool) -> Option<String> {
+        Some("this battle keeps its units until it ends".to_string())
+    }
+
     /// ENGINE-51 (SWITCH-FEEL1): the battle beat while it runs (TRANSITIONS1 T1 intro, T2 victory), for the switch report.
     fn transition(&self, _cx: &Cx) -> Option<&'static str> {
         self.beat.map(|b| b.kind.name())

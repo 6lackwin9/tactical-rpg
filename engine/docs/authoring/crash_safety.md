@@ -10,7 +10,8 @@ start and the save fallbacks with no code of its own. Only the rescue save needs
    build (dev or release, the engine version and `AEGIS_COMMIT` when the build sets it), the top screen, the last 200
    log lines, the backtrace and the last lines of `feel.log` when one is there.
 2. The shell catches the panic as it comes back from the event or frame: a window's event handler, or a no-window
-   run's request or frame. The Windows gamepad poll runs inside the same catch (ENGINE-63). It calls `Context::rescue`, which writes the rescue save. Then `crashlog::crashed` writes
+   run's request or frame. The Windows gamepad poll runs inside the same catch (ENGINE-63). It calls
+   `Context::rescue`, which writes the rescue save. Then `crashlog::crashed` writes
    the report if none is written yet (a no-window run has no log) and leaves `crashed.json` beside it. After that the
    panic goes on as before, and the program ends.
 3. At the next start the shell reads and removes `crashed.json`. It shows one line over the first screen: "The game

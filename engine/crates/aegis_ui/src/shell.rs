@@ -78,6 +78,10 @@ pub struct Options {
     pub window_sizes: Value,
     /// Some: no window at all, the frames stay in memory (HEADLESS1, `headless`). None: the player's window.
     pub headless: Option<headless::Headless>,
+    /// ENGINE-64 (LIVE-RELOAD1): watch the asset layers and the game's data and reload what changes (`crate::live`): a
+    /// dev run only (`start::Start` sets it for `dev=1`; a game with dev tools of its own keeps it to the builds with
+    /// them, never a player's build).
+    pub live: bool,
 }
 
 /// ENGINE-54 (WARM-SPREAD1): the art loads one warm slice may make on the frame, in µs (its draw's own cost comes on
@@ -144,6 +148,10 @@ struct Shell<G> {
     /// ENGINE-62 (CRASH-SAFE1): the game's title, for a crash report written with no log open.
     title: String,
     input_seen: bool,
+    /// ENGINE-64 (LIVE-RELOAD1): the watcher of a dev run with live reload on, and the last reload's line with when it
+    /// stops showing.
+    live: Option<crate::live::Watch>,
+    live_line: Option<(String, Instant)>,
 }
 
 impl<G: Context> Shell<G> {
@@ -154,11 +162,17 @@ impl<G: Context> Shell<G> {
         let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         gfx.kit.device.dpr = dpr;
         let (policy, offered, window_notices) = read_window_options(&options.canvas, &options.window_sizes);
-        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false, title: String::new() };
+        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false, title: String::new(), live: None, live_line: None };
         shell.cx.notice.extend(icon_notice);
         shell.cx.notice.extend(window_notices);
         hold_declared_sizes(&mut shell.cx.settings, &options.window_sizes, &offered);
         shell.title = options.title.clone();
+        if options.live {
+            shell.live = crate::live::Watch::start(shell.cx.art.layers().roots.clone(), shell.cx.app.data_dirs());
+            if shell.live.is_some() {
+                log("live reload on: the asset layers and the data are watched");
+            }
+        }
         crate::crashlog::set_top(shell.stack.last().map_or("", |s| s.id()));
         // ENGINE-62 (CRASH-SAFE1): panics are noted for `on_panic`; a crash the last run caught shows its line once
         #[cfg(not(target_arch = "wasm32"))]
@@ -468,7 +482,70 @@ impl<G: Context> Shell<G> {
         self.drawn().into_iter().fold(FrameNeed::Idle, |need, i| need.and(self.stack[i].frame_need(&self.cx)))
     }
 
+    /// ENGINE-64 (LIVE-RELOAD1): reloads what the watcher found changed since the last call (nothing while a save is
+    /// being written): art, the theme, layouts, sounds and the data, keeping the game state; one line says what. True
+    /// when the screen must be drawn again (a reload, or the line just went away).
+    fn live_poll(&mut self) -> bool {
+        let now = Instant::now();
+        let gone = self.live_line.as_ref().is_some_and(|(_, until)| now >= *until);
+        if gone {
+            self.live_line = None;
+        }
+        let Some(w) = self.live.as_mut() else { return gone };
+        let c = w.take(aegis_save::writing());
+        if c.is_empty() {
+            return gone;
+        }
+        let mut lines: Vec<String> = c.line().into_iter().collect();
+        self.cx.art.forget(&c.art);
+        self.cx.audio.forget(&c.sounds);
+        if c.theme {
+            crate::theme::reload(&mut self.cx);
+        }
+        if !c.data.is_empty() {
+            match G::reload_data(&mut self.cx, &c.data) {
+                Ok(problems) => {
+                    lines.push("Data reloaded".to_string());
+                    // what was built ahead from the old data is dropped; each screen rebuilds or says what it keeps
+                    self.warming = None;
+                    let n = self.stack.len();
+                    for i in (0..n).rev() {
+                        lines.extend(self.stack[i].data_reloaded(&mut self.cx, i + 1 == n));
+                    }
+                    self.cx.notice.extend(problems);
+                }
+                Err(e) => {
+                    let line = format!("Data not reloaded: {e}");
+                    self.cx.notice.push(line.clone());
+                    lines.push(line);
+                }
+            }
+        }
+        if lines.is_empty() {
+            return gone;
+        }
+        let line = lines.join("; ");
+        log(&format!("live reload: {line}"));
+        self.live_line = Some((line, now + crate::live::LINE_FOR));
+        self.settle();
+        true
+    }
+
+    /// ENGINE-64: the last reload's line, over everything at the canvas's bottom left.
+    fn draw_live_line(&mut self) {
+        let Some((line, _)) = self.live_line.as_ref() else { return };
+        let t = th();
+        let view = self.whole_view();
+        let mut p = Painter { c: &mut self.gfx.canvas, v: view, fonts: &mut self.gfx.fonts };
+        let size = crate::ui::BODY;
+        let (w, h) = (p.text_w(line, size).ceil() as i32 + 12, p.line_h(size).ceil() as i32 + 6);
+        let r = Rect::new(6, view.canvas.1 - h - 6, w, h);
+        p.panel(r, t.card, t.gold, 2.0);
+        p.text((r.x + 6) as f32, (r.y + 3) as f32, line, size, t.text);
+    }
+
     fn frame(&mut self) {
+        self.live_poll();
         self.feel.on = self.feel_launch || self.cx.settings.v["feel"] == json!(true);
         self.settle();
         self.cx.playtest.tick();
@@ -558,6 +635,7 @@ impl<G: Context> Shell<G> {
         if self.feel.on {
             self.draw_feel();
         }
+        self.draw_live_line();
         self.settle();
         self.follow_music();
         self.cx.audio.tick();
@@ -1124,7 +1202,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false, title: String::new() };
+        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false, title: String::new(), live: None, live_line: None };
         s.frame();
         s
     }

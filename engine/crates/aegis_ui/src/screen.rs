@@ -361,6 +361,16 @@ pub trait Context: Sized + 'static {
     fn rescue(&self) -> Option<Vec<String>> {
         None
     }
+    /// ENGINE-64 (LIVE-RELOAD1): the folders of the game's data, watched in a dev run with live reload on. None by default.
+    fn data_dirs(&self) -> Vec<PathBuf> {
+        Vec::new()
+    }
+    /// ENGINE-64: files in `data_dirs` changed: reloads the data through the same load and validation as a start and,
+    /// when it loads, swaps it in (Ok: a line for the notice, extra problems after it). On an error nothing is swapped
+    /// and the error names the file. The default has no data to reload.
+    fn reload_data(_cx: &mut Cx<Self>, _changed: &[PathBuf]) -> Result<Vec<String>, String> {
+        Err("this game does not reload its data".into())
+    }
 }
 
 /// The modifier keys held down right now (the shell keeps it current; all up while the window is out of focus), for
@@ -589,6 +599,13 @@ pub trait Screen<G> {
     /// opened can still get ready); give one only now and then (a slow screen costs its first draw here). None by
     /// default.
     fn warm_next(&mut self, _cx: &mut Cx<G>) -> Option<Box<dyn Screen<G>>> {
+        None
+    }
+    /// ENGINE-64 (LIVE-RELOAD1): the game's data was reloaded in a dev run (`Context::reload_data`): a screen built from
+    /// the old data rebuilds itself from the game state (pushing `Nav::Reset` or the like), or says what it keeps (a
+    /// battle keeps its units until it ends) as a line added to the reload's. Asked of every screen, top first (`top`:
+    /// this one is on top). None by default (the screen reads the data as it draws).
+    fn data_reloaded(&mut self, _cx: &mut Cx<G>, _top: bool) -> Option<String> {
         None
     }
     /// What the frame loop owes this screen now (FPSCAP1). Default: every frame. Say less only when `tick` and `draw` have
