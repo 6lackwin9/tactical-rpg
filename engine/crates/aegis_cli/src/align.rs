@@ -202,6 +202,66 @@ fn store_queue_ref(pipe: &Path, src: &Path) -> Result<String> {
     Ok(posix_path(&abs))
 }
 
+/// Mirrors ONLY the reference filenames needed by pending `queue/*.json` requests (skipping `session_ref` requests)
+/// into `<pipe>/refs/active/`, pruning stale copies from finished batches while keeping all originals in `<pipe>/refs/`.
+pub fn sync_active_refs(pipe: &Path) -> Result<Vec<String>> {
+    let queue_dir = pipe.join("queue");
+    let refs_dir = pipe.join("refs");
+    let active_dir = refs_dir.join("active");
+    std::fs::create_dir_all(&active_dir)?;
+
+    let mut wanted: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    if queue_dir.is_dir() {
+        for entry in std::fs::read_dir(&queue_dir)?.flatten() {
+            let p = entry.path();
+            if p.extension().and_then(|s| s.to_str()) != Some("json") {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&p) else { continue };
+            let Ok(req) = serde_json::from_str::<Value>(&text) else { continue };
+            if req["metadata"]["record"]["session_ref"].as_str().is_some_and(|s| !s.trim().is_empty()) {
+                continue;
+            }
+            if let Some(arr) = req["references"].as_array() {
+                for r in arr {
+                    if let Some(rs) = r.as_str() {
+                        if let Some(fname) = rs.rsplit(['/', '\\']).next().filter(|s| !s.is_empty()) {
+                            wanted.insert(fname.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Prune stale files in refs/active/ (originals remain archived in refs/)
+    for entry in std::fs::read_dir(&active_dir)?.flatten() {
+        let p = entry.path();
+        if p.is_file() {
+            let keep = p.file_name().and_then(|s| s.to_str()).is_some_and(|n| wanted.contains(n));
+            if !keep {
+                let _ = std::fs::remove_file(&p);
+            }
+        }
+    }
+
+    // Copy missing or updated active refs from refs/ into refs/active/
+    let mut synced = Vec::new();
+    for fname in &wanted {
+        let src = refs_dir.join(fname);
+        let dst = active_dir.join(fname);
+        if src.is_file() {
+            let src_bytes = std::fs::read(&src)?;
+            let needs_write = !dst.is_file() || std::fs::read(&dst).map_or(true, |b| b != src_bytes);
+            if needs_write {
+                std::fs::write(&dst, &src_bytes)?;
+            }
+            synced.push(fname.clone());
+        }
+    }
+    Ok(synced)
+}
+
 fn posix_path(p: &Path) -> String {
     let s = p.to_string_lossy().replace('\\', "/");
     s.strip_prefix("//?/").unwrap_or(&s).to_string()
@@ -415,18 +475,15 @@ fn cmd_enqueue<G: Game>(game: &G, args: &Args) -> Result<()> {
     std::fs::write(&tmp, serde_json::to_string_pretty(&req)? + "\n")?;
     std::fs::rename(&tmp, &dest)?;
 
-    let attach_names: Vec<String> = stored_refs
-        .iter()
-        .filter_map(|r| Path::new(r).file_name().and_then(|s| s.to_str()).map(String::from))
-        .collect();
+    let active_names = sync_active_refs(&pipe)?;
     println!("queued {name} [stage={}] -> {}", stage.as_str(), dest.display());
-    if !attach_names.is_empty() {
-        println!("  attach from refs/: {}", attach_names.join(", "));
+    if !active_names.is_empty() {
+        println!("  synced refs/active/: {}", active_names.join(", "));
     }
     if let Some(sref) = session_ref {
         println!("  session_ref: {sref} (chains directly from previous in-session output)");
     }
-    println!("  next: run 'process image queue' in Gemini Web App Tasks, then 'python tools/portraits/artqueue.py ingest'");
+    println!("  next: in Gemini Task mode, attach all files from refs/active/ via Upload files and run 'process image queue using image-pipeline-executor'");
     Ok(())
 }
 
@@ -4030,6 +4087,18 @@ mod tests {
         let r2 = store_queue_ref(&pipe, &block).unwrap();
         assert_eq!(r1, r2);
         assert!(pipe.join("refs").join("demo_vault.blockout.png").is_file());
+
+        // sync_active_refs mirrors only pending queue refs and prunes stale files from refs/active/
+        std::fs::create_dir_all(pipe.join("queue")).unwrap();
+        std::fs::create_dir_all(pipe.join("refs").join("active")).unwrap();
+        std::fs::write(pipe.join("refs").join("active").join("stale_old.png"), b"old").unwrap();
+        let mut qreq = req.clone();
+        qreq["references"] = json!([r1]);
+        std::fs::write(pipe.join("queue").join("demo_q1.json"), serde_json::to_string(&qreq).unwrap()).unwrap();
+        let active = sync_active_refs(&pipe).unwrap();
+        assert_eq!(active, vec!["demo_vault.blockout.png"]);
+        assert!(pipe.join("refs").join("active").join("demo_vault.blockout.png").is_file());
+        assert!(!pipe.join("refs").join("active").join("stale_old.png").exists());
     }
 
     #[test]

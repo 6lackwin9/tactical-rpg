@@ -183,6 +183,7 @@ def enqueue(pipe, name, req, dry=False):
         raise FileExistsError(f"request {name} exists")
     req["references"] = [store_ref(pipe, r) for r in req["references"]]
     write_json(path, req)
+    sync_active_refs(pipe)
     print(f"{name}: queued, n {req['n']}, {len(req['references'])} reference(s)")
     return path
 
@@ -214,6 +215,27 @@ def to_attach(pipe):
             continue
         names.update(re.split(r"[\/]", r)[-1] for r in req.get("references") or [])
     return sorted(names)
+
+
+def sync_active_refs(pipe):
+    """Mirrors only the active queue's reference files into <pipe>/refs/active/ (pruning stale copies while leaving
+    originals archived in <pipe>/refs/), so the Gemini web app can attach everything in refs/active/ via Add from Drive."""
+    wanted = set(to_attach(pipe))
+    refs_dir = pipe / REFS
+    active_dir = refs_dir / "active"
+    active_dir.mkdir(parents=True, exist_ok=True)
+    for existing in list(active_dir.iterdir()):
+        if existing.is_file() and existing.name not in wanted:
+            existing.unlink()
+    synced = []
+    for name in sorted(wanted):
+        src = refs_dir / name
+        dst = active_dir / name
+        if src.is_file():
+            if not dst.is_file() or dst.read_bytes() != src.read_bytes():
+                shutil.copyfile(src, dst)
+            synced.append(name)
+    return synced
 
 
 # ---- ingest ----
@@ -516,7 +538,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     pipe = pipeline(a.pipeline, a.backup)
     if a.cmd == "attach":
-        names = to_attach(pipe)
+        names = sync_active_refs(pipe)
         print(chr(10).join(names) if names else "nothing to attach")
         return 0
     if a.cmd == "status":
@@ -538,6 +560,8 @@ def main(argv=None):
         if not a.names:
             for name in failed_names(pipe):
                 report_failed(pipe, name)
+        if not a.dry_run:
+            sync_active_refs(pipe)
         return 0
     if a.n < 1:
         sys.exit("--n must be at least 1")
