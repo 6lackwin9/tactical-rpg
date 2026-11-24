@@ -97,7 +97,7 @@ Parked for your approval (golden re-records need your word):
 - [ ] Image queue ready: say "process image queue" in Gemini (bunk props, class glyphs, bed keepsakes, battle
   strips, Junction 7 houses; refs in `image_pipeline/refs/active`).
 - [ ] Gamepad on the PC (`FB-327`): repeat timing, dead zone, which button is Back (south Enter, east Back, west
-  Space, north Tab, bumpers page, Start Esc).
+  Space, north Tab, bumpers page, Start Esc). Since 2026-11-24 (`ENGINE-63`) Settings > Controls > Gamepad has sliders for the stick dead zone and the repeat delay and rate, with a live Stick Test line: set what feels right and tell me the numbers to make them the defaults.
 
 ## Battle view: closes M1
 
