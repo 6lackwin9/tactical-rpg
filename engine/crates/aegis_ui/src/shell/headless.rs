@@ -487,8 +487,12 @@ impl<G: Context> Loop<G> {
             let (stalled, real) = stalled_underruns(audio, &stalls, offset);
             audio["underruns"] = json!(real.len());
             audio["underrun_ms"] = json!(real);
-            audio["underruns_stalled"] = json!(stalled.len());
-            audio["underrun_stalled_ms"] = json!(stalled);
+            // the audio thread's own stalls (ENGINE-61) come first; the main thread's are added
+            let mut all: Vec<f64> = audio["underrun_stalled_ms"].as_array().into_iter().flatten().filter_map(Value::as_f64).collect();
+            all.extend(stalled);
+            all.sort_by(f64::total_cmp);
+            audio["underruns_stalled"] = json!(all.len());
+            audio["underrun_stalled_ms"] = json!(all);
         }
         if switching {
             // a dev build draws about twice as slow: its long frames and budgets stretch as the feel budgets do

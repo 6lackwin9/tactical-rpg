@@ -333,25 +333,18 @@ impl Canvas {
         if v.w <= 0 || v.h <= 0 || px.len() < (w.max(0) * h.max(0) * 4) as usize {
             return;
         }
+        // ENGINE-61 (FEEL-CLOSE1): one branch-free pass a row (it vectorises): `put`'s sum for every pixel, which is the
+        // pixel itself at alpha 255 and the canvas's at 0 (whose alpha `put` leaves as it is)
+        let n = (v.w * 4) as usize;
         for yy in v.y..v.y + v.h {
-            let row = ((yy - y) * w) as usize;
-            let mut xx = v.x;
-            while xx < v.x + v.w {
-                let i = (row + (xx - x) as usize) * 4;
-                // a run of opaque pixels is copied as it is (what `put` does with each of them)
-                if px[i + 3] == 255 {
-                    let mut end = xx + 1;
-                    while end < v.x + v.w && px[(row + (end - x) as usize) * 4 + 3] == 255 {
-                        end += 1;
-                    }
-                    let (from, to) = (i, ((yy * self.w + xx) * 4) as usize);
-                    let n = ((end - xx) * 4) as usize;
-                    self.px[to..to + n].copy_from_slice(&px[from..from + n]);
-                    xx = end;
-                    continue;
+            let from = (((yy - y) * w + (v.x - x)) * 4) as usize;
+            let to = ((yy * self.w + v.x) * 4) as usize;
+            for (d, s) in self.px[to..to + n].chunks_exact_mut(4).zip(px[from..from + n].chunks_exact(4)) {
+                let a = s[3] as u32;
+                for k in 0..3 {
+                    d[k] = ((s[k] as u32 * a + d[k] as u32 * (255 - a)) / 255) as u8;
                 }
-                self.put(xx, yy, [px[i], px[i + 1], px[i + 2], px[i + 3]]);
-                xx += 1;
+                d[3] |= 0u8.wrapping_sub(u8::from(a > 0));
             }
         }
     }

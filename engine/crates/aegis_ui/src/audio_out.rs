@@ -45,6 +45,8 @@ pub struct Stats {
     buffer_frames: AtomicU64,
     buffers: AtomicU64,
     underruns: Mutex<Vec<Instant>>,
+    /// ENGINE-61 (FEEL-CLOSE1): underruns whose mix ran mostly off the CPU (the audio thread stopped by the host).
+    underruns_stalled: Mutex<Vec<Instant>>,
     /// The longest a callback took to mix its buffer, in µs.
     worst_fill_us: AtomicU64,
     /// (the time frame `.1` plays, frame `.1`): the last callback's.
@@ -59,6 +61,8 @@ pub struct Snapshot {
     pub buffer_frames: u64,
     pub buffers: u64,
     pub underruns: Vec<Instant>,
+    /// ENGINE-61: underruns of a stalled audio thread (not in `underruns`).
+    pub underruns_stalled: Vec<Instant>,
     pub worst_fill_ms: f64,
     pub virtual_device: bool,
 }
@@ -72,7 +76,7 @@ impl Snapshot {
 
 impl Stats {
     fn new(rate: u32, channels: u16) -> Self {
-        Self { rate, channels, pos: AtomicU64::new(0), buffer_frames: AtomicU64::new(0), buffers: AtomicU64::new(0), underruns: Mutex::new(Vec::new()), worst_fill_us: AtomicU64::new(0), anchor: Mutex::new(None) }
+        Self { rate, channels, pos: AtomicU64::new(0), buffer_frames: AtomicU64::new(0), buffers: AtomicU64::new(0), underruns: Mutex::new(Vec::new()), underruns_stalled: Mutex::new(Vec::new()), worst_fill_us: AtomicU64::new(0), anchor: Mutex::new(None) }
     }
 
     /// When output frame `frame` plays (None before the first callback).
@@ -86,8 +90,10 @@ impl Stats {
         }
     }
 
-    fn underrun(&self, at: Instant) {
-        if let Ok(mut u) = self.underruns.lock() {
+    /// `stalled`: the late mix spent under `feel::STALL_CPU_SHARE` of its wall time on the CPU (ENGINE-61).
+    fn underrun(&self, at: Instant, stalled: bool) {
+        let list = if stalled { &self.underruns_stalled } else { &self.underruns };
+        if let Ok(mut u) = list.lock() {
             if u.len() >= UNDERRUNS_KEPT {
                 u.remove(0);
             }
@@ -124,14 +130,17 @@ impl Stats {
             buffer_frames: self.buffer_frames.load(Ordering::Relaxed),
             buffers: self.buffers.load(Ordering::Relaxed),
             underruns: self.underruns.lock().map(|u| u.clone()).unwrap_or_default(),
+            underruns_stalled: self.underruns_stalled.lock().map(|u| u.clone()).unwrap_or_default(),
             worst_fill_ms: self.worst_fill_us.load(Ordering::Relaxed) as f64 / 1000.0,
             virtual_device,
         }
     }
 
     fn reset(&self) {
-        if let Ok(mut u) = self.underruns.lock() {
-            u.clear();
+        for list in [&self.underruns, &self.underruns_stalled] {
+            if let Ok(mut u) = list.lock() {
+                u.clear();
+            }
         }
         self.worst_fill_us.store(0, Ordering::Relaxed);
         self.buffers.store(0, Ordering::Relaxed);
@@ -227,6 +236,12 @@ impl Output {
     }
 }
 
+/// ENGINE-61 (FEEL-CLOSE1): a late mix that ran `wall_ms` from its call and spent `cpu_ms` of it on the audio thread's
+/// CPU was a stall when under `feel::STALL_CPU_SHARE` of it ran (the thread stopped, not a mix too slow for its buffer).
+pub fn mix_stalled(wall_ms: f64, cpu_ms: f64) -> bool {
+    cpu_ms < wall_ms * crate::feel::STALL_CPU_SHARE
+}
+
 /// A device stream of sample type `T` whose callback mixes `mixer`. Each callback's buffer plays once the one before
 /// it has; a callback later than that (or that came after one buffer's time and took longer than that to mix) is an
 /// underrun.
@@ -243,7 +258,7 @@ fn stream<T: SizedSample + FromSample<f32> + Send + 'static>(device: &cpal::Devi
                 let span = Duration::from_secs_f64((data.len() / channels) as f64 / rate);
                 // the buffer before this one ran out before this callback came
                 if last.is_some_and(|(t, d)| now.saturating_duration_since(t) > d + span) {
-                    stats.underrun(now);
+                    stats.underrun(now, false);
                 }
                 mixed.resize(data.len(), 0.0);
                 stats.fill(&mut mixer, &mut mixed, now + span);
@@ -285,10 +300,13 @@ impl VirtualDevice {
                         std::thread::sleep(wait.into());
                     }
                     let plays = call + span;
+                    let cpu0 = crate::perf::thread_cpu_ms();
                     stats.fill(&mut mixer, &mut buf, plays);
                     let done = Instant::wall();
                     if done > plays {
-                        stats.underrun(done);
+                        // ENGINE-61: late with the mix mostly off the CPU (from its call, the sleep's overshoot included)
+                        let cpu = cpu0.zip(crate::perf::thread_cpu_ms()).map(|(a, b)| b - a);
+                        stats.underrun(done, cpu.is_some_and(|c| mix_stalled(done.saturating_duration_since(call).as_secs_f64() * 1000.0, c)));
                         // far behind (a stopped process): start over from now rather than mix the time missed
                         if done.saturating_duration_since(plays) > span * 4 {
                             t0 = done;

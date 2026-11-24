@@ -49,8 +49,8 @@ fn r3(x: f64) -> f64 {
 
 /// The report: `sounds` (each: `rel`, `bus`, `asked_ms`, `heard_ms`, `after_ask_ms`, `after_input_ms`, `beat_ms`,
 /// `decode_ms`), the worst of each budgeted measure (null when nothing measured it), `unheard` (asked, never heard by
-/// the end), and the output's `buffer_frames`, `buffer_ms`, `rate`, `virtual`, `underruns`, `underrun_ms` and
-/// `worst_fill_ms`. `inputs`: when each input of the replay came; `frames`: each frame's start and end; `period_ms`:
+/// the end), and the output's `buffer_frames`, `buffer_ms`, `rate`, `virtual`, `underruns`, `underrun_ms`,
+/// `underruns_stalled`, `underrun_stalled_ms` (the audio thread stopped by the host, ENGINE-61) and `worst_fill_ms`. `inputs`: when each input of the replay came; `frames`: each frame's start and end; `period_ms`:
 /// the frame period a frame is shown after its start.
 pub fn report(sounds: &[Started], t0: Instant, inputs: &[Instant], frames: &[(Instant, Instant)], out: &Snapshot, period_ms: f64) -> Value {
     let mut rows = Vec::new();
@@ -84,6 +84,7 @@ pub fn report(sounds: &[Started], t0: Instant, inputs: &[Instant], frames: &[(In
         "sounds": rows,
         "ui_sound_ms": ui, "hit_beat_ms": hit, "music_ms": music, "decode_ms": decode.map(r3), "unheard": unheard,
         "underruns": out.underruns.len(), "underrun_ms": out.underruns.iter().map(|u| ms(*u, t0)).collect::<Vec<f64>>(),
+        "underruns_stalled": out.underruns_stalled.len(), "underrun_stalled_ms": out.underruns_stalled.iter().map(|u| ms(*u, t0)).collect::<Vec<f64>>(),
         "buffer_frames": out.buffer_frames, "buffer_ms": r3(out.buffer_ms()), "rate": out.rate, "virtual": out.virtual_device,
         "buffers": out.buffers, "worst_fill_ms": r3(out.worst_fill_ms),
     })
@@ -103,7 +104,7 @@ mod tests {
     #[test]
     fn each_sound_is_timed_from_its_input_or_its_frame() {
         let t0 = Instant::wall();
-        let out = Snapshot { rate: 48_000, channels: 2, buffer_frames: 512, buffers: 10, underruns: vec![at(t0, 400)], worst_fill_ms: 0.5, virtual_device: true };
+        let out = Snapshot { rate: 48_000, channels: 2, buffer_frames: 512, buffers: 10, underruns: vec![at(t0, 400)], underruns_stalled: vec![], worst_fill_ms: 0.5, virtual_device: true };
         let sounds: Vec<Started> = vec![
             ("sfx/ui_click.wav".into(), Bus::Ui, at(t0, 100), Some(at(t0, 115)), 0.2),
             ("sfx/hit.wav".into(), Bus::Sfx, at(t0, 202), Some(at(t0, 222)), 0.0),

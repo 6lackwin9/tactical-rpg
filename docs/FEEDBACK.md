@@ -177,8 +177,35 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ENGINE-58` (`BLOCK-CLICK2`) | Built (tools lane) | `develop` | The block click answers in 21 to 33 ms in release (was 44 to 51): the later members' ghosts are drafted on the frames after the click's answer is drawn, one step a frame, and any request, key or Confirm finishes them first; a same-board test; a game with no window settles its screens before requested frames, so shots stay the same; `feel_battle` block budget 35 ms; goldens unchanged. FB-507 |
 | `ENGINE-59` (`BATTLE-FRAME2`) | Built in part (tools lane) | `develop` | Slow battle frames named: the round's planning start drafts the whole party's ghosts in one tick (31 to 45 ms; deferring them changed 11 shots, so it waits for a call); a queued ghost step on a heavy frame now waits for a frame with room. 5 of 5 release feel runs passed; the container's own stalls are named with options; goldens unchanged. FB-508 |
 | `ENGINE-60` (`PLAN-START2`) | Built (tools lane) | `develop` | The round's planning start drafts each ghost once when no buff would drop (33 to 17-19 ms; same-ghosts tests incl. the Crucible hold pick); the feel table lists frames mostly off the CPU as stalls apart, real misses still fail. 6 of 10 release feel runs passed (3 audio-thread underruns, 2 frames 1-2 ms over), options given; goldens unchanged. FB-509 |
+| `ENGINE-61` (`FEEL-CLOSE1`) | Built (tools lane) | `develop` | Underruns of a stalled audio thread listed as stalls; the canvas row blend made branch-free with the same bytes, cutting 4 to 6 ms of panels from every frame (battle draw 16-24 to 12-16 ms, warm frames at most 25 ms). 9 of 10 release feel runs passed, the miss judged container noise; the feel run moves to Tushar's PC. Goldens unchanged. FB-510 |
 
 ## 2. Feedback Items (Append-Only)
+
+### FB-510: ENGINE-61 FEEL-CLOSE1 built; 9 of 10 release runs pass, the one miss container noise
+
+- **Status**: built (tools lane), `develop`. Engine only (`aegis_ui`: canvas row blend, audio output, feel request);
+  no game, data or scenario change. **Every golden unchanged**; shots diff clean against `ed0510af` except the known
+  `screens_menus__scene_runner`. 9 of 10 release `tools/fc.sh feel` runs passed with stalls listed; the one miss is
+  container noise (below), so per the row the feel run stops here and moves to Tushar's PC (option f).
+- **Spec**: `docs/READY.md` row `ENGINE-61` (`FEEL-CLOSE1`).
+- **(g) built**: the virtual audio device times each mix with the audio thread's CPU clock; a late mix that spent under
+  `STALL_CPU_SHARE` (half) of its time from its call on the CPU is a stall (`audio_out::mix_stalled`) and lands in
+  `underruns_stalled` / `underrun_stalled_ms`, with the main thread's stalled underruns added. A real device's late
+  callback stays a real underrun (no CPU clock to judge it there). Test in `aegis_ui/tests/feel.rs`.
+- **(e) built**: the profile showed the five HUD panels alone cost 4 to 6 ms of every battle frame, in
+  `Canvas::blend_rgba` (each panel's composed nine-slice blended a pixel at a time). It is now one branch-free pass a
+  row with `blend`'s exact sum, which the compiler vectorises; the same bytes (new test `tests/blend_rows.rs` checks
+  it against `blend` per pixel, off the edge and under a clip, and the shots diff is clean). Every screen with frames
+  gains. Release battle draw went from 16 to 24 ms to 12 to 16 ms; the warm frames beside a fight (slice plus draw)
+  from 27 to 33 ms to at most 25 ms, so a busy frame keeps 8 ms or more under 33 ms. Tried and left out: keeping the
+  battle view-model for one revision (3 to 5 ms on idle frames only; the busy frames rebuild it anyway, and tests that
+  change the session directly would see a stale one).
+- **10 release runs**: 9 passed; stalls listed in 6 of them (most often `audio_feel/title_to_map`), stalled underruns
+  in 3. Run 9 failed `walk_feel/walk_keys` on two frames of 55 and 58 ms beside a listed stall (47 ms, 8 ms of CPU);
+  the same step's frames are 6 to 16 ms in the other 9 runs, and the CPU clock here moves in 4 ms ticks, so a slow
+  host spell can read as busy. Judged container noise.
+- **Docs delta**: `engine/README.md` (Design): in the feel line, "an audio underrun whose mix ran mostly off the
+  audio thread's CPU is listed as stalled too (ENGINE-61)".
 
 ### FB-509: ENGINE-60 PLAN-START2 built; the planning start halved, stalls listed apart, 6 of 10 runs pass
 

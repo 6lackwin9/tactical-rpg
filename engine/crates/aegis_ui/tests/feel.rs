@@ -108,3 +108,11 @@ fn underruns_during_a_stall_are_the_stalls() {
     let (stalled, real) = aegis_ui::shell::headless::stalled_underruns(&audio, &stalls, 100.0);
     assert_eq!((stalled, real), (vec![60.0], vec![5.0, 200.0]));
 }
+
+/// ENGINE-61: a late mix that ran mostly off the audio thread's CPU is a stall; one too slow for its buffer is not.
+#[test]
+fn a_late_mix_mostly_off_the_cpu_is_a_stall() {
+    use aegis_ui::audio_out::mix_stalled;
+    assert!(mix_stalled(30.0, 1.0), "the thread stopped");
+    assert!(!mix_stalled(30.0, 25.0), "the mix itself was too slow");
+}
