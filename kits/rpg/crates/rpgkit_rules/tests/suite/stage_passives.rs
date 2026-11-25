@@ -203,9 +203,18 @@ fn ranged_group_and_min_distance_evaluate_cleanly() {
     assert!((u.potency_for_skill_at(shot, true, 4) - 1.10).abs() < 1e-9);
     assert_eq!(u.potency_parts_at(shot, true, 3).len(), 1);
     assert_eq!(u.potency_parts_at(shot, true, 4).len(), 2);
-    // N1 reaches only the distance-gated entries: the distance-0 ranged boost stays with inherently ranged skills.
-    assert!((u.potency_for_skill_at(strike, true, 4) - 0.85).abs() < 1e-9);
-    assert_eq!(u.potency_parts_at(strike, true, 4).len(), 1);
+    // PR7-16 (FB-288 (b)): a distance-0 `group: "ranged"` grant follows the hit's ranged flag too (Strike with the bow).
+    assert!((u.potency_for_skill_at(strike, true, 4) - 1.10).abs() < 1e-9);
+    assert_eq!(u.potency_parts_at(strike, true, 4).len(), 2);
+    assert!((u.potency_for_skill_at(strike, true, 3) - 1.25).abs() < 1e-9);
+    assert_eq!(u.potency_parts_at(strike, true, 3).len(), 1);
+    assert!((u.potency_for_skill_at(strike, true, 0) - 1.25).abs() < 1e-9);
+    assert_eq!(u.potency_parts_at(strike, true, 0).len(), 1);
+    assert!((u.power_for_at(strike, true, 0) - 1.25 * u.power_for(strike)).abs() < 1e-9);
+    assert!((u.potency_for_skill_at(strike, false, 4) - 1.0).abs() < 1e-9);
+    assert!(u.potency_parts_at(strike, false, 4).is_empty());
+    assert!((u.potency_for_skill_at(strike, false, 0) - 1.0).abs() < 1e-9);
+    assert!(u.potency_parts_at(strike, false, 0).is_empty());
 
     u.apply_passive(&cat, &cat.passives["p_cond_far"]);
     // Hero currently wields `w_bow` (`attack_range > 1`), so `when: {"ranged": true}` holds.

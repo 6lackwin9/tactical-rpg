@@ -1,0 +1,47 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "vignettes",
+      "world": "sunk_ward",
+      "fields": [
+        "cards"
+      ],
+      "entry": {
+        "id": "vg_m5_gate",
+        "cards": [
+          {
+            "style": "image",
+            "image": "backgrounds/story/vg_m5_gate.png",
+            "top": "#0a0b10",
+            "bottom": "#1e232d",
+            "text": "The Crucible Watchpost. The winch chain screams. The Slag Gate rises a hand's width, then a forearm, then enough for a body to roll under.",
+            "fade_in_ms": 1200.0,
+            "fade_out_ms": 600.0,
+            "shake": "heavy"
+          },
+          {
+            "style": "text",
+            "text": "{member:sunk_ward.crucible_stayed} held the winch. Inquisitor-Prelate Nemeth did not strike them down. He took the stayer alive, the way a man takes a coin he intends to spend.",
+            "top": "#0a0b10",
+            "bottom": "#1e232d",
+            "when": [
+              {
+                "kind": "flag",
+                "key": "sunk_ward.crucible_stayed",
+                "op": "!=",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "style": "text",
+            "text": "Beyond the Slag Gate the ward ends. The ash falls, and the cathedral bells ring a new hour over Upper Cinderreach.",
+            "top": "#0a0b10",
+            "bottom": "#1e232d"
+          }
+        ]
+      }
+    }
+  ]
+}

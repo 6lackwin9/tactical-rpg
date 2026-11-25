@@ -423,3 +423,78 @@ fn ranged_min_distance_potency_governs_forecast_and_battle_hit() {
     assert_eq!(sdmg4, (sdmg3 as f64 * 0.85).round() as i32, "distance 4 basic ranged Strike applies -15%");
     assert_eq!(sest4, sdmg4, "the Strike forecast applies it too");
 }
+
+/// PR7-16 (`FB-288` (b)): a distance-0 `group: "ranged"` potency grant follows the hit's ranged flag identically in
+/// `command::hit_terms` and `plan::expected_from` (both at distance > 0 and at distance 0 / `NO_CELL`) for a basic
+/// Strike from a ranged weapon, while leaving a melee Strike unchanged.
+#[test]
+fn ranged_distance_zero_potency_matches_between_hit_terms_and_expected_from() {
+    let mut cat = catalog();
+    let extra = Catalog::from_value(&json!({
+        "passives": [
+            {"id": "t_ranged_flat", "name": "Ranged Flat", "slot": "", "effects": [
+                {"type": "skill_potency", "group": "ranged", "value": 0.25}
+            ]}
+        ]
+    }));
+    cat.passives.extend(extra.passives);
+    let strike_id = cat.skills.iter().position(|s| s.id == "strike").unwrap();
+    let arc_cat = Arc::new(cat);
+
+    let row = json!({"id": "t_r0", "name": "R0", "party": ["p_hero"], "enemies": ["p_foe"],
+        "total_blocks": BLOCKS, "unit_ap": 10, "ap_regen": 0, "max_rounds": 8, "rng_seed": 77});
+    let mut def = EncounterDef::from_obj(row.as_object().unwrap());
+    def.ruleset = Ruleset::from_row(json!({"id": TIMELINE, "name": "Timeline", "rules": [TRIGGERS]}).as_object().unwrap());
+
+    let run_case = |attack_range: i32, from: V2, at: V2| -> (i32, i32) {
+        let mut s = Session::start(arc_cat.clone(), def.clone(), &Plain);
+        s.w.units[HERO].attack_range = attack_range;
+        let pas = s.w.cat.passives["t_ranged_flat"].clone();
+        s.w.units[HERO].apply_passive(&s.w.cat, &pas);
+        s.w.units[1].armor_override = 0;
+        s.w.grid.positions[HERO] = Some(V2::new(2, 4));
+        s.w.grid.positions[1] = Some(V2::new(5, 4));
+
+        let ranged = attack_range > 1;
+        let power = s.w.units[HERO].power_for(&s.w.cat.skills[strike_id]);
+        let mut cmd = Command::new(
+            HERO,
+            0,
+            1,
+            command::CmdKind::Attack {
+                target: Some(1),
+                skill_mult: power,
+                use_offhand: false,
+                follow_tiles: 0,
+                dash_tiles: 0,
+                status_rounds: 0,
+                min_range: 1,
+                max_range: attack_range,
+                last_damage: 0,
+                last_crit: false,
+                last_target: None,
+            },
+        );
+        cmd.skill = "strike".into();
+        let scene = command::HitScene { from, at, guard: None, attacker_stance: None, target_stance: None };
+        let terms = command::hit_terms(&s.w, &cmd, HERO, 1, &scene, ranged, false, power);
+        let via_terms = damage::compute(&s.w.units[HERO], &s.w.units[1], terms.input).final_dmg;
+        let via_expected = plan::expected_from(&s.w, HERO, 1, strike_id, None, from, 0.0, 1.0, false);
+        (via_terms, via_expected)
+    };
+
+    // Melee Strike: no +25% grant.
+    let (melee_terms, melee_exp) = run_case(1, V2::new(4, 4), V2::new(5, 4));
+    assert_eq!(melee_terms, melee_exp, "melee hit_terms matches expected_from");
+
+    // Ranged Strike at distance 3: +25% applies identically in hit_terms and expected_from.
+    let (r3_terms, r3_exp) = run_case(6, V2::new(2, 4), V2::new(5, 4));
+    assert_eq!(r3_terms, r3_exp, "ranged dist=3 hit_terms matches expected_from");
+    assert_eq!(r3_terms, (melee_terms as f64 * 1.25).round() as i32, "ranged dist=3 gets +25%");
+
+    // Ranged Strike at distance 0 (NO_CELL): +25% STILL applies identically in hit_terms and expected_from.
+    let no_cell = rpgkit_battle::grid::NO_CELL;
+    let (r0_terms, r0_exp) = run_case(6, no_cell, no_cell);
+    assert_eq!(r0_terms, r0_exp, "ranged dist=0 hit_terms matches expected_from");
+    assert_eq!(r0_terms, r3_terms, "ranged dist=0 gets the same +25% as dist=3");
+}

@@ -91,11 +91,11 @@ pub fn gain(d: &Data, gs: &mut GameState, member: &str, family: &str, base: i64)
     Ok(Gain { member: member.to_string(), family: family.to_string(), from, to })
 }
 
-/// A gain's note: "Ana: sword mastery +10 (level 1)." (+ " New level." on a level-up).
+/// A gain's note: "Ana: Sword mastery +10 (level 1)." (+ " New level." on a level-up).
 pub fn note(d: &Data, gs: &GameState, g: &Gain) -> String {
     let who = gs.party.member(&g.member).map_or_else(|| g.member.clone(), |mem| progression::display_name(d, mem));
     let up = if g.level_up() { " New level." } else { "" };
-    format!("{who}: {} mastery +{} (level {}).{up}", g.family, g.to - g.from, g.level())
+    format!("{who}: {} mastery +{} (level {}).{up}", d.family_name(&g.family), g.to - g.from, g.level())
 }
 
 /// The settle's use: each fielded member still in the party gains the use XP in every family it attacked with this

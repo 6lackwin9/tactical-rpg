@@ -319,3 +319,19 @@ fn the_build_opens_the_wielded_familys_techniques_and_its_keystone() {
     let bare = progression::build(&d, m).unwrap().unit;
     assert!(bare.techniques.is_empty() && bare.mastery_keystone.is_empty(), "nothing without a sword in the main hand");
 }
+
+#[test]
+fn a_mastery_note_uses_the_familys_display_name_or_falls_back_to_its_id() {
+    let mut d = data();
+    // Give `sword` a display name while leaving `axe` without a `name` key.
+    d.catalogs.content.get_mut("item_families").unwrap().get_mut("sword").unwrap().insert("name".into(), json!("Longsword"));
+    let mut gs = game(&d, FROM_ACT);
+    let id = hero_id(&gs);
+    let g_sword = mastery::gain(&d, &mut gs, &id, "sword", USE_XP).unwrap();
+    let g_axe = mastery::gain(&d, &mut gs, &id, "axe", USE_XP).unwrap();
+    let sword_note = mastery::note(&d, &gs, &g_sword);
+    let axe_note = mastery::note(&d, &gs, &g_axe);
+    assert!(sword_note.contains(": Longsword mastery +"), "resolved family display name: {sword_note}");
+    assert!(!sword_note.contains(": sword mastery +"), "should not show raw id when name is set: {sword_note}");
+    assert!(axe_note.contains(": axe mastery +"), "falls back to family id when name is absent: {axe_note}");
+}

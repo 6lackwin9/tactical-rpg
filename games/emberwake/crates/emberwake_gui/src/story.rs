@@ -165,6 +165,9 @@ pub struct StoryStage {
     ahead_step: Option<(String, i64)>,
     ahead_since: Option<Instant>,
     ahead_job: Option<crate::battle::FightAheadJob>,
+    /// Milestone 1: the campaign act when this stage opened, so finishing a sequence that advances Act 1 -> 2 opens
+    /// `ActCompleteScreen` over the live `RegionMap`.
+    act_before: Option<i64>,
 }
 
 /// ENGINE-54 (WARM-SPREAD1): how long a vignette shows before the fight after it is started ahead.
@@ -172,7 +175,8 @@ const AHEAD_AFTER_MS: u64 = 300;
 
 impl StoryStage {
     pub fn new(cx: &Cx) -> Self {
-        let mut stage = Self { waiting: false, music: crate::music::game_track(cx, crate::music::MENU), step_seen: None, error: Vec::new(), w: Vec::new(), ahead_step: None, ahead_since: None, ahead_job: None };
+        let act_before = cx.game.as_ref().and_then(|g| g.gs.campaign.as_ref()).map(|c| c.act);
+        let mut stage = Self { waiting: false, music: crate::music::game_track(cx, crate::music::MENU), step_seen: None, error: Vec::new(), w: Vec::new(), ahead_step: None, ahead_since: None, ahead_job: None, act_before };
         stage.take_step_music(cx);
         stage
     }
@@ -287,6 +291,10 @@ impl StoryStage {
         } else {
             let map = crate::region::RegionMap::new(cx);
             cx.nav.push(Nav::Reset(Box::new(map)));
+            let act_now = cx.game.as_ref().and_then(|g| g.gs.campaign.as_ref()).map(|c| c.act);
+            if self.act_before == Some(1) && act_now == Some(2) {
+                cx.nav.push(Nav::Push(Box::new(crate::epilogue::ActCompleteScreen::new(cx))));
+            }
         }
     }
 
@@ -1229,5 +1237,65 @@ pub(crate) mod tests {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/ui/views");
         let v = vignette_view();
         std::fs::write(dir.join(format!("{}.view.json", v.screen)), serde_json::to_string_pretty(&v.to_json()).unwrap() + "\n").unwrap();
+    }
+
+    /// Milestone 1: when a story sequence advances the campaign from Act 1 to Act 2 and finishes to the map,
+    /// `StoryStage::finish` pushes `ActCompleteScreen` over the reset `RegionMap`; staying in Act 1 (or Act 2 -> 2)
+    /// pushes only `RegionMap`.
+    #[test]
+    fn story_stage_finish_pushes_act_complete_on_act_1_to_2_transition() {
+        let mut d = data();
+        // Enable a campaign starting at Act 1 on `tale` and add an Act 1 -> 2 sequence.
+        d.catalogs.worlds.get_mut("tale").unwrap().manifest.insert("campaign".into(), json!({"start_act": 1}));
+        let seq = json!({
+            "id": "to_act2",
+            "name": "To Act 2",
+            "steps": [
+                {"kind": "vignette", "vignette": "v_news"},
+                {"kind": "effects", "effects": [{"effect": "set_act", "act": 2}]},
+                {"kind": "enter", "location": "alley", "anchor": ""}
+            ]
+        });
+        let seq_row = json::arr(&with_ids("tale", json!([seq])))[0].clone();
+        d.catalogs.worlds.get_mut("tale").unwrap().own.entry("sequences".into()).or_default().push(json::dict(&seq_row).clone());
+
+        let mut cx = story_cx(d);
+        let mut gs = new_game::create_for_world(&cx.data.clone(), "tale", 1).expect("new game");
+        gs.story = Default::default();
+        assert_eq!(gs.campaign.as_ref().unwrap().act, 1);
+        let d_arc = cx.data.clone();
+        assert!(json::b(&story::start(&d_arc, &mut gs, "to_act2"), "ok", false));
+        enter_game(&mut cx, gs, -1, Vec::new());
+        let (how, mut stage) = take(&mut cx);
+        assert_eq!((how, stage.id()), ("reset", "story_stage"));
+
+        // Play the vignette step -> effects step sets act = 2 -> enter step calls StoryStage::finish.
+        stage.tick(&mut cx);
+        let (_, mut v) = take(&mut cx);
+        play_out(&mut cx, &mut v);
+        assert_eq!(cx.gs().campaign.as_ref().unwrap().act, 2);
+        stage.resume(&mut cx);
+        stage.tick(&mut cx);
+
+        // Expect [Nav::Reset(RegionMap), Nav::Push(ActCompleteScreen)] in order.
+        assert_eq!(cx.nav.len(), 2, "expected Reset(region_map) followed by Push(act_complete)");
+        let (how2, top) = take(&mut cx);
+        let (how1, base) = take(&mut cx);
+        assert_eq!((how1, base.id()), ("reset", "region_map"));
+        assert_eq!((how2, top.id()), ("push", "act_complete"));
+        assert_eq!(emberwake_world::campaign::save_refusal(cx.gs()), "", "saving stays enabled");
+
+        // Running the same sequence again when already in Act 2 does NOT push ActCompleteScreen.
+        assert!(json::b(&story::start(&d_arc, cx.gs_mut(), "to_act2"), "ok", false));
+        let mut stage2 = StoryStage::new(&cx);
+        stage2.tick(&mut cx);
+        let (_, mut v2) = take(&mut cx);
+        play_out(&mut cx, &mut v2);
+        stage2.resume(&mut cx);
+        stage2.tick(&mut cx);
+        assert_eq!(cx.nav.len(), 1, "Act 2 -> 2 should only reset to region_map");
+        let (how_only, only) = take(&mut cx);
+        assert_eq!((how_only, only.id()), ("reset", "region_map"));
+        let _ = std::fs::remove_dir_all(&cx.shot_dir);
     }
 }

@@ -335,3 +335,322 @@ impl Screen<GameCx> for EpilogueScreen {
 
     widget_plumbing!();
 }
+
+// ---- Milestone 1: Act 1 end-of-slice screen ----
+
+/// Act 1 completion card copy.
+pub const ACT1_TITLE: &str = "Act 1 Complete";
+pub const ACT1_SUBTITLE: &str = "To Be Continued";
+pub const ACT1_CONTINUE: &str = "Continue Exploring";
+pub const ACT1_MAIN_MENU: &str = "Main Menu";
+pub const ACT1_OPEN_NOTE: &str = "Act 2 systems and the road to the Slag Gate are open to explore.";
+const CRUCIBLE_STAYER_FLAG: &str = "sunk_ward.crucible_stayed";
+
+#[derive(Debug, Clone)]
+pub enum ActCompleteAct {
+    Continue,
+    MainMenu,
+}
+
+/// Milestone 1 end-of-slice screen shown over the live `RegionMap` when Act 1 advances into Act 2.
+/// Unlike `EpilogueScreen`, the campaign continues: Esc, right-click, or **Continue Exploring** pops
+/// back into the live map with saving still enabled; **Main Menu** autosaves and returns to the title.
+pub struct ActCompleteScreen {
+    days: i64,
+    members: Vec<(String, i64)>,
+    stayer: String,
+    departed: Vec<(String, String)>,
+    w: Vec<Widget<ActCompleteAct>>,
+}
+
+impl ActCompleteScreen {
+    pub fn new(cx: &Cx) -> Self {
+        let Some(g) = cx.game.as_ref() else {
+            return Self { days: 0, members: Vec::new(), stayer: String::new(), departed: Vec::new(), w: Vec::new() };
+        };
+        let gs = &g.gs;
+        let days = gs.time.max(0);
+        let members: Vec<(String, i64)> = gs
+            .party
+            .members
+            .iter()
+            .map(|m| (emberwake_world::progression::display_name(&cx.data, m), m.level(&cx.data)))
+            .collect();
+        let stayer_id = gs.flags.get(CRUCIBLE_STAYER_FLAG).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+        let stayer = if stayer_id.is_empty() {
+            String::new()
+        } else if let Some(dep) = gs.party.departed.iter().find(|d| d.member.id == stayer_id) {
+            emberwake_world::progression::display_name(&cx.data, &dep.member)
+        } else if let Some(m) = gs.party.member(&stayer_id) {
+            emberwake_world::progression::display_name(&cx.data, m)
+        } else {
+            let ch = cx.data.resolve(&gs.world_id, "characters", &stayer_id);
+            aegis_core::json::s_or(ch, "name", &stayer_id)
+        };
+        let departed: Vec<(String, String)> = gs
+            .party
+            .departed
+            .iter()
+            .filter(|d| stayer_id.is_empty() || d.member.id != stayer_id)
+            .map(|d| {
+                let name = emberwake_world::progression::display_name(&cx.data, &d.member);
+                let why = if !d.cause.is_empty() { d.cause.clone() } else { d.life.clone() };
+                (name, why)
+            })
+            .collect();
+        Self { days, members, stayer, departed, w: Vec::new() }
+    }
+
+    fn act(&mut self, cx: &mut Cx, a: ActCompleteAct) {
+        match a {
+            ActCompleteAct::Continue => cx.nav.push(Nav::Pop),
+            ActCompleteAct::MainMenu => {
+                cx.autosave();
+                cx.end_game();
+                cx.nav.push(Nav::Reset(Box::new(crate::menus::MainMenu::default())));
+            }
+        }
+    }
+
+    fn party_line(&self) -> String {
+        if self.members.is_empty() {
+            "Surviving party: none".into()
+        } else {
+            let list = self.members.iter().map(|(n, lv)| format!("{n} (Lv {lv})")).collect::<Vec<_>>().join(", ");
+            format!("Surviving party: {list}")
+        }
+    }
+
+    fn departed_line(&self) -> String {
+        if self.departed.is_empty() {
+            String::new()
+        } else {
+            let list = self
+                .departed
+                .iter()
+                .map(|(n, why)| if why.is_empty() { n.clone() } else { format!("{n} ({why})") })
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("Departed: {list}")
+        }
+    }
+}
+
+impl Screen<GameCx> for ActCompleteScreen {
+    fn id(&self) -> &'static str {
+        "act_complete"
+    }
+
+    fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        let mut ui: Ui<ActCompleteAct> = Ui::new(g, mouse, live);
+        ui.p.fill(Rect::new(0, 0, W, H), th().game("epilogue_fill", EPILOGUE_FILL));
+        let r = Rect::new(MARGIN, MARGIN, W - 2 * MARGIN, H - 2 * MARGIN);
+        ui.p.panel(r, th().panel, th().gold, 4.0);
+        let inner = r.w - 2 * PAD;
+        let (hl, tl, bl, sl) = (ui.p.line_h(HEAD), ui.p.line_h(TITLE), ui.p.line_h(BODY), ui.p.line_h(SMALL));
+        let center_x = (r.x + r.w / 2) as f32;
+        let left = (r.x + PAD) as f32;
+        let mut y = (r.y + PAD) as f32;
+
+        for l in lines(&mut ui, ACT1_TITLE, HEAD, inner as f32) {
+            ui.p.text_center(center_x, y, &l, HEAD, th().gold);
+            y += hl;
+        }
+        for l in lines(&mut ui, ACT1_SUBTITLE, TITLE, inner as f32) {
+            ui.p.text_center(center_x, y, &l, TITLE, th().dim);
+            y += tl;
+        }
+        y += 8.0;
+
+        let days_text = format!("Days elapsed: {} (Day {})", self.days, self.days + 1);
+        let party_text = self.party_line();
+        let stayer_text = if self.stayer.is_empty() { String::new() } else { format!("Held the winch: {} stayed behind at the Crucible Watchpost.", self.stayer) };
+        let dep_text = self.departed_line();
+
+        let card_pad = PAD / 2;
+        let card_w = inner;
+        let tw = (card_w - 2 * card_pad) as f32;
+        let days_lines = lines(&mut ui, &days_text, BODY, tw);
+        let party_lines = lines(&mut ui, &party_text, BODY, tw);
+        let stayer_lines = lines(&mut ui, &stayer_text, BODY, tw);
+        let dep_lines = lines(&mut ui, &dep_text, SMALL, tw);
+        let card_h = (2 * card_pad) as f32
+            + (days_lines.len() + party_lines.len() + stayer_lines.len()) as f32 * bl
+            + dep_lines.len() as f32 * sl
+            + if !party_lines.is_empty() { 4.0 } else { 0.0 }
+            + if !stayer_lines.is_empty() { 4.0 } else { 0.0 }
+            + if !dep_lines.is_empty() { 4.0 } else { 0.0 };
+        let card_rect = Rect::new(r.x + PAD, y.ceil() as i32, card_w, card_h.ceil() as i32);
+        ui.p.panel(card_rect, th().game("epilogue_card", rgba(22, 24, 32, 255)), th().dim, 3.0);
+
+        let cx_text = (card_rect.x + card_pad) as f32;
+        let mut cy = (card_rect.y + card_pad) as f32;
+        for l in &days_lines {
+            ui.p.text(cx_text, cy, l, BODY, th().text);
+            cy += bl;
+        }
+        if !party_lines.is_empty() {
+            cy += 4.0;
+            for l in &party_lines {
+                ui.p.text(cx_text, cy, l, BODY, th().good);
+                cy += bl;
+            }
+        }
+        if !stayer_lines.is_empty() {
+            cy += 4.0;
+            for l in &stayer_lines {
+                ui.p.text(cx_text, cy, l, BODY, th().gold);
+                cy += bl;
+            }
+        }
+        if !dep_lines.is_empty() {
+            cy += 4.0;
+            for l in &dep_lines {
+                ui.p.text(cx_text, cy, l, SMALL, th().dim);
+                cy += sl;
+            }
+        }
+
+        let mut ny = (card_rect.y + card_rect.h) as f32 + 10.0;
+        for l in lines(&mut ui, ACT1_OPEN_NOTE, BODY, inner as f32) {
+            ui.p.text(left, ny, &l, BODY, th().text);
+            ny += bl;
+        }
+
+        let bh = (bl + 6.0).ceil() as i32;
+        let by = r.y + r.h - PAD - bh;
+        let buttons = [
+            ("act_complete.continue", ACT1_CONTINUE, ActCompleteAct::Continue, "Return to the live map and keep playing."),
+            ("act_complete.main_menu", ACT1_MAIN_MENU, ActCompleteAct::MainMenu, "Autosave and return to the main menu."),
+        ];
+        let widths: Vec<i32> = buttons.iter().map(|b| button_w(&mut ui, b.1)).collect();
+        let mut x = r.x + r.w - PAD - widths.iter().sum::<i32>() - GAP * (widths.len() as i32 - 1);
+        for (b, bw) in buttons.into_iter().zip(widths) {
+            ui.button_tip(b.0, Rect::new(x, by, bw, bh), b.1, b.2, true, tip(b.1, b.3));
+            x += bw + GAP;
+        }
+        self.w = ui.widgets;
+    }
+
+    fn back(&mut self, cx: &mut Cx) {
+        self.act(cx, ActCompleteAct::Continue);
+    }
+
+    fn auto_focus(&self) -> bool {
+        true
+    }
+
+    fn state(&self, _cx: &Cx) -> Value {
+        json!({
+            "title": ACT1_TITLE,
+            "subtitle": ACT1_SUBTITLE,
+            "days": self.days,
+            "members": self.members.iter().map(|(n, lv)| json!({"name": n, "level": lv})).collect::<Vec<_>>(),
+            "stayer": self.stayer,
+            "departed": self.departed.iter().map(|(n, why)| json!({"name": n, "cause": why})).collect::<Vec<_>>(),
+            "note": ACT1_OPEN_NOTE,
+        })
+    }
+
+    fn ambience(&self, _cx: &Cx) -> Option<String> {
+        Some(String::new())
+    }
+
+    widget_plumbing!();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, gfx, rect};
+    use crate::screens::Game;
+    use crate::story::tests::story_cx;
+    use aegis_core::json as ajson;
+    use aegis_ui::painter::TextRec;
+    use aegis_ui::screen::TEXT_SIZES;
+    use emberwake_world::{campaign, new_game, state::Departed, Data};
+
+    fn act_complete_cx() -> Cx {
+        let catalog = json!({
+            "classes": [{"id": "fighter", "name": "Fighter"}],
+            "units": [
+                {"id": "hero", "name": "Ash", "side": "party", "class_id": "fighter", "level": 5},
+                {"id": "mate", "name": "Kaelen", "side": "party", "class_id": "fighter", "level": 4},
+                {"id": "stayer", "name": "Bram", "side": "party", "class_id": "fighter", "level": 4},
+                {"id": "fallen", "name": "Orla", "side": "party", "class_id": "fighter", "level": 3}
+            ]
+        });
+        let worlds = json!({
+            "w": {"manifest": {"id": "w", "name": "W", "start_location": "hub", "start_party": ["hero", "mate"], "campaign": {"start_act": 1}}, "own": {
+                "locations": [{"id": "hub", "name": "Hub", "_world": "w", "_qid": "w:hub"}]
+            }}
+        });
+        let d = Data::from_values(&catalog, &worlds, &json!({}));
+        let mut cx = story_cx(d);
+        let mut gs = new_game::create_for_world(&cx.data, "w", 1).expect("new game");
+        gs.time = 11;
+        gs.campaign.as_mut().unwrap().act = 2;
+        let stayer_m = emberwake_world::state::UnitState::at_level(&cx.data, "stayer", 4, "stayer_u");
+        let fallen_m = emberwake_world::state::UnitState::at_level(&cx.data, "fallen", 3, "fallen_u");
+        gs.flags.insert(CRUCIBLE_STAYER_FLAG.into(), json!("stayer_u"));
+        gs.party.departed.push(Departed { member: stayer_m, life: "captured".into(), cause: "crucible".into(), encounter: String::new(), day: 11, keepsake: String::new() });
+        gs.party.departed.push(Departed { member: fallen_m, life: "dead".into(), cause: "combat".into(), encounter: String::new(), day: 8, keepsake: String::new() });
+        cx.game = Some(Game::new(gs, -1, false));
+        cx
+    }
+
+    #[test]
+    fn act_complete_renders_clean_at_every_text_size_and_keeps_saving_open() {
+        let mut cx = act_complete_cx();
+        let mut screen = ActCompleteScreen::new(&cx);
+        let st = screen.state(&cx);
+        assert_eq!(st["title"], json!(ACT1_TITLE));
+        assert_eq!(st["subtitle"], json!(ACT1_SUBTITLE));
+        assert_eq!(st["days"], json!(11));
+        assert_eq!(st["stayer"], json!("Bram"));
+        assert_eq!(st["departed"], json!([{"name": "Orla", "cause": "combat"}]));
+        assert_eq!(campaign::save_refusal(cx.gs()), "", "saving stays enabled on ActCompleteScreen");
+
+        let mut g = gfx();
+        for (size, scale) in TEXT_SIZES {
+            let recs: Vec<TextRec> = frame(&mut screen, &mut cx, &mut g, scale as f32);
+            let boxes: Vec<(String, f32, f32, f32, f32)> = screen
+                .widgets()
+                .iter()
+                .map(|w| {
+                    let (x, y, ww, hh) = rect(w);
+                    (ajson::s(ajson::dict(w), "id"), x as f32, y as f32, ww as f32, hh as f32)
+                })
+                .collect();
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+            assert_eq!(v["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "act_complete at {size}: {v}");
+        }
+    }
+
+    #[test]
+    fn act_complete_continue_pops_and_main_menu_ends_game() {
+        let mut cx = act_complete_cx();
+        let mut g = gfx();
+        let mut screen = ActCompleteScreen::new(&cx);
+        frame(&mut screen, &mut cx, &mut g, 1.0);
+
+        // Esc / back pops back into live RegionMap.
+        screen.back(&mut cx);
+        assert!(matches!(cx.nav.pop(), Some(Nav::Pop)), "Esc pops back to RegionMap");
+        assert!(cx.has_game(), "game stays live after Esc");
+
+        // Continue Exploring button pops back into live RegionMap.
+        screen.click_id(&mut cx, "act_complete.continue").expect("Continue Exploring");
+        assert!(matches!(cx.nav.pop(), Some(Nav::Pop)), "Continue Exploring pops back to RegionMap");
+        assert!(cx.has_game(), "game stays live after Continue Exploring");
+        assert_eq!(campaign::save_refusal(cx.gs()), "", "saving stays enabled");
+
+        // Main Menu button autosaves, ends the game, and resets to MainMenu.
+        screen.click_id(&mut cx, "act_complete.main_menu").expect("Main Menu");
+        match cx.nav.pop() {
+            Some(Nav::Reset(s)) => assert_eq!(s.id(), "main_menu"),
+            other => panic!("expected Reset(main_menu), got {:?}", other.map(|_| "nav")),
+        }
+        assert!(!cx.has_game(), "Main Menu ends the active game");
+    }
+}

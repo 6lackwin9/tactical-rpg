@@ -117,7 +117,7 @@ fn an_ending_completes_the_run_with_its_row_and_saves_stay_refused() {
     campaign::apply_effects(&d, &mut gs, &[end_fx("")], &mut events);
     let over = gs.campaign.as_ref().and_then(|c| c.over.clone()).expect("the run is over");
     assert!(over.completed() && over.ending == "second", "{over:?}");
-    assert_eq!(campaign::save_refusal(&gs), campaign::RUN_OVER_TEXT, "F3 holds for a completed run");
+    assert_eq!(campaign::save_refusal(&gs), campaign::STORY_ENDED_TEXT, "F3 holds for a completed run");
     let ev = campaign::tick(&d, &mut gs, &campaign::Cause::Effects);
     let told: Vec<&Value> = ev.iter().filter(|e| json::s(json::dict(e), "event") == "run_over").collect();
     assert_eq!(told.len(), 1, "{ev:?}");

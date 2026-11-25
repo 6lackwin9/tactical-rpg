@@ -104,7 +104,7 @@ fn log_line(cx: &Cx, e: &Dict) -> String {
         "checkpoint_warning" => format!("{}: {} left (day {}).", checkpoint_name(cx, e), days(json::i(e, "left", 0)), json::i(e, "day", 0)),
         "checkpoint_missed" => format!("{}: the deadline has passed.", checkpoint_name(cx, e)),
         "act_start" => format!("Act {} begins.", json::i(e, "act", 0)),
-        "run_over" => campaign::RUN_OVER_TEXT.to_string(),
+        "run_over" => if json::b(e, "completed", false) { campaign::STORY_ENDED_TEXT } else { campaign::RUN_OVER_TEXT }.to_string(),
         _ => String::new(),
     }
 }
@@ -242,18 +242,32 @@ fn sentence_end(r: &str) -> String {
     }
 }
 
+/// PR7-16 (`FB-302`): whether every previewed end is a story completion (`kind == "ending"`), not a run-losing end.
+fn all_ending(ends: &[Value]) -> bool {
+    !ends.is_empty() && ends.iter().all(|e| s(json::dict(e), "kind") == emberwake_data::ending::END_KIND_ENDING)
+}
+
 /// W3: the question before fighting `encounter` when an outcome would end the run (`campaign::preview_battle`), None
-/// when none would: "Winning or losing this fight would end the run: <text>. Fight anyway?".
+/// when none would: "Winning or losing this fight would end the run: <text>. Fight anyway?", or "Ends the story" for
+/// kind-`ending` ends (`FB-302`).
 pub fn fight_ask(cx: &Cx, encounter: &str) -> Option<String> {
     let ends = campaign::preview_battle(&cx.data, cx.gs(), encounter);
+    fight_ask_of(&ends)
+}
+
+fn fight_ask_of(ends: &[Value]) -> Option<String> {
     if ends.is_empty() {
         return None;
     }
     let cases: Vec<String> = ends.iter().map(|e| s(json::dict(e), "case")).collect();
     let mut words: Vec<String> = cases.iter().enumerate().map(|(i, c)| if i == 0 { case_word(c).to_string() } else { case_word(c).to_lowercase() }).collect();
     words.dedup();
-    let r = reason(&ends);
-    Some(format!("{} this fight would end the run{} Fight anyway?", words.join(" or "), sentence_end(&r)))
+    let r = reason(ends);
+    if all_ending(ends) {
+        Some(format!("{} this fight - Ends the story{} Fight anyway?", words.join(" or "), sentence_end(&r)))
+    } else {
+        Some(format!("{} this fight would end the run{} Fight anyway?", words.join(" or "), sentence_end(&r)))
+    }
 }
 
 /// W3: the line for a fight that cannot be refused (a road or a roaming fight) when an outcome would end the run.
@@ -263,12 +277,17 @@ pub fn fight_warning(cx: &Cx, encounter: &str) -> Option<String> {
 
 /// The title of the notice over a fight that cannot be refused but could end the run.
 pub const FIGHT_WARNING: &str = "This fight can end the run";
+/// PR7-16 (`FB-302`): the title of the notice over a fight that cannot be refused and ends the story.
+pub const STORY_END_WARNING: &str = "Ends the story";
 
 /// W3: a fight that cannot be refused (a road or a roaming fight) and could end the run: the notice over the battle
 /// it just started (nothing when no outcome would end the run).
 pub fn warn_fight(cx: &mut Cx, encounter: &str) {
-    if let Some(text) = fight_warning(cx, encounter) {
-        cx.nav.push(Nav::Push(Box::new(CampaignNotice::new(FIGHT_WARNING, "fatal", &text))));
+    let ends = campaign::preview_battle(&cx.data, cx.gs(), encounter);
+    if let Some(q) = fight_ask_of(&ends) {
+        let text = q.trim_end_matches(" Fight anyway?").to_string();
+        let (title, tone) = if all_ending(&ends) { (STORY_END_WARNING, "warn") } else { (FIGHT_WARNING, "fatal") };
+        cx.nav.push(Nav::Push(Box::new(CampaignNotice::new(title, tone, &text))));
     }
 }
 
@@ -279,7 +298,11 @@ pub fn days_ask(cx: &Cx, n: i64, what: &str, verb: &str) -> Option<String> {
     if ends.is_empty() {
         return None;
     }
-    Some(format!("{what} would end the run{} {verb} anyway?", sentence_end(&reason(&ends))))
+    if all_ending(&ends) {
+        Some(format!("{what} - Ends the story{} {verb} anyway?", sentence_end(&reason(&ends))))
+    } else {
+        Some(format!("{what} would end the run{} {verb} anyway?", sentence_end(&reason(&ends))))
+    }
 }
 
 /// W3, CAMPAIGN1-TM: the question before the trip to `to` when its legs would end the run (`campaign::preview_trip`:
@@ -298,7 +321,11 @@ fn trip_ask_of(ends: Vec<Value>) -> Option<String> {
     if ends.is_empty() {
         return None;
     }
-    Some(format!("This trip would end the run{} Travel anyway?", sentence_end(&reason(&ends))))
+    if all_ending(&ends) {
+        Some(format!("This trip - Ends the story{} Travel anyway?", sentence_end(&reason(&ends))))
+    } else {
+        Some(format!("This trip would end the run{} Travel anyway?", sentence_end(&reason(&ends))))
+    }
 }
 
 /// The wrapped lines of `text` in `w` logical px at `size` (none for "").
@@ -1340,7 +1367,7 @@ pub(crate) mod tests {
         ep.key(&mut cx, Key::Right);
         ep.back(&mut cx);
         assert!(cx.nav.is_empty(), "F3: no way back into the run");
-        assert_eq!(campaign::save_refusal(cx.gs()), campaign::RUN_OVER_TEXT);
+        assert_eq!(campaign::save_refusal(cx.gs()), campaign::STORY_ENDED_TEXT);
         let mut slots = crate::menus::Slots::new(true);
         frame(&mut slots, &mut cx, &mut g, 1.0);
         assert!(slots.widgets().iter().filter(|w| s(json::dict(w), "id").starts_with("slot.") && s(json::dict(w), "kind") == "card").all(|w| !json::b(json::dict(w), "enabled", true)), "F3: no slot takes a save");
@@ -1380,5 +1407,58 @@ pub(crate) mod tests {
         let mut ep = crate::epilogue::EpilogueScreen::new(&cx);
         assert_eq!((ep.state(&cx)["title"].clone(), ep.state(&cx)["pages"].clone()), (json!(crate::epilogue::DONE_TITLE), json!(1)));
         audit_clean(&mut ep, &mut cx);
+    }
+
+    /// PR7-16 (`FB-302`): kind-`ending` previews say "Ends the story" instead of "would end the run" across fight,
+    /// days, trip, and non-refusable fight notices, and a completed `run_over` event logs `STORY_ENDED_TEXT`;
+    /// non-`ending` kinds keep "would end the run" and `RUN_OVER_TEXT`.
+    #[test]
+    fn kind_ending_previews_say_ends_the_story_and_completed_log_uses_story_ended_text() {
+        // Make Alert >= BREACH and the Red Tithing deadline fire kind `ending` instead of `fail`.
+        let d = data_edit(Value::Null, |worlds, _| {
+            for m in worlds["camp"]["own"]["meters"].as_array_mut().unwrap() {
+                if let Some(rules) = m.get_mut("rules").and_then(Value::as_array_mut) {
+                    for r in rules {
+                        if let Some(fxs) = r.get_mut("effects").and_then(Value::as_array_mut) {
+                            for fx in fxs {
+                                if fx.get("effect") == Some(&json!("end")) {
+                                    fx["kind"] = json!(emberwake_data::ending::END_KIND_ENDING);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        let mut cx = camp_cx_in(d, BREACH - LOUD_WON, 1);
+
+        let f_ask = fight_ask(&cx, "loud_job").expect("fight ending preview");
+        assert!(f_ask.contains("Ends the story") && !f_ask.contains("would end the run"), "{f_ask}");
+        let f_warn = fight_warning(&cx, "loud_job").expect("fight ending warning");
+        assert!(f_warn.contains("Ends the story") && !f_warn.contains("would end the run"), "{f_warn}");
+
+        warn_fight(&mut cx, "loud_job");
+        let (how, notice) = take_nav(&mut cx);
+        assert_eq!((how, notice.id()), ("push", "campaign_notice"));
+        assert_eq!(notice.state(&cx)["title"], json!(STORY_END_WARNING));
+        assert!(s(json::dict(&notice.state(&cx)), "text").contains("Ends the story"));
+
+        let d_ask = days_ask(&cx, 1, "Resting 1 day", "Rest").expect("days ending preview");
+        assert!(d_ask.contains("Ends the story") && !d_ask.contains("would end the run"), "{d_ask}");
+
+        let t_ask = trip_ask(&cx, "a").expect("trip ending preview");
+        assert!(t_ask.contains("Ends the story") && !t_ask.contains("would end the run"), "{t_ask}");
+
+        // Completed vs lost run_over log lines.
+        let completed_ev = json::dict(&json!({"event": "run_over", "kind": "ending", "completed": true, "ending": "fallback"})).clone();
+        let lost_ev = json::dict(&json!({"event": "run_over", "kind": "fail"})).clone();
+        assert_eq!(log_line(&cx, &completed_ev), campaign::STORY_ENDED_TEXT);
+        assert_eq!(log_line(&cx, &lost_ev), campaign::RUN_OVER_TEXT);
+
+        // Non-ending previews stay unchanged.
+        let fail_cx = camp_cx(BREACH - LOUD_WON, 1);
+        assert!(fight_ask(&fail_cx, "loud_job").unwrap().contains("would end the run"));
+        assert!(days_ask(&fail_cx, 1, "Resting 1 day", "Rest").unwrap().contains("would end the run"));
+        assert!(trip_ask(&fail_cx, "a").unwrap().contains("would end the run"));
     }
 }

@@ -1812,7 +1812,7 @@ pub fn hit_terms(w: &World, cmd: &Command, src: UnitId, t: UnitId, scene: &HitSc
     let mut mult = power * matched.1 * flank_power(w, flank);
     let dist = if scene.from != NO_CELL && scene.at != NO_CELL { crate::grid::square_dist(scene.from, w.size_of(src), scene.at, w.size_of(t)) } else { 0 };
     let mut distance = 0;
-    if dist > 0 {
+    if dist > 0 || ranged {
         if let Some(s) = w.cat.skill(&cmd.skill) {
             let base_pot = w.units[src].potency_for_skill(s);
             let at_pot = w.units[src].potency_for_skill_at(s, ranged, dist);

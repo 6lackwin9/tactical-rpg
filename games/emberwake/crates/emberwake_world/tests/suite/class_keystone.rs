@@ -171,3 +171,53 @@ fn the_seeded_folder_check_reports_nothing_new() {
     let (_s, dir) = seeded("check");
     assert_eq!(store::check(&dir), store::check(&base));
 }
+
+/// PR7-16 (`FB-303`): a recruit whose base unit has an empty `deck.keystone` cannot see or save its class keystone
+/// below the keystone level; at the keystone level `DeckTerms::for_member` lists it, slotting succeeds, and both
+/// `validate()` and `deck_errors()` return empty.
+#[test]
+fn a_recruit_deck_editor_exposes_and_validates_the_class_keystone_only_from_its_level() {
+    use emberwake_world::party_ops::deck::DeckTerms;
+    let (_t, dir) = seeded("deck_editor");
+    let d = open(&dir);
+    let (world, _) = deck_world(&d);
+    let rs = d.ruleset(&world);
+    for (class, key) in SPEC {
+        let row = recruit_row(&d, class);
+        assert!(d.cat.units[&row].deck.keystone.is_empty(), "{row} has empty base.deck.keystone");
+
+        // Below keystone level: omitted from DeckTerms::for_member, slot refused, saving rejected by validate() & deck_errors().
+        let mut below = UnitState::at_level(&d, &row, i64::from(KEY_LEVEL - 1), &row);
+        let below_terms = DeckTerms::for_member(&d, &below, &world, &rs).expect("deck terms");
+        assert!(!below_terms.keystones.contains(&key.to_string()), "{class} below level {KEY_LEVEL} omits {key}");
+        assert!(below_terms.slot(&below.deck, "keystone", key).is_err(), "{class} below level {KEY_LEVEL} cannot slot {key}");
+        below.deck.keystone = vec![key.to_string()];
+        assert!(!below.validate(&d).is_empty(), "{class} below level {KEY_LEVEL}: validate() rejects {key}");
+        assert!(!below.deck_errors(&d, &row).is_empty(), "{class} below level {KEY_LEVEL}: deck_errors() rejects {key}");
+
+        // At keystone level: listed by DeckTerms::for_member, auto-slotted, slotting succeeds, and validate()/deck_errors() are empty.
+        let mut at_key = UnitState::at_level(&d, &row, i64::from(KEY_LEVEL), &row);
+        let terms = DeckTerms::for_member(&d, &at_key, &world, &rs).expect("deck terms");
+        assert!(terms.keystones.contains(&key.to_string()), "{class} at level {KEY_LEVEL} lists {key}");
+        assert_eq!(terms.shown(&at_key.deck).keystone, vec![key.to_string()], "{class} at level {KEY_LEVEL} auto-slots {key}");
+
+        // Verify explicit slotting into a free keystone slot via DeckTerms::slot succeeds (with another keystone already slotted in a 2-slot ruleset)
+        // and replacing an alternate keystone via after_drop succeeds under the shipped 1-slot ruleset.
+        let other = d.cat.passives.values().find(|p| p.slot == "keystone" && p.id != key).expect("another keystone").id.clone();
+        let mut with_other = at_key.clone();
+        with_other.passives.push(other.clone());
+        with_other.deck.keystone = vec![other.clone()];
+        let terms_other = DeckTerms::for_member(&d, &with_other, &world, &rs).expect("deck terms");
+        let swapped = terms_other.after_drop(&with_other.deck, &format!("deck.own.keystone.{key}"), "deck.keystone.0").expect("replacing into keystone slot succeeds");
+        assert_eq!(swapped.keystone, vec![key.to_string()]);
+        let mut rs_two = rs.clone();
+        rs_two.numbers.deck_slots.keystone = 2;
+        let terms_two = DeckTerms::for_member(&d, &with_other, &world, &rs_two).expect("deck terms with 2 keystone slots");
+        let slotted = terms_two.slot(&with_other.deck, "keystone", key).expect("slot() succeeds for owned class keystone");
+        assert_eq!(slotted.keystone, vec![other, key.to_string()]);
+
+        at_key.deck = swapped;
+        assert!(at_key.validate(&d).is_empty(), "{class} at level {KEY_LEVEL}: validate() clean: {:?}", at_key.validate(&d));
+        assert!(at_key.deck_errors(&d, &row).is_empty(), "{class} at level {KEY_LEVEL}: deck_errors() clean: {:?}", at_key.deck_errors(&d, &row));
+    }
+}
