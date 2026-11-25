@@ -214,15 +214,24 @@ fn sunk_ward_seeds_six_cohort_templates_with_bodies_portraits_and_origins() {
     assert!(problems.is_empty(), "{problems:?}");
 }
 
-// PK3 §3.2's shared temperament pool is seeded as the slotless `temper_*` passives (PR7-10): `temper_steady`,
-// `temper_wary`, `temper_quiet` and `temper_reckless`. `temper_grim` is held back (a limit blocker): its effect needs a
-// Shaken status or resist the kit does not have yet, so no template names it.
+// PK3 §3.2's shared temperament pool is seeded as the slotless `temper_*` passives (PR7-10 + PR7-17):
+// `temper_steady`, `temper_wary`, `temper_quiet`, `temper_reckless`, and `temper_grim` (20% Weaken resist).
 #[test]
 fn sunk_ward_cohort_templates_draw_from_slotless_temperament_passives() {
     let d = data();
+    assert!(slotless(&d, "temper_grim"), "temper_grim is a slotless catalog passive");
+    let grim = d.cat.passives.get("temper_grim").expect("temper_grim seeded");
+    assert!(
+        grim.effects.iter().any(|e| e["type"] == "resist" && e["status"] == "weaken" && e["value"].as_f64() == Some(20.0)),
+        "temper_grim grants 20% resist to weaken: {:?}",
+        grim.effects
+    );
     for (id, _, _) in COHORTS {
         let t = emberwake_data::RecruitDef::from_obj(d.resolve(WORLD, emberwake_data::RECRUITS_KIND, id));
         assert!(!t.temperaments.is_empty() && t.temperaments.iter().all(|p| slotless(&d, p)), "{id}: slotless temperament passives {:?}", t.temperaments);
+        if matches!(id, "cohort_levy" | "cohort_novice" | "cohort_breaker") {
+            assert!(t.temperaments.iter().any(|p| p == "temper_grim"), "{id} pool includes temper_grim: {:?}", t.temperaments);
+        }
     }
 }
 

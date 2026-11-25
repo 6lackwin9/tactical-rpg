@@ -1859,6 +1859,20 @@
 			],
 			"slot": "",
 			"icon": "last_stand"
+		},
+		{
+			"id": "temper_grim",
+			"name": "Grim",
+			"description": "Seen worse than this: 20% resistance to Weaken.",
+			"effects": [
+				{
+					"type": "resist",
+					"status": "weaken",
+					"value": 20
+				}
+			],
+			"slot": "",
+			"icon": "resist"
 		}
 	]
 }

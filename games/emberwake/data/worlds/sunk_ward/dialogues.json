@@ -2278,6 +2278,29 @@
 				"talk",
 				"bunk"
 			]
+		},
+		{
+			"id": "dlg_bunk_tpl_temper_grim",
+			"name": "Bunks: seen worse",
+			"speaker": "",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "{b} is sitting on the edge of the bunk, rubbing tallow into a chipped edge without looking up.",
+					"next": "n1"
+				},
+				{
+					"id": "n1",
+					"text": "{a} asks if the noise down the sluice got to them. {b} shrugs: they have walked out of worse rooms than this.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk",
+				"provisional"
+			]
 		}
 	]
 }

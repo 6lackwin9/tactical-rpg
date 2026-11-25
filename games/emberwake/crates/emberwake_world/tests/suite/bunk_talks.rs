@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 const WORLD: &str = "sunk_ward";
 /// BUNKS1 row PR7-13: written talks for this many founder pairs and this many template talks.
 const FOUNDER_PAIRS: usize = 6;
-const TEMPLATES: usize = 5;
+const TEMPLATES: usize = 6;
 
 fn dir() -> PathBuf {
     Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder")

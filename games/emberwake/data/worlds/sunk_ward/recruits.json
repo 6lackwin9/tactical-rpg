@@ -28,7 +28,8 @@
 			],
 			"temperaments": [
 				"temper_steady",
-				"temper_wary"
+				"temper_wary",
+				"temper_grim"
 			],
 			"level": "",
 			"fuse": {},
@@ -126,7 +127,8 @@
 			],
 			"temperaments": [
 				"temper_steady",
-				"temper_wary"
+				"temper_wary",
+				"temper_grim"
 			],
 			"level": "",
 			"fuse": {},
@@ -158,7 +160,8 @@
 			],
 			"temperaments": [
 				"temper_reckless",
-				"temper_steady"
+				"temper_steady",
+				"temper_grim"
 			],
 			"level": "",
 			"fuse": {},
