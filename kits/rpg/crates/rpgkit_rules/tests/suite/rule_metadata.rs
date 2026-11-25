@@ -66,7 +66,7 @@ fn each_rule_has_its_metadata() {
         }
         assert!(!r.tested.is_empty(), "{}: tested somewhere", r.id);
         for f in r.tested.iter().filter(|f| **f != "golden") {
-            assert!(tests.join(f).is_file(), "{}: test file {f}", r.id);
+            assert!(tests.join(f).is_file() || tests.join("suite").join(f).is_file(), "{}: test file {f}", r.id);
         }
     }
     let ids: Vec<&str> = BUNDLES.iter().map(|b| b.id).collect();
