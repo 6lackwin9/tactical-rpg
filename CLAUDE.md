@@ -8,7 +8,15 @@
   2. **Autonomous execution inside scope:** Once a direction is picked, handle research, subagents, implementation, tests, and pre-merge review end-to-end without nagging on micro-decisions. Stop and ask only for genuine design forks, irreversible actions, or after two failed targeted fixes.
   3. **Concrete proof:** Report back in plain sentences with tangible results (timings, test counts, before/after shots, or playable steps) plus any `[PROVISIONAL]` calls made.
   4. **Streamline:** Record what worked vs. what felt clunky in the Experiment Log below, and drop or simplify rules that do not earn their keep.
-- **Batch Asset Review (no micro-approvals):** Lock **1 Style Anchor** per asset category (maps, props, portraits, battle backdrops). Agents auto-gate and auto-reroll batches of 5–10 assets against numeric checks (`aegis align-map check-ref` / `score`), then show **one visual contact sheet** per batch for exception-only sign-off.
+- **Batch Asset Review (no micro-approvals):** Lock **1 Style Anchor** per asset category (maps, props, portraits, battle backdrops). Agents auto-gate and auto-reroll batches of 5–10 assets against numeric checks (`aegis align-map check-ref` / `score`), then show **one visual contact sheet** (`aegis align-map batch-sheet`) per batch for exception-only sign-off.
+- **Sprite / Portrait Pipeline (`SpriteForge` Option A):** Keep `SpriteForge` as a standalone, profile-driven browser studio for interactive Style Anchor exploration; put the headless production pipeline (auto-chroma, studio keyer + despill, foot-aligned `112x96` slicer, `check-sprite` drift QA, Drive batch queue, and `batch-sheet`) in `engine/` (`aegis_cli`).
+- **6-Step Main-Release Review Loop:**
+  1. Agents implement and run full headless QA on `develop`, then release to `main` and trigger Web + Windows release builds (`.github/workflows/release-build.yml` & `web.yml`).
+  2. The user plays and reviews **only the `main` release build** and shares feedback + feel checklist notes.
+  3. Feedback is broken into scoped tasks and built on `develop`.
+  4. UI/UX changes iterate via lightweight interactive mocks (`tools/mock_ui/` / HTML previews) first to lock guidance before applying to target UI, assets, or an Act-wide theme.
+  5. Record workflow and development learnings in the Experiment Log below so future games inherit what worked.
+  6. Once all feedback tasks land, run a consolidated QA pass on `develop` and release to `main` for the next playtest iteration.
 - **Current product focus (2026-11-25):**
   - **Milestone 1:** Polished, playable **Act 1 Vertical Slice** (Windows + Web) before expanding Acts 2–3.
   - **Map rendering:** Modular engine tiles + `MapFx` zone grading & light pools driven by 3-stage AI target refs (`L1` cleanplate -> `L2` propped -> `L3` lit).
@@ -16,9 +24,10 @@
 ## Sessions & Parallel Lanes
 
 - **Scoped sessions are self-contained:** A cloud or desktop session working inside a user-approved scope may edit code, tools, and docs together on a clean feature branch and fast-forward push to `origin/develop` once verified. The older single-writer Design vs. Build vs. Art session walls (`docs/READY.md`, `docs/FEEDBACK.md`, `build-lease`, `.github/workflows/feedback-watch.yml`) remain available as **optional async handoff tools** when running separate async sessions — not mandatory locks for a single scoped session.
-- **Parallel lanes:**
+- **Parallel lanes & subagent model tiering:**
   - In the cloud, **separate conversations** are true dedicated lanes (each gets its own isolated VM, CPU, Cargo `target/`, and branch).
   - Inside one conversation, subagents share one VM and working tree: run research, audits, and disjoint file edits in parallel, and serialize Cargo builds/tests and git merges through the coordinator.
+  - **Model tiering (all at session effort):** use `flash` for read-only audits, codebase lookups, CI log triage, and doc syncs; `inherit` for scoped implementation and coordinator reviews; `pro` only for deep architectural redesigns or complex multi-crate bugs.
 
 ## Layers
 
