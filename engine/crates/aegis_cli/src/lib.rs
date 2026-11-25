@@ -10,6 +10,8 @@
 //!   aegis bundle <manifest.json> [out=<dir>]                                 pack a web build's bundle parts (see `bundle`)
 
 pub mod agentplay;
+pub mod align;
+pub mod batch_sheet;
 pub mod bundle;
 pub mod golden;
 pub mod new_game;
@@ -87,10 +89,11 @@ const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's com
 aegis replay <recording.json> [session=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
 aegis record <requests.json | recording.json> [out=<dir>] [id=<id>]   (play requests on fresh command hosts, save them as a recording)
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
-aegis content check | get <kind> <id> [world=<id>] | get @<list.json> | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>]
-aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]
-aegis playtest start [save=] [out=] [size=] [shots=each|off] [window=1] | do <command ...> | run <script | -> | stop | status   (an agent plays the real game, logged and screenshot per command)
+aegis content check | get <kind> <id> [world=<id>] | get @<list.json> | upsert <kind> <json or @file> [world=<id>] [replace=<id>] [fields=a,b] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> [check=1 | --check] | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>] | refs <kind> <id> | rename <kind> <old> <new> [world=<id>] [--apply]
+aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [set=<key>:<value>,...] [audit=1]
+aegis playtest start [save=] [out=] [size=] [shots=each|off] [keep_saves=<dir>] [window=1] | do <command ...> | run <script | -> | stop | status   (an agent plays the real game, logged and screenshot per command)
 aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)
+aegis align-map refspec | check-ref | enqueue | score | patch | run   (reference diorama validation, Drive queue bridge, and closed-loop map alignment)
 aegis new game <id> [title=<title>] [root=<workspace>]   (a new game folder games/<id>/ on the engine alone: menu, play screen, host, test, scenario)";
 
 /// Runs the command line of the process: the game's commands first, then the shell's.
@@ -106,6 +109,7 @@ pub fn run<G: Game>(game: &G) -> Result<()> {
         (Some("replay"), Some(_)) => replay(game, &args),
         (Some("record"), Some(_)) => record(game, &args),
         (Some("content"), Some(_)) => content(game, &args),
+        (Some("align-map"), _) => align::command(game, &args),
         (Some("bundle"), Some(manifest)) => bundle::command(manifest, &args.key("out", ".")),
         (Some("new"), Some("game")) => new_game::command(&args),
         (Some("playtest"), _) => {
@@ -138,92 +142,225 @@ pub fn json_arg(raw: &str) -> Result<Value> {
     serde_json::from_str(&text).context("parsing the JSON argument")
 }
 
+enum ParsedStep<'a> {
+    Sidecar {
+        op: String,
+        name: String,
+        edits: Value,
+    },
+    World {
+        id: String,
+        fields: &'a serde_json::Map<String, Value>,
+        full: bool,
+    },
+    Remove {
+        kind: String,
+        id: String,
+        world: Option<String>,
+        if_exists: bool,
+    },
+    Upsert {
+        kind: String,
+        entry: &'a serde_json::Map<String, Value>,
+        world: Option<String>,
+        replace: Option<String>,
+        fields: Option<Vec<String>>,
+    },
+}
+
+fn check_unknown_step_keys(op: &str, obj: &serde_json::Map<String, Value>, allowed: &[&str]) -> std::result::Result<(), Vec<String>> {
+    let mut unknown: Vec<&str> = obj.keys().map(String::as_str).filter(|k| !allowed.contains(k)).collect();
+    if !unknown.is_empty() {
+        unknown.sort_unstable();
+        return Err(vec![format!("{op} step has unknown key(s): {} (allowed: {})", unknown.join(", "), allowed.join(", "))]);
+    }
+    Ok(())
+}
+
+fn parse_content_step<'a>(hooks: &(impl Hooks + ?Sized), step: &'a Value) -> std::result::Result<ParsedStep<'a>, Vec<String>> {
+    let Some(obj) = step.as_object() else {
+        return Err(vec!["step must be a JSON object".to_string()]);
+    };
+    let op = match obj.get("op") {
+        None => "upsert",
+        Some(Value::String(s)) => s.as_str(),
+        Some(_) => return Err(vec!["step 'op' must be a string".to_string()]),
+    };
+    let opt_str = |key: &str| -> std::result::Result<Option<String>, Vec<String>> {
+        match obj.get(key) {
+            None => Ok(None),
+            Some(Value::String(s)) => Ok(Some(s.clone())),
+            Some(_) => Err(vec![format!("{op} '{key}' must be a string")]),
+        }
+    };
+    let opt_bool = |key: &str| -> std::result::Result<bool, Vec<String>> {
+        match obj.get(key) {
+            None => Ok(false),
+            Some(Value::Bool(b)) => Ok(*b),
+            Some(_) => Err(vec![format!("{op} '{key}' must be a boolean")]),
+        }
+    };
+
+    // PR5-48: a sidecar op of the game's writer, {"op": <op>, "name", "edits"} (no edits: written again as it is)
+    if hooks.sidecar_ops().contains(&op) {
+        check_unknown_step_keys(op, obj, &["op", "name", "edits"])?;
+        let name = obj.get("name").and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or_else(|| vec![format!("{op} needs a name")])?.to_string();
+        let edits = obj.get("edits").cloned().unwrap_or_else(|| json!([]));
+        return Ok(ParsedStep::Sidecar { op: op.to_string(), name, edits });
+    }
+    if op == "world" {
+        check_unknown_step_keys("world", obj, &["op", "id", "fields", "full"])?;
+        let id = obj.get("id").and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or_else(|| vec!["world needs an id".to_string()])?.to_string();
+        let fields = obj.get("fields").and_then(Value::as_object).ok_or_else(|| vec!["world needs a fields object".to_string()])?;
+        let full = opt_bool("full")?;
+        return Ok(ParsedStep::World { id, fields, full });
+    }
+    if op == "remove" {
+        check_unknown_step_keys("remove", obj, &["op", "kind", "id", "world", "if_exists"])?;
+        let kind = obj.get("kind").and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or_else(|| vec!["step needs a kind".to_string()])?.to_string();
+        let id = obj.get("id").and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or_else(|| vec!["remove needs an id".to_string()])?.to_string();
+        let world = opt_str("world")?;
+        let if_exists = opt_bool("if_exists")?;
+        return Ok(ParsedStep::Remove { kind, id, world, if_exists });
+    }
+    if op == "upsert" {
+        check_unknown_step_keys("upsert", obj, &["op", "kind", "entry", "world", "replace", "fields"])?;
+        let kind = obj.get("kind").and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or_else(|| vec!["step needs a kind".to_string()])?.to_string();
+        let entry = obj.get("entry").and_then(Value::as_object).ok_or_else(|| vec!["upsert needs an entry object".to_string()])?;
+        let world = opt_str("world")?;
+        let replace = opt_str("replace")?;
+        let fields = match obj.get("fields") {
+            None => None,
+            Some(v) => {
+                if replace.is_some() {
+                    return Err(vec!["upsert cannot combine 'fields' with 'replace'".to_string()]);
+                }
+                let arr = v.as_array().ok_or_else(|| vec!["'fields' is a list of the entry's top-level field names".to_string()])?;
+                if arr.is_empty() || !arr.iter().all(Value::is_string) {
+                    return Err(vec!["'fields' is a list of the entry's top-level field names".to_string()]);
+                }
+                Some(arr.iter().filter_map(Value::as_str).map(String::from).collect())
+            }
+        };
+        return Ok(ParsedStep::Upsert { kind, entry, world, replace, fields });
+    }
+    let extra: String = hooks.sidecar_ops().iter().map(|o| format!(", {o}")).collect();
+    Err(vec![format!("unknown op '{op}' (upsert, remove, world{extra})")])
+}
+
 /// One content step: {"op": "upsert", "kind", "entry", "world"?, "replace"?, "fields"? (ENGINE-20: only these top-level
 /// fields of the stored entry change, each to the entry's value or, left out of it, removed; the entry must exist)}, {"op": "remove", "kind", "id",
 /// "world"?, "if_exists"? (true: a missing entry is a no-op, PR5-51b)}, {"op": "world", "id", "fields", "full"?} (a world manifest, WORLDW1) or {"op": <a sidecar op of the
 /// game>, "name", "edits"?} (PR5-48, `Hooks::sidecar`).
 pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Result<String, Vec<String>> {
-    let s = |k: &str| step.get(k).and_then(|v| v.as_str()).map(String::from);
-    // PR5-48: a sidecar op of the game's writer, {"op": <op>, "name", "edits"} (no edits: written again as it is)
-    if let Some(op) = s("op").filter(|o| hooks.sidecar_ops().contains(&o.as_str())) {
-        let name = s("name").ok_or_else(|| vec![format!("{op} needs a name")])?;
-        let edits = step.get("edits").cloned().unwrap_or_else(|| json!([]));
-        return hooks.sidecar(dir, &op, &name, Some(&edits));
-    }
-    if s("op").as_deref() == Some("world") {
-        let id = s("id").ok_or_else(|| vec!["world needs an id".to_string()])?;
-        let fields = step.get("fields").and_then(|f| f.as_object()).ok_or_else(|| vec!["world needs a fields object".to_string()])?;
-        let full = step.get("full").and_then(Value::as_bool).unwrap_or(false);
-        let o = store::set_world(hooks, dir, &id, fields, full)?;
-        return Ok(format!("{} world '{id}' in {}", if o.replaced { "updated" } else { "created" }, o.file.display()));
-    }
-    let kind = s("kind").ok_or_else(|| vec!["step needs a kind".to_string()])?;
-    let world = s("world");
-    let (verb, outcome) = match s("op").as_deref().unwrap_or("upsert") {
-        "remove" => {
-            let id = s("id").ok_or_else(|| vec!["remove needs an id".to_string()])?;
+    match parse_content_step(hooks, step)? {
+        ParsedStep::Sidecar { op, name, edits } => hooks.sidecar(dir, &op, &name, Some(&edits)),
+        ParsedStep::World { id, fields, full } => {
+            let o = store::set_world(hooks, dir, &id, fields, full)?;
+            Ok(format!("{} world '{id}' in {}", if o.replaced { "updated" } else { "created" }, o.file.display()))
+        }
+        ParsedStep::Remove { kind, id, world, if_exists } => {
             // PR5-51b: `"if_exists": true` makes a re-run seed idempotent (a missing entry is a no-op, reported absent)
-            if step.get("if_exists").and_then(Value::as_bool).unwrap_or(false) && !store::contains(hooks, dir, world.as_deref(), &kind, &id) {
+            if if_exists && !store::contains(hooks, dir, world.as_deref(), &kind, &id) {
                 return Ok(format!("absent {kind} '{id}' in {} (nothing removed)", hooks.file_of(dir, world.as_deref(), &kind).display()));
             }
-            ("removed", store::remove(hooks, dir, world.as_deref(), &kind, &id)?)
+            let o = store::remove(hooks, dir, world.as_deref(), &kind, &id)?;
+            Ok(format!("removed {kind} '{id}' in {}", o.file.display()))
         }
-        "upsert" => {
-            let entry = step.get("entry").and_then(|e| e.as_object()).ok_or_else(|| vec!["upsert needs an entry object".to_string()])?;
-            let merged = match step.get("fields") {
-                None => None,
-                Some(f) => Some(only_fields(hooks, dir, world.as_deref(), &kind, entry, f)?),
+        ParsedStep::Upsert { kind, entry, world, replace, fields } => {
+            let o = match fields {
+                Some(names) => store::upsert_fields(hooks, dir, world.as_deref(), &kind, entry, &names)?,
+                None => store::upsert(hooks, dir, world.as_deref(), &kind, entry, replace.as_deref())?,
             };
-            let o = store::upsert(hooks, dir, world.as_deref(), &kind, merged.as_ref().unwrap_or(entry), s("replace").as_deref())?;
-            (if o.replaced { "replaced" } else { "added" }, o)
+            let id = entry.get("id").and_then(Value::as_str).unwrap_or_default();
+            Ok(format!("{} {kind} '{id}' in {}", if o.replaced { "replaced" } else { "added" }, o.file.display()))
         }
-        other => {
-            let extra: String = hooks.sidecar_ops().iter().map(|o| format!(", {o}")).collect();
-            return Err(vec![format!("unknown op '{other}' (upsert, remove, world{extra})")]);
-        }
-    };
-    let id = s("id").or_else(|| step.get("entry").and_then(|e| e.get("id")).and_then(|v| v.as_str()).map(String::from)).unwrap_or_default();
-    Ok(format!("{verb} {kind} '{id}' in {}", outcome.file.display()))
+    }
 }
 
-/// ENGINE-20 (TOOLS-HELP3): the stored entry with only the named top-level `fields` taken from `entry` (one left out of
-/// it is removed), so a seed changes no more than it names and never undoes a later seed's other fields.
-fn only_fields(hooks: &impl Hooks, dir: &Path, world: Option<&str>, kind: &str, entry: &serde_json::Map<String, Value>, fields: &Value) -> std::result::Result<serde_json::Map<String, Value>, Vec<String>> {
-    let names: Vec<&str> = fields.as_array().map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
-    if names.is_empty() || fields.as_array().map_or(true, |a| a.len() != names.len()) {
-        return Err(vec!["'fields' is a list of the entry's top-level field names".to_string()]);
+/// ENGINE-20: non-mutating dry-run check of one content step (`aegis content apply <seed.json> check=1 | --check`).
+/// Validates step shape, target kind/world/entry, and `store::merge_fields` / `Hooks::validate` without writing to disk.
+pub fn check_content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Result<String, Vec<String>> {
+    match parse_content_step(hooks, step)? {
+        ParsedStep::Sidecar { op, name, .. } => Ok(format!("ok {op} '{name}' (check)")),
+        ParsedStep::World { id, fields, full } => {
+            if !aegis_content::schema::is_id(&id) {
+                return Err(vec![format!("World '{id}' must be a world id (lowercase snake_case).")]);
+            }
+            hooks.world_manifest_text(dir, &id, fields, full)?;
+            Ok(format!("ok world '{id}' (check)"))
+        }
+        ParsedStep::Remove { kind, id, world, if_exists } => {
+            let known = hooks.kinds(world.as_deref());
+            if !known.contains(&kind.as_str()) {
+                return Err(vec![format!("Unknown kind '{kind}' (one of {}).", known.join(", "))]);
+            }
+            if let Some(w) = world.as_deref() {
+                if !aegis_core::vfs::is_file(aegis_content::world::manifest_path(dir, w)) {
+                    return Err(vec![format!("Unknown world '{w}'.")]);
+                }
+            }
+            if store::contains(hooks, dir, world.as_deref(), &kind, &id) {
+                Ok(format!("ok remove {kind} '{id}' (check)"))
+            } else if if_exists {
+                Ok(format!("ok absent {kind} '{id}' (check)"))
+            } else {
+                Err(vec![format!("No {kind} entry '{id}'.")])
+            }
+        }
+        ParsedStep::Upsert { kind, entry, world, replace, fields } => {
+            if let Some(names) = fields {
+                store::merge_fields(hooks, dir, world.as_deref(), &kind, entry, &names)?;
+                let id = entry.get("id").and_then(Value::as_str).unwrap_or_default();
+                return Ok(format!("ok upsert {kind} '{id}' (fields: {}, check)", names.join(", ")));
+            }
+            let known = hooks.kinds(world.as_deref());
+            if !known.contains(&kind.as_str()) {
+                return Err(vec![format!("Unknown kind '{kind}' (one of {}).", known.join(", "))]);
+            }
+            if let Some(w) = world.as_deref() {
+                if !aegis_core::vfs::is_file(aegis_content::world::manifest_path(dir, w)) {
+                    return Err(vec![format!("Unknown world '{w}'.")]);
+                }
+            }
+            let norm = aegis_core::json::normalize_dict(entry);
+            let full = hooks.validate(world.as_deref(), &kind, &norm)?;
+            let id = aegis_content::schema::sget(&full, "id", "");
+            let target = replace.as_deref().unwrap_or(&id);
+            if let Some(rep) = replace.as_deref() {
+                if !store::contains(hooks, dir, world.as_deref(), &kind, rep) {
+                    return Err(vec![format!("No {kind} entry '{rep}' to replace.")]);
+                }
+            }
+            if target != id && store::contains(hooks, dir, world.as_deref(), &kind, &id) {
+                return Err(vec![format!("A {kind} entry '{id}' already exists.")]);
+            }
+            Ok(format!("ok upsert {kind} '{id}' (check)"))
+        }
     }
-    if names.contains(&"id") {
-        return Err(vec!["'fields' never names 'id' (the entry's id picks it)".to_string()]);
-    }
-    let id = entry.get("id").and_then(Value::as_str).unwrap_or("");
-    let Some(mut stored) = store::get(hooks, dir, world, kind, id) else {
-        return Err(vec![format!("fields: no {kind} entry '{id}' to change (a new entry is a whole upsert)")]);
-    };
-    if let Some(extra) = entry.keys().find(|k| *k != "id" && !names.contains(&k.as_str())) {
-        return Err(vec![format!("fields: the entry holds '{extra}', which 'fields' does not name")]);
-    }
-    for n in names {
-        match entry.get(n) {
-            Some(v) => stored.insert(n.to_string(), v.clone()),
-            None => stored.remove(n),
-        };
-    }
-    Ok(stored)
+}
+
+/// ENGINE-38: the asset folder beside a game's data folder (`<game>/assets`), where art keyed by ids lives.
+fn asset_roots(data_dir: &Path) -> Vec<PathBuf> {
+    data_dir.parent().map(|g| g.join("assets")).filter(|a| a.is_dir()).into_iter().collect()
 }
 
 /// `aegis content ...`: the data folder edited through the engine's writer (`aegis_content::store` with the game's
 /// hooks), never by hand.
 ///   check                                              the game's warnings, then every problem (exit 1 when any)
-///   upsert <kind> <json | @file> [world=<id>] [replace=<id>]   add or replace one entry (stored shape)
+///   upsert <kind> <json | @file> [world=<id>] [replace=<id>] [fields=a,b]  add or replace one entry (or named fields)
 ///   remove <kind> <id> [world=<id>] [if_exists]        remove one entry (if_exists: a missing one is a no-op)
 ///   world <id> [<json | @file>] [full]                 show a world manifest, or create / update it (data/worlds/<id>/
 ///                                                      world.json; fields merged, checked, kept when the data loads)
-///   apply <seed.json>                                  run a seed: {"steps": [step...]} (stops at the first failure)
+///   apply <seed.json> [check=1 | --check]              run a seed: {"steps": [step...]} (or validate without writing)
 ///   manifest [<json | @file>]                          show the game manifest, or merge fields into it (checked)
 ///   manifest --kit <id> [<json | @file>]               show or write a kit manifest, kits/<id>/kit.json (ASSETORG2)
 ///   <sidecar op> <name> [<json | @file>]               PR5-48: show a sidecar of the game's writer, or apply edits to
 ///                                                      it (checked; nothing written when refused; `Hooks::sidecar`)
+///   refs <kind> <id>                                   ENGINE-38: every string naming the id in the data and seeds,
+///                                                      and the asset files named by it (`aegis_content::rename`)
+///   rename <kind> <old> <new> [world=<id>] [--apply]   ENGINE-38: a dry run of the rename (the files and moves), or
+///                                                      with --apply made and kept only when it adds no problem
 fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
     let dir = game.data_dir(args)?;
     let hooks = game.content();
@@ -249,12 +386,20 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
             Ok(())
         }
         Some("upsert") => {
-            let (Some(kind), Some(raw)) = (args.pos(2), args.pos(3)) else { bail!("usage: aegis content upsert <kind> <json | @file> [world=<id>] [replace=<id>]") };
+            let (Some(kind), Some(raw)) = (args.pos(2), args.pos(3)) else { bail!("usage: aegis content upsert <kind> <json | @file> [world=<id>] [replace=<id>] [fields=a,b]") };
             let mut step = json!({"op": "upsert", "kind": kind, "entry": json_arg(raw)?});
             for k in ["world", "replace"] {
                 if let Some(v) = args.keys.get(k) {
                     step[k] = json!(v);
                 }
+            }
+            if let Some(raw_fields) = args.keys.get("fields") {
+                let list: Vec<Value> = if raw_fields.is_empty() {
+                    Vec::new()
+                } else {
+                    raw_fields.split(',').map(|s| json!(s.trim())).collect()
+                };
+                step["fields"] = Value::Array(list);
             }
             match content_step(&hooks, &dir, &step) {
                 Ok(line) => Ok(println!("{line}")),
@@ -269,6 +414,52 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
             }
             match content_step(&hooks, &dir, &step) {
                 Ok(line) => Ok(println!("{line}")),
+                Err(e) => fail(e),
+            }
+        }
+        Some("refs") => {
+            let (Some(_kind), Some(id)) = (args.pos(2), args.pos(3)) else { bail!("usage: aegis content refs <kind> <id>") };
+            let found = aegis_content::rename::refs(&dir, &asset_roots(&dir), id);
+            for r in &found {
+                if r.line > 0 {
+                    println!("{}:{}: {}", r.path.display(), r.line, r.text);
+                } else {
+                    println!("{}: asset", r.path.display());
+                }
+            }
+            println!("{} reference(s) to '{id}'", found.len());
+            Ok(())
+        }
+        Some("rename") => {
+            let (Some(kind), Some(old), Some(new)) = (args.pos(2), args.pos(3), args.pos(4)) else { bail!("usage: aegis content rename <kind> <old> <new> [world=<id>] [--apply]") };
+            let world = args.keys.get("world").map(String::as_str);
+            if !aegis_content::rename::plain_id(new) {
+                bail!("'{new}' is not an id (lowercase letters, digits, _, - and .)");
+            }
+            // ENGINE-38: a flag has no entry; every other kind renames a stored entry to an id not taken
+            if kind != "flag" {
+                if !aegis_content::store::contains(&hooks, &dir, world, kind, old) {
+                    bail!("no {kind} entry '{old}' in {}", hooks.file_of(&dir, world, kind).display());
+                }
+                if aegis_content::store::contains(&hooks, &dir, world, kind, new) {
+                    bail!("a {kind} entry '{new}' already exists");
+                }
+            }
+            let roots = asset_roots(&dir);
+            let plan = aegis_content::rename::plan(&dir, &roots, old, new);
+            for (f, n) in &plan.files {
+                println!("{}: {n} string(s)", f.display());
+            }
+            for (from, to) in &plan.moves {
+                println!("move {} -> {}", from.display(), to.display());
+            }
+            if !args.flag("--apply") {
+                println!("dry run: {} file(s), {} move(s); nothing written (add --apply)", plan.files.len(), plan.moves.len());
+                return Ok(());
+            }
+            let before = hooks.check(&dir);
+            match aegis_content::rename::apply(&plan, old, new, &before, || hooks.check(&dir)) {
+                Ok(()) => Ok(println!("renamed '{old}' to '{new}': {} file(s), {} move(s)", plan.files.len(), plan.moves.len())),
                 Err(e) => fail(e),
             }
         }
@@ -314,17 +505,28 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
             }
         }
         Some("apply") => {
-            let Some(path) = args.pos(2) else { bail!("usage: aegis content apply <seed.json>") };
+            let check_only = args.key("check", "0") == "1" || args.flag("--check");
+            let Some(path) = args.positional.iter().skip(2).find(|p| p.as_str() != "--check") else {
+                bail!("usage: aegis content apply <seed.json> [check=1 | --check]")
+            };
             let seed = json_arg(&format!("@{path}"))?;
             let steps = seed.get("steps").and_then(|s| s.as_array()).cloned().or_else(|| seed.as_array().cloned()).context("a seed is {\"steps\": [...]} or a list of steps")?;
             for (i, step) in steps.iter().enumerate() {
-                match content_step(&hooks, &dir, step) {
+                let res = if check_only { check_content_step(&hooks, &dir, step) } else { content_step(&hooks, &dir, step) };
+                match res {
                     Ok(line) => println!("{}/{}: {line}", i + 1, steps.len()),
                     Err(e) => {
-                        eprintln!("step {} of {} failed (earlier steps stay written):", i + 1, steps.len());
+                        if check_only {
+                            eprintln!("step {} of {} failed (check mode: nothing written):", i + 1, steps.len());
+                        } else {
+                            eprintln!("step {} of {} failed (earlier steps stay written):", i + 1, steps.len());
+                        }
                         return fail(e);
                     }
                 }
+            }
+            if check_only {
+                println!("check ok: {} step(s); nothing written", steps.len());
             }
             Ok(())
         }
@@ -371,7 +573,7 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
                 Err(e) => fail(e),
             }
         }
-        _ => bail!("usage: aegis content check | upsert <kind> <json | @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json | @file>] [full] | apply <seed.json> | manifest [<json | @file>] | manifest --kit <id> [<json | @file>] | <sidecar op> <name> [<json | @file>]"),
+        _ => bail!("usage: aegis content check | upsert <kind> <json | @file> [world=<id>] [replace=<id>] [fields=a,b] | remove <kind> <id> [world=<id>] | world <id> [<json | @file>] [full] | apply <seed.json> [check=1 | --check] | manifest [<json | @file>] | manifest --kit <id> [<json | @file>] | <sidecar op> <name> [<json | @file>]"),
     }
 }
 

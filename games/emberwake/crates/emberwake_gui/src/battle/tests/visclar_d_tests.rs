@@ -692,7 +692,9 @@ fn a_late_space_does_not_confirm_the_next_plan() {
     assert_eq!(b.message, message, "the round's summary stays");
     b.advanced_at = None;
     b.key(&mut cx, Key::Enter);
-    assert_eq!(requests(&b, "confirm"), confirms + 1, "Enter is the plan's key");
+    assert_eq!(requests(&b, "confirm"), confirms, "PR7-83 (PT-79): the first Enter only dismisses the round's summary");
+    b.key(&mut cx, Key::Enter);
+    assert_eq!(requests(&b, "confirm"), confirms + 1, "then Enter is the plan's key");
 }
 
 /// The second Space, or the Next round click, right after a Space that played the round's last step (the screen's playback
@@ -854,13 +856,19 @@ fn the_prompt_survives_the_longest_summary() {
     let some = crate::battle::draw::summary_and_prompt(summary, prompt, 90.0, by_chars);
     assert_eq!(some, format!("Round over: 2 breaks (1 of 3 hits into a wind-up), 2 flanks. {prompt}"), "whole clauses go");
     assert_eq!(crate::battle::draw::summary_and_prompt(summary, prompt, 30.0, by_chars), prompt, "only the prompt");
+    // PLAN-FIX2 (PT-89): the windup reasons hold commas inside their parenthesis, which goes whole
+    let why = "Round over: no breaks (0 of 3 hits into a wind-up: 2 unbreakable, 1 not a breaking hit), 2 flanks.";
+    let cut = crate::battle::draw::summary_and_prompt(why, prompt, 120.0, by_chars);
+    assert_eq!(cut, format!("Round over: no breaks (0 of 3 hits into a wind-up: 2 unbreakable, 1 not a breaking hit). {prompt}"));
+    let cut = crate::battle::draw::summary_and_prompt(why, prompt, 60.0, by_chars);
+    assert_eq!(cut, format!("Round over: no breaks. {prompt}"), "the parenthesis goes whole, never half");
 
     let (mut cx, mut g, mut b) = arena();
     cx.settings.v["skip_anim"] = json!(true);
     b.tick(&mut cx);
     play_round(&mut b, &mut cx);
     tick_ready(&mut b, &mut cx);
-    let sum = emberwake_battle::round_intent::RoundSummary { breaks: 12, windup_breaks: 11, windup_hits: 13, flanks: 12, follow_ups: 16, rest_ap: 12 };
+    let sum = emberwake_battle::round_intent::RoundSummary { breaks: 12, windup_breaks: 11, windup_hits: 13, flanks: 12, follow_ups: 16, rest_ap: 12, ..Default::default() };
     let long = format!("Round over: {} and a little more, to pass the bar's width at the Normal text size, whatever else it holds.", emberwake_battle::round_intent::summary_text(&sum));
     let prompt = b.message.clone();
     b.round_note = Some((prompt.clone(), long));

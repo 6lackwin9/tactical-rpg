@@ -15,6 +15,11 @@ pub fn has_field(schema: &Value, section: &str, kind: &str, key: &str) -> bool {
     fields(schema, section, kind).iter().any(|f| json::s(json::dict(f), "key") == key)
 }
 
+/// All schema field keys of `kind` in `section` ("content" or "world"); empty for an unknown kind.
+pub fn field_names(schema: &Value, section: &str, kind: &str) -> Vec<String> {
+    fields(schema, section, kind).iter().map(|f| json::s(json::dict(f), "key")).filter(|k| !k.is_empty()).collect()
+}
+
 /// A field read as GDScript `str()`, or `fallback` when missing.
 pub fn sget(d: &Dict, key: &str, fallback: &str) -> String {
     d.get(key).map(gstr).unwrap_or_else(|| fallback.to_string())

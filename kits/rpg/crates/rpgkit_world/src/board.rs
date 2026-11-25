@@ -94,11 +94,15 @@ pub fn was_opened(gs: &GameState, b: &Dict) -> bool {
 }
 
 /// B6: the node of quest `qid`: its first step's location (a `reach_location` step's location; a `win_encounter`
-/// step's location, else its encounter's), resolved as the world map's quest targets are; "" when none.
+/// step's location, else its encounter's), resolved as the world map's quest targets are; PR7-76 (PT-49): a `flag`
+/// step's place where the party sets that flag (`flag_place`); "" when none.
 pub fn node_of(d: &Data, gs: &GameState, qid: &str) -> String {
     let q = quest::resolved(d, gs, qid);
     let kind = json::s(json::aget(&q, "objectives").first().map(json::dict).unwrap_or_else(|| json::empty()), "kind");
     let step = json::aget(&q, "steps").first().map(json::dict).unwrap_or_else(|| json::empty());
+    if kind == "flag" {
+        return flag_place(d, gs, &json::s(step, "flag"));
+    }
     let mut refs = vec![json::s(step, "location")];
     if kind == "win_encounter" {
         refs.push(json::s(d.resolve(&gs.world_id, "encounters", &json::s(step, "encounter")), "location"));
@@ -106,6 +110,40 @@ pub fn node_of(d: &Data, gs: &GameState, qid: &str) -> String {
         return String::new();
     }
     refs.into_iter().filter(|r| !r.is_empty()).map(|r| json::s(explore::resolve_location(d, gs, &r), "_qid")).find(|n| !n.is_empty()).unwrap_or_default()
+}
+
+/// PR7-76 (PT-49): the location where the party sets flag `key`: the first (in data order) with a marker whose
+/// `sets_flags` sets it (a point of interest, an exit), else the first holding a person whose conversation sets it (a
+/// reply's `set_flag` effect); "" when none.
+pub fn flag_place(d: &Data, gs: &GameState, key: &str) -> String {
+    if key.is_empty() {
+        return String::new();
+    }
+    let sets = |list: &Value| json::arr(&json::normalize(list)).iter().any(|f| json::s(json::dict(f), "key") == key);
+    let locations = d.merged_entries(&gs.world_id, "locations");
+    let markers = |l: &Dict| json::aget(l, "markers").iter().map(json::dict).cloned().collect::<Vec<Dict>>();
+    if let Some(l) = locations.iter().find(|l| markers(l).iter().any(|m| sets(json::get(m, "sets_flags")))) {
+        return json::s(l, "_qid");
+    }
+    let talk_sets = |character: &str| {
+        let tree = json::s(d.resolve(&gs.world_id, "characters", character), "dialogue");
+        if tree.is_empty() {
+            return false;
+        }
+        json::arr(&json::normalize(json::get(d.resolve(&gs.world_id, "dialogues", &tree), "nodes"))).iter().any(|n| {
+            json::arr(&json::normalize(json::get(json::dict(n), "choices"))).iter().any(|c| {
+                json::arr(&json::normalize(json::get(json::dict(c), "effects"))).iter().any(|f| {
+                    let f = json::dict(f);
+                    json::s(f, "effect") == "set_flag" && json::s(f, "key") == key
+                })
+            })
+        })
+    };
+    locations
+        .iter()
+        .find(|l| markers(l).iter().any(|m| json::s(m, "kind") == "npc" && talk_sets(&json::s(m, "character"))))
+        .map(|l| json::s(l, "_qid"))
+        .unwrap_or_default()
 }
 
 /// The section quest `qid` sits in (B5), with its line; None when it is not listed (completed, invalid, locked without

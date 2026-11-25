@@ -1,0 +1,28 @@
+{
+  "id": "one_click_talk",
+  "title": "PR7-46 item 3 (BUNKS-FIX1, PT-35): the playtest save hub_start; one click on Berek walks the party to him and his talk opens on arrival with no second click; Farewell, then one click on Sabina does the same; PR7-48: the walk rings the NPC's tile in amber until arrival (shot on Sabina's walk: Berek stands under the HUD bar)",
+  "launch": {"save": "hub_start"},
+  "settings": {"reduce_motion": true},
+  "timeout_s": 300,
+  "steps": [
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
+    {"step": "click", "id": "menu.continue"},
+    {"step": "wait", "until": {"path": "screen", "eq": "region_map"}, "timeout_ms": 20000},
+    {"step": "pause", "ms": 1000},
+    {"step": "click", "id": "marker.berek"},
+    {"step": "assert", "until": {"all": [{"path": "state.walking", "eq": true}, {"path": "state.walk_to", "eq": "berek"}, {"path": "state.walk_ring", "ne": null}]}},
+    {"step": "wait", "until": {"all": [{"path": "state.walking", "eq": false}, {"path": "state.dialogue.text", "ne": ""}]}, "timeout_ms": 30000},
+    {"step": "assert", "until": {"path": "state.walk_ring", "absent": true}},
+    {"step": "pause", "ms": 600},
+    {"step": "shot", "name": "berek_talk"},
+    {"step": "key", "key": "escape"},
+    {"step": "wait", "until": {"path": "state.dialogue", "absent": true}, "timeout_ms": 5000},
+    {"step": "click", "id": "marker.sabina"},
+    {"step": "assert", "until": {"all": [{"path": "state.walk_to", "eq": "sabina"}, {"path": "state.walk_ring", "ne": null}]}},
+    {"step": "pause", "ms": 300},
+    {"step": "shot", "name": "sabina_walk_ring"},
+    {"step": "wait", "until": {"all": [{"path": "state.walking", "eq": false}, {"path": "state.dialogue.text", "ne": ""}]}, "timeout_ms": 30000},
+    {"step": "pause", "ms": 600},
+    {"step": "shot", "name": "sabina_talk"}
+  ]
+}

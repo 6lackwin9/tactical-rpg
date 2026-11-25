@@ -18,12 +18,13 @@
 
 use crate::canvas::{Image, Rect, Rgba, OUTLINE_ALPHA};
 use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Face, Facing, Layers};
+use aegis_core::clock::Instant;
 use aegis_core::vfs;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// A body's sheet (palette applied) and its clips.
+/// A body's sheet (palette applied unless `painted`) and its clips.
 struct Body {
     sheet: Image,
     clips: Clips,
@@ -60,14 +61,48 @@ pub struct Art {
     body_rects: HashMap<(String, String, i32, Facing), Option<Rect>>,
     /// PNG rel -> its face sidecar from the PNG's own layer (PORTRAITFX1-E `face`).
     faces: HashMap<String, Option<Face>>,
+    /// ENGINE-51 (SWITCH-FEEL1): path -> a small file's decoded pixels (at most `RAW_KEEP_PX`), so a file drawn at two
+    /// sizes or a body sheet under two palettes is decoded once (a first fight decoded each body twice).
+    raw: HashMap<std::path::PathBuf, Option<Image>>,
+    /// ENGINE-51: pictures `want_fit` is decoding off the frame (a thread each), by file and size, until `image_fit`
+    /// takes one.
+    pending: Vec<(String, (i32, i32), std::thread::JoinHandle<Option<Image>>)>,
     /// Which `Art` this is (`generation`).
     generation: u64,
+    /// ENGINE-54 (WARM-SPREAD1): a warm draw's slice: until when it may load what is not cached (`defer`); past it, or
+    /// for a file not decoded yet, the value is left for a later slice and counted in `misses`.
+    defer_until: Option<Instant>,
+    misses: u64,
+    /// ENGINE-54: files a warm draw asked for, to decode off the frame (`warm_poll`), and those decoding (a thread each).
+    wanted: Vec<PathBuf>,
+    decoding: Vec<(PathBuf, std::thread::JoinHandle<Option<Image>>)>,
 }
+
+/// ENGINE-51: the largest file (in pixels) whose decoded pixels `Art` keeps for its next size or palette: a body sheet,
+/// an icon or a portrait; a window-sized background is decoded each time it is asked for at a new size.
+pub const RAW_KEEP_PX: i64 = 1024 * 1024;
 
 /// The next `Art::generation`.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// Decodes a PNG into RGBA (palette, grey and RGB inputs are expanded).
+/// ENGINE-51: how many threads `decode_all` uses at most.
+pub const DECODE_THREADS: usize = 4;
+
+/// ENGINE-51 (SWITCH-FEEL1): `load_png` of each of `paths`, in order; side by side on up to `DECODE_THREADS` threads
+/// (the files are read through the thread-safe vfs), on one on the web.
+pub fn decode_all(paths: &[PathBuf]) -> Vec<Option<Image>> {
+    let threads = if cfg!(target_arch = "wasm32") { 1 } else { std::thread::available_parallelism().map_or(1, |n| n.get()).min(DECODE_THREADS) };
+    if threads <= 1 || paths.len() <= 1 {
+        return paths.iter().map(|p| load_png(p)).collect();
+    }
+    let per = paths.len().div_ceil(threads);
+    std::thread::scope(|s| {
+        let parts: Vec<_> = paths.chunks(per).map(|part| s.spawn(move || part.iter().map(|p| load_png(p)).collect::<Vec<_>>())).collect();
+        parts.into_iter().flat_map(|h| h.join().unwrap_or_default()).collect()
+    })
+}
+
 pub fn load_png(path: &Path) -> Option<Image> {
     let bytes = vfs::read(path).ok()?;
     let mut dec = png::Decoder::new(std::io::Cursor::new(bytes));
@@ -94,11 +129,80 @@ impl Art {
     }
 
     pub fn layered(layers: Layers) -> Self {
-        Self { layers, files: HashMap::new(), fits: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), silhouettes: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new(), faces: HashMap::new(), generation: GENERATION.fetch_add(1, Ordering::Relaxed) }
+        Self { layers, files: HashMap::new(), fits: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), silhouettes: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new(), faces: HashMap::new(), raw: HashMap::new(), pending: Vec::new(), generation: GENERATION.fetch_add(1, Ordering::Relaxed), defer_until: None, misses: 0, wanted: Vec::new(), decoding: Vec::new() }
     }
 
     pub fn layers(&self) -> &Layers {
         &self.layers
+    }
+
+    /// ENGINE-54 (WARM-SPREAD1): starts a warm draw's slice of `budget`: until it ends, what is not cached loads as
+    /// before, except a file not decoded yet, which is asked for (decoded off the frame by `warm_poll`) and answers None;
+    /// once the slice is over every value not cached answers None. Nothing such a draw could not load is cached, so a
+    /// real draw never keeps a None for it. `undefer` ends the slice.
+    pub fn defer(&mut self, budget: std::time::Duration) {
+        self.defer_until = Some(Instant::now() + budget);
+        self.misses = 0;
+    }
+
+    /// ENGINE-54: ends the slice `defer` started; how many values it left for later (0: everything it drew was ready).
+    pub fn undefer(&mut self) -> u64 {
+        self.defer_until = None;
+        self.misses
+    }
+
+    /// ENGINE-54: the values the slice under way has left for later so far (a caller building something from several
+    /// loads compares it before and after, and keeps nothing built from a load left for later).
+    pub fn left(&self) -> u64 {
+        if self.defer_until.is_some() {
+            self.misses
+        } else {
+            0
+        }
+    }
+
+    /// ENGINE-54: the slice under way leaves something of its own for the next one (a screen made on this slice and
+    /// drawn from the next); nothing outside a slice.
+    pub fn more(&mut self) {
+        if self.defer_until.is_some() {
+            self.misses += 1;
+        }
+    }
+
+    /// ENGINE-54: in a slice, a value not cached is left for later once the slice is over (counted).
+    fn later(&mut self) -> bool {
+        if self.defer_until.is_some_and(|d| Instant::now() >= d) {
+            self.misses += 1;
+            return true;
+        }
+        false
+    }
+
+    /// ENGINE-54: moves the files decoded off the frame into the decoded cache and starts the next ones asked for (up
+    /// to `DECODE_THREADS` at a time). Cheap: call it each frame while `warming`.
+    pub fn warm_poll(&mut self) {
+        let mut i = 0;
+        while i < self.decoding.len() {
+            if self.decoding[i].1.is_finished() {
+                let (path, job) = self.decoding.remove(i);
+                self.raw.insert(path, job.join().ok().flatten());
+            } else {
+                i += 1;
+            }
+        }
+        while self.decoding.len() < DECODE_THREADS && !self.wanted.is_empty() {
+            let path = self.wanted.remove(0);
+            if self.raw.contains_key(&path) {
+                continue;
+            }
+            let at = path.clone();
+            self.decoding.push((path, std::thread::spawn(move || load_png(&at))));
+        }
+    }
+
+    /// ENGINE-54: files are asked for or decoding off the frame.
+    pub fn warming(&self) -> bool {
+        !self.wanted.is_empty() || !self.decoding.is_empty()
     }
 
     /// Different for every `Art` made in this run. This cache never re-reads a file, so an edited file reaches a running
@@ -106,6 +210,32 @@ impl Art {
     /// each frame instead of asking for the pictures again.
     pub fn generation(&self) -> u64 {
         self.generation
+    }
+
+    /// ENGINE-64 (LIVE-RELOAD1): the files at `rels` changed on disk: what was made from them is dropped (their scaled,
+    /// fitted, mirrored and decoded copies, sizes and face sidecars), and so is every body (a few sheets, fitted again
+    /// from the decoded copies that stay) and the lookups of which files exist. The generation moves on, so what was
+    /// made from pictures and kept (a composed ground) is made again. Everything else stays cached.
+    pub fn forget(&mut self, rels: &[String]) {
+        if rels.is_empty() {
+            return;
+        }
+        let hit = |rel: &str| rels.iter().any(|r| r == rel || r.strip_suffix(".json").is_some_and(|stem| rel.strip_suffix(".png") == Some(stem)));
+        self.files.retain(|k, _| !hit(&k.0));
+        self.fits.retain(|k, _| !hit(k));
+        self.mirrors.retain(|k, _| !hit(&k.0));
+        self.sizes.retain(|k, _| !hit(k));
+        self.faces.retain(|k, _| !hit(k));
+        self.raw.retain(|p, _| !rels.iter().any(|r| p.ends_with(r)));
+        self.pending.retain(|(rel, _, _)| !hit(rel));
+        self.present.clear();
+        self.variant_counts.clear();
+        self.bodies.clear();
+        self.frames.clear();
+        self.outlines.clear();
+        self.silhouettes.clear();
+        self.body_rects.clear();
+        self.generation = GENERATION.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Whether a layer holds `rel` (cached: screens ask every frame).
@@ -131,7 +261,14 @@ impl Art {
     pub fn image(&mut self, rel: &str, w: i32, h: i32) -> Option<&Image> {
         let key = (rel.to_string(), w, h);
         if !self.files.contains_key(&key) {
+            if self.later() {
+                return None;
+            }
+            let m = self.misses;
             let img = self.scaled(rel, w, h);
+            if self.misses != m {
+                return None;
+            }
             self.files.insert(key.clone(), img);
         }
         self.files.get(&key).and_then(|i| i.as_ref())
@@ -141,10 +278,47 @@ impl Art {
     /// pile up a copy per size (a new size reads the file again).
     pub fn image_fit(&mut self, rel: &str, w: i32, h: i32) -> Option<&Image> {
         if self.fits.get(rel).is_none_or(|(size, _)| *size != (w, h)) {
-            let img = self.scaled(rel, w, h);
+            // ENGINE-54: a warm draw leaves a picture still reading, or any once its slice is over
+            if self.later() {
+                return None;
+            }
+            if self.defer_until.is_some() && self.pending.iter().any(|p| p.0 == rel && p.1 == (w, h) && !p.2.is_finished()) {
+                self.misses += 1;
+                return None;
+            }
+            let m = self.misses;
+            // ENGINE-51: a picture `want_fit` started is taken when done (waited for when not yet); others of the file dropped
+            let started = self.pending.iter().position(|p| p.0 == rel && p.1 == (w, h)).map(|at| self.pending.remove(at).2);
+            self.pending.retain(|p| p.0 != rel);
+            let img = match started.and_then(|t| t.join().ok().flatten()) {
+                Some(img) => Some(img),
+                None => self.scaled(rel, w, h),
+            };
+            if self.misses != m {
+                return None;
+            }
             self.fits.insert(rel.to_string(), ((w, h), img));
         }
         self.fits.get(rel).and_then(|(_, i)| i.as_ref())
+    }
+
+    /// ENGINE-51 (SWITCH-FEEL1): starts reading the picture `image_fit(rel, w, h)` will ask for, on a thread of its own,
+    /// so a screen that opens later on a big picture finds it read (a map opens on its background): a screen calls it
+    /// for what may open next. Nothing when it is held or started already, the file is missing, or on the web (no
+    /// threads: `image_fit` reads it then). The same pixels as `image_fit` alone.
+    pub fn want_fit(&mut self, rel: &str, w: i32, h: i32) {
+        let held = self.fits.get(rel).is_some_and(|(size, _)| *size == (w, h)) || self.pending.iter().any(|p| p.0 == rel && p.1 == (w, h));
+        if held || cfg!(target_arch = "wasm32") {
+            return;
+        }
+        if let Some(path) = self.layers.find(rel) {
+            self.pending.push((rel.to_string(), (w, h), std::thread::spawn(move || load_png(&path).map(|i| i.downsample(w, h)))));
+        }
+    }
+
+    /// The pictures `want_fit` is reading now.
+    pub fn wanted_count(&self) -> usize {
+        self.pending.len()
     }
 
     /// The pictures `image_fit` holds, one per file.
@@ -152,10 +326,49 @@ impl Art {
         self.fits.len()
     }
 
-    fn scaled(&self, rel: &str, w: i32, h: i32) -> Option<Image> {
+    /// ENGINE-51: the file at `path` decoded, from `raw` when it was decoded before (kept when small).
+    fn decoded(&mut self, path: &Path) -> Option<Image> {
+        if let Some(img) = self.raw.get(path) {
+            let img = img.clone();
+            // ENGINE-54: a big file decoded ahead is taken once (as `decoded` keeps only small ones)
+            if img.as_ref().is_some_and(|i| (i.w as i64) * (i.h as i64) > RAW_KEEP_PX) {
+                self.raw.remove(path);
+            }
+            return img;
+        }
+        // ENGINE-54: a file decoding off the frame: a warm draw leaves it for later, any other draw takes it
+        if let Some(at) = self.decoding.iter().position(|d| d.0 == path) {
+            if self.defer_until.is_some() && !self.decoding[at].1.is_finished() {
+                self.misses += 1;
+                return None;
+            }
+            let (_, job) = self.decoding.remove(at);
+            let img = job.join().ok().flatten();
+            if img.as_ref().is_none_or(|i| (i.w as i64) * (i.h as i64) <= RAW_KEEP_PX) {
+                self.raw.insert(path.to_path_buf(), img.clone());
+            }
+            return img;
+        }
+        // ENGINE-54: a warm draw asks for the file instead of decoding it on the frame
+        if self.defer_until.is_some() {
+            if !self.wanted.iter().any(|p| p == path) {
+                self.wanted.push(path.to_path_buf());
+            }
+            self.misses += 1;
+            return None;
+        }
+        let img = load_png(path);
+        if img.as_ref().is_none_or(|i| (i.w as i64) * (i.h as i64) <= RAW_KEEP_PX) {
+            self.raw.insert(path.to_path_buf(), img.clone());
+        }
+        img
+    }
+
+    fn scaled(&mut self, rel: &str, w: i32, h: i32) -> Option<Image> {
         let path = self.layers.find(rel);
-        let img = path.as_ref().and_then(|p| load_png(p)).map(|i| i.downsample(w, h));
-        if img.is_none() && !self.layers.roots.is_empty() {
+        let m = self.misses;
+        let img = path.as_ref().and_then(|p| self.decoded(p)).map(|i| i.downsample(w, h));
+        if img.is_none() && !self.layers.roots.is_empty() && self.misses == m {
             crate::playtest::report_asset("file", rel, "", if path.is_some() { "load_failed" } else { "missing_file" });
         }
         img
@@ -165,7 +378,25 @@ impl Art {
     pub fn image_mirrored(&mut self, rel: &str, w: i32, h: i32) -> Option<&Image> {
         let key = (rel.to_string(), w, h);
         if !self.mirrors.contains_key(&key) {
+            let m = self.misses;
             let img = self.image(rel, w, h).map(|i| i.mirrored());
+            if self.misses != m {
+                return None;
+            }
+            self.mirrors.insert(key.clone(), img);
+        }
+        self.mirrors.get(&key).and_then(|i| i.as_ref())
+    }
+
+    /// `image` flipped top to bottom (cached apart, beside the mirrored copies).
+    pub fn image_flipped(&mut self, rel: &str, w: i32, h: i32) -> Option<&Image> {
+        let key = (format!("{rel}#flipped"), w, h);
+        if !self.mirrors.contains_key(&key) {
+            let m = self.misses;
+            let img = self.image(rel, w, h).map(|i| i.flipped());
+            if self.misses != m {
+                return None;
+            }
             self.mirrors.insert(key.clone(), img);
         }
         self.mirrors.get(&key).and_then(|i| i.as_ref())
@@ -223,7 +454,14 @@ impl Art {
     fn body(&mut self, key: &str, palette: &str) -> Option<&Body> {
         let k = (key.to_string(), palette.to_string());
         if !self.bodies.contains_key(&k) {
+            if self.later() {
+                return None;
+            }
+            let m = self.misses;
             let body = self.load_body(key, palette);
+            if self.misses != m {
+                return None;
+            }
             if body.is_none() && !self.layers.roots.is_empty() {
                 let there = self.layers.has(&assets::body_file(key, "clips.json"));
                 crate::playtest::report_asset("body", key, palette, if there { "load_failed" } else { "missing_file" });
@@ -233,13 +471,49 @@ impl Art {
         self.bodies.get(&k).and_then(|b| b.as_ref())
     }
 
-    fn load_body(&self, key: &str, palette: &str) -> Option<Body> {
+    /// ENGINE-51 (SWITCH-FEEL1): loads every body of `wanted` (key, palette) not loaded yet, as `body` would one by
+    /// one, with their sheets decoded side by side on up to `DECODE_THREADS` threads first (one thread on the web); a
+    /// screen that opens on many bodies (a battle) calls it once before its first draw. The same bodies as `body`.
+    pub fn load_bodies(&mut self, wanted: &[(String, String)]) {
+        // ENGINE-54: a warm draw asks for the sheets (decoded off the frame) instead
+        if self.defer_until.is_some() {
+            for (key, palette) in wanted {
+                self.body(key, palette);
+            }
+            return;
+        }
+        let mut paths: Vec<PathBuf> = Vec::new();
+        for (key, palette) in wanted {
+            if self.bodies.contains_key(&(key.clone(), palette.clone())) {
+                continue;
+            }
+            if let Some(p) = self.layers.find(&assets::body_file(key, "sheet.png")) {
+                if !self.raw.contains_key(&p) && !paths.contains(&p) {
+                    paths.push(p);
+                }
+            }
+        }
+        let decoded = decode_all(&paths);
+        // the big sheets go back out of `raw` once their bodies hold them (as `decoded` keeps only small files)
+        let big: Vec<PathBuf> = paths.iter().zip(&decoded).filter(|(_, i)| i.as_ref().is_some_and(|i| (i.w as i64) * (i.h as i64) > RAW_KEEP_PX)).map(|(p, _)| p.clone()).collect();
+        self.raw.extend(paths.into_iter().zip(decoded));
+        for (key, palette) in wanted {
+            self.body(key, palette);
+        }
+        for p in big {
+            self.raw.remove(&p);
+        }
+    }
+
+    fn load_body(&mut self, key: &str, palette: &str) -> Option<Body> {
         let clips = Clips::parse(&assets::read_json(&self.layers, &assets::body_file(key, "clips.json"))?).ok()?;
-        let mut sheet = load_png(&self.layers.find(&assets::body_file(key, "sheet.png"))?)?;
+        let path = self.layers.find(&assets::body_file(key, "sheet.png"))?;
+        let mut sheet = self.decoded(&path)?;
         if !clips.sheet_problem(sheet.w as u32, sheet.h as u32).is_empty() {
             return None;
         }
-        if !palette.is_empty() {
+        // DIORAMA1B: a painted sheet draws as painted (no palette swap)
+        if !palette.is_empty() && !clips.painted {
             if let Some(slots) = assets::read_json(&self.layers, &assets::body_file(key, &format!("palettes/{palette}.json"))).and_then(|v| assets::parse_palette(&v).ok()) {
                 sheet.swap_colours(&assets::palette_pairs(&clips.palette, &slots));
             }
@@ -275,12 +549,22 @@ impl Art {
     pub fn body_clip_flipped(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32, flip: bool) -> Option<&Image> {
         let k = (key.to_string(), palette.to_string(), clip.to_string(), n, size, flip);
         if !self.frames.contains_key(&k) {
+            if self.later() {
+                return None;
+            }
+            let m = self.misses;
             if flip {
                 let img = self.body_clip_flipped(key, palette, clip, n, size, false).map(|f| f.mirrored());
+                if self.misses != m {
+                    return None;
+                }
                 self.frames.insert(k.clone(), img);
                 return self.frames.get(&k).and_then(|i| i.as_ref());
             }
             let img = self.body_frame(key, palette, clip, n).map(|f| f.fit_square(size));
+            if self.misses != m {
+                return None;
+            }
             self.frames.insert(k.clone(), img);
         }
         self.frames.get(&k).and_then(|i| i.as_ref())
@@ -314,7 +598,11 @@ impl Art {
             Some(id) => (id.as_str(), false),
             None => ("idle", facing.left),
         };
+        let m = self.misses;
         let r = self.body_clip_flipped(key, palette, clip, 0, size, flip).and_then(|f| f.opaque_bounds(OUTLINE_ALPHA));
+        if self.misses != m {
+            return None;
+        }
         self.body_rects.insert(k, r);
         r
     }
@@ -357,7 +645,11 @@ impl Art {
     pub fn body_outline(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32, col: Rgba, flip: bool) -> Option<&Image> {
         let k = (key.to_string(), palette.to_string(), clip.to_string(), n, size, col, flip);
         if !self.outlines.contains_key(&k) {
+            let m = self.misses;
             let img = self.body_clip_flipped(key, palette, clip, n, size, flip).map(|f| f.outline(col));
+            if self.misses != m {
+                return None;
+            }
             self.outlines.insert(k.clone(), img);
         }
         self.outlines.get(&k).and_then(|i| i.as_ref())
@@ -370,7 +662,11 @@ impl Art {
     pub fn body_silhouette(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32, col: Rgba, flip: bool) -> Option<&Image> {
         let k = (key.to_string(), palette.to_string(), clip.to_string(), n, size, col, flip);
         if !self.silhouettes.contains_key(&k) {
+            let m = self.misses;
             let img = self.body_clip_flipped(key, palette, clip, n, size, flip).map(|f| f.silhouette(col));
+            if self.misses != m {
+                return None;
+            }
             self.silhouettes.insert(k.clone(), img);
         }
         self.silhouettes.get(&k).and_then(|i| i.as_ref())
@@ -409,6 +705,13 @@ impl Art {
         Some(format!("{dir}/v{v}.png"))
     }
 
+    /// DIORAMA5 R1 (PR7-77): `pick` with the variant from an integer hash of (x, y) (`ground::splitmix64`), so the
+    /// variants scatter with no lattice, unlike the linear (x x 7 + y x 13) mod n. None: no folder has a `v0.png`.
+    pub fn pick_hashed(&mut self, dirs: &[&str], x: i32, y: i32) -> Option<String> {
+        let (dir, n) = dirs.iter().map(|d| (*d, self.variants(d))).find(|(_, n)| *n > 0)?;
+        Some(format!("{dir}/v{}.png", cell_hash(x, y, 0) % n as u64))
+    }
+
     /// The image of `pick` (`dirs`, `variant`, `x`, `y`) downsampled to `w` x `h`.
     pub fn varied(&mut self, dirs: &[&str], variant: Option<u32>, x: i32, y: i32, w: i32, h: i32) -> Option<&Image> {
         let rel = self.pick(dirs, variant, x, y)?;
@@ -423,6 +726,12 @@ impl Art {
         self.varied(&dirs, None, x, y, size, size)
     }
 
+}
+
+/// DIORAMA5 R1: a cell's hash for scatter picks, stream `salt` (one per use, so two picks on one cell are apart): a
+/// pure function of its input.
+pub fn cell_hash(x: i32, y: i32, salt: u64) -> u64 {
+    crate::ground::splitmix64(((x as u32 as u64) << 32 | y as u32 as u64) ^ salt.wrapping_mul(0x9e37_79b9_7f4a_7c15))
 }
 
 /// A PNG's width and height from its header (None: not a readable PNG).
@@ -541,6 +850,50 @@ mod tests {
     }
 
     #[test]
+    fn a_wanted_picture_is_read_ahead_and_is_the_same() {
+        let root = aegis_core::scratch::Scratch::vacant("art_want");
+        let px: Vec<u8> = (0..64 * 32 * 4).map(|i| (i * 7 % 251) as u8).collect();
+        write_png(&root.join("bg.png"), 64, 32, &px);
+        let mut ahead = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        ahead.want_fit("bg.png", 16, 8);
+        ahead.want_fit("bg.png", 16, 8);
+        ahead.want_fit("none.png", 16, 8);
+        assert_eq!(ahead.wanted_count(), 1, "once, and nothing for a missing file");
+        let mut plain = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        assert_eq!(ahead.image_fit("bg.png", 16, 8).cloned().map(|i| i.px), plain.image_fit("bg.png", 16, 8).cloned().map(|i| i.px));
+        assert_eq!(ahead.wanted_count(), 0, "taken");
+        ahead.want_fit("bg.png", 16, 8);
+        assert_eq!(ahead.wanted_count(), 0, "held already");
+        ahead.want_fit("bg.png", 32, 16);
+        assert!(ahead.image_fit("bg.png", 8, 4).is_some() && ahead.wanted_count() == 0, "another size drops it");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn bodies_loaded_together_are_the_bodies_loaded_one_by_one() {
+        let root = body_tree("bodies");
+        let base = root.join("units/knight/base");
+        for k in ["squire", "page", "herald"] {
+            let dir = root.join(format!("units/knight/{k}"));
+            std::fs::create_dir_all(dir.join("palettes")).unwrap();
+            for f in ["sheet.png", "clips.json", "palettes/blue.json"] {
+                std::fs::copy(base.join(f), dir.join(f)).unwrap();
+            }
+        }
+        let keys = ["knight", "knight/squire", "knight/page", "knight/herald", "rogue"];
+        let wanted: Vec<(String, String)> = keys.iter().flat_map(|k| [(k.to_string(), String::new()), (k.to_string(), "blue".to_string())]).collect();
+        let mut together = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        together.load_bodies(&wanted);
+        assert_eq!(together.bodies.len(), wanted.len(), "every one asked for is kept, a missing one as missing");
+        let mut alone = Art::layered(Layers::of(vec![root.to_path_buf()]));
+        for (k, p) in &wanted {
+            assert_eq!(together.body_frame(k, p, "idle", 0).map(|i| i.px), alone.body_frame(k, p, "idle", 0).map(|i| i.px), "{k} {p}");
+        }
+        assert!(together.has_body("knight/herald") && !together.has_body("rogue"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn chains_take_the_first_file_or_body_present() {
         let root = body_tree("chains");
         write_png(&root.join("portraits/common/knight_base.png"), 2, 2, &[7u8; 16]);
@@ -575,3 +928,4 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 }
+

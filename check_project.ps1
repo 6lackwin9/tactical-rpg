@@ -9,7 +9,8 @@
 param (
     [switch]$VerboseOutput,   # print the full cargo output
     [switch]$Quiet,           # print only failures and the summary
-    [switch]$Fast             # accepted for compatibility: the engine gate has one speed
+    [switch]$Fast,            # accepted for compatibility: default runs every step
+    [switch]$FastLocal        # local dev mode: skips shotsexact and newgame (always run in full gate / CI)
 )
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -65,11 +66,17 @@ if (-not $script:bash) {
 }
 
 Write-Host "=== AEGIS: COMMIT GATE ($($steps.Count) steps, tools/gate_steps.txt) ===" -ForegroundColor Cyan
+$gateWatch = [System.Diagnostics.Stopwatch]::StartNew()
 $n = 0
 $test = $null
 foreach ($step in $steps) {
     $n++
+    if ($FastLocal -and ($step -eq "shotsexact" -or $step -eq "newgame")) {
+        Write-Host "[$n/$($steps.Count)] $step... skipped (-FastLocal)" -ForegroundColor Yellow
+        continue
+    }
     Write-Host "[$n/$($steps.Count)] $step..."
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
     switch ($step) {
         "build" {
             # Every target (tests included); a compiler warning fails the gate like an error (cargo replays cached warnings, CI1).
@@ -81,7 +88,8 @@ foreach ($step in $steps) {
                 Write-Host "=== [FAILED] build$(if ($build.Code -eq 0) { ': compiler warnings' }) ===" -ForegroundColor Red
                 exit 1
             }
-            if (-not $Quiet) { Write-Host "  -> build ok" -ForegroundColor Green }
+            $env:FC_PREBUILT = "1"
+            if (-not $Quiet) { Write-Host ("  -> build ok ({0:F2}s)" -f $sw.Elapsed.TotalSeconds) -ForegroundColor Green }
         }
         "test" {
             # Windows Smart App Control sometimes blocks a freshly linked test binary (os error 4551): delete it and retry.
@@ -100,6 +108,7 @@ foreach ($step in $steps) {
                 exit 1
             }
             if (-not $Quiet) { $test.Lines | Where-Object { $_ -match "checked|diverge|compared|panicked|os error" } | ForEach-Object { Write-Host "  $_" } }
+            Write-Host ("  -> test ok ({0:F2}s)" -f $sw.Elapsed.TotalSeconds) -ForegroundColor Green
         }
         default {
             # One copy of each check: `tools/fc.sh step <name>` (its output; a SKIP always shows, it means a check did not run).
@@ -110,11 +119,12 @@ foreach ($step in $steps) {
                 exit 1
             }
             if (-not $Quiet -or ($r.Lines -match 'SKIP')) { $r.Lines | ForEach-Object { Write-Host "  $_" -ForegroundColor $(if ($_ -match 'SKIP') { 'Yellow' } else { 'Green' }) } }
+            Write-Host ("  -> {0} ok ({1:F2}s)" -f $step, $sw.Elapsed.TotalSeconds) -ForegroundColor Green
         }
     }
 }
 
 $passed = 0
 if ($test) { $test.Lines | Select-String -Pattern "test result: ok\. (\d+) passed" | ForEach-Object { $passed += [int]$_.Matches[0].Groups[1].Value } }
-Write-Host "=== [SUCCESS] ALL CHECKS PASSED: $passed tests ===" -ForegroundColor Green
+Write-Host ("=== [SUCCESS] ALL CHECKS PASSED: {0} tests ({1:F2}s) ===" -f $passed, $gateWatch.Elapsed.TotalSeconds) -ForegroundColor Green
 exit 0

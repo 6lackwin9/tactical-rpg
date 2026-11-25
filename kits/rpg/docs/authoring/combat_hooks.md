@@ -224,6 +224,8 @@ Code `rpgkit_battle/src/encounter.rs` (`Phases::apply_decks`, `Phases::mark_fire
  "effects": [{"type": "deck", "unit": "boss", "add": ["earthbreaker"], "order": {"assault": ["earthbreaker"]}}]}
 ```
 
+A phase may set `form` (a form or state such as "Unbound", 1-40 characters; omit it for none): the boss bar then reads `<boss name>, <form>` in place of the title. The phase `name` shows only in the phase banner (`PR7-59`).
+
 ## Battle talk and event triggers
 
 Code `rpgkit_battle/src/encounter.rs` (`TALK_EFFECT`, `TalkCue`, `Phases::mark_block`, `Phases::check_events`),

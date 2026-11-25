@@ -4,7 +4,7 @@ use aegis_ui::theme::th;
 use super::marks::{bars_shown, break_plate, broken_units, draw_arrows, draw_hold_tiles, draw_hook_marks, draw_pushes, exit_glyph, exit_sign, poise_bar, poise_shown, HoldMarks, HookMarks};
 use super::overlays::{draw_overlay, Layers, Overlay};
 use super::skill_menu::{CHANNEL_TINT, CHANNEL_TINT_ALPHA};
-use super::{Action, AMBER, DASH_MS, GRID_X, GRID_Y, TILE};
+use super::{Action, AMBER, DASH_MS, GRID_X, GRID_Y, PANEL, TILE};
 use super::tips::{intent_glyph, intent_ring_color, ring_intent, unit_tip};
 use super::tokens::{body_keys, hit_flash, token_frame, token_outline, Float, Tokens, UnitAnim};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
@@ -99,6 +99,8 @@ pub(super) struct Board<'a> {
     pub(super) hold: Option<&'a HoldMarks>,
     /// PK1-S2c (PK1 4.3 item 6, placeholder): the units whose round is a Channel round as the party sees it (the tint).
     pub(super) channel: &'a [usize],
+    /// DIORAMA4 S1: the boss bar's bottom edge on screen while it shows (the backdrop band is kept in view under it)
+    pub(super) bar_bottom: Option<i32>,
 }
 
 /// INPUT1 MR12: `unit` moved in this step by a dash: a command of its whose start is this block made the dash board event
@@ -177,7 +179,9 @@ pub(super) struct StatusOn {
 /// link's `status_fx` (S9).
 fn status_draws(tokens: &mut Tokens, i: usize, alive: bool, wall: u64, now: u64, t: &Tuning) -> Vec<fx::Drawn> {
     let Some(a) = tokens.anims.get_mut(i) else { return Vec::new() };
-    let looks = if alive { fx::status_frame(&a.marks, &mut a.slots, wall, now, t.status_cycle_ms) } else { Vec::new() };
+    let mut looks = if alive { fx::status_frame(&a.marks, &mut a.slots, wall, now, t.status_cycle_ms) } else { Vec::new() };
+    // STATUSVIS1 SV8 (PR7-57): a targeting pull (taunt) shows as the badge over the sprite, no ring at the feet
+    looks.retain(|d| !emberwake_rules::status::has_targeting_pull(d.id));
     a.status_fx = looks.iter().map(|d| d.id).collect();
     looks
 }
@@ -247,7 +251,7 @@ fn scaled(a: u8, k: u8) -> u8 {
 /// to centre over the units, the cell widgets.
 /// The Flat board; returns the unit whose tile the mouse is over (VC2's hovered unit).
 pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold, channel } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold, channel, bar_bottom: _ } = b;
     let w = &s.w;
     // VISCLAR1 VC2: the unit under the mouse (its tile) joins the focus set; AR3: the arrows of the selected and the
     // inspected unit (Alt: all)
@@ -480,6 +484,18 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
     // FX1 4.1: the air layer over the units, before the floats (STATUSFX1 S6: the status loops first)
     draw_status_loops(&mut ui.p, &status, Layer::Air, &geo, tuning, anim_now, reduce);
     live.draw(&mut ui.p, anim_now, Layer::Air);
+    // STATUSVIS1 SV8 (PR7-57): the taunt badge over each taunting unit's token
+    for i in 0..w.units.len() {
+        let (Some(pos), Some(st)) = (w.grid.pos(i).filter(|_| w.units[i].is_alive()), super::statusvis::taunt_of(w, i)) else { continue };
+        let n = w.size_of(i);
+        super::statusvis::taunt_badge(ui, cx, w, i, &st, (GRID_X + pos.x * TILE + n * TILE / 2, GRID_Y + pos.y * TILE + 2), super::statusvis::bob(anim_now, reduce));
+    }
+    // OBJUI1 (PR7-31): the objective and morale chips at each standing unit's lower left
+    for i in 0..w.units.len() {
+        let Some(pos) = w.grid.pos(i).filter(|_| w.units[i].is_alive()) else { continue };
+        let n = w.size_of(i);
+        super::objchips::token_chips(ui, cx, s, i, (GRID_X + pos.x * TILE + 1, GRID_Y + pos.y * TILE + n * TILE - 7));
+    }
     for f in floats {
         if let Some(pos) = w.grid.pos(f.unit) {
             let t = now.duration_since(f.born).as_millis() as f32 / f.ms.max(1) as f32;
@@ -534,6 +550,8 @@ struct StageUnit {
     foot: (i32, i32),
     /// The drawn sprite square (slide and hit shake).
     tr: Rect,
+    /// DIORAMA1B: the sprite square's side (`Geom::sprite_px`: the token square, or a painted frame's scale).
+    sp: i32,
     /// The body's solid rect at its place (slide, no shake): the feet pass's rect and half of its widget rect.
     body_rect: Rect,
     /// STATUSFX1: the status looks it draws (none once it has fallen).
@@ -558,13 +576,30 @@ pub(super) fn with_alpha(c: Rgba, a: u8) -> Rgba {
     [c[0], c[1], c[2], a]
 }
 
+thread_local! {
+    /// ENGINE-46 (FEEL-FIX1): the Stage's floor layer (`draw_stage`).
+    static FLOOR: std::cell::RefCell<aegis_ui::painter::Snapshot> = Default::default();
+}
+
+/// ENGINE-46 (FEEL-FIX1): a hash of everything the Stage's floor layer shows: the art (its generation), the board's tiles
+/// and exits, the zone, its set and look, the decor, the camera shift, the grid lines, the exit gates and the colours.
+fn floor_key(art: &Art, w: &World, def: &emberwake_battle::session::EncounterDef, (set, look): (&str, &stage::ZoneLook), view: ((i32, i32), u8, bool), colours: (Rgba, Rgba)) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    art.generation().hash(&mut h);
+    (w.grid.open, &w.grid.exits, &w.grid.terrain, format!("{:?}", w.grid.table)).hash(&mut h);
+    (std::sync::Arc::as_ptr(&w.cat) as usize, &def.zone, format!("{:?}", def.decor)).hash(&mut h);
+    (set, format!("{look:?}"), view, colours).hash(&mut h);
+    h.finish()
+}
+
 /// STAGE1 option B, the Stage view: the board tilted to 32 x 24 cells, run as `stage::passes` (backdrop, ground,
 /// markers, ground arrows, shadows, front face, the feet-sorted blocks, props and units, the outlines through what
 /// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
 /// (front-most last, so it takes the click). `set`: the world's stage set (LOOK1-L1; "" = `common_stage`). Returns the
 /// unit the mouse is over on the board.
 pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold, channel } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold, channel, bar_bottom } = b;
     let w = &s.w;
     // VISCLAR1 AR3: the arrows of the selected and the inspected unit (Alt: all)
     let shown = overlay.map(|o| o.shown(&layers, sel, inspect, alt));
@@ -574,8 +609,6 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
     let reduce = cx.settings.reduce_motion();
     let still = UnitAnim::default();
-    ui.p.panel(Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4), th().game("board_tray", rgb(8, 10, 16)), th().edge, RADIUS);
-
     // The units' places this frame (STATUSFX1: and their status looks).
     let wall = tokens.wall_ms(now);
     for a in &mut tokens.anims {
@@ -604,22 +637,28 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
         // BIGUNIT1 BU14: a 2 x 2 unit stands on its square's foot point, its sprite scaled to the square
         let n = w.size_of(i);
         let (fx, fy) = geo.foot_n(pos, n);
-        let rest = geo.token_rect_n(pos, n, dx, dy);
+        // DIORAMA1B (D5): a body with a `foot` row stands PAINTED_CELLS cells tall per footprint cell on its foot point
+        let sprite = body.as_deref().and_then(|k| cx.art.clips(k)).map_or((tp * n, 0), |c| geo.sprite_px(n, c.frame, c.foot));
+        let rest = geo.sprite_rect_n(pos, n, sprite, dx, dy);
         // 3.8: the body's solid bounds of its idle frame 0 (animation frames do not move it); DIR4-HB: in the facing's
         // view (the front or back idle while it faces down or up, else the side idle with its left/right); no body:
         // the letter plate.
-        let body_rect = match body.as_deref().and_then(|k| cx.art.body_bounds_facing(k, &palette, tp * n, facing)) {
+        let body_rect = match body.as_deref().and_then(|k| cx.art.body_bounds_facing(k, &palette, sprite.0, facing)) {
             Some(bb) => Rect::new(rest.x + bb.x, rest.y + bb.y, bb.w, bb.h),
             None => rest.inset(4),
         };
         // FX1-L2: a miss's target steps aside and back (its sprite only; its foot keeps its place in the draw order)
         let (sx, sy) = fx::sidestep_of(sidesteps, i, anim_now);
         let looks = status_draws(tokens, i, alive, wall, anim_now, tuning);
-        units.push(StageUnit { i, pos, n, ally, alive, hp, standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.token_rect_n(pos, n, dx + shake + sx, dy + sy), body_rect, looks });
+        units.push(StageUnit { i, pos, n, ally, alive, hp, standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.sprite_rect_n(pos, n, sprite, dx + shake + sx, dy + sy), sp: sprite.0, body_rect, looks });
     }
     let status: Vec<StatusOn> = units.iter().filter(|t| t.alive).map(|t| StatusOn { unit: t.i, foot: (t.foot.0 as f32, t.foot.1 as f32), left: t.facing.left, looks: t.looks.clone() }).collect();
-    // 3.7 pass 7: blocks, standing props and units sorted by their feet.
+    // 3.7 pass 7: blocks, standing props, decor (DECOR1) and units sorted by their feet.
+    // DIORAMA4 S1, S2: the zone's own stage set, tint and terrain overrides (the world set's `stage.fx.json`)
+    let look = stage::zone_look(&mut cx.art, set, &s.def.zone);
+    let zset = (set, &look);
     let mut items = stage::board_items(&mut cx.art, &w.grid);
+    items.extend(stage::decor_items(&mut cx.art, &w.grid, zset, &s.def.decor));
     items.extend(units.iter().filter(|t| t.standing).map(|t| stage::unit_item(t.i, t.foot, t.body_rect)));
     let order = stage::feet_order(&items);
     let unit_of = |i: usize| units.iter().find(|t| t.i == i);
@@ -644,6 +683,13 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     } else {
         None
     };
+    // DIORAMA4 S3: the units standing in front of the selected unit, the hovered one, the inspected one or the
+    // selected unit's target draw see-through
+    let looked_at: Vec<usize> = sel.into_iter().chain(hovered).chain(inspect).chain(sel.and_then(|h| super::draw::round_target(w, h))).collect();
+    let faded = stage::occluders(&order, &looked_at);
+    // DIORAMA4 S1: under the boss bar, the backdrop band down to the first row a unit can stand on (stage coordinates)
+    let occupied: Vec<V2> = (0..w.units.len()).flat_map(|u| w.cells_of(u)).collect();
+    let band = bar_bottom.and_then(|y| stage::boss_band(&w.grid, &occupied, y - shift.1));
     let foot_f = |c: V2| {
         let (x, y) = geo.foot(c);
         (x as f32, y as f32)
@@ -651,13 +697,49 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     let mut frames: Vec<(usize, ClipFrame)> = Vec::new();
 
     // FX1 4.1: passes 1-9 inside the board's clip, shifted by the camera (the clip stays put)
-    ui.p.clip(Some(stage::INTERIOR));
+    // DIORAMA2 R4: the stage reaches into the panel's side gutters (its wings, faded), inside the panel's rim
+    ui.p.clip(Some(stage::STAGE_CLIP));
+    // DIORAMA5 R6: no grid lines unless Show full grid is on (then faint at rest, stronger while planning); the cells
+    // that matter keep their own marks (the hover plate, the move tiles, the target plates)
+    let grid_alpha = if !cx.settings.v[super::BOARD_GRID].as_bool().unwrap_or(false) {
+        0
+    } else if planning {
+        tuning.grid_alpha_planning
+    } else {
+        tuning.grid_alpha.max(stage::FULL_GRID_ALPHA)
+    };
+    let gates = exit_sign(hold).0 == "EXIT";
+    let (tray, wing) = (th().game("board_tray", rgb(8, 10, 16)), th().game("battle_panel", PANEL));
+    // ENGINE-46 (FEEL-FIX1): the tray, wings, backdrop and ground (passes 1 and 2) are drawn once and put back while
+    // nothing they show changes (`floor_key`); the marks, arrows and units draw over them every frame
+    let key = floor_key(&cx.art, w, &s.def, (set, &look), (shift, grid_alpha, gates), (tray, wing));
+    FLOOR.with(|slot| {
+        ui.p.cached(&mut slot.borrow_mut(), key, stage::STAGE_CLIP, |p| {
+            let v0 = p.v;
+            // DIORAMA2 R4: the stage's tray is its clip inside the board panel (no rim of its own past the panel's frame)
+            p.fill(stage::STAGE_CLIP, tray);
+            p.shift(shift.0, shift.1);
+            stage::draw_wings(p, &mut cx.art, &w.grid, zset, &s.def.zone, &w.cat.zones, wing);
+            // HOOKS1 ZN3: a data zone row keys its own backdrop and gradient ground (a code zone ignores any row)
+            stage::draw_backdrop(p, &mut cx.art, &w.grid, &s.def.zone, &w.cat.zones);
+            stage::draw_ground(p, &mut cx.art, &w.grid, zset, grid_alpha);
+            // DIORAMA3 R3: the lanterns' pools and the vignette, under the marks and the units
+            let spots = stage::light_spots(&mut cx.art, set, &s.def.zone);
+            // DIORAMA5 R3: and the lamps among the cover and props (`stage.fx.json` `lights`)
+            // DECOR1: and the lamps among the encounter's decor
+            let lamps = stage::lamps_with(&mut cx.art, &w.grid, zset, &s.def.decor);
+            stage::draw_light(p, &spots, &lamps);
+            // DIORAMA5 R4: a plain exit's gate beyond the board's edge
+            if gates {
+                stage::draw_exit_gates(p, &mut cx.art, &w.grid.exits);
+            }
+            p.v = v0;
+        });
+    });
     ui.p.shift(shift.0, shift.1);
     for pass in stage::passes() {
         match pass {
-            // HOOKS1 ZN3: a data zone row keys its own backdrop and gradient ground (a code zone ignores any row)
-            Pass::Backdrop => stage::draw_backdrop(&mut ui.p, &mut cx.art, &w.grid, &s.def.zone, &w.cat.zones),
-            Pass::Ground => stage::draw_ground(&mut ui.p, &mut cx.art, &w.grid, set, tuning.grid_alpha),
+            Pass::Backdrop | Pass::Ground => {}
             Pass::Markers => {
                 // HOOKS1-UI slice 1: the ground hazards and the arena's struck cells, under the hover and the tells
                 draw_hook_marks(&mut ui.p, &mut cx.art, marks, &geo);
@@ -697,9 +779,16 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                         }
                     }
                 }
-                // ENCOUNTER2 H7: a hold escape's shut gate plates its exits red (layer `gate`)
-                let (_, fill, edge) = exit_sign(hold);
+                // ENCOUNTER2 H7: a hold escape's shut gate plates its exits red (layer `gate`). DIORAMA5 R4: a plain exit is
+                // the worn path decal at about 60 percent with a faint pulse, bright when hovered or a hero stands one step
+                // from it (the plate stays without the art)
+                let (word, fill, edge) = exit_sign(hold);
                 for c in w.grid.exits.iter().filter(|c| w.grid.is_valid(**c)) {
+                    let near = w.allies.iter().any(|a| w.units[*a].is_active() && w.grid.pos(*a).is_some_and(|p| (p.x - c.x).abs() + (p.y - c.y).abs() == 1));
+                    let bright = hover_cell == Some(*c) || near;
+                    if word == "EXIT" && stage::draw_exit_path(&mut ui.p, &mut cx.art, *c, stage::exit_alpha(anim_now, reduce, bright)) {
+                        continue;
+                    }
                     plate(&mut ui.p, inset2(geo.cell_rect(*c), 3, 2), with_alpha(fill, 90), with_alpha(edge, 200));
                 }
             }
@@ -763,21 +852,32 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     }
                 }
             }
-            Pass::Face => stage::draw_face(&mut ui.p, &mut cx.art, &w.grid, set),
+            Pass::Face => stage::draw_face(&mut ui.p, &mut cx.art, &w.grid, zset),
             Pass::Feet => {
+                if let Some(b) = band {
+                    stage::draw_band(&mut ui.p, &mut cx.art, &w.grid, &s.def.zone, &w.cat.zones, b);
+                }
                 for p in &order {
                     match p.item {
-                        Item::Block(c) => stage::draw_block(&mut ui.p, &mut cx.art, &w.grid, set, c),
+                        // DIORAMA4 S1: the band's rows show the backdrop, not their walls
+                        Item::Block(c) if band.is_some_and(|b| stage::under_band(c, b)) => {}
+                        // DECOR1: a decor piece stands in place of an inner block's cover prop
+                        Item::Block(c) if !stage::block_shown(&mut cx.art, &w.grid, zset, &s.def.decor, c) => {}
+                        Item::Block(c) => stage::draw_block(&mut ui.p, &mut cx.art, &w.grid, zset, c),
                         Item::Prop(c) => stage::draw_prop(&mut ui.p, &mut cx.art, &w.grid, c),
+                        Item::Decor(k) if band.is_some_and(|b| stage::under_band(s.def.decor[k].at, b)) => {}
+                        Item::Decor(k) => stage::draw_decor(&mut ui.p, &mut cx.art, &w.grid, zset, &s.def.decor[k]),
                         Item::Unit(i) => {
                             let Some(t) = unit_of(i) else { continue };
-                            // BIGUNIT1 BU14: a 2 x 2 unit's sprite is its sheet scaled to the square
-                            let tp = tp * t.n;
+                            // BIGUNIT1 BU14: a 2 x 2 unit's sprite is its sheet scaled to the square; DIORAMA1B: a
+                            // painted frame at its own scale (`Geom::sprite_px`)
+                            let tp = t.sp;
                             let a = tokens.anims.get(i).unwrap_or(&still);
                             let ring = if t.ally { crate::tokens::ally() } else { th().foe };
                             let outline = if Some(i) == sel || Some(i) == talker { Some(th().gold) } else if hovered == Some(i) { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
                             // STATUSFX1: a stealthed token (sprite and outline) at 55 % alpha
                             let alpha = fx::token_alpha(&t.looks, tuning);
+                            let alpha = if faded.contains(&i) { scaled(alpha, stage::OCCLUDER_ALPHA) } else { alpha };
                             let frame = t.body.as_deref().and_then(|b| token_frame(&mut cx.art, b, &t.palette, &a.player, anim_now, tp, t.facing).map(|(f, img)| {
                                 ui.p.image_alpha(img, t.tr, alpha);
                                 f
@@ -822,7 +922,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                 for (k, p) in order.iter().enumerate() {
                     let Item::Unit(i) = p.item else { continue };
                     let Some(t) = unit_of(i).filter(|t| t.alive) else { continue };
-                    let tp = tp * t.n;
+                    let tp = t.sp;
                     let (Some(b), Some((_, f))) = (t.body.as_deref(), frames.iter().find(|(j, _)| *j == i)) else { continue };
                     let col = match stage::through(&order, k, Some(i) == sel, hovered == Some(i), reveal) {
                         Some(Through::Side) => with_alpha(if t.ally { crate::tokens::ally() } else { th().foe }, 230),
@@ -883,6 +983,10 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     let sign = Rect::new(cx_ - 11, cy_ - 2 - 5, 22, 9);
                     // ENCOUNTER2 H7: a hold escape's exit reads SHUT or OPEN (layer `gate`)
                     let (word, fill, edge) = exit_sign(hold);
+                    // DIORAMA5 R4: a plain exit with path art has no sign (the decal and the gate say it)
+                    if word == "EXIT" && stage::exit_path_art(&mut cx.art, c.x, c.y).is_some() {
+                        continue;
+                    }
                     ui.p.panel(sign, fill, edge, 2.0);
                     ui.p.text_center(cx_ as f32, sign.y as f32 + (sign.h as f32 - ui.p.line_h(SMALL)) / 2.0, exit_glyph(word), SMALL, th().bg);
                 }
@@ -907,6 +1011,16 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
             }
             _ => {}
         }
+    }
+    // STATUSVIS1 SV8 (PR7-57): the taunt badge over each taunting unit's sprite (the top of its body)
+    for t in units.iter().filter(|t| t.alive) {
+        if let Some(st) = super::statusvis::taunt_of(w, t.i) {
+            super::statusvis::taunt_badge(ui, cx, w, t.i, &st, (t.body_rect.x + t.body_rect.w / 2, t.body_rect.y), super::statusvis::bob(anim_now, reduce));
+        }
+    }
+    // OBJUI1 (PR7-31): the objective and morale chips left of each standing unit's sprite, from its feet up
+    for t in units.iter().filter(|t| t.alive) {
+        super::objchips::token_chips(ui, cx, s, t.i, (t.body_rect.x - super::objchips::CHIP - 1, t.body_rect.y + t.body_rect.h));
     }
     ui.p.shift(-shift.0, -shift.1);
     ui.p.clip(None);
@@ -935,6 +1049,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
         let tip = unit_tip(s, i, sel, tells, rounds, classes);
         ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), widget_rect(t), true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
     }
+    // OBJUI1: the chips' hovers over the units'
+    super::objchips::raise_chips(ui);
     board_hover
 }
 

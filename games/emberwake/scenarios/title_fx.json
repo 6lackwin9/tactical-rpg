@@ -1,0 +1,13 @@
+{
+  "id": "title_fx",
+  "title": "PR7-28 (TITLEFX1): the title backdrop's fire layer, lantern glows and rising embers at the spots of backgrounds/menu/title.fx.json, as a clip (the off state under Reduce motion is title_fx_still)",
+  "settings": {"reduce_motion": false},
+  "steps": [
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
+    {"step": "assert", "until": {"path": "state.title_fx.on", "eq": true}},
+    {"step": "assert", "until": {"path": "state.title_fx.lanterns", "eq": 5}},
+    {"step": "assert", "until": {"path": "state.title_fx.embers", "eq": 6}},
+    {"step": "clip", "name": "title_fire", "frames": 24, "every_ms": 120, "max_w": 960},
+    {"step": "shot", "name": "title_fire"}
+  ]
+}

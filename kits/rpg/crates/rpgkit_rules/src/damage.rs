@@ -260,6 +260,9 @@ pub struct HitInput {
     pub crit_roll: Option<f64>,
     /// Stance to attack with (None = the attacker's current stance).
     pub attacker_stance: Option<Stance>,
+    /// HITCALC1 (PR7-45): the stance the target holds when the hit lands (None = its current stance); a forecast sets
+    /// the stance it will hold at the landing block.
+    pub target_stance: Option<Stance>,
     pub include_guard: bool,
     pub cover: f64,
     /// RULESET1 A2 (rule pierce, skill flag `armor_piercing`): the armour term is 1.0 (guard and cover still apply).
@@ -271,7 +274,7 @@ pub struct HitInput {
 
 impl Default for HitInput {
     fn default() -> Self {
-        Self { ranged: false, offhand: false, skill_mult: 1.0, force_crit: false, crit_roll: None, attacker_stance: None, include_guard: true, cover: 0.0, ignore_armor: false, distance: 0 }
+        Self { ranged: false, offhand: false, skill_mult: 1.0, force_crit: false, crit_roll: None, attacker_stance: None, target_stance: None, include_guard: true, cover: 0.0, ignore_armor: false, distance: 0 }
     }
 }
 
@@ -457,7 +460,7 @@ fn hit(attacker: &Unit, target: &Unit, h: HitInput, traced: bool, skill_parts: V
     let power = explained.attack_power;
     let buff = attacker.attack_boost.max(1.0);
     let stance = h.attacker_stance.unwrap_or(attacker.stance);
-    let stance_factor = stance.matchup(target.stance);
+    let stance_factor = stance.matchup(h.target_stance.unwrap_or(target.stance));
     let chance = crit_chance(attacker);
     let is_crit = h.force_crit || h.crit_roll.is_some_and(|r| r * 100.0 < chance);
     let crit_mult = if is_crit { CRIT_MULT } else { 1.0 };

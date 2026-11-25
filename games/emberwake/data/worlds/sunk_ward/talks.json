@@ -150,6 +150,19 @@
 			"tags": [
 				"provisional"
 			]
+		},
+		{
+			"id": "bunk_tpl_temper_grim",
+			"name": "Bunks: seen worse",
+			"pair": [],
+			"template": true,
+			"requires_flags": [],
+			"min_together": 1,
+			"temperament": "temper_grim",
+			"dialogue": "dlg_bunk_tpl_temper_grim",
+			"tags": [
+				"provisional"
+			]
 		}
 	]
 }

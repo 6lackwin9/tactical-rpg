@@ -12,8 +12,11 @@ use aegis_core::json::{self, int, Dict};
 use rpgkit_battle::encounter::{PartyFate, StayBehind};
 use rpgkit_battle::session::{EncounterDef, Fate, Prebuilt, Session, StartGrant};
 use serde_json::Value;
+use indexmap::IndexMap;
 
-pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
+/// ENRAGE2 EN9 adds `escaped`: a random fight's foes slipped away at its round cap.
+pub const OUTCOMES: [&str; 4] = ["won", "lost", "fled", ESCAPED];
+pub use rpgkit_battle::encounter::ESCAPED;
 
 /// GameEncounter / WorldEncounter: the battle of encounter row `entry` resolved in `world`, with the ruleset of that
 /// world (RULESET1 3.1.2: a battle plays by the world that owns the encounter; ENCOUNTER2's linked rooms too).
@@ -21,7 +24,14 @@ pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
 pub fn encounter_def(d: &Data, world: &str, entry: &Dict) -> EncounterDef {
     let mut def = EncounterDef::from_obj_with(entry, d.ruleset(world));
     def.start_meter = start_meters(d, None, world, entry);
+    def.decor_pool = decor_pool(d, world);
     def
+}
+
+/// DECOR-GEN1 (PR7-86): the decor art keys a generated board of `world` draws from: the nearest non-empty `decor_pool`
+/// of its lineage (the world, then its parents); empty when none names one (no generated decor).
+pub fn decor_pool(d: &Data, world: &str) -> Vec<String> {
+    d.lineage(world).iter().rev().map(|lw| json::sget(d.manifest(lw), rpgkit_battle::encounter::DECOR_POOL)).find(|p| !p.is_empty()).unwrap_or_default()
 }
 
 /// PR6-7 (`PK6_PK7_BOSSES_ENDINGS.md` 1): the battle-start meter grants of encounter row `entry` fought in `world`: the
@@ -105,13 +115,19 @@ pub struct WorldRoster<'a> {
     pub captive_fallback: String,
     /// PR6-10: the units the echo refs play (`rpgkit_data::echo_ref(i)` plays `echoes[i - 1]`; `echo_defs`).
     pub echoes: Vec<rpgkit_data::UnitDef>,
+    /// BALANCE-WHATIF1 (ENGINE-26): levels added to every enemy on top of its stage level (the sim's `foe_level=`; 0
+    /// everywhere else).
+    pub foe_levels: i64,
+    /// CAMPAIGN-SIM1 (ENGINE-28): the level each named ally fights at when above its authored level (the sim's campaign
+    /// run, carrying XP from fight to fight; empty everywhere else). The raise spends its points as `raise_level` does.
+    pub ally_levels: IndexMap<String, i64>,
 }
 
 impl<'a> WorldRoster<'a> {
     /// W.2-S1 (FB-50a): the roster of a battle played in `world` at stage 0 (the one constructor; `begin_world` builds
     /// on it and sets the stage and the allies).
     pub fn new(d: &'a Data, world: impl Into<String>) -> Self {
-        Self { d, world: world.into(), stage: 0, allies: Vec::new(), captive: None, captive_fallback: String::new(), echoes: Vec::new() }
+        Self { d, world: world.into(), stage: 0, allies: Vec::new(), captive: None, captive_fallback: String::new(), echoes: Vec::new(), foe_levels: 0, ally_levels: IndexMap::new() }
     }
 
     /// PR6-10: the echo unit an echo ref plays (None for any other ref, or an index past the built echoes).
@@ -208,7 +224,9 @@ impl rpgkit_battle::session::Roster for WorldRoster<'_> {
         }
         let mut def = rpgkit_data::UnitDef::from_obj(&e);
         if !self.allies.iter().any(|a| a == r) {
-            rpgkit_rules::unit::raise_level(cat, &mut def, stage_level(&e, self.stage) as i32);
+            rpgkit_rules::unit::raise_level(cat, &mut def, (stage_level(&e, self.stage) + self.foe_levels) as i32);
+        } else if let Some(&level) = self.ally_levels.get(r).filter(|l| **l > i64::from(def.level)) {
+            rpgkit_rules::unit::raise_level(cat, &mut def, level as i32);
         }
         Some(def)
     }
@@ -504,6 +522,12 @@ fn claimable(d: &Data, gs: &GameState, world: &str, r: &str) -> String {
 /// side (`settle_party_side`: the tally's fielded members settled by `roster::settle_party`, the stay-behind flag) and
 /// its keys `party_fates`, `stay_lines`, `wounded`, `departed` (`PARTY_KEYS`).
 pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, tally: &Tally) -> Dict {
+    apply_paying(d, gs, encounter_qid, outcome, tally, false)
+}
+
+/// `apply`; `defaulted` = the tally is a fight settled without a battle (`default_tally`): its XP goes to the active
+/// members as before ACT1-FIX4 (`default_ends` holds only the members that would take the field).
+fn apply_paying(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, tally: &Tally, defaulted: bool) -> Dict {
     let done = |ok: bool, errors: &[String], xp: Dict, advanced: &[String]| {
         let mut out = json::ok_result(ok, errors);
         out.insert("xp".into(), Value::Object(xp));
@@ -511,9 +535,13 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
         out
     };
     if !OUTCOMES.contains(&outcome) {
-        return done(false, &[format!("Unknown battle outcome '{outcome}' (use won, lost or fled).")], Dict::new(), &[]);
+        return done(false, &[format!("Unknown battle outcome '{outcome}' (use won, lost, fled or escaped).")], Dict::new(), &[]);
     }
     let won = outcome == "won";
+    // ENRAGE2 EN9: an escape settles the party (damage, statuses, fates) and the campaign tick as a flight, and pays
+    // nothing: no foe counts as defeated for XP, the purse share or loot
+    let escaped = outcome == ESCAPED;
+    let outcome = if escaped { rpgkit_battle::encounter::FLED } else { outcome };
     let world = gs.world_id.clone();
     let enc = d.resolve(&world, "encounters", encounter_qid).clone();
     let enc_world = json::s_or(&enc, "_world", &world);
@@ -524,11 +552,13 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     let roster = roster_at(d, &world, encounter_qid, world_stage(gs));
     let (fates, mut notes) = tally.fates_of(&roster);
     notes.extend(party_notes);
-    let defeated: Vec<bool> = fates.iter().map(|f| f.defeated()).collect();
+    let defeated: Vec<bool> = fates.iter().map(|f| f.defeated() && !escaped).collect();
     // 2. XP for the defeated enemies only (none: no award at all). A won fight whose roster does not resolve from the
     // party's world (a road fight on another world's route) gives every member a 0 award, as before REWARD1 (Godot).
+    // ACT1-FIX4 (PT-95): to the members who fought (a captured stayer included), not who is active after the settle
+    let fielded: Vec<String> = if defaulted { Vec::new() } else { tally.party.iter().map(|e| e.member.clone()).collect() };
     let levels: Vec<(i64, String)> = roster.iter().zip(&defeated).filter(|(_, d)| **d).map(|(f, _)| (f.level, f.tier.clone())).collect();
-    let xp = if levels.is_empty() && !(won && roster.is_empty()) { Dict::new() } else { progression::award_encounter_pct(d, &mut gs.party, &levels, tally.xp_pct.unwrap_or(100)) };
+    let xp = if levels.is_empty() && !(won && roster.is_empty()) { Dict::new() } else { progression::award_fielded_pct(d, &mut gs.party, &fielded, &levels, tally.xp_pct.unwrap_or(100)) };
     // 3. the quest hook
     let advanced = if won { quest::on_encounter_won(d, gs, encounter_qid) } else { Vec::new() };
     // 4. the purse share
@@ -886,6 +916,8 @@ pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut Me
         def.zone = zone;
     }
     def.id = format!("{world}:{hit_id}");
+    // PR7-75 (PT-41): a retry after a lost try draws a fresh battle seed (the first try keeps the encounter's)
+    def.rng_seed = retry_seed(def.rng_seed, retries(gs, &enc_ref));
     let grants: Vec<bool> = def.start_status.iter().map(|sb| json::aget(json::dict(sb), "requires_flags").iter().all(|c| quest::condition_met(gs, json::dict(c)))).collect();
     def.start_grant = StartGrant::Only(grants);
     let stage = world_stage(gs);
@@ -966,7 +998,7 @@ pub fn settle(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, 
         Some(t) => apply(d, gs, encounter_qid, outcome, t),
         None => {
             let t = default_tally(d, gs, encounter_qid, outcome);
-            apply(d, gs, encounter_qid, outcome, &t)
+            apply_paying(d, gs, encounter_qid, outcome, &t, true)
         }
     }
 }
@@ -978,7 +1010,7 @@ pub fn settle_xp_pct(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome:
         None => default_tally(d, gs, encounter_qid, outcome),
     };
     t.xp_pct = Some(xp_pct.clamp(0, 100));
-    apply(d, gs, encounter_qid, outcome, &t)
+    apply_paying(d, gs, encounter_qid, outcome, &t, tally.is_none())
 }
 
 /// The tally of a fight settled without one (`settle`'s `None`).
@@ -997,6 +1029,14 @@ fn default_tally(d: &Data, gs: &GameState, encounter_qid: &str, outcome: &str) -
 /// party side first, then the rewards, then its clock tick (`apply`). The battle screen and the debug fight popup both
 /// settle through it.
 pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, outcome: &str, tally: Option<&Tally>) -> Dict {
+    // PR7-75 (PT-41): a try that was not won counts toward the encounter's next seed (PR7-82: a fight with no encounter
+    // ref has no seed to vary and writes no key the save would refuse)
+    let enc_ref = json::s(fight, "encounter");
+    if outcome != rpgkit_battle::encounter::WON && !enc_ref.is_empty() {
+        let key = retry_key(&enc_ref);
+        let n = retries_of(gs, &key);
+        gs.rolls.insert(key, int(n + 1));
+    }
     match runner {
         "travel" => crate::travel::after_fight(d, gs, fight, outcome, tally),
         "dialogue" => crate::dialogue::after_fight(d, gs, fight, outcome, tally),
@@ -1005,6 +1045,34 @@ pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, ou
         crate::siege::FIGHT_SOURCE => crate::siege::after_fight(d, gs, fight, outcome, tally),
         _ => crate::explore::after_fight(d, gs, fight, outcome, tally),
     }
+}
+
+/// PR7-75 (PT-41): the save's count of tries of an encounter that were not won, kept in `gs.rolls` under this stream
+/// and the encounter ref ("retry:<ref>").
+pub const RETRY_STREAM: &str = "retry";
+
+/// The `gs.rolls` key of encounter ref `enc_ref`'s lost tries.
+pub fn retry_key(enc_ref: &str) -> String {
+    format!("{RETRY_STREAM}:{enc_ref}")
+}
+
+fn retries_of(gs: &GameState, key: &str) -> i64 {
+    gs.rolls.get(key).map(json::to_int).unwrap_or(0).max(0)
+}
+
+/// Encounter ref `enc_ref`'s lost tries so far in this save.
+pub fn retries(gs: &GameState, enc_ref: &str) -> i64 {
+    retries_of(gs, &retry_key(enc_ref))
+}
+
+/// PR7-75 (PT-41): the battle seed of a try after `tries` lost ones: the encounter's own seed `base` on the first try,
+/// else `base` and the count hashed (so each retry rolls differently, and the same retry of a save replays alike).
+pub fn retry_seed(base: i64, tries: i64) -> i64 {
+    if tries <= 0 {
+        return base;
+    }
+    use aegis_core::ghash::{hash, GVar};
+    (hash(&GVar::Arr(vec![GVar::Int(base), GVar::Str(RETRY_STREAM.into()), GVar::Int(tries)])) & 0x7fff_ffff) as i64
 }
 
 /// The party side's result keys (`settle_party_side`), carried by every runner's `after_fight`.

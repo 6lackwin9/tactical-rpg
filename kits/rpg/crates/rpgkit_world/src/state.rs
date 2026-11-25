@@ -30,6 +30,9 @@ pub const EXPLORE_KEYS: [&str; 5] = ["steps", "next_at", "loc_steps", "last_safe
 /// MAPNAV1-U: the optional `explore` key naming the member who leads on the maps (`GameState::explore_leader`); absent
 /// = the first standing active member (a save without it loads as before).
 pub const LEADER_KEY: &str = "leader";
+/// PR7-47: the optional `explore` key of the open road legs the player was last told about (sorted route qids,
+/// `travel::note_new_roads`); absent until the world map first looks (a save without it loads as before).
+pub const ROADS_SEEN_KEY: &str = "roads_seen";
 pub const AUTO_IDS: [&str; 6] = ["balanced", "aggressive", "focus_weakest", "defensive", "ranged_kite", "economy"];
 pub const DEFAULT_TACTIC: &str = "balanced";
 /// A1.2-K3 (INTENT2-K3): the copies one pouch stack of catalog item `item` holds: `min(5, max_stack)`, at least 1
@@ -391,10 +394,20 @@ impl UnitState {
         if rpgkit_rules::unit::forbids_hands(progression::forbid_hands(d, self), def) {
             return Err(format!("{} is two-handed: {} can't wield two-handed items now.", def.name, progression::display_name(d, self)));
         }
-        if let Some(lock) = self.wear_lock(d, def) {
-            return Err(lock.text(&progression::display_name(d, self), &def.name));
+        if let Some(why) = self.wear_refusal(d, def) {
+            return Err(why);
         }
         Ok(())
+    }
+
+    /// PR7-76 (PT-60): the refusal line of the strict gear rule's lock on `item` (`wear_lock`), the gear type named in
+    /// words (its family's name, never its id); None when the item may be worn.
+    pub fn wear_refusal(&self, d: &Data, item: &rpgkit_data::ItemDef) -> Option<String> {
+        let lock = match self.wear_lock(d, item)? {
+            rpgkit_rules::gear::WearLock::Untrained { gear } => rpgkit_rules::gear::WearLock::Untrained { gear: d.family_name(&gear) },
+            other => other,
+        };
+        Some(lock.text(&progression::display_name(d, self), &item.name))
     }
 
     /// GEAR-REWORK1 (PR5-51a, U3.3 1): the strict rule's hard lock on `item` for this member (`gear::wear_lock`): read
@@ -1986,6 +1999,12 @@ pub fn flag_value_ok(v: &Value) -> bool {
 }
 
 /// QuestRules.blob_key_ok: exactly one ':' between two ids.
+/// PR7-82 (RETRY-SAVE-FIX1): a `rolls` key: a stream id, or an encounter's lost-try count `retry:<ref>`
+/// (`battle::retry_key`; the ref a qualified id world:id or a plain id). PR7-75 wrote the second and the save refused it.
+pub fn roll_key_ok(key: &str) -> bool {
+    json::id_ok(key) || key.strip_prefix(crate::battle::RETRY_STREAM).and_then(|r| r.strip_prefix(':')).is_some_and(|r| json::id_ok(r) || qid_ok(r))
+}
+
 pub fn qid_ok(key: &str) -> bool {
     let parts: Vec<&str> = key.split(':').collect();
     parts.len() == 2 && json::id_ok(parts[0]) && json::id_ok(parts[1])
@@ -2250,8 +2269,8 @@ impl GameState {
             errors.push(format!("rng_seed must be 0..{SEED_MAX}."));
         }
         for (k, v) in &self.rolls {
-            if !json::id_ok(k) || !json::is_int(v) || json::to_int(v) < 0 {
-                errors.push(format!("rolls: '{k}' must be a stream id with a count >= 0."));
+            if !roll_key_ok(k) || !json::is_int(v) || json::to_int(v) < 0 {
+                errors.push(format!("rolls: '{k}' must be a stream id (or retry:<encounter ref>) with a count >= 0."));
             }
         }
         for (k, v) in &self.shops {
@@ -2349,8 +2368,10 @@ pub fn explore_errors(e: &Dict) -> Vec<String> {
     let has_home = e.contains_key(HOME_WORLD_KEY);
     let has_leader = e.contains_key(LEADER_KEY);
     let has_patrols = e.contains_key(PATROLS_KEY);
-    let mut ok = e.len() == EXPLORE_KEYS.len() + has_home as usize + has_leader as usize + has_patrols as usize;
+    let has_roads = e.contains_key(ROADS_SEEN_KEY);
+    let mut ok = e.len() == EXPLORE_KEYS.len() + has_home as usize + has_leader as usize + has_patrols as usize + has_roads as usize;
     ok = ok && (!has_patrols || e.get(PATROLS_KEY).and_then(Value::as_object).is_some_and(patrols_ok));
+    ok = ok && (!has_roads || e.get(ROADS_SEEN_KEY).and_then(Value::as_array).is_some_and(|a| a.iter().all(|q| q.as_str().is_some_and(qid_ok))));
     ok = ok && (!has_home || e.get(HOME_WORLD_KEY).and_then(Value::as_str).is_some_and(json::id_ok));
     ok = ok && (!has_leader || e.get(LEADER_KEY).and_then(Value::as_str).is_some_and(json::id_ok));
     ok = ok && EXPLORE_KEYS.iter().all(|k| e.contains_key(*k));

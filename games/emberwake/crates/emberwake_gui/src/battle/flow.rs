@@ -196,10 +196,19 @@ impl BattleScreen {
             return;
         }
         let d = cx.data.clone();
+        // PR7-32 (BREPORT1 rule 3): the report is built and the metrics frozen once the outcome is known, before settle
+        let report = self.host.session.as_mut().and_then(|s| {
+            s.metrics_end(emberwake_battle::metrics::EndResult::default());
+            s.metrics.as_ref().map(|m| emberwake_battle::report::Report::build(m, s, &outcome))
+        });
         let tally = emberwake_world::battle::Tally::of_world_fight(self.session(), members, &self.class_world);
         let gs = cx.gs_mut();
         let res = emberwake_world::battle::finish_world(&d, gs, runner, fight, &outcome, Some(&tally));
         cx.set_busy(false);
+        // PR7-76 (PT-55): the region map reads the outcome (a walk the fight broke off goes on after a win)
+        if let Some(g) = cx.game.as_mut() {
+            g.fought = Some(outcome.clone());
+        }
         if !json::b(&res, "ok", false) {
             show_errors(cx, json::sget(&res, "errors"));
         }
@@ -216,7 +225,13 @@ impl BattleScreen {
         for l in &next {
             cx.log(l.clone());
         }
-        let results = crate::hub::Results::new(&res, &outcome, &fight).after_fight(timed_out, next).over_battle(cx.settings.reduce_motion(), before);
+        // PR7-75 (PT-40): the results say why the fight ended
+        let mut objective = emberwake_battle::obj_view::result_lines(self.session(), &outcome);
+        let reason = self.session().end_reason();
+        if !reason.is_empty() {
+            objective.push(reason);
+        }
+        let results = crate::hub::Results::new(&res, &outcome, &fight).after_fight(timed_out, next).partly_escaped(self.session().partial_escape().is_some()).objective(objective).report(report).over_battle(cx.settings.reduce_motion(), before);
         cx.nav.push(Nav::Push(Box::new(results)));
     }
 
@@ -224,6 +239,10 @@ impl BattleScreen {
 
     /// A player's action (a click or a key): the playback controls click (SoundEvents ui_click), then `run`.
     pub(super) fn act(&mut self, cx: &mut Cx, a: Action) {
+        // ENGINE-58 (BLOCK-CLICK2): an action reads and changes the plan as it would with every ghost drafted at once
+        self.settle_ghosts(cx);
+        // PR7-83 (PT-79): any action ends a run of Escs (`escape`)
+        self.esc_closed = false;
         // TRANSITIONS1: during a beat any press skips it (T1: control starts; T2: the results open) and does nothing else
         if self.beat.is_some() && !matches!(a, Action::Talk(_)) {
             self.skip_beat(cx);
@@ -237,7 +256,7 @@ impl BattleScreen {
         if a == Action::Confirm && self.advanced_at.is_some_and(|t| t.elapsed() < Duration::from_millis(CONFIRM_GUARD_MS)) {
             return;
         }
-        if matches!(a, Action::Confirm | Action::Step | Action::Autoplay | Action::NextRound | Action::PlaybackSpeed(_) | Action::NextBlock | Action::Skip) {
+        if a.clicks() {
             cx.audio.play(Bus::Ui, "sfx/ui_click.wav");
         }
         self.run(cx, a);
@@ -245,6 +264,7 @@ impl BattleScreen {
 
     /// An action, from the player or chained by another action or autoplay.
     pub(super) fn run(&mut self, cx: &mut Cx, a: Action) {
+        self.settle_ghosts(cx);
         match a {
             Action::Select(u) => {
                 // INPUT1 SL4, SL6 (round intent): a party card always selects; the selected hero's card selects nothing.
@@ -261,8 +281,8 @@ impl BattleScreen {
                         return;
                     }
                 }
-                let again = self.selected == Some(u) && self.host.session.as_ref().is_some_and(|s| ri::on(&s.w));
-                self.selected = if again { None } else { Some(u) };
+                // PR7-83 (PT-79): a click on the selected hero's card keeps it selected (it toggled the selection off)
+                self.selected = Some(u);
                 self.popup = None;
             }
             Action::UnitClick(u) => self.unit_click(cx, u),
@@ -278,6 +298,7 @@ impl BattleScreen {
             Action::TileClick(c) => self.tile_click(cx, c),
             Action::FillGhost => self.accept_ghost(cx, None),
             Action::GhostSlot(k) => self.accept_ghost(cx, Some(k)),
+            Action::StripMenu(b) => self.strip_menu(b),
             Action::Choose(i) => {
                 let Some(p) = self.popup.take() else { return };
                 let Some(row) = p.rows.get(i).filter(|r| r.valid).cloned() else {
@@ -296,7 +317,7 @@ impl BattleScreen {
                         if let Some((h, _)) = p.menu {
                             self.move_aim = Some((h, self.session().current_round));
                             self.move_tiles = rip::move_tiles(&self.session().w, &self.session().plan, h);
-                            self.message = format!("{}: click a tile to move there (Esc cancels).", self.session().w.units[h].name);
+                            self.message = format!("{}: click a tile to move there ({} cancels).", self.session().w.units[h].name, self.keys.key_hint(aegis_ui::screen::Key::Esc));
                         }
                     }
                     RowAct::SelectAlly(u) => {
@@ -402,10 +423,12 @@ impl BattleScreen {
             Action::StayPick(c) => {
                 let r = self.send(cx, json!({"cmd": "stay_pick", "unit": c}));
                 if r["ok"] == json!(true) {
+                    self.hold_repick = false;
                     let line = hold_line(self.session());
                     self.message = format!("{line} Plan your round, then confirm.");
                 }
             }
+            Action::StayRepick => self.hold_repick = true,
             // ENCOUNTER2-C4: a locked round has no Confirm (the script confirmed it; it plays by itself)
             Action::Confirm if self.locked() => {}
             Action::Confirm => {
@@ -456,7 +479,8 @@ impl BattleScreen {
                 self.pending_next_round = false;
                 let r = self.send(cx, json!({"cmd": "advance"}));
                 if r["ok"] == json!(true) {
-                    self.message = format!("Round {}: plan your party.", self.session().current_round);
+                    // PR7-75 (PT-47): a round-start talk goes first and the plan fills when it closes; the bar says so
+                    self.message = if !self.viewing && !self.auto && self.talk_due() && ri::on(&self.session().w) { talk_first_message(self.session().current_round) } else { plan_message(self.session().current_round) };
                     // VISCLAR1-D: the old round's playback is over: left on, the next tick's `step` would confirm this plan
                     self.playing = false;
                     self.astir_at = Instant::now();
@@ -493,6 +517,9 @@ impl BattleScreen {
                 self.show_log = !self.show_log;
                 self.log_scroll = 0;
             }
+            Action::LogLock => self.log_panel.toggle_lock(),
+            Action::LogMin => self.log_panel.minimize(),
+            Action::LogOpen => self.log_panel.restore(super::draw::LOG_AREA, self.log_size),
             Action::Continue => self.settle(cx),
             Action::SkipBeat => self.skip_beat(cx),
             Action::Leave => cx.nav.push(Nav::Pop),
@@ -544,12 +571,20 @@ impl BattleScreen {
         // classic keeps its old flow: only autoplay goes on by itself
         let setting = cx.settings.v[AUTO_CONFIRM].as_bool().unwrap_or(true) && ri::on(&s.w);
         let by_itself = next_round_by_itself(can_advance, self.auto, s.round_locked(), self.viewing, setting);
-        let hint = if by_itself { "" } else { " Space (or Next) for the next round." };
-        let message = if s.combat_over {
-            match s.outcome.as_str() {
+        let hint = if by_itself { String::new() } else { format!(" {} (or Next) for the next round.", self.keys.key_hint(aegis_ui::screen::Key::Space)) };
+        // PR7-75 (PT-40): an ending says why (`end_reason`), in the message and once in the combat log
+        let reason = s.end_reason();
+        let over = s.combat_over;
+        let message = if over {
+            let head = match s.outcome.as_str() {
                 "won" => "Victory!".to_string(),
                 "lost" => "Defeat.".to_string(),
-                o => format!("Battle over: {o}"),
+                o => format!("Battle over: {o}."),
+            };
+            if reason.is_empty() {
+                head
+            } else {
+                format!("{head} {reason}")
             }
         } else if !can_advance {
             "Round limit reached.".into()
@@ -561,6 +596,14 @@ impl BattleScreen {
             }
         };
         self.message = message;
+        if over && !reason.is_empty() {
+            let line = format!("[End] {reason}");
+            let s = self.host.session.as_mut().expect("a session");
+            if !s.encounter_lines.iter().any(|(_, l)| *l == line) {
+                let at = s.resolver.log.len();
+                s.encounter_lines.push((at, line));
+            }
+        }
         if by_itself {
             self.next_at = now + Duration::from_millis(t.round_pause_ms * pace);
             self.pending_next_round = true;
@@ -602,4 +645,14 @@ pub(super) fn sound_of(e: &EventKind) -> Option<&'static str> {
         EventKind::Move => Some("move_step"),
         _ => None,
     }
+}
+
+/// The planning prompt of round `round`.
+pub(super) fn plan_message(round: i32) -> String {
+    format!("Round {round}: plan your party.")
+}
+
+/// PR7-75 (PT-47): the prompt while a round-start talk holds the planning (the plan fills when it closes).
+pub(super) fn talk_first_message(round: i32) -> String {
+    format!("Round {round}: a talk first; the plan fills when it closes.")
 }

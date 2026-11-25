@@ -8,12 +8,17 @@
 //!   portrait.
 //! - `shop` (PLAYUI1-P, KU2): the shop as a trade, hosted by a game through `shop::ShopGame`; `shop_view` (UISPLIT1-G):
 //!   its view-model and actions.
+//! - `stage` (ENGINE-41 STAGE-KIT1): the tilted battle stage: geometry, the stage set and `stage.fx.json` look, the
+//!   composed board, decor, wall-run caps, the exit path and gate, and the draw passes; sizes from `StageSizes`.
 //! - `portrait_page`: the Kit widgets' Portraits page (`aegis_ui::specimens` page hook) on the code-drawn sample face.
 
+pub mod banner;
 pub mod pips;
 pub mod portrait_fx;
 pub mod portrait_page;
 pub mod portrait_overlays;
 pub mod shop;
 pub mod shop_view;
+pub mod stage;
 pub mod vignette;
+pub mod vn_stage;

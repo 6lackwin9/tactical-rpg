@@ -95,11 +95,6 @@ pub fn terrain_errors(v: &super::View, e: &Dict, current_id: &str) -> Vec<String
     errors
 }
 
-/// TerrainValidator.missing_ids: terrain types without a row, in terrain order.
-pub fn missing_terrain(rows: &[Dict]) -> Vec<&'static str> {
-    TERRAIN_IDS.iter().copied().filter(|id| !rows.iter().any(|r| json::s(r, "id") == *id)).collect()
-}
-
 /// Passives.EFFECT_TYPES; RULESET1-S adds `stagger_taken` (rule poise, P6), HOOKS1-S `forced_move`, `trigger` and `meter`
 /// (`check::hooks`); PR5-50 (FB-204) lists `skill_reach` where `spell_reach` stood (the alias still checks, unlisted).
 const TYPES: [&str; 15] = [

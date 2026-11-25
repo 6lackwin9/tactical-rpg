@@ -333,6 +333,8 @@ pub struct Unit {
     /// RULESET1 P2 (rule poise): the unit row's `poise`: -1 = the ruleset's derived Max Poise, 0 = no poise bar (never
     /// breaks), above 0 = a fixed Max Poise. Units built from member state keep -1.
     pub poise: i32,
+    /// BOSSUI1 BU7: the unit row's `poise_pips` (0 = the ruleset's `poise_pips`; units built from member state keep 0).
+    pub poise_pips: i32,
     /// BIGUNIT1 BU1: the cells the unit fills on the battle grid (1, or 2 for a 2 x 2 square anchored at its position);
     /// the unit row's `footprint` (1 for units built from member state).
     pub footprint: i32,
@@ -517,6 +519,7 @@ impl Unit {
             foresight_source: String::new(),
             foresight_range: 0,
             poise: -1,
+            poise_pips: 0,
             footprint: 1,
             stagger_taken: Vec::new(),
             passive_forced: ForcedTraits::default(),
@@ -2192,6 +2195,7 @@ fn build_catalog_unit(
     u.power_override = e.power;
     u.armor_override = e.armor;
     u.poise = e.poise;
+    u.poise_pips = e.poise_pips;
     u.footprint = e.footprint;
     for (k, v) in &e.status_resist {
         u.status_resist.insert(k.clone(), *v);
@@ -2397,6 +2401,25 @@ impl Unit {
         self.st.active.iter().filter(|s| raises(s)).fold(1.0, |f, s| f * (1.0 + self.capped_magnitude(s) as f64 / 100.0))
     }
 
+    /// STATUSVIS1 SV7 (PR7-57): the factor active status `status` puts on this unit's attack power alone: `1 - m / 100`
+    /// for an Attack Power debuff (weaken), `1 + m / 100` for a buff (empower), `m` its capped magnitude; 1.0 for any
+    /// other status, one not active, or while `attack_power` is held (the held value is no status's). The product over
+    /// the active statuses is `weaken_factor() * empower_factor()`. Read only.
+    pub fn attack_power_factor_of(&self, status: &str) -> f64 {
+        use crate::status::{lowers_rating, raises_rating, Rating};
+        if self.rating_set(Rating::AttackPower).is_some() || !self.st.active.contains(status) {
+            return 1.0;
+        }
+        let m = self.capped_magnitude(status) as f64 / 100.0;
+        if lowers_rating(status, Rating::AttackPower) {
+            1.0 - m
+        } else if raises_rating(status, Rating::AttackPower) {
+            1.0 + m
+        } else {
+            1.0
+        }
+    }
+
     pub fn potency_for(&self, family: &str) -> f64 {
         1.0
             + self.potency_bonus.get(family).copied().unwrap_or(0.0)
@@ -2422,6 +2445,11 @@ impl Unit {
     /// of a skill that is not itself ranged (the basic Strike with a bow), see `distance_group_matches`.
     pub fn potency_for_skill_at(&self, skill: &rpgkit_data::SkillDef, ranged: bool, distance: i32) -> f64 {
         let mut total = self.potency_for_skill(skill);
+        if ranged && !skill_in_group(skill, "ranged") {
+            total += self.potency_group.get("ranged").copied().unwrap_or(0.0)
+                + self.gear_potency_group.get("ranged").copied().unwrap_or(0.0)
+                + self.cond.potency_group.get("ranged").copied().unwrap_or(0.0);
+        }
         if distance <= 0 {
             return total;
         }
@@ -2487,15 +2515,13 @@ impl Unit {
     /// (`ranged`: the hit's ranged flag, as `potency_for_skill_at`).
     pub fn potency_parts_at(&self, skill: &rpgkit_data::SkillDef, ranged: bool, distance: i32) -> Vec<crate::pipeline::Part> {
         let fam = skill.family_id();
-        let groups: Vec<&str> = GROUPS.iter().copied().filter(|g| skill_in_group(skill, g) || (distance > 0 && distance_group_matches(skill, g, ranged))).collect();
-        let in_group = |g: &str| skill_in_group(skill, g);
+        let groups: Vec<&str> = GROUPS.iter().copied().filter(|g| distance_group_matches(skill, g, ranged)).collect();
         let of = |list: &[HitSource], set: &dyn Fn(&SkillSet) -> bool| -> Vec<crate::pipeline::Part> {
             list.iter()
                 .filter(|h| {
                     h.value != 0.0
                         && matches!(&h.target, Target::SkillPotency { set: x, min_distance }
-                            if (if *min_distance <= 0 { !matches!(x, SkillSet::Group(g) if !in_group(g)) } else { distance > 0 && distance >= *min_distance })
-                                && set(x))
+                            if (*min_distance <= 0 || (distance > 0 && distance >= *min_distance)) && set(x))
                 })
                 .map(|h| crate::pipeline::Part { source: h.source.clone().into(), value: h.value })
                 .collect()
@@ -2569,7 +2595,7 @@ impl Unit {
     /// PK2-STAGE-PASSIVES (`PR6-2`): `power_for` at attack distance `distance` (`0` = `power_for`; `ranged`: the hit's
     /// ranged flag, as `potency_for_skill_at`).
     pub fn power_for_at(&self, skill: &rpgkit_data::SkillDef, ranged: bool, distance: i32) -> f64 {
-        if distance <= 0 {
+        if distance <= 0 && !ranged {
             return self.power_for(skill);
         }
         skill.power_mult * self.potency_for_skill_at(skill, ranged, distance).max(0.0) * self.weaken_factor() * self.empower_factor()

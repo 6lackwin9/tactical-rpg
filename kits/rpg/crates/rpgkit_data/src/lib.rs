@@ -21,6 +21,7 @@ pub mod ending;
 pub mod facility;
 pub mod looks;
 pub mod mastery;
+pub mod passive_icon;
 pub mod recipe;
 pub mod siege;
 pub mod talk;
@@ -316,6 +317,9 @@ pub struct UnitDef {
     pub deck: Deck,
     /// RULESET1 5 P2 (rule poise): -1 = the derived Max Poise, 0 = no poise bar, above 0 = a fixed Max Poise.
     pub poise: i32,
+    /// BOSSUI1 BU7 (rule poise, `modes.poise` pips): the unit's own pip count (0 = the ruleset's `poise_pips`); its pip
+    /// threshold is `max_poise / poise_pips`, so a wider bar with a raised Max Poise keeps each pip the ruleset's size.
+    pub poise_pips: i32,
     /// BIGUNIT1 BU1: the cells the unit fills on the battle grid (1 = one cell, 2 = a 2 x 2 square anchored at its
     /// top-left cell); any other written value reads as 1 (the content check reports it).
     pub footprint: i32,
@@ -422,6 +426,7 @@ impl UnitDef {
             pouch: strings(o, "pouch"),
             deck: Deck::from_value(o.get("deck").unwrap_or(&Value::Null)),
             poise: int(o, "poise", -1),
+            poise_pips: int(o, "poise_pips", 0).max(0),
             footprint: if int(o, "footprint", 1) == 2 { 2 } else { 1 },
             default_intent: string(o, "default_intent", ""),
             tactics: strings(o, "tactics"),
@@ -1110,6 +1115,9 @@ pub struct PassiveDef {
     pub effects: Vec<Value>,
     /// RULESET1 9 D3 (rule deck): "" = source-granted, always on; "passive" or "keystone" = applies only while slotted.
     pub slot: String,
+    /// PASSIVE-ICON1 (ENGINE-24): its icon archetype (`passive_icon::ARCHETYPES`); "" = derived from its effects
+    /// (`passive_icon::of`).
+    pub icon: String,
 }
 
 /// The formula input name of the unit level (DERIVE1 4.1; reserved: no row id or constant takes it).
@@ -1278,7 +1286,7 @@ impl Catalog {
             cat.items.insert(i.id.clone(), i);
         }
         for o in rows("passives") {
-            let p = PassiveDef { id: string(&o, "id", ""), name: string(&o, "name", ""), effects: array(&o, "effects").to_vec(), slot: string(&o, "slot", "") };
+            let p = PassiveDef { id: string(&o, "id", ""), name: string(&o, "name", ""), effects: array(&o, "effects").to_vec(), slot: string(&o, "slot", ""), icon: string(&o, "icon", "") };
             cat.passives.insert(p.id.clone(), p);
         }
         for o in rows("encounters") {
@@ -1960,8 +1968,17 @@ pub const STORY_KINDS: [&str; 3] = ["vignettes", "sequences", "boards"];
 /// 4.2: a card's style.
 pub const CARD_STYLES: [&str; 4] = ["image", "text", "title", "line"];
 /// 4.2: the keys a card takes (any other key is refused); PORTRAITFX1 7: a `line` card's `expression`; FX1 5.1: a
-/// card's camera `shake`; FB-206 (2b): `particles_rise` (falling specks); ASSETORG4 dropped its old-name alias.
-pub const CARD_KEYS: [&str; 16] = ["style", "image", "top", "bottom", "particles_rise", "title", "subtitle", "text", "speaker", "fade_in_ms", "fade_out_ms", "hold_ms", "cue", "when", "expression", "shake"];
+/// card's camera `shake`; FB-206 (2b): `particles_rise` (falling specks); ASSETORG4 dropped its old-name alias;
+/// VNSTAGE1: `actors`, `camera`, `walk_ms`.
+pub const CARD_KEYS: [&str; 19] = ["style", "image", "top", "bottom", "particles_rise", "title", "subtitle", "text", "speaker", "fade_in_ms", "fade_out_ms", "hold_ms", "cue", "when", "expression", "shake", "actors", "camera", "walk_ms"];
+/// VNSTAGE1 (PR7-27): a card's stage actors `[{"who" (a characters ref), "side", "move"}]` (at most `ACTORS_MAX`, no
+/// title card), its stage camera and its walk's length.
+pub const ACTOR_KEYS: [&str; 3] = ["who", "side", "move"];
+pub const ACTOR_SIDES: [&str; 2] = ["left", "right"];
+pub const ACTOR_MOVES: [&str; 3] = ["stay", "enter", "exit"];
+pub const STAGE_CAMERAS: [&str; 3] = ["static", "scroll", "pan"];
+pub const ACTORS_MAX: usize = 4;
+pub const WALK_MS_MAX: i64 = 6000;
 /// FX1 5.1: the camera shake presets a card's `shake` and a phase's shake effect may name: the kit's copy of the
 /// engine's `aegis_ui::fx::SHAKE_PRESETS` (the content crates do not depend on `aegis_ui`; a GUI test keeps them equal).
 pub const SHAKE_PRESETS: [&str; 5] = ["jolt", "heavy", "toll", "tremor", "quake"];
@@ -2065,8 +2082,13 @@ pub const BOARD_SERVICE: &str = "board";
 
 /// PR7-37 (PT-03, PT-29): what a point of interest (a `point` marker's `use`) does when the party acts on it (E, or
 /// a click on its marker): "" says its note only; `rest` rests the party there (the campaign's rest rule, as Make
-/// camp); `crypts` says who lies in the crypt places; `stash` opens the party stash. Every point logs its line.
-pub const POINT_USES: [&str; 4] = ["", "rest", "crypts", "stash"];
+/// camp); `crypts` says who lies in the crypt places; `stash` opens the party stash; ENGINE-37 (LOOK-POINT1): `look`
+/// is look-only: it is listed and answers with its line, sets nothing and is never spent (no flag needed to list it).
+/// Every point logs its line.
+pub const POINT_USES: [&str; 5] = ["", "rest", "crypts", "stash", LOOK_USE];
+
+/// ENGINE-37 (LOOK-POINT1): the look-only point use.
+pub const LOOK_USE: &str = "look";
 
 /// The keys a step of `kind` takes (`kind` included; an unknown kind takes only `kind`). STORYMUSIC1: every kind takes
 /// an optional `music` (as a vignette's: "" keeps the music playing).

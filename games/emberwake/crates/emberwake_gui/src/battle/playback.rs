@@ -91,7 +91,7 @@ impl BattleScreen {
                         fell.push(i);
                     }
                 } else if new > old {
-                    floats.push((i, format!("+{}", new - old), t.heal_color));
+                    floats.push((i, format!("+{}", new - old), crate::tokens::moss()));
                 }
             }
         }
@@ -119,7 +119,7 @@ impl BattleScreen {
         }
         self.phase_shakes(cx);
         // INPUT1 PB1: the popped action's impact tracers (timeline battles): with its impact, else at once
-        let traces = self.new_traces(cx);
+        let traces = self.new_traces();
         // PB3, PB5: a step that finished its block may hold the playback at the block's end
         self.note_block_end();
         let pending = if skip || self.req_cmd != "step" { None } else { self.popped_impact(t.walk_ms) };
@@ -578,6 +578,7 @@ impl BattleScreen {
         if self.tokens.poses.len() == s.w.units.len() {
             return false;
         }
+        load_bodies(cx, s);
         self.tokens.poses = s.w.units.iter().enumerate().map(|(i, u)| cx.art.first_body(&body_keys(&s.art[i], u)).and_then(|b| cx.art.clips(&b).map(PoseSet::of)).unwrap_or_default()).collect();
         true
     }
@@ -602,8 +603,13 @@ impl BattleScreen {
         }
     }
 
-    /// VISCLAR1-D: the round the banner names and its alpha now (None: no banner showing).
+    /// VISCLAR1-D: the round the banner names and its alpha now (None: no banner showing). ACT1-FIX5 (PR7-91): none once
+    /// the battle is over, so the Victory beat and the outcome panel (Defeat and the rest) show alone; a new battle
+    /// clears the outcome and starts its own banner.
     pub(super) fn round_banner_now(&self, cx: &Cx) -> Option<(i32, u8)> {
+        if self.host.session.as_ref().is_some_and(|s| !s.final_outcome().is_empty()) {
+            return None;
+        }
         let (round, at) = self.banner?;
         let still = cx.settings.v["skip_anim"].as_bool().unwrap_or(false) || cx.settings.reduce_motion();
         Some((round, round_banner_alpha(self.clock.now().saturating_sub(at), still))).filter(|b| b.1 > 0)
@@ -701,7 +707,7 @@ impl BattleScreen {
 
     /// PB1: the tracers of the action the last step popped (once each; none outside timeline battles or for any other
     /// request).
-    fn new_traces(&mut self, cx: &Cx) -> Vec<fx::Trace> {
+    fn new_traces(&mut self) -> Vec<fx::Trace> {
         let Some(s) = self.host.session.as_ref() else { return Vec::new() };
         let popped = s.last_popped;
         let fresh = popped.filter(|p| self.req_cmd == "step" && Some(*p) != self.traced && p.0 == s.current_round);
@@ -709,7 +715,7 @@ impl BattleScreen {
         let Some((_, _, idx)) = fresh.filter(|_| self.playback_aids()) else { return Vec::new() };
         let tokens = &self.tokens;
         let at = |u: usize| s.w.grid.pos(u).or(tokens.anims.get(u).and_then(|a| a.seen.pos));
-        traces_of(s, idx, &at, cx.tuning.value.heal_color)
+        traces_of(s, idx, &at, crate::tokens::moss())
     }
 
     /// PB1: the live tracers as the agent link reads them (`overlay.tracers`: from, to, alpha now, dashed); none with
@@ -723,4 +729,17 @@ impl BattleScreen {
             (a > 0).then(|| json!({"from": cell(t.from), "to": cell(t.to), "alpha": a, "dashed": t.dashed}))
         }).collect())
     }
+}
+
+/// ENGINE-51 (SWITCH-FEEL1): every unit's body (bare, for its clips, and in its palette, as its token draws) loaded at
+/// once, the sheets decoded side by side (`Art::load_bodies`), before the battle's first draw.
+pub(super) fn load_bodies(cx: &mut Cx, s: &emberwake_battle::session::Session) {
+    let mut wanted: Vec<(String, String)> = Vec::new();
+    for (i, u) in s.w.units.iter().enumerate() {
+        if let Some(key) = body_keys(&s.art[i], u).into_iter().find(|k| cx.art.has(&aegis_core::assets::body_file(k, "clips.json"))) {
+            wanted.push((key.clone(), String::new()));
+            wanted.push((key, s.palettes.get(i).cloned().unwrap_or_default()));
+        }
+    }
+    cx.art.load_bodies(&wanted);
 }

@@ -1,0 +1,18 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "quests",
+      "world": "sunk_ward",
+      "fields": [
+        "rec_level",
+        "closed_text"
+      ],
+      "entry": {
+        "id": "q_a1_m5",
+        "closed_text": "Turn in the Bone-Mill and Vats to Talia. The Undercroft stirs then.",
+        "rec_level": 8
+      }
+    }
+  ]
+}

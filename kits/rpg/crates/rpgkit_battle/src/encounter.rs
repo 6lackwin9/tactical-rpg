@@ -15,6 +15,8 @@ use serde_json::Value;
 pub const WON: &str = "won";
 pub const LOST: &str = "lost";
 pub const FLED: &str = "fled";
+/// ENRAGE2 EN9, EN12: a random fight's verdict at its round cap: the foes slipped away (no rewards, damage kept).
+pub const ESCAPED: &str = "escaped";
 
 /// PR6-9 (`PK4_PK5_CAMPAIGN_HUB.md` 5, B6): the objective `retreat`: the battle is won once the `objective_unit` is out
 /// of the fight or down to its `hp_floor` percent of max HP, at which it withdraws (fate `withdrawn`); damage never takes
@@ -34,6 +36,103 @@ pub fn hp_floor_of(o: &Obj) -> i32 {
 /// PR6-9: the HP at which a retreat unit of max HP `max_hp` withdraws: max_hp x pct / 100 rounded down, at least 1.
 pub fn floor_hp(max_hp: i32, pct: i32) -> i32 {
     (max_hp.max(1) * pct / 100).max(1)
+}
+
+// ---- Decor (DECOR1) ------------------------------------------------------------------------------------------
+
+/// DECOR1 (PR7-81): an encounter's display-only decor field, `decor: [{art, x, y}]`; stored as no key when empty.
+pub const DECOR: &str = "decor";
+/// DECOR1: the keys a decor entry holds.
+pub const DECOR_KEYS: [&str; 3] = ["art", "x", "y"];
+
+/// DECOR1: one decor piece: display-only art (`art`, a decor art key: `cover`, `cover/v<N>`, `<prop>` or
+/// `<prop>/v<N>`) drawn by the stage on cell `at`. It never changes walkability, move cost, cover or line of sight;
+/// the rules never read it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Decor {
+    pub art: String,
+    pub at: V2,
+}
+
+/// DECOR1: encounter `o`'s decor, in order (an entry without a string `art` or whole `x` and `y` is left out; the
+/// content check refuses it).
+pub fn decor_of(o: &Obj) -> Vec<Decor> {
+    value::array(o, DECOR)
+        .iter()
+        .filter_map(Value::as_object)
+        .filter_map(|d| {
+            let art = d.get("art")?.as_str()?.trim().to_string();
+            let (x, y) = (d.get("x")?.as_i64()?, d.get("y")?.as_i64()?);
+            (!art.is_empty()).then(|| Decor { art, at: V2::new(x as i32, y as i32) })
+        })
+        .collect()
+}
+
+/// DECOR-GEN1 (PR7-86): the fewest and most pieces a generated board draws (`generated_decor`).
+pub const GENERATED_DECOR: (i32, i32) = (2, 6);
+/// DECOR-GEN1: the stream name of the generated decor's own draws (`generated_decor`), apart from every rule's.
+pub const DECOR_STREAM: &str = "decor";
+/// DECOR-GEN1: the world manifest field naming a world's generated-board decor keys.
+pub const DECOR_POOL: &str = "decor_pool";
+
+/// DECOR-GEN1: whether decor art key `key` is a cover key (`cover` or `cover/v<N>`: the stage set's cover prop),
+/// which stands on a blocked inner cell (else any edge cell); any other key is a prop, which stands on a back cell
+/// (`is_back_cell`).
+pub fn is_cover_key(key: &str) -> bool {
+    key == "cover" || key.starts_with("cover/")
+}
+
+/// DECOR-GEN1: whether cell `c` is on the board's outer ring (column 0 or 11, row 0 or 8).
+pub fn is_edge_cell(c: V2) -> bool {
+    c.x == 0 || c.y == 0 || c.x == crate::grid::GRID_W - 1 || c.y == crate::grid::GRID_H - 1
+}
+
+/// DECOR-GEN1: the last row of the side columns a prop may stand on (`is_back_cell`).
+pub const BACK_SIDE_ROWS: i32 = 2;
+
+/// DECOR-GEN1: whether cell `c` is at the back of the board, where a generated prop (a tall piece) may stand without
+/// rising into the fight area: row 0, or the side columns (0 and 11) in rows 0 to `BACK_SIDE_ROWS`.
+pub fn is_back_cell(c: V2) -> bool {
+    c.y == 0 || ((c.x == 0 || c.x == crate::grid::GRID_W - 1) && (0..=BACK_SIDE_ROWS).contains(&c.y))
+}
+
+/// DECOR-GEN1 (PR7-86): the display-only decor a generated board (an encounter with no rows and no decor of its own)
+/// draws from `pool` (its world's `decor_pool`), from the battle seed `seed` alone: one `aegis_core::rng::GodotRng`
+/// seeded with hash([seed, `DECOR_STREAM`, `zone`]), so no rule's draw moves and a replay with the same seed draws the
+/// same. It draws a count in `GENERATED_DECOR`, then per piece a key of `pool` and a free cell for it: a cover key on a
+/// blocked inner cell of `grid` (an edge cell when none is free), a prop on a back cell (`is_back_cell`); never on an exit, a cell of
+/// `taken` (the deploy cells and objective tiles), or another piece's cell. Fewer when the cells run out; none for an
+/// empty pool. The rules never read it.
+pub fn generated_decor(grid: &crate::grid::Grid, pool: &[String], seed: i64, zone: &str, taken: &[V2]) -> Vec<Decor> {
+    use aegis_core::ghash::{hash, GVar};
+    let pool: Vec<&String> = pool.iter().filter(|k| !k.trim().is_empty()).collect();
+    if pool.is_empty() {
+        return Vec::new();
+    }
+    let mut rng = aegis_core::rng::GodotRng::from_i64(i64::from(hash(&GVar::Arr(vec![GVar::Int(seed), GVar::Str(DECOR_STREAM.into()), GVar::Str(zone.into())]))));
+    let free = |c: &V2| !grid.is_exit(*c) && !taken.contains(c);
+    let cells: Vec<V2> = (0..crate::grid::GRID_H).flat_map(|y| (0..crate::grid::GRID_W).map(move |x| V2::new(x, y))).filter(free).collect();
+    let edge: Vec<V2> = cells.iter().copied().filter(|c| is_edge_cell(*c)).collect();
+    let back: Vec<V2> = edge.iter().copied().filter(|c| is_back_cell(*c)).collect();
+    let inner: Vec<V2> = cells.iter().copied().filter(|c| !is_edge_cell(*c) && !grid.is_walkable(*c)).collect();
+    let count = rng.randi_range(GENERATED_DECOR.0, GENERATED_DECOR.1);
+    let mut out: Vec<Decor> = Vec::new();
+    for _ in 0..count {
+        let key = pool[rng.randi_range(0, pool.len() as i32 - 1) as usize];
+        let open = |list: &[V2]| -> Vec<V2> { list.iter().copied().filter(|c| out.iter().all(|d| d.at != *c)).collect() };
+        let list = if is_cover_key(key) {
+            let inner = open(&inner);
+            if inner.is_empty() { open(&edge) } else { inner }
+        } else {
+            open(&back)
+        };
+        if list.is_empty() {
+            continue;
+        }
+        let at = list[rng.randi_range(0, list.len() as i32 - 1) as usize];
+        out.push(Decor { art: key.trim().to_string(), at });
+    }
+    out
 }
 
 // ---- Objectives ----------------------------------------------------------------------------------------------
@@ -213,13 +312,15 @@ impl Objectives {
 // ---- Stay-behind (ENCOUNTER2 3; not in Godot) ---------------------------------------------------------------------
 
 /// ENCOUNTER2 S2: the verdicts `timeout_outcome` may name (the first is the default, today's rule).
-pub const TIMEOUT_OUTCOMES: [&str; 2] = [FLED, LOST];
+/// ENRAGE2 EN12 adds `escaped`.
+pub const TIMEOUT_OUTCOMES: [&str; 3] = [FLED, LOST, ESCAPED];
 /// ENCOUNTER2 section 6: the `stay_behind` modes (hold: 3.1; stand: 3.2, ENCOUNTER2-L).
 pub const STAY_HOLD: &str = "hold";
 pub const STAY_STAND: &str = "stand";
 pub const STAY_MODES: [&str; 2] = [STAY_HOLD, STAY_STAND];
-/// H1: who holds when nobody picked (`pick_default`): the hero with the most HP now, or the first deployed.
-pub const PICK_DEFAULTS: [&str; 2] = ["highest_hp", "first"];
+/// H1: who holds when nobody picked (`pick_default`): the hero with the most HP now, the first deployed, or
+/// (ESCAPE-PLAN1 (3)) the hero with the shortest route to a hold tile (`nearest`; ties the first).
+pub const PICK_DEFAULTS: [&str; 3] = ["highest_hp", "first", "nearest"];
 /// H2: who else opens the gate once the holder is down (`fallback`).
 pub const FALLBACKS: [&str; 2] = ["any", "none"];
 /// W3: what the world does with the hero who stayed (`then`; ROSTER1 3.2).
@@ -227,7 +328,7 @@ pub const STAY_THEN: [&str; 3] = ["none", "capture", "kill"];
 pub const DEFAULT_TILES_LABEL: &str = "the line";
 pub const DEFAULT_RESULT_LINE: &str = "{name} stayed behind.";
 
-/// ENCOUNTER2 S2: an encounter's `timeout_outcome` (fled unless it names lost).
+/// ENCOUNTER2 S2: an encounter's `timeout_outcome` (fled unless it names lost or, ENRAGE2, escaped).
 pub fn timeout_outcome(o: &Obj) -> String {
     let raw = value::string(o, "timeout_outcome", FLED);
     if TIMEOUT_OUTCOMES.contains(&raw.as_str()) {
@@ -368,6 +469,9 @@ impl PartyFate {
 pub struct PhaseDef {
     pub id: String,
     pub name: String,
+    /// BOSSUI1 BU3b (PR7-59): the boss's form or state in this phase ("Unbound"; "" = none), shown on the boss bar after
+    /// the unit's name in place of its title. No rule reads it.
+    pub form: String,
     /// kind, unit, pct, or_round | round, block | round, block (arrival) | unit, count (downed) | unit (broken)
     pub trigger: Obj,
     /// Parsed effects with their defaults.
@@ -431,6 +535,11 @@ pub fn swap_hp(hp: i32, max: i32, new_max: i32, mode: &str) -> i32 {
 /// "" or a character ref) and its keys. No rule reads it: the session only lists its cue (`Session::talks`).
 pub const TALK_EFFECT: &str = "talk";
 pub const TALK_EFFECT_KEYS: [&str; 3] = ["type", "dialogue", "speaker"];
+/// PHASEBREAK1 (PR7-56, BOSSUI1 BU17): the phase effect that plays a world vignette over the board in the phase's
+/// transition (after its talk, before its banner; skippable), and its keys. No rule reads it: the session only lists
+/// its cue (`Session::vignettes`).
+pub const VIGNETTE_EFFECT: &str = "vignette";
+pub const VIGNETTE_EFFECT_KEYS: [&str; 2] = ["type", "id"];
 /// ENCOUNTER2-C PT2, PT3: the event triggers (a unit name's `count`-th unit down; a unit of the name broken, rule poise)
 /// and their keys. PT1: a `round` trigger's `block` (0 = the round start).
 pub const DOWNED: &str = "downed";
@@ -450,6 +559,16 @@ pub struct TalkCue {
     pub phase: String,
     pub dialogue: String,
     pub speaker: String,
+    pub round: i32,
+    pub block: i32,
+}
+
+/// PHASEBREAK1 (BU17): a vignette a phase raised: the phase id, the vignette ref and when the phase fired. The GUI
+/// plays it after the phase's talk; sims, autoplay and the host never wait for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VignetteCue {
+    pub phase: String,
+    pub vignette: String,
     pub round: i32,
     pub block: i32,
 }
@@ -586,6 +705,10 @@ pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
                             out.insert("to".into(), Value::from(value::string(fx, "to", "")));
                             out.insert("hp".into(), Value::from(value::string(fx, "hp", SWAP_KEEP_PCT)));
                         }
+                        // PHASEBREAK1: kept for the battle screen's vignette player; no rule reads it
+                        VIGNETTE_EFFECT => {
+                            out.insert("id".into(), Value::from(value::string(fx, "id", "")));
+                        }
                         // ENCOUNTER2-C DT1: kept for the battle screen's talk box; no rule reads it
                         TALK_EFFECT => {
                             out.insert("dialogue".into(), Value::from(value::string(fx, "dialogue", "")));
@@ -596,7 +719,7 @@ pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
                     out
                 })
                 .collect();
-            PhaseDef { id: value::string(src, "id", ""), name: value::string(src, "name", ""), trigger, effects }
+            PhaseDef { id: value::string(src, "id", ""), name: value::string(src, "name", ""), form: value::string(src, "form", ""), trigger, effects }
         })
         .collect()
 }

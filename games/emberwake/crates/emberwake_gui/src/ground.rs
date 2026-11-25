@@ -18,14 +18,19 @@ use emberwake_world::Data;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
+/// The region map's largest art cell: 32 (the sprites' own density); the composer's `CELL_MAX` is higher for the battle
+/// board (DIORAMA5 R1), and a region map keeps composing at most this.
+pub const REGION_CELL_MAX: i32 = 32;
+
 /// The composer's art px per cell in a view at `q` quarters of zoom: one art px is one logical px, so these equal
-/// `MapGeom::cell_size`, up to the composer's `CELL_MAX` (past it, the picture at `CELL_MAX` stretches on the blit).
+/// `MapGeom::cell_size`, up to `REGION_CELL_MAX` (past it, the picture at that size stretches on the blit).
 fn cell_of(view: View, q: i32) -> (i32, i32) {
     let (w, h) = match view {
         View::Square => (CELL_PX, CELL_PX),
         View::Tilted => TILTED_CELL,
     };
-    let q = q.min(4 * CELL_MAX / CELL_PX);
+    const _: () = assert!(REGION_CELL_MAX <= CELL_MAX);
+    let q = q.min(4 * REGION_CELL_MAX / CELL_PX);
     (w * q / 4, h * q / 4)
 }
 
@@ -42,6 +47,7 @@ struct Seen {
 
 /// One map's job, owning what the composer's job borrows. A texture is a layer's reduced art; `layers` is in `plan`'s
 /// order, the one fixed order, since a texture's offset comes from its place in the list.
+#[derive(Clone)]
 struct Picture {
     plan: GroundPlan,
     textures: Vec<Option<Image>>,
@@ -152,7 +158,15 @@ impl MapGround {
         if same {
             return;
         }
-        self.job = picture(cx, t, sets, view, q).map(|p| {
+        // ENGINE-54: a warm draw whose textures are not all loaded yet keeps no job (a later slice makes it)
+        let left = cx.art.left();
+        let pic = picture(cx, t, sets, view, q);
+        if cx.art.left() != left {
+            self.job = None;
+            self.seen = None;
+            return;
+        }
+        self.job = pic.map(|p| {
             let key = p.key(&map);
             (p, key)
         });
@@ -170,8 +184,19 @@ impl MapGround {
         };
         let (cw, ch) = geo.cell_size();
         let r = Rect::new(geo.ox, geo.oy, picture.plan.cols * cw, picture.plan.rows * ch);
+        // ENGINE-54 (WARM-SPREAD1): a warm draw composes the map's ground on a thread
+        if composer::deferring() && !composer::held(key) {
+            let picture = picture.clone();
+            composer::compose_later(key.clone(), move || picture.compose());
+            return true;
+        }
         composer::draw(p, key.clone(), r, || picture.compose());
         true
+    }
+
+    /// ENGINE-50 (MAP-FRAME1): whether this map has a composed ground (`draw` draws it).
+    pub fn has(&self) -> bool {
+        self.job.is_some()
     }
 
     /// The agent link's `state.ground`: `{"layers": n}`, or null on a map without ground.
@@ -236,7 +261,7 @@ mod tests {
             for z in mapview::zoom_steps() {
                 let q = mapview::zoom_of(&json!(z));
                 let (art, cell) = (cell_of(view, q), mapview::cell_of(view, q));
-                assert!(art.0 <= CELL_MAX && art.1 <= CELL_MAX, "{name} {z}: the composer takes it");
+                assert!(art.0 <= REGION_CELL_MAX && art.1 <= REGION_CELL_MAX, "{name} {z}: the composer takes it");
                 assert_eq!(art.0 * cell.1, art.1 * cell.0, "{name} {z}: the same shape as the cell");
                 if q <= 8 {
                     assert_eq!(art, cell, "{name} {z}: one art px is one logical px up to 2x");
@@ -297,6 +322,74 @@ mod tests {
                 println!("{view:?} {z}x: art {}x{} ({} MB), job {:.1} ms (first read of the art sizes), key {:.1} ms, compose {:.1} ms, physical copy {} MB in {:.1} ms{}; {:?}", art.w, art.h, art.px.len() / 1_000_000, job.as_secs_f64() * 1e3, keyed.as_secs_f64() * 1e3, composed.as_secs_f64() * 1e3, bytes / 1_000_000, expanded.as_secs_f64() * 1e3, if copy == 0 { " (past the limit: not kept)" } else { "" }, key.cell);
             }
         }
+    }
+
+    /// ENGINE-52 (COMPOSE-PAR1): two shipped maps' grounds (both views) compose to the same pixels on one thread and on
+    /// many (the rows in bands).
+    #[test]
+    fn a_maps_ground_is_the_same_on_one_thread_and_many() {
+        let mut cx = game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let d = cx.data.clone();
+        for (world, map) in [("ashlands", "ashlands_warden_keep"), ("sunk_ward", "sunk_ward_junction_7")] {
+            let loc = d.merged_entries(world, "locations").into_iter().find(|l| json::s(l, "map") == map).expect("the map's location");
+            let t = emberwake_world::explore::template_of(&d, loc).clone();
+            let mut lineage = d.lineage(world);
+            lineage.reverse();
+            let sets = emberwake_content::art::region_sets(&lineage, &json::s(loc, "tileset"));
+            for view in [View::Square, View::Tilted] {
+                let p = picture(&mut cx, &t, &sets, view, mapview::zoom_of(&json!(1.0))).expect("a picture");
+                let one = composer::with_compose_threads(1, || p.compose());
+                let many = composer::with_compose_threads(composer::COMPOSE_THREADS, || p.compose());
+                assert!(one.w > 0 && one.h > 0, "{map} {view:?}: a ground");
+                assert!(one == many, "{map} {view:?}: the same pixels");
+            }
+        }
+    }
+
+    /// ENGINE-53 (SWITCH-AHEAD1), ENGINE-54 (WARM-SPREAD1): a map's ground drawn in a warm slice is composed on a
+    /// thread, never on the frame: its textures are decoded off the frame first (the slice keeps no job made without
+    /// them), then the job goes to `compose_later`; once kept it is the ground a real draw finds (the same key and
+    /// pixels), so that draw composes nothing.
+    #[test]
+    fn a_warm_draw_composes_the_maps_ground_on_a_thread() {
+        let mut cx = game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let d = cx.data.clone();
+        let (world, map) = ("sunk_ward", "sunk_ward_junction_7");
+        let loc = d.merged_entries(world, "locations").into_iter().find(|l| json::s(l, "map") == map).expect("the map's location");
+        let t = emberwake_world::explore::template_of(&d, loc).clone();
+        let mut lineage = d.lineage(world);
+        lineage.reverse();
+        let sets = emberwake_content::art::region_sets(&lineage, &json::s(loc, "tileset"));
+        let (view, q) = (View::Square, mapview::zoom_of(&json!(1.0)));
+        let geo = MapGeom::default();
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+        let composes = composer::ground_composes();
+        let mut warm = MapGround::default();
+        let t0 = std::time::Instant::now();
+        let key = loop {
+            cx.art.warm_poll();
+            composer::poll_later();
+            cx.art.defer(std::time::Duration::from_millis(4));
+            composer::set_deferring(true);
+            warm.sync(&mut cx, &t, &sets, view, q);
+            warm.draw(&mut p, &geo);
+            let left = cx.art.undefer() + composer::left_later();
+            composer::set_deferring(false);
+            if left == 0 {
+                break warm.key().cloned().expect("a key");
+            }
+            assert!(t0.elapsed().as_secs() < 60, "the warm draws finish");
+        };
+        assert!(composer::held(&key), "kept");
+        assert_eq!(composer::ground_composes(), composes, "nothing composed on the frame");
+        let mut real = MapGround::default();
+        real.sync(&mut cx, &t, &sets, view, q);
+        assert_eq!(real.key(), Some(&key), "the map's own key");
+        real.draw(&mut p, &geo);
+        assert_eq!(composer::ground_composes(), composes, "the real draw finds it");
     }
 
     /// A row's numbers reach the composer as they are, in `plan`'s order (a texture's offset depends on it), water sunken.

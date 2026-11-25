@@ -315,6 +315,13 @@ pub mod dev {
         Ok(std::fs::read_dir(path)?.flatten().map(|e| e.path()).collect())
     }
 
+    /// ENGINE-64 (LIVE-RELOAD1): a file's change time and length (None: no such file, or it cannot be read).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn stamp(path: impl AsRef<Path>) -> Option<(crate::clock::SystemTime, u64)> {
+        let m = std::fs::metadata(path).ok()?;
+        Some((m.modified().ok()?, m.len()))
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     pub fn exists(path: impl AsRef<Path>) -> bool {
         path.as_ref().exists()
@@ -368,6 +375,11 @@ pub mod dev {
     #[cfg(target_arch = "wasm32")]
     pub fn list_dir(_: impl AsRef<Path>) -> io::Result<Vec<PathBuf>> {
         off()
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn stamp(_: impl AsRef<Path>) -> Option<(crate::clock::SystemTime, u64)> {
+        None
     }
 
     #[cfg(target_arch = "wasm32")]

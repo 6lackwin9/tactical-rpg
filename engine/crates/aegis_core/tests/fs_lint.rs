@@ -27,10 +27,11 @@ const ALLOWED: &[(&str, &str)] = &[
 const WRITERS: &[(&str, &str)] = &[
     ("engine/crates/aegis_content/src/store.rs", "the content writer (aegis content upsert / remove / set_world)"),
     ("engine/crates/aegis_content/src/manifest.rs", "game.json / kit.json writers (aegis content game / kit set)"),
+    ("engine/crates/aegis_content/src/rename.rs", "ENGINE-38: aegis content rename (rewrites data files, moves asset files)"),
 ];
 
 /// The std::fs calls a `WRITERS` file may make.
-const WRITE_FNS: &[&str] = &["write", "create_dir_all", "remove_file", "remove_dir"];
+const WRITE_FNS: &[&str] = &["write", "create_dir_all", "remove_file", "remove_dir", "rename"];
 
 /// Crates that are command-line tools only (never part of the web build), each with its reason.
 const CLI_CRATES: &[&str] = &[

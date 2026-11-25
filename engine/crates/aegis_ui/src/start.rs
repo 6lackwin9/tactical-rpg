@@ -40,6 +40,9 @@ pub struct Start {
     pub save_dir: PathBuf,
     pub shot_dir: PathBuf,
     pub options: Options,
+    /// ENGINE-57, ENGINE-66 (CLN-77): the launch asked for the developer surfaces (`dev=1`); a game shows them only in a
+    /// build with its dev tools.
+    pub dev: bool,
 }
 
 impl Start {
@@ -60,6 +63,8 @@ impl Start {
         let layers = game_dir.as_ref().map(|g| Layers::for_game(g)).unwrap_or_default();
         let save_dir = arg(args, "saves").map(PathBuf::from).unwrap_or_else(|| aegis_save::user_dir(id).join("saves"));
         let shot_dir = game_dir.clone().unwrap_or_else(|| PathBuf::from(".")).join(".shots");
+        // ENGINE-66 (CLN-77): the launch keys every game shares are read here once
+        let dev = arg(args, "dev") == Some("1");
         let port = arg(args, "port").and_then(|p| p.parse().ok()).unwrap_or(crate::bridge::DEFAULT_PORT);
         let options = Options {
             title: format!("Aegis - {}", manifest.title),
@@ -69,8 +74,12 @@ impl Start {
             canvas: manifest.canvas.clone(),
             window_sizes: manifest.window_sizes.clone(),
             headless,
+            // ENGINE-64 (LIVE-RELOAD1): `dev=1` watches the files (`live=0` not: a scenario run's shots never move); a game
+            // with dev tools of its own keeps it to the builds with them
+            live: dev && arg(args, "live") != Some("0"),
+            feel: crate::feel::launch_asked() || (cfg!(not(target_arch = "wasm32")) && arg(args, "feel") == Some("1")),
         };
-        Start { id: id.into(), manifest, game_dir, layers, notice, save_dir, shot_dir, options }
+        Start { dev, id: id.into(), manifest, game_dir, layers, notice, save_dir, shot_dir, options }
     }
 
     /// The player's settings (`<user dir>/settings.json`) over the game's `defaults`.
@@ -78,10 +87,13 @@ impl Start {
         Settings::load(aegis_save::user_dir(&self.id).join("settings.json"), defaults)
     }
 
-    /// The sounds over the asset layers; silent with no window.
+    /// The sounds over the asset layers; with no window on a virtual device (ENGINE-55: mixed and timed, unheard).
     pub fn audio(&self) -> Audio {
         if self.options.headless.is_some() {
-            Audio::offline_layers(&self.layers)
+            #[cfg(not(target_arch = "wasm32"))]
+            return Audio::virtual_layers(&self.layers);
+            #[cfg(target_arch = "wasm32")]
+            return Audio::offline_layers(&self.layers);
         } else {
             Audio::of_layers(&self.layers)
         }

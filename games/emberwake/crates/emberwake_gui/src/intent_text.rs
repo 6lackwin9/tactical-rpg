@@ -3,7 +3,7 @@
 //! slice 4 (UI5, V2): the round intent's head ("Assault: Wolf"), the card line that leads with it and the reveal head.
 
 use emberwake_battle::grid::NO_CELL;
-use emberwake_battle::intent::{HitOn, Intent, Line, ARRIVING, IDLE};
+use emberwake_battle::intent::{HitFail, HitOn, Intent, Line, ARRIVING, IDLE};
 use emberwake_battle::refusal::Reason;
 use emberwake_battle::round_intent::{ManeuverKind, RoundTarget};
 use emberwake_battle::world::World;
@@ -86,15 +86,40 @@ pub fn read_by(w: &World, i: &Intent, passive_name: impl Fn(&str) -> String) -> 
 pub fn forecast(i: &Intent, hero: usize, hits: &[HitOn]) -> Option<String> {
     let Some(first) = hits.first() else { return (i.line.target == Some(hero)).then(|| format!("Heads for you in {}", block_text(i.line.blocks))) };
     let blocks = hits.iter().map(|h| format!("B{}", h.block)).collect::<Vec<_>>().join(", ");
-    let guarded = |h: &HitOn| if h.guarded { " (guarded)" } else { "" };
-    let same = hits.iter().all(|h| h.skill == first.skill && h.damage == first.damage && h.guarded == first.guarded);
+    let same = hits.iter().all(|h| h.skill == first.skill && h.damage == first.damage && h.guarded == first.guarded && h.fails.is_none());
     Some(if hits.len() == 1 {
-        format!("Targets you in {blocks}: {}, about {}{}", first.skill, first.damage, guarded(first))
+        format!("Targets you in {blocks}: {}, {}", first.skill, hit_amount(first, None))
     } else if same {
-        format!("Targets you in {blocks}: {}, about {} a hit{}", first.skill, first.damage, guarded(first))
+        format!("Targets you in {blocks}: {}, about {} a hit{}", first.skill, first.damage, if first.guarded { " (guarded)" } else { "" })
     } else {
-        format!("Targets you in {blocks}: {}", hits.iter().map(|h| format!("B{} {} about {}{}", h.block, h.skill, h.damage, guarded(h))).collect::<Vec<_>>().join("; "))
+        format!("Targets you in {blocks}: {}", hits.iter().map(|h| format!("B{} {} {}", h.block, h.skill, hit_amount(h, None))).collect::<Vec<_>>().join("; "))
     })
+}
+
+/// HITCALC1 (PR7-45): how a forecast hit fails at its impact, in words: "dodged", "out of reach", "misses (flank
+/// protected)", "lost (stealth)", "taken by Bryn" or "40% taken by Bryn" (`w` None: "an ally").
+pub fn fail_words(w: Option<&World>, f: HitFail) -> String {
+    match f {
+        HitFail::Dodged => "dodged".into(),
+        HitFail::OutOfReach => "out of reach".into(),
+        HitFail::FlankProtected => "misses (flank protected)".into(),
+        HitFail::Hidden => "lost (stealth)".into(),
+        HitFail::Intercepted { by, pct } => {
+            let who = w.and_then(|w| w.units.get(by)).map_or_else(|| "an ally".to_string(), |u| u.name.clone());
+            if pct >= 100 { format!("taken by {who}") } else { format!("{pct}% taken by {who}") }
+        }
+    }
+}
+
+/// HITCALC1: one forecast hit's amount: "about 23 (guarded)", a failing hit's words (`fail_words`), a part intercept
+/// "about 14 (40% taken by Bryn)".
+pub fn hit_amount(h: &HitOn, w: Option<&World>) -> String {
+    let guarded = if h.guarded { " (guarded)" } else { "" };
+    match h.fails {
+        None => format!("about {}{guarded}", h.damage),
+        Some(f @ HitFail::Intercepted { pct, .. }) if pct < 100 => format!("about {}{guarded} ({})", h.damage, fail_words(w, f)),
+        Some(f) => fail_words(w, f),
+    }
 }
 
 /// PT-20: the hits on `hero` a record's forecast names (the tells never name an unrevealed later action): all of them
@@ -188,11 +213,14 @@ pub fn menu_refusal_text(reasons: &[Reason]) -> String {
 }
 
 /// PR7-41 (PT-23): how to give a skill-menu cell the target it asks for, in the battle screen's controls, for the
-/// kit's "Target ... to use this" refusals that need yourself or an ally (None for any other reason: an enemy or a
-/// tile is clicked on the board, as the menu was).
+/// kit's refusals that need yourself or an ally (None for any other reason: an enemy or a tile is clicked on the board,
+/// as the menu was). HITCALC1 (PR7-45): read from the reason's field (`Reason::NeedsTarget`), never the kit's words.
 pub fn target_control(reasons: &[Reason]) -> Option<&'static str> {
-    let text = reasons.iter().map(|r| r.to_string()).find(|t| t.starts_with("Target ") && t.ends_with(" to use this"))?;
-    match (text.contains("yourself"), text.contains("an ally")) {
+    let need = reasons.iter().find_map(|r| match r {
+        Reason::NeedsTarget(n) => Some(*n),
+        _ => None,
+    })?;
+    match (need.takes_self(), need.takes_ally()) {
         (true, true) => Some("Self button (key S) for yourself; Ally button (or Ctrl+click a member) for an ally."),
         (false, true) => Some("Ally button in the hero panel, or Ctrl+click a member."),
         (true, false) => Some("Self button in the hero panel (key S)."),

@@ -281,5 +281,77 @@ class FenceTest(unittest.TestCase):
         self.assertEqual(fc.parse_building_rows(fb), ["R1 (building)"])
 
 
+class WatchAndLaneTest(unittest.TestCase):
+    def test_watch_report_states(self):
+        # All answered -> ready_to_archive, needs_attention=False
+        d = fc.watch_report(FEEDBACK, READY.format(rows=ALL_ROWS), CLOSED)
+        self.assertEqual(d["state"], "ready_to_archive")
+        self.assertFalse(d["needs_attention"])
+        self.assertEqual(d["archivable"], ["FB-01", "FB-02", "UN-01"])
+        self.assertEqual(d["waiting_items"], [])
+
+        # Missing row -> waiting_design, needs_attention=True with parsed title
+        rows = "\n".join(r for r in ALL_ROWS.splitlines() if "FB-02" not in r)
+        d = fc.watch_report(FEEDBACK, READY.format(rows=rows), CLOSED)
+        self.assertEqual(d["state"], "waiting_design")
+        self.assertTrue(d["needs_attention"])
+        self.assertEqual(len(d["waiting_items"]), 1)
+        self.assertEqual(d["waiting_items"][0]["id"], "FB-02")
+        self.assertEqual(d["waiting_items"][0]["title"], "second")
+        md = fc.format_watch_markdown(d)
+        self.assertIn("`FB-02`", md)
+        self.assertIn("second", md)
+
+        # Invalid follow-up -> error, needs_attention=True
+        d = fc.watch_report(FEEDBACK, READY.format(rows=ALL_ROWS.replace("`ROW-A`", "`ROW-Z`")), CLOSED)
+        self.assertEqual(d["state"], "error")
+        self.assertTrue(d["needs_attention"])
+        self.assertEqual(len(d["errors"]), 1)
+
+        # Empty FEEDBACK -> idle, needs_attention=False
+        empty_fb = "# Build Status and Feedback\n\n## 2. Feedback Items\n"
+        d = fc.watch_report(empty_fb, READY.format(rows=""), CLOSED)
+        self.assertEqual(d["state"], "idle")
+        self.assertFalse(d["needs_attention"])
+        self.assertIn("All clear", fc.format_watch_markdown(d))
+
+    def test_watch_cli_writes_summary_and_json_and_exits_on_errors_only(self):
+        import json
+
+        rows_waiting = "\n".join(r for r in ALL_ROWS.splitlines() if "UN-01" not in r)
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d)
+            fb, rd, cl = p / "fb.md", p / "ready.md", p / "closed.md"
+            md_out, json_out = p / "summary.md", p / "watch.json"
+            fb.write_text(FEEDBACK, encoding="utf-8")
+            rd.write_text(READY.format(rows=rows_waiting), encoding="utf-8")
+            cl.write_text(CLOSED, encoding="utf-8")
+            rc = fc.main([
+                "watch",
+                "--feedback", str(fb),
+                "--ready", str(rd),
+                "--closed", str(cl),
+                "--summary-md", str(md_out),
+                "--json-out", str(json_out),
+            ])
+            self.assertEqual(rc, 0)
+            payload = json.loads(json_out.read_text(encoding="utf-8"))
+            self.assertEqual(payload["state"], "waiting_design")
+            self.assertTrue(payload["needs_attention"])
+            self.assertIn("`UN-01`", md_out.read_text(encoding="utf-8"))
+
+            # Schema error -> non-zero exit code 1
+            rd.write_text(READY.format(rows=ALL_ROWS.replace("`ROW-A`", "`ROW-Z`")), encoding="utf-8")
+            rc_err = fc.main(["watch", "--feedback", str(fb), "--ready", str(rd), "--closed", str(cl)])
+            self.assertEqual(rc_err, 1)
+
+    def test_lease_ref_for_lanes(self):
+        self.assertEqual(fc.lease_ref_for("main"), ("refs/heads/build-lease", "origin/build-lease"))
+        self.assertEqual(fc.lease_ref_for(""), ("refs/heads/build-lease", "origin/build-lease"))
+        self.assertEqual(fc.lease_ref_for("tools"), ("refs/heads/build-lease-tools", "origin/build-lease-tools"))
+        with self.assertRaises(fc.ParseError):
+            fc.lease_ref_for("../bad")
+
+
 if __name__ == "__main__":
     unittest.main()

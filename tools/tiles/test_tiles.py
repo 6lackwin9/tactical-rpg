@@ -1450,25 +1450,40 @@ class ComposerRunTest(unittest.TestCase):
 
     def test_no_cargo_is_an_error_not_a_crash(self):
         board._composer = None
+        clean_env = {k: v for k, v in os.environ.items() if k != "AEGIS_GROUND_COMPOSE"}
         with tempfile.TemporaryDirectory() as d:
             sd = os.path.join(d, "set", "ground", "ash")
             os.makedirs(sd)
             even_tile().save(os.path.join(sd, "v0.png"))
-            with unittest.mock.patch("subprocess.run", side_effect=FileNotFoundError("cargo")), contextlib.redirect_stderr(io.StringIO()) as err:
+            with unittest.mock.patch.dict(os.environ, clean_env, clear=True), \
+                    unittest.mock.patch("subprocess.run", side_effect=FileNotFoundError("cargo")), \
+                    contextlib.redirect_stderr(io.StringIO()) as err:
                 self.assertEqual(board.main([os.path.join(d, "set"), "--mix", "--out", os.path.join(d, "o")]), 1)
             self.assertIn("error:", err.getvalue())
 
     def test_cargo_names_the_composer_once_a_run(self):
         built = json.dumps({"reason": "compiler-artifact", "target": {"name": "ground_compose"}, "executable": "C:/t/ground_compose.exe"})
         other = json.dumps({"reason": "compiler-artifact", "target": {"name": "aegis_ui"}, "executable": None})
-        with unittest.mock.patch.object(board, "run_tool", return_value=f"{other}\n{built}\n") as run:
-            self.assertEqual(board.composer(), "C:/t/ground_compose.exe")
-            self.assertEqual(board.composer(), "C:/t/ground_compose.exe")
-        self.assertEqual(run.call_count, 1)
-        board._composer = None
-        with unittest.mock.patch.object(board, "run_tool", return_value=other):
-            with self.assertRaises(ValueError):
-                board.composer()
+        clean_env = {k: v for k, v in os.environ.items() if k != "AEGIS_GROUND_COMPOSE"}
+        with unittest.mock.patch.dict(os.environ, clean_env, clear=True):
+            board._composer = None
+            with unittest.mock.patch.object(board, "run_tool", return_value=f"{other}\n{built}\n") as run:
+                self.assertEqual(board.composer(), "C:/t/ground_compose.exe")
+                self.assertEqual(board.composer(), "C:/t/ground_compose.exe")
+            self.assertEqual(run.call_count, 1)
+            board._composer = None
+            with unittest.mock.patch.object(board, "run_tool", return_value=other):
+                with self.assertRaises(ValueError):
+                    board.composer()
+        with tempfile.TemporaryDirectory() as d:
+            exe = os.path.join(d, "ground_compose")
+            open(exe, "w", encoding="utf-8").close()
+            board._composer = None
+            with unittest.mock.patch.dict(os.environ, {"AEGIS_GROUND_COMPOSE": exe}), \
+                    unittest.mock.patch.object(board, "run_tool") as run:
+                self.assertEqual(board.composer(), exe)
+            self.assertEqual(run.call_count, 0)
+            board._composer = None
 
     def test_a_blocked_binary_is_relinked_and_any_other_failure_is_not(self):
         blocked = OSError("blocked")

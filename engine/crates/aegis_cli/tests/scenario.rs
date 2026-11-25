@@ -56,6 +56,89 @@ fn each_step_parses_with_its_keys_and_defaults() {
     assert_eq!(fail, &["cut", "edge", "overlap", "spill"]);
 }
 
+/// ENGINE-46 (FEEL-FIX1): a `feel` budget is the bar in a release build and stretches by `FEEL_DEV_ALLOWANCE` in a dev
+/// one (the gate's): the same worst numbers pass in dev and fail in release.
+#[test]
+fn a_feel_budget_stretches_in_a_dev_build() {
+    let reply = |build: &str| json!({"build": build, "to_present": {"worst": 120.0}, "frame_time": {"worst": 40.0}});
+    let release = scenario::feel_misses(&reply("release"), Some(100.0), Some(33.0), None);
+    assert_eq!(release.len(), 2, "both over in release: {release:?}");
+    assert!(release[0].starts_with("worst input 120.0 ms over 100") && release[1].starts_with("worst frame 40.0 ms over 33"), "{release:?}");
+    assert!(scenario::feel_misses(&reply("dev"), Some(100.0), Some(33.0), None).is_empty(), "within 2.5 x in dev");
+    let far = json!({"build": "dev", "to_present": {"worst": 300.0}, "frame_time": {"worst": 10.0}});
+    assert_eq!(scenario::feel_misses(&far, Some(100.0), Some(33.0), None).len(), 1, "a gross slip still fails in dev");
+    assert!(scenario::feel_misses(&reply("release"), None, None, None).is_empty(), "no budget, no miss");
+    // ENGINE-50 (MAP-FRAME1): the median frame against `frame_p50_ms`, stretched the same in dev
+    let median = |build: &str| json!({"build": build, "frame_time": {"p50": 20.0, "worst": 30.0}});
+    assert_eq!(scenario::feel_misses(&median("release"), None, Some(33.0), Some(16.7)), ["median frame 20.0 ms over 16.7 ms"]);
+    assert!(scenario::feel_misses(&median("dev"), None, Some(33.0), Some(16.7)).is_empty(), "within 2.5 x in dev");
+}
+
+/// ENGINE-45: the `feel` step takes a script of keys, clicks, pad buttons and frames, a gap (default 2) and a budget.
+#[test]
+fn a_feel_step_parses_its_script_and_budget() {
+    let s = parse("x", &minimal(json!([{"step": "feel", "name": "hub", "script": [{"key": "right", "times": 4}, {"click": "a"}, {"pad": "south"}, {"frames": 3}], "budget": {"input_ms": 100, "frame_ms": 33, "frame_p50_ms": 16.7}}]))).unwrap();
+    let Step::Feel { name, script, gap, input_ms, frame_ms, frame_p50_ms, motion, .. } = &s.steps[0] else { panic!() };
+    assert_eq!((name.as_str(), script.as_array().map(Vec::len), *gap, *input_ms, *frame_ms, *frame_p50_ms, *motion), ("hub", Some(4), 2, Some(100.0), Some(33.0), Some(16.7), false));
+}
+
+/// ENGINE-49 (WALK-FEEL1): held keys and d-pad directions, waits and long frames, the frame step, `motion` and its
+/// budgets; a movement budget needs `motion`, and each over its budget names itself.
+#[test]
+fn a_feel_step_takes_movement_inputs_and_budgets() {
+    let script = json!([{"press": "right"}, {"wait_ms": 500}, {"spike_ms": 250}, {"stall_ms": 250}, {"release": "right"}, {"pad_press": "dpad_up"}, {"pad_release": "dpad_up"}, {"stick": [0.9, -0.1]}, {"stick": [0, 0]}]);
+    let s = parse("x", &minimal(json!([{"step": "feel", "name": "walk", "step_ms": 16.667, "motion": true, "script": script, "budget": {"first_move_ms": 17, "overshoot_steps": 0}}]))).unwrap();
+    let Step::Feel { step_ms, motion, motion_budget, .. } = &s.steps[0] else { panic!() };
+    assert_eq!((*step_ms, *motion), (Some(16.667), true));
+    assert_eq!(motion_budget["overshoot_steps"], json!(0));
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "script": [{"press": "right"}], "budget": {"overshoot_steps": 0}}])));
+    assert!(got.contains("needs 'motion' true"), "{got}");
+    // ENGINE-63 (PAD-TUNE1): a stick is [x, y], each from -1 to 1
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "script": [{"stick": [2, 0]}, {"stick": "right"}]}])));
+    assert!(got.contains("script[0]") && got.contains("script[1]"), "{got}");
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "step_ms": 500, "script": [{"wait_ms": 0}]}])));
+    assert!(got.contains("'step_ms' is a number of ms from 1 to 200") && got.contains("'wait_ms'"), "{got}");
+    let report = json!({"first_move_ms": 33.3, "overshoot_steps": 0, "camera_lag_tiles": 0.0});
+    assert_eq!(scenario::motion_misses(&report, &json!({"first_move_ms": 17, "overshoot_steps": 0})), ["first_move_ms 33.3 over 17"]);
+}
+
+/// ENGINE-55 (AUDIO-FEEL1): the sound budgets: each over its budget names itself, one never measured says so, a dev
+/// build stretches `decode_ms` and allows an underrun per `DEV_UNDERRUN_EVERY_MS` of the replay.
+#[test]
+fn a_feel_step_takes_sound_budgets() {
+    let s = parse("x", &minimal(json!([{"step": "feel", "name": "round", "script": [{"click": "strip.confirm"}], "budget": {"ui_sound_ms": 50, "hit_beat_ms": 16.7, "underruns": 0}}]))).unwrap();
+    let Step::Feel { audio_budget, .. } = &s.steps[0] else { panic!() };
+    assert_eq!(audio_budget, &json!({"ui_sound_ms": 50, "hit_beat_ms": 16.7, "underruns": 0}));
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "script": [{"frames": 1}], "budget": {"underruns": -1}}])));
+    assert!(got.contains("'underruns' is a number from 0"), "{got}");
+    // 4 s of replay: 375 buffers of 10.667 ms
+    let report = json!({"ui_sound_ms": 61.0, "hit_beat_ms": null, "decode_ms": 3.0, "underruns": 2, "buffers": 375, "buffer_ms": 10.667});
+    let budget = json!({"ui_sound_ms": 50, "hit_beat_ms": 16.7, "decode_ms": 2, "underruns": 0});
+    assert_eq!(scenario::audio_misses(&report, &budget, 1.0), ["ui_sound_ms 61 over 50", "hit_beat_ms: nothing measured it (no such sound heard)", "underruns 2 over 0", "decode_ms 3 over 2"]);
+    assert_eq!(scenario::audio_misses(&report, &budget, 2.5), ["ui_sound_ms 61 over 50", "hit_beat_ms: nothing measured it (no such sound heard)"], "dev: decode 5 ms, 2 underruns in 4 s");
+    let short = json!({"underruns": 1, "buffers": 140, "buffer_ms": 10.667});
+    assert!(scenario::audio_misses(&short, &json!({"underruns": 0}), 2.5).is_empty(), "dev: one in a 1.5 s replay");
+    assert_eq!(scenario::audio_misses(&Value::Null, &json!({"underruns": 0}), 1.0), ["underruns: no sound output"]);
+}
+
+/// ENGINE-51 (SWITCH-FEEL1): `switch` follows each input until its new screen settles; an input's `switch_ms` needs it.
+#[test]
+fn a_feel_step_takes_switch_budgets() {
+    let s = parse("x", &minimal(json!([{"step": "feel", "name": "switch", "switch": true, "script": [{"click": "hud.party", "switch_ms": 150}, {"key": "esc", "switch_ms": 150}], "budget": {"uncovered_frames": 0}}]))).unwrap();
+    let Step::Feel { switch, script, uncovered_frames, .. } = &s.steps[0] else { panic!() };
+    assert_eq!((*switch, *uncovered_frames), (true, Some(0)));
+    assert_eq!(script[0]["switch_ms"], json!(150));
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "script": [{"click": "a", "switch_ms": 150}]}])));
+    assert!(got.contains("needs 'switch' true"), "{got}");
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "switch": "yes", "script": [{"click": "a"}]}])));
+    assert!(got.contains("'switch' is true or false"), "{got}");
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "switch": true, "script": [{"click": "a", "switch_ms": -1}]}])));
+    assert!(got.contains("'switch_ms' is a number of ms above 0"), "{got}");
+    assert!(parse("x", &minimal(json!([{"step": "feel", "name": "w", "switch": true, "script": [{"key": "enter", "switch_ms": 400, "to": "region_map"}]}]))).is_ok());
+    let got = problems_of(minimal(json!([{"step": "feel", "name": "w", "script": [{"key": "enter", "to": "region_map"}]}])));
+    assert!(got.contains("'to' names the screen a switch reaches"), "{got}");
+}
+
 #[test]
 fn an_unknown_step_or_key_names_its_place() {
     let got = problems_of(minimal(json!([{"step": "back"}, {"step": "dance"}])));
@@ -113,6 +196,14 @@ fn a_bad_file_is_named_and_refused_in_every_field() {
         (minimal(json!([{"step": "perf", "name": "a", "budget": {}}])), "name at least one"),
         (minimal(json!([{"step": "perf", "name": "a", "budget": {"p99_ms": 5}}])), "unknown key 'p99_ms'"),
         (minimal(json!([{"step": "perf", "name": "a", "budget": {"p95_ms": 0}}])), "'p95_ms' is a number"),
+        (minimal(json!([{"step": "feel", "name": "a"}])), "'script' is a list"),
+        (minimal(json!([{"step": "feel", "name": "a", "script": []}])), "'script' is a list"),
+        (minimal(json!([{"step": "feel", "name": "a", "script": [{"key": "up", "click": "b"}]}])), "exactly one of"),
+        (minimal(json!([{"step": "feel", "name": "a", "script": [{"tap": "up"}]}])), "unknown key 'tap'"),
+        (minimal(json!([{"step": "feel", "name": "a", "script": [{"frames": 0}]}])), "'frames' is a whole number"),
+        (minimal(json!([{"step": "feel", "name": "a", "script": [{"key": "up", "times": 201}]}])), "'times' is a whole number"),
+        (minimal(json!([{"step": "feel", "name": "a", "script": [{"key": "up"}], "budget": {"p95_ms": 5}}])), "unknown key 'p95_ms'"),
+        (minimal(json!([{"step": "feel", "name": "a/b", "script": [{"key": "up"}]}])), "becomes a file name"),
     ];
     for (file, wanted) in cases {
         let got = problems_of(file.clone());
@@ -371,7 +462,7 @@ fn launcher() -> FakeLauncher {
 
 /// A real window: the frames are polled for. `no_window` is the run with none.
 fn options(out: &Path) -> Options {
-    Options { game_id: "somegame".into(), exe: PathBuf::from("no_such_exe"), data: None, out: out.to_path_buf(), slow: 1, size: None, sized_ms: 0, window: true, fps: None, dpr: None, baselines: None, record: false, saves: None }
+    Options { game_id: "somegame".into(), exe: PathBuf::from("no_such_exe"), data: None, out: out.to_path_buf(), slow: 1, size: None, sized_ms: 0, window: true, fps: None, dpr: None, baselines: None, record: false, saves: None, set: Default::default(), audit: false }
 }
 
 fn no_window(out: &Path) -> Options {
@@ -594,6 +685,26 @@ fn the_audit_fails_on_the_named_kinds_only() {
 }
 
 #[test]
+fn audit_one_keeps_each_shots_text_audit_beside_it() {
+    let out = temp("shotaudit");
+    let mut l = launcher();
+    l.script.borrow_mut().audit_counts = json!({"cut": 1, "edge": 0, "overlap": 0, "spill": 0});
+    let s = scenario_of(json!([{"step": "shot", "name": "talk"}]));
+    let o = scenario::run_size(&s, (1280, 720), &options(&out), &mut l);
+    assert_eq!(o.code, 0, "{}", o.message);
+    assert!(!o.bundle.join("talk.audit.json").exists(), "no audit unless asked");
+    assert_eq!(l.script.borrow().asked.iter().filter(|a| a["cmd"] == "text_audit").count(), 0);
+    let o = scenario::run_size(&s, (1280, 720), &Options { audit: true, ..options(&out) }, &mut l);
+    assert_eq!(o.code, 0, "a problem found is reported, never a failure: {}", o.message);
+    let kept: Value = serde_json::from_str(&std::fs::read_to_string(o.bundle.join("talk.audit.json")).unwrap()).unwrap();
+    assert_eq!(kept["counts"]["cut"], json!(1));
+    let asked = l.script.borrow().asked.clone();
+    let (shot, audit) = (asked.iter().position(|a| a["cmd"] == "screenshot").unwrap(), asked.iter().position(|a| a["cmd"] == "text_audit").unwrap());
+    assert!(shot < audit, "the shot is the plain frame, taken before the audit's");
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+#[test]
 fn a_repeat_ends_at_until_and_fails_when_its_turns_run_out() {
     let out = temp("repeat");
     let walk = |until: Value| json!([{"step": "repeat", "times": 3, "until": until, "steps": [{"step": "key", "key": "up"}]}]);
@@ -640,6 +751,8 @@ fn the_scratch_profile_is_muted_windowed_and_keeps_the_focus_away() {
     assert_eq!((v["text_scale"].clone(), v["map_zoom"].clone(), v["mute"].clone()), (json!(1.3), json!(3), json!(true)), "merged over the profile");
 }
 
+/// ENGINE-57: every launch also asks for the game's developer surfaces (`dev=1`), so a release run takes the dev
+/// build's path.
 #[test]
 fn everything_the_game_writes_lies_under_the_scratch_folder() {
     let scratch = Path::new("scratch_root");
@@ -650,7 +763,7 @@ fn everything_the_game_writes_lies_under_the_scratch_folder() {
     let p = scenario::plan(&s, (1280, 720), "somegame", Path::new("game.exe"), Some(Path::new("copy/data")), 4567, scratch);
     assert_eq!(p.appdata, scratch);
     assert!(p.settings_path.starts_with(scratch) && p.recordings.starts_with(scratch));
-    for want in ["port=4567".to_string(), format!("saves={}", scratch.join("saves").display()), "screen=runner".into(), "scene=e1".into(), "seed=9".into(), "data=copy/data".into()] {
+    for want in ["port=4567".to_string(), format!("saves={}", scratch.join("saves").display()), "screen=runner".into(), "scene=e1".into(), "seed=9".into(), "data=copy/data".into(), "dev=1".into(), "live=0".into()] {
         assert!(p.args.contains(&want), "{want} in {:?}", p.args);
     }
     let dir = temp("write");
@@ -1338,6 +1451,38 @@ fn a_launch_save_names_a_fixture_folder_copied_into_the_scratch_saves() {
     std::fs::remove_dir_all(&saves).unwrap();
 }
 
+/// ENGINE-36 (1): a save may be a folder's absolute path (a kept playtest save), and `shots save=` launches from it,
+/// so a map proof shot from a save needs no scenario file; a relative path that is no plain name is still refused.
+#[test]
+fn a_save_folder_by_path_launches_shots_with_no_scenario_file() {
+    let kept = temp("save_kept");
+    let s = scenario::shots_scenario("map", &keys(&[&format!("save={}", kept.display()), "do=click:menu.continue,screen:region_map,shot:map"])).unwrap();
+    assert_eq!(s.launch.save.as_deref(), Some(kept.to_str().unwrap()));
+    assert!(scenario::shots_scenario("map", &keys(&["save=up/../x"])).is_err(), "a relative path is no save name");
+    let out = temp("save_path_out");
+    let mut l = launcher();
+    let o = Options { saves: None, ..no_window(&out) };
+    let _ = std::fs::remove_dir_all(&kept);
+    let r = scenario::run_size(&scenario_of_launch(&s), (1280, 720), &o, &mut l);
+    assert_eq!(r.code, 2);
+    assert!(r.message.contains("no such folder"), "{}", r.message);
+    std::fs::create_dir_all(&kept).unwrap();
+    std::fs::write(kept.join("slot_0.json"), "{}").unwrap();
+    let mut l = launcher();
+    let r = scenario::run_size(&scenario_of_launch(&s), (1280, 720), &o, &mut l);
+    assert_eq!(r.code, 0, "{}", r.message);
+    assert!(l.plans[0].args.iter().any(|a| a.starts_with("saves=")), "{:?}", l.plans[0].args);
+    let _ = std::fs::remove_dir_all(&out);
+    let _ = std::fs::remove_dir_all(&kept);
+}
+
+/// `s` with its launch kept and its steps one shot (the fake launcher answers no clicks or screen waits).
+fn scenario_of_launch(s: &scenario::Scenario) -> scenario::Scenario {
+    let mut one = scenario_of(json!([{"step": "shot", "name": "map"}]));
+    one.launch = s.launch.clone();
+    one
+}
+
 /// A `perf` reply: frame numbers in ms, and whether the game found the machine steady (its two calibrations close).
 fn perf_reply(p50: f64, p95: f64, max: f64, steady: bool) -> Value {
     json!({"ok": true, "stats": {"count": 30, "p10": p50 / 2.0, "p50": p50, "p95": p95, "max": max, "mean": p50}, "calib_before": 3.0, "calib_after": if steady { 3.1 } else { 4.0 },
@@ -1389,4 +1534,16 @@ fn a_perf_step_asks_with_no_window_keeps_its_numbers_and_judges_a_budget() {
     l.script.borrow_mut().perf = Some(json!({"ok": false, "error": "frames is a whole number from 1 to 2000"}));
     let o = scenario::run_size(&scenario_of(json!([{"step": "perf", "name": "menu"}])), (1280, 720), &no_window(&out), &mut l);
     assert!(o.code == 1 && o.message.contains("frames is a whole number"), "{}", o.message);
+}
+
+/// ENGINE-33: `set=` lays settings over every scenario's own (a JSON value, else a string); the driver's settings and
+/// `mute` are refused, as is a pair without a key.
+#[test]
+fn set_lays_settings_over_the_scenarios() {
+    let m = aegis_cli::scenario::parse_set("text_scale:1.3, reduce_motion:true,theme:dark").unwrap();
+    assert_eq!(serde_json::Value::Object(m), serde_json::json!({"text_scale": 1.3, "reduce_motion": true, "theme": "dark"}));
+    for bad in ["window_size:640x360", "mute:false", ":1", "text_scale"] {
+        assert!(aegis_cli::scenario::parse_set(bad).is_err(), "{bad}");
+    }
+    assert!(aegis_cli::scenario::parse_set("").unwrap().is_empty());
 }

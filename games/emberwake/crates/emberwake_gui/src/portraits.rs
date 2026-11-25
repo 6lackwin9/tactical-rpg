@@ -138,7 +138,7 @@ fn tier_of_folder(folder: &str) -> &'static str {
 
 /// Whose portrait is drawn: the `Faces` key (the character id, else the unit id, else the path), the portrait tier,
 /// id and body `face_chain` reads, the name (its initial is the fallback) and, for a portrait file picked as it is
-/// (the Gallery), that file.
+/// (the Gallery), that file; `portrait` is the unit's portrait key (PAINTED-MAPS1, `kart::portrait_key`; "" none).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Who {
     pub key: String,
@@ -147,6 +147,7 @@ pub struct Who {
     pub body: String,
     pub name: String,
     pub file: String,
+    pub portrait: String,
 }
 
 impl Who {
@@ -158,13 +159,13 @@ impl Who {
             ["portraits", folder, file] => (folder.to_string(), file.trim_end_matches(".png").to_string()),
             _ => (String::new(), rel.to_string()),
         };
-        Who { key: rel.to_string(), tier: tier_of_folder(&folder).to_string(), name: id.clone(), id, body: String::new(), file: rel.to_string() }
+        Who { key: rel.to_string(), tier: tier_of_folder(&folder).to_string(), name: id.clone(), id, body: String::new(), file: rel.to_string(), portrait: String::new() }
     }
 
     /// The files to try for `expression` ("" = neutral): `face_chain`; a picked file stops at that file (its frames,
     /// then itself; a common file only itself).
     pub fn chain(&self, expression: &str) -> Vec<String> {
-        let chain = kart::face_chain(&self.tier, &self.id, &self.body, expression);
+        let chain = kart::face_chain_keyed(&self.tier, &self.id, &self.body, &self.portrait, expression);
         if self.file.is_empty() {
             return chain;
         }
@@ -188,7 +189,7 @@ impl Who {
         let unit = d.entry("units", &json::s(character, "base_unit"));
         let class = d.entry("classes", &json::s(unit, "class_id"));
         let id = json::s(character, "id");
-        Who { key: id.clone(), tier: kart::portrait_tier(character, unit), body: kart::body_of(character, unit, class), name: json::s_or(character, "name", &id), id, file: String::new() }
+        Who { key: id.clone(), tier: kart::portrait_tier(character, unit), body: kart::body_of(character, unit, class), name: json::s_or(character, "name", &id), id, file: String::new(), portrait: kart::portrait_key(character, unit) }
     }
 
     /// A party member: the world character it plays (its `lore_ref`), else its base unit keyed by the member id.
@@ -200,7 +201,15 @@ impl Who {
         let unit = d.entry("units", &m.base_unit);
         let class = d.entry("classes", &json::s(unit, "class_id"));
         let empty = Dict::new();
-        Who { key: m.id.clone(), tier: kart::portrait_tier(&empty, unit), id: m.base_unit.clone(), body: kart::body_of(&empty, unit, class), name: progression::display_name(d, m), file: String::new() }
+        Who { key: m.id.clone(), tier: kart::portrait_tier(&empty, unit), id: m.base_unit.clone(), body: kart::body_of(&empty, unit, class), name: progression::display_name(d, m), file: String::new(), portrait: kart::portrait_key(&empty, unit) }
+    }
+
+    /// PT-59: catalog unit `unit` shown as `name` with no battle (a guest's results row): keyed by the unit id.
+    pub fn of_catalog(d: &Data, unit: &str, name: &str) -> Who {
+        let row = d.entry("units", unit);
+        let class = d.entry("classes", &json::s(row, "class_id"));
+        let empty = Dict::new();
+        Who { key: unit.to_string(), tier: kart::portrait_tier(&empty, row), id: unit.to_string(), body: kart::body_of(&empty, row, class), name: name.to_string(), file: String::new(), portrait: kart::portrait_key(&empty, row) }
     }
 
     /// Battle unit `i` of `s`, as world character `character` (empty: none): keyed by the character id, else
@@ -213,7 +222,7 @@ impl Who {
         let unit = d.entry("units", &u.catalog_id);
         let class = d.entry("classes", &json::s(unit, "class_id"));
         let empty = Dict::new();
-        Who { key: format!("{}#{i}", u.catalog_id), tier: kart::portrait_tier(&empty, unit), id: u.catalog_id.clone(), body: kart::body_of(&empty, unit, class), name: u.name.clone(), file: String::new() }
+        Who { key: format!("{}#{i}", u.catalog_id), tier: kart::portrait_tier(&empty, unit), id: u.catalog_id.clone(), body: kart::body_of(&empty, unit, class), name: u.name.clone(), file: String::new(), portrait: kart::portrait_key(&empty, unit) }
     }
 }
 
@@ -760,6 +769,32 @@ pub(crate) mod tests {
         assert_eq!(Who::file("portraits/common/beast_render_beast.png").chain("hurt"), ["portraits/common/beast_render_beast.png"]);
         assert_eq!(hue_name("#d97706"), "Tallow Amber");
         assert_eq!(hue_name("#123456"), "");
+    }
+
+    /// PAINTED-MAPS1 (PR7-73): a common-tier unit with a portrait key (picked by rule from the shipped catalog) shows
+    /// that file first, and it loads; a world character wearing its body shows it too, one with its own art does not;
+    /// a unit without a key falls back to its body's common portrait.
+    #[test]
+    fn a_units_portrait_key_comes_before_its_body_portrait() {
+        let mut cx = game_cx();
+        cx.art = aegis_ui::art::Art::new(Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let d = cx.data.clone();
+        let units: Vec<Dict> = d.content.get("units").map(|m| m.values().cloned().collect()).unwrap_or_default();
+        let common = |u: &Dict| kart::tier_folder(&kart::portrait_tier(&Dict::new(), u)).is_none();
+        let keyed = units.iter().find(|u| common(u) && !json::s(u, "portrait").is_empty()).expect("a common unit with a portrait key");
+        let character = |art: &str| json::obj([("id", json!("pk_test")), ("name", json!("Test")), ("role", json!("enemy")), ("base_unit", keyed["id"].clone()), ("art", json!(art))]);
+        let file = kart::keyed_portrait(&json::s(keyed, "portrait")).expect("a file");
+        let who = Who::of_character(&d, &character(""));
+        assert_eq!(who.chain("")[0], file, "the key first");
+        assert!(cx.art.image(&file, 64, 64).is_some(), "{file} loads");
+        let own = Who::of_character(&d, &character("brawler"));
+        assert!(!own.chain("").contains(&file), "a character with its own art keeps its body's portraits");
+        let plain = units.iter().find(|u| common(u) && json::s(u, "portrait").is_empty()).expect("a common unit without a key");
+        let class = d.entry("classes", &json::s(plain, "class_id"));
+        let body = kart::body_of(&Dict::new(), plain, class);
+        let who = Who::of_character(&d, &json::obj([("id", json!("pk_plain")), ("role", json!("enemy")), ("base_unit", plain["id"].clone()), ("art", json!(""))]));
+        assert_eq!(who.portrait, "");
+        assert_eq!(who.chain("")[0], kart::common_portrait(&body), "by the body");
     }
 
     /// `begin` drops a portrait neither drawn nor reacted to in the frame before (cycling members drops the old one).

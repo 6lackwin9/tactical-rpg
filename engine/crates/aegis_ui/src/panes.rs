@@ -1108,10 +1108,13 @@ pub fn list_row<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, v: &RowLook, action
     let (lb, ls) = (ui.p.line_h(m.body), ui.p.line_h(m.small));
     let both = if v.sub.is_empty() { lb } else { lb + ls };
     let y = r.y as f32 + (r.h as f32 - both) / 2.0;
+    let shown = ui.p.fit(v.name, m.body, room);
     ui.p.text_fit(x as f32, y, v.name, m.body, room, if v.enabled { t.text } else { t.dim });
     if !v.sub.is_empty() {
         ui.p.text_fit(x as f32, y + lb, v.sub, m.small, room, t.dim);
     }
+    // XL-FIX2 (PR7-85): a cut name reads in full on hover when the caller gave the row no hover card
+    let tip = if shown != v.name && tip.is_empty() { self::tip(v.name, "") } else { tip };
     ui.push(id, "row", v.name, r, v.enabled, v.selected, if live { action } else { None }, tip);
 }
 

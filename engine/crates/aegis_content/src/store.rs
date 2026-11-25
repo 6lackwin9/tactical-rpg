@@ -67,6 +67,17 @@ pub trait Hooks {
     fn sidecar(&self, _data_dir: &Path, op: &str, _name: &str, _edits: Option<&serde_json::Value>) -> Result<String, Vec<String>> {
         Err(vec![format!("This game has no sidecar op '{op}'.")])
     }
+    /// ENGINE-20: the known top-level field names of `kind` (in `world`, or the base catalog) when the kind has a
+    /// closed field list; `None` when the kind's field list is open (default). Used by `merge_fields` / `upsert_fields`
+    /// to reject typos in `"fields"`.
+    fn known_fields(&self, _world: Option<&str>, _kind: &str) -> Option<Vec<String>> {
+        None
+    }
+    /// ENGINE-20: pre-normalization JSON type checks for `entry` of `kind` (e.g. `schema::type_errors`, catching
+    /// values that `normalize` would coerce silently). Empty by default.
+    fn check_types(&self, _world: Option<&str>, _kind: &str, _entry: &Dict) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 /// PR5-48: writes `text` to `path` (its folder made when missing) for a game's writer of files beside the data (a
@@ -79,6 +90,7 @@ pub fn write_file(path: &Path, text: &str) -> Result<(), Vec<String>> {
 }
 
 /// What an upsert or remove did.
+#[derive(Debug)]
 pub struct Outcome {
     pub file: PathBuf,
     pub replaced: bool,
@@ -86,7 +98,7 @@ pub struct Outcome {
 
 /// Validates `entry` (stored shape), replaces the entry with its id (or `replace_id`) or appends it, writes the file,
 /// and keeps it only when it adds no blocking problem to the data folder.
-pub fn upsert(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, entry: &Dict, replace_id: Option<&str>) -> Result<Outcome, Vec<String>> {
+pub fn upsert(hooks: &(impl Hooks + ?Sized), data_dir: &Path, world: Option<&str>, kind: &str, entry: &Dict, replace_id: Option<&str>) -> Result<Outcome, Vec<String>> {
     let known = hooks.kinds(world);
     if !known.contains(&kind) {
         return Err(vec![format!("Unknown kind '{kind}' (one of {}).", known.join(", "))]);
@@ -118,20 +130,103 @@ pub fn upsert(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &s
     Ok(outcome)
 }
 
+/// ENGINE-20: merges only the named top-level `fields` of `entry` into the existing stored entry (`insert` when present
+/// in `entry`, `shift_remove` when omitted), runs `Hooks::check_types` and `Hooks::validate`, and returns the merged
+/// stored-shape entry without writing to disk. Refuses unknown kinds/worlds, missing/blank ids, invalid/duplicate/
+/// unknown field names, extra keys in `entry` outside `{"id"} ∪ fields`, missing target entries, and type or schema
+/// validation problems.
+pub fn merge_fields(hooks: &dyn Hooks, data_dir: &Path, world: Option<&str>, kind: &str, entry: &Dict, fields: &[String]) -> Result<Dict, Vec<String>> {
+    let known_kinds = hooks.kinds(world);
+    if !known_kinds.contains(&kind) {
+        return Err(vec![format!("Unknown kind '{kind}' (one of {}).", known_kinds.join(", "))]);
+    }
+    if let Some(w) = world {
+        if !vfs::is_file(manifest_path(data_dir, w)) {
+            return Err(vec![format!("Unknown world '{w}'.")]);
+        }
+    }
+    let id = match entry.get("id").and_then(serde_json::Value::as_str) {
+        Some(s) if !s.trim().is_empty() => s,
+        _ => return Err(vec!["fields: entry needs a non-empty string 'id'".to_string()]),
+    };
+
+    let mut errors = Vec::new();
+    if fields.is_empty() {
+        errors.push("'fields' is a list of the entry's top-level field names".to_string());
+    }
+    let known_fields = hooks.known_fields(world, kind);
+    let mut seen = std::collections::BTreeSet::new();
+    for f in fields {
+        if f.trim().is_empty() {
+            errors.push("fields: field name cannot be blank".to_string());
+            continue;
+        }
+        if f == "id" {
+            errors.push("'fields' never names 'id' (the entry's id picks it)".to_string());
+            continue;
+        }
+        if !seen.insert(f.as_str()) {
+            errors.push(format!("fields: duplicate field '{f}'"));
+            continue;
+        }
+        if let Some(ref known) = known_fields {
+            if !known.iter().any(|k| k == f) {
+                errors.push(format!("fields: unknown {kind} field '{f}'"));
+            }
+        }
+    }
+    let mut extra: Vec<&str> = entry.keys().map(String::as_str).filter(|k| *k != "id" && !seen.contains(*k)).collect();
+    extra.sort_unstable();
+    for k in extra {
+        errors.push(format!("fields: the entry holds '{k}', which 'fields' does not name"));
+    }
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    let Some(mut merged) = get(hooks, data_dir, world, kind, id) else {
+        return Err(vec![format!("fields: no {kind} entry '{id}' to change (a new entry is a whole upsert)")]);
+    };
+    for f in fields {
+        match entry.get(f) {
+            Some(v) => {
+                merged.insert(f.clone(), v.clone());
+            }
+            None => {
+                merged.shift_remove(f);
+            }
+        }
+    }
+    let merged = json::normalize_dict(&merged);
+    let type_errs = hooks.check_types(world, kind, &merged);
+    if !type_errs.is_empty() {
+        return Err(type_errs);
+    }
+    hooks.validate(world, kind, &merged)?;
+    Ok(merged)
+}
+
+/// ENGINE-20: merges only the named top-level `fields` of `entry` into the existing stored entry (`merge_fields`) and
+/// writes the result through `upsert` (rolled back if it adds any blocking data problem).
+pub fn upsert_fields(hooks: &dyn Hooks, data_dir: &Path, world: Option<&str>, kind: &str, entry: &Dict, fields: &[String]) -> Result<Outcome, Vec<String>> {
+    let merged = merge_fields(hooks, data_dir, world, kind, entry, fields)?;
+    upsert(hooks, data_dir, world, kind, &merged, None)
+}
+
 /// True when the stored file of `kind` (in `world`, or the base catalog) holds an entry `id` (PR5-51b: a seed's
 /// `"if_exists": true` remove step is a no-op when it does not).
-pub fn contains(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> bool {
+pub fn contains(hooks: &(impl Hooks + ?Sized), data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> bool {
     raw_entries(&hooks.file_of(data_dir, world, kind)).iter().any(|e| sget(e, "id", "") == id)
 }
 
 /// TOOLS-HELP1 (ENGINE-15): the stored entry `id` of `kind` (in `world`, or the base catalog), as written, if any
 /// (`aegis content get`; `tools/fc.sh seed-from` builds a seed from it).
-pub fn get(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> Option<Dict> {
+pub fn get(hooks: &(impl Hooks + ?Sized), data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> Option<Dict> {
     raw_entries(&hooks.file_of(data_dir, world, kind)).into_iter().find(|e| sget(e, "id", "") == id)
 }
 
 /// Removes the entry `id` of `kind` (kept only when it adds no blocking problem).
-pub fn remove(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> Result<Outcome, Vec<String>> {
+pub fn remove(hooks: &(impl Hooks + ?Sized), data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> Result<Outcome, Vec<String>> {
     let file = hooks.file_of(data_dir, world, kind);
     let mut entries = raw_entries(&file);
     let Some(i) = entries.iter().position(|e| sget(e, "id", "") == id) else { return Err(vec![format!("No {kind} entry '{id}'.")]) };
@@ -145,7 +240,7 @@ pub fn remove(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &s
 /// `patch` merged in by the game (`Hooks::world_manifest_text`), kept only when it adds no problem
 /// (`Hooks::world_blocking`) to the data folder, else the file (and a folder it made) is taken back. `replaced` is
 /// true when the world existed.
-pub fn set_world(hooks: &impl Hooks, data_dir: &Path, world: &str, patch: &Dict, full: bool) -> Result<Outcome, Vec<String>> {
+pub fn set_world(hooks: &(impl Hooks + ?Sized), data_dir: &Path, world: &str, patch: &Dict, full: bool) -> Result<Outcome, Vec<String>> {
     if !crate::schema::is_id(world) {
         return Err(vec![format!("World '{world}' must be a world id (lowercase snake_case).")]);
     }
@@ -168,7 +263,7 @@ pub fn set_world(hooks: &impl Hooks, data_dir: &Path, world: &str, patch: &Dict,
 /// game's extra keys (`Hooks::manifest_keys`), checked by the engine and the game (`Hooks::manifest_problems`); nothing
 /// is written when it has problems. An extra key the file holds that the game does not register (a hand-edited typo)
 /// is a problem too, so it is never kept silently; a patch setting it to null removes it.
-pub fn set_manifest(hooks: &impl Hooks, path: &Path, patch: &Dict) -> Result<Manifest, Vec<String>> {
+pub fn set_manifest(hooks: &(impl Hooks + ?Sized), path: &Path, patch: &Dict) -> Result<Manifest, Vec<String>> {
     Manifest::set_with(path, patch, hooks.manifest_keys(), |m| manifest_key_problems(hooks, m))
 }
 
@@ -176,7 +271,7 @@ pub fn set_manifest(hooks: &impl Hooks, path: &Path, patch: &Dict) -> Result<Man
 /// neither an engine key nor one the game's hooks register (`Hooks::manifest_keys`), then the hooks' own checks
 /// (`Hooks::manifest_problems`). `set_manifest` refuses a write with any; the game's whole-folder check reports the
 /// same lines, so a typo in the file fails the check before it blocks the next manifest write.
-pub fn manifest_key_problems(hooks: &impl Hooks, m: &Dict) -> Vec<String> {
+pub fn manifest_key_problems(hooks: &(impl Hooks + ?Sized), m: &Dict) -> Vec<String> {
     let registered = hooks.manifest_keys();
     let mut problems: Vec<String> = m
         .keys()
@@ -188,7 +283,7 @@ pub fn manifest_key_problems(hooks: &impl Hooks, m: &Dict) -> Vec<String> {
 }
 
 /// Writes the file, then checks the data folder again: new problems put the file back.
-fn commit(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, entries: &[Dict]) -> Result<(), Vec<String>> {
+fn commit(hooks: &(impl Hooks + ?Sized), data_dir: &Path, world: Option<&str>, kind: &str, entries: &[Dict]) -> Result<(), Vec<String>> {
     let path = hooks.file_of(data_dir, world, kind);
     let old_problems = hooks.blocking(data_dir);
     let text = hooks.file_text(data_dir, world, kind, entries).map_err(|e| vec![e])?;

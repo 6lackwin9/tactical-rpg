@@ -1,0 +1,145 @@
+# Builds downloadable playable release artifacts (Windows portable zip + Web release bundle)
+# automatically on push to main and on demand via workflow_dispatch (on main or develop).
+name: release-build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: Build variant (release = player build without dev tools; test = includes Tools menu)
+        type: choice
+        options: [release, test]
+        default: release
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-build-${{ github.ref }}-${{ inputs.variant || 'release' }}
+  cancel-in-progress: false
+
+jobs:
+  windows-release:
+    name: Windows portable (${{ inputs.variant || 'release' }})
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: stable-x86_64-pc-windows-msvc
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      CARGO_TERM_COLOR: never
+      VARIANT: ${{ inputs.variant || 'release' }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: rustup toolchain install stable-x86_64-pc-windows-msvc --profile minimal && rustc --version
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Build emberwake release binary
+        run: |
+          if [ "$VARIANT" = "release" ]; then
+            cargo build --release -p emberwake_gui --bin emberwake --no-default-features
+          else
+            cargo build --release -p emberwake_gui --bin emberwake
+          fi
+
+      - name: Package portable zip
+        run: |
+          python3 tools/release/package_windows.py \
+            --binary target/release/emberwake.exe \
+            --bundle games/emberwake/web_bundle.json \
+            --out "out/release/emberwake-windows-x64-${VARIANT}.zip" \
+            --variant "$VARIANT" \
+            --commit "${GITHUB_SHA::8}"
+
+      - name: Smoke-test unpacked portable zip from unrelated CWD
+        run: |
+          rm -rf "$RUNNER_TEMP/portable_smoke"
+          mkdir -p "$RUNNER_TEMP/portable_smoke" "$RUNNER_TEMP/other_cwd"
+          python3 -c "import zipfile; zipfile.ZipFile('out/release/emberwake-windows-x64-${VARIANT}.zip').extractall('$RUNNER_TEMP/portable_smoke')"
+          (cd "$RUNNER_TEMP/other_cwd" && "$RUNNER_TEMP/portable_smoke/emberwake.exe" render_map=sunk_ward_runoff_grate layers=shell fx=none out="$RUNNER_TEMP/portable_smoke/smoke.png")
+          test -s "$RUNNER_TEMP/portable_smoke/smoke.png"
+          echo "Portable Windows smoke render passed." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Windows portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emberwake-windows-x64-${{ inputs.variant || 'release' }}
+          path: out/release/emberwake-windows-x64-*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  web-release:
+    name: Web bundle (${{ inputs.variant || 'release' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: stable
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      CARGO_TERM_COLOR: never
+      WASM_BINDGEN_VERSION: 0.2.129
+      VARIANT: ${{ inputs.variant || 'release' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries (ALSA for native aegis CLI bundler)
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libasound2-dev pkg-config
+
+      - name: Binaryen (wasm-opt)
+        env:
+          BINARYEN_VERSION: "125"
+          BINARYEN_SHA256: 7c3bc16599c8274a04d34a504fe4be2047884f900e0e2da2f6fb9cd667183be4
+        run: |
+          archive="binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/$archive"
+          echo "$BINARYEN_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/binaryen-version_${BINARYEN_VERSION}/bin" >> "$GITHUB_PATH"
+
+      - name: Rust toolchain and wasm32 target
+        run: rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown && rustc --version
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            . -> target-wasm
+
+      - name: Cache wasm-bindgen-cli
+        id: bindgen-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-cli-${{ runner.os }}-${{ env.WASM_BINDGEN_VERSION }}
+
+      - name: Install wasm-bindgen-cli
+        if: steps.bindgen-cache.outputs.cache-hit != 'true'
+        run: cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+
+      - name: Build web bundle
+        run: |
+          bash tools/fc.sh web "$VARIANT" | tee web_build.log
+          {
+            echo "## Web Bundle (${VARIANT}, \`${GITHUB_SHA::8}\`)"
+            echo '```'
+            grep '^\[web\]' web_build.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload web release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emberwake-web-${{ inputs.variant || 'release' }}
+          path: out/web/
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,17 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "time": "2026-11-19T19:57:10Z",
+  "prompt_sent": "Use the attached image only as the reference for style, palette, pixel size and the straight front-on top-down view (left: the arched brick kiln bunk; middle: a free-standing timber cot; right: a weapon rack on pegs). Draw new separate props, not a scene.\nA sprite sheet of nine separate pixel-art props for a dark gothic tactical RPG, in a 3 x 3 grid with wide empty gaps, each centred in its cell on a flat solid #FF00FF magenta background. No cast shadows, no labels, no text, no grid lines, nothing touching another cell. Cells 1 to 6 are small wall pieces, each the personal gear of one person hung on a short dark oak peg board, about one third the width of the bunk in the reference:\n1. A notched, battered billhook polearm hung diagonally on two pegs, a dented steel plate with a cross chiselled out of it hanging below.\n2. A slim reversed-grip bodkin dagger on a peg with a small tin whistle on a cord and a coil of thin roof rope.\n3. A bronze censer on its chain hanging from a crook, a rolled vellum scroll and a quill in a tiny shelf beside it.\n4. A steel lever crossbow (arbalest) racked on two pegs with a small quiver of pale bone bolts.\n5. A pair of riveted iron penal cuffs with a broken chain link hanging from one peg.\n6. A brass sprayer nozzle with a rubber hose coiled on a peg, a small shelf with two glass retorts, one cracked, holding faint green liquid.\n7. A free-standing timber bunk bed seen from the same top-down view as the cot in the reference but with its HEAD AT THE BOTTOM of the cell: a plank headboard along the bottom edge with a small blank brass name plate on it, straw mattress, grey wool blanket folded at the top (foot) end, the whole frame visible on all four sides, nothing cut off.\n8. The same timber bunk as cell 7, made: grey wool blanket pulled up, a bleached linen pillow at the bottom (head) end.\n9. A low free-standing timber partition screen: two oak posts and three horizontal planks, about as tall as the bunk is long, seen front-on.\nColours: damp basalt, dark brick, rotting oak, straw, grey wool, bleached linen, scavenged iron #4b5563, tarnished brass, bone. Dark, matte, low contrast. Same pixel size as the reference.",
+  "references": [
+    "G:/My Drive/image_pipeline/refs/hub_bunk_gear_ref.png"
+  ],
+  "n": 1,
+  "files": [
+    {
+      "file": "output/props_hub_founder_bunks_1_q1795045324.png",
+      "width": 1024,
+      "height": 1024
+    }
+  ],
+  "notes": "Verified resolution (>=1024px) and aspect ratio within 3% tolerance."
+}

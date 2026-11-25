@@ -255,11 +255,14 @@ pub struct Session {
     pub step: u64,
     pub shots: bool,
     pub headless: bool,
+    /// ENGINE-36 (3): `keep_saves=<dir>`: each `save <name>` is also kept as `<dir>/<run>/<name>`, and the saves as the
+    /// game stops as `<dir>/<run>/last` (a folder that outlives the run's scratch folder; None: the run folder only).
+    pub keep: Option<PathBuf>,
 }
 
 impl Session {
     pub fn to_json(&self) -> Value {
-        json!({"run": self.run, "exe": self.exe, "args": self.args, "port": self.port, "pid": self.pid, "step": self.step, "shots": if self.shots { "each" } else { "off" }, "headless": self.headless})
+        json!({"run": self.run, "exe": self.exe, "args": self.args, "port": self.port, "pid": self.pid, "step": self.step, "shots": if self.shots { "each" } else { "off" }, "headless": self.headless, "keep_saves": self.keep})
     }
 
     pub fn from_json(v: &Value) -> Option<Self> {
@@ -272,6 +275,7 @@ impl Session {
             step: v["step"].as_u64().unwrap_or(0),
             shots: v["shots"] != json!("off"),
             headless: v["headless"].as_bool().unwrap_or(true),
+            keep: v["keep_saves"].as_str().map(PathBuf::from),
         })
     }
 
@@ -295,6 +299,22 @@ impl Session {
 
     fn saves(&self) -> PathBuf {
         self.profile().join("saves")
+    }
+
+    /// ENGINE-36 (3): where `keep_saves=` keeps the save named `name` (`<dir>/<run folder name>/<name>`).
+    pub fn kept(&self, name: &str) -> Option<PathBuf> {
+        Some(self.keep.as_ref()?.join(self.run.file_name()?).join(name))
+    }
+
+    /// ENGINE-36 (3): copies the saves folder as `name` under `keep_saves=` (nothing without it).
+    fn keep_saves(&self, name: &str) -> std::io::Result<()> {
+        match self.kept(name) {
+            Some(to) => {
+                let _ = std::fs::remove_dir_all(&to);
+                copy_dir(&self.saves(), &to)
+            }
+            None => Ok(()),
+        }
     }
 }
 
@@ -672,6 +692,18 @@ fn kill(pid: u32) {
     let _ = pid;
 }
 
+/// `stop_game`, then the saves as it left kept as `last` under `keep_saves=` (ENGINE-36).
+fn stop_and_keep(s: &Session) -> String {
+    let how = stop_game(s);
+    match s.keep_saves("last") {
+        Ok(()) => match s.kept("last") {
+            Some(to) => format!("{how}; saves kept in {}", to.display()),
+            None => how.to_string(),
+        },
+        Err(e) => format!("{how}; keeping the saves: {e}"),
+    }
+}
+
 /// Asks the game to leave over the link, then kills it if it has not.
 fn stop_game(s: &Session) -> &'static str {
     if let Ok(mut link) = connect(s) {
@@ -758,7 +790,7 @@ pub fn command<G: crate::Game>(game: &G, args: &Args, raw: &[String]) -> Result<
                 }
             }
             if alive_session(&s) {
-                println!("§ stop: {}", stop_game(&s));
+                println!("§ stop: {}", stop_and_keep(&s));
             }
             check_exit(&s, &mut code);
             println!("§ {} ({} commands); log {}", if code == 0 { "pass" } else { "FAIL" }, s.step, s.run.join("log.md").display());
@@ -766,7 +798,7 @@ pub fn command<G: crate::Game>(game: &G, args: &Args, raw: &[String]) -> Result<
         }
         Some("stop") => {
             let s = Session::load(&current_run(args)?)?;
-            println!("§ stop: {}", stop_game(&s));
+            println!("§ stop: {}", stop_and_keep(&s));
             Ok(0)
         }
         Some("status") => {
@@ -834,7 +866,8 @@ fn start<G: crate::Game>(game: &G, args: &Args, idle_default: u64) -> Result<Ses
     std::fs::create_dir_all(run.join("profile").join("saves"))?;
     let settings = json!({"mute": true, "fullscreen": false, "borderless": false, "window_size": format!("{}x{}", size.0, size.1), "vsync": false, "record_playtests": true, "start_inactive": true});
     std::fs::write(user.join("settings.json"), serde_json::to_string_pretty(&settings)?)?;
-    let mut s = Session { run: run.clone(), exe, args: Vec::new(), port, pid: 0, step: 0, shots, headless };
+    let keep = args.keys.get("keep_saves").map(|d| std::path::absolute(d)).transpose().context("keep_saves=<dir>")?;
+    let mut s = Session { run: run.clone(), exe, args: Vec::new(), port, pid: 0, step: 0, shots, headless, keep };
     if let Some(from) = args.keys.get("save") {
         let from = PathBuf::from(from);
         if from.is_dir() {
@@ -851,7 +884,7 @@ fn start<G: crate::Game>(game: &G, args: &Args, idle_default: u64) -> Result<Ses
         }
     }
     if headless {
-        let o = scenario::Options { game_id: manifest.id.clone(), exe: s.exe.clone(), data: None, out: out.clone(), slow: 1, size: None, sized_ms: 0, window: false, fps: args.keys.get("fps").map(|f| f.parse()).transpose().context("fps=N")?, dpr: None, baselines: None, record: false, saves: None };
+        let o = scenario::Options { game_id: manifest.id.clone(), exe: s.exe.clone(), data: None, out: out.clone(), slow: 1, size: None, sized_ms: 0, window: false, fps: args.keys.get("fps").map(|f| f.parse()).transpose().context("fps=N")?, dpr: None, baselines: None, record: false, saves: None, set: Default::default(), audit: false };
         a.extend(scenario::headless_args(size, &o));
         a.push(format!("idle_exit={idle}"));
     }
@@ -881,9 +914,9 @@ fn do_line(s: &mut Session, line: &str) -> i32 {
     s.step += 1;
     let _ = s.save();
     let done = match &cmd {
-        Cmd::Quit => Done { ok: true, message: stop_game(s).into(), print: String::new(), screen: String::new() },
-        Cmd::Save { name } => match copy_dir(&s.saves(), &s.run.join("saves").join(name)) {
-            Ok(()) => Done { ok: true, message: format!("saves/{name}"), print: String::new(), screen: String::new() },
+        Cmd::Quit => Done { ok: true, message: stop_and_keep(s), print: String::new(), screen: String::new() },
+        Cmd::Save { name } => match copy_dir(&s.saves(), &s.run.join("saves").join(name)).and_then(|()| s.keep_saves(name)) {
+            Ok(()) => Done { ok: true, message: s.kept(name).map_or_else(|| format!("saves/{name}"), |k| format!("saves/{name}, kept in {}", k.display())), print: String::new(), screen: String::new() },
             Err(e) => fail(format!("saving: {e}")),
         },
         Cmd::Load { name } => load(s, name),
@@ -1052,8 +1085,27 @@ mod tests {
 
     #[test]
     fn a_session_file_reads_back_as_written() {
-        let s = Session { run: "/r".into(), exe: "/e".into(), args: vec!["port=1".into()], port: 1, pid: 2, step: 3, shots: false, headless: true };
-        assert_eq!(Session::from_json(&s.to_json()), Some(s));
+        let s = Session { run: "/r".into(), exe: "/e".into(), args: vec!["port=1".into()], port: 1, pid: 2, step: 3, shots: false, headless: true, keep: None };
+        assert_eq!(Session::from_json(&s.to_json()), Some(s.clone()));
+        let s = Session { keep: Some("/k".into()), run: "/runs/run_7".into(), ..s.clone() };
+        assert_eq!(Session::from_json(&s.to_json()), Some(s.clone()));
+        assert_eq!(s.kept("crucible"), Some(PathBuf::from("/k/run_7/crucible")), "ENGINE-36: kept under the run's name");
+    }
+
+    /// ENGINE-36 (3): `keep_saves=` keeps a named save and the last saves outside the run folder; without it nothing.
+    #[test]
+    fn keep_saves_copies_the_saves_beside_the_run() {
+        let root = std::env::temp_dir().join(format!("agentplay_keep_{}", std::process::id()));
+        let run = root.join("runs").join("run_1");
+        let s = Session { run: run.clone(), exe: "/e".into(), args: Vec::new(), port: 1, pid: 0, step: 0, shots: false, headless: true, keep: Some(root.join("kept")) };
+        std::fs::create_dir_all(s.saves()).unwrap();
+        std::fs::write(s.saves().join("slot_0.json"), "{}").unwrap();
+        s.keep_saves("gate").unwrap();
+        assert!(root.join("kept/run_1/gate/slot_0.json").is_file());
+        let none = Session { keep: None, ..s };
+        none.keep_saves("gate").unwrap();
+        assert_eq!(none.kept("gate"), None);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// A game on a link: every reply in turn, and every request kept.

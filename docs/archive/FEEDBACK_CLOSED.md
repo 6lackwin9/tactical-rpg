@@ -3116,3 +3116,3916 @@ Dependencies: PR5-1 `roll_table` (the crisis); PR5-2 is not in R5.
   - **Act 1 `rock_salt` Drop Interaction (`act1_story.rs`)**: Because `inquisitorial_purifier` and `mortuary_flagellant` spawn in `enc_evt_02` (M2, plus `enc_pro_0b` & `enc_scav_crossroads`), combat now occasionally drops `rock_salt` before Maren's post-M2 reply runs (`act1_story::m2_rewards_the_captives_that_lived` failed until `salt_before` was moved right before `r.choose(...)` so it strictly checks `"the reply's Rock Salt"`). Flagging so Design confirms whether Act 1 `rock_salt` drops are desired alongside M2 captive rewards.
   - **Verification**: Extended `emberwake_content::ruleset_switches` (`PR6_5_SEED`) and added `pr6_5_act2_drops_manuals_shops_and_pk2_flags_match_spec` in `emberwake_world::techniques_grafts`. Passed: `fc.sh content check` (`data ok`), `fc.sh layers` (`ok`), `fc.sh docs`, `emberwake_content` (`asset_checks` `4/4`, `checks_golden` `2/2`, `ruleset_switches` `2/2`), `emberwake_rules` (`rules_golden` `3/3`), `emberwake_sim` (`sim_golden` `3/3`), `emberwake_battle` (`timeline_golden` `3/3`), and `emberwake_world` (`act1_story` `23/23`, `journey` `2/2`, `shop_trade` `6/6`, `sunk_ward_roster` `3/3`, `techniques_grafts` `6/6`). `0` golden diffs.
 - **Recommendation**: Mark `PR6-5` done in `READY.md`, track Act 2 High Bastion (`08-15`) `pk2.*` flag setters + bounded Act 2 cache chests under `PK8` (`ACT2-CONTENT`), and confirm `rock_salt` drops (`20%`/`18%`) on Act 1 `inquisitorial_purifier` / `mortuary_flagellant` are acceptable for Act 1 pacing.
+
+## FB-282 to FB-407, 100 items (answered in READY @542a6b63, moved 2026-11-20)
+
+### FB-282: PR6-4 cohort temperament ids do not exist
+
+- **Spec**: `PK3_ROSTER_LIFECYCLE.md` §3.2, `READY.md` §1 `PR6-4`
+- **Kind**: limit-blocker
+- **Status**: open
+- **Finding**: The cohort table's shared temperament pool names `steady`, `wary`, `grim`, `quiet`, `reckless`, but temperaments are slotless passive ids and none of these exists in `passives.json` (`steady` is already a `unit_meters` id). The six `cohort_*` rows shipped with `temperaments: []` (the check allows it); the assertion is parked as the ignored test `sunk_ward_cohort_templates_draw_from_slotless_temperament_passives` (`emberwake_world/tests/sunk_ward_roster.rs`).
+- **Recommendation**: Option A (recommended): name five slotless passives `temper_<x>` with a small stat or resist each, seeded with the pool lists in the table; Build then un-ignores the test. Option B: drop temperaments from cohorts (delete the parked test).
+
+### FB-283: PR6-4 Living Martyr fuse needs numbers, passives and a deploy prompt
+
+- **Spec**: `PK3_ROSTER_LIFECYCLE.md` §3.1, `ROSTER1` §8 (archive), `READY.md` §1 `PR6-4`
+- **Kind**: limit-blocker
+- **Status**: open
+- **Finding**: (a) Tier stacking conflicts: PK3 §3.1 says tiers are cumulative, `ROSTER1` FZ3 says only the highest tier applies; the kit implements PK3 (`FuseDef::passives_at`, `rpgkit_data/src/lib.rs`). (b) The spec gives `max: 6` and tiers `at: 2, 4` but no `per_deploy` or `stasis_days`, no tier passive ids and no `last_passive` ("Calcification V stats"), and no cohort carries a fuse, so no Martyr template is seeded. (c) The kit hooks exist (`roster::fuse_choices`, `fuse_refusal`, `last_stand`, `retire`, `portrait_of`) but `emberwake_gui` has no call site: the battle start does not yet gate on `fuse_refusal` (gating with no UI would block play), and procedural members need `roster::portrait_of` for their portrait.
+- **Recommendation**: Confirm cumulative tiers; set `per_deploy: 1`, `stasis_days: 7`; pick tier passives (Option A: reuse `calcify_2`, `calcify_3` and a Stage V passive; Option B: new `martyr_*` passives) and the template that carries the fuse; queue a small UI row for the Retire / Last Stand prompt beside `party_min_refusal`.
+
+### FB-284: PR6-4 crypt count is static; crypt-only refusal text added
+
+- **Spec**: `PK3_ROSTER_LIFECYCLE.md` §3.1, `READY.md` §1 `PR6-4`
+- **Kind**: limit-blocker
+- **Status**: open
+- **Finding**: "`crypts` 0 in Act 1, 2 from the Act 2 facility upgrade or `pk2.slab_open`" has no mechanism (the manifest holds a static int); shipped `crypts: 2` as the READY row states (Martyrs only arrive in Act 2 anyway). A `crypt_only` recruit takes no bunk, so the spec's bunk refusal cannot apply to it; the kit checks crypt places instead with a third text, "Every crypt is taken ({n} of {cap}).".
+- **Recommendation**: Option A (recommended): keep static `crypts: 2` and accept the third refusal text. Option B: a kit `crypts_flag` like `bunks_flag` (small schema slice), tied to `PR6-8` facilities.
+
+### FB-285: PR6-4 landing report
+
+- **Spec**: `PK3_ROSTER_LIFECYCLE.md` §§3–4, `READY.md` §1 `PR6-4` (@squash `PR6-4`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: Kit: world kind `recruits` (`recruits.json`, `WORLD_KINDS` 20); effects `rescue {template|character, base_unit?, count 1..4}` (seeded `recruit` roll stream, no name collisions) and `recruit {pool: id|first, level?}`; `roster::{rescue, swear_in, retire, dismiss}`; `UnitState` `name`/`housing`/`fuse`/`origin` plus `temperament`, `template` (needed for fuse and portrait lookup), `party.pool`, `party.keepsakes` (all skip-if-empty); procedural keepsakes `keepsake@<member>` named "{name}'s {item}", wear-legal accessory, one per template per unit. Data (`seeds/pr6_4.json`): six `orig_*` passives, six `keepsake_tpl_*` items, six `cohort_*` recruit rows with provisional given names (7 each), `sunk_ward` roster `crypts: 2` and `keepsakes.by_class`. Retire, dismiss and last-stand departures use cause `roster`. `units/mage` has no `base` body (only `1h_sprayer`); the mage cohort uses the class-derived `mage` party unit and asset checks pass. Tests: kit roster/campaign/temperament/roster_schema + `sunk_ward_roster` (6 pass, 1 parked by `FB-282`); 0 golden diffs; `campaign_schema` and `story_checks` pinned effect-list text gained `rescue`.
+- **Recommendation**: `GAME_BRIEF.md` roster section: add the recruits/pool/crypts/fuse/keepsake line above. `HISTORY.md`: none (no golden moved). `STRUCTURE.md`: `worlds/<id>/recruits.json` beside the other world kinds. Art/UI: cohort names are provisional placeholders for a lore pass.
+
+### FB-286: PR7-1 provisional copy for Design review
+
+- **Spec**: `READY.md` §1 `PR7-1`, [2026-11-17 review](audits/2026-11-17_11d320a_consistency_audit.md) "Lore and data" (@squash `PR7-1`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: `PLACEHOLDER` copy replaced (`[PROVISIONAL]`, from `CANON.md`). Meters: `alert/a_suspicious` "The Inquisition is Suspicious: the ward gates are watched. Quiet jobs and bribes at Talia lower Alert."; `alert/a_lockdown` "Lockdown: Inquisition hunter packs and Castellan Watch sweeps hold the main roads."; `alert/a_last` "One more loud job and the Inquisition finds the grate. The run would end."; `doom_clock/d_week` "Seven days to the Red Tithing.". Faction descriptions: `iron_inquisition` "The church's hunters: bell sweeps, stockades and vivisection slabs; the Castellan Watch is its city arm."; `castellan_watch` "The city watch: curfews, ward gates and Tithing sweeps under Inquisition writ."; `tallow_guild` "Renders the district's Spent dead into Warded Tallow; its mercenaries scour the cellars."; `fourth_kiln_syndicate` "The Guild's foundry arm: casts brass conduits and runs the bone-mill.". The four `q_hook_*` rewards now say Scrap; `q_a1_m5` and `loot_hearth_ingot_cache` say "The Crucible". Faction `motto` fields stay empty. Test `emberwake_world/tests/sunk_ward_text.rs` (3 tests); 0 golden diffs.
+- **Recommendation**: Design reviews the copy above and, if wanted, writes faction mottos (still empty) as a data row. `HISTORY.md`: quest `q_a1_m5` "The Drowned Sluice" renamed "The Crucible" (PR7-1). Note: older seeds (`act1fix1.json`, `act1story.json`, `pr6_5_act2_drops_flags.json`) still carry the old text; harmless while `pr7_1.json` applies after them.
+
+### FB-287: WEBFIX1 web display fixes from the user's playtest, and three open asks
+
+- **Spec**: user playtest 2026-11-17 (relayed by the coordinator, "fix ahead of PR7-1"); `WEBREL1`, archived `DISPLAY1` rule 8 (@squash `WEBFIX1`)
+- **Kind**: suggestion
+- **Status**: open
+- **Finding**: Fixed: (1) the web canvas was pinned to 1280 x 720 CSS px (`tools/web/index.html` viewport `width=1280`; `shell.rs` web window `with_inner_size`/`with_min_inner_size(CANVAS_CSS)`), so fullscreen only letterboxed it; now the page owns the canvas size (`shell::web_attributes_of`), the buffer is CSS size x pixel ratio and the layout rescales on `Resized` like a desktop window. (2) web `apply_settings` ignored every display setting; now Settings > Display > Fullscreen uses the browser Fullscreen API (`screen::WebFullscreen::step`, follows Esc, session-only) and the Display tab shows only Fullscreen and Text size on web (`screen::display_keys(web)`). Tests `aegis_ui/tests/web_display.rs` (5), `emberwake_host/tests/web_bundle.rs` (1); Playwright on a real web build at 1280x720, 1600x1000, 2560x1440. Not a web bug: (3) frame art is in the web bundle and loads; the battle, region and hub HUD panels draw flat panels on desktop too (`Painter::panel`/`fill`, e.g. `hub.rs:205,693`). Map zoom exists on web (Gameplay tab); the F6/F7 debug keys never work in web builds (`FB-162`) and no UI-scale setting exists (`LAYOUT720` unbuilt). `tools/web/smoke.js` step (b) "Start reaches the region map" fails because New game now opens a story scene and a battle (stale smoke step, not this change).
+- **Recommendation**: Design rows for: (a) HUD panels using the theme frame art (Art/UI per screen; the user's "UI elements missing the frames"); (b) "zoom on web": Option A copy Map zoom onto the Display tab (recommended, smallest), Option B build the `LAYOUT720` UI-scale setting; (c) update `smoke.js` for the new opening; (d) cap the canvas buffer at the GPU texture limit for very large screens. Docs delta: `docs/workflow/web.md` "What differs in the browser": "Display | The canvas fills the page and the screen in fullscreen (itch.io's button or Settings > Display > Fullscreen, session only); the Display tab shows Fullscreen and Text size only."; `engine/README.md`: "Web display (WEBFIX1): the page owns the canvas CSS size (`shell::web_attributes_of`); buffer = CSS size x pixel ratio, rescaled on `Resized`; `screen::WebFullscreen::step` asks for or follows browser fullscreen; `screen::display_keys(web)` lists each platform's Display rows."; `HISTORY.md`: the fixed 1280 x 720 CSS canvas of `WEBREL1-E2` replaced by a canvas that fills the page.
+
+### FB-288: PR7-2 landing report and two small questions
+
+- **Spec**: `READY.md` §1 `PR7-2`, `PK2_GRAFTS.md` §5.2, review `N1`/`N2` (@squash `PR7-2`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: N1: a `skill_potency` grant of group `ranged` with `min_distance > 0` now matches any ranged hit, the basic bow Strike included (`unit::distance_group_matches`; `potency_for_skill_at`/`power_for_at`/`potency_parts_at` take the hit's `ranged` flag; battle hit and forecast agree). N2 `[PROVISIONAL]`: the Cold Steel keystone needs mastery 3 in the main-hand family, that family's forge rite and a masterwork main hand of it; the rite is recorded per family (`forge_rites: Vec<String>`; the Hearth pane offers a family picker when several are open). Save: new member key `forge_rites` (skip-if-empty); a legacy `forge_rite: true` loads as one rite per family at mastery 3 and resaves as `forge_rites`. 0 golden diffs. Also: `READY.md` §4 rows `FB-282`..`FB-285` use disposition `answered` and follow-up `applied`, which `feedback_check.py archive` rejects (accepted values: `accepted`, `deferred`, `policy`; follow-up must be a §1/§3 id or `none`), so those four stay in this file until the rows are fixed.
+- **Recommendation**: `GAME_BRIEF.md`: "Cold Steel keystone: mastery 3 in the wielded family + that family's forge rite (one per family) + a masterwork main hand of that family (PR7-2, [PROVISIONAL])"; "Sensory Rot's -15% beyond 3 tiles applies to every ranged hit, the bow Strike included". `HISTORY.md`: "PR7-2: one forge rite for every family deprecated (spec 5.2: per family, into a masterwork); Sensory Rot ranged-skill-only reading deprecated (N1). No golden re-recorded; a legacy single rite maps to the families at mastery 3 at load, so a family that reaches mastery 3 later needs its own rite." `kits/rpg/README.md`: "`potency_for_skill_at`/`power_for_at`/`potency_parts_at` take the hit's `ranged` flag; `UnitState.forge_rites` (save key `forge_rites`)." Questions: (a) should the rite itself also require a masterwork of the family (today only the keystone checks it)? (b) a `ranged` group grant without a distance gate still follows the skill, not the hit (no shipped data uses one): keep, or follow the hit like N1? Fix the §4 dispositions so Build can archive.
+
+### FB-289: PR7-3 landing report and copy to confirm
+
+- **Spec**: `READY.md` §1 `PR7-3`, review `N3` (@squash `PR7-3`)
+- **Kind**: suggestion
+- **Status**: open
+- **Finding**: The kit already wrote `remains`, `mastery` and `wear` rows into the battle result; the results screen never read them. Now `emberwake_gui/src/hub.rs` draws them after the track lines: remains (gold) "Remains: X from Y, to the stash."; mastery (green) the kit's own note, e.g. "Bryn Hale: hammer mastery +10 (level 1). New level."; wear (dim) "Y's X wore N: M left."; dulled (red) "Y's X is dulled: -50% weapon power until repaired." (the -50% comes from the kit constant). Battle: the unit hover tip gets the dulled line and the party card a red "Dulled" pill (`battle/tips.rs`, `battle/draw.rs`, foe-badge colour, no new theme colour). `rpgkit_host` `state` unit rows gain `wear {slot: {durability, worn, dulled}}` and `attacked [families]`; `outcome_of` carries `wear` only (adding `attacked` there would change Act 1 checkpoint shapes). The UI Gallery "Battle results" sample shows all four lines. No formula changed; 0 golden diffs (`rules_contract_golden` unchanged). Tests: `rpgkit_host/tests/wear_keys.rs` (2), `hub::tests::the_results_draw_remains_mastery_and_wear`, `battle/tests/dulled_tests.rs`. Neither screen is reachable in a real run until Act 2 content (`PR6-12`); shots in project files `pr7-3/`.
+- **Recommendation**: Confirm or rewrite the four line texts and the "Dulled" badge; the mastery line shows the family id ("hammer") rather than a display name: Option A (recommended) a display-name lookup in the kit note, Option B keep ids. Docs delta: `kits/rpg/README.md` host command list: "`state` unit rows gain `wear` and `attacked`; `outcome_of` checkpoints carry `wear` (PR7-3)"; `GAME_BRIEF.md` where-to-look: "Graft-era result lines `emberwake_gui/src/hub.rs` `graft_lines`; dulled tip and badge `battle/tips.rs`, `battle/draw.rs`". `HISTORY.md`: none.
+
+### FB-290: PR7-5 landing report and two questions
+
+- **Spec**: `READY.md` §1 `PR7-5`, review part 2 "Engine track" `3` (@squash `PR7-5`)
+- **Kind**: suggestion
+- **Status**: open
+- **Finding**: `tools/fc.sh repro` (a gate step) replays every `games/emberwake/playtests/repro/*.json`; a divergence, refused request or panic fails, an empty folder passes. Seeded with one headless recording (classic `goblin_ambush` seed 3, timeline `goblin_skirmish` seed 7 autoplay). New `aegis record <requests.json | recording.json> out= id=` records (or re-records) a session on the current data. UI bot `aegis_ui::shell::bot` (game-agnostic) runs in-process from `emberwake_gui/tests/ui_bot.rs`: starts `menu`, `arena`, `arena_timeline`, `runner` x seeds 1,2,3 x 40 steps; skips `recordings.copy`, `recordings.open_folder`, `recordings.note_view.copy`, `menu.quit`; no panics found (22 screens reached); `tools/fc.sh bot seeds= steps=` for longer runs. Gate time +~16 s. 0 golden diffs. Deviation: the bot runs inside `cargo test` rather than as its own gate command. A seed repeats the same choice from the same widget list; screens read wall time, so a long run may take a different path with the same seed (the report lists every press).
+- **Recommendation**: (a) The 2 inbox recordings (`20261021-193519` diverges at its first checkpoint, `20261022-204440` has a refused request at 17) were recorded on older data; moving them to `repro/` would fail the gate, and re-recording captures today's behaviour, not the reported bug. Option A (recommended): triage them as bugs/declined per intake, and re-record only those that still show the bug. (b) Repros replay on shipped data, so an intended data change that moves a checkpoint fails `repro` until re-recorded and named in the commit; Option A (recommended) keep that (it is the regression signal), Option B pin repros to a fixture data copy. Docs delta: `engine/README.md` "Playtest recordings and replay": add the `aegis record` line and "`tools/fc.sh gate` replays every recording in `games/<game>/playtests/repro/` (`tools/fc.sh repro`)"; crate table `aegis_ui`: "`shell::bot`: seeded in-process UI bot (`Bot {seed, steps, size, skip, keys}`, `bot::run`); the game supplies starts and skips". `STRUCTURE.md`: `shell/bot.rs`; `aegis_cli` `record`; `tools/fc.sh` `repro`, `bot`; `playtests/repro/` replayed by the gate. `cloud.md` "Playtest intake" step 4: re-record with `aegis record` when an intended change moves checkpoints. `HISTORY.md`: none.
+
+### FB-291: PR7-6 balance bands: 4 of 9 rows out of band on develop
+
+- **Spec**: `READY.md` §1 `PR7-6` (@squash `PR7-6`)
+- **Kind**: sim
+- **Status**: open
+- **Finding**: `tools/fc.sh sim bands` (`tools/planner/sim_bands.py`) reads `games/emberwake/tuning.json` `balance_bands` (hand-edited: tuning is not a content kind; the script validates the block), runs `sim duel 5 50 score=binary` and `sim party 5 200 enc=<id>` per band, prints the table and exits 1 when a row is out of band (2 when the block is malformed). About 2 min on the 4-core cloud box; not in the per-task gate; 6 tool tests in `tools/planner/test_sim_bands.py`. Today's develop (level 5, party warrior/ranger/priest/mage): duel warrior 56% in, ranger **63% out**, priest **32% out**, brawler **64% out**, rogue 43% in, mage 42% in (band 40-60, each class's average vs the other five); party clear line **75% out** (80-95), elite 82% in (70-85), boss 34% in (30-50).
+- **Recommendation**: Design picks the tuning for ranger, brawler (too strong in duels), priest (too weak) and line encounters (too hard), or widens the `[PROVISIONAL]` bands; a duel band may not suit a support class like priest (Option: exclude priest from duel bands). Questions: should the nightly CI step (`PR7-7`) treat exit 2 as a failure (recommended: any non-zero fails)? Should bands cover a higher level later? Docs delta: `GAME_BRIEF.md` where-to-look: "balance target bands: `games/emberwake/tuning.json` `balance_bands`, checked by `tools/fc.sh sim bands` (about 2 min, exit 1 out of band)"; `STRUCTURE.md`: none (planner scripts folder).
+
+### FB-292: PR7-7 landing report (CI on develop, nightly bands)
+
+- **Spec**: `READY.md` §1 `PR7-7` (@squash `PR7-7`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: `gate.yml` now also runs on pushes to `develop` (docs-only pushes still skipped by `paths-ignore`; concurrency `gate-<ref>` cancels superseded develop runs only, never main or PR runs). New `.github/workflows/bands.yml`: cron `17 3 * * *` + `workflow_dispatch`, checks out `develop`, runs `tools/fc.sh sim bands`, writes the table and exit code to the job summary, fails on any non-zero exit (red until the `FB-291` rows are retuned). A cron only fires from the default branch, so the nightly starts once `bands.yml` reaches `main` (next release); `workflow_dispatch` works now. `tools/fc.sh` on Linux defaults `CARGO_TARGET_DIR=$PWD/target` when unset (`.cargo/config.toml` points at a Windows folder) and prints the ALSA fix when `pkg-config alsa` fails. `actionlint` clean on all workflows.
+- **Recommendation**: `docs/workflow/cloud.md` release step 3: replace "never on `develop` pushes" with "`gate.yml` also runs on pushes to `develop` (superseded develop runs cancelled; docs-only pushes skip); `bands.yml` runs `fc.sh sim bands` nightly on `develop` (red while a row is out of band)". `docs/decisions/workflow.md`: mark "CI on release PRs and main only" (2026-11-11) superseded by `CI-DEVELOP1` (develop pushes are checked in CI). `cloud.md` Environment/known-issues: `tools/fc.sh` self-heals `CARGO_TARGET_DIR` and names the ALSA fix. Follow-up (`PR7-7b`): the first develop CI run (`44207701141`) failed `[build] FAIL: compiler warnings` on cargo manifest lints the runner's newer stable cargo emits (`unused_workspace_dependencies`, `unused_workspace_package_fields`; local cargo 1.97.0 does not); removed the unused root `Cargo.toml` entries (`[workspace.package]`, `thiserror`, `rand`, `rand_pcg`). Known-issues row suggested: "CI-only `warning:` lines from a newer cargo fail `fc.sh build`; fix the manifest, do not filter warnings".
+
+### FB-293: PR7-8 relic signatures landed; six guesses to confirm
+
+- **Spec**: `READY.md` §1 `PR7-8`, `CANON.md` §5.1 (@squash `PR7-8`)
+- **Kind**: suggestion
+- **Status**: open
+- **Finding**: Kit hooks (game-agnostic): effect `meter_floor {meter, floor}` (raises a held gauge's floor, never grants a meter); `skill_potency` group `attack`; `when` keys `from_act` (the campaign act `roster::field_unit` writes onto `Unit::campaign_act`; 0 outside a campaign) and `holds_meter`; trigger effect `shockwave {tiles 1-3, pct_of_hit 1-100}`. Data (`seeds/pr7_8.json`): `dreamers_vertebra` +30% on attacks while holding Strain, Strain floor 20 from Act 2; `quells_marrow_scalpel` every melee hit inflicts bleed (potency 70, 2 rounds), from Act 2 also vents 10 Strain; `grendels_slag_hammer` every melee hit sends a 2-tile shockwave past the target, foes take 50% of the hit. Item text names each effect. Removed plain bonuses: vertebra KNOW +1, scalpel `status_potency` +10 (weapon power adjusts and the hammer's STR 15 kept). Tests: `rpgkit_battle/tests/relic_hooks.rs` (5), `rpgkit_content/tests/relic_hook_checks.rs` (3), `emberwake_world/tests/relic_signatures.rs` (4, Act 1 vs Act 2). 0 golden diffs (checks_golden reads frozen fixtures).
+- **Recommendation**: Confirm the guesses: (1) "Inoculated" = holds the Strain meter; the +30% is not act-gated; (2) +30% adds to other potency (1 + sum); (3) explicit `from_act` gate rather than relying on Strain appearing in Act 2; (4) bleed copies `twin_light_tempo` (70, 2 rounds), vent fires every melee hit (Vivisect's own rider makes 20 per Vivisect hit in Act 2): or once per round?; (5) shockwave foes only, not reduced again by armour, none when the target dies; (6) only the plain bonuses were removed. Docs delta: `kits/rpg/README.md` hooks list: the four hooks above. `GAME_BRIEF.md` relics: the three signature lines above. `HISTORY.md`: "PR7-8: relics' plain bonuses (vertebra KNOW +1, scalpel status_potency +10) replaced by CANON 5.1 signatures."
+
+### FB-294: PR7-10 `temper_grim` needs a Shaken resist that does not exist
+
+- **Spec**: `READY.md` §1 `PR7-10` (@squash `PR7-10`)
+- **Kind**: limit-blocker
+- **Status**: open
+- **Finding**: Seeded `temper_steady` (+6 max Poise), `temper_wary` (+1 PERC), `temper_quiet` (+1 KNOW), `temper_reckless` (crit +5, armor -1) via `seeds/pr7_10.json` and filled the cohort pools without Grim (levy: steady, wary; bolt: wary, steady, quiet; flue: reckless, quiet, wary; novice: steady, wary; breaker: reckless, steady; vat: quiet, reckless, steady). Un-ignored `sunk_ward_cohort_templates_draw_from_slotless_temperament_passives`; new `each_rescued_cohort_recruit_carries_one_temperament_from_its_pool` (8/8 pass). `temper_grim` "20% resistance to Shaken" cannot be written: Shaken is a Composure meter band (`unit_meters.json` band `shaken`, MORALE1), not a status, and `resist` takes a status id.
+- **Recommendation**: Option A (recommended, smallest): Grim resists a real status (e.g. `weaken` 20%). Option B: a kit hook that slows Composure loss or resists the `shaken` band (a small logic row). Then Build seeds `temper_grim` and adds it to the levy, novice and breaker pools.
+
+### FB-295: PR7-11 Martyr fuse landed; four guesses and docs delta
+
+- **Spec**: `READY.md` §1 `PR7-11`, `PK3_ROSTER_LIFECYCLE.md` §3.1, answers `FB-283` (@squash `PR7-11`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: The kit fuse already matched the row (`per_deploy 1`, `stasis_days 7`, `max 6`, cumulative tiers). No new hook: Last Stand is `skill_potency` group `attack` `0.25`, `stat` armor `4`, `resist` weaken and stun `100`; death at battle end is the existing `roster::last_stand` + `settle_fuses`. The one gap fixed: `battle::begin_fight` now refuses with `roster::fuse_refusal` while an active member's fuse is spent and no choice was made. Guesses: (1) headless fight starts now get that refusal (no shipped template has a fuse until `PR6-12`); (2) the prompt has no cancel/Esc, Last Stand is always offered; (3) `hub::member_portrait` shows the template art for every generated member on every portrait screen, per the `portrait_of` doc; (4) "+25% damage" is potency on every ATTACK skill incl. the basic attack.
+- **Recommendation**: Confirm the four guesses. Docs delta: `kits/rpg/README.md` rpgkit_world roster: "`battle::begin_fight` refuses with `roster::fuse_refusal` while an active Living Martyr's fuse is spent and no choice has been made; the game asks Retire / Last Stand first." `GAME_BRIEF.md` roster: "Living Martyr fuse: per deploy 1, stasis 7 days, max 6, cumulative tiers `calcify_2` at 2 and `calcify_3` at 4; at max the next deployment opens the Retire / Last Stand prompt; Last Stand deploys with `martyr_last_stand` (+25% attack potency, +4 Armor, immune to Weaken and Stun) and the member dies at the settle." `kits/rpg/README.md` also: "`battle::start_refusal(d, gs, encounter_ref)`: the start's refusals without the fuse (unknown encounter, no active member, `party_min`); screens read it before the Living Martyr choice." GUI note: `region::try_fight` returns `FightStart` (`Battle` / `FusePrompt`); the story stage uses `try_story_fight`, whose prompt closes and lets the stage run its fight step again; Retire is refused on the prompt when the fight would then be refused. Note for `PR6-12`: headless walkthroughs that recruit a fused Martyr must call `roster::last_stand` or `roster::retire` once the fuse is spent, or `begin_fight` refuses. Mark `FB-283` answered by this row.
+
+### FB-296: PR7-12 big units landed; nine guesses, one question, docs delta
+
+- **Spec**: `READY.md` §1 `PR7-12`, `BIGUNIT1.md` (@squash `PR7-12`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: BU1-BU16 built (schema `content.units.footprint` 1..2; rules in `rpgkit_battle`; drawing in `emberwake_gui` scales the current sprite over the square until AI-16 art lands). Guesses: (1) `Moved.blocker` kept as the first of the new `blockers` list; (2) a big unit never leaves by an exit (a step onto one is blocked); (3) a step costs the dearest newly covered cell and hazards roll once per status over those cells; (4) round-end hazards apply each status once per unit; (5) swap placement tries the four squares holding the old cell (TL, TR, BL, BR), then every terrain-fitting square by distance (reading order on ties), taking the first whose pushes all succeed; pushes chain (a unit with no free spot takes the nearest spot of an unmoved unit, which is pushed in turn; each unit moves once), do no damage and are logged as `[Push]`; if no square can be cleared the unit stays on one cell for the battle (footprint 1, logged); (6) the BU3 check runs a real deployment with every enemy placed at once (reserves and arrivals approximated); (7) adjacency in `metrics.rs` stays one cell; (8) `overlay_json` unchanged; (9) the section 5 "scenario runner" is the headless world battle runner. 0 golden diffs with the Amalgam seed applied.
+- **Recommendation**: Confirm the guesses; answer: may a big unit ever withdraw by an exit (Build chose no)? Docs delta: `kits/rpg/README.md` rpgkit_battle: "BIGUNIT1: units with `footprint: 2` fill the 2 x 2 square anchored at their top-left cell (`World::cells_of`, `size_of`, `fits`, `dist`, `occupants_once`, `grow_into_place`); big-unit paths go through `path::find_path_sized`; a forced move reports every blocker in `Moved.blockers`." `GAME_BRIEF.md` rules: "Big units (`footprint: 2`): fill 2 x 2 cells; distance and reach use the nearest cell; a step needs the whole square free and walkable and never leaves by an exit; hazards roll on newly covered cells; areas hit once; cover is the least over its cells; a swap into a big unit takes a square around the old cell, else the nearest, else pushes units back, chaining when a pushed unit has no free spot; if no square can be cleared, the unit stays on one cell (logged). The Calcified Amalgam is the first."
+
+### FB-297: PR6-6 campaign hooks landed; seven guesses and the N4 mapping
+
+- **Spec**: `READY.md` §1 `PR6-6`, `PK4_PK5_CAMPAIGN_HUB.md` §§1-2 (@squash `PR6-6`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: Kit only, 0 golden diffs. Recipe `doctrine {axis, delta}` moves the campaign gauge whose id is `axis` (clamped; a silent no-op outside a campaign or for an unknown axis, so today's `flesh_broker` / `preservationist` rows still do nothing). `recipe::run` ticks the campaign with `Cause::Recipe` (triggers `on: recipe`, filters `recipe`, `recipe_tags`; recipe rows gain `tags`). `HeroEnd` carries `strain_peak`, `strain_end`, `channel_actions` from the ruleset's channel meter (small `rpgkit_battle` touch: meter `peak`, `World.channel_actions`); meter inputs and battle triggers take a `hero` minimum filter. `UnitTrackDef.signed` (-3..3, no stages, 0 omitted). `clock_set.keep_longer`. Checkpoints `after_flag` + `offset_days` (`Campaign.checkpoint_armed_at`, saved only when non-empty). Guesses: (G1) "Strain" = the ruleset's `channel_meter`; a channel action is any non-move command started in a Channel round, Channel Rest included; (G2) "+2 per hero" lives on meter inputs with a `hero` filter (once per qualifying hero); battle triggers use it as an any-hero match; (G3) recipe triggers filter on `recipe_tags` (triggers already have a free `tags`); (G4) unknown axis = silent no-op, no result note; (G5) a signed track has no stages; (G6) `after_flag` arms on the tick day the flag first reads set; a later act's checkpoint arms when that act is current; unarmed rows are hidden; (G7) narrowed after review: `recipe::run` takes `campaign::recipe_tick`, which runs only `on: recipe` triggers and recipe meter inputs (no `any` triggers, checkpoint step, fuse refresh or time change), so shipped flows are unchanged; an act change or rest set by a recipe trigger is picked up by the next real tick; the GUI does not yet show a recipe result's `campaign` events (game follow-up); (G8) new meter input `on: recipe`, matched by the recipe's `tags` (not in the spec; inert in shipped data).
+- **Recommendation**: Confirm G1-G7. `N4` mapping for `PR6-12` (all become `{effect: doctrine, axis: doctrine, delta}` on one signed gauge, + = Flesh-Broker): slab `install` rows (21) `+4`; Tier III / keystone `install` + track (9) `+8`; `rock_salt_flush`, `train_secondary`, `train_third`, `train_minor`, `hearth_repair` `-2`; `hearth_reforge`, `hearth_rite` `-5`; guessed `drill_family` `-2`, `salvage_item` `-2`; add `bone_scraping` `-3`; `excise_*` none; plus the `doctrine` gauge in `sunk_ward` `meters.json` (-100..100) and a battle input `{on: battle, outcomes: [won], delta: 2, hero: {strain_end: 50}}`. Docs delta: `kits/rpg/README.md` rpgkit_world: the hooks above (`recipe::run` takes `campaign::recipe_tick`: recipe inputs and `on: recipe` triggers only, no full tick). `GAME_BRIEF.md` campaign: "Doctrine is a gauge moved by recipe `doctrine` effects and hero-filtered battle inputs; per-member lean is a signed unit track (-3..3); `keep_longer` clock sets; flag-armed checkpoints." `HISTORY.md`: "PR6-6: recipe effect `doctrine` changed from a reserved no-op to moving a campaign gauge by id; the two-axis rows stay until `PR6-12` reseeds them (N4)."
+
+### FB-298: PR6-7 battle hooks landed; six guesses and three questions
+
+- **Spec**: `READY.md` §1 `PR6-7`, `PK6_PK7_BOSSES_ENDINGS.md` §§1-2 (@squash `PR6-7`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: Kit only, 0 golden diffs, no shipped data change. `requires_calcified` never existed in code or data, so no migration seed: the generic `requires_track: {id, at_least}` gate sits on the new `start_meter` entries. Guesses: (1) `every_rounds` is on arena hazards only (ground rows have no `rounds`); `when_meter` sits in the arena `effect` and at the top of ground rows; (2) start-meter grants go to every holder of the meter on either side (units with no tracks read 0), no log line; (3) every region up the parent chain contributes, innermost first, then the encounter's own entries; (4) `start_meter` entries also take `requires_flags` (needed for "+8 when `pk6.chorus_halved` is set"); (5) the snapshot captive carries only the class path (no gear or passives), is never a hero key, pays no XP or loot; the fallback character scales with the stage; (6) `$captive_unit` at most once per encounter. Questions: should the captive pay XP/loot or carry the member's gear and passives? Should start-meter grants take a `side` key? Should a `when_meter` gate also change the AI hazard penalty and tells?
+- **Recommendation**: Confirm the guesses and answer the three questions. Docs delta: `kits/rpg/README.md` and `GAME_BRIEF.md` rules: "World regions and encounters take `start_meter: [{meter, value, requires_track?, unless_flag?, requires_flags?}]` (at most 4), applied at battle start after each holder's own start and floor (`meter::battle_start_with`). Arena hazards take `every_rounds: N` (added to `rounds`) and `effect.when_meter: {id, at_least}`; ground hazard rows take `when_meter`; a meter change alone now counts as a hazard hit. The encounter ref `$captive_unit` plays the latest departed member with life captured and cause stayed, else the required `captive_fallback` character." `GAME_BRIEF.md` where to look: `rpgkit_world::battle::{start_meters, captive_def}`, `rpgkit_battle::meter::battle_start_with`, `arena.rs` `gate_passes`, `ground.rs` `apply`. `STRUCTURE.md`: tests `rpgkit_battle/tests/battle_hooks.rs`, `rpgkit_world/tests/battle_hooks.rs`, `rpgkit_content/tests/battle_hook_checks.rs`. `HISTORY.md`: "PR6-7: the spec's `requires_calcified` start-meter condition was never built; replaced by the generic `requires_track: {id, at_least}`."
+
+### FB-299: PR6-8 hub facilities landed; effect vocabulary guessed; facility icon asset request
+
+- **Spec**: `READY.md` §1 `PR6-8`, `PK4_PK5_CAMPAIGN_HUB.md` §§3-4 (@squash `PR6-8`)
+- **Kind**: docs-delta, asset-request
+- **Status**: open
+- **Finding**: World kind `facilities` (`{id, name, keeper_character, levels}`, levels 1..3) with NPC service `facility` (a pane over the talk, like the recipe pane); levels saved in `GameState.facilities` (only 2..3, key omitted when empty, old saves byte-identical). Shop rows take `supply_price_mult_by_act {act: mult}` -> `round(supply_price * mult)` in offers, buy and trade; seed `pr6_8.json` sets `varka_trade` `{"3": 2.0}` (8 -> 16 in Act 3). `facilities.json` is left for `PR6-12`. Review shots: `/mnt/project-files/pr6-8/facility_pane_{small,normal,large,extra_large}.png`. Guesses: (1) level effects are `shop_pct {pct}`, `recipe_pct {pct, recipe_tags?}`, `rest_upkeep {delta}`, `set_flag {key, value}` (set once on upgrade); (2) effects add up across levels reached, percents multiply; (3) not built: bunk/crypt counts, Alert gain, "every 2nd rest" Tallow, the conditional `-20%` when `lucan_rescued`, level descriptions; (4) `scrap_cost` is paid from the world's purse currency (`party.gold`); (5) the supply multiplier reads the campaign act (0 outside a campaign) and changes only the supply price.
+- **Recommendation**: Confirm the guesses and say whether (3) needs a follow-up row before `PR6-12`. Asset request (Missing-asset intake): `kits/rpg/assets/ui/services/facility.png`, 32 x 32 RGBA service badge for "Facilities" (hub upgrades), used on the NPC service badge in the region talk view; placeholder landed (copy of `recipe.png`); row `PR6-8`. Docs delta: `STRUCTURE.md`: `facility.rs` in `rpgkit_data/src/`, `rpgkit_world/src/`, `emberwake_gui/src/`, and `rpgkit_content/src/check/facility.rs`. `GAME_BRIEF.md` hub: the finding's first two sentences. No golden re-recorded.
+
+### FB-300: PR6-9 sieges parked on one checks_golden message; guesses for when it lands
+
+- **Spec**: `READY.md` §1 `PR6-9`, `PK4_PK5_CAMPAIGN_HUB.md` §5
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: Built: `sieges` world kind (rooms 1..4, carry HP / downed / pouch, `no_camp`, `restocks`, `win_effects` / `loss_effects`, effect `start_siege`), `GameState.siege` (saved only while a siege runs), objective `retreat` (`objective_unit`, `hp_floor` default 25; damage stops at the floor; the unit withdraws and the fight is won) with fate `withdrawn` (unlike `Fled`: the party wins and the unit lives; common rewards, no key loot), a placeholder `SiegeScreen` (shots `/mnt/project-files/pr6-9/`). The only failure: adding `retreat` to the schema's objective enum changes the refusal text in `checks_golden` case `ashlands encounters courtyard_skirmish` ("... slay." -> "... slay, retreat."). Parked per B0 (golden the row does not name); user decision card open. Guesses: (1) a lost or fled room ends the siege, lowers that room's facility one level, then runs `loss_effects` (Alert resets come from data); (2) a downed hero is benched for later rooms; triage spends a stash `revive` item; "Yield the room" when all are down counts as a loss; (3) Re-stock is `roster::auto_fill` (only under `pouch_stacks`), after room 1; (4) `start_siege` is a shared effect, not in `CAMPAIGN_EFFECTS`; (5) Calcification and Strain carry over through the normal settle; (6) refusal text "No rest during a siege."
+- **Landed (2026-11-18)**: the user approved the re-record; PR6-9 squash-landed on `develop`. Docs delta: `HISTORY.md` row "checks_golden re-recorded for PR6-9: the objective enum message lists retreat."; any doc that counts world kinds now says 24.
+- **Recommendation**: If the user approves the re-record, Build lands it with a `HISTORY.md` row "checks_golden re-recorded for PR6-9: the objective enum message lists retreat." Note for `PR6-12`: seed the Ruthven room as `objective: "retreat"` with `hp_floor: 25` (the row text still says `"rout"`). Art/UI: a siege board layout (the screen is a placeholder). Confirm guesses 1-6.
+
+### FB-301: PR6-10 story prep landed; seven guesses and docs delta
+
+- **Spec**: `READY.md` §1 `PR6-10`, `PK6_PK7_BOSSES_ENDINGS.md` §3 (@squash `PR6-10`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: Story step `camp_prep {text?, keeper?}` (`story::prep_rest` / `prep_rest_open` / `prep_done`; one free full heal per prep step, no clock tick); fight step `retry_day_cost` (0-30; each retry adds the days and ticks `Days(n, rest)`) and `echo_fallen` (a retry fields up to 2 echo units `$echo_unit.N` mirroring departed members whose life is captured, dead or lost, latest first; never roster enemies); `story.running.tries` (counted only on an `echo_fallen` step; a plain retry saves the old shape) and `.rested` saved only when set. GUI `StoryCampPrep` (Party, Visit keeper, Save, Rest (free), Go on with a confirm); shot `/mnt/project-files/pr6-10/story_camp_prep.png` (placeholder layout). 0 golden diffs. Guesses: (1) the warning sits on the prep screen and the confirm is on Go on (no modal before); (2) shop and recipes come from an optional `keeper` character; (3) the free rest is `progression::rest` with no days or supplies; (4) retry days spend no supplies; (5) echoes fight at the member's own level, named `Echo of <name>`; (6) a flight that retries also pays the days; (7) `camp_prep` may not be the last step.
+- **Recommendation**: Confirm the guesses (open: a modal before the prep screen? should retry days spend supplies?). Docs delta: kit notes: the finding's first sentence. `GAME_BRIEF.md` where to look: `emberwake_gui/src/story.rs` `StoryCampPrep`; `rpgkit_world::story::{after_fight, fight}`, `rpgkit_world::battle::echo_defs`. `STRUCTURE.md`: test `kits/rpg/crates/rpgkit_world/tests/story_prep.rs`. Asset lane can now author the 3.5 -> 3.6 data.
+
+### FB-302: PR6-11 endings landed; nine guesses and docs delta
+
+- **Spec**: `READY.md` §1 `PR6-11`, `PK6_PK7_BOSSES_ENDINGS.md` §§4-5 (@squash `PR6-11`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: World kind `endings` (`rpgkit_data::ending`, `rpgkit_world::campaign::ending`, `check/endings.rs`). `{effect: end, kind: ending, ending?}` completes the run on the named row while its gates hold, else on the first row that holds; the last row must be ungated. `RunOver.ending` / `completed()` are runtime only (saves unchanged). GUI `EpilogueScreen` (art vignette, paragraph pages, Outcomes, Fates cards; Back / Next; Load a save / Main menu) replaces `RunOverScreen` for a completed run; `save_refusal` unchanged. Shots `/mnt/project-files/pr6-11/epilogue_{paragraph,fates}.png`. 0 golden diffs. Guesses: (1) endings have `name` (generic check), `title` optional; (2) `tone` is a meter band tone (calm, warn, danger, fatal); (3) `art` is a vignette played first; (4) a named ending whose gates fail falls through to the first that holds; (5) "last ending ungated" is checked on `end` effects of kind `ending`; (6) `member_fates_template` is `{track?, member, departed, causes?}` with `{name}`, `{stage}`, `{cause}`; (7) `world_outcomes` lines may carry `op` / `value`; (8) no separate story-node `ending` hook (the `end` effect covers it); (9) fight and trip previews still treat a kind-`ending` end as "would end the run".
+- **Recommendation**: Confirm the guesses; open: should previews skip kind-`ending` ends; should a completed run's log and save refusal say something other than "The run is over."? Docs delta: `STRUCTURE.md` emberwake_gui row: add `epilogue.rs` (and `facility.rs` from `PR6-8`). `GAME_BRIEF.md` campaign: the finding's second to fourth sentences. `engine/docs/PORT_NOTES.md`: `campaign/ending.rs`, `check/endings.rs`, `emberwake_gui/src/epilogue.rs` are engine-only.
+
+### FB-303: PR6-14 class keystones landed party-only; one question
+
+- **Spec**: `READY.md` §1 `PR6-14`, `U2_CLASS.md` "Class keystones" (@squash `PR6-14`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: Class rows take `keystone: {id, level}` (a `slot: keystone` passive, level >= 1). Under the deck rule a derived party unit of the class at that level or above whose own deck names no keystone slots it (`Unit::grant_class_keystone`); a keystone graft or the wielded family's keystone takes the one slot first. Seed `pr6_14.json`: the six class keystones at level 6 and `master_alchemist` widened to `firebomb`, `glacial_burst`, `choke_cloud` (+0.2 each). 0 golden diffs. Guesses: (1) party units only: the spec's "every unit of the class (recruits, generated units)" read as party units; granting foes would give Grakka (`goblin_warlord`, level-6 warrior, `ashmaw_stand`) `unbroken_phalanx` and move the phasefold golden; (2) derived units only, like class passives; (3) a missing `level` loads as 1 but the check requires it. Open: members don't own the class keystone through `member_passives`, so the deck editor doesn't list it and an explicit save of it reads "not owned"; the battle build still slots it.
+- **Recommendation**: Confirm party-only (or rule that foes get it, with a named phasefold re-record); decide whether the deck editor should list the class keystone (a small follow-up row). Docs delta: kit notes / `GAME_BRIEF.md`: the finding's first two sentences, and class rules "Each class learns its keystone at level 6: warrior `unbroken_phalanx`, rogue `ghost_of_the_undercroft`, priest `pure_hippocratic_oath`, ranger `dead_eye_discipline`, brawler `unbroken_iron`, mage `master_alchemist` (+20% on six bomb families)."
+
+### FB-304: PR7-13 bunks landed; fourteen guesses, AI-17 placeholders, docs delta
+
+- **Spec**: `READY.md` §1 `PR7-13`, `BUNKS1.md` (@squash `PR7-13`)
+- **Kind**: docs-delta, asset-request
+- **Status**: open
+- **Finding**: Hub bunks bind `bunk_<n>` map props to bunk and crypt members in roster order (empty, benched, active, crypt; condition wounded / high Strain / ready / resting); click card with squad in/out and Talk; members idle at table spots or by their bunk; passing the lead swaps places. World kind `talks` (pair or template by temperament or origin), pair counter `party.together` (saved only when non-empty), seen flag `talk.<id>[.<recruit>]`. Seed `pr7_13.json`: 11 dialogues, 6 founder pair talks, 5 templates, all `[PROVISIONAL]`. Shots `/mnt/project-files/pr7-13/` (`hub_bunks.png`, `hub_talk_waiting.png`, `bunk_card.png`). 0 golden diffs. Guesses: (1) the fifth template picks by origin `orig_mortuary_calm` because `temper_grim` is held (FB-294); (2) the 6 founder pairs are the pairs of kaelen, vesper, maren, hollis; (3) a hub is a map with `bunk_<n>` props in a world with a roster block; (4) members past the prop count (8 vs 6 props) get no bunk and don't idle; (5) spots: `idle_*` anchors first (none shipped), then open cells around `table*` props; (6) a benched member idles south of its bunk; (7) "high Strain" = the next battle starts the channel meter at >= 50% of max; (8) template `{a}` is the founder (first non-generated bunk member), `{b}` the recruit; (9) talks need both members in bunks; the counter counts members still in the party after the settle; (10) "oldest first" = table order; (11) the seen flag and reward (to the stash) apply when the talk opens; (12) the lead pass is instant, no walk; only active standing members can lead; (13) E on an idle member plays its talk, else opens the card; (14) the card shows toggle refusals and the fuse line; the `party_min` and fuse prompts still fire at the fight.
+- **Recommendation**: Confirm the guesses; open: wait for `temper_grim` for the fifth template? add explicit `idle_*` anchors to the hub map? Asset request (AI-17, placeholders landed as copies): `games/emberwake/assets/props/sunk_ward/kiln_bunk_{empty,benched,active,crypt}/v0.png` 80 x 80 (empty: bare rolled mattress; benched: made bed, member resting, keepsake, name plate; active: made bed, kit packed at the foot, name plate; crypt: cloth over the bed, name plate); `games/emberwake/assets/ui/markers/bunk_candle.png` 64 x 80 (candle on a bunk with a waiting talk; must read apart from the candles already in `kiln_bunk`); `games/emberwake/assets/ui/markers/bunk_talk.png` 32 x 32 (speech mark over a member). Docs delta: `STRUCTURE.md`: `rpgkit_data/src/talk.rs`, `rpgkit_content/src/check/talks.rs`, `rpgkit_world/src/{bunks,talks}.rs`, `emberwake_gui/src/bunks.rs`, world kind `talks` (`worlds/<id>/talks.json`), seeds index `pr7_13.json`. `GAME_BRIEF.md` hub: the finding's first two sentences. Save notes: optional party key `together` (counted in every world, so a save in a world without talks also gains it after a shared win; gate it on talk rows if saves there must not change).
+
+### FB-305: PR7-14 transitions landed; seven guesses, four questions, AI-18 placeholders
+
+- **Spec**: `READY.md` §1 `PR7-14`, `TRANSITIONS1.md` (@squash `PR7-14`)
+- **Kind**: docs-delta, asset-request
+- **Status**: open
+- **Finding**: A story fight opens with a 2 s battle beat (ash cover and wipe, combat sting, fight banner, party walk-in; any input skips; Reduce motion = 0.3 s fade). A won world fight plays a victory beat (0.3x slow motion for 0.7 s, Victory banner), then the results over the dimmed battle; Continue fades to black with the victory stinger; the hub opens on an arrival card ("Back at place, Day N, countdowns") and change lines (new bunk talks, new shop stock) in the ticker; a story that goes on to a vignette skips the card. Files `emberwake_gui/src/transitions.rs`, `battle/beats.rs`; scenario `games/emberwake/scenarios/story_battle_hub.json`. Shots `/mnt/project-files/pr7-14/` (test key frames) and `/mnt/project-files/pr7-14/scenario/` (real game). The wipe placeholder reads as a dissolve until the real mask lands. 0 golden diffs; the repro recording still replays. The asset layout test now allows `ui/transitions/*.png` and `audio/stings/*.ogg` (the AI-18 branch uses them). Guesses: (1) T1 only for story fights; (2) the walk-in starts 3 cells off on the nearer side; (3) victory beat, stinger and arrival only on wins; losses and flees get results over the field and the fade with a manual Continue; (4) the arrival card is read as the map opens and shows each visible countdown; (5) "what changed" = new waiting bunk talks and new shop offers since the fight started; (6) battle music plays on under the results; (7) clicking the old Continue during the victory beat skips to the results.
+- **Recommendation**: Confirm the guesses; open: T1 for map/campaign/travel fights? a defeat stinger or card? duck the music during the Continue fade? Also found: scenario `menu_opens.json` waits for screen "menu" but the main menu's id is "main_menu" (not run). Placeholders (copies, AI-18 replaces in place; names match the Art/UI AI-18 commit `69387801`): `games/emberwake/assets/ui/transitions/ash_wipe_mask.png` (1120 x 472, red channel = wipe threshold), `ash_flecks.png` (32 x 32), `objective_banner.png` and `victory_banner.png` (716 x 152 frames), `games/emberwake/assets/audio/stings/combat_sting.ogg` and `victory_stinger.ogg`. Docs delta: `GAME_BRIEF.md` / README: the finding's first sentences. `STRUCTURE.md` / ASSETORG2 section 3: the game asset tree allows `ui/transitions/<name>.png` and `audio/stings/<name>.ogg`. `engine/README.md` agent link: battle `state.beat` {kind, plain, ms, length, cover, fade, banner, banner_text}; `battle_results` `state.over_battle` {plain, arrives, leaving}; `region_map` `state.arrival` {card, changes}.
+
+### FB-306: playtest: the settings menu is not the approved mock (SCREEN_ATLAS screen 3)
+
+- **Spec**: `SCREEN_ATLAS.md` "3. Settings Modal", `tools/mock_ui/js/04_settings.js`, decision "Display settings DISPLAY1"; user playtest 2026-11-18 ("the settings menu seems the old version and not the version approved before")
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: The approved mock (`04_settings.js`, screen 1c) stages Display Mode and Resolution, applies them with a 15 s "keep these settings?" revert popup, guards closing Settings (right-click, Esc, X, Return to Title) while display changes are staged but unapplied, and has a decluttered in-game popup. The Aegis screen (`emberwake_gui/src/menus.rs`, `aegis_ui/src/screen.rs`) has none of that: window mode collapses to one Fullscreen checkbox (`screen.rs` migrates `window_mode`), there is a Resolution row on desktop but no revert timer or unapplied-close guard, and the Godot-era DISPLAY1 rows (window mode, window size, vsync, frame cap, "In use") are not all present. The web build (WEBFIX1) shows only Fullscreen and Text size by design. No READY row ported the mock's settings flow to Aegis.
+- **Recommendation**: Queue a fix row (UI, game layer + `aegis_ui` display apply): port the mock's settings modal: Display Mode dropdown (windowed / borderless / fullscreen), staged Resolution, Apply with the 15 s revert popup, the unapplied-close guard, and the decluttered in-game popup; desktop only for mode and size; mock frame style (F2) per the locked style; GUI audit tests and review shots for the user.
+
+### FB-307: playtest 2026-11-18 18:20: four UI bugs for a fix row
+
+- **Status**: open
+- **Source**: the user's playtest notes 1-4 (relayed by the coordinator); notes 5-7 went to Design.
+- **Bugs**: (1) the story screen shows a hover hint near the pointer telling the player to click to proceed, which is redundant; (2) the battle screen has no way to open Settings (Esc only closes panels; `battle.rs` header lists the keys, none opens the in-game settings popup); (3) the party screen at a full party spills over and pushes elements out of its frame (`party.rs` layout does not shrink or scroll past the frame); (4) portrait motion stretches faces and the light flickers (`portraits.rs` PORTRAITFX2 breath and tint, `region.rs` D1/D5 rim flicker).
+- **Recommendation**: queue one fix row (UI + test, game layer, `emberwake_gui`): (1) drop the hint; (2) a settings button on the battle HUD plus a key, opening the same in-game popup `PR7-21` declutters (so it lands after `PR7-21`); (3) the party screen fits a full party at normal and XL text, with a GUI audit test that every element stays inside the frame; (4) breath as a uniform scale or vertical bob that keeps the face's aspect, and the rim light eased instead of stepping, with a test that the portrait's aspect ratio never changes. Screenshots for the user's eyes on (3) and (4).
+
+### FB-308: PR7-21 settings landed; eight guesses, five mock rows left out, two questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-21`, `tools/mock_ui/js/04_settings.js` (@squash `PR7-21`)
+- **Guesses**: (1) every setting except desktop Display Mode and Resolution applies and saves at once, per the mock footer (six tests that assumed Apply-for-everything were updated); (2) Restore defaults resets all and stages the default display for Apply; (3) a dropdown sits between the `<` `>` arrows; (4) the mock's two-column rows became full-width so XL text fits; (5) Reduce Motion moved to Display, Portrait Effects beside it; (6) Battle shows the mock's six rows first, then Units Behind, the 25 overlay groups and the debug row in a scrolling body; (7) Controls keeps the real key bindings grouped in cards; (8) `PR7-15` has not landed, so Map zoom sits on Gameplay where the mock puts it.
+- **Left out (no setting exists)**: Language, Mute in Background, Ward Ambience volume (no ambience bus), Auto-Advance Story Dialogue, Tutorial and Tactical Hints.
+- **Known nit (fix rides with `PR7-26`)**: on web, Restore defaults stages the default `fullscreen` value, so if the browser is fullscreen the close guard can appear with no Apply on the tab; web should leave the display keys alone there.
+- **Questions**: add an ambience audio bus and Ward Ambience volume (engine audio work)? Keep the overlay groups on the Battle tab?
+- **Docs delta**: `docs/workflow/web.md` "What differs in the browser", Display row: "the Display tab shows Fullscreen (applied at once) and Text size of the display rows, plus Reduce Motion and Portrait Effects." `GAME_BRIEF.md` settings line: "Settings (SETTINGS-MOCK1): tab rail Display, Sound, Gameplay, Battle, Controls; every change saves at once except desktop Display Mode (Windowed / Borderless / Fullscreen) and Resolution, which need Apply and a 15 s keep-or-revert confirm; closing with a staged display change asks first; the hub opens the decluttered popup with Return to title." `HISTORY.md`: "Settings Apply-for-everything (draft until Apply) and the Fullscreen and Borderless checkboxes were replaced by instant apply plus a staged Display Mode choice (PR7-21, approved mock 04_settings.js)."
+
+### FB-309: PR7-22 agent playtest harness landed; Xvfb replaced by the no-window mode
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-22`, `PLAYTEST_BRIEF1.md` (@squash `PR7-22`)
+- **Built**: `aegis playtest` in `aegis_cli` (engine, game-agnostic; `agentplay.rs`) on the scenario plumbing (port, scratch profile, `frames` settle, conditions). `tools/fc.sh playtest [start] [save=] [out=] [size=] [shots=each|off] [window=1]`, then `playtest do <command>` once per tool call, `playtest run <script|->`, `stop`, `status`. Commands: screen, tree, click, hover, key, type, back, drag, link, wait, assert, get, shot, pause, frames, save, load, note, repeat, quit. Each command writes a row to `<run>/log.md` and `log.jsonl` and, by default, a numbered shot `309_<command>.png`; a failure keeps `309_fail.png` and its UI tree. Run folders `playtests/agent/<date>[-n]/` are git-ignored (copy one to the project files to hand it off).
+- **Deviation**: the row says "under Xvfb"; the harness uses the engine's existing no-window mode (HEADLESS1), which needs no display and is the same screens and link. `window=1` still runs a real muted window where a display (or a user-started Xvfb) exists. `[PROVISIONAL]`.
+- **Gate**: `tools/fc.sh gate` now runs the smoke playtest after the repro replays (the first gate step that launches the real game). `check_project.ps1` (desktop) has no matching step yet; the desktop gate skips it until someone adds it there.
+- **For the Fable playtest**: start with `tools/fc.sh playtest`, then `target/debug/aegis playtest do screen` and so on; the guide is `engine/docs/authoring/agent_playtest.md`.
+- **Docs delta**: `docs/STRUCTURE.md` tools row: "`aegis playtest` (agent playtest harness, `engine/crates/aegis_cli/src/agentplay.rs`; guide `engine/docs/authoring/agent_playtest.md`; run folders `playtests/agent/`, git-ignored)". `engine/README.md` CLI list: add the `aegis playtest` line. `cloud.md` "No interactive play" bullet: replace the Xvfb recipe with `tools/fc.sh playtest` (no display needed). `HISTORY.md`: none.
+
+### FB-310: PR7-26 playtest fixes landed; engine-side changes, seven guesses, three questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-26`, `FB-307`, `FB-308` (@squash `PR7-26`)
+- **Layer note**: items 1, 4 and 5 live in engine code (`aegis_ui` vignette, portrait_fx, audio, shell); every change is game-agnostic.
+- **Guesses**: (1) the playtest's "full party screen" is the hub party list (8 bunks pushed the menu out of the frame); the Character sheet already fit and now has a fit test on every tab; the list adds columns, then compact rows (class line moves to the hover card); (2) "full" means the party max and an 8-bunk roster; (3) Return to title in battle is refused with the "Finish the fight" notice, not disabled; (4) Mute in Background's help is its button hover card (the mock's header buttons have no help line); (5) effects already playing when focus is lost stay silenced; (6) the Test Arena's Esc still leaves; (7) web focus via winit `Focused` plus document `visibilitychange`, not tried in a browser.
+- **Questions**: should the Test Arena's Esc open the popup instead? Disable Return to title in battle instead of the notice? Is the cut "Party (64 points to spe..." button label at XL acceptable (existing behaviour, hover card shows it whole)?
+- **Docs delta**: `engine/README.md` (aegis_ui): "Audio: engine setting `mute_in_background` (default on); `Audio::set_focused` mutes the master level while the window lacks focus (desktop winit `Focused`, web canvas focus/blur plus `visibilitychange`); saved volumes are untouched. Portrait motion scales the inner rect evenly from its bottom centre (aspect kept); the rim flicker eases between hashed values every 600 ms (`RIM_KNOT_MS`). The vignette advance area has no hover card." `GAME_BRIEF.md`: "Battle: Esc with nothing open, or the bottom bar's Menu, opens the in-game Settings popup (Test Arena: Esc leaves). The hub party list adds columns, then compact rows, so a full roster keeps the menu in the frame. Settings: the Sound header has Mute in Background (on by default); the Battle tab's extra rows sit under Advanced." `HISTORY.md`: "PR7-26: the PORTRAITFX1 rim's 90 ms hashed step (read as flicker) is replaced by eased knots; the breath's vertical-only stretch (read as face stretch) is replaced by an even scale; `aegis_ui` test e4 now compares rows by the red channel."
+
+### FB-311: PR7-35 kit asset library check landed; one guess on sounds
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-35`, `docs/specs/ASSETLIB1.md` (@squash `PR7-35`)
+- **Built**: `kits/rpg/library/README.md` (the layout and fields; no assets yet, Art/UI fills it) and `tools/assetlib/check_library.py` (plain Python, no Pillow): AL6 (every sidecar parses, required fields, no unknown keys, `kind`/`status`/`source` enums, `kind` and `style` match the folders, `size` matches the PNG header, unique ids, every asset has a sidecar, no orphan sidecar, `style.meta.json` per style folder) and AL7 (file names, ids, tags and the style id/label refuse any game id, world id or `games/*/lore_words.txt` entry, whole word, `_` as a break). 14 fixture tests. `tools/fc.sh assetlib` runs both; the gate runs it last.
+- **Guess** `[PROVISIONAL]`: AL5 says `size` is pixels; a sound under `audio/` has none, so it takes `"size": null` (any other value is refused). Asset files are `.png`, `.ogg`, `.wav`, `.mp3`.
+- **Docs delta**: `docs/STRUCTURE.md` kit section: "`kits/rpg/library/<style>/<kind>/`: the kit asset library (ASSETLIB1), outside the shipped asset root; checked by `tools/assetlib/check_library.py` (`tools/fc.sh assetlib`, in the gate)". `HISTORY.md`: none.
+
+### FB-312: PR7-15 HUD frames landed; three guesses, a placeholder frame, two questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-15`, `FB-287` (@squash `PR7-15`)
+- **Guesses**: (1) a new game-agnostic frame role `hud` (falls back to `panel`) instead of changing `panel`, which every screen uses and which has no oxblood top line; (2) "hub HUD" read as the region-map HUD bar and legend at the hub plus the hub menu's party box; (3) only the legend's rows pane is framed (its head is a section button that would paint over the top line). Part (e) needed no change: `menu_opens.json` already waits for `main_menu`.
+- **Asset request**: `games/emberwake/assets/ui/frames/hud.png` (24x24, sidecar `hud.json`, slice 8, scale 2) is a placeholder, a copy of `panel.png` with its top 2 art rows recoloured `#991b1b`; Art/UI replaces it in place with a final F2 HUD frame.
+- **Finding**: headless Chromium's emulated `deviceScaleFactor` does not grow the buffer (winit reports CSS px), so the WEBFIX1 CSS-size-times-ratio buffer is not exercised by the smoke at DPR above 1; the cap check uses a 9000x5000 page instead (buffer 8192x4551, clicks land).
+- **Questions**: keep `hud` as its own role, or should Art/UI make `panel` itself F2 (changes every panel)?
+- **Docs delta**: `engine/README.md`: "Frame roles: `hud` (WEBFIX2), a screen's heads-up panels, falls back to `panel`. Web display (WEBFIX2): the drawing buffer is the canvas size capped at the GPU's largest texture (`shell::capped_buffer`, `App::fit_buffer`); pointer positions are scaled to the buffer; the web renderer starts within `web::WEBGL2_TEXTURE_MIN` (2048) and refits once the device is up." `GAME_BRIEF.md`: "Battle, region and hub HUD panels draw the theme's `hud` frame (style bible F2) through `hud::hud_panel`; Settings > Display has Map Camera Zoom on desktop and web (also on Gameplay)." `docs/workflow/web.md` "What differs in the browser": "Map zoom on the Display tab; the canvas buffer is capped at the GPU texture limit (the page stretches it). `tools/web/smoke.js` runs at 1280x720, 1600x1000 and 2560x1440 (sizes as arguments), plays the opening through the prologue, and checks the buffer cap on a 9000x5000 page; about 10 min." `STRUCTURE.md`: the game frame set gains `ui/frames/hud.png` and `hud.json`. `HISTORY.md`: "HUD panels drawn as flat `Painter::panel` fills replaced by the `hud` frame art (PR7-15); web smoke (b) 'Start reaches the region map' replaced by the opening walk-through."
+
+### FB-313: PR7-4 scenario goldens part 1 landed; baselines wait for the user
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-4` (SCENARIO-GOLDENS1) (@squash `PR7-4` part 1)
+- **Built**: `aegis_cli::golden` (PNG compare: per-channel tolerance, a pixel allowance, a diff image with the differing pixels in red, the box that holds them); a scenario `shot` takes `"golden": true` or `{"tolerance": n, "pixels": n}` and fails on a missing or differing baseline at `scenarios/baselines/<id>/<WxH>/<name>.png`; `record=1` writes the baselines only after the whole run passes; launch `"save": "<folder>"` copies `scenarios/saves/<folder>/` into the scratch saves. The gate runs every scenario of the game (`scenarios_all`, 6 scenarios, about 50 s) and fails when the dev CLI is missing. New scenarios `screens_menus`, `screens_hub` (from the fixture save `saves/hub_start`, made with the agent harness) and `screens_battle`: 18 shots.
+- **Parked**: the `golden` flags and the 18 baselines land as part 2 once the user approves the contact sheet (`/mnt/project-files/pr7-4/contact_sheet.png`). Menus are byte for byte the same run to run; the hub (idle sprites, 121 to 488 px) and the battle start take a pixels allowance (1500, 3000).
+- **Guess** `[PROVISIONAL]`: the recipe pane has no shot: no path from the fixture save opens it. A UI change to one of these screens re-records its baseline, which needs the user's approval like any golden.
+- **Docs delta**: `docs/STRUCTURE.md` game section: "`games/<id>/scenarios/baselines/` golden shots, `scenarios/saves/` fixture saves for a launch `save`". `engine/README.md` CLI row: scenario `record=1`. `HISTORY.md`: none until part 2 (the baseline record).
+
+### FB-314: PR7-24 hub polish landed; six guesses, two questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-24` (@squash `PR7-24`)
+- **Guesses**: (1) the class sigil is a ring with the class initial (no sigil art exists); (2) the plate sits on the bed head, not the niche's brass plaque (the plaque fits one letter and meets the candle); (3) the Talk choice is hidden when no talk waits (was a greyed button); (4) Close reads "Farewell."; (5) fallback line "In the squad." / "Out of the squad."; (6) the refusal line shows in normal text colour, not red.
+- **Questions**: real sigil art later (Art/UI request), or is the drawn letter final? Keep Talk visible but locked when no talk waits?
+- **Docs delta**: `GAME_BRIEF.md` (BUNKS1 BK2): "Occupied bunks wear a game-drawn name plate (class-initial sigil and name) centred on the 42 px bed, top on the bed head (`bunks::plate_rect`, AI-17 measure constants in `bunks.rs`)." BK4: "The bunk card is the dialogue box (`talk::box_layout` / `draw_box`): portrait left, name and class-condition line, choices Squad / Lead (locked with reason) / Talk (when waiting) / Farewell, keys 1-9." `HISTORY.md`: "Old 300x136 bunk card frame with a row of buttons replaced by the dialogue box (HUB-POLISH1; user 2026-11-18 playtest item 6)."
+
+### FB-315: ENGINE-1 sample game landed; six RPG leaks found in the engine
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-1` (HELLO-GAME1) (@squash `ENGINE-1`)
+- **Built**: `games/hello/` on the engine alone (its crate depends on `aegis_*` only, a test holds it): a main menu, a walker sprite stepping over a walled field (arrows or W A S D, a 120 ms slide, bumps on walls and stones), one save slot through `aegis_save`, the engine's `ui_*.wav` sounds through the asset layers, and `scenarios/hello_walk.json` (menu, new walk, steps and bumps, save, menu, continue; under 1 s). Two programs as Emberwake has: the game `hello` and its command line `hello_cli` (`hello_cli scenario run all`, `hello_cli playtest start`, `hello_cli serve`), so the game links no CLI code (the file and clock lints exempt `aegis_cli` on that ground); the gate's `scenarios_all` now runs both games. The agent playtest harness drives it unchanged. Six tests (rules, save round trip and a refused broken save, the command host and its replay, the folder, engine-only dependencies). `hello` became a game id for the layers check, so seven engine test strings "hello" became "salve" (no behaviour change).
+- **Leaks found** (engine assumes the RPG; none blocked the sample game, each is a candidate row for ENGINE-2..10, no fix made here):
+  1. Scenario `launch.screen` is a closed list `menu`, `arena`, `runner`, and `ruleset` is tied to `arena` (`aegis_cli/src/scenario.rs` launch parse): the RPG's launch screens in the engine's format. A game with another start screen cannot name it.
+  2. `aegis scenario shots` takes `screen=menu|arena|runner`, `scene=`, `ruleset=`, `encounter=`; `scenarios.md` calls `link` steps "battle commands".
+  3. One CLI per game, each a binary named `aegis`: two games' CLIs cannot both take that name in one workspace, so the sample game's is `hello_cli`. A shared rule (`<id>_cli`, or one `aegis` with a game registry) is a Design call.
+  4. No engine helper starts a game: the manifest, the asset layers, the font path, the `Cx` fields and `Options` are assembled by hand in each game (`emberwake_gui` `launch`, `hello_game::launch`, about 40 lines).
+  5. `tools/fc.sh` names the games' CLIs (`aegis` for Emberwake, `hello_cli`) in `scenarios_all` and the playtest smoke, instead of reading them from each `game.json`.
+  6. The engine's own interface sounds are the only shared audio; the sample game has no music because the engine ships none (fine for now; noted for the asset library).
+- **Questions**: (a) the layers check G1 bans any game id as a whole word in engine and kit code, so `hello` (a common word) is now banned there and in the kit asset library check; keep the id as the row names it and accept that, or rename the game to an unusual id? (b) `check_project.ps1` (desktop gate) has no scenario step, so no scenario (Emberwake's or this one) runs on the desktop gate although `fc.sh gate` says it has the same steps; a desktop row or a known-issues note? (found by the review, older than this change)
+- **Also**: `aegis_cli/src/agentplay.rs` `kill` no longer leaves `pid` unused on a target that is neither unix nor windows (the web build's warning, reported by main Build; not checkable here without the wasm target).
+- **Guess** `[PROVISIONAL]`: the game id is `hello` as the row names it; its sprite (a 16 x 16 lamp-bot, `games/hello/tools/walker_png.py`) is engine-sample art, not Emberwake art, and not for the kit library.
+- **Docs delta**: `docs/STRUCTURE.md` games section: "`games/hello/`: the engine's sample game (ENGINE-1), engine crates only; read it first when starting a game". `engine/README.md`: a "Sample game" line pointing at `games/hello/README.md`. `README.md`: the games list gains `hello`. `CLAUDE.md` Layers line: `games/hello/` (the sample game) beside `games/emberwake/`. `HISTORY.md`: "2026-11-18: engine test strings 'hello' renamed 'salve' (the layers check bans game ids; ENGINE-1)".
+
+### FB-316: PR7-23 hub layout landed; wall-set fallback, plate stagger, two questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-23`, `PR7-19`, `FB-304` (@squash `PR7-23`)
+- **Built**: `sunk_ward_undercroft` rebuilt from `art_src/region_maps/sluice_undercroft.json` by seed `pr7_23.json` (a scratch generator turns the layout JSON into a `maps` upsert): the layout's wall grid; 45 props (bunks `bunk_1..8`, 2x2 at y 15, x 12, 14, 16, 20, 22, 24, 10, 26; tall props; new lamps, `table_2`, `crypt_bars_2`; `shelf` removed); `idle_seat_1..8` and `idle_bunk_1..8` at the `PR7-19` coordinates; Talia (`npc_c`) to (15, 11) and Ivo (`lore_a`) to (12, 11) at the hall's mission board. Bunk art stays `kiln_bunk` (the final AI-17 state images; the layout's `niche_bunk` has no state images). The 8 new prop arts and the re-rendered `sluice_undercroft.png` came from the PC push (de439956).
+- **Wall sets**: slab `interior_plaster`, crypts `interior_stone`; basin, hearth, hall, entry and hollows also `interior_stone` because no drain-brick interior set exists (AI-23 asks for one; hollows moved from plaster to stone).
+- **Tests moved to the eight-bunk layout**: bunk props equal `roster.bunks_max` (8), bunks past today's cap (6) hold no member and draw empty; `idle_*` anchors are exempt from the wired-anchor check and must stand on open cells; the hub test pins the new wall sets and anchors and keeps its reachability checks.
+- **Plates (PR7-24 follow-up)**: bunks are now 2 cells (64 px) apart, so plates alternate between two heights (the bed's head, one plate lower) and only avoid same-height plates; `PLATE_MAX_W` 92 to 104 art px so "Dunstan" fits at Extra large. Every shipped party name reads whole at Normal and XL (tested). The lower plates partly cover the neighbouring bed.
+- **Content warnings**: `table` and `table_2` (`table_stools`, 96x80 art on a 1x1 footprint) hide `idle_seat_1/2/3/4/7/8` behind their art.
+- **Questions**: are the staggered plates acceptable, or prefer a smaller plate font or the lower row just below the bunk art? The location text `sluice_undercroft` still says "six bunks" (cap is still 6); change it when the cap rises?
+- **Docs delta**: `GAME_BRIEF.md` (BUNKS1 BK2): "Bunk name plates are centred on the bed. Neighbouring bunks in a row alternate between two heights (on the bed's head, one plate lower), so a plate only avoids same-height plates: at most 104 art px wide (`PLATE_MAX_W`) and at most the distance to the nearest same-height bunk's centre less 4 px (`bunks::plate_slot`, `PLATE_GAP`). Shipped party names read whole up to Extra large text." Hub line: "The Sluice Undercroft hub map follows the Art/UI eight-bunk layout (`PR7-23`); bunks 7 and 8 draw empty until the cap rises." No golden re-record, so no `HISTORY.md` row.
+
+### FB-317: ENGINE-2 perf step and painter benchmarks landed; first numbers
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-2` (PERF-STEP1), `docs/specs/AGENTROLES1.md` section 5 in part (@squash `ENGINE-2`)
+- **Built**: the no-window shell answers `perf {frames, warm}` (warm frames untimed, then whole frames back to back, a fixed CPU calibration before and after, nearest-rank p10/p50/p95/max/mean in ms, `steady` when the calibrations are within 20 %). Scenario step `perf` (`name`, `frames` = 300, `warm` = 60, `budget` {`p50_ms`, `p95_ms`, `max_ms`}): verdict `recorded`, `within`, `over` (fails the step) or `no verdict` (load changed, passes); `perf_<name>.json` in the bundle and `perf` in `result.json`. `aegis_ui::perf::bench` and the program `ui_bench` (`tools/fc.sh bench [sizes=] [runs=]`, release build, not in the gate). The sample game's scenario has two budgeted perf steps (p50 50 ms, p95 100 ms, against about 8 to 10 ms measured); Emberwake's screen scenarios record the main menu, the region map and battle planning (no budget).
+- **First numbers** (2026-11-18, dev build, no window, 1280x720, cloud): main menu p50 4.6 ms, region map 29.5 ms, battle planning 20.2 ms. Painter, dev build: a whole-canvas fill 3.7 ms at 720p and 8.6 ms at 1080p, 64 panels 5.0 and 12.4 ms, 40 text lines 1.2 and 2.5 ms. The fill alone is a fifth of a 60 fps frame at 1080p in a dev build; a release run is the next measure (`tools/fc.sh bench`).
+- **Not built** (AGENTROLES1 section 5, for a later row): frame counters in a real window, `docs/metrics/perf.jsonl` and the 5-record median rule (INTEG1-E3), the start-to-menu and working-set numbers.
+- **Guess** `[PROVISIONAL]`: the gate's budgets are loose ceilings for gross regressions only (a dev build on a shared machine); tight budgets belong in release runs. Note for PR7-4 part 2: the perf steps draw 70 extra frames before some later shots in `screens_menus` and `screens_hub`; a baseline must be recorded with them in place.
+- **Docs delta**: `engine/README.md` (no-window shell line): link requests `frames`, `clip`, `perf`; module `aegis_ui::perf`; program `ui_bench` (`tools/fc.sh bench`); scenario step `perf`. `docs/STRUCTURE.md`: none. `HISTORY.md`: none.
+
+### FB-319: PR7-38 screen layout framework landed; PR7-39 can start
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-38` (UISPLIT1-E), `docs/specs/UISPLIT1.md` US2..US6 (@squash `PR7-38`)
+- **Built**: `aegis_ui::screen_layout`: `View` (named fields of ten kinds: text, number, flag, picture, meter, rows, stats, tabs, slots, icons; actions with label and enabled) and its JSON fixture; `Layout` (regions with anchor, size in grid tokens, a share or fill, offsets, `in` a parent region, `when` text-scale overrides, one of 13 components with binds); `Layout::check` against a view; `draw` (the layout, or the US4 default when none) returning the `custom` rects; `Layouts`, the run-time loader (cache, fallback to the default with the problem reported once, reload on save in a native debug build); `render` (a fixture to a canvas offscreen). Program `ui_layout check <game dir>...` (gate step `tools/fc.sh layouts`, every `games/*/` with a `game.json`) and `ui_layout shot <game dir> <screen> [size=] [out=] [default=1]`. Gallery screen `aegis_ui::layout_gallery` (Emberwake UI Gallery entry Screen layouts, group Kit). Engine sample `engine/assets/ui/layouts/layout_sample.json` with its fixture. Tests `aegis_ui/tests/screen_layout.rs` (9). Authoring page `engine/docs/authoring/screen_layouts.md`.
+- **For main Build (PR7-39)**: a split screen builds a `View` each frame, passes it with `Layouts::get(&view)` to `screen_layout::draw`, maps the `Act` it gets back to its own actions, and ships `games/emberwake/assets/ui/views/<screen>.view.json`. With no layout file it draws the default; the gate checks any layout against the fixture. US5's "the shell shows the problem" is the screen's part: read `Layouts::take_problems` each frame and pass new ones to the shell's error display (`show_errors`, as the theme does); the engine gallery shows them already.
+- **Guesses** `[PROVISIONAL]`: (1) fixtures sit in `ui/views/` over the asset layers, owned by screen code (Build), so the check finds them beside the layouts; (2) the spec's `aegis gallery shot <screen>` is the engine program `ui_layout shot <game dir> <screen>` (no game code needed); (3) the panel shell (`ornate` main, `panel` popup), list row, slot card and portrait draw with today's panes and frame roles; when `PR7-36` and `PR7-25` land their looks, the components take them with no layout change; (4) a `custom` region draws nothing and hands its rect back; (5) a list, tab, slot or icon whose `select` action is missing or disabled draws but does nothing, and a region id may not equal an action id (widget ids would clash).
+- **Docs delta**: `engine/README.md`: a line for `aegis_ui::screen_layout`, `layout_gallery` and the program `ui_layout` (`tools/fc.sh layouts` in the gate); `engine/docs/authoring/README.md` row added. `docs/STRUCTURE.md`: `ui/layouts/` and `ui/views/` under each asset layer (layouts Art/UI, views Build). `CLAUDE.md` / `cloud.md` gate step lists: add the layout check. `HISTORY.md`: none. ASSETORG2 tree: the game test `region::tests::the_assets_follow_the_layered_tree` now allows `ui/layouts/*.json` and `ui/views/*.view.json` (`ASSETORG2.md` section 3 could list them).
+
+### FB-321: ENGINE-3 shell split landed
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-3` (SHELL-SPLIT1), review "Engine track" `#5` (@squash `ENGINE-3`)
+- **Built**: `aegis_ui::shell` keeps the shell and app state, the frame, redraw, the web start, the drawing helpers, shots and `run`, plus its tests. New child modules: `input` (pointer, keys, edited field, clicks, drags, drops, Back; 665 lines), `link` (agent link commands, text and layout audits, shots, `ui_tree`; 364), `settings` (declared window options, applying settings; 79), `window` (monitors, size and place, pixel buffer, full screen, the winit event handler; 453). Proof of no change: the moved lines, sorted, equal the old file's apart from `pub(super)` on moved items and the module glue; `cargo check --target wasm32-unknown-unknown` for `aegis_ui` (also `web_probe`) and `emberwake_gui` is clean (the wasm32 target is now installed in this container, which also verifies the ENGINE-1 `agentplay` pid fix). Public paths unchanged (`shell::read_window_options`, `capped_buffer`, `web_attributes_of` re-exported).
+- **Not done**: the tests stay in `shell.rs` (2,100 lines); moving them per module is a later trim if wanted.
+- **Docs delta**: `docs/STRUCTURE.md` (aegis_ui src row): `shell.rs` + `shell/{headless,bot,input,link,settings,window}.rs`. `HISTORY.md`: none.
+
+### FB-323: ENGINE-4 CI hardening landed in part; two questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-4` (CI-HARDEN1), review "Engine track" `#6` (@squash `ENGINE-4`)
+- **Built**: (1) a deny set in the root `Cargo.toml` `[workspace.lints]`, taken by all 23 crates (`[lints] workspace = true`): `unsafe_code` (the one Win32 call in `shell/window.rs` opts out where it stands), clippy `dbg_macro`, `todo`, `unimplemented`; (2) gate step `tools/fc.sh lints`: clippy with only that set (about 30 s warm), then `tools/deps/unused_deps.py` (every dependency a crate names appears in its code outside comments; a KEEP list with reasons, today `aegis_ui`'s wasm-only `cpal`, named to turn on a feature) and its 2 tests; (3) a `windows (advisory)` job in `.github/workflows/gate.yml` on the same triggers: `tools/fc.sh build` and `tools/fc.sh test` on `windows-latest` with the MSVC stable toolchain. It is outside the needs of `gate`, so it never blocks a push.
+- **Found**: no unused dependency in any crate; no `dbg!`, `todo!` or `unimplemented!` anywhere.
+- **Not built, Design's call**: making the web smoke a required check. WEBREL1 section 5 records that the user decides after two green releases whether main requires the web job, so this lane left `web (advisory)` as it is.
+- **Questions**: (1) make `windows` required (in the needs of `gate`) once it has been green, or keep it advisory? It costs about twice the Linux minutes per push; (2) the web smoke: ask the user now, or wait for the two green releases WEBREL1 names?
+- **Docs delta**: `CLAUDE.md` and `docs/workflow/cloud.md` gate step lists: add the lints step (and the layout check, FB-319). `docs/STRUCTURE.md` tools: `tools/deps/` (unused-dependency check). `check_project.ps1` (desktop) has no lints step yet; a Build row could add it. `HISTORY.md`: none.
+
+### FB-325: ENGINE-6 new-game scaffold and API guide landed; one question
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-6` (NEW-GAME1), review "Engine track" `#8` (@squash `ENGINE-6`)
+- **Built**: `aegis new game <id> [title=] [root=]` (`aegis_cli::new_game`, in every game's command line): `games/<id>/` with `game.json` (no kit), README, `.gitignore`, `data/`, `assets/`, a scenario, and crate `<id>_game` (programs `<id>` and `<id>_cli`, a context type, a main menu and a play screen on the native grid, a command host, a test file). Ids are 2 to 32 of `a-z0-9_`; engine names, a taken folder and a quoted title are refused. Templates in `engine/crates/aegis_cli/templates/new_game/` (compiled in). Gate step `tools/fc.sh newgame` (about 10 s warm): makes `games/scaffold_check`, builds it with no warning, runs its tests and its scenario, removes it. `scenarios_all` now runs every `games/<id>/` with a `scenarios/` folder (Emberwake through `aegis`, others through `<id>_cli`). Engine API guide `engine/docs/API.md` (crates, context, screens, launch, host, command line, checks). Tests `aegis_cli/tests/new_game.rs` (3).
+- **Moved**: `combat_hooks.md` and `rule_library.md` from `engine/docs/authoring/` to `kits/rpg/docs/authoring/` (both describe RPG kit rules); a pointer page stays at each old path, so no reference breaks. `kits/rpg/README.md` and the authoring index point at the new place.
+- **Question**: the other pages (story guide, lore modules, campaign structure, consistency pass, design library, naming and asset briefs, milestones, art bible) are game-design method rather than engine API, but not RPG rules. Move them to the kit, to a shared `docs/authoring/` for any game, or keep them in the engine? This lane kept them.
+- **Docs delta**: `engine/README.md`: `aegis new game` and `engine/docs/API.md`; `docs/STRUCTURE.md`: `engine/crates/aegis_cli/templates/new_game/`, `kits/rpg/docs/authoring/`, `tools/deps/`; `CLAUDE.md` / `cloud.md` gate step lists: `newgame`; `docs/specs/BASERULES1_LIBRARY.md` names `engine/docs/authoring/rule_library.md` (now a pointer). `HISTORY.md`: none.
+
+### FB-327: ENGINE-7 control map and gamepad landed; a playtest and a screen needed
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-7` (INPUT-MAP1), review "Engine track" `#9` (@squash `ENGINE-7`)
+- **Built**: `aegis_ui::controls`: `Controls` (keyboard rebinding `Key` to `Key`, pad buttons `Pad` to `Key`) read from the settings key `controls` over the defaults, with problems shown as the theme's are and the default kept per entry; `Repeat` (a held direction: at once, then after 350 ms every 110 ms) and `stick_dir` (dead zone 0.5). The shell passes every key a screen gets through the map (keys, the held walk keys, the link's `key`), so screens change nothing. Gamepad on Windows only (`gilrs` 0.11, Windows.Gaming.Input; a new Windows-only dependency in `aegis_ui`): buttons through the map, the d-pad and left stick as repeating arrows and `Held::dir`; the loop wakes every 16 ms while a pad is connected. Link requests `pad {button}` and `controls`. Tests `aegis_ui/tests/controls.rs` (4) and a shell test (keys and buttons through a map changed at run time). `cargo check --target x86_64-pc-windows-msvc` clean here; the Windows CI job builds it.
+- **Pad defaults** `[PROVISIONAL]`: south Enter, east Esc (Back), west Space, north Tab, bumpers Page Up / Down, Select Shift+Tab, Start Esc, d-pad and left stick arrows. Linux, macOS and the web have no pad yet (gilrs needs libudev on Linux; the web needs the Gamepad API).
+- **Needs**: (1) a user playtest with a pad on the PC (feel: repeat timing, dead zone, which button is Back); (2) a rebinding screen in the game's settings (game UI, main Build or a UISPLIT1 screen) that writes `controls`; the engine only reads it. Mouse buttons are not in the map.
+- **Docs delta**: `engine/README.md`: a line for `aegis_ui::controls` (settings key `controls`, link `pad` and `controls`, Windows gamepad). `docs/STRUCTURE.md`: `controls.rs` and `shell/gamepad.rs` in the aegis_ui row. `HISTORY.md`: none.
+
+### FB-329: ENGINE-10 string tables, crash log and property tests landed; one question
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-10` (ROBUST1), review "Engine track" `#12` (@squash `ENGINE-10`)
+- **Built**: (1) `aegis_ui::strings`: `assets/strings/<language>.json` layered engine, kit, game; language from the settings key `language` (default `en`), a missing key falls back to `en` then to the key; `tr` / `tr_with` (`{name}` fill); the shell loads the tables at start (native and web); `ui_layout check` (`tools/fc.sh layouts`, in the gate) now also checks that every language holds `en`'s keys with the same placeholders and no extras. The new-game scaffold draws its menu words through `tr` (`assets/strings/en.json`). Tests `aegis_ui/tests/strings.rs` (2). (2) `aegis_ui::crashlog`: a windowed native run writes `logs/game.log` beside the player's settings (previous run kept as `game.1.log`; screen push, pop, reset and notices), and a panic writes `logs/crash-<unix seconds>.txt` (message, place, backtrace, last 200 log lines; newest 5 kept), then the panic goes on as before. `aegis_core::vfs::dev::append` added for it. Test `aegis_ui/tests/crashlog.rs`. (3) Property tests with a fixed-seed generator (no new dependency): `aegis_layout/tests/properties.rs` (resolved sizes never negative or past the room, cuts share their edge, placed, split and stacked rects stay inside), `aegis_core/tests/pak_properties.rs` (a pack round trips byte for byte; a cut or damaged pack is refused or read, never a panic), `aegis_save/tests/migrate_properties.rs` (every version migrates through each step once in order; newer, missing or broken versions refused; random input never panics).
+- **Not done**: Emberwake's own screens still draw literal English; moving them to `tr` is game work per screen (main Build, or with each UISPLIT1 screen). The settings Language row (FB-308) can now be built on the settings key `language`.
+- **Question**: should the crash report also be offered to the player (a "the game closed unexpectedly, report saved to ..." notice on the next start)? Default if no answer: no notice; the file is there for the PC playtest thread to read.
+- **Docs delta**: `engine/README.md`: lines for `aegis_ui::strings` and `aegis_ui::crashlog`. `docs/STRUCTURE.md`: `strings.rs` and `crashlog.rs` in the aegis_ui row; `assets/strings/` in a game's asset tree. `HISTORY.md`: none.
+
+### FB-330: PR7-25 style engine landed; class-body shades need a re-export, three guesses
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-25`, `STYLE_BIBLE.md` §2-3, `ART-03` (@squash `PR7-25`)
+- **Built**: (1) S2 ramps: a palette file may name `<slot>_lo` / `<slot>_hi` besides the base; each swaps the body colour of the same name (the body's `clips.json` must list it). A base-only palette swaps exactly as before. The swap lives in the engine (`aegis_ui/src/art.rs`, `aegis_core::assets::palette_pairs`); the 16-slot cap counts bases only (hard limit 48 entries). (2) F2 frame: every portrait drawn through `portraits::Faces` draws on `portrait_well` inside a 2-unit iron `edge` line with a 2-unit oxblood `frame_line` top; the picture's painted border is covered by well colour. Covers the talk box, bunk card, Character screen, hub party box, fuse box, menu peek, battle hero and intel portraits, timeline icons and the Gallery; per-screen portrait borders removed.
+- **Gap (needs a row)**: class base bodies' `clips.json` files do not list their `_lo` / `_hi` shades, so ramps reach only variant bodies (goblins, beast, crawlers) today. A patch to `tools/sprites/export_units.py` that lists them is at `/mnt/project-files/pr7-25/export_units_ramps.patch` (full scratch export of 46 bodies passed, sheets pixel-identical, 20 `clips.json` files gain shade slots); landing it needs the shipped `clips.json` re-exported because three sprite tests pin them. Options: (a) a follow-up Build row applies the patch and re-exports keeping only the `clips.json` changes (recommended; `PR7-36` part 10, Berek's armour, needs it if he wears a class body); (b) Art/UI re-exports; (c) leave it.
+- **Guesses**: line 2 units (4 px at 1280x720), 1 unit on portraits under 24 units (hub rows, timeline icons); the painted border is covered, not cropped; the frame sits inside the portrait rect so no layout moved.
+- **Question**: should story vignette portraits (`aegis_ui::vignette`, not drawn through `Faces`) get F2 too (a separate engine change)?
+- **Docs delta**: `engine/README.md` assets: "S2 ramps (PR7-25): a palette slot may be a base or its `_lo`/`_hi` shade (`assets::shade_base`); `assets::palette_pairs` pairs a palette file with a body's palette; the 16-slot cap counts bases only." portrait_fx: "F2 frame (PR7-25): `portrait_fx::draw_frame(p, r, painted, well)` draws the iron `edge` line with a `frame_line` top line (2 old units, 1 under 24) and covers the picture's painted border (`painted_border`); layout audit `Placed { what: "portrait_frame" }`." `GAME_BRIEF.md` UI: "Every portrait drawn through `portraits::Faces` draws on `portrait_well` inside the F2 frame; screens draw no portrait border of their own." `HISTORY.md`: "The portrait border painted into pictures (sidecar `border`) and the per-screen 1 px well panels were replaced by the UI-drawn F2 frame (PR7-25, ART-03)."
+
+### FB-331: ENGINE-5 parts 1 and 3 landed; Windows CI green and required on pull requests into main
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-5` (ENGINE-PURITY-3), `FB-315` leaks 1-2, READY §4 answer to `FB-323` (@squash `ENGINE-5` part A)
+- **Built**: (1) `aegis_cli::Game` gains `launch_screens` (default `["menu"]`) and `launch_problems` (default: the screen is in that list); a scenario's `launch.screen` and `scenario shots screen=` take any screen id (letters, digits, `_`, `-`), and `scenario check`, `run` and `shots` hold each launch to the game's answer. The engine's closed list and the "ruleset only with arena" rule moved to Emberwake (`emberwake_host::cli::LAUNCH_SCREENS`, its `launch_problems`, a test in `emberwake_host/tests/scenarios.rs`). `scenarios.md`: `launch` row reworded, `link` steps send "the game's own commands". (2) Recordings pane: the session words come from the game (`Recordings::labels`); the engine default is "SESSION" / "sessions" and Emberwake passes "BATTLE" / "battles" (pinned pane hashes unchanged: the theme test draws with the RPG words). (3) `Timeline::ruler` (the ruler's label, "Block" when None). (4) Trail: plan edits name what they edit as `subject`, `unit` still read (test `aegis_host/tests/trail_subject.rs`). (5) `bridge.rs` stays in the engine: it is the generic agent link and names no RPG term. `recordings::SCENE_KEYS` keeps `encounter` as a read alias (old recordings carry it).
+- **Part 2 not yet done**: `portrait_fx`, `portrait_overlays` (they depend on each other), `pips` and `vignette` (it uses `portrait_fx`) are about 3,600 lines, and the engine's UI Gallery uses them (the Portraits specimen page; the Panes page's pips; the theme pane hashes for `vignette` and `pips`; the settings keys `text_speed`, `reduce_motion`, `portrait_overlays`). The plan: create `rpgkit_ui` (ENGINE-8 KU1), move the four modules and their tests there, give the engine gallery a page hook so the kit adds the Portraits page, split the vignette and pips pane hashes into the kit's own fixture (same values), and keep the three settings keys in the engine (they are generic). Next in this lane.
+- **Windows CI**: the first full Windows run passed (build and every test, run 44420605238 on develop 2f0d382). Per the FB-323 answer, `gate.yml`'s Windows job (renamed `windows`) is now in the needs of `gate`: it fails `gate` on a pull request into main and is advisory on a push to develop or main.
+- **Docs delta**: `engine/README.md`: `Game::launch_screens` / `launch_problems` in the `aegis_cli` line. `docs/STRUCTURE.md`: none. `HISTORY.md`: a row "Scenario launch screens: the engine's closed list (menu, arena, runner) replaced by the game's own list (ENGINE-5)".
+
+### FB-332: PR7-41 item 1 (PT-15 blocker) landed; four guesses
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-41` (1), systems playtest PT-15 (@squash `PR7-41-1`)
+- **Built (kit `rpgkit_world`)**: an encounter or roamer marker is hidden while a board quest has that fight as a win-encounter step and no quest naming the fight is accepted (fights no job names are never hidden). A fight counts as won by what a win already leaves (one-time marker done flag, paid one-time objective reward, fired one-time battle-won trigger), so no new saved state and no golden moved. `quest::start` skips opening steps whose fights are already won; `save::decode_with` moves any active quest stuck on a won fight on, with one notice per quest ("The Bone-Mill Raid: its fight was already won, so it is ready to turn in."). Healthy saves load unchanged.
+- **Tests**: `rpgkit_world/tests/job_fights.rs` (7), `emberwake_world/tests/job_fight_repair.rs` (loads `m3_stuck`, turns in, resaves); scenario `job_fight_repair.json` on fixture `games/emberwake/scenarios/saves/m3_stuck/slot_0.json`; `act1_story.rs` and `sunk_ward_maps.rs` updated to the new rule (M5's fight appears only once M5 is taken).
+- **Guesses** `[PROVISIONAL]`: (1) the gate applies only to board quests; (2) catch-up covers won fights only, not reach-a-location steps; (3) a shared fight appears once any quest naming it is accepted; (4) the repair notice is a player-facing load notice.
+- **Not checked**: the report's guess that The Crucible (M5) opens after this turn-in.
+- **Docs delta**: `GAME_BRIEF.md` (quests): "A job's fight (a board quest's win-encounter step) is offered only once a quest naming it is accepted; accepting a quest whose fight was already won (one-time marker done flag, paid one-time objective reward, or fired battle-won trigger) marks that step met; saves stuck that way are repaired on load with a notice (PR7-41, PT-15)." `STRUCTURE.md` (scenarios): "`games/emberwake/scenarios/saves/m3_stuck/` playtest save fixture (PT-15) used by `job_fight_repair.json` and `emberwake_world/tests/job_fight_repair.rs`." `HISTORY.md`: "2026-11-19 PR7-41 (1): job fights were offered before the job was accepted and a fight won early left the job stuck (PT-15); now gated by accept plus catch-up on accept and on load. No golden re-recorded."
+
+### FB-333: ENGINE-11 game start helper and per-game CLI landed
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-11` (GAME-START1), `FB-315` leaks 3-5 and (a) (@squash `ENGINE-11`)
+- **Built**: (1) `aegis_ui::start::Start::new(id, game folder, engine folder, launch keys, headless)`: reads `game.json` (missing or broken: a notice and the defaults), the asset layers, the saves folder (`saves=`, else `<user dir>/saves`), the shots folder and `shell::Options` (title, the engine font, `port=`, icon, canvas, window sizes); `settings(defaults)`, `audio()` (silent with no window) and `cx(settings, art, audio, playtest, app)` finish the context. `aegis_ui` now depends on `aegis_content` (for the manifest). Emberwake's `launch` (its data, tuning, launch keys and first screens stay its own; the shared-saves adoption stays in the game), `hello_game::launch` and the new-game template use it; behaviour unchanged (all scenarios, the playtest smoke and the new-game check pass). Tests `aegis_ui/tests/start.rs` (3). (2) `game.json` key `cli` (optional, after `engine`; `Manifest::cli_name` gives `<id>_cli` when missing; checked as a program name). Emberwake's manifest sets `"cli": "aegis"` through `aegis content manifest`. (3) `tools/fc.sh` `game_cli` reads it: `scenarios_all` and `playtest_smoke` no longer name the games' CLIs. (4) The layers check G1 skips the sample game id `hello`.
+- **Docs delta**: `engine/README.md`: a line for `aegis_ui::start` and the manifest key `cli`. `docs/STRUCTURE.md`: `start.rs` in the aegis_ui row. `HISTORY.md`: none.
+
+### FB-335: ENGINE-9 engine grid primitives, camera and tile layer landed
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-9` (WORLD-PRIM1) WP1-WP4 (@squash `ENGINE-9`)
+- **Built**: WP1 new engine crate `aegis_grid` (no dependencies, `no_std` with `alloc`): `Cell`, `DIRS4` (right, up, left, down, the kit's order), `DIRS8`, `neighbours`, `search` (uniform cost, or A* with a caller heuristic; the caller gives the step cost, the goal and which of two equal goals is better; ties resolve by one packed key (cost, steps, order found), so a route is the same every run), `reach` (every cell within a budget at its least cost), `line` (Bresenham), `walk`; tests `aegis_grid/tests/grid.rs` (4). WP2 `aegis_ui::world_camera::WorldCamera` (centre, zoom steps 0.5 / 1 / 2 / 3, bounds, `follow` with a half life, `snap`, `to_screen` / `to_world`, `visible`) and `aegis_ui::tilemap::TileLayer` (cells on view only, edge-sharing rects, `draw_images`, autotile `corners` and `draw_corners`); tests `aegis_ui/tests/world_prims.rs` (3). WP3 the kit's battle pathfinding (`rpgkit_battle::path::find_path_sized` and the 2 x 2 square path) now call `aegis_grid::search` with the arena's step costs and goal tie-break (preferred, then nearest the centre); its own heap went. `rpgkit_battle`, `rpgkit_host`, `emberwake_rules` and `emberwake_sim` tests (the sim, rules and contract goldens among them) pass unchanged. The kit has no camera: the cameras are Emberwake's own (`region.rs`, `worldmap.rs`), game code left as is; they can move onto `WorldCamera` when those screens are next touched. WP4 `games/hello`: the field is a `TileLayer` seen through a `WorldCamera` (pixels unchanged), and a click on a free tile walks there by `aegis_grid::search` (A*), one slide per step; a key takes over; link request `walk_to {x, y}`; scenario `hello_walk` ends with a walk to (9, 2); a rules test.
+- **Docs delta**: `engine/README.md`: a line for `aegis_grid` and for `aegis_ui::world_camera` / `tilemap`. `docs/STRUCTURE.md`: `engine/crates/aegis_grid/` in the engine crates. `HISTORY.md`: none.
+
+### FB-336: PR7-41 items 3-5 landed; four guesses and a forecast drift risk
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-41` (3), (4), (5), systems playtest PT-20, PT-17, PT-21 (@squash `PR7-41-2`)
+- **Built**: (3) kit `intent.rs` read-only forecasts (`planned_schedule`, `guard_at`, `stance_at`, `position_at`, `hits_on` / `hit_on` with `nth`) and `Plan::forecast_entry` / `estimate_damage_guarded`; the enemy hover reads "Targets you in B4: Heavy Thrust, about 44" ("a hit", "(guarded)"), a move-first plan "Heads for you in B1"; an unrevealed plan shows only the told action's hit; the plan strip's expected damage counts the target's guard at the landing block. (4) display only: kit `intent::area_cells` predicts the tiles struck at impact (a shaped Assault follows its target); the board marks the first action's area always and later areas once the plan is revealed. (5) data only, seed `games/emberwake/data/seeds/pr7_41_fight1.json`: `footman_curfew` (copy of `footman_patrol`, speed -3, initiative 14) in `enc_pro_0a` only, so the third Pommel Strike breaks Heavy Thrust at block 4 before it lands.
+- **Guesses**: (1) "including guard" = the hero's own planned guard at the landing block; (2) later area marks only once revealed (no leak); (3) fight-1-only initiative change rather than `sure_break` on `pommel_strike` (that would make the jab a sure break everywhere); (4) the playtester's exact hand plan was not reproduced (likely a Sunder after a move, or a moved target).
+- **Follow-ups (not built)**: `intent::hit_on` duplicates the hit math of `Command::land` instead of sharing it, so a future change to `land` can silently diverge; it also does not model a hit failing at impact (ATTACKLOCK1 dodge, out of reach, protected flank, intercept), mixes current and projected target tiles, and uses `cover_for` where the resolver uses `cover_between` (differs for big units). Suggest a row to factor a pure hit-input builder out of `land` used by both. The planned-hit estimate ignores the foe's stance at the landing block; the round-over hover shows last round's line. Older seeds `act1story`, `cast1enc`, `act1fix1` still upsert `enc_pro_0a` with `footman_patrol` (re-running them undoes PT-21).
+- **Tests**: kit `rpgkit_battle/tests/hit_forecast.rs` (4), `area_tell.rs` (2); game `emberwake_world/tests/sweep_telegraph.rs`, `fight1_hint.rs`, `tells_tests` (landing block, hidden later hit); scenarios `fight1_pommel_hint.json`, `sweep_telegraph.json` on save `scenarios/saves/sweep_start/`.
+- **Docs delta**: `GAME_BRIEF.md` (battle): "Battle forecasts (PR7-41 PT-20): every damage number is per hit, at the block it lands, with the target's guard then (kit `intent::hits_on`, `Plan::forecast_entry`); the tell's 'Targets you in Bn' names the landing block. Area marks are the tiles struck at impact (`intent::area_cells`; a shaped Assault follows its target)." `STRUCTURE.md` (scenarios): "`games/emberwake/scenarios/saves/sweep_start/` playtest save (PT-17) used by `sweep_telegraph.json`." `HISTORY.md`: "2026-11-19 PR7-41 (3-5): the enemy hover's 'takes about N' from a hypothetical Strike retired for the planned hits' per-hit forecast; area tells drawn only for an enemy's first action retired; fight 1 footmen now `footman_curfew` (initiative -3) so the Pommel Strike hint is true. Goldens unchanged."
+
+### FB-337: ENGINE-12 one gate step list for the cloud and desktop gates landed
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-12` (GATE-PARITY1) (@squash `ENGINE-12`)
+- **Built**: (1) `tools/gate_steps.txt`: the gate's steps in order, one a line with what it checks (build, test, repro, playtest, scenarios, newgame, layers, layouts, lints, docs, tooltests, plannertests, assetlib). (2) `tools/fc.sh`: `gate` loops over the list through a `gate_step` table (an unknown name fails and names itself); new subcommand `tools/fc.sh step <name>` runs one step; the docs step is `gate_docs` (same output as before). (3) `check_project.ps1` reads the same list: the build and the tests stay native (warning check, Smart App Control retry), every other step runs as `tools/fc.sh step <name>` through git's bash, so the desktop gate now has repro, the playtest smoke, scenarios, the new-game check, layouts, lints, planner tests and the asset library; its own PowerShell copy of the layers check went (it had drifted: no `hello` exemption). `-Quiet`, `-VerboseOutput` and `-Fast` keep their meaning. (4) `tools/planner/test_gate_steps.py` (4): the list and the `fc.sh` table hold the same steps, `gate` runs the list, `check_project.ps1` reads it and keeps no copy of a check, an unknown step fails. Cloud gate clean. Not yet run on Windows: asked of the PC thread (`check_project.ps1 -Fast -Quiet` on `C:\dev\tactical-rpg`); a Windows-only failure comes back as a fix row here.
+- **Guess** `[PROVISIONAL]`: a new step is added in two places (the list and the `fc.sh` table), and the test fails if they differ; the Windows CI job still runs build and test only (its `needs` and required-into-main rule unchanged).
+- **Docs delta**: `docs/WORKFLOW.md` (the `fc.sh` row): the step numbers `[3/5]`, `[4/5]`, `[5/5]` are gone; read "the gate and `check_project.ps1` run the steps of `tools/gate_steps.txt` (13, in order); `tools/fc.sh step <name>` runs one". `CLAUDE.md` Standing rules: "same steps" now holds by construction (`tools/gate_steps.txt`). `HISTORY.md`: "2026-11-19 ENGINE-12: `check_project.ps1` kept its own five steps and a PowerShell copy of the layers check, which drifted from `fc.sh gate`; both now read `tools/gate_steps.txt`."
+
+### FB-338: PR7-41 items 7-8 landed; five guesses and a CAST1 keystone question
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-41` (7), (8), systems playtest PT-23, PT-28 (@squash `PR7-41-3`)
+- **Found**: PT-23: the kit already offered pouch items and ally skills, but only Ctrl+click on an ally opened that menu (plain click selects, decision "Playtest 2026-11-02"), so nobody found it. PT-28: founder deck passives and keystones were never owned by the party member, so the Skills tab hid them and battle never applied them; Hollis's empty keystone row hid an auto-slotted class keystone.
+- **Built**: (7) `hero.ally` button (`Action::AllyTarget`) beside Self: lists other members from the kit's `menu_options`; a row opens the existing skill menu on that member; nothing usable gives a message naming the hero. A cell refused for its target names the control in its card and the hotkey refusal (`intent_text::target_control`). Seed `games/emberwake/data/seeds/pr7_41_hints.json`: fight 1 hint "Click a foe and pick Pommel Strike: a quick hit breaks a slow blow." (8) kit `rpgkit_world::progression` `deck_grants`, `owned_passives`, `keystone_level`, used only under the deck rule (member build, `DeckTerms::for_member`, deck validation); classic builds unchanged; `DeckTerms::shown` shows the automatic keystone in an empty row; `party.rs` headers and tooltips say where passives and the keystone come from; Stats tab lists innate (slotless) passives.
+- **Guesses**: G1 kept plain-click-selects and added a button (reversing "Playtest 2026-11-02" is a design call); G2 founders now get deck passives from level 1 and the keystone from 6 in world battles (a balance change per spec; no golden moved); G3 a class without a keystone gives its deck keystone from level 1; G4 empty keystone row shows the automatic keystone; G5 the fight 1 hint text change counts as "hints match the controls".
+- **Question**: `CAST1_FOUNDERS.md` "Deck at level 1" lists a keystone, but U2_CLASS and the row say level 6; built as level 6 for party members, while catalog-unit builds (sim) still apply the deck keystone at any level. Which wins?
+- **Follow-ups (not built)**: `intent_text::target_control` matches the kit's English refusal text (a structured refusal reason would be sturdier); the keystone header always says "Class keystone" even when it comes from the deck or a graft; `unit_builder.rs` oracle now calls `deck_grants` too (covered on its own by `deck_grants.rs`).
+- **Tests**: `emberwake_world/tests/deck_grants.rs` (3), `emberwake_gui` `battle/tests/ally_pick_tests.rs` (4), `party.rs` header test; `unit_builder.rs` reference updated for the intended deck-grant change (not a listed golden); scenarios `ally_support_menu.json` (save `cages_start`) and `party_keystone.json` (new save `scenarios/saves/after_vats/`).
+- **Docs delta**: `GAME_BRIEF.md` (passives/decks): "Under the deck rule a party member owns its base unit's deck passives from level 1 and its deck/class keystone from the class keystone level (`progression::deck_grants`, `owned_passives`, PR7-41); classic builds keep `member_passives`." `SCREENS.md` (battle selection): "The hero panel's Ally button (PR7-41) lists the members the hero can use a skill or pouch item on; a row opens the skill menu there (as Ctrl+click). A cell refused for its target names the control in its card." `SCREENS.md` (party Skills tab): "Passives/Keystone headers say where they come from and the keystone's level; the Stats tab lists innate passives." `STRUCTURE.md` (scenarios): "`games/emberwake/scenarios/saves/after_vats/` playtest save (PT-28) used by `party_keystone.json`." `kits/rpg/README.md`: "`rpgkit_world::progression` `deck_grants` / `owned_passives` / `keystone_level`." `HISTORY.md`: "2026-11-19 PR7-41 (7-8): founder deck passives and keystones were not owned by party members (never applied, shown empty); now owned under the deck rule. Ally picks reachable by a button, not only Ctrl+click. Goldens unchanged."
+
+### FB-339: ENGINE-5 part 2 and ENGINE-8 KU1: the kit UI crate landed
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-5` (ENGINE-PURITY-3) item 2 and `ENGINE-8` (KIT-UI1) KU1, plan of FB-331 as accepted (@squash `ENGINE-5` part B)
+- **Built**: (1) New kit crate `kits/rpg/crates/rpgkit_ui` (depends on `aegis_ui`, `aegis_core`, `aegis_layout`; names no game; layers check clean). `portrait_fx`, `portrait_overlays`, `pips` and `vignette` moved there from `aegis_ui` line for line (only `crate::` paths changed), with their tests. (2) Engine gallery page hook: `aegis_ui::specimens::KitPage` (a tab name, its place `AT`, `act`, `draw`, `advance`) and `SpecimensWith<P>`; `Specimens` = `SpecimensWith<NoPage>`, the engine's 8 pages; `KitAct::Extra(PageAct)` replaces the six `KitAct::Portrait*` variants; pages are found by name (`pages()`, `page_of`, `on_page`), not by number. The Portraits page is `rpgkit_ui::portrait_page::PortraitDemo` (a `KitPage` at the fourth tab); `KitWidgets` (the engine pages plus it) is what Emberwake's gallery keeps, so its tabs, control ids (`kit.portrait.*`, `kit.page.<i>`) and pixels are as before. (3) The engine keeps the settings keys (`text_speed`, `reduce_motion`, `portrait_overlays` in `Settings::engine_defaults`); `screen::REDUCE_MOTION` and `fx::MAX_FRAME_MS` are now the engine's own (the kit's `vignette` re-exports them). (4) Pixel hashes moved, not re-recorded: the Portraits page's 16 entries of `aegis_ui/tests/fixtures/theme/default_hashes.json` and the vignette and pips entries (36) of `pane_hashes.json` now live in `rpgkit_ui/tests/fixtures/theme/` with the same values, checked by `rpgkit_ui/tests/portrait_page.rs` and `theme_panes.rs`; the pip gauge's native-grid entries moved to `rpgkit_ui/tests/pips_native.rs`. (5) Emberwake: `emberwake_gui` depends on `rpgkit_ui`; its imports read `rpgkit_ui::…` and the gallery keeps a `KitWidgets` (game code changed only in import paths and the gallery's page lookups). Behaviour unchanged: 0 golden diffs, every moved hash equal.
+- **Guess** `[PROVISIONAL]`: the engine's own gallery (no kit) shows 8 tabs, Theme now the fourth; only a game with the kit page sees the old 9.
+- **Docs delta**: `engine/README.md`: drop `pips`, `portrait_fx`, `portrait_overlays`, `vignette` from the `aegis_ui` module list; add "`specimens::KitPage`: a kit or game page in the Kit widgets". `docs/STRUCTURE.md`: `kits/rpg/crates/rpgkit_ui/` (the kit's UI: portrait effects, pips, the vignette player, the Portraits page) in the kit crates. `engine/docs/authoring/motion_profiles.md`, `engine/docs/PORT_NOTES.md` and the Emberwake docs that say `aegis_ui::portrait_fx` / `portrait_overlays` / `vignette`: read `rpgkit_ui::…`. `HISTORY.md`: "2026-11-19 ENGINE-5 part 2: portrait effects, pips and the vignette player moved from the engine to the kit crate `rpgkit_ui`; the engine gallery's Portraits page became a kit page through `KitPage`. No golden or hash re-recorded."
+
+### FB-340: PR7-41 item 9 landed; six guesses and four questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-41` (9), systems playtest PT-25, 26, 27, 30, 32, 34, 35, 36 (@squash `PR7-41-4`)
+- **Built**: PT-26 `command::heal_words` ("healed 7 of 52" when the HP cap cuts a heal; a heal lost entirely still reads "healed 0", which the goldens hold). PT-27 `intent_text::ap_text` "AP 0/10 (N owed)" (display only; the AP debt rule unchanged). PT-30 wearing a stash copy of the class's standard item is refused (`party_ops/gear.rs`), shop rows "Worn by X" and "N Scrap", key items say what they are for (`recipe::uses_of`), pouch pip legend (`gear.pouch.legend`). PT-32 kit `Session::can_retreat` / `retreat` and host command `retreat` (recorded; only while planning when the encounter's timeout outcome is fled; settles as fled), Menu Retreat in world battles with a confirm ("The party falls back to where it came from. Foes already beaten still pay; the rest pay nothing, and the fight is not won."), Restart hidden in world battles, Step hidden while planning, Clear on an auto plan stays cleared this round (a hand pick re-arms the planner), strip and Confirm off under the intro talk. PT-34 kit and GUI wording fixes (`loses this block to <name>`, "fights differently", no doubled phase word, round summary counts logged breaks, `explore::locked_words`, one arrival line, bunk names from the character, "field HP"); seed `games/emberwake/data/seeds/pr7_41_text.json` (34 skill descriptions use `{name}`, `q_hook_overlook` names Winch Sunder, the Alert notice names Bailiff Corvo's toll). PT-35 world service line `turned_in` (kit `SERVICE_IDS`, tokens `{npc}`, `{quest}`), recipient picker only when a reward needs one (`quest::needs_recipient`), quit always asks, slot labels "Slot N · World, Location · date" plus party names. PT-36 bench and unspent-points notes after a join, bunk tip points. PT-25 `record_survivors` returns counts; rewards carry `survivors {lived, of}`; results say "Captives saved: N of M."
+- **Golden note**: PHASEFOLD and the journey diverged mid-work; both changes moved to the GUI (`intent_text::plain` display rewrite of "(blocked by no route)"; recruit notes logged by the GUI), nothing re-recorded.
+- **Not changed (questions)**: (1) here-list rows still look first and walk second (MAPNAV1-U); walk-and-talk in one click would change that design. Results Continue is already one click (the playtest clicked during the 500 ms fade). (2) AP debt as display ("owed") or a rule so AP never goes below 0? (3) count captives on a retreat (built: yes, guests still alive)? (4) PT-26 root cause not reproduced; may need the playtest's exact save.
+- **Guesses**: the Talia line `{npc} scratches a notch off the cipher rod. "{quest}: done. Read the board again."`; captives counted on retreat; Retreat only where the timeout outcome is fled; AP debt shown as owed; the Clear message and pouch legend wording.
+- **Follow-ups**: `plain()` rewrites kit strings by text (fits PR7-45's structured reasons); no test yet for a hand pick re-arming the planner after Clear.
+- **Tests**: kit `rpgkit_battle/tests/log_words.rs`, `battle_events.rs`; `rpgkit_host/tests/party_retreat.rs` (2); `rpgkit_world/tests/item_uses.rs` (2), `turn_in_lines.rs` (3), `party_ops.rs` (+1), `guest_survivors.rs` (+1); GUI `battle/tests/menu_retreat_tests.rs` (3); scenarios `battle_menu_retreat.json`, `hub_text_audit.json`; 15 shots in `/mnt/project-files/pr7-41/item9/`.
+- **Docs delta**: `GAME_BRIEF.md` (battle): "A world battle whose encounter times out as fled can be retreated from while planning (kit `Session::retreat`, host `retreat`; settles as fled: beaten foes pay, the party returns to its previous tile) (PR7-41)." `GAME_BRIEF.md` (quests): "Worlds may define the service line `turned_in` (`{npc}`, `{quest}`), said on a turn-in; battle rewards carry `survivors {lived, of}` shown on the results screen (PR7-41)." `kits/rpg/README.md`: new kit functions `quest::needs_recipient`, `dialogue::join_flags` / `join_note_member`, `recipe::uses_of`, `explore::locked_words`, `command::heal_words` / `blocked_words`, `Session::round_summary`, `Session::can_retreat` / `retreat`. Decisions (gear): "A stash copy of a class's standard item cannot be worn over it (PR7-41 PT-30)." `HISTORY.md`: none (no golden re-recorded).
+
+### FB-341: ENGINE-13 class-body shade slots and the F2 frame on story portraits landed
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-13` (SHADE-EXPORT1), `FB-330` (@squash `ENGINE-13`)
+- **Built**: (1) `/mnt/project-files/pr7-25/export_units_ramps.patch` applied to `tools/sprites/export_units.py` as written (a class body lists each base slot's `_lo` / `_hi` shade the sheet shows; the 16-slot cap counts bases). A full export ran; only the 20 class-body `clips.json` files were kept (kit `units/<class>/{base,looks}` and the game's class variants), and a check confirmed each gains `_lo` / `_hi` palette keys only (frame, clips and every old key unchanged); every sheet and palette file the export rewrote was restored. The sprite tests (`tools/sprites`, 103) and the workspace tests pass with no re-pin needed. (2) The vignette player's line card draws its portrait on `portrait_well` inside the F2 frame (`portrait_fx::draw_frame` with the picture's painted border), replacing its rounded dim-edged panel and 2 px inset; new `rpgkit_ui::portrait_fx::portrait_well()` (the theme's game colour `portrait_well`, same fallback as the game's). The kit pane hashes of the line card (`vignette.3.fade` and `vignette.3.hold` at the four text sizes, 8 entries of `rpgkit_ui/tests/fixtures/theme/pane_hashes.json`) were re-recorded for this intended change; nothing else moved. Review shot: `/mnt/project-files/engine-13/vignette_line_card_f2.png` (the sample card with no portrait file: the empty well and frame).
+- **Docs delta**: `HISTORY.md`: "2026-11-19 ENGINE-13: the vignette line card's own portrait panel (rounded, dim edge, 2 px inset) was replaced by the F2 frame on the portrait well, so every portrait matches (ART-03); kit pane hashes `vignette.3.*` re-recorded." `GAME_BRIEF.md` UI: "Story vignette portraits draw in the F2 frame too."
+
+### FB-342: PR7-43 bunk layout B landed with placeholders; two questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-43` (HUB-BUNKS2), §4 `FB-314`, `FB-316`, Art/UI `AO-13` take 2 mock (@squash `PR7-43`)
+- **Built**: seed `games/emberwake/data/seeds/pr7_43.json` rewrites `sunk_ward_undercroft`: `bunk_1..6` niche bunks (`kiln_bunk`) at y 15 with footprints 3/2/3 wide (x 10, 13, 15, 20, 23, 25) so centres sit 2.5 cells (80 px) apart, three each side of the door; `bunk_7`, `bunk_8` free-standing `timber_bunk` 1x2 at (12,21), (25,21); `idle_bunk_*` anchors moved in front. GUI: the PR7-24 bed plate is replaced by a brass wall plate above each occupied arch (headboard for the south pair) with class glyph `ui/markers/class_<class>.png` and the name (first word, then shortened, when it does not fit; `PLATE_TEXT` 5.0 logical px, `PLATE_GAP` 2, no stagger); class blanket overlays on made beds; founders' `bunk_gear_<character>` on wall pegs and `bunk_keepsake_<character>` on the bed; recruits get blanket and glyph only. Kit rule change: `bunks::place` no longer idles benched members and the new `bunks::sleepers` lists them; the GUI draws a head cut on the pillow as the resting-pose stand-in until `AI-17`; the bunk still opens the card. `[PROVISIONAL]` nooks (plank strip, timber screens, step) drawn by the GUI (map props cannot take sub-cell offsets). Theme game colours `bunk_screen`, `bunk_step`. Agent link reports `drawn`, `plate.*`, `dressed.*` per bunk and `nooks`.
+- **Placeholders (Art/UI request, all under `games/emberwake/assets/`)**: `props/sunk_ward/timber_bunk/v0.png` (flipped cot; no `timber_bunk_<state>` yet); `props/sunk_ward/kiln_bunk_blanket_<class>/v0.png` and `timber_bunk_blanket_<class>/v0.png` for warrior, ranger, rogue, priest, mage, brawler (12); `ui/markers/class_<class>.png` (6); `props/sunk_ward/bunk_gear_{kaelen,vesper,maren,hollis,dunstan,elyse}/v0.png` (6); `props/sunk_ward/bunk_keepsake_<same 6>/v0.png` (6, not in AO-13: the item icons carry a slate tile); `props/sunk_ward/bunk_screen/v0.png`, `props/sunk_ward/bunk_floor/v0.png`. The `kiln_bunk_<state>` art still has its own small plaque inside the arch.
+- **Guesses**: plate text 5 px (the mock's 10 px at 720p; `SMALL` does not fit 2.5 cells); bed measures in `bunks::bed_art` from the mock; south bunks 1x2 to pass the prop-size check; the "six bunks" location text unchanged (cap still 6). At Extra large text a name may show only its first word (the PR7-23 reads-whole check now covers Normal only).
+- **Questions**: (1) is 5 px plate text acceptable, or allow a two-line plate at `SMALL`? (2) one blanket art per bunk art (built, 12) or one overlay per class (6)?
+- **Follow-ups**: `idle_bunk_7` (14,22) and `idle_bunk_8` (27,22) no longer sit beside their bunks (cosmetic); a 1-cell pocket at x 11, rows 21-22 is reachable from row 20; the bunk state test accepts `timber_bunk/` for any state until state art exists.
+- **Tests**: GUI `bunks.rs` `hub_bunks2_bunk_states_with_a_benched_member_asleep` (new), `hub_bunks2_each_occupied_bunk_wears_a_brass_wall_plate` (replaces the PR7-24 plate test), BK9 check updated (benched now sleep); kit `rpgkit_world/tests/bunks.rs` checks `sleepers`. Shots `/mnt/project-files/pr7-43/` (hub at 1280x720 and 1920x1080, benched asleep, XL plates, the take 1 and take 2 mock renders).
+- **Docs delta**: `GAME_BRIEF.md` (BUNKS1 BK2, replacing the FB-314/FB-316 plate lines): "Layout B (`PR7-43`): six niche bunks on the hall's north wall, centres 2.5 cells apart (footprints 3/2/3 wide), three each side of the door; the Timber Frames pair (`bunk_7`, `bunk_8`, `timber_bunk`) free-standing on the south side, head to the wall. An occupied bunk wears a brass plate (class glyph and name) above its arch, or on the headboard; made beds take the class blanket; founders show their gear on wall pegs and their keepsake on the bed." `GAME_BRIEF.md` (BK9): "Benched members sleep in their bunk (`bunks::sleepers`; resting-pose stand-in until AI-17) instead of idling in front of it." `HISTORY.md`: "2026-11-19 HUB-POLISH1 bed plate and the PR7-23 two-height plate stagger replaced by wall plates (HUB-BUNKS2, bunk layout B; user 2026-11-18); BK9 benched members idling in front of their bunks replaced by sleeping in them; the XL whole-name plate check dropped (2.5-cell spacing). No golden re-recorded."
+
+### FB-343: ENGINE-14 golden bisect landed
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-14` (GOLDEN-BISECT1), `FB-334` repeats (@squash `ENGINE-14`)
+- **Built**: (1) `aegis_core::switches`: `on("<name>")` is true when the name is in the comma list of the environment variable `AEGIS_SWITCHES`, and only in a debug build (a release build never reads it, so no switch reaches a shipped game); read once per process; tests `aegis_core/tests/switches.rs`. (2) `tools/fc.sh golden-bisect <golden> <switch> [--keep DIR]` (`tools/planner/golden_bisect.py`): finds the golden by test name (`timeline`, `sim`, `rules`, `phasefold`, `journey`, `checks`, `rules_report`, `rng_hash`; any crate test that records under `RECORD=1`), refuses a switch no code reads, records it with the switch off and then on (`RECORD=1`, the committed fixtures restored byte for byte between and after the runs, whatever happens), and prints per fixture what moved by entry label (fight, sim command line, unit, case; else the index), plus what the switch-off run already moves against the committed golden (the branch's own drift). `--keep DIR` keeps both recordings; `golden-bisect list` lists the goldens and every switch the code reads. Tests `tools/planner/test_golden_bisect.py` (3, in the gate's planner tests). Tried end to end with a scratch switch (`+1` on every hit, removed again): timeline 18 of 18 fights moved, sim 17 of 22 runs, in about a minute each warm; fixtures unchanged after.
+- **How a builder uses it**: put the golden-moving rule behind `aegis_core::switches::on("regrant")` (the crate depends on `aegis_core`), run `tools/fc.sh golden-bisect timeline regrant`, and report the list. Once the user rules, the switch goes (the rule kept or dropped) and the golden is re-recorded as usual. For main Build: the parked `REGRANT_RULE` and retarget patch fit this as two switches.
+- **Docs delta**: `docs/WORKFLOW.md` (the `fc.sh` row): "`golden-bisect <golden> <switch>`: a golden recorded with a test-only switch (`aegis_core::switches`) off and on; lists what moves; fixtures restored." `engine/README.md` (aegis_core): "`switches`: named test-only switches (`AEGIS_SWITCHES`, debug builds only)." `HISTORY.md`: none.
+
+### FB-344: PR7-37 landed; item 4 partial, three guesses, four questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-37` (PLAYTEST-FIX2) items 1-10 with PT-24, PT-29, PT-31, PT-33 folded in (@squash `PR7-37`)
+- **Built**: (1) outside a dev build (`DEV_BUILD`, alias of `DEV_KEYS`: debug plus `dev_tools`) New game skips the world picker when only one start world is playable (kit `new_game::player_worlds`) and asks before replacing the autosave. (2) `Session::timed_out`: banner and results head "Out of time" (not "Defeat"), say whether beaten foes' rewards were kept, and each job still waiting on the fight logs "X is still open: rest, then try the fight again." (results and hub log; `quest::open_on_fight`, `quests_fighting`); the header counts living heroes. (3) kit marker key `use` on points (`""`, `rest`, `crypts`, `stash`; `POINT_USES`, validated, schema field); seed `games/emberwake/data/seeds/pr7_37.json` sets the Sluice Undercroft points (brazier rests or logs why not, cold vaults log crypt use, chest opens the stash); a point next to the party acts on click, else the party walks first; the flood-lock tablet logs its line and "Quest updated: X is ready to turn in." (4) partial: Varka opens her shop only after `ivo_rescued`, before that `stock_shut` ("Nothing yet, dear..."). (6) no empty `[]` tags; worn-gear skills show their own intent (`DeckTerms::intent_for`). (7) Character window: derived column gap, hover cards off the numbers, opaque backing. (8) world map "No open road to X" plus "Next: ..." (`travel::way_toward`, `way_words`), legend lists every active job (`legend_quests`), locked jobs "Opens after X." (`board::unlock_words`), "New road open: A to B." notice. (9) checked: the card closes when the pointer leaves the row (scenario `hover_card_leaves` keeps it). (10) Tools, "(testing)" overlays and the Debug row only in dev builds; Map Camera Zoom on the Display tab only; Edit layout already dev-only and Text Size already reaches battle. (5) already done (PR7-41). Engine: `aegis_ui::ui::tip_widget`, `draw_tip_by` (factored from `draw_tip`), `widget_plumbing!(own_tip ..)`.
+- **Tools**: `tools/web/smoke.js` follows the player flow in the release test build (Tools absent, New game straight to the vignette, the runner by `?screen=runner`); two older failures fixed (slot label pattern, favicon 204). New `games/emberwake/playtests/agent/smoke_player.play` for `profile=release` (the playtest language has no optional step); `smoke.play` unchanged for the gate.
+- **Guesses**: "journal line" = a hub log line plus a results line; the hub chest opens the stash; Map Camera Zoom on Display only replaces FB-287 Option A (the row's PT-33 wording); Varka's closed-shop line wording.
+- **Questions**: (1) other vendor-like NPCs (pawnbroker, lodging, candle-maker, Skerrit): give them shops (new content) or a "no" line like Varka? (2) chest = stash intended? (3) the road notice lasts only for the session, so a road opened before the first map look after a load is not announced: persist it? (4) at XL text the battle Menu button is cut to "Me...".
+- **Tests**: kit `rpgkit_world/tests/job_guidance.rs` (5), `points_of_interest.rs` (3), `rpgkit_content/tests/point_use.rs` (4), additions in `start_worlds.rs`, `party_ops.rs`, `rpgkit_host/tests/party_retreat.rs`; GUI `a_timed_out_fight_reads_out_of_time`, `an_empty_tag_shows_no_brackets`, `map_zoom_is_on_the_display_tab_only`; scenarios `sweep_out_of_time`, `hub_points`, `worldmap_guidance`, `hover_card_leaves`; web smoke pass; `smoke_player.play` 40/40 on release.
+- **Docs delta**: `GAME_BRIEF.md`: "Map points take `use` (`rest`, `crypts`, `stash`) and act when clicked from on or next to them (PR7-37)." "A fight that ends on the round limit reads Out of time and logs the jobs still open (PR7-37)." "The world map gives a Next: way hint and lists every active job; locked jobs say what opens them; a New road open notice is shown (PR7-37)." "Player builds (release) hide the world picker when one world is playable, Tools, the (testing) overlays and the Debug row (`DEV_BUILD`) (PR7-37)." `kits/rpg/README.md`: `POINT_USES`; `new_game::player_worlds`; `explore::point_near` / `point_use` / `point_line`; `roster::crypt_words`; `travel::WayStep` / `way_toward` / `way_words` / `legend_quests`; `quest::open_on_fight` / `quests_fighting`; `board::unlock_words`; `Session::timed_out`; `DeckTerms::intent_for`. `engine/README.md`: `ui::tip_widget`, `ui::draw_tip_by` (a widget-anchored hover card) and `widget_plumbing!(own_tip ..)`. `engine/docs/authoring/agent_playtest.md`: "release-profile runs use `smoke_player.play`; the language has no optional step." `HISTORY.md`: "2026-11-19 Map Camera Zoom on both Settings tabs (FB-287 Option A) replaced by the Display tab only (PR7-37 PT-33): one setting, one place. No golden re-recorded."
+
+### FB-345: ENGINE-15 tools helpers landed
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-15` (TOOLS-HELP1) (@squash `ENGINE-15`)
+- **Built**: (1) `tools/fc.sh golden-bisect repro <switch>`: builds the bins, replays every `games/*/playtests/repro/*.json` with the game's CLI (`game.json` `cli`, else `<id>_cli`) with the switch off and then on, and prints per recording whether it still matches, the divergence lines when not, and "N of M recording(s) move"; refuses a switch no code reads, like the golden mode. Tried with a scratch switch (removed again): the one recording diverged only with the switch on. (2) `tools/fc.sh schema-field <table> <field> <json> [--after <key>] [--replace]` (`tools/planner/schema_field.py`): `<table>` is `content.<kind>` or `world.<kind>`, or a bare kind when only one section has it (`items` and `encounters` are in both, so they must be qualified); the json is the field object, its `key` is `<field>`; added last or after `--after`; a duplicate key is refused unless `--replace` (keeps its place); writes the file in its own one-line form (compact, UTF-8, no trailing newline), so the diff is the new field alone, and refuses to rewrite a file not in that form. (3) `tools/fc.sh seed-from <kind> <id> [<world>] [--set k=v]... [--out F [--append]]` (`tools/planner/seed_from.py`): reads the stored entry through the new `aegis content get <kind> <id> [world=<id>]` (`aegis_content::store::get`; prints the entry as one JSON line), applies each `--set` (dotted keys reach inside, a value is JSON when it parses else a string, `k=` removes the key), writes whole floats as whole numbers, and prints the seed `{"steps":[{"op":"upsert",...}]}` or writes it to F (`--append` adds a step). It writes no data; apply with `tools/fc.sh content apply F`. Checked: a seed with no change applied to `classes warrior` leaves `classes.json` byte for byte unchanged (restored after). Tests `tools/planner/test_tools_help.py` (5) and a repro test in `test_golden_bisect.py` (4 there now), in the gate's planner tests.
+- **Guess**: `content get` numbers print as the store reads them (`1.0`); the seed helper turns whole floats back into whole numbers rather than changing the CLI's output.
+- **Docs delta**: `docs/WORKFLOW.md` (the `fc.sh` row): "`golden-bisect repro <switch>`: the repro replays off and on; `schema-field <table> <field> <json>`: a field into `kits/rpg/schema.json` byte for byte; `seed-from <kind> <id> [<world>] --set k=v`: a seed from a stored entry with changes, for `content apply`." `engine/README.md` (aegis_content / aegis_cli): "`content get <kind> <id> [world=]`: one stored entry as a JSON line." `HISTORY.md`: none.
+
+Entry fields: `Spec`, `Kind` (feasibility, conflict, cost, sim, docs-delta), `Status` (open, answered, closed), `Finding`, `Recommendation`.
+
+FB-01 to FB-281 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-17). New items start at FB-282. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
+
+### FB-347: ENGINE-16 tools helpers landed; scenario shots are not reproducible run to run
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-16` (TOOLS-HELP2), `FB-350` repeats (@squash `ENGINE-16`)
+- **Built**: (1) `tools/fc.sh scenario shots-all out=<dir> [compare=<before dir> [tolerance=8] [pixels=300]] [size=] [profile=] ...`: runs every scenario of the game (`scenario run all`) into a scratch folder, then copies each shot into `<dir>` as `<scenario>__<shot>.png` (`@<WxH>` added only when a scenario ran at more than one size; golden `.diff.png` images and the `playing/` frame sequences left out) with `index.txt`; on a failed scenario the bundles are kept and named. `compare=` lists the shots changed (most pixels first, with the count), new and gone against an earlier `<dir>`: a pixel changed when a channel moved more than `tolerance`, a shot when more than `pixels` did (`tools/planner/shots_all.py`, plain Python PNG reader, no Pillow). Today: 68 shots of 19 scenarios; a compare of 68 shots about 30 s. (2) `tools/fc.sh rename <old> <new> [<path>...] [--strings] [--comments] [--dry]` (`tools/planner/rename_ident.py`): renames a whole-word identifier in tracked `.rs` and `.json` files (or the paths given). In Rust only code changes: string literals (plain, byte, raw), char literals and comments (line, nested block, doc) are left unless `--strings` / `--comments`, and the hits left are listed per file. In JSON an object key or a string value equal to `<old>` is renamed (`--strings`: also as a word inside longer strings), the file's layout kept. `legacy/`, shipped game data (`games/*/data/`, through `aegis content`) and `tests/fixtures/` (goldens) are never touched, only listed. Tried: `MAX_FRAME_MS` renamed across engine, kit and game, workspace built clean with every target, then reverted. Tests `tools/planner/test_tools_help2.py` (6), in the gate's planner tests.
+- **Finding (for main Build and `PR7-4`)**: two runs of the same build give different shots. With tolerance 8, 11 of 68 shots move more than 300 pixels (`tallow_shop` `chandler_talk` 120,884; `story_battle_hub` `t1_battle_beat` 87,144 and `t2_victory_beat` 38,366; the battle-bar shots of `battle_menu_retreat` and `cages_auto_plan` 1,400 to 2,000), and the hub screens of `screens_hub` 100 to 300 (idle animations, by the look of it). That is why `compare` counts pixels instead of bytes and why its default allowance is 300. The screen baselines `PR7-4` waits to record would need an allowance like that, or the shots taken at a fixed animation time. No change made: whether shots should be frame-exact is for Design.
+- **Guesses**: `compare` defaults tolerance 8, pixels 300 (above the hub drift seen; battle animations still show); the `playing/` frame sequences are left out of the flat folder.
+- **Docs delta**: `docs/WORKFLOW.md` (the `fc.sh` row): "`scenario shots-all out=<dir> [compare=<before>]`: every scenario's shots in one folder, with changed, new and gone shots against an earlier folder; `rename <old> <new>`: an identifier across Rust and JSON, strings and comments left unless asked." `HISTORY.md`: none.
+
+### FB-348: PR7-42 pacing landed; five guesses and four questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-42` (PACE1) items 1-4, PT-17, PT-18, PT-19, PT-39 (@squash `PR7-42`)
+- **Built**: (1) kit zone-binding keys `visit_cap` (patrols per location visit, all zones counted, reset on entry), `rest_beaten` (a beaten patrol encounter is not picked again until `gs.time` changes) and `repeat_xp_pct` (XP percent per repeat win); a binding with any of them sends nothing before its own `steps_min`. Optional save key `explore.patrols` (`visit`, `won`, `day`), written only when a binding uses the keys, no save version bump. All 7 Sunk Ward locations use steps 40-60, cap 2, rest on, XP [75, 50, 25]. (2) Quest field `rec_level` (kit schema); the board shows "Lv N" and "Recommended level N." and lists rated jobs lowest first, unrated after in file order; The Cages 4, The Sweep 5. (3) Shop `chandler_stall` (the Candle-Maker) sells Warded Tallow for 5 Scrap; world `rest.needs_upkeep` true; `purse::starved_ap` / `upkeep_after` show "1 day, 1 Tallow, -2 AP" on a trip that empties the purse, an "On arrival" line on Travel and a red legend row at 0 Tallow. (4) Fight 2 hint "Use Vesper's smoke: hide, guard each other, drive them off."; exit tile (11, 4) removed. All data through seed `pr7_42`.
+- **Tests**: `patrol_pacing.rs` (3), `tallow_upkeep.rs` (2), `board_rec_level.rs` (2), `fight2_hint.rs` (1), worldmap unit test (1); scenario `tallow_shop`. A 120-step `patrol_walk` scenario was dropped (map markers only click on screen, walks stop in fights, 500-step limit); the integration test covers it. Goldens unchanged.
+- **Sims**: feel (10 seeds, authored party) and `sim bands` identical before and after. Feel wins: Rooftop 100%, Corvo gate 90%, Sweep 30%, Cages 80%, Bone-Mill 20%, Vats 50%, Crucible 0%. Bands already out on develop: duel ranger 63, priest 32, brawler 64, party line clear 75 (band 80-95).
+- **Guesses**: (a) "decays to 0 after the third repeat" = win 1 100%, repeats 1-3 75/50/25%, win 5 on 0; (b) levels 4 and 5 from the playtest notes (lost at 3, won at 5); (c) a visit is one stay at a location, a day is `gs.time`; (d) "before" is board order only, The Sweep is not locked; (e) the chandler shop name and talk line are new wording, not tagged.
+- **Questions**: (1) Should the third repeat itself pay 0? (2) Should `rest_beaten` be per zone? The Crossroads slum lane binds one encounter, so it goes quiet for the day after one win. (3) The round planner refuses every exit tile as a move target ("That tile can't be moved to."); that may break flee exits elsewhere; worth a row? (4) The refusal at 0 Tallow is the kit's generic "Not enough upkeep to rest."; name the game's upkeep item instead?
+- **Repeats**: the builder wrote throwaway scripts to add a field to the one-line `kits/rpg/schema.json` byte for byte and to build a seed from current entries with a change; two small `tools/` helpers (tools lane idea).
+- **Docs delta**: `GAME_BRIEF.md`: "Act 1 patrols: every 40-60 steps (none before `steps_min`), at most 2 per location visit, a beaten patrol rests until the next day; repeat wins pay 75/50/25% XP, then 0 (zone keys `visit_cap`, `rest_beaten`, `repeat_xp_pct`, PR7-42)." "Warded Tallow: 5 Scrap at the Candle-Maker; Make camp needs 1 Tallow (`rest.needs_upkeep`); at 0 Tallow the map shows the -2 AP fight penalty (PR7-42)." "Quest `rec_level` shows on the board; rated jobs list lowest first (The Cages 4, The Sweep 5)." `kits/rpg/README.md`: `explore.patrols` save key; `battle::settle_xp_pct`, `Tally.xp_pct`, `progression::award_encounter_pct`; `board::rec_level` / `rec_level_text`; `purse::starved_ap` / `upkeep_after`. `HISTORY.md`: "2026-11-19 Fight 2 (Rooftop) exit tile removed and hint reworded (PR7-42 PT-39): a round plan refuses moves onto exit tiles. No golden re-recorded." `BALANCE_REPORT.md`: the sim lines above.
+
+### FB-349: ENGINE-17 shot clock landed; every scenario shot byte for byte in two runs
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-17` (SHOT-CLOCK1), `FB-347` (@squash `ENGINE-17`)
+- **Built**: (1) `aegis_core::clock::Instant` is now a thin wrapper over the platform instant (same methods and operators, `From` both ways for an API such as winit's `WaitUntil`). `clock::step_on()` switches the process to stepped time, `clock::advance(d)` moves it, `Instant::wall()` / `wall_elapsed()` always read the real clock, and `clock::system_now()` gives the date on the same clock (from 2026-01-01 when stepped). Off, `now()` is the platform's own, so windows and shipped runs are unchanged. (2) `aegis_ui::shell::headless`: launch key `clock=step`. The clock is stepped before the first screen opens, no frame is drawn at the pace, each drawn frame first moves time on one frame step (1 / fps), and `frames` takes `ms` (that much game time) and `since_open_ms` (until the top screen has been open that long). Idle exit, pacing, perf frame times (`perf::ms_since`) and clip limits read wall time. (3) `aegis scenario`: every run with no window passes `clock=step`; start-up, each `wait` look (one frame, `WAIT_FRAMES`) and `pause` ask for frames instead of sleeping; shot step `t` (seconds 0 to 60 after the top screen opened, no window only); authoring page `engine/docs/authoring/scenarios.md` section "The shot clock". (4) Kit: a new game's clock seed reads `clock::system_now()`. That was the last difference: one run dropped Watch Hookbill and the other did not. (5) The agent playtest shares `headless_args` and stays on real time: the scenario runner adds `clock=step` itself. (6) Gate step `shotsexact` (`tools/gate_steps.txt`, after `scenarios`): the scenarios step keeps its shots under `target/fc_shots/<game>/`, then every scenario runs again and each shot must be byte for byte the same (`shots_all.py compare ... strict=1`, tolerance 0, pixels 0). Today it reports 74 Emberwake shots (20 scenarios) and 3 hello shots the same; it adds one scenarios run (about 3.5 minutes) to the gate.
+- **Changed outside the engine**: `games/emberwake/scenarios/story_battle_hub.json`: shot `t1_battle_beat` takes `"t": 1.0`. At 0 s the battle's fade-in is still black and the shot is refused as blank. Test files that built `std::time::Instant` for the clock's type now name `aegis_core::clock::Instant` (aegis_ui tests, emberwake_gui battle tests). The bot run's `Headless` sets `stepped: false`.
+- **Tests**: `aegis_core/tests/clock_step.rs` (stepped time, wall time, the date); `aegis_ui/tests/headless.rs` (`clock=` parsed, a bad value refused); `aegis_cli/tests/scenario.rs` (`t` parsed and bounded, `clock=step` passed, the start asks for frames, a pause with no window is one `frames` `ms` request); `cargo check --target wasm32-unknown-unknown -p emberwake_gui` clean. Goldens unchanged.
+- **Guesses**: `t` means "at least t s after the top screen opened": the clock never runs back, so a shot past that time is taken at once. Default 0 is "as soon as the frames after the last action are drawn". A screen counts as opened when the stack's depth or top id changes. A `wait` draws one frame per look. `shotsexact` is in the gate rather than an occasional check: drift would otherwise come back unseen. Design may move it out if gate time matters more.
+- **Docs delta**: `engine/README.md` (aegis_core): "`clock`: the one wall clock; stepped in a run with no window (the shot clock, `step_on` / `advance` / `system_now`), `Instant::wall` for real time." `docs/WORKFLOW.md` (gate steps): "`shotsexact`: every scenario again, each shot byte for byte the same." `HISTORY.md`: "2026-11-19 scenario shots compared with a pixel allowance for idle animation (`FB-347`): replaced by the shot clock (`ENGINE-17`); runs are frame-exact."
+
+### FB-350: PR7-36 style pass items 1-9 landed; items 4 and 9 partial, three questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-36` (STYLE-PASS1) items 1-9; item 10 waits on Art/UI PR #67 (@squash `PR7-36`)
+- **Built**: (1) `ui/theme.json`: `info` gold, `good` amber; game colours `hp` moss `#5f7a4a`, `ap` cold iron `#5b6f8c`, `ally` parchment, `move_fill` / `move_edge`, `exit_open` amber, `exit_shut` oxblood, `party_ring` gold, `label_plate`, read by `emberwake_gui::tokens`. (2) `ui/frames/panel.png` is frame A (generated by `tools/gen_art.py` `fr_double_line`, placeholder for Art/UI); `Ui::frame_in(role)` picks the tier: Character, Journal, board, shop and results `ornate`; talk box and bunk card `panel`. (3) Titles in the display face (`Painter::fit_face`, `text_fit_face`; `screen::title` and text menu rows). (4) 32 px tiles on shop, stash, Skills Owned and the six gear slot rows (empty-slot glyph). (5) Slots and New game over the title backdrop dimmed about 60 % in an ornate panel, lead portrait and Day N on filled slots. (6) Settings chevron uses the chip amber. (7) Battle reach band and move tiles parchment at low alpha, exit an amber marker. (8) World map label plates, gold title and party ring. (9) `aegis_ui::panes`: `TypeStep`, `ColourRole`, `panel_shell` / `shell_in` (`SHELL_DIM` 153), `key_hints`, `list_row` / `icon_tile`, `tip_beside` / `tooltip_box`; layout `panel_shell` binds `close`, `back`, `action`, `hints`; `RowView.sub`.
+- **Left**: item 4 reward rows (with `PR7-32` ART-18), the gear-tab stash list, pouch stacks view; gear tiles sit at the start of each row, not a six-tile grid, until the Art/UI gear mock (UX-24). Item 9 "never stacked" is not enforced; existing screens are not moved onto the shell yet (UISPLIT1 view rows).
+- **Guesses**: `info` gold not parchment (it colours headings and names); oxblood replaces bronze on frame A's top edge; game menu, Camp and Turn-in stay in the popup tier; heal float in `tuning.json` stays green (battle effect); cyan stays in effect and portrait data ("Salt Cyan"); battle panels keep amber for good news (five text colours, following UX-05).
+- **Tests**: `emberwake_gui/tests/theme.rs` (17), including no widget colour outside the palette and no cyan, bright green or light blue literal in GUI source; `aegis_ui/tests/shared_blocks.rs` (6); the `region.rs` shop-dim test now measures left of the ornate corners. Before and after shots for 18 screens in `/mnt/project-files/pr7-36/`. Known wart: the Character window's ornate corners overlap the HUD bar slightly. Goldens unchanged.
+- **Questions**: (1) Move the heal float colour to a muted token too? (2) Gear as a true six-tile grid now, or after the gear mock? (3) Enforce "never stacked" in navigation (a shell replaces the previous one)?
+- **Repeats**: a before/after shot loop over all screen scenarios to the mount ran twice (a `scenario shots-all out=` helper); bulk renames hit a string literal (a rename helper that skips strings). Tools lane ideas.
+- **Docs delta**: `engine/README.md` (`aegis_ui`): "panes: shared blocks `TypeStep`, `ColourRole`, `panel_shell` / `shell_in` (`ShellView`, `ShellAct`, `SHELL_DIM`), `key_hints`, `list_row` / `icon_tile` / `row_h_on`, `tip_beside` / `tooltip_box`; `Ui::frame_in(role)` frame tiers; `Painter::fit_face` / `text_fit_face`; layout `panel_shell` binds `close`, `back`, `action`, `hints`; `RowView.sub` (PR7-36)." Also line 55: `MenuStyle::Text` rows now use the display face. Art/UI request: the frames README under `assets/ui/frames/` still describes the old riveted `panel.png`; frame A replaced it. `GAME_BRIEF.md`: "UI colours: game tokens in `ui/theme.json` `game_colors` read through `emberwake_gui::tokens`; frame tiers: main panels `ornate`, popups `panel` (frame A) (PR7-36)." `STRUCTURE.md`: `emberwake_gui/src/tokens.rs`, `aegis_ui/tests/shared_blocks.rs`. `HISTORY.md`: "2026-11-19 `ui/frames/panel.png` iron line with corner rivets replaced by frame A; theme `info` cyan and `good` green retired (PR7-36 ART-01, ART-02). No golden re-recorded."
+
+### FB-351: ENGINE-18 layout parts for long lists landed; AI-27 can go ahead
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-18` (LAYOUT-KIT2), Art/UI `AI-27` (@squash `ENGINE-18`)
+- **Built** (`aegis_ui::screen_layout`, `panes`, `ui`): (1) A `list_row` region shorter than its list becomes a scroll area. Its id is `<screen>.<region>`, the wheel scrolls it, and a scroll bar shows. Every row stays a widget with its action whether it shows or not, so `settings_controls.f_bindings.11` resolves, and a row scrolled out has no room to be clicked by the mouse. When the keys or a pad move the focus (the ring shows), the list scrolls to keep the focused row and one row on each side in view, so arrow down walks the whole list. The new `Ui::scroll_to` writes the offset back to the kit, and a mouse user is not scrolled about. The default layout still gives a list its whole height. (2) No icon tile when no row of the list has a picture (`RowLook::bare`); the name starts at the left. (3) A row's `detail2` (view JSON key) is a second numbers column at the right end, with `detail` before it. Each column is as wide as its widest entry in the list, so the columns line up (`RowLook::columns`). (4) `stat_block` takes `"style": "muted"`: both columns dim. (5) A new component `heading` with the region key `text` (fixed words, no bind; gold, display face, one line). `text` on any other component, or a heading without it, is refused. Region ids stay `f_<field>`. Authoring page `engine/docs/authoring/screen_layouts.md` updated.
+- **Tests**: `aegis_ui/tests/layout_kit2.rs` (4). A controls-shaped view (24 bindings) goes through a layout with a 60-unit list region. Every row id exists and row 20 carries its action. Scrolled to the end, a click at row 20 hits row 20. A focused row 20 and its neighbours come into view, and back at row 0 the list returns to the top. A list with room has no scroll area. The new keys are parsed or refused, `detail2` round-trips, and a bare row starts with its text. The test builds its own view because the game's fixture has 7 rows and engine tests name no game. Review render: Art/UI's draft with a 40% list region, headings over both lists, muted fixed inputs and the fixture's key and pad split into the two columns; it scrolls and lines up. Goldens unchanged.
+- **For Art/UI (AI-27)**: the draft can now use `"h"` shorter than the list, `{"component": "heading", "text": "Fixed inputs"}` and `"style": "muted"` on `fixed`. For the two columns, the screen's view must give `detail2`; today Settings puts "Enter · Pad A" in one `detail`. Splitting it in `emberwake_gui` is a one-line change for main Build when the layout lands.
+- **Guesses**: one row of margin around the focus; the heading uses the body size in the display face; a column is as wide as its longest entry, so one long "Press a key or button…" widens the key column for every row.
+- **Also changed**: `emberwake_gui/src/controls_view.rs` builds its rows with `detail2: String::new()` (the new field; no behaviour change).
+- **Docs delta**: none beyond the engine authoring page. `HISTORY.md`: none.
+
+### FB-352: PR7-44 Controls rebinding landed; eight guesses and four questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-44` (CONTROLS-UI1), §4 `FB-327` (@squash `PR7-44`)
+- **Built**: the static Controls key table (`menus::CONTROLS`) is replaced by a rebindable view. Engine `aegis_ui::controls`: `Action`, `Input` (key or pad button), `Rebind` with `Step` (idle, waiting, clash) and `Outcome`; `Controls::key_for` / `pad_for` / `bind_key` / `bind_pad` / `gives` (a bind is a swap, so every input gives one thing); `key_label`, `Pad::label`, `capturable`; reset removes the settings key `controls`. `Screen::capture(cx, Input)` gives the top screen the raw key or pad button before the control map (press, pad, gamepad). `Ui::nest`, `Widget::map`; `screen_layout::default_height`, and default text blocks size to their wrapped lines (they overlapped the next field). Game: view-model `settings_controls` in `emberwake_gui/src/controls_view.rs` (26 actions, 8 fixed inputs; fields `prompt`, `bindings`, `fixed`; actions `bindings`, `swap`, `cancel`, `reset`), fixture `assets/ui/views/settings_controls.view.json`, drawn through the default layout; a `ui/layouts/settings_controls.json` from Art/UI is picked up with no code change.
+- **Guesses**: an action is one logical key across screens (one row "Walk left / autoplay (battle)"); a row accepts a key or a pad button; in the clash question Enter swaps, Esc cancels, the row also reads "Z taken · Enter swaps"; binding a pad button to an action that has none is refused ("Help has no pad button to trade; rebind Next control first.", `Outcome::Refused`) so no action loses its only pad button; since every default button gives a listed action, a buttonless action cannot get a pad button through this tab (review fix); pad labels use Xbox names (`[PROVISIONAL]`, FB-327); Esc, F-keys, Shift+digit and Ctrl+Enter cannot be bound; the default footer "Rebind" button with no row does nothing; Restore defaults is enabled only while a custom map exists.
+- **Tests**: engine `tests/controls.rs` (+4), `shell.rs` (+1, raw input through the link, Esc cancels, Tab captured); game `controls_view` (+5, fixture matches the view), `settings_tests::the_controls_tab_rebinds_saves_and_resets` (rebind, reload with `Settings::load`, cancel, clash and swap with text audits at 4 sizes, reset); scenario `controls_rebind` (audits at 1.0 and 1.3). Goldens unchanged.
+- **Look**: the default layout shows field names as small labels ("prompt", "bindings"), empty icon tiles on rows, and Reset at the bottom of the scrolled list; an Art/UI layout for `settings_controls` would fix these (Art/UI request).
+- **Questions**: (1) HUD buttons and the battle help still show the default letters (P, J, I, ?) after a rebind; show the bound key? (2) A pad-only player has no cancel while a rebind waits, since every button can be bound; reserve one (View?) as cancel? (3) Should buttonless actions (Journal, Undo) be able to take a pad button, e.g. through spare buttons or a chord? (4) Some keys screens read are not listed (`y`, `r`, digits); rebinding onto them swaps without asking; list them as fixed?
+- **Docs delta**: `engine/README.md` input row: "CONTROLS-UI1: `controls::{Action, Input, Rebind, Step, Outcome}`, `Controls::{key_for, pad_for, bind_key, bind_pad, gives}` (a bind swaps), `key_label`, `Pad::label`, `capturable`; `Screen::capture` takes the raw key or pad button before the map; `Ui::nest`, `Widget::map`; `screen_layout::default_height`, default text blocks size to their wrapped lines." `STRUCTURE.md`: `emberwake_gui/src/controls_view.rs`; `games/emberwake/assets/ui/views/settings_controls.view.json` (Build). `GAME_BRIEF.md`: "Settings > Controls rebinds keys and pad buttons (settings key `controls`); a clash asks before it swaps (PR7-44)." `HISTORY.md`: "2026-11-19 The static Controls key table (`menus::CONTROLS`) replaced by the rebindable view (PR7-44). No golden re-recorded."
+
+### FB-353: PR7-39 Stage A, the shop's view-model landed; ENGINE-8 KU2 can take the shop
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-39` (UISPLIT1-G) Stage A (@squash `PR7-39` Stage A)
+- **Built** (`emberwake_gui/src/shop_view.rs`): the view `shop` with every field today's drawing shows. Texts `title`, `band`, `total`, `purse`, `detail` and `errors`. Row lists `offers` (row id the offer id; `detail` the price, `detail2` "X of N", off at the cap), `trade` (`buy.<offer id>` and `sell.<item>`, `detail` the signed gold), `stash` (row id the item) and `others` (stash items the shop does not buy, always off). Actions `buy`, `buy5`, `buy10`, `sell`, `sell5`, `sell10` and `return` take the row id as arg; `clear`, `confirm` and `close` take none. `act` maps each to today's `ShopAct` and runs `ShopPane::act`, so the rules stay in one place. The fixture is `games/emberwake/assets/ui/views/shop.view.json`.
+- **No visible change**: `ShopPane::draw` is untouched, so the widget tree and every shot stay the same. The agent link's `shop` state gains a `view` key with the view-model (`talk::ServiceScreen::state`), so a scenario or agent can read the same fields a layout will draw.
+- **Tests**: `shop_view::tests` (3) on a debug game of the first playable world, every open shop. The rows follow `shop::offers` and `shop::sell_list` in order. Buy, `+5`, `+10` up to the cap, a line put back whole, sell up to what is owned, Clear, and Confirm paying the purse. The fixture has the view's shape.
+- **Guesses**: (1) a row's picture is the first file of the item's icon chain (supplies have none); the layout falls back as the drawing does once ENGINE-19 is in. (2) `shop_act` and `act` carry `allow(dead_code)` outside tests until Stage B's layout draw clicks through them. (3) The tests use the debug game, as the shop's own tests do, rather than a recorded save.
+- **For ENGINE-8 KU2**: the shop now has a view-model, so the tools lane takes it next (move to `rpgkit_ui`, today's drawing kept, KU5 no behaviour change).
+- **Docs delta**: none. `HISTORY.md`: none.
+
+### FB-355: ENGINE-19 layout parts for a shop-like screen landed; PR7-39 Stage B can go ahead
+
+- **Status**: open
+- **Spec**: `READY.md` §3 `ENGINE-19` (LAYOUT-KIT3) (@squash `ENGINE-19`)
+- **Built** (`aegis_ui::screen_layout`, `panes`): (1) Row `buttons` (`[{"action", "label", "enabled"}]`), drawn at the row's right end, each a widget `<row widget id>.<action>` running that view action with the row's id. A button is off when it says so, its row is off or the view's action is off; every row keeps the widest row's button room free so the numbers line up. (2) Row `selected` draws the selected fill (the widget is active). (3) Row `tone`, a theme colour role (`theme::ROLES`) for `detail`; an unknown role is refused when the view parses. `RowLook` gains `tone`. (4) `list_row` bind `then`: a second rows field under a divider in the same scroll area, dimmed and never clicked, widgets `<screen>.<region>.then.<i>`. (5) A `detail_line` component (bind `text` optional) shows the note (row `note`) of the row under the pointer, else the focused row's, else its text; it draws after every list, so it shows this frame's row, and `Drawn::hot` gives the screen that row's widget id and note. (6) Region key `row_ids` on a `list_row`: `true` gives `<screen>.row.<id>`, a prefix gives `<prefix>.<id>`; two lists may not share one. COMPONENTS has 15 entries.
+- **Tests**: `aegis_ui/tests/layout_kit3.rs` (4), on a shop-shaped view: ids and buttons with their actions, off states, the selected row, the dimmed section; foe-coloured pixels only on the toned row; the detail line by pointer, focus and fallback; the JSON round trip and the refusals. ENGINE-18's tests unchanged.
+- **Guesses**: (1) `row_ids` is opt-in, so lists without it keep their index ids (the controls draft and its scenarios keep working); the spec's "when the view gives them" read as the layout asking for them. (2) A button's widget id is `<row widget id>.<action>`; today's shop uses `shop.add5.<id>` and `stash.add10.<item>`, so Stage B moves the shop's tests and the tallow_shop scenario to the new ids (or Stage B names its actions to fit). (3) The tone colours `detail` only, also on a row that is off, as today's shop colours an out-of-reach price. (4) The detail line follows the focus only while the focus ring shows (keyboard or pad), as the list's scrolling does.
+- **Also changed**: the `RowView` literals in `controls_view.rs` and `shop_view.rs` end with `..Default::default()` (the new fields; no behaviour change).
+- **Docs delta**: none beyond the engine authoring page (`engine/docs/authoring/screen_layouts.md`). `HISTORY.md`: none.
+
+### FB-356: PR7-40 part 1 landed (contract sections 1-6); part 2 next; three questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-40` (BATTLE-UI2), `SCREEN_CONTRACT_BATTLE.md` sections 1-8 (@squash `PR7-40-1`)
+- **Built**: kit unit field `short_name` (falls back to `name`; `UnitDef::plate_name`, `PLATE_NAME_MAX_CHARS` 15), content check `plate_name_warnings` (only warning today: test unit `tl_crossbowman`); kit `intent::foe_card` (`CardHit`, `FoeCard`) from the live planned schedule; `Phases::next_reinforcement`, `Objectives::goal_of` / `protect_of`. Seed `pr7_40`: 24 enemy short names per the row. Game: view-model `battle_view.rs` with fixture `assets/ui/views/battle.view.json`; `battle/plates.rs`, `battle/card.rs`. (1) frame A on plates, card and skill menu; side and top panels keep the HUD frame. (2) portrait, "Round N of M" in gold, goal and protect lines, AP pips under tiles, red block ruler on impact blocks, AP line with grey owed part, amber Confirm rim. (3) plates 176 px in 184 px panels, board 888 px; guest plates with AI and Protect tags. (4) "Hostiles N", reinforcement tag, full plates to 6, compact from 7, groups from 11, crown and boss gold. (5) docked foe card in both modes: KO and BREAK tags, crit star, split shield, after-KO and totals; hidden while the timeline view covers the board. (6) 4 status slots plus "+N", buff and debuff rims, rounds, ordered by `tabs_of`.
+- **Left for part 2**: section 2 effect chips, tactic pennant buttons, play-style Auto, 2 px gold rim on the selected tile; section 4 group click expands (today it selects the first unit); section 6 moss-heart heal preview; section 7 skill menu rows; section 8 board previews (hazard icons, push arrows, dashed landing).
+- **Guesses**: plate name limit 15 characters standing in for a pixel width; strip stays 48 px so the board does not move; hero panel stays under the plates (only Self / Ally kept when short); crit star only with a KO block; with no pin, hover or target the card shows the first foe; tab effect line is `label_with_magnitude`; classic mode keeps widget id `card.unit`; empty-card notes "No hit planned" / "No hits planned"; new colours (`frame_a_*`, boss gold, planned, guest, oxblood) are code constants, `theme.json` untouched.
+- **Placeholders** (copies at final paths): `kits/rpg/assets/statuses/empower.png` (fortify), `guard.png` (steadfast); `kits/rpg/assets/ui/badges/crown.png`, `crit_star.png`, `split_shield.png`, `heart.png` (Art/UI request).
+- **Art/UI layout needs**: `ui/layouts/battle.json` with rects for strip, party, guests, hero, board, hostiles, the foe card and the bottom bar (today strip 2,2,636,24; sides 2,28,92,290 and 546,28,92,290; board 98,28,444,290; card 158 wide at the board's top right), plate sizes 88 x 42 and compact 26, strip portrait 18, title end 88. Theme tokens for the new colours could go with it.
+- **Tests**: `rpgkit_battle/tests/foe_card.rs` (4: plan-derived rows, pip loss per hit, KO block, crit star at 50 %), `rpgkit_content/tests/plate_names.rs` (3), `battle_view` unit tests (2); ten battle GUI tests updated for the new layout; `ruleset_switches.rs` seed chain includes `pr7_40`. 26 battle shots changed; shots-exact holds. Goldens unchanged.
+- **Review follow-ups for part 2**: a crit-star test at the 50 % boundary (two hits at 0.5 star, one at 0.4 none); tests for `goal_of`, `protect_of`, `next_reinforcement`; a hovered plate or a pin overrides the selected hero's target on the card while planning (contract section 5 keeps the hero's target); `goal_of` reads "Hold N rounds" where the contract shows "Survive N rounds"; schema `short_name` `max_len` 24 vs the 15-character plate (no warning on an over-long `short_name`). The new colours (`boss_gold` `#e8b84a`, `planned` `#d98c2b`, `guest` `#2da39a`) are raw literals and would fail the theme palette test if made tokens.
+- **Questions**: (1) Should the new battle colours become `theme.json` tokens, and should Art/UI write them? (2) Should clicking a group expand it, or select its first unit? (3) Should the hero panel go once the plates carry everything?
+- **Docs delta**: `STRUCTURE.md`: `emberwake_gui/src/battle_view.rs`, `battle/plates.rs`, `battle/card.rs`; `assets/ui/views/battle.view.json`; `rpgkit_battle/tests/foe_card.rs`; `rpgkit_content/tests/plate_names.rs`. Seeds README: "`pr7_40.json`: PR7-40 enemy `short_name` (plate names)." `kits/rpg/README.md`: "`units.short_name` (optional, falls back to `name`; the check warns past 15 characters); `intent::foe_card` derives the foe card from the planned schedule." `HISTORY.md`: "2026-11-19 BATTLE-UI2 retires the intel side panel and party cards (`draw_ap_pips`, `poise_number`, `card_rows`) for plates and a docked foe card (PR7-40). No golden re-recorded."
+
+### FB-357: ENGINE-8 KU2, the shop moved into the kit (rpgkit_ui); no behaviour change
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-8` (KIT-UI1) KU2-KU5, the shop first (@squash `ENGINE-8` KU2)
+- **Built**: `kits/rpg/crates/rpgkit_ui/src/shop.rs` holds the trade (`Trade`, `ShopAct`, `buy_cap`, `of_text`, `ShopPane` with its `act` and today's drawing, `frame_rect(p, hud_h)`, `item_tile`). `rpgkit_ui/src/shop_view.rs` holds the view-model and its actions. Both run on the engine's `aegis_ui::Cx<G>` for any game half `G: ShopGame`. The trait gives the data, the game state, the purse words, an item's detail line, its icon files, the log line and the HUD height. `rpgkit_ui` now depends on `rpgkit_world` (the shop rules). The kit files name no game.
+- **Game side**: `emberwake_gui/src/shop.rs` keeps `item_line`, `worn_by`, `item_use_note` (the game's texts), implements `ShopGame for GameCx`, re-exports `ShopAct`, `ShopPane` and `DISCARD`, and keeps `frame_rect(p)` for the board, recipe and facility panes. `shop_view.rs` is a wrapper (`view(&Cx, ..)`). All of their tests stay in the game, unchanged apart from imports. `item_line` now takes `&GameCx` (callers pass `&Cx` as before).
+- **KU5**: no behaviour change. The gate passes with no golden or shot change, and the shop's GUI tests and audits are unchanged.
+- **Tests**: a kit unit test for the trade's caps and sums, with no game (`rpgkit_ui` `shop::tests`).
+- **Guesses**: (1) The kit keeps the shop's English UI words ("Click a row to add it.", "Discard this trade?", "Confirm trade"); the game-specific words (the purse terms, an item's detail line) come from the game. (2) The game keeps its tests rather than moving them into the kit, because they run on the game's world.
+- **For main Build**: shop code now lives in `rpgkit_ui`; rebase if you touch `emberwake_gui/src/shop.rs`.
+- **Docs delta**: `docs/STRUCTURE.md`: `rpgkit_ui` gains `shop.rs` and `shop_view.rs` (the trade screen and its view-model, hosted through `ShopGame`); `emberwake_gui/src/shop.rs` becomes the host (`ShopGame for GameCx`, the item texts) and `shop_view.rs` a wrapper. `HISTORY.md`: none.
+
+### FB-358: PR7-40 part 2 landed; section 7 needs a ruling
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-40`, `SCREEN_CONTRACT_BATTLE.md` sections 2, 4, 6, 8; §4 `FB-356` answers; Art/UI token picks (22f026c) (@squash `PR7-40-2`)
+- **Built**: `ui/theme.json` `game_colors` adds `boss_gold` `#fbbf24`, `planned` `#d97706`, `guest` `#45857c`, plus `frame_a_outer` `#74543c`, `frame_a_inner` `#4b5563`, `frame_a_top` and `oxblood` `#991b1b` (the theme test needs every colour code reads); `tokens.rs` reads them all through `th().game`, with `moss()` and `moss_gain()`. Section 2: 2 px gold rim on the latest pick; effect chips centred on each tile's top edge (moss heart for a heal, one chip per status, hover `strip.effects.k`); party and hero tactics as 44 px pennant buttons (ids and text kept); Auto as a play triangle with an amber tag; classic battles and playback keep the text menus. Section 4: `Action::FoeGroup(key)` opens a group into compact plates; its header closes it. Section 5: while a hero plans against a foe, the card stays on that target. Section 6: kit `intent::heal_on` (planned heals on a unit, capped at missing HP) as a pale moss gain on plate HP bars with a heart and "+n"; card damage rows use a red heart. Section 8 (`battle/marks.rs`): ground hazards show their status icon and rounds left; push and pull show a dashed gold arrow to a dashed landing tile. Goal line "Survive N rounds"; a `short_name` past 15 characters warns.
+- **Not built**: section 7 skill menu rows. The contract and take 11 show one row per skill opening on a strip block; today's menu is the icon grid per intent (VISCLAR1-D, IR19), opened from a board tile, and a click on a ghost strip block already accepts the ghost.
+- **Guesses**: the "selected tile" is the latest pick; chips only while planning, item uses get none; heal preview counts Support skills, not pouch items; rounds left = last round - current + 1; playback speed chips keep the old widths; group open state resets per battle screen.
+- **Tests**: `foe_card.rs` crit star at exactly 50 % vs 40 %; `top_bar_lines.rs` (3: `goal_of`, `protect_of`, `next_reinforcement`); `heal_preview.rs` (1); `plate_names.rs` long short name; `battle_ui2b_tests.rs` (3: group open and close, card stays on target, pennant and Auto); `visclar_c_tests.rs` two expectations follow the chips and the gold rim. 25 battle shots changed; shots-exact holds. Goldens unchanged.
+- **Review notes**: the four extra tokens (`frame_a_outer`, `frame_a_inner`, `frame_a_top`, `oxblood`) were not in Design's pick, so Art/UI please confirm them (AI-36). The new `game_colors` keys break the file's alphabetical order. An open foe group still lists its members in the group row of the Hostiles text view as well as in their own rows. Section 8 marks and the heal "+n" have no GUI test yet.
+- **Questions**: (1) Section 7: should the row menu replace the icon grid or open beside it, and what opens it from a strip block when a click on a ghost block accepts the ghost? (2) No scenario shows chips, hazard icons or push arrows; add a scenario with a heal, a status, a hazard and a push for proof shots (Build can do it in part 3)?
+- **Docs delta**: `STRUCTURE.md`: `rpgkit_battle/tests/top_bar_lines.rs`, `heal_preview.rs`; `emberwake_gui/src/battle/marks.rs`, `battle/tests/battle_ui2b_tests.rs`. `kits/rpg/README.md`: "`intent::heal_on` previews the planned heals on a unit; the plate check also warns on a `short_name` past 15 characters." `HISTORY.md`: "2026-11-19 PR7-40 part 2: the goal line Hold N rounds becomes Survive N rounds; the foe card no longer follows a hovered plate or a pin while a hero plans. No golden re-recorded."
+
+### FB-359: PR7-39 Stage B, the shop now draws through its layout; widget ids moved
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-39` (UISPLIT1-G) Stage B, with FB-355's answer: one id scheme (@squash `PR7-39` Stage B)
+- **Built**: `ShopPane::draw` (`rpgkit_ui::shop`) now builds the view and draws it through `ui/layouts/shop.json` in the same frame (`frame_rect`), with each click mapped back to its `ShopAct` (`shop_view::shop_act_of`). Today's hand drawing (about 230 lines) is gone. The layout is the kit's `kits/rpg/assets/ui/layouts/shop.json`, so it is not a game layout file and Art/UI's ownership of `games/emberwake/assets/ui/layouts/` is untouched; a game `shop.json` there replaces it. The same file is built in (`shop::builtin_layout`) for a context with no asset layers (the GUI tests) or a layer file that does not fit. The view gained what the drawing showed: row `buttons` (+5 / +10, never on loot), `selected` (in the trade), price `tone` (`foe` above the gold left, `gold` while on, `dim` off; trade lines `foe` / `good`), row `note` (the detail line), a `hint` field ("Click a row to add it." on an empty trade), and pictures from the first icon file the art layers hold. The detail line keeps the last hot row (`Drawn::hot`).
+- **Look**: before and after shots are in `/mnt/project-files/pr7-39/stageB/` (`before_chandler_shop.png`, `after_chandler_shop.png`, `after_with_lines.png`). The same three columns, header, totals and bar. Differences: the column headings are the kit's gold display-face `heading`; the columns use the popup double line (the 11-18 frame rule for popups); rows are the shared row (taller, numbers in the mono face); the bar buttons are wider.
+- **Behaviour changes**: (1) The rows and buttons have no hover cards. The detail line under the columns shows the same item text, and the "Not bought here." note moves into that line for the dimmed rows. (2) "Not enough gold: N more needed." now shows on the refusal line while Confirm is off, instead of only in Confirm's hover card. (3) The total and purse lines are no longer coloured by sign.
+- **Widget ids** (one scheme): offers `shop.row.<id>`, their buttons `shop.row.<id>.buy5` / `.buy10`; stash `stash.row.<item>` and `.sell5` / `.sell10`; trade lines `trade.row.buy.<id>` / `trade.row.sell.<item>`; the dimmed rows `shop.stash.then.<i>`; the bar `shop.close`, `shop.clear`, `shop.confirm`; the detail line `shop.detail`. The shop's tests, `runover`'s purse test and `scenarios/tallow_shop.json` moved to them (`trade.confirm` became `shop.confirm`).
+- **Tests**: the shop's GUI tests pass unchanged in what they check (including the text audit at every text size), now reading counts and the refusal from the view in the agent link (`shop.view`). Kit tests: the layout file parses. The gate passes.
+- **Guesses**: (1) The kit layout, not a game layout file, is the right home for "a layout matching today's look", so the game's own layouts stay Art/UI's. (2) Dropping the per-row hover cards is acceptable because the detail line carries the same text; ENGINE could add row tips later if Tushar wants them back. (3) This is a visible change but not a feel change, so it lands without waiting for his eyes. Design may want it on `NEEDS_YOUR_EYES`.
+- **Docs delta**: `games/emberwake/docs/SCREENS.md` row 09: the shop draws through the kit's layout `kits/rpg/assets/ui/layouts/shop.json` (`rpgkit_ui::shop`, view `shop_view`). `HISTORY.md`: the shop's hand drawing (PLAYUI1-P, 2026-10) is replaced by the layout (UISPLIT1-G Stage B); its per-row hover cards go with it, and the detail line carries their text.
+
+### FB-360: PR7-53 and PR7-50 landed; three questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-53` (BUNKS-LAYOUT3, take 8 mock `art_src/style/hub_bunks_take8_mock.py`) and `PR7-50` (BUNKS-UPGRADE-PROPS1) (@squash `PR7-53`)
+- **Built (PR7-53)**: seed `pr7_53` (`seed-from --fields rows,props,anchors`): `bunk_1`..`bunk_6` art `niche_bunk`; `bunk_7` and `bunk_8` `cot` 3 x 2 beds at (10,21) and (25,21), `bunk_8` mirrored; stove to (19,20); the `stores` barrels removed. `emberwake_gui/src/bunks.rs`, `region.rs` (drawn at physical pixels so the mock's single pixels hold): dressed-stone wall with a plank strip, a niche with keystone per bed, a plain oxblood and gold lunette for founders (hook for `PR7-52`), beds land at x 392..872 as in take 8, a peg board per niche bunk (founders `bunk_gear_<id>`, recruits their first equipped item's icon), one brass plate style (the south pair on a post by the pillow; an empty bed gets a blank plate), benched members asleep in the front `idle_down` frame with the blanket over the shoulders. Removed: the `PR7-43` nooks, screens, step and bed keepsakes. Theme plate colours `bunk_plate`, `bunk_plate_edge`, `bunk_plate_text` (prop paint in the palette test).
+- **Built (PR7-50)**: there is no bunk facility gate today (bunks 7 and 8 wait on the bunk cap, `bunks` 6, `bunks_max` 8), and map prop keys are defined in code, so the reverse gate is a prop key `until_bunk` naming the `bunk_<n>` prop whose place it holds (kit `source::PROP_UNTIL_BUNK`, `BUNK_PROP_PREFIX`; left out of saves when empty). Content check: `until_bunk` must name a bunk prop of the same map, a bunk prop cannot carry one, and a prop may share tiles only with the bunk it holds. Kit `bunks::open_bunk_ids`, `prop_shown`, `shown_props`; the GUI filters on them and the agent link reports `bunk_held`. Seed `pr7_53_upgrade_props` (named so it replays after `pr7_53` in the seeds step): `spare_timber` (10,22) and `spare_pallet` (12,22) hold `bunk_7`; `spare_pallet_2` (25,22) and the kit `crate_stack` (26,22, its art has a barrel) hold `bunk_8`.
+- **PR7-46 overlap**: item 2 is covered (`idle_bunk_7` at (13,22), `idle_bunk_8` at (24,22), the pocket at x 11 rows 21-22 closed). Items 1 (two-line plates, whole-name check at Extra large) and 3 (one click walks and talks) are not; plates stay single-line at 5 px as in take 8, so item 1 may need re-reading against take 8.
+- **Guesses**: bed art renamed `cot_side` to `niche_bunk` (the `_side` suffix means wall-mounted props in `sunk_ward_maps`); crypt beds also get the class blanket; lunettes only for named founders; the sideways sleeper pose; no timber stack in the east cell (no room); props per the row and take 4 (take 8 shows take 5's sawhorse set); placement within 11 px of the mock (whole cells).
+- **Placeholders** (`games/emberwake/assets/props/sunk_ward/`): `niche_bunk/v0.png` (copy of `cot_side`), `niche_bunk_blanket_<class>` and `cot_blanket_<class>` (12, tinted), `bunk_wall`, `bunk_niche`, `bunk_lunette`, `bunk_pegboard` (cut from the mock's drawing), `bed_timber_stack/v0.png` and `rolled_pallet/v0.png` (drawn from the take 4 mock). Now unused: `kiln_bunk_*`, `timber_bunk*`, `bunk_keepsake_*`, `bunk_screen` (Art/UI may retire them).
+- **Tests**: GUI `bunks.rs` 13 (new: take 8 positions and sleep pose; stove between the tables and no hall barrels; props hold the Act 2 bunks until the upgrade; four updated for the new layout); `theme` 17; kit `rpgkit_world/tests/bunk_upgrade_props.rs` (2), `rpgkit_content/tests/until_bunk_checks.rs` (4). Only hub shots changed (16). Goldens unchanged, journey and store resave included.
+- **Questions**: (1) Act 1 props on the Act 2 cells: the take 4 set the row describes, or take 5's sawhorse set that take 8 shows? (2) Should empty north bunks also get a blank plate? (3) Is `until_bunk` fine in place of `until_facility`?
+- **Docs delta**: `GAME_BRIEF.md` (BK2): "Hub bunks follow the take 8 layout (PR7-53): six niche beds 80 px apart on a dressed-stone north wall, each in an arched niche with a keystone, a lunette cloth for founders, a brass plate on the wall band and a peg board of gear; benched members sleep in the front idle pose; the stove stands between the tables; the Timber Frames pair lies sideways on the south wall, the east one mirrored." "A map prop's `until_bunk` holds that bunk's place until the bunk cap reaches it (PR7-50); the Act 2 bunk cells show timber, pallets and crates until then." `kits/rpg/README.md`: `source::PROP_UNTIL_BUNK`, `BUNK_PROP_PREFIX`; `bunks::open_bunk_ids`, `prop_shown`, `shown_props`. `STRUCTURE.md`: the two kit test files. `HISTORY.md`: "2026-11-19 PR7-43 kiln-arch bunks, plank nooks with screens and bed keepsakes replaced by the take 8 niche layout (BUNKS-LAYOUT3); west barrels removed. No golden re-recorded."
+
+### FB-361: PR7-39 Stage B look fix; the shop's layout now matches the hand-drawn look
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-39` Stage B fix (Design's review of FB-359, points a-d) (@squash `PR7-39` Stage B fix)
+- **Built** (`aegis_ui::screen_layout`, `panes`): (a) `list_row` `style: plain` draws the numbers in the body face; row `tone2` colours `detail2` (the shop's counts in `info`, as before). (b) `panel_shell` `style: box` with a region `fill` (a theme colour token: role or game colour) draws a plain box with one thin `edge` line and no frame file; the shop's columns use `fill: column` (the game's existing `column` colour). (c) `heading` `style: muted` (small dim body text) and `style: title` (the display face at the old 10-unit size); a heading may bind a text field (`bind: {text}`) instead of its own `text`, so the shop's title is a heading at the old inset. (d) `text_block` `\n` starts a new line one body line down, and `style: muted` / `right` were added; the totals are one `totals` field ("Total ...\nScrap ...") under the trade list, spaced as before. Row buttons are 8 old units wider than their label, 2 apart, as before.
+- **Layout**: `kits/rpg/assets/ui/layouts/shop.json` now places everything from the frame's edge as the hand drawing did (7-unit margins rounded to the 4-unit grid, columns 38 : 25 : 33 percent, heading line, detail and refusal lines, bar). The band is right-aligned.
+- **Check**: before and after are in `/mnt/project-files/pr7-39/stageB/` (`before_over_after.png`: before on top). The shop shot differs from the hand-drawn one in 2.1% of its pixels (19,304 of 921,600 above a small threshold). The differences are offsets of 1 to 2 units from the 4-unit grid, the equal-width Clear and Confirm buttons, and the totals in plain text colour (the hand drawing coloured a negative total red; text blocks take no tone). The dropped hover cards and the refusal line are as in FB-359. I did not run `shots-all compare=` across every scenario, only the shop's shots. No other screen uses these styles.
+- **Tests**: `aegis_ui/tests/layout_kit3.rs` gains the styles test (parse, refusals, the box widget, two text lines). Two older tests now expect the new problem wording: a heading with neither or both texts, and a style on a text_block. The shop's GUI tests and text audits pass.
+- **Guesses**: (1) The `box` fill is named by the layout as a theme token, as `tone` is, so the engine names no game colour. (2) Totals not coloured by sign is acceptable; a toned text field could come later.
+- **Docs delta**: none beyond the engine authoring page. `HISTORY.md`: none.
+
+### FB-362: PR7-51 and PR7-52 landed; Extra large plates need a call
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-51` (FOOTLOCKER1), `PR7-52` (BUNKS-EMBLEM1); §4 `FB-360` answers (@squash `PR7-51`)
+- **Built (PR7-51)**: kit `bunks::has_locker`, `bunks::lockers` (active and benched members' bunks get a footlocker; crypt members and empty bunks none). Hub (`emberwake_gui/src/bunks.rs`, `region.rs`): the footlocker at the bed's foot as in take 8, closed by default; a click (widget `locker.<member>`) or E facing or standing on it opens it and pushes the loadout screen (`party::Character`) on that member's gear page with the party stash; the screen is unchanged; it closes when the map is the top screen again; the agent link shows `lockers` and `locker_open`. Seed `pr7_53z_footlocker` drops the `chest_a` stash marker from `sluice_undercroft` and the unused `chest_a` anchor from `sunk_ward_undercroft`; I and the HUD Stash button still open the stash. The `hub_points` scenario now clicks Maren's footlocker (shots `hub_footlocker_open`, `_closed`; `hub_chest_*` gone); `sunk_ward_maps.rs` asserts the hub has no stash point.
+- **Built (PR7-52)**: each founder's lunette draws `ui/badges/founder_<id>.png` (Art/UI's files); a recruit's arch stays plain. The blanket's top rows are drawn again from the cover line as a fold over the shoulders (rows 27-29 of the bed sheet showed between head and cover); code only. Every empty bunk, north and south, has the blank brass plate (FB-360 (2)).
+- **Not built**: the single-line plate showing the first name whole at Extra large (FB-360 PR7-46 item 1). At Extra large a plate is capped at 38 logical px (its share of the 80 px between bunks) and "Dunstan" alone is wider. Options: (A) wider plates over the niche edges, (B) drop the class glyph at Extra large, (C) plate text does not scale with the text size setting.
+- **Guesses**: benched members get a footlocker too (the mock shows one by the sleepers); the Act 2 bunks get one beside the bed's foot; the open art is at `props/sunk_ward/footlocker_open/v0.png` (the layered-tree asset test refuses `footlocker/v0_open.png`); a footlocker click wins over a member idling on the same cell; the loadout covers the map, so the open footlocker shows only behind it.
+- **Placeholders**: `props/sunk_ward/footlocker/v0.png`, `footlocker_open/v0.png` (33 x 29, cut from the take 8 mock) for Art/UI `AI-32`, whose request should name `footlocker_open/`.
+- **Tests**: `bunks.rs` +5 (footlocker click and E open the right loadout with the open art and close again, none for a crypt member or empty bunk; no stash chest; emblems for founders and a plain recruit arch; the blanket meets the head) and a blank-plate assert; kit `rpgkit_world/tests/bunk_lockers.rs` (2). 9 hub shots changed, 2 new, 2 gone; shots-exact holds. Goldens unchanged.
+- **Review notes** (for a follow-up row): E checks the footlocker underfoot before the tile ahead, so standing on a footlocker tile while facing an NPC, exit or point opens the footlocker; the order should be footlocker ahead, then the normal interact, then underfoot, with a test from a neighbouring tile. The kit point use `stash` (`POINT_USES`, glyph) has no shipped user now (CLEANUP candidate). Art/UI: `art_src/region_maps/build_layouts.py` and `sluice_undercroft.json` still hold the `chest_a` anchor, so a regenerated layout would bring it back.
+- **Questions**: (1) Extra large plates: A, B or C? (2) Should the loadout screen leave the open footlocker visible (a side panel rather than a full cover)?
+- **Docs delta**: `GAME_BRIEF.md` (BK2): "Each active or benched member's bunk has a footlocker at its foot (none for a crypt member or an empty bunk); clicking it or E beside it opens it and that member's loadout (gear page, shared stash); it closes with the screen. The hub has no stash chest (PR7-51). Founder lunettes show the founder's emblem `ui/badges/founder_<id>.png`; a sleeper's blanket is folded over the shoulders; every empty bunk wears a blank plate (PR7-52)." `kits/rpg/README.md`: `bunks::has_locker`, `bunks::lockers`. `STRUCTURE.md`: `kits/rpg/crates/rpgkit_world/tests/bunk_lockers.rs`. `HISTORY.md`: "2026-11-19 PR7-51: Sabina's stash chest (`chest_a`, `use: stash`) removed from the hub; bunk footlockers replace it. No golden re-recorded."
+
+### FB-363: PR7-34 AMBIENCE1, an ambience bus with its own loop channel and the Ward Ambience slider
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-34` (`AMBIENCE1`), `FB-308`'s answer (@squash `PR7-34`)
+- **Built** (engine, `aegis_ui::audio`): `Bus::Ambience` with the settings key `ambience` (0-100, default 80 in `Settings::engine_defaults`, master and mute apply). `Audio::ambience(rel)` / `wanted_ambience()`: one loop wanted at a time on its own channel, crossfaded (1 s, 2 s from silence) and looped (loop points as for music), at the music's -6 dB. A music change never cuts the ambience and a place change never cuts the music. `Screen::ambience()` is chosen like `Screen::music()`: the topmost screen's wish, None lets the screen below choose, `Some("")` is silence. The shell applies it each frame beside the music; the agent link's state shows `ambience`. A later bundle part (web) starts a wanted loop whose file was missing, as for music.
+- **Game** (`emberwake_gui`): `music::game_ambience(cx, ctx)` takes the first key of the music's context chain (`candidates`: `<region>_<ctx>`, ..., `<world>`, `<ctx>`, then the parent context) that has `audio/ambience/<key>.ogg`. The region map uses its music context (location kind, or shop, which falls back to town) and the world map uses `travel`. Battle, the run-over screen and the epilogue are silent; story screens and menus leave the place's loop playing under them. Sound tab: "Ward Ambience" (the settings mock's row and help line) below Interface Volume. Its sample is `sfx/ui_confirm.wav` on the ambience bus. The Battle tab's Advanced header was already in place (PR7-26 row, its test passes).
+- **Ambience keys** (placeholder-first): four placeholder loops in the kit, `kits/rpg/assets/audio/ambience/field.ogg`, `town.ogg`, `travel.ogg` and `danger.ogg`. Each is 8 s of seamless filtered noise (wind, murmur, road wind, low rumble with drips), Ogg Vorbis at about 20 KB, made with numpy and ffmpeg. Every region and hub context reaches one of them: `shop` falls back to `town`, and `danger`, `town` and `travel` fall back to `field`. For AI-30, Art/UI can replace these in place or add game loops in `games/emberwake/assets/audio/ambience/` under the music's keys, such as `sunk_ward_town.ogg`, `sunk_ward.ogg` or `ashlands.ogg`. The game's file wins over the kit's. No README was added under `assets/` because those belong to Art/UI; the folder needs one.
+- **Tests**: `aegis_ui` audio unit test (levels, mute, the loop beside the music); `emberwake_gui` `menus` GUI audit (slider below Interface on the full screen and the popup, saved at once, the ambience bus follows and the music does not); `music` every shipped sound decodes (now the `ambience` folder too) and every region and hub context has an ambience loop.
+- **Guesses**: (1) Ambience is silent in battle, and battle music plays alone. (2) Ambience keeps playing under story vignettes. A vignette's own ambience key could come later. (3) The ambience level uses the music's -6 dB.
+- **Docs delta**: `GAME_BRIEF` audio line: "Ambience: `audio/ambience/<key>.ogg` by the music's keys, on its own bus (Ward Ambience)". `docs/specs/ASSETORG2.md` section 3 tree: `audio/ambience/<key>.ogg` beside `audio/music/` (the layered-tree test now allows it). `HISTORY.md`: none.
+
+### FB-364: PR7-40 part 3 landed; the row is done; two questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-40` part 3, §4 `FB-358`, contract section 7 (@squash `PR7-40-3`)
+- **Built**: (1) `emberwake_gui/src/battle/skill_menu.rs` (with `input.rs`, `battle.rs`, `draw.rs`, `flow.rs`): one row per skill (icon with its intent line, name, AP pips and block span, HP damage and poise pips or split shield on the target, up to 3 status chips, moss heart for a heal, then "+N"); Fill, Move, Rest, Select, Channel and Off-Hand stay on a line under the title; a hairline between intents and a footer hint as in take 11; title "Block N vs `<target>`" (N = the block the next pick starts on). Kit `round_intent_plan::PickHits`, `pick_hits` (the foe card's hits of the picked steps only), `next_pick_block`. Opening: `Action::StripMenu(b)` on an empty or picked strip block (menu under the block); a board target as before; on a ghost block a right click or the menu key (Tab or pad north through `Screen::capture`, only while planning; Tab still moves focus otherwise); a left click on a ghost accepts it. (2) Scenario `battle_board_marks` (`kit_winch_escape`, Timeline ruleset): Snare Wire, then a Shield Bash push and a Tend Wounds heal; shots `marks`, `row_menu`. (3) `theme.json` `game_colors` sorted, values unchanged, with an order test. (4) An open foe group is a header row only in the Hostiles view. (5) `marks.rs` `ground_plate` shared by hazard plates and the push landing tile (dashed gold edge).
+- **Guesses**: a strip-opened menu uses the hero's round target, else its intent's proposed target, else the hero; picks still append after the last pick, so the title names the landing block (full round falls back to "Hero -> Target"); target name instead of a portrait in the title; heal rows show the heart chip only; name column 104 px; the menu key is whatever the control map turns into Tab (Tab and pad north by default), so a CONTROLS-UI1 rebind moves it (review fix, test `the_menu_key_follows_a_rebind`); while the menu is open Tab closes it rather than moving between rows, and Tab replaces any other open popup during planning.
+- **Tests**: `input1_tests` (title format), `intent2u_tests` (an intent's rows sit together, items after skills) and `skill_menu_tests` (a row spans the panel; one line per row) follow the replacement; `ally_support_menu.json` waits for "Block 1 vs "; new `battle_ui2c_tests.rs` (6) and a kit test in `rpgkit_battle/tests/picks.rs`. Shots: 1 changed (the menu swap), 2 new, 73 unchanged; shots-exact holds. Goldens unchanged.
+- **Questions**: (1) A menu opened beside a board tile can cover the docked foe card, but contract 7 keeps the card visible: should Art/UI's `battle.json` place the menu, or should code avoid the card? (2) Should a pick from a strip-block menu land at the clicked block (kit insertion) rather than append?
+- **Docs delta**: `STRUCTURE.md`: `emberwake_gui/src/battle/skill_menu.rs`, `battle/tests/battle_ui2c_tests.rs`; `games/emberwake/scenarios/battle_board_marks.json`. `kits/rpg/README.md`: "`round_intent_plan::pick_hits` gives a pick's hits on a foe (the foe card's hits of the picked steps only); `next_pick_block` gives the block the next pick starts on." `GAME_BRIEF.md` (battle UI): "One row skill menu (contract 7): it opens on an empty or picked strip block, a board target, or a ghost block by right click or Tab / pad north; a left click on a ghost accepts it (PR7-40)." `HISTORY.md`: "2026-11-19 PR7-40 part 3: the VISCLAR1-D / IR19 icon-grid skill menu replaced by one row per skill (FB-358); the menu title Hero -> Target becomes Block N vs Target. No golden re-recorded."
+
+### FB-365: ENGINE-20 TOOLS-HELP3, seed order check, seed-from --fields, shot crops and the toned shop total
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `ENGINE-20` (`TOOLS-HELP3`), items 1 to 3, with `FB-354` and `FB-361` (@squash `ENGINE-20`)
+- **Built, item 1**:
+  - The writer (`aegis_cli::content_step`): an upsert step may carry `"fields": [..]`. It then changes only those top-level fields of the stored entry. A named field the entry leaves out is removed, so the writer's default applies. It is refused for a missing entry, for `id`, or for an entry field the list does not name.
+  - `aegis content get @<list.json>` returns many stored entries in one run.
+  - `tools/fc.sh seed-from ... --fields a,b` writes such a step. Each `--set` must fall inside the named fields.
+  - `tools/fc.sh seeds [--all]` (`tools/planner/seed_order.py`) is now a gate step, `seeds`, after `layouts`. It orders each game's seeds by their last commit, then by name. For every entry that two or more seeds upsert, it compares the last seed's entry with the shipped one. A field the last seed writes differently, while an earlier seed wrote the shipped value, is a finding: `<last> undoes <earlier> on <kind> <id>: <fields>`. It reads the data only. The run takes about 2 s.
+- **Not a replay to an empty store**: the row asked for a replay into an empty store. I applied all 100 seeds in order to a copy of the data first, and 17 of them no longer apply to today's rules (old classes, hands and decks). So the check compares the seeds' entries statically instead of running the writer.
+- **Findings**:
+  - Today it finds 2, both old and both listed in `tools/planner/seed_order_known.txt` so they pass: `cast1a3.json` undoes `empower1.json` on skills `bile_coat` (description, grant_status, status_magnitude), and `classpass1_data.json` undoes `gearrework1.json` on item_families `shield` (off_hand_category). Any new finding fails the gate.
+  - The `sunk_ward_undercroft` case is clean now: `pr7_36b`, the last seed, matches the data.
+  - A cleanup pass could move the 2 known seeds, and the seeds that no longer apply, out of the folder (README rule). That is game data, so I left it.
+- **Built, item 2**:
+  - `tools/fc.sh scenario shots-all out=<dir> [compare=<dir>] [crop=x,y,w,h] [sheets=0]`. `crop=` compares only that rectangle and writes each shot's crop into `<out>/crops/`.
+  - `compare=` writes a before / after / diff sheet for each changed shot into `<out>/compare/`. The diff is the after shot dimmed, with each changed pixel in red. Plain Python, no Pillow.
+  - The gate's `shotsexact` step also writes sheets when a shot changes, which helps when it fails.
+- **Built, item 3**:
+  - A text, number or stats field may carry `"tone"`: a role for every line, or a list with one role per line. `View::tone` sets it and `View::tone_of` reads it. `text_block` lines and `stat_block` values draw in that role.
+  - The kit shop tones `totals` and `total` by sign: `foe` below 0, `good` above 0. The purse line is `foe` when the trade cannot be afforded, as the hand drawing was.
+  - The fixture carries the tones. The authoring page is updated.
+- **Tests**: `aegis_cli/tests/content_step.rs` (fields upsert and its refusals); `aegis_ui/tests/layout_kit3.rs` (tones parse, go out and back, are refused, and draw in foe); `emberwake_gui` `shop_view` (total `foe` after a buy, purse `foe` when unaffordable, none on an empty trade); `tools/planner/test_tools_help3.py` (order, findings, fields steps, the known file, crop parse, crop count, sheet layout, collect crops); `test_tools_help.py` (`--fields`).
+- **Guesses**: (1) The order is the last commit time, then the name, with uncommitted seeds last. (2) Known findings pass through a list in `tools/planner`, so the gate can land green without touching game data. (3) Sheets are on by default whenever `compare=` is given.
+- **Docs delta**: none beyond `tools/fc.sh` usage, `tools/gate_steps.txt` (15 steps) and the authoring page. The `patch-and-seed` skill could mention `--fields` and `tools/fc.sh seeds`. `HISTORY.md`: none.
+
+### FB-366: PR7-58 and PR7-46 item 3 landed; two questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-58` (FOOTLOCKER1B) items 1-3, `PR7-46` item 3 (PT-35) (@squash `PR7-58`)
+- **Built**: game layer only (`emberwake_gui/src/region.rs`, `bunks.rs`). (1) E: a footlocker on the tile ahead first, then a member idling ahead, then the normal interact (NPC, lore, chest, point); a footlocker underfoot only when nothing else answers (where "Nothing there." showed). (2) `bunks::LOCKER_BEAT_MS` 250 on the frame clock: a click or E shows the open art at once and the loadout comes up when the beat ends (keys, clicks and Esc ignored and any walk stops meanwhile); when the map is top again the open art holds 250 ms, then closes. (3) At the largest text size the plate drops its class glyph; a still-too-wide name is cut with an ellipsis (agent state `plate.shown`, `plate.glyph`); the bunk hover names the member in full. PR7-46 (3): one click on an NPC already walked there and opened the talk on arrival (hub and region); the playtest's second click likely came before arrival. New state key `walk_to` lets agents wait on the walk; here-list rows unchanged.
+- **Guesses**: the beat ignores input and runs its full length even with reduce motion; "Extra large" is the largest `TEXT_SIZES` entry; hub idle members still open their card on click, not walk-and-talk.
+- **Tests**: `bunks.rs` 19 (beat each way; E order from a neighbouring tile and from on the footlocker facing an NPC, with a test-only NPC anchor; Extra large plates with the widest founder name and a too-long name; one-click talk to every present hub NPC); scenario `one_click_talk` (Berek, then Sabina); `hub_points` asserts the beat state. 2 hub shots moved by idle frames (taken 0.25 s later), 2 new. Goldens unchanged.
+- **Questions**: (1) Since one click already worked, is `walk_to` enough for PT-35, or should a long walk show a target marker? (2) The scenario runner cannot shoot inside the 250 ms beat, so the beat is proven by a state assert and a unit-test shot only.
+- **Docs delta**: `GAME_BRIEF.md` (BK2): "E on the hub takes a footlocker ahead first, then what stands ahead, and a footlocker underfoot last; a footlocker shows open for 0.25 s before its loadout and 0.25 s after it closes; at Extra large plates drop the class glyph and cut a still-too-wide first name with an ellipsis; the bunk's hover names the member in full (PR7-58)." `STRUCTURE.md`: `games/emberwake/scenarios/one_click_talk.json`. Scenarios README row: "`one_click_talk` | PR7-46 (PT-35): the save `saves/hub_start`; one click on Berek, then on Sabina, walks there and opens the talk | about 10 s". `HISTORY.md`: "2026-11-20 PR7-58: the footlocker no longer closes the moment the map is the top screen again, and its loadout no longer opens at the click; a 250 ms beat each way. No golden re-recorded."
+
+### FB-367: ENGINE-22 SEED-ARCHIVE1, 33 stale seeds archived, the seed order check has no known findings
+
+- **Status**: open
+- **Spec**: `READY.md` §3 `ENGINE-22` (`SEED-ARCHIVE1`) (@squash `ENGINE-22`)
+- **Built**:
+  - I applied each of the 100 seeds alone to a fresh copy of the shipped data. 33 are refused, not 17. The 17 in FB-365 came from a run that stopped early.
+  - The 33 moved with `git mv` to `games/emberwake/data/seeds/archive/`. The seeds README has a table of them: name, last commit, and the writer's refusal (old intents and deck orders, gear types, hands, techniques, dojo presets).
+  - The 67 left in the folder each apply cleanly alone.
+  - No shipped data file changed: only seed files moved or were edited.
+- **Known cases**:
+  - `classpass1_data.json` is among the archived 33.
+  - `cast1a3.json` still applies, so it stays. Its `bile_coat` step now names its `fields` (every field except `description`, `grant_status`, `status_magnitude` and `status_rounds`), so a re-run keeps the shipped values that `empower1.json` set. Applied alone, it leaves `bile_coat` as shipped; I checked.
+  - `tools/planner/seed_order_known.txt` holds comments only. `tools/fc.sh seeds` reports 67 seeds and 0 known findings.
+- **Code**: `emberwake_content/tests/ruleset_switches.rs` replays several of the archived seeds by name. It now reads `data/seeds/<name>` and falls back to `data/seeds/archive/<name>`. Both tests pass.
+- **Guess**: the archive is a subfolder, not git history only, because the ruleset switch tests still read some of those seeds.
+- **Docs delta**: the `patch-and-seed` skill could say "a seed that no longer applies moves to `data/seeds/archive/`". `HISTORY.md`: none.
+
+### FB-368: PR7-54 boss UI landed; BU8 waits; two questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-54` (BOSS-UI1), `BOSSUI1.md` BU1-BU16 as amended, contract sections 7 and 9 (take 32), `FB-364` (1) (@squash `PR7-54`)
+- **Built**: kit unit field `poise_pips` (int 0-10, default 0 left out; 0 falls back to the ruleset's pips) through `UnitDef` and the rules `Unit`; `poise.rs` `PoiseState.full` per unit with `pips_of`, `full_pips`, `pip_threshold`, `threshold_over`, `rest_pip_gain_to` (refill, threshold, mirror, settle, forecast, windup bonus and rest use the unit's count); the phase swap, the Dojo and `intent::foe_card` follow it. Kit `Session::phase_bar()` (boss unit, up to 4 markers beaten / current / coming, phase name, HP span, broken) and `intent::phase_cut()`. Game: `battle_view.rs` `BossBar`, `BossRows`, `ImpactRow`, `ImpactCell`, `impact_num`, `boss_rows` ("Others" from hits not by the selected hero; the breaking hit stops at the threshold, later hits in its block dropped, later blocks struck; totals count what lands); `battle/boss_bar.rs`: 84 px bar, 142 px with the intent rows while planning when a hero targets or pins the boss, a hover listing every member with a Total column and a "Party" line, hidden fixed cells (HP 36 px, poise glyph and number, 17 px chips, "+N"; block 1 chip, Totals 3, hover 4), whole numbers to 9999, then K and M, "Block N: ends" and "Ph. 2 next round" with greyed blocks; the boss's next blow on the bar; the boss leaves the foe panel and card ("Boss above"); the card docks under the bar and flips top left when it would cover the selected hero or target; icon-only status tabs on the bar and plates. `skill_menu::menu_place_clear`: a board-tile menu tries the preferred side, the other side, below, above, then shifted spots, never over the card or bar, foe panel, target or tile. `lib.rs` accepts `scene=<world>:<encounter>` for the arena.
+- **Left**: BU8 boss poise data (Tushar's golden approval); no proof shot of a phase break (unit tests cover it); a menu opened from a strip block can still cover the card (FB-364 named board-tile menus).
+- **Guesses**: markers = 1 + the `hp_below` phases (round and arrival phases are cues); phase 1's title is the unit's name and title; "Hostiles N" leaves the boss out (take 31); passive tags = unit row passives plus those applied in battle, hover from `description`; a named phase hides the character title; `battle.json` has no menu side key, so code avoids either way; the bar records as panel `intel`.
+- **Placeholders**: poise and broken-poise glyphs drawn in code; `ui/badges/poise.png` and `broken_poise.png` are read first if Art/UI adds them.
+- **Tests**: `battle/tests/boss_ui1_tests.rs` (7: boss off the panel and card plus span; poise "10/10" and fallback; rows only while planning; Others with no duplication; 9999 / 10K / 1M; phase-break labels; menu clearance on the live board); kit `a_units_own_poise_pips_set_its_bar`; the corner-menu test in `skill_menu_tests.rs` accepts above or below; scenarios `hover_card_leaves` and `sweep_telegraph` now hover a foe and `boss.bar` (the boss plate is gone). 16 boss-fight shots changed; shots-exact holds. Goldens unchanged.
+- **Questions**: (1) Act 1 phase names such as "Vane withdraws" read as events once they title the bar: use them, or keep the unit's name? (2) In the Vane fight the planning bar reaches about 102 px down, over the board's top wall rows; fine, or should the board shift?
+- **Repeats**: before shots needed a stash and rebuild; a `shots-all before=<git ref>` option would save it (tools lane idea).
+- **Docs delta**: `STRUCTURE.md`: `emberwake_gui/src/battle/boss_bar.rs`, `battle/tests/boss_ui1_tests.rs`, `games/emberwake/scenarios/boss_bar.json`. `kits/rpg/README.md`: "`content.units.poise_pips` (0 = the ruleset's) sets a unit's full pips; `poise::full_pips`, `pip_threshold`; `Session::phase_bar` (markers, span, name, boss unit); `intent::phase_cut`." `kits/rpg/docs/authoring/rule_library.md`: "`poise_pips` (unit, 0-10, 0 = the ruleset's count) sets that unit's full poise pips." `GAME_BRIEF.md` (battle UI): "A boss takes the bar across the board top (contract 9, PR7-54); intent rows only while planning; status tabs icon only; skill menus beside a tile keep clear of the card, foe panel and target." `HISTORY.md`: "2026-11-20 PR7-54: plate status round pips removed (BU6); the boss's plate and card replaced by the boss bar. No golden re-recorded."
+
+### FB-369: ENGINE-21 UISPLIT1-H Stage A for the notice board and the save/load screens
+
+- **Status**: open
+- **Spec**: `READY.md` §3 `ENGINE-21` (`UISPLIT1-H`), like `PR7-39` Stage A (@squash `ENGINE-21` A1). Order agreed with main Build: board, save/load, then the character sheet after `PR7-45` (item 5 touches its header).
+- **Board** (`emberwake_gui::board_view`, fixture `ui/views/board.view.json` from the UI Gallery's sample board):
+  - Fields: `title`, `keeper`, `intro`; one rows field per kit section (`main`, `jobs`, `under_way`, `locked`, `closed`). Each row is a quest: name, "Lv N" (`info`), the deadline as `detail2` in `foe`, the node as `sub`, the section's line as `note`, and the pick selected.
+  - More fields: `detail_title`; `detail`, the paragraphs one per line, each toned as drawn (ENGINE-20 tones; the deadline's Arterial Red is `foe`); `accept_why`; `errors`.
+  - Actions: `pick`, `accept` (on only for an offered quest), `close`. `board_act` maps a view click back to `BoardAct`.
+  - The agent link's `board_pane` gains `view`.
+  - `BoardPane::detail_paras` now names theme roles instead of colours, and the pane draws them in the same colours.
+- **Save/load** (`emberwake_gui::save_view`, fixture `ui/views/slots.view.json`, screen id `slots` for both modes):
+  - Fields: `title`, `mode`, and `slots`, a row per slot with the autosave first. Each row's first line is the label, the lead's day the `detail`, the party or the reason the `sub`, the card's line the `note`. A row is on when a click saves or loads. Its buttons are lock or unlock, and delete (off while locked).
+  - Actions: `open`, `lock`, `unlock`, `delete`, `back`. `slot_act` maps them to `SlotAct`.
+  - The slot lines moved into `menus::slot_text`, which the drawing and the view share.
+  - The screen's agent link state is `{saving, view}`.
+- **Tests**: `board_view` (sections, rows, detail tones, Accept on and off with the reason, clicks, empty board, fixture shape); `menus` (the slots view matches the drawn cards row by row in both modes, a locked slot, clicks, fixture shape); `talk` (the hub's board carries its view). Two `#[ignore]` tests rewrite the fixtures from the samples.
+- **Guesses**: (1) Save/load is a rows list with row buttons, not `slot_card`, because slot cards have no buttons and no on or off state. Stage B can still pick either. (2) One `slots` screen for save and load, told apart by `mode`. (3) The board's sections are five fixed rows fields, not one list with headings, so a layout can place each section.
+- **Seen, not changed**: a save with no location shows `The Ashlands,  · <time>` (an empty place after the comma) on the drawn row. That is today's drawing (`PR7-29` redraws the rows), so the fixture uses a sample place.
+- **Docs delta**: none. `HISTORY.md`: none.
+
+### FB-370: PR7-57 status display landed; two colour and riposte questions
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-57` (STATUSVIS1-B), `STATUSVIS1.md` SV5-SV15, contract `SCREEN_CONTRACT_BATTLE.md` sections 3, 6 and 9 (@squash `PR7-57`)
+- **Built**: kit `rpgkit_battle::status_view` (`lock_runs` from each status's `lock_blocks`, plate priority, round ticks, `planned_loss` capped at current HP, `hit_parts` breakdown, `counter_return`, row target), `intent::Adjust` / `hit_on_adjusted` (`hit_on_with` calls it with no adjustment, so rules and sims are unchanged), `rpgkit_rules::Unit::attack_power_factor_of`. Engine `aegis_ui::timeline`: `Timeline.tiles`, `Segment.icon`, `Track.aside`, `Slot` + `draw_slots` (other callers get `tiles: false`, unchanged). Game `battle/statusvis.rs`: SV5/SV15 lock tiles (stun one tile over B1-2, stagger single tiles; locked blocks open no menu, the hover names the lock; one grey segment per run in the full view); SV6 "-n" on `party.<u>.incoming` and `foe.<u>.incoming` with "B{block} {skill}: -n", "Round end, {status}: -n" and "Total -n" (regen adds to the planned heal); SV7 card numbers final, gold with an up arrow when raised, foe red with a down arrow when lowered, frameless Base / modifiers / Final hover (`card.row.{k}.number`); SV8 taunt badge over the unit (`board.taunt.<u>`, "Foes must target X"; the feet ring is gone); SV9 "Riposte" chip (`card.row.{k}.riposte`, hover "Likely return on X: about N HP"); section 3 plate column order (rule flag, reactive, ticks, rest; old order inside each); SV10/SV13 two passive sockets centred under the portrait with their own hovers, dim when empty; SV14 calm tiles with skill icons and one target square per row (crimson enemy, teal ally or self, amber ring area, 3x3 floor patch ground tile, dash none; no switch arrow); SV11 the AP row follows the rules (test under a stun).
+- **Also fixed**: any key press opened the skill menu (only the menu key does now, still following rebinds); the menu key opens nothing on a locked block and, off the strip, steps past a lock run (review S1); a masked enemy's full-view target comes only from its round state, never its schedule (review S2); the planned-loss Total says "(capped at HP)" when capped; the plate's planned heal is clamped to missing HP; plate status, passive and incoming hovers were covered by the plate card (now drawn above it).
+- **Guesses**: the plain number keeps the normal text colour and is tinted only when modifiers change it; guard counts as a modifier; the riposte chip shows only for melee Attacks; hovering a ground target in the full view does not ring the board tile (the view covers the board); a masked enemy's target comes from its round state; the full view's wind-up parts and per-blow marks (masked ones too) are removed as superseded by SV14; dev-only link command `debug_status` (dev tools builds) gives a unit a status for proof shots and is never recorded.
+- **Theme tokens added** (palette colours): `crimson` #e11d48, `lock_bar` #9ca3af, `lock_block` #4b5563. The contract's #e27064 (lowered) and #f0c450 (raised) are not palette colours, so the existing `foe` and `boss_gold` stand in.
+- **Left**: move_rate is not shown on the grid; the skill menu and boss bar cells do not tint numbers or carry the breakdown hover yet; stealth looks unchanged; a dev-tools `debug_status` grant is not marked unrecordable.
+- **Placeholders**: SV12 generic passive icon set in `kits/rpg/assets/passives/` (Art/UI); sockets use the ENGINE-24 icons and a dim empty socket. Lock tiles reuse each status's icon.
+- **Tests**: `battle/tests/statusvis1b_tests.rs` (8), kit `tests/status_view.rs` (7); `timeline_view_tests::an_unrevealed_enemy_is_masked_with_its_intent_tell_and_badges` now checks a masked row has no per-blow marks and has its target square. Scenario `statusvis1b`. Battle shots with plates and timeline-view shots changed; shots-exact holds. Goldens unchanged.
+- **Questions**: (1) Add #e27064 and #f0c450 to the style palette, or keep `foe` and `boss_gold`? (2) Should the riposte chip also show for non-Attack melee skills?
+- **Repeats**: finding scenario picks the GUI accepts took several runs; a helper listing valid hero, foe and skill picks would help (tools lane idea).
+- **Docs delta**: `STRUCTURE.md`: "`kits/rpg/crates/rpgkit_battle/src/status_view.rs`: the statuses' display reads (lock runs, plate priority, round ticks, planned loss, hit breakdown, riposte return, row target); tests `kits/rpg/crates/rpgkit_battle/tests/status_view.rs`." and "`games/emberwake/crates/emberwake_gui/src/battle/statusvis.rs`: status looks where they act; tests `battle/tests/statusvis1b_tests.rs`; scenario `games/emberwake/scenarios/statusvis1b.json`." `engine/README.md` (aegis_ui timeline): "`Timeline.tiles` (calm tile spans), `Segment.icon`, `Track.aside` (a target square at the label column's end) and `Slot` + `draw_slots`." `kits/rpg/README.md`: "`status_view`: display reads of the status primitives; `intent::hit_on_adjusted` / `Adjust`; `Unit::attack_power_factor_of`." `GAME_BRIEF.md` (where to look): "Status looks (locks, planned loss, number breakdown, taunt badge, riposte chip, passive sockets, timeline row target): `emberwake_gui/src/battle/statusvis.rs` over `rpgkit_battle::status_view` (STATUSVIS1-B)." `HISTORY.md`: "2026-11-20 PR7-57: the full timeline view's wind-up parts and per-blow impact marks (also on masked enemies) removed, superseded by STATUSVIS1 SV14 (calm tiles, one target per row); the taunt ring at the feet replaced by a badge; the `parts` overlay group (Wind-up and impact) retired with the calmer timeline view (SV14), a saved `parts` setting is ignored. No golden re-recorded."
+
+### FB-371: ENGINE-23 UISPLIT1-I Stage A for the recipe pane and the facility screen
+
+- **Status**: open
+- **Spec**: `READY.md` §3 `ENGINE-23` (`UISPLIT1-I`), like `ENGINE-21` Stage A (@squash `ENGINE-23` A1). Order agreed with main Build: recipe and facility now; the party loadout after `PR7-51`, the world map after `PR7-47` (or first if it is still waiting when the rest is done).
+- **Recipe pane** (`emberwake_gui::recipe_view`, fixture `ui/views/recipe.view.json` from the pane tests' scratch smith):
+  - Fields: `title` (the character's name); one rows field per picker, `members`, `families`, `items`, `weapons`, each empty while the pane does not draw that picker (a row per choice, its index as the id, the clamped pick selected); `recipes` (a row per offered recipe: name, cost as `sub` ("Free" for none), the reason it can't run as `detail` in `foe`, the hover card's line as `note`, a Do row button, on while it can run); `line` (the refusal in `foe`, else the notes in `gold`).
+  - Actions: `member`, `family`, `item`, `weapon` (on only for a picker of two or more), `run`, `close`. `recipe_act` maps them to `RecipeAct`.
+  - The agent link's `recipe_pane` gains `view`.
+- **Facility screen** (`emberwake_gui::facility_view`, fixture `ui/views/facility.view.json` from the pane tests' scratch forge):
+  - Fields: `title` (the keeper's name); `facilities` (a row per facility: name, "Level N of M" as `detail`, in `good` at the top level; the effects in force as `sub`; the next level's cost as `detail2`, in `foe` while it can't be bought; the hover card's line as `note`, which is the next level while it can be bought, else the reason, or "Highest level reached."; an Upgrade row button while a level is left); `line` (as the recipe pane's).
+  - Actions: `upgrade`, `close`. `facility_act` maps them to `FacilityAct`.
+  - The facility lines (`level_line`, `now_line`, `next_line`, `cost_line`) moved into `facility.rs` functions that the drawing and the view share.
+  - The agent link's `facility_pane` gains `view`.
+- **Tests**: `recipe_view` (fields, picker rows and clamping, recipe rows on and off, the line's tones, clicks, the family and weapon pickers, a stash recipe with no picker, fixture shape); `facility_view` (rows before and after an upgrade, the gated reason, a refusal, clicks, fixture shape); the `recipe` and `facility` pane tests check the agent link's `view`. Two `#[ignore]` tests rewrite the fixtures.
+- **Guesses**: (1) The pickers are rows fields rather than a new select field kind, so a layout can draw them as a list or a picker without an engine change. (2) A gated facility row's `note` carries the reason, not the next level's line (the drawn pane shows both; the hover card shows the reason), so the view has no separate next-level field while it is gated. Stage B can add one if the mock wants it.
+- **Docs delta**: none. `HISTORY.md`: none.
+
+### FB-372: PR7-59 boss bar follow-ups and the riposte rule landed; a kit planner overflow
+
+- **Status**: open
+- **Spec**: `READY.md` §1 `PR7-59` (BOSS-UI1B), `FB-368` and `FB-370` answers, `BOSSUI1.md` BU3, BU11, BU12 (@squash `PR7-59`)
+- **Built**: (1) the bar's title is always the boss unit's name and title; `PhaseBar.name` stays for the phase banner. New optional phase key `form` (`PhaseDef.form`, `PhaseBar.form`, trimmed): the bar reads `<name>, <form>` and drops the title. Content check: `form` is a known phase key, a text of 1-40 characters, else "`Phase '<id>': the form is a text of 1 to 40 characters (omit it for none).`" No field table holds phase keys, so the `phases` help text in `content.encounters` and `world.encounters` gained one sentence (via `schema-field --replace`). No data, no seed. (2) `boss_bar::board_lift`: on the Stage view the board shifts down by the least amount that clears every tile under the grown bar that holds a unit or is in bounds and walkable, at most 20 logical px (`MAX_LIFT`, the front face and shadow); drawn like the camera shake, with the mouse, tile and unit widgets, skill-menu anchor, card keep-clear tiles and tracers shifted alike (`BattleScreen.board_lift`). The Vane fight shifts 20 px. Flat does not shift. (3) Poise badges load from `kits/rpg/assets/ui/badges/poise.png` and `broken_poise.png` (Art/UI `AI-40`), drawn shape as fallback. FB-370: kit `command::riposte_answers_at(w, attacker, from, defender, at, ranged)` is the riposte condition and `riposte_counter` calls it (unchanged, goldens hold); `status_view::counter_on(w, sched, a, t)` shows the chip on any Attack or Area hit the rule would answer, positions at impact after the plan's moves, a flank counts as ranged, once per attacker.
+- **Guesses**: the shift is worked out against the grown bar whenever a boss bar shows (no jump when a hero targets the boss, so it also shifts under the 84 px bar); "covers a unit" judged by the unit's cell, not its sprite; "a tile the plan can target" read as in bounds and walkable; when attacker and target are planned onto one tile, the target is read where it stands now.
+- **Left**: the `form` check has no world-encounter test of its own (same `phase_problems` path); the lift is live, so the board can step up to 20 px mid-playback when a unit walks into or out of the top rows (feel check in play); the skill menu uses the previous frame's lift on the one frame it changes.
+- **Finding (kit bug, not fixed)**: a hero whose first plan step is an Engage with an area skill whose `affects` is `all` sends `Plan` into endless recursion when friends are active (`first_move` -> `apply` -> `apply_engage` -> `apply_area` -> `planned_position` -> `ally_moves` -> `first_move`, `plan.rs` ~1533, ~1739, ~1824, ~1859). Suggest its own row; the test uses `affects: enemies` to avoid it.
+- **Tests**: `boss_ui1_tests.rs` `the_bar_keeps_the_units_name_and_shows_a_phase_form`, `the_board_shifts_down_until_the_bar_covers_no_unit_or_open_tile` (Vane fight; least shift; walled row none; Flat 0); new `rpgkit_content/tests/phase_form_checks.rs` (2); `rpgkit_battle/tests/status_view.rs` `the_counter_follows_the_riposte_rule_not_the_skill_kind`. Stage boss shots draw the board up to 20 px lower (`boss_bar`, the `statusvis1b` boss fight); shots-exact holds. Goldens unchanged.
+- **Docs delta**: `kits/rpg/README.md`: "Optional phase key `form` (1-40 characters; `PhaseDef.form`, `PhaseBar.form`) is the boss's form or state, shown after the boss unit's name in place of its title; a phase `name` stays for the phase banner; no rule reads it. `command::riposte_answers_at` is the riposte condition (read only; `riposte_counter` calls it); `status_view::counter_on(w, sched, a, t)` shows a counter on any hit the rule would answer, once per attacker." `kits/rpg/docs/authoring/combat_hooks.md` (phases): "A phase may set `form` (a form or state such as "Unbound", 1-40 characters; omit it for none): the boss bar then reads `<boss name>, <form>` in place of the title. The phase `name` shows only in the phase banner." `GAME_BRIEF.md` (boss bar): "The title is the boss unit's name and title, or `<name>, <form>` under a phase `form`; on the Stage view the board shifts down (at most 20 px) until the bar covers no unit or open tile; the riposte chip follows the riposte rule." `HISTORY.md`: "2026-11-20 PR7-59: BU3's phase-name title superseded (Act 1 phase names read as events); the bar keeps the unit's name and a phase `form` replaces the title (FB-368). The riposte chip's melee-Attack-only read retired; it follows the riposte rule (FB-370). No golden re-recorded."
+
+## 3. Notes for the user (non-build, read by the Design Session)
+
+The user may not read the build session's chat, so anything outside build work goes here, numbered `UN-nn`: questions or permissions for the user, things that need the user's eyes, process suggestions, and state the user should know. The Design Session relays them; the user's answers come back through `docs/READY.md` section 4 like any other. Fields: `For` (user, design, both), `Status` (open, answered, closed), `Note`, `Ask`.
+
+UN-01 to UN-12 are closed and moved to the archive (2026-11-11). New notes start at UN-13.
+
+### FB-373: ENGINE-24 PASSIVE-ICON1, passive icon archetypes and the plate's loadout passives
+
+- **Status**: open
+- **Spec**: `READY.md` §3 `ENGINE-24` (`PASSIVE-ICON1`), `STATUSVIS1` SV10 and SV12 (@squash `ENGINE-24`).
+- **Kit** (`rpgkit_data::passive_icon`):
+  - `PassiveDef.icon`, from the new schema field `content.passives.icon` (an enum of "" and the 16 archetypes of `kits/rpg/assets/passives/README.md`, after `slot`).
+  - `ARCHETYPES`, `path(key)` (`passives/<key>.png`), `known`, `of(passive)` (its `icon`, else derived) and `derived(effects)`.
+  - The derivation reads the first effect that is not a setup step (`meter` and `skill` are skipped): proficiency in an armour weight is `armour_drill`, any other gear `weapon_drill`; a stat by its key (STR, CONS `might`; INT, KNOW `intellect`; PERC `perception`; DEX, move_rate `agility`; max_poise `poise_up`; armor, composure `resist`); resist `resist`; stagger_taken `poise_up`; forced_move `immovable` when it is an immunity, else `might`; foresight `plan_sight`; crit `crit_up`; ap_regen `ap_gain`; status_potency `status_potency`; skill_potency and unlock by group (heal `heal_up`, spell `intellect`); a trigger by its `on` (hp_below `last_stand`, ally_hit and guard_start `cover_ally`, heal_given and cleanse_given `heal_up`, evaded `agility`, else `ap_gain` when it grants AP, else `status_potency`). Anything else is `might`.
+  - Content check A21 (`check::assets::passive_icon_errors`): a set `icon` must be a kit archetype with its file in the game, kit or engine layers. An empty one passes: its derived archetype falls back to a skill icon when the file is missing (the kit's scratch test layers hold no passive icons).
+- **Placeholders** (decision "Placeholder-first assets"): `kits/rpg/assets/passives/<key>.png` for the 16 keys, copies of the five `skills/kinds` icons (attack, defend, move, focus, rest), for Art/UI's `AI-39` to replace in place. The folder's README is Art/UI's (PR #70).
+- **Seed** `passive_icon1.json` (97 steps, `"fields": ["icon"]`), applied through `aegis content apply`: the derived archetype, with 17 changed where the whole passive reads otherwise: `steady_nerves`, `traitors_discipline`, `mastery_poise_ward` `poise_up` (stagger resistance); `prowlers_cadence`, `gutter_reflex`, `orig_soot_step` `agility` (slow and root resistance); `unbroken_phalanx`, `unyielding_authority`, `calcify_2` `immovable`; `kiln_poise`, `martyr_last_stand` `last_stand`; `triage_discipline` `heal_up`; `anatomical_flaw` `crit_up`; `master_alchemist`, `inoculated_test`, `aberrant_strain` `status_potency`; `calcify_4` `might`.
+- **Plates** (`battle_view::plate_passives`, `PlatePassive`, `Plate.passives`; `battle::plates::passive_row`): under the rule deck a party hero's first two slotted passives (`deck.passive`) show as 8 px icons (16 px at 1280 x 720) under the portrait, apart from the status column. Each is a label `party.<u>.passive.<i>` with the name and "Loadout passive: always on." on its hover card. A missing file falls back to `skills/kinds/focus.png`, then a "P" tile. Guests and foes show none.
+- **Tests**: `passive_icon` unit tests (field wins, derivation table); `emberwake_content` `asset_checks` (A21 with set, derived, missing and unknown keys; every archetype file in the kit; every shipped passive names its archetype); `battle::tests::passive_icon_tests` (two slots shown under the portrait, the third not, a foe none).
+- **Guesses**: (1) The content check reads only a set `icon`, so a passive with none passes and its plate icon falls back. (2) The placeholders are copies of skill kind icons, as SV12 says, rather than drawn letters. (3) The 17 changes above. Each is a one-line seed step to change.
+- **Docs delta**: `STRUCTURE.md`: `kits/rpg/assets/passives/` holds the passive archetype icons; `rpgkit_data::passive_icon`. `HISTORY.md`: none.
+
+### FB-375: ENGINE-20 fix, the seed order check on a shallow clone
+
+- **Status**: open
+- **Found by**: Merge & Release, a release blocker. develop's CI gate failed only on the seeds step since 18:13 UTC (a30ebd08, 724484af, 58c04388), with 54 findings. A deep clone passes.
+- **Cause**: `seed_order.py` orders seeds by `git log -1 --format=%at`. `actions/checkout@v4` checks out at depth 1, so every seed carried the one commit's time and the replay order was by name. The cloud container's clone is shallow too (23 seeds sat at its boundary commits), so the local passes were partly luck.
+- **Fix**: `gate.yml`'s checks job checks out with `fetch-depth: 0`. `seed_order.py` now fails with its reason, naming the seeds, when a seed's last commit is a boundary commit of a shallow clone (`cut_off`, from git's `shallow` file). A full clone cuts nothing. Two new tests in `test_tools_help3.py`.
+- **Checked**: on a depth-1 clone the step fails with the new message; after `git fetch --unshallow` the step passes (67 seeds, 0 findings); planner tests pass (65); docs clean.
+- **Docs delta**: `docs/workflow/cloud.md` (or the known-issues table): a cloud session runs `git fetch --unshallow origin` once before its first gate, or the seeds step stops with the shallow message. `HISTORY.md`: none.
+
+### FB-377: PR7-55 ENRAGE2 and PR7-56 PHASEBREAK1, the boss rules, one balance run and one re-record
+
+- **Status**: open
+- **Spec**: `READY.md` §3 `PR7-55` ([ENRAGE2.md](specs/ENRAGE2.md) EN1-EN12) and `PR7-56` (`BOSSUI1.md` BU15, BU17), one boss balance run and one named re-record for both (@squash `PR7-55` + `PR7-56`).
+- **PHASEBREAK1** (kit, `rpgkit_battle`):
+  - At each block start `World.phase_floors` holds, per unit, the HP threshold of its next `hp_below` phase (not fired, not due). `World::damage_as` stops a hit at the threshold (the rest is lost; the damage dealt is the HP it took, so the metric checks hold) and marks the break.
+  - The session ends the round at once: no later action of either side resolves or spends AP; the round end runs; the log's EVENT cell (outcome `PHASE BREAK`, `session::PHASE_BREAK_OUTCOME`, apart from a poise `BREAK`) names the unit and "Blocks N-6 skipped". The phase fires at the next round's start (block 0). A `round` phase and a fired last phase stop nothing.
+  - New phase effect `vignette` (`{"type": "vignette", "id"}`; one per phase; world encounters only; the id must name a world vignette), raised as `Session::vignettes()` (`VignetteCue {phase, vignette, round, block}`). `Session::phase_breaks()` lists (unit, round, block).
+- **ENRAGE2** (kit rule, game numbers):
+  - Ruleset fields `enrage_from_round` (0 = off), `enrage_step` (unit tier -> whole %), `enrage_max_stacks` (4), stored only off their defaults; content check on `enrage_step` (unit tiers, whole % 0-100); `Numbers::enrage_power(tier, round)`; `sim feel tune=enrage_from_round:N,enrage_step_<tier>:N`.
+  - At each round start from `enrage_from_round` every enemy on the board takes Empowered for the round at its tier's step times the rounds since (at most `enrage_max_stacks`); `empower` stacks refresh-max, so a larger phase enrage stays and the two never add. Heroes and allies never. An enraged enemy reads as enraged (intent revealed, PACE1). The log names it once (EVENT cell outcome `ENRAGE`). `Session::enrage_round()` gives the round for the counter's warning.
+  - The kit status table's `empower` cap is 80 (was 50) so a boss's four steps (+80 %) fit; an authored magnitude still tops out at 50 (`magnitude_max`).
+  - Seed `enrage2.json`: the timeline ruleset (from round 6; minion and standard 10, elite 15, boss 20; 4 steps); Sunk Ward caps by tier (EN7): prologue mobs 6, the corvo gate and the three elite roamers 8, the seven boss fights 12; the ten mob roamers, scavenger and patrol fights 5 with `timeout_outcome: escaped` (EN9).
+- **Escape** (EN9, EN10, EN12): `timeout_outcome` takes a third value, `escaped` (the kit's existing cap-outcome field). At the cap with both sides standing the fight ends `escaped`: the world settles the party as a flight (damage and statuses kept), pays nothing (no XP, purse share or loot, not even for slain foes), and the campaign tick reads it as fled. In exploration the party stays where it is; on a road the leg completes; a story fight takes its `on_fled` path. The party may retreat from such a fight at any planning step. Results head "They slipped away" with its note (`hub.rs`, `battle/draw.rs`).
+- **Sim** `pace=on` (feel): per group (mob, random, elite, boss by top enemy tier) the fights, won %, capped % (escapes included), won median rounds, EN7b minutes (10 s per hero + 5 s + blocks x 0.42 s + 0.9 s per round) and blocks lost to stun and to stagger per fight, then `PACE_JSON`.
+- **Balance run** (`BALANCE_REPORT.md` 2026-11-19 PR7-55 entry, 32 seeds, every Sunk Ward fight): enrage off to on costs at most 9.4 points (The Awakening Fissure 66 to 56); fights won in 5 rounds or fewer do not move; the steps stay. Caps: mob 4.2 %, elite 2.3 % (under 5 %); boss median 9 (8-11). No EN8 tuning: the misses are fights that are too short (below).
+- **Goldens** (intended, user-requested rules): `sim_golden` (the phase break and the enrage), the PHASEFOLD golden (the phase break), `rpgkit_host` `rules_contract_golden` (the three ruleset fields and the promoted `ENRAGE_MAX_STACKS`), and the repro recording `agent-classic-and-timeline-autoplay` (`aegis record`; the timeline fight's foes now gain `empower` at round 6). The timeline golden did not move.
+- **For main Build** (`PR7-40` part 3 and `PR7-54`): the round counter's warning a round ahead from `Session::enrage_round()` ("Round 5 of 6: foes enrage next round"; EN5); the enrage log cell (outcome `ENRAGE`, once); no enrage tag (an enraged foe shows `empower`'s amber tint and its raised numbers); the phase break's cell (outcome `PHASE BREAK`, status "Blocks N-6 skipped") in the log and the playback; between the break and the next round the transition plays its `talk`, then the `vignette` cue (`Session::vignettes()`), then the phase banner (BU17).
+- **Tests**: `rpgkit_battle` `phase_break` (3) and `baseline_enrage` (4, with the escape cap and retreat); `rpgkit_content` `enrage_checks` (4); `emberwake_world` `rewards::an_escaped_fight_pays_nothing`; the vignette check in `battle_talk_checks`; updated: `stay_behind_checks`, `rulesets` (18 ranged numbers), `item_values` (`empower_caps_at_eighty`), `ruleset_switches` (the enrage2 step closes the replay), `act1_story` (M1, M2 at 12).
+- **Guesses** (each a seed step or a line to change): (1) the three elite roamers keep the elite cap 8 and flee, not 5 and escape (EN11 "elite fights keep their caps"); (2) only Sunk Ward moves: Ashlands, Iron Reaches and Tidewrack play classic (no enrage) and keep their caps; (3) `escaped` pays nothing even for slain foes; (4) on a road an escape completes the leg; (5) the empower cap 80; (6) stun and stagger are counted as blocks lost.
+- **For the user** (not tuned; EN8 only raises lethality, which shortens fights further): random fights end in 1 round (PACE1 mob band 2-4); elite fights take about 3 minutes against the 7-8 minute target, and at the elite round target of 5 the EN7b estimate is about 4 minutes, so the two targets disagree; boss win rates at the authored levels are low (The Bone-Mill Raid 28 %, The Sweep 53 %).
+- **Docs delta**: `HISTORY.md`: "2026-11-19 `PR7-55` + `PR7-56`: `sim_golden`, the PHASEFOLD golden, `rules_contract_golden` and the repro `agent-classic-and-timeline-autoplay` re-recorded for the baseline enrage, the phase break and the enrage ruleset fields (intended, user-requested rules); the kit `empower` cap 50 -> 80." `GAME_BRIEF.md`: round caps by tier (mob 6, elite 8, boss 12, random 5 with escape) and enrage from round 6. `STRUCTURE.md`: none.
+
+### FB-379: ENGINE-23 UISPLIT1-I Stage A for the party loadout
+
+- **Status**: done (tools lane), on `develop`.
+- **Spec**: `READY.md` `ENGINE-23` (UISPLIT1 US1, US6, US8): Stage A for the party loadout, the screen the `PR7-51` footlockers open (the Character window's Gear tab: one member's gear and battle pouch over the shared stash). Main Build confirmed the screen was clear (`PR7-51` landed, 34ce69a1).
+- **Finding**: `emberwake_gui::loadout_view` builds view `loadout`: `title` (the member), `heading` (class and level), `stats` (the sheet with the draft's gear), `equipped` (a row per loadout slot; on while worn by choice; the wield badge as the detail in `foe`; the hover card's line as the note; the item's icon), `off_hand` (the Off-Hand button the draft would fight with, `gold` usable, `dim` not), `pouch` (a row per slot; under `pouch_stacks` the detail "in pouch/packs/limit" and `-` / `+` row buttons), `stash` (by name, "Name xN", on while a click does something). Actions `take_off`, `pouch_out`, `pack_less`, `pack_more`, `use` (wear, pouch or read a mastery book, by the item's type), `reset` and `confirm` (on with a draft), `close`; `loadout_act` maps a click back to the tab's own action against the draft. The agent link's character state gains `view` on the Gear tab. The slot, pouch and stash rows' texts moved into shared fns in `party.rs` that the drawing and the view both use, so the drawing is unchanged (806 GUI tests pass). Fixture `games/emberwake/assets/ui/views/loadout.view.json` (shape test plus an `#[ignore]` writer).
+- **Guess** (minor, made provisionally): drags (slot to slot, stash to slot and back) are not view actions; they stay the drawing's own until Stage B's layout says how a list takes a drop. The world map stays held for `PR7-47`.
+- **Docs delta**: `STRUCTURE.md`: `emberwake_gui/src/loadout_view.rs` (the party loadout's view-model, ENGINE-23). `HISTORY.md`: none.
+
+### FB-381: ENGINE-26 BALANCE-WHATIF1, numbers for the three balance calls
+
+- **Status**: done (tools lane), on `develop`; report only, no data or golden change.
+- **Spec**: `READY.md` `ENGINE-26` (the `FB-377` misses).
+- **Finding**: new feel keys for world encounters (`rpgkit_sim::args::FEEL_WHATIF_KEYS`): `foe_hp=<1-1000>` (each foe's HP in %, through `max_hp_offset` so a stat refresh keeps it; `runner::scale_foe_hp`), `foes=<0-4>` (more of the encounter's last foe), `foe_level=<0-5>` (every foe that many levels up, through a new `WorldRoster::foe_levels`, 0 everywhere else; never an ally). Tests `rpgkit_sim/tests/whatif.rs`. Results in `BALANCE_REPORT.md` "2026-11-19 ENGINE-26 BALANCE-WHATIF1": (1) random fights stay at median 1 round up to foe HP +100 %; **one more foe** is the smallest change that reaches median 2 (99.4 % won), two more reach 3 (98.1 %). (2) Elite fights run 3-5 rounds, 2.4-4.0 estimated minutes; five rounds read 7 minutes at 18.9 s of planning per hero per round and 8 minutes at 21.9 s (the estimate uses 10 s). (3) Bosses as authored: the Bone-Mill Raid 28.1 % is the only one in the 20-40 % band; the Sweep 53.1, the Cages 84.4, the Tallow Vats 56.3, the Fissure 56.3 are above it; both Crucible fights 0 %. At +1 level: the Vats 40.6, the Fissure 46.9, the others move 3 points or less, the Crucible stays 0.
+- **For the user** (the three calls, numbers above): random fights: add one foe each (or two for median 3)? Elite minutes: keep the 7-8 minute target and judge the planning estimate in play, or lower the target? Bosses: the band says 20-40 % won; four bosses sit above it and the Crucible is never won: tune the Crucible first?
+- **Docs delta**: `STRUCTURE.md`: none. `HISTORY.md`: none.
+
+### FB-383: ENGINE-25 UISPLIT1-J Stage A for the forge viewers, the siege and the epilogue
+
+- **Status**: done (tools lane) for three of the five screens, on `develop`. Main Build confirmed the dojo, forge, siege and epilogue clear and asked to hold `talk.rs` (the hub talk) for `PR7-46` item 3; the dojo follows in its own commit.
+- **Spec**: `READY.md` `ENGINE-25` (UISPLIT1 US1, US6, US8).
+- **Finding**: three view-models with act-mapping fns, fixtures in `games/emberwake/assets/ui/views/` (shape tests plus `#[ignore]` writers), and the view on the agent link. `forge_view` (view `forge`, both viewers): `title`, `worlds` (the World Forge's picker, empty in the Content Forge), `tabs`, `entries`, `heading`, `fields` (stats), `summary_head`, `summary` (stats, toned `gold` / `dim` by line), `foot`; actions `tab`, `select`, `world` (off in the Content Forge), `exit`. `siege_view` (view `siege`): `title`, `rooms` (mark as the detail, `good` / `gold` / `dim`), `down_head`, `downed` (a Triage row button naming the reviving item), `line`; actions `triage`, `restock` (labelled "Re-stock (n)"), `fight`, `yield` (one of the two on). The siege's link state keeps the kit's `view` and adds the screen's as `layout_view`. `epilogue_view` (view `epilogue`): `title` (toned by the ending's tone), `page_kind`, `heading`, `body`, `outcomes`, `fates` (tag as the detail, `dim` departed / `good`, the template line as the sub, the keepsake as the note), `count`; actions `back`, `next`, `load_save`, `main_menu` (on by page). The drawn texts moved into shared fns (forge heads and fields, siege marks, labels and line, the epilogue's page count and Load a save line), so the drawing is unchanged (815 GUI tests pass).
+- **Guess** (minor, made provisionally): the siege's screen view goes under `layout_view` on the link because `view` already holds the kit's siege reading that scenarios read.
+- **Docs delta**: `STRUCTURE.md`: `emberwake_gui/src/forge_view.rs`, `siege_view.rs`, `epilogue_view.rs` (view-models, ENGINE-25). `HISTORY.md`: none.
+
+### FB-385: ENGINE-25 UISPLIT1-J Stage A for the dojo
+
+- **Status**: done (tools lane) on `develop`; four of the five screens are done. The hub talk (`talk.rs`) stays held until main Build finishes `PR7-46` item 3; the tools lane asks main Build before starting it.
+- **Spec**: `READY.md` `ENGINE-25` (UISPLIT1 US1, US6, US8).
+- **Finding**: `emberwake_gui/src/dojo_view.rs` (view `dojo`): `title`, `heroes` (the active hero selected, "HP / AP / stance" as the sub), `carry` (`foe` when overloaded), `stage` (stats: the hero and the dummy, HP and their second stage line, names toned `gold` / `foe`), `round`, `gear` (a row per slot, on while worn), `pouch` (an Unload row button), `stash_tabs`, `stash` (the hover line as the note, dim when neither wearable nor pouchable), `log_tabs`, `log` (the category as the tone, the picked entry selected), `breakdown`. Actions `hero`, `strike` (arg main, offhand, ranged or dual), `use_skill`, `pouch`, `unpouch`, `unequip`, `stash_use`, `stash_filter`, `log_filter`, `log_pick`, `log_clear`, `next_round`, `stance`, `heal_hero`, `heal_dummy`, `exit`; `dojo_view::dojo_act` maps them to the dojo's own clicks and refuses an arg the dojo does not hold. Fixture `ui/views/dojo.view.json` (shape test plus an `#[ignore]` writer); the view is on the agent link. The drawn texts (hero line, carry line, slot and pouch labels, stash hover line, log lines, breakdown, the stage's poise line) moved into shared fns, so the drawing is unchanged (825 GUI tests pass).
+- **Guess** (minor, made provisionally): the console's setup controls (the skill, dummy skill and ruleset pickers, the Counter / Force crit / guard / windup toggles, the bench, the dummy power, the presets, the planner and deck windows) are not in the Stage A view; they are dev tuning, and Stage B can add them when the studio's dojo layout needs them.
+- **Docs delta**: `STRUCTURE.md`: `emberwake_gui/src/dojo_view.rs` (view-model, ENGINE-25). `HISTORY.md`: none.
+
+### FB-387: ENGINE-25 UISPLIT1-J Stage A for the hub talk; the row is done
+
+- **Status**: done (tools lane) on `develop`; with FB-383 and FB-385, Stage A covers all five `ENGINE-25` screens. Main Build cleared `talk.rs` (its `PR7-46` item 3 did not need it).
+- **Spec**: `READY.md` `ENGINE-25` (UISPLIT1 US1, US6, US8).
+- **Finding**: `emberwake_gui/src/talk_view.rs` (view `talk`, the talk box of `talk::Services` over the region map, in a hub or on `ServiceScreen`): `pane` ("talk", or the pane over it: "shop", "recipe", "facility", "board", "turn_in"; "" when nothing is open), `speaker`, `band` (the faction line), `expression`, `line`, `replies` (a row per reply as the box draws it, id the widget to click, the number 1-9 as the detail, off while locked or under the turn-in picker). Actions `choose` (arg the reply index), `advance` (Continue), `farewell` (on with a farewell reply or a talk that need not be answered); `talk_view::talk_act` maps them to `SvcAct`. Fixture `ui/views/talk.view.json` (shape test plus an `#[ignore]` writer). The link state gains `talk_view` on the services and the region map (the region map's `view` key is its camera view). The band line moved into a shared `talk::band_line`; the drawing is unchanged (828 GUI tests pass).
+- **Guess** (minor, made provisionally): the panes over the talk (shop, board, recipe, facility, turn-in) keep their own views and are named only by `pane`; the shop's is `trade`.
+- **Docs delta**: `STRUCTURE.md`: `emberwake_gui/src/talk_view.rs` (view-model, ENGINE-25). `HISTORY.md`: none.
+
+### FB-389: ENGINE-27 CRUCIBLE-CHECK1, why both Crucible fights are won 0 %
+
+- **Status**: done (tools lane), report only; no data, rule or golden change.
+- **Spec**: `READY.md` `ENGINE-27` (`FB-381`).
+- **Finding**: no rule bug. A round-by-round replay (32 seeds each, party level +0 to +4, `objective_count` 3 and 2) shows the holder, the gate, the wave, `infusion`, `unkillable` and the withdrawals all working as specified (`BALANCE_REPORT.md` "2026-11-20 ENGINE-27 CRUCIBLE-CHECK1"). The win needs all three non-holders out (`objective_count` 3 of four founders), so one founder down ends it. (1) At the authored level 1 (how the feel sim fights every world encounter) against level 2-6 foes, a founder falls in round 1 in 24 of 32 seeds, and still 19 of 32 at levels 2 and 3. (2) At level 4, round-1 deaths are rare (4 of 32), yet the base fight wins 0/32: the round-3 wave lands in the escape lane and one escaper falls on the way every time; the Overlook (wave on round 4) wins 24/32 at level 4 and 27/32 at level 5. With `objective_count` 2: 28-32 of 32 from level 4, still 0 below.
+- **Question for the user** (data, waits with the other boss calls): the smallest fixes are (a) name the party level the Crucible is tuned for and run the feel sim there; (b) move the base wave to round 4 as in the Overlook; (c) `objective_count` 2 (changes CANON's "one holds, three get out"). No sim models the founders' real level at M5 (no Act 1 XP campaign); below level 4 neither (a) nor (b) makes it winnable for the auto driver.
+- **Docs delta**: none (the report section is in `BALANCE_REPORT.md`). `HISTORY.md`: none.
+
+### FB-391: PR7-29 SLOTCARD1, slot cards on the save and load screens
+
+- **Status**: done (tools lane) on `develop`.
+- **Spec**: `READY.md` `PR7-29` (`LOOK1.md` M2, mock screen 2; `FB-369`).
+- **Finding**: `menus::Slots` draws the six slots as `aegis_ui::panes::slot_card`s, 290 x 84 in two columns (`menus::card_rect`), the autosave first: the save's location picture (`backgrounds/location/<id>.png`, else the world's title picture `backgrounds/title/<world>.png`, else the card's letter) as the thumbnail; the slot's name as the title; the place ("World, Location") and the lead's day as the lines; the party's portraits (up to four, active first); the time saved as the stamp; lock and delete as the card's corner icons. An empty or unreadable slot shows a plain well. One click acts as before (PLAYUI1, `[PROVISIONAL]` per the row; no select-then-act); widget ids, the off state and the hover lines ("Save here.", "Locked: unlock it to save over it.", the lock's "Lock (protect from overwrite and delete)") are unchanged, so the `slots` view-model and its fixture do not move. FB-369's line: `menus::slot_place` joins only the parts that exist, so a save with no location reads "The Ashlands · time" (test `a_save_with_no_location_drops_the_comma`). Screenshots at Normal and Extra large text in project files `tools-lane/pr7_29/` (no cut or overlap; at Extra large a long place is cut with the full text on the hover card).
+- **Guess** (minor, made provisionally): the corner icons are the kit card's drawn glyphs, not the `ui/lock.png` / `ui/delete.png` files (the card draws its own icons); the theme colour `menu_row` (only the old rows read it) is removed from `theme.json` and the contrast table.
+- **Docs delta**: none. `HISTORY.md`: "the save and load rows (a 500 x 31 list with the lead's animated portrait) replaced by slot cards (PR7-29, LOOK1 M2)".
+
+### FB-393: PR7-28 TITLEFX1, the title backdrop's fire layer
+
+- **Status**: done (tools lane) on `develop`.
+- **Spec**: `READY.md` `PR7-28` (`LOOK1-M1F`, mock `03_main_menu_and_slots.js`).
+- **Finding**: `emberwake_gui/src/title_fx.rs` draws, over the main menu's backdrop and with `aegis_ui::fx` (`Looped` `Flash` and `Sparks`) on the menu's own clock, three nested flickering glows at each lantern spot and a few rising, fading embers at each ember spot. The spots are data, in the picture's sidecar `backgrounds/menu/title.fx.json` (`{"spots": [{"kind": "lantern" or "embers", "at": [u, v]}]}`, fractions of the picture, mapped through the backdrop's cover fit): the mock's five lanterns (both portal brackets, three bridge posts) and six ember origins (those plus the open door). It shows only over the picture whose sidecar it is and never under Reduce motion (no drawing; the menu goes back to idle frames); while it shows the menu asks for about 30 frames a second. The agent link reads `state.title_fx` (`on`, `lanterns`, `embers`). GUI audit: scenarios `title_fx` (asserts on with 5 and 6 spots, a 24-frame clip) and `title_fx_still` (Reduce motion: asserts off); clip and still in project files `tools-lane/pr7_28_title_fire.gif` and `pr7_28_title_still.png`. Tests: the shipped spots, off under Reduce motion and over the menu picture, the cover-fit mapping, a malformed spot left out.
+- **Guess** (minor, made provisionally): the spots live in a sidecar beside the picture (the layered tree now allows `backgrounds/menu/<picture>.fx.json`, as `backgrounds/world_map/` allows its JSON sidecars), so a new title picture brings its own spots and the art studio can move them; the glow sizes and colours stay in code. The mock's window glows and falling ash are not part of the row (it names embers and lantern flicker).
+- **Docs delta**: `docs/specs/ASSETORG2.md` section 3: `backgrounds/menu/<picture>.fx.json` (TITLEFX1 spots). `STRUCTURE.md`: `emberwake_gui/src/title_fx.rs` (the title fire layer). `HISTORY.md`: none.
+
+### FB-395: ENGINE-28 CAMPAIGN-SIM1, the world campaign sim run
+
+- **Status**: done (tools lane) on `develop`; report only, no data, rule or golden change.
+- **Spec**: `READY.md` `ENGINE-28` (`FB-389`).
+- **Finding**: `tools/fc.sh sim campaign world=<world> [seeds=N] [side=0-9] [story=<enc,...>]` (`rpgkit_sim::world_campaign`, a kit tool that names no game; the old `campaign` without `world=` is unchanged, so `sim_golden` does not move). Story order is read from the world: the `new_game` sequence's fights, then each main-track quest's step fights in quest order, a sequence that sets a flag a main quest requires playing just before it (Sunk Ward: the interlude before M5). Each fight fields the party it lists (joins and leaves come from the data); a member starts at its authored level and gains the kit's kill XP for the roster at its own level (`progression::encounter_xp`), levels by `level_for`, and fights raised by the class's default growth through a new `WorldRoster::ally_levels` (never lowered, never a foe). `side=` roamer fights come before each quest fight (default: the world's largest patrol `visit_cap`), round robin over the paced bindings' encounters, a repeat paying its `repeat_xp_pct`. Per fight: entry levels, won %, won-fight median rounds, EN7b minutes, HP left, beside the same fight at the authored levels; then `CAMPAIGN_JSON`. Tests on a scratch world (`rpgkit_sim/tests/world_campaign.rs`): story order and unlocks, levels rise, a leave drops the member, ally levels reach the fight, side fights and repeat XP, keys and refusals.
+- **Sunk Ward Act 1** (`BALANCE_REPORT.md` "2026-11-20 ENGINE-28"): the founders reach M5 at level 7 (8 at the end, 7 without side fights). M1 81 %, M2 97 %, M3 66 %, M4 and the interlude 100 %; the Crucible 3 % (Overlook 9 %) with jitter, 0 % without. **The auto driver's Crucible result falls as the party levels past 5** (Overlook without jitter: 24/32 at level 4, 27/32 at 5, 0/32 at 6 and 7, Maren down in round 4 every seed), so the sim cannot judge the Crucible fixes above level 5.
+- **Guess** (minor, made provisionally): each fight counts as won for the XP (a lost story fight is retried in play) and starts at full HP; quest reward XP is not counted (the Sunk Ward quests pay none); side fights are drawn world-wide, not by the location of the next quest.
+- **Question for Design**: worth a follow-up row to look at the auto driver's escape play from level 6 (why Maren stays in the lane), before the user's Crucible call leans on sim numbers?
+- **Docs delta**: `STRUCTURE.md` (or the kit sim's place in it): `rpgkit_sim/src/world_campaign.rs` (CAMPAIGN-SIM1, `campaign world=`). `GAME_BRIEF.md` sim line: `tools/fc.sh sim campaign world=<world>` plays a world's story at the party's carried levels. `HISTORY.md`: none.
+
+### FB-397: PR7-30 MENURAIL1, the game menu rail and the banner cards
+
+- **Status**: done (tools lane) on `develop`.
+- **Spec**: `READY.md` `PR7-30` (`LOOK1.md` M2; frame tiers per the user's 2026-11-18 ruling, confirmed by Design 2026-11-20).
+- **Finding**: (1) The game menu (`hub::Hub`, frame A as a popup) is a left rail (Resume, Party, Journal, Save game, Load game, Settings, Quit to main menu; 130 wide, Resume first, the old corner "Return to map" folded into it as Resume with the same id `hub.return`) and the party box to its right with the place above it; the detail line sits at the frame's foot; ids, refusal reasons and hover cards are unchanged; the PR7-26 column and compact rules now measure the box's own area. (2) A new kit pane `rpgkit_ui::banner` draws a card in the `ornate` frame with its title on a banner picture across the top edge, the banner drawn at physical size in three slices (ends kept at their aspect, the middle repeated to the title's length; a plain bar without the file). Story title cards use it when the game's vignette palette names a banner (`Palette::banner`; Emberwake `ui/banner_full.png`): the subtitle in the card, the title on the banner. The run-over card uses it too (title "The run is over" in the foe colour on the banner, the card ornate). (3) Large modals: Board, Journal and Party were already ornate; the Recipe pane moves from the vector panel to `ornate`, its content inside the frame's content rect; the Shop's frame comes from its layout file (Art/UI's), unchanged. Shots in project files `tools-lane/pr7_30/` (game menu with six members and a wounded mark; the opening title card). Tests: the banner's slices and placement; the hub, party and run-over text audits at every size pass unchanged.
+- **Guess** (minor, made provisionally): the banner is `banner_full.png` (the whole banner with its finials) for both cards; the decision's crest-capped story banner needs a crest-end asset, which Art/UI can drop in at the same path. The title card's title is 2x body size (was 3x between two rules), so it fits the banner. No run-over screenshot: no scenario reaches a run-over; it shares the title card's drawing.
+- **Docs delta**: `SCREEN_ATLAS.md` / `SCREENS.md` row 11 (game menu): rail left, party box right. `STRUCTURE.md`: `rpgkit_ui/src/banner.rs` (banner card). `HISTORY.md`: "the game menu's two-column button grid and corner Return to map replaced by a left rail with Resume (PR7-30)"; "story title cards between two rules replaced by the banner card (PR7-30)".
+
+### FB-399: ENGINE-29 ESCAPE-PLAY1, no escape bug; the level effect was a fixed-start artifact
+
+- **Status**: done (tools lane), report only; no code, data or golden change.
+- **Spec**: `READY.md` `ENGINE-29` (`FB-395`).
+- **Finding** (`BALANCE_REPORT.md` "2026-11-20 ENGINE-29"): with the authored start tiles the seeds barely vary the Crucible, so 64 seeds play close to one fight; the Overlook's 41-54/64 at levels 4-5 and 0/64 from level 6 come from that one fight going one way or the other (from level 6 Hollis gets out a round sooner and the foes turn on Maren, the slowest escaper). With start tiles jittered by one tile the Overlook wins 0-6 % and the base 0-5 % at every level from 3 to 8. The driver has no escape bug: non-keepers Withdraw from the round the keeper can reach the winch, along routes around the enemy line. Two trial fixes in the shared auto-plan (test-only switch, measured, reverted) made it worse: Withdraw from round 1 (0/32 at every level) and Guard in place until the keeper is in reach (0/32). Per the feedback rule (two failed targeted fixes) I stopped there.
+- **Question for Design / the user** (with the other boss calls): the auto driver loses the Crucible at any level, so FB-389's figures at levels 4-5 (75-84 %) were fixed-start luck and the sim cannot rate fix (b). Options: (a) judge the Crucible by a human playtest at level 7 (its real level, FB-395); (b) a data change to the escape itself, such as `objective_count` 2 (FB-389 (c)) or exits nearer the party's side; (c) a new auto-plan row teaching escapers to move as a group (a design task, not a fix; it would move the shared auto-plan and its goldens).
+- **Docs delta**: none. `HISTORY.md`: "FB-389's Crucible figures at levels 4-5 were one fixed start; with jittered starts the auto driver wins 0-6 % at levels 3-8 (ENGINE-29)".
+
+### FB-401: ENGINE-30 AGENT-CRUCIBLE1 and ENGINE-31 SIM-JITTER1, a careful player wins the Crucible; jitter is already the default
+
+- **Status**: done (tools lane), report only; no code, data or golden change.
+- **Spec**: `READY.md` `ENGINE-30`, `ENGINE-31` (`FB-399`).
+- **Finding, ENGINE-30** (`BALANCE_REPORT.md` "2026-11-20 ENGINE-30"; logs and deciding-round shots in project files `tools-lane/engine30/<try>/`): played through the real game (`fc.sh playtest`) from saves at M5 with the founders at level 7, each round picked by hand. Base fight: lost, lost, fled (2 out), fled (2 out), **won in round 6 with no downs**. Overlook: fled (2 out), **won in round 5 with no downs**, and Auto every round fled (1 out). A careful player wins both, with no margin: one founder down ends any win (one holds, three leave), the keeper Vesper lasts about three rounds on the winch, and Nemeth's Decapitation (232-278 in one hit) must be dodged by moving off its tile (a hit timed to break it was dodged). The winning plan holds back in round 1 (Hollis kills a crossbow), sends the escapers round the outer lanes in round 2, puts Vesper on the winch in round 3, and lets Auto withdraw each escaper.
+- **Answer to (b)**: `objective_count` 2 turns three of the six losses into wins (they ended "fled" with two founders out). Exits nearer the party or the base wave on round 4 would not have saved the tries where a founder fell in round 3.
+- **Found while playing** (for Design; not fixed): (1) a hand pick cannot step onto an open exit ("That tile can't be moved to"; `move_route` and `apply_goto` refuse exit tiles), so only the auto-plan's Withdraw leaves and a player must press Auto or a preset for each escaper; (2) a later hero's pick silently drops an earlier hero's picks when their routes cross, and tiles allies start or end a block on block routes in that block, so in round 1 Kaelen is boxed in and cannot plan any route; (3) the keeper pick is final and defaults to Kaelen (`highest_hp`), the founder who cannot reach the winch in round 1; (4) the Withdraw draft spends AP below zero, hand moves cannot; (5) the results list the benched Dunstan +10 XP and the captured keeper none, and the pinned foe card covers the winch corner.
+- **Finding, ENGINE-31** (`BALANCE_REPORT.md` "2026-11-20 ENGINE-31"): start jitter is already the sims' default (`SimArgs` `jitter: true`) and the ENGINE-26 numbers used it (its authored row reproduces exactly). With fixed starts (`jitter=off`) 7 to 16 of the 24 Sunk Ward fights move per run, bosses by up to 53 points (the Sweep 53 to 19 %, the Cages 84 to 31 %, the Fissure 56 to 88 %), and "one more foe" no longer reaches the 2-round random target. Nothing to change: no golden touched; the goldens that pin `jitter=off` do it for stable output.
+- **Question for the user** (with the other boss calls): the Crucible is winnable by careful hand play at level 7 but unforgiving. Keep it as is, or take `objective_count` 2 (changes CANON's "one holds, three get out"). Items (1)-(3) above look like Build rows whatever the choice.
+- **Docs delta**: none. `HISTORY.md`: "The Crucible was won by hand at level 7 (base round 6, Overlook round 5) with no downs; Auto alone loses (ENGINE-30)".
+
+### FB-403: PR7-60 ESCAPE-PLAN1 built; three goldens wait on the user behind a test-only switch
+
+- **Status**: built (tools lane), `develop`. The Crucible hand-play rerun the row asks for follows as its own item.
+- **Spec**: `docs/READY.md` row `0k7` (`PR7-60`, `FB-401`; Design's (a) on the XP half, 7d48bc13).
+- **What landed** (kit `rpgkit_battle` unless named):
+  1. A hand move may end on an exit for a unit Withdraw lets leave (`World::may_leave_at`: one tile, not the hold's
+     holder); `move_route`, `apply_goto` and `move_tiles` take it, and the move leaves by the exit as Withdraw does.
+     Checked against every encounter with exits: the rule reads the board's `exits` and the hold, nothing per encounter.
+  2. `round_intent_plan::pick` refuses a pick whose rebuild would drop another member's hand picks, with that member's
+     reason ("Blocked by Maren's plan: Move here dropped: No path"), and leaves the battle as it was; `move_tiles` does
+     not offer such a tile. A party member's hand move (`Plan::pass_route`) may pass through a tile a friend holds or
+     will hold, never ending a move block there, when that route is shorter or the only one; the walk passes through the
+     friend and steps back to its last free tile if cut on one (`command::walk`).
+  3. `pick_default` `nearest` (the hero with the shortest walk to a hold tile; ties the first); the Crucible and its
+     Overlook take it (seed `escape_plan1.json`). `stay_pick` may be repeated until round 1 is confirmed, the new pick
+     replacing the old. The battle screen marks the suggested hero on the pick, shows the holder pressed, and while round
+     1 is planned shows a chip `<hero> holds the winch · Change` that opens the pick again.
+  4. A party member's Withdraw walks only as far as its AP pays for and is refused at 0 AP ("Not enough AP to
+     withdraw."); the foe AI's Withdraw is as before.
+  5. The docked foe card takes the board side covering fewer objective tiles (hold tiles, exits) after the selected hero
+     and its target. The XP half stays as is (Design (a)).
+- **Goldens (parked for the user)**: (2) and (4) move `sim_golden` (run 15, role 5 quick), `phasefold` and
+  `timeline_golden`; nothing else moved. Per the row they land behind a test-only switch
+  (`rpgkit_battle::plan::set_escape_plan1(false)`, called only by those three tests), so the goldens run with the moves
+  as before. To adopt: re-record the three with the switch removed, in one commit naming this item and a HISTORY row.
+  The user's call, with `PR7-41` item 6.
+- **Tests**: `rpgkit_battle/tests/escape_plan.rs` (5 tests, one per item), `stay_behind.rs` and the host's
+  `stay_pick.rs` updated for the repeatable pick, `hold_ai.rs` fixture given `ap_regen` 4 (it relied on Withdraw running
+  AP into debt with no regen), `rpgkit_content` `stay_behind_checks` names `nearest`. The repro recording
+  `agent-classic-and-timeline-autoplay` is re-recorded (an intended change, not a golden): its timeline autoplay of
+  `goblin_skirmish` (seed 7) now runs out of time (fled) in round 6 instead of losing, the heroes walking through each
+  other; its classic session is unchanged.
+- **Docs delta**: `docs/HISTORY.md`: "2026-11-20 `PR7-60` ESCAPE-PLAN1: the hold pick is no longer final before round 1
+  is confirmed (ENCOUNTER2 H1 said once); a pick no longer drops a later member's hand picks (INPUT1 GH5's drop now
+  refuses the pick); a hero's Withdraw no longer spends AP into debt." `engine/README.md` none.
+
+### FB-405: PR7-60 ESCAPE-PLAN1 Crucible rerun: the base fight is still won by hand, the Overlook now lost
+
+- **Status**: report only (tools lane), `develop`. `BALANCE_REPORT.md` "2026-11-20 PR7-60 ESCAPE-PLAN1 the Crucible
+  replayed by hand after the planner fixes"; logs and shots in project files `tools-lane/pr760/`.
+- **Spec**: `docs/READY.md` row `0k7` (`PR7-60`): "rerun your hand play of the Crucible, three tries of each fight".
+- **Findings**: base fight 1 win (round 6, no downs, every escape picked by hand onto an exit), 1 loss, 1 Auto flight;
+  Overlook 0 wins in 3 (`ENGINE-30`'s winning Overlook plan now loses Kaelen in round 5; a variant fled in round 6; Auto
+  fled in round 4). The hand exit picks and the no-drop rule worked in every try; the change that decides the Overlook
+  is (4): Maren's round-3 Withdraw used to run to -1 AP and leave, now she stops one tile short, leaves a round later,
+  and Purifier 2 follows her to the lower exits and walls Kaelen off.
+- **For the user** (with the Crucible item Design holds): keep (4) and accept a harder Overlook; or keep (4) and ease
+  the Overlook (one more AP for the founders there, or `objective_count` 2, which most likely saves Overlook 1); or
+  let Withdraw draw up to 1 AP of debt as before. Recommendation: keep (4) (hand moves and Withdraw follow one AP rule)
+  and weigh `objective_count` 2 for both fights, as Design planned.
+- **Scenario**: `games/emberwake/scenarios/crucible_exit_pick.json` (save `crucible_l7`): the suggested holder, the
+  pick changed through the holder chip, rounds 1-4 hand-planned, Maren and Hollis out through hand-picked exit tiles.
+  The battle screen's `hold` state now lists `out` (heroes out) and `suggested`.
+- **Docs delta**: none beyond `FB-403`.
+
+### FB-407: PR7-61 PLAN-RECURSE1 built; the planner no longer recurses on an area skill that hits everyone
+
+- **Status**: built (tools lane), `develop`.
+- **Spec**: `docs/READY.md` row `0k8` (`PR7-61`, `FB-372`).
+- **What landed**: `rpgkit_battle` `Plan::apply_area` counts the friends an area hits at each friend's planned tile,
+  and `planned_position` reaches `first_move` through `ally_moves`, which compiles the unit's first step and so comes
+  back to `apply_area`. While a first move is compiled (`blocked_override` set) the count now reads each friend's tile
+  as it stands; `first_move` drops that count, so every other caller reads the planned tile as before.
+- **Tests**: new `rpgkit_battle/tests/plan_recurse.rs` (an Engage with a `RING` `affects: all` skill as the first step
+  of both heroes, in either order, overflowed the stack before the fix; a friend walking into the ring is still
+  counted at its planned tile). `status_view.rs` `the_counter_follows_the_riposte_rule_not_the_skill_kind` is back on
+  `affects: all` (`PR7-59` had used `enemies` to dodge the crash).
+- **Goldens**: none moved (full gate clean).
+
+## FB-447, FB-445, FB-443, FB-441, FB-439, FB-437, FB-435, FB-433, FB-431, FB-429, FB-427, FB-425, FB-423, FB-421, FB-419, FB-417, FB-415, FB-413, FB-411, FB-409, FB-334, FB-346, FB-354, FB-374, FB-376, FB-378, FB-380, FB-382, FB-384, FB-386 (answered in READY @13a352c2, moved 2026-11-22)
+
+### FB-447: PR7-77 DIORAMA5 slice 0 built; the new diorama art paths are accepted
+
+- **Status**: closed: accepted (@13a352c2), follow-up `DIORAMA5`
+  later item.
+- **Spec**: `docs/READY.md` row `00f2` `PR7-77` (`DIORAMA5`), slice 0.
+- **Size choice for R1**: `CELL_MAX` is raised (to 64) rather than composing at half size and scaling, so the battle
+  ground composes at the stage art's own resolution (a 64 x 48 cell, 1:1 with the tiles; a half-size compose would blur
+  or double the sheet's pixels). Slice 0's sizes follow: a sheet is whole 64 x 48 cells.
+- **What landed**:
+  - Content check (`rpgkit_content` `check/assets.rs` `tileset_errors`, stage role): `<terrain>/sheet.png` must be a
+    whole number of 64 x 48 cells; `lip/<terrain>/v*` 64 wide and 1 to 48 high; `<terrain>/decal/v*` a stage tile (64 x
+    48); a terrain override's own `<terrain>/front_face/v*` a wall face (64 x 24; it was checked as a 64 x 48 tile).
+  - Layered-tree test (`region.rs` `layout_ok`): `tilesets/<set>/<terrain>/sheet.png`, `tilesets/<set>/<terrain>/decal/v*`
+    and `tilesets/<set>/lip/<terrain>/v*`; `props/common/exit_path/v*` and `exit_gate/v*` were already in the props
+    pattern. As a stopgap for Art/UI's ragged edges, a stage set's (`*_stage`) transition pieces
+    `<upper>/over_<lower>/m01..m14` (checked as 64 x 48 stage tiles); region sets keep refusing `over_*`. The prop
+    sizes (64 x 48, 64 x 72) are not checked (no props size check exists); R4 draws them at their size.
+- **Dropped**: FB-445's provisional `tilesets/<set>/backdrop_<name>.png` allowance, now that Art/UI's PR #93 moved the
+  parked backdrops to `backgrounds/battle/` (a parked backdrop in a set is a stray again, tested).
+- **Tests**: `rpgkit_content/tests/look1_sets.rs` (`tiles_of_the_wrong_size_are_errors`: a good and a bad sheet, a decal,
+  a good and a bad lip, an override front face), `region.rs` `ground_and_boundary_art_follow_their_patterns`.
+- **Docs delta**: ASSETORG2 section 3, the stage set line: add `<terrain>/sheet.png` (whole 64 x 48 cells),
+  `<terrain>/decal/v*` (64 x 48) and `lip/<terrain>/v*` (64 wide); `props/common/exit_path` and `exit_gate`.
+
+### FB-445: PR7-75 ACT1-FIX1 built; ending reasons, boss HP, retry seed, talk message, durations, portraits
+
+- **Status**: closed: accepted (@13a352c2), follow-up `ACT1-FIX1`
+- **Spec**: `docs/READY.md` row `00g` `PR7-75` (`ACT1-FIX1`), from `FB-441`.
+- **What landed**:
+  - (PT-40, why it ended) the kit's `Session::end_reason()` (`rpgkit_battle`): the party's retreat ("The party
+    retreated from the fight."), the round limit ("The round limit ran out (N rounds)."), the objective's own note,
+    the last standing heroes leaving the field ("No hero was left fighting: Ash left the field."), every hero down;
+    empty while the fight goes on. The results' objective lines and the round-over message ("Battle over: Fled. ...")
+    carry it, and the log gets one "[End] ..." line. The run's Fled came from the last two standing heroes withdrawing
+    through the exit, which the kit verdict reads as fled; the line now says so. The retreat log line is the kit's
+    `RETREAT_LINE`.
+  - (PT-40, boss HP) neither max is wrong: the bar shows the current phase's span (contract 9.1, 142/304) and the unit's
+    own card showed the whole (142/608); the boss card already folds into the bar. The bar's HP read-out now has a hover
+    with both ("This phase: 142/304", "In all: 142/608"; one line when they match) (`BossBar.whole`, `hp_tip`).
+  - (PT-40, counter) "Hostiles N" counts the boss with the panel's foes.
+  - (PT-41) a lost (or fled) world fight counts a try in the save (`rolls["retry:<encounter>"]`), and the next start
+    mixes the count into the battle seed (`rpgkit_world` `retry_seed`; the base seed when there are no tries). Sims,
+    replays and the journey keep their seeds: goldens unchanged.
+  - (PT-47) when a talk is due at a round's start, the bar says "Round N: a talk first; the plan fills when it closes."
+    and switches to the plan message once the plan fills after it.
+  - (PT-48) a battle-long duration (the kit's `trigger::lasts_battle`, rounds above `BATTLE_ROUNDS - 100`) shows no
+    number on the status tabs, the pending tabs and the taunt tip.
+  - (PT-59) a guest's results row draws its catalog unit's portrait (`Report` rows keep the unit id, not written to the
+    JSON; `Who::of_catalog`), the initial only without art.
+  - (`FB-386` question 3) `portrait_chain_keyed` and `face_chain_keyed` put a unit's explicit `portrait` key first,
+    above the unique tier's own files (face chain deduplicated).
+- **Gate fix** (develop was red after PRs #90 and #91): the asset tree test (`region.rs` `layout_ok`) now allows a
+  terrain override folder's own front face (`tilesets/<set>/<terrain>/front_face/v*.png`, the PR7-74 key the foundry
+  and tallow sets now use) and, `[PROVISIONAL]`, a stage set's parked placeholder backdrop
+  (`tilesets/<set>/backdrop_<name>.png`, High Bastion's ramparts) until its zone exists. For Design: add both to the
+  ASSETORG2 tree (section 3, the stage set line), or ask Art/UI to park the backdrop under `backgrounds/battle/`.
+- **Goldens**: none re-recorded; sim, rules, checks, journey and the other goldens pass unchanged.
+- **Changed shots** (`fc.sh shots diff`, base `4974bcdf`): one changed, `story_battle_hub` results over the field, but
+  the change is the results report that landed on `develop` after that base; a won rout has no reason line, so this
+  row changes nothing visible there. Sheet: `/mnt/project-files/build-tools/pr7-75/shots_diff_sheet.png`.
+- **Guesses** (`[PROVISIONAL]`): (1) the boss bar keeps the phase span and gains the hover rather than showing the whole
+  (contract 9.1 stands); (2) any outcome but won counts as a try, fled included; (3) a sentinel shows no number rather
+  than "until removed" (the tab's hover already names the status); (4) the reason for a fled that is neither a retreat
+  nor heroes leaving is empty.
+- **Tests**: `rpgkit_battle/tests/end_reason.rs` (6), `rpgkit_world/tests/world_fight.rs`
+  (`a_retry_after_a_lost_try_draws_a_fresh_seed`), `rpgkit_content/tests/portrait_key.rs`, `boss_ui1_tests`
+  (`the_counter_counts_the_boss_and_the_hp_hover_gives_both_numbers`), `statusvis1b_tests`
+  (`a_battle_long_status_shows_no_sentinel_number`), `talk_screen_tests` (both messages), `hub`
+  (`a_guest_row_shows_its_portrait`).
+- **Docs delta**: `engine/README.md` none (no engine change). Kit README lines for Design: `rpgkit_battle` gains
+  `Session::end_reason`, `RETREAT_LINE` and `trigger::lasts_battle`; `rpgkit_world` gains the retry count in the seed
+  (`retry_seed`, save key `retry:<encounter>`). `HISTORY` none.
+
+### FB-443: PR7-74 DIORAMA4 built; zone looks, backdrop band, see-through units, boss card docking
+
+- **Status**: closed: accepted (@13a352c2), follow-up `DIORAMA4`
+- **Spec**: `docs/READY.md` row `00f` `PR7-74` (`DIORAMA4`), with the Design relay of 2026-11-22 on Art/UI's zone sets
+  (PR #88).
+- **Key layout for Art/UI** (in `tilesets/<world set>/stage.fx.json`, which Art/UI owns; nothing of it is shipped by this
+  row, so the game looks as before until the entries land):
+
+  ```json
+  "zones": {
+   "tallow_vats": {
+    "set": "sunk_ward_tallow_vats_stage",
+    "tint": "#rrggbb",
+    "terrain": {"lava": "sunk_ward_tallow_vats_stage/lava"},
+    "spots": []
+   }
+  }
+  ```
+
+  - `set`: a stage set id. Its files are read before the world set's for the floor and every terrain tile, the wall
+    face, the wall foot, cover props, the front face (`front_face/<terrain>`) and the transition pieces (the zone's
+    pieces when it has any, else the world's). A set holding only `floor` and `stone` keeps the world set's walls and
+    front face (then `common_stage`). Its files count at the stage art resolution like the world set's.
+  - `tint`: "#rrggbb", multiplied over every tile, wall, cover prop, wall foot, piece and front face of the zone except
+    terrains with an override.
+  - `terrain.<terrain>`: a folder `<set>/<name>` under `tilesets/` (a bare `<name>` means the zone's set, else the
+    world's), or `{"folder": ..., "tint": "#rrggbb"}`. Its `v*` replace that terrain's tiles in the zone; its
+    `front_face/v*`, when present, the front face under it. The override's tint (none: untinted) replaces the zone's on
+    that terrain. A path with `..` or an empty part is ignored.
+  - Watchpost and the closed alleys: `tint` only. The keys are read once per world set and zone.
+- **What landed**:
+  - (S1) the keys above (`stage.rs` `ZoneLook`, `zone_look`, `zone_tile_art`); the engine gains
+    `Painter::image_tinted` (an image multiplied by a colour). A row-0 wall's cap and cover are clipped at the board's
+    top edge, so they no longer cover the backdrop's foot. While the boss bar shows, the backdrop band is drawn again
+    from the bar's bottom down to the first row holding a walkable cell or a unit (at least 8 px), bottom-aligned, and
+    the walls wholly inside that band are left out (`boss_band`, `draw_band`).
+  - (S2) the terrain override, as above. With a demo entry (`set` and `lava` from PR #88, not committed) Orlov's
+    floor shows the tallow and the zone floor with the world's walls.
+  - (S3) a unit not in focus whose body overlaps a focus unit's and whose feet stand nearer draws at 115/255 (about 45
+    percent): focus is the selected unit, the hovered one, the inspected one and the selected unit's round target
+    (`stage::occluders`, `OCCLUDER_ALPHA`). 1.15 cells kept; the outline-through pass stays; static, so Reduce motion
+    changes nothing.
+  - (S4) in a boss fight the docked foe card counts the party's cells first: the side away from the party (the party's
+    mean column) is tried first, then the other side; the compact card (header and totals, no rows) only when both full
+    sides cover a party cell; ties go by kept-clear cells, then objective tiles (`card::dock`). Outside a boss fight the
+    BU12 rule stands. (The gate's `statusvis1b` caught a first cut that went compact to spare the target cell.)
+  - (S5) no clip in the code: a column-0 decal draws whole inside the stage clip, at rest and shaken (test). The cut
+    in the Fable shot is in the art: `props/hazards/slow/v0.png` and `v2.png` and `poison/v1.png` carry a sliver of the
+    next sprite at their left edge (columns 4 to 7), and `poison/v0.png`, `slow/v1.png` and `slow/v3.png` one at their
+    right edge (columns 52 to 55). For Art/UI: re-crop those six.
+- **Golden**: the `stage.rs` fixture frame hash `TODAYS_FRAME` is re-recorded (`0xe6c3440ef5f1669f` to
+  `0x2a5309c84d603849`) for the one intended change, the row-0 wall clip (checked: with the clip off the old hash
+  holds).
+- **Changed shots** (`fc.sh shots diff scenarios=diorama_zones,diorama_stage,boss_bar`, base `8bc31c0b`): 6 changed, 1
+  new; the boss shots gain the backdrop band under the bar and the units in front of Kaelen fade; the Sunk Ward shots
+  change only along row 0's walls and in front of the selected unit. Sheet and shots:
+  `/mnt/project-files/build-tools/pr7-74/` (`shots_diff_sheet.png`, `vats_boss_no_zone_entry.png`,
+  `vats_boss_with_zone_set_demo.png`). New scenario `diorama_zones` (Orlov's fight in the tallow vats).
+- **Guesses** (`[PROVISIONAL]`): (1) the band shows the backdrop's lower part where it fits rather than moving the board
+  (the board has about 4 px to spare); (2) the tint multiplies, so it can darken and shift a colour but not lighten it;
+  (3) the party side is the mean column of the party; (4) the compact card leaves out the rows that do not fit, with
+  no "more" mark; (5) the demo shows the tallow override's front face falling back to the lava face colour, so a
+  `front_face` folder in the tallow override would finish it (Art/UI).
+- **Tests**: `stage.rs` (the key layout parsed, bad ids and paths left out, the file read; the zone's set before the
+  world's, the tint, the override with its own tint, the wall face from the world's set; a row-0 wall changes nothing
+  above the board; the band's extent and its walls; the occluders), `battle/card.rs` (the dock in and out of a boss
+  fight), `battle/marks.rs` (a column-0 decal whole), `aegis_ui` `fx_loops.rs` (`image_tinted`).
+- **Docs delta**: `HISTORY`: "2026-11-22 `PR7-74`: the `stage.rs` fixture frame hash re-recorded for the row-0 wall
+  clip (DIORAMA4 S1)." `engine/README.md` (aegis_ui painter): "`Painter::image_tinted(img, r, tint, a)`: an image
+  multiplied by a colour." `STRUCTURE`: none.
+
+### FB-441: ENGINE-32 ACT1-AGENT-RUN1 report; Act 1 blocked at the Bone-Mill boss for the auto plan
+
+- **Status**: closed: accepted (@13a352c2), follow-up `PR7-75`, `PR7-76`, `BONEMILL-CHECK1`
+- **Spec**: `docs/READY.md` row `ENGINE-32` (`ACT1-AGENT-RUN1`).
+- **Run**: `aegis playtest` (dev build, no window), a new Sunk Ward game, played through clicks and keys. I read
+  every vignette card, confirmed the auto-filled plan each round, and clicked the board, the turn-ins, level-up, the
+  gear, the shop and the travel; I made no debug jumps. Run log: `/mnt/project-files/build-tools/act1_agent_run/run_log.md` (4,870 commands), with the
+  shots this table cites in the same folder. Saves are kept at the start of the hub, before the Cages, the Sweep, the
+  Kiln, the Vats, and at the end.
+- **How far**: the prologue (opening vignette and four fights), then the Sluice Lock-Ciphers, the Crossroads Cages,
+  the Night of the Red Pen, the Sweep, the Seventh Ward Bellows, Liturgical Cipher Rubbings, the Tallow Vats (Elyse
+  joins) and Corvo's Gate (toll), all turned in. The Bone-Mill Raid was lost three times (PT-40), so the Crucible
+  (Locked) and the act's end were not reached. A player who plans the rounds by hand may get past it; this run used
+  only the auto plan and AUTO.
+- **Time per region** (wall clock, UTC 04:04 to 04:48): prologue to the hub 7 min; hub, board and level-up 3 min;
+  Drowned Runoff Grate 2 min; Ash-Crawl Crossroads (Cages, Red Pen, a patrol) 6 min; Alleyway Junction 7 (the Sweep, a
+  patrol) 4 min; the turn-ins at the hub 4 min; Alleyway again (shop, the Bellows, a patrol) 4 min; the Fourth Kiln
+  (a patrol and the boss twice, then once more) 9 min; the Tallow Vats 3 min; Corvo's Gate 1 min. In game: Tithing 42
+  to 17 days.
+- **Slow frames**: none seen in this headless run; frame times need a windowed run.
+
+| PT | Sev | Area | Finding | Shots (`NNN_*.png`) |
+| --- | --- | --- | --- | --- |
+| PT-40 | blocker | battle | The Bone-Mill boss (Overseer Grendel, phase 2) beats the party three times at Lv 7-8: twice on the auto-filled plan, once on AUTO. Each ends Fled at round 6-7 with two heroes standing and no line on why they fled. The boss card reads 142/608 while the boss bar reads 142/304, and the counter reads Hostiles 0 with the boss up. | 3819, 4191, 4865 |
+| PT-41 | major | battle | A retry replays the same fight: new gear (Slag Plating, Gilded Pavise) and the same plans give the same damage per hero to the point (170/222/104/411/58) and the same Fled at round 6. A player who retries without replanning cannot get a different result. | 3831, 4191 |
+| PT-42 | major | time | Tithing fell from 42 to 17 days by the Vats and Corvo. Each road and each rest costs a day, and a lost boss fight costs about 4 days for the trip home to rest. Nothing says what happens at 0 or how many days the rest of the act needs. | HUD in 4710 |
+| PT-43 | major | region | Quest points (the lock tablet, the toll pen, the rubbings, the bellows cache) are not in the Here list, though NPCs and exits are. The bellows cache is about 25 tiles off screen, with no arrow pointing to it, so finding it means panning the whole map. I walked there by keys. | 2349, 2675, 3416 |
+| PT-44 | major | region | After using a point (the rubbings, the toll pen), the log adds "You can't get there.". That line replaces the quest line in the one-line log bar, so the player sees an error where the quest moved. | 2675 |
+| PT-45 | major | world map | No roads are drawn until a place is picked (roads [] at the start). A new player sees locked places with quest marks and no way to them. The Next hint shows only after clicking a locked place. | 2329, 2331 |
+| PT-46 | minor | story | Each vignette card takes 2-4 Space presses: the first finishes the typing, and presses during the fade seem to be eaten. | 005..066 |
+| PT-47 | minor | battle | A mid-fight talk opens with the round's plan empty (1 Idle .. 6 Idle) and Confirm disabled, while the message bar still says "Round 2: plan your party.". | 1839 |
+| PT-48 | minor | battle | A downed foe lists "Hasted: 998 rounds" (a sentinel duration shown as a number). | 1839 |
+| PT-49 | minor | board | Jobs show no Where line and no level, while the main quests show both. The Crucible reads "Locked: Locked" with no "Opens after" line, and so do the Overlook, Wedges and Counter-Still. | 2252, 3268 |
+| PT-50 | minor | world map | A quest that is ready to turn in (Lock-Ciphers) drops off the Active quests legend. | 2359 |
+| PT-51 | minor | region | Using the lock tablet logs its lore line twice. | 2359 |
+| PT-52 | minor | story | The Night of the Red Pen resolves in one log line on a click (no scene, no fight), though the board sells it as a rescue. | 2675 |
+| PT-53 | minor | world map | Make camp always shows disabled away from a safe place, and the reason ("Rest only at a safe place.") is only in its hover. | 3906 |
+| PT-54 | minor | region | Exits named for a direction ("World map: the alley north", "the road north") all open the same world map at the current place. | 2736 |
+| PT-55 | minor | region | After a patrol fight interrupts a walk to an exit, the walk does not resume (it takes two more clicks). | log |
+| PT-56 | minor | turn-in | Each "We finished" opens its own confirm popup, even with nothing to choose (four popups for four quests). The "Quest complete: 60 XP, 20 Scrap." lines do not name the quest. | 3216 |
+| PT-57 | minor | economy | Tallow fell from 10 to 1 in the first week (1 per road), so I had to make a shopping trip before the Bellows. The shop's "20 of 98" reads oddly. | 3355, 3358 |
+| PT-58 | minor | region | Leaving the Fourth Kiln after the lost boss fight, a patrol jumps a party at 59/1/1/1 HP. There is no rest point there, so the walk out is another fight (Fled again). | log |
+| PT-59 | minor | results | A guest row shows only its initial, though the guest has a portrait in the party list (Dunstan). This is my `PR7-32` drawing guests without art. | 3831 |
+| PT-60 | minor | gear | Equipping an item the hero cannot use opens a notice with a raw id: "Vesper can't wear Marrow Scalpel: untrained in bone_saw (proficiency 0).". The stash list offers the item with no mark. | 3972 |
+| PT-61 | minor | quest | Paying Corvo's toll completes Corvo's Gate with no log line (no "Quest updated", no Scrap line). Only the Journal shows it ready. | 4710 |
+| PT-62 | minor | journal | The journal panel lets the region's Here list and log show through faintly behind the quest text. | 4710 |
+| PT-63 | minor | turn-in | Low confidence: the Tallow Vats pick (`loot_orlovs_retribution`) is missing from its "Quest complete" line, and the stash then holds "Flensing Talon". The Sweep's pick (Gilded Pavise) was listed. | log |
+| PT-64 | note | balance | The party reached Lv 7 after the first four quests, which are rated Lv 4-5, and won every fight up to the Bone-Mill boss in 1-8 rounds on the auto plan. | 2641 |
+| PT-65 | note | flow | The Talia board, the Journal, level-up (Auto, then Confirm, then Yes per member), the turn-in rewards, the chandler shop and the region and world map travel all worked as a player would expect. | 2265, 4710, 3358 |
+
+- **Next**: fixes come back as rows. PT-40 to PT-45 are the ones a player will hit first.
+
+### FB-439: PR7-72 SHOT-DIFF1 built; `fc.sh shots diff`
+
+- **Status**: closed: accepted (@13a352c2), follow-up `SHOT-DIFF1`
+- **Spec**: `docs/READY.md` row `PR7-72` (`SHOT-DIFF1`), from `FB-378` Repeats.
+- **What landed** (tools `fc.sh`, `tools/planner/shots_diff.py` over `shots_all.py`):
+  `tools/fc.sh shots diff [base=<sha>] [scenarios=a,b|all] [out=<dir>] [tolerance=0] [pixels=0] [limit=12]`. It picks
+  the scenarios from the change since the base (committed or not, new files too): none when every changed path is a
+  `.md` file or under `docs/`, `.claude/`, `.agents/`, `legacy/`, `tools/planner/` or `tools/mock_ui/` (then it writes
+  an index saying 0 changed and runs nothing); only the changed scenario files when nothing else changed; else every
+  Emberwake scenario. It runs them on the base in a scratch worktree (skipped for scenarios already in
+  `target/shots_cache/<sha>/`), then on HEAD's working tree, and writes `index.md` (base, counts, changed with pixel
+  counts, new, gone), `sheet.png` (before, after and diff of each changed shot at half size, most changed first, at
+  most 12) and `compare/` (the full-size sheets) to `target/shots_diff/` or `out=`.
+- **Proof**: against the commit before `PR7-32` with `scenarios=story_battle_hub,battle_report`: 1 changed (the results
+  shot), 2 new (the `battle_report` shots), 6 unchanged, in 4 min 43 s with a cold cache. Sheet:
+  `/mnt/project-files/build-tools/pr7-72_shots_diff_sheet.png` (it also shows the old Continue past the panel edge
+  that `PR7-32` fixed). A docs-only commit (`e97dd714`) selects no scenario.
+- **Guesses** (`[PROVISIONAL]`): (1) frame-exact by default (tolerance 0, pixels 0), since shots run on the shot clock;
+  (2) the scenario choice is coarse (docs-only, scenario files only, else all); a finer map from code paths to
+  scenarios can come later; (3) Emberwake scenarios only (the sample game has one scenario and no shots to review);
+  (4) a scenario that fails still gives the shots it took, with its log path printed.
+- **Finding** (worth a known-issues row): a second worktree on the same `CARGO_TARGET_DIR` makes cargo treat HEAD's
+  workspace crates as built after the base build (cargo keys them by path relative to the workspace, and HEAD's files
+  are older), so HEAD's build links the base's crates. The tool cleans the workspace crates (`cargo clean -p` each)
+  after a base build; the dependencies stay shared. So "reuses the HEAD target dir" holds for the dependencies only.
+- **Tests**: `tools/planner/test_shots_diff.py` (the choice of scenarios, one changed pixel gives one changed entry and
+  a sheet, identical folders give none, `add` keeps earlier shots, a docs-only index reads 0 changed).
+- **Docs delta**: `STRUCTURE` (tools): "`tools/fc.sh shots diff` (`tools/planner/shots_diff.py`, `SHOT-DIFF1`): the
+  shots a change moves against a base commit, with `index.md` and a contact sheet; base shots cached in
+  `target/shots_cache/<sha>/`. Builders use it for a FEEDBACK item's Changed shots line." The known-issues row is
+  added (`.claude/skills/known-issues`).
+
+### FB-437: PR7-71 CONTROLS-MIGRATE1 built; fixed-key bindings reset on load
+
+- **Status**: closed: accepted (@13a352c2), follow-up `CONTROLS-MIGRATE1`
+- **Spec**: `docs/READY.md` row `PR7-71` (`CONTROLS-MIGRATE1`), `FB-380` gap.
+- **What landed**: engine `aegis_ui::controls`: `Controls::release_fixed(fixed)` puts each action a fixed key gives
+  back on its own key through `bind_key`'s swap (the existing clash rule: the key that held the action's own key gets
+  its old action back), and the fixed key gives itself again; `controls::release_fixed(settings, fixed)` does it on
+  the settings object and writes the map back only when something moved. Game `lib.rs`: when the settings load, it
+  runs with `FIXED_KEYS`; when an action moved, the settings are saved again and the first screen's notice reads
+  `Controls: <action> went back to its own key (that key is fixed).`
+- **Guesses** (`[PROVISIONAL]`): (1) the player is told by a launch notice (the row did not say); (2) only keyboard
+  bindings are checked: the fixed keys are keys, and a pad button giving `r` or a digit is not a binding on a fixed key.
+- **Tests**: engine `tests/controls.rs::an_action_on_a_fixed_key_goes_back_to_its_own_key` (an old file binding Tab to
+  `r` with its swap half, a lone digit entry, a map with no fixed key left untouched, no map nothing written).
+- **Docs delta**: engine README, after the CONTROLS-UI1B line: "* **Fixed-key migration (CONTROLS-MIGRATE1, PR7-71):**
+  `controls::release_fixed(settings, fixed)` (and `Controls::release_fixed`) puts an action a fixed key gives back on
+  its own key; a game runs it when its settings load and saves when it returns any."
+
+### FB-435: PR7-32 BREPORTUI1 built; the results show the battle report
+
+- **Status**: closed: accepted (@13a352c2), follow-up `BREPORTUI1`
+- **Spec**: `docs/READY.md` row `PR7-32` (`BREPORTUI1`), `BREPORT1` rules 5-6, `ART-18`, `PT-11`, `PT-13`; also
+  `PR7-48` item 4 (reward rows).
+- **What landed** (game `battle.rs`, `battle/flow.rs`, `hub.rs`, `assets/ui/theme.json`): a world battle attaches the
+  kit's live metrics when it starts; the settle builds the kit's `Report` and hands it to the results. The results
+  panel is sized to its content and centred, with the ornate (F2) frame and a display-face title; a table lists the
+  report's columns (kit rule: only columns with a non-zero number), one row per awarded or reporting member in party
+  order then the guests, each with a 32 px portrait, its state, its XP line and an amber XP bar on a basalt track
+  (new theme colour `xp_track`); each number is a widget with the kit's tip (a 0 reads "-"); the best-moment line
+  follows; drops draw as item tiles with their counts merged, in place of the "Dropped:" line; Level up now and
+  Continue sit at the bottom. PT-11: the slide-in over the battle stops 4 px short of the window edge. PT-13: Level
+  up now pushes the character sheet over the results (it used to close them first), so Close comes back to the report.
+  The state gains `report` (the kit's `Report::to_json`).
+- **Provisional calls**: (1) the `dealt` column reads "Damage"; (2) when the heroes would overflow the window the rows
+  go compact (no XP line, the bar beside the name); (3) a member with no award and no report row is left out of the
+  table, so XP no longer shows for members who sat out; (4) the results shots in `story_battle_hub` change with the new
+  layout.
+- **Tests**: `hub::tests::the_results_show_the_battle_report_and_drop_tiles` (row order, numbers and tips, guest row,
+  best line, drop tile, state, clean at Normal and Extra large), `level_up_now_keeps_the_results_under_the_character_sheet`,
+  `the_sliding_results_stay_inside_the_window`; scenario `battle_report` (a recorded first fight: report in the state,
+  best line, Level up now then Escape back to the results). Shot: `/mnt/project-files/build-tools/pr7-32_report.png`.
+- **Docs delta**: `GAME_BRIEF` (results line): "The battle results show the kit's battle report: a per-hero table
+  (damage, taken, healed, effects, combos; zero columns hidden) with tips, the best-moment line, drop tiles and XP
+  bars (`PR7-32`)."
+- **Next**: `PR7-39` Stage A for the report can now follow (its row names `PR7-32` as the prerequisite).
+
+### FB-433: PR7-70 PANELS2 built; the four screens already drew alone
+
+- **Status**: closed: accepted (@13a352c2), follow-up `PANELS2`
+- **Spec**: `docs/READY.md` row `PR7-70` (`PANELS2`), `FB-378` question 2.
+- **Finding**: Save/Load slots, the forge and the dojo were never drawn over the game menu: each is a full screen
+  (`overlay()` false), so `drawn_screens` already drew only it and Back showed the game menu again. `FB-378`'s question
+  read them as stacked; they were not. The shop is not a screen: it is a pane the region map (or the services screen,
+  off the map) draws inside its own frame, so it cannot take the game menu's place.
+- **What landed** (game `menus.rs`, `forge.rs`, `dojo.rs`, `talk.rs`): `panel()` true on `Slots`, `Forge`, `Dojo` and
+  `ServiceScreen` (the services screen that hosts a shop off the map), so the panel rule names them; nothing draws
+  differently today.
+- **Tests**: `hub::tests::the_game_menu_then_slots_shows_only_the_slots_and_back_returns_to_the_menu` (Save from the
+  game menu and the Load slots draw alone and Back shows the game menu; the forge, the dojo and the services screen are
+  panels that fill the screen and draw alone over it). No shot changes. Engine goldens unchanged.
+- **Docs delta**: `GAME_BRIEF.md` panel list (PR7-48 line): add "Save/Load slots, the forge, the dojo and the services
+  screen (PR7-70)".
+
+### FB-431: PR7-63 XL-BATTLE1 built; the boss bar's next blow was drawn off screen
+
+- **Status**: closed: accepted (@13a352c2), follow-up `XL-BATTLE1`
+  the Vane fight on the Stage view above, the cage fight on Flat below).
+- **Spec**: `docs/READY.md` row `PR7-63` (`XL-BATTLE1`), `FB-376` finding.
+- **What landed** (game `battle/draw.rs`, `battle/boss_bar.rs`, `battle/plates.rs`, `battle/card.rs`), by layout, no
+  smaller text; Normal keeps its places:
+  - The strip's goal and protect lines stack by the line heights (`strip_lines`: the goal starts where the title's
+    letters end, never above 11; the protect line two thirds of a line below, never under 6), so at Extra large
+    "Rout them" no longer runs into "Round 1...". A cut round title hovers to the whole of it.
+  - "Boss above" (the reinforcement tag) keeps its own cell: when it would meet "Hostiles N" it takes a row under it,
+    as tall as its line, and the foe plates start under it.
+  - The bottom bar's message hovers to its whole text when cut; the boss name, title and blow name hover when cut.
+    Plates and guest plates already hovered to their names (`PR7-58`), so "Caged Uns..." and "Crossbow..." have theirs.
+  - A status tab's letter (when its icon is missing) and the card's "after KO" tag centre their text when the line is
+    taller than the tag.
+  - **Bug (all sizes)**: `Painter::text` returns the end x, but the boss bar took it as a width, so the boss's next
+    blow (its target, impact pips and loss) was drawn past the canvas's right edge (bone-mill raid: "K" and "-57" at
+    x 644 to 704), and the boss title's room test always failed, so a boss title never showed beside the name. Both
+    now use the width. The card's "+N" status count had the same mistake (it moved the column past the end).
+- **Tests**: `xl_battle_tests.rs` `the_battle_reads_clean_at_normal_and_extra_large` (the Vane fight `enc_evt_01`, the
+  cage fight `enc_evt_02` with two caged guests, the bone-mill raid `enc_evt_03` with a guest; Stage and Flat; Normal
+  and Extra large: no text past the canvas, overlapping or spilling out of its control, every cut text with a hover
+  holding its words; board cells and unit tokens are pictures, not controls, so letters over them are not spills),
+  `the_strip_lines_follow_the_text_size`, `the_boss_above_tag_takes_its_own_row_when_it_would_meet_the_count`.
+  `XL_SHOTS=<dir>` writes the frames with the game's art. Engine goldens unchanged.
+- **Changed shots** (review only): Extra large battle shots; at Normal, boss fights whose boss has a next blow (its
+  target, pips and loss now show) or a title with room.
+- **Left**: with six full foe plates and the tag on its own row at Extra large, the last plate may reach the panel's
+  foot (no shipped fight has both; the Vane fight has three foes).
+- **Docs delta**: none.
+
+### FB-429: ENGINE-23 UISPLIT1-I Stage A for the world map; the row is complete
+
+- **Status**: closed: accepted (@13a352c2), follow-up `UISPLIT1-I`
+  `FB-379`) every screen of the row now has its Stage A.
+- **Spec**: `docs/READY.md` §3 `ENGINE-23` (`UISPLIT1-I`), ready since `PR7-47` landed.
+- **World map** (`emberwake_gui::worldmap_view`, fixture `ui/views/world_map.view.json` from the shipped Sunk Ward hub
+  with Tier 2 open and the Tallow Vats picked):
+  - Fields: `title`; `here` (the party's place); `time`; `places` (a row per place the map shows, id its qid: name,
+    region line as `sub`, its first hover line as `detail` toned `info` or `dim`, "Quest" as `detail2` in `gold` while
+    it has a quest or job badge, its landmark picture (else its pin), the other hover lines as `note`, selected while
+    picked, off while locked); `trip` (the Travel tip for the chosen way, or "No open road to X." in `foe`); `hint`
+    (the next step toward a pick with no way); `ways` (a row per way, id its index, days and upkeep as `sub`);
+    `quests` (the Legend's rows, id the place, on while the map shows it); `upkeep` (the Legend's 0-upkeep warning in
+    `foe`); `log` (the last 16 lines).
+  - Actions: `place`, `way`, `travel`, `enter`, `camp`, `mode`, `back`; `worldmap_act` maps them to `WAct` (an unknown
+    place, a way past the last or an action that is off maps to nothing).
+  - The agent link's world map state gains `layout_view` (its `view` stays the kit's travel view, as the siege screen).
+  - The trip tip, way tip, mode button, camp button, place hover lines and Legend rows moved into `worldmap.rs`
+    functions the drawing and the view share (`trip_text`, `way_note`, `mode_line`, `camp_line`, `place_lines`,
+    `legend_rows`, `legend_about`, `upkeep_line`); the drawing is unchanged.
+- **Tests**: `worldmap_view` `the_view_lists_the_places_at_rest` (fields, places as drawn, the party's place, locked
+  places off, Travel off, clicks), `a_pick_lists_its_ways_and_the_trip` (ways as `state.ways`, the chosen one selected,
+  Travel on, way clicks), `the_agent_link_has_the_view`, `the_fixture_has_the_view_shape`; an `#[ignore]` test rewrites
+  the fixture. Engine goldens unchanged.
+- **Guesses**: (1) The floating Legend's lock, minimize and drag stay drawing-only (the layout will own the panel), so
+  the view has no actions for them. (2) The HUD bar's icon buttons are the shared HUD's, not the map's, so not in this
+  view. (3) The debug layout editor is not part of the view.
+- **Docs delta**: none. `HISTORY.md`: none.
+
+### FB-427: PR7-68 DIORAMA3 built; the Fable review's R3, R5 and R6
+
+- **Status**: closed: accepted (@13a352c2), follow-up `DIORAMA3`
+  and `build-tools/pr7-68_alley.png` (planning grid, a lantern pool); scenario `diorama_stage`.
+- **Spec**: `docs/READY.md` row `PR7-68` (`DIORAMA3`).
+- **What landed** (game `stage.rs`, `battle/board.rs`, `tuning.rs`, `menus.rs`, `screens.rs`):
+  - R3: `light_spots` reads the stage set's `stage.fx.json` spots (the zone's own `zones.<zone>.spots` first, else the
+    top level; an `at` outside 0..1 is dropped). Each spot lights an amber pool on the back rows below its `u` (ten soft
+    rings, about 46 x 18 px), then an 18 px vignette darkens the stage's top, bottom and sides. No file: no light.
+  - R5: a wall block not joined to the grid's edge through other blocks (`outer_wall`) is cover: it draws the set's
+    `tilesets/<set>/cover/v*` prop (64 x 72 art, drawn in the block's 32 x 36 box, feet on the cell's bottom, contact
+    shadow kept); blocks of the outer wall, and every block in a set without `cover/`, keep their wall cap. Display
+    only; the rules see the same block.
+  - R6: the board grid uses `grid_alpha` at rest and the new tuning key `grid_alpha_planning` (default 72) while
+    planning; the Gameplay settings tab has a Board Grid toggle (`board_grid`, on by default) that hides it.
+- **Provisional calls** (small; Art/UI or Design can retune): pool size and ring alpha, vignette alpha 70, planning grid
+  alpha 72 (`tuning.json` does not set it yet), outer-wall blocks keep their caps.
+- **Tests**: `a_block_inside_the_arena_stands_as_cover` (outer wall vs free block, only the block's box changes),
+  `the_lanterns_light_pools_under_their_spots` (zone override, default, invalid spot dropped, amber under the spot,
+  nothing far from it), `the_board_grid_setting_turns_the_grid_lines_off` (frame differs, planning alpha above rest).
+  Engine goldens unchanged.
+- **Changed shots** (review only): Stage-view battle shots of sets with `stage.fx.json` spots or `cover/` art (Sunk
+  Ward); planning shots show a slightly stronger grid.
+- **Docs delta**: none.
+
+### FB-425: PR7-67 DIORAMA2 built; the Fable review's R1, R2, R4 and R7
+
+- **Status**: closed: accepted (@13a352c2), follow-up `DIORAMA2`
+  project files `build-tools/pr7-67_before_after.png`; scenario `diorama_stage`.
+- **Spec**: `docs/READY.md` row 00d `PR7-67` (`DIORAMA2`); slice 0 (the content check and layout test) landed first
+  (`FB-423`).
+- **What landed** (game `stage.rs`, `battle/board.rs`):
+  - R1: a wall cell cap's lip line is `lip_colour`: the stage set's `lip` ("#rrggbb") in its `stage.fx.json`, bronze
+    `rgb(112, 88, 54)` when the file names none (Sunk Ward today), today's pale line with no set or a set without the
+    file (so the empty-set frame test holds). Provisional: Art/UI can set `lip` in `stage.fx.json` to retune it.
+  - R2: the front face under row 9 takes `tilesets/<set>/front_face/<top terrain>/v*` (64 x 24 art, drawn 32 x 12,
+    picked by the column); a terrain without files keeps today's face and its light line.
+  - R4: the stage's clip is the board panel inset 2 (`STAGE_CLIP` 100, 30, 440 x 286), so nothing of the stage covers
+    the panel's rim; the old tray (whose rounded edge ran past the panel's bottom) is now that rect filled. New
+    `draw_wings` before the passes: the backdrop repeated beside itself, the edge columns' ground (and row 0's wall
+    foot) one cell further out, their front face and drop shadow, then a fade to the panel colour over the 28 px gutters.
+  - R7: with the wider clip a decal on column 0 or the last column is not cut; a test checks the edge plate sits inside
+    the clip with room and draws.
+- **Tests**: `the_front_face_comes_from_the_stage_set_with_todays_fallback` (only the face band of the columns topped by
+  that terrain changes), `the_wall_lip_takes_the_stage_sets_tone`, `the_wings_fill_the_gutters_and_fade_to_the_panel`
+  (only the gutters, panel colour at the edge), `an_edge_column_decal_is_not_clipped`. `the_camera_shakes_the_board_only`
+  now reads the hostile panel's own rect (its old fixed rect began inside the board panel, where the wings shake).
+  Engine goldens unchanged.
+- **Changed shots** (review only): every Stage-view battle shot (the wider stage), the Sunk Ward ones most.
+- **Docs delta**: none.
+
+### FB-423: develop's content check refused Art/UI's front-face files; fixed in the check (PR7-67 slice 0)
+
+- **Status**: closed: accepted (@13a352c2), follow-up `DIORAMA2`
+- **What happened**: Art/UI's `70cbada1` added `tilesets/sunk_ward_stage/front_face/<terrain>/v*.png` (64 x 24) for
+  `PR7-67` R2. Since `PR7-64` the Sunk Ward world names that stage set, so the content check (A14) measured them as stage
+  tiles (64 x 48) and failed `tools/fc.sh content check` and the gate on develop from that merge on.
+- **Fix**: kit `rpgkit_content` `check/assets.rs` takes a stage set's `front_face/` at the wall face's size (64 x 24)
+  and its `cover/` at 64 x 72 (SW-20, coming), with cases in `look1_sets.rs`; the game's layered-tree test
+  (`region.rs` `layout_ok`) takes `tilesets/<set>/front_face/<terrain>/v*.png` and `tilesets/<set>/stage.fx.json`
+  (the test failed on both too); `cover/v*.png` already matched. The drawing itself (R2) lands with the rest of `PR7-67`.
+- **For Design**: an Art/UI drop under a named stage set now meets the content check on its merge. A note in
+  `ART_UI_REQUESTS` (or ASSETORG2's size table) that new stage-set folders need a size row in the check first would
+  avoid a repeat.
+
+### FB-421: PR7-66 VNSTAGE1B built; every Act 1 scene with speakers is staged
+
+- **Status**: closed: accepted (@13a352c2), follow-up `VNSTAGE1B`
+  `build-tools/pr7-66_act1_stage.png` (scenario `vn_stage_act1`).
+- **Spec**: `docs/READY.md` row 00c `PR7-66` (`VNSTAGE1B`).
+- **What landed** (seed `vnstage1b.json`, `cards` field only, through `aegis content`): `vg_debate_1`,
+  `vg_int_surge`, `vg_debate_2` and `vg_debate_3` (the Act 1 scenes with `line` cards; the prologue's two were staged
+  in `PR7-27`). The rule, applied the same way to each scene (a script, so a revised scene can be restaged the same
+  way):
+  - party members (`role: party`) stand left, everyone else right, at most two per side (the stage's limit is four);
+  - the opening picture card brings on the first two party speakers walking in and the first two others standing
+    right;
+  - a speaker not on stage takes the place of the one on their side who spoke longest ago (a party member walks in);
+  - a narration (`text`) card walks the party out right, the others stay;
+  - camera Static throughout (these scenes do not move: the hub and the fissure).
+- **Not built**: no new stage action was needed. Berek, Talia, Hollis and Elyse have no full-body picture, so they
+  stand as the code silhouette (placeholder-first); the Art/UI queue can add `portraits/full_body/<id>.png` and they
+  show with no data change.
+- **Tests**: the content check passes for every staged scene; scenario `vn_stage_act1` (9 shots, one or more per
+  scene) plays each scene through from the UI Gallery. The prologue's own two scenes are in `vn_stage`; the first debate closes the
+  prologue sequence, so a new game now plays it staged.
+- **Docs delta**: none.
+
+### FB-419: PR7-64 DIORAMA1 built; the Act 1 diorama battle stage (D1, D3, D4)
+
+- **Status**: closed: accepted (@13a352c2), follow-up `DIORAMA1`
+  project files `build-tools/pr7-64_diorama.png`, scenario `diorama_stage`).
+- **Spec**: `docs/READY.md` row 00 `PR7-64` (`DIORAMA1`), `SCREEN_CONTRACT_BATTLE.md` 8.1.
+- **What landed**:
+  - D1: seed `diorama1.json` (a `world` step) sets `stage_set: "sunk_ward_stage"` on the Sunk Ward manifest. The
+    content check knew the stage set's tiles (64 x 48) and wall face (64 x 24) only, and it refused the `wall_foot`
+    strips (64 x 16), so kit `rpgkit_content` `check/assets.rs` now accepts a stage set's `wall_foot/` at 64 x 16 (a
+    test case in `look1_sets.rs`).
+  - D3 (game `battle/marks.rs`): a ground hazard whose status has files under `props/hazards/<status>/` draws one
+    (picked by the tile, like the stage tiles) centred on its plate, at 2 art px per px, kept inside the plate; then
+    today's icon and rounds left. The tint plate shows only when there is no decal (`root`, smoke and the rest today).
+    The hidden-hazard fading stays (alpha 150). The agent state's ground marks carry `status`.
+  - D4 (game `stage.rs`): row 0's ground cells draw `tilesets/<set>/wall_foot/v*` (the world's set first, then
+    `common_stage`) over their top 8 logical px, after the tiles and before the lips and props; blocks and standing
+    cells draw their own. A set without the files draws today's frame.
+  - Dev link `debug_ground` (dev tools only, like `debug_status`): a test hazard of a status on a tile (`at` or the
+    n-th free tile `free`), for proof shots.
+- **Tests**: `a_hazard_decal_replaces_the_tint_and_the_tint_stays_without_one` (burn, poison and slow resolve their
+  decals; two tints draw the same frame with a decal and different frames without one, both views),
+  `the_wall_foot_draws_on_row_0_only` (only the top 8 px of row 0 change), `the_dev_link_puts_a_ground_hazard`, the
+  content size case. Engine goldens unchanged; no golden shots.
+- **Changed shots** (no baselines; review shots only): the Sunk Ward fights in `boss_bar`, `cages_auto_plan`,
+  `fight1_pommel_hint`, `floatpanels_log`, `job_fight_repair`, `objui1_marks`, `story_battle_hub` and `vn_stage`.
+- **For the coordinator**: ready for Fable's in-game UI consistency review. D5 (painted unit frames) is not in this row
+  (`PR7-65`).
+- **Docs delta**: none beyond the row (no new files or crates).
+
+### FB-417: PR7-27 VNSTAGE1 built; the story stage, Auto and Log
+
+- **Status**: closed: accepted (@13a352c2), follow-up `VNSTAGE1B`
+  the stage (shots in project files `build-tools/pr7-27/`, scenario `vn_stage`).
+- **Spec**: `docs/READY.md` row 1a `PR7-27` (`VNSTAGE1`), `ART_UI_STUDIO.md` §3.2 and screen 4, `ART-10`, `ART-11`.
+- **What landed**:
+  - Kit `rpgkit_ui::vn_stage` (new): a card's `actors` (`who`, `side` left or right, `move` stay, enter or exit) stand
+    on the stage rectangle (the picture rect), feet on its floor. The party enters from off the left edge and exits past
+    the right; a right-side actor under Scroll or Pan is pinned to the backdrop, so it comes in from off-frame right as
+    the backdrop moves. Several on one side stand in slots 56 px apart toward their edge. Cameras: Static (the picture
+    fitted, as before), Scroll (the backdrop slides 280 px, the party walks in place) and Pan (as Scroll, the party
+    walks forward 60 px with it). The walk lasts `walk_ms` (default 1600, eased); reduce motion puts everyone at the
+    end. The speaker draws last and full, the others slightly faded. Where no full-body picture exists (Hollis today)
+    a code-drawn silhouette stands in (placeholder-first).
+  - `ART-10`/`ART-11`: a line or text card keeps the scene's last picture, dimmed (alpha 102 of black, about 40 %),
+    never plain black, where its own card's camera left it.
+  - The cutscene bar: Auto (a card that waits moves on 1.8 s after its text) and Log (a panel of the lines so far;
+    Next, a click or Back closes it), left of Skip.
+  - Born split (UISPLIT1 US8): view `vignette` (fields `style`, `speaker`, `text`, `shown`, `backdrop`, `dimmed`,
+    `camera`, `actors`, `auto`, `log_open`, `log`; actions `next`, `skip`, `auto`, `log`), `act_of`, the fixture
+    `games/emberwake/assets/ui/views/vignette.view.json` with a shape test; the screen's state carries `view`.
+  - Content: `cards` take `actors` (at most 4, none on a title card, each `who` a character), `camera` and `walk_ms`
+    (0 to 6000), checked by `rpgkit_content`; `kits/rpg/schema.json` help updated. Kit `art::full_body_chain` and
+    `story::stage_actor` resolve the name and pictures (the character's, then its class body's).
+  - Data (seed `vnstage1.json`): `vg_meat_market` (Kaelen enters on a scroll, exits on the narration) and
+    `vg_bridge_cart` (Vesper and Kaelen enter on a pan; Maren and Hollis stand right; all four exit on the last card).
+- **Tests**: kit unit tests (enter, exit, slots, each camera, the backdrop covering the stage), kit vignette tests
+  (actors read, the kept backdrop and its camera, Auto, the Log and the view), 12 bad content cases, game tests
+  `a_staged_card_resolves_its_actors`, `the_story_stage_enters_exits_and_moves_its_camera` and the fixture shape;
+  scenario `vn_stage` (8 shots, no golden). Engine goldens unchanged.
+- **Next to the mock**: the mock's screen 4 fills the whole screen with the backdrop and draws large rigged actors
+  with mood tags; the build keeps today's picture rect and dialogue box (one stage rectangle, `ART-11`) and static
+  full-body pictures. A layout file can place the stage later (the view carries everything); the animated rig is not
+  built.
+- **Questions for Design** (provisional calls made): (1) the dim is a flat 40 % black; (2) the Log lists narration
+  without a speaker line; (3) which other scenes to stage (only the two prologue scenes are staged so far).
+- **Docs delta**: `STRUCTURE.md`, kit `rpgkit_ui`: add `src/vn_stage.rs` (the story stage: actors, cameras, the kept
+  backdrop). `GAME_BRIEF.md` story: vignette cards may stage actors with a camera; the bar has Auto and Log.
+
+### FB-415: ENGINE-21 character sheet Stage A built; the Character window's view-models
+
+- **Status**: closed: accepted (@13a352c2), follow-up `UISPLIT1-H`
+- **Spec**: `docs/READY.md` row `ENGINE-21` (`UISPLIT1-H`, US1, US6, US8), like the board and save/load (`FB-369`).
+- **What landed** (game `emberwake_gui`, new `character_view.rs`; its doc comment lists every field and action):
+  - `character`, the window: `title`, `member` ("Name  Lv N  +P"), `tabs` (the open one); actions `member_prev`,
+    `member_next`, `tab`, `close`.
+  - `stats`: the summary line, the wounded line, the In party flag and count, the bunks line, the core stat rows
+    (total, base, growth and spent), the derived rows, the mastery and innate passives lines; action `toggle_active`.
+  - `level_up`: points left, a row per stat with the draft (new total, "+N" in gold, `-` and `+` buttons), the
+    derived rows with "old -> new" in gold; actions `remove`, `add`, `auto`, `revert`, `confirm`.
+  - `skills` (classic): the class and extra slot rows (AP, rank in gold below the top, `<` and `>` buttons), the owned
+    list with Slot, Slotted, Full or Worn; actions `slot`, `unslot`, `rank_down`, `rank_up`, `reset`, `use_default`,
+    `clear_all`, `confirm`.
+  - `deck` (the deck rule): per kind a head, a hint and the slot rows; the basics; the right column's tabs; the owned
+    list; the order (a row per place, on from the second); actions `deck_slot`, `deck_unslot`, `right`, `order_up`,
+    `order_auto`, `reset`, `use_default`, `confirm`.
+  - The Gear tab stays the `loadout` view (`ENGINE-23`). `character_act` maps each view click to the window's own
+    action, refusing a row that is not there or a click that does nothing; Stage B's layout draw will hand its clicks
+    to it.
+  - The agent link carries the window's view under `shell` and the open tab's under `view`.
+  - `party.rs`: `skills_now` reads the Skills draft, or the saved skills before the tab loads them, without changing
+    the screen (`load_skills` now uses it). The deck's skill line moved out of `draw_deck` into `deck_skill`,
+    `intent_label` and `passive_text`, so the view and the drawing share it. Small readers were added for the views.
+- **Fixtures**: `games/emberwake/assets/ui/views/{character,stats,level_up,skills,deck}.view.json`, written by the
+  ignored test `write_character_fixtures` from the test bed world (classic, and the deck rule for `deck`).
+- **Tests**: `character_view` +7 (the window, each tab's fields and clicks, the state keys, the fixtures' shapes). All
+  `emberwake_gui` tests pass unchanged, so the drawing is the same.
+- **Left**: the deck's follow-up editor and every drag stay with the drawing until Stage B. The portrait is not a view
+  field (the screen draws it from the member's look, not a file path).
+- **Docs delta**: `docs/STRUCTURE.md`: `emberwake_gui/src/character_view.rs` (the Character window's view-models,
+  UISPLIT1-H Stage A) beside `loadout_view.rs`. `docs/HISTORY.md` none.
+
+### FB-413: PR7-62 INTERCEPT-LIMIT1 built; a hit forecast no longer shows an intercept whose use is spent
+
+- **Status**: closed: accepted (@13a352c2), follow-up `INTERCEPT-LIMIT1`
+- **Spec**: `docs/READY.md` row `0k9` (`PR7-62`), from `FB-374` "Left".
+- **What landed**:
+  - Kit `rpgkit_battle::trigger::Uses` (new): the trigger rows' `limit` counts (this round, this battle) moved from
+    the resolver's `trigger::State` to the world (`World::trigger_uses`, no save key, like `skill_uses`), so a read-only
+    forecast reads the counts the resolver checks. `battle_counts` and `battle_count` moved with them (the sim's
+    `feel.rs` reads `s.w.trigger_uses`).
+  - `trigger::watchers` (new, private): the `ally_hit` rows with uses left at a block, in the order the hit consults
+    them (a running skill's rows first, then passives and worn items, each by unit). Both the hit (`guardians`) and its
+    forecast (`intercept_of`) walk it, so their order and limits match by construction. The unit order was already the
+    same (both by unit id); now it is one function.
+- **Tests**: kit `hit_fail.rs` +2: a spent row is not forecast and the round agrees (full damage on the target, none on
+  the holder); a first cut spends the guard's use, and a second foe's cut later in the round is forecast to land and
+  does. Goldens unchanged (full gate clean).
+- **Left**: uses an earlier hit of the same round will spend are not foreseen (the forecast reads the counts as they
+  stand; the two tests read after the first cut lands). Inside one area action, the guard's per-action use count is not
+  forecast per target either.
+- **Docs delta**: `docs/STRUCTURE.md` none. `docs/HISTORY.md` none.
+
+### FB-411: PR7-33 FLOATPANELS1 built; the region legend, the ticker and the battle log float like the world map's legend
+
+- **Status**: closed: accepted (@13a352c2), follow-up `FLOATPANELS1`
+- **Spec**: `docs/READY.md` row `1g` (`PR7-33`); `preferences/ui.md` "Floating panels" (user 2026-11-13), `P-UI-03`.
+- **What landed**:
+  - Engine `aegis_ui::float_panel` (new, game-agnostic): the world map's `FloatPanel` moved there unchanged (place in a
+    free corner or the middle unlocked, drag while unlocked, minimise to a chip whose top right is the minimise
+    button's, `saved`/`restore_saved`), plus `keep` (one frame's bookkeeping of a kept panel), `draw` (the shared
+    chrome: frame, amber rim while unlocked, the lock and minimise buttons, or the named chip; a game frame drawn
+    between the fill and the buttons) and `chip_size`. The world map re-exports it and draws its legend as before.
+  - Game `emberwake_gui` `floats.rs` (new): the settings keys `region_legend`, `region_log`, `battle_log` and `frame`,
+    which takes a kept place or the panel's default corner, locked, and saves a change.
+  - Region map: the "Here (N)" legend is a floating panel at the top right (as before), its title row holding the
+    lock and minimise buttons; minimised it is a "Here (N)" button in place (`map_legend_open` keeps that state as
+    before). The ticker is a floating panel at the bottom left; minimised a "Log" button; its bottom edge stays put
+    while L opens and closes it. Both keep the HUD frame. Widgets `legend`, `legend.lock`, `legend.min`,
+    `legend.open`; `log.panel`, `log.panel.lock`, `log.panel.min`, `log.panel.open` (the ticker's `log` button stays).
+  - Battle: Expand (or L) opens the combat log as a floating panel over the board, half its width plus 32, at its
+    top left, locked; minimised a "Combat log" button; Close and L still hide it. The entry count moved to the label
+    `log.lines` (the panel widget `log.panel` is now the floating body).
+- **Tests**: engine `float_panel` (2), region `the_ticker_floats_drags_unlocked_and_minimizes_in_place`, battle
+  `battle/tests/floatpanels_tests.rs`; three existing tests follow the new widgets (`legend` is a backdrop with
+  `legend.min`/`legend.open` instead of a section toggle; `log.lines` carries the count). Scenario `floatpanels_log`
+  (shots in the project files `tools-lane/pr733/`).
+- **Docs delta**: `docs/STRUCTURE.md`: engine `aegis_ui/src/float_panel.rs`, game `emberwake_gui/src/floats.rs`;
+  `engine/README.md` module list gains `float_panel`.
+
+### FB-409: PR7-31 OBJUI1 built; morale, leader, slay and guest marks on the battle screen, the objective on the results
+
+- **Status**: closed: accepted (@13a352c2), follow-up `OBJUI1`
+- **Spec**: `docs/READY.md` row `1e` (`PR7-31`, amended 2026-11-20: no Enraged chip); `OBJ1.md` section 3 and
+  `MORALE1.md` section 3 (archived specs).
+- **What landed**:
+  - Kit `rpgkit_battle::obj_view` (new): the morale state's word and flavour line (never a value), the group letter
+    when a battle has several groups, the leader, the planning line on how they give up, the slay target, guests and
+    must-survive guests, and the results lines. `Session::morale_leader` and `Session::slay_target` (new readers).
+  - Battle screen (`emberwake_gui` `battle/objchips.rs`, new): a column of 8-unit chips at each standing unit's lower
+    left on both boards (flat: the tile's corner; Stage: beside the sprite's feet), bottom up: the guest's shield,
+    the morale state (three bars lit 3 steady, 2 shaken, 1 wavering, gold when fearless; the group letter instead with
+    several groups), the leader's pennant, the slay crown. Each chip hovers to its words (widgets `board.guest.N`,
+    `board.morale.N`, `board.leader.N`, `board.slay.N`; on Stage they sit above the unit widgets for the hover).
+  - The unit hover card adds "Guest", "Must survive", "Slay target: defeat it to win", "Wavering, group B: eyes on
+    the exit; runs once bloodied" and "Leader: its fall shakes every group". The docked foe card puts the morale chip
+    and the pennant on its portrait's lower corners (`card.morale`, `card.leader`).
+  - The top bar's goal hovers to the full objective line (rule 9) and the morale line ("They give up when Captain Vane
+    falls or half of them are down; shaken ones run sooner."). Contract 2 has no room for a third strip line.
+  - Results: `Objective met: <goal>` in gold on a win, "The objective failed." otherwise; after a win the break lines
+    (rule 12). The results state gains `objective` after a battle only.
+- **Tests**: `emberwake_gui` `battle/tests/objui1_tests.rs` (7 tests on the Sunk Ward sweep and bone-mill raid, the
+  Ashlands wagon raid and Ashmaw stand); scenario `objui1_marks` (three shots, in the project files
+  `tools-lane/pr731/`).
+- **Docs delta**: `docs/STRUCTURE.md`: kit `rpgkit_battle/src/obj_view.rs` (objective and morale reads for the
+  screen); `SCREEN_CONTRACT_BATTLE.md` has no line for these chips yet (Art/UI may add one with a restyle).
+
+### FB-334: PR7-41 items 2 and 6 landed in part; two golden-moving rules parked
+
+- **Status**: closed: deferred (@13a352c2), follow-up `PR7-41`
+- **Spec**: `READY.md` §1 `PR7-41` (2) and (6), systems playtest PT-16 and PT-22 (@squash `PR7-41-2`)
+- **Built**: PT-16 in the kit session: each member's tactic is remembered; after every draft and at Confirm, any round still holding its auto draft that a later member's draft broke is drafted again (bounded passes, last resort `ai::rest_fallback`). Rounds the player picked or edited by hand (intent, target, steps, maneuver, channel) leave the auto set and are never redrafted; such a round that is broken is refused: `Plan refused: <hero>, step N (<skill>): <cause>.` PT-22: a guard whose only trigger is `ally_hit` is not opened or filled unless an active friend is in its trigger range (now or at the friend's planned end tile); Focus Weakest takes the weakest foe the round actually attacks (else the old pick); seed `games/emberwake/data/seeds/pr7_41_decks.json` fills each founder's third active slot (Kaelen billhook_sunder, Vesper throat_carver, Hollis heavy_winch_sunder, Dunstan foundry_shatter before Strike in the assault order; Elyse choke_gas in the field order).
+- **Parked (needs Tushar, Design 6b7073c)**: `/mnt/project-files/pr7-41/pt22_regrant_retarget.patch` (applies on top): (a) auto-fill does not re-grant a 2+ round self status the unit holds (ends the Fade loop at 0 AP); (b) a hero whose target is down or out of reach turns on the nearest reachable foe (`[Retarget]`), enemies keep TG4 Rest. With it the timeline golden moves in 9 of 18 fights ((a) 6: `tl_duel_reach` 1337, `tl_flank` 1337/7, `tl_skirmish` 1337/7/42; (b) 8: `tl_flank` 1337/7, `tl_skirmish` 1337/7/42, `goblin_skirmish` 1337/7/42), sim golden run 21 (windup hits 8 to 9) and repro `agent-classic-and-timeline-autoplay`. Until then the Cages test keeps its no-double-grant check off (`REGRANT_RULE = false`).
+- **Guesses**: third-slot skills and their order; Elyse filled too (same empty slot); the cover check uses current and planned end tiles; an edit the session refuses still counts as hand-set (refused at Confirm, never replaced).
+- **Tests**: `rpgkit_battle/tests/auto_plan_fixes.rs` (4), `emberwake_world/tests/auto_plan_cages.rs`, `emberwake_world/tests/default_decks.rs`, `ruleset_switches.rs` replays the seed; scenario `cages_auto_plan.json` on save `scenarios/saves/cages_start/`. Not tested: the auto set cleared at round start (private `begin_round`).
+- **Docs delta**: `GAME_BRIEF.md` (battle): "The auto-filled plan always confirms: an auto round a later member's draft broke is drafted again, at worst it rests; a hand-edited round is never redrafted, and a refusal names the hero, the step and the cause (PR7-41). A guard that only covers friends is auto-picked only with a friend in range (PR7-41)." `STRUCTURE.md` (scenarios): "`games/emberwake/scenarios/saves/cages_start/` playtest save (PT-16/22) used by `cages_auto_plan.json` and `emberwake_world/tests/auto_plan_cages.rs`." `HISTORY.md`: "2026-11-19 PR7-41 (2, 6 part): auto plans could fail Confirm with a developer message and cover guards were picked with no one to cover; fixed. No golden re-recorded; re-grant and retarget rules parked pending a golden ruling."
+- **Repeats**: the builder bisected golden moves with temporary edits three times; a kept test-only switch or a `tools/fc.sh` golden-bisect helper would save it (tools lane idea).
+
+### FB-346: PR7-41 item 6 rules behind switches; bisect list ready for Tushar
+
+- **Status**: closed: deferred (@13a352c2), follow-up `PR7-41`
+- **Spec**: `READY.md` §4 `FB-334`, `FB-343` (Design 2026-11-19: put the parked rules behind two switches) (@squash `PR7-41-5`)
+- **Built**: rule (a) `regrant` in `kits/rpg/crates/rpgkit_battle/src/round_intent_plan.rs` (`regrants()`: auto-fill does not repeat a 2+ round self status the unit holds, and such skills open last); rule (b) `retarget` in `resolver.rs` with `Command::retarget` / `target_out_of_chase` in `command.rs` (a hero whose target is down or out of reach plus chase turns on the nearest visible reachable foe, log `[Retarget]`; enemies keep TG4 Rest). Both read `aegis_core::switches::on(..)`, so release builds and the goldens see today's behaviour. Their tests (`auto_plan_fixes.rs` `a_guard_round_grants_its_status_once`, `a_hero_whose_target_falls_retargets`; the Cages no-double-grant check) skip with a stderr note when the switch is off (setting the env inside a test would race the process-wide `OnceLock`) and pass with `AEGIS_SWITCHES=regrant,retarget`.
+- **Bisect** (`/mnt/project-files/pr7-41/bisect/`): `regrant` moves 6 of 18 timeline fights (`tl_duel_reach` 1337; `tl_flank` 1337, 7; `tl_skirmish` 1337, 7, 42), no sim run, repro passes. `retarget` moves 8 timeline fights (`tl_flank` 1337, 7; `tl_skirmish` 1337, 7, 42; `goblin_skirmish` 1337, 7, 42), sim run `feel 5 1 enc=tl_duel_windup,tl_skirmish party=both`, and repro `agent-classic-and-timeline-autoplay`. Matches FB-334.
+- **When Tushar rules**: per rule, drop the switch (keep or delete the rule), re-record the timeline and sim goldens and the repro, and add the HISTORY row then.
+- **Repeats**: `golden-bisect` does not cover the repro; the repro was run by hand per switch. A `golden-bisect repro <switch>` mode would save that (tools lane idea).
+- **Docs delta**: none until the ruling.
+
+### FB-354: PR7-36 item 10 landed; party token scale needs a call
+
+- **Status**: closed: deferred (@13a352c2), follow-up `TOOLS-HELP3`
+- **Spec**: `READY.md` §1 `PR7-36` item (10), Art/UI `AI-20`, `AI-23` (PR #67 merged) (@squash `PR7-36-2`)
+- **Built**: (a) seed `pr7_36b` sets `palette` for `sabina_kress`, `widow_varka`, `berek_dorn` (existing palette files); `warrior/base/palettes/berek_dorn.json` has no `_lo` / `_hi` shades, so his armour ramps wait on Art/UI. (b) `emberwake_gui/src/region.rs` draws an 8x8 glyph per point kind (exit, chest and stash, rest, vault, lore, look) on a dark plate, on the map and in the legend: amber while usable, iron once spent, oxblood for a locked exit; people, encounters and roamers unchanged. (c) a 2 px line in the intent colour along the bottom of strip blocks (`tips::draw_block_label` `line`; Rest none) and skill-menu cells. (d) engine `aegis_ui::ground` `GroundLayer::contact` (default off) and `CONTACT_DIM` 0.55: a 1 art px dark line on the upper ground where it meets a lower non-sunken ground; in the cache key and job-file keys; the game turns it on for every land layer, water keeps its rim. (e) the same seed switches `sunk_ward_undercroft` basin, hearth, hall, entry and hollows to `drain_brick`.
+- **Not built**: party token scale (ART-19). Measured: tokens about 40 px tall beside bunks and braziers of 80-90 px at 1280 x 720.
+- **Guesses**: glyph pictures, plate colour (`th().panel`), 2 px line height, dim 0.55, contact lines on outdoor maps too (the playtest names the Drowned Runoff Grate).
+- **Tests**: `aegis_ui/tests/ground.rs` (+2), `strip_block_tests.rs` (+1), `region.rs` glyph tests (+3); `sunk_ward_maps.rs` hub expectations updated for the `drain_brick` switch (intended). Goldens unchanged (contact off by default keeps the ground pins). 39 of 74 scenario shots changed (ground lines, glyphs, NPC palettes, icon lines; `t1_battle_beat` is frame timing, FB-347).
+- **Questions**: (1) Token scale: (A) `mapview::SPRITE` 24 to about 32 (non-integer pixel scale), (B) shrink tall props through `prop_fit`, (C) leave it? (2) Art/UI to add `_lo` / `_hi` armour shades to `berek_dorn.json`?
+- **Review notes**: the ground cache key hashes one more byte, so every cached ground rebuilds once. Seeds `pr7_23`, `pr7_43` and `pr7_36b` each upsert the whole `sunk_ward_undercroft` entry, so re-applying an older seed would undo later wall changes. No test replays every seed.
+- **Repeats**: before/after crops and diffs by inline PIL about 3 times; a `shots-all` crop option (tools lane idea).
+- **Docs delta**: `engine/README.md` Ground composer: "`GroundLayer::contact` (PR7-36, ART-20): a 1 art px dark line (`CONTACT_DIM` 0.55) on the upper ground's side where it meets a lower non-sunken ground; default off; in the key and the job file (`contact`)." `GAME_BRIEF.md`: "Region and hub maps draw a glyph per point kind (`region.rs` `MapGlyph`), amber when usable, iron when used; land grounds draw contact lines (PR7-36)." `HISTORY.md`: "2026-11-19 The kit's green exit flag and white point ring replaced on Emberwake's maps by game-drawn glyphs (PR7-36 UX-28). No golden re-recorded."
+
+### FB-374: PR7-45 hit calc landed; forecasts share the resolver's hit builder
+
+- **Status**: closed: accepted (@13a352c2), follow-up `INTERCEPT-LIMIT1`
+- **Spec**: `READY.md` §1 `PR7-45` (HITCALC1), `FB-336`, `FB-338` answers (@squash `PR7-45`)
+- **Built**: (1) kit `command::{HitScene, HitTerms, hit_terms, cover_at}`: `Command::land` and the Attack and Area paths take their hit inputs from `hit_terms` (resolver byte-identical: same RNG order, cover, flank, guard; `rpgkit_rules` `HitInput.target_stance` falls back to the live stance); `round_intent::flank_bonus_at`; `intent::hit_on_adjusted` uses `hit_terms`; `intent::scene_at` reads both units' projected tiles, the guard and both stances at the impact; `position_at` skips moves already landed; `intent::HitFail { Dodged, OutOfReach, FlankProtected, Intercepted { by, pct } }` on `HitOn.fails`; `trigger::intercept_of`, a read-only mirror of `ally_hit` (shared helper; `ally_hit` unchanged). Foe card rows, planned-loss lines and the plan forecast name failures in words (`intent_text::fail_words`, e.g. "Thrust, dodged", "out of reach", "misses (flank protected)", "about 14 (40% taken by an ally)"). (2) Once the round is over (`Phase::Replay`), an enemy's hover heads its tell "This round: ..." and drops the stale forecast (`tips::ROUND_OVER_HEAD`). (3) Seeds `act1story` and `cast1enc` moved unchanged to `data/seeds/archive/` (never scanned or re-run), so their stale `enc_pro_0a` copy with `footman_patrol` can no longer undo PT-21; `pr7_41_fight1` owns the entry and `archive/act1fix1.json` never upserted it. Editing them in place was tried first: it moves both seeds last in the replay order, where they undo later seeds (`pr7_36b` palettes, `enrage2` caps, story locations), as `seed_order.py` warns; the shipped data is unchanged and the seeds step replays 71 seeds clean. (4) `refusal::{Reason::NeedsTarget, TargetNeed}` (same text) read by `intent_text::target_control`; the keystone header names its source via `rpgkit_world::progression::keystone_source` (class, deck or graft).
+- **Guesses**: "this round's line" = the tell in the past tense without the forecast (the actual per-target result would need damage events the kit does not record); a planned clash onto one tile reads the target where it stands now (`intent::target_at`, the rule `counter_on` used); a chase or dash extra counts only when the target is out of band at the action's start.
+- **Left**: `intercept_of` ignores a trigger row's use limit and walks units in id order, so a forecast can show an intercept the resolver skips once the limit is spent; `Plan::forecast_hit` rebuilds the planned schedule per entry per frame (performance only); `KeystoneSource::label()` holds English in the kit.
+- **Tests**: `emberwake_battle/tests/hit_forecast_timeline.rs` (forecast before `execute_single` equals the struck result over the timeline fixtures: 438 hits, 93 failures, 0 mismatches); `rpgkit_battle/tests/hit_fail.rs` (5: one per kind plus the one-tile clash); `tells_tests::the_round_over_hover_reads_this_rounds_line` and fail-word asserts; `battle_events` +1; `ally_pick_tests` read the reason. No shot changed. Goldens unchanged.
+- **Docs delta**: `STRUCTURE.md`: "`games/emberwake/crates/emberwake_battle/tests/hit_forecast_timeline.rs` forecast-equals-result over the timeline fixtures; `kits/rpg/crates/rpgkit_battle/tests/hit_fail.rs` the impact-failure forecasts." `kits/rpg/README.md`: "`command::hit_terms` (with `HitScene`, `HitTerms`, `cover_at`) builds a hit's inputs for both `Command::land` and `intent::hit_on`; `intent::{HitFail, scene_at, target_at}`; `trigger::intercept_of` (read-only mirror of `ally_hit`); `refusal::Reason::NeedsTarget` / `TargetNeed` (UIs read it instead of the text); rpgkit_world `progression::keystone_source` (class, deck, graft)." `GAME_BRIEF.md` (battle): "Forecasts and the resolver share one hit builder (HITCALC1): cover, both units' tiles and stances and the guard at the landing block; a hit that fails at its impact is forecast as such (dodged, out of reach, flank protected, taken by an ally); once the round is over an enemy's hover reads 'This round: ...'." `HISTORY.md`: "2026-11-20 PR7-45 HITCALC1: `intent::hit_on`'s own copy of the hit math retired for `command::hit_terms` shared with `Command::land`; English refusal matching in `intent_text::target_control` retired for `refusal::Reason::NeedsTarget`; the round-over hover's stale forecast lines retired; seeds `act1story` and `cast1enc` archived (their stale `enc_pro_0a` copy undid PT-21 when re-run). No golden re-recorded."
+
+### FB-376: PR7-47 polish fixes landed; Extra large battle header still cut
+
+- **Status**: closed: accepted (@13a352c2), follow-up `XL-BATTLE1`
+- **Spec**: `READY.md` §1 `PR7-47` (POLISH-FIX4) items 2-5, `FB-344`, `FB-348` answers (@squash `PR7-47`)
+- **Built**: (2) kit `terms::not_enough_upkeep_to_camp(d, w)`: "Not enough {item} to make camp." with a renamed upkeep's full name (Sunk Ward: "Not enough Warded Tallow to make camp."), else the sentence word ("supplies"); `campaign::purse::rest_refusal` and `progression::can_camp` return `String`; `purse::REFUSE_UPKEEP` removed; no item name in kit code. (3) optional save key `explore.roads_seen` (`state::ROADS_SEEN_KEY`, sorted route ids; `explore_errors` refuses a damaged one); kit `travel::open_roads`, `roads_seen`, `note_new_roads` (with no saved list it only learns the open roads; unchanged writes nothing); the GUI's session-only `Game::roads_seen` removed; `enter_game` learns the roads only for a game with no list, before the clean copy; a road opened before a save is told after the load; no save version bump. (4) seed `pr7_47`: the pawnbroker, the lodging keeper and Skerrit get a "What do you sell?" choice to a `no_trade` node and back, like Varka's `stock_shut`; Skerrit's shows `unless sunk_ward.skerrit_open`. (5) the battle bar's Menu/Exit button is as wide as its label (at least 30); only Extra large widens it.
+- **Guesses**: a renamed upkeep uses its full name, not the short word; the lines: pawnbroker "I lend, I don't sell. Every spoon on that shelf has an owner still coming back for it.", lodging keeper "Beds, not wares. And the beds are full, for faces like yours.", Skerrit "Sell? I make, and not for strangers. Somebody I trust vouches for you first."; the choice text and its place first; reaching the map counts as seen (a road told but not yet saved is told again after a load).
+- **Finding (outside this row)**: the Extra large audit of the battle screen still finds the header "Round 1..." cut and over "Rout them", "Hostiles 3" over "Boss above", guest names cut ("Caged Uns..."), and boss and card names spilling. Suggest a follow-up row.
+- **Tests**: kit `tests/road_notice.rs` (3: first look, told once, save round-trip, old save loads, damaged key refused); `terms.rs` `the_upkeep_refusal_names_the_worlds_item`; `emberwake_world/tests/no_trade_lines.rs` (every "What do you sell?" answers with a shop or a line); `menu_retreat_tests::the_menu_button_fits_at_extra_large_text` (fails on the old draw); `tallow_upkeep.rs` expects the named refusal. Shot `/mnt/project-files/pr7-47/battle_bar_xl_after.png`. No reference shot changed. Goldens unchanged.
+- **Repeats**: a `seed-from` option to add one dialogue node and choice, and a `text_scale=` option for `scenario shots` (tools lane ideas).
+- **Docs delta**: `kits/rpg/README.md`: "`terms::not_enough_upkeep_to_camp` (the campaign rest's refusal names the world's upkeep; `rest_refusal` and `can_camp` return String; `REFUSE_UPKEEP` removed); `travel::open_roads`, `roads_seen`, `note_new_roads`; optional save key `explore.roads_seen` (`state::ROADS_SEEN_KEY`, no version bump)." `GAME_BRIEF.md`: "At 0 Tallow Make camp says 'Not enough Warded Tallow to make camp.'; the New road notice is kept in the save until the map shows it; the pawnbroker, the lodging keeper and Skerrit (until vouched for) answer 'What do you sell?' with a no-trade line, like Varka; the battle bar's Menu button fits at Extra large (PR7-47)." `HISTORY.md`: "2026-11-21 PR7-47: the road notice's session-only memory (`Game::roads_seen`, PR7-37) replaced by the saved `explore.roads_seen` (a road opened before a save was never told); the generic 'Not enough upkeep to rest.' replaced by the world's upkeep name. No golden re-recorded."
+
+### FB-378: PR7-48 style pass landed; two scope questions
+
+- **Status**: closed: accepted (@13a352c2), follow-up `STYLE-PASS1B`
+- **Spec**: `READY.md` §1 `PR7-48` (STYLE-PASS1B), `FB-350` items 1-2, `FB-366` (@squash `PR7-48`)
+- **Built**: (A) `region.rs` `walk_dest`, set at the three walk orders (point, marker, floor click); `walk_ring()` while the walk has steps left; `draw_walk_ring` draws a flat amber ellipse (`tokens::walk_ring()` = the theme's amber `focus`; `WALK_RING = (0.75, 0.48, 0.22)`) on the floor before the sprites; agent state key `walk_ring` (`[x, y]` or none). Static, so no Reduce-motion variant. (B) the battle heal float and the support tracer use `tokens::moss()` (the `hp` moss); `Tuning.heal_color` and its `tuning.json` key removed (an old file with the key still loads); the Gate-state overlay help now says SHUT (oxblood) / OPEN (amber). (C) engine `aegis_ui`: `Screen::panel()` (default false) and `screen::drawn_screens`: an overlay panel with another panel above it stays in the stack but is not drawn; non-panel popups still draw over a panel; the base screen always draws; the shell's draw and frame-rate check use `drawn()`; input and tick stay top-only. Game panels: game menu (`hub`), Journal, battle results, Character, bunk card, in-game Settings.
+- **Guesses**: the ring sits on the floor under sprites; the panel list above; the support greens in the intent rings and skill-kind tiles stay (the battle contract names "support green").
+- **Questions**: (1) Should the support colour in intent rings and skill-kind tiles also move to moss? (2) Save/Load slots (opened from the game menu) are not a panel, so the menu still draws under them: count Slots (and the shop, forge, dojo) as panels too, or keep the rule to the menu screens?
+- **Left**: no shot of the heal float (the colour is proven by a test); no before/after compare of every existing shot (disk); a test doc comment in `playback_tests.rs` sits above the new heal test instead of the tracer test it documents.
+- **Tests**: `aegis_ui` shell `a_panel_over_a_panel_takes_its_place_and_back_returns_to_it`; `hub::tests::the_game_menu_then_party_shows_one_panel_and_back_returns_to_the_menu`; `playback_tests::a_heal_float_is_the_theme_moss`; `region::view_tests::a_click_to_walk_rings_its_tile_until_arrival_or_a_new_order` (Reduce motion off and on); `bunks::tests::style_pass1b_a_walk_and_talk_rings_the_npcs_tile_until_arrival`. Scenarios: `screens_hub` adds shots `game_menu`, `game_menu_party`; `one_click_talk` checks `walk_ring` and adds shot `sabina_walk_ring`. Goldens unchanged.
+- **Repeats**: a before/after shots compare needs a second develop build (about 1.5 GB); a kept base-shots folder per develop commit would avoid it (tools lane idea).
+- **Docs delta**: `engine/README.md` (`aegis_ui`): "`Screen::panel()` and `screen::drawn_screens`: never stacked; a panel opened over another panel takes its place on screen, the one under stays in the stack and shows again on Back; popups that are not panels still draw over a panel (PR7-48)." `GAME_BRIEF.md`: "A click-to-walk in the hub or a region rings its destination tile (an NPC's tile for a walk-and-talk) in amber until arrival or a new order (agent state `walk_ring`); the battle heal float is the theme's moss; the game menu, Journal, Character, results, bunk card and in-game Settings are panels, one shown at a time (PR7-48)." Scenarios README: `one_click_talk` "PR7-48: the walk rings the NPC's tile (shot `sabina_walk_ring`)"; `screens_hub` "plus the game menu and its Party in its place (`game_menu`, `game_menu_party`)". `HISTORY.md`: "2026-11-21 PR7-48: `tuning.json` `heal_color` (bright green) retired for the theme's moss; a panel opened over a panel no longer draws both. No golden re-recorded."
+
+### FB-380: PR7-49 controls UI landed; stale fixed-key bindings are not migrated
+
+- **Status**: closed: accepted (@13a352c2), follow-up `CONTROLS-UI1B`, `PR7-71`
+- **Spec**: `READY.md` §1 `PR7-49` (CONTROLS-UI1B), `FB-351`, `FB-352` answers (@squash `PR7-49`)
+- **Built**: (1) engine `Controls::key_hint(action)` ("P") and `Controls::hint(action)` ("Esc / Pad B"); the game reads them through `controls_view::hints(settings)`: HUD button cards, region and world-map Help (`region::region_help`, `worldmap::world_help`), the region log card, the Character window's Q and E marks, Close on board, recipe and facility, siege Fight, the Auto-Confirm tip, the battle cards (Restart, Step, Menu, Exit, log, Next block, Fill, Self), the battle messages (move "Esc cancels", next round, tells), "Inspecting X (Esc clears)" (`battle/tips.rs::inspecting`), the Tab skill-menu line, and Settings "Keep changes [Enter]" / "Apply display [Enter]". (2) pressing the action's own key or button ends a waiting rebind with nothing written (`Outcome::Cancelled`); `Rebind.until` = `WAIT` (5 s) from the start, moved on any input, on the shot clock; `Rebind::expire` ends it (the swap question too); every button stays bindable. (3) engine `Fixed { key, label, screen }`; `Rebind::input(actions, fixed, settings, input)` refuses a fixed key (`refused_fixed`); the game's `FIXED_KEYS`: `y` (question boxes), `r` (battle screen), `1`-`9` (conversations; `1`-`4` the battle screen), e.g. "R stays fixed: the battle screen uses it (Restart the battle). Press another key, or Esc to cancel."; Journal and Undo still have no pad button. (4) controls rows: key in `detail`, pad button in `detail2`; a waiting row shows "Press a key or button..."; the default layout already draws two columns. Also: the question box (`screen::Ask`) answers `y` / `n` by the raw key, so moving Next block off N no longer changes how No is answered.
+- **Guesses**: hover-card titles show key plus pad button, sentences show the key only; a buttonless action's second column reads "no pad button"; the own input ends as Cancelled (before, it wrote the same binding); any input, a refused one too, restarts the wait; fixed keys match the raw lower-case key; the world map's Menu button still shows no key; the HUD's drawn stand-in letters (P, J, I, shown only while an icon file is missing) stay; the fixed-key screen names' wording.
+- **Left**: no migration for a settings file that bound an action onto `r` or a digit before this row (it keeps that binding until Reset); no test hovers a ghost block for the Tab line; Art/UI's `settings_controls.json` (AI-27) does not exist yet (the view is ready).
+- **Tests**: engine `tests/controls.rs` +3 (hint follows the binding; own input or wait ends a rebind; fixed key refused); `shell.rs` question box answers raw `n` after a swap; `controls_view` +3 (own button and timer; fixed key names its screen; two columns); `hud.rs` `the_hud_and_help_name_the_bound_keys`; `input1_tests::the_battle_hints_follow_a_rebind` (cards, inspect message and panel, Step card); `the_controls_tab_rebinds_saves_and_resets` expects "Keep changes [K]". Scenario `controls_rebind`: `r` refused (shot `controls_fixed`, sizes 1.0 and 1.3), own `e` and own Pad B end a rebind, a 5200 ms pause ends one. All `controls_rebind` shots change (second column); hover cards on Esc read "(Esc / Pad B)". Goldens unchanged.
+- **Docs delta**: `engine/README.md` (input row): "CONTROLS-UI1B (PR7-49): `Controls::{key_hint, hint}` (on-screen hints read the bound key, plus the pad button where there is one); `controls::{Fixed, WAIT}`; `Rebind::input(actions, fixed, settings, input)` refuses a fixed key (`refused_fixed`); a waiting rebind ends on the action's own input or after `WAIT` (5 s, `Rebind::{until, expire}`, shot clock); the question box (`screen::Ask`) answers `y` / `n` by the raw key." `STRUCTURE.md` (emberwake_gui row, optional): "`region::region_help` / `worldmap::world_help` (help lines from the control map)." `GAME_BRIEF.md`: "Every key hint (HUD, Help, battle cards) shows the bound key; a waiting rebind ends on the action's own button or after 5 s; Y, R and the digits are fixed keys a rebind refuses (PR7-49)." `HISTORY.md`: "2026-11-22 PR7-49: fixed key letters in on-screen hints (`REGION_HELP`, `WORLD_HELP`, HUD '(P)' etc.) replaced by hints from the control map; a rebind onto the action's own input no longer rewrites it. No golden re-recorded."
+
+### FB-382: PR7-65 painted unit frames landed; three questions
+
+- **Status**: closed: accepted (@13a352c2), follow-up `DIORAMA1B`, `PR7-73`
+- **Spec**: `READY.md` §1 `PR7-65` (DIORAMA1B), contract `SCREEN_CONTRACT_BATTLE.md` 8.1 D5 (@squash `PR7-65`)
+- **Built**: engine `aegis_core::assets::Clips` reads optional `foot` (the frame row the feet stand on) and `painted` (default false), with listed problems for a bad value; `aegis_ui::art::load_body` skips the palette swap for a painted sheet. Game `stage.rs` `PAINTED_CELLS = 1.15`, `Geom::sprite_px(n, frame, foot)` and `sprite_rect_n`: a body with a `foot` row is scaled so frame top to foot row is 1.15 x 32 px per footprint cell (about 36.8 px; 2 x 2 about 73.6 px), centred on the foot point (a 2 x 2 unit's centre foot point); `board.rs` `draw_stage` uses that square for the body, feet and see-through passes and the hover bounds. Sheets without `foot` and the Flat view draw exactly as before. Missing clips fall back to `idle` (now tested). Kit content check A4 skips a painted body. Seed `pr7_65` (19 `--fields art` unit steps): `founder_kaelen` `warrior/kaelen`, `founder_vesper` `rogue/vesper`, `founder_maren` `priest/maren`, `founder_hollis` `ranger/hollis`, and `castellan_footman`, `watch_crossbowman`, `tallow_dredger`, `ash_crawler` (`crawler/ash_crawler_painted`), `mortuary_flagellant`, `bailiff_enforcer`, `inquisitorial_purifier`, `calcified_husk`, `render_beast` (`beast/render_beast_painted`), `captain_vane`, `inquisitor_prelate_nemeth`, `proctor_quell`, `guild_master_orlov`, `overseer_grendel`, `calcified_amalgam` as the row lists.
+- **Placeholders**: the portrait path follows the body key, so seven common-tier units would have changed portrait; byte copies of what each showed before now sit at `games/emberwake/assets/portraits/common/` (`beast_render_beast_painted`, `crawler_ash_crawler_painted`, `rogue_tallow_dredger`, `warrior_castellan_footman`, `rogue_mortuary_flagellant`, `warrior_calcified_husk`, `ranger_watch_crossbowman`). For Art/UI to replace or own.
+- **Guesses**: "a cell" = the cell width (32 px; on the 24 px height units would be about 27.6 px, smaller than today's sprites); the scaling is keyed on `foot`, not on `painted` or frame size; the Flat view keeps the 28 px token square; exploration and hub maps show the painted sheets fitted in the token square (no foot-row scaling there); overhead chips and `Geom::chest` keep their token-based anchors (close enough at about 37 px).
+- **Questions**: (1) Is 1.15 cells measured on the cell width (built) or height? (2) Should the exploration and hub maps also scale painted sheets by the foot row? (3) Should portraits be looked up by unit instead of body key, so painted bodies need no portrait copies?
+- **Tests**: `aegis_ui/tests/painted_bodies.rs` (3: foot and painted parsing with errors; painted skips the swap; idle fallback); `stage.rs` (a 112 x 96 frame with foot 93 stands 1.15 cells on the foot point; a 224 x 192 2 x 2 frame stands 2.3 cells; old sheets and Flat keep the token square). `ruleset_switches.rs` and `big_units.rs` keep the shipped `art` when replaying old whole-unit seeds onto a scratch folder with no assets (test assumptions; no assertion weakened). 55 of 126 shots change (painted units in battle, hub and region scenarios). Goldens unchanged.
+- **Docs delta**: `engine/README.md` (assets): "`clips.json` may give `foot` (the frame row the feet stand on) and `painted` (default false: a painted sheet takes no palette swap); `Clips::foot`, `Clips::painted` (DIORAMA1B)." `kits/rpg/README.md` (content checks): "A4 skips a painted body." `GAME_BRIEF.md` (battle stage): "A unit body with a `foot` row stands `PAINTED_CELLS` = 1.15 cells (32 px) tall per footprint cell, feet on the foot point; other sheets and the Flat view keep the token square; the founders and every Act 1 foe and boss use painted sheets (PR7-65)." `HISTORY.md`: "2026-11-22 PR7-65: the founders and Act 1 foes and bosses moved from shared class bodies (`warrior/2h_axe`, `rogue/base`, `brawler/base` and others) to painted sheets; the old bodies stay for other units and fixtures; common portrait placeholders copied to the painted body keys. No golden re-recorded."
+
+### FB-384: PR7-69 Grate north quay retagged to flagstone (cells guessed)
+
+- **Status**: closed: accepted (@13a352c2), follow-up `GRATE-GROUND1`
+- **Spec**: `READY.md` §1 `PR7-69` (GRATE-GROUND1) (@squash `PR7-69`)
+- **Built**: seed `pr7_69` (`seed-from maps sunk_ward_runoff_grate --fields ground`) replaces only that map's `ground` grid: every walkable `m` (mud) cell in rows 0-11 becomes `f` (flagstone), 107 cells: y3 x1-5, 7-10, 12-18, 22-24; y4 x1, 3, 5, 7-18, 22-24; y5 x1-5, 9-18, 22-24; y6 x5-6, 23-24; y7 x5-7, 24; y8-y10 x1-8, 23-24; y11 x1-7, 24-30. Unchanged: walls and water, the silt bank's footprint (x1-4, y6-7, kept mud as silt), the east soot yard, the catwalk, the cobble ring road (rows 12-18) and the mud borders.
+- **Guess**: the Drive reference (`image_pipeline/flow/out/Region Maps`) is not reachable from the cloud, so "north quay" was read as all walkable mud north of the ring road, keeping the silt bank. If the reference keeps some mud, name the cells and a follow-up seed replaces the grid.
+- **Shots**: `/mnt/project-files/pr7-69/grate_before.png`, `grate_after.png`: only the quay ground changes (brown mud to dark flagstone around the pool and tablets).
+- **Checks**: `content check` data ok; seeds, test, scenarios, shots-exact clean.
+- **Docs delta**: none.
+
+### FB-386: PR7-73 painted bodies on the maps and portraits by unit landed; three questions
+
+- **Status**: closed: accepted (@13a352c2), follow-up `PAINTED-MAPS1`, `PR7-75`
+- **Spec**: `READY.md` §1 `PR7-73` (PAINTED-MAPS1), `FB-382` questions 2 and 3 (@squash `PR7-73`)
+- **Built**: (a) `stage::painted_px(tile_w, n, frame, foot)` factored out of the battle stage (`Geom::sprite_px` calls it; the stage is unchanged); `mapview::body_foot(cell)` (centred, cell width / 8 above the bottom edge) and `mapview::body_rect(cell, clips)`: a body with a `foot` row stands `PAINTED_CELLS` (1.15) of the map's own tile width, foot row on the foot point; other sheets keep `sprite_rect`. `region.rs` (hub and region maps) uses it for the leader, people markers, hub members and `draw_sprite`; labels, badges, agent-link sprite rects and the roof check follow the drawn body; click areas stay the cell (EXPLOREVIEW1 3.5); the party still sorts by its tile's bottom edge. (b) kit unit field `portrait` (string, omit_default, max 64: a file stem under `portraits/common/`); `rpgkit_content::art` `portrait_key`, `keyed_portrait`, `portrait_chain_keyed`, `face_chain_keyed` (the old chains call them with an empty key); the GUI and story lookups pass the key; content check A5 warns when a key's file is missing and drops the body warning when it exists. Seed `pr7_73` (7 portrait-only steps): `render_beast` `beast_render_beast_painted`, `ash_crawler` `crawler_ash_crawler_painted`, `tallow_dredger` `rogue_tallow_dredger`, `castellan_footman` `warrior_castellan_footman`, `mortuary_flagellant` `rogue_mortuary_flagellant`, `calcified_husk` `warrior_calcified_husk`, `watch_crossbowman` `ranger_watch_crossbowman`. All files stay where they are (six are Art/UI #87's real portraits); nothing changes on screen today, the units are just decoupled from their body key.
+- **Guesses**: lookup order: a unique tier's own file, then the unit key, then the body's common portrait, then the class base; a world character uses its base unit's key only when it wears the unit's body (own `art` empty).
+- **Questions**: (1) Move the seven files to unit-named paths (e.g. `portraits/common/render_beast.png`; Art/UI would update `assets/**/README.md`)? (2) Keep the old pre-painted `beast_render_beast.png` and `crawler_ash_crawler.png`? (3) Should a unique-tier unit's key rank above its own tier file?
+- **Tests**: `mapview::tests::a_painted_body_stands_1_15_tile_widths_on_its_foot_point` (both views, every zoom; no foot row keeps the token square); `region::sprite_tests::a_painted_leader_stands_on_the_tiles_foot_point`; `portraits::tests::a_units_portrait_key_comes_before_its_body_portrait`; kit `rpgkit_content/tests/portrait_key.rs` (2); `asset_checks::a_portrait_key_is_checked_and_stands_in_for_the_body_portrait`; `ruleset_switches.rs` keeps the shipped `portrait` when replaying old seeds. Hub and region shots with painted founders or foes move. Goldens unchanged.
+- **Repeats**: proof shots of a region from a save need a throwaway scenario (`scenario shots` covers fights and menus); a multi-id `seed-from` would replace a loop (tools lane ideas).
+- **Docs delta**: `STRUCTURE.md`: "`kits/rpg/crates/rpgkit_content/tests/portrait_key.rs`: a unit's portrait key and the portrait lookup order." `kits/rpg/README.md` (unit fields): "`portrait` (optional, PR7-73): the unit's own common portrait, a file stem under `portraits/common/`; lookup: a unique tier's file, then the key, then the body's common portrait, then `<class>_base`; a world character wearing the unit's body shows it too; check A5 checks the key's file." `GAME_BRIEF.md`: "Hub and region maps scale a body with a `foot` row like the battle stage (1.15 of the map's tile width, feet on the tile's foot point; `mapview::body_rect` over `stage::painted_px`); portraits look up the unit's `portrait` key before the body key (PR7-73)." `HISTORY.md`: "2026-11-22 PR7-73: portraits are no longer found only by body key; units can name their portrait (seed `pr7_73` for seven painted-body units); the files stay. No golden re-recorded."
+
+## FB-513, FB-512, FB-511, FB-510, FB-509, FB-508, FB-507, FB-506, FB-505, FB-504, FB-503, FB-501, FB-499, FB-497, FB-495, FB-493, FB-491, FB-489, FB-487, FB-485, FB-483, FB-481, FB-479, FB-477, FB-475, FB-473, FB-471, FB-469, FB-467, FB-465, FB-463, FB-461, FB-459, FB-457, FB-455, FB-453, FB-451, FB-449, FB-388, FB-390, FB-394, FB-392, FB-396, FB-398, FB-400, FB-402, FB-404, FB-406, FB-408, FB-410 (answered in READY @d5b35cd5, moved 2026-11-24)
+
+### FB-513: ENGINE-64 LIVE-RELOAD1 built; art, theme, layouts, sound and data reload in a dev run
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `TIDY3`
+  `aegis_core::vfs::dev::stamp`; `aegis_save::writing`; `aegis_cli` scenario launch) and game (Emberwake's data hook,
+  region map rebuild, battle line). **Every golden unchanged.** No draw changes without a reload, and scenario runs
+  pass `live=0`, so no shot can move (no shots diff run). Gate clean.
+- **Spec**: `docs/READY.md` row `ENGINE-64` (`LIVE-RELOAD1`).
+- **(1) On**: `Options::live`, set by `start::Start` for `dev=1` unless `live=0`. Every game that starts through
+  `Start` (hello and kit_sample too) gets art reload with no code of its own. Emberwake keeps it to builds with its dev
+  tools (`options.live &= DEV_TOOLS`), so a player's build never watches. The web never watches (no dev files).
+  Scenario runs add `live=0`: a file touched during the gate can never move a shot.
+- **(2) Watch**: a thread (`live::Watch`) scans the asset layer roots and `Context::data_dirs` every 500 ms by change
+  time and length (`vfs::dev::stamp`; about 2,100 files for Emberwake, a few ms), with no new crate. The shell's
+  `live_poll` runs before each frame (and the window wakes every 500 ms for it). It sorts the paths: pictures and
+  sidecars go to `Art::forget` (that file's scaled, fitted, mirrored and decoded copies; bodies refit from the kept
+  decodes; the generation moves on, so a composed ground is made again); `ui/theme.json` to `theme::reload`; layouts
+  (`Layouts` reads a changed file again whenever live reload is on, not only in debug builds); sounds to
+  `Audio::forget` (a sound playing now plays on).
+- **(3) Data**: `Context::reload_data` (default: none). Emberwake runs `Data::open` as at start; any load problem keeps
+  the old data and returns the first problem with its file, otherwise it swaps `cx.data`. On success the shell drops
+  the screen being warmed ahead and asks each screen `Screen::data_reloaded(cx, top)`. Emberwake's region map, on top
+  with no conversation or card open, rebuilds from the game state (the party stays where it is). A battle returns
+  "this battle keeps its units until it ends". On an error a notice says "Data not reloaded: ...".
+- **(4) Line**: one line per reload for 3 s at the bottom left ("Reloaded 1 art file", "Data reloaded; this battle
+  keeps its units until it ends"), and `ui_tree`'s `live` while it shows. Nothing reloads while `aegis_save::writing()`
+  (a counter around every save write): the finds wait for the next frame.
+- **(5) Tests**: `aegis_ui/tests/live_reload.rs` (in a no-window run, a picture saved over draws its new pixels with the
+  game state kept and the line shown; a good data edit renames the item on screen and every screen is told; a broken
+  edit keeps the old data and a notice names `items.json`; a run without live reload keeps what it read; finds wait
+  while a save is written; paths sorted by kind; scan sees changed, new and gone files), `start.rs` (`dev=1`, `live=0`),
+  `aegis_cli` scenario plan (`live=0`), Emberwake menus `live_reload_swaps_good_data_and_keeps_the_old_on_a_broken_file`
+  (a copied data folder: Iron Claymore renamed and swapped with the game kept; a broken `items.json` refused).
+- **Calls (`[PROVISIONAL]`)**: success is a short line, not a notice popup (a popup per save would block play); a
+  refused data reload is a notice. Any data load problem refuses the swap, because start data has none today (the test
+  checks this).
+- **Docs delta**: new `engine/docs/authoring/live_reload.md` and its row in the authoring README (tools-lane files,
+  edited here). `engine/README.md` (Design): "Live reload (LIVE-RELOAD1, ENGINE-64): `dev=1` (`Options::live`, never a
+  player build or the web) watches the asset layers and `Context::data_dirs` every 500 ms. Art (`Art::forget`), theme,
+  layouts and sounds (`Audio::forget`) reload in place, data through `Context::reload_data` and
+  `Screen::data_reloaded`, one line per reload, nothing during a save write (`aegis_save::writing`)
+  (`engine/docs/authoring/live_reload.md`)".
+
+### FB-512: ENGINE-63 PAD-TUNE1 built; gamepad tuning, stick test, pad poll in the catch, stick replay
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `LIVE-RELOAD1`
+  check) and game (Emberwake's Controls tab rows, `walk_feel` stick case). **Every golden unchanged.** Shots diff
+  against `3a70b1be`: only the Controls tab shots move (8 shots, 228 px each: the scroll thumb, the list is longer),
+  plus the known `screens_menus__scene_runner`. Reach scenarios (`reach_menus` with `settings_controls`), `controls_rebind`,
+  `feel_settings` and `walk_feel` pass. Gate clean.
+- **Spec**: `docs/READY.md` row `ENGINE-63` (`PAD-TUNE1`).
+- **(1) Settings**: `aegis_ui::controls::PadTuning` under its own settings key `gamepad` (`PAD_TUNING_KEY`), apart from
+  `controls`, so the bindings' problem report is untouched: `dead_zone` 0.15 to 0.6 step 0.05 (default 0.5),
+  `repeat_delay_ms` 150 to 600 step 25 (default 350), `repeat_every_ms` 50 to 250 step 10 (default 110). Missing
+  means today's value; out of range is clamped onto the steps. `PAD_SETTINGS` lists each with label, help, range and
+  unit for any game's UI. `Repeat::tune` takes the delay and rate; the pad poll reads the tuning at each poll, so a
+  change applies at once. `stick_dir_past(x, y, dead)` beside `stick_dir`. The keyboard's repeat stays the OS's.
+- **(2) Controls tab**: a "Gamepad" heading under the bindings with three slider rows (`<` and `>` step, the ends
+  disabled) and a "Stick Test" row whose line is `PadTuning::test_line`: "Stick x +0.47  y -0.20  reads Right  (dead
+  zone 0.45)", live from the new `Held::stick` (the pad poll sets it; `Held` drops `Eq`, its f32s). Ids
+  `settings.gamepad.<key>[.down|.up]`, `settings.gamepad.test`. The screen's Reset to defaults resets them too; the
+  bindings' own Reset leaves them. Drawn as Settings rows, not through the `settings_controls` view, so no fixture or
+  layout change.
+- **(3) Catch**: `shell::guard` runs a closure inside the catch (`on_panic` then `resume_unwind`); the window's events
+  and the Windows pad poll (`App::poll_pad`) both go through it.
+- **(4) Replay**: the feel script takes `{"stick": [x, y]}` (each -1 to 1): the direction it reads under the player's
+  dead zone is held like a d-pad press (a new one replaces the old and sends its key once; the same direction again
+  sends nothing; inside the dead zone lets go). The movement report reads a stick with a direction as a press (first
+  move, turn) and one that lets go as a release (`after_release_steps`). `walk_feel` gains stick left, turn up, centre:
+  first move 16.67 ms, turn 16.67 ms with a 33.33 ms gap, no overshoot, the same as its d-pad case.
+- **(5) Tests**: `aegis_ui/tests/controls.rs` (settings round trip through JSON text, clamping and steps; the tuned dead
+  zone and repeat), `aegis_ui/tests/headless.rs` (`a_feel_script_replays_the_stick_as_a_held_direction`), shell unit
+  test `a_panic_in_the_pad_poll_is_caught_like_a_frame` (the guard hands back a value; a panic writes `crashed.json`
+  and the report, then unwinds), `aegis_cli/tests/scenario.rs` (stick accepted, bad sticks named), Emberwake menus
+  `the_gamepad_group_tunes_the_pad_and_tests_the_stick`.
+- **Not covered**: no real pad in the container; the Windows poll path is compiled only on Windows (the catch helper is
+  tested on its own).
+- **Docs delta**: `engine/docs/authoring/scenarios.md` (stick step) and `crash_safety.md` (pad poll in the catch),
+  tools-lane files, edited here. `engine/README.md` (Design): "Gamepad tuning (PAD-TUNE1, ENGINE-63):
+  `controls::{PadTuning, PadSetting, PAD_SETTINGS, PAD_TUNING_KEY}` (settings key `gamepad`: dead zone, repeat delay
+  and rate), `Repeat::tune`, `stick_dir_past`, `Held::stick` for a live stick test; the pad poll runs inside the
+  frame's catch; the feel script's `{"stick": [x, y]}`."
+
+### FB-511: ENGINE-62 CRASH-SAFE1 built; crash report, rescue save and damaged-save fallback
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `PAD-TUNE1`
+  (`rpgkit_world::save` read and peek) and game (Emberwake's rescue hook, title item and slot card). **Every golden
+  unchanged**, the store resave golden included. Gate clean.
+- **Spec**: `docs/READY.md` row `ENGINE-62` (`CRASH-SAFE1`).
+- **(1) Report and rescue**: the panic hook (`crashlog::arm`, set when the shell opens) notes every panic. With a log
+  open it writes the report, which now also gives the build (dev or release, engine version, `AEGIS_COMMIT` when set
+  at build time, else "unknown"), the top screen (`crashlog::set_top`, on every screen change) and the last 40 lines of
+  `feel.log`. The shell catches a panic coming back from a window event or frame, and from a no-window run's request or
+  frame. It then calls the new `Context::rescue` (default None; Emberwake writes the game in play with
+  `save::write_keyed` under `aegis_save::RESCUE_KEY`, outside the slot range). Next, `crashlog::crashed` writes the
+  report if none exists yet (a no-window run has no log, so it goes to `<settings dir>/logs/`) and leaves
+  `crashed.json` there. The panic then carries on as before. Report names stay `crash-<unix seconds>.txt`, the
+  existing ROBUST1 naming, not `crash_<time>.txt`.
+- **(2) Next start**: the shell reads and removes `crashed.json`. It shows a one-line overlay over the first screen
+  (`crash_note`): "The game closed unexpectedly. A report is at PATH." with Open folder (`recordings::open_folder`)
+  and OK; Enter or Esc closes it. Emberwake's title adds "Continue from the rescue save" under Continue while the
+  rescue exists. Taking it loads that game and removes the rescue. A plain Continue that loads also removes it.
+- **(3) Damaged saves**: the atomic write copies the save it replaces to `<file>.prev` (`slot_1.json.prev`), only when
+  that save reads. `aegis_save::read` / `read_keyed` fall back to the copy when the file is not JSON. `damage` gives
+  the reason and `peek_slot` reads the header from the copy. A read never deletes. The player's `delete` removes the
+  copy too, and there is a new `delete_keyed`. The kit's `save::read` also falls back when the slot reads but does not
+  load (refused version, failed migration), with a warning. Its `peek` adds `damaged`, and Emberwake's slot card shows
+  "Damaged (reason); loads the previous save: ..." (or "Damaged (reason)" when there is no copy). Not on the web: the
+  web store writes whole, with no temp file and no copy, to keep the quota.
+- **(4) Tests**: `aegis_ui/tests/crash_safe.rs` (a forced panic in a no-window run leaves the report with build and
+  screen, `crashed.json` and the rescue keyed save; the next start shows `crash_note` once, and OK closes it);
+  `aegis_save/tests/prev_copy.rs` (copy kept, truncated slot reads the copy, damage named, a damaged save never copied
+  over a good one, delete takes the copy, rescue is keyed); `rpgkit_world/tests/save_versions.rs` (truncated and
+  refused-version slots load the previous save); `hello_game/tests/crash.rs` (the sample game, with no code of its
+  own, shows the crash line over its menu after a forced panic, and has no rescue); Emberwake menus (rescue offered
+  beside Continue and loaded once; damaged slot card). The forced panic is the agent link's `{"cmd": "panic"}`, dev
+  builds only.
+- **Not covered**: the Windows pad poll in `about_to_wait` is outside the catch (a panic there still writes the report
+  through the hook, but no rescue).
+- **Docs delta**: new `engine/docs/authoring/crash_safety.md` and its row in the authoring README (tools-lane files,
+  edited here). `engine/README.md` (Design): a line under the shell or save sections: "crash safety (ENGINE-62): a
+  caught panic writes the report and the game's rescue save (`Context::rescue`, keyed `rescue`), the next start shows
+  where the report is; saves keep `<file>.prev` and a damaged slot loads it (`engine/docs/authoring/crash_safety.md`)".
+
+### FB-510: ENGINE-61 FEEL-CLOSE1 built; 9 of 10 release runs pass, the one miss container noise
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `CRASH-SAFE1`
+  no game, data or scenario change. **Every golden unchanged**; shots diff clean against `ed0510af` except the known
+  `screens_menus__scene_runner`. 9 of 10 release `tools/fc.sh feel` runs passed with stalls listed; the one miss is
+  container noise (below), so per the row the feel run stops here and moves to Tushar's PC (option f).
+- **Spec**: `docs/READY.md` row `ENGINE-61` (`FEEL-CLOSE1`).
+- **(g) built**: the virtual audio device times each mix with the audio thread's CPU clock; a late mix that spent under
+  `STALL_CPU_SHARE` (half) of its time from its call on the CPU is a stall (`audio_out::mix_stalled`) and lands in
+  `underruns_stalled` / `underrun_stalled_ms`, with the main thread's stalled underruns added. A real device's late
+  callback stays a real underrun (no CPU clock to judge it there). Test in `aegis_ui/tests/feel.rs`.
+- **(e) built**: the profile showed the five HUD panels alone cost 4 to 6 ms of every battle frame, in
+  `Canvas::blend_rgba` (each panel's composed nine-slice blended a pixel at a time). It is now one branch-free pass a
+  row with `blend`'s exact sum, which the compiler vectorises; the same bytes (new test `tests/blend_rows.rs` checks
+  it against `blend` per pixel, off the edge and under a clip, and the shots diff is clean). Every screen with frames
+  gains. Release battle draw went from 16 to 24 ms to 12 to 16 ms; the warm frames beside a fight (slice plus draw)
+  from 27 to 33 ms to at most 25 ms, so a busy frame keeps 8 ms or more under 33 ms. Tried and left out: keeping the
+  battle view-model for one revision (3 to 5 ms on idle frames only; the busy frames rebuild it anyway, and tests that
+  change the session directly would see a stale one).
+- **10 release runs**: 9 passed; stalls listed in 6 of them (most often `audio_feel/title_to_map`), stalled underruns
+  in 3. Run 9 failed `walk_feel/walk_keys` on two frames of 55 and 58 ms beside a listed stall (47 ms, 8 ms of CPU);
+  the same step's frames are 6 to 16 ms in the other 9 runs, and the CPU clock here moves in 4 ms ticks, so a slow
+  host spell can read as busy. Judged container noise.
+- **Docs delta**: `engine/README.md` (Design): in the feel line, "an audio underrun whose mix ran mostly off the
+  audio thread's CPU is listed as stalled too (ENGINE-61)".
+
+### FB-509: ENGINE-60 PLAN-START2 built; the planning start halved, stalls listed apart, 6 of 10 runs pass
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `FEEL-CLOSE1`
+  probe, headless feel request, `perf::thread_cpu_ms`) and `tools/planner/feel_table.py` for (d). **Every golden
+  unchanged**; shots diff clean against `2434ef66` except the known `screens_menus__scene_runner`. **The 10-run target is
+  not met**: 6 of 10 release `tools/fc.sh feel` runs passed with stalls listed; the 4 misses are below, with options.
+- **Spec**: `docs/READY.md` row `ENGINE-60` (`PLAN-START2`).
+- **(b) built**: the round's planning start drafts a member's tactic ghost once, in the host, when the member has no
+  buff the tactic would drop and no planned rows; otherwise it keeps the copy draft as before. `plan_start` fell from
+  about 33 ms to 17 to 19 ms in release (all 6 members took the single draft in `feel_battle`). Same-ghosts tests
+  (`battle/tests/plan_start_tests.rs`): a timeline fight over rounds 1 to 3, and the Crucible exit hold pick (pick
+  waiting, stay, round 2), each checking the board and the host's request history against the old path drafted in
+  full. No planning-start frame went over 33 ms in the 10 runs (no `battle_resolve` miss, where the next round's start
+  falls).
+- **(d) built**: a frame over 33 ms that spent under half its wall time on the CPU (`STALL_CPU_SHARE` 0.5; thread CPU
+  from `/proc/thread-self/schedstat` on Linux, none elsewhere, so nothing is marked there) is a stall: it leaves the
+  step's frame stats and flagged inputs and is listed in the result's `stalls`. An audio underrun inside a stall (from
+  its start to two buffers after its end) moves to `underruns_stalled`. The feel table gains a `stalls` column, a
+  `stall <scenario>/<step>: frames X ms (cpu Y)` line per stalled step and a footer count. Real misses still fail.
+  Tests: 2 in `aegis_ui/tests/feel.rs`, 1 in `tools/planner/test_feel_table.py`.
+- **10 release runs** (`tools/fc.sh feel`): runs 1, 3, 5, 7, 8 and 10 passed; stalls listed in 5, 7 and 8 (most often
+  `audio_feel/title_to_map`, a 44 to 50 ms frame with 20 to 23 ms of CPU). The misses:
+  - Audio underruns, 1 each, in runs 2 (`audio_feel/battle_round`), 6 (`switch_feel/menus`) and 9
+    (`audio_feel/battle_round`). None fell in a main-thread stall window: the audio thread itself was starved, which
+    the main thread's CPU time can't see.
+  - Frames 1 to 2 ms over with the CPU busy: run 4 `switch_feel/title_warm` 34.9 ms, run 9 `feel_battle/battle_block`
+    34.4 ms. Real by the stall rule.
+- **Options** (Design's call):
+  - (g) Mark an underrun as stalled when the audio thread's own callback shows the same wall-versus-CPU gap (time each
+    mix callback with the thread's CPU clock). A small engine change in `aegis_audio` and the feel request.
+  - (e) A row cuts the battle draw (16 to 24 ms; strip and board the largest parts) and the title warm slice, to leave
+    the 2 ms these frames lack.
+  - (c), held: the planning start no longer misses, so not needed now.
+  - (f) Release feel runs on the PC.
+  - Recommendation: (g) then (e).
+- **Docs delta**: `engine/docs/authoring/scenarios.md` "Reading the feel table" gained the `stalls` column and stall
+  lines (tools-lane file, edited here). `engine/README.md` (Design): in the feel line, add "frames mostly off the CPU
+  are listed as stalls, not misses (ENGINE-60)".
+
+### FB-508: ENGINE-59 BATTLE-FRAME2 built in part; the slow battle frames named, one cause fixed, one needs a call
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `PLAN-START2`
+  engine, data or scenario change. **Every golden unchanged**; shots diff clean against `d17386c4` except the known
+  `screens_menus__scene_runner`. This change passed 5 of 5 release `tools/fc.sh feel` runs in a row. **The 10-run target
+  is not proven**: with the logs below, this container misses about 1 run in 3 to 5 on causes the row can't fix. One
+  battle cause needs Design's call. The row stops here after two targeted fixes (feedback rule).
+- **Spec**: `docs/READY.md` row `ENGINE-59` (`BATTLE-FRAME2`).
+- **How it was found**: a temporary log (removed before landing) printed every frame over 30 ms with its parts (input,
+  tick, music, warm slice, draw, and the battle draw's sections). It also printed the thread's CPU time
+  (`/proc/thread-self/schedstat`), context switches and page faults. About 40 `feel_battle` runs and 22
+  `tools/fc.sh feel` runs.
+- **Cause 1, named, not fixed: the round's planning start** drafts every member's tactic ghost in one tick, 31 to 45 ms
+  (33.3 ms logged in `plan_start` alone), then the draw. Round 1's falls just before `battle_plan` is measured
+  (frame 74 to 81 against a window from 97), so it rarely counts. The next round's start falls inside `battle_resolve`
+  when the playback ends early enough. **Tried and taken back**: queueing those ghosts on ENGINE-58's queue made the
+  frames short and ended on the same board (a same-board test passed). But it changed 11 battle shots: the tokens turn
+  and step a few frames later, and the crucible exit hold pick showed no ghosts at all. Both break "what is drawn
+  unchanged". **Options** (Design's call):
+  - (a) Queue them anyway and accept that the ghosts land over the first 100 to 200 ms of a round, re-recording the
+    11 shots (and finding the hold-pick case first).
+  - (b) Halve the cost in the same frame: the start drafts each member twice, once on a copy to check buffs it would drop
+    and once in the host. Skipping the copy when the member has no buff to drop keeps one draft each.
+  - (c) Draft the copies on a worker thread while the round banner shows, and apply them in order on the main thread.
+  - Recommendation: (b), then measure again.
+- **Cause 2, fixed: a queued ghost step on a heavy frame** (ENGINE-58's block queue): a step costs 2 to 9 ms most of the
+  time but 15 to 20 ms in this container's slow spells, so a step plus a 20 ms draw reached 35 to 47 ms (`battle_plan`,
+  `battle_block`). **Fix**: a step starts only while the last draw plus the last step fit in 26 ms; one that does not
+  fit waits for a lighter frame, 3 frames at most, so the ghosts always land. Also: an agent-link request now finishes
+  the waiting ghosts first, as a player's request does (a scenario's `link` step could otherwise run past them).
+- **Misses that are not the game's code**:
+  - Container stalls: a 34 to 53 ms battle draw that spent only 18 to 21 ms on the CPU with no context switch. The thread
+    was stopped by the host; the guest sees no steal time.
+  - One audio underrun in `switch_feel` in 2 runs of 10 (budget 0), likely the same stall starving the virtual device.
+  - The first map frame (75 to 100 ms at `region_map` frame 4, about half of it off the CPU), outside any measured step.
+- **Options for those** (Design's call): (d) the feel table marks a frame with much less CPU time than wall time as
+  `stall`, not a miss (`/proc/thread-self/schedstat` on Linux), so the target reads "no miss of the code's own";
+  (e) a follow-up row cuts the battle draw (16 to 24 ms, the strip and the board the largest parts) to leave room;
+  (f) release feel runs on the PC. Recommendation: (d).
+- **Docs delta**: none.
+
+### FB-507: ENGINE-58 BLOCK-CLICK2 built; the block click answers in 21 to 33 ms in release, later ghosts follow on the next frames
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `BATTLE-FRAME2`
+  (`aegis_ui` `Screen::settle`, the shell with no window), `feel_battle` budget; no data. **Every golden unchanged**; the
+  sim's planner untouched (the change is the screen's order of work only).
+- **Spec**: `docs/READY.md` row `ENGINE-58` (`BLOCK-CLICK2`).
+- **1. Profile** (release, `feel_battle` `battle_block`): the `strip.block1` handler spent 41 to 52 ms, almost all of it
+  redrafting the later members' ghosts (each one a draft on a copy, about 2 to 11 ms, then the host's `preset`, about
+  2 to 16 ms) after the clicked member's own change (a few ms). The forecasts and compiles the row named were small next
+  to that.
+- **2. Approach: defer the later members' ghosts**. The clicked member's change is sent at once, as before. The later
+  members wait in a queue (`reghost`) of steps, each member's draft worked out on one step and its send (when it changes
+  the plan) on the next. The queue starts on the frame after the click's own answer is drawn, and a frame does one step
+  (more only while they cost under 1 ms), so each frame stays near its draw. Anything that reads or changes the plan
+  first finishes the queue: any request to the host, a key, a click, Confirm (`run`, `act`). A queued member that a
+  newer change touches again is drafted again. A send worked out before that change is dropped.
+- **3. Same board**: `ghost_defer_tests` `a_ghost_click_drafts_later_ghosts_on_the_next_frames_and_ends_on_the_same_board`
+  plays one ghost click on two identical arenas, one settled at once and one over the frames. The clicked member's picks
+  match straight away. Once the queue is empty, the host's plan view, every member's picks, ghosts and round states, and
+  the waiting (buff-dropping) drafts are equal.
+- **4. Shots stay machine-independent**: a game with no window settles every screen before the frames a `frames` request
+  draws (`Screen::settle`, default nothing; the battle finishes its queue). Without this, `ally_support_menu`'s shot
+  missed a forecast segment the debug build had not drafted yet. Test: `aegis_ui` headless
+  `a_frames_request_settles_the_screens_first`. Shots diff against `1cf978aa`: only the known `screens_menus__scene_runner`.
+- **5. Budget**: `feel_battle` `battle_block` `input_ms` 50 to 35. Release runs (this container, the 5 of 6 that reached it): click to
+  present 21.0 to 33.2 ms, worst frame 22.8 to 28.6 ms (develop before: 44.4 to 51.4 ms, one of 5 over 50).
+- **Timing note**: a scenario run steps the game's clock (`aegis_core::clock::Instant::now` stands still within a frame),
+  so the per-frame time limit reads the wall clock (`Instant::wall`); with `now` every waiting ghost landed on one frame.
+- **Open (not this row)**: in about 1 run in 4 here one frame between inputs of `battle_plan` or `battle_resolve` goes
+  over 33 ms (34 to 45 ms); develop before this change does the same (`battle_plan` 44.7 ms in 1 of 5). The block step
+  passed its budgets in every run that reached it (11 runs). A follow-up row could find that frame; `tools/fc.sh feel`
+  passes when it does not come.
+- **Docs delta**: `engine/README.md` (Design): the `Screen` trait gains `settle` (finish now the work a screen spreads over
+  the frames after an input; the shell with no window calls it before a `frames` request draws).
+
+### FB-506: ENGINE-57 FEEL-RELEASE1 built; release scenario runs take the dev path, `tools/fc.sh feel` prints one table
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `BLOCK-CLICK2`
+  (`aegis_cli` scenario launch), `tools/fc.sh feel`, `tools/planner/feel_table.py` with its tests, authoring guide
+  `engine/docs/authoring/scenarios.md`; no data. **Every golden unchanged**.
+- **Spec**: `docs/READY.md` row `ENGINE-57` (`FEEL-RELEASE1`); the approach agreed with Design in the thread.
+- **1. The cause of `switch_feel_story`'s release failure**: the game shows its developer surfaces only in a debug build
+  with the dev tools (`DEV_BUILD`, PR7-37 PT-01 and PT-14). A release build is a player build, so New Game starts the one
+  player world at once (its opening vignette) where the gate's dev build opens the world picker the scenario clicks.
+  **Fix**: a build with the dev tools shows them when launched with `dev=1` (`dev_build()`; `DEV_KEYS`, the F-keys, stay
+  debug only), and the scenario driver passes `dev=1` on every launch, so one script takes one path in either profile.
+  A shipped player build (no dev tools) ignores `dev=1`. Tests: `dev_1_shows_the_developer_surfaces_only_with_the_dev_tools`
+  (lib; fails without the fix), `new_game_starts_the_one_world_unless_the_developer_surfaces_show` (menus, `at_once`),
+  and the driver's launch keys (`aegis_cli` scenario). `switch_feel_story` now passes in release.
+- **2. `tools/fc.sh feel [out=<dir>]`**: every scenario with a `feel` or `reach` step, each game (Emberwake's 10, `hello_walk`),
+  no window, release build, release budgets; one table, one row per step: result, input, frame p50 and max, switch (own
+  part), move, interface sound, hit, music, underruns, reach dead ends; `*` over the step's budget; exit 1 on a failed
+  scenario. Not in the gate; a few minutes.
+- **3. Reading it**: `engine/docs/authoring/scenarios.md` "Reading the feel table"; its "What a run owns" table gains the
+  virtual sound device (ENGINE-55) and the developer surfaces.
+- **First table** (this container): 38 of 39 steps pass their release budgets. **`feel_battle` `battle_block` misses**: the
+  click on `strip.block1` takes 51 to 74 ms in its handler against `input_ms` 50 (4 runs); develop before this change
+  measured 50 and 53 ms (one pass, one fail), so it sits on the line already. The gate's dev allowance (125 ms) hides it.
+  A follow-up row could find what the block click does on the frame; not done here. Next highest: `switch_feel` menus
+  and fight to results switches 62 to 65 ms (budget 150), `feel_battle` plan input 50.4 ms (budget 100), the
+  `audio_feel` Continue input 59 ms (no input budget).
+- **Docs delta**: none for the shared READMEs; `tools/fc.sh feel` is in `fc.sh`'s help.
+
+### FB-505: ENGINE-56 AUDIO-FEEL2 built; menus answer by sound, map footsteps, battle music in 0.4 s, stings warmed
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `FEEL-RELEASE1`
+  (`emberwake_gui` battle, settings, region map, map view, defaults, tuning), kit asset `kits/rpg/assets/audio/sfx/
+  map_step.wav` (placeholder), game `tuning.json` (`battle_music_fade_ms` 400), scenario `audio_feel`; no catalog data.
+  **Every golden unchanged**. Shots diff: `screens_menus__settings_sound.png` (the new Footsteps row, intended) and
+  `screens_menus__scene_runner.png` (its known artifact).
+- **Spec**: `docs/READY.md` row `ENGINE-56` (`AUDIO-FEEL2`).
+- **(4) Menu sounds by rule** (engine): the shell answers a press with `ui_confirm` when a button is pressed and taken
+  (a click, Enter or Space on the focus, the agent link), `ui_error` on a disabled one, and `ui_back` when Esc, the pad's
+  B or a right click closed a screen or an open choice list (a back that closes nothing is silent). Buttons are the kinds
+  in `UI_SOUND_KINDS` (button, text button, icon button, tab, checkbox, choice field and option, section); sliders, rows,
+  cards and board cells say nothing. A screen overrides per widget with `Screen::ui_sound` (the rule, none, or its own
+  file): the battle's round controls keep their `ui_click` (`Action::clicks`), the Settings volumes' `<` and `>` keep
+  their sample like the sliders. The files are the engine's (`engine/assets/audio/sfx`); a game's of the same name plays
+  over them.
+- **(3) Map footstep** (game): a soft step on each step of the party on the hub and region maps (`mapview::MAP_STEP`,
+  Effects bus), at a new `Footsteps` volume under Effects (settings `footsteps`, default 60, a share of Effects; its row
+  sits under Effects Volume on the Sound tab and previews the step). The file is a placeholder at its final path: the
+  kit's `move_step.wav` low-passed at 45 % (Art/UI replaces it and adds its line to the kit's sfx README).
+- **(2) Battle music fade**: a screen may name its music's fade-in (`Screen::music_fade_in`, `Audio::music_faded`); the
+  battle names `battle_music_fade_ms` (tuning, 400). I read "from silence" as the battle track's own fade-in wherever it
+  starts: The Sweep's track starts over the map's, so it now comes in over 0.4 s while the map's fades out over 1 s
+  as before. Other tracks keep 2 s from silence and 1 s over another.
+- **(5) Stings warmed**: a world battle screen decodes `combat_sting` and `victory_stinger` on a thread as it is made
+  (`Audio::warm`; the map makes it ahead, unseen); the first combat sting in `switch_feel_story` played from the cache
+  (0.08 ms on the ask, heard 24 ms after it).
+- **Measured** (release, no window, 3 runs of `audio_feel`):
+  - **Confirm**: 13 to 22 ms after the click (Continue, the game menu, its party screen); **back**: 16 to 21 ms after Esc.
+  - **Map footstep**: within 3.5 to 5.5 ms of its frame; the first step of a key press is asked between frames and
+    heard 21 ms after the key.
+  - Round controls, hits and music as in FB-504.
+  - Underruns: none in three runs. One release run had a single underrun in `battle_round` with a 6 ms buffer mix
+    (the virtual device's thread preempted on this container); not seen again in three more.
+- **Scenarios**: `audio_feel` gains `menu_confirm_back` (interface sounds 50 ms) and `map_step` (footsteps 16.7 ms off
+  their frame), and `title_to_map` budgets Continue's confirm; README row.
+- **Tests**: the shell's rule (confirm by click, Enter and the link, error on a disabled button, back only when
+  something closed, nothing on a slider or where the screen plays its own); `warm`, `music_faded` and `play_gain`.
+- **Found, not mine**: `switch_feel_story` fails in a release run at its step 4 (New Game opens a vignette, not the new
+  game screen) on develop before this change too; it passes in the dev build the gate runs.
+- **Docs delta (engine/README.md)**: in the audio bullet add "; since ENGINE-56 the shell answers presses by sound
+  (`ui_confirm`, `ui_back`, `ui_error`; `Screen::ui_sound`, `UI_SOUND_KINDS`), a screen may name its music's fade-in
+  (`Screen::music_fade_in`), `Audio::warm` decodes a sound ahead and `Audio::play_gain` plays under a bus's level".
+
+### FB-504: ENGINE-55 AUDIO-FEEL1 built; interface sounds 12 to 20 ms, hits within 6 ms of their frame, no underruns
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `AUDIO-FEEL2`
+  headless feel replay, start; `aegis_cli` scenario feel budgets), scenarios `audio_feel` (new), `switch_feel` and
+  `walk_feel_fight` (`underruns` 0); no data, no game code. **Every golden unchanged**. Shots
+  diff: only `screens_menus__scene_runner.png` (its known artifact); `audio_feel` had one underrun in Continue's 1.5 s
+  inside the diff's loaded run, so the dev allowance now counts a part of 2 s as one. One gate run failed `feel_battle`'s
+  `battle_resolve` on `shotsexact`'s second run (one 97 ms frame, median 32 ms, no sound decode in it); it passed
+  three times alone (worst 45 to 48 ms) and in the next full gate.
+- **Spec**: `docs/READY.md` row `ENGINE-55` (`AUDIO-FEEL1`).
+- **What `feel` now reports**: every `feel` reply has `audio`: each sound and track started, with when it was asked, when
+  its first sample over 1/1024 was heard (a probe on the mixer's output), the time from its input (`after_input_ms`),
+  from its ask (`after_ask_ms`) and, for an effect asked in a frame, from when that frame is shown (`beat_ms`), and the
+  decode done on the ask; plus the output's buffer, underruns (a buffer mixed after it should have played) and the
+  longest mix. With no window the sound plays into a virtual 48 kHz output on its own thread that asks for 512-frame
+  buffers on time, so muted gate runs hear it too. A window's feel overlay adds the real device's buffer and underruns.
+- **Measured** (release, no window, this 4-core container; before the fixes in brackets):
+  - **UI click or confirm**: 12 to 20 ms after the click (under 50 ms).
+  - **Hits and footsteps** (battle hits, `move_step`, defends): within 4.9 to 5.6 ms of their frame (one 11 ms seen);
+    one frame is 16.7 ms.
+  - **Music change**: 15 to 30 ms after its ask (Continue's map, the map to The Sweep, results to the map) [Continue's
+    music 96 ms after the click: it was asked after the map's first draw].
+  - **Decode on the frame**: about 1 ms for a track (the bytes read) [3.5 ms of decoder]; an effect 0.1 to 0.3 ms
+    once cached [the Ogg stings 10 to 17 ms on their first play if decoded on the frame].
+  - **Underruns**: none in release in `walk_feel_fight`, `switch_feel` or `audio_feel`; the longest buffer mix 2.5 ms
+    against its 10.7 ms. In the gate's dev build one underrun shows now and then in a long replay (`switch_feel`'s menus,
+    fight to results, and once in Continue's 1.5 s under the shots diff's load): a debug thread starved by the build's
+    own load, not the mix.
+- **Fixes**:
+  - A screen's music is asked for right after its tick, before its draw (`Shell::follow_music`), not after it.
+  - A track's decoder is made on a thread (`aegis-track`); an effect is decoded once and kept (a `.wav` on its first
+    ask, any other format streamed on a thread while a copy is decoded for the next play).
+  - The device is opened with our own `cpal` stream at a fixed 512-frame buffer (10.7 ms at 48 kHz) where the device
+    allows it, else its default; the old default stream's buffer was unknown. No mixing work was on the audio thread
+    beyond the mix itself.
+- **Gate budgets**: a `feel` step's `budget` takes `ui_sound_ms`, `hit_beat_ms`, `music_ms`, `underruns` and `decode_ms`;
+  one over, or one never measured, fails the step. In a dev build `decode_ms` counts 2.5 times and `underruns` allows one
+  per 2 s of replay or part (`DEV_UNDERRUN_EVERY_MS`). `audio_feel`: music 50 ms, the confirm 50 ms, hits 16.7 ms, underruns 0;
+  `switch_feel` and `walk_feel_fight`: underruns 0. Authoring guide `engine/docs/authoring/scenarios.md` "Sound".
+- **Mix and feel choices for Design** (none changed here):
+  1. Buffer 512 frames (10.7 ms) vs 256 (5.3 ms): 256 halves the wait, costs more wakeups and risks underruns on slow
+     PCs. Recommend 512.
+  2. Fades: a track from silence fades in over 2 s, a change crossfades over 1 s. The first notes of a short sting or a
+     battle start are quiet for a moment; a shorter fade-in (0.3 to 0.5 s) for battle music may feel punchier.
+  3. No footsteps on the map: `move_step` plays in battle only. A soft map step would help the walk feel.
+  4. No menu or button sounds: the engine ships `ui_click`, `ui_confirm`, `ui_back` and `ui_error`, but only the battle's
+     round controls and the volume sliders play them. A rule like "confirm on any button, back on Esc" would make menus
+     feel answered.
+  5. Stings (`combat_sting`, `victory_stinger`) now decode on a thread on their first play, so the first one is heard
+     a frame or two later than a cached one; warming them with the screen would remove that.
+  6. The dev-build underrun allowance (one per 2 s) vs none: release holds 0.
+  7. On Windows a WASAPI device may refuse the fixed buffer and fall back to its default; the overlay shows the real
+     buffer when Tushar plays with `feel=1`.
+- **Docs delta (engine/README.md)**: in the audio bullet add "; since ENGINE-55 the output is our own `cpal` stream at a
+  fixed 512-frame buffer (`aegis_ui::audio_out`; a virtual device with no window, so feel replays hear sound), effects
+  decoded once and off the frame, and `feel` reports each sound from its input or frame to its first audible sample
+  (`aegis_ui::audiofeel`, budgets `ui_sound_ms`, `hit_beat_ms`, `music_ms`, `underruns`, `decode_ms`)".
+
+### FB-503: ENGINE-54 WARM-SPREAD1 built; no frame over 33 ms while warming, Continue 19 ms and The Sweep 21 ms
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `AUDIO-FEEL1`
+  (`rpgkit_battle` plan, `rpgkit_ui` composed board), game GUI (`emberwake_gui` title, region map, story stage, battle
+  start, map ground), scenarios `walk_feel_fight` (new) and `switch_feel`; no data. **Every golden unchanged**. Shots
+  diff: only `screens_menus__scene_runner.png` (its known artifact) and the new scenario's shots; `feel_battle` failed
+  once inside the diff's loaded dev run (a 105 ms frame) and passed twice alone.
+- **Spec**: `docs/READY.md` row `ENGINE-54` (`WARM-SPREAD1`).
+- **Build-ahead work on threads**:
+  - Decodes: in a warm draw (`Art::defer`) a file not decoded yet is asked for and decoded on a thread (up to
+    `DECODE_THREADS` at once); `Art::warm_poll` takes the finished ones in. Nothing built from a file left for later is
+    cached (each cache checks `Art::left`).
+  - Grounds: in a warm draw (`ground::set_deferring`) a ground not composed yet is composed on a thread
+    (`ground::compose_later`, `ground::poll_later`): the map's ground and the fight's board ground. The map ground's
+    ENGINE-53 path of its own (`compose_ahead`) is gone: the title's unseen map draw composes it the same way.
+  - Fight starts: a fight the party walks toward or stands near, and the fight after a vignette, start on a thread
+    (`battle::FightAhead::spawn`; the kit's round plan is now `Send`: `Arc` and atomics for its `Rc` and `Cell`s,
+    same values).
+- **The rest in slices**: the screen `warm_next` gives is drawn unseen one slice a frame (`Shell::warm_slice`): nothing
+  can be drawn (an empty canvas `bounds`, which the screen's own clips cannot lift; shapes and glyph blits skip their
+  pixels, a cached or scrolled layer is drawn whole for what it asks and keeps nothing), art made on the frame limited
+  to 2 ms a slice (`WARM_ART_US`), the screen made on one slice and drawn from the next. A slice that left something
+  waits for the threads it started before the next one; one that left nothing ends the warming.
+- **When**: the title 300 ms after it shows (was its third frame); the map after the party has stood still 300 ms on a
+  tile (was 10 frames; a fight already drawn unseen on this map is only started ahead, not drawn again); a vignette
+  300 ms in. A frame after an input has no slice, and nothing waits on one.
+- **Measured** (release, no window, 1280 x 720, this 4-core container):
+  - **No frame over 33 ms while warming**: `walk_feel_fight` (new, cold art by The Sweep's marker, click walk
+    included) worst 22 ms, median 5.3 ms; `walk_feel` worst 21 ms (click) and 17 ms (keys); the title while it makes
+    Continue's map (`switch_feel`'s new `title_warm`) worst 19 ms, median 1 ms.
+  - **Slices**: the fight's unseen draw once its art is in 3 to 4 ms; **two slices are over 8 ms**: the first draw on
+    cold art, 16 to 18 ms (the battle's board asks for about 200 files), and the next, 9 to 14 ms (the bodies made from
+    them). That work is the board's own first draw, not art the 2 ms limit counts; the frames stay under 33 ms
+    with it. Splitting it further would need the battle's draw to stop part way; not done (a follow-up if wanted).
+  - **Continue 18.6 to 21.5 ms; The Sweep 21 to 22 ms** (own part, both under 60 ms); in one `switch_feel` run of
+    four The Sweep took 98 ms (two frames, worst 47 ms; under its 120 ms budget, not reproduced in three more runs).
+- **Scenarios**: new `walk_feel_fight` (budgets of `walk_feel`); `switch_feel` gains `title_warm` (frames 33 ms).
+  Scenarios README rows.
+- **Docs delta (engine/README.md)**: in the screens / shell bullet, after the ENGINE-53 `Screen::warm_next` clause add
+  "; since ENGINE-54 drawn in slices of one a frame, unseen behind an empty canvas `bounds`, once the screen has been
+  still 300 ms and never on a frame with input: decodes (`Art::defer`, `Art::warm_poll`) and grounds
+  (`ground::compose_later`) go to threads, and a slice that left something waits for them".
+
+### FB-501: ENGINE-53 SWITCH-AHEAD1 built; Continue 19 to 22 ms and The Sweep 27 to 30 ms, both under 60 ms
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `WARM-SPREAD1`
+  GUI (`emberwake_gui` title, region map, story stage, battle start, map ground), the `switch_feel` scenario; no data.
+  **Every golden unchanged** (the composer's pinned fixtures too). Shots diff: clean (only the known `screens_menus__scene_runner.png` artifact).
+- **Spec**: `docs/READY.md` row `ENGINE-53` (`SWITCH-AHEAD1`), options (b) and (c).
+- **(b) The composer's serial parts on threads**: the fields' blur (`grounds()` and the other fields, new `par_map`: one
+  field a thread) and the sunken rims and contact lines (bands of rows, `by_rows`) run on up to `COMPOSE_THREADS`; each
+  writes only its own field or row from what it reads, so the bytes are the one pass's (the ENGINE-52 tests, three
+  grounds and two shipped maps on 1 / 2 / 4 threads, pass unchanged). The stone rim and the dressing (groups, placed
+  patches, marks) stay on one thread: they read what their neighbours wrote. (Not timed apart: the switches below no longer compose on their frame.)
+- **(c) Built ahead at idle**:
+  - New engine hook `Screen::warm_next`: a screen may hand the shell a screen it may open next; the shell draws it once
+    unseen at the start of a frame (after the tick), as it draws the warm list before the first frame (ENGINE-46), and
+    drops what it asked for (navigation, notices). Asked of the top screen, then down the stack until one gives one.
+  - Ground composed ahead: `ground::keep(key, img)` puts an image composed elsewhere in the composer's cache
+    (`ground::held` tells); a stale one is never drawn, its key matching nothing.
+  - **Continue**: on the title's third tick it reads the newest save (not entering it), starts its map ground on a
+    thread (`emberwake_gui::ground::compose_ahead`, the same key and pixels as the map's own: test
+    `a_ground_composed_ahead_is_the_one_the_map_draws`), keeps it when done, then draws the map once unseen
+    (`region::Rehearsal`, on a game of its own swapped in for that draw; the log given back). Continue then finds every
+    cache full. The title's `state.ahead` reads `waiting`, `composing`, `drawing` or `ready`. Continue also reads the
+    newest slot the menu already found instead of parsing every slot again.
+  - **A fight on the map**: the game keeps one `battle::FightAhead`: a world fight started on a copy of the game (the
+    copy before and after, and what the start built). During a click walk, once per walk, its steps are tried on a copy
+    (`explore::step`) and the fight they end in is started ahead; standing still 10 frames on a tile, the walk to the
+    nearest encounter marker is tried the same way and the fight is also drawn once unseen (bodies, board ground, panels).
+    `BattleScreen::world` takes it when the game, the fight and the runner are exactly those it was started from, and
+    otherwise starts the fight as before (stale: dropped).
+  - **A scripted fight**: while a story vignette shows (10 frames in, once a step), a fight step right after it is
+    started ahead on a copy with the vignette's step done, and drawn once unseen.
+  - Test (as asked): `transitions_tests::a_fight_built_ahead_equals_one_built_on_the_switch`: the same battle state, game
+    and log after the start, the game untouched until taken, another runner or a changed game stale and started anew.
+- **Measured** (release, no window, 1280 x 720, this 4-core container; `own_ms`):
+  - **Title Continue to the map: 19 to 22 ms** (was 107 to 124; its first frame 17 to 18 ms).
+  - **The Sweep from the map, no intro: 27 to 30 ms** (was 101 to 135; the fight's start 0.2 ms, its first draw 15 ms).
+  - Story card to the stage to the fight (with its beat), dev build: 50 ms (was 94 in release).
+  - No release first frame over 100 ms in `switch_feel`; every other switch as before (within noise).
+  - **The cost moved to idle** (not a switch, listed as asked): the title draws the map once unseen in one frame of about
+    50 ms after its ground is kept (about 0.3 s after it opens); a map draws a fight once unseen in one frame of about
+    100 to 140 ms the first time the party stands still 10 frames near an encounter (cold art: decoding its bodies, its
+    board ground, its panels; about 20 ms once the art is warm); a vignette the same once, 10 frames in. A click walk
+    toward a fight adds about 12 to 20 ms to one walk frame (the fight started on the copy). None is a cue, and `walk_feel`
+    stays within its budgets.
+- **Budgets**: `switch_feel` waits for the title's `state.ahead` to read `ready` before Continue, and its Continue and
+  The Sweep inputs go 200 -> 120 ms (300 in the gate's dev build).
+- **Docs**: the scenarios README row. **Docs delta (engine/README.md)**: (1) in the ground composer's bullet, after the
+  ENGINE-52 clause add "; its fields' blur, sunken rims and contact lines too, and `ground::keep` takes an image composed
+  ahead (ENGINE-53)"; (2) in the screens / shell bullet add "`Screen::warm_next` hands the shell a screen to draw once
+  unseen at the start of a frame, so a screen's first draw finds its caches full (ENGINE-53: the title's Continue map, a
+  fight near the party, the fight after a vignette)".
+
+### FB-499: ENGINE-52 COMPOSE-PAR1 built; the ground composer runs its rows on threads, same pixels; both switches miss 60 ms
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `SWITCH-AHEAD1`
+  `compose_board`, for tests), game tests and the `switch_feel` budgets; no data. **Every golden unchanged** (the
+  composer's pinned fixtures too). Shots diff: 128 unchanged, 1 changed
+  (`screens_menus__scene_runner.png`, the known artifact); in that run `switch_feel` itself failed once (the party
+  popup 411 ms against 375 in the dev build while the diff ran two builds' scenarios side by side; alone it is 110 to
+  142 ms), so its budgets are load-sensitive on a shared machine.
+- **Spec**: `docs/READY.md` row `ENGINE-52` (`COMPOSE-PAR1`).
+- **Built**: the per-pixel pass and every noise pass (`add_noise`, so the patchy blobs too) run in bands of whole rows
+  on up to `COMPOSE_THREADS` (4) threads (`ground::by_rows`; one on the web, one for a job under `PAR_MIN_PX` 16 K px a
+  thread). Each pixel or noise row reads the shared fields and writes only itself, so the result is the one pass's
+  bytes. `ground::with_compose_threads(n, ..)` caps it (tests). Tests: `aegis_ui` ground
+  `a_job_is_the_same_on_one_thread_and_many` (three grounds with textures, wear, strays, tone, patchy and patches, square
+  and tilted, 1 / 2 / 4 threads); `emberwake_gui` `a_maps_ground_is_the_same_on_one_thread_and_many` (Warden Keep and
+  Junction 7, both views) and `a_battle_boards_ground_is_the_same_on_one_thread_and_many` (two Sunk Ward fights and the
+  Ashlands courtyard, through the new kit `stage::compose_board`).
+- **Measured** (release, no window, 1280 x 720, on this 4-core container):
+  - The composer alone (Junction 7, 896 x 576 art px): 40 -> 26 ms (noise 12.8 -> 7, the per-pixel pass 14 -> 7; the
+    fields' blur 3, the rims 2.5 and the dressing 5 to 7 stay on one thread). In the game the same compose took 42 to
+    50 ms on 4 threads against 45 to 55 on one: the threads share the cores with the rest of the run.
+  - **Continue to the region map: 107 to 124 ms to settled** (first frame 90 to 107 ms; about 45 of it the ground,
+    about 40 the rest of the map's first draw: the tiles, walls, markers, legend and HUD). **Misses 60 ms.**
+  - **The Sweep from the map, no intro: 101 to 135 ms** (own part; building the fight in the tick about 25 to 35 ms,
+    its first draw 45 to 50). **Misses 60 ms.**
+  - As asked, no cue added. Neither reaches 60 ms without moving most of a map's or fight's first draw off the input
+    frame; listed below.
+- **Still layers on the input frame**: not done. The region map's ground job is made in its first draw (`MapGround::sync`)
+  and the ground is the first thing that draw paints, so starting it earlier on a thread overlaps only the 5 ms before
+  it. A real gain needs the job made on the input (Continue's handler, a fight's start) and the map's other first-draw
+  work moved beside it; that is a restructure of the region map's draw, not this row.
+- **What would reach 60 ms** (for a Design call): (a) the region map's first frame drawn in two: the ground composed on a
+  thread from the input while a plain floor shows one frame (a visible step, so a cue by another name); (b) the composer's
+  remaining serial parts (fields, rims, dressing) on threads: about 10 ms more; (c) a fight built ahead while its marker
+  is approached (the 25 to 35 ms tick). Each is a row of its own.
+- **Budgets**: `switch_feel`'s Continue and The Sweep inputs 400 -> 200 ms (`own_ms`; 500 in the gate's dev build).
+  Release runs of Continue occasionally show its first frame just over 100 ms (101 to 107), which a release run of
+  `switch_feel` counts as an uncovered frame; the gate's dev run allows 250.
+- **Fix found by the gate**: the switch probe counted a frame as settled under 33 ms in a dev build too, where a
+  world map's frames take 34 to 54 ms, so the gate's second run of `switch_feel` read the world map as settling 1.5 s
+  late. A switch now settles on a frame under 33 ms times the dev allowance (82.5 ms) in a dev build
+  (`Switch::settled_frame_ms`); test `a_dev_build_settles_on_its_stretched_frame`; `scenarios.md` says so.
+- **Docs**: the scenarios README row. **Docs delta (engine/README.md)**: in the ground composer's bullet add "its
+  per-pixel pass and noise run in bands of rows on up to 4 threads, the same bytes (ENGINE-52,
+  `ground::with_compose_threads`)".
+
+### FB-497: ENGINE-51 SWITCH-FEEL1 built; every screen switch timed and within its target, no uncovered frame over 100 ms
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `COMPOSE-PAR1`
+  read-ahead, the ground composer's noise; `aegis_cli` the `feel` step), game GUI (`emberwake_gui` battle, results,
+  region map, world map, the warm list) and two new gate scenarios; no data. **Every golden unchanged**. Shots diff:
+  128 unchanged, 1 changed (`screens_menus__scene_runner.png`, the known artifact).
+- **Spec**: `docs/READY.md` row `ENGINE-51` (`SWITCH-FEEL1`).
+- **The probe**: a `feel` step with `switch` true follows each key, click or pad input frame by frame until its new screen
+  settles (`aegis_ui::switchfeel`): `first_ms` (input to the first frame of another screen, or the same at another stack
+  depth, so a popup counts), `settled_ms` (to the first frame of the last screen it came to drawn in 33 ms: the loads are
+  done; a story card that hands over to a stage and a fight is one chain), `own_ms` (from the old screen's last frame: a
+  walk to an exit or the results' fade out is play, not loading), `long_frames` over 100 ms with the transition shown
+  before each (new `Screen::transition`: the battle beat and the results' fade out report theirs). A script item's
+  `switch_ms` fails the step when `own_ms` passes it, `to` names the screen it should reach (so a fight that opens on its
+  own after the results is not counted in it), and `budget.uncovered_frames` limits long frames nothing covered. Tests:
+  `aegis_ui` switchfeel (6), `aegis_cli` `a_feel_step_takes_switch_budgets`.
+- **Measured** (release build, no window, 1280 x 720; own ms, worst frame ms; before -> after where a fix moved it):
+
+  | Switch | Own | Worst frame |
+  | --- | --- | --- |
+  | Title Continue to the map | 85 to 107 | 84 to 90 |
+  | Party screen, hub menu, its party, Settings, back | 17 to 62 | 46 |
+  | Hub Save | 90 to 124 -> 17 | 107 -> 11 |
+  | Title Settings, Load, New Game | 17 to 79 -> 17 | 62 -> 13 |
+  | Region map to world map (after the walk) | 90 to 123 -> 25 | 102 -> 25 |
+  | World map Enter to the map | 19 | 11 |
+  | Region map to a fight, no intro (after the walk) | 113 to 146 -> 119 to 128 | 97 to 128 -> 75 |
+  | Story card to stage to fight, with its beat | 81 to 119 -> 94 | 86 -> 61 |
+  | Fight to results | 31 to 69 | 50 |
+  | Results to the map (after the 500 ms fade out) | 17 to 20 | 36 |
+  | Results to stage to the next story card | 42 | 26 |
+
+  Every switch is under its target (menus and popups 150 ms, maps and fights 400 ms) and no frame over 100 ms is left
+  uncovered in the release runs.
+- **Fixes** (clear misses):
+  - (1) Duplicated work: every body sheet and icon was decoded twice (once to read its clips or size, once to draw).
+    `Art` keeps a small file's decoded pixels (`RAW_KEEP_PX`, a megapixel) so the second reads them.
+  - (2) A fight's bodies at once: new engine `Art::load_bodies` decodes the sheets a screen opens on side by side
+    (`decode_all`, up to `DECODE_THREADS` 4; one on the web); a world fight loads its units' bodies before its first
+    frame (`battle/playback.rs` `load_bodies`). The fight's first frame 102 to 128 -> about 75 to 90 ms.
+  - (3) Earlier, by warm: the Save and Load slots join the start's warm list (`Context::warm`, ENGINE-46): their slot
+    panels' frames were a 50 ms first draw, a 107 ms frame opening Save.
+  - (4) Earlier, by idle loading: new engine `Art::want_fit` starts reading a big picture on a thread for a screen that
+    may open next (nothing on the web); the region map asks for the world map's background after its first frame
+    (`worldmap::want_background`), so the world map opens in 25 ms instead of reading 36 ms and scaling 13 ms.
+  - (5) The ground composer's four noise fields are made side by side (`ground::noise_fields`, the same values): the
+    region map's ground compose 64 -> 43 ms, its noise 37 -> 16 ms.
+- **Needs a loading cue or a later row (nothing over target now, listed as asked)**:
+  - The title's Continue: the region map's first frame is 84 to 90 ms, of which composing its ground about 43 ms (its
+    per-pixel pass 13, the noise 16) and its still layers' first full draw. Close to 100 ms on a slower machine. A cue
+    (a short fade from the title) or a row parallelising the composer's per-pixel pass by rows (pure, so the same pixels)
+    would hold it.
+  - The region map to a fight with no intro: the fight's first frame 75 to 90 ms (building the fight about 25 ms in the
+    tick, its stage ground about 11 ms). A fight that has the battle beat is covered by it; one without has nothing
+    covering it. A cue is the same call as above.
+  - The character popup (46 ms) and the results (50 ms) spend about 30 ms composing their framed panels on first open;
+    within target, could join the warm list when they need no game.
+- **Gate scenarios**: `switch_feel` (the save `saves/sweep_start`: Continue, the party screen, the hub menu, Save,
+  Settings, the world map and back, The Sweep with no intro, results, back to the map) and `switch_feel_story` (a new
+  game: Settings, Load, New Game, the story cards into the first fight and its beat, results, the next card), each input
+  with `switch_ms` 150 (menus, popups) or 400 (maps, fights) and `uncovered_frames` 0; 2.5 times in the gate's dev build.
+  Gate time about 80 s and 45 s.
+- **Docs**: `engine/docs/authoring/scenarios.md` ("Input times": screen switches), the scenarios README rows.
+- **Docs delta (engine/README.md, Feel probe bullet)**: after the ENGINE-50 clause add "; a `feel` step with `switch`
+  times each screen switch to its first settled frame (ENGINE-51: `aegis_ui::switchfeel`, `Screen::transition` names a
+  covering fade or beat; `switch_ms`, `to` and `uncovered_frames` budgets), and `Art::load_bodies` (sheets decoded side by
+  side) and `Art::want_fit` (a picture read ahead on a thread) move loads off a switch's first frame".
+
+### FB-495: ENGINE-50 MAP-FRAME1 built; the region map's frame cut to a third, a key press after a hitch takes no catch-up step
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `SWITCH-FEEL1`
+  `feel` step), game GUI (`emberwake_gui` region map) and the `walk_feel` scenario; no data. **Every golden unchanged**.
+  Shots diff against `8277b246`: 128 unchanged, 1 changed (`screens_menus__scene_runner.png`, the known artifact).
+- **Spec**: `docs/READY.md` row `ENGINE-50` (`MAP-FRAME1`).
+- **Where the frame went** (release build, no window, 1280 x 720, the hub walked by `walk_feel`): about 18 ms a frame,
+  of which the map's still layers (ground, tiles, walls, border, dressing, shadows, ground props) about 3.5 ms, the
+  markers' pass about 5 ms and the "Here" legend about 5.5 ms; the last two asked `explore::marker_view` and
+  `explore::npc_services` (quest scans) for every marker, twice a frame.
+- **(1) Still layers drawn once**: a map's camera moves every frame while walking, so `Painter::cached` (keyed on the
+  view) would redraw every frame. New engine `Painter::scroll_begin` / `scroll_end` with `Strip`: a layer keyed as
+  `cached` plus an origin in whole physical px; the pixels kept from the last frame are put back moved by the origin's
+  change and only the strips newly in view are left to draw (a key or view change draws it all). The region map
+  (`RegionMap::floor`, the hub too) draws its still layers into those strips under their clip; `floor_key` holds the
+  data, art generation, theme, location, view, zoom, tile sets, composed ground and the props shown (a hub's bunk states
+  among them). Test: `aegis_ui` painter `a_scrolled_layer_draws_only_what_came_into_view` (at 1x and 2x: only the new
+  columns and rows drawn, the same pixels as a full draw, unmoved all put back, a new key or a jump past it draws all).
+- **(1b) Marker views per state**: `MarkerMemo` keeps each marker's view and services for one game state and data (all
+  they read; compared each frame, so a step or any change reads them again). Same results, read once instead of twice a
+  frame.
+- **Frame times** (release, no window; median / p95 / worst ms):
+
+  | Run | Before | After |
+  | --- | --- | --- |
+  | Hub, click walk | 18.0 / 26.7 / 29.0 | 6.8 / 12.6 / 19.0 |
+  | Hub, keys and d-pad | 17.8 / 22.2 / 50.8 | 6.7 / 10.2 / 15.6 |
+  | Crossroads Cages map, keys | 11.9 / 16.4 / 86.2 | 5.4 / 11.8 / 79.5 |
+
+  The Cages run's worst frame is the map's first draw inside the replay (a cold start: the ground composed and the art
+  read; 51 ms of it the first full draw of the still layers), not a walking frame. The gate's dev build on the hub:
+  median 30 to 16.4 ms, worst 54 to 25 ms. Results in `/mnt/project-files/build-tools/map_frame/`.
+- **Budgets**: the `feel` step's `budget` takes `frame_p50_ms` (the median frame; 2.5 times in a dev build like the
+  others). `walk_feel` now holds `frame_p50_ms` 16.7 and `frame_ms` 33 on both its runs.
+- **(2) A key press after a long frame**: a press stepped as of the last frame however long ago it was; after a hitch its
+  glide jumped ahead and the held walk took a quick step to catch up (66 ms after the step, not a beat). Now the next
+  tick dates it no more than `CLICK_STEP_BACK` (25 ms) back, as a click (`RegionMap::press_at`), and the next step comes
+  a beat after that. Tests: `emberwake_gui` `a_key_press_after_a_long_frame_is_dated_now` (17, 25 and 250 ms after the
+  frame); `walk_feel` presses during a 250 ms hitch through the new `feel` input `stall_ms` (the clock moves with no frame
+  drawn, so the input arrives in the hitch): the first move is on the next frame and the beat stays even (without the
+  fix the step fails with `cadence_spread_ms 66.67 over 17`). The held walk's own on-schedule steps (`step_time`) are
+  unchanged: bounding those would slow walking at 30 frames a second.
+- **Docs**: `engine/docs/authoring/scenarios.md` ("Input times": `frame_p50_ms`, `stall_ms`), the scenarios README row.
+- **Docs delta (engine/README.md, Feel probe bullet)**: after "`Painter::cached` keeps a layer drawn once (ENGINE-46)"
+  add ", and `Painter::scroll_begin` / `scroll_end` keep one that scrolls (ENGINE-50: the kept pixels move with the
+  layer's origin and only the strips newly in view are drawn)"; after "a `feel` budget counts 2.5 times in a dev build"
+  add ", `frame_p50_ms` holds the median frame".
+- **Free-port flake**: not seen again (this row's gate passed first time).
+
+### FB-493: ENGINE-49 WALK-FEEL1 built; walking measured on two maps, every target met after one fix, feel choices listed
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `MAP-FRAME1`
+  replay; `aegis_cli`: the `feel` step), game GUI (`emberwake_gui` region map) and one game scenario; no data. **Every
+  golden unchanged**. Shots diff: see the last line.
+- **Spec**: `docs/READY.md` row `ENGINE-49` (`WALK-FEEL1`).
+- **What landed (the measure)**: the `feel` step takes held keys and d-pad directions (`press`, `release`, `pad_press`,
+  `pad_release`, as a window's key down and up), `wait_ms`, `spike_ms` (one long frame), `step_ms` (the shot clock's
+  frame step: 16.667 for 60 frames a second) and `motion` (the top screen's `Screen::motion` read after every frame:
+  the mover's cell, where it is drawn, the camera and where it wants to be). `aegis_ui::walkfeel::report` reads first move,
+  cadence, overshoot, turns, long frames and camera lag and jumps; movement budgets fail the step. Documented in
+  `engine/docs/authoring/scenarios.md` ("Input times"). Tests: `aegis_ui` `walkfeel` (4 unit tests); `aegis_cli`
+  `tests/scenario.rs` `a_feel_step_takes_movement_inputs_and_budgets`.
+- **Gate**: `games/emberwake/scenarios/walk_feel.json` on the Sluice Undercroft (the hub, save `hub_start`), with budgets
+  first move 17 ms, overshoot 0, cadence spread 17 ms, stutters 0, camera lag 1 tile, camera jump 0.5 tile a frame.
+- **Report** (release build, no window, 60 frames a second on the shot clock, so the step times are exact; the hub and
+  the Crossroads Cages map from `cages_start`; scenarios, every `feel_*.json` and shots in
+  `/mnt/project-files/build-tools/walk_feel/`):
+
+  | Measure | Target | Hub | Cages map |
+  | --- | --- | --- | --- |
+  | (a) Press to first visible move: keys, d-pad | next frame | 16.7 ms (1 frame) | 16.7 ms |
+  | (a) Same, a tap (press and let go) | next frame | 16.7 ms | 16.7 ms |
+  | (b) Beat while held | even | 200 ms, spread one frame (183 to 200) | same |
+  | (b) Across a 250 ms frame | even | late step at 250 ms, then back on the beat (383, 583) | same |
+  | (c) Steps after release | 0 | 0 in every release | 0 |
+  | (d) Turn mid-walk (keys, d-pad) | answers, no drop | steps at once (16.7 ms); none dropped | same |
+  | (d) Two keys at once (up, then left a frame later) | - | up steps, left steps a frame later; letting left go resumes up on the beat | same |
+  | (e) Click to walk: first move | next frame | was 33 ms (2 frames), **now 16.7 ms** | (keys only) |
+  | (e) A second click mid-walk | no stall | the walk turns at the next step (83 ms, the step in progress), on the beat | - |
+  | (f) Camera lag | within a tile | 0 tiles (locked on the party) | 0 tiles |
+  | (f) Camera jump in a frame | none | 0.09 tile a frame at most, at the edges too | 0.13 tile |
+  | Input to drawn frame (feel probe) | - | 19 to 22 ms | 12 to 14 ms |
+  | Frames over 33 ms | - | 1 a run (p50 18.6 ms, worst 39 ms) | 1 (p50 11.8 ms, worst 80 ms) |
+
+- **Fix (no design call)**: **click to walk showed its first move a frame late**. A click walk took its first step on the
+  next frame's tick, dated at that frame, so that frame drew the party not yet moving; a key press steps dated at the
+  frame it came after. Now a walk ordered while the party stands takes its first step as of the frame the click came
+  after (`RegionMap::tick_at`), when that frame is at most `CLICK_STEP_BACK` (25 ms) back; after a longer frame it is
+  dated now as before (a first try with no bound dated it far back after a long frame and the walk ran to catch up: the
+  shots diff caught it in `sweep_telegraph`). Test: `emberwake_gui`
+  `region::sprite_tests::a_click_walk_moves_on_the_next_frame` (fails without the fix; also covers the long frame).
+  A key press is dated at the last frame with no such bound (`RegionMap::key`); after a long hitch a held walk could take
+  one quick catch-up step. Not changed here (the walk tests run on their own clock there); a candidate if the PC shows it.
+- **For Design (feel choices, nothing changed)**:
+  1. **Walk speed**: one tile every 200 ms (5 tiles a second); Shift runs (WALKRUN1). Keep, or another pace?
+  2. **No acceleration**: full speed from the first step and a dead stop on release (no ease in or out of a walk).
+     Keep, or a short ease?
+  3. **A turn steps at once**: a new direction pressed mid-walk steps on the next frame, not after the step in progress,
+     so a turn makes a short step (33 ms after the last one); two keys pressed together step twice within a frame or
+     two. Keep (snappy), or queue the turn to the end of the step in progress (even beat)?
+  4. **Hold to run**: running is Shift held; the pad has no run button. Give the pad one (a shoulder or a trigger), or a
+     run after holding a direction a while?
+  5. **Four directions only**: two keys held walk the latest pressed, no diagonal steps.
+  6. **The camera is locked on the party** (no follow lag or look-ahead) and stops at the map's edges. Keep, or a soft
+     follow?
+- **Not in this row**: the hub's frames run about 18.6 ms at p50 in this container's software draw (over 16.7 ms for 60
+  a second); one frame a run over 33 ms on each map. A frame-time row could follow if the PC shows the same.
+- **Docs delta**: `engine/README.md` "No window (HEADLESS1)": the `feel` link request also takes `press` / `release` /
+  `pad_press` / `pad_release` / `wait_ms` / `spike_ms`, `step_ms` and `motion` (ENGINE-49), and `aegis_ui::walkfeel`;
+  the screen trait's list: `Screen::motion`. `docs/STRUCTURE.md`: none.
+- **Shots diff** (every scenario, base `fd88cc64`): 129 shots, the one difference the Scene Runner's data folder path (the
+  base ran from a scratch worktree).
+
+### FB-491: PR7-92 INPUT-REACH2 built; slots pick, place and empty by key, the battle board one Tab stop
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `INPUT-REACH2`
+  the party window, the battle screen) and two game scenarios; no data. **Every golden unchanged** (rules, sim, checks,
+  rules contract, journey, timeline, PHASEFOLD). Shots diff: see the last line.
+- **Spec**: `docs/READY.md` row `PR7-92` (`INPUT-REACH2`), from `FB-489` calls 1, 2 and 4.
+- **Slots without a mouse (calls 1, 2)**, one rule for the skill slots (deck and classic), the gear slots, the pouch and
+  the bunk loadout (the same Gear tab):
+  - Enter on a filled slot picks it (outlined in gold); Enter on another slot then moves or swaps it there, Enter on a
+    list row (owned skill, stash item) puts that row in the picked slot (a swap when filled), Enter on the list itself
+    (the owned list, the stash) empties the picked slot, and Enter on the picked slot again drops the pick. Each place is
+    the same move a drag makes (`accept_drop`), so the rules and refusals are the drag's.
+  - Esc drops a pick (the window stays open); with no pick Esc closes as before.
+  - Space (pad X) on a focused filled slot empties it (unslot or unequip, as a drag to the list).
+  - The hint line (the window's detail box) names the keys while the focus is on a slot or a pick waits, from the
+    player's bindings.
+  - Every slot, empty ones too, and both lists are now in the keyboard ring. A mouse click is unchanged on a worn item
+    and a pouch item (it takes it off); a click on a skill slot or an empty slot does what Enter does.
+  - Engine: `Screen::press_focus(id, key)`, Enter or Space on a focused widget before the shell clicks it (true takes
+    the key).
+  - Tests: `emberwake_gui` `party::reach_slot_tests` `the_keys_pick_place_swap_and_empty_deck_slots` and
+    `the_keys_pick_place_and_empty_gear_slots`.
+- **The battle board is one Tab stop (call 4)**: `Screen::focus_group` (new, engine) names id prefixes of widgets that
+  make one keyboard stop; the battle screen (story and Test Arena) gives its tiles and unit tokens. Tab and Shift+Tab land
+  on the board once (on the tile last focused) and go on to the strip, panels and End turn; on the board the arrows move
+  the tile cursor (the focus ring) among its tiles and tokens only, staying put at the edge; Enter presses the tile or
+  token as a click. The ring of the Test Arena's plan went from 121 stops to 14. Engine: `focus::step_grouped`,
+  `ring_grouped`, `in_group`; the shell keeps the member last focused. Tests: `aegis_ui` `reach` unit test
+  `a_focus_group_is_one_tab_stop_and_the_arrows_walk_inside_it`; `emberwake_gui` `board_focus_tests`
+  `the_board_is_one_tab_stop_and_the_arrows_walk_it`.
+- **Reach**: the report reads the focus group (`report_grouped`, `device_reach_grouped`; `ring` holds the group once,
+  `group` its prefixes). New gate scenarios with `fail` on: `reach_party` (stats, skills, gear, the bunk loadout) and
+  `reach_battle` (the plan before and after a hero is picked, a round resolving). Release run, no window:
+
+  | Screen | Mouse | Ring | Misses |
+  | --- | --- | --- | --- |
+  | Party: stats | 7 | 7 | none |
+  | Party: skills | 22 | 22 (was 15) | none (was 7) |
+  | Party: gear, and the bunk loadout | 17 | 17 (was 7) | none (was 10) |
+  | Battle plan, and a hero picked | 121 | 14 (was 121) | none |
+  | Battle resolve | 14 | 11 | none |
+
+- **Call 3**: the region map is unchanged (d-pad walks, Y gives Tab).
+- **Docs delta**: `engine/README.md`, the screen trait's list: add `Screen::focus_group` (a group of widgets that is one
+  keyboard stop; `focus::step_grouped`) and `Screen::press_focus` (Enter or Space on the focus before its click); the
+  reach line: the report reads the focus group. `docs/STRUCTURE.md`: none.
+- **Shots diff** (every scenario, base `62e57a92`): 129 shots, the one difference the Scene Runner's data folder path (the
+  base ran from a scratch worktree); no shot shows a pick or a moved ring.
+- **Gate**: one run failed on `aegis_cli` `tests/scenario.rs` `each_start_gets_a_free_port_of_its_own_and_a_real_one_is_never_used`
+  ("scratch is gone after"), code this row does not touch; it passed 5 runs of its own and the next full gate. A flake to
+  watch (a scratch folder still there when checked); for the known-issues table if it comes back.
+
+### FB-489: ENGINE-48 INPUT-REACH1 built; a `reach` step, every screen walked, three dead ends fixed, four for Design
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `INPUT-REACH2`
+  (`emberwake_gui`) plus one game scenario; no data. **Every golden unchanged** (rules, sim, checks, rules contract,
+  journey, timeline, PHASEFOLD). `tools/fc.sh shots diff` over every scenario (base `16d0aa02`): 129 shots, the one
+  difference the Scene Runner's data folder path (the base ran from a scratch worktree). The ring clamp moves no shot: no
+  scenario shot shows a focus ring on a whole-canvas widget.
+- **Spec**: `docs/READY.md` row `ENGINE-48` (`INPUT-REACH1`), from `FB-487`.
+- **What landed**:
+  - **`aegis_ui::reach`** (new, engine): pure functions over a screen's widget infos. The mouse set (every enabled widget
+    a mouse can click, pick, drag, drop on or type into, less what a popup's backdrop covers), the Tab ring, what the
+    arrows walk to from the opening focus (each move as the shell makes it), and what a pad reaches from its buttons in
+    the player's `controls` (the ring when a button gives Tab, else its d-pad, and only where `Screen::arrow_focus` is
+    true). Three unit tests.
+  - **Link request `reach`** (no window, `shell/headless.rs`): the report above, plus a frame per ring widget with its
+    focus shown, compared with a frame with none within `REACH_MARGIN_PX` (8) of its box: no change lists it under
+    `invisible`, a box that changes between two plain frames under `unsure`. With `back` it presses Esc once and says what
+    happened (`quits`, `closed`, `opened`, `swapped`, `changed`, `nothing`) and the top screen after.
+  - **Scenario step `reach`** (`name`, `back`, `fail`, `allow`): writes `reach_<name>.json`, adds it under `perf`
+    (`kind` `reach`) with `dead_ends`; `fail` fails the step on a dead end that `allow` does not name. Documented in
+    `engine/docs/authoring/scenarios.md` ("Input reach").
+  - **Gate scenario** `games/emberwake/scenarios/reach_menus.json` (`fail` on): the main menu, load slots, every settings
+    tab and Controls; back closes the load slots and Controls; Esc on the main menu is allowed to do nothing.
+  - Test `aegis_ui/tests/headless.rs` `the_reach_report_names_what_only_a_mouse_reaches` (a drop-only slot is named, a
+    whole-canvas widget's focus shows, a back press reports).
+- **Fixes (no design call)**, each with a test:
+  1. **A whole-canvas widget's focus ring drew off the canvas** (the cutscene's `vignette.next` stage: focus invisible).
+     `draw_ring` clamps the ring to the canvas. Covered by the headless test above.
+  2. **The arrows did nothing on a cutscene** (`rpgkit_ui` vignette, `arrow_focus` false and no other use of them): now
+     they move the focus. `rpgkit_ui/tests/vignette.rs` `the_arrows_reach_every_button_of_the_cutscene_bar`.
+  3. **The arrows walked the party during a conversation, the notice board and a shop on the region map**, so a d-pad
+     could not pick a reply or an item (the walk is held while those are open). `arrow_focus` is now true while one is
+     open. `emberwake_gui` `map_tests::the_arrows_move_the_focus_in_a_conversation`.
+- **Report** (release build, no window, 1280 x 720; scenarios and every `reach_*.json` in
+  `/mnt/project-files/build-tools/input_reach/`, `summary.txt` the table's source). Mouse = widgets a mouse can use;
+  ring = Tab stops. No screen showed an invisible focus after fix 1.
+
+  | Screen | Mouse | Ring | Keys and pad miss | Back (Esc) |
+  | --- | --- | --- | --- | --- |
+  | Title (main menu) | 4 | 4 | none | nothing (root screen) |
+  | Load slots | 1 | 1 | none | closes to the main menu |
+  | Settings: Display, Sound, Gameplay, Battle | 26, 24, 13, 22 | same | none | not pressed per tab |
+  | Settings: Controls | 21 | 21 | none | closes to the main menu |
+  | Cutscene (story card) | 4 | 4 | none (after fixes 1, 2) | opens the skip question |
+  | Skip question | 2 | 2 | none | closes to the cutscene |
+  | Story battle, plan | 126 | 126 | none | not pressed |
+  | Battle results | 2 | 2 | none | not pressed |
+  | Test Arena, plan (and a unit picked) | 121 | 121 | none | not pressed |
+  | Test Arena, resolve | 14 | 14 | none | not pressed |
+  | Region map (hub) | 35 | 35 | d-pad alone: all 35 (the arrows walk; Y gives Tab) | not pressed |
+  | Region map: talk, notice board, shop | 6, 11, 14 | same | none (after fix 3) | board and shop close |
+  | Bunk card | 3 | 3 | none | closes to the region map |
+  | Party: stats | 7 | 7 | none | not pressed |
+  | Party: skills | 22 | 15 | 7 (below) | not pressed |
+  | Party: gear, and the bunk loadout | 17 | 7 | 10 (below) | closes to the region map |
+  | Game menu | 7 | 7 | none | closes to the region map |
+  | World map | 27 | 27 | none | closes to the region map |
+
+  Shops: the region shop above; no separate shop screen was reached in Act 1 play. The pad map is the default (A Enter,
+  B Esc, X Space, Y Tab, LB/RB page, d-pad arrows), so the pad reaches what the keys reach.
+- **For Design** (each needs a call):
+  1. **Party skills: unslotting and reordering are mouse only.** The five slots (`skills.active.0..2`,
+     `skills.passive.0..1`) are drag sources only, and `skills.keystone.0` and `skills.list` drop targets only. Slotting an
+     owned skill by click works. Options: make a slot clickable (pick it, then Enter on a list row swaps; Enter on the
+     slot again unslots), or a context action on the focused slot.
+  2. **Party gear and the bunk loadout: unequipping is mouse only.** Ten drop-only slots (`gear.slot.main_hand`,
+     `off_hand`, `head`, `body`, `accessory_1`, `accessory_2`, `gear.pouch.0..2`, `gear.stash`). Equipping from the list by
+     click works. Same options as 1.
+  3. **Region map on a pad: the d-pad walks, so markers, bunks and the HUD are reached only through Y (Tab).** By design
+     today; confirm, or add a pad button that jumps between markers.
+  4. **The battle plan's ring is about 120 stops** (about 108 of them board tiles), so Tab to the strip or the end turn
+     button is long. Options: tiles out of the Tab ring (arrows only), or LB/RB to jump between board and panels.
+  Esc on the title doing nothing is left as is (the root screen; no quit by Esc).
+- **Docs delta**: `engine/README.md` "No window (HEADLESS1)": add link `reach` (keys and pad reach, focus shown, back;
+  ENGINE-48) beside `feel`, and `aegis_ui::reach`. `docs/STRUCTURE.md`: none.
+
+### FB-487: ENGINE-47 GHOST-SETTLE1 built; the guest's ghost was not flipping, ally_moves kept, strip.block1 under 50 ms
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `INPUT-REACH1`
+  scenario; no data. **No behaviour change**, so **every golden is unchanged** (rules, sim, checks, rules contract, journey,
+  timeline, PHASEFOLD). `tools/fc.sh shots diff` over every scenario (base `16d0aa02`) is clean: 129 shots, the one
+  difference being the Scene Runner's data folder path (the base ran from a scratch worktree).
+- **Spec**: `docs/READY.md` row `ENGINE-47` (`GHOST-SETTLE1`), from `FB-485`.
+- **Part 1, correcting FB-485: the guest's ghost does not flip.** On cages_start each draft was applied to a copy and
+  drafted again; all 16 drafts in the run came back the same on the same board. A preset already drafts from the member's
+  plan cleared (`ai::plan_round_intent` clears it first), and the battle screen already skips re-sending a member whose
+  draft equals what it holds (`draft_ghost`'s `same`). The guest changed on every click because those clicks (`hero.self`,
+  the strip block) changed the first member's plan, and the members after a changed one are redrafted by design (PL8,
+  `reghost_after`). Nothing to change; the new test pins it: `rpgkit_battle/tests/intent_ai.rs`
+  `a_tactic_draft_settles_on_the_board_it_left` drafts each member again under six tactics and finds the same intent,
+  target, steps and planned tiles.
+- **Part 2: `ally_moves` is worked out once while nothing it reads changes** (`Plan::ally_moves`, `moves_key`,
+  `moves_memo`). It is kept with a hash of what it reads: every unit's steps in plan order (each field, the tiles they
+  fixed included), the draft preferences, every round state, every unit's lock and where every unit stands. **The step
+  tile is handled without moving it**: a run that fixes a step's tile (`PlanStep::cell`, set on first compile) changes the
+  key, so that run is not kept and the next call works it out again exactly as before. Under a trial's blocked cells it is
+  never kept. This keeps the planner's results bit for bit (no move of `cell` out of compile, which could have shifted the
+  sim's plans and its goldens). Audit: with `RPGKIT_MOVES_CHECK=1` every kept value is checked against a fresh one; the
+  suites of `rpgkit_battle`, `rpgkit_sim`, `rpgkit_host`, `emberwake_battle`, `emberwake_sim`, `emberwake_rules`,
+  `emberwake_world` and `emberwake_content` pass that way. A first try keyed only each unit's first step and failed the
+  audit (`tactics_map_to_intents`): the first step's compile reads later steps too, so every step is keyed.
+- **Budget**: `feel_battle.json` has a step for the strip block alone (`battle_block`, `input_ms` 50, `frame_ms` 33); the
+  rest of the planning script keeps 100 ms.
+- **Before and after** (release build, no window, 1280 x 720, this cloud container; `/mnt/project-files/build-tools/ghost_settle/`):
+
+  | Input | ENGINE-46 | Now |
+  | --- | --- | --- |
+  | `click strip.block1`, input to present | 55 to 59 ms | 43 to 46 ms |
+  | First `key tab` | 61 to 64 ms | 45 to 46 ms |
+  | `click hero.self` | 52 to 54 ms | 38 to 42 ms |
+  | Planning frames, p50 / worst | 17 / 28 ms | 17 / 24 ms |
+  | Resolve frames, p50 / worst | 14 / 20 ms | 14 / 20 ms |
+
+  The block pick's margin under 50 ms is small on this container (46 ms worst of three runs); the gate's dev build judges
+  it at 125 ms.
+- **Docs delta**: none.
+
+### FB-485: ENGINE-46 FEEL-FIX1 built; planning frames under 33 ms, Settings warmed, a stage floor cache
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `GHOST-SETTLE1`
+  (`emberwake_gui`) plus two game scenarios; no data. **No behaviour change**: every cache gives the pixels and numbers
+  the uncached path gives. **Every golden unchanged**; `tools/fc.sh shots diff` (every scenario, base `b4ad6a83`) is
+  clean: 129 shots, the one difference the Scene Runner's data folder path (the base ran from a scratch worktree).
+- **Spec**: `docs/READY.md` row `ENGINE-46` (`FEEL-FIX1`), the follow-ups of `FB-483`.
+- **What landed**:
+  - **Planning board draw cache** (part 1). `aegis_ui::painter::Snapshot` and `Painter::cached` (new, engine): a layer drawn
+    once and put back (`Canvas::copy_rgba` / `put_rgba`) while its key and the view stay the same. The battle Stage's floor
+    (tray, wings, backdrop, ground, lights, exit gates: passes 1 and 2) is one; its key hashes the art generation, the
+    board's tiles and exits, the zone, set, look and decor, the camera shift, the grid lines and the colours. Marks, ghosts,
+    hover and animation draw over it every frame. Panels: a `nine` panel at any scale is composed once and blitted
+    (`Canvas::blend_rgba`, a row at a time), its cache bounded by count and bytes (`NINE_CACHE_MAX` 64, `NINE_CACHE_BYTES`
+    64 MiB, replacing `REDUCED_MAX` 8).
+  - **Block forecast cache** (part 2). `rpgkit_battle::intent::memo` (new, kit): inside a `memo::scope` over one world,
+    round and plan, `planned_schedule`, `Plan::compile` per member and each forecast tile read are worked out once (they
+    were recomputed about 1200 times a frame). The battle screen's draw opens a scope per frame. Caching applies only to the
+    exact world, round and plan the scope borrows, so a changed plan always reads fresh.
+  - **Settings warm-up** (part 3). `Context::warm` (new, engine, default none): screens the shell draws once, unseen, before
+    the first frame (`Shell::warm`; no tick, no frame counted, audits paused, the canvas cleared after). Emberwake's list
+    is the Settings screen and popup on each of the five tabs (`SettingsScreen::on_tab`): their panels, art, font face and
+    glyphs are cached before the player opens them.
+  - **Budgets**: `games/emberwake/scenarios/feel_battle.json` (cages_start: the plan picks, Tab, Self and the strip block,
+    then a round resolving) and `feel_settings.json` (open, five tabs, back), each `feel` step with `budget` `input_ms` 100
+    and `frame_ms` 33. A dev build (the gate's) judges each budget at 2.5 times (`aegis_cli::scenario::FEEL_DEV_ALLOWANCE`,
+    `feel_misses`); the release run holds the real bar (`tools/fc.sh scenario feel_battle profile=release`). Both pass in
+    release and in the gate. Doc: `engine/docs/authoring/scenarios.md` "Input times"; rows in the scenarios README.
+  - Tests: `aegis_cli/tests/scenario.rs` `a_feel_budget_stretches_in_a_dev_build`; `aegis_ui/tests/theme.rs` (the panel
+    cache stays bounded, now at `NINE_CACHE_MAX`). The goldens and the shot runs check that nothing drawn or forecast moved.
+- **Before and after** (release build, no window, 1280 x 720, this cloud container; `/mnt/project-files/build-tools/feel_fix/`):
+
+  | Run | Before (FB-483) | After |
+  | --- | --- | --- |
+  | Battle planning frames, p50 / worst | 37.7 / 79.9 ms, 37 of 44 over 33 ms | 17 to 18 / 27 to 28 ms, 0 over |
+  | Battle resolve frames, p50 / worst | 20.1 / 34.3 ms | 13.5 to 14.3 / 18.6 to 21.6 ms |
+  | `click strip.block1`, input to present | 112.7 ms | 55 to 59 ms |
+  | First `key tab` in the fight | 84 ms | 61 to 64 ms |
+  | Settings first draw, Controls tab first draw | 50 to 57 ms | 9 to 13 ms |
+  | Battle plan, worst input to present | 112.7 ms | 58.5 ms |
+
+- **Not under 50 ms: `strip.block1` (55 to 59 ms), for Design.** The click's handler takes about 37 ms, nearly all in
+  re-drafting the ghosts of the members after the one changed (`reghost_after`: each later member's tactic preset planned
+  on a copy, `ai::plan_party_intents`, 2 to 9 ms each). About 21 ms of it is one finding: **the guest (fifth member) on
+  cages_start is re-sent on every plan click**: its drafted plan never equals the plan it was given, because the preset
+  planned from plan A gives plan B and from B gives A. Its ghost rows and round target (a tile and Myself) alternate on each
+  click; a player would see the guest's ghost flip. Making the preset draft settle (draft from the member's plan cleared,
+  or keep the last draft while its inputs hold) would cut the click to about 35 ms but changes what the guest plans, so it
+  is not in this row (behaviour unchanged here). The rest of the AI's cost is `Plan::blocked_cells` working out every
+  ally's first move again for each route it tries (`ally_moves`, over half of a draft); a cache there would need the plan's
+  steps to stop fixing their tiles while compiling (`PlanStep::cell`). Both are proposed as rows if Design wants them.
+- **Docs delta**: `engine/README.md` "Feel probe (FEEL-PROBE1)": add "`Context::warm` draws a game's listed screens once
+  before the first frame; `Painter::cached` keeps a layer drawn once (ENGINE-46); a `feel` budget counts 2.5 times in a dev
+  build". `games/emberwake/docs/GAME_BRIEF.md`: none.
+
+### FB-483: ENGINE-45 FEEL-PROBE1 built; input and frame times, and where the battle's time goes
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `FEEL-FIX1`
+  authoring doc; no game code or data. **No behaviour change**: the probe only reads the clock, and the overlay draws only
+  when asked. **Every golden unchanged** (the gate passes; `hello_walk`'s new step comes after its last shot).
+- **Spec**: `docs/READY.md` row `ENGINE-45` (`FEEL-PROBE1`).
+- **What landed**:
+  - `aegis_ui::feel` (new): `Probe` notes each input on arrival and when its handler is done, and closes it with the first
+    frame that started after it: `to_state`, `to_frame` (the wait for the frame loop), `to_present`, the frame's own ms and
+    the `tick` and `draw` the screens took in it. `report` gives p50, p95 and worst, every input and the flagged ones
+    (input over 100 ms, frame over 33 ms).
+  - The shell: the window notes key presses, clicks and wheel turns (`window_event`), pad events (the poll that read them)
+    and each redraw up to `render()`; the no-window loop notes each frame drawn. On with `--feel` or `feel=1` on the command
+    line, or the setting `"feel": true`: an overlay at the top left (last frame, worst of the last second, last input's
+    input-to-present) and a line per input in `feel.log` beside `game.log` (`crashlog::dir`, `append_beside`).
+  - Link request `feel` (no window): replays a script of `key`, `click`, `pad` and `frames` with an optional `times`, `gap`
+    frames after each, and replies with the report.
+  - Scenario step `feel` (`name`, `script`, `gap`, `budget` `input_ms` / `frame_ms`): `feel_<name>.json` in the bundle,
+    under `perf` in `result.json` (`kind` `feel`). `games/hello/scenarios/hello_walk.json` ends with one, so it runs in
+    the gate. Doc: `engine/docs/authoring/scenarios.md` "Input times".
+  - Tests: `aegis_ui/tests/feel.rs` (5: an input closes with the first frame after it, two inputs in one frame, off notes
+    nothing, the overlay text, the report and log flags), `aegis_ui/tests/headless.rs` `a_feel_script_replays_and_times_each_input`,
+    `aegis_cli/tests/scenario.rs` (the step parses; eight refusals).
+- **Report** (release build, no window, 1280 x 720, Normal text, this cloud container's CPU; nothing is presented, so a
+  window adds the GPU copy, the present and vsync's wait). Scenario files and every result:
+  `/mnt/project-files/build-tools/feel_probe/`. Overlay shot: `overlay_planning.png` there.
+
+  | Run | Inputs | Input-to-present p50 / p95 / worst (ms) | Frame p50 / p95 / worst (ms) | Frames over 33 ms |
+  | --- | --- | --- | --- | --- |
+  | Hub walk (`hub_start`: arrows, two click-to-walks, E) | 23 | 19.2 / 29.3 / 29.5 | 18.4 / 27.8 / 31.8 | 0 of 222 |
+  | Region walk (`cages_start`, crossroads: arrows) | 20 | 13.5 / 16.8 / 20.3 | 13.2 / 20.6 / 21.2 | 0 of 110 |
+  | Battle plan (Cages: party picks, Tab, Esc, a block) | 11 | 43.9 / 112.7 / 112.7 | 37.7 / 65.3 / 79.9 | 37 of 44 |
+  | Battle resolve (Confirm, then 120 frames) | 1 | 25.2 | 20.1 / 28.4 / 34.3 | 1 of 124 |
+  | Main menu (arrows, New Game) | 7 | 1.3 / 13.4 / 13.4 | 1.2 / 3.7 / 12.5 | 0 of 33 |
+  | Settings (open, five tabs, Esc) | 6 | 12.0 / 56.8 / 56.8 | 11.4 / 50.3 / 56.6 | 2 of 34 |
+
+  Flagged, and where the time went:
+  - **Battle planning frames, 36 to 80 ms**: almost all in the battle screen's `draw` (35 to 76 ms of each; `tick` under
+    0.1 ms). The board, units and forecast marks are redrawn every frame while planning; resolve frames are about 20 ms.
+    This is the main thing a hands-on playtest would feel (under 30 frames a second while planning).
+  - **`click strip.block1`, 112.7 ms**: 64.6 ms in the click's handler (picking a block re-reads the plan and forecast),
+    then a 48 ms frame.
+  - **`key tab` (first in the fight), 84 ms**: 37.7 ms in the handler, then a 46 ms frame. The second Tab took 2 ms in the
+    handler.
+  - **First draw of Settings and of its Controls tab, 50 to 57 ms**: one frame each, in `draw`; the other tabs are 10 to
+    13 ms. The first frame of a screen lays out its text.
+  - A dev build is about 1.5 to 2 times slower (battle plan frames 43 to 76 ms, the hub walk's frames about 33 ms).
+- **Follow-ups (not built; for Design)**: a draw cache for the planning board (draw the static stage once, redraw only the
+  marks and hovered pieces); move the block pick's forecast re-read off the click (or cache it per plan change); warm the
+  Settings text layout before its first frame. Each would land with a `feel` budget in a release scenario.
+- **Docs delta**: `engine/README.md` "No window (HEADLESS1)": add the link request `feel` (a script of keys, clicks and pad
+  buttons, timed; ENGINE-45) beside `frames` and `clip`; a line for the feel probe (`aegis_ui::feel`, `--feel`, overlay,
+  `feel.log`).
+
+### FB-481: PR7-90 FORECAST-MOVE1 built; a forecast reads the target's tile after every move booked before the hit
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `FEEL-PROBE1`
+  (rules, sim, checks, rules contract, journey, timeline, PHASEFOLD; the crate suites of `rpgkit_battle`, `rpgkit_sim`,
+  `rpgkit_host`, `emberwake_battle`, `emberwake_sim`, `emberwake_world`, `emberwake_rules`, `emberwake_content`,
+  `emberwake_gui` pass).
+- **Spec**: `docs/READY.md` row `PR7-90` (`FORECAST-MOVE1`), PT-85 from `FB-406`.
+- **Cause**: `intent::position_at` walked a moving unit with the move preview over the board as it stood at planning.
+  A friend's tile stopped the walk (the real walk passes through it, ESCAPE-PLAN1 (2)); a tile a friend leaves earlier
+  stayed blocked; a foe stepping in front earlier in the block did not stop it; a cut-short walk's next walk did not
+  re-path.
+- **What landed** (`kits/rpg/crates/rpgkit_battle/src/intent.rs`): the forecast walk now plays each booked walk
+  against where every other unit stands at that walk's moment (earlier blocks, and earlier in the same block by
+  initiative): it passes friends mid-route, takes tiles already left, stops before a unit standing there, stops on a
+  sprung trap, steps back off a shared end tile, and re-paths a walk whose start moved, with the same budget as the
+  round. Big units keep the old preview read.
+- **Tests**: `kits/rpg/crates/rpgkit_battle/tests/forecast_move.rs`, one per logged case (try 2 R2 a walk through a
+  friend, try 2 R4 a foe stepping in front, try 3 R1 a tile a friend leaves earlier). Each plays the round and checks
+  the forecast tile against the tile the round leaves the unit on. All three fail on the old `intent.rs` and pass now.
+  `emberwake_gui` `card_numbers_show_modifiers_and_the_riposte_chip` searched for a pick whose forecast showed a riposte;
+  its old pick had the foe walk off before the hit (stepping the round confirmed it, so the old forecast was wrong). The
+  search now takes only a pick whose hit lands from a tile next to the foe.
+- **Replay**: I replayed run 3's inputs (failed lines left out) from `saves/crucible_entry` with `tools/fc.sh playtest
+  run`. Today's build no longer reaches the logged boards: the PR7-88 fixes change the plans from R1, and the script
+  stops at a refused popup in R3. So the three cases are rebuilt as fixed boards in the tests above rather than replayed.
+- **Not done**: PT-87's foe start tiles (waits on the per-block claim rule, per Design).
+- **Docs delta**: none.
+
+### FB-479: PR7-88 PLAN-FIX2 built in part; five of the six run findings fixed, PT-85 and one PT-87 part left
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `FORECAST-MOVE1`
+  unchanged** (rules, sim, checks, rules contract, journey, timeline, PHASEFOLD; the crate suites of `rpgkit_battle`,
+  `rpgkit_sim`, `emberwake_battle`, `emberwake_sim`, `emberwake_world`, `emberwake_gui` pass). Every change applies
+  only to a round with hand picks, which no golden plays.
+- **Spec**: `docs/READY.md` row `PR7-88` (`PLAN-FIX2`), from `FB-406`.
+- **How**: I replayed the run's own inputs (`run_log.jsonl`, failed lines left out) from `saves/crucible_entry` with
+  `tools/fc.sh playtest run` on today's develop. Try 1 R2's refusal came back word for word. I traced it with a
+  temporary state key, since removed.
+- **What landed** (`kits/rpg/crates/rpgkit_battle` unless named):
+  - **PT-88** (the root cause also covers the odd step costs): the planner's hazard penalty stays on a hero once its
+    auto plan has been drafted (`plan.path_penalties`). A hand move then routed around the burning tiles: Maren's
+    (3,5) to (7,7) took 8 tiles, not 6. That made it "too far", and every pick that rebuilt her was refused for it
+    ("Blocked by Maren's plan"). Now a hero with hand picks walks the shortest route; the penalty only breaks ties
+    (`Plan::pass_route`, `route_plain`). The replay now accepts Kaelen's Billhook Sunder there. Test
+    `picks::a_hand_move_takes_the_shortest_route_past_the_planner_penalty`.
+  - **PT-87, the goldens-safe part**: a later member's ghost plan (no picks, so the planner's, rebuilt after the pick
+    by PL8) no longer claims tiles for a hero with hand picks. That member blocks only the tile it stands on
+    (`Plan::blocked_for`). "Claimed by Vesper's move" and the 14-tile detour to the winch go. A hand-picked move still
+    claims. Test `picks::a_ghost_plan_claims_no_tile_a_hand_pick_needs`.
+  - **PT-86**: a crossbow's band starts at 2. The planner's AS2 kite walks to the farthest band tile, up to 4 tiles,
+    and a hand pick used it too. For a hand pick (`Builder::hand`):
+    - with the foe in the band (inside the foe's melee reach), there is no kite;
+    - with the foe adjacent, the shortest step back that reaches;
+    - out of reach, only the tiles with the shortest walk are ranked.
+
+    The planner's own plans are unchanged. Test `picks::a_ranged_pick_walks_no_farther_than_it_must`.
+    **Spec note for Design**: INPUT1 section 4's archer worked example used the old kite (2 tiles, "10 - 8 = 2, next
+    6"). With one step back it reads "10 - 7 = 3, next 7"; `picks.rs` asserts the new numbers. Please update INPUT1.
+  - **PT-91**: the fill after hand picks (`Builder::fill`'s new `picked`) works like this:
+    - It places no skill that only re-grants a status, whatever the `regrant` switch. Vesper's Move here no longer
+      fills 4 Ash-Cloud Fades; the test reproduces exactly that, `move, fade x4` without the fix.
+    - It places no non-attack skill a hand pick already runs, such as a second Tourniquet.
+    - Attacks may still follow up.
+
+    The planner's whole-round fill is unchanged (the switch's golden ruling, FB-334, stays open). Test
+    `auto_plan_fixes::the_fill_after_hand_picks_does_not_repeat_them`.
+  - **PT-89**: a windup hit that breaks nothing now says why in the round summary: "no breaks (0 of 3 hits into a
+    wind-up: 2 unbreakable, 1 not a breaking hit)", or "missed the break roll". It reads a new `StaggerHit::held`
+    (P12) and the counts `RoundSummary::windup_unbreakable / windup_missed_roll / windup_not_breaking`. The log's
+    goldened `Stagger` detail is unchanged. In the run, Decapitation is `unbreakable`, so the line would read "2
+    unbreakable". `emberwake_gui` `draw::summary_and_prompt` drops the parenthesis whole, never at a comma inside
+    it. Tests `poise::a_windup_hit_that_breaks_nothing_says_why` and an extra case in
+    `visclar_d_tests::the_prompt_survives_the_longest_summary`.
+- **Not done (please re-queue or rule)**:
+  - **PT-85** (forecasts on a target that moves): not started. The three cases need the try 2 and try 3 boards. The
+    replay method above reaches them, and `intent::hit_on` with `planned_schedule` is where the forecast reads the
+    target's tile at the impact. The 415-against-277 gap in the same report is a crit (the card shows it apart).
+  - **PT-87, a foe's start tile**: the planner's blocked set holds every foe's start tile (`blocked_for`), with no
+    knowledge of when a foe leaves. Routing through it needs the foes' booked moves plus the per-block claim rule
+    that stays with Tushar. Not changed.
+  - **PT-88's general rule** ("a pick with no move is never refused by another hero's move"): the logged refusal came
+    only from the detour above, now fixed. A real route clash still refuses under ESCAPE-PLAN1 (2) ("a pick never
+    drops another member's hand picks"). Changing that rule is a decision.
+  - **PT-91's AP strip** ("AP -3" while Vesper ended at 1/10): it followed from the 4 Fades. I have no separate
+    repro, so no other change. "A filled Strike spent Ammo" was not looked at.
+- **Docs delta**: none beyond the INPUT1 worked-example note above.
+
+### FB-477: ENGINE-43 TERRAIN-PARTIAL1 built; partial terrain tables
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `TERRAIN-PARTIAL1`
+  (`checks_golden` included: no shipped or golden data set carried the removed problem or warning).
+- **Spec**: `docs/READY.md` row `ENGINE-43` (`TERRAIN-PARTIAL1`).
+- **What landed** (`kits/rpg/crates/rpgkit_content`):
+  - The content check no longer reports `terrain:missing` (a terrain file that lacks some built-in types), and the
+    warnings no longer list one line per terrain when the file is absent. `View.terrain_file` and
+    `simple::missing_terrain` are gone.
+  - Nothing changed in the loader: `TerrainTable::from_catalog` already gave every type without a row its code
+    defaults.
+  - A listed row still runs `terrain_errors` whole (ranges, glyphs, hazards), so the writer refuses a bad one.
+  - Test `tests/terrain_partial.rs`: a one-row table (floor) is written, checks and warns clean, keeps its own numbers,
+    and the other 16 types match `TerrainTable::builtin()`; a listed row out of range is refused.
+- **Docs delta**: `engine/docs/authoring/kit_game.md` and `games/kit_sample/data/README.md` now say terrain rows are
+  optional per type (done here). For Design: any spec or brief line saying "all 17 terrain rows or none" is outdated.
+
+### FB-475: ENGINE-42 KIT-SAMPLE1 built; the kit's sample game
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `KIT-SAMPLE1`, `TERRAIN-PARTIAL1`
+- **Spec**: `docs/READY.md` row `ENGINE-42` (`KIT-SAMPLE1`).
+- **What landed** (`games/kit_sample/`, made with `aegis new game kit_sample`, then given the kit):
+  - `game.json` `"kit": "rpg"`, so the kit library is an asset layer. The crate depends on engine and kit crates only.
+    Its CLI uses the kit's content kinds (`RpgContent`).
+  - Data, all through `kit_sample_cli content upsert`: the 5 skills the kit requires plus `strike`, 2 classes
+    (`ks_fighter`, `ks_shooter`), 4 class-derived units, and the encounter `ks_skirmish` (2 a side, zone
+    `stone_arena`, decor `fire_pit` at (6, 0)). `content check` is clean apart from one warning per default terrain.
+  - The fight (`battle.rs`) is the kit's `Session`, each round drafted by `auto_draft(AUTO_PRESET)` and resolved.
+  - The board (`screens.rs` `draw_stage`) draws the kit stage passes: backdrop, composed ground, light, exit gate,
+    face, then props, decor and bodies in feet order. It uses stage set `ks_stage`: `floor/sheet.png` is a 256 x 192
+    crop of the kit library's floorboards, and `stage.fx.json` gives zone `stone_arena` a tint and a light spot and
+    the `fire_pit` a light of radius 3. Bodies and the prop come from the kit library.
+  - Scenario `kit_sample_fight`: menu, Start, board (shot), a round, to the end (shot), back. It passes, and the gate
+    runs it in `scenarios_all` and `shotsexact`. 5 tests: folder and scenarios, the kit's content check and the art
+    found, the fight ending the same way twice, the stage set's zone and light, and the host.
+  - `engine/docs/authoring/kit_game.md` (new): starting a kit game from the sample. Indexed in the authoring README;
+    `battle_stage.md` links to it.
+  - Kit asset `kits/rpg/assets/ui/views/shop.view.json`: the kit library ships the shop layout, so every kit game's
+    layout check wanted a shop fixture. This is the game's fixture with the names made neutral (Coin, The Counter,
+    Traders); the game's own fixture still overrides it.
+- **Kit change**: `rpgkit_content::source::xp_curve`: a missing `progression/xp_curve.json` now means the default
+  curve with no problem. A file that does not parse or validate is still a problem. Before, a kit game without the
+  file failed `content check`, and the file is no content kind, so there was no sanctioned way to write it. Emberwake
+  ships the file, so nothing changes for it.
+- **Findings** (not changed):
+  - The class-reference message reads "unknown classe" (`singular` of `classes`). It is recorded in
+    `checks_golden`, so fixing it needs a re-record.
+  - Terrain rows are all or nothing (one row makes the other 16 required), so a small game keeps the code defaults
+    and gets 17 warnings.
+  - In this fight the party loses at the round limit. The sample shows the loop, not balance.
+- **Shots**: `/mnt/project-files/build-tools/engine-42/` (board and end).
+- **Docs delta**: `STRUCTURE.md`: a `games/kit_sample/` row beside `games/hello/` ("the RPG kit's sample game,
+  ENGINE-42"). `README.md` / `GAME_BRIEF` games list: the same. `engine/README.md`: link `kit_game.md`.
+  `CLAUDE.md` layers line could name `games/kit_sample/` as the kit's sample game, as it does for hello.
+
+### FB-473: ENGINE-41 STAGE-KIT1 built; the battle stage drawing is the kit's
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `STAGE-KIT1`
+- **Spec**: `docs/READY.md` row `ENGINE-41` (`STAGE-KIT1`).
+- **What moved**: the whole stage module, `emberwake_gui/src/stage.rs` and `stage/composed.rs`, to
+  `kits/rpg/crates/rpgkit_ui/src/stage.rs` and `stage/composed.rs` (git moves). It already named no game; it now
+  reads the kit crates directly (`rpgkit_battle`, `rpgkit_content`, `rpgkit_data`, new dependencies of `rpgkit_ui`
+  with `indexmap`). That is the `stage.fx.json` reader (zones, spots, lights, lip, decal density), the composed
+  battle ground, decor drawing, the wall-run caps, the exit path and gate, the geometry and the draw passes.
+- **What the game keeps** (`emberwake_gui/src/stage.rs`): `pub use rpgkit_ui::stage::*`, and `impl StageSizes for
+  Tuning`. `Geom::new(view, &impl StageSizes)` replaces the one reference to the game's `Tuning`, so the 36 call
+  sites are unchanged. The kit also gives plain `Sizes` for a game with no tuning.
+- **Tests**: 44 stage tests moved with the module and pass unchanged, `TODAYS_FRAME` among them. They draw at
+  `SIZES` (40, 28, 5), the game's default tuning, and use a kit-local `gfx()` canvas. Five tests that read the
+  game's own art, data or settings stayed in the game, unchanged: the shipped terrain rows, the two backdrop tests,
+  the feet pass and the cover reveal. So did a copy of `painted_root`, which the map view's test uses. New game test
+  `the_default_tuning_and_settings_match_the_kits_stage_tests` holds the two defaults the kit tests had asserted
+  (Tuning sizes and the `battle_view` setting).
+- **Shots**: `tools/fc.sh shots diff scenarios=all` against `dbb6e8bb`: 128 of 129 unchanged. The one change is
+  the scene runner's developer panel, which prints the data folder's path (the base ran in a scratch worktree). No
+  stage shot moved. Goldens unchanged.
+- **Layers**: one comment example named a game set; it now uses a made-up set name.
+- **Docs**: `engine/docs/authoring/battle_stage.md` now places the stage drawing in the kit.
+- **Docs delta**: `STRUCTURE.md`: `rpgkit_ui` row gains `stage` (the battle stage, ENGINE-41); the `emberwake_gui`
+  `stage.rs` row becomes "re-exports `rpgkit_ui::stage`, `StageSizes` for `Tuning`". `kits/rpg/README.md` UI line:
+  add `stage`. `GAME_BRIEF` lines that point at `emberwake_gui/src/stage.rs` can point at `rpgkit_ui::stage`.
+  `HISTORY.md`: none (a move).
+
+### FB-471: ENGINE-40 ENGINE-GUIDE2 built; the authoring guide catches up, and hello shows the ground composer
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `ENGINE-GUIDE2`, `STAGE-KIT1`
+- **Spec**: `docs/READY.md` row `ENGINE-40` (`ENGINE-GUIDE2`).
+- **What landed** (`engine/docs/authoring/`):
+  - New `battle_stage.md`: which layer owns each part; stage set files and sizes (`<terrain>/sheet.png`, `decal/`,
+    `front_face/`, `lip/<terrain>/`, `cover/`, transition pieces); the composed ground; every `stage.fx.json` key
+    (`lip`, `spots`, `lights`, `decal_density`, `zones.<zone>.set` / `tint` / `terrain`) with an example; encounter
+    `decor` and world `decor_pool` with the generated-board rule and the checks; painted sheets (`foot`, `painted`).
+  - `scenarios.md`: run-wide `set=`, `audit=1` and `save=` (a name or an absolute folder), a two-size sweep example,
+    and a section on `tools/fc.sh shots diff`.
+  - `naming_and_asset_briefs.md`: "Renaming an id" (`content refs`, `content rename`, `--apply`, the matching rule).
+  - `region_grounds.md`: "Points the party can look at" (every point `use`, `look` among them).
+  - The index (`README.md`) gains the new page and names the new sections.
+- **Sample game** (`games/hello/`): the field's grass and a dirt path are now one picture from the engine's ground
+  composer (`aegis_ui::ground`, textures from `ground::two_tone`, so no files), made once and cached by its key; the
+  walls stay tiles on top and the walk reads only the walls. Test
+  `the_field_ground_composes_the_same_picture_with_a_path_on_it`; `hello_walk` passes (its `field` and `walked`
+  shots change: they show the path). README row "Ground".
+- **Finding for Design**: the code that reads `stage.fx.json`, draws the composed battle ground, the lights and the
+  decor lives in the game's GUI crate (`stage.rs`, `stage/composed.rs`), so a second game on the kit gets the files
+  checked but not drawn. The page says so. A later row could move the stage look reader and the board compose into
+  the kit's UI crate (`rpgkit_ui`); I have not queued or started it.
+- **Docs delta**: `engine/README.md` could link `engine/docs/authoring/battle_stage.md` beside the region grounds
+  line; `STRUCTURE.md` engine docs row: add `battle_stage.md`.
+
+### FB-469: ENGINE-39 TARGET-PRUNE1 built; fc.sh prune and a low-disk prune before the gate
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `TARGET-PRUNE1`
+- **Spec**: `docs/READY.md` row `ENGINE-39` (`TARGET-PRUNE1`).
+- **What landed**:
+  - `tools/fc.sh prune [target=<dir>] [--dry]`: in each `<target>/<profile>/deps` it groups the executables named
+    `<name>-<16 hex>` by name, keeps the newest (by modified time) and removes the rest; then it removes each
+    `<target>/<profile>/incremental` folder (the gate builds with `CARGO_INCREMENTAL=0`). Libraries (`.rlib`,
+    `.rmeta`, `.so`, `.d` and the like) and unhashed files stay. `--dry` lists the count and size and removes nothing.
+  - `tools/fc.sh gate` runs it first when the target folder's disk has under `FC_PRUNE_MB` (default 6000) MB free, and
+    says so in one `[gate]` line.
+  - Test: `tools/planner/test_prune_target.py` (a fake target folder: the newest per name stays, libraries stay, a dry
+    run removes nothing, a missing folder is nothing to do), run by `plannertests`.
+- **On this cloud session**: the first run removed 45 stale binaries and folders, 1.16 GB.
+- **Known-issues**: the cloud disk-full row now starts with `tools/fc.sh prune`.
+- **Docs delta**: `docs/workflow/cloud.md` disk note could name `tools/fc.sh prune` (the gate runs it on its own when
+  low). No README change needed (the verb is in `tools/fc.sh` help).
+
+### FB-467: ENGINE-38 LORE-RENAME1 built; content refs and a dry-run-first rename
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `LORE-RENAME1`
+- **Spec**: `docs/READY.md` row `ENGINE-38` (`LORE-RENAME1`).
+- **What landed**:
+  - `aegis content refs <kind> <id>` (`tools/fc.sh content refs ...`) prints every JSON string in the data folder
+    (catalogs, worlds, seeds) that names the id, as `file:line: text`, then every asset file or folder under
+    `<game>/assets` named by it.
+  - A string names the id when it is the id, or when one of its `/` or `:` parts is the id or has the id as its stem
+    (`rogue/<id>`, `portraits/<id>.png`, `<world>:<id>`). Prose and longer ids (`<id>_elder`) never match.
+  - `aegis content rename <kind> <old> <new> [world=] [--apply]`. Without `--apply` it lists the files (with string
+    counts) and the asset moves and writes nothing. With `--apply` it rewrites only the matching strings, so each file
+    stays byte for byte otherwise, and moves the asset files or folders. Everything is put back if the game's
+    `content check` then lists a problem it did not list before.
+  - The kind's entry must exist and the new id must be free. `flag` is the kind with no entry.
+- **On the real data**: `refs units tallow_dredger` lists 30 places in 13 files (data and seeds) plus
+  `assets/units/rogue/tallow_dredger/`. An applied rename to `tallow_skimmer` on a copy of the game added no
+  content-check problem and left no reference behind. The shipped data is not changed.
+- **Limits**:
+  - It matches by text across all kinds, so an id shared by two kinds (a unit and a character both called `x`) is
+    renamed in both. The dry run shows each place, so check the list.
+  - Ids inside Rust code, docs, scenarios or playtest recordings are not touched (`tools/fc.sh rename` covers code).
+  - The cloud can't push moved LFS art; the PC push thread lands such a move.
+- **Seam**: reads and probes go through `aegis_core::vfs`; its file writes and moves are native tooling, so
+  `aegis_core/tests/fs_lint.rs` lists `rename.rs` among the writers and allows `rename` beside `write`.
+- **Tests**: `engine/crates/aegis_content/tests/rename.rs` (fixture game: a unit referenced by an encounter, a quest, a
+  seed, an art folder and a portrait path; the dry run writes nothing; refs lists every place; prose and longer ids
+  stay; a rename that adds a problem is put back).
+- **Docs delta**: for `engine/README.md` (content commands) and `docs/STRUCTURE.md` tools list: `aegis content refs`
+  and `aegis content rename` (dry run first).
+
+### FB-465: ENGINE-37 LOOK-POINT1 built; a look-only point, the winch drum off its flag
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `LOOK-POINT1`
+- **Spec**: `docs/READY.md` row `ENGINE-37` (`LOOK-POINT1`).
+- **What landed**: a `point` marker may take `use: "look"` (`rpgkit_data::LOOK_USE`, in `POINT_USES`): it is listed in
+  the Here list (any point with a use is), acting on it logs its line ("The gorge winch drum: Greased iron chain ...")
+  and does nothing else, it sets no flag and is never spent, and it draws the Look glyph. The content check takes it
+  like the other uses. `crucible_watchpost`'s `winch_post` now has `use: "look"` and no `sets_flags`, so
+  `sunk_ward.winch_seen` (read by nothing) is gone. Seed `engine_37.json` writes the location's `markers` field.
+- **My guess**: the row says "a marker kind". I added a point `use` rather than a new marker kind, because a point
+  already has the label, note, Here row and glyph, so one value covers it. Say if a separate kind is wanted.
+- **Tests**: kit `rpgkit_world/tests/points_of_interest.rs` `a_look_only_point_is_present_and_answers_with_its_line`;
+  `rpgkit_content/tests/point_use.rs` covers every use; game `region.rs` `pt43_usable_points_join_the_here_list` (a
+  look point is listed and acting on it sets no flag).
+- **Docs delta**: `GAME_BRIEF` or the authoring notes, if they list point uses: add `look` (listed, answers, sets
+  nothing).
+
+### FB-463: PR7-87 FORECAST-FIX1 built in part; the forecast follows moves, pushes and stealth
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `FORECAST-FIX1`
+  check `hit_forecast_timeline` green).
+- **Spec**: `docs/READY.md` row `00g3b` `PR7-87` (`FORECAST-FIX1`).
+- **Correction to FB-459 (PT-67)**: a shaped blow's forecast already re-reads its shape on the target's tile
+  (`intent::area_cells`, PT-17). The real gaps were in where the forecast puts units at the impact
+  (`intent::position_at`), which only followed Walks, and that it never read stealth. Fixed both:
+  - `position_at` now follows a carried Engage (as it starts), a Disengage (its landing tile) and a carried retreat
+    (after its hit), each landing before the block read. Vesper's Hamstring Sever retreat was invisible to it.
+  - A new fail `HitFail::Hidden` ("lost (stealth)"): an attack on a target, or a blow shaped on it, that holds stealth
+    (now, or granted by its own action landing earlier) and has moved by the impact is forecast lost, as the resolver
+    loses it (`intent::hidden_at`, matching `round_intent::hidden`).
+- **PT-69**: a push or pull from another unit's attack locked on a unit, landing earlier, moves that unit in the
+  forecast (`forced::forecast` steps), so a pushed foe's own blow is read from its new tile and its new target shows
+  the incoming hit.
+- **PT-72 (rest)**:
+  - At pick time the kit already returns every later member's dropped pick, but the battle screen showed only the first.
+    It now shows all of them, each named when there are several (`input::dropped_message`).
+  - An earlier member's hand pick can't be voided: such a pick is refused with the reason. An auto plan that a pick
+    breaks is redrafted at confirm. A sweep of every tile on a test board found no pick that breaks one. I added no
+    second notice, since I couldn't test it.
+  - The odd costs ((7,4) 4, (8,4) 9) and "No path" through a foe leaving in B1: not reproduced. The run log keeps only
+    200 characters per read. Not done; `ENGINE-35` can capture the full board with `keep_saves=` and a `save=` shot.
+- **Tests**: kit `hit_fail.rs` `a_stealthed_target_that_moves_is_forecast_lost`,
+  `a_disengage_before_the_impact_moves_the_forecast_target`, `a_push_before_a_blow_moves_the_forecast_attacker`; game
+  `battle/input.rs` `every_dropped_pick_is_said_at_pick_time`; `hit_forecast_timeline.rs` counts `Hidden` as a fail.
+- **Docs delta**: none.
+
+### FB-461: ENGINE-36 TOOLS-REPEATS2 built; shots from a save, seed-from for many ids, kept playtest saves
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `TOOLS-REPEATS2`
+- **Spec**: `docs/READY.md` row `ENGINE-36` (`TOOLS-REPEATS2`).
+- **What landed** (engine `aegis_cli`, tools):
+  - (1) `scenario shots <name> save=<name or absolute folder>` launches from a save (a name under
+    `scenarios/saves/`, or any folder, such as a kept playtest save), so a map or hub proof shot is one line:
+    `tools/fc.sh scenario shots hub save=/abs/dir do=click:menu.continue,screen:region_map,shot:map`. A scenario
+    file's `launch.save` takes an absolute folder too. It reuses the `do=` steps rather than adding a game-named step
+    (the engine names no menu ids). Live check: `build-tools/engine-36/hub_from_save.png` (the hub from `hub_start`).
+  - (2) `tools/fc.sh seed-from <kind> [<world>] --ids a,b,c [--set k=v]... [--fields a,b]` writes one step per id
+    (same changes for each, in order; an empty or repeated id list is refused).
+  - (3) `tools/fc.sh playtest start keep_saves=<dir>` keeps each `save <name>` also as `<dir>/<run>/<name>` and the
+    saves as the game stops (`stop`, `quit`, the end of `run`) as `<dir>/<run>/last`. A cloud thread passes
+    `/mnt/project-files/build-tools/playtest_saves/`; the engine names no path.
+- **Fix to PR7-83**: its `forced.rs` comment named a hero, which the gate's layers step refuses (the PR7-83 gate stopped
+  early, so I missed it); the comment now names no one. develop failed `layers` between the two landings.
+- **My guess**: (1) read "a scenario step" as the `shots` keys plus `launch.save` taking a folder path, not a new step
+  kind, since loading a save happens at launch. Say if a mid-scenario load step is wanted.
+- **Tests**: `aegis_cli` `tests/scenario.rs` `a_save_folder_by_path_launches_shots_with_no_scenario_file`;
+  `agentplay.rs` `keep_saves_copies_the_saves_beside_the_run` and the session file round trip;
+  `tools/planner/test_tools_help.py` `test_ids_write_one_step_per_id_in_one_call`.
+- **Docs delta**: `engine/docs/authoring/agent_playtest.md` updated here (the `keep_saves=` lines). For `engine/README.md`
+  or `docs/STRUCTURE.md` (tools list), if they list the shots keys: add `save=` to `scenario shots`, `--ids` to
+  `seed-from`, and `keep_saves=` to `playtest start`.
+
+### FB-459: PR7-83 ACT1-FIX3 built in part; two rule fixes held because they move the sim golden
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `ACT1-FIX3`, `FORECAST-FIX1`
+- **Spec**: `docs/READY.md` row `00g3` `PR7-83` (`ACT1-FIX3`, `FB-392` findings).
+- **Fixed** (goldens unchanged):
+  - PT-73: a partial escape (some heroes out, fewer than needed, none left fighting) reads "Partly escaped" on the
+    banner and the results, with the reason "2 of 3 got out; the escape needed 3." (kit `Session::partial_escape`,
+    used by `end_reason`; game `hub::PARTLY_ESCAPED`). A retreat or a round-limit end is never partial.
+  - PT-75: the boss bar's span shows HP carried over from a phase that ended by time (" +138"), and its hover says
+    "This phase: left/span" and "Carried over: n HP from an earlier phase that ended by time, still to take."
+  - PT-76: `tallow_dredger` short name "Tallow Dredger" (seed `pr7_83.json`, fields only).
+  - PT-79: Enter at "Round over" only dismisses the summary (a second Enter confirms); a party slot click always
+    selects (no toggle off); Escape steps back one layer at a time and stops once with nothing open before it leaves.
+  - PT-81: planning a second exit move reads "{name} leaves by the exit earlier in this plan; nothing can follow."
+  - PT-84: a pull or push of 0 tiles with nothing stopped logs nothing.
+  - PT-68 (text): stealth hides a unit only from single-target attacks, and only in a round it moved
+    (`round_intent::hidden`); Ash-Cloud Fade now says so ("for 2 rounds, a single-target attack cannot find you
+    in a round you moved"; the old text also read "2 rounds rounds"). The hits in the run were area attacks (Heretic's
+    Brand, Hammer Strike) or rounds Vesper did not move.
+  - PT-69 (text): the Pulverizer is `unbreakable`, so `sure_break` cannot break its wind-up; Winch Sunder now says
+    "breaks a windup outright (not an unbreakable one)".
+- **Held for Design** (each tried, each moves `sim_golden`; reverted, per "goldens unchanged"):
+  - PT-71: an arriving wave passing over the tiles the party's planned walks claim. Tried the whole path, then the goal
+    only: both change `sim_golden` (the sim's waves land on claimed tiles). The kit helper
+    `World::place_leftovers_avoiding` is in, tested and unwired. Options: (A) wire it, re-record `sim_golden` as the
+    intended change (recommended: one line, low undo cost); (B) leave spawns as they are. On the "dropped move with no
+    log line": every cut walk logs "[Move Cut Short] ..."; the run log keeps only 200 characters of each read, so I
+    could not find the dropped line. `ENGINE-35` could capture the full log.
+  - PT-70: a re-route that would end a block farther from the goal stays put (tried for every unit, then the party
+    only: both change `sim_golden`). On open ground a cut walk already re-routes toward its goal (test below); the
+    run's "wrong way" looks like the long way round a closed gap. Options: (A) party walks never end a block farther
+    from the goal, re-record `sim_golden` (recommended); (B) keep the shortest route even when it starts away.
+- **Reported, not changed**:
+  - PT-72, the path-claim rule (no change made). Today a planned move claims every path tile for the round, so a
+    1-tile gap passes one hero a round. Options: (A) keep; (B) a move claims each tile only in the block it walks it,
+    so a friend may follow a block later (recommended: matches what players expect, friends already pass mid-block);
+    (C) claim only block-end tiles. The rest of PT-72 (the "voided by a later pick" line at pick time, odd costs,
+    "No path" through a foe leaving in B1) is not done: the pick already returns the dropped later picks
+    (`Session::pick`), the game does not show them at pick time yet. A follow-up row.
+  - PT-74: the auto plan is the sim's planner, so teaching it the escape objective changes `sim_golden` by
+    construction. Not started; it needs an intended re-record.
+  - PT-67: my reading (not proven by a test): Hammer Strike is a shaped Assault, so at impact its shape is re-read on
+    its target's tile (`CmdKind::Area.target`); the forecast reads the cells fixed at planning, so a disengage looked
+    safe ("-0") while the blow followed Vesper. Fix: the forecast follows the target the same way. Not done this row.
+  - PT-69 (forecast part): a pushed skill's new target showing an incoming forecast is not done.
+  - PT-80: data, not a rule. Tourniquet is 3 AP, 2 blocks and Cauterize (brimstone) 2 AP, 1 block on every target;
+    both reach 2 tiles, so a far ally adds the walk to reach (my reading of the 8 AP and 4 blocks; not traced in a
+    test). The "-3 blocks, -3 AP" rows after a Move pick show what that Move already spends.
+- **Tests**: kit `escape_plan.rs` `an_escape_short_of_its_count_reads_as_partly_escaped`,
+  `an_arrival_passes_over_a_claimed_tile`, `a_move_cut_short_reroutes_toward_its_goal`; game `hub.rs`
+  `a_partial_escape_reads_partly_escaped`, `boss_ui1_tests.rs` (carried HP), `input1_tests.rs`
+  (`a_fresh_escape_with_nothing_open_leaves_at_once`, `enter_at_round_over_only_dismisses_the_summary`, the
+  Escape steps), `visclar_d_tests.rs` (the second Enter confirms).
+- **Docs delta**: none.
+
+### FB-457: PR7-80 WALLMASS1 built; wall runs as one mass, north and south exit paths
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `WALLMASS1`
+- **Spec**: `docs/READY.md` row `00g2` `PR7-80` (`WALLMASS1`).
+- **What landed** (game `stage.rs`, engine `aegis_ui`):
+  - (a) A run of blocks (side by side) shares one cap: the cap's tile variant is picked at the run's root (its
+    topmost, then leftmost cell), so neighbours never change art at their seam (`stage::run_root`). When the wall
+    terrain has a ground sheet (`<dir>/wall/sheet.png`, none ships yet), each cap is cut from the sheet at its place
+    on the board, so the caps continue one picture (`stage::sheet_cap`); Art/UI can add one per set. Side lines and
+    the top lip were already drawn only on the run's outline, and stay so. A run joined to the back row takes a
+    darker shade (`OUTER_CAP_SHADE`, alpha 46) toward the back rows' look. No walkability change.
+  - (b) Top and bottom exits draw `props/<set>/exit_path_north/v*` (the bottom one flipped top to bottom); the side
+    exits keep `exit_path` (mirrored on the west); a set without the north art falls back to the east art
+    (`stage::exit_look`). Engine: `Image::flipped` and `Art::image_flipped` (cached beside the mirrored copies).
+- **My guess**: "the cap lowered toward the back rows' look" read as a darker tone on back-row runs, not a smaller
+  lift (a lower lift moves every block's rect, decor on blocks and the depth sort). Say if a real lowering is wanted.
+- **Golden**: `stage.rs` `TODAYS_FRAME` re-recorded `0xffa27f50b69d7596` -> `0x7898f381e249352d`, the one intended
+  change (one variant per wall run, the back-row shade).
+- **Tests** (`stage.rs`): `adjacent_walls_share_one_cap_and_a_lone_wall_keeps_its_outline` (one root and variant, no
+  side line between neighbours, a lone wall keeps both, a sheet's caps continue across the edge, the back shade);
+  `top_and_bottom_exits_take_the_north_art_flipped_for_the_south`.
+- **Shots** (`fc.sh shots diff`, base `83c8e910`): 12 of 18 changed, all on the walls (one brick variant per run, the
+  darker back band). Sheet `build-tools/pr7-80/shots_diff_sheet.png`, with two before | after crops beside it.
+- **Docs delta**: `docs/HISTORY.md` row: "2026-11-22 PR7-80 WALLMASS1: the stage frame golden re-recorded for one tile
+  variant per wall run and the back-row shade." `engine/README.md` `aegis_ui` line: add `Image::flipped`,
+  `Art::image_flipped`.
+
+### FB-455: ENGINE-33 XL-SWEEP1 built; the Extra large sweep, four fixes, findings
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `XL-SWEEP1`, `XL-FIX2`
+- **Spec**: `docs/READY.md` row `ENGINE-33` (`XL-SWEEP1`).
+- **Sheet**: `build-tools/engine-33/xl_sweep_sheet.png` (fixes before and after, then the findings), with the per-shot
+  audit lists `audit_xl.txt` and `audit_normal.txt` beside it.
+- **How it ran** (engine and tools):
+  - `aegis scenario run` (and `fc.sh scenario`, `shots-all`) take `set=<key>:<value>,...`: settings laid over every
+    scenario's own (the driver's held settings and `mute` refused), so one run takes every screen at
+    `set=text_scale:1.3`.
+  - `audit=1`: after every shot the text audit of that frame is kept beside it as `<shot>.audit.json` (cut, edge,
+    overlap, spill); `shots_all.py collect` copies them and writes `audit.txt`, the shots with a problem, most first.
+  - The sweep: all 34 scenarios, 129 shots at 1280x720, at Normal and at Extra large, compared with `compare=` (the
+    sheets of every shot side by side). Extra large raised the shots with a listed problem from 38 to 63.
+- **Fixed here** (tests in `battle/tests/xl_battle_tests.rs` and `worldmap.rs`):
+  - Battle plates (party and Hostiles): "hp/max" with its planned loss ran past the plate ("120/120 -120"); the
+    maximum now drops first ("120 -120") only when the two would not fit (`plates::hp_fit`). Test
+    `a_plate_drops_its_maximum_before_the_loss_runs_past_it`.
+  - The docked unit card: a long name ran into the HP numbers under it ("Watch Crossbowman" over "136/136"); with
+    no title line and a name line taller than its slot, the name stops before the numbers, and a cut name hovers to
+    its full words. Names are now fitted in the display face they are drawn in. Test
+    `the_card_name_stops_short_of_the_hp_numbers` (it fails without the fix).
+  - The boss bar name: fitted in the display face, its box as tall as its line (it spilled at Extra large).
+  - The world map side panel: "No open road to `<place>`." wraps instead of being cut, and wrapped lines step a whole
+    line at larger text (8 at Normal, as before). Test `the_side_panel_lines_grow_with_the_text_size`.
+  - At Normal no text moved (the 16 Normal shots that changed are the ground art from develop).
+- **For Art/UI** (layout file `kits/rpg/assets/ui/layouts/shop.json`, not edited here): at Extra large "Confirm
+  trade" is cut to "Confirm t..." and the shop row's "+10" button sits over the Trade column's edge. A wider Confirm
+  button and a little more room for the row buttons would clear both.
+- **For Design** (bigger than a layout fix; my guesses in brackets):
+  - (a) The battle strip's "Round 1 of 12" is always cut to "Round 1..." at Extra large (the hover has the words) and
+    its line touches the goal line under it. [Shorten to "R 1/12" at large sizes, or rely on the bottom bar's
+    "Round 1/12".]
+  - (b) The Character Stats and Gear stat rows are 12 units high; at Extra large the lines nearly touch and "Debuff
+    resist %" meets its value. Readable, but tight. [Grow the row with the text size.]
+  - (c) Ellipsis cuts by design remain: shop item names, "Party (24 points to spend)" on the hub menu, the save
+    slot's place, skill lines on the Skills tab, the timeline's foe names. Most have a hover; a pass to check each
+    hover is listed in `audit_xl.txt` under `cut`.
+  - (d) Audit noise worth knowing: the board's tile widgets count as controls, so the battle log and the ally menu
+    over the board show as spills; `layout_audit` already skips them, `text_audit` does not. [A later engine row: a
+    screen may name boxes the audit ignores.]
+- **Docs delta**: `engine/README.md` scenario line: add `[set=<key>:<value>,...] [audit=1]` to `aegis scenario run`
+  (settings over every scenario; a text audit beside each shot). `STRUCTURE.md`: none.
+
+### FB-453: PR7-82 RETRY-SAVE-FIX1 built; the autosave after a lost fight works again
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `RETRY-SAVE-FIX1`
+- **Spec**: `docs/READY.md` row `00f3` `PR7-82` (`FB-392` PT-66).
+- **Cause**: `PR7-75` keeps an encounter's lost tries in `gs.rolls` under `retry:<encounter ref>` (for example
+  `retry:sunk_ward:enc_evt_03`), but the save's check took only a plain stream id as a `rolls` key, so every save after
+  a lost or fled fight was refused.
+- **What landed** (kit, `rpgkit_world`):
+  - `state::roll_key_ok`: a `rolls` key is a stream id or `retry:<ref>`, the ref a qualified id `world:id` or a plain
+    id; the check uses it, and its message names both forms. The key and the count stay as they were, so
+    `retry_seed` gives the same seed for the same count, and an old save (with no retry keys) loads as before.
+  - A fight with no encounter ref no longer writes a `retry:` key (it has no seed to vary, and the key was invalid).
+- **Test**: `rpgkit_world/tests/world_fight.rs` `a_lost_fight_saves_and_reloads_with_its_retry_count` (a loss
+  validates, saves, reloads with its count and rolls the same retry seed; malformed keys still refused).
+- **Docs delta**: none (no README names the `rolls` keys).
+
+### FB-451: PR7-77 DIORAMA5 R6 built; no grid at rest, coherent blobs, no pieces over the blend
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `DIORAMA5`
+- **Spec**: `docs/READY.md` row `00f2` `PR7-77` R6 (user 2026-11-22 08:45), with Art/UI's continuous cobbles (PR #95).
+- **What landed**:
+  - Grid: `tuning.json` `grid_alpha` 0 (the tuning now takes 0). The Settings row is "Show full grid" (same key
+    `board_grid`), off by default; on, the full grid shows faint at rest (`stage::FULL_GRID_ALPHA` 34) and at
+    `grid_alpha_planning` while planning. Off, no lines at rest or while planning: the cells that matter keep the marks
+    they already had (the hover plate, the Move's tiles while it waits, the target and area plates), so no new outline
+    was added.
+  - Blobs: the composer's random patches (about a cell each) are off on the battle board; instead up to 3 placed
+    patches 2 to 4 cells wide and 2 to 3 high, picked by the board's seed, each on one open non-sunken ground with a
+    ring of that ground (`composed::blobs`, `BLOB_STRENGTH` 0.14). The composer's tone noise and edges were already
+    sampled by art pixel over the whole board.
+  - Sheets were already sampled by board pixel with a seeded offset (the composer's texture offset), so their seams do
+    not sit on cell lines (unless the offset falls on a multiple of 64, one chance in 64 per axis).
+  - No `over_*` transition piece draws when the ground is composed; a board without sheets keeps them.
+- **Changed shots** (`fc.sh shots diff scenarios=diorama_zones,diorama_stage,boss_bar`, base `8c261fcc`): all 7, the grid
+  gone and the edge pieces gone on the composed boards. `/mnt/project-files/build-tools/pr7-77-r6/`.
+- **Guesses** (`[PROVISIONAL]`): (1) existing marks count as the outlines of the hovered, move and target cells; (2) a
+  player who had the old Board Grid on keeps the key's saved value, so their full grid stays on.
+- **Tests**: `battle_ui2c_tests` `the_board_grid_setting_turns_the_grid_lines_off` (off by default, 0 at rest, full
+  grid stronger while planning), `stage.rs` `the_patches_are_a_few_coherent_blobs`.
+- **Docs delta**: SCREEN_CONTRACT_BATTLE / the diorama spec: the grid off at rest, "Show full grid", blobs, no pieces
+  over the composed ground. HISTORY row: "PR7-68 R6's faint grid at rest is replaced by no grid (PR7-77 R6, user
+  2026-11-22: the grid kept the board from reading like the reference)".
+
+### FB-449: PR7-77 DIORAMA5 R1 to R5 built; composed ground, decals, lips, lamp light, exit path and gate
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `DIORAMA5`
+- **Spec**: `docs/READY.md` row `00f2` `PR7-77` (`DIORAMA5`), R1 as amended (the region ground composer), R2 to R5;
+  Art/UI's placeholders from PR #94.
+- **What landed**:
+  - Engine (`aegis_ui`): the composer's `CELL_MAX` is 64 (it was 32), so the board composes at the stage art's own 64 x
+    48 a cell; the region map keeps its own cap of 32 (`ground.rs` `REGION_CELL_MAX` in the game), so region maps are
+    unchanged. `Art::pick_hashed` and `art::cell_hash` (a variant from an integer hash of the cell). `Canvas::add` and
+    `Painter::glow` (an additive light pool with a smooth falloff).
+  - (R1) `stage/composed.rs`: when any ground on the board has a `sheet.png` (override folder, then the zone's set,
+    then the world's, then `common_stage`), the board's ground is one composer job: one layer per ground shown, its
+    sheet as the texture (tinted as the zone), the commonest ground lowest and the others over it with worn edges,
+    strays, a quiet tone and patches; sunken terrains keep to their cell edges (`clamp_water`) so the lips fit. A
+    terrain without a sheet gives its first tile as its texture. The job is rebuilt only when the board, sets, zone look
+    or art change; the composer's cache keeps the picture. Without any sheet the tiles draw as before, now picked by
+    `pick_hashed` instead of (7x + 13y) mod n. Then accent decals: `<terrain>/decal/v*` on ground cells where
+    `cell_hash` falls under `decal_density` (default 10 percent, 35 percent beside a block or a prop; the zone's
+    `decal_density` over the file's). Transition pieces still draw over the result.
+  - (R2) a sunken cell's lip from `lip/<terrain>/v*` (an override `<set>/<name>` reads `<set>/lip/<name>`, then the
+    zone's set, then the world's), cut from its top to the band; the flat fill stays the fallback.
+  - (R3) the lantern pools are additive glows at 150 at the centre (about twice the old rings); with any light the board
+    darkens a little (`DARKEN`, alpha 34) so the pools read. New `stage.fx.json` key `lights`, top level or per zone
+    (the zone's over the file's): `{"cover/v3": {"color": "#ffb060", "radius": 1.5}}`, a prop's `"<prop>/v1"` or bare
+    `"<prop>"`; a matching cover or prop casts a pool on its cell and its neighbours (`stage::lamps`). Radius past 4
+    cells is ignored.
+  - (R4) Stage view, plain exits only (a hold escape's SHUT and OPEN signs stay): the `exit_path` decal on each exit
+    cell at 60 percent with a faint 2.4 s pulse (static under Reduce motion), 92 percent when hovered or when an active
+    hero stands one step from it; mirrored on a west exit, since the chevrons point east. The yellow plate and the ">"
+    sign are gone where the art exists. An `exit_gate` stands beyond each run of exits on the top edge (on the
+    backdrop's foot) and on the side edges (in the wing by the run's lowest cell); none on the bottom (no room under
+    the front face).
+  - (R5) rubble in a zone whose set has no `rubble` draws the zone set's floor (before the world's rubble).
+  - Tools: `fc.sh shots diff` no longer marks a failed base run done in its cache (a full disk had cached an empty
+    base, so every shot came out "new").
+- **Golden**: the `stage.rs` fixture frame hash `TODAYS_FRAME` is re-recorded (`0x2a5309c84d603849` to
+  `0xffa27f50b69d7596`) for the one intended change: the fixture's two grass variants are picked by the cell's hash
+  (R1 c). HISTORY row: "PR7-77 (DIORAMA5 R1): the stage's tile variants are picked by an integer hash of the cell;
+  the (7x + 13y) mod n lattice read as an alternating pattern (user 2026-11-22)".
+- **Changed shots** (`fc.sh shots diff scenarios=diorama_zones,diorama_stage,boss_bar`, base `3c3873a9`): all 7
+  changed; the floors are continuous with ragged joins, the window pools read, the exits show the path and gate.
+  Sheet and shots: `/mnt/project-files/build-tools/pr7-77/`.
+- **For Art/UI**: no `stage.fx.json` has `lights` yet, so no lamp casts a pool today; add e.g. `"lights":
+  {"cover/v3": {"color": "#ffb060", "radius": 1.5}}` to the sets with a lamp post cover. The exit gate is drawn at
+  32 x 36 logical (64 x 72 art). The decal and path have no north or south variant, so a top or bottom exit shows the
+  east chevrons; a `v1` turned that way could be added later.
+- **Guesses** (`[PROVISIONAL]`): (1) "a unit can step there" is an active hero one step away; (2) gates on the top and
+  side edges only; (3) the darkening shows only when the set has spots or lamps; (4) the layer numbers (wear 0.12,
+  tone 0.06, patches 0.12) are the region look, quieter; (5) the glow is a true add (no new blend mode for the board
+  otherwise).
+- **Tests**: `stage.rs`: `the_variant_pick_scatters_with_no_lattice`, `the_sheet_and_the_rubble_ground_follow_the_zone`,
+  `a_ground_sheet_composes_one_continuous_floor`, `decals_fall_by_the_hash_density_and_gather_near_things`,
+  `a_sunken_lip_draws_its_art_before_the_fill`, `a_lamp_prop_casts_its_pool`, `the_exit_reads_as_a_path_and_a_gate`;
+  the lantern test updated for the darkening.
+- **Docs delta**: `engine/README.md` (`aegis_ui`): `ground::CELL_MAX` 64; `Art::pick_hashed`, `art::cell_hash`;
+  `Canvas::add`, `Painter::glow`. SCREEN_CONTRACT_BATTLE 8.1 (or the diorama spec): the composed ground, decals,
+  `decal_density`, `lights`, lip art, exit path and gate. STRUCTURE: `emberwake_gui/src/stage/composed.rs`.
+
+### FB-388: PR7-76 ACT1-FIX2 built; grate silt parked, guesses and data notes
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `ACT1-FIX2`, `PR7-78`, `BONEMILL-CHECK1`
+  PT-45 intends (`roads_show_on_focus_only...`, `the_sunk_ward_map_shows_roads...`). Shots in `/mnt/project-files/pr7-76/`.
+- **Parked, needs a call (grate silt)**: the validator refuses `mud` ground on a `~` (water) cell, so the west-basin silt
+  banks cannot be ground-only. Option A: change `rows` and `ground` at x=9, y=7, 8, 10, 11 of `sunk_ward_runoff_grate`
+  (walkable silt, a gameplay change; my reading of "west causeway row" is y=9, kept as water). Option B: a visual-only
+  silt exemption in the validator (logic row). Nothing applied; the ground-only seed waits in the Build scratchpad.
+- **Guesses marked [PROVISIONAL]**:
+  - PT-54: a directional exit preselects a place only when the location has 2 or more world-map exits and the exit is
+    not the generic `world_map` one; the open neighbour best lined up with the exit's direction from the map centre
+    (cosine above 0) wins (`worldmap::exit_toward`).
+  - PT-56: quests ready for the same person, with nothing to choose and no recipient, join one "Turn in: N quests"
+    confirm.
+  - PT-61: dialogue choices log "Paid N Scrap.", "Received N ...", "Handed over X xN.", "Received X xN." and newly ready
+    quests.
+  - PT-50: a ready quest stays in the legend as "`name` (ready)" with the turn-in icon.
+  - PT-53: the Make camp reason sits in small dim text under the button.
+  - PT-42: a countdown tooltip adds "At 0 days: `warning`" (or "the run ends."), plus the restart length.
+  - PT-46: a press during typing shows the card, a press while held moves on, a press in the fade-out jumps to the next
+    card shown in full; the one-step `press` is kept for tools.
+- **Data notes to route**:
+  - q_a1_m4 has no `rewards` though its `reward` text promises a poultice and five days of Warded Tallow: add them or
+    change the text. Its pick `loot_orlovs_retribution` is a skill; it now logs "`name` (skill for `member`)".
+  - The flag_job templates have no `rec_level`, so jobs show no level.
+  - The Crucible and Overlook lock flag `interlude_done` is set by a sequence, so the unlock words fall back to the
+    quest's `closed_text`.
+- **Hub cast**: seed `pr7_76_hub_cast` sets `art` for Sabina, Berek, Talia, Ivo and Widow Varka to their existing unit
+  folders; their NPC portraits in `assets/portraits/npcs/` are unchanged.
+- **Docs delta**:
+  - `kits/rpg/README.md`: rpgkit_world gains `board::flag_place`, `travel::legend_ready` and `person_place`,
+    `Dialogue::turn_in_index`, `GameState::wear_refusal`, `Data::family_name`, `campaign::view::end_line`; rpgkit_ui
+    `vignette::Player::press_next` is the two-press player model.
+  - GAME_BRIEF, Where to look: "A walk broken off by a fight resumes after a win: `region.rs` `resume_walk` /
+    `Game::fought`." and "A directional exit preselects the place that way: `worldmap::exit_toward`."
+  - HISTORY: "AO-01(4) world map roads 'focus only, nothing at rest' replaced by open roads drawn at rest (PT-45,
+    PR7-76)." and "Vignette press model V3 (one phase per press) replaced for players by two presses a card, with no
+    press lost in the fade (PT-46, PR7-76); `press` kept for tools."
+
+### FB-390: PR7-78 ACT1-DATA1 built; job levels guessed, lock text already names the interlude
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `ACT1-DATA1`
+- **(a)** No change needed; FB-388 misread it. The poultice is already in `q_a1_m4`'s template `a1_main_raid`
+  (`sulfur_poultice` 1), and the five days of Warded Tallow are the `orlov_stores` chest at the Tallow Vats (`supplies`
+  5, opens on `sunk_ward.m4_done`), as the text says ("wait in Orlov's stores"). A first cut that added 5 supplies at
+  turn-in (doubling the Tallow) was caught in review and dropped.
+- **(b)** `rec_level` is a world quest field, so it is set on the eight quests using an `a1_flag_job*` template, by the
+  place that sets the flag. `[PROVISIONAL]` levels (only crossroads 4 and junction 7 at 5 are shipped bands; the rest
+  follow story order): `q_a1_corvo` 3 (Corvo's gate), `q_a1_red_pen` 4 and `q_hook_rubbings` 4 (crossroads),
+  `q_hook_lock_ciphers` 5 (the Grate, no shipped band), `q_hook_bellows` 5 (junction 7), `q_hook_wedges` 6 (Fourth
+  Kiln), `q_hook_counter_still` 6 (Tallow Vats), `q_hook_overlook` 7 (Crucible watchpost). `q_a1_m3`, `q_a1_m4` and
+  `q_a1_m5` still have no `rec_level` (not in the row).
+- **(c)** No change and no gap: the only lock text field is the quest's `closed_text`, and both `q_a1_m5` and
+  `q_hook_overlook` already say "Something under the Undercroft must be answered first.", which the board shows since
+  PR7-76.
+- **Test**: `emberwake_world/tests/board_rec_level.rs` `every_flag_job_on_a_board_has_a_level` (data-derived).
+- **Docs delta**: none.
+
+### FB-394: PR7-79 DIORAMA-DRESS1 blocked; battle boards have no data lever for lamps or props
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `DECOR1`, `DIORAMA-DRESS1`
+- **Spec**: `docs/READY.md` row `00b7` `PR7-79` (`DIORAMA-DRESS1`).
+- **Finding**: the encounter schema (`kits/rpg/schema.json`) has `rows`, `exits`, `objective_tiles` and the battle
+  fields, but no `props`, `decor` or lamps (`maps.json` `props` is region maps only). A blocked cell's cover art is
+  picked by position (`stage.rs` `shown_cover` / `cover_art`, `art.pick(.., x, y)`), so `cover/v3` cannot be chosen per
+  cell; a battle prop comes only from a terrain's `prop` (`tree`, `rubble`), and terrain ids are a closed set
+  (`rpgkit_battle` `grid.rs` `TERRAIN_IDS`). Any change would alter walkability, move cost or cover, which the row
+  forbids, so all 24 Sunk Ward battle boards are listed, not changed. `stage.fx.json` `lights` already lights any
+  `cover/v3` or `lantern_pole` that does show.
+- **Options** (a logic row first):
+  1. (recommended) an encounter field `decor: [{art, x, y}]`, display-only for the rules, drawn by the stage with
+     `lights` matched on the art key; the content check refuses exits, deploy cells and objective tiles. Lamps and
+     props both, no golden change.
+  2. new terrain ids copying `floor`/`stone` stats with a `prop`: a larger `TERRAIN_IDS` and terrain-table golden
+     re-records.
+  3. a per-cell cover variant pick for blocked cells: lamps and cover density only, no props on walkable cells.
+- **Docs delta**: Art/UI `code_rows.md` R3(b) assumes lamps can be placed on battle boards; true for region maps only.
+
+### FB-392: ENGINE-34 BONEMILL-CHECK1 report; Bone-Mill won by hand on try 1, Crucible lost 5 times
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `RETRY-SAVE-FIX1`, `ACT1-FIX3`, `ACT1-DATA2`, `ACT1-END-RUN1`
+  The Crucible (`enc_evt_06`, Slag Gate) was lost five times (1 auto, 4 hand), so the act's end was **not reached**.
+  No debug was used anywhere, and no save was edited to skip the Crucible.
+- **Spec**: `docs/READY.md` row `ENGINE-34`; follows `FB-441`.
+- **Run**: develop `61ce531b`, `tools/fc.sh playtest start` and `aegis playtest do`, 1280x720, no window, 08:52 to 10:14
+  UTC. The ENGINE-32 saves were lost with that session, so the whole run was hand-replayed from a new game, following
+  the old log. Folder `/mnt/project-files/build-tools/act1_agent_run2/`: `run_log.md` (and `.jsonl`), 59 shots named by
+  log step, saves `before_kiln`, `before_boss`, `after_bonemill`, `before_crucible`. Fights other than the Bone-Mill and
+  Crucible tries B to E ran on the auto-filled plan.
+- **How far**: prologue, Grate, Cages, Sweep, turn-ins, Fourth Kiln (patrol, Bone-Mill), Vats (Elyse joins), Corvo,
+  the interlude (Fissure fight, debate), Crucible Watchpost (Overlook, picket), then five Crucible losses.
+- **Tithing**: 42 after the prologue, 32 at the Kiln, 23 after the Vats and Corvo, 19 at the Crucible entry; no final
+  count, since the act's end was not reached.
+- **Bone-Mill** (Overseer Grendel; Kaelen, Vesper, Maren, Hollis Lv 7 plus guest Dunstan on AI):
+  - Try 1, hand: **won in 4 rounds**. R1 Hollis's Winch Sunder and the slag vents killed both Dredgers; R2 phase 1
+    broke, Vesper downed by a 386 crit (PT-67); R3 Kaelen's Sunder exposed Grendel, Hollis's crit Sunder and the vents
+    finished him; R4 the Enforcer fell. Tries 2 to 5 not needed.
+  - Comparison, auto plan from `before_boss`: Fled at R6, Grendel 142/304 in phase 2.
+- **Crucible** (Inquisitor-Prelate Nemeth, from `before_crucible`, party Lv 8):
+
+  | Try | Plan | Holder | Result | What happened |
+  | --- | --- | --- | --- | --- |
+  | A | auto | Vesper | Fled R9 | Nemeth untouched, nobody out |
+  | B | hand | Vesper | Fled R7 | Maren out R3, Hollis R4; Vesper downed R5, the gate shut |
+  | C | hand (R4 on, auto) | Kaelen | Fled R9 | the R4 spawn ate Kaelen's move (PT-71); auto walked the holder off |
+  | D | hand (R5 auto, a slip) | Vesper | Fled R6 | Kaelen and Maren out R4; Vesper downed R5; Hollis 1 tile short |
+  | E | hand (R2 auto, PT-79) | Kaelen | gave up R3 | auto R2 left Vesper in melee, downed |
+
+| PT | Sev | Area | Finding | Shots |
+| --- | --- | --- | --- | --- |
+| PT-66 | major | save | "Autosave failed: rolls: 'retry:sunk_ward:enc_evt_03' must be a stream id with a count >= 0." after every lost story fight (PR7-75's retry key); the post-loss state is never saved | steps 1242, 1851, 2279 |
+| PT-67 | major | forecast | The boss blow read "Hammer Strike block 3: -0" for stealthed Vesper, who then took a 386 crit after disengaging one tile | log ~1000-1100 |
+| PT-68 | major | stealth | Ash-Cloud Fade "readies stealth", yet the hero is hit that round and the next (Grendel's jabs; four Heretic's Brand hits on the winch holder, Brand also ends her guard) | 1907, 3171 |
+| PT-69 | major | skills | Winch Sunder did not break the Pulverizer wind-up ("0 of 3 into wind-up"); it landed after a 2-tile push, on Maren with no incoming forecast | log ~1124 |
+| PT-70 | major | movement | A move cut short re-routes the wrong way: Kaelen (5,4) to (4,2) then (3,4); Hollis (5,4) to (5,6) and to (4,4) | 2088 |
+| PT-71 | major | Crucible | R4 reinforcements spawn on the open middle gap (6,4), (7,4) on claimed tiles; the planned move drops with no log line | 2541 |
+| PT-72 | major | planning | A planned move claims every path tile, so a 1-tile gap carries one hero a round across blocks; auto ghost plans claim too; a later pick voids an earlier move, said only at confirm; odd path costs ((7,4) 4, (8,4) 9); "No path" through a foe leaving in B1 | log 2852-2894 |
+| PT-73 | major | balance | Crucible not won in 5 tries at Lv 8: the suggested holder (232 HP) draws both Purifiers and a Footman, the gate shuts when the holder falls, and 2 of 3 out reads plain "Fled", like a wipe | 2273, 3171 |
+| PT-74 | major | auto plan | The auto plan ignores the escape objective: walks the holder off the winch, kites Hollis away from the exits, keeps Vesper in melee; try A never touched Nemeth | 1844, 3247 |
+| PT-75 | minor | UI | After the R4 time phase the boss bar reads "This phase 346/346, In all 484/692" while phase 1 still had 138; is it still owed? | 2154 |
+| PT-76 | minor | UI | The Hostiles list names Tallow Dredgers "Skirmisher" | 846 |
+| PT-77 | minor | board | No Lv on the Bone-Mill, Vats and Crucible main quests (`q_a1_m3..m5` have no `rec_level`) | 308, 1673 |
+| PT-78 | minor | quests | The Crucible lock hint does not name the Bone-Mill and Vats turn-ins; the Wedges job unlocks at the Kiln but is taken only at the hub, 3 days away | 1673, 1301 |
+| PT-79 | minor | input | Enter at "Round over" confirms the next round (cost try E); a party slot click toggles selection; a third Esc opens Settings | 3247 |
+| PT-80 | minor | skills | Ally heals cost far more (Tourniquet 4 blocks/8 AP on an ally vs 2/3 on self; Cauterize 3/7 vs 1/2); after a Move pick rows show "-3 blocks, -3 AP" | 1054 |
+| PT-81 | minor | UI | "Maren has already left the battle." shows while planning an exit | log 2460 |
+| PT-82 | minor | lore | Dunstan's jaw is "wired shut", yet he speaks a battle line | 829 |
+| PT-83 | minor | map | The Watchpost marker "The gorge winch drum" has no Here row | log 1727 |
+| PT-84 | minor | log | "Bailiff Enforcer drags Kaelen 0 tiles" | log ~1150 |
+
+- **Notes**: Vesper's max HP fell from 222 to 186 after being downed (an injury?); Maren's picks may have been empty at
+  confirm in Crucible B R1 (low confidence).
+- **FB-441 items re-checked as fixed**: PT-43, 44, 45, 46, 49, 51, 53, 55, 56, 60, 61, 63; PT-40 partly (the boss HP
+  hover explains the phase span; the auto plan still loses the Bone-Mill).
+- **Docs delta**: none.
+
+### FB-396: PR7-81 DECOR1 built; decor key format for the asset lane, five guesses
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `DECOR1`
+- **Key format**: `decor` is a list of `{"art": KEY, "x": 0-11, "y": 0-8}` on a catalog or world encounter, omitted
+  when empty. KEY is `cover/v<N>` (that cover variant of the board's set, zone set first, then the world's
+  `stage_set`), `cover` (the cell's pick), `<prop>/v<N>` or `<prop>` (`props/common/<prop>/` first, then the other prop
+  sets in name order). Catalog encounters (set "") cannot use cover keys. `stage.fx.json` `lights` match on the
+  resolved key, so `cover/v3` and `lantern_pole` decor cast their pools.
+- **Check** (`rpgkit_content` `check::encounter::decor_problems`): refuses a non-list, unknown keys, off-grid cells,
+  exits, the cells the listed units deploy on, hold tiles and the escape objective's stay-behind tiles, two decor on one
+  cell, and art the board's set does not have.
+- **Guesses `[PROVISIONAL]`**:
+  1. A cover-key decor that resolves to art on an inner block replaces that block's cover (drawing and light); prop
+     decor on a block, and any decor on an outer wall's cap, draws raised on top of the block.
+  2. Deploy cells are the cells the listed party, guests and enemies take; a world fight whose heroes come from the
+     player's party may deploy onto decor, which units draw over.
+  3. Props draw at their PNG size (`lantern_pole` is 64 x 112), so the asset lane may prefer `cover/v3` for lamps.
+  4. Cover decor takes the zone tint for its terrain; props none, like terrain props.
+  5. Decor under the boss band is skipped like blocks.
+- **Tests**: `rpgkit_content/tests/decor.rs` (schema, key forms, writer round trip, board unchanged, refusals, world
+  check, cover sets); `stage::tests` decor drawn on inner and outer blocks, a lamp decor's pool, walkability unchanged.
+- **Docs delta**:
+  - Kit README: "DECOR1 (PR7-81): encounter field `decor: [{art, x, y}]` (catalog and world, omitted when empty),
+    display-only; `rpgkit_battle::encounter::decor_of` / `EncounterDef.decor`; `rpgkit_content::art::decor_art`,
+    `decor_known(layers, key, cover_sets)`, `decor_cover_sets`, `decor_prop_dirs`, `stage_fx`;
+    `check::encounter::decor_problems`; `World::deploy_cells`."
+  - STRUCTURE: `kits/rpg/crates/rpgkit_content/tests/decor.rs` (DECOR1 tests).
+  - GAME_BRIEF, Where to look: "Battle board decor (lamps, props, display-only): encounter `decor`, drawn by
+    `emberwake_gui/src/stage.rs` `decor_items` / `draw_decor` / `lamps_with`; never changes walkability, cover or line
+    of sight."
+
+### FB-398: PR7-84 ACT1-DATA2 built; the winch drum row is a flag workaround
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `ACT1-DATA2`
+- **(PT-77)** `rec_level` `[PROVISIONAL]`: `q_a1_m3` (Bone-Mill) 7, `q_a1_m4` (Vats) 7, `q_a1_m5` (Crucible) 8, from
+  the ENGINE-34 party's levels, one above the Kiln and Vats jobs (6) and the Overlook (7).
+- **(PT-78)** `q_a1_m5` and `q_hook_overlook` share the lock `sunk_ward.interlude_done`, set by the interlude after
+  `enc_evt_05`; its trigger `t_interlude` needs `m3_turned_in`, `m4_turned_in` and the two joined flags those fights
+  set. Both `closed_text` now read "Turn in the Bone-Mill and Vats to Talia. The Undercroft stirs then.". The Wedges
+  job at the hub (also PT-78) is not touched.
+- **(PT-83)** The marker `winch_post` had no `use` and no `sets_flags`; the `use` values are rest, crypts and stash
+  only. It now sets `sunk_ward.winch_seen` (read by nothing), so it is listed in Here. A look-only point would be a
+  logic row (a new `use` or a listing rule), if wanted.
+- **(PT-82)** Dunstan's round-1 line in `enc_evt_03` (`dlg_talk_m3_grendel`) now reads "Dunstan grinds his wired jaw
+  and hammers the slag-ladle against the chute rail, twice, hard." in the plain narration style of his other lines.
+- **Test**: `emberwake_world/tests/board_rec_level.rs` `every_flag_job_on_a_board_has_a_level` now also covers main
+  raids.
+- **Docs delta**: none.
+
+### FB-400: PR7-79 DIORAMA-DRESS1 built; roam and patrol boards not dressed; arena path fix
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `DIORAMA-DRESS1`, `DECOR-GEN1`
+  `_undercroft`, `_watchpost`; goldens unchanged (sim, checks).
+- **Boards** (6 to 9 pieces each): `enc_pro_0a/0b/0c`, `enc_job_corvo_gate`, `enc_evt_01` to `enc_evt_05`,
+  `enc_evt_06` and `enc_evt_06_overlook` (one layout). `cover/v3` lamps and `cover/v0`/`v1` on inner blocked cells where
+  a board has them; `lantern_pole` only at edge columns, back rows or the top row; props (`barrel_stack`, `crates_tall`) at
+  the edges too, kept off the fight lane (the check refuses exits, deploy cells and objectives); a first cut with poles
+  in the fight lane was redone.
+- **Listed, not changed**: the 12 roam, scav and patrol encounters have empty `rows` (generated boards), so decor has
+  no fixed cells there. Dressing them needs a rule (decor by generator) if wanted.
+- **Fix found on the way**: an arena launch with `scene=<world>:<id>` and no `ruleset` (`BattleScreen::sandbox`) read
+  the whole string as the encounter id, so the board had no stage set and drew no cover art at all (blocks or decor).
+  `sandbox()` now splits world and id like `arena_with` and `playback`. World fights were never affected. Test
+  `battle/tests/decor_tests.rs` opens every shipped encounter with cover decor through both paths.
+- **Guess**: `cover/v3` on a walkable cell draws (cover size) and is not refused by the check.
+- **Shots**: `/mnt/project-files/pr7-79/` before and after for `enc_pro_0a`, `enc_evt_03`, `enc_evt_06`, plus
+  `enc_evt_06_after_fix.png`.
+- **Docs delta**: STRUCTURE: `emberwake_gui/src/battle/tests/decor_tests.rs` (shipped decor draws on both arena paths).
+  GAME_BRIEF, if wanted: an arena launch `scene=<world>:<id>` now opens with that world's stage set, music and talks.
+
+### FB-402: PR7-86 DECOR-GEN1 built; the pool is a world manifest field, props stay at the back
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `DECOR-GEN1`, `TARGET-PRUNE1`
+  rules). Shots `/mnt/project-files/pr7-86/` (`enc_roam_watch` before and after).
+- **Finding**: there is no board generator; the 13 Sunk Ward roam, scav and patrol fights have empty `rows`, so
+  `Grid::apply_board` lays out a plain 12 x 9 floor. The rule runs at session start instead.
+- **List**: a kit world manifest field `decor_pool` (strings, decor keys as in FB-396, omitted when empty, the nearest
+  parent world's pool when a world has none), checked by `check::encounter::decor_pool_problems`. Seed
+  `pr7_86_decor_pool` sets Sunk Ward's to `cover/v3`, `lantern_pole`, `barrel_stack`, `crates_tall`. `stage.fx.json`
+  is untouched.
+- **Rule** (`rpgkit_battle::encounter::generated_decor`, called in `Session::start_with`): only for an encounter with no
+  `rows`, no `decor` and a pool; 2 to 6 pieces on a stream hashed from (battle seed, "decor", zone), so no other draw
+  moves and a replay draws the same; cover keys on free blocked inner cells, else any edge cell; prop keys only on back
+  cells (row 0, or columns 0 and 11 in rows 0 to 2), so nothing tall stands in the fight; never exits, start cells,
+  hold or stay-behind tiles, nor two on one cell.
+- **Guesses `[PROVISIONAL]`**: edge means the outer ring; `cover/v3` falls back to an edge floor cell (these boards have
+  no inner blocks); later arrivals may land on decor and draw over it; "generated" means empty `rows`.
+- **Tests**: `rpgkit_battle/tests/generated_decor.rs` (7), `rpgkit_content/tests/decor.rs`
+  `a_world_checks_its_decor_pool`, `emberwake_world/tests/generated_decor.rs`, `emberwake_gui` `decor_tests`
+  `generated_boards_draw_their_world_decor_through_both_arena_paths`.
+- **Docs delta**:
+  - Kit README: "DECOR-GEN1 (PR7-86): world manifest `decor_pool`; a generated board (no `rows`, no `decor`) draws 2 to
+    6 display-only pieces at session start (`rpgkit_battle::encounter::generated_decor`, own seeded stream; cover keys
+    on blocked inner cells else any edge cell; prop keys on back cells only, `is_back_cell`, `BACK_SIDE_ROWS` = 2);
+    `EncounterDef.decor_pool` from `rpgkit_world::battle::decor_pool`; check `decor_pool_problems`."
+  - STRUCTURE: `kits/rpg/crates/rpgkit_battle/tests/generated_decor.rs`,
+    `games/emberwake/crates/emberwake_world/tests/generated_decor.rs`.
+  - GAME_BRIEF, Where to look: "Decor on generated boards (roam, scav, patrol): the world manifest's `decor_pool`,
+    placed by `rpgkit_battle::encounter::generated_decor` (props at the back only); display-only."
+- **Tooling note**: the disk filled twice from stale test binaries in `target/debug/deps` (an `encounter.rs` change
+  rebuilds every downstream test); a `tools/fc.sh` step that keeps only the newest binary per name would help (tools
+  lane, if wanted).
+
+### FB-404: PR7-85 XL-FIX2 built; FB-455's strip overlap and tile spills no longer showed
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `XL-FIX2`
+  unchanged, `screens_menus__scene_runner` differs only by the temp data path). Shots `/mnt/project-files/pr7-85/`
+  (Extra large and Large, plus `audit_xl_after.txt`).
+- **Finding**: the strip overlap and tile spills FB-455 listed for (a) and (d) no longer show on today's develop; both
+  are done as asked anyway.
+- **What landed**:
+  - (a) the battle strip title is "Round 1 of 12" at Small and Normal, "R 1/12" above (hovering to the long form); the
+    goal line sits by the title's height in its display face.
+  - (b) Character Stats and Gear rows step at least a line plus one unit apart at every size; a list that has no room
+    takes a second column (`party.rs` `stat_rows_fit`); a label cut there hovers in full (none cut in today's data).
+  - (c) the XL sweep found six cuts with no hover (the Stats passives line, the Skills source hint, shop item names);
+    all hover now, and the sweep shows 0 (`audit.txt` marks NO HOVER).
+  - (d) engine `Screen::audit_ignores()` (widget id prefixes the text audit does not treat as controls; the battle
+    screen names `tile.` and `unit.`); each cut reports `hover`, the reply counts `bare_cut`; `panes::list_row` hovers a
+    cut name when the caller gave no card.
+- **Guesses `[PROVISIONAL]`**: the short form for any size above Normal; "grow" means a line plus one unit with a
+  two-column fallback; unit tokens are ignored by the text audit like tiles. Caveat: at Normal a list of 12 or more
+  rows would also take two columns (today's data stays in one).
+- **Tests**: `aegis_ui/tests/text_audit.rs` (two new), `tests/panes.rs` (one new), `battle/tests/xl_battle_tests.rs`
+  `the_strip_title_shortens_at_large_text_and_clears_the_goal`, `party.rs` `xl_rows_tests` (three).
+- **Docs delta**:
+  - engine/README.md, after the XL-SWEEP1 bullet: "**Audit ignores and cut hovers (XL-FIX2, PR7-85):**
+    `Screen::audit_ignores()` names widget id prefixes the text audit does not take as controls (the battle screen
+    names `tile.` and `unit.`); the layout audit is unchanged. Each audited cut says whether a widget at it hovers to its
+    full words (`hover`), and `bare_cut` counts those that do not; `audit.txt` marks them NO HOVER. `panes::list_row`
+    hovers a cut name when the caller gave none. `layout_audit::frame_report` takes the ignores."
+  - engine/README.md, the link's `text_audit` line: "boxes in `Screen::audit_ignores` are not controls; each cut
+    carries `hover` and the reply `bare_cut`".
+  - GAME_BRIEF (optional): "XL-FIX2: the battle strip reads 'R 1/12' above Normal text; Stats and Gear rows keep a
+    line apart at every size, taking a second column when needed."
+  - EFFICIENCY: `fc.sh scenario` rebuilds the binaries first, so a "before" sweep must be taken before any edit;
+    `shots diff` runs `cargo clean` on the workspace crates.
+
+### FB-406: ENGINE-35 ACT1-END-RUN1 report; Crucible won by hand on try 3, act end reached at Tithing 19
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `PLAN-FIX2`, `ACT1-FIX4`
+  try 3** in 7 rounds at party Lv 8. **No debug was used** and no save was edited. Try 1 ran rounds 8 to 12 on the auto
+  plan after the holder fell, only to reach the loss screen for the PT-66 check; try 2 was given up at R6 by reloading
+  the entry save, once 3 out could no longer happen. Everything else was hand-played.
+- **Spec**: `docs/READY.md` row `ENGINE-35`; follows `FB-392`, with the logging asks of `FB-459` (PT-71) and `FB-463`.
+- **Run**: develop `b24d2dee`, `tools/fc.sh playtest start save=` (the `before_crucible` save of act1_agent_run2, which
+  loads on this build) `keep_saves=` `shots=off`, then `aegis playtest do`; 1280x720, no window, 17:23 to 18:17 UTC.
+  Folder `/mnt/project-files/build-tools/act1_agent_run3/`: `run_log.md` (section 2 has every battle line in full from
+  `state.log_groups`, per round, for all three tries), `run_log.jsonl`, 47 shots named by log step,
+  `441_tree_odd_costs_A_R2.json` (the whole board at PT-88), `saveshot_ghost_claim_14.png` (a `save=` proof shot), and
+  saves `crucible_entry`, `act1_end` (right after "Act 2 begins") and `slag_gate`.
+- **How far**: Crucible won, the end vignettes `vg_m5_gate` and `vg_debate_3`, "Act 2 begins" at the Sluice Undercroft,
+  the Crucible turned in to Talia, then travel to the Slag Gate.
+- **Tithing**: 19 at the Crucible entry and **19 at the act's end** (the win ends the act; no day passes); 15 after the
+  4-day trip to the Slag Gate (PT-97). Alert 12% to 30%.
+- **Crucible tries** (all from `crucible_entry`; deterministic, R1 the same each time):
+
+  | Try | Holder | Result | Rounds | What decided it |
+  | --- | --- | --- | --- | --- |
+  | 1 | Kaelen | Partly escaped, 1 of 3 out | 12 (hand R1-7, auto R8-12) | Vesper out R5; from R4 Footmen 3, 4 and Nemeth guarded all three column-6 gaps, so Maren and Hollis were cut short in R6; Decapitation crit Kaelen for 415 in R7 (forecast -277); two Pommel Strikes in its windup broke nothing (PT-89) |
+  | 2 | Kaelen | given up R6 | 6 | Vesper out R5; Maren (89 HP) cut short at (5,3) when a Purifier stepped in front (Hollis's move took (4,4) first); Brands killed her in R5 |
+  | 3 | Kaelen | **Victory** | 7 | Hollis killed Purifier 1 in R1 (Sunder 145 + Quarrel 99) and with Kaelen Footman 2 in R2; Kaelen on the winch R3 B2; Maren ran the north lane in R4 and got out R5; Vesper (stealth) R6; Hollis R7 at 7 HP |
+
+  Results: "Kaelen held the winch. Kaelen was captured." His keepsake goes to the stash and Act 2 opens without him.
+
+| PT | Sev | Area | Finding | Shots |
+| --- | --- | --- | --- | --- |
+| PT-85 | major | forecast | Hit forecasts on a target that moves disagree with the result: Decapitation on Hollis after his move showed -209 at (1,3), 5 tiles from Nemeth, and nothing at (2,4), 3 tiles (try 2 R2); Maren moving to (5,5) showed no incoming while a Footman and a Purifier targeted her, she took 151 (try 2 R4); Maren showed -138 and took 0 (try 3 R1) | 1415, 1763 |
+| PT-86 | major | planning | A ranged pick on an adjacent foe adds an approach walk 4 tiles away from the fight and the exits (Winch Sunder walk to (3,1), try 1 R3; Barbed Quarrel walked Hollis from (5,7) to (1,7), away from his exit, try 3 R5) | 539 |
+| PT-87 | major | planning | Foe start tiles and ghost plans still block routes (rest of PT-72): a foe's start tile counts as blocked though it leaves in B1, so the only gap reads "Too far: 12-18 tiles"; auto ghost plans still claim tiles ("Too far: 14 tiles" for Kaelen to the winch in R1, 8 after Clear; after Clear "Claimed by Vesper's move") | saveshot_ghost_claim_14 |
+| PT-88 | major | planning | Kaelen's Billhook Sunder on an adjacent Footman (no move) refused: "Blocked by Maren's plan: Move here dropped: Too far: 8 tiles > 6"; Maren's costs from (3,5) ran above their step counts ((3,7) 4, (4,7) 5, (5,7) 6, (7,7) 8), and (7,7) had been accepted at 6 before the other picks | 312, 441_tree json |
+| PT-89 | major | combat | Two Pommel Strikes landed in B1 and B2 of Nemeth's B1-3 Decapitation windup; the summary read "no breaks (0 of 3 hits into a wind-up)" with no reason; the blow then crit for 415 against a forecast of -277 | 1005 |
+| PT-90 | major | story | After the win the log shows "Flag 'sunk_ward.sabina_dose_to' names no party member; nothing is installed." (guess: the dose went to Kaelen, now captured) | 2843 |
+| PT-91 | minor | planning | Auto-fill after hand picks repeats them and spends more: Ash-Cloud Fade ran in 4 blocks, the strip said "AP -3" yet Vesper ended at 1/10 AP; a second Tourniquet healed 5; a filled Strike spent Ammo | 183 |
+| PT-92 | minor | log | The R3 reinforcements (Footmen 3 and 4) arrive with no log line; wording "Nemeth is Burning by Floor" | log A R3 |
+| PT-93 | minor | log | A Purifier at 16 HP walked out through the party's exit, logged like a hero ("safely WITHDREW through Exit!"); the Hostiles list keeps it at 16/200 | 1066 |
+| PT-94 | minor | text | Double words: "exposes the target for 3 rounds rounds" (Billhook Sunder); "dash up to 3 tiles tiles" (Hamstring Sever) | run_log notes |
+| PT-95 | minor | results | A win goes straight to the results with no banner (a loss shows one); Dunstan, not in the fight, is listed with empty stats and +35 XP; captured Kaelen gets no XP line | 2690 |
+| PT-96 | minor | map | The Slag Gate's "The raised portcullis" marker has no Here row (like PT-83); its art shows the bars down while the text says it was lifted | 2904, 2911 |
+| PT-97 | minor | flow | The act end moves the party to the Undercroft, but the new road starts at the Watchpost, so the Slag Gate costs 4 days (Tithing 19 to 15) and 4 supplies | 2895 |
+| PT-98 | minor | UI | The journal's Back button sits on top of the last quest rows | 2850 |
+| PT-99 | minor | UI | A unit hover tooltip from before the end stays over the battle-over banner and hides its title | 1063 |
+| PT-100 | minor | lore | In `vg_debate_3` Sabina says "I watched" about a fight she was not at; Talia's "Eighteen, twenty-four, cowled to the eyes" reads oddly | run_log section 3 |
+
+- **FB-392 items re-checked** (PR7-82, PR7-83 parts, PR7-84, PR7-87 on develop):
+  - Fixed: PT-66 (no "Autosave failed" after a loss), PT-68 (attacks "lose" a stealthed hero who moves), PT-73 (results
+    "Partly escaped", "1 of 3 got out; the escape needed 3."), PT-75 (boss bar "346/346 +330" with a carried-over
+    hover), PT-77 (Crucible Lv 8 on the board), PT-83 (winch drum in Here).
+  - Partly fixed: PT-72 (a pick that would void a move is refused with a reason; see PT-87, PT-88); PT-69 (Winch Sunder
+    broke a Footman's Heavy Thrust; the Pulverizer not met); PT-79 (slot clicks always select; one Esc at "Round over"
+    opened Settings); PT-80 (negative costs after a Move pick remain: "Ash-Cloud Fade -4 blocks, -7 AP").
+  - Not reproduced: PT-70, PT-71 (every cut walk logged "[Move Cut Short]"), PT-81, PT-84.
+  - Unchanged: PT-74 (on the auto plan Maren and Hollis were downed with no escape attempt).
+  - Not re-checked (Bone-Mill and earlier boards not replayed): PT-67, PT-76, PT-78, PT-82.
+- **Not done**: odd costs could not be kept as a mid-battle save (saves are the campaign slot); the tree file captures
+  the R2 board. The Overlook and Wedges jobs remain open; Act 2 not played past the Slag Gate.
+- **Docs delta**: none.
+
+### FB-408: PR7-89 ACT1-FIX4 built; the win banner did not reproduce; three questions
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `ACT1-FIX5`, `ACT1-END-RUN2`
+  timeline, resave). Seeds `pr7_89_text`, `pr7_89_portcullis`, `pr7_89_road`. Shots `/mnt/project-files/pr7-89/`.
+- **PT-90** `[PROVISIONAL]`: the dose stays with the captured hero and returns with him. `dlg_int_dose` ends "The vial
+  goes down a throat", and `vg_m5_gate` says Nemeth "took the stayer alive"; nothing passes it on. `install` on a flag
+  naming a departed member grafts into the departed record (`rpgkit_world::dialogue::departed_from_flag`); the note
+  reads "Kaelen is captured; Optic Graft stays with them and returns with them.". There is no rejoin yet.
+- **PT-92**: reinforcements log "[Wave] `label`: A, B join the battle."; hazards log "[Hazard] X is caught in Burning
+  Ground: Burning" (`command::terrain_label`, the terrain row's name or its id in words).
+- **PT-93**: a foe leaving by an exit logs "[Escape] ... escaped through the exit." and leaves the Hostiles list
+  (`Session::foe_escaped`); a surrendered foe stays listed.
+- **PT-94**: the `{rounds}` and `{dash}` tokens already add their unit, so nine skill texts doubled it; the trailing
+  words are dropped in data. No other doubled word found.
+- **PT-95**: encounter XP goes to the members who fought (`progression::award_fielded_pct`; Dunstan's +35 came from the
+  bench filling the captured hero's slot); a captured hero keeps his XP in his departed record and has a results row;
+  a member not in the fight has none. **The win banner did not reproduce**: a won world fight plays the "Victory" beat
+  for about 1.8 s, then opens the results; the run's wait swallowed it (`win_banner.png`).
+- **PT-96**: the Slag Gate marker uses `use: "look"`; there is no raised-portcullis art, so the text now matches the
+  lowered bars: "The Slag Gate portcullis", "The winch has been turned and the road is cleared. Beyond the
+  chain-teeth, it climbs toward Upper Cinderreach.". Raised art would be an Art/UI request.
+- **PT-97**: route `high_gorge` now runs from `sluice_undercroft` (where `seq_after_m5` leaves the party) to the Slag
+  Gate; it no longer starts at the Watchpost. A second route from the Watchpost would be a design call.
+- **PT-98**: the Journal list stays above Back and scrolls (selection kept in view, wheel, "more above/below" marks).
+- **PT-99**: when the outcome panel shows, a veil over the board stops stale hover cards covering the banner.
+- **Questions**:
+  1. Should a win hold its Victory banner until a click, as a loss does (TRANSITIONS1 T2)?
+  2. Should the round banner hide during the Victory beat? It draws over it now.
+  3. Should blocker and forced-move lines also name the terrain instead of "Floor"? That changes log text.
+- **Guess**: benched members no longer get XP from a fight they were not in. Fights settled without a battle (the default
+  tally) still pay every active member; a member who died in the fight gets none; `install` on a flag naming a dead
+  member installs nothing, with a note.
+- **Docs delta**: GAME_BRIEF, combat log: "Reinforcements log `[Wave]`; terrain hazards `[Hazard] X is caught in
+  Terrain: Status`; a foe leaving by an exit logs `[Escape]` and leaves the Hostiles list (`Session::foe_escaped`)."
+  Rewards: "Encounter XP goes to the members who fought (`progression::award_fielded_pct`); a captured member keeps his
+  XP in his departed record." Story effects: "`install` on a flag naming a departed member grafts into the departed
+  record (`dialogue::departed_from_flag`)."
+
+### FB-410: PR7-91 ACT1-FIX5 built; the banner hides for every outcome panel
+
+- **Status**: closed: accepted (@d5b35cd5), follow-up `ACT1-END-RUN2`
+  Shot `/mnt/project-files/pr7-91/victory_banner_no_round_banner.png`.
+- **What landed**:
+  - (a) `playback.rs` `round_banner_now` returns nothing once the battle has an outcome: the Victory beat and every
+    outcome panel. A new battle starts its own banner. A win keeps its 1.8 s beat and opens the results by itself.
+  - (b) `rpgkit_battle::command::terrain_name` now uses `terrain_label` (the row's name, else its id in words), with
+    "Floor" only for a plain floor; `forced.rs` `obstacle()` uses it, so pushes read "the rubble", "the lava".
+- **Guess `[PROVISIONAL]`**: the banner hides for every outcome panel (Fled, Out of time too), since each covers the
+  board; Victory and Defeat only is a one-line change.
+- **Tests**: `rpgkit_battle/tests/terrain_rows.rs` `blocker_and_forced_move_lines_name_the_terrain`;
+  `transitions_tests` `the_round_banner_hides_once_the_battle_is_over`; `story_battle_hub.json` checks
+  `state.round_banner` is absent before the Victory shot.
+- **Docs delta**: GAME_BRIEF, combat log: "Blocker and forced-move lines name the terrain by its display name
+  ('blocked by Lava', 'hits the rubble'); a plain floor reads 'Floor'. The round banner hides once a battle has an
+  outcome."
+
+## Build status rows through ENGINE-64 (moved from FEEDBACK.md section 1, 2026-11-24, ENGINE-65)
+
+| Task / Sub-block | Stage / Status | Branch / Commit | Notes |
+| --- | --- | --- | --- |
+| R1 to PR6-3, PR6-5 (excl. PR6-4; `FB-01`..`FB-281`, `UN-01`..`UN-12`) | released or done | `main` / `develop` (`f132eabc`) | Archived in `docs/archive/FEEDBACK_CLOSED.md` (moved 2026-11-17) |
+| `PR6-4` (`PK3-RECRUITS-KEEPSAKES`) | done with parked clauses (`FB-282`, `FB-283`, `FB-284`) | `develop` (squash `PR6-4`) | Kit recruits/pool/crypts/fuse/keepsakes + `sunk_ward` seed `pr6_4.json`; temperaments, Martyr fuse data and the Retire/Last Stand prompt parked |
+| `PR7-1` (`FIX-TEXT1`) | done | `develop` (squash `PR7-1`) | `sunk_ward` text fixes, seed `pr7_1.json`; new copy `[PROVISIONAL]` in `FB-286` |
+| `WEBFIX1` (playtest, user 2026-11-17) | done | `develop` (squash `WEBFIX1`) | Web canvas fills page/fullscreen, web Fullscreen setting works; `FB-287` |
+| `PR7-2` (`SPEC-FIX-N1N2`) | done | `develop` (squash `PR7-2`) | Sensory Rot on ranged hits; Cold Steel per-family rite + masterwork; `FB-288` |
+| `PR7-9` (`LORE-DATA1`) | done | `develop` (squash `PR7-9`) | Seed `pr7_9.json`: Vanguard blurb and `notched_billhook` say one-handed polearm; `enc_evt_05` (the only `flag_skills` in `sunk_ward`) no longer grants `marrow_lash`; `dlg_int_dose` flags kept; test `sunk_ward_act1_marrow.rs`; PR5-44 Interlude grant test in `act1_story.rs` rewritten to assert no grant; 0 golden diffs |
+| `PR7-11` (`MARTYR-FUSE1`) | done | `develop` (squash `PR7-11`) | Seed `pr7_11.json` (`martyr_last_stand`); `begin_fight` refuses on a spent fuse; Retire / Last Stand prompt `region::FusePrompt`; closes `FB-283`; `FB-295` |
+| `PR7-12` (`BIGUNIT1`) | done | `develop` (squash `PR7-12`) | `footprint: 2` units fill a 2 x 2 square (BU1-BU15); seed `pr7_12.json` puts it on `calcified_amalgam`; `FB-296` |
+| `PR6-6` (`PK4-CAMPAIGN-HOOKS1`) | done | `develop` (squash `PR6-6`) | Kit: data-configured doctrine, `recipe` trigger, hero strain/channel tallies, signed tracks, `keep_longer`, flag-armed checkpoints; `N4` mapping proposed; `FB-297` |
+| `PR6-7` (`PK6-BATTLE-HOOKS1`) | done | `develop` (squash `PR6-7`) | Kit: region/encounter `start_meter`, hazard `when_meter` / `every_rounds`, ground meter-only fix, `$captive_unit` with `captive_fallback`, generic `requires_track`; `FB-298` |
+| `PR6-8` (`PK5-HUB-FACILITIES1`) | done (UI feel to review) | `develop` (squash `PR6-8`) | Kit `facilities` kind + `facility` service + shop/recipe/rest hooks; `supply_price_mult_by_act` (seed `pr6_8.json`: `varka_trade` Act 3 `2.0x`); facility pane; placeholder icon; `FB-299` |
+| `PR6-9` (`PK5-SIEGES1`) | done | `develop` (squash `PR6-9`) | Re-applied on develop after the user approved the re-record (decision card 2026-11-18): `checks_golden` case `ashlands encounters courtyard_skirmish` re-recorded (the objective enum message lists `retreat`); world kinds now 24 (sieges after endings, talks); `FB-300` |
+| `PR6-10` (`PK6-STORY-PREP1`) | done | `develop` (squash `PR6-10`) | Kit `camp_prep` step, `retry_day_cost`, `echo_fallen`; `StoryCampPrep` screen; `FB-301` |
+| `PR6-11` (`PK7-ENDINGS1`) | done | `develop` (squash `PR6-11`) | Kit `endings` kind, `end` kind `ending`, `campaign::ending` evaluator; GUI `EpilogueScreen`; `FB-302` |
+| `PR6-14` (`CLASSKEY1`) | done | `develop` (squash `PR6-14`) | Class `keystone: {id, level}`; party units slot it at level 6 when their deck names none; seed `pr6_14.json`; `FB-303` |
+| `PR7-13` (`BUNKS1`) | done (UI feel to review) | `develop` (squash `PR7-13`) | Hub bunks, bunk talks (`talks` kind, pair counter, templates), idle spots and passing the lead; seed `pr7_13.json`; six placeholders (AI-17); `FB-304` |
+| `PR7-14` (`TRANSITIONS1`) | done (UI feel to review) | `develop` (squash `PR7-14`) | T1 battle beat, T2 victory beat, results over the field, hub arrival card; six AI-18 placeholders; scenario `story_battle_hub`; `FB-305` |
+| `PR7-21` (`SETTINGS-MOCK1`) | done (UI to review) | `develop` (squash `PR7-21`) | Settings ported to the approved mock: tab rail, instant apply, staged Display Mode (Windowed, Borderless, Fullscreen) and Resolution with a 15 s keep-or-revert, close guard, decluttered in-game popup; review shots `/mnt/project-files/pr7-21/` beside the mock; `FB-308` |
+| `PR7-22` (`AGENT-PLAYTEST1`) | done (tools lane) | `develop` (squash `PR7-22`) | `aegis playtest` start / do / run / stop / status (`tools/fc.sh playtest`), no-window by default; smoke script `games/emberwake/playtests/agent/smoke.play` plays a fresh save to the hub in the gate (~20 s); `FB-309` |
+| `PR7-26` (`PLAYTEST-UI1`) | done (UI to review) | `develop` (squash `PR7-26`) | Story advance hint gone; battle Esc or Menu opens the in-game Settings popup; hub party list fits a full roster; portrait breath keeps the face aspect and the rim light eases; Mute in Background (on by default, user 2026-11-18); Battle tab Advanced heading; shots `/mnt/project-files/pr7-26/`; `FB-310` |
+| `PR7-15` (`WEBFIX2`) | done (UI to review) | `develop` (squash `PR7-15`) | Battle, region and hub HUD panels draw a new `hud` frame role (F2 iron with oxblood top line; placeholder `ui/frames/hud.png`); Map Camera Zoom on Display too; web smoke plays the new opening at three sizes; web buffer capped at the GPU texture limit; `FB-312` |
+| `PR7-24` (`HUB-POLISH1`) | done (UI to review) | `develop` (squash `PR7-24`) | Occupied bunks wear a name plate (class-initial sigil and name) on the 42 px bed; the bunk card is the dialogue box (portrait left, numbered choices, keys 1-9); shots `/mnt/project-files/pr7-24/`; `FB-314` |
+| `PR7-23` (`HUB-LAYOUT1`) | done (UI to review) | `develop` (squash `PR7-23`) | Hub map rebuilt from the Art/UI eight-bunk layout (seed `pr7_23.json`, absorbs `PR7-19`): walls, 45 props, `bunk_1..8` (7 and 8 empty at cap 6), `idle_*` anchors; real prop art pushed from the PC; plates staggered on two heights so names read whole; `FB-316` |
+| `PR7-25` (`STYLE-ENGINE1`) | done (UI to review) | `develop` (squash `PR7-25`) | S2 ramps: palettes may name `_lo` / `_hi` shades and the engine swaps them (variant bodies today; class bodies need a clips re-export); F2 portrait frame drawn in the one portrait widget on every screen; shots `/mnt/project-files/pr7-25/`; `FB-330` |
+| `PR7-41` (`PLAYTEST-FIX3`) item 1 | done (blocker) | `develop` (squash `PR7-41-1`) | PT-15: a job's fight is offered only once a quest naming it is accepted; accepting after the fight was won marks it ready; stuck saves repaired on load with a notice; save `m3_stuck` fixture and scenario `job_fight_repair`; items 2-9 next; `FB-332` |
+| `PR7-41` (`PLAYTEST-FIX3`) items 2 and 6 (part) | done; item 6 re-grant and retarget rules parked for Tushar (golden re-record) | `develop` (squash `PR7-41-2`) | PT-16: the auto-filled plan always confirms (a round a later draft broke is redrafted, at worst rests; hand-edited rounds never touched) and a refusal names hero, step and cause; PT-22 part: a friends-only cover guard needs a friend in range, Focus Weakest picks a foe it attacks, founders' third deck slot filled (seed `pr7_41_decks`); save `cages_start` and scenario `cages_auto_plan`; every golden unchanged; `FB-334` |
+| `PR7-41` (`PLAYTEST-FIX3`) items 3-5 | done | `develop` (squash `PR7-41-2`) | PT-20: every forecast is per hit at the landing block with the target's guard then, "Targets you in Bn" names the landing block, unrevealed plans show only the told hit; PT-17: area marks are the tiles struck at impact, any revealed area marked; PT-21: fight 1 footmen `footman_curfew` (speed -3, seed `pr7_41_fight1`) so the Pommel Strike lands first; goldens unchanged; `FB-336` |
+| `PR7-41` (`PLAYTEST-FIX3`) items 7-8 | done | `develop` (squash `PR7-41-3`) | PT-23: hero panel Ally button lists members the hero can use a skill or pouch item on and opens the skill menu there (as Ctrl+click); target refusals name the control; fight 1 hint names the click (seed `pr7_41_hints`); PT-28: under the deck rule members own their base deck passives from level 1 and the keystone from level 6 (kit `progression::deck_grants`), Skills tab says where they come from; goldens unchanged; `FB-338` |
+| `PR7-41` (`PLAYTEST-FIX3`) item 9 | done (PT-35 partial, two points left as designed) | `develop` (squash `PR7-41-4`) | PT-25 captives saved on results; PT-26 capped heals "healed 7 of 52"; PT-27 AP debt shown as owed; PT-30 worn-copy refusal, shop worn/Scrap, key item uses, pouch legend; PT-32 Menu Retreat (fled-timeout fights), Restart/Step hidden when unavailable, Clear on auto stays cleared, strip off under intro talk; PT-34 text fixes (seed `pr7_41_text`); PT-35 Talia turn-in line, recipient prompt only when needed, quit confirm, slot labels; PT-36 bench/points notes and a real Alert option; shots `/mnt/project-files/pr7-41/item9/`; goldens unchanged; `FB-340` |
+| `PR7-43` (`HUB-BUNKS2`) | done (UI to review; placeholder props) | `develop` (squash `PR7-43`) | Layout B (seed `pr7_43`): six niche bunks on the north wall 2.5 cells apart, three each side of the door, Timber Frames pair free-standing south; brass wall plates with class glyph and name (headboard for the south pair); class blankets, founder gear on pegs and keepsakes on beds; benched members sleep in their bunk (kit `bunks::sleepers`); provisional plank nooks with screens and a step; 33 placeholder PNGs; shots `/mnt/project-files/pr7-43/`; goldens unchanged; `FB-342` |
+| `PR7-37` (`PLAYTEST-FIX2`) | done (item 4 partial; item 5 already done in PR7-41; item 9 checked, no fix needed) | `develop` (squash `PR7-37`) | New game skips the world picker outside dev builds; round-limit ends read "Out of time" with the jobs still open; hub points act (seed `pr7_37`, kit marker `use`); Varka's shop opens after Ivo is rescued; no empty `[]` tags; Character window aligned; world map "Next:" way hints, full job legend, "Opens after X", "New road open" notice; dev-only Settings rows hidden in player builds, Map Camera Zoom on Display only; web smoke and a release-profile `smoke_player.play` follow the player flow; shots `/mnt/project-files/pr7-37/`; goldens unchanged; `FB-344` |
+| `PR7-41` (`PLAYTEST-FIX3`) item 6 switches | done (rules off by default; Tushar to rule, FB-334) | `develop` (squash `PR7-41-5`) | The parked re-grant and retarget rules land behind test-only switches `regrant` and `retarget` (`aegis_core::switches`, FB-343); off = today's behaviour, every golden unchanged; bisect results `/mnt/project-files/pr7-41/bisect/summary.md`; `FB-346` |
+| `PR7-42` (`PACE1`) | done (sim bands unchanged; band misses predate it) | `develop` (squash `PR7-42`) | Act 1 patrols every 40-60 steps, at most 2 per location visit, a beaten patrol rests until the next day, repeat wins pay 75/50/25% XP then 0 (kit zone keys `visit_cap`, `rest_beaten`, `repeat_xp_pct`); quest `rec_level` on the board, The Cages (4) listed before The Sweep (5); the Candle-Maker sells Warded Tallow for 5 Scrap, Make camp needs 1 Tallow, the map shows the -2 AP penalty; fight 2 hint matches its objective and its unreachable exit tile is gone; seed `pr7_42`; goldens unchanged; `FB-348` |
+| `PR7-36` (`STYLE-PASS1`) items 1-9 | done (items 4 and 9 partial; item 10 waits on PR #67) | `develop` (squash `PR7-36`) | Theme tokens: cyan, bright green and light blue retired for gold, amber, parchment, moss HP and cold-iron AP (`emberwake_gui::tokens`); popups on frame A (`panel.png`, placeholder), main panels ornate (`Ui::frame_in`); Alegreya SC gold titles; 32 px icon tiles on shop, stash, skills and gear rows; save slots over the dimmed title with portrait and day; one amber for chevron and chip; parchment move tiles and amber exit markers; world map label plates and gold party ring; engine shared blocks in `aegis_ui::panes` (shell, row, type steps, colour roles, tooltip, key hints); shots `/mnt/project-files/pr7-36/`; goldens unchanged; `FB-350` |
+| `PR7-44` (`CONTROLS-UI1`) | done (default layout; Art/UI layout file optional) | `develop` (squash `PR7-44`) | Settings > Controls rebinds keys and pad buttons: click a row, press a key or button, Esc or right click cancels, a clash asks before it swaps, Restore defaults clears the settings key `controls`; engine `aegis_ui::controls` rebind model and `Screen::capture`; game view-model `settings_controls` drawn through the default layout; scenario `controls_rebind`; shots `/mnt/project-files/pr7-44/`; goldens unchanged; `FB-352` |
+| `PR7-36` (`STYLE-PASS1`) item 10 | done except party token scale (ART-19, question) | `develop` (squash `PR7-36-2`) | Palette ids for Sabina, Varka and Berek (seed `pr7_36b`); region and hub points draw a glyph per kind, amber usable, iron used, oxblood locked exit; a 2 px intent line under battle skill icons; engine ground contact lines (`GroundLayer::contact`, off by default, on for the game's land layers); undercroft basin, hearth, hall, entry and hollows on `drain_brick` walls; shots `/mnt/project-files/pr7-36/item10/`; goldens unchanged; `FB-354` |
+| `PR7-40` (`BATTLE-UI2`) part 1 | done (sections 1, 3-5, most of 2 and 6; the rest in parts 2-3) | `develop` (squash `PR7-40-1`) | Battle plates 176 px in 184 px panels with an 888 px board; foe panel with compact plates and groups, crown and boss gold; docked foe card from the live plan (per-hit poise pips, KO and break tags, after-KO, crit star); top bar round, goal and protect lines, AP pips and ruler; 4-slot status tabs; unit field `short_name` with 24 enemy short names (seed `pr7_40`, `[PROVISIONAL]`, for Tushar's review); battle view-model `battle_view`; shots `/mnt/project-files/pr7-40/`; goldens unchanged; `FB-356` |
+| `PR7-40` (`BATTLE-UI2`) part 2 | done except section 7 (skill menu rows, question) | `develop` (squash `PR7-40-2`) | Gold rim on the latest pick, effect chips on strip tiles, tactic pennant buttons and the Auto button; foe groups open and close; the card stays on the planning hero's target; moss heal preview on plates (kit `intent::heal_on`); hazard icons with rounds left and dashed push and pull arrows; "Survive N rounds"; battle colours as theme tokens (Art/UI picks); shots `/mnt/project-files/pr7-40/part2/`; goldens unchanged; `FB-358` |
+| `PR7-53` (`BUNKS-LAYOUT3`) with `PR7-50` (`BUNKS-UPGRADE-PROPS1`) | done (UI to review; placeholder art) | `develop` (squash `PR7-53`, one commit for both, Design 2026-11-19) | Take 8 bunk room: six niche beds 80 px apart on a dressed-stone wall with keystones, founder lunettes, one brass plate style, peg boards of gear, sleepers in the front idle pose under the blanket, stove between the tables, west barrels gone, the Act 2 pair sideways on the south wall; map prop key `until_bunk` holds a bunk's place until the bunk cap reaches it (timber, pallets, crates on the Act 2 cells); seeds `pr7_53`, `pr7_53_upgrade_props`; shots `/mnt/project-files/pr7-53/`; goldens unchanged; `FB-360` |
+| `PR7-51` (`FOOTLOCKER1`) with `PR7-52` (`BUNKS-EMBLEM1`) | done (UI to review; placeholder footlocker art) | `develop` (squash `PR7-51`, one commit for both) | A footlocker at the foot of each active or benched member's bunk (none for a crypt member or an empty bunk); a click or E opens it and that member's loadout with the shared stash, and it closes with the screen; the hub stash chest is gone (seed `pr7_53z_footlocker`), the stash stays on I and the HUD; founder lunettes draw `ui/badges/founder_<id>.png`; the blanket folds over a sleeper's shoulders; every empty bunk wears a blank plate; shots `/mnt/project-files/pr7-51/`; goldens unchanged; `FB-362` |
+| `PR7-40` (`BATTLE-UI2`) part 3 | done (row closed; two questions) | `develop` (squash `PR7-40-3`) | One row skill menu replaces the icon grid (contract 7): opens on an empty or picked strip block, a board target, or a ghost block by right click or Tab / pad north; title "Block N vs Target"; kit `pick_hits`, `next_pick_block`; proof-shot scenario `battle_board_marks` (heal, status, hazard, push); `game_colors` sorted; an open foe group listed once; section 8 and heal "+n" GUI tests; shots `/mnt/project-files/pr7-40/part3/`; goldens unchanged; `FB-364` |
+| `PR7-58` (`FOOTLOCKER1B`) with `PR7-46` (`BUNKS-FIX1`) item 3 | done (PR7-46 closed: items 1-2 elsewhere) | `develop` (squash `PR7-58`, one commit for both) | E takes a footlocker ahead first, then what stands ahead, a footlocker underfoot last; the footlocker shows open for 0.25 s before its loadout and after it closes; Extra large plates drop the class glyph and cut a too-wide name with an ellipsis; one-click talk already worked, now proven by a test and scenario `one_click_talk` (state key `walk_to`); shots `/mnt/project-files/pr7-58/`; goldens unchanged; `FB-366` |
+| `PR7-54` (`BOSS-UI1`) | done except BU8 (boss poise data waits for Tushar's golden approval) | `develop` (squash `PR7-54`) | Boss bar across the board top (contract 9, take 32): phase HP span and markers, per-phase names, one poise bar with ticks and "6/10", passive tags, icon-only tabs; planning-only intent rows (selected hero plus "Others", hover with every member, totals, "Party" line) on fixed cells; phase-break headers and greyed blocks; kit unit field `poise_pips` (no data); skill menus beside a tile keep clear of the card, foe panel and target; scenario `boss_bar`; shots `/mnt/project-files/pr7-54/`; goldens unchanged; `FB-368` |
+| `PR7-57` (`STATUSVIS1-B`) | done | `develop` (squash `PR7-57`) | Statuses shown where they act (SV5-SV15): grey lock tiles with the status icon on the strip and in the full view (stun one tile, stagger single tiles; a locked block opens no menu); one planned-loss "-n" on party and foe plates with a hover of hits and round-end ticks; card numbers after all modifiers, tinted with an arrow, frameless breakdown hover; taunt badge over the sprite; riposte chip with no number; plate column priority; two passive sockets under the portrait; calm full timeline view with one target square per row; kit `status_view`; engine `aegis_ui` timeline slots; scenario `statusvis1b`; shots `/mnt/project-files/pr7-57/`; goldens unchanged; `FB-370` |
+| `PR7-59` (`BOSS-UI1B`) + FB-370 riposte | done | `develop` (squash `PR7-59`) | Boss bar title is the unit's name and title (phase names only in the banner); optional kit phase key `form` (`<name>, <form>`, content check 1-40 characters, no data); the Stage board shifts down (at most 20 px) until the grown bar covers no unit or open tile; poise badges drawn from the kit files with the drawn fallback; riposte chip follows the riposte rule (`command::riposte_answers_at`); shots `/mnt/project-files/pr7-59/`; goldens unchanged; `FB-372` |
+| `PR7-45` (`HITCALC1`) | done | `develop` (squash `PR7-45`) | One hit builder (`command::hit_terms`) shared by `Command::land` and `intent::hit_on`: cover by `cover_between`, both units' tiles, stances and guard at the landing block; impact failures forecast as such (dodged, out of reach, flank protected, taken by an ally); round-over hover reads "This round:"; seeds `act1story` and `cast1enc` archived (their stale `enc_pro_0a` copy undid PT-21); `refusal::Reason::NeedsTarget` replaces English matching; keystone header names its source; forecast-equals-result test (438 hits, 0 mismatches); goldens unchanged; `FB-374` |
+| `PR7-47` (`POLISH-FIX4`) items 2-5 | done (item 1 moved to `PR7-60`) | `develop` (squash `PR7-47`) | The upkeep refusal names the world's item ("Not enough Warded Tallow to make camp."); the New road notice is kept in the save (`explore.roads_seen`) until the map shows it; the pawnbroker, lodging keeper and Skerrit (until vouched for) answer "What do you sell?" with a no-trade line (seed `pr7_47`); the battle Menu button fits at Extra large; goldens unchanged; `FB-376` |
+| `PR7-48` (`STYLE-PASS1B`) | done | `develop` (squash `PR7-48`) | Amber ring on a click-to-walk's destination tile (the NPC's tile for a walk-and-talk) until arrival or a new order; battle heal float in the theme's moss (`tuning.json` `heal_color` retired); never stacked: `aegis_ui` `Screen::panel()` and `screen::drawn_screens`, a panel over a panel takes its place and Back returns to it; shots `/mnt/project-files/pr7-48/`; goldens unchanged; `FB-378` |
+| `PR7-49` (`CONTROLS-UI1B`) | done | `develop` (squash `PR7-49`) | Every on-screen key hint reads the bound key (plus the pad button on hover titles) from `Controls`; a waiting rebind ends on the action's own input or after 5 s; `y`, `r` and the digits are fixed keys a rebind refuses, naming the screen; the controls view puts the key in `detail` and the pad button in `detail2`; question boxes answer `y` / `n` by the raw key; shots `/mnt/project-files/pr7-49/`; goldens unchanged; `FB-380` |
+| `PR7-65` (`DIORAMA1B`) | done | `develop` (squash `PR7-65`) | Painted sheets: `clips.json` `foot` and `painted` (no palette swap); on the battle stage a body with a `foot` row stands 1.15 cells (32 px) tall per footprint cell, feet on the foot point (2 x 2 about 2.3 cells); seed `pr7_65` points the four founders and 15 Act 1 foes and bosses at their painted sheets; placeholder portrait copies keep every portrait unchanged; shots `/mnt/project-files/pr7-65/`; goldens unchanged; `FB-382` |
+| `PR7-69` (`GRATE-GROUND1`) | done | `develop` (squash `PR7-69`) | Seed `pr7_69` retags 107 walkable mud cells of the Grate's north quay (`sunk_ward_runoff_grate`, rows 3-11) to flagstone; the silt bank, soot yard, catwalk and ring road unchanged; shots `/mnt/project-files/pr7-69/`; `FB-384` |
+| `PR7-73` (`PAINTED-MAPS1`) | done | `develop` (squash `PR7-73`) | Hub and region maps scale a body with a `foot` row like the battle stage (1.15 of the map's tile width, feet on the tile's foot point); kit unit field `portrait` looked up before the body key; seed `pr7_73` keys the seven painted-body units to the files they already show (Art/UI #87 portraits kept); shots `/mnt/project-files/pr7-73/`; goldens unchanged; `FB-386` |
+| `PR7-76` (`ACT1-FIX2`) | done | `develop` (squash `PR7-76`) | Act 1 agent-run fixes PT-42..63 (Here list usable points and edge arrows, no repeat point answers, roads drawn at rest, vignette two-press, job places and locked reasons, ready quest in legend, Make camp reason, directional exits, walk resumes after a won fight, batched turn-ins, can't-wear badge, dialogue change log, opaque Journal, skill picks logged, Tithing at-0 line); seed `pr7_76_hub_cast` keys five hub NPC bodies; grate silt parked; shots `/mnt/project-files/pr7-76/`; goldens unchanged; `FB-388` |
+| `PR7-78` (`ACT1-DATA1`) | done | `develop` (squash `PR7-78`) | q_a1_m4 already grants its promise (no change); `rec_level` on the eight flag-job quests, with a test; Crucible and Overlook already name the interlude in `closed_text` (no change); seed `pr7_78_quests`; goldens unchanged; `FB-390` |
+| `ENGINE-34` (`BONEMILL-CHECK1`) | Report | `develop` | Bone-Mill won by hand on try 1 at Lv 7 (the auto plan still loses it); the Crucible lost 5 times at Lv 8 (1 auto, 4 hand), so the act's end was not reached; no debug; PT-66..84; `FB-392` |
+| `PR7-81` (`DECOR1`) | done | `develop` (squash `PR7-81`) | Display-only encounter field `decor: [{art, x, y}]` (kit schema, typed reader, content check), drawn by the stage with `lights` on its art key; no rule reads it; goldens unchanged; `FB-396` |
+| `PR7-84` (`ACT1-DATA2`) | done | `develop` (squash `PR7-84`) | `rec_level` 7, 7, 8 on the Bone-Mill, Vats and Crucible; the Crucible and Overlook lock hint names the Bone-Mill and Vats turn-ins; the winch drum gets a Here row; Dunstan's battle line is wordless; six `pr7_84_*` seeds; `FB-398` |
+| `PR7-79` (`DIORAMA-DRESS1`) | done | `develop` (squash `PR7-79`) | Ten Act 1 Sunk Ward battle boards dressed through `decor` seeds (`cover/v3` lamps on blocks, edge `lantern_pole`s, edge props), no walkability change; fix: the arena launch path reads `<world>:<id>` so its board gets the world's stage set; shots `/mnt/project-files/pr7-79/`; goldens unchanged; `FB-400` |
+| `PR7-86` (`DECOR-GEN1`) | done | `develop` (squash `PR7-86`) | Generated boards (no `rows`, no `decor`) draw 2 to 6 display-only decor pieces from the world manifest's `decor_pool` on their own seeded stream: cover keys on blocks or edges, props at the back only; seed `pr7_86_decor_pool`; goldens unchanged; `FB-402` |
+| `PR7-85` (`XL-FIX2`) | done | `develop` (squash `PR7-85`) | "R 1/12" at Large and Extra large with the goal line clear; Stats and Gear rows grow with text size (second column when needed); every XL cut hovers to its full words; engine `Screen::audit_ignores` and cut `hover`/`bare_cut`; Normal shots unchanged; `FB-404` |
+| `ENGINE-35` (`ACT1-END-RUN1`) | Report | `develop` | Crucible won by hand on try 3 at Lv 8 (no debug); Act 1's end reached at Tithing 19; Kaelen held the winch and was captured; PT-85..100; `FB-406` |
+| `PR7-89` (`ACT1-FIX4`) | done | `develop` (squash `PR7-89`) | Captured hero keeps the dose; `[Wave]`, `[Hazard]` and foe `[Escape]` log lines; results list who fought and a captured hero's XP; Journal scrolls clear of Back; hover cards close at battle end; doubled words fixed; portcullis is a look point matched to its art; the post-act road starts at the Undercroft; goldens unchanged; `FB-408` |
+| `PR7-91` (`ACT1-FIX5`) | done | `develop` (squash `PR7-91`) | The round banner hides once a battle has an outcome; blocker and forced-move lines name the terrain ("blocked by Lava", "the rubble"), a plain floor still "Floor"; goldens unchanged; `FB-410` |
+| `PR7-35` (`ASSETLIB1`) | done (tools lane) | `develop` (squash `PR7-35`) | Library folder `kits/rpg/library/` (README, empty) and `tools/assetlib/check_library.py` in the gate (`tools/fc.sh assetlib`); `FB-311` |
+| `PR7-4` (`SCENARIO-GOLDENS1`) | part 1 done (tools lane); baselines await the user | `develop` (squash `PR7-4` part 1) | Scenario `shot` step `golden` (tolerance, pixels allowance, diff image), `record=1`, launch `save`; every scenario in the gate (`tools/fc.sh scenarios_all`); three screen scenarios (menus, hub, battle; 18 shots) run as review shots until the user approves the baselines (`/mnt/project-files/pr7-4/`); `FB-313` |
+| `ENGINE-1` (`HELLO-GAME1`) | done (tools lane) | `develop` (squash `ENGINE-1`) | Sample game `games/hello/` on engine crates only: menu, walker sprite, one save slot, engine sounds, scenario `hello_walk` in the gate; programs `hello` and `hello_cli`; six RPG leaks listed; `FB-315` |
+| `ENGINE-2` (`PERF-STEP1`) | done (tools lane) | `develop` (squash `ENGINE-2`) | Scenario `perf` step (no window: frame times, calibration, `budget` with a `no verdict` on a changing load); link request `perf`; `aegis_ui::perf` and `tools/fc.sh bench` (fill, panels, text); perf steps in both games' scenarios; `FB-317` |
+| `PR7-38` (`UISPLIT1-E`) | done (tools lane) | `develop` (squash `PR7-38`) | `aegis_ui::screen_layout`: views and fixtures (`ui/views/<screen>.view.json`), layout files (`ui/layouts/<screen>.json`), 13 components, the default, the run-time loader with fallback and debug reload; `ui_layout check` in the gate (`tools/fc.sh layouts`) and `ui_layout shot`; UI Gallery entry Screen layouts; engine sample `layout_sample`; authoring page `engine/docs/authoring/screen_layouts.md`. FB-319 |
+| `ENGINE-3` (`SHELL-SPLIT1`) | done (tools lane) | `develop` (squash `ENGINE-3`) | `aegis_ui/src/shell.rs` 4,423 to 2,904 lines (1,160 of code, the rest its tests): new modules `shell/input.rs`, `link.rs`, `settings.rs`, `window.rs`; code moved line for line, behaviour identical; native and wasm builds clean. FB-321 |
+| `ENGINE-4` (`CI-HARDEN1`) | done in part (tools lane); web smoke as a required check waits for Design | `develop` (squash `ENGINE-4`) | Workspace deny set (`unsafe_code`, clippy `dbg_macro`, `todo`, `unimplemented`) in every crate; gate step `tools/fc.sh lints` (the deny set under clippy, `tools/deps/unused_deps.py` and its tests); advisory Windows job in `gate.yml` (build and test, MSVC). FB-323 |
+| `ENGINE-6` (`NEW-GAME1`) | done (tools lane); which other authoring pages move to the kit waits for Design | `develop` (squash `ENGINE-6`) | `aegis new game <id> [title=] [root=]` (any game's CLI) writes `games/<id>/` on the engine alone from `engine/crates/aegis_cli/templates/new_game/`; gate step `tools/fc.sh newgame` makes one, builds, tests and plays its scenario, then removes it; `scenarios_all` runs every game with a `scenarios/` folder; API guide `engine/docs/API.md`; `combat_hooks.md` and `rule_library.md` moved to `kits/rpg/docs/authoring/` (pointer pages left). FB-325 |
+| `ENGINE-7` (`INPUT-MAP1`) | done in the engine (tools lane); feel needs a user playtest with a pad; a rebinding screen is game UI | `develop` (squash `ENGINE-7`) | `aegis_ui::controls`: the control map (settings key `controls`, keys and pad buttons to `Key`s), applied to every key the shell hands a screen; Windows gamepad (`gilrs`) with d-pad and stick repeat and `Held::dir`; link requests `pad` and `controls`. FB-327 |
+| `ENGINE-10` (`ROBUST1`) | done in the engine (tools lane); translating the game's own words is game work | `develop` (squash `ENGINE-10`) | `aegis_ui::strings` (string tables over the asset layers, `tr`, settings key `language`, a gate check in `fc.sh layouts`); `aegis_ui::crashlog` (`game.log` and crash reports beside the settings, windowed native runs); property tests for layout, pak and save migration. FB-329 |
+| `ENGINE-5` (`ENGINE-PURITY-3`) | done (tools lane): parts 1 and 3 (part A), part 2 with `ENGINE-8` KU1 (part B, FB-339) | `develop` (squash `ENGINE-5` parts A and B) | Scenario `launch.screen` takes any screen id, the game's list `Game::launch_screens` (Emberwake `menu`, `arena`, `runner`) and its rules `Game::launch_problems` (ruleset only in the arena) checked by `scenario check`, `run`, `shots`; recordings pane words from `Recordings::labels` (engine default "SESSION"); timeline ruler label `Timeline::ruler`; trail plan edits read `subject` (alias `unit`); `bridge.rs` stays (names no RPG term). FB-331 |
+| `ENGINE-11` (`GAME-START1`) | done (tools lane) | `develop` (squash `ENGINE-11`) | `aegis_ui::start::Start` (manifest, layers, saves, shots, settings, audio, options, the `Cx`) used by `emberwake_gui`, `hello` and the new-game template; `game.json` key `cli` (Emberwake `aegis`, else `<id>_cli`), read by `tools/fc.sh` for scenarios and the playtest smoke; the layers check exempts `hello`. FB-333 |
+| `ENGINE-9` (`WORLD-PRIM1`) | done (tools lane) | `develop` (squash `ENGINE-9`) | New crate `aegis_grid` (cells, 4 and 8 neighbours, `search` uniform cost or A*, `reach`, `line`); `aegis_ui::world_camera` and `aegis_ui::tilemap`; the kit's battle routes (`rpgkit_battle::path` `find_path`, the 2 x 2 square path) run on `aegis_grid::search`, every golden unchanged; `games/hello` draws its field as a tile layer and walks to a clicked tile (link `walk_to`). FB-335 |
+| `ENGINE-12` (`GATE-PARITY1`) | done in the cloud (tools lane); the PC run of `check_project.ps1` asked of the PC thread | `develop` (squash `ENGINE-12`) | `tools/gate_steps.txt` lists the gate's 13 steps; `tools/fc.sh gate` and `check_project.ps1` both run that list (the desktop gate gains repro, playtest smoke, scenarios, new game, layouts, lints, planner tests, asset library); `tools/fc.sh step <name>` runs one; the PowerShell copy of the layers check is gone. FB-337 |
+| `ENGINE-8` (`KIT-UI1`) | KU1 done (tools lane, with `ENGINE-5` part 2); KU2-KU5 wait for screens split under `UISPLIT1` (the shop after `PR7-39`) | `develop` (squash `ENGINE-5` part B) | New kit crate `rpgkit_ui` (on `aegis_ui`, names no game): `portrait_fx`, `portrait_overlays`, `pips`, `vignette`, `portrait_page`. FB-339 |
+| `ENGINE-13` (`SHADE-EXPORT1`) | done (tools lane) | `develop` (squash `ENGINE-13`) | `tools/sprites/export_units.py` lists a class body's `_lo` / `_hi` shades (the FB-330 patch); 20 class-body `clips.json` re-exported (shade slots only; sheets untouched); story vignette line-card portraits draw on the portrait well inside the F2 frame (`rpgkit_ui::portrait_fx::portrait_well`). FB-341 |
+| `ENGINE-14` (`GOLDEN-BISECT1`) | done (tools lane) | `develop` (squash `ENGINE-14`) | `aegis_core::switches::on(name)` (test-only switches: env `AEGIS_SWITCHES`, debug builds only) and `tools/fc.sh golden-bisect <golden> <switch> [--keep DIR]` / `list`: records the golden with the switch off and on, lists the fights or runs that move, restores the fixtures. FB-343 |
+| `ENGINE-15` (`TOOLS-HELP1`) | done (tools lane) | `develop` (squash `ENGINE-15`) | `tools/fc.sh golden-bisect repro <switch>` (the repro replays off and on), `tools/fc.sh schema-field` (a field into `kits/rpg/schema.json` byte for byte), `tools/fc.sh seed-from` (a seed from a stored entry with changes) and `aegis content get <kind> <id> [world=]`. FB-345 |
+| `ENGINE-16` (`TOOLS-HELP2`) | done (tools lane) | `develop` (squash `ENGINE-16`) | `tools/fc.sh scenario shots-all out=<dir> [compare=<before>]` (every scenario's shots in one flat folder; changed, new and gone shots with pixel counts) and `tools/fc.sh rename <old> <new>` (an identifier across Rust and JSON; strings and comments left unless asked). FB-347 |
+| `ENGINE-17` (`SHOT-CLOCK1`) | done (tools lane) | `develop` (squash `ENGINE-17`) | The shot clock: `aegis_core::clock::Instant` is stepped in every scenario run with no window (`clock=step`), time moving only by the frames the driver asks for; shot step `t`; new game seed from `clock::system_now`; gate step `shotsexact` (every scenario twice, 71 shots byte for byte). FB-349 |
+| `ENGINE-18` (`LAYOUT-KIT2`) | done (tools lane) | `develop` (squash `ENGINE-18`) | `list_row` scrolls inside a short region (every row a widget, the focused row kept in view), no icon tiles without pictures, `detail2` second numbers column, `stat_block` `style: muted`, `heading` component with fixed `text`. FB-351 |
+| `PR7-39` (`UISPLIT1-G`) | Stage A done (tools lane); Stage B waits for `ENGINE-19` | `develop` (squash `PR7-39` Stage A) | Shop view-model `shop_view.rs`, its actions through `ShopPane::act`, fixture `ui/views/shop.view.json`, tests; today's drawing kept. FB-353 |
+| `ENGINE-19` (`LAYOUT-KIT3`) | done (tools lane) | `develop` (squash `ENGINE-19`) | `list_row` row buttons, selected rows, toned `detail`, a dimmed `then` section, view row ids (`row_ids`), and a `detail_line` component that follows the hot row. FB-355 |
+| `ENGINE-8` (`KIT-UI1`) KU2 | shop done (tools lane); next screens wait for their UISPLIT1 split | `develop` (squash `ENGINE-8` KU2) | The shop and its view-model moved to `rpgkit_ui` (`shop`, `shop_view`, hosted by `ShopGame`); the game keeps its texts and tests. No behaviour change. FB-357 |
+| `PR7-39` (`UISPLIT1-G`) Stage B | done (tools lane); the battle report half waits for `PR7-32` | `develop` (squash `PR7-39` Stage B) | The shop draws through the kit's layout `kits/rpg/assets/ui/layouts/shop.json`; new widget ids; no per-row hover cards. FB-359 |
+| `PR7-39` (`UISPLIT1-G`) Stage B fix | done (tools lane) | `develop` (squash `PR7-39` Stage B fix) | The shop's layout matches the hand-drawn look: body-face numbers, thin column boxes, muted headings and title at the old inset, totals spaced as before (new layout styles). FB-361 |
+| `PR7-34` (`AMBIENCE1`) | done (tools lane) | `develop` (squash `PR7-34`) | An ambience bus and loop channel in the engine beside the music; region, hub and road screens play `ambience/<key>.ogg` by the music's keys; a Ward Ambience slider on the Sound tab; placeholder loops in the kit. FB-363 |
+| `ENGINE-12` PC gate fix | done (tools lane) | `develop` | The PC gate failed at step 4 (playtest): in the desktop's main checkout `tools/fc.sh` looked for binaries in `$PWD/target` while cargo built into `.cargo/config.toml`'s target-dir. `fc.sh` now exports that target-dir when `CARGO_TARGET_DIR` is unset (off Linux), as linked worktrees already did. The PC re-run is next. |
+| `ENGINE-20` (`TOOLS-HELP3`) | done (tools lane) | `develop` (squash `ENGINE-20`) | Seed order check (gate step `seeds`), `seed-from --fields` with a `fields` upsert in the writer, `shots-all crop=` and before / after / diff sheets, toned text fields and the shop's total toned by sign again. FB-365 |
+| `ENGINE-12` PC gate fix 2 | done (tools lane) | `develop` | The PC gate's step 10 (lints): `tools/deps/unused_deps.py` took a crate's name by splitting its path on `/`, but on Windows glob joins with a backslash, so the keep list never matched. It now uses `Path(crate).name`. In a sweep of the other tools, every other `split("/")` splits an asset key, not a path. `golden_bisect.py` now lists files as posix paths. |
+| `ENGINE-12` (`GATE-PARITY1`) | closed: the PC gate passes | `develop` ec53813 | The PC thread ran `check_project.ps1` on develop ec53813: all 15 steps passed (3952 tests, exit 0). |
+| `ENGINE-22` (`SEED-ARCHIVE1`) | done (tools lane) | `develop` (squash `ENGINE-22`) | 33 stale seeds moved to `data/seeds/archive/`, with a README row each. The 2 known overlaps are settled. `seed_order_known.txt` is empty. FB-367 |
+| `ENGINE-22` fix | done (tools lane) | `develop` | Correction to FB-367: my edit to `cast1a3.json` (narrowing its `bile_coat` step) moved it last in the commit order, so after main Build's `pr7_40` landing the seeds step failed: 34 findings, all `cast1a3.json` against `pr7_41_text.json`. `cast1a3.json` is now restored as it was and archived, making 34 archived seeds. `tools/fc.sh seeds` reports 67 seeds and 0 findings. `seed_order.py`'s doc and the seeds README say an old seed is archived, never edited in place. develop was red on the seeds step between 33a6b49 and this fix. |
+| `ENGINE-21` (`UISPLIT1-H`) board and save/load | Stage A done (tools lane); the character sheet waits for main Build's `PR7-45` | `develop` (squash `ENGINE-21` A1) | View-models, actions, fixtures and tests for the notice board and the save/load screens; today's drawing kept. FB-369 |
+| `ENGINE-23` (`UISPLIT1-I`) recipe and facility | Stage A done (tools lane); the party loadout waits for main Build's `PR7-51`, the world map for `PR7-47` | `develop` (squash `ENGINE-23` A1) | View-models, actions, fixtures and tests for the recipe pane and the facility screen; today's drawing kept. FB-371 |
+| `ENGINE-20` fix (CI seeds) | done (tools lane) | `develop` | The seeds step failed on CI since 18:13 UTC: the gate job's depth-1 checkout gave every seed the same commit time. The checks job now checks out with `fetch-depth: 0`, and `seed_order.py` fails with its reason when a seed's last commit is a shallow clone's boundary. FB-375 |
+| `ENGINE-24` (`PASSIVE-ICON1`) | done (tools lane) | `develop` (squash `ENGINE-24`) | Kit field `icon` on passives with its derivation and content check A21, 16 placeholder icons, a seed giving the 97 passives their archetype, and two loadout passive icons under the portrait on party plates. FB-373 |
+| `PR7-55` (`ENRAGE2`) + `PR7-56` (`PHASEBREAK1`) | done (tools lane); the battle screen parts are main Build's (`PR7-40` part 3, `PR7-54`) | `develop` (squash `PR7-55` + `PR7-56`) | Phase break (a hit stops at the phase threshold and ends the round; phase `vignette` cue); baseline enrage by tier from round 6 (ruleset fields, seed `enrage2.json`); `timeout_outcome: escaped` for random fights (no rewards, retreat allowed); Sunk Ward caps by tier; sim `pace=on`; one boss balance run; sim, PHASEFOLD and rules contract goldens re-recorded. FB-377 |
+| `ENGINE-23` (`UISPLIT1-I`) party loadout | Stage A done (tools lane); the world map still waits for `PR7-47` | `develop` (squash `ENGINE-23` A2) | View-model, actions, fixture and tests for the party loadout (the Character window's Gear tab the footlockers open); today's drawing kept. FB-379 |
+| `ENGINE-26` (`BALANCE-WHATIF1`) | done (tools lane); the data change waits for the user | `develop` (squash `ENGINE-26`) | What-if sim keys `foe_hp=`, `foes=`, `foe_level=` (feel mode, report only); random, elite and boss what-if runs in `BALANCE_REPORT.md`. FB-381 |
+| `ENGINE-25` (`UISPLIT1-J`) forge, siege, epilogue | Stage A done for three screens (tools lane); the dojo next; the hub talk held for main Build's `PR7-46` | `develop` (squash `ENGINE-25` A1) | View-models, actions, fixtures and tests for the Content and World Forge viewers, the siege screen and the epilogue; today's drawing kept. FB-383 |
+| `ENGINE-25` (`UISPLIT1-J`) dojo | Stage A done for the dojo (tools lane); four of five screens done, the hub talk held for main Build's `PR7-46` | `develop` (squash `ENGINE-25` A2) | View-model, actions, fixture and tests for the dojo; today's drawing kept. FB-385 |
+| `ENGINE-25` (`UISPLIT1-J`) hub talk | Stage A done for all five screens (tools lane) | `develop` (squash `ENGINE-25` A3) | View-model, actions, fixture and tests for the talk box; today's drawing kept. FB-387 |
+| `ENGINE-27` (`CRUCIBLE-CHECK1`) | Done, report only (tools lane) | `develop` | No rule bug: the escape needs all three non-holders out; at the authored level 1 a founder falls in round 1, and at level 4 the round-3 wave still blocks the exit lane (Overlook 75 %, base 0 %). FB-389 |
+| `PR7-29` (`SLOTCARD1`) | Done (tools lane) | `develop` | The save and load screens draw six `slot_card`s in two columns (location picture, place, day, party portraits, time, lock and delete); one click acts as before; "The Ashlands · time" with no location. FB-391 |
+| `PR7-28` (`TITLEFX1`) | Done (tools lane) | `develop` | Lantern glows and rising embers over the title backdrop at the spots of `backgrounds/menu/title.fx.json`; off under Reduce motion; scenarios `title_fx` and `title_fx_still`. FB-393 |
+| `ENGINE-28` (`CAMPAIGN-SIM1`) | Done, report only (tools lane) | `develop` | `tools/fc.sh sim campaign world=<world>`: story fights in story order with the party each fields, XP and levels carried by the kit's rules, optional side fights; Sunk Ward founders reach M5 at level 7, where the Crucible is still 3 % (Overlook 9 %). FB-395 |
+| `PR7-30` (`MENURAIL1`) | Done (tools lane) | `develop` | Game menu as a left rail plus party box; story title cards and the run-over card in the ornate frame with the title on a banner across the top edge (kit `rpgkit_ui::banner`); the Recipe pane ornate. FB-397 |
+| `ENGINE-29` (`ESCAPE-PLAY1`) | Done, report only (tools lane) | `develop` | No escape bug in the driver; the level effect was the fixed start (jittered: Crucible 0-6 % at every level 3-8); two trial fixes were worse and reverted; options for the Crucible call. FB-399 |
+| `ENGINE-30` (`AGENT-CRUCIBLE1`), `ENGINE-31` (`SIM-JITTER1`) | Done, report only (tools lane) | `develop` | The Crucible played by hand at level 7: base won in round 6 and Overlook in round 5 with no downs, every other try lost a founder; `objective_count` 2 would turn three losses into wins; sim start jitter is already the default (fixed starts move 7-16 of 24 fights). FB-401 |
+| `PR7-60` (`ESCAPE-PLAN1`) | Built (tools lane); goldens parked | `develop` | Hand moves onto exits; a pick never drops another's (refused with the reason), hand moves pass through friends; the hold pick suggests the nearest hero and can change until round 1; a hero's Withdraw spends no AP it lacks; the foe card keeps off the winch and exits. `sim_golden`, `phasefold` and `timeline_golden` run the old moves behind a test-only switch until the user approves the re-record. FB-403 |
+| `PR7-61` (`PLAN-RECURSE1`) | Built (tools lane) | `develop` | An Engage with an area skill that `affects` `all` as a unit's first step no longer recurses without end with friends active: while a first move is compiled, the area counts friends where they stand. No golden moved. FB-407 |
+| `PR7-31` (`OBJUI1`) | Built (tools lane) | `develop` | Board chips for morale (state bars, the group letter with several groups), the leader's pennant, the slay crown and the guest shield (gold rim when it must survive); the words on the hover card and the foe card's portrait; the goal hovers to the objective and morale lines; the results read the objective line and a break's lines. No Enraged chip (Design's amendment). FB-409 |
+| `PR7-33` (`FLOATPANELS1`) | Built (tools lane) | `develop` | The region's "Here (N)" legend, its event ticker and the battle log float (unlock, drag, minimise in place to a named button, place and lock kept in the settings) on the floating panel, now an engine module `aegis_ui::float_panel` with shared chrome. FB-411 |
+| `PR7-62` (`INTERCEPT-LIMIT1`) | Built (tools lane) | `develop` | `trigger::intercept_of` walks the same `ally_hit` rows as the hit, in its order, with their use limits (counts now on `World::trigger_uses`): a spent intercept is no longer forecast. Kit tests for a spent limit; goldens unchanged. FB-413 |
+| `ENGINE-21` (`UISPLIT1-H`) character sheet | Stage A built (tools lane) | `develop` | View-models `character` (the window), `stats`, `level_up`, `skills` and `deck`, with actions, fixtures and tests; the Gear tab stays the `loadout` view; today's drawing kept. FB-415 |
+| `PR7-27` (`VNSTAGE1`) | Built (tools lane) | `develop` | The story stage: cards carry actors (full-body pictures, a code-drawn figure where none exists) who enter left and exit right, met ones pinned right; cameras Static, Scroll and Pan; dialogue and narration keep the scene's backdrop dimmed; the cutscene bar gains Auto and Log; born split (view `vignette` and its fixture). Seed `vnstage1` stages the meat market and the mortuary cart. FB-417 |
+| `PR7-64` (`DIORAMA1`) | Built (tools lane) | `develop` | Sunk Ward names stage set `sunk_ward_stage` (seed `diorama1`); ground hazards draw their painted decal `props/hazards/<status>/v*` under the icon and rounds left (the tint without a file); row 0's ground cells draw the set's `wall_foot` strip. FB-419 |
+| `PR7-66` (`VNSTAGE1B`) | Built (tools lane) | `develop` | The rest of Act 1's speaking scenes staged (seed `vnstage1b`): the three hub debates and the awakening fissure; data only, no new code. FB-421 |
+| `PR7-67` (`DIORAMA2`) | Built (tools lane) | `develop` | The wall lip in the stage set's tone; the front face from `tilesets/<set>/front_face/<terrain>/`; the stage fills the 888 px panel with faded wings, inside the panel's rim; edge decals unclipped. FB-425 |
+| `PR7-68` (`DIORAMA3`) | Built (tools lane) | `develop` | Amber light pools under the stage set's lantern spots and a soft vignette; a block inside the arena stands as the set's cover prop; the grid faint at rest, stronger while planning, with a Board Grid setting. FB-427 |
+| `ENGINE-23` (`UISPLIT1-I`) world map | Stage A done (tools lane); ENGINE-23 complete | `develop` | View-model, actions, fixture and tests for the world map; today's drawing kept. FB-429 |
+| `PR7-63` (`XL-BATTLE1`) | Built (tools lane) | `develop` | The battle screen at Extra large: the goal under the title, "Boss above" on its own row, cut texts hover to their words, tags and tabs centred; the boss bar's next blow back on screen. FB-431 |
+| `PR7-70` (`PANELS2`) | Built (tools lane) | `develop` | Save/Load slots, forge, dojo and the services screen are panels; they already filled the screen, so nothing changes on screen. FB-433 |
+| `PR7-32` (`BREPORTUI1`) | Built (tools lane) | `develop` | The results popup shows the battle report table and best moment; F2 panel sized to content, portraits, drop tiles, XP bars; PT-11 and PT-13 fixed. FB-435 |
+| `PR7-71` (`CONTROLS-MIGRATE1`) | Built (tools lane) | `develop` | On load, an action on a fixed key goes back to its own key (swap undone), the settings are saved and a notice names it. FB-437 |
+| `PR7-72` (`SHOT-DIFF1`) | Built (tools lane) | `develop` | `tools/fc.sh shots diff`: the scenarios a change can show, base shots cached per commit, `index.md` and a contact sheet. FB-439 |
+| `ENGINE-32` (`ACT1-AGENT-RUN1`) | Report (tools lane) | `develop` | Agent run of Act 1: 9 quests turned in, then blocked at the Bone-Mill boss for the auto plan; PT-40..PT-65. FB-441 |
+| `PR7-74` (`DIORAMA4`) | Built (tools lane) | `develop` | Zone stage sets, tint and terrain overrides (`stage.fx.json` keys for Art/UI), the backdrop band under the boss bar, see-through units in front of the focus, the boss-fight foe card off the party; S5 is an art crop. FB-443 |
+| `PR7-75` (`ACT1-FIX1`) | Built (tools lane) | `develop` | The ending's reason in the results and the log, the boss HP hover and the Hostiles count, a fresh seed on a retry, the talk-first message, no sentinel durations, the guest portrait, the portrait key first. FB-445 |
+| `PR7-77` (`DIORAMA5`) slice 0 | Built (tools lane) | `develop` | The content check and the layered-tree test accept ground sheets, accent decals, lip art and the exit path and gate props; R1 to R5 follow. FB-447 |
+| `PR7-77` (`DIORAMA5`) R1 to R5 | Built (tools lane) | `develop` | The battle ground composed by the region composer from the sheets, hashed variant picks, accent decals, lip art, additive lamp light with `lights`, the exit path decal and gate, rubble on the zone floor. FB-449 |
+| `PR7-77` (`DIORAMA5`) R6 | Built (tools lane) | `develop` | No grid lines at rest, the "Show full grid" setting (off by default), coherent 2 to 4 cell blobs, no edge pieces over the composed ground. FB-451 |
+| `PR7-82` (`RETRY-SAVE-FIX1`) | Built (tools lane) | `develop` | A lost fight's retry count (`retry:<encounter ref>` in the save's `rolls`) passes the save check, so the autosave after a loss works again; the retry seed is unchanged. FB-453 |
+| `ENGINE-33` (`XL-SWEEP1`) | Built (tools lane) | `develop` | Every scenario shot at Normal and Extra large text with a text audit per shot (`set=`, `audit=1`); four small fixes (plate HP, card name, boss name, world map side panel); the shop layout for Art/UI and three findings for Design. FB-455 |
+| `PR7-80` (`WALLMASS1`) | Built (tools lane) | `develop` | A wall run shares one cap (one variant per run, a ground sheet's cap continuous when there is one, a back-row shade); top and bottom exits draw `exit_path_north` (flipped for the bottom). FB-457 |
+| `PR7-83` (`ACT1-FIX3`) | Built in part (tools lane) | `develop` | PT-73, 75, 76, 79, 81, 84 fixed; PT-68 and PT-69 text fixed; PT-70 and PT-71 fixes move the sim golden, so held for Design with options; PT-67, 72, 74, 80 reported. FB-459 |
+| `ENGINE-36` (`TOOLS-REPEATS2`) | Built (tools lane) | `develop` | `scenario shots save=` (a name or a folder path) shoots a map from a save with no scenario file; `seed-from --ids a,b,c`; `playtest start keep_saves=<dir>`. FB-461 |
+| `PR7-87` (`FORECAST-FIX1`) | Built in part (tools lane) | `develop` | The forecast follows disengages, carried moves, pushes and stealth (PT-67, PT-69); every dropped later pick is said at pick time; PT-72's costs and "No path" not reproduced, reported. FB-463 |
+| `ENGINE-37` (`LOOK-POINT1`) | Built (tools lane) | `develop` | A point's `use` may be `look` (listed in Here, answers with its line, sets nothing, never spent); the winch drum uses it and drops `sunk_ward.winch_seen` (seed `engine_37.json`). FB-465 |
+| `ENGINE-38` (`LORE-RENAME1`) | Built (tools lane) | `develop` | `aegis content refs <kind> <id>` lists every reference; `aegis content rename <kind> <old> <new>` is a dry run, `--apply` rewrites data and seeds (only the matching strings) and moves the asset files, kept only when it adds no problem. FB-467 |
+| `ENGINE-39` (`TARGET-PRUNE1`) | Built (tools lane) | `develop` | `tools/fc.sh prune [target=] [--dry]` keeps only the newest test binary per name in `target/*/deps` and removes the incremental folders; `tools/fc.sh gate` runs it first when under 6 GB is free (`FC_PRUNE_MB`). FB-469 |
+| `ENGINE-40` (`ENGINE-GUIDE2`) | Built (tools lane) | `develop` | `engine/docs/authoring/battle_stage.md` (composed ground, stage sets and `stage.fx.json`, decor, painted sheets); scenario run keys and `shots diff` in `scenarios.md`; `content refs` / `rename` and look-only points; the sample game's field on the engine's ground composer. FB-471 |
+| `ENGINE-41` (`STAGE-KIT1`) | Built (tools lane) | `develop` | The battle stage module (geometry, `stage.fx.json` reader, composed board, decor, wall-run caps, exit path and gate, draw passes) moved to `rpgkit_ui::stage`; the game re-exports it and gives its sizes through `StageSizes`. Fixture hash, goldens and shots unchanged. FB-473 |
+| `ENGINE-42` (`KIT-SAMPLE1`) | Built (tools lane) | `develop` | `games/kit_sample/`: a two-a-side fight from its own catalog on the kit's battle stage (composed floor, one zone, a lit fire pit), engine and kit crates only; scenario in the gate; `engine/docs/authoring/kit_game.md`. FB-475 |
+| `ENGINE-43` (`TERRAIN-PARTIAL1`) | Built (tools lane) | `develop` | A terrain table may list only the types it changes; the rest take the kit's code defaults with no problem and no warning; a listed row is still checked whole. FB-477 |
+| `PR7-88` (`PLAN-FIX2`) | Built in part (tools lane) | `develop` | PT-86, PT-87 (ghost claims), PT-88, PT-89, PT-91 fixed with tests, goldens unchanged; PT-85 and PT-87's foe start tiles not done (findings in the item). FB-479 |
+| `PR7-90` (`FORECAST-MOVE1`) | Built (tools lane) | `develop` | A hit forecast reads where the target stands in the block the hit lands, after every move booked before it (walks through friends, tiles freed earlier, foes stepping in, re-paths); three logged cases as tests, goldens unchanged. FB-481 |
+| `ENGINE-45` (`FEEL-PROBE1`) | Built (tools lane) | `develop` | `aegis_ui::feel` times each input (arrival, handler done, frame start, presented) and every frame; `--feel` or the setting `feel` shows an overlay and writes `feel.log`; scenario step `feel` (p50, p95, worst; in the gate on `hello_walk`); report: battle planning frames 36 to 80 ms and two clicks over 100 ms, the rest under. FB-483 |
+| `ENGINE-46` (`FEEL-FIX1`) | Built (tools lane) | `develop` | Stage floor layer cache (`Painter::cached`), panels composed once, per-frame forecast memo (`intent::memo`), Settings warmed before the first frame (`Context::warm`); `feel_battle` and `feel_settings` budgets (100 ms input, 33 ms frame; 2.5 x in dev) pass; planning frames 17 / 28 ms p50 / worst (were 38 / 80), Settings first draw 13 ms (was 57), `strip.block1` 55 to 59 ms (was 113; the guest ghost re-sent each click is reported). FB-485 |
+| `ENGINE-47` (`GHOST-SETTLE1`) | Built (tools lane) | `develop` | The guest's ghost was not flipping (a draft settles on its own board; test added); `ally_moves` kept while nothing it reads changes (a run that fixes a step's tile is not kept, so plans stay bit for bit); `strip.block1` 43 to 46 ms against a 50 ms `feel` budget; goldens unchanged. FB-487 |
+| `ENGINE-48` (`INPUT-REACH1`) | Built (tools lane) | `develop` | Scenario step `reach` (keys and pad reach, focus shown, back) in the gate on `reach_menus`; every screen walked; fixed a cutscene focus ring off the canvas and dead arrows on cutscenes and in hub talk, board and shop; party skill and gear slots mouse only, for Design; goldens unchanged. FB-489 |
+| `PR7-92` (`INPUT-REACH2`) | Built (tools lane) | `develop` | Skill, gear, pouch and loadout slots pick (Enter), place or swap (Enter), drop the pick (Esc) and empty (Space, pad X) by key, hint line names the keys; the battle board is one Tab stop with an arrow tile cursor (ring 121 to 14); `reach_party` and `reach_battle` gate scenarios with `fail` on; goldens unchanged. FB-491 |
+| `ENGINE-49` (`WALK-FEEL1`) | Built (tools lane) | `develop` | `feel` measures movement (held keys and d-pad, long frames, `motion`: first move, beat, overshoot, turns, camera); hub and Cages map meet every target; click to walk moved a frame late (fixed); `walk_feel` gate scenario with budgets; six feel choices for Design; goldens unchanged. FB-493 |
+| `ENGINE-50` (`MAP-FRAME1`) | Built (tools lane) | `develop` | the region map's still layers kept and moved with the camera (engine `Painter::scroll_begin`), marker views read once per state: release median 18 to 6.8 ms, worst 51 to 19 ms on the hub; `frame_p50_ms` budget, `walk_feel` holds 16.7 / 33 ms; a key press after a long frame dated at most 25 ms back (`stall_ms` input tests it); shots diff clean; goldens unchanged. FB-495 |
+| `ENGINE-51` (`SWITCH-FEEL1`) | Built (tools lane) | `develop` | every screen switch timed to its first settled frame (`feel` `switch`, `aegis_ui::switchfeel`, `Screen::transition`): all under target in release, no uncovered frame over 100 ms; fixes: double decodes, a fight's sheets decoded side by side, Save/Load warmed, the world map's background read ahead, the ground's noise side by side; gate scenarios `switch_feel`, `switch_feel_story`; goldens unchanged. FB-497 |
+| `ENGINE-52` (`COMPOSE-PAR1`) | Built (tools lane) | `develop` | the ground composer's per-pixel pass and noise in bands of rows on up to 4 threads, the same bytes (tests on two maps, battle boards, an engine job); compose 40 to 26 ms alone; Continue (107 to 124 ms) and a fight with no intro (101 to 135 ms) miss 60 ms, reported with options; `switch_feel` budgets for both 200 ms; goldens unchanged. FB-499 |
+| `ENGINE-53` (`SWITCH-AHEAD1`) | Built (tools lane) | `develop` | the composer's fields' blur, rims and contact lines on threads (same bytes); built ahead at idle (`Screen::warm_next`, `ground::keep`): the title's Continue map (ground composed on a thread, map drawn once unseen), a fight the party walks into or stands near and the fight after a vignette (started on a copy of the game, taken when not stale); Continue 19 to 22 ms, The Sweep 27 to 30 ms; test that a fight built ahead equals one built on the switch; `switch_feel` budgets 120 ms; goldens unchanged. FB-501 |
+| `ENGINE-54` (`WARM-SPREAD1`) | Built (tools lane) | `develop` | build-ahead work on threads (decodes, grounds, fight starts; the kit's round plan `Send`), the rest drawn unseen in slices one a frame behind an empty canvas `bounds` after 300 ms still, none on a frame with input; no frame over 33 ms while warming (worst 22 ms by The Sweep on cold art), two cold slices of the fight 9 to 18 ms; Continue 19 ms, The Sweep 21 ms; new `walk_feel_fight`, `switch_feel` `title_warm`; goldens unchanged. FB-503 |
+| `ENGINE-55` (`AUDIO-FEEL1`) | Built (tools lane) | `develop` | `feel` times each sound from its input or frame to its first audible sample, with the output's buffer and underruns; UI sounds 12 to 20 ms, hits within 6 ms of their frame, music 15 to 30 ms after its ask (was 96 ms on Continue), no underruns in release; music asked before the draw, decoding off the frame, a fixed 512-frame buffer; audio budgets on `feel` steps, new `audio_feel`; goldens unchanged. FB-504 |
+| `ENGINE-56` (`AUDIO-FEEL2`) | Built (tools lane) | `develop` | menus answer by sound by rule (confirm, back, error; `Screen::ui_sound` overrides, the round controls and volume steps keep theirs); a soft map footstep with its own Footsteps volume under Effects (placeholder `map_step.wav`); battle music fades in over 0.4 s (`battle_music_fade_ms`); stings warmed with the battle screen; `audio_feel` gains a confirm, a back and a map step; goldens unchanged. FB-505 |
+| `ENGINE-57` (`FEEL-RELEASE1`) | Built (tools lane) | `develop` | `switch_feel_story`'s release failure: a release build hides the developer surfaces, so New Game skipped the world picker; `dev=1` (dev tools builds only) shows them and every scenario launch passes it; `tools/fc.sh feel` runs every feel and reach scenario in release and prints one table (38 of 39 steps pass; `feel_battle` `battle_block` 51 to 74 ms against 50); goldens unchanged. FB-506 |
+| `ENGINE-58` (`BLOCK-CLICK2`) | Built (tools lane) | `develop` | The block click answers in 21 to 33 ms in release (was 44 to 51): the later members' ghosts are drafted on the frames after the click's answer is drawn, one step a frame, and any request, key or Confirm finishes them first; a same-board test; a game with no window settles its screens before requested frames, so shots stay the same; `feel_battle` block budget 35 ms; goldens unchanged. FB-507 |
+| `ENGINE-59` (`BATTLE-FRAME2`) | Built in part (tools lane) | `develop` | Slow battle frames named: the round's planning start drafts the whole party's ghosts in one tick (31 to 45 ms; deferring them changed 11 shots, so it waits for a call); a queued ghost step on a heavy frame now waits for a frame with room. 5 of 5 release feel runs passed; the container's own stalls are named with options; goldens unchanged. FB-508 |
+| `ENGINE-60` (`PLAN-START2`) | Built (tools lane) | `develop` | The round's planning start drafts each ghost once when no buff would drop (33 to 17-19 ms; same-ghosts tests incl. the Crucible hold pick); the feel table lists frames mostly off the CPU as stalls apart, real misses still fail. 6 of 10 release feel runs passed (3 audio-thread underruns, 2 frames 1-2 ms over), options given; goldens unchanged. FB-509 |
+| `ENGINE-61` (`FEEL-CLOSE1`) | Built (tools lane) | `develop` | Underruns of a stalled audio thread listed as stalls; the canvas row blend made branch-free with the same bytes, cutting 4 to 6 ms of panels from every frame (battle draw 16-24 to 12-16 ms, warm frames at most 25 ms). 9 of 10 release feel runs passed, the miss judged container noise; the feel run moves to Tushar's PC. Goldens unchanged. FB-510 |
+| `ENGINE-62` (`CRASH-SAFE1`) | Built (tools lane) | `develop` | A caught panic writes the report (now with build, top screen and `feel.log` tail) and the game's rescue save (`Context::rescue`, keyed `rescue`); the next start shows one line with the report path and Open folder (any game, the hello sample included); Emberwake's title offers the rescue beside Continue. Saves keep `<file>.prev`; a damaged slot is kept, named and loads its copy. Goldens unchanged. FB-511 |
+| `ENGINE-63` (`PAD-TUNE1`) | Built (tools lane) | `develop` | Settings > Controls has a Gamepad group: stick dead zone (0.15 to 0.6), d-pad and stick repeat delay and rate (today's values by default), saved under `gamepad` (`aegis_ui::controls::PadTuning`), and a live stick Test line. The Windows pad poll runs inside the frame's catch. The feel script replays `{"stick": [x, y]}`; `walk_feel` has a stick case. Goldens unchanged. FB-512 |
+| `ENGINE-64` (`LIVE-RELOAD1`) | Built (tools lane) | `develop` | `dev=1` (in a build with the dev tools; never a player build or the web) watches the asset layers and data every 500 ms. Art, theme, layouts and sounds reload in place; data reloads through `Data::open` and is swapped only when it loads clean (the region map rebuilds, a battle keeps its units), else a notice names the file. One line per reload; nothing during a save write; scenario runs pass `live=0`. Goldens unchanged. FB-513 |
+
+## FB-514 (answered in READY @839fbf7b, moved 2026-11-24)
+
+### FB-514: ENGINE-65 TIDY3 done; FEEDBACK.md archived, cleanup pass 4 proposed
+
+- **Status**: closed: accepted (@839fbf7b), follow-up `TIDY4`
+  clean. The gate was not re-run: no code changed since gate97 (`d3e27428`).
+- **Spec**: `docs/READY.md` row `ENGINE-65` (`TIDY3`).
+- **(1) Archive**: `feedback_check.py archive` moved the 50 answered items (FB-388 to FB-513) to
+  `docs/archive/FEEDBACK_CLOSED.md` (Status lines rewritten `closed: accepted (@d5b35cd5)`). The 171 status rows of
+  section 1 moved there too, under "Build status rows through ENGINE-64", and one summary row replaces them.
+  FEEDBACK.md went from 241,859 bytes to about 3 KB, and `feedback_check.py check` is clean (no open items, 180
+  answer rows).
+- **(2) Housekeeper pass 4**: `docs/specs/CLEANUP.md` "Pass 4" lists `CLN-72`..`CLN-81`, all `proposed`. I found no
+  dead modules. The duplicates: the build-name string (x4), ms rounding helpers (x6), two medians (merging moves
+  `walk_feel` numbers; Design call), path constants in `live.rs`, cache clearing in `Audio`. Structure: the 220-line
+  headless `feel` request. Launch keys and settings: `feel` read from process args outside `Start`, `dev=1` parsed
+  twice, the settings `"feel"` key no row sets (Design call). Test hooks in shipped paths: `stall_ms`/`spike_ms`, the
+  release-refused `panic` (keep, document). Unused shipped helper: `controls::stick_dir`. Items that change numbers
+  or API say so.
+- **Docs delta**: none beyond CLEANUP.md (Design's file, written at Design's request for this row).

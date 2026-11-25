@@ -22,6 +22,7 @@ use anyhow::{bail, Context as _, Result};
 use {
     super::{blank_reason, save_png, settings::text_scale_of, Shell},
     crate::bridge,
+    crate::screen::Key,
     crate::pacing::{Pace, Pacer},
     crate::screen::window_size_of,
     aegis_core::clock::Instant,
@@ -29,6 +30,23 @@ use {
     std::path::{Path, PathBuf},
     std::sync::mpsc::RecvTimeoutError,
 };
+
+/// ENGINE-48: how far around a widget its focus mark may be drawn, in px.
+pub const REACH_MARGIN_PX: i32 = 8;
+
+/// ENGINE-48: whether two frames (width, height, RGBA) of one size differ inside `r` (px, cut to the canvas).
+#[cfg(not(target_arch = "wasm32"))]
+fn region_differs(a: &(i32, i32, Vec<u8>), b: &(i32, i32, Vec<u8>), r: crate::canvas::Rect) -> bool {
+    let (w, h) = (a.0, a.1);
+    if (w, h) != (b.0, b.1) {
+        return true;
+    }
+    let (x0, y0, x1, y1) = (r.x.max(0), r.y.max(0), (r.x + r.w).min(w), (r.y + r.h).min(h));
+    (y0..y1).any(|y| {
+        let (i, j) = (((y * w + x0) * 4) as usize, ((y * w + x1.max(x0)) * 4) as usize);
+        a.2[i..j] != b.2[i..j]
+    })
+}
 
 /// The default frame rate.
 pub const DEFAULT_FPS: u32 = 15;
@@ -57,6 +75,9 @@ pub const CLIP_BYTES_MAX: u64 = 256 << 20;
 /// A `perf` request's bounds (ENGINE-2): the frames timed and the frames drawn first, untimed.
 pub const PERF_FRAMES_MAX: u64 = 2000;
 pub const PERF_WARM_MAX: u64 = 600;
+/// A `feel` request's frames between two inputs by default, and the most `times` one script input may ask for.
+pub const FEEL_GAP_DEFAULT: u64 = 2;
+pub const FEEL_TIMES_MAX: u64 = 200;
 #[cfg(not(target_arch = "wasm32"))]
 const CLIP_MAX_W: u64 = 1280;
 
@@ -111,6 +132,15 @@ impl Headless {
     }
 }
 
+/// ENGINE-49: what a `feel` replay with `motion` records: its start (the run's clock), every frame's motion and every
+/// input.
+#[cfg(not(target_arch = "wasm32"))]
+struct MotionRec {
+    t0: Instant,
+    frames: Vec<crate::walkfeel::Frame>,
+    marks: Vec<crate::walkfeel::Mark>,
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 struct Loop<G> {
     shell: Shell<G>,
@@ -125,7 +155,22 @@ struct Loop<G> {
     /// The top screen (stack depth and id) and when it opened, on the run's clock: `frames` `since_open_ms` reads it.
     top: (usize, &'static str),
     opened: Instant,
+    /// ENGINE-55 (AUDIO-FEEL1): during a `feel` replay, when each input came and each frame started and ended (wall
+    /// clock), for its sound report (`crate::audiofeel`).
+    heard: Option<HeardRec>,
 }
+
+/// ENGINE-55: what a `feel` replay records for its sound report.
+#[cfg(not(target_arch = "wasm32"))]
+struct HeardRec {
+    t0: Instant,
+    inputs: Vec<Instant>,
+    frames: Vec<(Instant, Instant)>,
+}
+
+/// ENGINE-55: how long a replay's end waits, at most, for the sounds it asked for to be mixed (two buffers and more).
+#[cfg(not(target_arch = "wasm32"))]
+const HEARD_WAIT: Duration = Duration::from_millis(150);
 
 #[cfg(not(target_arch = "wasm32"))]
 impl<G: Context> Loop<G> {
@@ -136,7 +181,13 @@ impl<G: Context> Loop<G> {
             aegis_core::clock::advance(self.every);
         }
         let started = Instant::wall();
+        let feel_start = self.shell.feel_now();
+        // ENGINE-60: the frame's CPU time, for the probe's stall mark
+        let cpu0 = self.shell.feel.on.then(crate::perf::thread_cpu_ms).flatten();
         self.shell.frame();
+        self.shell.feel.cpu = cpu0.zip(crate::perf::thread_cpu_ms()).map(|(a, b)| (b - a).max(0.0));
+        // ENGINE-45: nothing is presented with no window; the frame counts as shown once drawn
+        self.shell.feel_framed(feel_start);
         self.shell.pointer_req = None;
         self.apply_settings();
         self.pacer.framed(started, self.shell.frame_need());
@@ -170,12 +221,23 @@ impl<G: Context> Loop<G> {
     }
 
     /// A request, answered at once whatever the pace; it counts as a change a frame must show, as it does in a window.
+    /// ENGINE-62 (CRASH-SAFE1): runs `f` on the loop; a panic in it ends the run as before, after the shell's rescue save
+    /// and report (`Shell::on_panic`).
+    fn guard(&mut self, f: impl FnOnce(&mut Self)) {
+        if let Err(p) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(self))) {
+            self.shell.on_panic();
+            std::panic::resume_unwind(p);
+        }
+    }
+
     fn serve(&mut self, req: bridge::Request) {
         self.pacer.touch(Instant::wall());
         let reply = match req.body["cmd"].as_str() {
             Some("frames") => self.frames(&req.body),
             Some("clip") => self.clip(&req.body),
             Some("perf") => self.perf(&req.body),
+            Some("feel") => self.feel(&req.body),
+            Some("reach") => self.reach(&req.body),
             _ => self.shell.bridge(&req.body),
         };
         let _ = req.reply.send(reply);
@@ -213,6 +275,7 @@ impl<G: Context> Loop<G> {
                 None => return json!({"ok": false, "error": format!("frames is a whole number from 1 to {FRAMES_MAX}")}),
             },
         };
+        self.shell.settle_screens();
         for _ in 0..frames {
             self.draw();
         }
@@ -244,10 +307,375 @@ impl<G: Context> Loop<G> {
             ms.push(crate::perf::ms_since(t));
         }
         let calib_after = crate::perf::calib();
-        let r = |x: f64| (x * 1000.0).round() / 1000.0;
+        let r = |x: f64| crate::perf::round_to(x, 3);
         let canvas = [self.shell.gfx.canvas.w, self.shell.gfx.canvas.h];
         json!({"ok": true, "stats": crate::perf::Stats::of(&ms).to_json(), "calib_before": r(calib_before), "calib_after": r(calib_after),
-            "steady": crate::perf::steady(calib_before, calib_after), "canvas": canvas, "build": if cfg!(debug_assertions) { "dev" } else { "release" }, "frame": self.shell.frames})
+            "steady": crate::perf::steady(calib_before, calib_after), "canvas": canvas, "build": crate::perf::build_name(), "frame": self.shell.frames})
+    }
+
+    /// ENGINE-45 (FEEL-PROBE1): `{"cmd": "feel", "script": [...], "gap": g}`: replays the script's inputs one by one, each
+    /// timed by the feel probe (`crate::feel`) from its arrival through its handler to the end of the next frame (drawn:
+    /// nothing is presented with no window), then `gap` more frames (default 2) before the next. An input is
+    /// `{"key": name}`, `{"click": widget id}`, `{"pad": button}` or `{"frames": n}` (frames drawn, no input), each with an
+    /// optional `"times"`; a held direction is `{"press"|"release": key}`, `{"pad_press"|"pad_release": button}` or
+    /// `{"stick": [x, y]}` (ENGINE-63: the left stick, read under the player's dead zone; `[0, 0]` lets go). Replies with `feel::report` (p50, p95 and worst of input-to-state, input-to-present and frame
+    /// time, every input, the flagged ones), the canvas and the build. A refused input stops the replay with its error.
+    fn feel(&mut self, body: &Value) -> Value {
+        let Some(script) = body["script"].as_array() else { return json!({"ok": false, "error": "feel needs script: a list of {key|click|pad|frames}"}) };
+        let gap = match body.get("gap") {
+            None => FEEL_GAP_DEFAULT,
+            Some(g) => match g.as_u64().filter(|g| *g <= FRAMES_MAX) {
+                Some(g) => g,
+                None => return json!({"ok": false, "error": format!("gap is a whole number from 0 to {FRAMES_MAX}")}),
+            },
+        };
+        let was_on = self.shell.feel.on;
+        let was_launch = self.shell.feel_launch;
+        self.shell.feel_launch = true;
+        self.shell.feel.on = true;
+        let _ = self.shell.feel.take();
+        let _ = self.shell.feel.take_stalls();
+        // ENGINE-49 (WALK-FEEL1): `step_ms` sets the shot clock's frame step for this replay; `motion` reads the top
+        // screen's `motion` after every frame for the movement report (`crate::walkfeel`)
+        let every = self.every;
+        if let Some(ms) = body["step_ms"].as_f64() {
+            if !(1.0..=200.0).contains(&ms) || !self.stepped {
+                return json!({"ok": false, "error": "step_ms is from 1 to 200, with the shot clock on (a scenario run)"});
+            }
+            self.every = Duration::from_secs_f64(ms / 1000.0);
+        }
+        let mut rec = (body["motion"] == json!(true)).then(|| MotionRec { t0: Instant::now(), frames: Vec::new(), marks: Vec::new() });
+        // ENGINE-51 (SWITCH-FEEL1): with `switch`, each key, click or pad input is followed until its new screen settles
+        let switching = body["switch"] == json!(true);
+        let mut switches: Vec<crate::switchfeel::Switch> = Vec::new();
+        // where things stand before the first input (the last frame drawn)
+        if let Some(r) = rec.as_mut() {
+            r.frames.extend(crate::walkfeel::Frame::of(0.0, &self.shell.stack.last().unwrap().motion()));
+        }
+        let mut held: Vec<Key> = Vec::new();
+        // the direction the replay's stick holds (one of `held`)
+        let mut stick: Option<Key> = None;
+        let mut done = 0u64;
+        let mut failed = None;
+        // ENGINE-55: the sounds of this replay, timed from its inputs and frames
+        self.shell.cx.audio.reset_output();
+        self.heard = Some(HeardRec { t0: Instant::wall(), inputs: Vec::new(), frames: Vec::new() });
+        'script: for (i, step) in script.iter().enumerate() {
+            let times = step["times"].as_u64().unwrap_or(1).clamp(1, FEEL_TIMES_MAX);
+            let dir_key = |name: Option<&str>| name.and_then(Key::parse).filter(|k| k.dir().is_some());
+            let pad_key = |name: Option<&str>, shell: &mut Shell<G>| name.and_then(crate::controls::Pad::parse).map(|p| shell.controls().pad(p)).filter(|k| k.dir().is_some());
+            // a held direction: pressed (as a window's key down, kept held) or let go
+            let hold = match (step["press"].as_str(), step["release"].as_str(), step["pad_press"].as_str(), step["pad_release"].as_str()) {
+                (Some(n), _, _, _) => Some(("press", n, dir_key(Some(n)), true)),
+                (_, Some(n), _, _) => Some(("release", n, dir_key(Some(n)), false)),
+                (_, _, Some(n), _) => Some(("pad_press", n, pad_key(Some(n), &mut self.shell), true)),
+                (_, _, _, Some(n)) => Some(("pad_release", n, pad_key(Some(n), &mut self.shell), false)),
+                _ => None,
+            };
+            if let Some((kind, name, k, down)) = hold {
+                let Some(k) = k else {
+                    failed = Some(format!("script[{i}] {kind}: '{name}' is no movement key or d-pad direction"));
+                    break;
+                };
+                let before = !held.is_empty();
+                held.retain(|h| *h != k);
+                if down {
+                    held.push(k);
+                }
+                self.hold_input(&mut rec, &held, kind, &format!("{kind} {name}"), k.dir(), before, down.then_some(k), gap);
+                done += 1;
+                continue;
+            }
+            if let Some(xy) = step.get("stick") {
+                // ENGINE-63 (PAD-TUNE1): the left stick moved to (x, y): the direction it reads under the player's dead
+                // zone (`controls::PadTuning`) is held as a pad's is (a new one pressed, the old one let go; centred lets go)
+                let (Some(x), Some(y)) = (xy[0].as_f64(), xy[1].as_f64()) else {
+                    failed = Some(format!("script[{i}] stick: [x, y], each from -1 to 1"));
+                    break;
+                };
+                let (x, y) = (x.clamp(-1.0, 1.0) as f32, y.clamp(-1.0, 1.0) as f32);
+                let want = crate::controls::PadTuning::of(&self.shell.cx.settings.v).stick_dir(x, y);
+                self.shell.cx.held.stick = (x, y);
+                let before = !held.is_empty();
+                let changed = want != stick;
+                if changed {
+                    if let Some(old) = stick {
+                        held.retain(|h| *h != old);
+                    }
+                    if let Some(k) = want {
+                        held.retain(|h| *h != k);
+                        held.push(k);
+                    }
+                    stick = want;
+                }
+                // the direction only when it changed (a turn or a new hold); a release when it let go
+                let dir = want.filter(|_| changed).and_then(|k| k.dir());
+                self.hold_input(&mut rec, &held, "stick", &format!("stick {x} {y}"), dir, before, want.filter(|_| changed), gap);
+                done += 1;
+                continue;
+            }
+            if self.clock_step(&mut rec, step, !held.is_empty()) {
+                continue;
+            }
+            let (cmd, kind, mark) = if let Some(k) = step["key"].as_str() {
+                (json!({"cmd": "key", "key": k}), format!("key {k}"), ("key", Key::parse(k).and_then(|k| k.dir())))
+            } else if let Some(id) = step["click"].as_str() {
+                (json!({"cmd": "click", "id": id}), format!("click {id}"), ("click", None))
+            } else if let Some(b) = step["pad"].as_str() {
+                (json!({"cmd": "pad", "button": b}), format!("pad {b}"), ("pad", pad_key(Some(b), &mut self.shell).and_then(|k| k.dir())))
+            } else if let Some(n) = step["frames"].as_u64() {
+                for _ in 0..n.min(FRAMES_MAX) * times {
+                    self.feel_draw(&mut rec);
+                }
+                continue;
+            } else {
+                failed = Some(format!("script[{i}]: one of key, click, pad, frames, press, release, pad_press, pad_release, stick, wait_ms, spike_ms or stall_ms"));
+                break;
+            };
+            for _ in 0..times {
+                self.mark(&mut rec, mark.0, &kind, mark.1, !held.is_empty(), !held.is_empty());
+                let from = (self.top_id(), self.shell.stack.len());
+                let from_transition = self.transition_shown();
+                self.heard_input();
+                self.shell.feel_input(&kind);
+                let handler = Instant::wall();
+                let reply = self.shell.bridge(&cmd);
+                let handler_ms = crate::perf::ms_since(handler);
+                self.shell.feel_state();
+                if reply["ok"] != json!(true) {
+                    failed = Some(format!("script[{i}] {kind}: {}", reply["error"]));
+                    break 'script;
+                }
+                done += 1;
+                if switching {
+                    let mut sw = crate::switchfeel::Switch { what: kind.clone(), handler_ms, from, from_transition, frames: Vec::new(), budget_ms: step["switch_ms"].as_f64(), to: step["to"].as_str().map(String::from), settled_frame_ms: crate::switchfeel::SETTLED_FRAME_MS * if cfg!(debug_assertions) { crate::switchfeel::DEV_ALLOWANCE } else { 1.0 } };
+                    while !sw.done() {
+                        let t = Instant::wall();
+                        self.feel_draw(&mut rec);
+                        sw.frames.push(crate::switchfeel::Frame { wall_ms: crate::perf::ms_since(t), top: self.top_id(), depth: self.shell.stack.len(), transition: self.transition_shown() });
+                    }
+                    switches.push(sw);
+                }
+                for _ in 0..=gap {
+                    self.feel_draw(&mut rec);
+                }
+            }
+        }
+        self.shell.cx.held.dir = None;
+        self.shell.cx.held.stick = (0.0, 0.0);
+        self.every = every;
+        let heard = self.heard.take();
+        let heard_t0 = heard.as_ref().map(|h| h.t0);
+        let (samples, frames) = self.shell.feel.take();
+        let stalls = self.shell.feel.take_stalls();
+        self.shell.feel_launch = was_launch;
+        self.shell.feel.on = was_on;
+        if let Some(e) = failed {
+            return json!({"ok": false, "error": e, "done": done});
+        }
+        let mut out = crate::feel::report(&samples, &frames);
+        out["ok"] = json!(true);
+        out["canvas"] = json!([self.shell.gfx.canvas.w, self.shell.gfx.canvas.h]);
+        out["build"] = json!(crate::perf::build_name());
+        out["frame"] = json!(self.shell.frames);
+        if let Some(r) = rec {
+            out["motion"] = crate::walkfeel::report(&r.frames, &r.marks, body["step_ms"].as_f64().unwrap_or(every.as_secs_f64() * 1000.0));
+        }
+        if let (Some(h), Some(_)) = (heard, self.shell.cx.audio.output()) {
+            out["audio"] = self.heard_report(h, body["step_ms"].as_f64().unwrap_or(every.as_secs_f64() * 1000.0));
+        }
+        // ENGINE-60: the stalled frames apart, and the underruns heard during one (or within two buffers after it)
+        out["stalls"] = json!(stalls.iter().map(crate::feel::Stall::to_json).collect::<Vec<_>>());
+        out["stall_count"] = json!(stalls.len());
+        if let (Some(t0), Some(audio)) = (heard_t0, out.get_mut("audio").filter(|a| a.is_object())) {
+            let offset = t0.saturating_duration_since(self.shell.feel_t0).as_secs_f64() * 1000.0;
+            let (stalled, real) = stalled_underruns(audio, &stalls, offset);
+            audio["underruns"] = json!(real.len());
+            audio["underrun_ms"] = json!(real);
+            // the audio thread's own stalls (ENGINE-61) come first; the main thread's are added
+            let mut all: Vec<f64> = audio["underrun_stalled_ms"].as_array().into_iter().flatten().filter_map(Value::as_f64).collect();
+            all.extend(stalled);
+            all.sort_by(f64::total_cmp);
+            audio["underruns_stalled"] = json!(all.len());
+            audio["underrun_stalled_ms"] = json!(all);
+        }
+        if switching {
+            // a dev build draws about twice as slow: its long frames and budgets stretch as the feel budgets do
+            let k = if cfg!(debug_assertions) { crate::switchfeel::DEV_ALLOWANCE } else { 1.0 };
+            out["switch"] = crate::switchfeel::report(&switches, body["step_ms"].as_f64().unwrap_or(every.as_secs_f64() * 1000.0), k);
+        }
+        out
+    }
+
+    /// ENGINE-55: an input of a `feel` replay came now.
+    fn heard_input(&mut self) {
+        if let Some(h) = self.heard.as_mut() {
+            h.inputs.push(Instant::wall());
+        }
+    }
+
+    /// ENGINE-55: the replay's sound report (`audiofeel::report`), once the sounds it asked for are mixed (waiting at
+    /// most `HEARD_WAIT`).
+    fn heard_report(&mut self, h: HeardRec, period_ms: f64) -> Value {
+        let audio = &self.shell.cx.audio;
+        let wait = Instant::wall();
+        while audio.sounds_since(h.t0).iter().any(|s| s.3.is_none()) && wait.wall_elapsed() < HEARD_WAIT {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        let Some(out) = audio.output() else { return Value::Null };
+        crate::audiofeel::report(&audio.sounds_since(h.t0), h.t0, &h.inputs, &h.frames, &out, period_ms)
+    }
+
+    /// ENGINE-51: the top screen's id.
+    fn top_id(&self) -> String {
+        self.shell.stack.last().map_or("", |s| s.id()).to_string()
+    }
+
+    /// ENGINE-51: the transition a screen of the stack shows now, the topmost first (`Screen::transition`).
+    fn transition_shown(&self) -> Option<String> {
+        self.shell.stack.iter().rev().find_map(|s| s.transition(&self.shell.cx)).map(String::from)
+    }
+
+    /// ENGINE-49: a frame of a `feel` replay, and the top screen's `motion` after it when the replay records it.
+    fn feel_draw(&mut self, rec: &mut Option<MotionRec>) {
+        let start = Instant::wall();
+        self.draw();
+        if let Some(h) = self.heard.as_mut() {
+            h.frames.push((start, Instant::wall()));
+        }
+        if let Some(r) = rec.as_mut() {
+            let t = Instant::now().saturating_duration_since(r.t0).as_secs_f64() * 1000.0;
+            if let Some(f) = crate::walkfeel::Frame::of(t, &self.shell.stack.last().unwrap().motion()) {
+                r.frames.push(f);
+            }
+        }
+    }
+
+    /// ENGINE-49: notes an input of a `feel` replay for the movement report.
+    /// ENGINE-66 (TIDY4, CLN-75): a step of a `feel` script that only moves time: `wait_ms` (frames drawn for that long
+    /// on the run's clock), `stall_ms` (ENGINE-50 MAP-FRAME1: the clock moves with no frame drawn, so the next input
+    /// arrives during a hitch) or `spike_ms` (one frame that takes that long). `held` says whether a direction is held
+    /// (for the marks). False when `step` is none of them.
+    fn clock_step(&mut self, rec: &mut Option<MotionRec>, step: &Value, held: bool) -> bool {
+        if let Some(ms) = step["wait_ms"].as_f64() {
+            let until = Instant::now() + Duration::from_secs_f64(ms.clamp(0.0, 60_000.0) / 1000.0);
+            let mut n = 0;
+            while Instant::now() < until && n < 60 * 60 {
+                self.feel_draw(rec);
+                n += 1;
+            }
+        } else if let Some(ms) = step["stall_ms"].as_f64() {
+            self.mark(rec, "stall", &format!("stall {ms} ms"), None, held, held);
+            if self.stepped {
+                aegis_core::clock::advance(Duration::from_secs_f64(ms.clamp(0.0, 2000.0) / 1000.0));
+            }
+        } else if let Some(ms) = step["spike_ms"].as_f64() {
+            // the shot clock moves that much more before the frame
+            self.mark(rec, "spike", &format!("spike {ms} ms"), None, held, held);
+            if self.stepped {
+                aegis_core::clock::advance(Duration::from_secs_f64(ms.clamp(0.0, 2000.0) / 1000.0).saturating_sub(self.every));
+            }
+            self.feel_draw(rec);
+        } else {
+            return false;
+        }
+        true
+    }
+
+    /// ENGINE-66 (TIDY4, CLN-75): a held-direction step of a `feel` script (a key or d-pad press or release, a stick
+    /// move) once `held` is updated: `Held::dir` follows the latest held, the input is marked for the movement report
+    /// (`dir`, held before and after), a `press` key is timed and sent, then `gap` + 1 frames are drawn.
+    #[allow(clippy::too_many_arguments)]
+    fn hold_input(&mut self, rec: &mut Option<MotionRec>, held: &[Key], kind: &str, what: &str, dir: Option<(i64, i64)>, before: bool, press: Option<Key>, gap: u64) {
+        self.shell.cx.held.dir = held.last().and_then(|h| h.dir());
+        self.mark(rec, kind, what, dir, before, !held.is_empty());
+        if let Some(k) = press {
+            self.heard_input();
+            self.shell.feel_input(what);
+            self.shell.key(k);
+            self.shell.feel_state();
+        }
+        for _ in 0..=gap {
+            self.feel_draw(rec);
+        }
+    }
+
+    fn mark(&self, rec: &mut Option<MotionRec>, kind: &str, what: &str, dir: Option<(i64, i64)>, held_before: bool, held_after: bool) {
+        if let Some(r) = rec.as_mut() {
+            let t = Instant::now().saturating_duration_since(r.t0).as_secs_f64() * 1000.0;
+            r.marks.push(crate::walkfeel::Mark { t, kind: kind.into(), what: what.into(), dir, held_before, held_after });
+        }
+    }
+
+    /// ENGINE-48 (INPUT-REACH1): `{"cmd": "reach", "back": b}`: the top screen's reach report (`crate::reach::report`:
+    /// what a mouse can use that the keys, the d-pad alone or a pad cannot reach), then whether the focus shows on each
+    /// widget of the ring (a frame with it against one without, around the widget: `invisible` when nothing changed,
+    /// `unsure` when the screen moves there by itself), then with `back` (default false) one Esc through the control map
+    /// and what it did: `closed` (a screen left), `opened` (one came over it), `swapped`, `changed` (the same screen with
+    /// other widgets), `nothing` or `quits` (the game asked to quit: the run is kept going). The focus is put back after
+    /// the focus check; the Esc is not undone.
+    fn reach(&mut self, body: &Value) -> Value {
+        use crate::reach;
+        let shell = &mut self.shell;
+        let top = shell.stack.last().unwrap();
+        let (screen, infos, arrows, grid, group) = (top.id(), top.widgets(), top.arrow_focus(), top.grid(), top.focus_group());
+        let start = top.focus_first().map(String::from).or_else(|| shell.gfx.kit.focus.clone());
+        let pad_keys: Vec<crate::screen::Key> = crate::controls::PADS.iter().map(|(p, _)| shell.controls().pad(*p)).collect();
+        let mut out = reach::report_grouped(&infos, arrows, start.as_deref(), reach::Device::pad(&pad_keys), group);
+        // the focus check: frames with the focus shown and hidden, the mouse away
+        let saved = (shell.gfx.kit.focus.clone(), shell.gfx.kit.focus_visible, shell.mouse);
+        shell.mouse = (-10_000, -10_000);
+        let view = shell.view_of(grid);
+        let frame = |shell: &mut Shell<G>, focus: Option<&str>| {
+            shell.gfx.kit.focus = focus.map(String::from);
+            shell.gfx.kit.focus_visible = focus.is_some();
+            shell.frame();
+            (shell.gfx.canvas.w, shell.gfx.canvas.h, shell.gfx.canvas.px.clone())
+        };
+        let base = frame(shell, None);
+        let again = frame(shell, None);
+        let (mut invisible, mut unsure) = (Vec::new(), Vec::new());
+        for w in crate::focus::ring(&infos, false) {
+            let wid = w["id"].as_str().unwrap_or("");
+            let r = |i: usize| w["rect"][i].as_i64().unwrap_or(0) as i32;
+            let px = view.rect(crate::canvas::Rect::new(r(0), r(1), r(2), r(3)));
+            let around = crate::canvas::Rect::new(px.x - REACH_MARGIN_PX, px.y - REACH_MARGIN_PX, px.w + 2 * REACH_MARGIN_PX, px.h + 2 * REACH_MARGIN_PX);
+            let shown = frame(shell, Some(wid));
+            if !region_differs(&base, &shown, around) {
+                invisible.push(json!({"id": wid, "kind": w["kind"]}));
+            } else if region_differs(&base, &again, around) {
+                unsure.push(json!({"id": wid, "kind": w["kind"]}));
+            }
+        }
+        (shell.gfx.kit.focus, shell.gfx.kit.focus_visible, shell.mouse) = saved;
+        out["invisible"] = json!(invisible);
+        out["unsure"] = json!(unsure);
+        if body["back"] == json!(true) {
+            let before = (shell.stack.len(), screen, infos.iter().map(|w| w["id"].clone()).collect::<Vec<_>>());
+            shell.press(crate::screen::Key::Esc);
+            self.draw();
+            let shell = &mut self.shell;
+            let quits = std::mem::take(&mut shell.cx.quit);
+            let top = shell.stack.last().unwrap();
+            let after = (shell.stack.len(), top.id(), top.widgets().iter().map(|w| w["id"].clone()).collect::<Vec<_>>());
+            let did = if quits {
+                "quits"
+            } else if after.0 < before.0 {
+                "closed"
+            } else if after.0 > before.0 {
+                "opened"
+            } else if after.1 != before.1 {
+                "swapped"
+            } else if after.2 != before.2 {
+                "changed"
+            } else {
+                "nothing"
+            };
+            out["back"] = json!({"did": did, "to": after.1});
+        }
+        out["screen"] = json!(screen);
+        out["ok"] = json!(true);
+        out
     }
 
     /// `{"cmd": "clip", "dir": ..., "frames": n, "every_ms": m, "max_w": w}`: a numbered sequence (`frame_0001.png` on) of
@@ -331,6 +759,18 @@ impl ClipPlan {
     }
 }
 
+/// ENGINE-60 (PLAN-START2): a sound report's underruns (`underrun_ms`, ms from the replay's start) split into those heard
+/// during a stalled frame or within two output buffers after it, and the rest. `offset`: the replay's start in probe
+/// ms (the stalls' clock).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn stalled_underruns(audio: &Value, stalls: &[crate::feel::Stall], offset: f64) -> (Vec<f64>, Vec<f64>) {
+    let reach = 2.0 * audio["buffer_ms"].as_f64().unwrap_or(0.0);
+    audio["underrun_ms"].as_array().into_iter().flatten().filter_map(Value::as_f64).partition(|u| {
+        let at = u + offset;
+        stalls.iter().any(|s| s.start <= at && at <= s.end + reach)
+    })
+}
+
 /// What is past a clip's limits, if anything: large frames written slowly or at length must not run away.
 #[cfg(not(target_arch = "wasm32"))]
 fn clip_over(bytes: u64, took: Duration) -> Option<String> {
@@ -361,28 +801,28 @@ pub(super) fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options
     }
     let shell = Shell::open(cx, stack, options, h.size, h.dpr, icon_notice);
     let every = Duration::from_micros(1_000_000 / u64::from(h.fps));
-    let mut game = Loop { shell, pacer: Pacer::default(), every, applied: None, asked_at: Instant::wall(), stepped: h.stepped, top: (0, ""), opened: Instant::now() };
+    let mut game = Loop { shell, pacer: Pacer::default(), every, applied: None, asked_at: Instant::wall(), stepped: h.stepped, top: (0, ""), opened: Instant::now(), heard: None };
     if h.stepped {
         // One frame at the start, as the pace would draw: the first `ui_tree` has a screen to read.
-        game.draw();
+        game.guard(Loop::draw);
     }
     loop {
         if let Ok(req) = link.try_recv() {
-            game.serve(req);
+            game.guard(|g| g.serve(req));
         }
         if game.stepped && !game.shell.cx.quit {
             // No pace: frames come only with the requests that ask for them.
             match link.recv_timeout(Duration::from_millis(250)) {
-                Ok(req) => game.serve(req),
+                Ok(req) => game.guard(|g| g.serve(req)),
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => std::thread::sleep(Duration::from_millis(250)),
             }
         } else if !game.shell.cx.quit {
             let now = Instant::now();
             match game.pacer.decide(now, Some(every)) {
-                Pace::Redraw => game.draw(),
+                Pace::Redraw => game.guard(Loop::draw),
                 Pace::WaitUntil(at) => match link.recv_timeout(at.saturating_duration_since(now)) {
-                    Ok(req) => game.serve(req),
+                    Ok(req) => game.guard(|g| g.serve(req)),
                     Err(RecvTimeoutError::Timeout) => {}
                     // No listener any more: only the pace wakes the loop, and it must still sleep.
                     Err(RecvTimeoutError::Disconnected) => std::thread::sleep(at.saturating_duration_since(now)),
@@ -396,7 +836,7 @@ pub(super) fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options
         if game.asked_at.wall_elapsed() >= h.idle {
             // A request already waiting means its driver is still there.
             if let Ok(req) = link.try_recv() {
-                game.serve(req);
+                game.guard(|g| g.serve(req));
                 continue;
             }
             game.shell.leave_all();

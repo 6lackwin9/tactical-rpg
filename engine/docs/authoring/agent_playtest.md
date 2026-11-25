@@ -9,7 +9,7 @@ is a fixed test, a playtest is driven step by step and keeps a log of what happe
 
 | Command | Does |
 | --- | --- |
-| `tools/fc.sh playtest [start] [save=<dir or file>] [out=<dir>] [size=WxH] [seed=N] [shots=each or off] [window=1] [idle_exit=S] [profile=dev or release]` | Builds the game and the CLI, starts the game with no window, waits for its first frames, prints the run folder |
+| `tools/fc.sh playtest [start] [save=<dir or file>] [out=<dir>] [size=WxH] [seed=N] [shots=each or off] [keep_saves=<dir>] [window=1] [idle_exit=S] [profile=dev or release]` | Builds the game and the CLI, starts the game with no window, waits for its first frames, prints the run folder |
 | `tools/fc.sh playtest do <command ...>` | One command on the running game: a log line, a shot after it, and what it found printed |
 | `tools/fc.sh playtest run <script or -> [the keys of start]` | Starts, runs every line of the file (`-`: stdin), stops; the first failed line ends it |
 | `tools/fc.sh playtest stop` and `status` | Ends the game, or says whether it runs |
@@ -24,6 +24,10 @@ screen; `off` takes one only on `shot` and on a failure. `idle_exit=` is how lon
 leaves (default 3600 s for `start`, 300 s for `run`), so a session left alone does not leave a game behind. `window=1` runs a
 real muted window, which has no idle exit (close it with `stop`) (it needs a display; on a machine without one, start `Xvfb` and set `DISPLAY` first). `screen=`, `seed=`,
 `scene=`, `data=`, `exe=` and `fps=` reach the game as in a scenario.
+`keep_saves=<dir>` (ENGINE-36) keeps each `save <name>` also as `<dir>/<run>/<name>` and the saves as the game stops as
+`<dir>/<run>/last`, outside the run folder (a cloud thread passes `/mnt/project-files/build-tools/playtest_saves/`, so the
+saves outlive its scratchpad); a kept save launches proof shots with `scenario shots <name> save=<dir>` (an absolute
+folder path, or a name under `scenarios/saves/`).
 
 ## The run folder
 

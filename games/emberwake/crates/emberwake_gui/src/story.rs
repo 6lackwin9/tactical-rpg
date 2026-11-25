@@ -7,6 +7,7 @@
 //! screens to the kit later, KIT1 KQ4). PR6-10 (`PK6_PK7_BOSSES_ENDINGS.md` 3): a `camp_prep` step opens
 //! `StoryCampPrep` (party, the keeper's services, save, one free rest, then on past the point of no return).
 
+use aegis_core::clock::Instant;
 use crate::screens::{show_errors, Cx, GameCx, Nav, Screen};
 use aegis_core::json::{self, s, s_or, Dict};
 use aegis_ui::canvas::{rgb, Rect};
@@ -20,9 +21,12 @@ use serde_json::{json, Value};
 
 /// The card colours (STORYUI1 3, LOOK1-G2: from the theme): `text`, `gold` as the accent, and a dim of the card's own
 /// (Polished Steel, hue 06: a card's dim lines sit on art, whatever the theme's `dim` is).
+/// MENURAIL1 (PR7-30): the banner a story title card's title sits on (decision "LOOK1-A6 picks").
+pub const BANNER_ART: &str = "ui/banner_full.png";
+
 pub fn palette() -> Palette {
     let t = th();
-    Palette { text: t.text, accent: t.gold, dim: t.game("story_dim", rgb(0x9c, 0xa3, 0xaf)) }
+    Palette { text: t.text, accent: t.gold, dim: t.game("story_dim", rgb(0x9c, 0xa3, 0xaf)), banner: BANNER_ART }
 }
 
 /// A card of world `world` as the engine plays it (W5): the card keys through `Card::from_json`; a `line` card's speaker
@@ -37,6 +41,14 @@ pub fn card_of(d: &Data, world: &str, raw: &Dict) -> Card {
         c.portrait = story::card_portrait(d, world, raw);
         // PORTRAITFX1-D: the portrait's effects are seeded by the character id, as the talk box's
         c.portrait_key = s(who, "id");
+    }
+    // VNSTAGE1 (PR7-27): the stage actors' names and full-body pictures
+    for a in &mut c.actors {
+        (a.name, a.sprite) = story::stage_actor(d, world, &a.who);
+        let id = s(d.resolve(world, "characters", &a.who), "id");
+        if !id.is_empty() {
+            a.who = id;
+        }
     }
     c
 }
@@ -148,11 +160,23 @@ pub struct StoryStage {
     /// Why a step could not run (shown with a way back to the main menu).
     error: Vec<String>,
     w: Vec<Widget<StAct>>,
+    /// ENGINE-53 (SWITCH-AHEAD1): the running step (sequence, step) whose next fight was looked for, since when its
+    /// vignette has shown, and the thread starting that fight (ENGINE-54).
+    ahead_step: Option<(String, i64)>,
+    ahead_since: Option<Instant>,
+    ahead_job: Option<crate::battle::FightAheadJob>,
+    /// Milestone 1: the campaign act when this stage opened, so finishing a sequence that advances Act 1 -> 2 opens
+    /// `ActCompleteScreen` over the live `RegionMap`.
+    act_before: Option<i64>,
 }
+
+/// ENGINE-54 (WARM-SPREAD1): how long a vignette shows before the fight after it is started ahead.
+const AHEAD_AFTER_MS: u64 = 300;
 
 impl StoryStage {
     pub fn new(cx: &Cx) -> Self {
-        let mut stage = Self { waiting: false, music: crate::music::game_track(cx, crate::music::MENU), step_seen: None, error: Vec::new(), w: Vec::new() };
+        let act_before = cx.game.as_ref().and_then(|g| g.gs.campaign.as_ref()).map(|c| c.act);
+        let mut stage = Self { waiting: false, music: crate::music::game_track(cx, crate::music::MENU), step_seen: None, error: Vec::new(), w: Vec::new(), ahead_step: None, ahead_since: None, ahead_job: None, act_before };
         stage.take_step_music(cx);
         stage
     }
@@ -267,6 +291,10 @@ impl StoryStage {
         } else {
             let map = crate::region::RegionMap::new(cx);
             cx.nav.push(Nav::Reset(Box::new(map)));
+            let act_now = cx.game.as_ref().and_then(|g| g.gs.campaign.as_ref()).map(|c| c.act);
+            if self.act_before == Some(1) && act_now == Some(2) {
+                cx.nav.push(Nav::Push(Box::new(crate::epilogue::ActCompleteScreen::new(cx))));
+            }
         }
     }
 
@@ -283,6 +311,50 @@ impl StoryStage {
 impl Screen<GameCx> for StoryStage {
     fn id(&self) -> &'static str {
         "story_stage"
+    }
+
+    /// ENGINE-53 (SWITCH-AHEAD1), ENGINE-54 (WARM-SPREAD1): while a step's vignette shows (`AHEAD_AFTER_MS` in, once a
+    /// step), a fight step right after it: started ahead on a thread, on a copy of the game with the vignette's step done
+    /// (the game's `fight_ahead`), and a second start warmed unseen in slices (its bodies, board ground, beat, panels).
+    fn warm_next(&mut self, cx: &mut Cx) -> Option<Box<dyn Screen<GameCx>>> {
+        if self.ahead_job.as_ref().is_some_and(|j| j.done()) {
+            let found = self.ahead_job.take()?.take()?;
+            let g = cx.game.as_mut()?;
+            if g.busy {
+                return None;
+            }
+            g.fight_ahead = Some(found.ahead);
+            let slot = g.slot;
+            return found.second.map(|second| Box::new(crate::region::Rehearsal::fight(found.gs, slot, found.fight, story::FIGHT_SOURCE, second)) as Box<dyn Screen<GameCx>>);
+        }
+        if !self.waiting || !self.error.is_empty() {
+            self.ahead_since = None;
+            return None;
+        }
+        let g = cx.game.as_ref()?;
+        let at = g.gs.story.running.as_ref().map(|r| (r.sequence.clone(), r.step))?;
+        if self.ahead_step.as_ref() == Some(&at) {
+            return None;
+        }
+        let since = *self.ahead_since.get_or_insert_with(Instant::now);
+        if Instant::now().saturating_duration_since(since).as_millis() < AHEAD_AFTER_MS as u128 {
+            return None;
+        }
+        self.ahead_step = Some(at);
+        self.ahead_since = None;
+        let gs = g.gs.clone();
+        self.ahead_job = crate::battle::FightAhead::spawn(cx.data.clone(), story::FIGHT_SOURCE, true, move |d| {
+            if !matches!(story::current(d, &gs), Some(Step::Vignette { .. })) {
+                return None;
+            }
+            let mut after = gs;
+            if !json::b(&story::step_done(d, &mut after), "ok", false) || !matches!(story::current(d, &after), Some(Step::Fight { .. })) {
+                return None;
+            }
+            let fight = story::fight(d, &after)?;
+            Some((after, fight))
+        });
+        None
     }
 
     fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
@@ -594,7 +666,7 @@ pub(crate) mod tests {
         cx.gs().story.running.as_ref().map(|r| r.step)
     }
 
-    /// Presses Space on a vignette screen until its reel ends (each press moves one phase, V3); the reel's `on_done`
+    /// Presses Space on a vignette screen until its reel ends (two presses a card, PT-46); the reel's `on_done`
     /// queues the pop, which is taken off.
     fn play_out(cx: &mut Cx, v: &mut Box<dyn Screen<GameCx>>) {
         for _ in 0..200 {
@@ -1059,6 +1131,171 @@ pub(crate) mod tests {
         let (_, fight) = take(&mut cx);
         assert_eq!((fight.id(), fight.state(&cx)["source"].clone()), ("debug_fight", json!(story::FIGHT_SOURCE)));
         assert!(cx.log.iter().any(|l| l == fight_line) && stage.state(&cx)["error"] == json!([]));
+        let _ = std::fs::remove_dir_all(&cx.shot_dir);
+    }
+
+    /// PR7-27 (VNSTAGE1): a staged scene of the test world: the hero walks in left on a scrolling backdrop to meet the
+    /// clerk pinned right, the clerk speaks, the narration closes as the hero walks out right.
+    fn staged_reel(d: &Data) -> Reel {
+        let cards = [
+            json!({"style": "image", "image": "backgrounds/story/x.png", "text": "The hub.", "fade_in_ms": 0, "fade_out_ms": 0, "camera": "scroll",
+                "actors": [{"who": "hero", "side": "left", "move": "enter"}, {"who": "clerk", "side": "right"}]}),
+            json!({"style": "line", "speaker": "clerk", "text": "Well?", "actors": [{"who": "hero", "side": "left"}, {"who": "clerk", "side": "right"}]}),
+            json!({"style": "text", "text": "He goes.", "actors": [{"who": "hero", "side": "left", "move": "exit"}]}),
+        ];
+        let mut reel = Reel::from_json(&json!({"id": "tale:staged", "skippable": true}));
+        reel.cards = cards.iter().map(|c| card_of(d, "tale", json::dict(c))).collect();
+        reel
+    }
+
+    /// PR7-27: a card's actors take the character's name and full-body chain (the kit's `story::stage_actor`; a `who`
+    /// that names no character keeps its id and its own full-body path), and the clerk's id, so the speaker is found.
+    #[test]
+    fn a_staged_card_resolves_its_actors() {
+        let d = data();
+        let reel = staged_reel(&d);
+        let a = &reel.cards[0].actors;
+        assert_eq!(a.iter().map(|a| (a.who.as_str(), a.name.as_str(), a.side, a.motion)).collect::<Vec<_>>(), [("hero", "hero", vignette::Side::Left, vignette::Motion::Enter), ("clerk", "Clerk", vignette::Side::Right, vignette::Motion::Stay)]);
+        assert_eq!((a[0].sprite[0].as_str(), a[1].sprite[0].as_str()), ("portraits/full_body/hero.png", "portraits/full_body/clerk.png"));
+        assert_eq!((reel.cards[0].camera, reel.cards[1].camera, reel.cards[1].portrait_key.as_str()), (vignette::StageCamera::Scroll, vignette::StageCamera::Static, "clerk"));
+    }
+
+    /// PR7-27: on the game's vignette screen the hero walks in from off the left edge to his place while the scroll
+    /// brings the clerk in from off the right; the line keeps the scene's backdrop dimmed where the scroll left it,
+    /// with the clerk speaking; the narration walks the hero out past the right edge. Reduce motion puts each at its end.
+    #[test]
+    fn the_story_stage_enters_exits_and_moves_its_camera() {
+        use rpgkit_ui::vn_stage::{actor_x, backdrop_offset, ACTOR_PX, SCROLL_PX, STAGE};
+        let d = data();
+        let cx = story_cx(data());
+        let mut s = vignette_screen(&cx, staged_reel(&d), |_, _| {});
+        let at = |s: &VignetteScreen<GameCx>, k: usize| {
+            let (c, t) = (s.player.card().expect("a card"), s.player.walk(false));
+            let (cam, bt) = s.player.backdrop_camera(t);
+            (actor_x(&c.actors[k], c.camera, t, 0), backdrop_offset(cam, bt))
+        };
+        let field = |s: &VignetteScreen<GameCx>, f: &str| s.view().to_json()["fields"][f].clone();
+        // the image card at its start: hero off left, clerk off right, backdrop unmoved
+        let (hero0, off0) = at(&s, 0);
+        assert!(hero0 + ACTOR_PX / 2 <= STAGE.x && off0 == 0, "{hero0} {off0}");
+        assert!(at(&s, 1).0 - ACTOR_PX / 2 >= STAGE.x + STAGE.w, "the clerk is off the right edge");
+        assert_eq!(field(&s, "camera"), json!({"text": "scroll"}));
+        s.player.advance(vignette::WALK_MS);
+        let ((hero1, off1), (clerk1, _)) = (at(&s, 0), at(&s, 1));
+        assert_eq!(off1, -SCROLL_PX, "the scroll's end");
+        assert!(hero1 > STAGE.x && clerk1 < STAGE.x + STAGE.w && hero1 < clerk1, "both on the stage, hero left: {hero1} {clerk1}");
+        // the line: the backdrop kept, dimmed, where the scroll left it; the clerk speaks
+        while s.player.card_index() < 1 {
+            s.player.press();
+        }
+        assert_eq!((at(&s, 1).1, field(&s, "dimmed"), field(&s, "backdrop")), (-SCROLL_PX, json!({"flag": true}), json!({"picture": "backgrounds/story/x.png"})));
+        let rows = field(&s, "actors")["rows"].clone();
+        assert_eq!((rows[1]["id"].clone(), rows[1]["selected"].clone(), rows[0]["sub"].clone()), (json!("clerk"), json!(true), json!("stay")));
+        // the narration: the hero walks out past the right edge
+        while s.player.card_index() < 2 {
+            s.player.press();
+        }
+        let start = at(&s, 0).0;
+        s.player.advance(vignette::WALK_MS);
+        let end = at(&s, 0).0;
+        assert!(start < end && end - ACTOR_PX / 2 >= STAGE.x + STAGE.w, "{start} -> {end}");
+        assert_eq!(s.player.walk(true), 1.0, "reduce motion: at the end at once");
+        let _ = std::fs::remove_dir_all(&cx.shot_dir);
+    }
+
+    /// The vignette screen's view on the staged scene's line card (the fixture's values).
+    fn vignette_view() -> aegis_ui::screen_layout::View {
+        let d = data();
+        let cx = story_cx(data());
+        let mut s = vignette_screen(&cx, staged_reel(&d), |_, _| {});
+        while s.player.card_index() < 1 {
+            s.player.press();
+        }
+        s.player.advance(3000);
+        let v = s.view();
+        let _ = std::fs::remove_dir_all(&cx.shot_dir);
+        v
+    }
+
+    /// PR7-27 (UISPLIT1 US6, born split): the fixture `ui/views/vignette.view.json` has the view's shape (field names
+    /// and kinds, action ids).
+    #[test]
+    fn the_vignette_fixture_has_the_view_shape() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let layers = aegis_core::assets::Layers::of(vec![root]);
+        let shape = |v: &aegis_ui::screen_layout::View| (v.screen.clone(), v.fields.iter().map(|(n, f)| (n.clone(), f.kind())).collect::<Vec<_>>(), v.actions.iter().map(|a| a.id.clone()).collect::<Vec<_>>());
+        let v = vignette_view();
+        let fixture = aegis_ui::screen_layout::load_fixture(&layers, &v.screen).expect("the fixture file").expect("it parses");
+        assert_eq!(shape(&fixture), shape(&v));
+    }
+
+    /// Writes the vignette fixture from the staged scene (run by hand: `cargo test -p emberwake_gui
+    /// write_vignette_fixture -- --ignored`).
+    #[test]
+    #[ignore]
+    fn write_vignette_fixture() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/ui/views");
+        let v = vignette_view();
+        std::fs::write(dir.join(format!("{}.view.json", v.screen)), serde_json::to_string_pretty(&v.to_json()).unwrap() + "\n").unwrap();
+    }
+
+    /// Milestone 1: when a story sequence advances the campaign from Act 1 to Act 2 and finishes to the map,
+    /// `StoryStage::finish` pushes `ActCompleteScreen` over the reset `RegionMap`; staying in Act 1 (or Act 2 -> 2)
+    /// pushes only `RegionMap`.
+    #[test]
+    fn story_stage_finish_pushes_act_complete_on_act_1_to_2_transition() {
+        let mut d = data();
+        // Enable a campaign starting at Act 1 on `tale` and add an Act 1 -> 2 sequence.
+        d.catalogs.worlds.get_mut("tale").unwrap().manifest.insert("campaign".into(), json!({"start_act": 1}));
+        let seq = json!({
+            "id": "to_act2",
+            "name": "To Act 2",
+            "steps": [
+                {"kind": "vignette", "vignette": "v_news"},
+                {"kind": "effects", "effects": [{"effect": "set_act", "act": 2}]},
+                {"kind": "enter", "location": "alley", "anchor": ""}
+            ]
+        });
+        let seq_row = json::arr(&with_ids("tale", json!([seq])))[0].clone();
+        d.catalogs.worlds.get_mut("tale").unwrap().own.entry("sequences".into()).or_default().push(json::dict(&seq_row).clone());
+
+        let mut cx = story_cx(d);
+        let mut gs = new_game::create_for_world(&cx.data.clone(), "tale", 1).expect("new game");
+        gs.story = Default::default();
+        assert_eq!(gs.campaign.as_ref().unwrap().act, 1);
+        let d_arc = cx.data.clone();
+        assert!(json::b(&story::start(&d_arc, &mut gs, "to_act2"), "ok", false));
+        enter_game(&mut cx, gs, -1, Vec::new());
+        let (how, mut stage) = take(&mut cx);
+        assert_eq!((how, stage.id()), ("reset", "story_stage"));
+
+        // Play the vignette step -> effects step sets act = 2 -> enter step calls StoryStage::finish.
+        stage.tick(&mut cx);
+        let (_, mut v) = take(&mut cx);
+        play_out(&mut cx, &mut v);
+        assert_eq!(cx.gs().campaign.as_ref().unwrap().act, 2);
+        stage.resume(&mut cx);
+        stage.tick(&mut cx);
+
+        // Expect [Nav::Reset(RegionMap), Nav::Push(ActCompleteScreen)] in order.
+        assert_eq!(cx.nav.len(), 2, "expected Reset(region_map) followed by Push(act_complete)");
+        let (how2, top) = take(&mut cx);
+        let (how1, base) = take(&mut cx);
+        assert_eq!((how1, base.id()), ("reset", "region_map"));
+        assert_eq!((how2, top.id()), ("push", "act_complete"));
+        assert_eq!(emberwake_world::campaign::save_refusal(cx.gs()), "", "saving stays enabled");
+
+        // Running the same sequence again when already in Act 2 does NOT push ActCompleteScreen.
+        assert!(json::b(&story::start(&d_arc, cx.gs_mut(), "to_act2"), "ok", false));
+        let mut stage2 = StoryStage::new(&cx);
+        stage2.tick(&mut cx);
+        let (_, mut v2) = take(&mut cx);
+        play_out(&mut cx, &mut v2);
+        stage2.resume(&mut cx);
+        stage2.tick(&mut cx);
+        assert_eq!(cx.nav.len(), 1, "Act 2 -> 2 should only reset to region_map");
+        let (how_only, only) = take(&mut cx);
+        assert_eq!((how_only, only.id()), ("reset", "region_map"));
         let _ = std::fs::remove_dir_all(&cx.shot_dir);
     }
 }

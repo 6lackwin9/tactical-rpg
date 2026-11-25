@@ -14,7 +14,7 @@ use crate::focus;
 use crate::canvas::{Canvas, Image};
 use crate::layout_audit::{self, Profile};
 use crate::painter::{CanvasPolicy, Fonts, Grid, Painter, View};
-use crate::screen::{read_window_sizes, Settings, WINDOW_SIZES, Context, Cx, Held, Key, Nav, Notice, PointerPhase, Screen};
+use crate::screen::{read_window_sizes, Settings, WINDOW_SIZES, Context, Cx, Held, Key, Nav, Notice, PointerPhase, Screen, UiCue, UiSound, UI_SOUND_KINDS};
 // The window's show, size and place (DISPLAY2): the desktop only; the web page owns its canvas (WEBREL1-E2).
 #[cfg(not(target_arch = "wasm32"))]
 use crate::screen::{window_capped, window_centred, window_kept_in, window_size_of, ScreenRect};
@@ -78,7 +78,20 @@ pub struct Options {
     pub window_sizes: Value,
     /// Some: no window at all, the frames stay in memory (HEADLESS1, `headless`). None: the player's window.
     pub headless: Option<headless::Headless>,
+    /// ENGINE-64 (LIVE-RELOAD1): watch the asset layers and the game's data and reload what changes (`crate::live`): a
+    /// dev run only (`start::Start` sets it for `dev=1`; a game with dev tools of its own keeps it to the builds with
+    /// them, never a player's build).
+    pub live: bool,
+    /// ENGINE-45, ENGINE-66 (CLN-77): the launch asked for the feel probe (`start::Start`: `feel=1` or `--feel`); the
+    /// player's settings key `"feel": true` turns it on too.
+    pub feel: bool,
 }
+
+/// ENGINE-54 (WARM-SPREAD1): the art loads one warm slice may make on the frame, in µs (its draw's own cost comes on
+/// top; a slice keeps under 8 ms on a screen whose unseen draw is cheap).
+const WARM_ART_US: u64 = 2000;
+/// ENGINE-54: the most slices one warming gets (a screen that keeps leaving work is dropped after it).
+const WARM_SLICES_MAX: u32 = 240;
 
 struct Shell<G> {
     cx: Cx<G>,
@@ -101,6 +114,9 @@ struct Shell<G> {
     win_drag: Option<(String, Grab, (i32, i32))>,
     /// The choice field whose list the keyboard opened (its option takes the focus once the list is drawn).
     open_focus: Option<String>,
+    /// PR7-92: the member of the top screen's focus group (`Screen::focus_group`) the focus was last on, where Tab
+    /// lands on the group again.
+    group_keep: Option<String>,
     /// Playtest trail: the control under the pointer, since when, and its trail form.
     hover: Option<(String, aegis_core::clock::Instant, Value)>,
     /// Shift is held (a Shift+click in a text field extends its selection).
@@ -123,6 +139,22 @@ struct Shell<G> {
     policy: CanvasPolicy,
     /// INPUT-MAP1: the control map, and the settings value it was read from (None: not read yet; re-read on a change).
     controls: (crate::controls::Controls, Option<Option<Value>>),
+    /// ENGINE-45 (FEEL-PROBE1): input-to-present and frame times (`crate::feel`), its wall-clock start, and whether the
+    /// launch asked for it (`--feel`; the settings' `"feel": true` turns it on too).
+    feel: crate::feel::Probe,
+    feel_t0: Instant,
+    feel_launch: bool,
+    /// ENGINE-54 (WARM-SPREAD1): the screen being warmed (`Screen::warm_next`), one slice a frame, how many slices it has
+    /// had, and whether an input came since the last frame (a slice waits a frame after one).
+    warming: Option<Box<dyn Screen<G>>>,
+    warm_slices: u32,
+    /// ENGINE-62 (CRASH-SAFE1): the game's title, for a crash report written with no log open.
+    title: String,
+    input_seen: bool,
+    /// ENGINE-64 (LIVE-RELOAD1): the watcher of a dev run with live reload on, and the last reload's line with when it
+    /// stops showing.
+    live: Option<crate::live::Watch>,
+    live_line: Option<(String, Instant)>,
 }
 
 impl<G: Context> Shell<G> {
@@ -133,11 +165,184 @@ impl<G: Context> Shell<G> {
         let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         gfx.kit.device.dpr = dpr;
         let (policy, offered, window_notices) = read_window_options(&options.canvas, &options.window_sizes);
-        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default() };
+        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: options.feel, warming: None, warm_slices: 0, input_seen: false, title: String::new(), live: None, live_line: None };
         shell.cx.notice.extend(icon_notice);
         shell.cx.notice.extend(window_notices);
         hold_declared_sizes(&mut shell.cx.settings, &options.window_sizes, &offered);
+        shell.title = options.title.clone();
+        if options.live {
+            shell.live = crate::live::Watch::start(shell.cx.art.layers().roots.clone(), shell.cx.app.data_dirs());
+            if shell.live.is_some() {
+                log("live reload on: the asset layers and the data are watched");
+            }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            crate::crashlog::set_top(shell.stack.last().map_or("", |s| s.id()));
+            // ENGINE-62 (CRASH-SAFE1): panics are noted for `on_panic`; a crash the last run caught shows its line once
+            crate::crashlog::arm();
+            if let Some((report, rescue)) = crate::crashlog::take_crashed(&shell.logs_dir()) {
+                shell.stack.push(Box::new(crate::screen::CrashNote::new(report, rescue)));
+            }
+        }
+        shell.warm();
         shell
+    }
+
+    /// ENGINE-62: the folder of the run's log and crash reports, beside the player's settings.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn logs_dir(&self) -> PathBuf {
+        crate::crashlog::dir().unwrap_or_else(|| self.cx.settings.path().parent().map_or_else(|| PathBuf::from("logs"), |d| d.join("logs")))
+    }
+
+    /// ENGINE-62 (CRASH-SAFE1): a panic came back to the shell: the game writes its rescue save (`Context::rescue`, its
+    /// save write only), then the report and `crashed.json` are left for the next start. Returns the report's path.
+    pub(crate) fn on_panic(&mut self) -> Option<PathBuf> {
+        let rescue = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.cx.app.rescue())) {
+            Ok(Some(problems)) if problems.is_empty() => true,
+            Ok(Some(problems)) => {
+                log(&format!("rescue save refused: {}", problems.join("; ")));
+                false
+            }
+            Ok(None) => false,
+            Err(_) => {
+                log("rescue save panicked");
+                false
+            }
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            crate::crashlog::crashed(&self.logs_dir(), &self.title, rescue)
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = rescue;
+            None
+        }
+    }
+
+    /// ENGINE-46 (FEEL-FIX1): draws the game's warm list (`Context::warm`) once, unseen, before the first frame, so the
+    /// art, panel and glyph caches a screen's first draw would fill are filled already. The screens are dropped and the
+    /// canvas cleared; nothing else changes (no tick, no frame counted, the audits paused).
+    fn warm(&mut self) {
+        let screens = G::warm(&mut self.cx);
+        self.warm_screens(screens);
+    }
+
+    /// ENGINE-46, ENGINE-53: draws `screens` once each, unseen, then clears the canvas and drops what they asked of the
+    /// shell (navigation, notices): only the caches they filled stay.
+    fn warm_screens(&mut self, screens: Vec<Box<dyn Screen<G>>>) {
+        if screens.is_empty() {
+            return;
+        }
+        let (nav, notices) = (self.cx.nav.len(), self.cx.notice.len());
+        let paused = (self.gfx.fonts.audit.take(), self.gfx.fonts.layout.take());
+        self.gfx.fonts.sync(&th());
+        for mut s in screens {
+            self.gfx.view = self.view_of(s.grid());
+            s.draw(&mut self.cx, &mut self.gfx, (-1, -1), false);
+        }
+        (self.gfx.fonts.audit, self.gfx.fonts.layout) = paused;
+        self.gfx.canvas.clip = None;
+        self.gfx.canvas.clear(th().bg);
+        self.cx.nav.truncate(nav);
+        self.cx.notice.truncate(notices);
+    }
+
+    /// ENGINE-54 (WARM-SPREAD1): one slice of warming the screen `warm_next` gave: the files and grounds done off the
+    /// frame are taken in (`Art::warm_poll`, `ground::poll_later`), then the screen is drawn unseen (an empty `bounds`, no
+    /// mouse) with its art loads limited to `WARM_ART_US` and its decodes and composes sent to threads (`Art::defer`,
+    /// `ground::set_deferring`). What the slice left comes in a later one, once the threads are done; a slice with nothing left ends the warming. A
+    /// frame after an input has no slice (the input never waits on one). Nothing it asks for (navigation, notices) stays.
+    fn warm_slice(&mut self) {
+        let input = std::mem::take(&mut self.input_seen);
+        if cfg!(target_arch = "wasm32") {
+            self.warming = None;
+            return;
+        }
+        if self.cx.art.warming() {
+            self.cx.art.warm_poll();
+        }
+        if crate::ground::composing() {
+            crate::ground::poll_later();
+        }
+        // the next slice waits for the files and grounds the last one asked for (a slice drawn sooner would only ask
+        // again, a full draw's cost each frame)
+        if input || self.warming.is_none() || self.cx.art.warming() || crate::ground::composing() {
+            return;
+        }
+        let Some(mut s) = self.warming.take() else { return };
+        let (nav, notices) = (self.cx.nav.len(), self.cx.notice.len());
+        let paused = (self.gfx.fonts.audit.take(), self.gfx.fonts.layout.take());
+        self.gfx.view = self.view_of(s.grid());
+        // nothing drawn: an empty outer limit (the screen sets and lifts its own clips)
+        let bounds = self.gfx.canvas.bounds.replace(Rect::new(0, 0, 0, 0));
+        self.cx.art.defer(std::time::Duration::from_micros(WARM_ART_US));
+        crate::ground::set_deferring(true);
+        s.draw(&mut self.cx, &mut self.gfx, (-1, -1), false);
+        let left = self.cx.art.undefer() + crate::ground::left_later();
+        crate::ground::set_deferring(false);
+        (self.gfx.fonts.audit, self.gfx.fonts.layout) = paused;
+        self.gfx.canvas.bounds = bounds;
+        self.gfx.canvas.clip = None;
+        self.cx.nav.truncate(nav);
+        self.cx.notice.truncate(notices);
+        self.warm_slices += 1;
+        if left > 0 && self.warm_slices < WARM_SLICES_MAX {
+            self.warming = Some(s);
+        }
+    }
+
+    /// ENGINE-45: ms on the feel probe's wall clock.
+    fn feel_now(&self) -> f64 {
+        crate::perf::ms_since(self.feel_t0)
+    }
+
+    /// ENGINE-45: an input of `kind` arrived now.
+    fn feel_input(&mut self, kind: &str) {
+        self.input_seen = true;
+        let at = self.feel_now();
+        self.feel.input(kind, at);
+    }
+
+    /// ENGINE-45: the latest input's handler is done.
+    fn feel_state(&mut self) {
+        let at = self.feel_now();
+        self.feel.state(at);
+    }
+
+    /// ENGINE-45: the frame that started at `start` (probe ms) is presented now; its inputs' lines go to `feel.log`.
+    fn feel_framed(&mut self, start: f64) {
+        let now = self.feel_now();
+        self.feel.frame(start, now);
+        let lines = std::mem::take(&mut self.feel.lines);
+        #[cfg(not(target_arch = "wasm32"))]
+        crate::crashlog::append_beside(crate::feel::LOG_FILE, &lines);
+        #[cfg(target_arch = "wasm32")]
+        drop(lines);
+    }
+
+    /// ENGINE-45: the feel overlay at the window's top left, over everything (the last numbers known: this frame's own
+    /// time is known only once it is presented).
+    fn draw_feel(&mut self) {
+        let mut text = self.feel.overlay_text(self.feel_now());
+        // ENGINE-55 (AUDIO-FEEL1): a real device's buffer and its underruns since the window opened
+        if let Some(out) = self.cx.audio.output().filter(|o| !o.virtual_device) {
+            text.push_str(&format!("  audio {:.1} ms x {}, underruns {}", out.buffer_ms(), out.buffer_frames, out.underruns.len()));
+        }
+        let v = self.whole_view();
+        let mut p = Painter { c: &mut self.gfx.canvas, v, fonts: &mut self.gfx.fonts };
+        let w = p.text_w(&text, crate::feel::OVERLAY_SIZE);
+        p.fill(Rect::new(1, 1, w.ceil() as i32 + 6, crate::feel::OVERLAY_SIZE as i32 + 4), rgba(0, 0, 0, 200));
+        p.text(4.0, 2.0, &text, crate::feel::OVERLAY_SIZE, rgba(255, 240, 150, 255));
+    }
+
+    /// ENGINE-58: every screen finishes the work it spreads over the frames after an input (`Screen::settle`).
+    #[cfg(not(target_arch = "wasm32"))]
+    fn settle_screens(&mut self) {
+        for s in self.stack.iter_mut() {
+            s.settle(&mut self.cx);
+        }
     }
 
     /// The canvas is now `w` x `h` px.
@@ -206,6 +411,11 @@ impl<G: Context> Shell<G> {
                 self.stack.push(Box::new(Notice::new(lines)));
             }
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        if guard > 0 {
+            // ENGINE-62: a crash report names the screen on top
+            crate::crashlog::set_top(self.stack.last().map_or("", |s| s.id()));
+        }
         self.follow_top();
     }
 
@@ -269,13 +479,10 @@ impl<G: Context> Shell<G> {
         self.gfx.kit.edit = Some(Edit::new(crate::notes::TEXT_ID, "", true));
     }
 
-    /// The lowest screen drawn: the top one and those under it down to the first that is not an overlay.
-    fn drawn_from(&self) -> usize {
-        let mut base = self.stack.len() - 1;
-        while base > 0 && self.stack[base].overlay() {
-            base -= 1;
-        }
-        base
+    /// The screens drawn: the top one and those under it down to the first that is not an overlay, less a panel under
+    /// another panel (never stacked, `screen::drawn_screens`).
+    fn drawn(&self) -> Vec<usize> {
+        crate::screen::drawn_screens(&self.stack)
     }
 
     /// What the frame loop owes what is on screen now (FPSCAP1): every frame while the shell's own work runs (a text field
@@ -286,10 +493,74 @@ impl<G: Context> Shell<G> {
         if own || self.cx.audio.fading() || !self.cx.nav.is_empty() || !self.cx.notice.is_empty() {
             return FrameNeed::Full;
         }
-        self.stack[self.drawn_from()..].iter().fold(FrameNeed::Idle, |need, s| need.and(s.frame_need(&self.cx)))
+        self.drawn().into_iter().fold(FrameNeed::Idle, |need, i| need.and(self.stack[i].frame_need(&self.cx)))
+    }
+
+    /// ENGINE-64 (LIVE-RELOAD1): reloads what the watcher found changed since the last call (nothing while a save is
+    /// being written): art, the theme, layouts, sounds and the data, keeping the game state; one line says what. True
+    /// when the screen must be drawn again (a reload, or the line just went away).
+    fn live_poll(&mut self) -> bool {
+        let now = Instant::now();
+        let gone = self.live_line.as_ref().is_some_and(|(_, until)| now >= *until);
+        if gone {
+            self.live_line = None;
+        }
+        let Some(w) = self.live.as_mut() else { return gone };
+        let c = w.take(aegis_save::writing());
+        if c.is_empty() {
+            return gone;
+        }
+        let mut lines: Vec<String> = c.line().into_iter().collect();
+        self.cx.art.forget(&c.art);
+        self.cx.audio.forget(&c.sounds);
+        if c.theme {
+            crate::theme::reload(&mut self.cx);
+        }
+        if !c.data.is_empty() {
+            match G::reload_data(&mut self.cx, &c.data) {
+                Ok(problems) => {
+                    lines.push("Data reloaded".to_string());
+                    // what was built ahead from the old data is dropped; each screen rebuilds or says what it keeps
+                    self.warming = None;
+                    let n = self.stack.len();
+                    for i in (0..n).rev() {
+                        lines.extend(self.stack[i].data_reloaded(&mut self.cx, i + 1 == n));
+                    }
+                    self.cx.notice.extend(problems);
+                }
+                Err(e) => {
+                    let line = format!("Data not reloaded: {e}");
+                    self.cx.notice.push(line.clone());
+                    lines.push(line);
+                }
+            }
+        }
+        if lines.is_empty() {
+            return gone;
+        }
+        let line = lines.join("; ");
+        log(&format!("live reload: {line}"));
+        self.live_line = Some((line, now + crate::live::LINE_FOR));
+        self.settle();
+        true
+    }
+
+    /// ENGINE-64: the last reload's line, over everything at the canvas's bottom left.
+    fn draw_live_line(&mut self) {
+        let Some((line, _)) = self.live_line.as_ref() else { return };
+        let t = th();
+        let view = self.whole_view();
+        let mut p = Painter { c: &mut self.gfx.canvas, v: view, fonts: &mut self.gfx.fonts };
+        let size = crate::ui::BODY;
+        let (w, h) = (p.text_w(line, size).ceil() as i32 + 12, p.line_h(size).ceil() as i32 + 6);
+        let r = Rect::new(6, view.canvas.1 - h - 6, w, h);
+        p.panel(r, t.card, t.gold, 2.0);
+        p.text((r.x + 6) as f32, (r.y + 3) as f32, line, size, t.text);
     }
 
     fn frame(&mut self) {
+        self.live_poll();
+        self.feel.on = self.feel_launch || self.cx.settings.v["feel"] == json!(true);
         self.settle();
         self.cx.playtest.tick();
         self.track_hover();
@@ -297,14 +568,27 @@ impl<G: Context> Shell<G> {
         // The saved sound levels; a screen may play draft ones for this frame (the settings popup).
         self.cx.audio.set_levels(&self.cx.settings.v);
         let cx = &mut self.cx;
+        let t = self.feel.on.then(Instant::wall);
         self.stack.last_mut().unwrap().tick(cx);
+        self.feel.tick = t.map_or(0.0, crate::perf::ms_since);
         self.settle();
+        // ENGINE-55 (AUDIO-FEEL1): a screen opened by an input or the tick starts its music before the frame is drawn
+        self.follow_music();
+        // ENGINE-53 (SWITCH-AHEAD1), ENGINE-54 (WARM-SPREAD1): a screen one in the stack may open next (the top asked
+        // first), warmed one slice a frame
+        let cx = &mut self.cx;
+        if let Some(next) = self.stack.iter_mut().rev().find_map(|s| s.warm_next(cx)) {
+            self.warming = Some(next);
+            self.warm_slices = 0;
+        }
+        self.warm_slice();
         // LOOK1-E1: the theme in force (the faces follow it; the screens' `Ui` sync them too).
         let theme = th();
         self.gfx.fonts.sync(&theme);
         self.gfx.canvas.clear(theme.bg);
         let n = self.stack.len();
-        for i in self.drawn_from()..n {
+        let t = self.feel.on.then(Instant::wall);
+        for i in self.drawn() {
             let live = i == n - 1;
             self.gfx.view = self.view_of(self.stack[i].grid());
             let mouse = if live { self.mouse } else { (-1, -1) };
@@ -318,6 +602,7 @@ impl<G: Context> Shell<G> {
                 self.gfx.fonts.layout = paused.1;
             }
         }
+        self.feel.draw = t.map_or(0.0, crate::perf::ms_since);
         self.gfx.canvas.clip = None;
         // The focus ring, the open list, the ghost and the tip are the top screen's: its view stays until the stack changes.
         self.gfx.view = self.view_of(self.stack[n - 1].grid());
@@ -361,14 +646,23 @@ impl<G: Context> Shell<G> {
             let at = keyed.map_or(self.mouse, |f| focus::tip_point(&self.stack[n - 1].widgets(), self.mouse, Some(f)));
             self.stack[n - 1].draw_tip(&mut p, at);
         }
+        if self.feel.on {
+            self.draw_feel();
+        }
+        self.draw_live_line();
         self.settle();
+        self.follow_music();
+        self.cx.audio.tick();
+        self.frames += 1;
+    }
+
+    /// The music and ambience the stack wants now (the topmost screen naming one); a change starts at once.
+    fn follow_music(&self) {
         let cx = &self.cx;
-        let track = self.stack.iter().rev().find_map(|s| s.music(cx));
-        cx.audio.music(track.as_deref());
+        let track = self.stack.iter().rev().find_map(|s| s.music(cx).map(|m| (m, s.music_fade_in(cx))));
+        cx.audio.music_faded(track.as_ref().map(|(m, _)| m.as_str()), track.as_ref().and_then(|(_, f)| *f));
         let bed = self.stack.iter().rev().find_map(|s| s.ambience(cx)).filter(|b| !b.is_empty());
         cx.audio.ambience(bed.as_deref());
-        cx.audio.tick();
-        self.frames += 1;
     }
 
 }
@@ -470,6 +764,7 @@ impl<G: Context> App<G> {
     fn redraw(&mut self) {
         let started = Instant::now();
         let Some(shell) = self.shell.as_mut() else { return };
+        let feel_start = shell.feel_now();
         if let Some(rx) = &self.bridge {
             while let Ok(req) = rx.try_recv() {
                 let reply = shell.bridge(&req.body);
@@ -511,6 +806,7 @@ impl<G: Context> App<G> {
                 let _ = p.render();
             }
         }
+        shell.feel_framed(feel_start);
         self.pacer.framed(started, shell.frame_need());
     }
 
@@ -680,7 +976,11 @@ fn draw_ring(p: &mut Painter, r: Rect) {
     let t = th();
     let m = Metrics::of(&t, p.v);
     let (out, wide, radius) = (m.u(2), m.u(4), m.radius + m.uf(1.0));
-    p.panel(Rect::new(r.x - out, r.y - out, r.w + wide, r.h + wide), rgba(0, 0, 0, 0), t.ring, radius);
+    // ENGINE-48 (INPUT-REACH1): a widget at the canvas's edge (a whole-stage click area) keeps its ring on the canvas
+    let (cw, ch) = p.v.canvas;
+    let (x0, y0) = ((r.x - out).max(0), (r.y - out).max(0));
+    let (x1, y1) = ((r.x - out + r.w + wide).min(cw), (r.y - out + r.h + wide).min(ch));
+    p.panel(Rect::new(x0, y0, x1 - x0, y1 - y0), rgba(0, 0, 0, 0), t.ring, radius);
 }
 
 /// A valid drop target's outline while dragging, the one under the cursor lit in gold.
@@ -816,6 +1116,25 @@ pub fn start_web<G: Context>(mut cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, opti
     Ok(())
 }
 
+/// ENGINE-63 (PAD-TUNE1): what holds the shell the catch (`guard`) writes the rescue save through: the window's loop.
+trait HasShell<G: Context> {
+    fn shell_mut(&mut self) -> Option<&mut Shell<G>>;
+}
+
+/// ENGINE-62, ENGINE-63: runs `f` on `state` inside the frame's catch (the window's events, its pad poll): a panic gets
+/// the rescue save and the report (`Shell::on_panic`), then goes on unwinding.
+fn guard<G: Context, T: HasShell<G>, R>(state: &mut T, f: impl FnOnce(&mut T) -> R) -> R {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(&mut *state))) {
+        Ok(r) => r,
+        Err(p) => {
+            if let Some(s) = state.shell_mut() {
+                s.on_panic();
+            }
+            std::panic::resume_unwind(p)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -897,9 +1216,111 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default() };
+        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, group_keep: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, controls: Default::default(), feel: Default::default(), feel_t0: Instant::wall(), feel_launch: crate::feel::launch_asked(), warming: None, warm_slices: 0, input_seen: false, title: String::new(), live: None, live_line: None };
         s.frame();
         s
+    }
+
+    /// ENGINE-63 (PAD-TUNE1): what runs inside the frame's catch (`guard`: the window's events and its pad poll) hands
+    /// its value back; a panic in it (a pad poll that panics) leaves the crash note beside the logs, then still unwinds.
+    #[test]
+    fn a_panic_in_the_pad_poll_is_caught_like_a_frame() {
+        struct Looper {
+            shell: Option<Shell<App>>,
+            polls: u32,
+        }
+        impl HasShell<App> for Looper {
+            fn shell_mut(&mut self) -> Option<&mut Shell<App>> {
+                self.shell.as_mut()
+            }
+        }
+        let dir = aegis_core::scratch::Scratch::vacant("shell_pad_catch");
+        let mut s = shell();
+        s.cx.settings = Settings::load(dir.join("settings.json"), json!({}));
+        let logs = s.logs_dir();
+        let mut l = Looper { shell: Some(s), polls: 0 };
+        let wake = guard(&mut l, |l| {
+            l.polls += 1;
+            Some(16)
+        });
+        assert_eq!((wake, l.polls), (Some(16), 1), "a poll that goes well hands its wake back");
+        assert!(!logs.join(crate::crashlog::CRASHED_FILE).exists());
+        let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            guard(&mut l, |_| -> Option<u64> { panic!("the pad driver went away") })
+        }));
+        assert!(caught.is_err(), "the panic goes on unwinding after the rescue");
+        assert!(logs.join(crate::crashlog::CRASHED_FILE).is_file(), "the crash note is written for the next start");
+        let (report, rescue) = crate::crashlog::take_crashed(&logs).expect("the note names its report");
+        assert!(report.is_file() && !rescue, "the report, and no rescue save (this game has none): {}", report.display());
+    }
+
+    /// ENGINE-56: a menu over the board: an enabled button, a disabled one, one that plays its own sound, a slider.
+    #[derive(Default)]
+    struct Menu {
+        w: Vec<Widget<&'static str>>,
+    }
+
+    impl Menu {
+        fn act(&mut self, cx: &mut Cx, a: &'static str) {
+            cx.app.log.push(format!("click {a}"));
+        }
+    }
+
+    impl Screen<App> for Menu {
+        fn id(&self) -> &'static str {
+            "menu"
+        }
+        fn overlay(&self) -> bool {
+            true
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let mut ui: Ui<&'static str> = Ui::new(g, mouse, live);
+            ui.button("ok", Rect::new(10, 100, 60, 14), "OK", "ok", true);
+            ui.button("off", Rect::new(80, 100, 60, 14), "Off", "off", false);
+            ui.button("own", Rect::new(150, 100, 60, 14), "Own", "own", true);
+            ui.slider("vol", Rect::new(10, 130, 100, 14), 1, 2, "40%", |i| if i == 0 { "v0" } else { "v1" }, true);
+            self.w = ui.widgets;
+        }
+        fn ui_sound(&self, _cx: &Cx, id: &str, _cue: UiCue) -> UiSound {
+            if id == "own" { UiSound::Silent } else { UiSound::Rule }
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    /// ENGINE-56 (AUDIO-FEEL2): a press answers by rule: confirm on a button taken (by a click, the keyboard or the agent
+    /// link), error on a disabled one, back when Esc or a right click closed the screen, nothing where the screen plays
+    /// its own, on a slider, or on a back that closed nothing.
+    #[test]
+    fn presses_answer_by_rule_unless_the_screen_names_its_own() {
+        let mut s = shell();
+        let engine = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        s.cx.audio = Audio::virtual_layers(&aegis_core::assets::Layers::of(vec![engine]));
+        s.stack.push(Box::new(Menu::default()));
+        s.frame();
+        let t0 = Instant::wall();
+        let heard = |s: &Shell<App>| s.cx.audio.sounds_since(t0).into_iter().map(|x| x.0).collect::<Vec<_>>();
+        let at = |s: &mut Shell<App>, pos: (i32, i32)| {
+            s.mouse = pos;
+            s.click();
+            s.frame();
+        };
+        at(&mut s, (20, 105));
+        at(&mut s, (90, 105));
+        at(&mut s, (160, 105));
+        at(&mut s, (20, 135));
+        assert_eq!(heard(&s), ["sfx/ui_confirm.wav", "sfx/ui_error.wav"], "the slider and the screen's own say nothing");
+        assert_eq!(s.cx.app.log, ["click ok", "click own", "click v0"]);
+        let r = s.bridge(&json!({"cmd": "click", "id": "ok"}));
+        assert_eq!(r["ok"], json!(true));
+        let r = s.bridge(&json!({"cmd": "click", "id": "off"}));
+        assert_eq!(r["ok"], json!(false));
+        assert_eq!(heard(&s)[2..], ["sfx/ui_confirm.wav", "sfx/ui_error.wav"], "the link's clicks too");
+        s.key(Key::Esc);
+        assert_eq!((s.stack.len(), heard(&s).last().map(String::as_str)), (1, Some("sfx/ui_back.wav")), "Esc closed the menu");
+        let n = heard(&s).len();
+        s.back();
+        s.key(Key::Esc);
+        assert_eq!(heard(&s).len(), n, "a back that closes nothing is silent");
     }
 
     /// Press at `from`, move to `to` in steps, release (the window's mouse path).
@@ -971,6 +1392,70 @@ mod tests {
     fn press(s: &mut Shell<App>, k: Key) {
         s.key(k);
         s.frame();
+    }
+
+    /// A screen that logs each draw ("drew <id>"), an overlay and a panel as asked (STYLE-PASS1B).
+    struct Layer {
+        id: &'static str,
+        overlay: bool,
+        panel: bool,
+        w: Vec<Widget<()>>,
+    }
+
+    impl Layer {
+        fn new(id: &'static str, overlay: bool, panel: bool) -> Self {
+            Self { id, overlay, panel, w: Vec::new() }
+        }
+        fn act(&mut self, _cx: &mut Cx, _a: ()) {}
+    }
+
+    impl Screen<App> for Layer {
+        fn id(&self) -> &'static str {
+            self.id
+        }
+        fn overlay(&self) -> bool {
+            self.overlay
+        }
+        fn panel(&self) -> bool {
+            self.panel
+        }
+        fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let ui: Ui<()> = Ui::new(g, mouse, live);
+            self.w = ui.widgets;
+            cx.app.log.push(format!("drew {}", self.id));
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    /// The draws of one frame, bottom first.
+    fn drew(s: &mut Shell<App>) -> Vec<String> {
+        s.cx.app.log.clear();
+        s.frame();
+        s.cx.app.log.iter().filter_map(|l| l.strip_prefix("drew ").map(String::from)).collect()
+    }
+
+    /// STYLE-PASS1B (`PR7-48` (2), never stacked): a panel opened over a panel takes its place on screen (the map still
+    /// under it), a question over the panel draws over it, and closing the top panel shows the one under again; an
+    /// overlay that is not a panel keeps drawing under a panel.
+    #[test]
+    fn a_panel_over_a_panel_takes_its_place_and_back_returns_to_it() {
+        let mut s = shell();
+        s.stack = vec![Box::new(Layer::new("map", false, false)), Box::new(Layer::new("menu", true, true))];
+        assert_eq!(drew(&mut s), ["map", "menu"]);
+        s.cx.nav.push(Nav::Push(Box::new(Layer::new("party", true, true))));
+        assert_eq!(drew(&mut s), ["map", "party"], "one panel shows");
+        assert_eq!(s.stack.len(), 3, "the menu stays in the stack");
+        s.cx.ask("Sure?", |_| {});
+        assert_eq!(drew(&mut s), ["map", "party"], "the panel stays drawn under a question");
+        assert_eq!(s.stack.last().map(|t| t.id()), Some("ask"));
+        s.cx.nav.push(Nav::Pop);
+        s.cx.nav.push(Nav::Pop);
+        assert_eq!(drew(&mut s), ["map", "menu"], "Back returns to the menu");
+        s.cx.nav.push(Nav::Push(Box::new(Layer::new("veil", true, false))));
+        s.cx.nav.push(Nav::Push(Box::new(Layer::new("journal", true, true))));
+        assert_eq!(drew(&mut s), ["map", "veil", "journal"], "a plain overlay between still draws");
+        let none: Vec<Box<dyn Screen<App>>> = Vec::new();
+        assert!(crate::screen::drawn_screens(&none).is_empty());
     }
 
     /// A screen with one label that fits at Normal text size and is cut at Extra large (TEXTFIT1 audit).
@@ -1659,6 +2144,16 @@ mod tests {
         assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (None, false), "the default question shows no ring");
         press(&mut s, Key::Enter);
         assert!(s.cx.take_answer("kept") && s.stack.last().unwrap().id() == "form", "Enter: Yes, the question closed");
+        // CONTROLS-UI1B: y and n answer by the raw key: with n and k swapped by the map, k answers nothing, n is No
+        s.cx.settings.v["controls"] = json!({"keys": {"n": "k", "k": "n"}});
+        s.cx.ask_tag("Discard?", "swapped");
+        s.frame();
+        s.press(Key::Char('k'));
+        s.frame();
+        assert_eq!(s.stack.last().unwrap().id(), "ask", "k (the map's n) answers nothing");
+        s.press(Key::Char('n'));
+        s.frame();
+        assert!(!s.cx.take_answer("swapped") && s.stack.last().unwrap().id() == "form", "the raw n: No, the question closed");
     }
 
     #[test]
@@ -2343,6 +2838,7 @@ mod tests {
                     Section { title: "Enemies".into(), colour: TEXT, tracks: vec![Track { key: "foe".into(), label: "Foe".into(), colour: TEXT, segments: vec![seg("hidden", 1, 6)], masked: Some("Plans in secret".into()), ..Track::default() }] },
                 ],
                 ruler: None,
+                tiles: false,
             };
             t.draw(&mut ui, "tl", Rect::new(10, 10, 74 + 4 + 300, 120), |b| format!("block {b}"), |k| format!("track {k}"), |k, s| format!("seg {k} {s}"));
             self.w = ui.widgets;
@@ -3029,7 +3525,7 @@ mod tests {
         }
         fn capture(&mut self, cx: &mut Cx, input: crate::controls::Input) -> bool {
             self.rebind.capturing() && {
-                self.rebind.input(&REBIND_ACTIONS, &mut cx.settings.v, input);
+                self.rebind.input(&REBIND_ACTIONS, &[], &mut cx.settings.v, input);
                 true
             }
         }

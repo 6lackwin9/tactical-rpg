@@ -6,7 +6,10 @@
 //! `locks.json` beside the saves; `write` and `delete` refuse a locked slot. Engine-only addition (CAMPAIGN1 F5):
 //! keyed saves (`key_<key>.json`, for example an act-start save) beside the slots, in the same envelope; they are
 //! outside the slot range, so slot saves never overwrite them and slot listings never show them. Every user file goes
-//! through the user store (`store`, WEBREL1-E1b): the disk on native, `localStorage` on the web.
+//! through the user store (`store`, WEBREL1-E1b): the disk on native, `localStorage` on the web. Engine-only addition
+//! (ENGINE-62, CRASH-SAFE1): the atomic write keeps the slot's previous readable save as `<file>.prev`; a slot whose
+//! file is not a readable envelope is damaged (`damage`), never deleted, and reads fall back to that copy (`read`,
+//! `peek_slot`); a rescue save written after a crash is the keyed save `RESCUE_KEY`.
 
 pub mod store;
 
@@ -78,6 +81,18 @@ pub fn path_for(dir: &Path, slot: i64) -> PathBuf {
     dir.join(format!("slot_{slot}.json"))
 }
 
+/// ENGINE-62 (CRASH-SAFE1): the previous readable copy of the save at `path` (`slot_1.json.prev`), kept by the atomic
+/// write.
+pub fn prev_path(path: &Path) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".prev");
+    path.with_file_name(name)
+}
+
+/// ENGINE-62: the keyed save a crash's rescue goes to (`write_keyed`): outside the slot range, so never over a player's
+/// slot.
+pub const RESCUE_KEY: &str = "rescue";
+
 pub fn exists(dir: &Path, slot: i64) -> bool {
     store::current().is_file(&path_for(dir, slot))
 }
@@ -90,7 +105,14 @@ pub fn delete(dir: &Path, slot: i64) -> Result<(), String> {
     if is_locked(dir, slot) {
         return Err(locked_text(slot));
     }
-    store::current().remove_file(&path_for(dir, slot)).map_err(|_| format!("Slot {slot} could not be deleted."))
+    let st = store::current();
+    st.remove_file(&path_for(dir, slot)).map_err(|_| format!("Slot {slot} could not be deleted."))?;
+    // the player deleted the slot: its previous copy goes too (a damaged save is never deleted by a read)
+    let prev = prev_path(&path_for(dir, slot));
+    if st.is_file(&prev) {
+        let _ = st.remove_file(&prev);
+    }
+    Ok(())
 }
 
 // ---- Slot locks (PLAYUI1 section 1): a sidecar file beside the saves, so a lock never rewrites a save ----------
@@ -179,7 +201,32 @@ pub fn write(fmt: &Format, dir: &Path, slot: i64, saved_at: i64, state: impl FnO
 /// Writes `state` in the envelope to `final_path` through a temp file and a rename (directly on a store that
 /// `writes_whole`, the web: no temp key, so a save needs only its own size in the quota); problem strings, empty =
 /// written.
+/// ENGINE-64 (LIVE-RELOAD1): how many save writes are under way (a dev run's live reload waits while one is).
+static WRITING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// ENGINE-64: a save is being written right now (on any thread).
+pub fn writing() -> bool {
+    WRITING.load(std::sync::atomic::Ordering::Acquire) > 0
+}
+
+/// Counts a write while it lives (`writing`).
+struct Writing;
+
+impl Writing {
+    fn start() -> Writing {
+        WRITING.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        Writing
+    }
+}
+
+impl Drop for Writing {
+    fn drop(&mut self) {
+        WRITING.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    }
+}
+
 fn write_envelope(fmt: &Format, dir: &Path, final_path: &Path, saved_at: i64, state: Value) -> Vec<String> {
+    let _writing = Writing::start();
     let envelope = json::obj([
         ("format", fmt.tag.into()),
         ("version", int(fmt.version)),
@@ -213,6 +260,11 @@ fn write_envelope(fmt: &Format, dir: &Path, final_path: &Path, saved_at: i64, st
         let _ = st.remove_file(&tmp);
         return vec![format!("Can't write '{}'.", final_path.display())];
     }
+    // ENGINE-62: the save being replaced, when it reads, stays as the previous copy (a damaged one is not copied over a
+    // good one)
+    if matches!(peek_file(fmt, final_path), Peek::Found(_)) {
+        let _ = st.copy(final_path, &prev_path(final_path));
+    }
     if st.rename(&tmp, final_path).is_err() {
         let _ = st.remove_file(&tmp);
         return vec!["Can't move the save into place (the previous save was kept).".into()];
@@ -220,12 +272,73 @@ fn write_envelope(fmt: &Format, dir: &Path, final_path: &Path, saved_at: i64, st
     Vec::new()
 }
 
-/// A slot's file text, or the refusal when the slot is empty.
+/// A slot's file text, or the refusal when the slot is empty. ENGINE-62: a file that is not a JSON object (cut short,
+/// garbled) gives its previous copy's text instead when that one is (`prev_path`); the file itself stays.
 pub fn read(dir: &Path, slot: i64) -> Result<String, Vec<String>> {
     if !exists(dir, slot) {
         return Err(vec![format!("No save in slot {slot}.")]);
     }
-    Ok(store::current().read_to_string(&path_for(dir, slot)).unwrap_or_default())
+    Ok(text_or_prev(&path_for(dir, slot)))
+}
+
+/// The text at `path`, or its previous copy's when the file is not a JSON object and the copy is.
+fn text_or_prev(path: &Path) -> String {
+    let st = store::current();
+    let text = st.read_to_string(path).unwrap_or_default();
+    let object = |t: &str| matches!(serde_json::from_str::<Value>(t), Ok(Value::Object(_)));
+    if object(&text) {
+        return text;
+    }
+    match st.read_to_string(&prev_path(path)) {
+        Ok(prev) if object(&prev) => prev,
+        _ => text,
+    }
+}
+
+/// ENGINE-62 (CRASH-SAFE1): why a slot's file is damaged (not JSON, another format, no valid version), None when it
+/// reads or the slot is empty. A damaged save is kept as it is; its previous copy loads instead when there is one.
+pub fn damage(fmt: &Format, dir: &Path, slot: i64) -> Option<String> {
+    damage_of(fmt, &path_for(dir, slot))
+}
+
+fn damage_of(fmt: &Format, path: &Path) -> Option<String> {
+    let st = store::current();
+    if !st.is_file(path) {
+        return None;
+    }
+    let text = st.read_to_string(path).unwrap_or_default();
+    let envelope = match serde_json::from_str::<Value>(&text) {
+        Ok(Value::Object(e)) => e,
+        _ => return Some("the file is cut short or garbled".into()),
+    };
+    if json::s(&envelope, "format") != fmt.tag {
+        return Some(format!("not a save of this game (format '{}')", json::s(&envelope, "format")));
+    }
+    let version = json::get(&envelope, "version");
+    if !version.is_number() || json::to_int(version) < 1 {
+        return Some("the save has no valid version".into());
+    }
+    None
+}
+
+/// ENGINE-62: a slot read for its header (`peek`), from its previous copy when the file itself is damaged: (what was
+/// read, why the file is damaged or None).
+pub fn peek_slot(fmt: &Format, dir: &Path, slot: i64) -> (Peek, Option<String>) {
+    let path = path_for(dir, slot);
+    match damage_of(fmt, &path) {
+        None => (peek_file(fmt, &path), None),
+        Some(why) => (peek_file(fmt, &prev_path(&path)), Some(why)),
+    }
+}
+
+/// ENGINE-62: whether the slot has a previous copy to load (`prev_path`).
+pub fn has_prev(dir: &Path, slot: i64) -> bool {
+    store::current().is_file(&prev_path(&path_for(dir, slot)))
+}
+
+/// ENGINE-62: the slot's previous copy's text (a save that failed later, in its migration, loads this one instead).
+pub fn read_prev(dir: &Path, slot: i64) -> Result<String, Vec<String>> {
+    store::current().read_to_string(&prev_path(&path_for(dir, slot))).map_err(|_| vec![format!("Slot {slot} has no previous copy.")])
 }
 
 /// A save file's text as an envelope: parse and format check (not migrated).
@@ -362,12 +475,25 @@ pub fn write_keyed(fmt: &Format, dir: &Path, key: &str, saved_at: i64, state: im
 }
 
 /// A keyed save's file text (for `open` and `migrate`, like `read`), or the refusal.
+/// ENGINE-62: removes the keyed save `key` and its previous copy (a rescue save once taken or turned down).
+pub fn delete_keyed(dir: &Path, key: &str) -> Result<(), String> {
+    check_key(key)?;
+    let st = store::current();
+    let path = key_path(dir, key);
+    for p in [prev_path(&path), path] {
+        if st.is_file(&p) {
+            st.remove_file(&p).map_err(|_| format!("Can't delete '{}'.", p.display()))?;
+        }
+    }
+    Ok(())
+}
+
 pub fn read_keyed(dir: &Path, key: &str) -> Result<String, Vec<String>> {
     check_key(key).map_err(|problem| vec![problem])?;
     if !exists_keyed(dir, key) {
         return Err(vec![format!("No save '{key}'.")]);
     }
-    Ok(store::current().read_to_string(&key_path(dir, key)).unwrap_or_default())
+    Ok(text_or_prev(&key_path(dir, key)))
 }
 
 /// `peek` for a keyed save; a bad key is `Missing`.

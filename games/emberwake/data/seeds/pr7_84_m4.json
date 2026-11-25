@@ -1,0 +1,16 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "quests",
+      "world": "sunk_ward",
+      "fields": [
+        "rec_level"
+      ],
+      "entry": {
+        "id": "q_a1_m4",
+        "rec_level": 7
+      }
+    }
+  ]
+}

@@ -1,0 +1,214 @@
+{
+  "screen": "shop",
+  "fields": {
+    "title": {
+      "text": "The Counter"
+    },
+    "band": {
+      "text": "Traders: Friendly"
+    },
+    "offers": {
+      "rows": [
+        {
+          "id": "supplies",
+          "label": "Supplies",
+          "detail": "5 Coin",
+          "detail2": "3",
+          "enabled": true,
+          "note": "Supplies: an item.",
+          "tone2": "info"
+        },
+        {
+          "id": "potion",
+          "label": "Potion",
+          "detail": "30 Coin",
+          "detail2": "2 of 6",
+          "enabled": true,
+          "note": "Potion: an item.",
+          "selected": true,
+          "tone": "gold",
+          "buttons": [
+            {
+              "action": "buy5",
+              "label": "+5",
+              "enabled": true
+            },
+            {
+              "action": "buy10",
+              "label": "+10",
+              "enabled": true
+            }
+          ],
+          "tone2": "info"
+        },
+        {
+          "id": "iron_sword",
+          "label": "Iron Sword",
+          "detail": "120 Coin",
+          "detail2": "0 of 1",
+          "enabled": true,
+          "note": "Iron Sword: an item.",
+          "tone": "foe",
+          "tone2": "info"
+        },
+        {
+          "id": "loot_0",
+          "label": "Old Clasp x2",
+          "detail": "60 Coin",
+          "detail2": "1 of 1",
+          "enabled": false,
+          "note": "Old Clasp x2: an item.",
+          "tone": "dim",
+          "tone2": "info"
+        }
+      ]
+    },
+    "trade": {
+      "rows": [
+        {
+          "id": "buy.supplies",
+          "label": "Supplies x3",
+          "detail": "-15",
+          "enabled": true,
+          "tone": "foe"
+        },
+        {
+          "id": "buy.potion",
+          "label": "Potion x2",
+          "detail": "-60",
+          "enabled": true,
+          "tone": "foe"
+        },
+        {
+          "id": "buy.loot_0",
+          "label": "Old Clasp x2 x1",
+          "detail": "-60",
+          "enabled": true,
+          "tone": "foe"
+        },
+        {
+          "id": "sell.wolf_pelt",
+          "label": "Wolf Pelt x2",
+          "detail": "+24",
+          "enabled": true,
+          "tone": "good"
+        }
+      ]
+    },
+    "hint": {
+      "text": ""
+    },
+    "totals": {
+      "text": "Total: -111 Coin\nCoin: 240 -> 129",
+      "tone": ["foe", ""]
+    },
+    "total": {
+      "text": "Total: -111 Coin",
+      "tone": "foe"
+    },
+    "purse": {
+      "text": "Coin: 240 -> 129"
+    },
+    "stash": {
+      "rows": [
+        {
+          "id": "wolf_pelt",
+          "label": "Wolf Pelt",
+          "detail": "12 Coin",
+          "detail2": "2 of 2",
+          "enabled": false,
+          "selected": true,
+          "tone2": "info"
+        },
+        {
+          "id": "herb",
+          "label": "Herb",
+          "detail": "4 Coin",
+          "detail2": "0 of 5",
+          "enabled": true,
+          "buttons": [
+            {
+              "action": "sell5",
+              "label": "+5",
+              "enabled": true
+            },
+            {
+              "action": "sell10",
+              "label": "+10",
+              "enabled": true
+            }
+          ],
+          "tone2": "info"
+        }
+      ]
+    },
+    "others": {
+      "rows": [
+        {
+          "id": "old_letter",
+          "label": "Old Letter",
+          "detail": "x1",
+          "enabled": false
+        }
+      ]
+    },
+    "detail": {
+      "text": "Potion: Restores 30 HP. · consumable · Owned 1"
+    },
+    "errors": {
+      "text": ""
+    }
+  },
+  "actions": [
+    {
+      "id": "buy",
+      "label": "Buy",
+      "enabled": true
+    },
+    {
+      "id": "buy5",
+      "label": "+5",
+      "enabled": true
+    },
+    {
+      "id": "buy10",
+      "label": "+10",
+      "enabled": true
+    },
+    {
+      "id": "sell",
+      "label": "Sell",
+      "enabled": true
+    },
+    {
+      "id": "sell5",
+      "label": "+5",
+      "enabled": true
+    },
+    {
+      "id": "sell10",
+      "label": "+10",
+      "enabled": true
+    },
+    {
+      "id": "return",
+      "label": "Put back",
+      "enabled": true
+    },
+    {
+      "id": "clear",
+      "label": "Clear",
+      "enabled": true
+    },
+    {
+      "id": "confirm",
+      "label": "Confirm trade",
+      "enabled": true
+    },
+    {
+      "id": "close",
+      "label": "Close",
+      "enabled": true
+    }
+  ]
+}

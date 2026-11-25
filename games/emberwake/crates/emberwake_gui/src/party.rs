@@ -28,7 +28,7 @@ use serde_json::{json, Value};
 /// the member picker, above every tab's content).
 pub const PORTRAIT: i32 = 48;
 
-const TABS: [(&str, &str); 4] = [("stats", "Stats"), ("level_up", "Level up"), ("skills", "Skills"), ("gear", "Gear")];
+pub(crate) const TABS: [(&str, &str); 4] = [("stats", "Stats"), ("level_up", "Level up"), ("skills", "Skills"), ("gear", "Gear")];
 
 #[derive(Debug, Clone)]
 pub enum PAct {
@@ -75,6 +75,9 @@ pub enum PAct {
     FollowAdd(String, String),
     /// Takes place `.1` out of opener `.0`'s list (a right click).
     FollowRemove(String, usize),
+    /// PR7-92 (INPUT-REACH2): a slot or a list pressed with no drag (widget id): picks a filled slot, or puts the pick
+    /// there (`Character::slot_enter`).
+    SlotPress(String),
     /// "Use the <Intent> order": empties opener `.0`'s list.
     FollowClear(String),
 }
@@ -112,7 +115,23 @@ pub struct Character {
     follow_open: Option<String>,
     /// PORTRAITFX1-R: the shown member's portrait (surface `roster`); cycling members drops the old one's.
     faces: crate::portraits::Faces,
+    /// PR7-92 (INPUT-REACH2): the slot picked with Enter, waiting for where it goes.
+    pick: Option<Pick>,
     w: Vec<Widget<PAct>>,
+}
+
+/// PR7-92: a picked slot: its widget, the payload a drag of it carries and the drop key it takes.
+#[derive(Debug, Clone, PartialEq)]
+struct Pick {
+    id: String,
+    from: String,
+    to: String,
+}
+
+/// PR7-92: whether drop key `k` is a slot (a skill, gear or pouch slot) rather than a list, an order or a follow-up
+/// place: the slots the keys pick, place and empty.
+fn is_slot_key(k: &str) -> bool {
+    (k.starts_with("deck.") && k != "deck.list" && !k.starts_with("deck.own.")) || k.starts_with("slot.") || k.starts_with("pouch.")
 }
 
 /// One derived row as a screen lists it: the header, the value, the value as shown (with the row's suffix) and the
@@ -132,13 +151,13 @@ impl DRow {
 }
 
 /// The ruleset the party screen reads derived rows by: the ruleset of the save's world (RULESET1 3.1.1).
-fn party_ruleset(cx: &Cx) -> String {
+pub(crate) fn party_ruleset(cx: &Cx) -> String {
     cx.data.ruleset_id(&cx.gs().world_id)
 }
 
 /// PartyPreview.derived: the derived rows of a member built without auto-spend, as it fights in `world` (its class path
 /// and deck rule there; HOOKS1-UI slice 2).
-fn derived(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
+pub(crate) fn derived(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
     progression::build_with(d, m, world, false).map(|b| derived_of(&d.cat, ruleset, &b.unit)).unwrap_or_default()
 }
 
@@ -309,7 +328,7 @@ pub(crate) fn tagged(tag: &str) -> String {
 }
 
 /// What a core stat does, for the detail pane (numbers from the rules: StatRules, DamageCalculator).
-fn stat_desc(st: &str) -> String {
+pub(crate) fn stat_desc(st: &str) -> String {
     use emberwake_rules::damage::{CRIT_PER_PERC, CRIT_PERC_FLOOR};
     use emberwake_rules::stats::{HP_PER_CONS, KNOW_UNLOCK_BASE, KNOW_UNLOCK_STEP, MAX_UNLOCK_REDUCTION, RANGE_PERC_THRESHOLD};
     match st {
@@ -348,14 +367,70 @@ impl Character {
         let first = gs.party.members.first().map(|m| m.id.clone()).unwrap_or_default();
         let member = if gs.party.member(member).is_some() { member.to_string() } else { first };
         let tab = TABS.iter().find(|t| t.0 == tab).map(|t| t.0).unwrap_or("stats");
-        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, gear_stacks: false, gear_world: String::new(), pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", follow_open: None, faces: crate::portraits::Faces::default(), w: Vec::new() }
+        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, gear_stacks: false, gear_world: String::new(), pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", follow_open: None, faces: crate::portraits::Faces::default(), pick: None, w: Vec::new() }
+    }
+
+    /// ENGINE-23: the Gear tab's draft as the loadout view reads it: the open draft (the member and the stash), else
+    /// the member and the party stash as saved, with whether the pouch holds stacks (`pouch_stacks`).
+    pub(crate) fn gear_now(&self, cx: &Cx) -> (UnitState, Stash, bool) {
+        match &self.gear {
+            Some((w, st)) => (w.clone(), st.clone(), self.gear_stacks),
+            None => (self.m(cx).clone(), cx.gs().party.stash.clone(), cx.data.ruleset(&cx.gs().world_id).numbers.pouch_stacks),
+        }
+    }
+
+    /// ENGINE-23: the member shown and whether the Gear tab's draft differs from the saved state (Reset and Confirm on).
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn gear_member(&self) -> &str {
+        &self.member
+    }
+
+    pub(crate) fn gear_dirty(&self, cx: &Cx) -> bool {
+        self.gear.as_ref().is_some_and(|(w, st)| w != self.m(cx) || *st != cx.gs().party.stash)
     }
 
     fn m<'a>(&self, cx: &'a Cx) -> &'a UnitState {
         cx.gs().party.member(&self.member).expect("member")
     }
 
-    fn has_draft(&self, cx: &Cx) -> bool {
+    /// ENGINE-21 (UISPLIT1-H Stage A): the member shown, the open tab, the level-up draft and the deck tab's right
+    /// column ("owned" or "order"), as the character views read them.
+    pub(crate) fn member(&self) -> &str {
+        &self.member
+    }
+
+    pub(crate) fn tab(&self) -> &'static str {
+        self.tab
+    }
+
+    pub(crate) fn level_draft(&self) -> &IndexMap<String, i64> {
+        &self.draft
+    }
+
+    pub(crate) fn deck_view(&self) -> &'static str {
+        self.deck_view
+    }
+
+    /// ENGINE-21: the Skills tab's draft as the skills views read it: the open draft, else the member's saved skills as
+    /// the tab loads them (the deck terms under the deck rule, the deck, the classic slots, whether they are the
+    /// default).
+    pub(crate) fn skills_now(&self, cx: &Cx) -> (Option<DeckTerms>, Deck, SkillSlots, bool) {
+        if self.skills_loaded {
+            return (self.terms.clone(), self.deck.clone(), self.slots(), self.using_default);
+        }
+        let m = self.m(cx);
+        // RULESET1 9 D6: under the deck rule the tab edits the deck (classic: today's slots)
+        let terms = DeckTerms::for_member(&cx.data, m, &cx.gs().world_id, &cx.data.ruleset(&cx.gs().world_id));
+        let using_default = m.loadout_class.is_empty() && m.loadout_extra.is_empty();
+        let (class, extra) = if using_default {
+            SkillSlots::default_of(&cx.data, m, &cx.gs().world_id).unwrap_or_else(|| (self.class_slots.clone(), self.extra_slots.clone()))
+        } else {
+            (m.loadout_class.clone(), m.loadout_extra.clone())
+        };
+        (terms, m.deck.clone(), SkillSlots { class, extra, ranks: m.loadout_ranks.clone() }, using_default)
+    }
+
+    pub(crate) fn has_draft(&self, cx: &Cx) -> bool {
         match self.tab {
             "level_up" => self.draft.values().sum::<i64>() > 0,
             "skills" if self.terms.is_some() => self.skills_loaded && self.deck != self.m(cx).deck,
@@ -370,6 +445,7 @@ impl Character {
     }
 
     fn drop_drafts(&mut self) {
+        self.pick = None;
         self.draft.clear();
         self.skills_loaded = false;
         self.gear = None;
@@ -379,23 +455,14 @@ impl Character {
         if self.skills_loaded {
             return;
         }
-        let m = self.m(cx).clone();
-        // RULESET1 9 D6: under the deck rule the tab edits the deck (classic: today's slots)
-        self.terms = DeckTerms::for_member(&cx.data, &m, &cx.gs().world_id, &cx.data.ruleset(&cx.gs().world_id));
-        self.deck = m.deck.clone();
-        self.using_default = m.loadout_class.is_empty() && m.loadout_extra.is_empty();
-        if self.using_default {
-            self.fill_default(cx);
-        } else {
-            self.class_slots = m.loadout_class.clone();
-            self.extra_slots = m.loadout_extra.clone();
-        }
-        self.ranks = m.loadout_ranks.clone();
+        let (terms, deck, slots, using_default) = self.skills_now(cx);
+        (self.terms, self.deck, self.using_default) = (terms, deck, using_default);
+        self.set_slots(slots);
         self.skills_loaded = true;
     }
 
     /// The member's class path families in the played world (`party_ops::path_families`).
-    fn path_families(&self, cx: &Cx) -> Vec<String> {
+    pub(crate) fn path_families(&self, cx: &Cx) -> Vec<String> {
         party_ops::path_families(&cx.data, self.m(cx), &cx.gs().world_id)
     }
 
@@ -478,9 +545,12 @@ impl Character {
         }
     }
 
-    fn act(&mut self, cx: &mut Cx, a: PAct) {
+    pub(crate) fn act(&mut self, cx: &mut Cx, a: PAct) {
         let d = cx.data.clone();
         match a {
+            PAct::SlotPress(id) => {
+                self.slot_enter(cx, &id);
+            }
             PAct::Member(step) => {
                 let ids: Vec<String> = cx.gs().party.members.iter().map(|m| m.id.clone()).collect();
                 if ids.len() < 2 {
@@ -719,6 +789,59 @@ impl Character {
         self.gear_stacks
     }
 
+    /// PR7-92: the drop key of the open tab's list (emptying a slot puts what it holds there).
+    fn list_key(&self) -> &'static str {
+        match self.tab {
+            "gear" => "stash",
+            _ if self.terms.is_some() => "deck.list",
+            _ => "list",
+        }
+    }
+
+    /// PR7-92 (INPUT-REACH2): Enter (or a press with no drag) on widget `id`. On a slot: with no pick a filled slot is
+    /// picked; with one, the pick goes there (a move, or a swap when filled; the same move as a drag) and the same slot
+    /// drops it. On a list row with a pick: that row goes into the picked slot. On the list itself with a pick: the
+    /// picked slot is emptied. False: nothing for the keys to do here (the press stays a click).
+    pub(crate) fn slot_enter(&mut self, cx: &mut Cx, id: &str) -> bool {
+        let Some(w) = self.w.iter().find(|w| w.id == id) else { return false };
+        let (drag, drop) = (w.drag.clone(), w.drop.clone());
+        if let Some(to) = drop.clone().filter(|k| is_slot_key(k)) {
+            match self.pick.take() {
+                None => self.pick = drag.map(|from| Pick { id: id.to_string(), from, to }),
+                Some(p) if p.id == id => {}
+                Some(p) => self.accept_drop(cx, &p.from, &to),
+            }
+            return true;
+        }
+        let Some(p) = self.pick.clone() else { return false };
+        if drop.as_deref() == Some(self.list_key()) {
+            self.pick = None;
+            self.accept_drop(cx, &p.from, self.list_key());
+            return true;
+        }
+        if let Some(from) = drag {
+            self.pick = None;
+            self.accept_drop(cx, &from, &p.to);
+            return true;
+        }
+        false
+    }
+
+    /// PR7-92: Space (pad X) on slot widget `id`: a filled slot is emptied (what a drag to the list does), the pick
+    /// dropped. False when `id` is not a slot.
+    pub(crate) fn slot_empty(&mut self, cx: &mut Cx, id: &str) -> bool {
+        let Some(w) = self.w.iter().find(|w| w.id == id) else { return false };
+        if !w.drop.as_deref().is_some_and(is_slot_key) {
+            return false;
+        }
+        let drag = w.drag.clone();
+        self.pick = None;
+        if let Some(from) = drag {
+            self.accept_drop(cx, &from, self.list_key());
+        }
+        true
+    }
+
     /// The draft after the drop of payload `from` on target `to` (GEARUI1 drag and drop), or why it can't be done.
     fn after_drop(&self, d: &Data, from: &str, to: &str) -> Result<(UnitState, Stash), String> {
         let (mut work, mut stash) = self.gear.clone().ok_or("No gear draft.")?;
@@ -755,6 +878,10 @@ impl Screen<GameCx> for Character {
     fn overlay(&self) -> bool {
         true
     }
+    /// STYLE-PASS1B (`PR7-48` (2)): a panel-shell screen; a panel opened over it takes its place until it closes.
+    fn panel(&self) -> bool {
+        true
+    }
 
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         self.take_answers(cx);
@@ -774,9 +901,13 @@ impl Screen<GameCx> for Character {
         let unspent = m.unspent(&d);
         let pick = format!("{}  Lv {}{}", crate::hub::member_name(cx, &m), m.level(&d), if unspent > 0 { format!("  +{unspent}") } else { String::new() });
         let pw = ui.p.text_w(&pick, BODY + 1.0) as i32 + 12;
-        ui.p.text(320.0 - pw as f32 / 2.0 - 10.0, 57.0, "Q", BODY + 1.0, th().dim);
-        ui.button_full("character.member", Rect::new(320 - pw / 2, 53, pw, 17), &pick, PAct::Member(1), true, true, BODY + 1.0, tip("Next member (E)", "Q / E cycle the party."));
-        ui.p.text(320.0 + pw as f32 / 2.0 + 4.0, 57.0, "E", BODY + 1.0, th().dim);
+        // CONTROLS-UI1B: the keys beside the name are the bound ones
+        let keys = crate::controls_view::hints(&cx.settings.v);
+        let (q, e) = (keys.key_hint(Key::Char('q')), keys.key_hint(Key::Char('e')));
+        let wider = (ui.p.text_w(&q, BODY + 1.0) - ui.p.text_w("Q", BODY + 1.0)).max(0.0);
+        ui.p.text(320.0 - pw as f32 / 2.0 - 10.0 - wider, 57.0, &q, BODY + 1.0, th().dim);
+        ui.button_full("character.member", Rect::new(320 - pw / 2, 53, pw, 17), &pick, PAct::Member(1), true, true, BODY + 1.0, tip(&format!("Next member ({e})"), &format!("{q} / {e} cycle the party.")));
+        ui.p.text(320.0 + pw as f32 / 2.0 + 4.0, 57.0, &e, BODY + 1.0, th().dim);
         // PORTRAITFX1-R: the member's portrait (its carried HP and conditions hold the state rows; the initial without a
         // file)
         self.faces.begin();
@@ -796,12 +927,28 @@ impl Screen<GameCx> for Character {
             "skills" => self.draw_skills(&mut ui, cx, &m),
             _ => self.draw_gear(&mut ui, cx, &m),
         }
+        // PR7-92: the picked slot is outlined while it waits (dropped when what it held has gone)
+        let picked = self.pick.as_ref().and_then(|p| ui.widgets.iter().find(|w| w.id == p.id && w.drag.as_deref() == Some(p.from.as_str()))).map(|w| (w.rect, w.text.clone()));
+        if picked.is_none() {
+            self.pick = None;
+        }
+        if let Some((r, _)) = picked {
+            ui.p.panel(Rect::new(r.x - 1, r.y - 1, r.w + 2, r.h + 2), rgba(0, 0, 0, 0), th().gold, 2.0);
+        }
         let dbox = Rect::new(25, 275, 590, 31);
         ui.p.panel(dbox, th().game("party_box", rgba(20, 28, 46, 255)), th().edge, 2.0);
         // while dragging on the Skills tab the pane says where the skill can go (SKILLUI1), not the hovered card
         let dragging_skill = self.tab == "skills" && ui.dragging().is_some() && !self.detail.is_empty();
+        // PR7-92: the hint line names the keys of a pick, or of the slot the keyboard focus is on
+        let (enter, space, esc) = (keys.key_hint(Key::Enter), keys.key_hint(Key::Space), keys.key_hint(Key::Esc));
+        let on_slot = ui.focus_id().and_then(|f| ui.widgets.iter().find(|w| w.id == f)).is_some_and(|w| w.drop.as_deref().is_some_and(is_slot_key));
+        let key_hint = match &picked {
+            Some((_, label)) if ui.dragging().is_none() => Some(format!("Picked {label}: {enter} on a slot or a list row puts it there (a swap when the slot is filled); {esc} drops the pick.")),
+            None if on_slot => Some(format!("{enter} picks this slot, then {enter} on a list row or another slot places or swaps it; {space} (pad X) empties it.")),
+            _ => None,
+        };
         let hovered = ui.widgets.iter().rev().find(|w| !dragging_skill && w.rect.contains(mouse.0, mouse.1) && w.tip.len() > 1).map(|w| w.tip[1].0.clone());
-        let text = hovered.unwrap_or_else(|| if self.detail.is_empty() { "Move to a row to read what it does.".into() } else { self.detail.clone() });
+        let text = key_hint.or(hovered).unwrap_or_else(|| if self.detail.is_empty() { "Move to a row to read what it does.".into() } else { self.detail.clone() });
         ui.para(30, 279, 580, &text, BODY, th().text);
         self.w = ui.widgets;
     }
@@ -819,9 +966,22 @@ impl Screen<GameCx> for Character {
         }
     }
 
-    /// Esc always closes (the right-click unslot of `back` is for the mouse only, SKILLUI1 Q4).
+    /// Esc drops a pick (PR7-92), else closes (the right-click unslot of `back` is for the mouse only, SKILLUI1 Q4).
     fn escape(&mut self, cx: &mut Cx) {
+        if self.pick.take().is_some() {
+            return;
+        }
         self.act(cx, PAct::Close);
+    }
+
+    /// PR7-92 (INPUT-REACH2): Enter picks and places slots (`slot_enter`), Space empties one (`slot_empty`); elsewhere
+    /// both press as a click.
+    fn press_focus(&mut self, cx: &mut Cx, id: &str, k: Key) -> bool {
+        match k {
+            Key::Enter => self.slot_enter(cx, id),
+            Key::Space => self.slot_empty(cx, id),
+            _ => false,
+        }
     }
 
     /// A right click: on the Skills tab over a filled slot it takes the skill out (SKILLUI1 Q4); anywhere else it closes.
@@ -905,7 +1065,11 @@ impl Screen<GameCx> for Character {
     }
 
     fn state(&self, cx: &Cx) -> Value {
-        let mut out = json!({"member": self.member, "tab": self.tab, "draft": self.draft.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<String, Value>>(), "has_draft": self.has_draft(cx), "portraits": self.faces.state()});
+        let mut out = json!({"pick": self.pick.as_ref().map(|p| p.id.clone()), "member": self.member, "tab": self.tab, "draft": self.draft.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<String, Value>>(), "has_draft": self.has_draft(cx), "portraits": self.faces.state()});
+        // ENGINE-21 (UISPLIT1-H Stage A): the window's view-model and the open tab's (ENGINE-23: the loadout's on the Gear
+        // tab)
+        out["shell"] = crate::character_view::character(cx, self).to_json();
+        out["view"] = crate::character_view::tab_view(cx, self).to_json();
         if let (true, Some(t)) = (self.tab == "skills", &self.terms) {
             let shown = t.shown(&self.deck);
             out["deck"] = deck_json(&self.deck);
@@ -947,6 +1111,24 @@ fn tip_place(id: &str, r: Rect, mouse: (i32, i32)) -> (i32, i32) {
 
 /// PR7-37 (PT-07): the gap between the stat table's Total column and the derived list on the Stats tab.
 const DERIVED_GAP: f32 = 18.0;
+
+/// XL-FIX2 (PR7-85, FB-455 b): where a list of `n` stat rows goes, `room` units from its first row's top to its last
+/// row's top: a step of `base`, grown to `need` (a line of the text size and a unit) when that is more, closed up to
+/// fit the room; when one column cannot give the rows `need`, two columns (the first the longer). Answers (columns,
+/// rows per column, step). At Normal text the shipped lists keep one column and their old step.
+pub(crate) fn stat_rows_fit(n: usize, base: f32, room: f32, need: f32) -> (usize, usize, f32) {
+    let step_in = |per: usize| base.max(need).min(room / (per.max(2) - 1) as f32);
+    let one = step_in(n);
+    if one + 1e-3 >= need || n < 2 {
+        (1, n, one)
+    } else {
+        let per = n.div_ceil(2);
+        (2, per, step_in(per))
+    }
+}
+
+/// XL-FIX2 (PR7-85): the Stats tab's derived rows end left of this x (its "Bunks" line's right end and a margin).
+const DERIVED_RIGHT: f32 = 604.0;
 
 /// PR7-37 (PT-07): the y the Stats tab's stat table ends at (its six rows from 158, 15 apart).
 const STATS_TABLE_END: i32 = 158 + 6 * 15;
@@ -1005,13 +1187,31 @@ impl Character {
         let label_x = 262f32.max(table_right + DERIVED_GAP);
         let value_x = 325f32.max(label_x + rows.iter().map(|r| ui.p.text_w(&r.label, BODY + 1.0)).fold(0.0, f32::max) + 8.0);
         // DERIVE1 4.4: the built-in rows keep their 15 px step; catalog rows past them close the step up to stay above
-        // the detail pane (the last row starts at 263 at most)
-        let step = 15f32.min(120.0 / (rows.len().max(2) - 1) as f32);
+        // the detail pane (the last row starts at 263 at most). XL-FIX2 (PR7-85): the step grows with the text size,
+        // and when one column has no room for it the list takes a second column beside the first
+        let need = ui.p.line_h(BODY + 1.0) + 1.0;
+        let (ncols, mut per, mut step) = stat_rows_fit(rows.len(), 15.0, 120.0, need);
+        let mut xs = vec![(label_x, value_x)];
+        if ncols == 2 {
+            let widest = |ui: &mut Ui<PAct>, rs: &[DRow], label: bool| rs.iter().map(|r| ui.p.text_w(if label { &r.label } else { &r.shown }, BODY + 1.0)).fold(0.0, f32::max);
+            let vx1 = 325f32.max(label_x + widest(ui, &rows[..per], true) + 8.0);
+            let lx2 = vx1 + widest(ui, &rows[..per], false) + DERIVED_GAP;
+            let vx2 = lx2 + widest(ui, &rows[per..], true) + 8.0;
+            if vx2 + widest(ui, &rows[per..], false) <= DERIVED_RIGHT {
+                xs = vec![(label_x, vx1), (lx2, vx2)];
+            } else {
+                // no room for a second column: one, closed up as before
+                (per, step) = (rows.len(), 15f32.min(120.0 / (rows.len().max(2) - 1) as f32));
+            }
+        }
         for (i, r) in rows.iter().enumerate() {
-            let y = 143.0 + i as f32 * step;
-            ui.p.text(label_x, y, &r.label, BODY + 1.0, th().dim);
-            ui.p.text(value_x, y, &r.shown, BODY + 1.0, th().text);
-            ui.push(format!("stats.derived.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 26, step.min(14.0) as i32), true, false, None, tip(&r.label, &r.desc));
+            let c = (i / per.max(1)).min(xs.len() - 1);
+            let ((lx, vx), y) = (xs[c], 143.0 + (i - c * per) as f32 * step);
+            ui.p.text(lx, y, &r.label, BODY + 1.0, th().dim);
+            ui.p.text(vx, y, &r.shown, BODY + 1.0, th().text);
+            // a row of the first of two columns reaches to the second's labels
+            let rw = xs.get(c + 1).map_or((vx - lx) as i32 + 26, |next| (next.0 - lx) as i32 - 1);
+            ui.push(format!("stats.derived.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(lx as i32 - 2, y as i32 - 2, rw, step.min(14f32.max(need)) as i32), true, false, None, tip(&r.label, &r.desc));
         }
         // AUDIT-04 (PR5-40): the PK2 numbers it has (mastery, techniques, keystone, weapon durability), read only, as one
         // compact line between the stat table (its last row ends at 245) and the passives (256): the derived rows keep
@@ -1028,10 +1228,16 @@ impl Character {
         let names: Vec<String> = owned.iter().map(|p| s_or(d.entry("passives", p), "name", p)).collect();
         // PR7-41 (PT-28): these apply with no slot; the slotted passives and the keystone sit on the Skills tab
         let line = format!("Innate passives (no slot): {}", if names.is_empty() { "none".into() } else { names.join(", ") });
+        let cut = ui.p.fit(&line, BODY + 1.0, label_x - 78.0) != line;
         ui.p.text_fit(68.0, 258.0, &line, BODY + 1.0, label_x - 78.0, th().dim);
         let about: Vec<String> = owned.iter().map(|p| format!("{}: {}", s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"))).collect();
         let line_h = (ui.p.line_h(BODY + 1.0) + 2.0).ceil().max(13.0) as i32;
-        ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, line_h), true, false, None, tip("Innate passives", &format!("{} Slotted passives and the keystone are on the Skills tab.", if about.is_empty() { "None yet: innate passives come from the hero's background, faction, disciplines and named items.".to_string() } else { about.join(" ") })));
+        let mut card = tip("Innate passives", &format!("{} Slotted passives and the keystone are on the Skills tab.", if about.is_empty() { "None yet: innate passives come from the hero's background, faction, disciplines and named items.".to_string() } else { about.join(" ") }));
+        // XL-FIX2 (PR7-85, FB-455 c): a cut line hovers to its full words
+        if cut {
+            card.insert(1, (line.clone(), th().text));
+        }
+        ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, line_h), true, false, None, card);
     }
 
     fn draw_level(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
@@ -1115,7 +1321,7 @@ impl Character {
                     ui.p.panel(r, th().game("slot_empty", rgba(20, 28, 46, 120)), th().game("slot_empty_edge", rgba(58, 78, 116, 120)), 2.0);
                     ui.p.text(r.x as f32 + 4.0, r.y as f32 + 3.0, "Empty", BODY, th().dim);
                     let label = if class { "class" } else { "extra" };
-                    ui.push(id, "row", "Empty", r, true, false, None, tip(&format!("Empty {label} slot"), "Drag a skill here, or click a skill in the list."));
+                    ui.push(id.clone(), "row", "Empty", r, true, false, Some(PAct::SlotPress(id)), tip(&format!("Empty {label} slot"), "Drag a skill here, or click a skill in the list."));
                     ui.drop_target(format!("slot.{g}.{i}"));
                     continue;
                 };
@@ -1130,7 +1336,7 @@ impl Character {
                 ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
                 ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &fam_name(f), BODY, 112.0, th().text);
                 let card = vec![(fam_name(f), th().gold), (desc.clone(), th().text), ("Drag to another slot or back to the list. Right click takes it out.".into(), th().dim)];
-                ui.push(id, "row", fam_name(f), r, true, false, None, card);
+                ui.push(id.clone(), "row", fam_name(f), r, true, false, Some(PAct::SlotPress(id)), card);
                 ui.draggable(format!("slot.{g}.{i}"));
                 ui.drop_target(format!("slot.{g}.{i}"));
                 // < Rank >: step over the unlocked ranks; GOLD when kept below the highest unlocked rank
@@ -1161,7 +1367,7 @@ impl Character {
         // Right: the owned skills; the whole column takes slots dropped back (recorded under the rows).
         let list_area = Rect::new(310, 114, 294, 156);
         ui.p.text(310.0, 104.0, "Owned skills (drag onto a slot or click)", BODY + 1.0, th().info);
-        ui.push("skills.list", "panel", "Owned skills", list_area, true, false, None, tip("Owned skills", "Drop a slot here to take the skill out."));
+        ui.push("skills.list", "panel", "Owned skills", list_area, true, false, Some(PAct::SlotPress("skills.list".into())), tip("Owned skills", "Drop a slot here to take the skill out."));
         ui.drop_target("list");
         let owned: Vec<String> = u.owned_families(cat).into_iter().filter(|f| !cat.is_basic_family(f)).collect();
         // AUDIT-05 (OFFHAND1): the worn items' skills close the list, read-only: open while worn, no slot
@@ -1233,20 +1439,9 @@ impl Character {
         let rs = d.ruleset(&cx.gs().world_id);
         let built = progression::build_with(d, m, &cx.gs().world_id, false).map(|b| b.unit);
         let shown = t.shown(&self.deck);
-        let intent_name = |i: &str| emberwake_battle::round_intent::RoundIntent::parse(i).map(|x| x.label(cat)).unwrap_or_else(|| title_case(i));
-        // (name, intent, AP, rank, description) of family `f` at the rank the member uses now (its top unlocked)
-        let skill_of = |f: &str| -> (String, String, i32, i32, String) {
-            let top = built.as_ref().and_then(|u| u.selectable_ranks(cat, f).last().copied()).unwrap_or(0);
-            let row = cat.family_rows(f).into_iter().find(|s| s.tier == top).or_else(|| cat.tier_one(f));
-            let name = cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
-            // PR7-37 (PT-06): a worn item's skill (in none of the deck's lists) shows its own intent
-            let intent = intent_name(&t.intent_for(cat, f));
-            match row {
-                Some(s) => (name, intent, emberwake_battle::skill::ap_cost_by(s, built.as_ref(), &rs), top, emberwake_content::source::skill_description(&s.raw, rs.stances())),
-                None => (name, intent, 0, top, String::new()),
-            }
-        };
-        let passive_of = |p: &str| (s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"));
+        let intent_name = |i: &str| intent_label(d, i);
+        let skill_of = |f: &str| deck_skill(d, built.as_ref(), t, &rs, f);
+        let passive_of = |p: &str| passive_text(d, p);
         let name_of = |kind: &str, id: &str| if kind == "active" { skill_of(id).0 } else { passive_of(id).0 };
         let (level, key_level) = (m.level(d) as i32, progression::keystone_level(d, m));
         // Left: the buckets.
@@ -1259,7 +1454,14 @@ impl Character {
                 ui.p.text(150.0, y as f32, if self.deck.is_empty() { "Automatic deck" } else { "Custom deck" }, BODY, th().dim);
             } else {
                 // PR7-41 (PT-28): where this kind comes from, on the header
-                ui.p.text_fit(150.0, y as f32, &deck_source_hint(kind, level, key_level), BODY, 150.0, th().dim);
+                // HITCALC1 (PR7-45): the keystone's header names where the slotted one comes from (class, deck or graft)
+                let source = if kind == "keystone" { list.first().and_then(|k| progression::keystone_source(d, m, k)) } else { None };
+                let hint = deck_source_hint(kind, level, key_level, source);
+                ui.p.text_fit(150.0, y as f32, &hint, BODY, 150.0, th().dim);
+                // XL-FIX2 (PR7-85, FB-455 c): a cut hint hovers to its full words
+                if ui.p.fit(&hint, BODY, 150.0) != hint {
+                    ui.push(format!("skills.{kind}.source"), "label", hint.clone(), Rect::new(150, y, 150, ui.p.line_h(BODY).ceil() as i32), true, false, None, vec![(hint, th().text)]);
+                }
             }
             y += 11;
             for i in 0..cap {
@@ -1276,7 +1478,7 @@ impl Character {
                         } else {
                             format!("Holds one of the hero's {takes}: drag one here, or click it in the owned list.")
                         };
-                        ui.push(id, "row", "Empty", r, true, false, None, tip(&format!("Empty {kind} slot"), &help));
+                        ui.push(id.clone(), "row", "Empty", r, true, false, Some(PAct::SlotPress(id)), tip(&format!("Empty {kind} slot"), &help));
                     }
                     Some(f) => {
                         ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
@@ -1291,7 +1493,10 @@ impl Character {
                             ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &name, BODY, 228.0, th().text);
                             vec![(name, th().gold), (desc, th().text), ("Applies only while slotted. Drag to another slot or back to the list. Right click takes it out.".into(), th().dim)]
                         };
-                        ui.push(id, "row", name_of(kind, f), r, true, false, None, card);
+                        if ui.hover(r) {
+                            ui.p.panel(r, rgba(0, 0, 0, 0), th().edge_hot, 2.0);
+                        }
+                        ui.push(id.clone(), "row", name_of(kind, f), r, true, false, Some(PAct::SlotPress(id)), card);
                         ui.draggable(key.clone());
                     }
                 }
@@ -1417,7 +1622,7 @@ impl Character {
             }
         } else {
             let list_area = Rect::new(310, 114, 294, 158);
-            ui.push("skills.list", "panel", "Owned", list_area, true, false, None, tip("Owned", "Drop a slot here to take it out."));
+            ui.push("skills.list", "panel", "Owned", list_area, true, false, Some(PAct::SlotPress("skills.list".into())), tip("Owned", "Drop a slot here to take it out."));
             ui.drop_target("deck.list");
             let owned: Vec<(&'static str, String)> = DECK_KINDS.iter().flat_map(|k| t.owned(k.0).iter().map(move |id| (k.0, id.clone()))).collect();
             // U3.2-S4 (OFFHAND1): the worn items' skills close the list, read-only: open while worn, no slot
@@ -1508,26 +1713,16 @@ impl Character {
         ui.p.text(mx as f32 + 2.0, 102.0, "Equipped", head, th().info);
         for (i, slot) in LOADOUT_SLOTS.iter().enumerate() {
             let y = 116 + i as i32 * 15;
-            // PR5-26 (audit B2): a slot left empty (`NO_ITEM`) shows empty, as no item
-            let explicit = work.equipment.get(*slot).cloned().filter(|i| i != NO_ITEM);
-            let shown = explicit.clone().or_else(|| {
-                let s = emberwake_rules::gear::Slot::parse(slot)?;
-                built.as_ref().and_then(|b| b.unit.inventory.get(s).map(|e| e.item.id.clone()))
-            });
-            let name = shown.as_ref().map(|i| d.item_name(i)).unwrap_or_else(|| "empty".into());
-            // AUDIT-04 (PR5-40): a wielded weapon instance shows its durability, and MW when masterwork
-            let label = format!("{}: {name}{}", title_case(slot), instance_note(d, &wields, slot));
-            // U3.2-S3 (FB-34): the worn item's wield penalty, as the built unit fights with it
-            let badge = shown.as_ref().and_then(|i| d.cat.items.get(i)).and_then(|def| wield_badge(built.as_ref().map(|b| &b.unit), def));
-            let note = badge.as_ref().map(|(_, n)| format!(" {n}")).unwrap_or_default();
-            let card = match (&explicit, &shown) {
-                (Some(item), _) => item_tip(d, item, &format!("Click or drag it to the stash to take it off (the class default comes back); drag it onto another slot it fits to move it.{note}")),
-                (None, Some(item)) => item_tip(d, item, &format!("Class default gear: drag an item from the stash onto this slot to replace it.{note}")),
-                (None, None) => tip(&label, "Empty: drag an item from the stash onto this slot."),
+            let GearSlot { explicit, shown, label, badge, help } = gear_slot(d, &work, &wields, built.as_ref(), slot);
+            let card = match &shown {
+                Some(item) => item_tip(d, item, &help),
+                None => tip(&label, &help),
             };
             // PR7-36 (ART-05): the slot's tile (the item's icon, an empty-slot glyph) at the row's left
             item_tile(ui, cx, Rect::new(mx, y, 14, 14), shown.as_deref());
-            ui.row(&format!("gear.slot.{slot}"), Rect::new(mx + 16, y, mw - 16, 14), &label, if explicit.is_some() { th().text } else { th().dim }, explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())), false, card);
+            let id = format!("gear.slot.{slot}");
+            let act = explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())).unwrap_or_else(|| PAct::SlotPress(id.clone()));
+            ui.row(&id, Rect::new(mx + 16, y, mw - 16, 14), &label, if explicit.is_some() { th().text } else { th().dim }, Some(act), false, card);
             if let Some((b, _)) = &badge {
                 ui.p.text_right((mx + mw - 3) as f32, y as f32 + 2.0, b, SMALL, th().foe);
             }
@@ -1543,16 +1738,15 @@ impl Character {
             for i in 0..POUCH_MAX {
                 let y = 224 + i as i32 * 15;
                 let item = work.pouch.get(i);
-                let label = match item {
-                    Some(item) => format!("{}. {}", i + 1, d.item_name(item)),
-                    None => format!("{}. Empty", i + 1),
-                };
+                let label = pouch_label(d, i, item.map(String::as_str));
                 let card = match item {
-                    Some(item) => item_tip(d, item, "Click or drag it to the stash to take it out; drag it onto another pouch slot to reorder."),
-                    None => tip(&label, "Drag a consumable from the stash here; the hero can use it in battle."),
+                    Some(item) => item_tip(d, item, POUCH_ITEM_HELP),
+                    None => tip(&label, POUCH_EMPTY_HELP),
                 };
                 item_tile(ui, cx, Rect::new(mx, y, 14, 14), item.map(String::as_str));
-                ui.row(&format!("gear.pouch.{i}"), Rect::new(mx + 16, y, mw - 16, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card);
+                let id = format!("gear.pouch.{i}");
+                let act = item.map(|_| PAct::PouchRemove(i)).unwrap_or_else(|| PAct::SlotPress(id.clone()));
+                ui.row(&id, Rect::new(mx + 16, y, mw - 16, 14), &label, if item.is_some() { th().text } else { th().dim }, Some(act), false, card);
                 if item.is_some() {
                     ui.draggable(format!("pouch.{i}"));
                 }
@@ -1564,10 +1758,10 @@ impl Character {
         ui.p.text(sx as f32 + 2.0, 102.0, "Party stash", head, th().info);
         let area = Rect::new(sx, 114, sw, 156);
         ui.p.panel(area, th().game("party_area", rgba(20, 28, 46, 160)), th().edge, 2.0);
-        ui.push("gear.stash", "panel", "Party stash", area, true, false, None, tip("Party stash", "Drop a worn or pouch item here to take it off."));
+        ui.push("gear.stash", "panel", "Party stash", area, true, false, Some(PAct::SlotPress("gear.stash".into())), tip("Party stash", "Drop a worn or pouch item here to take it off."));
         ui.drop_target("stash");
-        let mut ids: Vec<&String> = stash.keys().filter(|id| d.cat.items.contains_key(*id)).collect();
-        ids.sort_by_key(|id| d.item_name(id));
+        let ids = stash_ids(d, &stash);
+        let ids: Vec<&String> = ids.iter().collect();
         const ROWS: usize = 10;
         self.gear_scroll = self.gear_scroll.min(ids.len().saturating_sub(ROWS));
         if ids.is_empty() {
@@ -1575,27 +1769,8 @@ impl Character {
         }
         for (row, id) in ids.iter().skip(self.gear_scroll).take(ROWS).enumerate() {
             let def = &d.cat.items[*id];
-            let (act, help) = if def.is_equipment() {
-                (Some(PAct::Equip((*id).clone())), "Click to wear it, or drag it onto a slot.")
-            } else if def.item_type == "CONSUMABLE" {
-                (Some(PAct::PouchAdd((*id).clone())), "Click to put one in the battle pouch, or drag it onto a pouch slot.")
-            } else if def.item_type == emberwake_data::MASTERY_BOOK {
-                // PK2-FOLLOWUP (FB-214 (f)): a mastery book is read, not worn (a click, no drag)
-                (Some(PAct::ReadBook((*id).clone())), "Click to read it: this hero gains its weapon family's mastery (proficiency 2 or more, not yet mastery 3).")
-            } else {
-                (None, "Not wearable.")
-            };
+            let StashRow { act, badge, help } = stash_row(d, cx.gs(), built.as_ref(), Some(&work), id);
             let movable = act.as_ref().is_some_and(|a| !matches!(a, PAct::ReadBook(_)));
-            // U3.2-S3 (FB-34): every item shows (training is no gate); one the hero would wear under a wield penalty
-            // carries the badge, and its card says why
-            let badge = wield_badge(built.as_ref().map(|b| &b.unit), def);
-            let help = match &badge {
-                Some((_, n)) => format!("{help} {n}"),
-                None => help.to_string(),
-            };
-            // PR7-41 (PT-30): what a kept item is for (recipes, story)
-            let note = crate::shop::item_use_note(d, cx.gs(), id);
-            let help = if note.is_empty() { help } else { format!("{help} {note}") };
             let y = 116 + row as i32 * 15;
             ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, y, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), th().text, act, false, item_tip(d, id, &help));
             if let Some((b, _)) = &badge {
@@ -1635,19 +1810,40 @@ impl Character {
         }
         let (lx, lw) = (25, 210);
         ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.class_name(&cx.gs().world_id, &work.class_id(d)), work.level(d)), head, th().info);
-        // DERIVE1 4.4: catalog rows past the built-in ones close the 12 px step up (the last row starts at 260 at most)
-        let step = 12f32.min(102.0 / (now.len().saturating_sub(STATS.len()).max(2) - 1) as f32);
+        // DERIVE1 4.4: catalog rows past the built-in ones close the 12 px step up (the last row starts at 260 at most).
+        // XL-FIX2 (PR7-85, FB-455 b): the rows grow with the text size (a line and a unit); the derived rows start under
+        // the grown core rows and take two columns, like the core rows, when one has no room for the grown step
+        let need = ui.p.line_h(BODY) + 1.0;
+        let core_step = 12f32.max(need.ceil()) as i32;
+        let top = 117 + STATS.len().div_ceil(2) as i32 * core_step + 5;
+        let extra = now.len().saturating_sub(STATS.len());
+        let (ncols, per, step) = stat_rows_fit(extra, 12.0, (260 - top) as f32, need);
+        // two columns: the value leaves room for a change after it, and a label too long for the rest is cut (its row
+        // hovers to it)
+        let delta_room = if ncols == 2 { ui.p.text_w("+99", BODY).ceil() as i32 + 3 } else { 26 };
         for (i, r) in now.iter().enumerate() {
             let core = i < STATS.len();
-            let (x, y, w) = if core { (lx + 3 + (i as i32 % 2) * 104, 117 + (i as i32 / 2) * 12, 100) } else { (lx + 3, 158 + ((i - STATS.len()) as f32 * step) as i32, lw - 6) };
-            ui.p.text(x as f32, y as f32, &r.label, BODY, th().dim);
-            let right = (x + w - 26) as f32;
+            let k = i.saturating_sub(STATS.len());
+            let (x, y, w) = if core {
+                (lx + 3 + (i as i32 % 2) * 104, 117 + (i as i32 / 2) * core_step, 100)
+            } else if ncols == 2 {
+                (lx + 3 + (k / per) as i32 * 104, top + ((k % per) as f32 * step) as i32, 100)
+            } else {
+                (lx + 3, top + (k as f32 * step) as i32, lw - 6)
+            };
+            let right = (x + w - if core { 26 } else { delta_room }) as f32;
+            if !core && ncols == 2 {
+                let room = right - x as f32 - ui.p.text_w(&r.shown, BODY) - 4.0;
+                ui.p.text_fit(x as f32, y as f32, &r.label, BODY, room, th().dim);
+            } else {
+                ui.p.text(x as f32, y as f32, &r.label, BODY, th().dim);
+            }
             ui.p.text_right(right, y as f32, &r.shown, BODY, th().text);
             let delta = then.as_ref().and_then(|t| t.get(i)).map(|t| t.value - r.value).unwrap_or(0);
             if delta != 0 {
                 ui.p.text(right + 3.0, y as f32, &format!("{delta:+}"), BODY, if delta > 0 { th().good } else { th().foe });
             }
-            ui.push(format!("gear.stat.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(x - 2, y - 1, w, if core { 12 } else { step.min(12.0) as i32 }), true, false, None, tip(&r.label, &r.desc));
+            ui.push(format!("gear.stat.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(x - 2, y - 1, w, if core { core_step } else { step.min(core_step as f32) as i32 }), true, false, None, tip(&r.label, &r.desc));
         }
         let dirty = &work != m || stash != cx.gs().party.stash;
         ui.button("gear.reset", Rect::new(68, 312, 70, 18), "Reset", PAct::ResetGear, dirty);
@@ -1669,19 +1865,14 @@ impl Character {
             let item = slots.get(i);
             let pips_w = 5 * PIP;
             let name_w = mw - 2 * (BTN + 2) - pips_w - 2;
-            let label = match item {
-                Some(item) => format!("{}. {}", i + 1, d.item_name(item)),
-                None => format!("{}. Empty", i + 1),
-            };
+            let label = pouch_label(d, i, item.map(String::as_str));
             let card = match item {
-                Some(item) => {
-                    let (cur, packed, left) = (work.pouch_count(item), work.packed(item), stash.get(item).copied().unwrap_or(0));
-                    let short = if cur < packed { " Hollow pips: copies still to come from the stash." } else { "" };
-                    item_tip(d, item, &format!("In the pouch: {cur}; packs {packed} (stash {left}). Auto-fill tops it up to {packed} from the stash when a fight starts while this hero is active, and after each fight this hero comes home from.{short} Click or drag it to the stash to empty the slot; drag it onto another slot to move it; - and + set how many it packs."))
-                }
-                None => tip(&label, "Drag a consumable from the stash here (or click it in the stash): the slot packs as many as its stack holds."),
+                Some(item) => item_tip(d, item, &stack_help(work, stash, item)),
+                None => tip(&label, STACK_EMPTY_HELP),
             };
-            ui.row(&format!("gear.pouch.{i}"), Rect::new(mx, y, name_w, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card.clone());
+            let id = format!("gear.pouch.{i}");
+            let act = item.map(|_| PAct::PouchRemove(i)).unwrap_or_else(|| PAct::SlotPress(id.clone()));
+            ui.row(&id, Rect::new(mx, y, name_w, 14), &label, if item.is_some() { th().text } else { th().dim }, Some(act), false, card.clone());
             if item.is_some() {
                 ui.draggable(format!("pouch.{i}"));
             }
@@ -1790,15 +1981,45 @@ fn off_hand_preview(b: &emberwake_rules::unit::OffHandButton) -> (String, aegis_
 
 /// A deck as the agent link reads it (every key, empty ones too).
 /// INPUT1 FL3: places a line in the follow-up editor, and the width of an order entry's follow-up toggle.
+/// (name, intent, AP, rank, description) of family `f` under the deck rule at the rank the member uses now (its top
+/// unlocked; `built` the member's battle unit), for the Skills tab and its view (`character_view`).
+pub(crate) fn deck_skill(d: &Data, built: Option<&Unit>, t: &DeckTerms, rs: &emberwake_rules::ruleset::Ruleset, f: &str) -> (String, String, i32, i32, String) {
+    let cat = &d.cat;
+    let top = built.and_then(|u| u.selectable_ranks(cat, f).last().copied()).unwrap_or(0);
+    let row = cat.family_rows(f).into_iter().find(|s| s.tier == top).or_else(|| cat.tier_one(f));
+    let name = cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
+    // PR7-37 (PT-06): a worn item's skill (in none of the deck's lists) shows its own intent
+    let intent = intent_label(d, &t.intent_for(cat, f));
+    match row {
+        Some(s) => (name, intent, emberwake_battle::skill::ap_cost_by(s, built, rs), top, emberwake_content::source::skill_description(&s.raw, rs.stances())),
+        None => (name, intent, 0, top, String::new()),
+    }
+}
+
+/// An intent id as the screen names it.
+pub(crate) fn intent_label(d: &Data, i: &str) -> String {
+    emberwake_battle::round_intent::RoundIntent::parse(i).map(|x| x.label(&d.cat)).unwrap_or_else(|| title_case(i))
+}
+
+/// A passive's (name, description).
+pub(crate) fn passive_text(d: &Data, p: &str) -> (String, String) {
+    (s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"))
+}
+
 const FOLLOW_PER: usize = 5;
 const FOLLOW_TOGGLE: i32 = 11;
 
 /// PR7-41 (PT-28): the dim line on a Passives or Keystone bucket's header: where that kind comes from, and for the
-/// keystone the level it opens at (`progression::keystone_level`) for a hero at `level`.
-pub(crate) fn deck_source_hint(kind: &str, level: i32, key_level: i32) -> String {
-    match kind {
-        "keystone" if level < key_level => format!("Opens at level {key_level}"),
-        "keystone" => format!("Class keystone, from level {key_level}"),
+/// keystone the level it opens at (`progression::keystone_level`) for a hero at `level`. HITCALC1 (PR7-45, FB-338): the
+/// keystone line names the slotted keystone's `source` ("Deck keystone, from level 6", "Graft keystone"); an empty slot
+/// names the class keystone it will hold.
+pub(crate) fn deck_source_hint(kind: &str, level: i32, key_level: i32, source: Option<progression::KeystoneSource>) -> String {
+    use progression::KeystoneSource;
+    match (kind, source) {
+        ("keystone", Some(KeystoneSource::Graft)) => "Graft keystone".into(),
+        ("keystone", _) if level < key_level => format!("Opens at level {key_level}"),
+        ("keystone", Some(s)) => format!("{} keystone, from level {key_level}", s.label()),
+        ("keystone", None) => format!("Class keystone, from level {key_level}"),
         _ => "From the hero's deck and background".into(),
     }
 }
@@ -1813,13 +2034,115 @@ pub(crate) fn deck_json(d: &Deck) -> Value {
 /// instances are active (`weapons::active`), the kit's `weapons::sync_party` over the draft member, the draft stash and
 /// the party's stashed instances (`stash_weapons`), so a stashed masterwork moved into the main hand wields its
 /// instance (its technique opens in the sheet and the preview); the draft itself otherwise.
-fn wielding(d: &Data, gs: &GameState, work: &UnitState, stash: &Stash) -> UnitState {
+pub(crate) fn wielding(d: &Data, gs: &GameState, work: &UnitState, stash: &Stash) -> UnitState {
     if !weapons::active(d, gs) {
         return work.clone();
     }
     let mut party = PartyState { members: vec![work.clone()], stash: stash.clone(), stash_weapons: gs.party.stash_weapons.clone(), ..PartyState::default() };
     weapons::sync_party(d, &mut party);
     party.members.swap_remove(0)
+}
+
+/// ENGINE-23: the Gear tab's equipped slot as drawn and as the loadout view shows it: the item worn by choice
+/// (`explicit`), the item shown (that, else the class default the built unit wears), the row's label, the wield
+/// penalty badge (short, note) and the hover card's help line.
+pub(crate) struct GearSlot {
+    pub explicit: Option<String>,
+    pub shown: Option<String>,
+    pub label: String,
+    pub badge: Option<(String, String)>,
+    pub help: String,
+}
+
+pub(crate) fn gear_slot(d: &Data, work: &UnitState, wields: &UnitState, built: Option<&progression::Built>, slot: &str) -> GearSlot {
+    // PR5-26 (audit B2): a slot left empty (`NO_ITEM`) shows empty, as no item
+    let explicit = work.equipment.get(slot).cloned().filter(|i| i != NO_ITEM);
+    let shown = explicit.clone().or_else(|| {
+        let s = emberwake_rules::gear::Slot::parse(slot)?;
+        built.and_then(|b| b.unit.inventory.get(s).map(|e| e.item.id.clone()))
+    });
+    let name = shown.as_ref().map(|i| d.item_name(i)).unwrap_or_else(|| "empty".into());
+    // AUDIT-04 (PR5-40): a wielded weapon instance shows its durability, and MW when masterwork
+    let label = format!("{}: {name}{}", title_case(slot), instance_note(d, wields, slot));
+    // U3.2-S3 (FB-34): the worn item's wield penalty, as the built unit fights with it
+    let badge = shown.as_ref().and_then(|i| d.cat.items.get(i)).and_then(|def| wield_badge(built.map(|b| &b.unit), def));
+    let note = badge.as_ref().map(|(_, n)| format!(" {n}")).unwrap_or_default();
+    let help = match (&explicit, &shown) {
+        (Some(_), _) => format!("Click or drag it to the stash to take it off (the class default comes back); drag it onto another slot it fits to move it.{note}"),
+        (None, Some(_)) => format!("Class default gear: drag an item from the stash onto this slot to replace it.{note}"),
+        (None, None) => "Empty: drag an item from the stash onto this slot.".into(),
+    };
+    GearSlot { explicit, shown, label, badge, help }
+}
+
+/// The classic battle pouch's help lines: a filled slot's and an empty one's.
+pub(crate) const POUCH_ITEM_HELP: &str = "Click or drag it to the stash to take it out; drag it onto another pouch slot to reorder.";
+pub(crate) const POUCH_EMPTY_HELP: &str = "Drag a consumable from the stash here; the hero can use it in battle.";
+
+/// Pouch slot `i`'s label ("1. Name", "1. Empty").
+pub(crate) fn pouch_label(d: &Data, i: usize, item: Option<&str>) -> String {
+    match item {
+        Some(item) => format!("{}. {}", i + 1, d.item_name(item)),
+        None => format!("{}. Empty", i + 1),
+    }
+}
+
+/// INTENT2-U: a stack slot's help line (in the pouch, packed, in the stash, how auto-fill tops it up) and an empty
+/// stack slot's.
+pub(crate) fn stack_help(work: &UnitState, stash: &Stash, item: &str) -> String {
+    let (cur, packed, left) = (work.pouch_count(item), work.packed(item), stash.get(item).copied().unwrap_or(0));
+    let short = if cur < packed { " Hollow pips: copies still to come from the stash." } else { "" };
+    format!("In the pouch: {cur}; packs {packed} (stash {left}). Auto-fill tops it up to {packed} from the stash when a fight starts while this hero is active, and after each fight this hero comes home from.{short} Click or drag it to the stash to empty the slot; drag it onto another slot to move it; - and + set how many it packs.")
+}
+pub(crate) const STACK_EMPTY_HELP: &str = "Drag a consumable from the stash here (or click it in the stash): the slot packs as many as its stack holds.";
+
+/// The party stash's catalog items, by name.
+pub(crate) fn stash_ids(d: &Data, stash: &Stash) -> Vec<String> {
+    let mut ids: Vec<String> = stash.keys().filter(|id| d.cat.items.contains_key(*id)).cloned().collect();
+    ids.sort_by_key(|id| d.item_name(id));
+    ids
+}
+
+/// PR7-76 (PT-60): the stash badge of gear the hero cannot wear.
+pub(crate) const CANT_WEAR: &str = "can't wear";
+
+/// ENGINE-23: a stash row's click (wear, pouch, read; None for an item that is none of these), its wield penalty
+/// badge and its hover card's help line.
+pub(crate) struct StashRow {
+    pub act: Option<PAct>,
+    pub badge: Option<(String, String)>,
+    pub help: String,
+}
+
+/// PR7-76 (PT-60): `work` is the hero the stash is shown for; gear the strict gear rule refuses them (`wear_refusal`)
+/// is marked "can't wear" and its card says why in words.
+pub(crate) fn stash_row(d: &Data, gs: &GameState, built: Option<&progression::Built>, work: Option<&UnitState>, id: &str) -> StashRow {
+    let def = &d.cat.items[id];
+    let (act, help) = if def.is_equipment() {
+        (Some(PAct::Equip(id.to_string())), "Click to wear it, or drag it onto a slot.")
+    } else if def.item_type == "CONSUMABLE" {
+        (Some(PAct::PouchAdd(id.to_string())), "Click to put one in the battle pouch, or drag it onto a pouch slot.")
+    } else if def.item_type == emberwake_data::MASTERY_BOOK {
+        // PK2-FOLLOWUP (FB-214 (f)): a mastery book is read, not worn (a click, no drag)
+        (Some(PAct::ReadBook(id.to_string())), "Click to read it: this hero gains its weapon family's mastery (proficiency 2 or more, not yet mastery 3).")
+    } else {
+        (None, "Not wearable.")
+    };
+    // U3.2-S3 (FB-34): every item shows (training is no gate); one the hero would wear under a wield penalty carries
+    // the badge, and its card says why
+    let refused = work.filter(|_| def.is_equipment()).and_then(|w| w.wear_refusal(d, def));
+    let badge = match refused {
+        Some(why) => Some((CANT_WEAR.to_string(), why)),
+        None => wield_badge(built.map(|b| &b.unit), def),
+    };
+    let help = match &badge {
+        Some((_, n)) => format!("{help} {n}"),
+        None => help.to_string(),
+    };
+    // PR7-41 (PT-30): what a kept item is for (recipes, story)
+    let note = crate::shop::item_use_note(d, gs, id);
+    let help = if note.is_empty() { help } else { format!("{help} {note}") };
+    StashRow { act, badge, help }
 }
 
 /// AUDIT-04 (PR5-40): " (durability/full)" of the weapon instance `m` wields in `slot`, with " MW" for a masterwork;
@@ -1834,7 +2157,7 @@ const PK2_Y: i32 = 246;
 /// AUDIT-04 (PR5-40): the member's PK2 numbers, read only, for the Stats tab's PK2 line, only those it has: its weapon
 /// mastery per family (level and XP), the techniques and the mastery keystone open now (as the built unit holds them),
 /// and each wielded weapon instance's durability (MW = masterwork).
-fn pk2_rows(d: &Data, world: &str, m: &UnitState) -> Vec<(DRow, String)> {
+pub(crate) fn pk2_rows(d: &Data, world: &str, m: &UnitState) -> Vec<(DRow, String)> {
     let row = |label: &str, shown: String, desc: &str, short: String| (DRow { label: label.into(), value: 0, shown, desc: desc.into() }, short);
     let skill = |id: &str| d.cat.skill(id).map_or_else(|| id.to_string(), |s| s.name.clone());
     let top = emberwake_data::mastery::MASTERY_MAX;
@@ -1866,7 +2189,7 @@ fn pk2_rows(d: &Data, world: &str, m: &UnitState) -> Vec<(DRow, String)> {
 }
 
 /// The Gear tab's stat list: the core stats with gear, then the derived rows (`derived`), as `m` fights in `world`.
-fn sheet(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
+pub(crate) fn sheet(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
     let Some(b) = progression::build_with(d, m, world, false) else { return Vec::new() };
     let mut out: Vec<DRow> = STATS.iter().map(|st| DRow::plain(st, b.unit.stats.stat(st, None) as i64, stat_desc(st))).collect();
     out.extend(derived_of(&d.cat, ruleset, &b.unit));
@@ -1928,7 +2251,7 @@ fn item_numbers(def: &emberwake_data::ItemDef) -> String {
     c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str() + ".").unwrap_or_default()
 }
 
-fn roman(n: i32) -> &'static str {
+pub(crate) fn roman(n: i32) -> &'static str {
     ["-", "I", "II", "III", "IV", "V"].get(n.max(0) as usize).copied().unwrap_or("V+")
 }
 
@@ -1957,6 +2280,38 @@ mod tests {
             }
         }
         (d, m, stash)
+    }
+
+    /// PR7-76 (PT-60): stash gear a hero cannot wear (the strict gear rule, picked by rule over the shipped worlds'
+    /// starting members) is marked "can't wear" and its card says why with the gear type's name, never its id; gear the
+    /// hero may wear carries no such mark.
+    #[test]
+    fn pt60_gear_a_hero_cannot_wear_is_marked_in_the_stash() {
+        let dir = Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
+        let d = Data::open(&dir).expect("data").0;
+        let mut found = None;
+        for w in emberwake_world::new_game::playable_worlds(&d) {
+            let Ok(gs) = emberwake_world::new_game::create_for_world(&d, &w, 1) else { continue };
+            for m in &gs.party.members {
+                let mut ids: Vec<&String> = d.cat.items.keys().collect();
+                ids.sort();
+                if let Some(id) = ids.into_iter().find(|id| m.wear_refusal(&d, &d.cat.items[*id]).is_some()) {
+                    found = found.or(Some((gs.clone(), m.clone(), id.clone())));
+                }
+            }
+        }
+        let (gs, m, id) = found.expect("a member and an item the strict rule refuses");
+        let row = stash_row(&d, &gs, None, Some(&m), &id);
+        let (badge, why) = row.badge.clone().expect("marked");
+        assert_eq!(badge, CANT_WEAR);
+        assert_eq!(Some(why.clone()), m.wear_refusal(&d, &d.cat.items[&id]));
+        let gear = &d.cat.items[&id].weapon_type;
+        if why.contains("untrained") && d.family_name(gear) != *gear {
+            assert!(!why.contains(gear.as_str()) && why.contains(&d.family_name(gear)), "the type in words: {why}");
+        }
+        assert!(row.help.contains(&why), "the card says why");
+        let ok = d.cat.items.keys().find(|i| d.cat.items[*i].is_equipment() && m.wear_refusal(&d, &d.cat.items[*i]).is_none()).expect("gear the member may wear");
+        assert!(stash_row(&d, &gs, None, Some(&m), ok).badge.is_none_or(|b| b.0 != CANT_WEAR));
     }
 
     fn first(d: &Data, slot: &str) -> String {
@@ -2066,7 +2421,7 @@ mod tests {
     #[test]
     fn a_member_forbidden_two_handers_keeps_them_off_and_its_empty_slot() {
         let (mut d, mut m, mut st) = setup();
-        let no_2h = emberwake_data::PassiveDef { id: "t_no_2h".into(), name: "No 2H".into(), effects: vec![json!({"type": "forbid_hands", "hands": 2})], slot: String::new() };
+        let no_2h = emberwake_data::PassiveDef { id: "t_no_2h".into(), name: "No 2H".into(), effects: vec![json!({"type": "forbid_hands", "hands": 2})], slot: String::new(), icon: String::new() };
         std::sync::Arc::make_mut(&mut d.cat).passives.insert(no_2h.id.clone(), no_2h);
         let mut great: Vec<&String> = d.cat.items.iter().filter(|(id, i)| i.two_handed && m.can_wear(&d, id, "main_hand").is_ok()).map(|(id, _)| id).collect();
         great.sort();
@@ -2273,7 +2628,7 @@ mod tests {
         assert!(text.ends_with(&format!("KNOW {know} x 10 = 5 (capped at the max; 0-5).")), "{text}");
         // a passive `stat` effect on the derived id (a scratch passive applied to the built unit): the value rises by it
         // and the breakdown names the passive
-        let steady = emberwake_data::PassiveDef { id: "test_steady".into(), name: "Steady Test".into(), effects: vec![json!({"type": "stat", "stat": "nerve", "value": 4})], slot: String::new() };
+        let steady = emberwake_data::PassiveDef { id: "test_steady".into(), name: "Steady Test".into(), effects: vec![json!({"type": "stat", "stat": "nerve", "value": 4})], slot: String::new(), icon: String::new() };
         let mut d = d.clone();
         d.edit_cat(|cat| {
             cat.passives.insert(steady.id.clone(), steady.clone());
@@ -2887,7 +3242,7 @@ mod tests {
 
     /// A game on the shipped data in a world that plays under the deck rule (`deck` true) or without it, and its first
     /// member.
-    fn deck_cx(deck: bool) -> (Cx, String) {
+    pub(super) fn deck_cx(deck: bool) -> (Cx, String) {
         // The test bed (decision "Ashlands is a test bed"), by name: a pick by rule follows whichever world sorts first,
         // and sunk_ward's empty class paths leave a member no actives. It plays classic, so the deck case gives this
         // test's own copy of its manifest the timeline row.
@@ -3057,9 +3412,14 @@ mod tests {
     /// at (`progression::keystone_level`); an empty keystone slot below that level says so on its card.
     #[test]
     fn the_deck_buckets_say_where_passives_and_the_keystone_come_from() {
-        assert_eq!(deck_source_hint("keystone", 3, 6), "Opens at level 6");
-        assert_eq!(deck_source_hint("keystone", 6, 6), "Class keystone, from level 6");
-        assert!(deck_source_hint("passive", 1, 6).contains("deck"));
+        use progression::KeystoneSource;
+        assert_eq!(deck_source_hint("keystone", 3, 6, None), "Opens at level 6");
+        assert_eq!(deck_source_hint("keystone", 6, 6, None), "Class keystone, from level 6");
+        // HITCALC1 (PR7-45): the header names the slotted keystone's source
+        assert_eq!(deck_source_hint("keystone", 6, 6, Some(KeystoneSource::Class)), "Class keystone, from level 6");
+        assert_eq!(deck_source_hint("keystone", 6, 6, Some(KeystoneSource::Deck)), "Deck keystone, from level 6");
+        assert_eq!(deck_source_hint("keystone", 3, 6, Some(KeystoneSource::Graft)), "Graft keystone", "a graft holds the slot below the level");
+        assert!(deck_source_hint("passive", 1, 6, None).contains("deck"));
         let (mut cx, member) = deck_cx(true);
         let m = cx.gs().party.member(&member).unwrap().clone();
         let (level, key_level) = (m.level(&cx.data) as i32, progression::keystone_level(&cx.data, &m));
@@ -3596,6 +3956,229 @@ mod fit_tests {
             enc.set_color(png::ColorType::Rgba);
             enc.set_depth(png::BitDepth::Eight);
             enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
+        }
+    }
+}
+
+/// XL-FIX2 (PR7-85, FB-455 b and c): the Stats and Gear tabs' stat rows grow with the text size (one under the other
+/// at least a line apart, a second column when one has no room), and every line cut on the Character screen hovers to
+/// its full words, at every text size.
+#[cfg(test)]
+mod xl_rows_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+    use aegis_ui::screen::TEXT_SIZES;
+
+    /// The rule: one column at the base step, closed up to the room, while that holds the rows a line apart; else two,
+    /// the first the longer, at the base step or the line, whichever is more, within the room.
+    #[test]
+    fn stat_rows_take_a_second_column_when_one_cannot_hold_the_line() {
+        let close = |n: usize, base: f32, room: f32| base.min(room / (n - 1) as f32);
+        // lists the room closes up (the room per row under the base step)
+        for (n, base, room) in [(11usize, 15.0f32, 120.0f32), (11, 12.0, 102.0), (14, 12.0, 96.0)] {
+            let one = close(n, base, room);
+            assert_eq!(stat_rows_fit(n, base, room, one - 0.5), (1, n, one), "{n} rows: a short line keeps one column");
+            assert_eq!(stat_rows_fit(n, base, room, one), (1, n, one), "{n} rows: a line the step just holds");
+            let per = n.div_ceil(2);
+            for need in [one + 0.5, base + 1.0] {
+                let (cols, rows, step) = stat_rows_fit(n, base, room, need);
+                assert_eq!((cols, rows), (2, per), "{n} rows, line {need}");
+                assert_eq!(step, base.max(need).min(room / (per - 1) as f32), "{n} rows, line {need}");
+                assert!(step * (per - 1) as f32 <= room + 1e-3, "{n} rows stay in the room");
+            }
+        }
+        assert_eq!(stat_rows_fit(7, 15.0, 120.0, 17.0), (1, 7, 17.0), "a list with room grows its one column");
+        assert_eq!(stat_rows_fit(1, 12.0, 102.0, 30.0).0, 1, "a single row stays one column");
+    }
+
+    /// The line height of `size` at text size `scale` (`Painter::line_h`).
+    fn line_h(g: &mut Gfx, scale: f32, size: f32) -> f32 {
+        g.fonts.scale = scale;
+        let p = aegis_ui::painter::Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+        p.line_h(size)
+    }
+
+    /// At every text size the rows of each column are a line or more apart, no two rows' boxes meet, and every row
+    /// stays above the detail pane (y 275).
+    #[test]
+    fn the_stat_rows_grow_with_the_text_size() {
+        let mut cx = game_cx();
+        let mut g = gfx();
+        let member = cx.gs().party.members[0].id.clone();
+        let mut bad = Vec::new();
+        for (tab, prefix, size) in [("stats", "stats.derived.", BODY + 1.0), ("gear", "gear.stat.", BODY)] {
+            let mut c = Character::new(&cx, &member, tab);
+            for (name, scale) in TEXT_SIZES {
+                frame(&mut c, &mut cx, &mut g, scale as f32);
+                let line = line_h(&mut gfx(), scale as f32, size);
+                let rows: Vec<Rect> = c.w.iter().filter(|w| w.id.starts_with(prefix)).map(|w| w.rect).collect();
+                assert!(rows.len() > STATS.len().min(6), "{tab} at {name}: the rows are drawn");
+                let mut cols: IndexMap<i32, Vec<i32>> = IndexMap::new();
+                for r in &rows {
+                    cols.entry(r.x).or_default().push(r.y);
+                    if r.y + r.h > 275 {
+                        bad.push(format!("{tab} at {name}: a row at {r:?} meets the detail pane"));
+                    }
+                }
+                for ys in cols.values_mut() {
+                    ys.sort();
+                    for pair in ys.windows(2) {
+                        if ((pair[1] - pair[0]) as f32) < line.floor() {
+                            bad.push(format!("{tab} at {name}: rows {} and {} under a line ({line}) apart", pair[0], pair[1]));
+                        }
+                    }
+                }
+                for (i, a) in rows.iter().enumerate() {
+                    for b in &rows[i + 1..] {
+                        let x = a.intersect(*b);
+                        if x.w > 0 && x.h > 0 {
+                            bad.push(format!("{tab} at {name}: rows {a:?} and {b:?} meet"));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// Every text cut on any tab, at any text size, has a widget at it whose hover holds the full words (the engine's
+    /// audit reads it: `bare_cut`).
+    #[test]
+    fn every_cut_on_the_character_screen_hovers_to_its_full_words() {
+        let mut cx = crate::party::fit_tests::full_party_cx(8);
+        let mut g = gfx();
+        let member = cx.gs().party.members[0].id.clone();
+        let mut bad = Vec::new();
+        for (tab, _) in TABS {
+            let mut c = Character::new(&cx, &member, tab);
+            for (name, scale) in TEXT_SIZES {
+                let recs = frame(&mut c, &mut cx, &mut g, scale as f32);
+                let v = aegis_ui::layout_audit::frame_report(g.view, aegis_ui::painter::Grid::Old, &recs, &[], &c.widgets(), &[]).report;
+                if v["bare_cut"] != json!(0) {
+                    bad.push(format!("{tab} at {name}: {}", json!(v["cut"].as_array().map(|a| a.iter().filter(|c| c["hover"] == json!(false)).cloned().collect::<Vec<_>>()))));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+}
+
+/// PR7-92 (INPUT-REACH2): slots without a mouse.
+#[cfg(test)]
+mod reach_slot_tests {
+    use super::*;
+    use super::tests::deck_cx;
+
+    // ---- PR7-92 (INPUT-REACH2): slots without a mouse ------------------------------------------------------------
+
+    fn widget_of<'a>(c: &'a Character, id: &str) -> Option<&'a Widget<PAct>> {
+        c.w.iter().find(|w| w.id == id)
+    }
+
+    /// What the keys miss on the open tab (`aegis_ui::reach`): a mouse-only widget.
+    fn keys_miss(c: &Character) -> Vec<String> {
+        let infos = c.widgets();
+        aegis_ui::reach::unreached(&infos, &aegis_ui::reach::tab_reach(&infos)).into_iter().map(|u| u.0).collect()
+    }
+
+    /// Enter picks a filled deck slot and puts it on another slot (a swap) or puts a list row in it; Esc drops the pick
+    /// and leaves the window open; Space empties a slot; every slot and the list are in the keys' reach.
+    #[test]
+    fn the_keys_pick_place_swap_and_empty_deck_slots() {
+        let (mut cx, member) = deck_cx(true);
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut c = Character::new(&cx, &member, "skills");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert_eq!(keys_miss(&c), Vec::<String>::new(), "the keys reach every slot and the list");
+        let t = c.terms.clone().expect("deck terms");
+        let shown = |c: &Character| t.shown(&c.deck).active.clone();
+        let before = shown(&c);
+        assert!(before.len() >= 2, "two actives to swap: {before:?}");
+        assert!(c.press_focus(&mut cx, "skills.active.0", Key::Enter) && c.pick.as_ref().is_some_and(|p| p.id == "skills.active.0"), "Enter picks a filled slot");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(c.press_focus(&mut cx, "skills.active.1", Key::Enter) && c.pick.is_none());
+        assert_eq!(shown(&c)[..2], [before[1].clone(), before[0].clone()], "Enter on another slot swaps the two");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        c.press_focus(&mut cx, "skills.active.0", Key::Enter);
+        c.escape(&mut cx);
+        assert!(c.pick.is_none() && cx.nav.is_empty(), "Esc drops the pick; the window stays");
+        // a list row into the picked slot
+        let spare = t.owned("active").iter().find(|f| !shown(&c).contains(f)).cloned();
+        if let Some(f) = spare {
+            crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+            c.press_focus(&mut cx, "skills.active.0", Key::Enter);
+            assert!(c.press_focus(&mut cx, &format!("skills.owned.active.{f}"), Key::Enter), "a list row takes the key while a pick waits");
+            assert_eq!(shown(&c)[0], f, "the row went into the picked slot");
+        }
+        // Space empties
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        let n = shown(&c).len();
+        assert!(c.press_focus(&mut cx, &format!("skills.active.{}", n - 1), Key::Space));
+        assert_eq!(shown(&c).len(), n - 1, "Space takes the skill out");
+        // an empty slot with no pick: taken, nothing picked
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(c.press_focus(&mut cx, &format!("skills.active.{}", n - 1), Key::Enter) && c.pick.is_none());
+        // the hint line names the keys while a pick waits
+        c.press_focus(&mut cx, "skills.active.0", Key::Enter);
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        let hint = c.w.iter().filter(|w| w.kind == "label" || w.kind == "para").map(|w| w.text.clone()).collect::<Vec<_>>().join(" ");
+        assert!(c.pick.is_some() && (hint.contains("Picked") || hint.is_empty()), "{hint}");
+        assert!(!c.press_focus(&mut cx, "character.tab.stats", Key::Enter), "elsewhere Enter stays a click");
+    }
+
+    /// The gear slots and the pouch follow the same rule; the stash takes a pick back (unequip), a stash row goes into
+    /// the picked slot.
+    #[test]
+    fn the_keys_pick_place_and_empty_gear_slots() {
+        let (mut cx, member) = deck_cx(false);
+        // gear the member may wear, in the stash
+        let d = cx.data.clone();
+        let m = cx.gs().party.member(&member).unwrap().clone();
+        let mut ids: Vec<String> = d.cat.items.iter().filter(|(_, i)| i.is_equipment() && m.wear_refusal(&d, i).is_none()).map(|(id, _)| id.clone()).collect();
+        ids.sort();
+        for id in ids.iter().take(6) {
+            cx.gs_mut().party.stash.insert(id.clone(), 1);
+        }
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut c = Character::new(&cx, &member, "gear");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert_eq!(keys_miss(&c), Vec::<String>::new(), "the keys reach every slot, the pouch and the stash");
+        let filled = |c: &Character| c.w.iter().filter(|w| w.id.starts_with("gear.slot.") && w.drag.is_some()).map(|w| w.id.clone()).collect::<Vec<_>>();
+        if filled(&c).is_empty() {
+            // wear one the way a drag does, then confirm it
+            let pair = c.w.iter().filter_map(|w| w.drag.clone()).filter(|f| f.starts_with("stash.")).find_map(|f| c.w.iter().filter_map(|w| w.drop.clone()).find(|t| t.starts_with("slot.") && c.can_drop(&cx, &f, t)).map(|t| (f.clone(), t)));
+            let (f, t) = pair.expect("a stash item that fits a slot");
+            c.accept_drop(&mut cx, &f, &t);
+            c.act(&mut cx, PAct::ConfirmGear);
+            crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        }
+        let slot = filled(&c).first().cloned().expect("a worn item");
+        assert!(c.press_focus(&mut cx, &slot, Key::Enter) && c.pick.is_some(), "Enter picks a worn item (a click would take it off)");
+        assert!(filled(&c).contains(&slot), "picking moves nothing");
+        c.escape(&mut cx);
+        assert!(c.pick.is_none() && cx.nav.is_empty());
+        c.press_focus(&mut cx, &slot, Key::Enter);
+        assert!(c.press_focus(&mut cx, "gear.stash", Key::Enter), "the stash takes the pick");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(!filled(&c).contains(&slot), "Enter on the stash takes it off");
+        // a stash row into the emptied slot
+        let to = widget_of(&c, &slot).and_then(|w| w.drop.clone()).expect("a drop key");
+        c.act(&mut cx, PAct::ResetGear);
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(c.press_focus(&mut cx, &slot, Key::Space), "Space on a worn item");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(!filled(&c).contains(&slot), "Space takes it off");
+        c.act(&mut cx, PAct::ResetGear);
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        let row = c.w.iter().find(|w| w.id.starts_with("gear.stash.") && w.drag.as_deref().is_some_and(|f| c.can_drop(&cx, f, &to))).map(|w| w.id.clone());
+        {
+            let row = row.expect("a stash item for the slot");
+            let was = widget_of(&c, &slot).unwrap().text.clone();
+            c.press_focus(&mut cx, &slot, Key::Enter);
+            assert!(c.press_focus(&mut cx, &row, Key::Enter));
+            crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+            assert_ne!(widget_of(&c, &slot).unwrap().text, was, "the stash row went into the picked slot");
         }
     }
 }

@@ -71,6 +71,8 @@ An unknown key or step is a problem, not a thing ignored.
 | `shot` | `name`, `max_w` = 1920, `golden`, `t` = 0 | Screenshot into the bundle, once the frames after the last change are drawn. A blank frame fails the step. `golden`: compared with its baseline (below). `t`: no window only, seconds (0 to 60) the top screen has been open first, on the shot clock (below): a screen that fades in takes the time of its fade |
 | `clip` | `name`, `frames` = 30, `every_ms` = 66, `max_w` = 1280 | No window only. A numbered sequence, `<name>/frame_0001.png` on: at most 120 frames, 10 to 2000 ms apart, 15 s in all |
 | `perf` | `name`, `frames` = 300, `warm` = 60, `budget` | No window only. Frame times (ENGINE-2): see "Frame times" |
+| `feel` | `name`, `script`, `gap` = 2, `budget`, `step_ms`, `motion` = false, `switch` = false | No window only. Input times (ENGINE-45), movement (ENGINE-49) and screen switches (ENGINE-51): see "Input times" |
+| `reach` | `name`, `back` = false, `fail` = false, `allow` = [] | No window only. What keys and a pad reach (ENGINE-48): see "Input reach" |
 | `pause` | `ms` | Time passes, for a picture at a moment of an animation, with a look at the game each second; with no window, that much game time on the shot clock, drawn at once. To wait for a result, use `wait` |
 | `audit` | `scales`, `fail` = all of `cut`, `edge`, `overlap`, `spill` | The text audit per text size; a kind in `fail` found fails the step |
 | `repeat` | `times`, `steps`, `until` | A bounded loop. `until` is read before each turn and ends it; turns running out with `until` still false fails |
@@ -104,7 +106,8 @@ the `game` reply. Only `absent` passes on a missing path, so a mistyped path nev
 | Port | From the OS per start. If it answers for another process, that process is left alone and the next port is tried, 3 at most |
 | Profile | A scratch folder as the game's `APPDATA` and `saves=`, removed after; the real profile is never read or written |
 | Settings | `mute` true, windowed at the size, `vsync` false, `record_playtests` true, `start_inactive` true |
-| Sound | No window: no device is opened or needed. A real window: muted |
+| Sound | No window: a virtual output device on its own thread (ENGINE-55), so `feel` hears sounds while muted. A real window: muted |
+| Developer surfaces | `dev=1` on every launch (ENGINE-57): a game with dev tools in the build shows them in a release run too, as the gate's dev build does. One script then takes the same path in either profile. A build without the dev tools ignores the key |
 | Process | Only the one it started: asked to leave over the link, killed after 5 s times `slow`. If the driver itself is killed, a game with no window leaves on its own (see below); a real window stays open until it is closed |
 
 ## Golden shots
@@ -146,6 +149,122 @@ A frame with no window is the whole frame's cost (nothing is presented), not the
 slower than a release one, so a budget in a scenario the gate runs is a loose ceiling that catches a gross regression; a tight
 one belongs in a release run (`tools/fc.sh scenario <id> profile=release`). The painter's own costs (fill, panels, text) are
 `tools/fc.sh bench`.
+
+## Input times
+
+A `feel` step (no window only, ENGINE-45 FEEL-PROBE1) replays `script` one input at a time and times each with the shell's
+feel probe (`aegis_ui::feel`). An input is `{"key": name}`, `{"click": widget id}` or `{"pad": button}` (a name the `pad`
+link request takes: `south`, `east`, `dpad_up`...), or `{"frames": n}` (1 to 240 frames drawn, no input), each with an
+optional `times` (1 to 200). After each input the next frame is drawn, then `gap` more (0 to 240) before the next input.
+Each input gets: `to_state_ms` (arrival to its handler done), `to_frame_ms` (to the start of the frame that shows it),
+`to_present_ms` (to that frame done), `frame_ms`, the `tick_ms` and `draw_ms` the screens took in it, and `spent_in` (the
+largest of `handler`, `wait` and `frame`). The step writes `feel_<name>.json` to the bundle and adds it under `perf` in
+`result.json` (`kind` `feel`): `to_state`, `to_present` and `frame_time` each as `count`, `p50`, `p95` and `worst`, every
+input, `flagged_inputs` (input-to-present over 100 ms) and `frames_over` (frames over 33 ms). `budget` takes `input_ms`
+(the worst input-to-present), `frame_ms` (the worst frame) and `frame_p50_ms` (the median frame, ENGINE-50); one over it
+fails the step. In a dev build (the gate's) each
+budget counts 2.5 times (`FEEL_DEV_ALLOWANCE`, ENGINE-46): a dev build draws about twice as slow, so the gate catches a gross
+slip while the release run holds the real bar. A refused input stops the step with its place.
+
+Movement (ENGINE-49 WALK-FEEL1): the script also takes `{"press": key}` and `{"release": key}` (a movement key held down
+and let go, as a window's key down and up: `Held::dir` follows the latest held), `{"pad_press": button}` and
+`{"pad_release": button}` (a d-pad direction the same way), `{"stick": [x, y]}` (ENGINE-63 PAD-TUNE1: the left stick
+moved to x, y, each from -1 to 1, y up; the direction it reads under the player's dead zone (`controls::PadTuning`) is
+held the same way, a new one replacing the old, and inside the dead zone it lets go; the report reads a stick that gives
+a direction as a press and one that lets go as a release), `{"wait_ms": n}` (frames drawn for n ms of the run's clock,
+1 to 60000), `{"spike_ms": n}` (one frame that takes n ms, 1 to 2000; a test hook, as `stall_ms` is: both move the
+shot clock, which only a scenario run has, so a player's build never runs them) and `{"stall_ms": n}` (ENGINE-50 MAP-FRAME1: the
+clock moves n ms with no frame drawn, 1 to 2000, so the next input arrives during a hitch and its frame comes after it). `step_ms` (1 to 200) sets the shot clock's frame
+step for the replay (16.667 for 60 frames a second). With `motion` true the top screen's `Screen::motion` is read after
+every frame and the reply's `motion` (`aegis_ui::walkfeel::report`) gives, per input, `to_move_ms` (to the first frame the
+mover is drawn elsewhere) and `to_step_ms` (to its first new cell), a turn's `turn_ms` and `turn_gap_ms` (a press while
+another direction is held), `after_release_steps`, a long frame's `next_steps_ms`; and over the run `first_move_ms` (the
+worst first move; a press that moves nothing, into a wall, counts under `still`), `cadence_ms` and `cadence_spread_ms`
+(the gaps between steps with no input between them; the stretch after a long frame is read apart), `overshoot_steps`,
+`stutters` (a turn later than a usual gap allows while walking), `camera_lag_tiles` (the camera's distance from where it
+wants to be) and `camera_jump_tiles` (its largest move in a frame, per frame of `step_ms`), and `path` (each step's time
+and cell). `budget` takes each of `first_move_ms`, `overshoot_steps`, `cadence_spread_ms`, `stutters`,
+`camera_lag_tiles` and `camera_jump_tiles`; one over fails the step, as does a screen that reports no motion.
+
+Screen switches (ENGINE-51 SWITCH-FEEL1): with `switch` true each key, click or pad input is followed, frame by frame,
+until its new screen settles (`aegis_ui::switchfeel`), and the reply's `switch` gives per input `from` and `to` (top
+screen and stack depth), `handler_ms`, `first_ms` (to the first frame of another screen, or the same at another depth),
+`settled_ms` (to the first frame of the last screen it came to drawn in 33 ms, 82.5 in a dev build: its loads are done), `own_ms` (from the old
+screen's last frame to settled: a walk to an exit or the old screen's fade out left out), `chain` (a story card that
+hands over to a stage, the stage to a fight), `worst_frame_ms`, `long_frames` (over 100 ms, the handler counted with the
+first; each with `covered_by`, the transition shown before it, `Screen::transition`, or null) and `transitions`; over the
+run `worst_settled_ms`, `uncovered` and `misses`. A script item takes `switch_ms` (the input's `own_ms` past it fails
+the step, as does no other screen coming up) and `to` (the screen it is meant to reach: it settles on that screen's first
+quick frame and is followed no further, so a fight that opens on its own after a results screen is not part of it; an
+input with a `to` also waits for a walk to the exit, up to 600 frames, where one without stops after 180 frames with no
+other screen). `budget` takes `uncovered_frames` (long frames no transition covered). The dev build's allowance stretches
+`switch_ms` and the 100 ms alike.
+
+Sound (ENGINE-55 AUDIO-FEEL1): every `feel` reply also has `audio` (`aegis_ui::audiofeel`). With no window the sound
+plays into a virtual output (`aegis_ui::audio_out`, a 48 kHz stereo device on its own thread asking for 512-frame
+buffers on time, so a sound is heard when its buffer plays, even in a muted run). Each sound and track started in the
+replay gets `rel`, `bus`, `asked_ms`, `heard_ms` (its first sample over 1/1024), `after_ask_ms`, `after_input_ms` (from
+the last input within 250 ms before the ask), `beat_ms` (an effect asked in a frame, heard minus that frame's start plus
+one period: when the frame is shown) and `decode_ms` (reading or decoding on the ask); over the run `ui_sound_ms` (the
+worst interface sound after its input), `hit_beat_ms` (the worst effect off its frame, either way), `music_ms` (the worst
+track after its ask), `decode_ms`, `unheard`, `underruns` (a buffer mixed after it should have played) with
+`underrun_ms`, `buffer_frames`, `buffer_ms`, `buffers` and `worst_fill_ms`. `budget` takes each of `ui_sound_ms`,
+`hit_beat_ms`, `music_ms`, `underruns` and `decode_ms`; one over, or one nothing measured, fails the step. In a dev build
+`decode_ms` counts 2.5 times and `underruns` allows one more per 2 s of replay or part of it (`DEV_UNDERRUN_EVERY_MS`: a starved
+debug thread). A window's feel overlay adds the real device's buffer and underruns.
+
+With no window nothing is presented, so a frame is done once drawn; a window adds the copy to the GPU and the present (and
+vsync's wait). The same numbers come from a real window with `--feel` (or `feel=1`) on the game's command line (the run's
+switch, read once by `start::Start` into `Options::feel`), or the settings key `"feel": true` (the player's switch: it
+stays on across runs until removed; no Settings row writes it): an overlay at the top left (the last frame's ms, the worst frame of the last second, the last
+input's input-to-present ms) and a line per input in `feel.log` beside the run's `game.log`. Use a release build for numbers
+a player would see (`tools/fc.sh scenario <id> profile=release`).
+
+## Input reach
+
+A `reach` step (no window only, ENGINE-48 INPUT-REACH1) walks the top screen as a keyboard and as a pad would (the link
+request `reach`, `aegis_ui::reach`). A mouse reaches every enabled widget it can click, pick, drag, drop on or type into,
+less what a popup's backdrop covers. Keys reach the focus ring (Tab walks all of it). A pad reaches what its buttons map to
+in the player's `controls`: the ring when a button gives Tab, else what its d-pad walks to from the opening focus, and only
+on a screen whose arrows move the focus (`Screen::arrow_focus`); a focus group (a board, PR7-92) is one Tab stop whose
+members the arrows walk. The step writes `reach_<name>.json` to the bundle and adds
+it under `perf` in `result.json` (`kind` `reach`): `mouse` (a count), `ring` (a focus group, `Screen::focus_group`, once; its prefixes in `group`), `keys_miss`, `pad_miss` and `dpad_miss` (each
+`{id, kind, use}`), `invisible` (ring widgets whose focus draws nothing within `REACH_MARGIN_PX` of their box), `unsure`
+(the box changes from frame to frame, so it cannot tell) and, with `back` true, what one Esc did: `quits`, `closed`,
+`opened`, `swapped`, `changed` (the same screen drew differently) or `nothing`, and the top screen after it. `dead_ends`
+lists `keys <id>`, `pad <id>`, `invisible <id>`, `back nothing` and `back quits`. With `fail` true a dead end fails the step
+unless `allow` names its widget id, or `back` for a back press (a root screen where Esc rightly does nothing).
+
+## Reading the feel table
+
+`tools/fc.sh feel [out=<dir>]` (ENGINE-57 FEEL-RELEASE1) runs every scenario that has a `feel` or `reach` step, in each
+game, with no window and in a release build. Release budgets apply: none of the dev build's allowances. It then prints one
+table (`tools/planner/feel_table.py`) and exits 1 when a scenario failed. It takes a few minutes and is never in the gate.
+Run it on a quiet machine, and run a scenario again alone before trusting a single slow row.
+
+Each row is one step, named `<scenario>/<step>`. The columns:
+
+- `result`: `ok`, `FAIL: <why>` on the step that failed, or `not run` for the steps after a failure (also when the
+  scenario did not start).
+- Times are in ms, and a value over that step's own budget ends in `*`.
+  - `input`: the worst input to present.
+  - `frame p50` and `frame max`: the median and the worst frame.
+  - `switch`: the worst switch's own part.
+  - `move`: the worst first move.
+  - `ui snd`: the worst interface sound after its input.
+  - `hit`: the worst effect off its frame, either way.
+  - `music`: the worst track after its ask.
+- `underruns` is a count.
+- `stalls` is a count (ENGINE-60): the step's stalled frames plus the underruns heard during one. A stalled frame took
+  over 33 ms but ran on the CPU for under half of it, so the machine stopped the game rather than the game working that
+  long (Linux reads the CPU time; elsewhere nothing is marked). A stall is in no other column and fails nothing.
+- `dead ends` is the count on a `reach` row; its other columns are `-`.
+- `-` means nothing measured it.
+
+Under the table you get a count of the steps, then one line for each failed scenario with its step number and message,
+then one `stall` line for each step with stalls (each stalled frame's wall and CPU ms, and its stalled underruns).
+The bundles and each scenario's log stay under `out`. Open `feel_<step>.json` to see which input or frame made a number.
+A row that fails here but passes in the gate is over its release budget: the dev build's 2.5 times hides it.
 
 ## The bundle
 
@@ -244,6 +363,41 @@ A run takes most of one CPU core, covered or not: 89 to 104 % with `vsync` off a
 A link request can reach a result without the screen ever showing it: a game's command API may resolve work in one request. To prove a
 screen, drive what the player drives (`click`, `key`) and `wait` on the state. A game's own notes on this lie beside its scenarios, in
 `games/<id>/scenarios/README.md`.
+
+## Settings, audits and saves for a whole run
+
+Three keys change a run without touching its files (ENGINE-33, ENGINE-36). `set=` and `audit=` go on `run`,
+`tools/fc.sh scenario` and `shots-all`; `save=` goes on `shots`:
+
+| Key | Does |
+| --- | --- |
+| `set=<key>:<value>,...` | Settings laid over each scenario's own `settings`, for example `set=text_scale:1.3` takes every screen at a larger text size. The keys a file may not set are refused here too |
+| `audit=1` | After every shot, the text audit of that frame (cut, edge, overlap, spill) is kept beside it as `<shot>.audit.json`; `shots-all` collects them into `audit.txt`, the shots with a problem first |
+| `save=<name or absolute folder>` | On `shots`: launch from a save. A name is a folder under `scenarios/saves/`; an absolute path is any saves folder, such as one an agent playtest kept (`keep_saves=`, [agent_playtest.md](agent_playtest.md)). A file's `launch.save` takes the same two forms |
+
+A sweep at two text sizes, compared shot by shot:
+
+```sh
+tools/fc.sh scenario shots-all out=target/xl_normal audit=1
+tools/fc.sh scenario shots-all out=target/xl_large set=text_scale:1.3 audit=1 compare=target/xl_normal
+```
+
+## The shots a change moves
+
+`tools/fc.sh shots diff [base=<sha>] [scenarios=a,b or all] [out=<dir>] [tolerance=0] [pixels=0] [limit=12]` shows what a
+change does to the screens before it lands (SHOT-DIFF1):
+
+- With no `scenarios=`, it picks the scenarios the change can show from the paths changed since the base (committed or
+  not, new files too): only the changed scenario files when nothing else changed, else all; a docs-only change runs
+  nothing.
+- It runs them on the working tree and on the base commit (default `origin/develop`). The base's shots are cached in
+  `target/shots_cache/<sha>/`, so the next diff against that commit runs only the working tree.
+- Shots run on the shot clock, so a comparison is exact by default; `tolerance=` and `pixels=` loosen it.
+- The out folder (default `target/shots_diff/`) holds `index.md` (every changed, new and gone shot, most changed first),
+  `sheet.png` (before, after and diff of the most changed shots at half size), `compare/` (each at full size) and
+  `head/`.
+
+Put the sheet beside a change's report; a reviewer sees the screens without running anything.
 
 ## Not here yet
 

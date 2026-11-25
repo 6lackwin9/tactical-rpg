@@ -87,6 +87,9 @@ fn freeze_or_read() -> Value {
 }
 
 fn frozen_data() -> Data {
+    // ESCAPE-PLAN1 (`PR7-60`): the golden predates the row's moves (walking through friends, a hero's Withdraw within its
+    // AP); they stay off here until the user approves the re-record (`FB-403`)
+    emberwake_battle::plan::set_escape_plan1(false);
     let catalog = read_json(&crate_dir().join("../emberwake_battle/tests/fixtures/timeline_kit.json"), "the frozen catalog");
     let wg = frozen_worlds_and_game();
     Data::from_values(&catalog, &wg["worlds"], &wg["game"])

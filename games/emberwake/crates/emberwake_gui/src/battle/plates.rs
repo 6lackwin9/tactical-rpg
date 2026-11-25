@@ -140,8 +140,8 @@ pub(super) fn party_poise_row(r: Rect) -> Rect {
     Rect::new(r.x + 3, r.y + r.h - 4, r.w - STATUS_COL - 6, 2)
 }
 
-/// Contract 6: one status tab in `r`: the icon, the rim (gold a buff, oxblood a debuff; dashed when a planned move
-/// applies it), the rounds left as up to 3 pips at its right (a permanent one a full bar).
+/// Contract 6: one status tab in `r`: the icon and the rim (gold a buff, oxblood a debuff; dashed when a planned move
+/// applies it). BOSSUI1 BU6 (PR7-54): icon only, no pips or numbers; the rounds left are in its list line (`Tab::line`).
 pub(super) fn tab(ui: &mut Ui<super::Action>, cx: &mut Cx, t: &Tab, r: Rect) {
     let rim = if t.buff { th().gold } else { oxblood() };
     ui.p.fill(r, rgb(16, 20, 30));
@@ -153,20 +153,14 @@ pub(super) fn tab(ui: &mut Ui<super::Action>, cx: &mut Cx, t: &Tab, r: Rect) {
     } else {
         ui.p.panel(r, rgba(0, 0, 0, 0), rim, 0.0);
     }
-    let side = (r.h - 2).min(r.w - 4).max(1);
-    let ir = Rect::new(r.x + 1, r.y + (r.h - side) / 2, side, side);
+    let side = (r.h - 2).min(r.w - 2).max(1);
+    let ir = Rect::new(r.x + (r.w - side) / 2, r.y + (r.h - side) / 2, side, side);
     if !icon(ui, cx, &t.icon, ir, if t.planned { 170 } else { 255 }) {
         let letter: String = t.name.chars().take(1).collect();
-        ui.p.text_center(ir.x as f32 + ir.w as f32 / 2.0, ir.y as f32, &letter, SMALL, rim);
-    }
-    let px = r.x + r.w - 3;
-    match t.rounds {
-        None => ui.p.fill(Rect::new(px, r.y + 1, 2, r.h - 2), rim),
-        Some(n) => {
-            for k in 0..n.clamp(0, 3) {
-                ui.p.fill(Rect::new(px, r.y + r.h - 3 - k * 3, 2, 2), rim);
-            }
-        }
+        // PR7-63: a letter taller than its tab sits centred on it (at Extra large), else at the tab's top as before
+        let lh = ui.p.line_h(SMALL);
+        let ly = if lh > r.h as f32 { r.y as f32 + (r.h as f32 - lh) / 2.0 } else { ir.y as f32 };
+        ui.p.text_center(ir.x as f32 + ir.w as f32 / 2.0, ly, &letter, SMALL, rim);
     }
 }
 
@@ -220,14 +214,14 @@ pub(super) fn party_plate(ui: &mut Ui<super::Action>, cx: &mut Cx, faces: &mut F
     name_in(&mut ui.p, tx as f32, r.y as f32 + 2.0, &p.name, room, if p.active { super::ally() } else { th().dim });
     // HP: the bar with the incoming loss, its numbers under it
     hp_bar(&mut ui.p, Rect::new(tx, r.y + 13, text_w, 3), p.hp, p.max_hp, if p.active { hp() } else { th().dim }, p.incoming, p.heal);
-    let hp_text = format!("{}/{}", p.hp, p.max_hp);
+    let hp_text = hp_fit(&mut ui.p, p.hp, p.max_hp, p.incoming, p.loss_sign, text_w as f32);
     let hw = ui.p.text_w(&hp_text, SMALL);
     ui.p.text(tx as f32, r.y as f32 + 17.0, &hp_text, SMALL, th().text);
     let mut nx = tx as f32 + hw + 3.0;
+    // STATUSVIS1 SV6, SV7 (PR7-57): the one planned loss (hits and ticks), tinted with an arrow when a modifier moved its
+    // hits, each hit and tick on its frameless hover
     if p.incoming > 0 {
-        let t = format!("-{}", p.incoming);
-        ui.p.text(nx, r.y as f32 + 17.0, &t, SMALL, th().foe);
-        nx += ui.p.text_w(&t, SMALL) + 2.0;
+        nx += incoming_number(ui, &format!("party.{}.incoming", p.unit), p, nx, r.y as f32 + 17.0) + 2.0;
     }
     // contract 6: a planned heal, the moss heart and "+n"
     if p.heal > 0 {
@@ -250,6 +244,71 @@ pub(super) fn party_plate(ui: &mut Ui<super::Action>, cx: &mut Cx, faces: &mut F
         pips(&mut ui.p, party_poise_row(r), lit, max);
     }
     status_column(ui, cx, &format!("party.{}", p.unit), &p.tabs, col, STATUS_SLOTS);
+    if p.sockets || !p.passives.is_empty() {
+        passive_sockets(ui, cx, &format!("party.{}", p.unit), &p.passives, Rect::new(pr.x, pr.y + pr.h + 1, pr.w, PASSIVE_ICON));
+    }
+}
+
+/// SV6, SV7: the plate's planned loss "-n" at (`x`, `y`): tinted and arrowed by `p.loss_sign`, its hover each hit and
+/// tick with the total (`Plate::loss`). Returns its width.
+/// ENGINE-33 (XL-SWEEP1): a plate's HP numbers in `room`: "hp/max", or only "hp" when "hp/max" and its planned loss
+/// beside it (and its modifier arrow when `sign` is not 0) would run past the plate (Extra large text); the bar still
+/// shows the share and the card the maximum.
+pub(super) fn hp_fit(painter: &mut Painter, hp: i32, max_hp: i32, incoming: i32, sign: i32, room: f32) -> String {
+    let full = format!("{hp}/{max_hp}");
+    if incoming <= 0 {
+        return full;
+    }
+    let need = painter.text_w(&full, SMALL) + 3.0 + painter.text_w(&format!("-{incoming}"), SMALL) + if sign != 0 { LOSS_SIGN_W } else { 0.0 };
+    // the plate's 2-unit inner margin may take the last letter (as before this fit)
+    if need <= room + HP_FIT_SLACK {
+        full
+    } else {
+        hp.to_string()
+    }
+}
+
+/// How far into the plate's inner margin the numbers may run.
+const HP_FIT_SLACK: f32 = 2.0;
+
+/// The room a modifier's arrow beside a planned loss may take (`statusvis::number`).
+const LOSS_SIGN_W: f32 = 6.0;
+
+fn incoming_number(ui: &mut Ui<super::Action>, id: &str, p: &Plate, x: f32, y: f32) -> f32 {
+    let t = format!("-{}", p.incoming);
+    let tip = super::statusvis::num_tip("Planned loss", &p.loss);
+    super::statusvis::number(ui, id, &t, x, y, SMALL, p.loss_sign, th().text, tip)
+}
+
+/// PASSIVE-ICON1 (ENGINE-24, STATUSVIS1 SV10), SV13 (PR7-57): a loadout passive's socket under the portrait (18 px
+/// at 1280 x 720) and the gap between the two.
+pub(super) const PASSIVE_ICON: i32 = 9;
+const PASSIVE_GAP: i32 = 2;
+/// SV12: the placeholder while an archetype's icon is not there yet (a skill kind's icon).
+const PASSIVE_PLACEHOLDER: &str = "skills/kinds/focus.png";
+
+/// SV10, SV13: the loadout's two passive sockets centred in `row` under the portrait (apart from the status column):
+/// each slotted passive's icon its own label `<id>.passive.<i>` with its name and what it does on the hover; an empty
+/// socket dim, its label `<id>.socket.<i>`.
+fn passive_sockets(ui: &mut Ui<super::Action>, cx: &mut Cx, id: &str, passives: &[crate::battle_view::PlatePassive], row: Rect) {
+    let n = crate::battle_view::PLATE_PASSIVES as i32;
+    let x0 = row.x + (row.w - (n * PASSIVE_ICON + (n - 1) * PASSIVE_GAP)) / 2;
+    for i in 0..n as usize {
+        let r = Rect::new(x0 + i as i32 * (PASSIVE_ICON + PASSIVE_GAP), row.y, PASSIVE_ICON, PASSIVE_ICON);
+        match passives.get(i) {
+            Some(p) => {
+                let px = ui.icon_px(r).max(1);
+                let img = cx.art.first(&[p.icon.clone(), PASSIVE_PLACEHOLDER.to_string()], px, px).cloned();
+                aegis_ui::panes::icon_tile(ui, r, img.as_ref(), if img.is_none() { "P" } else { "" });
+                let about = if p.about.is_empty() { "Loadout passive: always on.".to_string() } else { p.about.clone() };
+                ui.push(format!("{id}.passive.{i}"), "label", p.name.clone(), r, true, false, None, vec![(p.name.clone(), th().gold), (about, th().text)]);
+            }
+            None => {
+                ui.p.panel(r, th().game("slot_empty", rgba(20, 28, 46, 120)), th().game("slot_empty_edge", rgba(58, 78, 116, 120)), 0.0);
+                ui.push(format!("{id}.socket.{i}"), "label", "Empty passive socket", r, true, false, None, vec![("Empty passive socket".into(), th().dim), ("A loadout holds up to two passives.".into(), th().text)]);
+            }
+        }
+    }
 }
 
 /// Contract 3: a guest's compact plate (teal rim, "AI" tag, HP, intent, a gold "Protect" tag).
@@ -319,8 +378,13 @@ pub(super) fn foe_plate(ui: &mut Ui<super::Action>, cx: &mut Cx, faces: &mut Fac
     let name_col = if !p.active { th().dim } else if p.boss { boss_gold() } else { th().text };
     name_in(&mut ui.p, tx as f32, r.y as f32 + 2.0, &p.name, text_w as f32, name_col);
     bar(&mut ui.p, Rect::new(tx, r.y + 13, text_w, 3), p.hp, p.max_hp, if p.active { th().foe } else { th().dim }, p.incoming);
-    let hp_text = if p.active { format!("{}/{}", p.hp, p.max_hp) } else { "Down".to_string() };
+    let hp_text = if p.active { hp_fit(&mut ui.p, p.hp, p.max_hp, p.incoming, p.loss_sign, text_w as f32) } else { "Down".to_string() };
     ui.p.text(tx as f32, r.y as f32 + 17.0, &hp_text, SMALL, if p.active { th().text } else { th().dim });
+    // SV6, SV7 (PR7-57): the one planned loss beside it, with its hover
+    if p.incoming > 0 && p.active {
+        let nx = tx as f32 + ui.p.text_w(&hp_text, SMALL) + 3.0;
+        incoming_number(ui, &format!("foe.{}.incoming", p.unit), p, nx, r.y as f32 + 17.0);
+    }
     if let Some(l) = p.lands.as_ref().filter(|_| p.active) {
         lands_row(ui, cx, small, looks, l, lands_rect(r));
     }

@@ -12,6 +12,7 @@ Every kit rule option in `REGISTER` (`ruleset.rs`) is additive and off by defaul
   - An unmet `requires` where the rule would be silently inert (such as `flank` without `round_intent`) is a hard error.
   - Conflicts, fields set when their `needs` rule is off, split must-ship bundles (`BUNDLES`), and combinations outside `TESTED_SETS` emit warnings; `tools/fc.sh sim` with `ruleset=` or `rules=` prints any `RULES error:` or `RULES warning:` lines under `ARGS`, and `LOCKED` validation recursively scans nested objects and arrays.
 - **One picked set per game**: A game's worlds pick one active ruleset row; `TESTED_SETS` pins the supported option combinations on a frozen catalog, and `kits/rpg/crates/rpgkit_host/tests/fixtures/rules_contract_golden.json` pins `aegis rules --contract`.
+- **Per-unit poise pips (`PR7-54`)**: `poise_pips` (unit, 0-10, 0 = the ruleset's count) sets that unit's full poise pips.
 
 ## 2. Value vs form vs new rule (the stop rule)
 

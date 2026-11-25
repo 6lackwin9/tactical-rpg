@@ -123,7 +123,7 @@ fn a_miss_is_one_dashed_tracer_and_a_cancelled_action_none() {
     while s(&b).phase != Phase::Replay {
         b.send(&cx, json!({"cmd": "step"}));
     }
-    let heal = cx.tuning.value.heal_color;
+    let heal = crate::tokens::moss();
     let sess = b.host.session.as_mut().unwrap();
     let idx = sess.resolver.scheduled.iter().position(|a| matches!(a.command.kind, CmdKind::Attack { target: Some(_), .. })).expect("an attack");
     let CmdKind::Attack { target: Some(t), .. } = sess.resolver.scheduled[idx].command.kind else { unreachable!() };
@@ -155,6 +155,29 @@ fn a_miss_is_one_dashed_tracer_and_a_cancelled_action_none() {
 
 /// PB1: with the group `tracers` off the agent link lists none (and the board draws none); the tracer fades from
 /// alpha 200 to 0 over 400 ms on the FX clock, and under reduce motion holds 200 for 400 ms, then is gone.
+/// STYLE-PASS1B (`PR7-48` (1), FB-350): a unit's HP rise floats "+n" in the theme's moss token (the heroes' HP moss),
+/// a fall "-n" in the damage colour; with the shipped theme the moss is the muted one (no bright green on the battle
+/// screen).
+#[test]
+fn a_heal_float_is_the_theme_moss() {
+    let game = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    aegis_ui::theme::set_theme(aegis_ui::theme::load(&aegis_core::assets::Layers::for_game(&game)).expect("the game's theme loads"));
+    let (mut cx, _, mut b) = arena(None);
+    cx.settings.v["skip_anim"] = json!(true);
+    let unit = s(&b).w.units.iter().position(|u| u.hp > 5).expect("a unit above 5 HP");
+    b.last_hp = s(&b).w.units.iter().map(|u| u.hp).collect();
+    b.last_hp[unit] -= 5;
+    b.floats.clear();
+    b.after_change(&cx);
+    let float = b.floats.iter().find(|f| f.unit == unit).expect("the rise floats");
+    assert_eq!((float.text.as_str(), float.color), ("+5", crate::tokens::moss()));
+    assert_eq!(crate::tokens::moss(), crate::tokens::hp(), "the theme's moss is its HP token");
+    let [r, g, bl, _] = float.color;
+    let (hi, lo) = (r.max(g).max(bl) as f32, r.min(g).min(bl) as f32);
+    assert!((hi - lo) / hi <= 0.55 && hi / 255.0 <= 0.60, "a muted moss, not a bright green: {:?}", float.color);
+    aegis_ui::theme::set_theme(aegis_ui::theme::Theme::default());
+}
+
 #[test]
 fn the_group_off_lists_no_tracer_and_a_tracer_fades_or_holds() {
     let (mut cx, mut g, mut b) = arena(Some(TIMELINE));

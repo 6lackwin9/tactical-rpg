@@ -10,6 +10,7 @@ needs nothing of the RPG kit, and it is the place to look first when starting a 
 | Screens | `crates/hello_game/src/screens.rs` | A main menu and the field, with the engine's widgets and default theme |
 | Start | `crates/hello_game/src/lib.rs` | The manifest, the asset layers (the game's `assets/`, then the engine's), the context and the shell's options |
 | Command line | `crates/hello_game/src/bin/hello_cli.rs` | `aegis_cli::Game` with no content kinds |
+| Ground | `with_field_ground` in `crates/hello_game/src/screens.rs` | The engine's ground composer (`aegis_ui::ground`): grass and a dirt path as one picture with worn, generated edges, made once and cached; a picture only, the walk never reads it (ENGINE-40, `engine/docs/authoring/battle_stage.md`) |
 | Sprite | `assets/sprites/walker.png` | 16 x 16, drawn by `tools/walker_png.py` |
 | Sounds | the engine's `assets/audio/sfx/ui_*.wav` | Found through the asset layers; the game ships none |
 | Scenario | `scenarios/hello_walk.json` | Menu, a new walk, steps and bumps, a save, back to the menu, continue, and frame times with a loose budget; in the gate |

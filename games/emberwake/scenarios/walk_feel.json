@@ -1,0 +1,238 @@
+{
+ "id": "walk_feel",
+ "title": "ENGINE-49 (WALK-FEEL1): the Sluice Undercroft walked by click, keys, d-pad and (ENGINE-63) the left stick; the first move on the next frame, no step after a release, an even beat, the camera within a tile; ENGINE-50 (MAP-FRAME1): the median frame under 16.7 ms and none over 33 ms, and a press during a 250 ms hitch takes no quick step to catch up",
+ "launch": {
+  "save": "hub_start"
+ },
+ "settings": {},
+ "timeout_s": 600,
+ "steps": [
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "main_menu"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "click",
+   "id": "menu.continue"
+  },
+  {
+   "step": "wait",
+   "until": {
+    "path": "screen",
+    "eq": "region_map"
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "step": "pause",
+   "ms": 1500
+  },
+  {
+   "step": "feel",
+   "name": "walk_click",
+   "step_ms": 16.667,
+   "motion": true,
+   "gap": 0,
+   "script": [
+    {
+     "click": "marker.crypts"
+    },
+    {
+     "wait_ms": 500
+    },
+    {
+     "click": "marker.berek"
+    },
+    {
+     "wait_ms": 3500
+    }
+   ],
+   "budget": {
+    "first_move_ms": 17,
+    "overshoot_steps": 0,
+    "cadence_spread_ms": 17,
+    "stutters": 0,
+    "camera_lag_tiles": 1,
+    "camera_jump_tiles": 0.5,
+    "frame_ms": 33,
+    "frame_p50_ms": 16.7
+   }
+  },
+  {
+   "step": "repeat",
+   "times": 6,
+   "until": {
+    "path": "state.dialogue",
+    "absent": true
+   },
+   "steps": [
+    {
+     "step": "key",
+     "key": "esc"
+    }
+   ]
+  },
+  {
+   "step": "pause",
+   "ms": 500
+  },
+  {
+   "step": "feel",
+   "name": "walk_keys",
+   "step_ms": 16.667,
+   "motion": true,
+   "gap": 0,
+   "script": [
+    {
+     "press": "left"
+    },
+    {
+     "wait_ms": 600
+    },
+    {
+     "spike_ms": 250
+    },
+    {
+     "wait_ms": 600
+    },
+    {
+     "release": "left"
+    },
+    {
+     "wait_ms": 500
+    },
+    {
+     "key": "right"
+    },
+    {
+     "wait_ms": 300
+    },
+    {
+     "key": "right"
+    },
+    {
+     "wait_ms": 300
+    },
+    {
+     "key": "right"
+    },
+    {
+     "wait_ms": 500
+    },
+    {
+     "pad_press": "dpad_right"
+    },
+    {
+     "wait_ms": 800
+    },
+    {
+     "pad_press": "dpad_down"
+    },
+    {
+     "wait_ms": 400
+    },
+    {
+     "pad_release": "dpad_down"
+    },
+    {
+     "wait_ms": 300
+    },
+    {
+     "pad_release": "dpad_right"
+    },
+    {
+     "wait_ms": 500
+    },
+    {
+     "stick": [
+      -0.9,
+      0.1
+     ]
+    },
+    {
+     "wait_ms": 800
+    },
+    {
+     "stick": [
+      0.2,
+      0.9
+     ]
+    },
+    {
+     "wait_ms": 400
+    },
+    {
+     "stick": [
+      0.1,
+      0.2
+     ]
+    },
+    {
+     "wait_ms": 500
+    },
+    {
+     "press": "up"
+    },
+    {
+     "press": "left"
+    },
+    {
+     "wait_ms": 500
+    },
+    {
+     "release": "left"
+    },
+    {
+     "wait_ms": 400
+    },
+    {
+     "release": "up"
+    },
+    {
+     "wait_ms": 500
+    },
+    {
+     "stall_ms": 250
+    },
+    {
+     "press": "left"
+    },
+    {
+     "wait_ms": 3000
+    },
+    {
+     "release": "left"
+    },
+    {
+     "wait_ms": 500
+    },
+    {
+     "press": "down"
+    },
+    {
+     "wait_ms": 2500
+    },
+    {
+     "release": "down"
+    },
+    {
+     "wait_ms": 500
+    }
+   ],
+   "budget": {
+    "first_move_ms": 17,
+    "overshoot_steps": 0,
+    "cadence_spread_ms": 17,
+    "stutters": 0,
+    "camera_lag_tiles": 1,
+    "camera_jump_tiles": 0.5,
+    "frame_ms": 33,
+    "frame_p50_ms": 16.7
+   }
+  }
+ ]
+}

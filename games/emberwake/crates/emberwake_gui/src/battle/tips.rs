@@ -376,7 +376,7 @@ pub(super) fn ap_held_text(ap: i32, source: &str) -> String {
 }
 
 /// A kind's own icon.
-pub(super) fn kind_icon(kind: &str) -> String {
+pub(crate) fn kind_icon(kind: &str) -> String {
     format!("skills/kinds/{}.png", kind.to_lowercase())
 }
 
@@ -466,12 +466,18 @@ pub(super) fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Inten
 /// unrevealed plan's skills, blocks or walks, deck, order, AI row or profile): the hover card's lines with its facing,
 /// without the tell's first action and its forecast while the tells are hidden and without the classic "Next:" line;
 /// a party member adds its picks, its plan and its AP numbers (IS3, AP9's lines) while planning under the round intent.
-pub(super) fn inspect_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds: &[Intent], classes: &[String], show_tells: bool) -> Tip {
+#[allow(clippy::too_many_arguments)]
+pub(super) fn inspect_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds: &[Intent], classes: &[String], show_tells: bool, keys: &aegis_ui::controls::Controls) -> Tip {
     let mut t = unit_tip_as(s, i, sel, tells, rounds, classes, Some(show_tells));
     if let Some(head) = t.first_mut() {
-        head.0 = format!("Inspecting {} (Esc clears)", s.w.units[i].name);
+        head.0 = inspecting(&s.w.units[i].name, keys);
     }
     t
+}
+
+/// CONTROLS-UI1B: the pinned intel's header, "Inspecting <name> (Esc clears)", with the key bound to Back.
+pub(crate) fn inspecting(name: &str, keys: &aegis_ui::controls::Controls) -> String {
+    format!("Inspecting {name} ({} clears)", keys.key_hint(aegis_ui::screen::Key::Esc))
 }
 
 /// AP9 (INPUT1 7): a party member's AP numbers, one line each: "AP <now> of <max>", "Plan: <spent> (picked <picked>,
@@ -596,6 +602,24 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
         None => format!("Level {} {}", u.stats.level, u.tier),
     };
     t.push((format!("{level}   Initiative {}   Reach {}", u.initiative, reach_text(w, i)), th().dim));
+    // OBJUI1 (PR7-31; OBJ1 3, MORALE1 3): the guest and must-survive marks, the slay target, the morale state in words
+    // with its line, the leader
+    let marks = emberwake_battle::obj_view::marks(s, i);
+    if marks.guest {
+        t.push(("Guest".into(), crate::tokens::guest()));
+    }
+    if marks.must_survive {
+        t.push(("Must survive".into(), crate::tokens::boss_gold()));
+    }
+    if marks.slay {
+        t.push(("Slay target: defeat it to win".into(), crate::tokens::boss_gold()));
+    }
+    if let Some(m) = emberwake_battle::obj_view::morale_mark(s, i) {
+        t.push((format!("{}: {}", m.title(), m.line), super::objchips::state_col(m.state)));
+    }
+    if emberwake_battle::obj_view::is_leader(s, i) {
+        t.push((emberwake_battle::obj_view::LEADER_LINE.into(), crate::tokens::boss_gold()));
+    }
     if let Some(line) = derived_line(&derived_rows(s, i)) {
         t.push((line, th().dim));
     }
@@ -607,7 +631,7 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     if let Some(st) = emberwake_battle::poise::state(w, i).filter(|st| st.max > 0 && u.is_active()) {
         // S2.2-S3: in pips under poise_mode pips, with the threshold a hit must reach to take one
         let n = &w.ruleset.numbers;
-        let what = if emberwake_battle::poise::pips_mode(n) { format!("Poise pips {}/{} (T {})", if st.broken { 0 } else { st.pips }, n.poise_pips.max(1), emberwake_battle::poise::threshold(n, st.max)) } else { format!("Poise {}/{}", st.value, st.max) };
+        let what = if emberwake_battle::poise::pips_mode(n) { format!("Poise pips {}/{} (T {})", if st.broken { 0 } else { st.pips }, emberwake_battle::poise::full_pips(n, st), emberwake_battle::poise::pip_threshold(n, st)) } else { format!("Poise {}/{}", st.value, st.max) };
         t.push((format!("{what}{}", if st.broken { "  BROKEN this round" } else if st.broken_last { "  (broke last round: stagger x repeat)" } else { "" }), if st.broken { th().foe } else { POISE }));
     }
     // HOOKS1-UI slice 3: its meters (UM7; none without the rule, a hidden meter left out) and a held guard (8.3)
@@ -643,11 +667,14 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     }
     if !ally && u.is_active() {
         let mut hit_shown = false;
+        // HITCALC1 (PR7-45): once the round is over its tell reads as this round's line ("This round: ..."), and its
+        // forecast, of hits that have landed, is not shown again (the log has what they did)
+        let over = s.phase == Phase::Replay;
         match tell {
             Some(r) => {
                 // IS2: the tell's first action only while the tells show (I)
                 if tells_shown {
-                    t.push((format!("Intent: {}", intent_text::first_line(w, &r.line)), th().gold));
+                    t.push((format!("{} {}", if over { ROUND_OVER_HEAD } else { "Intent:" }, intent_text::first_line(w, &r.line)), th().gold));
                 }
                 // V1, V2: who reads the plan (a reader who fell stays listed), the enrage or the battle's plan reveal
                 if let Some(head) = intent_text::reveal_head(w, r, |p| s.w.cat.passives.get(p).map(|x| x.name.clone()).unwrap_or_else(|| p.to_string())) {
@@ -657,7 +684,7 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
                     }
                 }
                 // PR7-41 (PT-20): the hits on the selected hero, per hit at the block each lands, with its guard then
-                if let Some(f) = sel.filter(|_| tells_shown).and_then(|h| intent_text::forecast(r, h, &intent_text::forecast_hits(r, h, hits_on_hero(s, i, h)))) {
+                if let Some(f) = sel.filter(|_| tells_shown && !over).and_then(|h| intent_text::forecast(r, h, &intent_text::forecast_hits(r, h, hits_on_hero(s, i, h)))) {
                     hit_shown = f.starts_with("Targets you");
                     t.push((f, th().foe));
                 }
@@ -680,6 +707,9 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     }
     t
 }
+
+/// HITCALC1 (PR7-45): the head of an enemy's tell on its hover card once the round is over (instead of "Intent:").
+pub(super) const ROUND_OVER_HEAD: &str = "This round:";
 
 /// PR7-3 (review N3): the party card's badge text while a weapon is dulled.
 pub(super) const DULLED_BADGE: &str = "Dulled";

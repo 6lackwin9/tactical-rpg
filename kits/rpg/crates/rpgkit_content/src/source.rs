@@ -1656,6 +1656,12 @@ pub fn ground_patch_full(p: &Dict) -> Dict {
 pub const PROP_KEYS: [&str; 9] = ["id", "art", "x", "y", "w", "h", "layer", "variant", "flip"];
 /// REVEAL1 1.2: a roof prop's indoor zone (`layer` "roof"); stored after `PROP_KEYS` only when set (`omit_default`).
 pub const PROP_ROOF_OF: &str = "roof_of";
+/// BUNKS1: the id prefix of a hub's bunk prop (`bunk_1`, `bunk_2`, ...).
+pub const BUNK_PROP_PREFIX: &str = "bunk_";
+/// BUNKS-UPGRADE-PROPS1: the bunk prop of the same map a prop holds the place of (`bunk_<n>`; "" = none): the prop
+/// shows only while that bunk is past the hub's bunk cap, and the bunk only once the cap reaches it (the reverse of the
+/// bunk's cap gate); it may share that bunk's tiles. Stored after `PROP_KEYS` only when set.
+pub const PROP_UNTIL_BUNK: &str = "until_bunk";
 /// REVEAL1 1.1: a zone legend entry's optional keys beside `id` and `kind`, with their defaults, stored only when set.
 pub const ZONE_INDOOR: &str = "indoor";
 pub const ZONE_WALL_SET: &str = "wall_set";
@@ -1696,6 +1702,9 @@ pub fn map_without_reveal_defaults(t: &mut Dict) {
             if let Value::Object(o) = p {
                 if o.get(PROP_ROOF_OF).is_some_and(|v| v.as_str() == Some("")) {
                     o.shift_remove(PROP_ROOF_OF);
+                }
+                if o.get(PROP_UNTIL_BUNK).is_some_and(|v| v.as_str() == Some("")) {
+                    o.shift_remove(PROP_UNTIL_BUNK);
                 }
             }
         }
@@ -1739,9 +1748,11 @@ pub(crate) fn service(e: &Dict) -> Dict {
     template(e, &[("id", s.clone()), ("text", s)])
 }
 
-/// XpCurve.load_file: the file as parsed when it validates, else the defaults.
+/// XpCurve.load_file: the file as parsed when it validates, else the defaults. ENGINE-42 (KIT-SAMPLE1): no file at all
+/// is the defaults with no problem (a kit game need not ship a curve); a file that does not parse or validate is still
+/// a problem.
 fn xp_curve(path: &Path, errors: &mut Vec<String>) -> Dict {
-    let doc = read(path, errors).and_then(|v| v.as_object().cloned());
+    let doc = if aegis_core::vfs::exists(path) { read(path, errors).and_then(|v| v.as_object().cloned()) } else { Some(xp_defaults()) };
     let problems = match &doc {
         None => vec![format!("XP curve file '{}' not found or not valid JSON; using defaults.", path.display())],
         Some(d) => xp_problems(d),
@@ -1750,6 +1761,11 @@ fn xp_curve(path: &Path, errors: &mut Vec<String>) -> Dict {
         return doc.unwrap();
     }
     errors.extend(problems);
+    xp_defaults()
+}
+
+/// The XP curve a game without a valid curve file uses.
+fn xp_defaults() -> Dict {
     let defaults = serde_json::json!({"version": 1, "xp_to_next": [40, 70, 110, 160, 220, 290, 370, 460, 560],
         "kill_xp": {"base": 10, "per_level": 5, "tier_mult": {"minion": 0.5, "standard": 1.0, "elite": 2.0, "boss": 5.0, "hero": 1.0},
         "level_delta_step": 0.15, "level_delta_min": 0.25, "level_delta_max": 2.0}});

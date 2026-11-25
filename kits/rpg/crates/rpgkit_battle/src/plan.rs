@@ -16,9 +16,26 @@ use rpgkit_rules::damage::{self, HitInput};
 use rpgkit_rules::ruleset::{self, Chase};
 use rpgkit_rules::{status, Stance};
 use indexmap::{IndexMap, IndexSet};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::collections::HashMap;
-use std::rc::Rc;
+// ENGINE-54 (WARM-SPREAD1): shared plan steps are `Arc`, so a started fight can be built on a thread
+use std::sync::Arc as Rc;
+
+/// ESCAPE-PLAN1 (2), (4) (`PR7-60`): on (the default) a party member's hand move may walk through a friend's tile and
+/// its Withdraw spends no AP it lacks; off = the moves as before the row. Test-only: the goldens recorded before the row
+/// (`sim_golden`, `phasefold`) turn it off until the user approves their re-record (`FB-403`); nothing else sets it.
+static ESCAPE_PLAN1: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Whether ESCAPE-PLAN1 (2) and (4) apply (see `ESCAPE_PLAN1`).
+pub fn escape_plan1() -> bool {
+    ESCAPE_PLAN1.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Test-only: sets `ESCAPE_PLAN1` (the pre-row goldens pass false).
+pub fn set_escape_plan1(on: bool) {
+    ESCAPE_PLAN1.store(on, std::sync::atomic::Ordering::Relaxed);
+}
 
 pub const MAX_MOVE_BLOCKS: usize = 2;
 
@@ -42,7 +59,7 @@ pub struct PlanStep {
     pub direction: V2,
     pub tiles: i32,
     /// GOTO / AREA destination, or the approach / landing tile fixed when first compiled.
-    pub cell: Cell<V2>,
+    pub cell: TileCell,
     /// ITEM: the catalog consumable id used from the battle pouch.
     pub item_id: String,
     /// GOTO only (RULESET1_INTENT AS3, rule `round_intent`): an after-move, one move block that may follow the unit's
@@ -55,13 +72,55 @@ pub struct PlanStep {
     pub move_reason: String,
     /// INPUT1 GH1: the planner placed the step after a member's picks (a ghost block: a real step all the same).
     /// Display only: compiling never reads it.
-    pub ghost: Cell<bool>,
+    pub ghost: Flag,
     /// Decision "Auto-fill keeps a flank": an auto-filled follow-up (or one accepted from the ghost): a carried Engage hits
     /// from its flank or behind tile (`round_intent::keeps_flank`) rather than moving to its own position.
-    pub stay: Cell<bool>,
+    pub stay: Flag,
 }
 
 pub type Step = Rc<PlanStep>;
+
+/// ENGINE-54 (WARM-SPREAD1): a step's tile, settable through a shared step like a `Cell` but one a thread may hold
+/// (relaxed atomics; a plan is only ever used on one thread at a time), so a started fight can be built on a thread.
+#[derive(Debug)]
+pub struct TileCell(AtomicU64);
+
+impl TileCell {
+    pub fn new(v: V2) -> Self {
+        Self(AtomicU64::new(Self::pack(v)))
+    }
+
+    pub fn get(&self) -> V2 {
+        let n = self.0.load(Ordering::Relaxed);
+        V2::new((n >> 32) as u32 as i32, n as u32 as i32)
+    }
+
+    pub fn set(&self, v: V2) {
+        self.0.store(Self::pack(v), Ordering::Relaxed);
+    }
+
+    fn pack(v: V2) -> u64 {
+        ((v.x as u32 as u64) << 32) | v.y as u32 as u64
+    }
+}
+
+/// ENGINE-54: a step's flag, as `TileCell` (a `Cell<bool>` a thread may hold).
+#[derive(Debug)]
+pub struct Flag(AtomicBool);
+
+impl Flag {
+    pub fn new(v: bool) -> Self {
+        Self(AtomicBool::new(v))
+    }
+
+    pub fn get(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+
+    pub fn set(&self, v: bool) {
+        self.0.store(v, Ordering::Relaxed);
+    }
+}
 
 impl PlanStep {
     /// PlanStep.title: "⚔ Strike → Wolf", "➜ Move →2", "Use Potion → Bryn" (the sim's PLAN FAIL lines).
@@ -103,24 +162,24 @@ impl PlanStep {
     }
 
     fn make(mode: Mode, skill: Option<SkillId>, target: Option<UnitId>, cell: V2) -> Step {
-        Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+        Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: TileCell::new(cell), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Flag::new(false), stay: Flag::new(false) })
     }
     pub fn engage(skill: SkillId, target: UnitId) -> Step {
         Self::make(Mode::Engage, Some(skill), Some(target), NO_CELL)
     }
     pub fn mv(skill: SkillId, direction: V2, tiles: i32) -> Step {
-        Rc::new(PlanStep { mode: Mode::Move, skill: Some(skill), target: None, direction, tiles, cell: Cell::new(NO_CELL), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+        Rc::new(PlanStep { mode: Mode::Move, skill: Some(skill), target: None, direction, tiles, cell: TileCell::new(NO_CELL), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Flag::new(false), stay: Flag::new(false) })
     }
     pub fn go_to(skill: SkillId, cell: V2) -> Step {
         Self::make(Mode::Goto, Some(skill), None, cell)
     }
     /// RULESET1_INTENT AS3: an after-move to `cell` (a kite step after the attacks; rule `round_intent`).
     pub fn after_move(skill: SkillId, cell: V2) -> Step {
-        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: true, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: 1, cell: TileCell::new(cell), item_id: String::new(), after: true, reason: String::new(), move_reason: String::new(), ghost: Flag::new(false), stay: Flag::new(false) })
     }
     /// VISCLAR1-D: the player's Move after a skill: an after-move of up to `blocks` move blocks (kept in `tiles`).
     pub fn after_move_up_to(skill: SkillId, cell: V2, blocks: i32) -> Step {
-        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: blocks, cell: Cell::new(cell), item_id: String::new(), after: true, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: blocks, cell: TileCell::new(cell), item_id: String::new(), after: true, reason: String::new(), move_reason: String::new(), ghost: Flag::new(false), stay: Flag::new(false) })
     }
     pub fn area_at(skill: SkillId, cell: V2) -> Step {
         Self::make(Mode::Area, Some(skill), None, cell)
@@ -143,11 +202,11 @@ impl PlanStep {
     /// ITEMUSE1 1.3: use pouch item `item_id` on `target` (the user itself for self items). Skill-less step.
     /// A1.2-K3 (INTENT2 section 6, IR2): an area item's Field row aimed at the source tile `cell`.
     pub fn use_item_at(item_id: &str, cell: V2) -> Step {
-        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: None, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: None, direction: ZERO, tiles: 1, cell: TileCell::new(cell), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new(), ghost: Flag::new(false), stay: Flag::new(false) })
     }
 
     pub fn use_item(item_id: &str, target: UnitId) -> Step {
-        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: Some(target), direction: ZERO, tiles: 1, cell: Cell::new(NO_CELL), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: Some(target), direction: ZERO, tiles: 1, cell: TileCell::new(NO_CELL), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new(), ghost: Flag::new(false), stay: Flag::new(false) })
     }
 }
 
@@ -439,7 +498,7 @@ impl SimState {
 }
 
 /// A unit's opening move: destination (None = withdraws), end block, block it leaves its tile.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct FirstMove {
     to: V2,
     leave: i32,
@@ -453,9 +512,17 @@ pub struct Plan {
     pub goal_preferences: IndexMap<UnitId, Vec<UnitId>>,
     pub ai_pressure: IndexSet<UnitId>,
     blocked_override: RefCell<Option<Rc<Cells>>>,
+    /// ENGINE-47 (GHOST-SETTLE1): the last `ally_moves` and the hash of what it read (`moves_key`).
+    moves_memo: RefCell<Option<(u64, Rc<HashMap<UnitId, FirstMove>>)>>,
 }
 
 pub const AI_HAZARD_PENALTY: i32 = 3;
+
+/// ENGINE-47: `RPGKIT_MOVES_CHECK` set: every kept `ally_moves` is checked against a fresh one (a test run's audit).
+fn moves_check() -> bool {
+    thread_local!(static ON: bool = std::env::var_os("RPGKIT_MOVES_CHECK").is_some());
+    ON.with(|o| *o)
+}
 
 /// The AI cover preference: the cover a cell gives against the ranged foe nearest to it.
 pub fn cover_pref(w: &World, shooters: &[UnitId], cell: V2) -> f64 {
@@ -596,6 +663,15 @@ impl Plan {
     }
 
     pub fn compile(&self, w: &World, c: UnitId) -> SimState {
+        // ENGINE-46 (FEEL-FIX1): once per member inside a forecast scope on this world and plan (`intent::memo`)
+        // (a first-move trial's blocked cells change what it compiles to: not kept)
+        if self.blocked_override.borrow().is_some() {
+            return self.compile_now(w, c);
+        }
+        crate::intent::memo::compiled(w, self, c, || self.compile_now(w, c))
+    }
+
+    fn compile_now(&self, w: &World, c: UnitId) -> SimState {
         let mut st = self.start_state(w, c);
         let steps = self.steps_of(c);
         for (i, step) in steps.iter().enumerate() {
@@ -628,7 +704,8 @@ impl Plan {
     fn apply(&self, w: &World, c: UnitId, st: &mut SimState, step: &Step, index: i32) -> String {
         let u = &w.units[c];
         if st.withdrawn {
-            return format!("{} has already left the battle.", u.name);
+            // PR7-83 (PT-81): the leaving is planned, not done: a step after the plan's exit move says so
+            return format!("{} leaves by the exit earlier in this plan; nothing can follow.", u.name);
         }
         if !u.is_active() || st.pos == NO_CELL {
             return format!("{} is not on the field.", u.name);
@@ -970,8 +1047,10 @@ impl Plan {
         }
         let blocked = self.blocked_cells(w, c);
         let dest = step.cell.get();
+        // ESCAPE-PLAN1 (1): a hand move onto an exit leaves by it, as Withdraw does
+        let leaves = w.may_leave_at(c, dest);
         // BIGUNIT1 BU6: a big unit's whole square at the destination
-        if w.cells_at(c, dest).iter().any(|&n| !w.grid.is_valid(n) || !w.grid.is_walkable(n) || w.grid.is_exit(n)) {
+        if !leaves && w.cells_at(c, dest).iter().any(|&n| !w.grid.is_valid(n) || !w.grid.is_walkable(n) || w.grid.is_exit(n)) {
             return "That tile can't be moved to.".into();
         }
         if w.cells_at(c, dest).iter().any(|n| blocked.contains(n)) {
@@ -980,7 +1059,7 @@ impl Plan {
         if st.pos == dest {
             return "Already there.".into();
         }
-        let route = self.route(w, c, st.pos, &[dest].into_iter().collect(), &blocked, false);
+        let route = self.pass_route(w, c, st.pos, &[dest].into_iter().collect(), leaves);
         if route.is_empty() {
             return "No path to that tile.".into();
         }
@@ -992,7 +1071,11 @@ impl Plan {
         if need > cap {
             return "An after-move takes one move block.".into();
         }
-        self.add_move(w, c, st, &route, None, index)
+        let p = self.add_move(w, c, st, &route, None, index);
+        if p.is_empty() && leaves {
+            st.withdrawn = true;
+        }
+        p
     }
 
     /// RULESET1_INTENT AS3: why `c` cannot take an after-move now ("" = it can).
@@ -1039,9 +1122,22 @@ impl Plan {
         if route.is_empty() {
             return "No route to an exit.".into();
         }
-        let reaches = self.fits_move(w, c, st.pos, &route);
+        let mut reaches = self.fits_move(w, c, st.pos, &route);
         if !reaches {
             route = path::fit_blocks(&w.grid, st.pos, &route, w.units[c].move_per_block(), MAX_MOVE_BLOCKS);
+        }
+        // ESCAPE-PLAN1 (4): a party member's Withdraw (the round's draft) spends only the AP left, as a hand move (it
+        // walks as far as that pays for)
+        if escape_plan1() && w.pays_ap(c) && w.allies.contains(&c) {
+            let per = skill::ap_cost_by(&w.cat.skills[w.book().lowest(Kind::Move)], Some(&w.units[c]), &w.ruleset).max(0);
+            let afford = if per == 0 { route.len() } else { (st.ap_left.max(0) / per) as usize };
+            if afford < route.len() {
+                if afford == 0 {
+                    return "Not enough AP to withdraw.".into();
+                }
+                route.truncate(afford);
+                reaches = false;
+            }
         }
         let p = self.add_move(w, c, st, &route, None, index);
         if p.is_empty() && reaches {
@@ -1529,8 +1625,13 @@ impl Plan {
                 }
             }
             let mut friends_hit = 0;
+            // while a first move is compiled (`first_move`, which `planned_position` itself calls through `ally_moves`)
+            // a friend stands where it is now: asking for its planned tile there recurses without end, and the count
+            // is dropped by `first_move` anyway
+            let compiling_first = self.blocked_override.borrow().is_some();
             for &f in w.friends_of(c) {
-                if f != c && skill::affects_unit(affects, true) && w.units[f].is_active() && cells.contains(&self.planned_position(w, f)) {
+                let at = if compiling_first { w.pos(f) } else { self.planned_position(w, f) };
+                if f != c && skill::affects_unit(affects, true) && w.units[f].is_active() && cells.contains(&at) {
                     friends_hit += 1;
                 }
             }
@@ -1563,6 +1664,14 @@ impl Plan {
             penalty: if self.path_penalties.contains(&c) { Some(&penalty) } else { None },
             prefer: if shooters.is_some() { Some(&prefer) } else { None },
         };
+        path::find_path_sized(&w.grid, from, goals, blocked, goals_are_exits, &hooks, w.size_of(c))
+    }
+
+    /// `route` without the planner's hazard penalty (PLAN-FIX2: a hand move's shortest route).
+    fn route_plain(&self, w: &World, c: UnitId, from: V2, goals: &Cells, blocked: &Cells, goals_are_exits: bool) -> Vec<V2> {
+        let shooters = self.goal_preferences.get(&c);
+        let prefer = |cell: V2| cover_pref(w, shooters.unwrap(), cell);
+        let hooks = Hooks { penalty: None, prefer: if shooters.is_some() { Some(&prefer) } else { None } };
         path::find_path_sized(&w.grid, from, goals, blocked, goals_are_exits, &hooks, w.size_of(c))
     }
 
@@ -1691,19 +1800,22 @@ impl Plan {
     }
 
     /// PR7-41 (PT-20): the damage the battle screen shows for planned entry `e` of `c` (its `est_damage`), by the one
-    /// forecast convention: per hit, at the block it lands, with the target's guard then (`intent::guard_at` over the
-    /// round's scheduled actions `sched`). A single-target attack on a foe that guards at its impact is estimated again
-    /// with that guard; anything else keeps `est_damage`.
+    /// forecast convention: per hit, at the block it lands, with the target's guard and stance then. HITCALC1
+    /// (PR7-45): the hit of `forecast_hit` (0 when it fails at its impact); anything else keeps `est_damage`.
     pub fn forecast_entry(&self, w: &World, sched: &[crate::resolver::ScheduledAction], c: UnitId, e: &PlanEntry) -> i32 {
+        self.forecast_hit(w, sched, c, e).map_or(e.est_damage, |h| h.damage)
+    }
+
+    /// HITCALC1 (PR7-45): the hit planned entry `e` of `c` lands on its foe, read from the round as it will run (the
+    /// scheduled actions `sched` with this plan booked, `intent::planned_schedule`) by the resolver's own hit builder
+    /// (`intent::hit_on`): None for anything but a damaging single-target attack on a foe, or when the entry is not
+    /// booked.
+    pub fn forecast_hit(&self, w: &World, sched: &[crate::resolver::ScheduledAction], c: UnitId, e: &PlanEntry) -> Option<crate::intent::HitOn> {
         let s = &w.cat.skills[e.skill];
-        let Some(foe) = e.target.filter(|&f| f != c && e.item.is_none() && skill::kind(s) == Kind::Attack && !skill::is_area(s)) else { return e.est_damage };
-        let guard = if command::ignores_guard(w, s) { 0.0 } else { crate::intent::guard_at(w, sched, foe, e.end_block(w)) };
-        if guard <= 0.0 || e.est_damage <= 0 {
-            return e.est_damage;
-        }
-        let from = e.path.iter().fold(e.pos_before, |a, d| a + *d);
-        let stance = if w.ruleset.stances() { skill::stance_during(s, e.stance_before) } else { e.stance_before };
-        self.estimate_damage_guarded(w, c, e.skill, stance, foe, from, &[], guard)
+        let foe = e.target.filter(|&f| f != c && e.item.is_none() && skill::kind(s) == Kind::Attack && !skill::is_area(s) && e.est_damage > 0)?;
+        let round = crate::intent::planned_schedule(w, sched, self);
+        let a = round.iter().find(|a| a.unit == c && a.start == e.start_block && !a.cancelled && a.command.skill == s.id)?;
+        crate::intent::hit_on(w, &round, a, foe)
     }
 
     fn estimate_hit(&self, w: &World, c: UnitId, st: &mut SimState, sid: SkillId, stance: Stance, foe: UnitId, from: V2) -> i32 {
@@ -1765,9 +1877,56 @@ impl Plan {
         Rc::new(self.blocked_for(w, c, &self.ally_moves(w)))
     }
 
+    /// ESCAPE-PLAN1 (2): the route of a party member's hand move to `goals`: around every unit as `route` has it; when
+    /// that finds none or a longer one, through the tiles its friends hold or will hold (their start and planned end
+    /// tiles), never ending a move block on one. Other units route as before.
+    ///
+    /// PLAN-FIX2 (PT-88): a member with hand picks walks the shortest route: the planner's hazard penalty (set on the
+    /// member when its auto plan was drafted) only breaks ties, so a hand move is never "too far" for a detour and its
+    /// cost in tiles is its step count.
+    pub fn pass_route(&self, w: &World, c: UnitId, from: V2, goals: &Cells, goals_are_exits: bool) -> Vec<V2> {
+        let blocked = self.blocked_cells(w, c);
+        let mut around = self.route(w, c, from, goals, &blocked, goals_are_exits);
+        let hand = w.allies.contains(&c) && w.round_states.get(&c).is_some_and(|r| !r.picks.is_empty());
+        if hand && self.path_penalties.contains(&c) {
+            let shortest = self.route_plain(w, c, from, goals, &blocked, goals_are_exits);
+            if !shortest.is_empty() && (around.is_empty() || shortest.len() < around.len()) {
+                around = shortest;
+            }
+        }
+        if !escape_plan1() || !w.allies.contains(&c) || w.size_of(c) > 1 {
+            return around;
+        }
+        // the blocked tiles no foe stands on are the friends' (their start and planned end tiles)
+        let friends = w.friends_of(c);
+        let foes: Cells = w.allies.iter().chain(w.enemies.iter()).filter(|&&o| o != c && w.has(o) && !friends.contains(&o)).flat_map(|&o| crate::grid::square_cells(w.pos(o), w.size_of(o))).collect();
+        let soft: Cells = blocked.iter().copied().filter(|x| !foes.contains(x)).collect();
+        if goals.iter().any(|g| soft.contains(g)) {
+            return around;
+        }
+        let hard: Cells = blocked.iter().copied().filter(|x| foes.contains(x)).collect();
+        let through = if hand { self.route_plain(w, c, from, goals, &hard, goals_are_exits) } else { self.route(w, c, from, goals, &hard, goals_are_exits) };
+        if through.is_empty() || (!around.is_empty() && around.len() <= through.len()) {
+            return around;
+        }
+        let mut pos = from;
+        for part in path::chunk_sized(&w.grid, from, &through, w.units[c].move_per_block(), 1) {
+            pos = part.iter().fold(pos, |a, d| a + *d);
+            if soft.contains(&pos) {
+                return around;
+            }
+        }
+        through
+    }
+
     fn blocked_for(&self, w: &World, c: UnitId, moves: &HashMap<UnitId, FirstMove>) -> Cells {
         let mut blocked = Cells::new();
         let friends = w.friends_of(c);
+        // PLAN-FIX2 (PT-87): for a party member with hand picks, a later member's ghost plan (no picks: the planner's,
+        // rebuilt after this member's pick, PL8) claims no tile; that member blocks only where it stands
+        let has_picks = |u: UnitId| w.round_states.get(&u).is_some_and(|r| !r.picks.is_empty());
+        let at = |u: UnitId| w.allies.iter().position(|&a| a == u);
+        let ghost_later = |u: UnitId| has_picks(c) && !has_picks(u) && at(c).zip(at(u)).is_some_and(|(i, j)| j > i);
         for &other in w.allies.iter().chain(w.enemies.iter()) {
             if other == c || !w.has(other) {
                 continue;
@@ -1775,7 +1934,7 @@ impl Plan {
             // BIGUNIT1 BU4: a big unit blocks every cell of its square
             let start = w.pos(other);
             let n = w.size_of(other);
-            match moves.get(&other).filter(|_| friends.contains(&other)) {
+            match moves.get(&other).filter(|_| friends.contains(&other) && !ghost_later(other)) {
                 Some(m) => {
                     if m.to != NO_CELL {
                         blocked.extend(crate::grid::square_cells(m.to, n));
@@ -1794,7 +1953,49 @@ impl Plan {
     }
 
     /// Each planning unit's opening move, fastest first (ties in planning order); each sees earlier claims.
-    fn ally_moves(&self, w: &World) -> HashMap<UnitId, FirstMove> {
+    /// ENGINE-47 (GHOST-SETTLE1): `ally_moves_now`, kept while nothing it reads changes (`moves_key`): a draft asks for it
+    /// on every route it tries. A run that changes what it reads (a first compile fixes a step's tile, `PlanStep::cell`)
+    /// is not kept, so the next call works it out again as before; under a trial's blocked cells it is never kept.
+    fn ally_moves(&self, w: &World) -> Rc<HashMap<UnitId, FirstMove>> {
+        if self.blocked_override.borrow().is_some() {
+            return Rc::new(self.ally_moves_now(w));
+        }
+        let key = self.moves_key(w);
+        let kept = self.moves_memo.borrow().as_ref().filter(|(k, _)| *k == key).map(|(_, m)| m.clone());
+        if let Some(m) = kept {
+            if moves_check() {
+                assert_eq!(*m, self.ally_moves_now(w), "ENGINE-47: a kept ally_moves differs from a fresh one");
+            }
+            return m;
+        }
+        let moves = Rc::new(self.ally_moves_now(w));
+        if self.moves_key(w) == key {
+            *self.moves_memo.borrow_mut() = Some((key, moves.clone()));
+        }
+        moves
+    }
+
+    /// What `ally_moves_now` reads: each unit's steps (all of each, the tiles they fixed too) in plan order, the draft
+    /// preferences, every round state and lock, and where every unit stands.
+    fn moves_key(&self, w: &World) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (std::sync::Arc::as_ptr(&w.cat) as usize, w.units.len(), &w.grid.positions, &w.allies, &w.enemies).hash(&mut h);
+        for u in &w.units {
+            u.active_target.hash(&mut h);
+        }
+        format!("{:?}", w.round_states).hash(&mut h);
+        for (c, steps) in &self.sequences {
+            c.hash(&mut h);
+            for s in steps.iter() {
+                (format!("{:?}", s.mode), s.skill, s.target, s.direction, s.tiles, s.cell.get(), &s.item_id, s.after, s.ghost.get(), s.stay.get()).hash(&mut h);
+            }
+        }
+        (self.path_penalties.iter().collect::<Vec<_>>(), format!("{:?}", self.goal_preferences)).hash(&mut h);
+        h.finish()
+    }
+
+    fn ally_moves_now(&self, w: &World) -> HashMap<UnitId, FirstMove> {
         let mut moves: HashMap<UnitId, FirstMove> = HashMap::new();
         let mut units: Vec<UnitId> = Vec::new();
         let mut order: HashMap<UnitId, usize> = HashMap::new();
@@ -1947,7 +2148,7 @@ pub fn expected_from(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Op
     let u = &w.units[c];
     let ranged = expected_is_ranged(w, c, sid);
     let dist = if from != NO_CELL && w.has(foe) { w.dist_at(c, from, foe) } else { 0 };
-    let skill_mult = if dist > 0 { u.power_for_at(s, ranged, dist) } else { u.power_for(s) } * power_scale;
+    let skill_mult = if dist > 0 || ranged { u.power_for_at(s, ranged, dist) } else { u.power_for(s) } * power_scale;
     damage::compute(
         u,
         &w.units[foe],

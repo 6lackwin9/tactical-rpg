@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import json
 import os
 import re
 import subprocess
@@ -40,7 +41,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DISPOSITIONS = ("accepted", "deferred", "policy")
 ITEM_ID = re.compile(r"^(FB|UN)-\d+$")
-HEADER = re.compile(r"^### ((?:FB|UN)-\d+)\b")
+HEADER = re.compile(r"^### ((?:FB|UN)-\d+)\b(.*)$")
 STATUS = re.compile(r"^- \*\*Status\*\*:\s*(.*)$")
 TICKED = re.compile(r"`([^`]+)`")
 RANGE = re.compile(r"^(.*-[A-Z]+)(\d+)\.\.[A-Z]*(\d+)$")  # U4.2-S3..S4 -> U4.2-S3, U4.2-S4
@@ -59,6 +60,7 @@ class Item:
     status: str
     start: int  # line index of the ### header in FEEDBACK.md
     end: int  # one past the item's last line
+    title: str = ""
 
     @property
     def open(self) -> bool:
@@ -120,7 +122,8 @@ def read_items(lines: list[str]) -> list[Item]:
             items[-1].end = i
         m = HEADER.match(line)
         if m:
-            items.append(Item(m.group(1), "", i, len(lines)))
+            title = m.group(2).lstrip(": \t-\u2014").strip()
+            items.append(Item(m.group(1), "", i, len(lines), title))
     for it in items:
         for k, line in enumerate(lines[it.start:it.end], it.start):
             s = STATUS.match(line) if text[k] else None
@@ -338,10 +341,114 @@ def parse_building_rows(feedback_text: str) -> list[str]:
 
 LEASE_REF = "refs/heads/build-lease"
 LEASE_SUBJ = re.compile(r"^BUILD-LEASE:\s*(cloud|desktop)\b", re.IGNORECASE)
+LANE_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
-def check_lease(action: str, window_minutes: float, session: str, force: bool, no_fetch: bool) -> int:
-    """Checks, claims, or releases the remote Build Session lease (`refs/heads/build-lease` + branch/FEEDBACK check)."""
+def lease_ref_for(lane: str) -> tuple[str, str]:
+    """Returns `(full_ref, remote_ref)` for a build lease lane (`main` -> `refs/heads/build-lease`)."""
+    norm = (lane or "main").strip().lower()
+    if norm in ("", "main", "default"):
+        return LEASE_REF, "origin/build-lease"
+    if not LANE_NAME.match(norm):
+        raise ParseError(f"invalid lease lane '{lane}' (expected lowercase letters, digits, '-' or '_')")
+    return f"{LEASE_REF}-{norm}", f"origin/build-lease-{norm}"
+
+
+def watch_report(feedback: str, ready: str, closed: str) -> dict:
+    """Produces a structured status report for CI/scheduled feedback watching (replaces Gemini Task watchers)."""
+    rep, items, answers = check(feedback, ready, closed, pending_ok=True)
+    waiting_items = [
+        {
+            "id": it.id,
+            "title": it.title,
+            "status": it.status,
+            "line": it.start + 1,
+        }
+        for it in items
+        if it.open and it.id not in answers
+    ]
+    building_rows = parse_building_rows(feedback)
+    if rep.errors:
+        state = "error"
+    elif waiting_items:
+        state = "waiting_design"
+    elif rep.archivable:
+        state = "ready_to_archive"
+    else:
+        state = "idle"
+    return {
+        "state": state,
+        "needs_attention": bool(rep.errors or waiting_items),
+        "waiting_items": waiting_items,
+        "archivable": list(rep.archivable),
+        "building_rows": building_rows,
+        "errors": list(rep.errors),
+        "warnings": list(rep.warnings),
+        "counts": {
+            "items": len(items),
+            "answers": len(answers),
+            "waiting": len(waiting_items),
+            "archivable": len(rep.archivable),
+            "errors": len(rep.errors),
+            "warnings": len(rep.warnings),
+            "building": len(building_rows),
+        },
+    }
+
+
+def format_watch_markdown(data: dict) -> str:
+    """Renders a `watch_report` dict as a concise GitHub Actions summary / rolling issue body."""
+    c = data["counts"]
+    lines = [
+        "## Feedback Watch Status",
+        "",
+        f"- **State**: `{data['state']}` (`needs_attention`: `{str(data['needs_attention']).lower()}`)",
+        f"- **Counts**: {c['waiting']} waiting for Design | {c['archivable']} ready to archive | {c['errors']} error(s) | {c['warnings']} warning(s) | {c['building']} active build row(s)",
+        "",
+    ]
+    if data["errors"]:
+        lines.append("### Errors (Action Required)")
+        for e in data["errors"]:
+            lines.append(f"- {e}")
+        lines.append("")
+    if data["waiting_items"]:
+        lines.append("### Open Items Waiting for Design (`docs/FEEDBACK.md`)")
+        lines.append("| ID | Line | Status | Title |")
+        lines.append("| --- | --- | --- | --- |")
+        for it in data["waiting_items"]:
+            title = it["title"].replace("|", "\\|") or "(no title)"
+            status = it["status"].replace("|", "\\|")
+            lines.append(f"| `{it['id']}` | L{it['line']} | {status} | {title} |")
+        lines.append("")
+    if data["archivable"]:
+        ids = ", ".join(f"`{i}`" for i in data["archivable"])
+        lines.append(f"### Answered — Ready to Archive\n- {ids}\n")
+    if data["building_rows"]:
+        lines.append("### Active Build Rows (`docs/FEEDBACK.md` Section 1)")
+        for r in data["building_rows"]:
+            lines.append(f"- {r}")
+        lines.append("")
+    if data["warnings"]:
+        lines.append("### Warnings")
+        for w in data["warnings"]:
+            lines.append(f"- {w}")
+        lines.append("")
+    if not (data["errors"] or data["waiting_items"] or data["archivable"] or data["building_rows"]):
+        lines.append("_All clear — no open feedback items, errors, or pending archives._\n")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def check_lease(
+    action: str,
+    window_minutes: float,
+    session: str,
+    force: bool,
+    no_fetch: bool,
+    lane: str = "main",
+) -> int:
+    """Checks, claims, or releases a remote Build Session lease (`refs/heads/build-lease[-<lane>]` + branch/FEEDBACK check)."""
+    lease_ref, remote_lease = lease_ref_for(lane)
+
     def git_out(*args: str) -> str:
         r = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode != 0:
@@ -354,12 +461,12 @@ def check_lease(action: str, window_minutes: float, session: str, force: bool, n
         git_out("fetch", "-p", "-q", "origin")
     now = int(time.time())
 
-    # 1. Explicit remote lease ref (`origin/build-lease`)
+    # 1. Explicit remote lease ref (`origin/build-lease` or `origin/build-lease-<lane>`)
     lease_owner = ""
     lease_age = 999999.0
     lease_subj = ""
     r_lease = subprocess.run(
-        ["git", "log", "-1", "--format=%h|%ct|%s", "origin/build-lease"],
+        ["git", "log", "-1", "--format=%h|%ct|%s", remote_lease],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -373,8 +480,8 @@ def check_lease(action: str, window_minutes: float, session: str, force: bool, n
             lease_owner = m.group(1).lower()
 
     if action == "release":
-        subprocess.run(["git", "push", "-q", "origin", f":{LEASE_REF}"], cwd=ROOT, capture_output=True)
-        print(f"[build-lease] released origin/build-lease (session={session})")
+        subprocess.run(["git", "push", "-q", "origin", f":{lease_ref}"], cwd=ROOT, capture_output=True)
+        print(f"[build-lease] released {remote_lease} (session={session}, lane={lane})")
         return 0
 
     # 2. Unmerged remote claude/* task branches
@@ -408,7 +515,7 @@ def check_lease(action: str, window_minutes: float, session: str, force: bool, n
     dev_age = max(0.0, (now - int(dev_ts)) / 60.0)
     building = parse_building_rows(git_out("show", "origin/develop:docs/FEEDBACK.md"))
 
-    print(f"[build-lease] session={session} | origin/develop={dev_sha} ({dev_age:.1f}m ago) '{dev_subj}'")
+    print(f"[build-lease] session={session} lane={lane} | origin/develop={dev_sha} ({dev_age:.1f}m ago) '{dev_subj}'")
     if lease_owner:
         print(f"[build-lease] lease-owner={lease_owner} ({lease_age:.1f}m ago) '{lease_subj}'")
     if building:
@@ -419,7 +526,7 @@ def check_lease(action: str, window_minutes: float, session: str, force: bool, n
     conflicts: list[str] = []
     if lease_owner and lease_owner != session:
         conflicts.append(
-            f"remote lease `origin/build-lease` is owned by `{lease_owner}` ({lease_age:.1f}m ago): {lease_subj}"
+            f"remote lease `{remote_lease}` is owned by `{lease_owner}` ({lease_age:.1f}m ago): {lease_subj}"
         )
     if not force and lease_owner != session:
         for b, sha, age, subj in active_branches:
@@ -440,7 +547,7 @@ def check_lease(action: str, window_minutes: float, session: str, force: bool, n
     if action == "claim":
         tree = git_out("rev-parse", "origin/develop^{tree}").strip()
         parent = git_out("rev-parse", "origin/develop").strip()
-        msg = f"BUILD-LEASE: {session} claimed build lease at {datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}"
+        msg = f"BUILD-LEASE: {session} claimed {lane} build lease at {datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}"
         commit = subprocess.run(
             ["git", "commit-tree", tree, "-p", parent, "-m", msg],
             cwd=ROOT,
@@ -448,8 +555,8 @@ def check_lease(action: str, window_minutes: float, session: str, force: bool, n
             text=True,
             check=True,
         ).stdout.strip()
-        git_out("push", "-f", "-q", "origin", f"{commit}:{LEASE_REF}")
-        print(f"[build-lease] claimed `origin/build-lease` for session={session} (@{commit[:8]})")
+        git_out("push", "-f", "-q", "origin", f"{commit}:{lease_ref}")
+        print(f"[build-lease] claimed `{remote_lease}` for session={session} (@{commit[:8]})")
         return 0
 
     print("[build-lease] ok: no conflicting active Build Session.")
@@ -458,7 +565,7 @@ def check_lease(action: str, window_minutes: float, session: str, force: bool, n
 
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("command", nargs="?", default="check", choices=("check", "archive", "lease"))
+    p.add_argument("command", nargs="?", default="check", choices=("check", "archive", "lease", "watch"))
     p.add_argument("lease_action", nargs="?", default="check", choices=("check", "claim", "release"))
     p.add_argument("--feedback", type=Path, default=ROOT / "docs/FEEDBACK.md")
     p.add_argument("--ready", type=Path, default=ROOT / "docs/READY.md")
@@ -468,17 +575,32 @@ def main(argv: list[str]) -> int:
     p.add_argument("--dry-run", action="store_true", help="archive: print what would move, change nothing")
     p.add_argument("--window-minutes", type=float, default=20.0, help="lease: activity window in minutes (default: 20)")
     p.add_argument("--session", default="auto", choices=("auto", "cloud", "desktop"))
+    p.add_argument("--lane", default="main", help="lease: lane name ('main' -> build-lease, e.g. 'tools' -> build-lease-tools)")
     p.add_argument("--force", action="store_true", help="lease claim: force takeover from the other session")
     p.add_argument("--no-fetch", action="store_true", help="lease: skip git fetch -p origin")
+    p.add_argument("--summary-md", type=Path, help="watch: write Markdown summary to this path (e.g. $GITHUB_STEP_SUMMARY)")
+    p.add_argument("--json-out", type=Path, help="watch: write structured JSON report to this path")
     args = p.parse_args(argv)
     if args.command == "lease":
         try:
-            return check_lease(args.lease_action, args.window_minutes, args.session, args.force, args.no_fetch)
+            return check_lease(args.lease_action, args.window_minutes, args.session, args.force, args.no_fetch, args.lane)
         except ParseError as e:
             print(f"[build-lease] ERROR: {e}")
             return 2
     try:
         texts = [f.read_text(encoding="utf-8") for f in (args.feedback, args.ready, args.closed)]
+        if args.command == "watch":
+            data = watch_report(*texts)
+            md = format_watch_markdown(data)
+            if args.summary_md:
+                args.summary_md.parent.mkdir(parents=True, exist_ok=True)
+                with open(args.summary_md, "a", encoding="utf-8", newline="\n") as f:
+                    f.write(md)
+            if args.json_out:
+                args.json_out.parent.mkdir(parents=True, exist_ok=True)
+                args.json_out.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            print(md, end="")
+            return 1 if data["errors"] else 0
         rep, items, answers = check(*texts, pending_ok=args.pending_ok or args.command == "archive")
     except (OSError, ParseError) as e:
         print(f"[feedback] ERROR: {e}")

@@ -1,0 +1,689 @@
+{
+  "id": "crucible_exit_pick",
+  "title": "PR7-60 ESCAPE-PLAN1: the level-7 Crucible save; the hold pick marks Vesper as suggested, Kaelen is picked and changed to Vesper through the holder chip; rounds 1-4 hand-planned (the agent's winning plan of FB-401 with every escape picked by hand): Maren and Hollis each pick an open exit tile in round 4 and are out after it",
+  "launch": {
+    "save": "crucible_l7"
+  },
+  "settings": {
+    "reduce_motion": true
+  },
+  "timeout_s": 600,
+  "steps": [
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "main_menu"
+      }
+    },
+    {
+      "step": "click",
+      "id": "menu.continue"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "region_map"
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "step": "click",
+      "id": "here.crucible"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "widget": "marker.crucible"
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "step": "click",
+      "id": "marker.crucible"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "battle"
+      },
+      "timeout_ms": 40000
+    },
+    {
+      "step": "wait",
+      "until": {
+        "widget": "hold.pick.1"
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "step": "assert",
+      "until": {
+        "path": "state.hold.suggested",
+        "eq": 1
+      }
+    },
+    {
+      "step": "shot",
+      "name": "hold_pick_suggested"
+    },
+    {
+      "step": "click",
+      "id": "hold.pick.0"
+    },
+    {
+      "step": "assert",
+      "until": {
+        "path": "state.hold.holder",
+        "eq": 0
+      }
+    },
+    {
+      "step": "click",
+      "id": "hold.change"
+    },
+    {
+      "step": "click",
+      "id": "hold.pick.1"
+    },
+    {
+      "step": "assert",
+      "until": {
+        "path": "state.hold.holder",
+        "eq": 1
+      }
+    },
+    {
+      "step": "shot",
+      "name": "hold_chip"
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "autofill",
+        "on": false
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 0
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 1
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 2
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 3
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 0,
+        "target": "self",
+        "pick": {
+          "skill": "hold_line"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 0,
+        "target": "self",
+        "pick": {
+          "skill": "intercepting_hook"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 1,
+        "target": "self",
+        "pick": {
+          "skill": "ash_cloud_fade"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 1,
+        "target": "self",
+        "pick": {
+          "skill": "active_guard"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 2,
+        "target": "self",
+        "pick": {
+          "skill": "active_guard"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 2,
+        "target": "self",
+        "pick": {
+          "skill": "active_guard"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 3,
+        "target": 10,
+        "pick": {
+          "skill": "heavy_winch_sunder"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "confirm"
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "resolve"
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "advance"
+      }
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "state.view.fields.round.text",
+        "has": "Round 2"
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 0
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 1
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 2
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 3
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 0,
+        "target": 4,
+        "pick": {
+          "skill": "pommel_strike"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 0,
+        "target": "self",
+        "pick": "rest"
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 0,
+        "target": "self",
+        "pick": "rest"
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 0,
+        "target": "self",
+        "pick": "rest"
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 0,
+        "target": "self",
+        "pick": "rest"
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 0,
+        "target": "self",
+        "pick": "rest"
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 1,
+        "target": "self",
+        "pick": {
+          "move": [
+            7,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 2,
+        "target": "self",
+        "pick": {
+          "move": [
+            7,
+            7
+          ]
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 3,
+        "target": 4,
+        "pick": {
+          "skill": "poachers_quarrel"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 2,
+        "target": "self",
+        "pick": {
+          "skill": "active_guard"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 1,
+        "target": "self",
+        "pick": "rest"
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "confirm"
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "resolve"
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "advance"
+      }
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "state.view.fields.round.text",
+        "has": "Round 3"
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 0
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 1
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 2
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 3
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 1,
+        "target": "self",
+        "pick": {
+          "move": [
+            10,
+            1
+          ]
+        },
+        "then": {
+          "skill": "ash_cloud_fade"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 1,
+        "target": "self",
+        "pick": {
+          "skill": "active_guard"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 2,
+        "target": "self",
+        "pick": {
+          "move": [
+            10,
+            5
+          ]
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 3,
+        "target": "self",
+        "pick": {
+          "move": [
+            9,
+            2
+          ]
+        },
+        "then": {
+          "skill": "active_guard"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 0,
+        "target": "self",
+        "pick": {
+          "move": [
+            2,
+            5
+          ]
+        },
+        "then": {
+          "skill": "hold_line"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "confirm"
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "resolve"
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "advance"
+      }
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "state.view.fields.round.text",
+        "has": "Round 4"
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "step": "assert",
+      "until": {
+        "path": "state.hold.open",
+        "eq": true
+      }
+    },
+    {
+      "step": "click",
+      "id": "dialogue.continue"
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 0
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 1
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 2
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "clear",
+        "unit": 3
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 2,
+        "target": "self",
+        "pick": {
+          "move": [
+            11,
+            5
+          ]
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 3,
+        "target": "self",
+        "pick": {
+          "move": [
+            11,
+            3
+          ]
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 1,
+        "target": "self",
+        "pick": {
+          "skill": "active_guard"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 1,
+        "target": "self",
+        "pick": {
+          "skill": "active_guard"
+        }
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "pick",
+        "unit": 0,
+        "target": "self",
+        "pick": {
+          "move": [
+            6,
+            7
+          ]
+        },
+        "then": {
+          "skill": "hold_line"
+        }
+      }
+    },
+    {
+      "step": "pause",
+      "ms": 800
+    },
+    {
+      "step": "shot",
+      "name": "exit_picks"
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "confirm"
+      }
+    },
+    {
+      "step": "link",
+      "body": {
+        "cmd": "resolve"
+      }
+    },
+    {
+      "step": "assert",
+      "until": {
+        "all": [
+          {
+            "path": "state.hold.out",
+            "has": 2
+          },
+          {
+            "path": "state.hold.out",
+            "has": 3
+          }
+        ]
+      }
+    },
+    {
+      "step": "pause",
+      "ms": 800
+    },
+    {
+      "step": "shot",
+      "name": "two_out"
+    }
+  ]
+}

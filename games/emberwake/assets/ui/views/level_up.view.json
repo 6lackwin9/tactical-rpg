@@ -1,0 +1,253 @@
+{
+  "screen": "level_up",
+  "fields": {
+    "points": {
+      "text": "Points left: 8   (confirmed points are permanent)"
+    },
+    "stats": {
+      "rows": [
+        {
+          "id": "STR",
+          "label": "STR",
+          "detail": "21",
+          "picture": null,
+          "enabled": true,
+          "detail2": "+0",
+          "sub": "Now 21",
+          "tone2": "dim",
+          "note": "Strength: power with STR weapons, +2 max HP per point, +1 armor per 4 points; unarmed hits use STR + DEX.",
+          "buttons": [
+            {
+              "action": "remove",
+              "label": "-",
+              "enabled": false
+            },
+            {
+              "action": "add",
+              "label": "+",
+              "enabled": true
+            }
+          ]
+        },
+        {
+          "id": "DEX",
+          "label": "DEX",
+          "detail": "7",
+          "picture": null,
+          "enabled": true,
+          "detail2": "+0",
+          "sub": "Now 7",
+          "tone2": "dim",
+          "note": "Dexterity: initiative (8 + DEX - gear burden) and move rate, power with DEX weapons and of shots without a ranged weapon.",
+          "buttons": [
+            {
+              "action": "remove",
+              "label": "-",
+              "enabled": false
+            },
+            {
+              "action": "add",
+              "label": "+",
+              "enabled": true
+            }
+          ]
+        },
+        {
+          "id": "INT",
+          "label": "INT",
+          "detail": "6",
+          "picture": null,
+          "enabled": true,
+          "detail2": "+0",
+          "sub": "Now 6",
+          "tone2": "dim",
+          "note": "Intelligence: debuff resistance (2.5% per point) and power with INT weapons.",
+          "buttons": [
+            {
+              "action": "remove",
+              "label": "-",
+              "enabled": false
+            },
+            {
+              "action": "add",
+              "label": "+",
+              "enabled": true
+            }
+          ]
+        },
+        {
+          "id": "CONS",
+          "label": "CONS",
+          "detail": "25",
+          "picture": null,
+          "enabled": true,
+          "detail2": "+0",
+          "sub": "Now 25",
+          "tone2": "dim",
+          "note": "Constitution: +8 max HP per point.",
+          "buttons": [
+            {
+              "action": "remove",
+              "label": "-",
+              "enabled": false
+            },
+            {
+              "action": "add",
+              "label": "+",
+              "enabled": true
+            }
+          ]
+        },
+        {
+          "id": "PERC",
+          "label": "PERC",
+          "detail": "13",
+          "picture": null,
+          "enabled": true,
+          "detail2": "+0",
+          "sub": "Now 13",
+          "tone2": "dim",
+          "note": "Perception: crit chance +1% per point above 10; at 18 or more, ranged weapons reach 1 tile further.",
+          "buttons": [
+            {
+              "action": "remove",
+              "label": "-",
+              "enabled": false
+            },
+            {
+              "action": "add",
+              "label": "+",
+              "enabled": true
+            }
+          ]
+        },
+        {
+          "id": "KNOW",
+          "label": "KNOW",
+          "detail": "10",
+          "picture": null,
+          "enabled": true,
+          "detail2": "+0",
+          "sub": "Now 10",
+          "tone2": "dim",
+          "note": "Knowledge: from 12, every 4 points open skill families one level earlier (up to 2 levels).",
+          "buttons": [
+            {
+              "action": "remove",
+              "label": "-",
+              "enabled": false
+            },
+            {
+              "action": "add",
+              "label": "+",
+              "enabled": true
+            }
+          ]
+        }
+      ]
+    },
+    "derived": {
+      "rows": [
+        {
+          "id": "Max HP",
+          "label": "Max HP",
+          "detail": "302",
+          "picture": null,
+          "enabled": true,
+          "note": "Health: 60 + 8 per CONS + 2 per STR."
+        },
+        {
+          "id": "Initiative",
+          "label": "Initiative",
+          "detail": "15",
+          "picture": null,
+          "enabled": true,
+          "note": "Initiative: 8 + DEX - the burden of worn gear and carry overload (at least 1); units with more act earlier."
+        },
+        {
+          "id": "Tiles per move",
+          "label": "Tiles per move",
+          "detail": "3",
+          "picture": null,
+          "enabled": true,
+          "note": "Tiles one move covers (move rate): (8 + DEX + 2) / 5, from 1 to 4; burden and overload lower it only past initiative 1; haste adds 1, slow takes 1."
+        },
+        {
+          "id": "Crit %",
+          "label": "Crit %",
+          "detail": "12",
+          "picture": null,
+          "enabled": true,
+          "note": "Critical hit chance: 5% + 1% per PERC above 10, plus the weapon proficiency bonus."
+        },
+        {
+          "id": "Melee power",
+          "label": "Melee power",
+          "detail": "52",
+          "picture": null,
+          "enabled": true,
+          "note": "Melee hit power: the weapon's power (with tier and proficiency bonuses) + its scaling stat x your proficiency scaling."
+        },
+        {
+          "id": "Ranged power",
+          "label": "Ranged power",
+          "detail": "11",
+          "picture": null,
+          "enabled": true,
+          "note": "Ranged hit power, the same way with a ranged weapon; without one, DEX alone."
+        },
+        {
+          "id": "Armor",
+          "label": "Armor",
+          "detail": "23",
+          "picture": null,
+          "enabled": true,
+          "note": "Armor rating: gear mitigation + STR / 4; it cuts damage taken by rating / (rating + 50)."
+        },
+        {
+          "id": "Debuff resist %",
+          "label": "Debuff resist %",
+          "detail": "15",
+          "picture": null,
+          "enabled": true,
+          "note": "Chance to shake off a debuff: 2.5% per INT, plus the unit's own resistances."
+        },
+        {
+          "id": "AP",
+          "label": "AP",
+          "detail": "10",
+          "picture": null,
+          "enabled": true,
+          "note": "Action points: the most this unit holds; each round refills some or all of it (the battle's AP regen). A skill costs its level (1-5) in AP, Move 1 and Rest nothing, or the AP cost its row sets under the AP cost rule."
+        }
+      ]
+    }
+  },
+  "actions": [
+    {
+      "id": "remove",
+      "label": "-",
+      "enabled": true
+    },
+    {
+      "id": "add",
+      "label": "+",
+      "enabled": true
+    },
+    {
+      "id": "auto",
+      "label": "Auto",
+      "enabled": true
+    },
+    {
+      "id": "revert",
+      "label": "Revert",
+      "enabled": false
+    },
+    {
+      "id": "confirm",
+      "label": "Confirm",
+      "enabled": false
+    }
+  ]
+}

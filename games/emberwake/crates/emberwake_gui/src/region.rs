@@ -44,14 +44,18 @@ use crate::ground::MapGround;
 use crate::portraits::Faces;
 use crate::talk::{talk_layout, Services, SvcAct};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
-use aegis_ui::painter::View as PView;
+use aegis_ui::controls::Controls;
+use aegis_ui::painter::{Snapshot, View as PView};
 use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
+use aegis_ui::float_panel::{FloatPanel, PANEL_BTN};
 use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_world::explore::{self, Pos};
 use emberwake_world::quest;
 use serde_json::{json, Value};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
+use emberwake_world::GameState;
 #[cfg(test)]
 use std::time::Duration;
 use aegis_core::clock::Instant;
@@ -71,10 +75,17 @@ pub enum RAct {
     /// SERVICES1: a click on the conversation, its shop, its board or the turn-in picker (`talk::Services`).
     Svc(SvcAct),
     CloseLore,
-    /// Fold or open the legend (`map_legend_open`).
+    /// Minimize the legend to its "Here (N)" button, or open it again (`map_legend_open`).
     Legend,
     /// Show the last events in the ticker, or only the latest (L).
     Log,
+    /// FLOATPANELS1: lock or unlock the legend, the ticker; minimize the ticker or open it again.
+    LegendLock,
+    LogLock,
+    LogMin,
+    LogOpen,
+    /// FLOATPANELS1: a click on a floating panel's body (kept off the map under it).
+    Panel,
     /// MAPNAV1-U: a legend row or an edge arrow: the camera looks at the marker (a second click on the row while it
     /// looks there walks there, as a marker click).
     Pan(String),
@@ -82,6 +93,9 @@ pub enum RAct {
     Lead,
     /// BUNKS1 BK4: a click on a member idling in the hub, or on an occupied bunk: the member's card.
     Member(String),
+    /// FOOTLOCKER1: a click on a bunk's footlocker: it opens and its member's loadout opens (the gear page over the
+    /// shared stash).
+    Locker(String),
 }
 
 impl From<SvcAct> for RAct {
@@ -99,6 +113,9 @@ pub struct RegionMap {
     pub(crate) lore: Option<(String, String)>,
     walk: Vec<Pos>,
     walk_target: Option<String>,
+    /// STYLE-PASS1B (`PR7-48`, FB-366): the tile a click-to-walk heads for (a marker's own tile for a walk-and-talk);
+    /// its amber ring shows while the walk lasts (`walk_ring`).
+    walk_dest: Option<Pos>,
     next_walk: Instant,
     /// WALK2, VIEWKEYS1: the time between steps, read from the settings each frame.
     step: mapview::WalkStep,
@@ -108,6 +125,15 @@ pub struct RegionMap {
     geo: MapGeom,
     /// The ticker shows the last `LOG_OPEN` events (else only the latest).
     log_open: bool,
+    /// FLOATPANELS1 (`preferences/ui.md` "Floating panels"): the legend and the ticker float (unlock, drag, minimize in
+    /// place to a named button); their place and lock kept in the settings (`LEGEND_PANEL_KEY`, `LOG_PANEL_KEY`), the
+    /// legend's minimized state as `map_legend_open`. The baselines kept and the sizes of the last frame.
+    legend_panel: FloatPanel,
+    legend_kept: Option<Value>,
+    legend_size: (i32, i32),
+    log_panel: FloatPanel,
+    log_kept: Option<Value>,
+    log_size: (i32, i32),
     /// PLAYUI1-R: the sprites' animation clock (ms, at the animation speed setting) and when it last advanced.
     anim_ms: f64,
     anim_at: Instant,
@@ -127,10 +153,23 @@ pub struct RegionMap {
     arrows: Vec<Value>,
     /// REGIONGROUND1-L: the map's composed ground, kept while its job stands.
     ground: MapGround,
+    /// ENGINE-50 (MAP-FRAME1): the map's still layers (ground, tiles, walls, border, dressing, shadows, ground props) as
+    /// last drawn; under a moving camera only what comes into view is drawn (`Painter::scroll_begin`).
+    floor: Snapshot,
+    /// The data the floor was keyed on, held so that a reload cannot reuse its address (`floor_key`).
+    floor_data: Option<Arc<emberwake_world::Data>>,
+    /// ENGINE-50: the markers' views and services for one game state (`MarkerMemo`).
+    marker_memo: MarkerMemo,
     /// REGIONVIEW1: this frame's wall time (set by the tick; None before the first: no time has passed, all at rest).
     frame_at: Option<Instant>,
     /// The scheduled time of a step taken since the last frame.
     step_at: Option<Instant>,
+    /// ENGINE-50 (MAP-FRAME1): a key press's step since the last frame, dated at that frame (`tick_at` dates it now when
+    /// that frame was long ago).
+    press_at: Option<Instant>,
+    /// ENGINE-51 (SWITCH-FEEL1): the location and view scale the world map's background was last asked ahead for
+    /// (`worldmap::want_background`); None before this map's first frame, then empty until its second.
+    map_wanted: Option<(String, f32)>,
     /// That step's times (TURNFEEL1).
     leg: mapview::Leg,
     /// When the last step was taken (`state.walk_feel`, under `camera_trail` as it is a clock reading: what a render
@@ -150,13 +189,53 @@ pub struct RegionMap {
     hub: crate::bunks::HubState,
     /// BUNKS1 BK2, BK8: the bunks drawn last frame (agent link `state.bunks`, tests).
     bunks_drawn: Vec<Value>,
-    /// HUB-BUNKS2 (5): the niche bunks' nook floor runs drawn last frame.
-    nooks: Vec<Rect>,
+    /// BUNKS-LAYOUT3 (1): the dressed north wall runs drawn last frame (the wall band and its plank strip).
+    bunk_walls: Vec<Rect>,
+    /// BUNKS-UPGRADE-PROPS1: the props holding a bunk's place drawn last frame (`{prop, until_bunk, file}`).
+    bunk_held: Vec<Value>,
+    /// ENGINE-49 (WALK-FEEL1): the last frame's party cell, drawn place, camera and the camera's wanted place
+    /// (`Screen::motion`); null with no map drawn.
+    motion: Value,
+    /// FOOTLOCKER1 (`PR7-51`): the footlockers drawn last frame (member, the tile it stands on, its logical rect, its
+    /// file), and the member whose footlocker is open (their loadout is open over the map; "" none: it closes when the
+    /// map is the top screen again).
+    lockers: Vec<(String, Pos, Rect, String)>,
+    locker_open: String,
+    /// FOOTLOCKER1B (`PR7-58` (2)): the footlocker's beat (`bunks::LOCKER_BEAT_MS`): when it ends and whether it is the
+    /// opening one (the open art shows, then the loadout comes up) or the closing one (the open art after the loadout
+    /// closed, then the closed art); and whether the loadout it opened is up (the map ticks again only once it closed).
+    locker_beat: Option<(Instant, bool)>,
+    locker_up: bool,
     /// TRANSITIONS1 T2 step 4: the arrival card showing since when, and whether it opened the ticker for its change
     /// lines (closed again when the card goes).
     arrival: Option<(crate::transitions::Arrival, Instant)>,
     ticker_forced: bool,
+    /// PR7-76 (PT-44, PT-51): the marker the last step set a flag on (a point of interest it answered for): the walk's
+    /// arrival does not act on it again. So a point with both a use and `sets_flags` would skip its use on a click walk's
+    /// arrival (no shipped point has both; see `point_listed`).
+    point_fired: Option<String>,
+    /// PR7-76 (PT-55): a click walk a fight broke off (the location, the party's tile, the walk's tile and its marker),
+    /// taken up again after a win (`tick_at`).
+    resume: Option<(String, Pos, Pos, Option<String>)>,
+    /// ENGINE-53 (SWITCH-AHEAD1): where the party stands still (location, tile) and for how many frames; the nearest
+    /// fight is started ahead once there (`ahead_fight`), and its drawing comes on the next frame.
+    /// ENGINE-54 (WARM-SPREAD1): since when (and whether its fight was looked for).
+    still: (String, Pos, Option<Instant>, bool),
+    rehearse: Option<Rehearsal>,
+    /// ENGINE-54: the fights this map has drawn unseen already (their art and board ground stay in the caches, so
+    /// another start of one, from another tile, is only started ahead, not drawn again).
+    rehearsed: Vec<Dict>,
+    /// ENGINE-53: the click walk (its tile, and where it started) whose fight was last looked for.
+    ahead_walk: Option<(Option<Pos>, Pos)>,
+    /// ENGINE-54: the thread starting a fight ahead, and whether its warm draw follows.
+    ahead_job: Option<(crate::battle::FightAheadJob, bool)>,
+    /// Presentation-only per-map zone grading and light overrides (`map_fx/<map_id>.fx.json`), keyed by art generation.
+    map_fx_cache: aegis_ui::map_fx::MapFxCache,
 }
+
+/// ENGINE-54 (WARM-SPREAD1): how long the party stands still (no walk, no step showing) before the nearest fight is
+/// started ahead and warmed.
+const AHEAD_STILL_MS: u64 = 300;
 
 /// One frame's camera as the agent link reports it.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -165,6 +244,10 @@ struct CamShot {
     party: (i32, i32),
     scale: f32,
 }
+
+/// ENGINE-49 (WALK-FEEL1): how far back a click walk's first step may be dated (the frame before, at 60 frames a second
+/// or more; after a longer frame it is dated now, as before).
+const CLICK_STEP_BACK: std::time::Duration = std::time::Duration::from_millis(25);
 
 /// The frames `state.camera.trail` keeps.
 const CAM_TRAIL: usize = 240;
@@ -381,7 +464,7 @@ fn log_once(cx: &mut Cx, line: String) {
 }
 
 /// PR7-37 (PT-29): the jobs that turned ready since `before` (a flag a point set finished one) say so.
-fn log_newly_ready(cx: &mut Cx, before: &[String]) {
+pub(crate) fn log_newly_ready(cx: &mut Cx, before: &[String]) {
     let (d, gs) = (&cx.data, cx.gs());
     let lines: Vec<String> = quest::quests_with(d, gs, "ready")
         .into_iter()
@@ -516,11 +599,18 @@ impl RegionMap {
             lore: None,
             walk: Vec::new(),
             walk_target: None,
+            walk_dest: None,
             next_walk: Instant::now(),
             step: mapview::WalkStep::of(&cx.settings.v, cx.held.shift),
             hold: false,
             geo: MapGeom::default(),
             log_open: false,
+            legend_panel: FloatPanel::default(),
+            legend_kept: None,
+            legend_size: (0, 0),
+            log_panel: FloatPanel::default(),
+            log_kept: None,
+            log_size: (0, 0),
             anim_ms: 0.0,
             anim_at: Instant::now(),
             leader: ClipPlayer::default(),
@@ -531,7 +621,12 @@ impl RegionMap {
             pan_loc: String::new(),
             arrows: Vec::new(),
             ground: MapGround::default(),
+            floor: Snapshot::default(),
+            floor_data: None,
+            marker_memo: MarkerMemo::default(),
             frame_at: None,
+            press_at: None,
+            map_wanted: None,
             step_at: None,
             leg: mapview::Leg::plain(0.0),
             last_step: None,
@@ -543,9 +638,133 @@ impl RegionMap {
             roofs: crate::props::RoofFade::default(),
             hub: crate::bunks::HubState::default(),
             bunks_drawn: Vec::new(),
-            nooks: Vec::new(),
+            bunk_walls: Vec::new(),
+            bunk_held: Vec::new(),
+            motion: Value::Null,
+            lockers: Vec::new(),
+            locker_open: String::new(),
+            locker_beat: None,
+            locker_up: false,
             arrival: None,
             ticker_forced: false,
+            point_fired: None,
+            resume: None,
+            still: (String::new(), (0, 0), None, false),
+            rehearse: None,
+            rehearsed: Vec::new(),
+            ahead_walk: None,
+            ahead_job: None,
+            map_fx_cache: aegis_ui::map_fx::MapFxCache::new(),
+        }
+    }
+
+    /// ENGINE-53 (SWITCH-AHEAD1), ENGINE-54 (WARM-SPREAD1): a fight the party is about to walk into, started ahead on a
+    /// thread (`FightAhead::spawn`; nothing of it on the frame) and kept as the game's `fight_ahead`. During a click walk,
+    /// once per walk: its steps tried on a copy of the game and the fight they end in (as `explore::step` tells it)
+    /// started on that copy. Standing still `AHEAD_STILL_MS` on a tile (no walk, no step showing, nothing open), once per
+    /// tile: the same for the walk to the nearest encounter marker, and a second start warmed unseen in slices
+    /// (`warm_next`, `Rehearsal`), so its bodies, board ground and panels are in their caches. A walk that goes another
+    /// way, or anything else that changes the game first, leaves it stale (`FightAhead::fits`); a fight that starts
+    /// before the thread is done never waits on it.
+    fn ahead_fight(&mut self, cx: &mut Cx) {
+        if self.ahead_job.as_ref().is_some_and(|(job, _)| job.done()) {
+            if let Some((job, draw)) = self.ahead_job.take() {
+                self.take_ahead(cx, job, draw);
+            }
+        }
+        let Some(g) = cx.game.as_ref() else { return };
+        if self.modal() || g.busy || g.sample {
+            self.still.2 = None;
+            return;
+        }
+        let (loc, at) = (g.gs.location_id.clone(), g.gs.position);
+        if self.still.0 != loc || self.still.1 != at {
+            self.still = (loc, at, None, false);
+        }
+        if !self.walk.is_empty() {
+            if self.ahead_walk.is_none_or(|w| w.0 != self.walk_dest) {
+                self.ahead_walk = Some((self.walk_dest, at));
+                let path = self.walk.clone();
+                self.start_ahead(cx, path, false);
+            }
+            return;
+        }
+        self.ahead_walk = None;
+        if self.moving() {
+            self.still.2 = None;
+            return;
+        }
+        let since = *self.still.2.get_or_insert_with(Instant::now);
+        if self.still.3 || Instant::now().saturating_duration_since(since).as_millis() < AHEAD_STILL_MS as u128 {
+            return;
+        }
+        self.still.3 = true;
+        if let Some(path) = self.nearest_fight_walk(cx) {
+            self.start_ahead(cx, path, true);
+        }
+    }
+
+    /// ENGINE-53: the walk (its steps) to the nearest present encounter marker, as a click on it walks.
+    fn nearest_fight_walk(&self, cx: &Cx) -> Option<Vec<Pos>> {
+        let d = &cx.data;
+        let gs = cx.gs();
+        let loc = explore::location(d, gs);
+        let t = explore::template_of(d, loc);
+        let steps = gs.explore_int("loc_steps");
+        let mut found: Vec<(i64, Pos)> = explore::markers_of(loc)
+            .iter()
+            .filter(|m| s(m, "kind") == "encounter" && explore::presence(d, gs, &s(loc, "_qid"), m) == "present")
+            .map(|m| explore::marker_pos(t, m, steps))
+            .map(|p| ((p.0 - gs.position.0).abs() + (p.1 - gs.position.1).abs(), p))
+            .collect();
+        found.sort();
+        let (_, nearest) = *found.first()?;
+        self.path_to(cx, nearest, false).filter(|p| !p.is_empty())
+    }
+
+    /// ENGINE-54: starts the thread that tries `path`'s steps on a copy of the game and starts the fight they end in
+    /// (twice with `draw`: the second for the warm draw); one at a time (a newer one replaces it, the older left to end
+    /// on its own).
+    fn start_ahead(&mut self, cx: &Cx, path: Vec<Pos>, draw: bool) {
+        let Some(g) = cx.game.as_ref() else { return };
+        let gs = g.gs.clone();
+        let job = crate::battle::FightAhead::spawn(cx.data.clone(), "explore", draw, move |d| {
+            let mut after = gs;
+            for dir in path {
+                let res = explore::step(d, &mut after, dir);
+                if !json::b(&res, "ok", false) {
+                    return None;
+                }
+                let events = json::aget(&res, "events");
+                if let Some(e) = events.iter().map(json::dict).find(|e| s(e, "kind") == "fight") {
+                    return Some((after, e.clone()));
+                }
+                if events.iter().map(json::dict).any(|e| ["exit", "blocked", "locked"].contains(&s(e, "kind").as_str())) {
+                    return None;
+                }
+            }
+            None
+        });
+        self.ahead_job = job.map(|j| (j, draw));
+    }
+
+    /// ENGINE-54: a done thread's fight kept as the game's `fight_ahead` (unless one kept already fits, or a fight is
+    /// on), and with `draw` its second start handed to the warm draw.
+    fn take_ahead(&mut self, cx: &mut Cx, job: crate::battle::FightAheadJob, draw: bool) {
+        let Some(found) = job.take() else { return };
+        let Some(g) = cx.game.as_mut() else { return };
+        if g.busy {
+            return;
+        }
+        let slot = g.slot;
+        if !g.fight_ahead.as_ref().is_some_and(|a| a.fits(&found.gs, &found.fight, "explore")) {
+            g.fight_ahead = Some(found.ahead);
+        }
+        if draw && !self.rehearsed.iter().any(|f| f == &found.fight) {
+            if let Some(second) = found.second {
+                self.rehearsed.push(found.fight.clone());
+                self.rehearse = Some(Rehearsal::fight(found.gs, slot, found.fight, "explore", second));
+            }
         }
     }
 
@@ -626,6 +845,7 @@ impl RegionMap {
     /// One step; handles fights, world-map exits and the log. False when the walk should stop.
     fn step(&mut self, cx: &mut Cx, dir: Pos) -> bool {
         self.turn(dir);
+        self.point_fired = None;
         let d = cx.data.clone();
         let from = cx.gs().position;
         // PR7-37 (PT-29): the jobs ready before the step, so a flag a point sets says what it changed (taken before the
@@ -642,6 +862,8 @@ impl RegionMap {
             }
             self.moved_at = Some((self.anim_ms, self.leg.anim));
             self.pan = None;
+            // ENGINE-56 (AUDIO-FEEL2): a soft footstep on each step, at its own volume under Effects
+            cx.audio.play_gain(aegis_ui::audio::Bus::Sfx, crate::mapview::MAP_STEP, crate::mapview::footstep_gain(&cx.settings.v));
         }
         if !json::b(&res, "ok", false) {
             for e in json::sget(&res, "errors") {
@@ -651,8 +873,10 @@ impl RegionMap {
         }
         let events = json::aget(&res, "events").to_vec();
         log_events(cx, &events);
-        if events.iter().any(|e| s(json::dict(e), "kind") == "flags_set") {
+        if let Some(e) = events.iter().map(json::dict).find(|e| s(e, "kind") == "flags_set") {
             log_newly_ready(cx, &ready_before);
+            // PR7-76 (PT-44, PT-51): the point answered on this step (its line, the quest's); the arrival leaves it be
+            self.point_fired = Some(s(e, "marker"));
         }
         crate::runover::take(cx, &res);
         let mut go_on = true;
@@ -663,6 +887,8 @@ impl RegionMap {
                 // that cannot be refused gets the notice
                 "fight" => {
                     go_on = false;
+                    // PR7-76 (PT-55): a click walk still under way goes on after a win
+                    self.keep_walk(cx);
                     let enc = s(e, "encounter");
                     match (s(e, "source") == "marker", crate::runover::fight_ask(cx, &enc)) {
                         (true, Some(q)) => {
@@ -678,8 +904,10 @@ impl RegionMap {
                         _ => self.start_fight(cx, e, "explore"),
                     }
                 }
+                // PR7-76 (PT-54): a road's exit opens the world map with that road's next place picked
                 "exit" if s(e, "to") == explore::WORLD_MAP => {
-                    cx.nav.push(Nav::Push(Box::new(crate::worldmap::WorldMap::new())));
+                    let map = crate::worldmap::WorldMap::toward(cx, &s(e, "marker"));
+                    cx.nav.push(Nav::Push(Box::new(map)));
                     go_on = false;
                 }
                 "exit" | "blocked" | "locked" => go_on = false,
@@ -687,6 +915,38 @@ impl RegionMap {
             }
         }
         go_on
+    }
+
+    /// PR7-76 (PT-55): keeps the click walk under way (its tile and marker, where the party stands now) for after a
+    /// fight; nothing for a key step or a walk already at its tile. A click walk is under way while steps are left on its
+    /// path or its marker waits to be reached (`walk_dest` alone is not enough: a finished walk leaves it behind).
+    fn keep_walk(&mut self, cx: &Cx) {
+        let at = cx.gs().position;
+        let under_way = !self.walk.is_empty() || self.walk_target.is_some();
+        self.resume = match self.walk_dest {
+            Some(dest) if under_way && (dest != at || self.walk_target.is_some()) => Some((cx.gs().location_id.clone(), at, dest, self.walk_target.clone())),
+            _ => None,
+        };
+    }
+
+    /// PR7-76 (PT-55): after a won fight with the party where it was found, the walk it broke off goes on (to its marker,
+    /// else its tile); a loss, a flight (the party stepped back) or a move elsewhere drops it.
+    fn resume_walk(&mut self, cx: &mut Cx) {
+        let Some(outcome) = cx.game.as_mut().and_then(|g| g.fought.take()) else { return };
+        let Some((loc, at, dest, target)) = self.resume.take() else { return };
+        if outcome != "won" || cx.gs().location_id != loc || cx.gs().position != at || self.modal() {
+            return;
+        }
+        match target {
+            Some(id) => self.walk_to_marker(cx, &id),
+            None => {
+                if let Some(path) = self.path_to(cx, dest, false).filter(|p| !p.is_empty()) {
+                    self.walk = path;
+                    self.walk_target = None;
+                    self.walk_dest = Some(dest);
+                }
+            }
+        }
     }
 
     pub fn start_fight(&mut self, cx: &mut Cx, fight: &Dict, runner: &str) {
@@ -702,14 +962,45 @@ impl RegionMap {
     }
 
     /// A frame's tick at wall time `now` (the frame's clock: the glide and the camera read it in `draw`).
-    fn tick_at(&mut self, cx: &mut Cx, now: Instant) {
-        self.frame_at = Some(now);
+    pub(crate) fn tick_at(&mut self, cx: &mut Cx, now: Instant) {
+        let prev = self.frame_at.replace(now);
+        // ENGINE-50 (MAP-FRAME1): a key press steps as of the last frame, so the next frame shows it moving; no more than
+        // `CLICK_STEP_BACK` before this one (as a click): dated back across a long frame, its glide would jump ahead and
+        // the walk would take a quick step to catch up
+        if let Some(at) = self.press_at.take() {
+            let late = now.saturating_duration_since(at);
+            if late > CLICK_STEP_BACK && self.last_step == Some(at) {
+                let moved = late - CLICK_STEP_BACK;
+                self.step_at = self.step_at.map(|a| a + moved);
+                self.last_step = Some(at + moved);
+                self.next_walk += moved;
+            }
+        }
         // PLAYUI1-R: the sprites play on their own clock at the animation speed setting (as the battle tokens)
         let speed = mapview::anim_speed(&cx.settings.v);
         // WALKRUN1: Shift held runs; the pace of a step is set as it is taken, so a release counts from the next step
         self.step = mapview::WalkStep::of(&cx.settings.v, cx.held.shift);
         self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
         self.anim_at = now;
+        // FOOTLOCKER1B (2): the map ticks again with the loadout a footlocker opened closed: the closing beat starts;
+        // a beat ended: the loadout comes up (opening) or the footlocker closes; the map holds still while it opens
+        if std::mem::take(&mut self.locker_up) {
+            self.locker_beat = Some((now + crate::bunks::locker_beat(), false));
+        }
+        if let Some((due, opening)) = self.locker_beat {
+            if now >= due {
+                self.locker_beat = None;
+                if opening {
+                    self.locker_up = true;
+                    cx.nav.push(Nav::Push(Box::new(crate::party::Character::new(cx, &self.locker_open.clone(), "gear"))));
+                } else {
+                    self.locker_open.clear();
+                }
+            }
+            if opening {
+                return;
+            }
+        }
         // PORTRAITFX1 4.5: the talk box's portrait clock moves; CAMPAIGN1 W3: a Yes to the ask before a resting reply
         // picks it (`Services::tick`)
         if let Some(fought) = self.svc.tick(cx) {
@@ -734,6 +1025,7 @@ impl RegionMap {
             self.walk_target = None;
             return;
         }
+        self.resume_walk(cx);
         // WALK2: a held movement key keeps stepping at the step rate (the press itself stepped at once; the OS key
         // repeat is dropped by the shell, `hold_walk`), so the steps chain with the walk clip running.
         if cx.held.dir.is_none() {
@@ -743,6 +1035,9 @@ impl RegionMap {
             if let (Some(dir), true) = (cx.held.dir, now >= self.next_walk) {
                 let at = self.step_time(now);
                 self.plan_step(cx, at, dir);
+                // PR7-76 (PT-55): a key step is no click walk (nothing to resume after a fight it walks into)
+                self.walk_dest = None;
+                self.walk_target = None;
                 let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs()));
                 if t.is_empty() || !self.step(cx, dir) {
                     self.hold = false;
@@ -753,19 +1048,36 @@ impl RegionMap {
         if self.walk.is_empty() || self.modal() || now < self.next_walk {
             return;
         }
-        let at = self.step_time(now);
+        // ENGINE-49 (WALK-FEEL1): a walk ordered while the party stood (a click since the last frame) takes its first step
+        // as of that frame, as a key press does, so the next frame already shows it moving (it was a frame late). Only
+        // from a frame just before (`CLICK_STEP_BACK`): after a long frame the step would be dated far back and the walk
+        // would run to catch up.
+        let at = match prev {
+            Some(p) if p >= self.next_walk && p < now && now.saturating_duration_since(p) <= CLICK_STEP_BACK => p,
+            _ => self.step_time(now),
+        };
         let dir = self.walk.remove(0);
         self.plan_step(cx, at, dir);
         if !self.step(cx, dir) {
             self.walk.clear();
             self.walk_target = None;
+            self.walk_dest = None;
             return;
         }
         if self.walk.is_empty() {
-            if let Some(id) = self.walk_target.take() {
+            // the walk is over (a marker's walk below sets its own tile again)
+            self.walk_dest = None;
+            // PR7-76 (PT-44, PT-51): a point the last step already answered is not acted on again
+            if let Some(id) = self.walk_target.take().filter(|id| self.point_fired.as_deref() != Some(id.as_str())) {
                 self.walk_to_marker(cx, &id);
             }
         }
+    }
+
+    /// STYLE-PASS1B (`PR7-48`, FB-366): the tile of the click-to-walk under way, ringed in amber until the walk arrives,
+    /// stops or a new order replaces it (none for a key step or a walk already over).
+    fn walk_ring(&self) -> Option<Pos> {
+        self.walk_dest.filter(|_| !self.walk.is_empty())
     }
 
     /// Whether the leader walks at the clock's now: on a walked path, or within a step and `WALK_LINGER_MS` of the last step
@@ -774,10 +1086,16 @@ impl RegionMap {
         !self.walk.is_empty() || self.moved_at.is_some_and(|(t, step)| self.anim_ms - t < step + WALK_LINGER_MS)
     }
 
-    fn interact(&mut self, cx: &mut Cx, dir: Pos) {
+    pub(crate) fn interact(&mut self, cx: &mut Cx, dir: Pos) {
         self.turn(dir);
         // BUNKS1 BK8, BK11: a member idling ahead plays its waiting talk (the lead's too), else opens its card
         let ahead = (cx.gs().position.0 + dir.0, cx.gs().position.1 + dir.1);
+        // FOOTLOCKER1B (`PR7-58` (1)): a footlocker ahead first, then what stands ahead (a member, a marker, a point),
+        // and a footlocker underfoot last
+        if let Some(member) = self.lockers.iter().find(|l| l.1 == ahead).map(|l| l.0.clone()) {
+            self.open_locker(cx, &member);
+            return;
+        }
         let member = self.hub.member_at(ahead);
         if !member.is_empty() {
             if !self.play_talk(cx, &member) {
@@ -814,9 +1132,36 @@ impl RegionMap {
             // PR7-37 (PT-03, PT-29): a point of interest underfoot or ahead answers (its line, then its use)
             _ => match explore::point_near(&d, cx.gs(), dir) {
                 Some(m) => act_on_point(cx, &m),
-                None => cx.log("Nothing there."),
+                None => {
+                    let here = cx.gs().position;
+                    match self.lockers.iter().find(|l| l.1 == here).map(|l| l.0.clone()) {
+                        Some(member) => self.open_locker(cx, &member),
+                        None => cx.log("Nothing there."),
+                    }
+                }
             },
         }
+    }
+
+    /// FOOTLOCKER1 (`PR7-51`): `member`'s footlocker opens (the open art while the screen is up) and their loadout opens
+    /// over the map: the Character window's gear page focused on them, beside the shared stash (gear and consumables).
+    /// FOOTLOCKER1B (`PR7-58` (2)): the open art shows for the beat first (the frame's clock); the loadout comes up as it
+    /// ends (`tick_at`). A footlocker already in its beat or open takes nothing more.
+    fn open_locker(&mut self, _cx: &mut Cx, member: &str) {
+        if self.locker_beat.is_some_and(|b| b.1) || self.locker_up {
+            return;
+        }
+        self.walk.clear();
+        self.walk_target = None;
+        self.hold = false;
+        self.locker_open = member.to_string();
+        let now = self.frame_at.unwrap_or_else(Instant::now);
+        self.locker_beat = Some((now + crate::bunks::locker_beat(), true));
+    }
+
+    /// FOOTLOCKER1B (2): a footlocker is in its opening beat (the map takes no input until the loadout is up).
+    fn locker_opening(&self) -> bool {
+        self.locker_beat.is_some_and(|b| b.1)
     }
 
     /// Opens the conversation with `character` (`Services::talk`).
@@ -892,6 +1237,7 @@ impl RegionMap {
                 Some(path) => {
                     self.walk = path;
                     self.walk_target = Some(id.to_string());
+                    self.walk_dest = Some(at);
                 }
                 None => cx.log("You can't get there."),
             }
@@ -908,12 +1254,19 @@ impl RegionMap {
             Some(path) if !path.is_empty() => {
                 self.walk = path;
                 self.walk_target = if solid { Some(id.to_string()) } else { None };
+                self.walk_dest = Some(at);
             }
-            _ => cx.log("You can't get there."),
+            // PR7-76 (PT-44): already there (a point that went once used): nothing to say
+            Some(_) => {}
+            None => cx.log("You can't get there."),
         }
     }
 
     fn act(&mut self, cx: &mut Cx, a: RAct) {
+        if self.locker_opening() {
+            return;
+        }
+        self.resume = None;
         let d = cx.data.clone();
         match a {
             RAct::MapClick => {
@@ -923,6 +1276,7 @@ impl RegionMap {
                     Some(path) => {
                         self.walk = path;
                         self.walk_target = None;
+                        self.walk_dest = Some((tx, ty));
                     }
                     None => cx.log("You can't get there."),
                 }
@@ -967,9 +1321,13 @@ impl RegionMap {
                 self.walk.clear();
                 cx.nav.push(Nav::Push(Box::new(crate::bunks::BunkCard::new(&id))));
             }
+            RAct::Locker(id) => {
+                self.walk.clear();
+                self.open_locker(cx, &id);
+            }
             RAct::Hud(h) => {
                 self.walk.clear();
-                hud_open(cx, h, &REGION_HELP);
+                hud_open(cx, h, &region_help(&crate::controls_view::hints(&cx.settings.v)));
             }
             RAct::Svc(a) => {
                 if self.svc.act(cx, a) {
@@ -985,6 +1343,11 @@ impl RegionMap {
                 }
             }
             RAct::Log => self.log_open = !self.log_open,
+            RAct::LegendLock => self.legend_panel.toggle_lock(),
+            RAct::LogLock => self.log_panel.toggle_lock(),
+            RAct::LogMin => self.log_panel.minimize(),
+            RAct::LogOpen => self.log_panel.restore(MAP_AREA, self.log_size),
+            RAct::Panel => {}
         }
     }
 
@@ -1004,15 +1367,38 @@ impl RegionMap {
 }
 
 impl Screen<GameCx> for RegionMap {
-    /// The arrow keys walk the party.
+    /// ENGINE-53 (SWITCH-AHEAD1), ENGINE-54: the nearest fight, started ahead on a thread, warmed unseen in slices.
+    fn warm_next(&mut self, cx: &mut Cx) -> Option<Box<dyn Screen<GameCx>>> {
+        if let Some(r) = self.rehearse.take() {
+            return Some(Box::new(r));
+        }
+        self.ahead_fight(cx);
+        None
+    }
+    /// The arrow keys walk the party; ENGINE-48 (INPUT-REACH1): while a conversation (its shop, board, recipes or facility)
+    /// or a lore card is open, nothing walks, so they move the focus over its replies and rows.
     fn arrow_focus(&self) -> bool {
-        false
+        self.svc.talking() || self.lore.is_some()
     }
     fn hold_walk(&self) -> bool {
         true
     }
     fn id(&self) -> &'static str {
         "region_map"
+    }
+    /// ENGINE-64 (LIVE-RELOAD1): on top, with no conversation or card open, the map is built again from the game state
+    /// over the new data (where the party stands stays); under another screen it reads the new data as it draws.
+    fn data_reloaded(&mut self, cx: &mut Cx, top: bool) -> Option<String> {
+        if top && !self.svc.talking() && self.lore.is_none() && cx.has_game() {
+            let map = RegionMap::new(cx);
+            cx.nav.push(Nav::Reset(Box::new(map)));
+        }
+        None
+    }
+
+    /// ENGINE-49 (WALK-FEEL1): the party's cell, where it is drawn and the camera, for a `feel` replay's movement report.
+    fn motion(&self) -> Value {
+        self.motion.clone()
     }
 
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
@@ -1031,11 +1417,24 @@ impl Screen<GameCx> for RegionMap {
         let lead_now = leader_id(cx);
         self.hub.sync(&d, cx.gs_mut(), &lead_now);
         self.bunks_drawn.clear();
-        self.nooks.clear();
+        self.bunk_walls.clear();
+        self.bunk_held.clear();
+        self.lockers.clear();
         let gs = cx.gs().clone();
         // the open conversation; a new node starts its line and its replies scrolled to the top; PORTRAITFX1-D: a
         // portrait left out of the last frame (the conversation ended or hid) is dropped
         let talk_view = self.svc.begin_frame(g, &d, &gs);
+        // ENGINE-51: once this map has drawn a frame, the world map's background is read ahead (the map opens from
+        // here); not in the first, whose own reads it would slow
+        let wanted = (cx.gs().location_id.clone(), g.view.s);
+        match &self.map_wanted {
+            None => self.map_wanted = Some((String::new(), 0.0)),
+            Some(was) if *was != wanted => {
+                crate::worldmap::want_background(cx, wanted.1);
+                self.map_wanted = Some(wanted);
+            }
+            Some(_) => {}
+        }
         let mut ui: Ui<RAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), th().game("map_ground", rgb(14, 18, 26)));
         let loc = explore::location(&d, &gs);
@@ -1095,7 +1494,7 @@ impl Screen<GameCx> for RegionMap {
             ui.p.v = map_view;
             // REGIONGROUND1-L: the composed ground under everything; it stands in for the `.` and `~` tiles below
             self.ground.sync(cx, t, &sets, view, q);
-            let has_ground = self.ground.draw(&mut ui.p, &geo);
+            let has_ground = self.ground.has();
             // the cells to draw: those meeting the area, by a logical px more (the camera's rest can bring one in)
             let paint_area = Rect::new(map_area.x - 1, map_area.y - 1, map_area.w + 2, map_area.h + 2);
             let (x0, x1) = geo.cols(paint_area);
@@ -1126,105 +1525,149 @@ impl Screen<GameCx> for RegionMap {
             let is_wall = |x: i32, y: i32| ch_at(x, y) == '#' && !freestanding.contains(&(x, y));
             let mw_i = map_w as i32;
             let mh_i = map_h as i32;
-            for y in y0..=y1 {
-                for x in x0..=x1 {
-                    let r = geo.cell(x, y);
-                    let ch = ch_at(x, y);
-                    let vis_ch = if ch == '#' && freestanding.contains(&(x, y)) { '.' } else { ch };
-                    // the border draws after this pass; tilted, a wall is a block in the sorted pass below
-                    if border_at(x, y) || (tilted && vis_ch == '#') {
-                        continue;
-                    }
-                    if has_ground && matches!(vis_ch, '.' | '~') {
-                        continue;
-                    }
-                    if !tilted && wall_face_tiles > 0 && vis_ch == '#' {
-                        let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
-                        let is_face = |nx: i32, ny: i32| wall_depth_at(nx, ny, wall_face_tiles, (mw_i, mh_i), &is_wall) > 0;
-                        let wa = wall_art_at(x, y);
-                        if depth > 0 {
-                            let up_face = is_face(x, y - 1);
-                            draw_wall_face_at(&mut ui, cx, wa, false, x, y, r, r.h, depth == 1 && up_face, !up_face, !is_face(x + 1, y), !is_face(x - 1, y));
-                        } else {
-                            let tile = emberwake_content::art::region_tile('#').unwrap_or("wall");
-                            match cx.art.tile_in(&wa.sets, tile, x, y, art_size) {
-                                Some(img) => ui.p.image(img, r),
-                                None => ui.p.fill(r, WALL_FILL),
-                            }
-                            draw_wall_cap_edges(&mut ui, r, r.h, !is_wall(x, y - 1), !is_wall(x - 1, y) || is_face(x - 1, y), !is_wall(x + 1, y) || is_face(x + 1, y));
-                        }
-                        continue;
-                    }
-                    let tile = emberwake_content::art::region_tile(vis_ch);
-                    // REVEAL1 1.1: a wall beside an indoor zone draws its wall set first
-                    let tile_sets = if vis_ch == '#' { &wall_art_at(x, y).sets } else { &set_refs };
-                    match tile.and_then(|t| cx.art.tile_in(tile_sets, t, x, y, art_size)) {
-                        Some(img) => ui.p.image(img, r),
-                        None => ui.p.fill(r, match vis_ch {
-                            '.' => rgb(70, 90, 64),
-                            '#' => WALL_FILL,
-                            '~' => rgb(40, 90, 100),
-                            _ => rgb(20, 20, 24),
-                        }),
-                    }
-                    if tilted && vis_ch == '~' && wall_face_tiles == 0 {
-                        draw_lips(&mut ui, r, ch_at(x, y - 1) != '~', ch_at(x, y + 1) != '~');
-                    }
-                }
-            }
-            // REGIONVIEW1: the border, flat so that it ends on the map's edge: tilted, a wall on an open cell keeps its
-            // face and the shade it drops, inside its own cell and the cell south (the row above the area can shade the
-            // first one)
-            for y in (if tilted { y0 - 1 } else { y0 })..=y1 {
-                for x in x0..=x1 {
-                    if border_at(x, y) {
-                        if wall_face_tiles > 0 && x >= 0 && y >= 0 && x < mw_i && y < mh_i {
-                            let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
-                            let is_face = |nx: i32, ny: i32| wall_depth_at(nx, ny, wall_face_tiles, (mw_i, mh_i), &is_wall) > 0;
-                            let r = geo.cell(x, y);
-                            if depth > 0 {
-                                let up_face = is_face(x, y - 1);
-                                draw_wall_face_at(&mut ui, cx, &walls, true, x, y, r, r.h, depth == 1 && up_face, !up_face, !is_face(x + 1, y), !is_face(x - 1, y));
-                            } else {
-                                draw_border(&mut ui, cx, &walls, x, y, r, art_size, false);
-                                draw_wall_cap_edges(&mut ui, r, r.h, !is_wall(x, y - 1), !is_wall(x - 1, y) || is_face(x - 1, y), !is_wall(x + 1, y) || is_face(x + 1, y));
-                            }
-                        } else {
-                            draw_border(&mut ui, cx, &walls, x, y, geo.cell(x, y), art_size, tilted && !is_wall(x, y + 1));
-                        }
-                    }
-                }
-            }
-            // REVEAL1 2.2: the boundary's edge dressing over the cells past the map (art only: no widget)
-            if !boundary.is_empty() {
-                draw_dressing(&mut ui, cx, &lineage, &boundary, &geo, (map_w, map_h), (x0, x1), (y0, y1));
-            }
-            if wall_face_tiles > 0 {
-                draw_depth_floor_shadows_and_water(&mut ui, &geo, (mw_i, mh_i), (x0, x1), (y0, y1), has_ground, &ch_at, &is_wall);
-            }
             if !modal {
                 ui.push("map", "map", s_or(loc, "name", ""), map_area, true, false, Some(RAct::MapClick), Vec::new());
             }
             // PROPS1 4.2-4.6: the ground props over the tiles; the standing props go into the sorted pass below. Props
             // are art only: no widget, and walking still comes from `rows`
             // BUNKS1 BK2: in a hub each bunk prop draws its state's art (`<art>_<state>`, where that art exists)
-            let hub_bunks = if self.hub.on() { emberwake_world::bunks::bunks(&gs, t) } else { Vec::new() };
-            let state_t = crate::bunks::state_props(t, &hub_bunks, |art, x, y| {
+            // BUNKS-UPGRADE-PROPS1: the props holding a bunk's place show until the bunk cap reaches it, then the bunk
+            let shown_t = if self.hub.on() { emberwake_world::bunks::shown_props(&gs, t) } else { None };
+            let base_t = shown_t.as_ref().unwrap_or(t);
+            let hub_bunks: Vec<emberwake_world::bunks::Bunk> = if self.hub.on() {
+                let shown: Vec<String> = json::aget(base_t, "props").iter().map(|p| s(json::dict(p), "id")).collect();
+                emberwake_world::bunks::bunks(&gs, t).into_iter().filter(|b| shown.contains(&b.prop)).collect()
+            } else {
+                Vec::new()
+            };
+            let state_t = crate::bunks::state_props(base_t, &hub_bunks, |art, x, y| {
                 let dirs = emberwake_content::art::prop_dirs(&lineage, art);
                 let dirs: Vec<&str> = dirs.iter().map(String::as_str).collect();
                 cx.art.pick(&dirs, None, x as i32, y as i32).is_some()
             });
-            let props = crate::props::layout(state_t.as_ref().unwrap_or(t), &lineage, (geo.ox, geo.oy), geo.cell_size(), paint_area, |dirs, variant, x, y| {
+            let props = crate::props::layout(state_t.as_ref().unwrap_or(base_t), &lineage, (geo.ox, geo.oy), geo.cell_size(), paint_area, |dirs, variant, x, y| {
                 let rel = cx.art.pick(dirs, variant, x, y)?;
                 let size = cx.art.size_of(&rel)?;
                 Some((rel, size))
             });
+            if self.hub.on() {
+                for raw in json::aget(base_t, "props") {
+                    let held = s(json::dict(raw), emberwake_world::bunks::UNTIL_BUNK);
+                    let id = s(json::dict(raw), "id");
+                    if let Some(p) = props.iter().find(|p| !held.is_empty() && p.id == id) {
+                        self.bunk_held.push(json!({"prop": id, "until_bunk": held, "file": p.file}));
+                    }
+                }
+            }
             let prop_arts = collect_prop_arts(t);
             // REGIONVIEW1: past the map is boundary art only: a prop's art that overhangs it is cut there (a footprint
             // cannot leave the map: check P8)
             let map_rect = Rect::new(geo.ox, geo.oy, map_w as i32 * geo.cell_size().0, map_h as i32 * geo.cell_size().1);
-            for p in props.iter().filter(|p| p.ground) {
-                draw_prop(&mut ui, cx, p, None, false, map_rect, q);
+            // ENGINE-50 (MAP-FRAME1): the still layers (the ground, tiles, walls, border, dressing, shadows and ground props)
+            // are kept from the last frame and moved with the camera; only the strips that came into view are drawn (all
+            // of it when anything they show changed: `floor_key`)
+            let key = floor_key(cx, &gs.location_id, (view, q), &sets, has_ground, state_t.as_ref().unwrap_or(base_t));
+            self.floor_data = Some(cx.data.clone());
+            ui.p.v = base_view;
+            let strips = ui.p.scroll_begin(&mut self.floor, key, map_area, camera);
+            let kept_clip = ui.p.c.clip;
+            let ground_fill = th().game("map_ground", rgb(14, 18, 26));
+            for strip in strips {
+                ui.p.c.clip = Some(strip.px);
+                ui.p.v = map_view;
+                // the strip in the map's logical px, by one more (the camera's rest is under a logical px)
+                let area = Rect::new(strip.area.x - 1, strip.area.y - 1, strip.area.w + 2, strip.area.h + 2);
+                ui.p.fill(area, ground_fill);
+                self.ground.draw(&mut ui.p, &geo);
+                let (x0, x1) = geo.cols(area);
+                let (y0, y1) = geo.rows(area);
+                for y in y0..=y1 {
+                    for x in x0..=x1 {
+                        let r = geo.cell(x, y);
+                        let ch = ch_at(x, y);
+                        let vis_ch = if ch == '#' && freestanding.contains(&(x, y)) { '.' } else { ch };
+                        // the border draws after this pass; tilted, a wall is a block in the sorted pass below
+                        if border_at(x, y) || (tilted && vis_ch == '#') {
+                            continue;
+                        }
+                        if has_ground && matches!(vis_ch, '.' | '~') {
+                            continue;
+                        }
+                        if !tilted && wall_face_tiles > 0 && vis_ch == '#' {
+                            let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
+                            let is_face = |nx: i32, ny: i32| wall_depth_at(nx, ny, wall_face_tiles, (mw_i, mh_i), &is_wall) > 0;
+                            let wa = wall_art_at(x, y);
+                            if depth > 0 {
+                                let up_face = is_face(x, y - 1);
+                                draw_wall_face_at(&mut ui, cx, wa, false, x, y, r, r.h, depth == 1 && up_face, !up_face, !is_face(x + 1, y), !is_face(x - 1, y));
+                            } else {
+                                let tile = emberwake_content::art::region_tile('#').unwrap_or("wall");
+                                match cx.art.tile_in(&wa.sets, tile, x, y, art_size) {
+                                    Some(img) => ui.p.image(img, r),
+                                    None => ui.p.fill(r, WALL_FILL),
+                                }
+                                draw_wall_cap_edges(&mut ui, r, r.h, !is_wall(x, y - 1), !is_wall(x - 1, y) || is_face(x - 1, y), !is_wall(x + 1, y) || is_face(x + 1, y));
+                            }
+                            continue;
+                        }
+                        let tile = emberwake_content::art::region_tile(vis_ch);
+                        // REVEAL1 1.1: a wall beside an indoor zone draws its wall set first
+                        let tile_sets = if vis_ch == '#' { &wall_art_at(x, y).sets } else { &set_refs };
+                        match tile.and_then(|t| cx.art.tile_in(tile_sets, t, x, y, art_size)) {
+                            Some(img) => ui.p.image(img, r),
+                            None => ui.p.fill(r, match vis_ch {
+                                '.' => rgb(70, 90, 64),
+                                '#' => WALL_FILL,
+                                '~' => rgb(40, 90, 100),
+                                _ => rgb(20, 20, 24),
+                            }),
+                        }
+                        if tilted && vis_ch == '~' && wall_face_tiles == 0 {
+                            draw_lips(&mut ui, r, ch_at(x, y - 1) != '~', ch_at(x, y + 1) != '~');
+                        }
+                    }
+                }
+                // REGIONVIEW1: the border, flat so that it ends on the map's edge: tilted, a wall on an open cell keeps its
+                // face and the shade it drops, inside its own cell and the cell south (the row above the area can shade the
+                // first one)
+                for y in (if tilted { y0 - 1 } else { y0 })..=y1 {
+                    for x in x0..=x1 {
+                        if border_at(x, y) {
+                            if wall_face_tiles > 0 && x >= 0 && y >= 0 && x < mw_i && y < mh_i {
+                                let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
+                                let is_face = |nx: i32, ny: i32| wall_depth_at(nx, ny, wall_face_tiles, (mw_i, mh_i), &is_wall) > 0;
+                                let r = geo.cell(x, y);
+                                if depth > 0 {
+                                    let up_face = is_face(x, y - 1);
+                                    draw_wall_face_at(&mut ui, cx, &walls, true, x, y, r, r.h, depth == 1 && up_face, !up_face, !is_face(x + 1, y), !is_face(x - 1, y));
+                                } else {
+                                    draw_border(&mut ui, cx, &walls, x, y, r, art_size, false);
+                                    draw_wall_cap_edges(&mut ui, r, r.h, !is_wall(x, y - 1), !is_wall(x - 1, y) || is_face(x - 1, y), !is_wall(x + 1, y) || is_face(x + 1, y));
+                                }
+                            } else {
+                                draw_border(&mut ui, cx, &walls, x, y, geo.cell(x, y), art_size, tilted && !is_wall(x, y + 1));
+                            }
+                        }
+                    }
+                }
+                // REVEAL1 2.2: the boundary's edge dressing over the cells past the map (art only: no widget)
+                if !boundary.is_empty() {
+                    draw_dressing(&mut ui, cx, &lineage, &boundary, &geo, (map_w, map_h), (x0, x1), (y0, y1));
+                }
+                if wall_face_tiles > 0 {
+                    draw_depth_floor_shadows_and_water(&mut ui, &geo, (mw_i, mh_i), (x0, x1), (y0, y1), has_ground, &ch_at, &is_wall);
+                }
+                for p in props.iter().filter(|p| p.ground) {
+                    draw_prop(&mut ui, cx, p, None, false, map_rect, q);
+                }
+                ui.p.v = base_view;
+            }
+            ui.p.c.clip = kept_clip;
+            ui.p.scroll_end(&mut self.floor);
+            ui.p.v = map_view;
+            let map_fx = self.map_fx_cache.get_cloned(&cx.art, &s(t, "id"));
+            if let Some(fx) = map_fx.as_ref().filter(|f| !f.zones.is_empty()) {
+                apply_map_zone_grades(&mut ui, t, &geo, map_rect, (mw_i, mh_i), &is_wall, fx);
             }
             // BUNKS1 BK3, BK4, BK8: each bunk's click area (its drawn art; under the markers and the party), its hover
             // name and condition, and whether a talk waits on its member (a candle, drawn over the scene below)
@@ -1233,14 +1676,16 @@ impl Screen<GameCx> for RegionMap {
             for b in &hub_bunks {
                 let Some(p) = props.iter().find(|p| p.id == b.prop) else { continue };
                 let candle = !b.member.is_empty() && waiting.iter().any(|w| w.has(&b.member));
-                self.bunks_drawn.push(json!({"prop": b.prop, "member": b.member, "state": b.state.name(), "candle": candle, "file": p.file}));
+                let bed = crate::bunks::bed_art(&b.art);
+                let drawn = crate::bunks::drawn_rect(&bed, p.rect);
+                self.bunks_drawn.push(json!({"prop": b.prop, "member": b.member, "state": b.state.name(), "candle": candle, "file": p.file, "niche": bed.niche, "drawn": [drawn.x, drawn.y, drawn.w, drawn.h], "flip": p.flip}));
                 if candle {
-                    candles.push(p.rect);
+                    candles.push(drawn);
                 }
                 if modal {
                     continue;
                 }
-                let hit = p.rect.intersect(map_area);
+                let hit = crate::bunks::drawn_rect(&crate::bunks::bed_art(&b.art), p.rect).intersect(map_area);
                 let (name, word) = if ui.hover(hit) { crate::bunks::bunk_tip(&d, &gs, b) } else { (String::new(), String::new()) };
                 let act = (!b.member.is_empty()).then(|| RAct::Member(b.member.clone()));
                 ui.push(format!("{}{}", crate::bunks::BUNK_PREFIX, b.prop), "bunk", bunk_label(&d, &gs, &b.member), hit, true, false, act, if name.is_empty() { Vec::new() } else { tip(&name, &word) });
@@ -1258,7 +1703,7 @@ impl Screen<GameCx> for RegionMap {
             let mut hits: Vec<MarkHit> = Vec::new();
             for raw in json::aget(loc, "markers") {
                 let m = explore::marker_full(json::dict(raw));
-                let view = explore::marker_view(&d, &gs, loc, &m);
+                let (view, memo_services) = self.marker_memo.get(&d, &gs, loc, &m);
                 let state = s(&view, "state");
                 if state == "absent" {
                     continue;
@@ -1273,8 +1718,8 @@ impl Screen<GameCx> for RegionMap {
                 let label = s(&view, "label");
                 let seen = r.intersect(map_area);
                 if seen.w <= 0 || seen.h <= 0 {
-                    // MAPNAV1-U: a legend entry out of view gets an edge arrow
-                    if kind != "point" {
+                    // MAPNAV1-U: a legend entry out of view gets an edge arrow (PR7-76, PT-43: a usable point too)
+                    if kind != "point" || point_listed(&m, &state) {
                         off_view.push((id, label, r));
                     }
                     continue;
@@ -1285,12 +1730,12 @@ impl Screen<GameCx> for RegionMap {
                 let mut top = mapview::icon_rect(r);
                 if kind == "npc" {
                     let who = d.resolve(&gs.world_id, "characters", &s(&m, "character"));
-                    services = explore::npc_services(&d, &gs, &s(who, "_qid"));
+                    services = memo_services;
                     let (body, palette, _) = crate::screens::character_art(&d, who);
                     // 2.4: the person's body, else its class body (the chain), else today's token
                     let sprite = cx.art.first_body(&emberwake_content::art::body_chain(&body));
                     if sprite.is_some() {
-                        top = mapview::sprite_rect(r);
+                        top = body_rect_of(cx, sprite.as_deref(), r);
                     }
                     // facing the party while in the conversation (four ways, DIR4-M: up or down when the party is
                     // more above or below, keeping their left or right); else the row's `face`, down by default
@@ -1328,7 +1773,7 @@ impl Screen<GameCx> for RegionMap {
                 }
                 let (body, palette) = crate::bunks::member_art(&d, &gs, m);
                 let sprite = cx.art.first_body(&emberwake_content::art::body_chain(&body));
-                let top = if sprite.is_some() { mapview::sprite_rect(r) } else { mapview::icon_rect(r) };
+                let top = if sprite.is_some() { body_rect_of(cx, sprite.as_deref(), r) } else { mapview::icon_rect(r) };
                 let name = crate::hub::member_name(cx, m);
                 let key = format!("{}{id}", crate::bunks::MEMBER_PREFIX);
                 if waiting.iter().any(|w| w.has(&id)) {
@@ -1369,6 +1814,11 @@ impl Screen<GameCx> for RegionMap {
                     }
                 }
             }
+            // STYLE-PASS1B (`PR7-48`, FB-366): the click-to-walk's destination, a small amber ring on the floor under
+            // whatever stands there (static: no Reduce motion variant)
+            if let Some(dest) = self.walk_ring() {
+                draw_walk_ring(&mut ui.p, geo.cell(dest.0 as i32, dest.1 as i32));
+            }
             // the sorted pass (PROPS1 4.4): standing props, markers and the party back to front by their feet (the
             // sprites stand on their tiles, so lower rows cover upper ones, spec PLAYUI1 2.4)
             // REGIONVIEW1: the party's cell where it is drawn, and the view that puts it on its own physical px
@@ -1376,6 +1826,7 @@ impl Screen<GameCx> for RegionMap {
             let party_view = PView { ox: base_view.ox + party_shift.0, oy: base_view.oy + party_shift.1, ..base_view };
             let shot = CamShot { px: camera, party: (party_view.x(pr.x as f32), party_view.y(pr.y as f32)), scale };
             self.cam = shot;
+            self.motion = json!({"cell": [gs.position.0, gs.position.1], "drawn": [drawn.0, drawn.1], "cam": [camera.0, camera.1], "target": [target.0, target.1], "tile": ts as f32 * scale});
             if let Some(now) = self.frame_at.filter(|_| cx.settings.v["camera_trail"] == json!(true)) {
                 self.cam_trail.push_back((now.saturating_duration_since(self.opened_at).as_secs_f64(), shot));
                 if self.cam_trail.len() > CAM_TRAIL {
@@ -1390,52 +1841,96 @@ impl Screen<GameCx> for RegionMap {
             // TURNFEEL1: while a turn finishes its leg the sprite faces the way it still goes
             let leader_shown = self.frame_at.and_then(|at| self.glide.heading(at)).map_or(self.leader_face, |d| self.leader_face.toward(d.0, d.1));
             self.leader.set_base(base, now);
-            let drawn_party = if leader_sprite.is_some() { mapview::sprite_rect(pr) } else { pr };
-            let order = crate::props::sorted(&props, &blocks, &marks.iter().map(|m| m.r).collect::<Vec<_>>(), drawn_party);
+            let drawn_party = if leader_sprite.is_some() { body_rect_of(cx, leader_sprite.as_deref(), pr) } else { pr };
+            // PAINTED-MAPS1: the party sorts by its tile's bottom edge (a painted body's frame drops under it)
+            let sort_party = Rect::new(drawn_party.x, pr.y, drawn_party.w, pr.h);
+            let order = crate::props::sorted(&props, &blocks, &marks.iter().map(|m| m.r).collect::<Vec<_>>(), sort_party);
             let idle = ClipPlayer::default();
             let mut sprites = Vec::new();
             let mut party_frame = None;
-            // HUB-BUNKS2: the hub bunks' drawn rects (a plate keeps to the room its neighbours leave) and the niche bunks'
-            // nooks (drawn once, before the first bunk)
-            let bunk_fits: Vec<(Rect, String)> = props
+            // HUB-BUNKS2, BUNKS-LAYOUT3: the hub bunks' drawn rects (a plate keeps to the room its neighbours leave) and
+            // the dressed north wall with the niches (drawn once, before the first bunk)
+            let fit_rects: Vec<Rect> = props
                 .iter()
-                .filter(|p| hub_bunks.iter().any(|b| b.prop == p.id))
-                .map(|p| {
-                    let art = prop_art_of(&prop_arts, &geo, p).unwrap_or("").to_string();
-                    (prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles).0.unwrap_or(p.rect), art)
-                })
+                .filter_map(|p| hub_bunks.iter().find(|b| b.prop == p.id).map(|b| crate::bunks::drawn_rect(&crate::bunks::bed_art(&b.art), p.rect)))
                 .collect();
-            let fit_rects: Vec<Rect> = bunk_fits.iter().map(|(r, _)| *r).collect();
-            let mut nooks_drawn = false;
+            let mut wall_drawn = false;
             for item in &order {
                 match *item {
                     Item::Prop(i) => {
                         let p = &props[i];
                         let (fit, mounted) = prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles);
                         let bunk = hub_bunks.iter().find(|b| b.prop == p.id);
-                        if bunk.is_some() && !nooks_drawn {
-                            nooks_drawn = true;
-                            let niches: Vec<Rect> = bunk_fits.iter().filter(|(_, art)| !crate::bunks::bed_art(art).head_south).map(|(r, _)| *r).collect();
-                            self.nooks = crate::bunks::draw_nooks(&mut ui, cx, &lineage, &niches);
-                        }
-                        draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
-                        // HUB-BUNKS2 (2)-(4): an occupied bunk's dressing and its brass plate (with the bunk, in depth)
-                        if let Some(b) = bunk.filter(|b| !b.member.is_empty()) {
-                            let r = fit.unwrap_or(p.rect);
-                            let bed = crate::bunks::bed_art(prop_art_of(&prop_arts, &geo, p).unwrap_or(&b.art));
-                            let dressed = crate::bunks::dress(&mut ui, cx, &lineage, b, &bed, r);
-                            if let Some(m) = gs.party.member(&b.member) {
-                                let (name, class, class_id) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m), m.class_id(&d));
-                                let room = crate::bunks::plate_room(r, &fit_rects);
-                                let plate = crate::bunks::plate_rect(&mut ui.p, r, &bed, &name, room);
-                                let full = crate::bunks::plate_need(&mut ui.p, &name) <= plate.w;
-                                let shown = crate::bunks::plate_name(&mut ui.p, &name, plate.w);
-                                crate::bunks::draw_plate(&mut ui, cx, plate, &name, &class_id, &class);
-                                if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
-                                    e["plate"] = json!({"name": name, "shown": shown, "class": class, "class_id": class_id, "rect": [plate.x, plate.y, plate.w, plate.h], "full": full, "wall": !bed.head_south, "room": room});
-                                    e["drawn"] = json!([r.x, r.y, r.w, r.h]);
-                                    e["dressed"] = json!({"blanket": dressed.blanket, "gear": dressed.gear, "keepsake": dressed.keepsake, "asleep": dressed.asleep});
+                        if bunk.is_some() && !wall_drawn {
+                            wall_drawn = true;
+                            let (cw, ch) = geo.cell_size();
+                            let runs: Vec<(i32, i32, i32)> = crate::bunks::wall_runs(t, &hub_bunks).iter().map(|&(x0, x1, y)| (geo.ox + x0 as i32 * cw, geo.ox + x1 as i32 * cw, geo.oy + (y as i32 + 1) * ch)).collect();
+                            let niches: Vec<(String, crate::bunks::Pen, String)> = hub_bunks
+                                .iter()
+                                .filter_map(|b| {
+                                    let bed = crate::bunks::bed_art(&b.art);
+                                    let pd = props.iter().find(|p| p.id == b.prop).filter(|_| bed.niche)?;
+                                    let founder = gs.party.member(&b.member).map(|m| json::s(d.resolve(&gs.world_id, "characters", &m.lore_ref), "id")).unwrap_or_default();
+                                    Some((b.prop.clone(), crate::bunks::Pen::of(&ui.p, &bed, pd.rect, pd.flip), founder))
+                                })
+                                .collect();
+                            let k = ui.p.v.s * cw as f32 / crate::props::ART_TILE as f32;
+                            let pens: Vec<(crate::bunks::Pen, String)> = niches.iter().map(|(_, pen, f)| (*pen, f.clone())).collect();
+                            let (walls, emblems) = crate::bunks::draw_wall(&mut ui, cx, &lineage, &runs, &pens, k);
+                            self.bunk_walls = walls;
+                            // BUNKS-EMBLEM1: each niche bunk's emblem ("" a plain arch)
+                            for ((prop, _, _), emblem) in niches.iter().zip(emblems) {
+                                if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == prop.as_str()) {
+                                    e["emblem"] = json!(emblem);
                                 }
+                            }
+                        }
+                        let Some(b) = bunk else {
+                            draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
+                            continue;
+                        };
+                        // BUNKS-LAYOUT3: the bed at the take 8 mock's place, its dressing and its brass plate (with the
+                        // bunk, in depth)
+                        let bed = crate::bunks::bed_art(&b.art);
+                        let pen = crate::bunks::Pen::of(&ui.p, &bed, p.rect, p.flip);
+                        let r = crate::bunks::drawn_rect(&bed, p.rect);
+                        let kept = ui.p.c.clip;
+                        let inside = ui.p.v.rect(map_rect);
+                        ui.p.c.clip = Some(kept.map_or(inside, |c| c.intersect(inside)));
+                        crate::bunks::draw_bed(&mut ui, cx, &pen, p.file.as_deref());
+                        let dressed = crate::bunks::dress(&mut ui, cx, &lineage, b, &bed, &pen, p.file.as_deref());
+                        if !bed.niche {
+                            crate::bunks::draw_post(&mut ui, &pen, &bed);
+                        }
+                        // FOOTLOCKER1: the footlocker at the foot of an active or benched member's bunk, open while
+                        // their loadout is
+                        if emberwake_world::bunks::has_locker(b) {
+                            let open = self.locker_open == b.member;
+                            if let Some((file, lr)) = crate::bunks::draw_locker(&mut ui, cx, &lineage, &pen, &bed, open) {
+                                let at = geo.cell_at(lr.x + lr.w / 2, lr.y + lr.h * 3 / 4);
+                                self.lockers.push((b.member.clone(), at, lr, file));
+                            }
+                        }
+                        ui.p.c.clip = kept;
+                        let room = crate::bunks::plate_room(r, &fit_rects);
+                        let entry = json!({"blanket": dressed.blanket, "gear": dressed.gear, "board": dressed.board, "asleep": dressed.asleep, "pose": dressed.pose, "head": dressed.head.map(|h| json!([h.x, h.y, h.w, h.h])), "fold": dressed.fold.map(|(a, b)| json!([a, b]))});
+                        if let Some(m) = gs.party.member(&b.member) {
+                            let (name, class, class_id) = (emberwake_world::progression::display_name(&d, m), crate::hub::class_name(cx, m), m.class_id(&d));
+                            let plate = crate::bunks::plate_rect(&mut ui.p, r, &bed, &name, room, p.flip);
+                            let full = crate::bunks::plate_need(&mut ui.p, &name) <= plate.w;
+                            let shown = crate::bunks::plate_shown(&mut ui.p, &name, plate.w);
+                            let glyph = crate::bunks::plate_glyph(&ui.p);
+                            crate::bunks::draw_plate(&mut ui, cx, plate, &name, &class_id, &class);
+                            if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
+                                e["plate"] = json!({"name": name, "shown": shown, "class": class, "class_id": class_id, "rect": [plate.x, plate.y, plate.w, plate.h], "full": full, "wall": bed.niche, "room": room, "glyph": glyph});
+                                e["dressed"] = entry;
+                            }
+                        } else {
+                            // FB-360: every empty bunk, on the north wall and free-standing, wears the blank plate
+                            let plate = crate::bunks::plate_rect(&mut ui.p, r, &bed, "", room, p.flip);
+                            crate::bunks::draw_blank_plate(&mut ui, plate);
+                            if let Some(e) = self.bunks_drawn.iter_mut().find(|e| e["prop"] == p.id.as_str()) {
+                                e["blank_plate"] = json!([plate.x, plate.y, plate.w, plate.h]);
                             }
                         }
                     }
@@ -1487,8 +1982,9 @@ impl Screen<GameCx> for RegionMap {
                     opaque_roofs.push(p.rect);
                 }
             }
-            if dim_ambience {
-                apply_dim_ambience(&mut ui, &geo, &props, &prop_arts, &opaque_roofs, &is_wall, wall_face_tiles);
+            let effective_dim = map_fx.as_ref().and_then(|f| f.dim_ambience).unwrap_or(dim_ambience);
+            if effective_dim {
+                apply_dim_ambience(&mut ui, &geo, &props, &prop_arts, &opaque_roofs, &is_wall, wall_face_tiles, map_fx.as_ref());
             }
             // 4.5: a standing prop or a wall block drawn over the party: its outline over them (the sprite's silhouette
             // outline); REVEAL1: a roof showing over them too
@@ -1548,6 +2044,13 @@ impl Screen<GameCx> for RegionMap {
             ui.push("party", "party", format!("Party at {}, {}", gs.position.0, gs.position.1), pr, true, false, (!modal && can_pass).then_some(RAct::Lead), lead_tip);
             if !modal {
                 push_hits(&mut ui, front);
+                // FOOTLOCKER1: the footlockers over the people idling by them (a small area of its own)
+                for (member, _, lr, _) in &self.lockers {
+                    let hit = lr.intersect(map_area);
+                    let name = gs.party.member(member).map(|m| crate::hub::member_name(cx, m)).unwrap_or_default();
+                    let t = if ui.hover(hit) { tip(&format!("{name}'s footlocker"), "Open: their loadout and the shared stash.") } else { Vec::new() };
+                    ui.push(format!("{}{member}", crate::bunks::LOCKER_PREFIX), "locker", format!("{name}'s footlocker"), hit, true, false, Some(RAct::Locker(member.clone())), t);
+                }
             }
             // the names over everything on the map, kept inside the map area
             for (r, label, badge) in labels {
@@ -1572,7 +2075,8 @@ impl Screen<GameCx> for RegionMap {
         // -- HUD bar (PLAYUI1-H): the location name; gold, supplies and the icon buttons at the right
         let name = s_or(loc, "name", "").to_string();
         let why = if modal { "Finish the conversation, shop or page first." } else { "" };
-        hud_bar(&mut ui, cx, 4, &name, ("region.menu", "Esc"), why, &REGION_HELP, RAct::Hud);
+        let help = region_help(&crate::controls_view::hints(&cx.settings.v));
+        hud_bar(&mut ui, cx, 4, &name, ("region.menu", Some(Key::Esc)), why, &help, RAct::Hud);
         // -- The legend (2.1 A) at the top right and the event log ticker (MAPLOG1) at the bottom left; off in a talk
         let mut panes = Vec::new();
         if !t.is_empty() && !talking {
@@ -1645,6 +2149,10 @@ impl Screen<GameCx> for RegionMap {
             }
             return;
         }
+        // FOOTLOCKER1B (2): a footlocker opening holds the map still
+        if self.locker_opening() {
+            return;
+        }
         // an open conversation takes the keys (`Services::key`)
         if let Some(fought) = self.svc.key(cx, k) {
             if fought {
@@ -1664,9 +2172,11 @@ impl Screen<GameCx> for RegionMap {
             let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs()));
             if !t.is_empty() {
                 self.step = mapview::WalkStep::of(&cx.settings.v, cx.held.shift);
-                // the frame's clock: the press moves from this frame on, and the steps chain from it
+                // the frame's clock: the press moves from this frame on, and the steps chain from it (ENGINE-50: the
+                // next tick dates it now when that frame was long ago)
                 let at = self.frame_at.unwrap_or_else(Instant::now);
                 self.plan_step(cx, at, dir);
+                self.press_at = Some(at);
                 self.hold = self.step(cx, dir);
             }
         } else if k == Key::Char('e') || k == Key::Enter {
@@ -1682,6 +2192,9 @@ impl Screen<GameCx> for RegionMap {
     }
 
     fn back(&mut self, cx: &mut Cx) {
+        if self.locker_opening() {
+            return;
+        }
         if self.lore.is_some() {
             self.lore = None;
         } else if let Some(fought) = self.svc.back(cx) {
@@ -1705,7 +2218,12 @@ impl Screen<GameCx> for RegionMap {
         json!({"location": gs.location_id, "position": [gs.position.0, gs.position.1], "facing": [self.facing.0, self.facing.1],
             // TURNFEEL1: the feel options and the last step's times (wall ms)
             "walk_feel": {"turn_beat": feel.beat, "equal_speed": feel.equal, "corner": feel.corner.name(), "step_at_ms": self.last_step.filter(|_| cx.settings.v["camera_trail"] == json!(true)).map(|t| t.saturating_duration_since(self.opened_at).as_secs_f64() * 1000.0), "glide_ms": self.leg.glide, "delay_ms": self.leg.delay},
-            "walking": !self.walk.is_empty(), "log": cx.log.iter().rev().take(8).rev().collect::<Vec<_>>(),
+            "walking": !self.walk.is_empty(),
+            // BUNKS-FIX1 (`PR7-46` (3)): the marker the walk acts on when it arrives (a talk, a point; "" none)
+            "walk_to": self.walk_target.clone().unwrap_or_default(),
+            // STYLE-PASS1B (`PR7-48`): the tile the walk's amber ring marks (null: none)
+            "walk_ring": self.walk_ring().map(|p| json!([p.0, p.1])),
+            "log": cx.log.iter().rev().take(8).rev().collect::<Vec<_>>(),
             "dialogue": svc["dialogue"], "turn_in": svc["turn_in"],
             "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
             "arrival": self.arrival.as_ref().map(|(a, _)| json!({"card": a.card, "changes": a.changes})),
@@ -1717,11 +2235,17 @@ impl Screen<GameCx> for RegionMap {
             "view": mapview::View::of_setting(&cx.settings.v["region_view"]).name(), "ground": self.ground.state(), "leader": leader_id(cx), "arrows": self.arrows, "pan": self.pan.filter(|_| self.pan_loc == gs.location_id).map(|p| json!([p.0, p.1])),
             // PORTRAITFX1 4.11: the speaker's portrait while the talk box shows (the shop or the board hides it)
             "portraits": svc["portraits"],
+            // ENGINE-25: the talk box's view-model (`talk_view`)
+            "talk_view": svc["talk_view"],
             // REVEAL1 1.3: each roofed indoor zone's roof opacity (0 gone, 1 opaque)
             "roofs": self.roofs.state(),
             // BUNKS1: in a hub, where each member idles and each bunk's member, state and candle (null elsewhere)
             "hub": self.hub.state(), "bunks": (!self.bunks_drawn.is_empty()).then(|| self.bunks_drawn.clone()),
-            "nooks": (!self.nooks.is_empty()).then(|| self.nooks.iter().map(|r| json!([r.x, r.y, r.w, r.h])).collect::<Vec<_>>())})
+            "bunk_held": (!self.bunk_held.is_empty()).then(|| self.bunk_held.clone()),
+            // FOOTLOCKER1: each footlocker (member, tile, rect, open, file) and whose is open ("" none)
+            "lockers": (!self.lockers.is_empty()).then(|| self.lockers.iter().map(|(m, at, r, f)| json!({"member": m, "at": [at.0, at.1], "rect": [r.x, r.y, r.w, r.h], "open": *m == self.locker_open, "file": f})).collect::<Vec<_>>()),
+            "locker_open": self.locker_open,
+            "bunk_walls": (!self.bunk_walls.is_empty()).then(|| self.bunk_walls.iter().map(|r| json!([r.x, r.y, r.w, r.h])).collect::<Vec<_>>())})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
@@ -1784,9 +2308,9 @@ impl RegionMap {
         self.w.iter().find(|w| w.kind == "row" && w.rect.contains(self.mouse.0, self.mouse.1)).and_then(|w| w.id.strip_prefix("here.")).map(str::to_string)
     }
 
-    /// The legend (spec PLAYUI1 2.1 A, MAPNAV1-U's collapse): a pane floating at the map's top right under the HUD bar.
-    /// Its header "Here (N)" with a chevron collapses it to the header (kept in the settings as `map_legend_open`); a
-    /// row per marker shows the marker's map icon, its name and (people) their service icons at the right; spent
+    /// The legend (spec PLAYUI1 2.1 A; FLOATPANELS1): a floating panel (`aegis_ui::float_panel`) that starts at the
+    /// map's top right under the HUD bar, locked; unlocked it drags anywhere on the map, and its minimize button shrinks
+    /// it in place to a "Here (N)" button (kept in the settings as `map_legend_open`); a row per marker shows the marker's map icon, its name and (people) their service icons at the right; spent
     /// markers dim. A row click looks there (MAPNAV1-U: the camera pans to the marker); a second click while it looks
     /// there walks there as before. Width from the texts, at most `LEGEND_MAX` (times the text size). Its rect (the edge
     /// arrows keep off it).
@@ -1794,52 +2318,61 @@ impl RegionMap {
         let d = cx.data.clone();
         let gs = cx.gs().clone();
         let loc = explore::location(&d, &gs);
-        // (id, kind, state, label, verb, services)
-        let mut rows: Vec<(String, String, String, String, String, Vec<&'static str>)> = Vec::new();
+        // (id, kind, state, label, verb, services, a point's use)
+        let mut rows: Vec<(String, String, String, String, String, Vec<&'static str>, String)> = Vec::new();
         for m in explore::markers_of(loc) {
-            let view = explore::marker_view(&d, &gs, loc, &m);
+            let (view, services) = self.marker_memo.get(&d, &gs, loc, &m);
             let (kind, state) = (s(&m, "kind"), s(&view, "state"));
-            if state == "absent" || kind == "point" {
+            // PR7-76 (PT-43): a point of interest the party can use now is listed too
+            if state == "absent" || (kind == "point" && !point_listed(&m, &state)) {
                 continue;
             }
-            let services = if kind == "npc" { explore::npc_services(&d, &gs, &s(d.resolve(&gs.world_id, "characters", &s(&m, "character")), "_qid")) } else { Vec::new() };
-            rows.push((s(&m, "id"), kind, state, s(&view, "label"), s(&view, "verb"), services));
+            rows.push((s(&m, "id"), kind, state, s(&view, "label"), s(&view, "verb"), services, explore::point_use(&m)));
         }
         let open = cx.settings.v["map_legend_open"].as_bool().unwrap_or(true);
         let rh = (ui.p.line_h(BODY).ceil() as i32 + 4).max(14);
         let title = format!("Here ({})", rows.len());
-        let mut w = 14 + ui.p.text_w(&title, BODY).ceil() as i32 + 8;
-        for (_, _, _, label, _, services) in &rows {
+        // FLOATPANELS1: the head row holds the title and, at its right, the lock and minimize buttons
+        let buttons = 2 * PANEL_BTN + 8;
+        let mut w = 4 + ui.p.text_w(&title, BODY).ceil() as i32 + 6 + buttons;
+        for (_, _, _, label, _, services, _) in &rows {
             w = w.max(4 + ICON + 4 + ui.p.text_w(label, BODY).ceil() as i32 + 6 + services.len() as i32 * (SERVICE + 1) + 4);
         }
-        let w = w.min((LEGEND_MAX as f32 * ui.p.fonts.scale).round() as i32);
-        let x = W - 4 - w;
-        let head = Rect::new(x, HUD_H + 4, w, rh);
-        ui.p.fill(head, th().game("map_pane", PANE));
-        let t = tip(&title, if open { "Click to fold the legend to this line." } else { "Click to open the legend: who and what is here." });
-        ui.section("legend", head, &title, "", open, RAct::Legend, t);
-        if !open || rows.is_empty() {
-            return head;
-        }
-        let top = head.y + head.h + 1;
+        let w = w.min((LEGEND_MAX as f32 * ui.p.fonts.scale).round() as i32 + buttons);
+        let top_y = HUD_H + 4;
         let content = rows.len() as i32 * rh;
-        let pane = Rect::new(x, top, w, content.min(H - 4 - top));
-        let whole = Rect::new(x, head.y, w, pane.y + pane.h - head.y);
-        ui.p.fill(pane, th().game("map_pane", PANE));
-        // WEBFIX2 (a): the legend's rows in the HUD frame (the head is its section button)
-        crate::hud::hud_panel(ui, pane, rgba(0, 0, 0, 0), th().edge, 3.0);
+        let size = (w, rh + 1 + content.min(H - 4 - top_y - rh - 1));
+        let chip = aegis_ui::float_panel::chip_size(ui, &title);
+        self.legend_panel.minimized = !open;
+        let held = ui.dragging() == Some(LEGEND_PANEL_DRAG);
+        crate::floats::frame(cx, &mut self.legend_panel, &mut self.legend_kept, crate::floats::REGION_LEGEND_KEY, MAP_AREA, (W - 4 - w, top_y), size, chip, self.mouse, held);
+        self.legend_size = size;
+        let acts = aegis_ui::float_panel::Acts { body: RAct::Panel, lock: RAct::LegendLock, min: RAct::Legend, open: RAct::Legend };
+        // WEBFIX2 (a): the panel in the HUD frame
+        let hud = |ui: &mut Ui<RAct>, p: Rect| crate::hud::hud_panel(ui, p, rgba(0, 0, 0, 0), th().edge, 3.0);
+        let Some(p) = aegis_ui::float_panel::draw(ui, &self.legend_panel, "legend", &title, LEGEND_PANEL_DRAG, size, chip, &acts, th().game("map_pane", PANE), hud) else {
+            return self.legend_panel.chip_rect(size, chip);
+        };
+        ui.p.text_fit(p.x as f32 + 4.0, p.y as f32 + (rh as f32 - ui.p.line_h(BODY)) / 2.0, &title, BODY, (p.w - 8 - buttons) as f32, th().gold);
+        if rows.is_empty() {
+            return p;
+        }
+        let (x, w) = (p.x, p.w);
+        let top = p.y + rh + 1;
+        let pane = Rect::new(x, top, w, p.y + p.h - top);
+        ui.p.fill(Rect::new(x + 2, top - 1, w - 4, 1), th().edge);
         let off = ui.scroll_begin("legend.rows", pane, content);
         let px = ui.icon_px(Rect::new(0, 0, ICON + 4, ICON + 4));
         let spx = ui.icon_px(Rect::new(0, 0, SERVICE + 4, SERVICE + 4));
-        for (i, (id, kind, state, label, verb, services)) in rows.into_iter().enumerate() {
+        for (i, (id, kind, state, label, verb, services, point_use)) in rows.into_iter().enumerate() {
             let r = Rect::new(x, top - off + i as i32 * rh, w, rh);
             let hover = !modal && ui.hover(r);
             if hover {
                 ui.p.panel(r, th().card_hot, th().edge_hot, 3.0);
             }
             let ir = Rect::new(r.x + 4, r.y + (rh - ICON) / 2, ICON, ICON);
-            // PR7-36 (UX-28): an exit, chest or lore row shows the map's glyph (points have no legend row)
-            match (glyph_of(&kind, ""), cx.art.image(&emberwake_content::art::marker(marker_icon(&kind, &state)), px, px)) {
+            // PR7-36 (UX-28): an exit, chest, lore or (PT-43) point row shows the map's glyph
+            match (glyph_of(&kind, &point_use), cx.art.image(&emberwake_content::art::marker(marker_icon(&kind, &state)), px, px)) {
                 (Some(g), _) => draw_map_glyph(&mut ui.p, ir, g, glyph_colour(&kind, &state)),
                 (None, Some(img)) => ui.p.image(img, ir),
                 (None, None) => ui.p.fill(Rect::new(ir.x + 2, ir.y + 2, ICON - 4, ICON - 4), Self::marker_style(&kind, &state).0),
@@ -1864,13 +2397,13 @@ impl RegionMap {
             ui.push(format!("here.{id}"), "row", label.clone(), r, true, false, (!modal).then(|| RAct::Pan(id.clone())), t);
         }
         ui.scroll_end();
-        whole
+        p
     }
 
     /// The event log ticker (MAPLOG1-U, spec PLAYUI1 2.1 A): the latest event on one line at the map's bottom left; L
     /// or a click opens the last `LOG_OPEN` events (newest at the bottom), and again shows only the latest. Its rect
     /// (None with an empty log).
-    fn draw_ticker(&mut self, ui: &mut Ui<RAct>, cx: &Cx, modal: bool) -> Option<Rect> {
+    fn draw_ticker(&mut self, ui: &mut Ui<RAct>, cx: &mut Cx, modal: bool) -> Option<Rect> {
         let Some(latest) = cx.log.last().cloned() else { return None };
         let lh = ui.p.line_h(SMALL).ceil() as i32 + 1;
         let max_w = ((TICKER_MAX as f32 * ui.p.fonts.scale).round() as i32).min(W - 8);
@@ -1892,11 +2425,25 @@ impl RegionMap {
         let text_w = lines.iter().map(|l| ui.p.text_w(l, SMALL).ceil() as i32).max().unwrap_or(0);
         let w = (15 + text_w + 4).min(max_w);
         let h = lines.len() as i32 * lh + 5;
-        let r = Rect::new(4, H - 4 - h, w, h);
+        // FLOATPANELS1: the ticker floats (a free corner: the bottom left, locked); its lock and minimize buttons sit
+        // right of the text, and its bottom edge stays put while it opens and closes
+        let buttons = 2 * PANEL_BTN + 8;
+        let size = (w + buttons, h.max(PANEL_BTN + 4));
+        if let Some((x, y)) = self.log_panel.pos.filter(|_| self.log_size.1 > 0 && self.log_size.1 != size.1) {
+            self.log_panel.pos = Some((x, y + self.log_size.1 - size.1));
+        }
+        let chip = aegis_ui::float_panel::chip_size(ui, "Log");
+        let held = ui.dragging() == Some(LOG_PANEL_DRAG);
+        crate::floats::frame(cx, &mut self.log_panel, &mut self.log_kept, crate::floats::REGION_LOG_KEY, MAP_AREA, (4, H - 4 - size.1), size, chip, self.mouse, held);
+        self.log_size = size;
+        let acts = aegis_ui::float_panel::Acts { body: RAct::Panel, lock: RAct::LogLock, min: RAct::LogMin, open: RAct::LogOpen };
+        let hud = |ui: &mut Ui<RAct>, p: Rect| crate::hud::hud_panel(ui, p, rgba(0, 0, 0, 0), th().edge, 3.0);
+        let Some(p) = aegis_ui::float_panel::draw(ui, &self.log_panel, "log.panel", "Log", LOG_PANEL_DRAG, size, chip, &acts, th().game("map_pane", PANE), hud) else {
+            return Some(self.log_panel.chip_rect(size, chip));
+        };
+        let r = Rect::new(p.x, p.y + p.h - h, w, h);
         let hover = !modal && ui.hover(r);
-        ui.p.fill(r, th().game("map_pane", PANE));
-        crate::hud::hud_panel(ui, r, rgba(0, 0, 0, 0), if hover { th().gold } else { th().edge }, 3.0);
-        if hover && th().frame(crate::hud::HUD_FRAME).is_some() {
+        if hover {
             ui.p.panel(r, rgba(0, 0, 0, 0), th().gold, 3.0);
         }
         let last_y = r.y + 3 + (lines.len() as i32 - 1) * lh;
@@ -1905,18 +2452,60 @@ impl RegionMap {
             let ly = (r.y + 3 + i as i32 * lh) as f32;
             ui.p.text_fit((r.x + 15) as f32, ly, l, SMALL, inner as f32, if i + 1 == lines.len() { th().text } else { th().dim });
         }
-        let mut t = tip("Event log (L)", if self.log_open { "Click or press L to show only the latest event." } else { "Click or press L for the last 12 events." });
+        let l = crate::controls_view::hints(&cx.settings.v).key_hint(Key::Char('l'));
+        let mut t = tip(&format!("Event log ({l})"), &if self.log_open { format!("Click or press {l} to show only the latest event.") } else { format!("Click or press {l} for the last 12 events.") });
         if !self.log_open && ui.p.text_w(&latest, SMALL) > inner as f32 {
             t.push((latest.clone(), th().text));
         }
         ui.push("log", "button", latest, r, !modal, self.log_open, Some(RAct::Log), t);
-        Some(r)
+        Some(p)
     }
 }
 
 /// A marker for the sorted pass (PROPS1 4.4): its id, tile, the top of what is drawn there (a sprite's head, else the
 /// tile; badges and names sit over it), kind and state; a person's art; the first service's badge (drawn with the
 /// overlays).
+/// ENGINE-50 (MAP-FRAME1): the key of the map's still layers (`RegionMap::floor`): the data and art loaded, the theme,
+/// the location, view and zoom, the tile sets, whether a composed ground is under the tiles, and the props shown (a
+/// hub's bunk states among them). The view and canvas are `Painter::scroll_begin`'s own part of the key.
+fn floor_key(cx: &Cx, location: &str, (view, q): (mapview::View, i32), sets: &[String], has_ground: bool, props_t: &Dict) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (Arc::as_ptr(&cx.data) as usize, cx.art.generation(), std::rc::Rc::as_ptr(&th()) as usize).hash(&mut h);
+    (location, view.name(), q, sets, has_ground).hash(&mut h);
+    json::get(props_t, "props").to_string().hash(&mut h);
+    h.finish()
+}
+
+/// ENGINE-50 (MAP-FRAME1): each marker's view (`explore::marker_view`) and a person's services (`explore::npc_services`,
+/// none for another kind) for one game state and data, which are all they read. The map and the legend asked for each
+/// marker every frame, most of a walking frame; now once per state (a step changes it).
+#[derive(Default)]
+struct MarkerMemo {
+    data: Option<Arc<emberwake_world::Data>>,
+    gs: Option<GameState>,
+    rows: HashMap<String, (Dict, Vec<&'static str>)>,
+}
+
+impl MarkerMemo {
+    /// Marker `m`'s (full, `explore::marker_full`) view and services at `loc` in `gs`.
+    fn get(&mut self, d: &Arc<emberwake_world::Data>, gs: &GameState, loc: &Dict, m: &Dict) -> (Dict, Vec<&'static str>) {
+        if !self.data.as_ref().is_some_and(|k| Arc::ptr_eq(k, d)) || self.gs.as_ref() != Some(gs) {
+            (self.data, self.gs) = (Some(d.clone()), Some(gs.clone()));
+            self.rows.clear();
+        }
+        let read = || {
+            let services = if s(m, "kind") == "npc" { explore::npc_services(d, gs, &s(d.resolve(&gs.world_id, "characters", &s(m, "character")), "_qid")) } else { Vec::new() };
+            (explore::marker_view(d, gs, loc, m), services)
+        };
+        let id = s(m, "id");
+        if id.is_empty() {
+            return read();
+        }
+        self.rows.entry(id).or_insert_with(read).clone()
+    }
+}
+
 struct MarkDraw {
     id: String,
     r: Rect,
@@ -2128,13 +2717,102 @@ fn leader_art(cx: &Cx) -> (String, String) {
     }
 }
 
+/// ENGINE-53 (SWITCH-AHEAD1), ENGINE-54 (WARM-SPREAD1): the region map a save opens on, drawn unseen in the shell's
+/// warm slices while the title shows (`Screen::warm_next`), so its first draw's art (bodies, markers, props, roofs) and
+/// ground are in their caches before Continue. It draws over a game of its own, swapped in for each slice only (the
+/// title has none), and gives back the log; the shell drops what it asked for (navigation, notices). A save opening on a
+/// story stage is not rehearsed. A fight started ahead is warmed the same way (`fight`).
+pub struct Rehearsal {
+    game: Option<crate::screens::Game>,
+    /// A fight (its event or row, and runner) to start on that game and draw instead of the map (a fight started ahead).
+    fight: Option<(Dict, String)>,
+    /// ENGINE-54 (WARM-SPREAD1): the screen drawn, made on the first slice and kept for the next ones (None after a
+    /// start that failed).
+    inner: Option<Box<dyn Screen<GameCx>>>,
+    made: bool,
+    /// ENGINE-54: set once a slice drew it with nothing left for later (the warming is done).
+    done: std::rc::Rc<std::cell::Cell<bool>>,
+}
+
+impl Rehearsal {
+    /// The map `gs` opens on (as `enter_game` would open it), or None for a game that opens on its story stage.
+    pub fn of(cx: &Cx, gs: &GameState, slot: i64) -> Option<Self> {
+        if emberwake_world::story::is_running(gs) || gs.location_id.is_empty() {
+            return None;
+        }
+        let mut gs = gs.clone();
+        if emberwake_world::travel::roads_seen(&gs).is_none() {
+            emberwake_world::travel::note_new_roads(&cx.data.clone(), &mut gs);
+        }
+        Some(Self { game: Some(crate::screens::Game::new(gs, slot, false)), fight: None, inner: None, made: false, done: Default::default() })
+    }
+
+    /// ENGINE-53, ENGINE-54: `fight` by `runner` on a copy of `gs`, started already (`ahead`, on a thread: its slices
+    /// never start a fight on the frame), drawn unseen (its bodies, board ground, panels).
+    pub fn fight(gs: GameState, slot: i64, fight: Dict, runner: &str, ahead: crate::battle::FightAhead) -> Self {
+        let mut game = crate::screens::Game::new(gs, slot, false);
+        game.fight_ahead = Some(ahead);
+        Self { game: Some(game), fight: Some((fight, runner.to_string())), inner: None, made: false, done: Default::default() }
+    }
+
+    /// ENGINE-54: set once the warming is done (a slice drew it with nothing left for later).
+    pub fn done_flag(&self) -> std::rc::Rc<std::cell::Cell<bool>> {
+        self.done.clone()
+    }
+}
+
+impl Screen<GameCx> for Rehearsal {
+    fn id(&self) -> &'static str {
+        "region_rehearsal"
+    }
+    fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, _mouse: (i32, i32), _live: bool) {
+        let Some(game) = self.game.take() else { return };
+        let kept = cx.game.replace(game);
+        let log = cx.log.clone();
+        // the screen is made on one slice and drawn from the next (each its own frame)
+        if !self.made {
+            self.made = true;
+            self.inner = match &self.fight {
+                None => Some(Box::new(RegionMap::new(cx))),
+                Some((fight, runner)) => crate::battle::BattleScreen::world(cx, fight, runner).ok().map(|b| Box::new(b) as Box<dyn Screen<GameCx>>),
+            };
+            cx.art.more();
+            cx.log = log;
+            self.game = std::mem::replace(&mut cx.game, kept);
+            return;
+        }
+        let left = (cx.art.left(), aegis_ui::ground::left_later());
+        if let Some(inner) = self.inner.as_mut() {
+            inner.draw(cx, g, (-1, -1), false);
+        }
+        if (cx.art.left(), aegis_ui::ground::left_later()) == left {
+            self.done.set(true);
+        }
+        cx.log = log;
+        self.game = std::mem::replace(&mut cx.game, kept);
+    }
+    fn widgets(&self) -> Vec<Value> {
+        Vec::new()
+    }
+    fn draw_tip(&self, _p: &mut aegis_ui::painter::Painter, _mouse: (i32, i32)) {}
+    fn click(&mut self, _cx: &mut Cx, _pos: (i32, i32)) -> bool {
+        false
+    }
+    fn click_id(&mut self, _cx: &mut Cx, id: &str) -> Result<(), String> {
+        Err(format!("unknown widget '{id}'"))
+    }
+    fn widget_rect(&self, _id: &str) -> Option<(Rect, Vec<String>)> {
+        None
+    }
+}
+
 /// Body `body` standing on tile `r` (spec PLAYUI1 2.4): a foot shadow in `foot`, then the frame `player` plays at
 /// `now` in `face` (`Art::played_facing`, DIR4-M: the up or down row when the body has one, else the side row,
-/// mirrored facing left), filling its rect at the zoomed size (SPRITEFIT1's exact fit). None when it does not play (the
-/// caller draws today's token).
+/// mirrored facing left), filling its rect (`body_rect_of`: PAINTED-MAPS1 scales a painted body by its foot row) at the
+/// zoomed size (SPRITEFIT1's exact fit). None when it does not play (the caller draws today's token).
 #[allow(clippy::too_many_arguments)]
 fn draw_sprite(ui: &mut Ui<RAct>, cx: &mut Cx, body: &str, palette: &str, player: &ClipPlayer, now: u64, face: Facing, r: Rect, foot: Rgba) -> Option<SpriteDrawn> {
-    let sr = mapview::sprite_rect(r);
+    let sr = body_rect_of(cx, Some(body), r);
     let px = (sr.w as f32 * ui.p.v.s).round().max(1.0) as i32;
     let (f, img) = cx.art.played_facing(body, palette, player, now, px, face)?;
     let flip = face.mirrors(&f);
@@ -2143,6 +2821,12 @@ fn draw_sprite(ui: &mut Ui<RAct>, cx: &mut Cx, body: &str, palette: &str, player
     ui.p.image(img, sr);
     let view = if f.side { View::Side } else { face.view };
     Some(SpriteDrawn { body: body.to_string(), clip: f.clip, frame: f.frame, flip, rect: sr, px, face, view })
+}
+
+/// PAINTED-MAPS1 (PR7-73): the drawn square of body `body` (None: no body) on tile `r` (`mapview::body_rect` over its
+/// sheet: a painted body by its foot row, any other the token square).
+fn body_rect_of(cx: &mut Cx, body: Option<&str>, r: Rect) -> Rect {
+    mapview::body_rect(r, body.and_then(|b| cx.art.clips(b)))
 }
 
 /// A marker on its tile: a person's sprite (PLAYUI1-R; their ring and token, or initial, without a body), else the
@@ -2572,7 +3256,32 @@ fn into_wall_tone(c: &aegis_ui::canvas::Canvas, dest: Rect, img: &aegis_ui::canv
     out
 }
 
+/// Applies per-zone floor and wall presentation grading from `fx` across `map_rect`.
+fn apply_map_zone_grades(
+    ui: &mut Ui<RAct>,
+    t: &Dict,
+    geo: &MapGeom,
+    map_rect: Rect,
+    (mw, mh): (i32, i32),
+    is_wall: &impl Fn(i32, i32) -> bool,
+    fx: &aegis_ui::map_fx::MapFx,
+) {
+    let (cw, ch) = geo.cell_size();
+    let grid = aegis_ui::map_fx::GradeGrid {
+        ox: ui.p.v.x(geo.ox as f32) as f32,
+        oy: ui.p.v.y(geo.oy as f32) as f32,
+        cw: cw as f32 * ui.p.v.s,
+        ch: ch as f32 * ui.p.v.s,
+        cols: mw,
+        rows: mh,
+    };
+    let area = ui.p.v.rect(map_rect);
+    aegis_ui::map_fx::apply_zone_grades_with(ui.p.c, area, grid, fx, is_wall, |x, y| explore::zone_at(t, x as i64, y as i64));
+}
+
 /// REGIONVIEW2: opt-in evening ambience darkened over `map_area` and warmed cleanly by per-art light pools.
+/// Optional `fx` overrides darkness, ambient shadow colour, and per-prop light specs.
+#[allow(clippy::too_many_arguments)]
 fn apply_dim_ambience(
     ui: &mut Ui<RAct>,
     geo: &MapGeom,
@@ -2581,21 +3290,10 @@ fn apply_dim_ambience(
     opaque_roofs: &[Rect],
     is_wall: &impl Fn(i32, i32) -> bool,
     wall_face_tiles: i32,
+    fx: Option<&aegis_ui::map_fx::MapFx>,
 ) {
-    let Some(area) = canvas_visible_rect(ui.p.c, Rect::new(0, 0, ui.p.c.w, ui.p.c.h)) else { return };
-    struct Light {
-        lx: f32,
-        ly: f32,
-        inv_rx2: f32,
-        inv_ry2: f32,
-        bx0: i32,
-        by0: i32,
-        bx1: i32,
-        by1: i32,
-        col: [f32; 3],
-    }
     let (cw, ch) = geo.cell_size();
-    let mut lights = Vec::new();
+    let mut pools = Vec::new();
     for p in props {
         if p.roof.is_some() {
             continue;
@@ -2607,77 +3305,25 @@ fn apply_dim_ambience(
             continue;
         }
         let Some(art) = prop_art_of(prop_arts, geo, p) else { continue };
-        let Some((rad, col)) = light_pool(art) else { continue };
+        let (rad, col, strength) = match fx.and_then(|f| f.light_for(&p.id, art)) {
+            Some(spec) => (spec.radius, spec.color, spec.strength),
+            None => match light_pool(art) {
+                Some((r, c)) => (r as f32, c, aegis_ui::map_fx::DEFAULT_LIGHT_STRENGTH),
+                None => continue,
+            },
+        };
         let (fit, _) = prop_mounted_fit(Some(art), p, geo, is_wall, wall_face_tiles);
         let dr = fit.unwrap_or(p.rect);
         let lx = ui.p.v.x(dr.x as f32 + dr.w as f32 * 0.5) as f32;
         let ly = ui.p.v.y((dr.y + dr.h) as f32 - 14.0 * ch as f32 / ART_TILE as f32) as f32;
-        let rx = (rad as f32 * cw as f32 / ART_TILE as f32) * ui.p.v.s;
-        let ry = (rad as f32 * ch as f32 / ART_TILE as f32) * ui.p.v.s;
-        if rx < 1.0 || ry < 1.0 {
-            continue;
-        }
-        let bx0 = (lx - rx).floor().max(area.x as f32) as i32;
-        let by0 = (ly - ry).floor().max(area.y as f32) as i32;
-        let bx1 = (lx + rx).ceil().min((area.x + area.w) as f32) as i32;
-        let by1 = (ly + ry).ceil().min((area.y + area.h) as f32) as i32;
-        if bx1 > bx0 && by1 > by0 {
-            lights.push(Light {
-                lx,
-                ly,
-                inv_rx2: 1.0 / (rx * rx),
-                inv_ry2: 1.0 / (ry * ry),
-                bx0,
-                by0,
-                bx1,
-                by1,
-                col: [col[0] as f32, col[1] as f32, col[2] as f32],
-            });
+        let rx = (rad * cw as f32 / ART_TILE as f32) * ui.p.v.s;
+        let ry = (rad * ch as f32 / ART_TILE as f32) * ui.p.v.s;
+        if rx >= 1.0 && ry >= 1.0 {
+            pools.push(aegis_ui::map_fx::LightPool { x: lx, y: ly, rx, ry, color: col, strength });
         }
     }
-    let w = ui.p.c.w;
-    for py in area.y..(area.y + area.h) {
-        let fy = py as f32 + 0.5;
-        let row = (py * w) as usize;
-        for px in area.x..(area.x + area.w) {
-            let fx = px as f32 + 0.5;
-            let mut min_dark = 96.0_f32;
-            let (mut gr, mut gg, mut gb, mut gw) = (0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32);
-            for l in &lights {
-                if px < l.bx0 || px >= l.bx1 || py < l.by0 || py >= l.by1 {
-                    continue;
-                }
-                let dx = fx - l.lx;
-                let dy = fy - l.ly;
-                let d2 = dx * dx * l.inv_rx2 + dy * dy * l.inv_ry2;
-                if d2 < 1.0 {
-                    let d = d2.sqrt();
-                    min_dark = min_dark.min(96.0 * d.powf(1.6));
-                    let wt = (1.0 - d).powf(1.3) * 0.28;
-                    gr += l.col[0] * wt;
-                    gg += l.col[1] * wt;
-                    gb += l.col[2] * wt;
-                    gw += wt;
-                }
-            }
-            let i = (row + px as usize) * 4;
-            let da = min_dark / 255.0;
-            let inv = 1.0 - da;
-            let mut r = ui.p.c.px[i] as f32 * inv + 6.0 * da;
-            let mut g = ui.p.c.px[i + 1] as f32 * inv + 8.0 * da;
-            let mut b = ui.p.c.px[i + 2] as f32 * inv + 16.0 * da;
-            if gw > 0.0 {
-                let ga = gw.min(0.32);
-                let ig = 1.0 - ga;
-                r = r * ig + (gr / gw) * ga;
-                g = g * ig + (gg / gw) * ga;
-                b = b * ig + (gb / gw) * ga;
-            }
-            ui.p.c.px[i] = r.round().clamp(0.0, 255.0) as u8;
-            ui.p.c.px[i + 1] = g.round().clamp(0.0, 255.0) as u8;
-            ui.p.c.px[i + 2] = b.round().clamp(0.0, 255.0) as u8;
-        }
-    }
+    let full = Rect::new(0, 0, ui.p.c.w, ui.p.c.h);
+    aegis_ui::map_fx::apply_ambience_and_lights(ui.p.c, full, aegis_ui::map_fx::AmbienceConfig::from_fx(fx), &pools);
 }
 
 /// A prop, cut at the map's rect (REGIONVIEW1: only boundary art past the map). The clip is physical px under the
@@ -2966,6 +3612,10 @@ fn darkened_cap(cx: &mut Cx, sets: &[&str], wall: &str, b: &Block) -> Option<aeg
 const PANE: Rgba = rgba(12, 18, 28, 235);
 /// The legend's widest at text size Normal (spec PLAYUI1 2.1 A), and the ticker's.
 const LEGEND_MAX: i32 = 170;
+/// FLOATPANELS1: the area the legend and the ticker float in (the map under the HUD bar), and their drag payloads.
+const MAP_AREA: Rect = Rect::new(0, HUD_H, W, H - HUD_H);
+const LEGEND_PANEL_DRAG: &str = "region.legend";
+const LOG_PANEL_DRAG: &str = "region.log";
 const TICKER_MAX: i32 = 360;
 /// The events the opened ticker shows (MAPLOG1-U).
 pub const LOG_OPEN: usize = 12;
@@ -3024,6 +3674,14 @@ pub(crate) fn glyph_colour(kind: &str, state: &str) -> Rgba {
     }
 }
 
+/// PR7-76 (PT-43): a point of interest the party can use now: present (not spent) with a use (`explore::point_use`) or a
+/// flag to set; it joins the Here list and gets an edge arrow out of view. A point that only speaks stays off.
+/// Known limit (`point_fired`): a point with both a use and `sets_flags` would have its use skipped when a click walk
+/// arrives on it (the step's flag answer stands for it); no shipped point has both.
+pub(crate) fn point_listed(m: &Dict, state: &str) -> bool {
+    state == "present" && (!explore::point_use(m).is_empty() || !json::arr(&json::normalize(json::get(m, "sets_flags"))).is_empty())
+}
+
 /// A glyph's 8 x 8 picture, `#` drawn.
 fn glyph_rows(g: MapGlyph) -> [&'static str; 8] {
     match g {
@@ -3035,6 +3693,22 @@ fn glyph_rows(g: MapGlyph) -> [&'static str; 8] {
         MapGlyph::Look => ["........", "...##...", "..#..#..", ".#.##.#.", ".#.##.#.", "..#..#..", "...##...", "........"],
     }
 }
+
+/// STYLE-PASS1B (`PR7-48`, FB-366): the walk destination's ring in cell `r`: a flat amber ellipse on the floor where a
+/// sprite's feet stand (the lower part of the cell, wider than a foot shadow so it shows around one), two strokes thick
+/// (the outer full, the inner softer).
+pub(crate) fn draw_walk_ring(p: &mut aegis_ui::painter::Painter, r: Rect) {
+    let col = crate::tokens::walk_ring();
+    let (w, h) = (r.w as f32, r.h as f32);
+    let (cx, cy) = (r.x as f32 + w / 2.0, r.y as f32 + h * WALK_RING.0);
+    let (rx, ry) = (w * WALK_RING.1, h * WALK_RING.2);
+    p.ellipse_ring(cx, cy, rx, ry, col);
+    p.ellipse_ring(cx, cy, rx - 1.0, (ry - 1.0).max(1.0), rgba(col[0], col[1], col[2], 150));
+}
+
+/// The walk ring as shares of the cell (STYLE-PASS1B): its centre's height from the cell's top, its half width and its
+/// half height.
+pub(crate) const WALK_RING: (f32, f32, f32) = (0.75, 0.48, 0.22);
 
 /// Draws glyph `g` in `col` on a dark plate filling `r` (a marker icon's rect), its cells whole logical px.
 pub(crate) fn draw_map_glyph(p: &mut aegis_ui::painter::Painter, r: Rect, g: MapGlyph, col: Rgba) {
@@ -3125,18 +3799,255 @@ fn draw_talk(ui: &mut Ui<RAct>, cx: &mut Cx, faces: &mut Faces, view: &Dict, b: 
     crate::talk::draw_talk(ui, cx, &gs, faces, view, b, busy, crate::talk::svc_talk_act::<RAct>);
 }
 
-/// The region map's controls (the Help button's hover card and popup).
-pub const REGION_HELP: [&str; 9] = [
-    "Arrows or WASD: move",
-    "E or Enter: use what the party faces",
-    "Click: walk there, or on a marker to use it",
-    "Legend row or edge arrow: look there (again: walk there)",
-    "Q or a click on the leader: the next member leads",
-    "1-9: pick a reply in a conversation",
-    "P: party   J: journal   I: stash",
-    "L: the last events, or only the latest",
-    "Esc: back, or the game menu",
-];
+/// The region map's controls (the Help button's hover card and popup), with the keys `c` binds (CONTROLS-UI1B).
+pub fn region_help(c: &Controls) -> Vec<String> {
+    let k = |ch: char| c.key_hint(Key::Char(ch));
+    vec![
+        format!("Arrows or {}: move", walk_keys(c)),
+        format!("{} or {}: use what the party faces", k('e'), c.key_hint(Key::Enter)),
+        "Click: walk there, or on a marker to use it".into(),
+        "Legend row or edge arrow: look there (again: walk there)".into(),
+        format!("{} or a click on the leader: the next member leads", k('q')),
+        "1-9: pick a reply in a conversation".into(),
+        party_keys(c),
+        format!("{}: the last events, or only the latest", k('l')),
+        format!("{}: back, or the game menu", c.key_hint(Key::Esc)),
+    ]
+}
+
+/// The walk keys as one word ("WASD"), or spaced when one is longer than a letter ("W A S Space").
+pub fn walk_keys(c: &Controls) -> String {
+    let keys: Vec<String> = ['w', 'a', 's', 'd'].map(|ch| c.key_hint(Key::Char(ch))).to_vec();
+    keys.join(if keys.iter().all(|k| k.chars().count() == 1) { "" } else { " " })
+}
+
+/// The HUD keys' help line ("P: party   J: journal   I: stash"), as `c` binds them.
+pub fn party_keys(c: &Controls) -> String {
+    let k = |ch: char| c.key_hint(Key::Char(ch));
+    format!("{}: party   {}: journal   {}: stash", k('p'), k('j'), k('i'))
+}
+
+/// Deterministic headless full-map renderer for offline alignment and visual diffs (`emberwake render_map=<id>`).
+///
+/// Renders the entire map at 32 px per tile (`q = 8`, `scale = 1.0`) using the live `RegionMap` pipeline (composed
+/// ground, walls & interior wall sets, ground props, feet-sorted standing props, optional `MapFx` zone grades and light
+/// pools), with no HUD, party, NPCs, markers, or camera crop.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn render_static_map(
+    cx: &mut Cx,
+    font_path: &std::path::Path,
+    map_id: &str,
+    view: mapview::View,
+    fx_mode: &aegis_ui::map_fx::StaticFx,
+    layers: aegis_ui::map_fx::StaticLayers,
+    map_override: Option<&Dict>,
+) -> anyhow::Result<aegis_ui::canvas::Canvas> {
+    let d = cx.data.clone();
+    let t_ref = map_override.unwrap_or_else(|| d.map(map_id));
+    if t_ref.is_empty() {
+        anyhow::bail!("render_map: unknown map template '{map_id}'");
+    }
+    let t = t_ref.clone();
+    let (map_w, map_h) = explore::size_of(&t);
+    if map_w <= 0 || map_h <= 0 {
+        anyhow::bail!("render_map: map '{map_id}' has empty dimensions");
+    }
+    // Locate the world and location referencing this map template (for lineage, tileset, boundary, dim_ambience).
+    let mut world_id = String::new();
+    let mut loc = Dict::new();
+    'outer: for wid in d.world_ids() {
+        for entry in d.own_entries(&wid, "locations") {
+            if s(entry, "map") == map_id {
+                world_id = wid;
+                loc = entry.clone();
+                break 'outer;
+            }
+        }
+    }
+    let mut lineage = if world_id.is_empty() { Vec::new() } else { d.lineage(&world_id) };
+    lineage.reverse();
+    let sets = emberwake_content::art::region_sets(&lineage, &s(&loc, "tileset"));
+    let set_refs: Vec<&str> = sets.iter().map(String::as_str).collect();
+    let q = 8; // 32x32 square or 32x24 tilted: exact 1:1 ART_TILE density
+    let tilted = view == mapview::View::Tilted;
+    let geo = MapGeom { view, ox: 0, oy: 0, q };
+    let (cw, ch) = geo.cell_size();
+    let (mw_i, mh_i) = (map_w as i32, map_h as i32);
+    let (w_px, h_px) = (mw_i * cw, mh_i * ch);
+    let map_rect = Rect::new(0, 0, w_px, h_px);
+
+    let font_bytes = aegis_core::vfs::read(font_path).map_err(|e| anyhow::anyhow!("{}: {e}", font_path.display()))?;
+    let mut g = Gfx {
+        canvas: aegis_ui::canvas::Canvas::new(w_px, h_px),
+        view: PView { s: 1.0, ox: 0.0, oy: 0.0, g: 1, canvas: (w_px, h_px) },
+        fonts: aegis_ui::painter::Fonts::new(&font_bytes),
+        kit: aegis_ui::ui::Kit::default(),
+    };
+    let draw_ground_overlay = layers.includes_ground();
+    let draw_props = layers.includes_props();
+    let draw_lighting = layers.includes_lighting();
+
+    let mut ground = MapGround::default();
+    if draw_ground_overlay {
+        ground.sync(cx, &t, &sets, view, q);
+    }
+    let has_ground = draw_ground_overlay && ground.has();
+    let art_size = if tilted { ART_TILE * q / 4 } else { cw };
+    let ch_at = |x: i32, y: i32| explore::tile(&t, x as i64, y as i64).unwrap_or('#');
+    let border_at = |x: i32, y: i32| on_border(&t, (map_w, map_h), x as i64, y as i64);
+    let boundary = emberwake_content::art::boundary_of(&loc, &t);
+    let walls = WallArt::of(&sets, &boundary);
+    let interior: Vec<(String, Vec<String>)> = interior_sets(&t, &sets);
+    let interior_walls: Vec<(&str, WallArt)> = interior.iter().map(|(set, names)| (set.as_str(), WallArt::of(names, &boundary))).collect();
+    let wall_art_at = |x: i32, y: i32| -> &WallArt {
+        if interior_walls.is_empty() {
+            return &walls;
+        }
+        let set = explore::wall_set_at(&t, x as i64, y as i64);
+        interior_walls.iter().find(|(s, _)| !set.is_empty() && *s == set).map_or(&walls, |(_, w)| w)
+    };
+    let wall_face_tiles = map_wall_face_tiles(&loc, &t);
+    let dim_ambience = map_dim_ambience(&loc, &t);
+    let freestanding = freestanding_prop_cells(&t, (map_w, map_h), &ch_at);
+    let is_wall = |x: i32, y: i32| ch_at(x, y) == '#' && !freestanding.contains(&(x, y));
+
+    let props = crate::props::layout(&t, &lineage, (geo.ox, geo.oy), geo.cell_size(), map_rect, |dirs, variant, x, y| {
+        let rel = cx.art.pick(dirs, variant, x, y)?;
+        let size = cx.art.size_of(&rel)?;
+        Some((rel, size))
+    });
+    let prop_arts = collect_prop_arts(&t);
+
+    {
+        let mut ui: Ui<RAct> = Ui::new(&mut g, (-1, -1), false);
+        ui.p.fill(map_rect, th().game("map_ground", rgb(14, 18, 26)));
+        if draw_ground_overlay {
+            ground.draw(&mut ui.p, &geo);
+        }
+        for y in 0..mh_i {
+            for x in 0..mw_i {
+                let r = geo.cell(x, y);
+                let ch = ch_at(x, y);
+                let vis_ch = if ch == '#' && freestanding.contains(&(x, y)) { '.' } else { ch };
+                if border_at(x, y) || (tilted && vis_ch == '#') {
+                    continue;
+                }
+                if has_ground && matches!(vis_ch, '.' | '~') {
+                    continue;
+                }
+                if !tilted && wall_face_tiles > 0 && vis_ch == '#' {
+                    let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
+                    let is_face = |nx: i32, ny: i32| wall_depth_at(nx, ny, wall_face_tiles, (mw_i, mh_i), &is_wall) > 0;
+                    let wa = wall_art_at(x, y);
+                    if depth > 0 {
+                        let up_face = is_face(x, y - 1);
+                        draw_wall_face_at(&mut ui, cx, wa, false, x, y, r, r.h, depth == 1 && up_face, !up_face, !is_face(x + 1, y), !is_face(x - 1, y));
+                    } else {
+                        let tile = emberwake_content::art::region_tile('#').unwrap_or("wall");
+                        match cx.art.tile_in(&wa.sets, tile, x, y, art_size) {
+                            Some(img) => ui.p.image(img, r),
+                            None => ui.p.fill(r, WALL_FILL),
+                        }
+                        draw_wall_cap_edges(&mut ui, r, r.h, !is_wall(x, y - 1), !is_wall(x - 1, y) || is_face(x - 1, y), !is_wall(x + 1, y) || is_face(x + 1, y));
+                    }
+                    continue;
+                }
+                let tile = emberwake_content::art::region_tile(vis_ch);
+                let tile_sets = if vis_ch == '#' { &wall_art_at(x, y).sets } else { &set_refs };
+                match tile.and_then(|tk| cx.art.tile_in(tile_sets, tk, x, y, art_size)) {
+                    Some(img) => ui.p.image(img, r),
+                    None => ui.p.fill(
+                        r,
+                        match vis_ch {
+                            '.' => rgb(70, 90, 64),
+                            '#' => WALL_FILL,
+                            '~' => rgb(40, 90, 100),
+                            _ => rgb(20, 20, 24),
+                        },
+                    ),
+                }
+                if tilted && vis_ch == '~' && wall_face_tiles == 0 {
+                    draw_lips(&mut ui, r, ch_at(x, y - 1) != '~', ch_at(x, y + 1) != '~');
+                }
+            }
+        }
+        for y in 0..mh_i {
+            for x in 0..mw_i {
+                if border_at(x, y) {
+                    if wall_face_tiles > 0 {
+                        let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
+                        let is_face = |nx: i32, ny: i32| wall_depth_at(nx, ny, wall_face_tiles, (mw_i, mh_i), &is_wall) > 0;
+                        let r = geo.cell(x, y);
+                        if depth > 0 {
+                            let up_face = is_face(x, y - 1);
+                            draw_wall_face_at(&mut ui, cx, &walls, true, x, y, r, r.h, depth == 1 && up_face, !up_face, !is_face(x + 1, y), !is_face(x - 1, y));
+                        } else {
+                            draw_border(&mut ui, cx, &walls, x, y, r, art_size, false);
+                            draw_wall_cap_edges(&mut ui, r, r.h, !is_wall(x, y - 1), !is_wall(x - 1, y) || is_face(x - 1, y), !is_wall(x + 1, y) || is_face(x + 1, y));
+                        }
+                    } else {
+                        draw_border(&mut ui, cx, &walls, x, y, geo.cell(x, y), art_size, tilted && !is_wall(x, y + 1));
+                    }
+                }
+            }
+        }
+        if wall_face_tiles > 0 {
+            draw_depth_floor_shadows_and_water(&mut ui, &geo, (mw_i, mh_i), (0, mw_i - 1), (0, mh_i - 1), has_ground, &ch_at, &is_wall);
+        }
+        if draw_props {
+            for p in props.iter().filter(|p| p.ground) {
+                draw_prop(&mut ui, cx, p, None, false, map_rect, q);
+            }
+        }
+        let map_fx = if draw_lighting { fx_mode.resolve(cx.art.layers(), map_id) } else { None };
+        if let Some(fx) = map_fx.as_ref().filter(|f| !f.zones.is_empty()) {
+            apply_map_zone_grades(&mut ui, &t, &geo, map_rect, (mw_i, mh_i), &is_wall, fx);
+        }
+        let mut blocks: Vec<Block> = Vec::new();
+        if tilted {
+            for y in 0..mh_i {
+                for x in 0..mw_i {
+                    if !is_wall(x, y) || border_at(x, y) {
+                        continue;
+                    }
+                    let cell = geo.cell(x, y);
+                    let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
+                    let face = if wall_face_tiles > 0 { depth > 0 } else { !is_wall(x, y + 1) };
+                    let rect = mapview::block_rect(cell, face);
+                    blocks.push(Block { x, y, cell, rect, face });
+                }
+            }
+        }
+        let order = crate::props::sorted(&props, &blocks, &[], Rect::new(-1000, -1000, 1, 1));
+        for item in &order {
+            match *item {
+                Item::Prop(i) => {
+                    if draw_props {
+                        let p = &props[i];
+                        let (fit, mounted) = prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles);
+                        draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
+                    }
+                }
+                Item::Block(i) => {
+                    let b = &blocks[i];
+                    if wall_face_tiles > 0 {
+                        draw_block_depth(&mut ui, cx, b, wall_art_at(b.x, b.y), wall_face_tiles, (mw_i, mh_i), &is_wall, &border_at);
+                    } else {
+                        draw_block(&mut ui, cx, b, wall_art_at(b.x, b.y), &ch_at, &border_at);
+                    }
+                }
+                Item::Marker(_) | Item::Party => {}
+            }
+        }
+        if draw_lighting {
+            let effective_dim = map_fx.as_ref().and_then(|f| f.dim_ambience).unwrap_or(dim_ambience);
+            if effective_dim {
+                apply_dim_ambience(&mut ui, &geo, &props, &prop_arts, &[], &is_wall, wall_face_tiles, map_fx.as_ref());
+            }
+        }
+    }
+    Ok(g.canvas)
+}
 
 #[cfg(test)]
 mod tests {
@@ -3182,10 +4093,10 @@ mod tests {
     /// REGIONGROUND1: a ground's one texture and a boundary's tiles are in the tree; a ground's other file is a stray.
     #[test]
     fn ground_and_boundary_art_follow_their_patterns() {
-        for ok in ["tilesets/ashlands/ground/mud/v0.png", "tilesets/common/boundary/keep/wall/v0.png", "tilesets/common/boundary/keep/wall_face/v2.png"] {
+        for ok in ["tilesets/ashlands/ground/mud/v0.png", "tilesets/common/boundary/keep/wall/v0.png", "tilesets/common/boundary/keep/wall_face/v2.png", "tilesets/sunk_ward_stage/front_face/floor/v3.png", "tilesets/sunk_ward_stage/stage.fx.json", "tilesets/sunk_ward_stage/cover/v0.png", "tilesets/sunk_ward_stage/wall_foot/v1.png", "tilesets/sunk_ward_foundry_stage/lava/front_face/v0.png", "tilesets/sunk_ward_stage/floor/sheet.png", "tilesets/sunk_ward_stage/floor/decal/v0.png", "tilesets/sunk_ward_stage/lip/lava/v1.png", "props/common/exit_path/v0.png", "props/common/exit_gate/v0.png", "tilesets/sunk_ward_stage/lava/over_floor/m01.png", "tilesets/sunk_ward_foundry_stage/floor/over_lava/m14.png"] {
             assert!(layout_ok(ok), "{ok}");
         }
-        for stray in ["tilesets/ashlands/ground/mud/v1.png", "tilesets/ashlands/ground/mud.png", "tilesets/ashlands/ground/mud/over_ash/m01.png", "tilesets/common/boundary/keep/roof/v0.png", "tilesets/common/boundary/keep/wall/face.png"] {
+        for stray in ["tilesets/ashlands/ground/mud/v1.png", "tilesets/ashlands/ground/mud.png", "tilesets/ashlands/ground/mud/over_ash/m01.png", "tilesets/common/boundary/keep/roof/v0.png", "tilesets/common/boundary/keep/wall/face.png", "tilesets/sunk_ward_stage/front_face/floor.png", "tilesets/sunk_ward_stage/floor/stage.fx.json", "tilesets/high_bastion_stage/backdrop_ramparts.png", "tilesets/sunk_ward_foundry_stage/lava/front_face/v0.jpg", "tilesets/sunk_ward_stage/floor/sheet1.png", "tilesets/sunk_ward_stage/floor/decal/a.png", "tilesets/sunk_ward_stage/lip/lava.png", "tilesets/ashlands/floor/over_mud/m01.png", "tilesets/sunk_ward_stage/lava/over_floor/m15.png", "tilesets/sunk_ward_stage/lava/over_floor/v0.png"] {
             assert!(!layout_ok(stray), "{stray}");
         }
     }
@@ -3258,6 +4169,8 @@ mod tests {
             ["portraits", "full_body", f] => png(f),
             ["items", _, f] => png(f),
             ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
+            // PASSIVE-ICON1: the kit's passive icon archetypes
+            ["passives", f] => png(f),
             // LOOK1-G1: the theme file and its nine-slice frames (`<role>.png` with a `<role>.json` sidecar)
             ["ui", "theme.json"] => true,
             // UISPLIT1: screen layout files and their view fixtures
@@ -3265,14 +4178,33 @@ mod tests {
             ["ui", "views", f] => f.ends_with(".view.json"),
             ["ui", "frames", f] => png(f) || f.ends_with(".json"),
             ["ui", "pins" | "badges" | "chips" | "intents" | "hud" | "markers" | "services", f] | ["ui", f] => png(f),
+            // DIORAMA5 slice 0 (PR7-77): a terrain's ground sheet (before the `v*` pattern below)
+            ["tilesets", _, _, "sheet.png"] => true,
             ["tilesets", _, _, f] | ["props", _, _, f] => v(f),
             // REGIONGROUND1: a ground's one texture (only `v0` is read), and a boundary's tiles
             ["tilesets", _, "ground", _, "v0.png"] => true,
             ["tilesets", _, "boundary", _, "wall" | "wall_face", f] => v(f),
+            // DIORAMA2 R2 and DIORAMA3 R3 (ASSETORG2): a stage set's front face per terrain and its light spots
+            ["tilesets", _, "front_face", _, f] => v(f),
+            ["tilesets", _, "stage.fx.json"] => true,
+            // DIORAMA4 S2 (PR7-74): a zone's terrain override folder's own front face (`<set>/<terrain>/front_face/v*`)
+            ["tilesets", _, _, "front_face", f] => v(f),
+            // DIORAMA5 slice 0 (PR7-77): a terrain's ground sheet, its accent decals, a sunken terrain's lip art, and
+            // the exit marker's path decal and gate (`props/common/exit_path/v*`, `exit_gate/v*`, the props pattern)
+            ["tilesets", _, _, "decal", f] => v(f),
+            ["tilesets", _, "lip", _, f] => v(f),
+            // A stage set's transition pieces (`<upper>/over_<lower>/m01..m14`, LOOK1 5.3, 64 x 48), a stopgap for
+            // Art/UI's ragged edges until the composer draws the battle ground; region sets keep refusing them
+            ["tilesets", set, _, over, f] if set.ends_with("_stage") && over.starts_with("over_") => {
+                f.strip_prefix('m').and_then(|n| n.strip_suffix(".png")).filter(|n| n.len() == 2).and_then(|n| n.parse::<u32>().ok()).is_some_and(|n| (1..=14).contains(&n))
+            }
             // MAP-HOOKS1: a location's landmark on the world map, and a world map background with its layout sidecar
             ["map", "landmarks", f] => png(f),
             ["backgrounds", "world_map", f] => png(f) || f.ends_with(".json"),
-            ["backgrounds", "menu" | "title" | "location" | "battle" | "story", f] => png(f),
+            // TITLEFX1 (PR7-28): a menu picture's fire spots `<picture>.fx.json` beside it
+            ["backgrounds", "menu", f] => png(f) || f.ends_with(".fx.json"),
+            ["map_fx", f] => f.ends_with(".fx.json"),
+            ["backgrounds", "title" | "location" | "battle" | "story", f] => png(f),
             ["audio", "sfx", f] => f.ends_with(".wav"),
             ["audio", "music", f] => f.ends_with(".ogg"),
             // AMBIENCE1: a place's ambient loop
@@ -3315,13 +4247,16 @@ mod map_tests {
         Rect::new(0, HUD_H, W, H - HUD_H)
     }
 
-    /// The markers the legend lists, in order: present (or spent or locked) and not a bare point.
+    /// The markers the legend lists, in order: present (or spent or locked), a point only while usable (PT-43).
     fn listed(cx: &Cx) -> Vec<Dict> {
         let gs = cx.gs();
         let loc = explore::location(&cx.data, gs);
         explore::markers_of(loc)
             .into_iter()
-            .filter(|m| s(&explore::marker_view(&cx.data, gs, loc, m), "state") != "absent" && s(m, "kind") != "point")
+            .filter(|m| {
+                let st = s(&explore::marker_view(&cx.data, gs, loc, m), "state");
+                st != "absent" && (s(m, "kind") != "point" || point_listed(m, &st))
+            })
             .collect()
     }
 
@@ -3410,11 +4345,14 @@ mod map_tests {
         let (mut cx, mut g) = (game_cx(), gfx());
         let mut map = RegionMap::new(&mut cx);
         frame(&mut map, &mut cx, &mut g, 1.0);
-        let head = widget(&map, "legend").expect("the legend header");
-        assert_eq!(head["kind"], json!("section"));
+        // FLOATPANELS1: a floating panel, its title row holding the lock and minimize buttons
+        let head = widget(&map, "legend").expect("the legend panel");
+        assert_eq!(head["kind"], json!("backdrop"));
         let (hx, hy, hw, _) = rect(&head);
         assert_eq!((hx + hw, hy), ((W - 4) as i64, (HUD_H + 4) as i64), "top right under the bar");
-        assert!(hw <= LEGEND_MAX as i64, "at most {LEGEND_MAX} wide at Normal: {hw}");
+        let buttons = (2 * PANEL_BTN + 8) as i64;
+        assert!(hw <= LEGEND_MAX as i64 + buttons, "at most {LEGEND_MAX} wide at Normal past its buttons: {hw}");
+        assert!(widget(&map, "legend.lock").is_some() && widget(&map, "legend.min").is_some());
         let markers = listed(&cx);
         assert!(head["text"].as_str().is_some_and(|t| t == format!("Here ({})", markers.len())), "{head}");
         let want: Vec<String> = markers.iter().map(|m| format!("here.{}", s(m, "id"))).collect();
@@ -3428,16 +4366,104 @@ mod map_tests {
             let card = widget(&map, &format!("here.{}", s(m, "id"))).map(|w| w["tip"].to_string()).unwrap_or_default();
             assert_eq!(card.contains(&services_text(&services)) && !services.is_empty(), !services.is_empty(), "{card}");
         }
-        // a click folds it to the header, kept in the settings file; another opens it again
-        map.click_id(&mut cx, "legend").expect("fold");
+        // minimize shrinks it in place to its "Here (N)" button, kept in the settings file; the button opens it again
+        let min = rect(&widget(&map, "legend.min").unwrap());
+        map.click_id(&mut cx, "legend.min").expect("minimize");
         assert_eq!(map.state(&cx)["legend_open"], json!(false));
         frame(&mut map, &mut cx, &mut g, 1.0);
-        assert!(widget(&map, "legend").is_some() && ids_with(&map, "here.").is_empty(), "folded to its header");
+        let chip = widget(&map, "legend.open").expect("the named button");
+        assert_eq!(chip["text"], head["text"]);
+        let c = rect(&chip);
+        assert_eq!((c.0 + c.2, c.1), (min.0 + min.2, min.1 - 1), "the button's top right where the minimize button's was");
+        assert!(widget(&map, "legend").is_none() && ids_with(&map, "here.").is_empty(), "minimized");
         let saved = Settings::load(cx.shot_dir.join("settings.json"), crate::screens::default_settings());
         assert_eq!(saved.v["map_legend_open"], json!(false), "the fold is saved");
-        map.click_id(&mut cx, "legend").expect("open");
+        map.click_id(&mut cx, "legend.open").expect("open");
         frame(&mut map, &mut cx, &mut g, 1.0);
         assert_eq!(ids_with(&map, "here."), want);
+    }
+
+    /// FLOATPANELS1 (`preferences/ui.md` "Floating panels"): the ticker floats: locked it stays put; unlocked its body
+    /// drags and stays where it was dropped (kept in the settings with its lock); minimize shrinks it in place to a
+    /// "Log" button that opens it again where it was; its bottom edge stays put while L opens and closes it.
+    #[test]
+    fn the_ticker_floats_drags_unlocked_and_minimizes_in_place() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        cx.log = (0..20).map(|i| format!("Event {i}.")).collect();
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let at = |map: &RegionMap, id: &str| rect(&widget(map, id).unwrap_or_else(|| panic!("no {id}")));
+        let r = at(&map, "log.panel");
+        assert!(r.0 <= 4 && r.1 + r.3 >= (H - 4) as i64, "bottom left: {r:?}");
+        assert_eq!(widget(&map, "log.panel.lock").unwrap()["text"], json!("Unlock"), "starts locked");
+        // L opens the last 12: the panel grows upward, its bottom edge in place
+        map.key(&mut cx, Key::Char('l'));
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let open = at(&map, "log.panel");
+        assert_eq!(open.1 + open.3, r.1 + r.3, "the bottom stays");
+        assert!(open.3 > r.3);
+        map.key(&mut cx, Key::Char('l'));
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        // locked: a drag does nothing
+        let held = aegis_ui::ui::Drag { key: LOG_PANEL_DRAG.into(), id: "log.panel".into(), text: "Log".into() };
+        let grab = ((r.0 + r.2 - 30) as i32, (r.1 + r.3 / 2) as i32);
+        map.draw(&mut cx, &mut g, grab, true);
+        g.kit.drag = Some(held.clone());
+        map.draw(&mut cx, &mut g, (grab.0 + 200, grab.1 - 100), true);
+        g.kit.drag = None;
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(at(&map, "log.panel"), r, "locked: stays");
+        // unlocked: it drags and the place is kept in the settings
+        map.click_id(&mut cx, "log.panel.lock").expect("unlock");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(widget(&map, "log.panel").unwrap()["drag"], json!(LOG_PANEL_DRAG));
+        map.draw(&mut cx, &mut g, grab, true);
+        g.kit.drag = Some(held);
+        map.draw(&mut cx, &mut g, (grab.0 + 200, grab.1 - 100), true);
+        g.kit.drag = None;
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let moved = at(&map, "log.panel");
+        assert_eq!((moved.0, moved.1), (r.0 + 200, r.1 - 100), "dropped there");
+        let saved = Settings::load(cx.shot_dir.join("settings.json"), crate::screens::default_settings());
+        assert_eq!(saved.v[crate::floats::REGION_LOG_KEY], json!({"pos": [moved.0, moved.1], "locked": false}));
+        // minimize toggles in place
+        let min = at(&map, "log.panel.min");
+        map.click_id(&mut cx, "log.panel.min").expect("minimize");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert!(widget(&map, "log.panel").is_none() && widget(&map, "log").is_none(), "minimized");
+        let chip = widget(&map, "log.panel.open").expect("the Log button");
+        assert_eq!(chip["text"], json!("Log"));
+        let c = rect(&chip);
+        assert_eq!((c.0 + c.2, c.1), (min.0 + min.2, min.1 - 1), "where the minimize button was");
+        map.click_id(&mut cx, "log.panel.open").expect("open");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(at(&map, "log.panel.min"), min, "restored in place");
+    }
+
+    /// ENGINE-48 (INPUT-REACH1): the arrows walk the party, but in a conversation (nothing walks) they move the focus over
+    /// its replies, so a pad's d-pad can pick one.
+    #[test]
+    fn the_arrows_move_the_focus_in_a_conversation() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert!(!map.arrow_focus(), "on the map the arrows walk");
+        let world = cx.gs().world_id.clone();
+        let people: Vec<String> = cx.data.merged_entries(&world, "characters").iter().map(|c| s(c, "id")).collect();
+        for p in people {
+            map.talk(&mut cx, &p);
+            if map.svc.talking() {
+                break;
+            }
+        }
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert!(map.svc.talking() && map.arrow_focus(), "in a conversation the arrows move the focus");
+        let infos = map.widgets();
+        // the replies that can be picked (one may be shut: its widget is off)
+        let choices: Vec<String> = infos.iter().filter(|w| aegis_ui::focus::focusable(w, false)).filter_map(|w| w["id"].as_str()).filter(|i| i.starts_with("choice.")).map(String::from).collect();
+        assert!(choices.len() > 1, "the conversation offers replies: {choices:?}");
+        let reached = aegis_ui::reach::arrow_reach(&infos, choices.first().map(String::as_str));
+        assert!(choices.iter().all(|c| reached.contains(c)), "the arrows reach every reply: {choices:?} in {reached:?}");
     }
 
     #[test]
@@ -4053,8 +5079,66 @@ mod sprite_tests {
         assert_eq!(sp["body"], json!(want));
         assert_eq!((sp["clip"].clone(), sp["left"].clone()), (json!("idle"), json!(false)));
         let (r, t) = (rect_of(&sp), tile_rect(&map, cx.gs().position));
-        assert_eq!((r.w, r.h), (SPRITE, SPRITE), "1.5 tiles tall");
-        assert_eq!((r.y + r.h, r.x + r.w / 2), (t.y + t.h, t.x + t.w / 2), "bottom-centred on the tile");
+        // PAINTED-MAPS1: a painted leader stands by its foot row (`a_painted_leader_stands_on_the_tiles_foot_point`)
+        let clips = cx.art.clips(&want).cloned();
+        assert_eq!(r, mapview::body_rect(t, clips.as_ref()), "the body's rect");
+        if clips.and_then(|c| c.foot).is_none() {
+            assert_eq!((r.w, r.h), (SPRITE, SPRITE), "1.5 tiles tall");
+            assert_eq!((r.y + r.h, r.x + r.w / 2), (t.y + t.h, t.x + t.w / 2), "bottom-centred on the tile");
+        }
+    }
+
+    /// PAINTED-MAPS1 (PR7-73): a catalog unit whose body (as the art resolves it) has a `foot` row (`painted`) or has
+    /// none: its id.
+    fn unit_with(cx: &mut Cx, painted: bool) -> Option<String> {
+        let d = cx.data.clone();
+        let units: Vec<Dict> = d.content.get("units").map(|m| m.values().cloned().collect()).unwrap_or_default();
+        let found = units.into_iter().find(|u| {
+            let body = emberwake_content::art::body_of(&Dict::new(), u, d.entry("classes", &s(u, "class_id")));
+            let shown = cx.art.first_body(&emberwake_content::art::body_chain(&body));
+            shown.and_then(|b| cx.art.clips(&b).map(|k| k.foot.is_some())) == Some(painted)
+        });
+        found.map(|u| s(&u, "id"))
+    }
+
+    /// PAINTED-MAPS1 (PR7-73): under both views, a leader on a unit whose body has a `foot` row (picked by rule) stands
+    /// `stage::PAINTED_CELLS` tile widths tall from its frame's top to its foot row, on the tile's foot point
+    /// (`mapview::body_rect`); one whose body has none keeps the token square, bottom-centred on the tile.
+    #[test]
+    fn a_painted_leader_stands_on_the_tiles_foot_point() {
+        for (view, _) in mapview::VIEWS {
+            for painted in [true, false] {
+                let (mut cx, mut g) = (art_cx(), gfx());
+                cx.settings.v["region_view"] = json!(view);
+                let who = unit_with(&mut cx, painted).expect("a unit with (or without) a painted body");
+                let id = leader_id(&cx);
+                let m = cx.gs_mut().party.member_mut(&id).expect("a leader");
+                // the leader plays no character: its base unit's body (`leader_art`)
+                (m.lore_ref, m.base_unit) = (String::new(), who.clone());
+                let mut map = RegionMap::new(&mut cx);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let sp = sprite(&map, &cx, "party").expect("the leader is a sprite");
+                let body = sp["body"].as_str().unwrap_or_default().to_string();
+                let clips = cx.art.clips(&body).cloned().expect("the body's sheet");
+                assert_eq!(clips.foot.is_some(), painted, "{who}: body {body}");
+                let (r, t) = (rect_of(&sp), tile_rect(&map, cx.gs().position));
+                assert_eq!(r, mapview::body_rect(t, Some(&clips)), "{view} {who}: the drawn rect");
+                if let Some(foot) = clips.foot {
+                    let (long, h) = (clips.frame.0.max(clips.frame.1) as f32, clips.frame.1 as f32);
+                    let k = r.w as f32 / long;
+                    let tall = foot as f32 * k;
+                    let want = crate::stage::PAINTED_CELLS * t.w as f32;
+                    assert!((tall - want).abs() <= 1.0, "{view} {who}: about 1.15 tile widths tall: {tall} against {want}");
+                    // the frame sits on the square's bottom edge, so its foot row is (h - foot) frame rows above it
+                    let foot_y = (r.y + r.h) as f32 - (h - foot as f32) * k;
+                    let (fx, fy) = mapview::body_foot(t);
+                    assert!((foot_y - fy as f32).abs() <= 1.0, "{view} {who}: the foot row on the foot point: {foot_y} against {fy}");
+                    assert_eq!(r.x + r.w / 2, fx, "{view} {who}: centred on it");
+                } else {
+                    assert_eq!(r, mapview::sprite_rect(t), "{view} {who}: the token square");
+                }
+            }
+        }
     }
 
     /// The view a body draws `clip` in for a `facing` (`side`, `down`, `up`): the facing's view when the body has a
@@ -4109,6 +5193,73 @@ mod sprite_tests {
         let view = drawn_view(&mut cx, &s(json::dict(&sp), "body"), "idle", "up");
         let want = if view == "side" { "idle".to_string() } else { format!("idle_{view}") };
         assert_eq!((sp["clip"].clone(), sp["view"].clone()), (json!(want), json!(view)), "standing still");
+    }
+
+    /// ENGINE-49 (WALK-FEEL1): a click walk ordered while the party stands shows the party moving on the very next
+    /// frame, as a key press does (its first step is taken as of the frame the click came after; it showed a frame late).
+    #[test]
+    fn a_click_walk_moves_on_the_next_frame() {
+        let (mut cx, mut g) = (art_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        let d = cx.data.clone();
+        let start = cx.gs().clone();
+        let loc = explore::location(&d, &start);
+        let t = explore::template_of(&d, loc).clone();
+        let t0 = Instant::now();
+        map.tick_at(&mut cx, t0);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let far = explore::markers_of(loc).into_iter().map(|m| s(&m, "id")).find(|id| map.path_to(&cx, explore::marker_pos(&t, &explore::markers_of(loc).into_iter().find(|m| s(m, "id") == *id).unwrap(), start.explore_int("loc_steps")), true).is_some_and(|p| p.len() >= 3)).expect("a marker three steps away or more");
+        let before = map.motion["drawn"].clone();
+        let far_id = far.clone();
+        map.act(&mut cx, RAct::Marker(far));
+        assert!(!map.walk.is_empty(), "a walk is ordered");
+        let next = t0 + Duration::from_millis(17);
+        map.tick_at(&mut cx, next);
+        assert_eq!(map.last_step, Some(t0), "the first step is dated at the frame the click came after");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_ne!(map.motion["drawn"], before, "the next frame shows the party moving");
+        assert_eq!(map.step_at, None, "the glide took the step");
+        // after a long frame the first step is dated now (dated back, the walk would run to catch up)
+        let (mut cx, mut g) = (art_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        map.tick_at(&mut cx, t0);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        map.act(&mut cx, RAct::Marker(far_id.clone()));
+        let late = t0 + Duration::from_millis(300);
+        map.tick_at(&mut cx, late);
+        assert_ne!(map.last_step, Some(t0), "a long frame: not dated back to the frame before");
+    }
+
+    /// ENGINE-50 (MAP-FRAME1): a key press is dated at the frame before it when that frame was just before, and no more
+    /// than `CLICK_STEP_BACK` back after a long frame (a 250 ms hitch), so a hitch adds no quick step to catch up.
+    #[test]
+    fn a_key_press_after_a_long_frame_is_dated_now() {
+        let (mut cx, mut g) = (art_cx(), gfx());
+        let _ = RegionMap::new(&mut cx);
+        let start = cx.gs().clone();
+        let d = cx.data.clone();
+        let loc = explore::location(&d, &start);
+        let t = explore::template_of(&d, loc).clone();
+        let marked: Vec<Pos> = explore::markers_of(loc).iter().map(|m| explore::marker_pos(&t, m, start.explore_int("loc_steps"))).collect();
+        let (w, h) = explore::size_of(&t);
+        let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+        let from = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| free((x, y)) && free((x + 1, y))).expect("two free tiles side by side");
+        let t0 = Instant::now();
+        for (gap, dated) in [(17u64, 0u64), (25, 0), (250, 225)] {
+            let mut map = RegionMap::new(&mut cx);
+            cx.gs_mut().position = from;
+            map.tick_at(&mut cx, t0);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            map.key(&mut cx, Key::Right);
+            assert_eq!(cx.gs().position, (from.0 + 1, from.1), "the press steps");
+            let beat = map.next_walk.saturating_duration_since(t0);
+            let now = t0 + Duration::from_millis(gap);
+            map.tick_at(&mut cx, now);
+            let at = t0 + Duration::from_millis(dated);
+            assert_eq!((map.last_step, map.step_at), (Some(at), Some(at)), "{gap} ms after the frame: dated {dated} ms on");
+            assert_eq!(map.next_walk, at + beat, "{gap} ms: the next step a beat after it");
+            frame(&mut map, &mut cx, &mut g, 1.0);
+        }
     }
 
     /// WALK2: a held movement key steps at once on the press (no key-repeat delay), chains a step every `step`
@@ -4531,14 +5682,17 @@ mod nav_tests {
         map.geo.cell_of(at)
     }
 
-    /// The legend's markers (present, spent or locked, not a bare point) with a map place: (id, tile).
+    /// The legend's markers (present, spent or locked, a point only while usable, PT-43) with a map place: (id, tile).
     fn listed(cx: &Cx) -> Vec<(String, Pos)> {
         let gs = cx.gs();
         let loc = explore::location(&cx.data, gs);
         let t = explore::template_of(&cx.data, loc);
         explore::markers_of(loc)
             .into_iter()
-            .filter(|m| s(&explore::marker_view(&cx.data, gs, loc, m), "state") != "absent" && s(m, "kind") != "point")
+            .filter(|m| {
+                let st = s(&explore::marker_view(&cx.data, gs, loc, m), "state");
+                st != "absent" && (s(m, "kind") != "point" || point_listed(m, &st))
+            })
             .map(|m| (s(&m, "id"), explore::marker_pos(t, &m, gs.explore_int("loc_steps"))))
             .filter(|(_, at)| at.0 >= 0)
             .collect()
@@ -5283,6 +6437,69 @@ mod view_tests {
             let pressed = map.frame_at.expect("the frame's clock");
             assert_eq!(cx.gs().position, (at.0 + 3, at.1));
             assert_eq!(map.next_walk, pressed + ms(run / speed), "the held key's run at {speed}x");
+        }
+    }
+
+    /// STYLE-PASS1B (`PR7-48`, FB-366): a click on a floor tile rings that tile in amber while the walk lasts: the ring
+    /// draws only inside the destination cell, a new click moves it to the new tile, and arrival clears it (state
+    /// `walk_ring`). Static, so the same under Reduce motion.
+    #[test]
+    fn a_click_to_walk_rings_its_tile_until_arrival_or_a_new_order() {
+        for still in [false, true] {
+            let (mut cx, mut g) = (game_cx(), gfx());
+            cx.settings.v["reduce_motion"] = json!(still);
+            let mut map = RegionMap::new(&mut cx);
+            let d = cx.data.clone();
+            let start = cx.gs().clone();
+            let t = explore::template_of(&d, explore::location(&d, &start)).clone();
+            let (w, h) = explore::size_of(&t);
+            let marked: Vec<Pos> = explore::markers_of(explore::location(&d, &start)).iter().map(|m| explore::marker_pos(&t, m, start.explore_int("loc_steps"))).collect();
+            let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+            let at = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| (0..5).all(|i| free((x + i, y)))).expect("a free row");
+            cx.gs_mut().position = at;
+            for _ in 0..3 {
+                frame(&mut map, &mut cx, &mut g, 1.0);
+            }
+            assert_eq!((map.walk_ring(), map.state(&cx)["walk_ring"].clone()), (None, Value::Null), "no walk, no ring");
+            let click = |map: &mut RegionMap, cx: &mut Cx, p: Pos| {
+                let r = map.geo.cell(p.0 as i32, p.1 as i32);
+                map.mouse = (r.x + r.w / 2, r.y + r.h / 2);
+                map.act(cx, RAct::MapClick);
+            };
+            let dest = (at.0 + 4, at.1);
+            click(&mut map, &mut cx, dest);
+            assert_eq!(map.walk_ring(), Some(dest), "the clicked tile");
+            assert_eq!(map.state(&cx)["walk_ring"], json!([dest.0, dest.1]));
+            // the ring draws in the destination cell only, in the amber
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let ringed = g.canvas.px.clone();
+            let kept = map.walk_dest.take();
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let plain = g.canvas.px.clone();
+            map.walk_dest = kept;
+            let cw = g.canvas.w as usize;
+            let changed: Vec<(usize, usize)> = (0..ringed.len() / 4).filter(|i| ringed[i * 4..i * 4 + 3] != plain[i * 4..i * 4 + 3]).map(|i| (i % cw, i / cw)).collect();
+            assert!(!changed.is_empty(), "the ring draws");
+            let cell = map.geo.cell(dest.0 as i32, dest.1 as i32);
+            let v = g.view;
+            let (x0, y0, x1, y1) = (v.x(cell.x as f32) - 2, v.y(cell.y as f32) - 2, v.x((cell.x + cell.w) as f32) + 2, v.y((cell.y + cell.h) as f32) + 2);
+            assert!(changed.iter().all(|&(x, y)| (x0..=x1).contains(&(x as i32)) && (y0..=y1).contains(&(y as i32))), "inside the cell {cell:?}");
+            let amber = crate::tokens::walk_ring();
+            let near = changed.iter().map(|&(x, y)| (0..3).map(|c| (ringed[(y * cw + x) * 4 + c] as i32 - amber[c] as i32).abs()).sum::<i32>()).min().unwrap();
+            assert!(near <= 60, "the amber (an anti-aliased line: nearest {near})");
+            // a new order moves the ring; arrival clears it
+            let dest2 = (at.0 + 3, at.1);
+            click(&mut map, &mut cx, dest2);
+            assert_eq!(map.walk_ring(), Some(dest2), "a new order: its tile");
+            let mut now = Instant::now() + Duration::from_secs(1);
+            let mut ticks = 0;
+            while !map.walk.is_empty() && ticks < 50 {
+                now += Duration::from_millis(500);
+                map.tick_at(&mut cx, now);
+                ticks += 1;
+            }
+            assert_eq!(cx.gs().position, dest2, "arrived");
+            assert_eq!((map.walk_ring(), map.state(&cx)["walk_ring"].clone()), (None, Value::Null), "arrival clears the ring");
         }
     }
 
@@ -7722,5 +8939,301 @@ mod glyph_tests {
         assert!(lit >= cells * k * k, "every cell lit: {lit} px for {cells} cells");
         let outside = Rect::new(pr.x + pr.w + 2, pr.y, 4, pr.h);
         assert!((outside.y..outside.y + outside.h).all(|y| (outside.x..outside.x + outside.w).all(|x| px(x, y) == [0, 0, 0])), "nothing past the plate");
+    }
+}
+
+/// PR7-76 (ACT1-FIX2, FB-441) on the shipped game, every place and marker picked by rule: usable points of interest
+/// join the Here list and get edge arrows (PT-43); a point walked onto answers once and no "You can't get there."
+/// follows (PT-44, PT-51); a walk a fight broke off goes on after a win only (PT-55); a road's exit opens the world map
+/// with the next place that way picked (PT-54).
+#[cfg(test)]
+mod act1_fix2_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+    use crate::worldmap::tests::{ward_hub, TIER2};
+    use emberwake_world::GameState;
+
+    /// The first location of the world (data order) with a point `want` accepts (the marker and its view's state), with
+    /// the party entered there; None when there is none.
+    fn enter_point(cx: &mut Cx, want: impl Fn(&Dict, &str) -> bool) -> Option<Dict> {
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        for loc in d.merged_entries(&world, "locations") {
+            if explore::template_of(&d, loc).is_empty() {
+                continue;
+            }
+            let mut gs = cx.gs().clone();
+            if !json::b(&explore::enter(&d, &mut gs, &s(loc, "id"), explore::SPAWN), "ok", false) {
+                continue;
+            }
+            let here = explore::location(&d, &gs).clone();
+            if let Some(m) = explore::markers_of(&here).into_iter().find(|m| s(m, "kind") == "point" && want(m, &s(&explore::marker_view(&d, &gs, &here, m), "state"))) {
+                *cx.gs_mut() = gs;
+                return Some(m);
+            }
+        }
+        None
+    }
+
+    fn widget(map: &RegionMap, id: &str) -> Option<Value> {
+        map.widgets().into_iter().find(|w| w["id"] == id)
+    }
+
+    /// An open tile that reaches `at` by a walk of at least two steps (`path_to`), the nearest first.
+    fn start_for(map: &RegionMap, cx: &mut Cx, at: Pos) -> Option<Pos> {
+        let d = cx.data.clone();
+        let t = explore::template_of(&d, explore::location(&d, cx.gs())).clone();
+        let (w, h) = explore::size_of(&t);
+        let mut tiles: Vec<Pos> = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|p| explore::is_open(&t, p.0, p.1)).collect();
+        tiles.sort_by_key(|p| (p.0 - at.0).abs() + (p.1 - at.1).abs());
+        let keep = cx.gs().position;
+        for p in tiles.into_iter().filter(|p| (p.0 - at.0).abs() + (p.1 - at.1).abs() >= 3) {
+            cx.gs_mut().position = p;
+            if map.path_to(cx, at, false).is_some_and(|w| w.len() >= 2) {
+                return Some(p);
+            }
+        }
+        cx.gs_mut().position = keep;
+        None
+    }
+
+    fn walk_out(map: &mut RegionMap, cx: &mut Cx) {
+        let mut now = Instant::now() + Duration::from_secs(1);
+        for _ in 0..200 {
+            if map.walk.is_empty() && map.walk_target.is_none() {
+                break;
+            }
+            now += Duration::from_millis(500);
+            map.tick_at(cx, now);
+        }
+    }
+
+    /// PT-43: a usable point (present, with a use or a flag to set) has its Here row; a point that only speaks has none.
+    #[test]
+    fn pt43_usable_points_join_the_here_list() {
+        let (mut cx, mut g) = (ward_hub(&TIER2, &[], false), gfx());
+        let m = enter_point(&mut cx, |m, st| point_listed(m, st)).expect("a usable point in the world");
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let row = widget(&map, &format!("here.{}", s(&m, "id"))).expect("the point's Here row");
+        assert_eq!(row["text"], json!(s(&explore::marker_view(&cx.data, cx.gs(), explore::location(&cx.data, cx.gs()), &m), "label")));
+        assert!(!point_listed(&m, "spent") && !point_listed(&m, "absent"), "a spent or absent point is not listed");
+        let mut bare = m.clone();
+        bare.shift_remove("use");
+        bare.insert("sets_flags".into(), json!([]));
+        assert!(!point_listed(&bare, "present"), "a point that only speaks is not listed");
+        // ENGINE-37 (LOOK-POINT1): a look-only point is listed with no flag to set, and acting on it sets nothing
+        bare.insert("use".into(), json!("look"));
+        assert!(point_listed(&bare, "present"), "a look-only point is listed");
+        let flags = cx.gs().flags.clone();
+        act_on_point(&mut cx, &bare);
+        assert_eq!(cx.gs().flags, flags, "a look sets nothing");
+        if let Some(talker) = enter_point(&mut cx, |m, st| st == "present" && !point_listed(m, st)) {
+            let mut map = RegionMap::new(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert!(widget(&map, &format!("here.{}", s(&talker, "id"))).is_none(), "{talker:?} only speaks: no row");
+        }
+    }
+
+    /// PT-43: a usable point out of view gets an edge arrow (the party as far from it as the map allows).
+    #[test]
+    fn pt43_an_off_screen_usable_point_gets_an_edge_arrow() {
+        let (mut cx, mut g) = (ward_hub(&TIER2, &[], false), gfx());
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        // the first place (data order) with a usable point out of view from the tile farthest from it
+        let mut found = None;
+        'places: for loc in d.merged_entries(&world, "locations") {
+            if explore::template_of(&d, loc).is_empty() {
+                continue;
+            }
+            let mut gs = cx.gs().clone();
+            if !json::b(&explore::enter(&d, &mut gs, &s(loc, "id"), explore::SPAWN), "ok", false) {
+                continue;
+            }
+            let here = explore::location(&d, &gs).clone();
+            let t = explore::template_of(&d, &here).clone();
+            let (w, h) = explore::size_of(&t);
+            let usable: Vec<Dict> = explore::markers_of(&here).into_iter().filter(|m| s(m, "kind") == "point" && point_listed(m, &s(&explore::marker_view(&d, &gs, &here, m), "state"))).collect();
+            for m in usable {
+                let at = explore::marker_pos(&t, &m, gs.explore_int("loc_steps"));
+                let Some(far) = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|p| explore::is_open(&t, p.0, p.1)).max_by_key(|p| (p.0 - at.0).abs() + (p.1 - at.1).abs()) else { continue };
+                gs.position = far;
+                *cx.gs_mut() = gs.clone();
+                let mut map = RegionMap::new(&mut cx);
+                for _ in 0..3 {
+                    frame(&mut map, &mut cx, &mut g, 1.0);
+                }
+                let r = map.geo.cell_of(at);
+                let seen = r.intersect(MAP_AREA);
+                if seen.w <= 0 || seen.h <= 0 {
+                    found = Some((m, at, t, map, r));
+                    break 'places;
+                }
+            }
+        }
+        let (m, at, t, map, r) = found.expect("a usable point out of view from some tile of its place");
+        let (w, h) = explore::size_of(&t);
+        let id = s(&m, "id");
+        let arrow = map.state(&cx)["arrows"].as_array().cloned().unwrap_or_default().into_iter().find(|a| s(json::dict(a), "id") == id).expect("its edge arrow");
+        // placed on the map area's edge band, pointing at the point's tile, with its widget
+        let (x, y) = (arrow["at"][0].as_i64().unwrap() as i32, arrow["at"][1].as_i64().unwrap() as i32);
+        let a = MAP_AREA;
+        assert!(a.contains(x, y), "inside the map area: ({x}, {y})");
+        let edge = (x - a.x).min(a.x + a.w - x).min(y - a.y).min(a.y + a.h - y);
+        assert!(edge <= ARROW + 1, "at the edge: {edge} px in");
+        let (tx, ty) = (r.x as f64 + r.w as f64 / 2.0 - x as f64, r.y as f64 + r.h as f64 / 2.0 - y as f64);
+        let (ux, uy) = (arrow["dir"][0].as_f64().unwrap(), arrow["dir"][1].as_f64().unwrap());
+        let cos = (tx * ux + ty * uy) / (tx * tx + ty * ty).sqrt();
+        assert!(cos > 0.95, "points at the point: cos {cos}");
+        let wd = widget(&map, &format!("arrow.{id}")).expect("the arrow's widget");
+        assert_eq!(wd["kind"], json!("arrow"));
+        // walked next to it, the arrow goes
+        let near = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|p| explore::is_open(&t, p.0, p.1)).min_by_key(|p| (p.0 - at.0).abs() + (p.1 - at.1).abs()).unwrap();
+        cx.gs_mut().position = near;
+        let mut map = RegionMap::new(&mut cx);
+        for _ in 0..3 {
+            frame(&mut map, &mut cx, &mut g, 1.0);
+        }
+        assert!(widget(&map, &format!("arrow.{id}")).is_none(), "in view: no arrow");
+    }
+
+    /// PT-55 (review): a click walk that already arrived leaves nothing to resume; a key step into a fight then a win
+    /// does not walk the party anywhere.
+    #[test]
+    fn pt55_a_key_step_into_a_fight_after_a_finished_walk_resumes_nothing() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        let d = cx.data.clone();
+        let t = explore::template_of(&d, explore::location(&d, cx.gs())).clone();
+        let (w, h) = explore::size_of(&t);
+        let marked: Vec<Pos> = explore::markers_of(explore::location(&d, cx.gs())).iter().map(|m| explore::marker_pos(&t, m, 0)).collect();
+        let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+        let at = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| (0..6).all(|i| free((x + i, y)))).expect("a free row");
+        cx.gs_mut().position = at;
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let dest = (at.0 + 3, at.1);
+        let r = map.geo.cell(dest.0 as i32, dest.1 as i32);
+        map.mouse = (r.x + r.w / 2, r.y + r.h / 2);
+        map.act(&mut cx, RAct::MapClick);
+        walk_out(&mut map, &mut cx);
+        assert_eq!(cx.gs().position, dest, "the click walk arrived");
+        // a key step on (as the held key does), into a fight that keeps what walk is under way
+        cx.gs_mut().position = (dest.0 + 1, dest.1);
+        map.keep_walk(&cx);
+        cx.game.as_mut().unwrap().fought = Some("won".to_string());
+        map.tick_at(&mut cx, Instant::now() + Duration::from_secs(3));
+        assert!(map.walk.is_empty(), "no stale walk resumed: {:?}", map.walk);
+        assert_eq!(cx.gs().position, (dest.0 + 1, dest.1), "the party stays");
+    }
+
+    /// PT-44, PT-51: a point that sets a flag, walked onto by a click on it, logs its line once and never "You can't get
+    /// there." after it.
+    #[test]
+    fn pt44_pt51_a_point_walked_onto_answers_once() {
+        let mut cx = ward_hub(&TIER2, &[], false);
+        let fresh = |gs: &GameState, m: &Dict| json::arr(&json::normalize(json::get(m, "sets_flags"))).iter().any(|f| !gs.flag_true(&s(json::dict(f), "key")));
+        let probe = cx.gs().clone();
+        let m = enter_point(&mut cx, |m, st| st == "present" && fresh(&probe, m)).expect("a point that sets a flag not set yet");
+        let mut map = RegionMap::new(&mut cx);
+        let d = cx.data.clone();
+        let t = explore::template_of(&d, explore::location(&d, cx.gs())).clone();
+        let at = explore::marker_pos(&t, &m, cx.gs().explore_int("loc_steps"));
+        start_for(&map, &mut cx, at).expect("a tile a walk away");
+        // the job waiting on its flag is under way (its "Quest updated" line then comes between, as in a game)
+        let keys: Vec<String> = json::arr(&json::normalize(json::get(&m, "sets_flags"))).iter().map(|f| s(json::dict(f), "key")).collect();
+        let world = cx.gs().world_id.clone();
+        let jobs: Vec<String> = d.merged_entries(&world, "quests").into_iter().filter(|q| json::aget(q, "steps").iter().any(|st| keys.contains(&s(json::dict(st), "flag")))).map(|q| s(q, "_qid")).collect();
+        for q in &jobs {
+            cx.gs_mut().quests.insert(q.clone(), json!({"state": "active", "objective": 0}));
+        }
+        // the roads open now are told first (that notice would stop the walk)
+        crate::worldmap::note_new_roads(&mut cx);
+        cx.notice.clear();
+        cx.log.clear();
+        map.act(&mut cx, RAct::Marker(s(&m, "id")));
+        assert!(!map.walk.is_empty(), "a walk starts");
+        walk_out(&mut map, &mut cx);
+        let line = explore::point_line(&m);
+        assert_eq!(cx.log.iter().filter(|l| **l == line).count(), 1, "its line once: {:?}", cx.log);
+        assert!(!cx.log.iter().any(|l| l == "You can't get there."), "{:?}", cx.log);
+        if !jobs.is_empty() {
+            assert!(cx.log.iter().any(|l| l.starts_with("Quest updated: ")), "the job's line: {:?}", cx.log);
+        }
+    }
+
+    /// PT-55: a click walk a fight broke off goes on after a win with the party where it was; a flight (the party back a
+    /// tile) or a loss drops it.
+    #[test]
+    fn pt55_a_walk_broken_off_by_a_fight_goes_on_after_a_win() {
+        for (outcome, back, goes_on) in [("won", false, true), ("fled", true, false), ("lost", false, false)] {
+            let (mut cx, mut g) = (game_cx(), gfx());
+            let mut map = RegionMap::new(&mut cx);
+            let d = cx.data.clone();
+            let t = explore::template_of(&d, explore::location(&d, cx.gs())).clone();
+            let (w, h) = explore::size_of(&t);
+            let marked: Vec<Pos> = explore::markers_of(explore::location(&d, cx.gs())).iter().map(|m| explore::marker_pos(&t, m, 0)).collect();
+            let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+            let at = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| (0..6).all(|i| free((x + i, y)))).expect("a free row");
+            cx.gs_mut().position = at;
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let dest = (at.0 + 5, at.1);
+            let r = map.geo.cell(dest.0 as i32, dest.1 as i32);
+            map.mouse = (r.x + r.w / 2, r.y + r.h / 2);
+            map.act(&mut cx, RAct::MapClick);
+            map.tick_at(&mut cx, Instant::now() + Duration::from_secs(1));
+            let found = cx.gs().position;
+            assert_eq!(found, (at.0 + 1, at.1), "one step taken");
+            // the fight: the walk is kept, then cleared as a fight starts
+            map.keep_walk(&cx);
+            map.walk.clear();
+            map.walk_target = None;
+            if back {
+                cx.gs_mut().position = at;
+            }
+            cx.game.as_mut().unwrap().fought = Some(outcome.to_string());
+            map.tick_at(&mut cx, Instant::now() + Duration::from_secs(3));
+            assert_eq!(!map.walk.is_empty() || cx.gs().position != if back { at } else { found }, goes_on, "{outcome}: the walk goes on only after a win");
+            assert!(cx.game.as_ref().unwrap().fought.is_none(), "the outcome is taken");
+            if goes_on {
+                assert_eq!(map.walk_dest, Some(dest), "to the same tile");
+                walk_out(&mut map, &mut cx);
+                assert_eq!(cx.gs().position, dest, "arrived");
+            }
+        }
+    }
+
+    /// PT-54: in a place with several world-map exits, each road's exit picks an open neighbour the exit's way (within
+    /// 90 degrees on the world map), the place's own world-map exit none; stepping onto it opens the world map with it
+    /// picked.
+    #[test]
+    fn pt54_a_roads_exit_picks_the_next_place_that_way() {
+        let mut cx = ward_hub(&TIER2, &[], false);
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        let mut picked = 0;
+        for loc in d.merged_entries(&world, "locations") {
+            let exits: Vec<Dict> = explore::markers_of(loc).into_iter().filter(|m| s(m, "kind") == "exit" && s(m, "to") == explore::WORLD_MAP).collect();
+            if exits.len() < 2 || explore::template_of(&d, loc).is_empty() {
+                continue;
+            }
+            let mut gs = cx.gs().clone();
+            if !json::b(&explore::enter(&d, &mut gs, &s(loc, "id"), explore::SPAWN), "ok", false) {
+                continue;
+            }
+            *cx.gs_mut() = gs;
+            assert_eq!(crate::worldmap::exit_toward(&d, cx.gs(), explore::WORLD_MAP), None, "the plain exit picks nothing");
+            for e in &exits {
+                let Some(q) = crate::worldmap::exit_toward(&d, cx.gs(), &s(e, "id")) else { continue };
+                let here = cx.gs().location_id.clone();
+                let view = emberwake_world::travel::view(&d, cx.gs());
+                let road = json::aget(&view, "routes").iter().map(json::dict).any(|r| json::b(r, "open", true) && ((s(r, "from") == here && s(r, "to") == q) || (s(r, "to") == here && s(r, "from") == q)));
+                assert!(road, "{q} is an open neighbour of {here}");
+                assert_eq!(crate::worldmap::WorldMap::toward(&cx, &s(e, "id")).selected, q);
+                picked += 1;
+            }
+        }
+        assert!(picked > 0, "some road's exit picks a place");
+        assert_eq!(crate::worldmap::WorldMap::toward(&cx, "").selected, "", "no exit: nothing picked");
     }
 }

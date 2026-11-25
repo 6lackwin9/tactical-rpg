@@ -22,6 +22,15 @@ pub const TACTICS: [(&str, &str); 6] =
 pub const FEEL_KEYS: [&str; 4] = ["tactic", "party", "armor", "tune"];
 /// SIMCOUNT1: the feel key `usage` does not list (see `FEEL_COUNTS_USAGE`); any other mode refuses it too.
 pub const FEEL_COUNTS_KEY: &str = "counts";
+/// ENRAGE2 (PR7-55, EN6-EN7b): the feel key that adds the pace block (by encounter tier).
+pub const FEEL_PACE_KEY: &str = "pace";
+/// BALANCE-WHATIF1 (ENGINE-26): the feel keys that change a world encounter's foes for a what-if run (report only, no
+/// data change): `foe_hp=<pct>` scales each foe's HP (100 = as authored), `foes=<n>` adds n more of the encounter's
+/// last foe, `foe_level=<n>` fights the foes n levels up. Any other mode refuses them.
+pub const FEEL_WHATIF_KEYS: [&str; 3] = ["foe_hp", "foes", "foe_level"];
+pub const FOE_HP_MAX: i32 = 1000;
+pub const FOES_MAX: i32 = 4;
+pub const FOE_LEVEL_MAX: i32 = 5;
 /// SIMCOUNT1: the help of the `counts=` key, printed apart from `usage` (`sim help`, a refused feel line): `sim_golden` holds
 /// `usage`.
 pub const FEEL_COUNTS_USAGE: &str = "       feel only: counts=on|off (off): each block and FEEL_JSON add per side the rule counts (feel::RULE_COUNTERS), protected share, Rest blocks a round, items by id; the hook counts (feel::HOOK_COUNTERS), skills landed, intents by unit, and per encounter arena strikes, windup breaks by skill, phases fired and fights with each count";
@@ -47,13 +56,22 @@ pub const MASTERY_USAGE: &str = "       mastery=0-3 (none): each ally holds that
 pub const ARMOR_MAX: i32 = 200;
 /// RULESET1-G2: the ruleset numbers `tune=` may set (RULESET1_TASKS 1.2), by key prefix; ranges from the kit schema.
 /// PR5-26 (FB-191 (f)): `channel_` (the Channel rule's `channel_power` and `channel_ai_edge`).
-pub const TUNE_PREFIXES: [&str; 5] = ["stagger_", "flank_", "break_chance_", "rest_", "channel_"];
+/// ENRAGE2 (PR7-55) adds `enrage_` (the rule-off and rule-on balance runs).
+pub const TUNE_PREFIXES: [&str; 6] = ["stagger_", "flank_", "break_chance_", "rest_", "channel_", "enrage_"];
+/// ENRAGE2: the `enrage_step` entries by unit tier as `tune=` keys (`enrage_step_<tier>`, 0..100 %).
+pub const ENRAGE_STEP_KEYS: [&str; 4] = ["enrage_step_minion", "enrage_step_standard", "enrage_step_elite", "enrage_step_boss"];
 /// PR5-26 (FB-191 (f)): the `tune=` keys of the ruleset's `channel_cost` (a list in the schema): the cost by AP 1, 2 and
 /// 3+, each a whole number 0-`CHANNEL_COST_MAX`.
 pub const CHANNEL_COST_KEYS: [&str; 3] = ["channel_cost_1", "channel_cost_2", "channel_cost_3"];
 pub const CHANNEL_COST_MAX: f64 = 100.0;
 /// CAMPAIGN1-SIM: the keys only the deadlines mode reads (any other mode refuses them).
 pub const DEADLINE_KEYS: [&str; 1] = ["losses"];
+/// CAMPAIGN-SIM1 (ENGINE-28): the keys only the world campaign run (`campaign world=<id>`) reads.
+pub const WORLD_CAMPAIGN_KEYS: [&str; 2] = ["side", "story"];
+/// CAMPAIGN-SIM1: the most side fights `side=` puts before a quest fight.
+pub const SIDE_MAX: i32 = 9;
+/// CAMPAIGN-SIM1: the help of the world campaign run, printed apart from `usage` (which `sim_golden` holds).
+pub const WORLD_CAMPAIGN_USAGE: &str = "       campaign world=<world> [seeds=N] [side=0-9] [story=<enc,...>]: the world's story fights in story order with the party each fields, XP and level-ups carried by the kit's rules (each fight counted won: a lost story fight is retried), side= roamer fights before each quest fight (default: the world's patrol visit cap); per fight the entry levels, won %, median rounds, minutes and HP left beside the same fight at the authored levels";
 /// CAMPAIGN1-SIM: `losses=` (lost tries per mission in the worst case): default and range.
 pub const LOSSES_DEFAULT: i64 = 1;
 pub const LOSSES_MAX: i64 = 9;
@@ -165,6 +183,13 @@ pub struct SimArgs {
     pub drivers: Vec<crate::timed::Driver>,
     /// SIMCOUNT1 (feel only): print the rule counts (`counts=on|off`; off).
     pub counts: bool,
+    /// ENRAGE2 EN6-EN7b (feel only): print the pace block by encounter tier (`pace=on|off`; off).
+    pub pace: bool,
+    /// BALANCE-WHATIF1 (feel only, world encounters): the foes' HP in % of authored, extra copies of the last foe, and
+    /// levels added to the foes (`FEEL_WHATIF_KEYS`).
+    pub foe_hp: i32,
+    pub foes: i32,
+    pub foe_level: i32,
     /// RULESET1-G2 (feel only): unit id -> the armour it fights with in this run (`armor=<unit>:<0-200>`).
     pub armor: IndexMap<String, i32>,
     /// RULESET1-G2 (feel only): ruleset number -> its value in this run (`tune=<key>:<value>`), applied to `ruleset`.
@@ -175,6 +200,13 @@ pub struct SimArgs {
     pub losses: i64,
     /// The deadlines keys given, for the check that no other mode takes them.
     deadline_keys: Vec<String>,
+    /// CAMPAIGN-SIM1 (world campaign only): side fights before each quest fight (`side=0..SIDE_MAX`; None: the world's
+    /// patrol visit cap).
+    pub side: Option<i32>,
+    /// CAMPAIGN-SIM1 (world campaign only): the story fights in order (`story=<enc,...>`; empty: derived from the world).
+    pub story: Vec<String>,
+    /// The world campaign keys given, for the check that no other run takes them.
+    campaign_keys: Vec<String>,
 }
 
 impl Default for SimArgs {
@@ -235,11 +267,18 @@ impl Default for SimArgs {
             tactic: "balanced".into(),
             drivers: vec![crate::timed::Driver::Auto],
             counts: false,
+            pace: false,
+            foe_hp: 100,
+            foes: 0,
+            foe_level: 0,
             armor: IndexMap::new(),
             tune: IndexMap::new(),
             feel_keys: Vec::new(),
             losses: LOSSES_DEFAULT,
             deadline_keys: Vec::new(),
+            side: None,
+            story: Vec::new(),
+            campaign_keys: Vec::new(),
         }
     }
 }
@@ -447,6 +486,14 @@ impl SimArgs {
         } else if let Some(k) = a.deadline_keys.first() {
             return Err(format!("{k}= is a deadlines key (mode deadlines only)"));
         }
+        if let Some(k) = a.campaign_keys.first().filter(|_| !a.world_campaign()) {
+            return Err(format!("{k}= is a world campaign key (campaign world=<world> only)"));
+        }
+        for id in &a.story {
+            if !has_encounter(d, &a.world, id) {
+                return Err(format!("story: '{id}' is not an encounter of world {}", a.world));
+            }
+        }
         a.ruleset = rpgkit_rules::ruleset::Ruleset::of(&d.cat, &a.ruleset_id)?;
         a.ruleset.adjust(&a.rules)?;
         if let Some(m) = a.melee_diagonal {
@@ -539,6 +586,11 @@ impl SimArgs {
         Ok(())
     }
 
+    /// CAMPAIGN-SIM1 (ENGINE-28): the run is the world campaign (`campaign` with `world=`), not the game's story run.
+    pub fn world_campaign(&self) -> bool {
+        self.mode == "campaign" && self.world_set
+    }
+
     /// The PlanPresets id the party drafts with in the feel mode (its tactic's).
     pub fn tactic_preset(&self) -> &'static str {
         TACTICS.iter().find(|(name, _)| *name == self.tactic).map_or("balanced", |(_, p)| p)
@@ -547,13 +599,30 @@ impl SimArgs {
     fn key(&mut self, d: &Data, key: &str, value: &str) -> Result<(), String> {
         let ids = self.game.classes.ids;
         let classes = godot_list(ids);
-        if (FEEL_KEYS.contains(&key) || key == FEEL_COUNTS_KEY) && !self.feel_keys.iter().any(|k| k == key) {
+        if (FEEL_KEYS.contains(&key) || key == FEEL_COUNTS_KEY || key == FEEL_PACE_KEY || FEEL_WHATIF_KEYS.contains(&key)) && !self.feel_keys.iter().any(|k| k == key) {
             self.feel_keys.push(key.to_string());
         }
         if DEADLINE_KEYS.contains(&key) && !self.deadline_keys.iter().any(|k| k == key) {
             self.deadline_keys.push(key.to_string());
         }
+        if WORLD_CAMPAIGN_KEYS.contains(&key) && !self.campaign_keys.iter().any(|k| k == key) {
+            self.campaign_keys.push(key.to_string());
+        }
         match key {
+            // CAMPAIGN-SIM1: the world campaign run's keys.
+            "side" => {
+                let Some(n) = value.parse::<i32>().ok().filter(|n| (0..=SIDE_MAX).contains(n)) else {
+                    return Err(format!("side must be 0..{SIDE_MAX} (got '{value}')"));
+                };
+                self.side = Some(n);
+            }
+            "story" => {
+                let ids = list(value);
+                if ids.is_empty() {
+                    return Err("story must list encounter ids, comma separated".into());
+                }
+                self.story = ids;
+            }
             // CAMPAIGN1-SIM: the deadlines mode's key.
             "losses" => {
                 let Some(n) = value.parse::<i64>().ok().filter(|n| (0..=LOSSES_MAX).contains(n)) else {
@@ -580,6 +649,27 @@ impl SimArgs {
                     return Err(format!("counts must be on or off (got '{value}')"));
                 }
                 self.counts = value == "on";
+            }
+            "foe_hp" | "foes" | "foe_level" => {
+                let (lo, hi) = match key {
+                    "foe_hp" => (1, FOE_HP_MAX),
+                    "foes" => (0, FOES_MAX),
+                    _ => (0, FOE_LEVEL_MAX),
+                };
+                let Some(n) = value.strip_prefix('+').unwrap_or(value).parse::<i32>().ok().filter(|n| (lo..=hi).contains(n)) else {
+                    return Err(format!("{key} must be {lo}..{hi} (got '{value}')"));
+                };
+                match key {
+                    "foe_hp" => self.foe_hp = n,
+                    "foes" => self.foes = n,
+                    _ => self.foe_level = n,
+                }
+            }
+            "pace" => {
+                if value != "on" && value != "off" {
+                    return Err(format!("pace must be on or off (got '{value}')"));
+                }
+                self.pace = value == "on";
             }
             "armor" => {
                 for part in list(value) {
@@ -1055,7 +1145,7 @@ pub fn feel_roster(d: &Data, id: &str) -> Vec<String> {
 
 /// RULESET1-G2: the `tune=` keys: the kit schema's numeric ruleset fields with a TUNE_PREFIXES prefix.
 pub fn tune_keys() -> Vec<String> {
-    tune_fields().map(|f| aegis_core::json::s(f, "key")).chain(CHANNEL_COST_KEYS.iter().map(|k| k.to_string())).collect()
+    tune_fields().map(|f| aegis_core::json::s(f, "key")).chain(CHANNEL_COST_KEYS.iter().chain(&ENRAGE_STEP_KEYS).map(|k| k.to_string())).collect()
 }
 
 /// RULESET1-G2: the schema range (min, max) of the `tune=` number `key` (None: not one). PR5-26: a `channel_cost` key's
@@ -1063,6 +1153,9 @@ pub fn tune_keys() -> Vec<String> {
 pub fn tune_range(key: &str) -> Option<(f64, f64)> {
     if CHANNEL_COST_KEYS.contains(&key) {
         return Some((0.0, CHANNEL_COST_MAX));
+    }
+    if ENRAGE_STEP_KEYS.contains(&key) {
+        return Some((0.0, 100.0));
     }
     let f = tune_fields().find(|f| aegis_core::json::s(f, "key") == key)?;
     Some((f.get("min")?.as_f64()?, f.get("max")?.as_f64()?))

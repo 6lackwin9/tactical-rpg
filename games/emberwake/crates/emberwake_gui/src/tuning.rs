@@ -39,7 +39,6 @@ pub struct Tuning {
     pub shakes: ShakeTable,
     pub shake_max_px: f32,
     pub shake_max_ms: u32,
-    pub heal_color: Rgba,
     pub damage_color: Rgba,
     pub crit_color: Rgba,
     pub intent_arrows: bool,
@@ -53,10 +52,15 @@ pub struct Tuning {
     pub shadow_alpha: u8,
     /// STAGE1: the opacity of a Stage unit's side-coloured foot ring.
     pub foot_ring_alpha: u8,
-    /// STAGE1: the opacity of the Stage grid lines (1-255; always on).
+    /// STAGE1: the opacity of the Stage grid lines at rest (0-255; DIORAMA5 R6: 0, none at rest).
     pub grid_alpha: u8,
+    /// DIORAMA3 R6: the grid lines' alpha while planning with Show full grid on (DIORAMA5 R6).
+    pub grid_alpha_planning: u8,
     /// SPRITE1-U: how long a moving unit slides to its new tile playing `walk` (0: it jumps).
     pub walk_ms: u64,
+    /// ENGINE-56 (AUDIO-FEEL2): how long a battle's music fades in (0-3000 ms; other tracks 2 s from silence, 1 s over
+    /// another; `Screen::music_fade_in`).
+    pub battle_music_fade_ms: u64,
     /// SPRITE1-U: how long a fallen unit shows the death clip's last frame before the dead marker.
     pub death_hold_ms: u64,
     /// SPRITE1-U: the opacity (0-255) of the side-coloured ellipse under a unit's feet (the Flat view).
@@ -93,7 +97,6 @@ impl Default for Tuning {
             shakes: ShakeTable::default(),
             shake_max_px: 3.0,
             shake_max_ms: 1500,
-            heal_color: rgb(96, 220, 120),
             damage_color: rgb(255, 96, 80),
             crit_color: rgb(255, 210, 60),
             intent_arrows: true,
@@ -102,8 +105,10 @@ impl Default for Tuning {
             foot_inset_px: 5,
             shadow_alpha: 120,
             foot_ring_alpha: 200,
-            grid_alpha: 34,
+            grid_alpha: 0,
+            grid_alpha_planning: 72,
             walk_ms: 360,
+            battle_music_fade_ms: 400,
             death_hold_ms: 600,
             foot_alpha: 110,
             hover_outline_alpha: 110,
@@ -176,7 +181,6 @@ impl Tuned for Tuning {
             shakes: shakes(v.get("shakes")),
             shake_max_px: v.get("shake_max_px").and_then(Value::as_f64).map_or(d.shake_max_px, |x| x as f32).clamp(0.0, 6.0),
             shake_max_ms: u("shake_max_ms", d.shake_max_ms as u64).min(3000) as u32,
-            heal_color: v.get("heal_color").map(|c| color(c, d.heal_color)).unwrap_or(d.heal_color),
             damage_color: v.get("damage_color").map(|c| color(c, d.damage_color)).unwrap_or(d.damage_color),
             crit_color: v.get("crit_color").map(|c| color(c, d.crit_color)).unwrap_or(d.crit_color),
             intent_arrows: v.get("intent_arrows").and_then(Value::as_bool).unwrap_or(d.intent_arrows),
@@ -185,8 +189,10 @@ impl Tuned for Tuning {
             foot_inset_px: i("foot_inset_px", d.foot_inset_px).clamp(2, 10),
             shadow_alpha: u("shadow_alpha", d.shadow_alpha as u64).min(255) as u8,
             foot_ring_alpha: u("foot_ring_alpha", d.foot_ring_alpha as u64).min(255) as u8,
-            grid_alpha: u("grid_alpha", d.grid_alpha as u64).clamp(1, 255) as u8,
+            grid_alpha: u("grid_alpha", d.grid_alpha as u64).min(255) as u8,
+            grid_alpha_planning: u("grid_alpha_planning", d.grid_alpha_planning as u64).clamp(1, 255) as u8,
             walk_ms: u("walk_ms", d.walk_ms).min(2000),
+            battle_music_fade_ms: u("battle_music_fade_ms", d.battle_music_fade_ms).min(3000),
             death_hold_ms: u("death_hold_ms", d.death_hold_ms).min(5000),
             foot_alpha: u("foot_alpha", d.foot_alpha as u64).min(255) as u8,
             hover_outline_alpha: u("hover_outline_alpha", d.hover_outline_alpha as u64).min(255) as u8,

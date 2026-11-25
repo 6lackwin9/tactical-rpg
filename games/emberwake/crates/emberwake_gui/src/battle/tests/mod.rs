@@ -1,5 +1,11 @@
+mod decor_tests;
+mod statusvis1b_tests;
 mod pacing_tests;
 mod battle_ui2b_tests;
+mod battle_ui2c_tests;
+mod ghost_defer_tests;
+mod plan_start_tests;
+mod passive_icon_tests;
 mod data_looks_tests;
 mod windup_tests;
 mod skill_menu_tests;
@@ -1138,7 +1144,7 @@ fn a_fired_phase_with_a_shake_starts_it_at_once() {
     let fire_phase = |b: &mut BattleScreen, id: &str| {
         let s = b.host.session.as_mut().unwrap();
         let effect: aegis_core::value::Obj = serde_json::from_value(json!({"type": emberwake_data::SHAKE_EFFECT, "preset": "tremor"})).unwrap();
-        s.phases.phases.push(emberwake_battle::encounter::PhaseDef { id: id.into(), name: String::new(), trigger: Default::default(), effects: vec![effect] });
+        s.phases.phases.push(emberwake_battle::encounter::PhaseDef { id: id.into(), name: String::new(), form: String::new(), trigger: Default::default(), effects: vec![effect] });
         s.phases.fired.insert(id.into(), (s.current_round, s.current_block));
     };
     fire_phase(&mut b, "fx_tremor");
@@ -1190,7 +1196,7 @@ fn mend_motes_rise_at_the_targets_foot_and_its_float_waits_for_the_impact() {
     let mut i = b.impacts.remove(0);
     let target = i.struck[0];
     let cell = b.host.session.as_ref().unwrap().w.grid.pos(target).unwrap();
-    (i.style, i.area, i.to, i.struck, i.floats) = (fx::library::look(fx::DEFAULT_SUPPORT), false, cell, Vec::new(), vec![(target, "+5".into(), cx.tuning.value.heal_color)]);
+    (i.style, i.area, i.to, i.struck, i.floats) = (fx::library::look(fx::DEFAULT_SUPPORT), false, cell, Vec::new(), vec![(target, "+5".into(), crate::tokens::moss())]);
     let at = i.at.unwrap();
     b.floats.clear();
     b.impacts.push(i);
@@ -1288,7 +1294,9 @@ fn the_camera_shakes_the_board_only() {
         let board = crate::stage::INTERIOR;
         let moved = (board.y..board.y + board.h).any(|y| (board.x..board.x + board.w).any(|x| at(&before, x, y) != pixel(&g, x, y)));
         assert!(moved, "{view}: a board pixel moved");
-        for r in [Rect::new(2, 2, aegis_ui::ui::W - 4, 24), Rect::new(aegis_ui::ui::W - 126, 28, 124, 290)] {
+        // DIORAMA2 R4: the hostile cards' own panel (the board panel, with the stage's wings, ends left of it)
+        let hostiles = b.panels.iter().find(|p| p.0 == "hostiles").map(|p| p.1).expect("the hostile panel");
+        for r in [Rect::new(2, 2, aegis_ui::ui::W - 4, 24), hostiles] {
             let same = (r.y..r.y + r.h).all(|y| (r.x..r.x + r.w).all(|x| at(&before, x, y) == pixel(&g, x, y)));
             assert!(same, "{view}: the HUD at {r:?} does not shake");
         }
@@ -1299,3 +1307,28 @@ mod visclar_c_tests;
 mod visclar_d_tests;
 mod hud_frame_tests;
 mod portrait_frame_tests;
+mod boss_ui1_tests;
+mod objui1_tests;
+mod floatpanels_tests;
+mod xl_battle_tests;
+mod board_focus_tests;
+
+/// ENGINE-52 (COMPOSE-PAR1): a shipped fight's composed stage ground is the same on one thread and on many.
+#[test]
+fn a_battle_boards_ground_is_the_same_on_one_thread_and_many() {
+    let dir = Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
+    let d = Data::open(&dir).expect("data").0;
+    let mut art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+    let mut composed = 0;
+    for (world, id) in [("sunk_ward", "enc_pro_0a"), ("sunk_ward", "enc_evt_01"), ("ashlands", "courtyard_skirmish")] {
+        let def = EncounterDef::from_obj(d.resolve(world, "encounters", id));
+        let s = Session::start(d.cat.clone(), def, &WorldRoster::new(&d, world));
+        let set = emberwake_world::dialogue::stage_set(&d, world);
+        let look = crate::stage::zone_look(&mut art, &set, &s.def.zone);
+        let one = aegis_ui::ground::with_compose_threads(1, || crate::stage::compose_board(&mut art, &s.w.grid, &set, &look));
+        let many = aegis_ui::ground::with_compose_threads(aegis_ui::ground::COMPOSE_THREADS, || crate::stage::compose_board(&mut art, &s.w.grid, &set, &look));
+        assert!(one == many, "{world} {id}: the same pixels");
+        composed += one.is_some() as usize;
+    }
+    assert!(composed >= 1, "at least one board composes its ground");
+}

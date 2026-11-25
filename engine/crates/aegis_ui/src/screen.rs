@@ -350,11 +350,32 @@ pub trait Context: Sized + 'static {
     fn agent_summary(&self) -> Value;
     /// The reply to the agent's `game` command.
     fn agent_game(&self) -> Value;
+    /// ENGINE-46 (FEEL-FIX1): screens whose first draw is slow (big panels, art, another face), drawn once unseen before
+    /// the first frame so their first real draw finds the caches full (`Shell::warm`). None by default.
+    fn warm(_cx: &mut Cx<Self>) -> Vec<Box<dyn Screen<Self>>> {
+        Vec::new()
+    }
+    /// ENGINE-62 (CRASH-SAFE1): after a panic the shell caught, writes the game in play to the rescue save
+    /// (`aegis_save::RESCUE_KEY`, never a player's slot) with nothing more than a save write: None when there is nothing
+    /// to save, else the write's problems (empty: written). None by default.
+    fn rescue(&self) -> Option<Vec<String>> {
+        None
+    }
+    /// ENGINE-64 (LIVE-RELOAD1): the folders of the game's data, watched in a dev run with live reload on. None by default.
+    fn data_dirs(&self) -> Vec<PathBuf> {
+        Vec::new()
+    }
+    /// ENGINE-64: files in `data_dirs` changed: reloads the data through the same load and validation as a start and,
+    /// when it loads, swaps it in (Ok: a line for the notice, extra problems after it). On an error nothing is swapped
+    /// and the error names the file. The default has no data to reload.
+    fn reload_data(_cx: &mut Cx<Self>, _changed: &[PathBuf]) -> Result<Vec<String>, String> {
+        Err("this game does not reload its data".into())
+    }
 }
 
 /// The modifier keys held down right now (the shell keeps it current; all up while the window is out of focus), for
 /// hold-to-show controls such as revealing what is hidden while a key is held.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Held {
     pub shift: bool,
     pub ctrl: bool,
@@ -362,6 +383,9 @@ pub struct Held {
     /// The step direction (`Key::dir`) of the movement key (arrows, W A S D) held down, the latest pressed when
     /// several are; None when none is. For screens that walk while a key is held (`Screen::hold_walk`).
     pub dir: Option<(i64, i64)>,
+    /// ENGINE-63 (PAD-TUNE1): the left stick of a pad (x, y from -1 to 1, y up positive; (0, 0) at rest or with no pad),
+    /// for a live stick test (`controls::PadTuning::test_line`).
+    pub stick: (f32, f32),
 }
 
 /// PR5-48: where a pointer drag on a `handle` widget (`Ui::handle`) is (`Screen::pointer`): the press, a move while the
@@ -442,6 +466,43 @@ impl<G: Context> Cx<G> {
     }
 }
 
+/// ENGINE-56 (AUDIO-FEEL2): what the shell answers a press with by sound (`Screen::ui_sound`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UiCue {
+    /// A button (or another kind of `UI_SOUND_KINDS`) pressed and taken.
+    Confirm,
+    /// Esc, the pad's B or a right click that closed something (a screen, an open choice list).
+    Back,
+    /// A press on a disabled button.
+    Error,
+}
+
+impl UiCue {
+    /// The engine's sound for the cue (`engine/assets/audio/sfx`; a game's file of the same name plays over it).
+    pub fn file(self) -> &'static str {
+        match self {
+            UiCue::Confirm => "sfx/ui_confirm.wav",
+            UiCue::Back => "sfx/ui_back.wav",
+            UiCue::Error => "sfx/ui_error.wav",
+        }
+    }
+}
+
+/// ENGINE-56: a screen's answer to `Screen::ui_sound`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UiSound {
+    /// The cue's own file (`UiCue::file`).
+    Rule,
+    /// Nothing (the screen plays its own).
+    Silent,
+    /// This file on the interface bus.
+    File(&'static str),
+}
+
+/// ENGINE-56: the widget kinds a press of answers by rule: buttons (framed, text or icon), tabs, checkboxes, choice
+/// fields and their options, sections; not sliders, rows, cards, board cells, drag handles or text fields.
+pub const UI_SOUND_KINDS: [&str; 8] = ["button", "text_button", "icon_button", "tab", "checkbox", "dropdown", "option", "section"];
+
 pub trait Screen<G> {
     fn id(&self) -> &'static str;
     /// The units this screen writes its rects in, for as long as it lives (LAYOUT720-E1; the shell gives it the view
@@ -451,6 +512,12 @@ pub trait Screen<G> {
     }
     /// Drawn over the screen below it (popups, menus over the map).
     fn overlay(&self) -> bool {
+        false
+    }
+    /// A panel-shell screen (a main panel or a game menu over the map, `panes::panel_shell`). Never stacked
+    /// (STYLE-PASS1B): a panel opened over another panel takes its place on screen; the one under stays in the stack, not
+    /// drawn, and shows again when the top one closes (Back returns to it). See `drawn_screens`.
+    fn panel(&self) -> bool {
         false
     }
     fn draw(&mut self, cx: &mut Cx<G>, g: &mut Gfx, mouse: (i32, i32), live: bool);
@@ -463,6 +530,29 @@ pub trait Screen<G> {
     /// CONTROLS-UI1: a raw key or pad button, before the control map, the focus keys and `key` (a rebind waiting for
     /// its input). True: taken, it goes no further.
     fn capture(&mut self, _cx: &mut Cx<G>, _input: crate::controls::Input) -> bool {
+        false
+    }
+    /// ENGINE-49 (WALK-FEEL1): what this screen moves, as of the last frame, for a `feel` replay's movement report
+    /// (`crate::walkfeel::Frame::of`): `{"cell": [x, y], "drawn": [x, y] (in cells, between two while it glides),
+    /// "cam": [x, y], "target": [x, y] (the camera and where it wants to be, physical px), "tile": px}`. Null: nothing.
+    fn motion(&self) -> Value {
+        Value::Null
+    }
+    /// ENGINE-51 (SWITCH-FEEL1): the name of a transition this screen shows over itself now (a fade, a wipe, an entry
+    /// beat), for a `feel` replay's switch report (`crate::switchfeel`): a long frame after one is covered. None: nothing.
+    fn transition(&self, _cx: &Cx<G>) -> Option<&'static str> {
+        None
+    }
+    /// PR7-92 (INPUT-REACH2): the id prefixes of a group of widgets that is one keyboard stop (a board's tiles and the
+    /// tokens on them): Tab and Shift+Tab land on the group once, and while the focus is in it the arrows move it among
+    /// the group's widgets only (`focus::step_grouped`). Empty: no group.
+    fn focus_group(&self) -> &'static [&'static str] {
+        &[]
+    }
+    /// PR7-92 (INPUT-REACH2): Enter or Space (`k`) on widget `id` with a visible keyboard focus, before the shell
+    /// presses it as a click: true takes the key (no click). A screen whose keys do more than a click there (pick a slot
+    /// on Enter, empty it on Space) says so; the default leaves both to `click_id`.
+    fn press_focus(&mut self, _cx: &mut Cx<G>, _id: &str, _k: Key) -> bool {
         false
     }
     /// Whether the arrow keys move the keyboard focus (PORT-FOCUS); a screen that walks or steers with them says no
@@ -498,6 +588,26 @@ pub trait Screen<G> {
     }
     fn wheel(&mut self, _cx: &mut Cx<G>, _lines: i32) {}
     fn tick(&mut self, _cx: &mut Cx<G>) {}
+    /// ENGINE-58: finish now the work this screen spreads over the frames after an input (so each of those frames stays
+    /// short). A game with no window calls it on every screen before the frames a `frames` request draws, so what the
+    /// requests before changed is all on the canvas on any machine (a shot never depends on how fast the frames came).
+    fn settle(&mut self, _cx: &mut Cx<G>) {}
+    /// ENGINE-53 (SWITCH-AHEAD1): a screen this one may open next, for the shell to draw once unseen at the start of
+    /// this frame (after the tick), as it draws the warm list before the first frame (`Context::warm`): the art, panel
+    /// and glyph caches its first real draw would fill are filled while this screen idles. Asked of the top screen each
+    /// frame, then each screen under it down the stack until one gives one (so a screen under a popup or a card it
+    /// opened can still get ready); give one only now and then (a slow screen costs its first draw here). None by
+    /// default.
+    fn warm_next(&mut self, _cx: &mut Cx<G>) -> Option<Box<dyn Screen<G>>> {
+        None
+    }
+    /// ENGINE-64 (LIVE-RELOAD1): the game's data was reloaded in a dev run (`Context::reload_data`): a screen built from
+    /// the old data rebuilds itself from the game state (pushing `Nav::Reset` or the like), or says what it keeps (a
+    /// battle keeps its units until it ends) as a line added to the reload's. Asked of every screen, top first (`top`:
+    /// this one is on top). None by default (the screen reads the data as it draws).
+    fn data_reloaded(&mut self, _cx: &mut Cx<G>, _top: bool) -> Option<String> {
+        None
+    }
     /// What the frame loop owes this screen now (FPSCAP1). Default: every frame. Say less only when `tick` and `draw` have
     /// nothing to do until input or the time named; the shell asks every screen it draws, after each frame.
     fn frame_need(&self, _cx: &Cx<G>) -> FrameNeed {
@@ -516,6 +626,12 @@ pub trait Screen<G> {
     fn note_context(&self, _cx: &Cx<G>) -> Value {
         Value::Null
     }
+    /// XL-FIX2 (PR7-85): the widget id prefixes whose boxes the text audit does not take as controls (a board's cell
+    /// widgets, which panels such as a log or a menu are drawn over, so their text would read as spilling out of a
+    /// cell). The layout audit and `ui_tree` see those widgets as ever. Default: none.
+    fn audit_ignores(&self) -> &'static [&'static str] {
+        &[]
+    }
     /// Called when the screen leaves the stack (popped, a new stack, the window closing): its last chance to keep
     /// what it holds (a playtest session).
     fn leave(&mut self, _cx: &mut Cx<G>) {}
@@ -532,6 +648,18 @@ pub trait Screen<G> {
     /// chosen as the music is: the topmost screen's wish plays, None lets the screen below choose, and `Some("")` is
     /// silence (a battle over a region, say).
     fn ambience(&self, _cx: &Cx<G>) -> Option<String> {
+        None
+    }
+    /// ENGINE-56 (AUDIO-FEEL2): the sound the shell plays for `cue` on widget `id` of this screen (empty for a back):
+    /// the rule (`UiSound::Rule`: `UiCue::file`), none (the screen plays its own, as a battle's round controls do), or
+    /// another file. The shell asks before the press runs and plays after it, only when it went through (a confirm),
+    /// was refused (an error) or closed something (a back).
+    fn ui_sound(&self, _cx: &Cx<G>, _id: &str, _cue: UiCue) -> UiSound {
+        UiSound::Rule
+    }
+    /// ENGINE-56: how long this screen's music (`music`) fades in when it starts, in seconds; None: the engine's (2 s
+    /// from silence, 1 s over another track). The track it replaces fades out as ever.
+    fn music_fade_in(&self, _cx: &Cx<G>) -> Option<f32> {
         None
     }
     /// Drag and drop (UIKIT2): whether payload `from` (`Ui::draggable`) may be dropped on the target `to`
@@ -555,6 +683,29 @@ pub trait Screen<G> {
     fn desk(&mut self) -> Option<&mut crate::window::Desk> {
         None
     }
+}
+
+/// The stack's screens drawn this frame, bottom first: the top one and the overlays under it down to the first screen
+/// that is not an overlay, less every overlay panel with another panel above it (never stacked, STYLE-PASS1B:
+/// `Screen::panel`). A popup that is not a panel (a question, a notice) still draws over the panel under it, and the
+/// screen at the bottom (the map) always draws.
+pub fn drawn_screens<G>(stack: &[Box<dyn Screen<G>>]) -> Vec<usize> {
+    let Some(top) = stack.len().checked_sub(1) else { return Vec::new() };
+    let mut base = top;
+    while base > 0 && stack[base].overlay() {
+        base -= 1;
+    }
+    let mut panel_above = false;
+    let mut out = Vec::new();
+    for i in (base..=top).rev() {
+        let panel = stack[i].panel();
+        if !(panel && panel_above && stack[i].overlay()) {
+            out.push(i);
+        }
+        panel_above |= panel;
+    }
+    out.reverse();
+    out
 }
 
 /// The widget plumbing every screen shares: its `w` list and `act(cx, action)`. The context type is `Cx` as named
@@ -657,6 +808,19 @@ impl<G> Screen<G> for Ask<G> {
     fn pointer_to(&self) -> Option<&str> {
         self.no_default.then_some("ask.no")
     }
+    /// CONTROLS-UI1B: `y` and `n` answer by the raw key, before the control map, so a rebind (`n` is a game's action
+    /// key too) never changes how a question is answered (a key the map turns into `y` or `n` is swallowed); Enter and
+    /// Esc go through the map as every screen's do.
+    fn capture(&mut self, cx: &mut Cx<G>, input: crate::controls::Input) -> bool {
+        match input {
+            crate::controls::Input::Key(Key::Char('y')) => self.act(cx, true),
+            crate::controls::Input::Key(Key::Char('n')) => self.act(cx, false),
+            // a key the map turns into `y` or `n` answers nothing (only the raw keys do)
+            crate::controls::Input::Key(k) => return matches!(crate::controls::Controls::from_settings(&cx.settings.v).0.key(k), Key::Char('y' | 'n')),
+            _ => return false,
+        }
+        true
+    }
     fn key(&mut self, cx: &mut Cx<G>, k: Key) {
         match k {
             Key::Enter => self.act(cx, !self.no_default),
@@ -721,6 +885,83 @@ impl<G> Screen<G> for Notice {
     }
     fn state(&self, _cx: &Cx<G>) -> Value {
         json!({"lines": self.lines})
+    }
+    widget_plumbing!(Cx<G>);
+}
+
+// ---- CrashNote: the last run closed on a crash (ENGINE-62, CRASH-SAFE1) ---------------------------------------
+
+/// The line a start shows over its first screen after a caught crash (`crashlog::take_crashed`): where the report is,
+/// with Open folder and OK. Shell-made: a game needs no code of its own for it.
+pub struct CrashNote {
+    pub report: std::path::PathBuf,
+    /// A rescue save was written (the game's Continue offers it).
+    pub rescue: bool,
+    /// Open folder's refusal, shown in the line's place.
+    problem: String,
+    w: Vec<Widget<CrashAct>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum CrashAct {
+    Open,
+    Close,
+}
+
+/// The line's words: the report's path stands at its end.
+pub const CRASH_LINE: &str = "The game closed unexpectedly. A report is at";
+
+impl CrashNote {
+    pub fn new(report: std::path::PathBuf, rescue: bool) -> Self {
+        Self { report, rescue, problem: String::new(), w: Vec::new() }
+    }
+    /// The whole line as shown.
+    pub fn line(&self) -> String {
+        format!("{CRASH_LINE} {}.", self.report.display())
+    }
+    fn act<G>(&mut self, cx: &mut Cx<G>, a: CrashAct) {
+        match a {
+            CrashAct::Open => {
+                let dir = self.report.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+                if let Err(e) = crate::recordings::open_folder(&dir) {
+                    self.problem = e;
+                }
+            }
+            CrashAct::Close => cx.nav.push(Nav::Pop),
+        }
+    }
+}
+
+impl<G> Screen<G> for CrashNote {
+    fn id(&self) -> &'static str {
+        "crash_note"
+    }
+    fn frame_need(&self, _cx: &Cx<G>) -> FrameNeed {
+        FrameNeed::Idle
+    }
+    fn overlay(&self) -> bool {
+        true
+    }
+    fn draw(&mut self, _cx: &mut Cx<G>, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        let mut ui: Ui<CrashAct> = Ui::new(g, mouse, live);
+        let r = Rect::new(6, H - 26, W - 12, 20);
+        ui.frame(r, "", false);
+        let (open_w, ok_w) = (64, 34);
+        let room = (r.w - open_w - ok_w - 24) as f32;
+        let (text, col) = if self.problem.is_empty() { (self.line(), ui.t.text) } else { (self.problem.clone(), ui.t.foe) };
+        ui.p.text_fit(r.x as f32 + 8.0, r.y as f32 + 5.0, &text, BODY, room, col);
+        ui.push("crash.line", "label", self.line(), Rect::new(r.x + 6, r.y + 2, room as i32, 16), true, false, None, Vec::new());
+        ui.button("crash.open", Rect::new(r.x + r.w - open_w - ok_w - 12, r.y + 3, open_w, 14), "Open folder", CrashAct::Open, true);
+        ui.button("crash.ok", Rect::new(r.x + r.w - ok_w - 6, r.y + 3, ok_w, 14), "OK", CrashAct::Close, true);
+        self.w = ui.widgets;
+    }
+    fn key(&mut self, cx: &mut Cx<G>, k: Key) {
+        if matches!(k, Key::Enter | Key::Space | Key::Esc) {
+            self.act(cx, CrashAct::Close);
+        }
+    }
+    fn state(&self, _cx: &Cx<G>) -> Value {
+        json!({"line": self.line(), "report": self.report.display().to_string(), "rescue": self.rescue})
     }
     widget_plumbing!(Cx<G>);
 }

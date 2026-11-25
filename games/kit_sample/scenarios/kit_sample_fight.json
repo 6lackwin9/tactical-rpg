@@ -1,0 +1,18 @@
+{
+  "id": "kit_sample_fight",
+  "title": "The kit sample: the menu, Start, the two-a-side fight on the kit's battle stage, a round, then to the end",
+  "steps": [
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
+    {"step": "shot", "name": "menu"},
+    {"step": "click", "id": "menu.start"},
+    {"step": "wait", "until": {"path": "screen", "eq": "board"}},
+    {"step": "wait", "until": {"path": "state.fight.over", "eq": false}},
+    {"step": "shot", "name": "board"},
+    {"step": "click", "id": "board.round"},
+    {"step": "click", "id": "board.to_end"},
+    {"step": "wait", "until": {"path": "state.fight.over", "eq": true}},
+    {"step": "shot", "name": "end"},
+    {"step": "key", "key": "esc"},
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}}
+  ]
+}

@@ -19,6 +19,8 @@
 
 pub mod art;
 pub mod audio;
+pub mod audio_out;
+pub mod audiofeel;
 pub mod autotile;
 pub mod controls;
 #[cfg(not(target_arch = "wasm32"))]
@@ -27,8 +29,10 @@ pub mod bridge;
 pub mod canvas;
 pub mod depth;
 pub mod edit;
+pub mod feel;
 pub mod focus;
 pub mod frame_tuner;
+pub mod float_panel;
 pub mod fx;
 pub mod ground;
 pub mod icon;
@@ -37,6 +41,8 @@ pub mod layout_audit;
 pub mod layout_editor;
 pub mod layout_gallery;
 pub mod layout_specimen;
+pub mod live;
+pub mod map_fx;
 pub mod notes;
 pub mod pacing;
 pub mod painter;
@@ -44,6 +50,7 @@ pub mod perf;
 pub mod panes;
 pub mod playtest;
 pub mod preview;
+pub mod reach;
 pub mod recordings;
 pub mod screen;
 pub mod screen_layout;
@@ -58,7 +65,9 @@ pub mod tilemap;
 pub mod timeline;
 pub mod tuning;
 pub mod ui;
+pub mod walkfeel;
+pub mod switchfeel;
 pub mod window;
 pub mod world_camera;
 
-pub use screen::{Context, Cx, Held, Key, Nav, PointerPhase, Screen};
+pub use screen::{Context, Cx, Held, Key, Nav, PointerPhase, Screen, UiCue, UiSound, UI_SOUND_KINDS};

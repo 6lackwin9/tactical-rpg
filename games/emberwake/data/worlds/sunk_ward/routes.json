@@ -159,7 +159,7 @@
 		{
 			"id": "high_gorge",
 			"name": "The high gorge",
-			"from": "crucible_watchpost",
+			"from": "sluice_undercroft",
 			"to": "slag_gate",
 			"two_way": true,
 			"time": 1,

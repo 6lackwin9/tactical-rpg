@@ -7,20 +7,21 @@ game and kit layers, plus the assets canon or a spec needs that have no file yet
 
 | Category | Final | Rework | Placeholder | Missing |
 | --- | --- | --- | --- | --- |
-| background | 17 | 0 | 21 | 0 |
+| background | 17 | 0 | 23 | 0 |
 | face sheet | 0 | 0 | 76 | 0 |
 | item icon | 49 | 1 | 54 | 0 |
 | map | 19 | 0 | 0 | 0 |
 | music | 14 | 0 | 8 | 0 |
-| portrait | 0 | 0 | 99 | 0 |
-| prop | 152 | 0 | 0 | 0 |
-| sfx | 12 | 0 | 0 | 0 |
+| passives | 16 | 0 | 0 | 0 |
+| portrait | 0 | 0 | 106 | 0 |
+| prop | 200 | 0 | 0 | 0 |
+| sfx | 21 | 0 | 0 | 0 |
 | skill icon | 97 | 12 | 89 | 0 |
-| sprite sheet | 0 | 0 | 35 | 0 |
-| status icon | 16 | 0 | 0 | 0 |
-| tile | 82 | 0 | 0 | 0 |
-| ui | 74 | 0 | 0 | 0 |
-| **all** | **532** | **13** | **382** | **0** |
+| sprite sheet | 0 | 0 | 59 | 0 |
+| status icon | 18 | 0 | 0 | 0 |
+| tile | 421 | 0 | 0 | 0 |
+| ui | 92 | 0 | 0 | 0 |
+| **all** | **964** | **13** | **415** | **0** |
 
 Every row, final files included: [ASSET_STATUS.csv](ASSET_STATUS.csv) (path, category, state, act, why, last
 commit). Below: what still needs work, rework and placeholders grouped by folder and reason.
@@ -39,12 +40,12 @@ commit). Below: what still needs work, rework and placeholders grouped by folder
 | `kit:skills/kinds/` | skill icon | 6 | I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4) |
 | `kit:skills/kinds/` | skill icon | 3 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
 
-## Placeholder (382)
+## Placeholder (415)
 
 | Folder | Category | Files | Why |
 | --- | --- | --- | --- |
 | `game:audio/music/` | music | 8 | synth music placeholder |
-| `game:backgrounds/battle/` | background | 15 | procedural backdrop (gen_art.py) |
+| `game:backgrounds/battle/` | background | 17 | procedural backdrop (gen_art.py) |
 | `game:backgrounds/story/` | background | 1 | Gemini web-queue CG; final from Flow (STYLE_BIBLE 6) |
 | `game:backgrounds/story/` | background | 4 | Gemini web-queue opening CG; final from Flow (STYLE_BIBLE 6) |
 | `game:backgrounds/story/` | background | 1 | procedural story card (gen_art.py) |
@@ -64,7 +65,7 @@ commit). Below: what still needs work, rework and placeholders grouped by folder
 | `game:portraits/bosses/faces/guild_master_orlov/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:portraits/bosses/faces/inquisitor_prelate_nemeth/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:portraits/bosses/faces/proctor_quell/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
-| `game:portraits/common/` | portrait | 10 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:portraits/common/` | portrait | 17 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:portraits/elites/` | portrait | 9 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:portraits/full_body/` | portrait | 14 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:portraits/heroes/` | portrait | 8 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
@@ -81,18 +82,42 @@ commit). Below: what still needs work, rework and placeholders grouped by folder
 | `game:portraits/npcs/faces/talia_rusk/` | face sheet | 4 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:skills/` | skill icon | 89 | Phase 4 U2 placeholder icons (AI-14) |
 | `game:units/beast/render_beast/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/beast/render_beast_painted/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:units/brawler/ash_warchief/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:units/brawler/braces/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/brawler/calcified_amalgam/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:units/brawler/gauntlet/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/brawler/guild_master_orlov/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:units/crawler/ash_crawler/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/crawler/ash_crawler_painted/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:units/mage/1h_sprayer/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/mage/inquisitorial_purifier/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/priest/maren/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/priest/sabina_kress/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/priest/widow_varka/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/ranger/hollis/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/ranger/watch_crossbowman/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:units/ranger/wenn_tallow/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:units/rogue/1h_knife/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/rogue/ivo/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/rogue/mortuary_flagellant/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/rogue/talia_rusk/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/rogue/tallow_dredger/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/rogue/vesper/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:units/warrior/2h_greatsword/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/bailiff_enforcer/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/berek_dorn/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:units/warrior/brask_toller/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/calcified_husk/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/captain_vane/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/castellan_footman/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:units/warrior/grakka_ashmaw/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:units/warrior/hest_the_quartermaster/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/inquisitor_prelate_nemeth/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/kaelen/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `game:units/warrior/orsa_tallow/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/overseer_grendel/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
+| `game:units/warrior/proctor_quell/` | sprite sheet | 1 | Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2) |
 | `kit:items/axe/` | item icon | 1 | byte copy of game:items/greatsword/battle_axe.png |
 | `kit:items/cloth/` | item icon | 1 | byte copy of game:items/light/base.png |
 | `kit:items/leather/` | item icon | 1 | byte copy of game:items/medium/base.png |

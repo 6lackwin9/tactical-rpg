@@ -361,6 +361,8 @@ pub(super) struct GroundMark {
     last_round: i32,
     /// PR7-40 part 2 (contract 8): the hazard's icon (its status's kit icon; "" none: the glyph shows).
     icon: String,
+    /// DIORAMA1 D3: the hazard's status (its decal folder `props/hazards/<status>`; "" none).
+    status: String,
     tip: Tip,
 }
 
@@ -428,7 +430,7 @@ impl HookMarks {
     /// The agent link's state: the marks as drawn (tiles as [x, y]).
     pub(super) fn json(&self) -> Value {
         json!({
-            "ground": self.ground.iter().filter(|_| self.show_ground).map(|g| json!({"at": [g.cell.x, g.cell.y], "id": g.id, "name": g.name, "glyph": g.glyph, "hidden": g.hidden, "last_round": g.last_round})).collect::<Vec<_>>(),
+            "ground": self.ground.iter().filter(|_| self.show_ground).map(|g| json!({"at": [g.cell.x, g.cell.y], "id": g.id, "name": g.name, "glyph": g.glyph, "hidden": g.hidden, "last_round": g.last_round, "status": g.status})).collect::<Vec<_>>(),
             "arena": if self.show_arena { emberwake_battle::intent::arena_json(&self.arena) } else { json!([]) },
         })
     }
@@ -534,7 +536,7 @@ fn ground_mark(w: &World, cell: V2, p: &emberwake_battle::ground::Placed) -> Gro
         tip.push(("Hidden from the foes".into(), th().dim));
     }
     let icon = if d.status.is_empty() { String::new() } else { emberwake_content::art::status_icon(&d.status) };
-    GroundMark { cell, id: d.id.clone(), name: d.name.clone(), tint, glyph: d.glyph.clone(), hidden: d.hidden, last_round: p.last_round, icon, tip }
+    GroundMark { cell, id: d.id.clone(), name: d.name.clone(), tint, glyph: d.glyph.clone(), hidden: d.hidden, last_round: p.last_round, icon, status: d.status.clone(), tip }
 }
 
 /// HOOKS1-UI slice 1: the ground hazards (a tinted plate with the row's glyph; the party's own hidden ones fainter) and
@@ -542,15 +544,15 @@ fn ground_mark(w: &World, cell: V2, p: &emberwake_battle::ground::Placed) -> Gro
 /// PR7-40 part 2 (contract 8): a ground hazard shows its icon (its status's kit icon; the glyph without one) and its
 /// rounds left in the plate's top left.
 pub(super) fn draw_hook_marks(p: &mut Painter, art: &mut aegis_ui::art::Art, m: &HookMarks, geo: &Geom) {
-    let plate_of = |c: V2| match geo.view {
-        View::Stage => inset2(geo.cell_rect(c), 1, 1),
-        View::Flat => geo.cell_rect(c).inset(1),
-    };
+    let plate_of = |c: V2| ground_plate(geo, c);
     for g in m.ground.iter().filter(|_| m.show_ground) {
         let r = plate_of(g.cell);
-        let (fill, edge) = if g.hidden { (36, 120) } else { (70, 200) };
-        plate(p, r, with_alpha(g.tint, fill), with_alpha(g.tint, edge));
         let alpha = if g.hidden { 150 } else { 235 };
+        // DIORAMA1 D3: the status's painted decal on the tile (the tint plate only when there is no decal file)
+        if !draw_decal(p, art, &g.status, g.cell, r, alpha) {
+            let (fill, edge) = if g.hidden { (36, 120) } else { (70, 200) };
+            plate(p, r, with_alpha(g.tint, fill), with_alpha(g.tint, edge));
+        }
         let side = (r.h / 3).clamp(5, 8);
         let ir = Rect::new(r.x + 2, r.y + 2, side, side);
         let px = ((side as f32) * p.v.s).round().max(1.0) as i32;
@@ -578,6 +580,45 @@ pub(super) fn draw_hook_marks(p: &mut Painter, art: &mut aegis_ui::art::Art, m: 
         for k in [5.0, 9.0] {
             p.line(x1 - k, y1, x1, y1 - k * 0.6, with_alpha(ARENA, 200), 1.0);
         }
+    }
+}
+
+/// DIORAMA1 D3 (SCREEN_CONTRACT_BATTLE 8.1): a ground hazard's decal for `status` on tile `c`, `props/hazards/<status>/v*`
+/// (picked by the tile, like the stage's tiles); None: no status or no file (the tint plate shows).
+pub(super) fn decal_art(art: &mut aegis_ui::art::Art, status: &str, c: V2) -> Option<String> {
+    if status.is_empty() {
+        return None;
+    }
+    art.pick(&[&format!("{DECAL_DIR}/{status}")], None, c.x, c.y)
+}
+
+/// The decals' folder (`<dir>/<status>/v*.png`, drawn at `DECAL_ART_PX` art px per logical px).
+pub(super) const DECAL_DIR: &str = "props/hazards";
+pub(super) const DECAL_ART_PX: i32 = 2;
+
+/// Draws tile `c`'s decal for `status` centred on plate `r` (its art size halved, kept inside the plate); false when
+/// there is none.
+fn draw_decal(p: &mut Painter, art: &mut aegis_ui::art::Art, status: &str, c: V2, r: Rect, alpha: u8) -> bool {
+    let Some(rel) = decal_art(art, status, c) else { return false };
+    let Some((iw, ih)) = art.size_of(&rel) else { return false };
+    let (w, h) = ((iw / DECAL_ART_PX).min(r.w).max(1), (ih / DECAL_ART_PX).min(r.h).max(1));
+    let d = Rect::new(r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h);
+    let k = p.v.s;
+    match art.image(&rel, ((w as f32) * k).round().max(1.0) as i32, ((h as f32) * k).round().max(1.0) as i32) {
+        Some(img) => {
+            p.image_alpha(img, d, alpha);
+            true
+        }
+        None => false,
+    }
+}
+
+/// PR7-40 part 3 (contract 8, FB-358): the plate a ground mark takes on tile `c` in either view, one rect for the
+/// hazard plates and a push's landing tile, so the two line up on the same tile.
+pub(super) fn ground_plate(geo: &Geom, c: V2) -> Rect {
+    match geo.view {
+        View::Stage => inset2(geo.cell_rect(c), 1, 1),
+        View::Flat => geo.cell_rect(c).inset(1),
     }
 }
 
@@ -686,7 +727,9 @@ pub(super) fn draw_hold_pick(ui: &mut Ui<Action>, s: &Session) {
     let Some(gate) = s.w.hold.as_ref() else { return };
     let ids = hold_pick_ids(s);
     let title = format!("Who holds {}?", gate.label);
-    let labels: Vec<String> = ids.iter().map(|&c| format!("{}  HP {}/{}", s.w.units[c].name, s.w.units[c].hp, s.w.units[c].max_hp)).collect();
+    // ESCAPE-PLAN1 (3): the encounter's suggestion (`pick_default`) is marked; the current holder shows pressed
+    let suggest = s.stay_pick_suggestion();
+    let labels: Vec<String> = ids.iter().map(|&c| format!("{}  HP {}/{}{}", s.w.units[c].name, s.w.units[c].hp, s.w.units[c].max_hp, if suggest == Some(c) { "  (suggested)" } else { "" })).collect();
     let widths: Vec<i32> = labels.iter().map(|l| (ui.p.text_w(l, BODY) + 12.0).ceil() as i32).collect();
     let inner = widths.iter().sum::<i32>() + 4 * (ids.len() as i32 - 1).max(0);
     let w = (inner.max((ui.p.text_w(&title, TITLE) + 12.0).ceil() as i32) + 12).min(GRID_W * TILE - 8);
@@ -699,9 +742,21 @@ pub(super) fn draw_hold_pick(ui: &mut Ui<Action>, s: &Session) {
     let y = r.y + r.h - 16;
     for ((c, label), bw) in ids.iter().zip(&labels).zip(&widths) {
         let tip = vec![(format!("{} holds {}", s.w.units[*c].name, gate.label), th().gold), ("They walk to it and guard it; the gate is open while they stand on it.".into(), th().text)];
-        ui.button_full(&format!("hold.pick.{c}"), Rect::new(x, y, *bw, 14), label, Action::StayPick(*c), true, false, BODY, tip);
+        ui.button_full(&format!("hold.pick.{c}"), Rect::new(x, y, *bw, 14), label, Action::StayPick(*c), true, gate.holder == Some(*c), BODY, tip);
         x += bw + 4;
     }
+}
+
+/// ESCAPE-PLAN1 (3): "<hero> holds <tiles> · Change" over the board's lower edge while round 1 is planned; Change opens
+/// the pick again.
+pub(super) fn draw_hold_chip(ui: &mut Ui<Action>, s: &Session) {
+    let Some(gate) = s.w.hold.as_ref() else { return };
+    let Some(h) = gate.holder else { return };
+    let label = format!("{} holds {}  ·  Change", s.w.units[h].name, gate.label);
+    let w = ((ui.p.text_w(&label, BODY) + 14.0).ceil() as i32).min(GRID_W * TILE - 8);
+    let r = Rect::new(GRID_X + (GRID_W * TILE - w) / 2, GRID_Y + GRID_H * TILE - 20, w, 14);
+    let tip = vec![(format!("{} holds {}", s.w.units[h].name, gate.label), th().gold), ("Change who holds it until round 1 is confirmed.".into(), th().text)];
+    ui.button_full("hold.change", r, &label, Action::StayRepick, true, false, BODY, tip);
 }
 
 // ---- HOOKS1-UI slice 4: push and pull forecasts (HOOKS1 5) ---------------------------------------------------------
@@ -770,10 +825,11 @@ pub(super) fn draw_pushes(p: &mut Painter, list: &[emberwake_battle::forced::For
         if f.to != f.from {
             // PR7-40 part 2 (contract 8): a dashed gold arrow to a dashed landing tile
             let gold = th().gold;
-            let land = geo.cell_rect(f.to).inset(1);
-            let (x0, y0, x1, y1) = (land.x as f32, land.y as f32, (land.x + land.w) as f32, (land.y + land.h) as f32);
+            // PR7-40 part 3: the hazard plates' rect in both views (`ground_plate`), its edge dashed as the arrow
+            let land = ground_plate(geo, f.to);
+            let (x0, y0, x1, y1) = (land.x as f32, land.y as f32, (land.x + land.w - 1) as f32, (land.y + land.h - 1) as f32);
             for (a, b, c, d) in [(x0, y0, x1, y0), (x0, y1, x1, y1), (x0, y0, x0, y1), (x1, y0, x1, y1)] {
-                p.line(a, b, c, d, gold, 2.0);
+                stage::wide_line(p, a, b, c, d, gold, 1.0, 2.0);
             }
             stage::wide_line(p, fx, fy, tx, ty, gold, 1.5, 3.0);
             let (dx, dy) = (tx - fx, ty - fy);
@@ -905,7 +961,7 @@ pub(super) fn pip_view(n: &emberwake_rules::ruleset::Numbers, st: &emberwake_bat
     if !poise::pips_mode(n) {
         return PipView { lit: poise_pips(st.value, st.max, st.broken), total: POISE_PIPS, bonus: !st.broken && st.value > st.max, pips: false };
     }
-    let total = n.poise_pips.max(1);
+    let total = emberwake_battle::poise::full_pips(n, st);
     let now = if st.broken || st.max <= 0 { 0 } else { poise::pips_now(n, st) };
     PipView { lit: now.clamp(0, total), total, bonus: now > total, pips: true }
 }
@@ -1053,4 +1109,45 @@ pub(super) fn round_summary_text(s: &Session, layers: &Layers) -> Option<String>
         return None;
     }
     Some(ri::summary_text(&s.round_summary()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tuning::Tuning;
+    use aegis_core::assets::Layers;
+
+    /// DIORAMA4 S5: a column-0 hazard decal draws whole inside the stage clip (the wings' clip does not cut its left
+    /// edge), on the board at rest and shaken left.
+    #[test]
+    fn a_column_0_decal_is_not_clipped() {
+        let root = aegis_core::scratch::Scratch::new("emberwake_marks_decal");
+        let path = root.join(format!("{DECAL_DIR}/zz_burn/v0.png"));
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(&path).unwrap()), 60, 44);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&[250u8, 0, 250, 255].repeat(60 * 44)).unwrap();
+        let mut art = aegis_ui::art::Art::layered(Layers::of(vec![root.to_path_buf()]));
+        let geo = Geom::new(View::Stage, &Tuning::default());
+        for shake in [0, -3] {
+            let mut g = crate::hud::hud_tests::gfx();
+            let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+            p.clip(Some(crate::stage::STAGE_CLIP));
+            p.shift(shake, 0);
+            let c = V2::new(0, 3);
+            let r = ground_plate(&geo, c);
+            assert!(draw_decal(&mut p, &mut art, "zz_burn", c, r, 255));
+            let w = g.canvas.w as i32;
+            let at = |x: i32, y: i32| {
+                let i = ((y * w + x) * 4) as usize;
+                [g.canvas.px[i], g.canvas.px[i + 1], g.canvas.px[i + 2]]
+            };
+            let (x0, y0) = (r.x + shake, r.y + r.h / 2);
+            assert!(x0 > crate::stage::STAGE_CLIP.x, "the plate inside the clip");
+            assert_eq!(at(x0, y0), [250, 0, 250], "the decal's left edge drawn (shake {shake})");
+            assert_eq!(at(x0 + r.w - 1, y0), [250, 0, 250], "and its right edge");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

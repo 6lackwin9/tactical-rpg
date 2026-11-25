@@ -25,14 +25,15 @@ pub enum Hud {
     Menu,
 }
 
-/// The buttons left to right: (button, widget id, name, key, icon in the asset layers, drawn stand-in, hover text). The
-/// Menu button's id and key are the screen's own (`hud_bar`'s `menu`).
-const HUD_BUTTONS: [(Hud, &str, &str, &str, &str, Glyph, &str); 5] = [
-    (Hud::Party, "hud.party", "Party", "P", "ui/hud/party.png", Glyph::Letter('P'), "Roster, level up, skills and gear."),
-    (Hud::Journal, "hud.journal", "Journal", "J", "ui/hud/journal.png", Glyph::Letter('J'), "Quests ready, active, on hold and completed."),
-    (Hud::Stash, "hud.stash", "Stash", "I", "ui/hud/stash.png", Glyph::Letter('I'), "The party's shared stash, beside the selected hero's gear."),
-    (Hud::Help, "hud.help", "Help", "?", "ui/help.png", Glyph::Help, ""),
-    (Hud::Menu, "", "Game menu", "", "ui/hud/menu.png", Glyph::Menu, "Party, journal, save, load, settings."),
+/// The buttons left to right: (button, widget id, name, the key its screens read (its hint is the key bound to it,
+/// CONTROLS-UI1B), icon in the asset layers, drawn stand-in, hover text). The Menu button's id and key are the screen's
+/// own (`hud_bar`'s `menu`).
+const HUD_BUTTONS: [(Hud, &str, &str, Option<Key>, &str, Glyph, &str); 5] = [
+    (Hud::Party, "hud.party", "Party", Some(Key::Char('p')), "ui/hud/party.png", Glyph::Letter('P'), "Roster, level up, skills and gear."),
+    (Hud::Journal, "hud.journal", "Journal", Some(Key::Char('j')), "ui/hud/journal.png", Glyph::Letter('J'), "Quests ready, active, on hold and completed."),
+    (Hud::Stash, "hud.stash", "Stash", Some(Key::Char('i')), "ui/hud/stash.png", Glyph::Letter('I'), "The party's shared stash, beside the selected hero's gear."),
+    (Hud::Help, "hud.help", "Help", Some(Key::Char('?')), "ui/help.png", Glyph::Help, ""),
+    (Hud::Menu, "", "Game menu", None, "ui/hud/menu.png", Glyph::Menu, "Party, journal, save, load, settings."),
 ];
 
 /// The HUD bar's keys: P party, J journal, I stash, ? help (Esc stays each screen's own).
@@ -52,7 +53,7 @@ pub fn hud_key(k: Key) -> Option<Hud> {
 /// What a HUD button opens: Party the Character popup on the leader's (MAPNAV1-U; with no lead chosen the first active
 /// member's) Stats tab, Stash the same popup's Gear tab (where the party's shared stash lives), Journal the journal (a
 /// notice while there are no quests), Help the controls `help`, Menu the game menu.
-pub fn hud_open(cx: &mut Cx, h: Hud, help: &[&str]) {
+pub fn hud_open(cx: &mut Cx, h: Hud, help: &[String]) {
     let first = crate::region::leader_id(cx);
     match h {
         Hud::Party => cx.nav.push(Nav::Push(Box::new(crate::party::Character::new(cx, &first, "stats")))),
@@ -84,22 +85,23 @@ pub fn hud_panel<A: Clone>(ui: &mut Ui<A>, r: Rect, fill: Rgba, edge: Rgba, radi
 
 /// Draws the HUD bar: `name` (gold) from `left`, then at the right gold, supplies and the icon buttons Party, Journal,
 /// Stash, Help and Menu (icons from the asset layers, drawn shapes while a file is missing). `menu` is the Menu
-/// button's widget id and key; `why` (when not empty) disables every button but Help and says why on its hover card;
+/// button's widget id and the key its screen reads (each hover card names the key bound to its button's key); `why` (when not empty) disables every button but Help and says why on its hover card;
 /// `help` lists the controls; `wrap` makes the screen's action of a button.
 #[allow(clippy::too_many_arguments)]
-pub fn hud_bar<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, left: i32, name: &str, menu: (&str, &str), why: &str, help: &[&str], wrap: impl Fn(Hud) -> A) {
+pub fn hud_bar<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, left: i32, name: &str, menu: (&str, Option<Key>), why: &str, help: &[String], wrap: impl Fn(Hud) -> A) {
     ui.p.fill(Rect::new(0, 0, W, HUD_H), th().game("hud_bar", rgba(10, 14, 22, 255)));
     hud_panel(ui, Rect::new(0, 0, W, HUD_H), rgba(0, 0, 0, 0), th().game("hud_bar", rgba(10, 14, 22, 255)), 0.0);
     let journal = crate::hub::has_quests(cx);
     let px = ui.icon_px(Rect::new(0, 0, HUD_BOX, HUD_BOX));
     let start = W - 3 - HUD_BUTTONS.len() as i32 * (HUD_BOX + 2) + 2;
+    let keys = crate::controls_view::hints(&cx.settings.v);
     for (i, (h, id, label, key, rel, glyph, body)) in HUD_BUTTONS.into_iter().enumerate() {
         let r = Rect::new(start + i as i32 * (HUD_BOX + 2), (HUD_H - HUD_BOX) / 2, HUD_BOX, HUD_BOX);
         let (id, key) = if h == Hud::Menu { menu } else { (id, key) };
-        let title = if key.is_empty() { label.to_string() } else { format!("{label} ({key})") };
+        let title = key.map_or_else(|| label.to_string(), |k| format!("{label} ({})", keys.hint(k)));
         let mut t: Tip = tip(&title, body);
         if h == Hud::Help {
-            t.extend(help.iter().map(|l| (l.to_string(), th().text)));
+            t.extend(help.iter().map(|l| (l.clone(), th().text)));
         }
         let off = match h {
             Hud::Help => "",
@@ -229,7 +231,7 @@ fn counter_glyph<A>(ui: &mut Ui<A>, chip: &HudChip, r: Rect) {
 #[cfg(test)]
 pub(crate) mod hud_tests {
     use super::*;
-    use crate::region::{RegionMap, REGION_HELP};
+    use crate::region::{region_help, RegionMap};
     use crate::screens::{default_settings, Game, GameCx, Screen};
     use aegis_core::json::{self, s, s_or};
     use aegis_ui::ui::{Gfx, H};
@@ -335,10 +337,50 @@ pub(crate) mod hud_tests {
         assert!(!recs.iter().any(|r| r.text.contains("WASD") || r.text.starts_with("Supplies")), "the help line and the supplies text left the top left");
         let widgets = map.widgets();
         let card = |id: &str| widgets.iter().find(|w| w["id"] == id).map(|w| w["tip"].to_string()).unwrap_or_default();
-        for (id, key) in [("hud.party", "(P)"), ("hud.journal", "(J)"), ("hud.stash", "(I)"), ("hud.help", "(?)"), ("region.menu", "(Esc)")] {
+        let esc = format!("({})", aegis_ui::controls::Controls::default().hint(Key::Esc));
+        for (id, key) in [("hud.party", "(P)"), ("hud.journal", "(J)"), ("hud.stash", "(I)"), ("hud.help", "(?)"), ("region.menu", esc.as_str())] {
             assert!(card(id).contains(key), "{id}'s card names its key: {}", card(id));
         }
         assert!(card("hud.help").contains("WASD"), "Help's card lists the controls");
+    }
+
+    /// CONTROLS-UI1B (PR7-49 (1)): after a rebind the HUD buttons' cards, the Help card and popup and the log box's
+    /// card name the bound keys (Party on K, Help on H, the walk on the arrows' neighbours, Back on X with Pad Y), and
+    /// no old letter is left; the world map's bar follows too.
+    #[test]
+    fn the_hud_and_help_name_the_bound_keys() {
+        use aegis_ui::controls::{Controls, Pad};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut c = Controls::default();
+        c.bind_key(Key::Char('p'), Key::Char('k'));
+        c.bind_key(Key::Char('?'), Key::Char('h'));
+        c.bind_key(Key::Char('w'), Key::Char('u'));
+        c.bind_key(Key::Char('l'), Key::Char('b'));
+        c.bind_key(Key::Esc, Key::Char('x'));
+        c.bind_pad(Key::Esc, Pad::North);
+        cx.settings.v["controls"] = c.to_json();
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let widgets = map.widgets();
+        let card = |id: &str| widgets.iter().find(|w| w["id"] == id).map(|w| w["tip"].to_string()).unwrap_or_default();
+        for (id, key) in [("hud.party", "Party (K)"), ("hud.help", "Help (H)"), ("hud.journal", "(J)"), ("region.menu", "Game menu (X / Pad Y)")] {
+            assert!(card(id).contains(key), "{id}: {key} in {}", card(id));
+        }
+        let help = card("hud.help");
+        for want in ["Arrows or UASD: move", "K: party", "B: the last events", "X: back, or the game menu"] {
+            assert!(help.contains(want), "{want} in {help}");
+        }
+        assert!(!help.contains("WASD") && !help.contains("P: party") && !help.contains("Esc:"), "no old letter: {help}");
+        if !card("log").is_empty() {
+            assert!(card("log").contains("Event log (B)") && !card("log").contains("press L"), "{}", card("log"));
+        }
+        map.click_id(&mut cx, "hud.help").expect("help");
+        let (_, state) = opened(&mut cx);
+        assert!(state["lines"].to_string().contains("K: party"), "the popup too: {state}");
+        let mut wm = crate::worldmap::WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let wcard = wm.widgets().into_iter().find(|w| w["id"] == "hud.help").map(|w| w["tip"].to_string()).unwrap_or_default();
+        assert!(wcard.contains("K: party") && wcard.contains("X: back to the region map"), "{wcard}");
     }
 
     #[test]
@@ -356,7 +398,7 @@ pub(crate) mod hud_tests {
         map.click_id(&mut cx, "hud.help").expect("help");
         let (id, state) = opened(&mut cx);
         assert_eq!(id, "notice");
-        assert_eq!(state["lines"].as_array().map(|l| l.len()), Some(REGION_HELP.len() + 1), "a title and the controls");
+        assert_eq!(state["lines"].as_array().map(|l| l.len()), Some(region_help(&aegis_ui::controls::Controls::default()).len() + 1), "a title and the controls");
         map.click_id(&mut cx, "region.menu").expect("menu");
         assert_eq!(opened(&mut cx).0, "hub");
         // Journal: on when there are quests (the Hub's rule), else off with the reason on its card

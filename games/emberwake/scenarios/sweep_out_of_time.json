@@ -1,6 +1,6 @@
 {
   "id": "sweep_out_of_time",
-  "title": "PR7-37 (PT-02, PT-24): the playtest save sweep_start fights The Sweep by the link's autoplay to its round limit; the banner and the results read Out of time (not Fled), the results say the job is still open and can be tried again, and the hub log keeps that line",
+  "title": "PR7-37 (PT-02, PT-24): the playtest save sweep_start fights The Sweep by the link's autoplay to its round limit (five rounds on the balanced tactic, then defensive: PR7-55 ENRAGE2 raised the cap to 12 and plain autoplay now wins); the banner and the results read Out of time (not Fled), the results say the job is still open and can be tried again, and the hub log keeps that line",
   "launch": {"save": "sweep_start"},
   "settings": {"reduce_motion": true},
   "timeout_s": 600,
@@ -16,7 +16,8 @@
     {"step": "wait", "until": {"path": "state.beat", "absent": true}, "timeout_ms": 20000},
     {"step": "click", "id": "dialogue.continue"},
     {"step": "pause", "ms": 800},
-    {"step": "link", "body": {"cmd": "autoplay"}},
+    {"step": "link", "body": {"cmd": "autoplay", "rounds": 5}},
+    {"step": "link", "body": {"cmd": "autoplay", "preset": "defensive"}},
     {"step": "wait", "until": {"path": "state.outcome", "ne": ""}, "timeout_ms": 240000},
     {"step": "pause", "ms": 800},
     {"step": "assert", "until": {"path": "state.timed_out", "eq": true}},

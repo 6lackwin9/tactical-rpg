@@ -56,6 +56,8 @@ pub fn mode_dropped_text(id: &str) -> String {
 pub const ACT_MAX: i64 = 9;
 /// F3: the refusal of every save while the run is over.
 pub const RUN_OVER_TEXT: &str = "The run is over.";
+/// PR7-16 (FB-302): the refusal of every save and the log line once a campaign ended on kind `ending`.
+pub const STORY_ENDED_TEXT: &str = "The story has ended.";
 /// 11.4: the refusal of `set_flag` and `add_flag` on a read key.
 pub fn reserved_text(key: &str) -> String {
     format!("Flag key '{key}' is reserved (meter., campaign. and roster. keys are read-only).")
@@ -907,10 +909,10 @@ pub fn merge_events(out: &mut Dict, events: Vec<Value>) {
 
 /// F3: the refusal of a save while the run is over ("" = may save).
 pub fn save_refusal(gs: &GameState) -> &'static str {
-    if gs.campaign.as_ref().is_some_and(Campaign::is_over) {
-        RUN_OVER_TEXT
-    } else {
-        ""
+    match gs.campaign.as_ref().and_then(|c| c.over.as_ref()) {
+        Some(o) if o.completed() => STORY_ENDED_TEXT,
+        Some(_) => RUN_OVER_TEXT,
+        None => "",
     }
 }
 

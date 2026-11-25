@@ -98,6 +98,16 @@ impl Image {
         Image { w: self.w, h: self.h, px }
     }
 
+    /// The image flipped top to bottom (PR7-80: a south-facing copy of a north-facing decal).
+    pub fn flipped(&self) -> Image {
+        let row = (self.w * 4) as usize;
+        let mut px = Vec::with_capacity(self.px.len());
+        for y in (0..self.h as usize).rev() {
+            px.extend_from_slice(&self.px[y * row..(y + 1) * row]);
+        }
+        Image { w: self.w, h: self.h, px }
+    }
+
     /// Every pixel of exactly a `from` colour (any alpha) takes its `to` colour (ASSETORG2 palettes).
     pub fn swap_colours(&mut self, pairs: &[([u8; 3], [u8; 3])]) {
         for p in self.px.chunks_exact_mut(4) {
@@ -266,6 +276,20 @@ impl Canvas {
         self.put(x, y, c);
     }
 
+    /// DIORAMA5 R3: adds `c` scaled by its alpha to the pixel (a light: each channel grows, saturating at 255), inside
+    /// the canvas, `clip` and `bounds`.
+    #[inline]
+    pub fn add(&mut self, x: i32, y: i32, c: Rgba) {
+        if x < 0 || y < 0 || x >= self.w || y >= self.h || c[3] == 0 || self.clip.is_some_and(|r| !r.contains(x, y)) || self.bounds.is_some_and(|r| !r.contains(x, y)) {
+            return;
+        }
+        let i = ((y * self.w + x) * 4) as usize;
+        let a = c[3] as u32;
+        for k in 0..3 {
+            self.px[i + k] = (self.px[i + k] as u32 + (c[k] as u32 * a + 127) / 255).min(255) as u8;
+        }
+    }
+
     /// `blend` on a pixel already known to be inside the canvas, `clip` and `bounds` (`visible`).
     #[inline]
     pub(crate) fn put(&mut self, x: i32, y: i32, c: Rgba) {
@@ -284,6 +308,12 @@ impl Canvas {
         self.px[i + 3] = 255;
     }
 
+    /// ENGINE-54 (WARM-SPREAD1): nothing can be drawn (an empty `clip` or `bounds`: a warm draw, whose shapes and
+    /// glyphs skip their pixel work and keep only what they cache).
+    pub fn hidden(&self) -> bool {
+        [self.clip, self.bounds].into_iter().flatten().any(|r| r.w <= 0 || r.h <= 0)
+    }
+
     /// The part of `r` that can be drawn: inside the canvas, `clip` and `bounds` (its `w` or `h` is 0 or less when none is).
     pub(crate) fn visible(&self, r: Rect) -> Rect {
         let (mut x0, mut y0, mut x1, mut y1) = (r.x.max(0), r.y.max(0), (r.x + r.w).min(self.w), (r.y + r.h).min(self.h));
@@ -294,6 +324,57 @@ impl Canvas {
             y1 = y1.min(lim.y + lim.h);
         }
         Rect::new(x0, y0, x1 - x0, y1 - y0)
+    }
+
+    /// ENGINE-46 (FEEL-FIX1): `blend` of each pixel of `px` (RGBA rows, `w` x `h`) at (`x`, `y`) on, a row at a time
+    /// over the part that can be drawn (`visible`): the same pixels as a `blend` per pixel, without its checks per pixel.
+    pub fn blend_rgba(&mut self, x: i32, y: i32, w: i32, h: i32, px: &[u8]) {
+        let v = self.visible(Rect::new(x, y, w, h));
+        if v.w <= 0 || v.h <= 0 || px.len() < (w.max(0) * h.max(0) * 4) as usize {
+            return;
+        }
+        // ENGINE-61 (FEEL-CLOSE1): one branch-free pass a row (it vectorises): `put`'s sum for every pixel, which is the
+        // pixel itself at alpha 255 and the canvas's at 0 (whose alpha `put` leaves as it is)
+        let n = (v.w * 4) as usize;
+        for yy in v.y..v.y + v.h {
+            let from = (((yy - y) * w + (v.x - x)) * 4) as usize;
+            let to = ((yy * self.w + v.x) * 4) as usize;
+            for (d, s) in self.px[to..to + n].chunks_exact_mut(4).zip(px[from..from + n].chunks_exact(4)) {
+                let a = s[3] as u32;
+                for k in 0..3 {
+                    d[k] = ((s[k] as u32 * a + d[k] as u32 * (255 - a)) / 255) as u8;
+                }
+                d[3] |= 0u8.wrapping_sub(u8::from(a > 0));
+            }
+        }
+    }
+
+    /// ENGINE-46 (FEEL-FIX1): the pixels of `r` (in px, cut to what can be drawn, `visible`) as RGBA rows, with the rect
+    /// they cover; `put_rgba` puts them back as they were.
+    pub fn copy_rgba(&self, r: Rect) -> (Rect, Vec<u8>) {
+        let v = self.visible(r);
+        if v.w <= 0 || v.h <= 0 {
+            return (Rect::new(v.x, v.y, 0, 0), Vec::new());
+        }
+        let mut out = Vec::with_capacity((v.w * v.h * 4) as usize);
+        for y in v.y..v.y + v.h {
+            let at = ((y * self.w + v.x) * 4) as usize;
+            out.extend_from_slice(&self.px[at..at + (v.w * 4) as usize]);
+        }
+        (v, out)
+    }
+
+    /// Puts `px` (RGBA rows of `r`, as `copy_rgba` gave them) back as they are, no blending; nothing when they do not fit
+    /// the canvas.
+    pub fn put_rgba(&mut self, r: Rect, px: &[u8]) {
+        if r.w <= 0 || r.h <= 0 || r.x < 0 || r.y < 0 || r.x + r.w > self.w || r.y + r.h > self.h || px.len() != (r.w * r.h * 4) as usize {
+            return;
+        }
+        let n = (r.w * 4) as usize;
+        for (k, row) in px.chunks_exact(n).enumerate() {
+            let at = (((r.y + k as i32) * self.w + r.x) * 4) as usize;
+            self.px[at..at + n].copy_from_slice(row);
+        }
     }
 
     /// `blend` over `r`, a row at a time (the same pixels; VISCLAR1-C: a whole frame's panels spent most of it here).
@@ -320,6 +401,9 @@ impl Canvas {
 
     /// Bresenham line; `dash` > 0 draws dash-on / dash-off segments.
     pub fn line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, c: Rgba, dash: i32) {
+        if self.hidden() {
+            return;
+        }
         let (dx, dy) = ((x1 - x0).abs(), -(y1 - y0).abs());
         let (sx, sy) = (if x0 < x1 { 1 } else { -1 }, if y0 < y1 { 1 } else { -1 });
         let (mut x, mut y, mut err, mut n) = (x0, y0, dx + dy, 0);

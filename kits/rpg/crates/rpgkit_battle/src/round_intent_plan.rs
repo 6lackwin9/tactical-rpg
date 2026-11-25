@@ -15,13 +15,14 @@ use crate::command;
 use crate::grid::{V2, GRID_H, GRID_W};
 use crate::path::{self, Cells};
 use crate::plan::{carries, Mode, Plan, PlanStep, SimState, Step};
-use crate::refusal::Reason;
+use crate::refusal::{Reason, TargetNeed};
 use crate::round_intent::{self, Aim, ManeuverKind, Opener, RoundIntent, RoundTarget};
 use crate::skill::{self, Kind, SkillId};
 use crate::world::{UnitId, World};
 use aegis_core::switches;
 use rpgkit_data::{Deck, SkillDef};
-use std::rc::Rc;
+// ENGINE-54 (WARM-SPREAD1): shared plan steps are `Arc`, so a started fight can be built on a thread
+use std::sync::Arc as Rc;
 
 /// PL6 reason tags.
 pub const APPROACH: &str = "approach";
@@ -377,7 +378,7 @@ pub fn fill_rest(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), String> {
     let opener = w.round_states.get(&c).and_then(|r| r.opener.clone()).or_else(|| {
         plan.steps_of(c).iter().filter_map(|st| st.skill).find(|&sid| sid < w.cat.skills.len() && round_intent::skill_rows(w, &w.cat.skills[sid]).contains(&b.intent.id())).map(Opener::Skill)
     });
-    let cause = b.fill(plan, &Reserve::default(), &follow_order(w, c, b.intent, opener.as_ref()));
+    let cause = b.fill(plan, &Reserve::default(), &follow_order(w, c, b.intent, opener.as_ref()), None);
     b.rest(plan, &cause);
     Ok(())
 }
@@ -484,6 +485,9 @@ struct Builder<'a> {
     target: RoundTarget,
     kind: ManeuverKind,
     order: Vec<SkillId>,
+    /// PLAN-FIX2 (PT-86): the steps are for the player's picks (GH3), not the planner's own plan: a ranged pick on a foe
+    /// already in its reach does not kite (AS2), and an approach takes the tile with the shortest walk first.
+    hand: bool,
 }
 
 /// The whole auto plan for `c` (its world state holds intent, target, kind and opener).
@@ -500,7 +504,7 @@ fn build(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), String> {
     };
     let reserve = b.reserve(plan);
     // FL2: the opener placed (given, else PL3's) chooses the follow-up list
-    let cause = b.fill(plan, &reserve, &follow_order(w, c, b.intent, Some(&opener)));
+    let cause = b.fill(plan, &reserve, &follow_order(w, c, b.intent, Some(&opener)), None);
     if let Some(step) = reserve.step {
         // PL5: the after-move (or the Disengage jump) right after the fill; dropped when it no longer fits
         let _ = plan.add_step(w, c, step, false);
@@ -525,7 +529,7 @@ impl<'a> Builder<'a> {
         if !p.is_empty() {
             return Err(p);
         }
-        Ok(Self { w, c, intent, target, kind: round_intent::maneuver_of(w, c), order: order(w, c, intent) })
+        Ok(Self { w, c, intent, target, kind: round_intent::maneuver_of(w, c), order: order(w, c, intent), hand: false })
     }
 
     fn skill(&self, sid: SkillId) -> &'a SkillDef {
@@ -644,8 +648,15 @@ impl<'a> Builder<'a> {
     }
 
     /// AS1, SP1, MV10: the standard approach tile (at most the standard move's blocks) with `goal` in `lo..=hi`.
+    /// PLAN-FIX2 (PT-86): for a hand pick only the tiles with the shortest walk are ranked (the player asked for the
+    /// skill, not for a reposition: no walk four tiles away when one step reaches).
     fn approach_tile(&self, plan: &Plan, from: V2, goal: V2, lo: i32, hi: i32) -> Option<V2> {
-        self.best(goal, Aim::Toward, self.walk_tiles(plan, from, goal, lo, hi, crate::plan::MAX_MOVE_BLOCKS))
+        let mut cands = self.walk_tiles(plan, from, goal, lo, hi, crate::plan::MAX_MOVE_BLOCKS);
+        if self.hand {
+            let least = cands.iter().map(|(_, route)| route.len()).min().unwrap_or(0);
+            cands.retain(|(_, route)| route.len() == least);
+        }
+        self.best(goal, Aim::Toward, cands)
     }
 
     // ---- Opener (FU1, PL3, AS1, AS2, GD1, SP1, MV7-MV10) ----------------------------------------------------------
@@ -825,8 +836,15 @@ impl<'a> Builder<'a> {
             return Err(format!("Disengage needs {} within reach of {}.", self.target_name(), s.name));
         }
         // AS2: a ranged unit with its target in the target's melee band kites first, to the farthest band tile
-        if !maneuver && u.attack_range > 1 && d <= round_intent::melee_reach(w, foe) {
+        // PLAN-FIX2 (PT-86): not for a hand pick whose target is already in the skill's reach (no walk asked for)
+        if !maneuver && u.attack_range > 1 && d <= round_intent::melee_reach(w, foe) && !(self.hand && in_band) {
             let cands = self.walk_tiles(plan, st.pos, goal, band.0, band.1, 1);
+            // PLAN-FIX2 (PT-86): a hand pick backs off by the shortest walk that reaches (one step when one does)
+            if self.hand {
+                let least = cands.iter().map(|(_, route)| route.len()).min().ok_or("No tile to kite to.")?;
+                let tile = self.best(goal, Aim::Away, cands.into_iter().filter(|(_, route)| route.len() == least).collect()).ok_or("No tile to kite to.")?;
+                return Ok(vec![tagged(PlanStep::go_to(self.mv(), tile), KITE_IN_MELEE, ""), tagged(PlanStep::engage(sid, foe), OPENER, "")]);
+            }
             let far = cands.iter().map(|(cell, _)| self.gap(*cell, goal)).max().ok_or("No tile to kite to.")?;
             let tile = self.best(goal, Aim::Away, cands.into_iter().filter(|(cell, _)| self.gap(*cell, goal) == far).collect()).ok_or("No tile to kite to.")?;
             return Ok(vec![tagged(PlanStep::go_to(self.mv(), tile), KITE_IN_MELEE, ""), tagged(PlanStep::engage(sid, foe), OPENER, "")]);
@@ -999,8 +1017,11 @@ impl<'a> Builder<'a> {
     /// FU2, FU3: block by block, the first entry of `order` (FL2's `follow_order`: the opener's follow-up list, then
     /// the deck order) that has the intent, fits before the reserve, is affordable without debt (and leaves the
     /// reserve's AP), acts on the target from the unit's tile and is a skill. Returns the first refused entry's cause
-    /// at the block where the fill stops ("" when the blocks ran out).
-    fn fill(&self, plan: &mut Plan, reserve: &Reserve, order: &[SkillId]) -> String {
+    /// at the block where the fill stops ("" when the blocks ran out). PLAN-FIX2 (PT-91): `picked` is the hand-picked
+    /// skills when the fill follows the player's picks (GH3): it then places no skill that only re-grants a status
+    /// (`regrants`, whatever the switch) and no non-attack skill a hand pick already runs this round (a second heal or
+    /// guard); attacks may follow up as before. None (the planner's whole plan) keeps the fill as it was (goldens).
+    fn fill(&self, plan: &mut Plan, reserve: &Reserve, order: &[SkillId], picked: Option<&[SkillId]>) -> String {
         let w = self.w;
         let u = &w.units[self.c];
         let pays = w.pays_ap(self.c);
@@ -1025,7 +1046,10 @@ impl<'a> Builder<'a> {
                 // PR7-41 (PT-22): a status the unit grants itself is granted once: the fill places no skill granting a
                 // status the unit holds or an earlier step of the round grants (a re-grant adds nothing). Behind the
                 // test-only switch `regrant` until the golden ruling (FB-334); off, the fill as before
-                if switches::on("regrant") && regrants(w, self.c, s, st.entries.iter().map(|e| e.skill)) {
+                if (picked.is_some() || switches::on("regrant")) && regrants(w, self.c, s, st.entries.iter().map(|e| e.skill)) {
+                    continue;
+                }
+                if picked.is_some_and(|p| p.contains(&sid)) && skill::kind(s) != Kind::Attack {
                     continue;
                 }
                 // PR7-41 (PT-22): a guard that only covers friends (its every trigger is an `ally_hit`) is not filled
@@ -1401,19 +1425,34 @@ fn target_label(w: &World, t: RoundTarget) -> String {
 /// INPUT1 IF4, IF6 a-b, GH3: appends `picks` to `c`'s picks on target `at` (the first skill or item pick sets the
 /// intent, the Maneuver kind and the round target) and rebuilds `c`'s plan from its picks, then every later member's
 /// (PL8; the later members' dropped picks and refusals come back). Atomic: a refused pick leaves the battle as it was.
+///
+/// ESCAPE-PLAN1 (2): a pick never drops another member's hand picks: when the rebuild would drop one (the routes
+/// clash), the pick is refused with that member's reason ("Blocked by <member>'s plan: Move here dropped: Too far") and
+/// the battle stays as it was.
 pub fn pick(w: &mut World, plan: &mut Plan, c: UnitId, at: RoundTarget, picks: &[Pick]) -> (Result<(), String>, Vec<(UnitId, String)>) {
     let (w0, seq0) = (w.clone(), plan.sequences.clone());
-    match pick_inner(w, plan, c, at, picks) {
+    let refused = match pick_inner(w, plan, c, at, picks) {
         Ok(()) => {
             let later = rebuild_later(w, plan, c);
-            (Ok(()), later)
+            match clash(&w0, w, c, &later) {
+                None => return (Ok(()), later),
+                Some(why) => why,
+            }
         }
-        Err(e) => {
-            *w = w0;
-            plan.sequences = seq0;
-            (Err(e.text), Vec::new())
-        }
-    }
+        Err(e) => e.text,
+    };
+    *w = w0;
+    plan.sequences = seq0;
+    (Err(refused), Vec::new())
+}
+
+/// ESCAPE-PLAN1 (2): the reason a pick by `c` is refused when the rebuild of the later members (`later`, their
+/// refusals) left one of them fewer hand picks than it held in `before` (None: no hand pick was dropped).
+fn clash(before: &World, after: &World, c: UnitId, later: &[(UnitId, String)]) -> Option<String> {
+    let side = if after.allies.contains(&c) { &after.allies } else { &after.enemies };
+    let m = side.iter().copied().find(|&m| m != c && picks_of(after, m).len() < picks_of(before, m).len())?;
+    let why = later.iter().find(|(u, _)| *u == m).map(|(_, t)| t.strip_prefix(&format!("{}: ", after.units[m].name)).unwrap_or(t).to_string()).unwrap_or_default();
+    Some(if why.is_empty() { format!("Blocked by {}'s plan", after.units[m].name) } else { format!("Blocked by {}'s plan: {why}", after.units[m].name) })
 }
 
 /// `pick`'s steps: the picks set (`set_up_picks`), then `c`'s plan built from them.
@@ -1771,7 +1810,7 @@ struct Room<'a> {
 fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refusal)> {
     let picks = picks_of(w, c);
     plan.set_steps(c, Vec::new());
-    let b = Builder::new(w, c).ok();
+    let b = Builder::new(w, c).ok().map(|b| Builder { hand: true, ..b });
     let pays = w.pays_ap(c);
     let mv = w.book().lowest(Kind::Move);
     let mut after: Option<After> = None;
@@ -1880,7 +1919,9 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
                 Pick::Skill { skill, .. } => Some(Opener::Skill(*skill)),
                 _ => None,
             });
-            let cause = b.fill(plan, &reserve, &follow_order(w, c, b.intent, opener.as_ref()));
+            // PLAN-FIX2 (PT-91): the fill after hand picks does not repeat them (`fill`'s `picked`)
+            let picked: Vec<SkillId> = picks.iter().filter_map(|p| if let Pick::Skill { skill, .. } = p { Some(*skill) } else { None }).collect();
+            let cause = b.fill(plan, &reserve, &follow_order(w, c, b.intent, opener.as_ref()), Some(&picked));
             if let Some(step) = reserve.step {
                 let _ = plan.add_step(w, c, step, false);
             }
@@ -1990,7 +2031,9 @@ fn place(w: &World, plan: &mut Plan, c: UnitId, steps: Vec<Step>, may_move: bool
 /// ET3: the route of a plain move from `from` to the empty tile `cell`: "No path", "Claimed by <ally>'s move".
 fn move_route(w: &World, plan: &Plan, c: UnitId, from: V2, cell: V2) -> Result<Vec<V2>, String> {
     // BIGUNIT1 BU6: a big unit's whole square
-    if w.cells_at(c, cell).iter().any(|&n| !w.grid.is_valid(n) || !w.grid.is_walkable(n) || w.grid.is_exit(n)) {
+    // ESCAPE-PLAN1 (1): a unit Withdraw lets leave may pick an exit tile and leaves by it
+    let leaves = w.may_leave_at(c, cell);
+    if !leaves && w.cells_at(c, cell).iter().any(|&n| !w.grid.is_valid(n) || !w.grid.is_walkable(n) || w.grid.is_exit(n)) {
         return Err("That tile can't be moved to.".into());
     }
     if cell == from {
@@ -2002,7 +2045,7 @@ fn move_route(w: &World, plan: &Plan, c: UnitId, from: V2, cell: V2) -> Result<V
             return Err(format!("Claimed by {}'s move", w.units[m].name));
         }
     }
-    let route = plan.route(w, c, from, &[cell].into_iter().collect(), &blocked, false);
+    let route = plan.pass_route(w, c, from, &[cell].into_iter().collect(), leaves);
     if route.is_empty() {
         return Err("No path".into());
     }
@@ -2308,6 +2351,47 @@ pub fn preview_plan(w: &World, plan: &Plan, c: UnitId, at: RoundTarget, picks: &
     trial(w, plan, c, at, picks).map_err(String::from)
 }
 
+/// BATTLE-UI2 (skill menu row, battle contract section 7): what a pick would land on one foe, summed over its hits.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PickHits {
+    /// The hits the pick's own steps land on the foe.
+    pub hits: usize,
+    pub damage: i32,
+    /// The poise pips they break, and whether one empties the bar.
+    pub pips: i32,
+    pub breaks: bool,
+}
+
+/// BATTLE-UI2 (battle contract section 7): the foe card's hits (`intent::foe_card` over the round as it would run,
+/// `intent::planned_schedule` of `sched` with the trial plan) of the steps `picks` on `at` add to `c`'s round, on `foe`;
+/// None when the picks are refused. The ghost the picks replace and the ghost after them do not count. Read only.
+pub fn pick_hits(w: &World, plan: &Plan, sched: &[crate::resolver::ScheduledAction], c: UnitId, at: RoundTarget, picks: &[Pick], foe: UnitId) -> Option<PickHits> {
+    let before = if picks_of(w, c).is_empty() { 0 } else { ghost_from(w, plan, c) };
+    let (w2, p2) = trial(w, plan, c, at, picks).ok()?;
+    let entries = p2.entries_for(&w2, c);
+    let ghost = ghosts_of(&w2, &p2, c, &entries);
+    let starts: Vec<i32> = entries.iter().zip(&ghost).skip(before).filter(|(_, g)| !**g).map(|(e, _)| e.start_block).collect();
+    let card = crate::intent::foe_card(&w2, &crate::intent::planned_schedule(&w2, sched, &p2), foe);
+    Some(card.hits.iter().filter(|h| h.unit == c && starts.contains(&h.start)).fold(PickHits::default(), |mut s, h| {
+        s.hits += 1;
+        s.damage += h.damage;
+        s.pips += h.pips;
+        s.breaks |= h.breaks;
+        s
+    }))
+}
+
+/// BATTLE-UI2 (battle contract section 7): the block `c`'s next pick starts on: the one after its last picked entry
+/// (block 1 with no pick); past the round's last block when its picks fill the round.
+pub fn next_pick_block(w: &World, plan: &Plan, c: UnitId) -> i32 {
+    let entries = plan.entries_for(w, c);
+    if picks_of(w, c).is_empty() {
+        return 1;
+    }
+    let ghost = ghosts_of(w, plan, c, &entries);
+    entries.iter().zip(&ghost).filter(|(_, g)| !**g).map(|(e, _)| e.end_block(w) + 1).max().unwrap_or(1)
+}
+
 /// PR5-32 (A4.2-K1b, INTENT2-U): the row an entry's impact tiles are marked in under the Field rows: an area item's or an
 /// area attack skill's entry with tiles, in the Assault row when it is locked on a target (it follows its target), else
 /// in the round's `intent` (a Field throw or aim); None for any other entry.
@@ -2560,15 +2644,16 @@ pub fn menu_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
         let (intent, kind) = row_meta(w, c, at, std::slice::from_ref(&p));
         let intent = want.or(intent);
         let (problem, reasons) = why.map(|o| (o.problem.unwrap_or_default(), o.reasons)).unwrap_or_else(|| {
-            let text = match want {
-            Some(RoundIntent::Field) => "Target a tile (or an enemy's tile) to use this".to_string(),
-            Some(RoundIntent::Assault) => "Target an enemy to use this".to_string(),
-            // INTENT2-U: an item's Stand cell is used on yourself, its Support cell on an ally
-            Some(RoundIntent::Guard) => "Target yourself to use this".to_string(),
-            Some(RoundIntent::Support) => "Target an ally to use this".to_string(),
-            _ => target_hint(w, c, &p),
+            // HITCALC1 (PR7-45): the kind of target it needs travels as a field (`Reason::NeedsTarget`), its words as before
+            let need = match want {
+                Some(RoundIntent::Field) => TargetNeed::Tile { or_foe_tile: true },
+                Some(RoundIntent::Assault) => TargetNeed::Enemy,
+                // INTENT2-U: an item's Stand cell is used on yourself, its Support cell on an ally
+                Some(RoundIntent::Guard) => TargetNeed::Yourself,
+                Some(RoundIntent::Support) => TargetNeed::Ally,
+                _ => target_hint(w, c, &p),
             };
-            (text.clone(), vec![Reason::Text(text)])
+            (Reason::NeedsTarget(need).to_string(), vec![Reason::NeedsTarget(need)])
         });
         PickOption { picks: vec![p], intent, kind, ap: 0, blocks: 0, problem: Some(problem), reasons, ap_short: None, drops: Vec::new(), at }
     };
@@ -2628,25 +2713,24 @@ pub fn menu_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
 }
 
 /// VISCLAR1-D (decision "Intent framework answers"): what a cell greyed for the kind of target needs.
-fn target_hint(w: &World, c: UnitId, p: &Pick) -> String {
-    let needs = match p {
+fn target_hint(w: &World, c: UnitId, p: &Pick) -> TargetNeed {
+    match p {
         Pick::Skill { skill, .. } => {
             let s = &w.cat.skills[*skill];
             match round_intent::skill_primary(w, s) {
-                i if i == RoundIntent::Field.id() => "a tile",
-                i if i == RoundIntent::Guard.id() || self_only(s) => "yourself",
-                i if i == RoundIntent::Support.id() && s.target_mode == "ALLY" => "an ally",
-                i if i == RoundIntent::Support.id() => "yourself or an ally",
-                _ if skill::is_area(s) => "an enemy or a tile",
-                _ => "an enemy",
+                i if i == RoundIntent::Field.id() => TargetNeed::Tile { or_foe_tile: false },
+                i if i == RoundIntent::Guard.id() || self_only(s) => TargetNeed::Yourself,
+                i if i == RoundIntent::Support.id() && s.target_mode == "ALLY" => TargetNeed::Ally,
+                i if i == RoundIntent::Support.id() => TargetNeed::YourselfOrAlly,
+                _ if skill::is_area(s) => TargetNeed::EnemyOrTile,
+                _ => TargetNeed::Enemy,
             }
         }
-        Pick::Item(id) if command::pouch_item(w, c, id).is_some_and(|i| command::item_area_on(w, i)) => "an enemy or a tile",
-        Pick::Item(id) if command::pouch_item(w, c, id).is_some_and(|i| i.aims_at_foes()) => "an enemy",
-        Pick::Item(_) => "yourself or an ally",
-        _ => "a tile",
-    };
-    format!("Target {needs} to use this")
+        Pick::Item(id) if command::pouch_item(w, c, id).is_some_and(|i| command::item_area_on(w, i)) => TargetNeed::EnemyOrTile,
+        Pick::Item(id) if command::pouch_item(w, c, id).is_some_and(|i| i.aims_at_foes()) => TargetNeed::Enemy,
+        Pick::Item(_) => TargetNeed::YourselfOrAlly,
+        _ => TargetNeed::Tile { or_foe_tile: false },
+    }
 }
 
 /// VISCLAR1-D: one tile the menu's Move can go to now, what it takes.
@@ -2691,7 +2775,7 @@ pub fn move_tiles(w: &World, plan: &Plan, c: UnitId) -> Vec<MoveTile> {
     for y in 0..GRID_H {
         for x in 0..GRID_W {
             let cell = V2::new(x, y);
-            if cell == from || cell.dist(from) > reach || !w.grid.is_walkable(cell) || w.grid.is_exit(cell) || w.occupant(cell).is_some() {
+            if cell == from || cell.dist(from) > reach || !w.grid.is_walkable(cell) || (w.grid.is_exit(cell) && !w.may_leave_at(c, cell)) || w.occupant(cell).is_some() {
                 continue;
             }
             // BIGUNIT1 BU6, BU15: a big unit's move tiles are anchors its whole square fits
@@ -2700,7 +2784,13 @@ pub fn move_tiles(w: &World, plan: &Plan, c: UnitId) -> Vec<MoveTile> {
             }
             let o = option_of(w, plan, c, vec![if held { Pick::StepAfter(cell) } else { Pick::MoveHere(cell) }], RoundTarget::Cell(cell), base);
             if o.problem.is_none() {
-                let drops = trial(w, plan, c, o.at, &o.picks).map_or_else(|_| String::new(), |(_, after)| dropped_fill(w, plan, &after, c));
+                let Ok((mut w2, mut after)) = trial(w, plan, c, o.at, &o.picks) else { continue };
+                let drops = dropped_fill(w, plan, &after, c);
+                // ESCAPE-PLAN1 (2): a tile whose move would drop another member's hand picks is refused by `pick`
+                let later = rebuild_later(&mut w2, &mut after, c);
+                if clash(w, &w2, c, &later).is_some() {
+                    continue;
+                }
                 out.push(MoveTile { cell, blocks: o.blocks, ap: o.ap, drops });
             }
         }

@@ -26,15 +26,21 @@
 
 mod beats;
 mod board;
+
+/// DIORAMA3 R6: the setting that shows the battle board's grid lines (on by default).
+pub const BOARD_GRID: &str = "board_grid";
+mod boss_bar;
 mod card;
 mod draw;
 mod flow;
 mod input;
 mod marks;
+mod objchips;
 mod overlays;
 mod playback;
 mod plates;
 mod skill_menu;
+mod statusvis;
 mod talks;
 mod tips;
 mod tokens;
@@ -46,7 +52,7 @@ pub(crate) use marks::{party_foresight_off, seen_intents};
 #[allow(unused_imports)]
 pub(crate) use marks::FORESIGHT_OFF;
 pub(crate) use overlays::{overlay_default, settings_overlay_groups, Layers, OVERLAY_GROUPS};
-pub(crate) use tips::{action_rows, ap_lines, channel_action, channel_block, channel_fill, channeled_word, kind_color};
+pub(crate) use tips::{action_rows, ap_lines, channel_action, channel_block, channel_fill, channeled_word, kind_color, kind_icon};
 pub(crate) use input::skill_text;
 pub(crate) use skill_menu::CHANNEL_TINT;
 use draw::{draw, log_groups_json};
@@ -68,6 +74,7 @@ use aegis_ui::fx::{Camera, Clock, Fx};
 use aegis_ui::pacing::{FrameNeed, SLOW_LIFE};
 use crate::stage::View;
 use crate::screens::{Cx, GameCx, Key, Nav, Screen};
+use aegis_ui::{UiCue, UiSound};
 use aegis_ui::ui::{Gfx, Widget};
 use emberwake_battle::grid::V2;
 use emberwake_battle::round_intent::{self as ri};
@@ -165,6 +172,10 @@ pub enum Action {
     Step,
     Restart,
     ToggleLog,
+    /// FLOATPANELS1: lock or unlock the battle log's panel, minimize it to its "Combat log" button, open it again.
+    LogLock,
+    LogMin,
+    LogOpen,
     /// World battle over: settle it and show the results.
     Continue,
     /// Leave the Test Arena.
@@ -179,6 +190,8 @@ pub enum Action {
     AllyTarget,
     /// ENCOUNTER2 H1: the hero picked to hold a hold escape's tiles.
     StayPick(usize),
+    /// ESCAPE-PLAN1 (3): the holder chip's Change: the hold pick opens again (until round 1 is confirmed).
+    StayRepick,
     /// ENCOUNTER2-C DT9: a reply or Continue in the open battle talk's box.
     Talk(TalkAct),
     /// INPUT1 TV1: key T opens and closes the full timeline view.
@@ -198,11 +211,91 @@ pub enum Action {
     /// INPUT2: a click on a strip block showing a ghost entry (the entry's index in the plan): the ghost up to it becomes
     /// picks, so that command is the hero's latest pick.
     GhostSlot(usize),
+    /// BATTLE-UI2 (battle contract 7, FB-358): a click on an empty or a picked strip block (its number): the selected
+    /// hero's skill menu opens under it (a ghost block's click accepts the ghost; its right click and the menu key open
+    /// the menu there).
+    StripMenu(i32),
     /// TRANSITIONS1: a click anywhere during a beat skips it (T1: control starts; T2: the results open).
     SkipBeat,
     /// BATTLE-UI2 contract 4 (PR7-40 part 2): a click on a foe group (its catalog unit) opens it into compact plates; a
     /// click on the open group's header closes it.
     FoeGroup(String),
+}
+
+impl Action {
+    /// The round's playback controls, which click on a player's press (SoundEvents `ui_click`, `flow::act`); the shell's
+    /// press sound leaves them be (ENGINE-56, `Screen::ui_sound`).
+    pub fn clicks(&self) -> bool {
+        matches!(self, Action::Confirm | Action::Step | Action::Autoplay | Action::NextRound | Action::PlaybackSpeed(_) | Action::NextBlock | Action::Skip)
+    }
+}
+
+/// ENGINE-53 (SWITCH-AHEAD1): a world fight started ahead, on a copy of the game, while the map idles near it: the game
+/// it was started from (`pre`), the game after its start (`post`) and what the start built. `BattleScreen::world` takes
+/// it instead of starting the fight again when the game, the fight and the runner are still exactly those (so the
+/// battle is the one a start on the switch makes); anything else drops it as stale.
+pub struct FightAhead {
+    fight: Dict,
+    runner: String,
+    pre: emberwake_world::GameState,
+    post: emberwake_world::GameState,
+    started: emberwake_world::battle::WorldFight,
+}
+
+impl FightAhead {
+    /// `fight` (a fight event or row) by `runner`, started on a copy of `gs`; None when the start refuses it.
+    pub fn start(d: &emberwake_world::Data, gs: &emberwake_world::GameState, fight: &Dict, runner: &str) -> Option<Self> {
+        let mut post = gs.clone();
+        let started = emberwake_world::battle::begin_world_with(d, &mut post, fight, &mut |world, m| member_art(d, world, m)).ok()?;
+        Some(Self { fight: fight.clone(), runner: runner.to_string(), pre: gs.clone(), post, started })
+    }
+
+    /// Started from `gs` for this fight and runner (not stale).
+    pub fn fits(&self, gs: &emberwake_world::GameState, fight: &Dict, runner: &str) -> bool {
+        self.runner == runner && self.fight == *fight && self.pre == *gs
+    }
+
+    /// ENGINE-54 (WARM-SPREAD1): on a thread of its own, `find` (on that thread: the game a fight would start from and
+    /// the fight, or None) and that fight by `runner` started ahead, twice when `twice` (the second for a warm draw);
+    /// nothing on the frame. `FightAheadJob::take` hands it over once done. None on the web (no threads).
+    pub fn spawn(d: std::sync::Arc<emberwake_world::Data>, runner: &str, twice: bool, find: impl FnOnce(&emberwake_world::Data) -> Option<(emberwake_world::GameState, Dict)> + Send + 'static) -> Option<FightAheadJob> {
+        if cfg!(target_arch = "wasm32") {
+            return None;
+        }
+        let runner = runner.to_string();
+        Some(FightAheadJob(std::thread::spawn(move || {
+            let found = find(&d).and_then(|(gs, fight)| {
+                let ahead = Self::start(&d, &gs, &fight, &runner)?;
+                let second = if twice { Self::start(&d, &gs, &fight, &runner) } else { None };
+                Some(Found { gs, fight, ahead, second })
+            });
+            found
+        })))
+    }
+}
+
+/// ENGINE-54: what a `FightAhead::spawn` thread found: the game the fight starts from, the fight, and the fight started
+/// ahead (and a second start for a warm draw).
+pub struct Found {
+    pub gs: emberwake_world::GameState,
+    pub fight: Dict,
+    pub ahead: FightAhead,
+    pub second: Option<FightAhead>,
+}
+
+/// ENGINE-54: a `FightAhead::spawn` thread.
+pub struct FightAheadJob(std::thread::JoinHandle<Option<Found>>);
+
+impl FightAheadJob {
+    /// Done (`take` will not wait).
+    pub fn done(&self) -> bool {
+        self.0.is_finished()
+    }
+
+    /// What it found (None: nothing, or the thread failed); waits only if not done.
+    pub fn take(self) -> Option<Found> {
+        self.0.join().ok().flatten()
+    }
 }
 
 /// ASSETORG2: a fielded member's body and palette in world `world` (the kit's `begin_world_with` art callback): its
@@ -245,6 +338,8 @@ enum Mode {
 
 pub struct BattleScreen {
     pub host: Host,
+    /// CONTROLS-UI1B (PR7-49 (1)): the control map in force, re-read each frame; every key hint reads it.
+    keys: aegis_ui::controls::Controls,
     w: Vec<Widget<Action>>,
     mouse: (i32, i32),
     selected: Option<usize>,
@@ -253,6 +348,8 @@ pub struct BattleScreen {
     move_aim: Option<(usize, i32)>,
     /// The tiles that Move can go to, marked on the board while it waits.
     move_tiles: Vec<rip::MoveTile>,
+    /// ESCAPE-PLAN1 (3): the hold pick is open again after the holder chip's Change.
+    hold_repick: bool,
     playing: bool,
     auto: bool,
     next_at: Instant,
@@ -265,6 +362,11 @@ pub struct BattleScreen {
     pub message: String,
     show_log: bool,
     log_scroll: i32,
+    /// FLOATPANELS1: the battle log floats over the board (`aegis_ui::float_panel`); its place and lock kept in the
+    /// settings (`floats::BATTLE_LOG_KEY`); the baseline kept and its size in the last frame.
+    log_panel: aegis_ui::float_panel::FloatPanel,
+    log_kept: Option<Value>,
+    log_size: (i32, i32),
     tuning_checked: Instant,
     mode: Mode,
     encounter: String,
@@ -295,6 +397,9 @@ pub struct BattleScreen {
     /// The panels of the last frame by name (UIGALLERY1: the UI Gallery shows each one on its own), named from
     /// `PANELS`.
     pub panels: Vec<(&'static str, Rect)>,
+    /// BOSSUI1 BU11, BU12 (PR7-59): how far the last frame shifted the Stage board down to keep the boss bar off its
+    /// units and targetable tiles (`boss_bar::board_lift`; 0 without a bar); the board's widgets were drawn shifted.
+    pub board_lift: i32,
     /// (requests, checkpoints) of the session at its last save.
     saved: (usize, usize),
     /// Playtest trail events of the battle (plan edits, confirms, the end), handed to the hub on the next tick.
@@ -372,6 +477,17 @@ pub struct BattleScreen {
     /// GH2 a, IN6 (decision "INPUT1 answers, part 4" Q18): members whose ghost would change their intent and drop
     /// intent-bound buffs: the change that realizes it waits for Confirm, the ghost shows on copies meanwhile.
     deferred: Vec<(usize, Deferred)>,
+    /// ENGINE-58 (BLOCK-CLICK2): the later members whose ghosts a player's change redrafts (`reghost_after`), in order,
+    /// drafted on the next frames (`ghost_tick`) so the click's own answer is drawn first; any request to the host
+    /// drafts the rest first (`send`), so every plan and ghost ends as it would drafted at once.
+    reghost: std::collections::VecDeque<input::GhostStep>,
+    /// ENGINE-58: the frame that shows the change that queued `reghost` has been drawn.
+    reghost_drawn: bool,
+    /// ENGINE-59 (BATTLE-FRAME2): the last frame's draw and the last waiting-ghost step, in wall µs, and the frames a
+    /// step has waited for room (`ghost_tick`).
+    ghost_room: (u128, u128, u8),
+    /// ENGINE-58: a waiting ghost is being drafted (its own request does not draft the rest).
+    drafting: bool,
     /// The round whose planning start drafted the ghosts (GH2 a, GH6).
     ghosted: i32,
     /// IF5: the hovered menu row's preview (revision, row, the plan as if picked); MR13 reads it too.
@@ -422,6 +538,8 @@ pub struct BattleScreen {
     /// VISCLAR1-D: the round's summary shown before the next round's prompt while that prompt stands (prompt, summary), and
     /// when the last advance of a timeline battle came (`CONFIRM_GUARD_MS`).
     round_note: Option<(String, String)>,
+    /// PR7-83 (PT-79): the last Esc closed something (any other key or click clears it): see `escape`.
+    esc_closed: bool,
     advanced_at: Option<Instant>,
     /// TRANSITIONS1 (`beats.rs`): the running beat (T1 the battle beat of a story fight, T2 the victory beat), T1's
     /// banner, whether its walk-in started, whether T2 ran, the ash wipe's cover cache, and the hub's view as the fight
@@ -452,20 +570,28 @@ impl BattleScreen {
     pub(crate) fn at_rest(&self) -> bool {
         self.host.session.is_some() && !self.viewing && !self.playing && !self.auto && !self.pending_next_round && self.talk.is_none()
             && self.impacts_done(Instant::now()) && self.fx.is_empty() && self.floats.is_empty() && self.flashes.is_empty() && self.tracers.is_empty() && self.sidesteps.is_empty()
-            && !self.round_banner_alive() && !self.pips_moving() && self.beat.is_none()
+            && !self.round_banner_alive() && !self.pips_moving() && self.beat.is_none() && self.reghost.is_empty()
     }
 
     fn blank(cx: &Cx, mode: Mode) -> Self {
+        // ENGINE-56 (AUDIO-FEEL2): a world fight's stings decode on a thread as the screen is made (ahead, unseen, when
+        // the map warms it), so their first play is a cached one
+        if matches!(mode, Mode::World { .. }) {
+            cx.audio.warm(crate::transitions::COMBAT_STING);
+            cx.audio.warm(crate::transitions::VICTORY_STINGER);
+        }
         // PR5-53 (VFX-DATA1): the tokens' status looks from the game's effect presets
         crate::fx::install_status_looks(&cx.data.cat.fx_presets);
         Self {
             host: Host::new(Battle::with_data(cx.data.clone())),
+            keys: crate::controls_view::hints(&cx.settings.v),
             w: Vec::new(),
             mouse: (0, 0),
             selected: None,
             popup: None,
             move_aim: None,
             move_tiles: Vec::new(),
+            hold_repick: false,
             playing: false,
             auto: false,
             next_at: Instant::now(),
@@ -478,6 +604,9 @@ impl BattleScreen {
             message: String::new(),
             show_log: false,
             log_scroll: 0,
+            log_panel: aegis_ui::float_panel::FloatPanel::default(),
+            log_kept: None,
+            log_size: (0, 0),
             tuning_checked: Instant::now(),
             mode,
             encounter: cx.encounter.clone(),
@@ -493,6 +622,7 @@ impl BattleScreen {
             log_seen: 0,
             slot: None,
             panels: Vec::new(),
+            board_lift: 0,
             saved: (0, 0),
             parked: Vec::new(),
             trail_out: Vec::new(),
@@ -532,6 +662,10 @@ impl BattleScreen {
             member_tactic: Default::default(),
             open_groups: Vec::new(),
             deferred: Vec::new(),
+            reghost: std::collections::VecDeque::new(),
+            reghost_drawn: true,
+            ghost_room: (0, input::GHOST_STEP_GUESS_US, 0),
+            drafting: false,
             ghosted: 0,
             preview: None,
             deferred_view: None,
@@ -557,6 +691,7 @@ impl BattleScreen {
             channel_units: Vec::new(),
             banner: None,
             round_note: None,
+            esc_closed: false,
             advanced_at: None,
             beat: None,
             intro_card: Default::default(),
@@ -594,6 +729,51 @@ impl BattleScreen {
         self.saved = now;
         let s = self.recorded();
         cx.playtest.put_session(&mut self.slot, s);
+    }
+
+    /// PR7-57 (STATUSVIS1-B): the agent link's `debug_status` (dev tools only): unit `unit` holds `status` now for
+    /// `rounds` (the status's default) at `magnitude` (its least), as a grant that lands at once
+    /// (`status::grant_now`); for proof shots of the statuses' looks. Not a battle command, never in a recording.
+    pub(crate) fn debug_status(&mut self, cx: &Cx, body: &Value) -> Value {
+        if !crate::DEV_TOOLS {
+            return json!({"ok": false, "error": "debug_status needs the dev tools"});
+        }
+        let Some(s) = self.host.session.as_mut() else { return json!({"ok": false, "error": "no battle"}) };
+        let status = body["status"].as_str().unwrap_or("");
+        let Some(row) = emberwake_rules::status::row_of(status) else { return json!({"ok": false, "error": format!("unknown status '{status}'")}) };
+        let Some(unit) = body["unit"].as_u64().map(|u| u as usize).filter(|u| *u < s.w.units.len()) else { return json!({"ok": false, "error": "debug_status needs a unit"}) };
+        let rounds = body["rounds"].as_i64().map_or(row.default_rounds.max(1), |r| r as i32);
+        let magnitude = body["magnitude"].as_i64().map_or(row.magnitude_min, |m| m as i32);
+        emberwake_rules::status::grant_now(&mut s.w.units[unit], status, rounds, magnitude, "debug");
+        self.after_change(cx);
+        json!({"ok": true})
+    }
+
+    /// PR7-64 (DIORAMA1): a dev tools ground hazard on tile `at` ([x, y]; or `free`: the n-th free tile) carrying `status` (a test row: 3 rounds, left
+    /// by the first ally, tint `tint` or a violet), for proof shots of the decals and the tint fallback; refused without the
+    /// dev tools, a battle or a free tile.
+    pub(crate) fn debug_ground(&mut self, cx: &Cx, body: &Value) -> Value {
+        if !crate::DEV_TOOLS {
+            return json!({"ok": false, "error": "debug_ground needs the dev tools"});
+        }
+        let Some(s) = self.host.session.as_mut() else { return json!({"ok": false, "error": "no battle"}) };
+        let at = |k: usize| body["at"][k].as_i64().map(|v| v as i32);
+        let free = |c: &emberwake_battle::grid::V2| s.w.grid.is_valid(*c) && s.w.grid.is_walkable(*c);
+        // `free`: the n-th walkable tile with no unit, in reading order (a scenario that does not know the map)
+        let nth = body["free"].as_u64().and_then(|n| {
+            let (gw, gh) = (emberwake_battle::grid::GRID_W, emberwake_battle::grid::GRID_H);
+            (0..gh).flat_map(|y| (0..gw).map(move |x| emberwake_battle::grid::V2::new(x, y))).filter(|c| free(c) && s.w.occupant(*c).is_none()).nth(n as usize)
+        });
+        let Some(cell) = nth.or_else(|| at(0).zip(at(1)).map(|(x, y)| emberwake_battle::grid::V2::new(x, y)).filter(free)) else {
+            return json!({"ok": false, "error": "debug_ground needs a walkable tile 'at' (or 'free': n)"});
+        };
+        let status = body["status"].as_str().unwrap_or("");
+        let row = json!({"id": format!("debug_{status}"), "name": format!("Test {status}"), "on": "enter", "damage": 3, "status": status, "potency": 50, "affects": "all", "duration": 3, "tint": body["tint"].as_str().unwrap_or("#b070e0"), "glyph": "?"});
+        let (by, round) = (s.w.allies.first().copied().unwrap_or(0), s.current_round);
+        let def = emberwake_data::HazardDef::from_obj(row.as_object().expect("an object"));
+        s.w.grid.ground.insert(cell, emberwake_battle::ground::Placed { def, by, round, last_round: round + 2 });
+        self.after_change(cx);
+        json!({"ok": true, "at": [cell.x, cell.y]})
     }
 
     /// The command-host session as the recording keeps it (a take-over names its parent in `end`).
@@ -641,6 +821,11 @@ impl BattleScreen {
     /// The Test Arena: the catalog encounter given on the command line (goblin_skirmish by default).
     pub fn sandbox(cx: &Cx) -> Self {
         let mut b = Self::blank(cx, Mode::Arena);
+        // DECOR1 (PR7-79 follow-up): a launch encounter `<world>:<id>` is that world's (its stage set, cover and decor
+        // cover draw), as in `arena_with` and `playback`
+        if let Some((w, e)) = b.encounter.split_once(':').map(|(w, e)| (w.to_string(), e.to_string())) {
+            (b.arena_world, b.encounter) = (Some(w), e);
+        }
         b.start_battle();
         b
     }
@@ -721,7 +906,15 @@ impl BattleScreen {
         let d = cx.data.clone();
         // TRANSITIONS1 T2 step 4: the hub's view before the fight (the arrival lists what changed)
         let before = crate::transitions::snapshot(&d, cx.gs());
-        let started = emberwake_world::battle::begin_world_with(&d, cx.gs_mut(), fight, &mut |world, m| member_art(&d, world, m))?;
+        // ENGINE-53 (SWITCH-AHEAD1): the fight started ahead, when it was started from this very game; else started now
+        let ahead = cx.game.as_mut().and_then(|g| g.fight_ahead.take()).filter(|a| a.fits(cx.gs(), fight, runner));
+        let started = match ahead {
+            Some(a) => {
+                *cx.gs_mut() = a.post;
+                a.started
+            }
+            None => emberwake_world::battle::begin_world_with(&d, cx.gs_mut(), fight, &mut |world, m| member_art(&d, world, m))?,
+        };
         let emberwake_world::battle::WorldFight { session, world, members, stash_short, mods, intro, .. } = started;
         // CAMPAIGN1 P3, W6: at zero upkeep the party starts with less AP (read before the session, logged once)
         if !mods.note.is_empty() {
@@ -731,6 +924,10 @@ impl BattleScreen {
         b.class_world = world;
         b.host.begin(session);
         b.host.restart();
+        // PR7-32 (BREPORT1 rules 1-3): a game battle's metrics follow it live, for the results' battle report
+        if let Some(s) = b.host.session.as_mut() {
+            s.attach_metrics(emberwake_battle::metrics::BattleMetrics::new(), true);
+        }
         b.after_start(&intro);
         if !mods.note.is_empty() {
             b.message = format!("{} {}.", b.message, mods.note);
@@ -744,6 +941,7 @@ impl BattleScreen {
         if runner == story::FIGHT_SOURCE {
             b.start_intro(cx);
         }
+        playback::load_bodies(cx, b.session());
         cx.set_busy(true);
         Ok(b)
     }
@@ -758,6 +956,10 @@ impl BattleScreen {
 
     /// Sends one request through the command API and turns HP changes into floating numbers.
     fn send(&mut self, cx: &Cx, req: Value) -> Value {
+        // ENGINE-58: a request sees every ghost drafted, as before the drafts waited for the next frames
+        if !self.drafting {
+            self.settle_ghosts(cx);
+        }
         self.flush(cx);
         self.req_cmd = req["cmd"].as_str().unwrap_or("").to_string();
         self.note_step();
@@ -773,11 +975,44 @@ impl BattleScreen {
     }
 }
 
+/// PR7-92: the board's widget id prefixes, one keyboard stop (`Screen::focus_group`).
+pub(crate) const BOARD_GROUP: &[&str] = &["tile.", "unit."];
+
 impl Screen<GameCx> for BattleScreen {
+    /// ENGINE-64 (LIVE-RELOAD1): a fight under way keeps the units and skills it was built with until it ends.
+    fn data_reloaded(&mut self, _cx: &mut Cx, _top: bool) -> Option<String> {
+        Some("this battle keeps its units until it ends".to_string())
+    }
+
+    /// ENGINE-51 (SWITCH-FEEL1): the battle beat while it runs (TRANSITIONS1 T1 intro, T2 victory), for the switch report.
+    fn transition(&self, _cx: &Cx) -> Option<&'static str> {
+        self.beat.map(|b| b.kind.name())
+    }
+
     /// A4.2-K1b: while the selected hero plans a Field round the arrows aim its source (`field_nudge`), so they do not
     /// move the keyboard focus then; any other time they do, as before.
     fn arrow_focus(&self) -> bool {
         !self.field_aiming()
+    }
+
+    /// PR7-92 (INPUT-REACH2, FB-489 call 4): the board (its tiles and the unit tokens on them) is one Tab stop; while
+    /// the focus is on it the arrows move the tile cursor and Enter presses the tile or token as a click.
+    fn focus_group(&self) -> &'static [&'static str] {
+        BOARD_GROUP
+    }
+
+    /// BATTLE-UI2 (battle contract 7, FB-358): whatever the player's control map turns into Tab (by default the Tab key
+    /// and the pad's north button) is the skill menu key while planning (`menu_key`); any other time it moves the
+    /// keyboard focus as before. The raw input is read through the map, so a CONTROLS-UI1 rebind is respected.
+    fn capture(&mut self, cx: &mut Cx, input: aegis_ui::controls::Input) -> bool {
+        use aegis_ui::controls::{Controls, Input};
+        let (map, _) = Controls::from_settings(&cx.settings.v);
+        let gives = match input {
+            Input::Key(k) => map.key(k),
+            Input::Pad(p) => map.pad(p),
+        };
+        // PR7-57: only the menu key opens the menu (any other key, T among them, kept opening it as a side effect)
+        gives == Key::Tab && self.menu_key()
     }
 
     /// FPSCAP1: a battle waiting for the player moves slowly (idle clips, portraits, status loops); any other time every
@@ -798,12 +1033,23 @@ impl Screen<GameCx> for BattleScreen {
         }
     }
 
+    /// XL-FIX2 (PR7-85, FB-455 d): the board's widgets (its tiles and the unit tokens on them, `unit.<n>`) are not
+    /// controls to the text audit: the log and the ally menu drawn over the board do not spill out of a tile (the layout
+    /// audit already reads them so).
+    fn audit_ignores(&self) -> &'static [&'static str] {
+        &["tile.", "unit."]
+    }
+
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        // ENGINE-58: the waiting ghosts are drafted from the next frame's tick on
+        self.reghost_drawn = true;
         self.mouse = mouse;
         self.resolve_impacts(cx);
         self.react_start_portraits(cx);
         self.follow_round_banner();
+        let t0 = aegis_core::clock::Instant::wall();
         draw(self, cx, g, mouse, live);
+        self.ghost_room.0 = t0.wall_elapsed().as_micros();
     }
 
     fn leave(&mut self, cx: &mut Cx) {
@@ -822,8 +1068,14 @@ impl Screen<GameCx> for BattleScreen {
         json!({"session": self.slot.map_or(-1, |i| i as i64), "round": s.current_round, "block": s.current_block, "phase": phase})
     }
 
+    /// ENGINE-58: the later members' ghosts still waiting are drafted now (a requested frame, a shot).
+    fn settle(&mut self, cx: &mut Cx) {
+        self.settle_ghosts(cx);
+    }
+
     fn tick(&mut self, cx: &mut Cx) {
         let now = Instant::now();
+        self.ghost_tick(cx);
         if !self.at_rest() {
             self.astir_at = now;
         }
@@ -899,6 +1151,11 @@ impl Screen<GameCx> for BattleScreen {
         if !self.viewing && ri::on(&self.session().w) && self.planning() {
             if self.ghosted != self.session().current_round {
                 self.plan_start(cx);
+                // PR7-75 (PT-47): the talk that held the planning has closed: the prompt asks for the plan again
+                let round = self.session().current_round;
+                if self.message == flow::talk_first_message(round) {
+                    self.message = flow::plan_message(round);
+                }
             } else {
                 let on = cx.settings.v["auto_fill"].as_bool().unwrap_or(true);
                 if self.session().w.autofill != on {
@@ -967,6 +1224,9 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn key(&mut self, cx: &mut Cx, k: Key) {
+        // ENGINE-58: a key reads the plan as drafted (Esc, `escape`, only closes or steps back and needs no draft)
+        self.settle_ghosts(cx);
+        self.esc_closed = false;
         if crate::viewkeys::window_key(cx, k, crate::viewkeys::Shown::Notice) {
             return;
         }
@@ -987,6 +1247,11 @@ impl Screen<GameCx> for BattleScreen {
             return;
         }
         match k {
+            // PR7-83 (PT-79): while the last round's summary still shows, Enter only dismisses it (a quick Enter after
+            // "Round over" confirmed the next, empty round)
+            Key::Enter if self.planning() && self.round_note.as_ref().is_some_and(|n| n.0 == self.message) => {
+                self.round_note = None;
+            }
             Key::Enter if self.planning() => self.act(cx, Action::Confirm),
             Key::Enter if !self.outcome().is_empty() && self.world_mode() => self.act(cx, Action::Continue),
             Key::Space => self.act(cx, Action::Step),
@@ -1000,8 +1265,8 @@ impl Screen<GameCx> for BattleScreen {
                 cx.settings.v["show_tells"] = serde_json::Value::Bool(!on);
                 self.message = match cx.settings.save() {
                     Err(e) => format!("Tells toggled but the setting was not saved: {e}"),
-                    Ok(()) if on => "Enemy tells hidden (I shows them).".into(),
-                    Ok(()) => "Enemy tells shown (I hides them).".into(),
+                    Ok(()) if on => format!("Enemy tells hidden ({} shows them).", self.keys.key_hint(Key::Char('i'))),
+                    Ok(()) => format!("Enemy tells shown ({} hides them).", self.keys.key_hint(Key::Char('i'))),
                 };
             }
             Key::Char('r') => self.act(cx, Action::Restart),
@@ -1045,6 +1310,9 @@ impl Screen<GameCx> for BattleScreen {
             self.message = "Move cancelled.".into();
         } else if self.show_log {
             self.show_log = false;
+        } else if let Some((b, true)) = self.strip_block_under_mouse().filter(|_| self.host.session.is_some() && self.planning()) {
+            // BATTLE-UI2 (battle contract 7, FB-358): a right click on a ghost block opens the skill menu there
+            self.strip_menu(b);
         } else if let Some(u) = self.unit_under_mouse() {
             self.inspect_unit(u);
         } else if self.host.session.is_some() && self.planning() {
@@ -1060,6 +1328,9 @@ impl Screen<GameCx> for BattleScreen {
         if self.talk.is_some() {
             return;
         }
+        // PR7-83 (PT-79): Esc stops at the last panel: after a run of Escs that closed things, the next one with nothing
+        // left to close does nothing; only the Esc after that opens Settings
+        let streak = std::mem::replace(&mut self.esc_closed, true);
         // INPUT1 SL3 (round intent): the menu, the log, the inspected unit, then the selection; then as before. TV1: an
         // open timeline view closes first
         let timeline = self.host.session.as_ref().is_some_and(|s| ri::on(&s.w));
@@ -1077,11 +1348,15 @@ impl Screen<GameCx> for BattleScreen {
             self.message = "Inspect cleared.".into();
         } else if timeline && self.selected.is_some() {
             self.selected = None;
+        } else if streak {
+            self.esc_closed = false;
         } else if !self.world_mode() {
+            self.esc_closed = false;
             cx.nav.push(Nav::Pop);
         } else {
             // PR7-26: nothing open in a world battle: the in-game Settings popup (its Return to title keeps the hub's
             // busy and unsaved checks)
+            self.esc_closed = false;
             self.act(cx, Action::Settings);
         }
     }
@@ -1163,7 +1438,9 @@ impl Screen<GameCx> for BattleScreen {
             if let Some(gate) = &sess.w.hold {
                 let cell = |c: &V2| json!([c.x, c.y]);
                 out["hold"] = json!({"label": gate.label, "tiles": gate.tiles.iter().map(cell).collect::<Vec<_>>(), "holder": gate.holder, "open": gate.is_open(&sess.w),
-                    "needs_pick": sess.needs_stay_pick(), "note": sess.gate_note(), "pick": hold_pick_ids(sess)});
+                    "needs_pick": sess.needs_stay_pick(), "note": sess.gate_note(), "pick": hold_pick_ids(sess),
+                    // ESCAPE-PLAN1: the heroes out through an exit, and the hold pick's suggestion
+                    "out": gate.heroes.iter().copied().filter(|&c| sess.w.units[c].is_withdrawn).collect::<Vec<_>>(), "suggested": sess.stay_pick_suggestion()});
             }
         }
         // HOOKS1-UI slice 4: the selected hero's push forecasts as drawn (key only while forced_move is on)
@@ -1225,6 +1502,16 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn command(&mut self, cx: &Cx, body: &Value) -> Option<Value> {
+        // ENGINE-59: an agent-link request sees every waiting ghost drafted, as a player's does (`send`)
+        self.settle_ghosts(cx);
+        // PR7-57 (STATUSVIS1-B): the dev tools' status grant for proof shots (not a battle command: the host never sees it)
+        if body["cmd"] == json!("debug_status") {
+            return Some(self.debug_status(cx, body));
+        }
+        // PR7-64 (DIORAMA1): the dev tools' ground hazard for proof shots of the decals
+        if body["cmd"] == json!("debug_ground") {
+            return Some(self.debug_ground(cx, body));
+        }
         // An agent-link `new` ends this session: park it for the hub (saved on the next tick), then start a new one.
         let restart = body["cmd"] == json!("new");
         if restart && self.recordable() {
@@ -1265,6 +1552,21 @@ impl Screen<GameCx> for BattleScreen {
             _ => ("", ""),
         };
         music::battle_track(cx, ctx, world, location, self.music_request, seed)
+    }
+
+    /// ENGINE-56 (AUDIO-FEEL2): the battle's music fades in over `battle_music_fade_ms`.
+    fn music_fade_in(&self, cx: &Cx) -> Option<f32> {
+        Some(cx.tuning.value.battle_music_fade_ms as f32 / 1000.0)
+    }
+
+    /// ENGINE-56: the round controls play their own click (`Action::clicks`); every other button answers by the rule.
+    fn ui_sound(&self, _cx: &Cx, id: &str, cue: UiCue) -> UiSound {
+        let own = self.w.iter().find(|w| w.id == id).and_then(|w| w.action.as_ref()).is_some_and(Action::clicks);
+        if own && cue == UiCue::Confirm {
+            UiSound::Silent
+        } else {
+            UiSound::Rule
+        }
     }
 
     aegis_ui::widget_plumbing!();

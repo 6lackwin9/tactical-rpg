@@ -1,0 +1,52 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "encounters",
+      "world": "sunk_ward",
+      "fields": [
+        "decor"
+      ],
+      "entry": {
+        "id": "enc_evt_03",
+        "decor": [
+          {
+            "art": "lantern_pole",
+            "x": 1,
+            "y": 1
+          },
+          {
+            "art": "lantern_pole",
+            "x": 1,
+            "y": 7
+          },
+          {
+            "art": "lantern_pole",
+            "x": 10,
+            "y": 1
+          },
+          {
+            "art": "barrel_stack",
+            "x": 1,
+            "y": 2
+          },
+          {
+            "art": "crates_tall",
+            "x": 1,
+            "y": 6
+          },
+          {
+            "art": "barrel_stack",
+            "x": 10,
+            "y": 7
+          },
+          {
+            "art": "crates_tall",
+            "x": 10,
+            "y": 2
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -84,6 +84,37 @@ pub fn award_encounter_pct(d: &Data, party: &mut PartyState, enemies: &[(i64, St
     out
 }
 
+/// ACT1-FIX4 (PT-95): `award_encounter_pct` paid to the members who fought (`fielded` ids): each one still in the
+/// party (party order), then each who left in that fight (its latest `party.departed` record, e.g. a captured
+/// stayer, keeps its XP; a dead one gets none); a member who did not fight gets none (a benched member auto-filled
+/// into a freed slot).
+/// Empty `fielded` = no party side: the active members, as `award_encounter_pct`.
+pub fn award_fielded_pct(d: &Data, party: &mut PartyState, fielded: &[String], enemies: &[(i64, String)], pct: i64) -> Dict {
+    if fielded.is_empty() {
+        return award_encounter_pct(d, party, enemies, pct);
+    }
+    let mut out = Dict::new();
+    let pay = |out: &mut Dict, m: &mut UnitState| {
+        let full = encounter_xp(d, enemies, m.level(d));
+        let xp = if pct >= 100 { full } else { full * pct.max(0) / 100 };
+        let mut res = award(d, m, xp);
+        res.insert("xp".into(), int(xp));
+        out.insert(m.id.clone(), Value::Object(res));
+    };
+    for m in party.members.iter_mut().filter(|m| fielded.contains(&m.id)) {
+        pay(&mut out, m);
+    }
+    for id in fielded {
+        if out.contains_key(id) {
+            continue;
+        }
+        if let Some(rec) = party.departed.iter_mut().rev().find(|r| &r.member.id == id && r.life != "dead") {
+            pay(&mut out, &mut rec.member);
+        }
+    }
+    out
+}
+
 /// Adds `draft` (stat -> points) to the spend; errors leave the state untouched.
 pub fn confirm(d: &Data, state: &mut UnitState, draft: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
@@ -328,6 +359,40 @@ pub fn keystone_level(d: &Data, state: &UnitState) -> i32 {
     d.cat.classes.get(&state.class_id(d)).and_then(|c| c.keystone.as_ref()).map_or(1, |k| k.level.max(1))
 }
 
+/// HITCALC1 (PR7-45, FB-338): where a member's keystone `id` comes from, for the Skills tab's header.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeystoneSource {
+    /// Its class's keystone (CLASSKEY1).
+    Class,
+    /// Its base unit's deck `keystone` row (`deck_grants`).
+    Deck,
+    /// A unit track stage it is on (PK2 grafts, `track_passives`).
+    Graft,
+}
+
+impl KeystoneSource {
+    /// "Class", "Deck", "Graft".
+    pub fn label(self) -> &'static str {
+        match self {
+            KeystoneSource::Class => "Class",
+            KeystoneSource::Deck => "Deck",
+            KeystoneSource::Graft => "Graft",
+        }
+    }
+}
+
+/// HITCALC1 (PR7-45): where keystone `id` of member `state` comes from: its class's keystone first, then its base
+/// unit's deck, then its unit tracks (grafts); None for any other source (a masterwork, a hand-built deck's id).
+pub fn keystone_source(d: &Data, state: &UnitState, id: &str) -> Option<KeystoneSource> {
+    if d.cat.classes.get(&state.class_id(d)).and_then(|c| c.keystone.as_ref()).is_some_and(|k| k.id == id) {
+        return Some(KeystoneSource::Class);
+    }
+    if d.cat.units.get(&state.base_unit).is_some_and(|b| b.deck.keystone.iter().any(|k| k == id)) {
+        return Some(KeystoneSource::Deck);
+    }
+    track_passives(d, state).iter().any(|k| k == id).then_some(KeystoneSource::Graft)
+}
+
 /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the passives the member's unit tracks grant: per track row (catalog order)
 /// the member is on, every stage's passive up to its stage (`UnitTrackDef::passives_to`).
 pub fn track_passives(d: &Data, state: &UnitState) -> Vec<String> {
@@ -370,7 +435,7 @@ pub const REFUSE_NOT_AT_NODE: &str = "Make camp on the world map.";
 pub const REFUSE_RESTED: &str = "Everyone is rested.";
 /// TERMS1: the upkeep's default word (`terms::UPKEEP`) with CAMP_COST: only a world without a campaign refuses a Camp
 /// with it, and there the purse, so the upkeep, has its default name (the campaign rest refuses with
-/// `campaign::purse::REFUSE_UPKEEP`); `tests/terms.rs` checks it against the register.
+/// `terms::not_enough_upkeep_to_camp`); `tests/terms.rs` checks it against the register.
 pub const REFUSE_SUPPLIES: &str = "Making camp needs 3 supplies.";
 
 pub fn rally(max_hp: i64) -> i64 {
@@ -431,25 +496,25 @@ pub fn is_rest_place(d: &Data, gs: &GameState, location_ref: &str) -> bool {
 }
 
 /// HealRules.can_camp; in a campaign world the rest rule's refusal (CAMPAIGN1 R1, R2: `campaign::purse::rest_refusal`).
-pub fn can_camp(d: &Data, gs: &GameState) -> &'static str {
+pub fn can_camp(d: &Data, gs: &GameState) -> String {
     // PR6-9: no rest while a siege with `no_camp` runs
     let siege = crate::siege::camp_refusal(d, gs);
     if !siege.is_empty() {
-        return siege;
+        return siege.into();
     }
     if gs.campaign.is_some() {
         return crate::campaign::purse::rest_refusal(d, gs);
     }
     if crate::travel::current_node(d, gs).is_empty() {
-        return REFUSE_NOT_AT_NODE;
+        return REFUSE_NOT_AT_NODE.into();
     }
     if !hurt(&gs.party) {
-        return REFUSE_RESTED;
+        return REFUSE_RESTED.into();
     }
     if gs.party.supplies < CAMP_COST {
-        return REFUSE_SUPPLIES;
+        return REFUSE_SUPPLIES.into();
     }
-    ""
+    String::new()
 }
 
 /// {ok, errors, spent, restored, events}. In a campaign world the rest rule's rest (CAMPAIGN1 R2: `campaign::purse::rest`,
@@ -460,7 +525,7 @@ pub fn make_camp(d: &Data, gs: &mut GameState) -> Dict {
     }
     let refusal = can_camp(d, gs);
     if !refusal.is_empty() {
-        let mut out = json::fail(refusal);
+        let mut out = json::fail(&refusal);
         out.insert("spent".into(), int(0));
         out.insert("restored".into(), int(0));
         out.insert("events".into(), Value::Array(Vec::new()));

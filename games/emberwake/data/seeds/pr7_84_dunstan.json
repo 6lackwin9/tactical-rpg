@@ -1,0 +1,23 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "dialogues",
+      "world": "sunk_ward",
+      "fields": [
+        "nodes"
+      ],
+      "entry": {
+        "id": "dlg_talk_m3_grendel",
+        "nodes": [
+          {
+            "id": "n0",
+            "speaker": "dunstan",
+            "text": "Dunstan grinds his wired jaw and hammers the slag-ladle against the chute rail, twice, hard.",
+            "end": true
+          }
+        ]
+      }
+    }
+  ]
+}

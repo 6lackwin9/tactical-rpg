@@ -35,14 +35,38 @@ impl Stats {
 
     /// The numbers rounded to 0.001 ms, for a reply or a file.
     pub fn to_json(&self) -> Value {
-        let r = |x: f64| (x * 1000.0).round() / 1000.0;
+        let r = |x: f64| crate::perf::round_to(x, 3);
         json!({"count": self.count, "p10": r(self.p10), "p50": r(self.p50), "p95": r(self.p95), "max": r(self.max), "mean": r(self.mean)})
     }
+}
+
+/// ENGINE-66 (TIDY4, CLN-72): the build's name in reports: "dev" (debug assertions on) or "release".
+pub fn build_name() -> &'static str {
+    if cfg!(debug_assertions) {
+        "dev"
+    } else {
+        "release"
+    }
+}
+
+/// ENGINE-66 (CLN-73): `x` rounded to `places` decimals (the reports' ms: 3 places, the movement and switch reports 2).
+pub fn round_to(x: f64, places: i32) -> f64 {
+    let k = 10f64.powi(places);
+    (x * k).round() / k
 }
 
 /// Milliseconds since `t`, as a fraction.
 pub fn ms_since(t: Instant) -> f64 {
     t.wall_elapsed().as_secs_f64() * 1000.0
+}
+
+/// ENGINE-60 (PLAN-START2): the calling thread's CPU time so far in ms, where the platform tells it (Linux:
+/// `/proc/thread-self/schedstat`); None elsewhere.
+pub fn thread_cpu_ms() -> Option<f64> {
+    #[cfg(target_os = "linux")]
+    return aegis_core::vfs::read_to_string("/proc/thread-self/schedstat").ok()?.split_whitespace().next()?.parse::<f64>().ok().map(|ns| ns / 1e6);
+    #[cfg(not(target_os = "linux"))]
+    None
 }
 
 /// Rounds of the calibration workload: a few ms in a release build.

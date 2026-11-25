@@ -1,0 +1,102 @@
+# Watches docs/FEEDBACK.md and docs/READY.md on develop (replaces Gemini Task feedback watchers).
+# Writes a structured Markdown report to the Job Summary and maintains at most ONE rolling GitHub Issue
+# labeled `feedback-watch` when open items await Design or schema errors exist, closing it automatically
+# once the queue clears. Fails the run only on real FEEDBACK/READY schema or follow-up mismatches.
+name: feedback-watch
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'docs/FEEDBACK.md'
+      - 'docs/READY.md'
+      - 'docs/archive/FEEDBACK_CLOSED.md'
+      - 'tools/planner/feedback_check.py'
+      - '.github/workflows/feedback-watch.yml'
+  schedule:
+    - cron: '17 6,18 * * *'
+  workflow_dispatch:
+    inputs:
+      sync_issue:
+        description: Create/update/close the rolling feedback-watch GitHub issue
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: feedback-watch-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Run feedback watcher
+        id: watch
+        run: |
+          set +e
+          python3 tools/planner/feedback_check.py watch \
+            --summary-md "$GITHUB_STEP_SUMMARY" \
+            --json-out feedback_watch.json > feedback_watch.md
+          rc=$?
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          if [ -f feedback_watch.json ]; then
+            python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          d = json.load(open("feedback_watch.json", encoding="utf-8"))
+          print(f"state={d['state']}")
+          print(f"needs_attention={'true' if d['needs_attention'] else 'false'}")
+          PY
+          else
+            echo "state=parse_error" >> "$GITHUB_OUTPUT"
+            echo "needs_attention=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync rolling feedback-watch issue
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.sync_issue }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEEDS_ATTENTION: ${{ steps.watch.outputs.needs_attention }}
+          WATCH_STATE: ${{ steps.watch.outputs.state }}
+        run: |
+          LABEL="feedback-watch"
+          TITLE="[Feedback Watch] Actionable FEEDBACK / READY items"
+          # Ensure label exists (ignore if already present)
+          gh label create "$LABEL" --color "d93f0b" --description "Automated docs/FEEDBACK.md & READY.md watcher" 2>/dev/null || true
+
+          ISSUE_NUM=$(gh issue list --state open --label "$LABEL" --limit 1 --json number --jq '.[0].number // empty')
+          BODY_FILE="issue_body.md"
+          {
+            cat feedback_watch.md
+            echo ""
+            echo "_Updated by [feedback-watch](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) on \`develop\` (\`${GITHUB_SHA::8}\`)._"
+          } > "$BODY_FILE"
+
+          if [ "$NEEDS_ATTENTION" = "true" ]; then
+            if [ -n "$ISSUE_NUM" ]; then
+              gh issue edit "$ISSUE_NUM" --title "$TITLE" --body-file "$BODY_FILE"
+              echo "Updated rolling issue #$ISSUE_NUM (state=$WATCH_STATE)"
+            else
+              gh issue create --title "$TITLE" --label "$LABEL" --body-file "$BODY_FILE"
+              echo "Opened rolling issue (state=$WATCH_STATE)"
+            fi
+          elif [ -n "$ISSUE_NUM" ]; then
+            gh issue close "$ISSUE_NUM" --comment "Queue cleared on \`develop\` (\`${GITHUB_SHA::8}\`, state=\`${WATCH_STATE}\`)."
+            echo "Closed rolling issue #$ISSUE_NUM (state=$WATCH_STATE)"
+          else
+            echo "No open issue and no attention needed (state=$WATCH_STATE)"
+          fi
+
+      - name: Enforce schema validity
+        if: ${{ steps.watch.outputs.exit_code != '0' }}
+        run: |
+          echo "feedback_check.py watch exited with code ${{ steps.watch.outputs.exit_code }}"
+          exit ${{ steps.watch.outputs.exit_code }}

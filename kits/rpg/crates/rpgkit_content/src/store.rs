@@ -72,7 +72,7 @@ fn class_storage(full: &Dict) -> Dict {
 fn ruleset_storage(full: &Dict) -> Dict {
     let by_rules = |key: &str, v: &Value| rpgkit_rules::ruleset::BY_RULES_FIELDS.contains(&key) && gstr(v).is_empty();
     let channel_default = |key: &str, v: &Value| {
-        RULESET_CHANNEL_FIELDS.contains(&key) && fields("content", source::RULESET_KIND).iter().map(json::dict).any(|f| json::s(f, "key") == key && json::deep_equal(json::get(f, "default"), v))
+        (RULESET_CHANNEL_FIELDS.contains(&key) || RULESET_ENRAGE_FIELDS.contains(&key)) && fields("content", source::RULESET_KIND).iter().map(json::dict).any(|f| json::s(f, "key") == key && json::deep_equal(json::get(f, "default"), v))
     };
     to_storage(source::schema(), "content", source::RULESET_KIND, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || by_rules(key, v) || channel_default(key, v))
 }
@@ -80,6 +80,9 @@ fn ruleset_storage(full: &Dict) -> Dict {
 /// PK1-S2a (PK1 4.1): the ruleset row fields of the rule `channel`, stored only when set off their defaults.
 /// PR5-20 adds `channel_ai_edge` (FB-179).
 pub const RULESET_CHANNEL_FIELDS: [&str; 6] = ["channel_meter", "channel_power", "channel_cost", "channeled_actives", "channel_rest", "channel_ai_edge"];
+
+/// ENRAGE2 (PR7-55): the baseline enrage numbers, stored like the Channel numbers only when set off their defaults.
+pub const RULESET_ENRAGE_FIELDS: [&str; 3] = ["enrage_from_round", "enrage_step", "enrage_max_stacks"];
 
 /// P1.2-S1 (FB-51): a terrain row stores `walkable` and `stops_forced_move` only when it gives them (`entry`, the
 /// stored shape); a row without them reads their fallbacks (`source::TERRAIN_FALLBACK_KEYS`), so it re-saves byte for
@@ -593,6 +596,34 @@ impl Hooks for RpgContent {
         let w = crate::world_map::write(&view.worlds, &view.assets, name, edits)?;
         Ok(format!("{} {} ({} edit(s))", if w.changed { "wrote" } else { "unchanged" }, w.path.display(), w.edits))
     }
+
+    /// ENGINE-20: known top-level stored field names for schema-backed kinds (plus `ranks` on ranked skills) and
+    /// game-data kinds (`GAME_KINDS`), so `fields`-scoped seeds fail immediately on typos.
+    fn known_fields(&self, world: Option<&str>, kind: &str) -> Option<Vec<String>> {
+        if world.is_some() {
+            let names = aegis_content::schema::field_names(source::schema(), "world", kind);
+            return (!names.is_empty()).then_some(names);
+        }
+        if let Some((_, _, _, cols)) = game_kind(kind) {
+            return Some(cols.iter().map(|s| (*s).to_string()).collect());
+        }
+        let mut names = aegis_content::schema::field_names(source::schema(), "content", kind);
+        if kind == "skills" && !names.iter().any(|k| k == "ranks") {
+            names.push("ranks".to_string());
+        }
+        (!names.is_empty()).then_some(names)
+    }
+
+    /// ENGINE-20: pre-normalization JSON type checks (`schema::type_errors`) for schema-backed catalog and world kinds.
+    fn check_types(&self, world: Option<&str>, kind: &str, entry: &Dict) -> Vec<String> {
+        if world.is_some() {
+            return aegis_content::schema::type_errors(fields("world", kind), entry);
+        }
+        if game_kind(kind).is_some() {
+            return Vec::new();
+        }
+        aegis_content::schema::type_errors(fields("content", kind), entry)
+    }
 }
 
 /// E2.2-S2 (FB-110): merges `patch` into the game manifest at `path` (`aegis content manifest`): the engine keys and the
@@ -613,15 +644,14 @@ pub fn remove(data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> Res
     aegis_content::store::remove(&RpgContent, data_dir, world, kind, id)
 }
 
-/// The checks view of a data folder: the loaded catalog and worlds, the art keys of its asset manifest, whether it has
-/// a terrain file, and the load problems.
+/// The checks view of a data folder: the loaded catalog and worlds, the art keys of its asset manifest and the load
+/// problems.
 pub fn view(data_dir: &Path) -> crate::check::View {
     view_of(data_dir, &source::load(data_dir))
 }
 
 fn view_of(data_dir: &Path, src: &source::Source) -> crate::check::View {
     let mut view = crate::check::View::new(&src.catalog, &src.worlds, &src.game, data_dir.parent().map(aegis_core::assets::Layers::for_game).unwrap_or_default());
-    view.terrain_file = vfs::is_file(data_dir.join("catalog/terrain.json"));
     view.load_errors = src.errors.clone();
     view.purse = src.purse;
     view.music_keys = src.music_keys.clone();

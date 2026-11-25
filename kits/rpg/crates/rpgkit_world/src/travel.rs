@@ -151,6 +151,39 @@ pub fn legs(d: &Data, gs: &GameState, w: &str) -> Vec<(Dict, String, String)> {
     directed(graph(d, w).into_iter().filter(|r| is_open(gs, r)))
 }
 
+/// PR7-37 (PT-31): the road legs open now (`legs`), as sorted route qids.
+pub fn open_roads(d: &Data, gs: &GameState) -> Vec<String> {
+    let mut out: Vec<String> = legs(d, gs, &gs.world_id).iter().map(|(r, _, _)| json::s(r, "_qid")).filter(|q| !q.is_empty()).collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// PR7-47: the open roads the player was last told about (the saved `explore.roads_seen`), None before the first look.
+pub fn roads_seen(gs: &GameState) -> Option<Vec<String>> {
+    let a = gs.explore.get(crate::state::ROADS_SEEN_KEY)?.as_array()?;
+    Some(a.iter().filter_map(|q| q.as_str().map(String::from)).collect())
+}
+
+/// PR7-37 (PT-31), PR7-47: the legs (from, to) of the roads opened since the player was last told, one per road, and
+/// the open roads saved as told (`explore.roads_seen`, so a road opened before a save is still told after the load).
+/// The first look (no saved list: a new game, an older save) only learns the roads open then; no change writes nothing.
+pub fn note_new_roads(d: &Data, gs: &mut GameState) -> Vec<(String, String)> {
+    let open = open_roads(d, gs);
+    let seen = roads_seen(gs);
+    if seen.as_ref() == Some(&open) {
+        return Vec::new();
+    }
+    gs.explore.insert(crate::state::ROADS_SEEN_KEY.into(), Value::Array(open.iter().map(|q| Value::String(q.clone())).collect()));
+    let Some(seen) = seen else { return Vec::new() };
+    let all = legs(d, gs, &gs.world_id);
+    open.iter()
+        .filter(|q| !seen.contains(q))
+        .filter_map(|q| all.iter().find(|(r, _, _)| json::s(r, "_qid") == *q))
+        .map(|(_, a, b)| (a.clone(), b.clone()))
+        .collect()
+}
+
 /// CAMPAIGN1-SIM: every directed leg of `w`'s graph, route gates ignored (the full graph `sim deadlines` plans on).
 pub fn all_legs(d: &Data, w: &str) -> Vec<(Dict, String, String)> {
     directed(graph(d, w).into_iter())
@@ -456,6 +489,34 @@ pub fn legend_quests(d: &Data, gs: &GameState) -> Vec<(String, String, String)> 
         }
     }
     out
+}
+
+/// PR7-76 (PT-50): every quest ready to turn in, as (node qid, quest name, quest id) in quest order: the node is the
+/// place of the person it turns in to (`person_place`; "" when none is found); a quest without a display name is left
+/// out. A world map's legend keeps them after the active ones, marked ready.
+pub fn legend_ready(d: &Data, gs: &GameState) -> Vec<(String, String, String)> {
+    let mut out = Vec::new();
+    for qid in quest::quests_with(d, gs, "ready") {
+        let q = quest::resolved(d, gs, &qid);
+        let name = json::s(&q, "name");
+        if !name.is_empty() {
+            out.push((person_place(d, gs, &crate::dialogue::turn_in_qid(d, gs, &q)), name, qid));
+        }
+    }
+    out
+}
+
+/// PR7-76 (PT-50): the location (qid) holding a person marker of character `who` (a qualified id), the first in data
+/// order; "" when none does.
+pub fn person_place(d: &Data, gs: &GameState, who: &str) -> String {
+    if who.is_empty() {
+        return String::new();
+    }
+    let here = |m: &Value| {
+        let m = json::dict(m);
+        json::s(m, "kind") == "npc" && crate::dialogue::character_qid(d, gs, &json::s(m, "character")) == who
+    };
+    d.merged_entries(&gs.world_id, "locations").into_iter().find(|l| json::aget(l, "markers").iter().any(here)).map(|l| json::s(l, "_qid")).unwrap_or_default()
 }
 
 /// The active quests' objective places: (node qid, objective text, quest id).
@@ -965,6 +1026,15 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
             }
             events.extend(json::aget(&entered, "events").iter().cloned());
             // CAMPAIGN1 T1: the arrival's enter tick events follow the battle's
+            woke_campaign = json::aget(&entered, "campaign").to_vec();
+        }
+        // ENRAGE2 EN9: the foes slipped away, so the way is clear: the leg completes (no scripted event is done)
+        crate::battle::ESCAPED => {
+            let entered = complete_leg(d, gs, &rq, &json::s(fight, "to"));
+            if !json::b(&entered, "ok", false) {
+                return base(false, &json::sget(&entered, "errors"), events, applied["xp"].clone(), applied["advanced"].clone());
+            }
+            events.extend(json::aget(&entered, "events").iter().cloned());
             woke_campaign = json::aget(&entered, "campaign").to_vec();
         }
         "lost" => {

@@ -279,7 +279,20 @@ pub fn card_portrait(d: &Data, home: &str, card: &Dict) -> Vec<String> {
     }
     let unit = d.entry("units", &json::s(c, "base_unit"));
     let class = d.entry("classes", &json::s(unit, "class_id"));
-    art::face_chain(&art::portrait_tier(c, unit), &json::s(c, "id"), &art::body_of(c, unit, class), &json::s(card, "expression"))
+    art::face_chain_keyed(&art::portrait_tier(c, unit), &json::s(c, "id"), &art::body_of(c, unit, class), &art::portrait_key(c, unit), &json::s(card, "expression"))
+}
+
+/// VNSTAGE1 (PR7-27): a story stage actor `who` (a characters ref of world `home`): its shown name and its full-body
+/// picture chain (`art::full_body_chain`); an unknown ref shows its id and tries the id's picture.
+pub fn stage_actor(d: &Data, home: &str, who: &str) -> (String, Vec<String>) {
+    let c = d.resolve(home, "characters", who);
+    if c.is_empty() {
+        return (who.to_string(), art::full_body_chain(who, ""));
+    }
+    let unit = d.entry("units", &json::s(c, "base_unit"));
+    let class = d.entry("classes", &json::s(unit, "class_id"));
+    let id = json::s(c, "id");
+    (json::s_or(c, "name", &id), art::full_body_chain(&id, &art::body_of(c, unit, class)))
 }
 
 /// W3: vignette `r` as it plays now: {vignette (qid), name, music, frame, skippable, once, seen (W6: Skip asks only
@@ -545,7 +558,8 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
     let (rule, retry_days, echo_fallen) = match current(d, gs) {
         Some(Step::Fight { on_lost, on_fled, retry_day_cost, echo_fallen, .. }) => match outcome {
             "won" => ("continue".to_string(), 0, false),
-            "fled" => (on_fled, retry_day_cost as i64, echo_fallen),
+            // ENRAGE2 EN9: foes that slipped away read as a flight
+            "fled" | crate::battle::ESCAPED => (on_fled, retry_day_cost as i64, echo_fallen),
             _ => (on_lost, retry_day_cost as i64, echo_fallen),
         },
         // not at a fight step (nothing runs): the dialogue fight's loss path

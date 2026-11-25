@@ -373,6 +373,9 @@ pub struct Counts {
     pub timed_rounds: i64,
     pub party: Side,
     pub enemy: Side,
+    /// ENRAGE2 (PR7-55, STATUSVIS1 SV5; `pace=on` only): blocks units lost to Stunned and to Staggered.
+    pub stun_blocks: i64,
+    pub stagger_blocks: i64,
     /// WORLD-SIM1 (PR5-42, CAST1 T10-T14; printed with counts=on): the arena strikes (HOOKS1 4.2), the windup breaks by
     /// the breaking command's skill, the fights each encounter phase fired in (by phase id), and the fights with at least
     /// one of a count (`fights_with`: every `HOOK_COUNTERS` key over both sides, `arena_strikes`, `windup_breaks` and
@@ -392,6 +395,8 @@ impl Counts {
         self.fled += o.fled;
         self.rounds.extend(&o.rounds);
         self.won_rounds.extend(&o.won_rounds);
+        self.stun_blocks += o.stun_blocks;
+        self.stagger_blocks += o.stagger_blocks;
         for (k, v) in &o.breaks {
             *self.breaks.entry(k.clone()).or_default() += v;
         }
@@ -765,6 +770,16 @@ impl Feel {
             _ => c.capped += 1,
         }
         c.rounds.push(rounds);
+        // ENRAGE2 (STATUSVIS1 SV5): the blocks lost to a stun or a stagger
+        for line in &s.resolver.log {
+            if let Some(st) = line.strip_prefix("[Status] ").and_then(|l| l.split_once(" loses this block to ")).map(|(_, st)| st) {
+                if st == rpgkit_rules::status::display_name("stun") {
+                    c.stun_blocks += 1;
+                } else if st == rpgkit_rules::status::display_name("stagger") {
+                    c.stagger_blocks += 1;
+                }
+            }
+        }
         // PK2-FOLLOWUP: each side's weapon wear this fight (counts=on)
         for (side, units) in [(&mut c.party, &s.w.allies), (&mut c.enemy, &s.w.enemies)] {
             let (worn, dulled) = rpgkit_battle::wear::tally(&s.w, units);
@@ -812,7 +827,7 @@ impl Feel {
         let m = rpgkit_battle::channel::meter_id(&s.w);
         if !m.is_empty() {
             let prefix = format!("{}{m}#", rpgkit_battle::meter::METER_KEY);
-            for (unit, n) in s.resolver.triggers.battle_counts(&prefix) {
+            for (unit, n) in s.w.trigger_uses.battle_counts(&prefix) {
                 if s.w.allies.contains(&unit) {
                     c.party.channel_triggers += i64::from(n);
                 } else {
@@ -826,7 +841,7 @@ impl Feel {
                     let key = format!("{}{m}#{n}", rpgkit_battle::meter::METER_KEY);
                     for unit in 0..s.w.units.len() {
                         let max = rpgkit_battle::meter::pool(&s.w, unit, m).map_or(def.max, |p| p.max);
-                        let fired = s.resolver.triggers.battle_count(unit, &key);
+                        let fired = s.w.trigger_uses.battle_count(unit, &key);
                         if fired == 0 || at < max {
                             continue;
                         }
@@ -916,8 +931,12 @@ fn feel_block(r: &mut Runner) {
     let (fails_before, skips_before, fights_before) = (r.plan_fails, r.plan_skips, r.fights);
     let mut total = Counts::default();
     let mut per: Map<String, Value> = Map::new();
+    let mut paces: Vec<(String, Pace, Counts)> = Vec::new();
     for id in r.args.encounters.clone() {
         let counts = fight_encounter(r, &id, &seeds);
+        if r.args.pace {
+            paces.push((id.clone(), pace_of(r, &id), counts.clone()));
+        }
         let name = match crate::args::parse_ref(&id, &r.args.world) {
             Some((world, local)) => json::s_or(r.d.resolve(&world, "encounters", &local), "name", &local),
             None => json::s_or(r.d.entry("encounters", &id), "name", &id),
@@ -929,6 +948,9 @@ fn feel_block(r: &mut Runner) {
     }
     let lines = total.report_lines("TOTAL", rule_counts);
     r.out.extend(lines);
+    if r.args.pace {
+        pace_block(r, &paces);
+    }
     let (fails, skips, fights) = (r.plan_fails - fails_before, r.plan_skips - skips_before, r.fights - fights_before);
     r.print(format!("plan checks: {fails} PLAN FAIL, {skips} PLAN SKIP over {fights} fights"));
     let armor: Map<String, Value> = r.args.armor.iter().map(|(k, v)| (k.clone(), json!(v))).collect();
@@ -938,4 +960,82 @@ fn feel_block(r: &mut Runner) {
         "armor": armor, "tune": tune, "plan_fails": fails, "plan_skips": skips, "encounters": per, "total": total.report_json(rule_counts),
     });
     r.print(format!("{JSON_PREFIX}{out}"));
+}
+
+// ---- ENRAGE2 pace block (PR7-55, `docs/specs/ENRAGE2.md` EN6, EN7, EN7b; `pace=on`) --------------------------------
+
+/// ENRAGE2 EN7b `[PROVISIONAL]`: planning seconds per hero per round, plus per round.
+pub const PLAN_SECS_PER_HERO: f64 = 10.0;
+pub const PLAN_SECS_PER_ROUND: f64 = 5.0;
+/// EN7b: playback seconds per block at the default speed, plus the pause between rounds (the game's battle tuning
+/// `step_ms` 420 and `round_pause_ms` 900 today; the kit sim takes them as estimates).
+pub const PLAYBACK_SECS_PER_BLOCK: f64 = 0.42;
+pub const ROUND_PAUSE_SECS: f64 = 0.9;
+/// The pace groups, in report order: an encounter's group is its top enemy tier (mob: minion or standard), and
+/// `random` for a mob fight whose round cap ends in the foes' escape (EN9).
+pub const PACE_GROUPS: [&str; 4] = ["mob", "random", "elite", "boss"];
+
+/// One encounter's pace inputs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Pace {
+    pub group: &'static str,
+    pub heroes: usize,
+    pub blocks: i32,
+}
+
+/// Encounter `id`'s pace group, hero count and blocks per round.
+fn pace_of(r: &Runner, id: &str) -> Pace {
+    let entry = match crate::args::parse_ref(id, &r.args.world) {
+        Some((world, local)) => r.d.resolve(&world, "encounters", &local).clone(),
+        None => r.d.entry("encounters", id).clone(),
+    };
+    let rank = |t: &str| ["minion", "standard", "elite", "boss"].iter().position(|x| *x == t).map_or(0, |i| i + 1);
+    let top = json::sget(&entry, "enemies").iter().filter_map(|u| r.d.cat.units.get(u)).map(|u| u.tier.clone()).max_by_key(|t| rank(t)).unwrap_or_default();
+    let group = match top.as_str() {
+        "boss" => "boss",
+        "elite" => "elite",
+        _ if rpgkit_battle::encounter::timeout_outcome(&entry) == rpgkit_battle::encounter::ESCAPED => "random",
+        _ => "mob",
+    };
+    Pace { group, heroes: json::sget(&entry, "party").len().max(1), blocks: json::i(&entry, "total_blocks", 6) as i32 }
+}
+
+/// EN7b: the estimated minutes of a fight of `rounds` rounds.
+pub fn minutes(p: &Pace, rounds: f64) -> f64 {
+    let per_round = PLAN_SECS_PER_HERO * p.heroes as f64 + PLAN_SECS_PER_ROUND + PLAYBACK_SECS_PER_BLOCK * f64::from(p.blocks) + ROUND_PAUSE_SECS;
+    rounds * per_round / 60.0
+}
+
+/// EN6, EN7, EN7b: per pace group the fights, the share that reached the round cap (escapes included), the won-fight
+/// median rounds, the estimated minutes at that median, and the blocks lost to stuns and staggers per fight; then the
+/// same as JSON (`PACE_JSON {...}`).
+fn pace_block(r: &mut Runner, paces: &[(String, Pace, Counts)]) {
+    let mut out = Map::new();
+    for group in PACE_GROUPS {
+        let rows: Vec<&(String, Pace, Counts)> = paces.iter().filter(|(_, p, _)| p.group == group).collect();
+        if rows.is_empty() {
+            continue;
+        }
+        let mut c = Counts::default();
+        let mut mins: Vec<f64> = Vec::new();
+        for (_, p, k) in &rows {
+            c.add(k);
+            mins.extend(k.won_rounds.iter().map(|&n| minutes(p, f64::from(n))));
+        }
+        mins.sort_by(f64::total_cmp);
+        let med_min = if mins.is_empty() { 0.0 } else if mins.len() % 2 == 1 { mins[mins.len() / 2] } else { (mins[mins.len() / 2 - 1] + mins[mins.len() / 2]) / 2.0 };
+        let f = c.fights.max(1) as f64;
+        let cap_pct = round1(100.0 * c.capped as f64 / f);
+        let won_med = median(&c.won_rounds);
+        let (stun, stagger) = (round1(c.stun_blocks as f64 / f), round1(c.stagger_blocks as f64 / f));
+        r.print(format!(
+            "PACE {group}: {} fights in {} encounters, won {}%, capped {cap_pct}%, won median {won_med} rounds, about {:.1} min, per fight {stun} blocks lost to stun, {stagger} to stagger",
+            c.fights,
+            rows.len(),
+            round1(100.0 * c.won as f64 / f),
+            med_min
+        ));
+        out.insert(group.into(), json!({"encounters": rows.len(), "fights": c.fights, "won_pct": round1(100.0 * c.won as f64 / f), "capped_pct": cap_pct, "median_rounds_won": won_med, "minutes": round1(med_min), "stun_blocks": stun, "stagger_blocks": stagger}));
+    }
+    r.print(format!("PACE_JSON {}", Value::Object(out)));
 }

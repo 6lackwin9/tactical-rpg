@@ -591,6 +591,18 @@ pub fn flank_bonus_from(w: &World, a: UnitId, cell: V2, t: UnitId) -> bool {
     w.ruleset.has(ruleset::FLANK) && on(w) && a != t && w.has(a) && w.has(t) && facing(w, t) != ZERO && flank_at(w, a, cell, t)
 }
 
+/// HITCALC1 (PR7-45): `flank_bonus` with `a` anchored at `from` (where it stands at the impact; `flank_bonus` when it
+/// is its tile now): a big attacker strikes from the cell of its square nearest `t` (BIGUNIT1 BU11, as `is_flank`).
+/// The target's front and engagement are read as they are now. The one flank read of `command::hit_terms`.
+pub fn flank_bonus_at(w: &World, a: UnitId, from: V2, t: UnitId) -> bool {
+    if !w.ruleset.has(ruleset::FLANK) || !on(w) || a == t || !w.has(a) || !w.has(t) || facing(w, t) == ZERO || from == crate::grid::NO_CELL {
+        return false;
+    }
+    let size = w.size_of(a);
+    let at = if size > 1 { crate::grid::square_nearest(from, size, w.nearest_cell(t, from)) } else { from };
+    flank_at(w, a, at, t)
+}
+
 // ---- Tiles (MV5, MV6, PL4) -----------------------------------------------------------------------------------------
 
 /// Where a ranked move goes: nearer the target (an approach, an Engage) or away from it (a kite step, a retreat).
@@ -976,6 +988,11 @@ pub struct RoundSummary {
     pub windup_breaks: i32,
     /// Stagger hits that landed on a unit in windup (the "of" of "windups broken of hit").
     pub windup_hits: i32,
+    /// PLAN-FIX2 (PT-89): why the windup hits that broke nothing did not: the target could not be broken (P12
+    /// `unbreakable`/steadfast), the P13 break roll missed, or the hit was not a breaking hit (no poise lost to roll on).
+    pub windup_unbreakable: i32,
+    pub windup_missed_roll: i32,
+    pub windup_not_breaking: i32,
     /// Hits that were flanks (MV3).
     pub flanks: i32,
     /// Party-side commands after each member's first one (follow-ups: FU2; moves, Rest and lock changes not counted).
@@ -995,6 +1012,14 @@ pub fn round_summary(w: &World, sched: &[crate::resolver::ScheduledAction]) -> R
             if st.broke.is_some() {
                 out.breaks += 1;
                 out.windup_breaks += st.windup as i32;
+            } else if st.windup {
+                if st.held {
+                    out.windup_unbreakable += 1;
+                } else if st.chance.is_some() {
+                    out.windup_missed_roll += 1;
+                } else {
+                    out.windup_not_breaking += 1;
+                }
             }
         }
         out.flanks += a.command.hits.iter().filter(|(_, flank)| *flank).count() as i32;
@@ -1013,11 +1038,19 @@ pub fn round_summary(w: &World, sched: &[crate::resolver::ScheduledAction]) -> R
 
 /// RULESET1 12: a round summary in words: "1 break (1 of 2 hits into a wind-up), 1 flank, 3 follow-ups, Rest +1 AP";
 /// "no breaks" leads when nothing broke (the battle screen's round-over message and the log's `[Round]` line).
+/// PLAN-FIX2 (PT-89): the windup hits that broke nothing say why after a colon: "no breaks (0 of 2 hits into a
+/// wind-up: 1 unbreakable, 1 not a breaking hit)", or "missed the break roll".
 pub fn summary_text(sum: &RoundSummary) -> String {
     let plural = |n: i32, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
     let mut lead = if sum.breaks == 0 { "no breaks".to_string() } else { plural(sum.breaks, "break", "breaks") };
     if sum.windup_hits > 0 {
-        lead += &format!(" ({} of {} into a wind-up)", sum.windup_breaks, plural(sum.windup_hits, "hit", "hits"));
+        let why: Vec<String> = [(sum.windup_unbreakable, "unbreakable"), (sum.windup_missed_roll, "missed the break roll"), (sum.windup_not_breaking, "not a breaking hit")]
+            .iter()
+            .filter(|(n, _)| *n > 0)
+            .map(|(n, w)| format!("{n} {w}"))
+            .collect();
+        let why = if why.is_empty() { String::new() } else { format!(": {}", why.join(", ")) };
+        lead += &format!(" ({} of {} into a wind-up{why})", sum.windup_breaks, plural(sum.windup_hits, "hit", "hits"));
     }
     let mut parts = vec![lead];
     if sum.flanks > 0 {

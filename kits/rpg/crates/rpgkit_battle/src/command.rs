@@ -549,18 +549,19 @@ impl Command {
                 let damaging = skill_mult > 0.0;
                 // SIMCOUNT1: a hit only the diagonal rule let land (read before an intercept moves it)
                 self.diagonal_hit = damaging && self.diagonal && !in_reach(w, src, t, band, false);
-                // RULESET1_INTENT MV3: a flank hit (rule flank) matches `flanked`, takes the flank power and no riposte
-                let flank = round_intent::flank_bonus(w, src, t);
-                // HOOKS1 EX1: an `hp_below` entry matches the target's HP share before the hit (rule execute)
-                let matched = if damaging { skill::exploit_match_by(&self.exploit, &w.units[t], &[], flank, &w.ruleset) } else { (String::new(), 1.0) };
+                // HITCALC1: the hit's terms from the one builder (`hit_terms`): RULESET1_INTENT MV3, a flank hit (rule
+                // flank) matches `flanked`, takes the flank power and no riposte; HOOKS1 EX1, an `hp_below` entry matches
+                // the target's HP share before the hit (rule execute)
+                let ranged = w.units[src].attack_range > 1 && !use_offhand;
+                let terms = damaging.then(|| hit_terms(w, self, src, t, &HitScene::live(w, src, t), ranged, use_offhand, skill_mult));
+                let flank = terms.as_ref().map_or_else(|| round_intent::flank_bonus(w, src, t), |h| h.flank);
+                let matched = terms.as_ref().map_or_else(|| (String::new(), 1.0), |h| h.matched.clone());
                 let mut taken = 0;
                 let mut crit = false;
                 let mut t = t;
-                if damaging {
-                    let ranged = w.units[src].attack_range > 1 && !use_offhand;
-                    let cover = cover_between(w, src, t, ranged);
+                if let Some(terms) = terms {
                     // HOOKS1 8.4: an intercept moves the whole hit to the friend that took it (rule triggers)
-                    let (on, hit, dealt) = self.land(w, rng, src, t, ranged, use_offhand, skill_mult * matched.1 * flank_power(w, flank), cover, &[]);
+                    let (on, hit, dealt) = self.land(w, rng, src, t, terms.input, &[]);
                     t = on;
                     taken = dealt;
                     crit = hit.is_crit;
@@ -623,18 +624,17 @@ impl Command {
                 // HOOKS1 8.4: a unit the area also strikes takes no redirect (rule triggers)
                 // BIGUNIT1 BU9: a unit is hit once however many of its cells the area covers
                 let inside: Vec<UnitId> = if self.ally.is_some() { w.occupants_once(&cells).into_iter().map(|(_, v)| v).collect() } else { Vec::new() };
-                for (cell, v) in w.occupants_once(&cells) {
+                for (_, v) in w.occupants_once(&cells) {
                     if v == src || skill_mult <= 0.0 || !skill::affects_unit(affects, w.friends_of(src).contains(&v)) {
                         continue;
                     }
                     let ranged = w.units[src].attack_range > 1;
-                    let cover = if w.size_of(v) > 1 || w.size_of(src) > 1 { cover_between(w, src, v, ranged) } else { cover_for(&w.grid, w.pos(src), cell, ranged) };
-                    let flank = round_intent::flank_bonus(w, src, v);
-                    let matched = skill::exploit_match_by(&self.exploit, &w.units[v], &[], flank, &w.ruleset);
                     // IR17: the hits off the primary target take `splash`
                     let primary = target.is_none_or(|t| t == v);
                     let part = if primary { 1.0 } else { splash };
-                    let (v, hit, taken) = self.land(w, rng, src, v, ranged, false, skill_mult * part * matched.1 * flank_power(w, flank), cover, &inside);
+                    // HITCALC1: the one builder (BIGUNIT1 BU10: the cover over the struck unit's cells, `cover_at`)
+                    let HitTerms { flank, matched, input } = hit_terms(w, self, src, v, &HitScene::live(w, src, v), ranged, false, skill_mult * part);
+                    let (v, hit, taken) = self.land(w, rng, src, v, input, &inside);
                     self.hits.push((v, flank));
                     self.struck.push(crate::trigger::Struck { target: v, damage: taken, ranged });
                     total += taken;
@@ -927,7 +927,10 @@ impl Command {
                 let (moved, cut, blocker, notes) = walk(w, rng, src, &path, expected_start, goal);
                 let end = w.grid.pos(src).unwrap_or(NO_CELL);
                 self.cue = Some(crate::event::EventKind::Move);
-                self.log = if w.units[src].is_withdrawn {
+                self.log = if w.units[src].is_withdrawn && !w.allies.contains(&src) {
+                    // ACT1-FIX4 (PT-93): a foe leaving by an exit escapes (not a hero's withdrawal)
+                    format!("[Escape] {src_name} moved from {start} and escaped through the exit.")
+                } else if w.units[src].is_withdrawn {
                     format!("[Withdrawal] {src_name} moved from {start} and safely WITHDREW through Exit!")
                 } else if moved == 0 && cut {
                     format!("[Move Cut Short] {src_name} couldn't move from {start} ({}).", blocked_words(&blocker))
@@ -1073,40 +1076,24 @@ impl Command {
     /// guard; the holder never drops below 1 HP, the rest goes back to `f`). Without a watch it is today's hit: one crit
     /// draw, then the damage. Returns the unit the hit lands on (`f`, or the holder of an intercept), the hit and the
     /// damage dealt to that unit.
-    #[allow(clippy::too_many_arguments)]
-    fn land(&mut self, w: &mut World, rng: &mut GodotRng, src: UnitId, f: UnitId, ranged: bool, offhand: bool, mut mult: f64, cover: f64, skip: &[UnitId]) -> (UnitId, Hit, i32) {
-        self.orb_override |= damage::attack_power(&w.units[src], ranged, offhand).stat_override;
-        let dist = if w.has(src) && w.has(f) { w.dist(src, f) } else { 0 };
-        let mut input_dist = 0;
-        if dist > 0 {
-            if let Some(s) = w.cat.skill(&self.skill) {
-                let base_pot = w.units[src].potency_for_skill(s);
-                // PR7-2 (N1): the hit's ranged flag lets a distance-gated `ranged` grant reach the basic attack too
-                let at_pot = w.units[src].potency_for_skill_at(s, ranged, dist);
-                if (at_pot - base_pot).abs() > 1e-12 && base_pot.abs() > 1e-12 {
-                    mult *= at_pot.max(0.0) / base_pot;
-                }
-            } else {
-                input_dist = dist;
-            }
-        }
-        // PK2-S1: a member grant `pierce_melee` pierces with every melee hit
-        let pierce = self.pierces_by_skill(w) || pierces_melee(w, src, ranged);
+    /// HITCALC1 (PR7-45): `input` is the hit's terms from the one builder (`hit_terms`, `HitScene::live`); here only the
+    /// crit draw and the intercept are added.
+    fn land(&mut self, w: &mut World, rng: &mut GodotRng, src: UnitId, f: UnitId, input: HitInput, skip: &[UnitId]) -> (UnitId, Hit, i32) {
+        self.orb_override |= damage::attack_power(&w.units[src], input.ranged, input.offhand).stat_override;
         let claim = match self.ally.as_mut() {
-            Some(watch) => crate::trigger::ally_hit(w, watch, src, f, ranged, &self.family, skip),
+            Some(watch) => crate::trigger::ally_hit(w, watch, src, f, input.ranged, &self.family, skip),
             None => None,
         };
-        // HOOKS1 IG1: a guard-bypassing hit leaves out the guard part of the guard-and-cover term (cover stays)
-        let include_guard = !self.ignore_guard;
         let Some(r) = claim else {
             self.guard_bypassed |= self.ignore_guard && w.units[f].guard > 0.0;
             // one crit draw, then the damage (roll_hit_with's order)
-            let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, distance: input_dist, ..HitInput::default() };
+            let input = HitInput { crit_roll: Some(rng.randf()), ..input };
             let hit = damage::compute(&w.units[src], &w.units[f], input);
             let taken = w.damage(f, hit.final_dmg, true);
             return (f, hit, taken);
         };
-        let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, distance: input_dist, ..HitInput::default() };
+        let ranged = input.ranged;
+        let input = HitInput { crit_roll: Some(rng.randf()), ..input };
         let own = damage::compute(&w.units[src], &w.units[f], input);
         let h = r.holder;
         self.guard_bypassed |= self.ignore_guard && (w.units[f].guard > 0.0 || w.units[h].guard > 0.0);
@@ -1645,15 +1632,26 @@ fn walk(w: &mut World, rng: &mut GodotRng, src: UnitId, planned: &[V2], expected
     let mut blocked_by = String::new();
     let mut trapped = String::new();
     let mut entered = Vec::new();
-    for d in route {
+    // ESCAPE-PLAN1 (2): a party member walks through a friend's tile mid-route (never stopping on it); `back` is the
+    // last tile it stood on alone and the tiles walked to it
+    let passes = crate::plan::escape_plan1() && w.allies.contains(&src) && w.size_of(src) == 1;
+    let mut back = (start, 0);
+    let n = route.len();
+    for (i, d) in route.into_iter().enumerate() {
         let here = w.pos(src);
         let next = here + d;
-        if !w.units[src].is_active() || !w.move_unit(src, d) {
+        let through = passes && i + 1 < n && w.units[src].is_active() && w.grid.is_walkable(next) && !w.grid.is_exit(next) && w.occupant(next).is_some_and(|o| o != src && w.friends_of(src).contains(&o));
+        if through {
+            w.grid.positions[src] = Some(next);
+        } else if !w.units[src].is_active() || !w.move_unit(src, d) {
             cut = true;
             blocked_by = describe_blocker_for(w, src, here, next);
             break;
         }
         moved += 1;
+        if !through && w.grid.pos(src).is_some() {
+            back = (w.pos(src), moved);
+        }
         // BIGUNIT1 BU7: the cells newly covered roll their hazards and may spring a trap
         let new_cells = newly_covered(w, src, here, next);
         if w.grid.pos(src).is_some() {
@@ -1664,6 +1662,11 @@ fn walk(w: &mut World, rng: &mut GodotRng, src: UnitId, planned: &[V2], expected
             trapped = format!("the {trap}");
             break;
         }
+    }
+    // ESCAPE-PLAN1 (2): a walk cut on a friend's tile steps back to the last tile it held alone
+    if passes && w.grid.pos(src).is_some() && w.occupant_other(src, w.pos(src)).is_some() {
+        w.grid.positions[src] = Some(back.0);
+        moved = back.1;
     }
     let notes = hazard_on_enter(w, rng, src, &entered);
     if w.units[src].is_withdrawn {
@@ -1751,6 +1754,113 @@ pub fn cover_between(w: &World, a: UnitId, t: UnitId, ranged: bool) -> f64 {
     w.cells_of(t).into_iter().map(|cell| cover_for(&w.grid, w.nearest_cell(a, cell), cell, ranged)).fold(f64::INFINITY, f64::min)
 }
 
+/// HITCALC1 (PR7-45): `cover_between` with `a` anchored at `from` and `t` at `at` (`cover_between` when both are their
+/// tiles now); 0 when either is off the grid.
+pub fn cover_at(w: &World, a: UnitId, from: V2, t: UnitId, at: V2, ranged: bool) -> f64 {
+    if from == NO_CELL || at == NO_CELL {
+        return 0.0;
+    }
+    let (sa, st) = (w.size_of(a), w.size_of(t));
+    if sa == 1 && st == 1 {
+        return cover_for(&w.grid, from, at, ranged);
+    }
+    w.cells_at(t, at).into_iter().map(|cell| cover_for(&w.grid, crate::grid::square_nearest(from, sa, cell), cell, ranged)).fold(f64::INFINITY, f64::min)
+}
+
+/// HITCALC1 (PR7-45): the board one hit is read on: the tile its attacker strikes from, the tile its target stands
+/// on, the target's guard and both units' stances when it lands. `Command::land` reads the live world
+/// (`HitScene::live`); a forecast reads the round as it will run (`intent::scene_at`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HitScene {
+    pub from: V2,
+    pub at: V2,
+    /// The target's guard at the impact; None: the guard it holds as the hit lands (`Unit::guard`).
+    pub guard: Option<f64>,
+    /// The stances at the impact; None: the ones the units hold as the hit lands.
+    pub attacker_stance: Option<Stance>,
+    pub target_stance: Option<Stance>,
+}
+
+impl HitScene {
+    /// The hit as it lands now: both units where they stand, the target's own guard and both stances.
+    pub fn live(w: &World, src: UnitId, t: UnitId) -> Self {
+        let tile = |c: UnitId| if w.has(c) { w.pos(c) } else { NO_CELL };
+        HitScene { from: tile(src), at: tile(t), guard: None, attacker_stance: None, target_stance: None }
+    }
+}
+
+/// HITCALC1: one hit's terms (`hit_terms`): it flanks, the exploit it matches (status, factor) and its damage input
+/// (no crit roll yet).
+#[derive(Debug, Clone)]
+pub struct HitTerms {
+    pub flank: bool,
+    pub matched: (String, f64),
+    pub input: HitInput,
+}
+
+/// HITCALC1 (PR7-45): the one hit-input builder, used by the resolver's hit (`Command::land`) and every forecast
+/// (`intent::hit_on`), so a forecast cannot drift from the hit: the flank from the attacker's tile
+/// (`round_intent::flank_bonus_at`), the exploit match (HOOKS1 EX1: the target's HP share before the hit), the power
+/// `power` (the command's, times an area's splash part) x exploit x flank power x the distance potency (PR7-2 N1: the
+/// hit's ranged flag), the cover between the two tiles (`cover_at`, BIGUNIT1 BU10), armour piercing (the skill's or a
+/// melee `pierce_melee`, PK2-S1), the guard (HOOKS1 IG1: left out for a guard-bypassing command; a scene's guard joins
+/// the cover in the one guard-and-cover term, as `damage::compute` adds them) and the stances. Read only.
+#[allow(clippy::too_many_arguments)]
+pub fn hit_terms(w: &World, cmd: &Command, src: UnitId, t: UnitId, scene: &HitScene, ranged: bool, offhand: bool, power: f64) -> HitTerms {
+    let flank = round_intent::flank_bonus_at(w, src, scene.from, t);
+    let matched = skill::exploit_match_by(&cmd.exploit, &w.units[t], &[], flank, &w.ruleset);
+    let mut mult = power * matched.1 * flank_power(w, flank);
+    let dist = if scene.from != NO_CELL && scene.at != NO_CELL { crate::grid::square_dist(scene.from, w.size_of(src), scene.at, w.size_of(t)) } else { 0 };
+    let mut distance = 0;
+    if dist > 0 || ranged {
+        if let Some(s) = w.cat.skill(&cmd.skill) {
+            let base_pot = w.units[src].potency_for_skill(s);
+            let at_pot = w.units[src].potency_for_skill_at(s, ranged, dist);
+            if (at_pot - base_pot).abs() > 1e-12 && base_pot.abs() > 1e-12 {
+                mult *= at_pot.max(0.0) / base_pot;
+            }
+        } else {
+            distance = dist;
+        }
+    }
+    let mut cover = cover_at(w, src, scene.from, t, scene.at, ranged);
+    let include_guard = match scene.guard {
+        None => !cmd.ignore_guard,
+        Some(g) => {
+            if !cmd.ignore_guard {
+                cover += g;
+            }
+            false
+        }
+    };
+    let ignore_armor = cmd.pierces_by_skill(w) || pierces_melee(w, src, ranged);
+    let input = HitInput { ranged, offhand, skill_mult: mult, cover, ignore_armor, include_guard, distance, attacker_stance: scene.attacker_stance, target_stance: scene.target_stance, ..HitInput::default() };
+    HitTerms { flank, matched, input }
+}
+
+/// HITCALC1 (PR7-45): read only, INPUT1 MR8 c as a forecast: attack `cmd` misses at its impact because its target's
+/// flank is protected: already decided once it started (`Command::missed`); before, a carried Engage whose unit
+/// starts from `from` finds no open position tile around its target (`round_intent::positions`, as `carried_engage`
+/// reads it; a planned stay that still flanks never misses).
+pub fn flank_protected_from(w: &World, cmd: &Command, from: V2) -> bool {
+    if cmd.missed {
+        return true;
+    }
+    if cmd.started {
+        return false;
+    }
+    let (Carry::Engage(cell), Some(position), CmdKind::Attack { target, .. }) = (cmd.carry, cmd.position, &cmd.kind) else { return false };
+    let src = cmd.source;
+    let Some(t) = effective_target(w, src, *target).filter(|t| w.units[*t].is_active() && w.has(*t)) else { return false };
+    if !w.units[src].is_active() || !w.has(src) || from == NO_CELL || round_intent::hidden(w, t) {
+        return false;
+    }
+    if cmd.keep_flank && cell == from && round_intent::keeps_flank_by(w, t, src, cell, cmd.diagonal) {
+        return false;
+    }
+    round_intent::positions(w, t, src, position, from, cmd.diagonal, &others_blocked(w, src, true)).protected()
+}
+
 /// HazardRules.on_enter: each enter-hazard status of the entered cells rolls once (the first tile of a status wins).
 pub fn hazard_on_enter(w: &mut World, rng: &mut GodotRng, u: UnitId, cells: &[V2]) -> Vec<String> {
     let mut lines = Vec::new();
@@ -1779,12 +1889,34 @@ fn hazard_roll(w: &mut World, rng: &mut GodotRng, u: UnitId, h: &crate::grid::Ha
     if !status::apply_effect(&mut w.units[u], &spec, status::Timing::Next, 0.0, Some(rng)) {
         return None;
     }
-    Some(format!("[Hazard] {} is {} by {}", w.units[u].name, status::display_name(&h.status), terrain_name(w, cell)))
+    // ACT1-FIX4 (PT-92): "X is caught in Burning Ground: Burning" (was "X is Burning by Floor": terrain rows have no name)
+    Some(format!("[Hazard] {} is caught in {}: {}", w.units[u].name, terrain_label(w, cell), status::display_name(&h.status)))
 }
 
-/// Terrain.display_name of the tile's terrain (the catalog's name, else Floor).
+/// ACT1-FIX4 (PT-92): the tile's terrain as a hazard line names it: the catalog row's `name`, else its id in words
+/// ("burning_ground" -> "Burning Ground").
+pub fn terrain_label(w: &World, cell: V2) -> String {
+    let id = w.grid.terrain_id(cell);
+    let named = w.cat.terrain.get(id).map(|r| aegis_core::value::string(r, "name", "")).unwrap_or_default();
+    if !named.is_empty() {
+        return named;
+    }
+    id.split('_')
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            let mut cs = p.chars();
+            cs.next().map(|c| c.to_uppercase().chain(cs).collect::<String>()).unwrap_or_default()
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Terrain.display_name of the tile's terrain for blocker and forced-move lines. ACT1-FIX5 (PR7-91): the same name as
+/// a hazard line (`terrain_label`: "Rubble", "Lava"; was always "Floor" as terrain rows have no name); a plain floor
+/// tile reads "Floor", and a tile with no id falls back to "Floor".
 pub fn terrain_name(w: &World, cell: V2) -> String {
-    w.cat.terrain.get(w.grid.terrain_id(cell)).map(|r| aegis_core::value::string(r, "name", "Floor")).unwrap_or_else(|| "Floor".into())
+    let label = terrain_label(w, cell);
+    if label.is_empty() { "Floor".into() } else { label }
 }
 
 /// HazardRules.at_round_end: every active unit on a round-end hazard tile rolls it, in `units` order.
@@ -1807,18 +1939,25 @@ pub fn hazard_round_end(w: &mut World, rng: &mut GodotRng, units: &[UnitId]) -> 
     lines
 }
 
-/// RiposteRules.counter: a riposting defender answers an adjacent melee hit it survived, once per attacker per round
-/// (diagonally adjacent too under `melee_diagonal` all, INPUT1 MR10).
-pub fn riposte_counter(w: &mut World, rng: &mut GodotRng, attacker: UnitId, defender: UnitId, ranged: bool) -> Option<Reaction> {
-    if ranged || attacker == defender {
-        return None;
+/// RiposteRules.counter's condition (STATUSVIS1 SV9, FB-370: the riposte chip reads it on a planned hit): whether
+/// `defender` standing at `at` answers a hit by `attacker` struck from `from`: not `ranged` (the caller folds a flank
+/// in), not itself, the defender holding `riposte` and alive, the attacker active and not answered yet this round, the
+/// two adjacent (INPUT1 MR10, GD3: under `melee_diagonal` all, diagonally too). Read only.
+pub fn riposte_answers_at(w: &World, attacker: UnitId, from: V2, defender: UnitId, at: V2, ranged: bool) -> bool {
+    if ranged || attacker == defender || from == NO_CELL || at == NO_CELL {
+        return false;
     }
     let d = &w.units[defender];
     if !d.has_status("riposte") || !d.is_alive() || !w.units[attacker].is_active() || d.riposted.contains(&attacker) {
-        return None;
+        return false;
     }
-    // INPUT1 MR10, GD3: under `melee_diagonal` all the counter answers a diagonal melee hit too
-    if !w.has(attacker) || !w.has(defender) || w.band_at(round_intent::diagonal(w, defender, None), defender, w.pos(defender), attacker) != 1 {
+    crate::grid::square_band(round_intent::diagonal(w, defender, None), at, w.size_of(defender), from, w.size_of(attacker)) == 1
+}
+
+/// RiposteRules.counter: a riposting defender answers an adjacent melee hit it survived, once per attacker per round
+/// (diagonally adjacent too under `melee_diagonal` all, INPUT1 MR10).
+pub fn riposte_counter(w: &mut World, rng: &mut GodotRng, attacker: UnitId, defender: UnitId, ranged: bool) -> Option<Reaction> {
+    if !w.has(attacker) || !w.has(defender) || !riposte_answers_at(w, attacker, w.pos(attacker), defender, w.pos(defender), ranged) {
         return None;
     }
     w.units[defender].riposted.push(attacker);

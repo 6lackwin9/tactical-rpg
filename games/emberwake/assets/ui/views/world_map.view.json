@@ -1,0 +1,175 @@
+{
+  "screen": "world_map",
+  "fields": {
+    "title": {
+      "text": "World map"
+    },
+    "here": {
+      "text": "The Sluice Undercroft"
+    },
+    "time": {
+      "text": "Time 0"
+    },
+    "places": {
+      "rows": [
+        {
+          "id": "sunk_ward:sluice_undercroft",
+          "label": "The Sluice Undercroft",
+          "detail": "Your party is here.",
+          "picture": "map/landmarks/sluice_undercroft.png",
+          "enabled": true,
+          "sub": "The Sunk Ward",
+          "tone": "info"
+        },
+        {
+          "id": "sunk_ward:drowned_runoff_grate",
+          "label": "Drowned Runoff Grate",
+          "detail": "Trip: 1 day, 1 Tallow",
+          "picture": "map/landmarks/drowned_runoff_grate.png",
+          "enabled": true,
+          "sub": "The Sunk Ward",
+          "tone": "info"
+        },
+        {
+          "id": "sunk_ward:ash_crawl_crossroads",
+          "label": "Ash-Crawl Crossroads",
+          "detail": "Trip: 2 days, 2 Tallow",
+          "picture": "map/landmarks/ash_crawl_crossroads.png",
+          "enabled": true,
+          "sub": "The Sunk Ward",
+          "tone": "info"
+        },
+        {
+          "id": "sunk_ward:alleyway_junction_7",
+          "label": "Alleyway Junction 7",
+          "detail": "Trip: 2 days, 2 Tallow",
+          "picture": "map/landmarks/alleyway_junction_7.png",
+          "enabled": true,
+          "sub": "The Sunk Ward",
+          "tone": "info"
+        },
+        {
+          "id": "sunk_ward:fourth_kiln",
+          "label": "The Fourth Kiln",
+          "detail": "Trip: 3 days, 3 Tallow",
+          "picture": "map/landmarks/fourth_kiln.png",
+          "enabled": true,
+          "sub": "The Sunk Ward (not visited)",
+          "tone": "info"
+        },
+        {
+          "id": "sunk_ward:crucible_watchpost",
+          "label": "Crucible Watchpost",
+          "detail": "No open road yet.",
+          "picture": "map/landmarks/crucible_watchpost.png",
+          "enabled": false,
+          "sub": "The Sunk Ward (not visited)",
+          "tone": "dim"
+        },
+        {
+          "id": "sunk_ward:tallow_vats",
+          "label": "The Tallow Vats",
+          "detail": "Trip: 2 days, 2 Tallow",
+          "picture": "map/landmarks/tallow_vats.png",
+          "enabled": true,
+          "sub": "The Sunk Ward (not visited)",
+          "selected": true,
+          "tone": "info"
+        },
+        {
+          "id": "sunk_ward:slag_gate",
+          "label": "The Slag Gate",
+          "detail": "No open road yet.",
+          "picture": "map/landmarks/slag_gate.png",
+          "enabled": false,
+          "sub": "The Sunk Ward (not visited)",
+          "tone": "dim"
+        },
+        {
+          "id": "sunk_ward:corvos_gate",
+          "label": "Corvo's Gate",
+          "detail": "Trip: 2 days, 2 Tallow",
+          "picture": "map/landmarks/corvos_gate.png",
+          "enabled": true,
+          "sub": "The Sunk Ward (not visited)",
+          "tone": "info"
+        }
+      ]
+    },
+    "trip": {
+      "text": "2 days, 2 Tallow. Roads can be ambushed. Arrive on day 3, 40 days left."
+    },
+    "hint": {
+      "text": ""
+    },
+    "ways": {
+      "rows": [
+        {
+          "id": "0",
+          "label": "by The Siphon Shortcut",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "2 days, 2 Tallow",
+          "selected": true,
+          "note": "2 days, 2 Tallow. Click to take this way."
+        },
+        {
+          "id": "1",
+          "label": "via Ash-Crawl Crossroads",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "3 days, 3 Tallow",
+          "note": "3 days, 3 Tallow. Click to take this way."
+        }
+      ]
+    },
+    "quests": {
+      "rows": []
+    },
+    "upkeep": {
+      "text": ""
+    },
+    "log": {
+      "rows": []
+    }
+  },
+  "actions": [
+    {
+      "id": "place",
+      "label": "Pick",
+      "enabled": true
+    },
+    {
+      "id": "way",
+      "label": "Take this way",
+      "enabled": true
+    },
+    {
+      "id": "travel",
+      "label": "Travel to The Tallow Vats",
+      "enabled": true
+    },
+    {
+      "id": "enter",
+      "label": "Enter The Sluice Undercroft",
+      "enabled": true
+    },
+    {
+      "id": "camp",
+      "label": "Make camp (1 Tallow)",
+      "enabled": false
+    },
+    {
+      "id": "mode",
+      "label": "Travel mode",
+      "enabled": false
+    },
+    {
+      "id": "back",
+      "label": "Back",
+      "enabled": true
+    }
+  ]
+}

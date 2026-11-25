@@ -1,0 +1,23 @@
+{
+  "id": "diorama_stage",
+  "title": "PR7-64 (DIORAMA1, battle contract 8.1): Sunk Ward fights on the world's stage set sunk_ward_stage; the alley with a burn, a poison and a slow hazard (painted decals under the icon and rounds left) and a root one (no decal: the tint), the wall foot along row 0; the canal fight's stage",
+  "launch": {"screen": "arena", "scene": "sunk_ward:enc_roam_watch", "ruleset": "timeline", "seed": 7},
+  "settings": {"reduce_motion": true, "battle_overlays": {"test_hazards": true}},
+  "timeout_s": 600,
+  "steps": [
+    {"step": "wait", "until": {"path": "state.ruleset.id", "eq": "timeline"}},
+    {"step": "pause", "ms": 1500},
+    {"step": "repeat", "times": 6, "until": {"path": "state.talk", "absent": true}, "steps": [{"step": "click", "id": "dialogue.continue"}, {"step": "pause", "ms": 600}]},
+    {"step": "link", "body": {"cmd": "debug_ground", "free": 26, "status": "burn"}},
+    {"step": "link", "body": {"cmd": "debug_ground", "free": 72, "status": "poison"}},
+    {"step": "link", "body": {"cmd": "debug_ground", "free": 90, "status": "slow"}},
+    {"step": "link", "body": {"cmd": "debug_ground", "free": 100, "status": "root", "tint": "#40c0ff"}},
+    {"step": "assert", "until": {"path": "state.hook_marks.ground.3.status", "eq": "root"}},
+    {"step": "pause", "ms": 400},
+    {"step": "shot", "name": "alley_hazards"},
+    {"step": "link", "body": {"cmd": "new", "encounter": "sunk_ward:enc_pro_0c", "ruleset": "timeline", "seed": 7}},
+    {"step": "pause", "ms": 1500},
+    {"step": "repeat", "times": 6, "until": {"path": "state.talk", "absent": true}, "steps": [{"step": "click", "id": "dialogue.continue"}, {"step": "pause", "ms": 600}]},
+    {"step": "shot", "name": "canal_stage"}
+  ]
+}

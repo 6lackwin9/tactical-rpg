@@ -231,6 +231,9 @@ fn the_golden_covers_every_check_family() {
         }
         let file = WORLD_KINDS_ELSEWHERE.iter().find(|(k, _)| *k == kind).map(|(_, f)| *f);
         let file = file.unwrap_or_else(|| panic!("world kind {kind} has no golden case and no kit test named"));
-        assert!(kit_tests.join(file).is_file(), "world kind {kind}: the kit test {file} is missing");
+        assert!(
+            kit_tests.join(file).is_file() || kit_tests.join("suite").join(file).is_file(),
+            "world kind {kind}: the kit test {file} is missing"
+        );
     }
 }

@@ -1,0 +1,22 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "time": "2026-11-19T19:57:10Z",
+  "prompt_sent": "A sheet of 4 pixel-art props for the top-down tile maps of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art. Square 1:1 image, an exact 2 by 2 grid of 4 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Every tile is filled edge to edge with flat, solid pure magenta (#FF00FF), so the background can be keyed out. Each tile holds one single prop drawn as large as the tile allows. VIEW, the same for every prop: seen straight from the front and slightly from above, like furniture on a classic top-down JRPG tile map; the front face is flat to the viewer, its bottom edge perfectly horizontal; we see a little of the top. Muted soot-darkened palette: worn brown timber, dull iron bands, a small brass hasp; no bright colours, no text, no people. All four tiles show the SAME soldier's footlocker, a low wide timber chest with two vertical iron bands and a brass hasp, a matched pair of states that must look like one object: TOP ROW, CLOSED: (1) the lid shut and flush, the hasp closed, a clear dark seam where lid meets box; (2) the same, a little more worn. BOTTOM ROW, OPEN, so it reads as open at a glance: the SAME chest with its lid swung fully up and back on hinges at the rear, standing almost upright behind the box, its paler inner face and the lid's iron bands visible; the hasp hangs down loose on the front; the box's dark interior shows from above, packed with kit that pokes up over the rim: (3) a folded grey-cream cloth, a leather pouch and a small tin flask; (4) a rolled bandage, a whetstone and a coil of cord. The box itself (width, height, bands, hasp plate) is identical in all four; only the lid and contents change.",
+  "references": [
+    "G:/My Drive/image_pipeline/refs/props_buildings_gen1793556098_1.png"
+  ],
+  "n": 2,
+  "files": [
+    {
+      "file": "output/props_hub_footlocker_2_q1795109300_1.png",
+      "width": 1024,
+      "height": 1024
+    },
+    {
+      "file": "output/props_hub_footlocker_2_q1795109300_2.png",
+      "width": 1024,
+      "height": 1024
+    }
+  ],
+  "notes": "Verified resolution (>=1024px) and aspect ratio within 3% tolerance."
+}

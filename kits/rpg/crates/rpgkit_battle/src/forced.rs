@@ -279,7 +279,11 @@ pub fn shove_unit(res: &mut Resolver, w: &mut World, t: UnitId, by: Option<UnitI
         m.stopped = stop_walks(res, t);
     }
     m.line = move_line(w, &m, &notes);
-    res.log.push(m.line.clone());
+    // PR7-83 (PT-84): a move of 0 tiles that cancels nothing and enters no hazard is no event ("drags X 0 tiles");
+    // a collision still logs its own hit lines below
+    if m.tiles > 0 || m.stopped > 0 || !notes.is_empty() {
+        res.log.push(m.line.clone());
+    }
     if let Some(&cell) = refused.first() {
         m.blocked_by = obstacle(w, cell);
         m.blockers = blockers_of(w, t, &refused);
@@ -465,7 +469,7 @@ fn move_line(w: &World, m: &Moved, notes: &[String]) -> String {
 }
 
 /// FM4: what refused a step into `cell`: the unit there, the arena edge, the exit, else the tile's terrain (its catalog
-/// name, else its id: "the wall").
+/// display name, `command::terrain_name`: "the wall").
 fn obstacle(w: &World, cell: V2) -> String {
     if let Some(o) = w.occupant(cell) {
         return w.units[o].name.clone();
@@ -476,9 +480,8 @@ fn obstacle(w: &World, cell: V2) -> String {
     if w.grid.is_exit(cell) {
         return "the exit".into();
     }
-    let id = w.grid.terrain_id(cell);
-    let name = if w.cat.terrain.contains_key(id) { terrain_name(w, cell) } else { id.replace('_', " ") };
-    format!("the {}", name.to_lowercase())
+    // ACT1-FIX5 (PR7-91): the terrain's display name as hazard lines give it ("the rubble", "the lava"; was "the floor")
+    format!("the {}", terrain_name(w, cell).to_lowercase())
 }
 
 /// FM4: one collision hit on `v` (`moved`: the unit that was moved; else the unit that blocked it): the damage (HP lost
@@ -531,13 +534,14 @@ pub(crate) fn collision_stagger(res: &mut Resolver, w: &mut World, v: UnitId, c:
     let taken = poise::stagger_taken(c.stagger.max(0), &f);
     let pips = poise::pips_mode(&w.ruleset.numbers);
     let pips_before = poise::pips_now(&w.ruleset.numbers, &st);
-    let mut hit = StaggerHit { target: v, stagger: c.stagger.max(0), factors: f, windup, taken, before: st.value, after: st.value, pips_before, pips_after: pips_before, chance: None, broke: None };
+    let mut hit = StaggerHit { target: v, stagger: c.stagger.max(0), factors: f, windup, taken, before: st.value, after: st.value, pips_before, pips_after: pips_before, chance: None, broke: None, held: false };
     // P8: a unit broken this round stays at 0 and breaks no further
     if st.broken {
         return Some(hit);
     }
     // S2.2-S2: P7, P12 and P14 (no P13 roll) through the one stagger rule, by pips under modes.poise pips
     let held = poise::unbreakable(w, &res.scheduled, v, block);
+    hit.held = held;
     let terms = poise::Terms { windup, held, sure: sure.then_some(BreakCause::Collision), chance: false };
     let s = poise::settle(&w.ruleset.numbers, &st, taken, terms);
     if let Some(bar) = w.poise.get_mut(&v) {

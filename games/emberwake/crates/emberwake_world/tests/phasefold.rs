@@ -61,6 +61,9 @@ fn phase_int(p: Phase) -> i64 {
 
 /// One fight played as world_traces plays it, plus what PHASEFOLD must keep (events, fates, tally keys, roster keys).
 fn run(d: &Data, world: &str, id: &str, over: &Value, preset: &str, seed: i64) -> Value {
+    // ESCAPE-PLAN1 (`PR7-60`): the golden predates the row's moves (walking through friends, a hero's Withdraw within its
+    // AP); they stay off here until the user approves the re-record (`FB-403`)
+    emberwake_battle::plan::set_escape_plan1(false);
     let mut entry = if world.is_empty() { d.cat.encounters.get(id).cloned().unwrap_or_default() } else { d.resolve(world, "encounters", id).clone() };
     assert!(!entry.is_empty(), "encounter {world}:{id} is missing from the shipped data");
     for (k, v) in json::dict(over) {
@@ -283,6 +286,7 @@ fn world_arrival_refs_read_as_the_wave_field() {
 
 /// A catalog fight: `party` vs `enemy`, with `phases`; the deployed enemy is down before the first step.
 fn fight_with_the_enemy_down(d: &Data, p: &str, enemy: &str, phases: Value, morale: bool) -> Session {
+    emberwake_battle::plan::set_escape_plan1(false);
     let entry = obj(json!({"id": "test_arrival", "name": "Test Arrival", "party": [p], "enemies": [enemy], "phases": phases, "morale": morale}));
     let mut s = Session::start(d.cat.clone(), EncounterDef::from_obj(&entry), &IndexMap::<String, UnitDef>::new());
     let first = s.w.enemies[0];
@@ -324,6 +328,9 @@ fn an_arrival_counts_as_a_foe_before_it_comes_and_a_phase_wave_does_not() {
     assert_eq!((cell.round, cell.block, cell.actor.as_str(), cell.skill.as_str(), cell.subtype.as_str(), cell.outcome.as_str()), (2, 1, "Reinforcements", "Here!", "Wave", "ARRIVED"));
     let name = s.w.units[arrival[0]].name.clone();
     assert_eq!(s.events.last().unwrap(), &format!("Here!: {name} join the battle."));
+    // ACT1-FIX4 (PT-92): the arrival is a combat log line too, in round 2's block 1 part
+    let wave_line = format!("[Wave] Here!: {name} join the battle.");
+    assert!(s.log_groups().iter().any(|g| (g.round, g.block) == (2, 1) && g.lines.contains(&wave_line)), "{:?}", s.log_groups());
     assert_eq!(s.phases.fired.get("reinforcements"), Some(&(2, 1)));
     s.w.units[arrival[0]].hp = 0;
     for _ in 0..600 {

@@ -1,0 +1,33 @@
+[package]
+name = "kit_sample_game"
+version = "0.1.0"
+edition = "2021"
+
+# ENGINE-42 (KIT-SAMPLE1): the RPG kit's sample game, on the engine and the kit alone (no other game's code or data).
+# Made by `aegis new game kit_sample`, then given the kit. Two programs: the game (`kit_sample`) and the engine's command line for it
+# (`kit_sample_cli scenario run all`, `kit_sample_cli playtest start`), so the game program links no CLI code.
+[[bin]]
+name = "kit_sample"
+path = "src/main.rs"
+
+[[bin]]
+name = "kit_sample_cli"
+path = "src/bin/kit_sample_cli.rs"
+
+[dependencies]
+aegis_core = { path = "../../../../engine/crates/aegis_core" }
+aegis_host = { path = "../../../../engine/crates/aegis_host" }
+aegis_content = { path = "../../../../engine/crates/aegis_content" }
+aegis_layout = { path = "../../../../engine/crates/aegis_layout" }
+aegis_ui = { path = "../../../../engine/crates/aegis_ui" }
+aegis_cli = { path = "../../../../engine/crates/aegis_cli" }
+rpgkit_battle = { path = "../../../../kits/rpg/crates/rpgkit_battle" }
+rpgkit_content = { path = "../../../../kits/rpg/crates/rpgkit_content" }
+rpgkit_ui = { path = "../../../../kits/rpg/crates/rpgkit_ui" }
+rpgkit_world = { path = "../../../../kits/rpg/crates/rpgkit_world" }
+indexmap = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

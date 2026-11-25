@@ -2,8 +2,8 @@
 //! game's real screens over the agent link and assert state, with no window by default (HEADLESS1), or in a real muted
 //! window that does not take the focus when the file or `window=1` asks.
 //!   aegis scenario check [<file> | all]                                       parse the files; no game starts
-//!   aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]
-//!   aegis scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...] [the same keys as run]
+//!   aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X] [set=<key>:<value>,...] [audit=1]
+//!   aegis scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [save=] [do=<a>,<b>,...] [the same keys as run]
 //! A scenario is named by where it lies: `<game folder>/scenarios/<id>.json`. The game folder is the one holding the game
 //! manifest the registered game names, and the game's program is the file named as the manifest's id beside this one
 //! (`exe=` says otherwise). Exit codes: 0 pass, 1 a step or a file failed, 2 could not start. `tools/fc.sh gate` runs
@@ -144,6 +144,16 @@ pub enum Step {
     /// ENGINE-2: frame times with no window (`perf` link request); `budget` fails the step when a number is over it on a
     /// steady machine.
     Perf { name: String, frames: u64, warm: u64, budget: Budget },
+    /// ENGINE-45 (FEEL-PROBE1): replays `script` (keys, clicks, pad buttons, frames) with no window and reports input
+    /// and frame times (`feel` link request); `input_ms` / `frame_ms` fail the step when the worst passes them,
+    /// `frame_p50_ms` (ENGINE-50) when the median frame does. `switch` (ENGINE-51): each key, click or pad input is
+    /// followed until its new screen settles; an input's `switch_ms` fails the step past it and its `to` names the screen it reaches
+    /// (`aegis_ui::switchfeel`).
+    Feel { name: String, script: Value, gap: u64, input_ms: Option<f64>, frame_ms: Option<f64>, frame_p50_ms: Option<f64>, step_ms: Option<f64>, motion: bool, motion_budget: Value, switch: bool, uncovered_frames: Option<u64>, audio_budget: Value },
+    /// ENGINE-48 (INPUT-REACH1): the top screen's reach report with no window (`reach` link request): what a mouse can use
+    /// that the keys or a pad cannot reach, a focus that does not show, and with `back` what one Esc does. `fail`: the
+    /// step fails on a dead end whose widget id (or `back`) is not in `allow`.
+    Reach { name: String, back: bool, fail: bool, allow: Vec<String> },
     Pause { ms: u64 },
     Audit { scales: Vec<f64>, fail: Vec<String> },
     Repeat { times: u64, steps: Vec<Step>, until: Option<Cond> },
@@ -184,6 +194,97 @@ pub fn perf_verdict(budget: &Budget, reply: &Value) -> (&'static str, Vec<String
     }
     let misses = budget.misses(&reply["stats"]);
     (if misses.is_empty() { "within" } else { "over" }, misses)
+}
+
+/// ENGINE-46 (FEEL-FIX1): how much a `feel` budget stretches in a dev build (the gate's), which draws about twice as
+/// slow as a release one: the release budget stays the bar a player sees, the dev run a loose ceiling on a gross slip.
+pub const FEEL_DEV_ALLOWANCE: f64 = 2.5;
+
+/// A `feel` reply's misses against its budget: the worst input-to-present over `input_ms`, the worst frame over
+/// `frame_ms`, the median frame over `frame_p50_ms` (ENGINE-50), each times `FEEL_DEV_ALLOWANCE` when the reply's
+/// `build` is `dev`.
+pub fn feel_misses(reply: &Value, input_ms: Option<f64>, frame_ms: Option<f64>, frame_p50_ms: Option<f64>) -> Vec<String> {
+    let (k, build) = if reply["build"] == json!("dev") { (FEEL_DEV_ALLOWANCE, " (dev build: the budget x 2.5)") } else { (1.0, "") };
+    let mut misses = Vec::new();
+    for (budget, key, stat, what) in [(input_ms, "to_present", "worst", "worst input"), (frame_ms, "frame_time", "worst", "worst frame"), (frame_p50_ms, "frame_time", "p50", "median frame")] {
+        let got = reply[key][stat].as_f64();
+        if let Some(b) = budget.map(|b| b * k).filter(|b| got.is_some_and(|w| w > *b)) {
+            misses.push(format!("{what} {} ms over {b} ms{build}", reply[key][stat]));
+        }
+    }
+    misses
+}
+
+/// ENGINE-48: a `reach` reply's dead ends, each `"<what> <id>"`: `keys` (a mouse widget the keys cannot reach), `pad`
+/// (nor a pad), `invisible` (its focus does not show) and `back nothing` / `back quits`.
+pub fn reach_dead_ends(reply: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    for (key, what) in [("keys_miss", "keys"), ("pad_miss", "pad"), ("invisible", "invisible")] {
+        for w in reply[key].as_array().into_iter().flatten() {
+            out.push(format!("{what} {}", w["id"].as_str().unwrap_or("?")));
+        }
+    }
+    if let Some(did) = reply["back"]["did"].as_str().filter(|d| *d == "nothing" || *d == "quits") {
+        out.push(format!("back {did}"));
+    }
+    out
+}
+
+/// ENGINE-49 (WALK-FEEL1): the inputs of a `feel` script.
+const FEEL_INPUTS: &str = "key, click, pad, frames, press, release, pad_press, pad_release, stick, wait_ms, spike_ms or stall_ms";
+
+/// ENGINE-49: the movement budgets of a `feel` step with `motion` (`aegis_ui::walkfeel::over_budget`).
+pub const MOTION_BUDGETS: [&str; 6] = ["first_move_ms", "overshoot_steps", "cadence_spread_ms", "stutters", "camera_lag_tiles", "camera_jump_tiles"];
+
+/// ENGINE-49: the budgets of a `feel` step's movement report (`aegis_ui::walkfeel::report`): the worst first move (ms),
+/// steps after a release, the cadence spread (ms), stutters, the camera's lag and its largest move in a frame (tiles).
+/// Each over its budget names itself.
+pub fn motion_misses(report: &Value, budget: &Value) -> Vec<String> {
+    MOTION_BUDGETS.iter().filter_map(|k| match (budget[*k].as_f64(), report[*k].as_f64()) {
+        (Some(b), Some(v)) if v > b => Some(format!("{k} {v} over {b}")),
+        _ => None,
+    }).collect()
+}
+
+/// ENGINE-55 (AUDIO-FEEL1): the sound budgets of a `feel` step (`aegis_ui::audiofeel::AUDIO_BUDGETS`): the worst interface
+/// sound after its input, the worst effect off its frame (either way), the worst music change after its ask (ms),
+/// underruns (count) and the worst decode on an ask (ms).
+pub const AUDIO_BUDGETS: [&str; 5] = ["ui_sound_ms", "hit_beat_ms", "music_ms", "underruns", "decode_ms"];
+
+/// ENGINE-55: in a dev build (the gate's) a replay may have one underrun per this many ms of it (or part) over its budget: the
+/// virtual device's thread runs at a normal priority (a device's runs at the system's audio priority) beside a build
+/// that draws about twice as slow, and the scheduler now and then wakes it a buffer late. A gross slip (mixing or
+/// decoding too slow for the buffer) underruns at nearly every buffer, about 90 a second; a release build has none.
+pub const DEV_UNDERRUN_EVERY_MS: f64 = 2000.0;
+
+/// ENGINE-55: a `feel` reply's sound report (`audio`) against `budget`: a measure over its budget, or budgeted and never
+/// measured (no such sound heard in the replay, or no sound output at all). `decode_ms` stretches by `dev` (the dev
+/// build's allowance, 1 in a release build) and `underruns` by `DEV_UNDERRUN_EVERY_MS`; the times through the output do
+/// not depend on the build.
+pub fn audio_misses(report: &Value, budget: &Value, dev: f64) -> Vec<String> {
+    let mut out = Vec::new();
+    let replay_ms = report["buffers"].as_f64().unwrap_or(0.0) * report["buffer_ms"].as_f64().unwrap_or(0.0);
+    for k in AUDIO_BUDGETS {
+        let Some(b) = budget[k].as_f64() else { continue };
+        let b = match k {
+            "decode_ms" => b * dev,
+            "underruns" if dev > 1.0 => b + (replay_ms / DEV_UNDERRUN_EVERY_MS).ceil(),
+            _ => b,
+        };
+        match report[k].as_f64() {
+            Some(v) if v > b => out.push(format!("{k} {v} over {b}")),
+            Some(_) => {}
+            None if report.is_null() => out.push(format!("{k}: no sound output")),
+            None => out.push(format!("{k}: nothing measured it (no such sound heard)")),
+        }
+    }
+    out
+}
+
+/// ENGINE-48: whether `allow` covers a dead end (`reach_dead_ends`): its widget id is listed, or `back` for a back press.
+pub fn reach_allowed(end: &str, allow: &[String]) -> bool {
+    let (what, id) = end.split_once(' ').unwrap_or((end, ""));
+    allow.iter().any(|a| if what == "back" { a == "back" } else { a == id })
 }
 
 /// A `perf` step's bounds (the game's own are the same: `aegis_ui::shell::headless::PERF_*`) and the most a budget says.
@@ -483,6 +584,33 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
             };
             Step::Audit { scales, fail }
         }
+        "reach" => {
+            keys(&["name", "back", "fail", "allow"], problems);
+            let name = text_of(o, "name", place, problems);
+            if !name.is_empty() && !plain_name(&name) {
+                problems.push(format!("{place}: 'name' becomes a file name: letters, digits, _ and - only, at most 80"));
+            }
+            let flag = |k: &str, problems: &mut Vec<String>| match o.get(k) {
+                None => false,
+                Some(Value::Bool(b)) => *b,
+                Some(_) => {
+                    problems.push(format!("{place}: '{k}' is true or false"));
+                    false
+                }
+            };
+            let (back, fail) = (flag("back", problems), flag("fail", problems));
+            let allow: Vec<String> = match o.get("allow") {
+                None => Vec::new(),
+                Some(list) => {
+                    let names: Vec<String> = list.as_array().map(|a| a.iter().filter_map(|k| k.as_str().map(String::from)).collect()).unwrap_or_default();
+                    if list.as_array().is_none_or(|a| a.len() != names.len()) {
+                        problems.push(format!("{place}: 'allow' is a list of widget ids (and 'back')"));
+                    }
+                    names
+                }
+            };
+            Step::Reach { name, back, fail, allow }
+        }
         "repeat" => {
             keys(&["times", "steps", "until"], problems);
             let times = int_of(o, "times", None, (1, STEPS_MAX), place, problems);
@@ -535,6 +663,133 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
             }
             Step::Perf { name, frames, warm, budget }
         }
+        "feel" => {
+            keys(&["name", "script", "gap", "budget", "step_ms", "motion", "switch"], problems);
+            let name = text_of(o, "name", place, problems);
+            // ENGINE-49 (WALK-FEEL1): the shot clock's frame step for the replay, and the movement report
+            let step_ms = match o.get("step_ms") {
+                None => None,
+                Some(v) => match v.as_f64().filter(|n| (1.0..=200.0).contains(n)) {
+                    Some(n) => Some(n),
+                    None => {
+                        problems.push(format!("{place}: 'step_ms' is a number of ms from 1 to 200"));
+                        None
+                    }
+                },
+            };
+            let flag = |k: &str, problems: &mut Vec<String>| match o.get(k) {
+                None => false,
+                Some(Value::Bool(b)) => *b,
+                Some(_) => {
+                    problems.push(format!("{place}: '{k}' is true or false"));
+                    false
+                }
+            };
+            let motion = flag("motion", problems);
+            let switch = flag("switch", problems);
+            if !name.is_empty() && !plain_name(&name) {
+                problems.push(format!("{place}: 'name' becomes a file name: letters, digits, _ and - only, at most 80"));
+            }
+            let gap = int_of(o, "gap", Some(2), (0, 240), place, problems);
+            let script = o.get("script").cloned().unwrap_or(Value::Null);
+            match script.as_array() {
+                Some(list) if !list.is_empty() && list.len() as u64 <= STEPS_MAX => {
+                    for (i, item) in list.iter().enumerate() {
+                        let at = format!("{place}.script[{i}]");
+                        let Some(m) = item.as_object() else {
+                            problems.push(format!("{at}: an object: one of {FEEL_INPUTS}, and times"));
+                            continue;
+                        };
+                        let named: Vec<&str> = ["key", "click", "pad", "frames", "press", "release", "pad_press", "pad_release", "stick", "wait_ms", "spike_ms", "stall_ms"].into_iter().filter(|k| m.contains_key(*k)).collect();
+                        if named.len() != 1 {
+                            problems.push(format!("{at}: exactly one of {FEEL_INPUTS}"));
+                        }
+                        for (k, v) in m {
+                            let fine = match k.as_str() {
+                                "key" | "click" | "pad" | "press" | "release" | "pad_press" | "pad_release" => v.as_str().is_some_and(|t| !t.is_empty()),
+                                "frames" => v.as_u64().is_some_and(|n| (1..=240).contains(&n)),
+                                // ENGINE-63 (PAD-TUNE1): the left stick's place, [x, y] each from -1 to 1
+                                "stick" => v.as_array().is_some_and(|a| a.len() == 2 && a.iter().all(|n| n.as_f64().is_some_and(|n| (-1.0..=1.0).contains(&n)))),
+                                "times" => v.as_u64().is_some_and(|n| (1..=200).contains(&n)),
+                                "switch_ms" if !switch => {
+                                    problems.push(format!("{at}: 'switch_ms' is a switch budget: it needs 'switch' true"));
+                                    true
+                                }
+                                "switch_ms" => v.as_f64().is_some_and(|n| n > 0.0 && n <= PERF_BUDGET_MS_MAX),
+                                "to" if !switch => {
+                                    problems.push(format!("{at}: 'to' names the screen a switch reaches: it needs 'switch' true"));
+                                    true
+                                }
+                                "to" => v.as_str().is_some_and(|t| !t.is_empty()),
+                                "wait_ms" => v.as_f64().is_some_and(|n| (1.0..=60_000.0).contains(&n)),
+                                "spike_ms" | "stall_ms" => v.as_f64().is_some_and(|n| (1.0..=2000.0).contains(&n)),
+                                _ => {
+                                    problems.push(format!("{at}: unknown key '{k}' ({FEEL_INPUTS}, times, switch_ms, to)"));
+                                    true
+                                }
+                            };
+                            if !fine {
+                                problems.push(format!("{at}: '{k}' is {}", if k == "frames" { "a whole number from 1 to 240" } else if k == "times" { "a whole number from 1 to 200" } else if k == "switch_ms" { "a number of ms above 0" } else { "a name" }));
+                            }
+                        }
+                    }
+                }
+                _ => problems.push(format!("{place}: 'script' is a list of 1 to {STEPS_MAX} inputs")),
+            }
+            let (mut input_ms, mut frame_ms, mut frame_p50_ms) = (None, None, None);
+            let mut uncovered_frames = None;
+            let mut motion_budget = serde_json::Map::new();
+            let mut audio_budget = serde_json::Map::new();
+            match o.get("budget") {
+                None => {}
+                Some(Value::Object(b)) => {
+                    for (k, v) in b {
+                        if MOTION_BUDGETS.contains(&k.as_str()) {
+                            match v.as_f64().filter(|n| *n >= 0.0 && *n <= PERF_BUDGET_MS_MAX) {
+                                Some(_) if motion => {
+                                    motion_budget.insert(k.clone(), v.clone());
+                                }
+                                Some(_) => problems.push(format!("{place}.budget: '{k}' is a movement budget: it needs 'motion' true")),
+                                None => problems.push(format!("{place}.budget: '{k}' is a number from 0 to {PERF_BUDGET_MS_MAX}")),
+                            }
+                            continue;
+                        }
+                        if AUDIO_BUDGETS.contains(&k.as_str()) {
+                            match v.as_f64().filter(|n| *n >= 0.0 && *n <= PERF_BUDGET_MS_MAX) {
+                                Some(_) => {
+                                    audio_budget.insert(k.clone(), v.clone());
+                                }
+                                None => problems.push(format!("{place}.budget: '{k}' is a number from 0 to {PERF_BUDGET_MS_MAX}")),
+                            }
+                            continue;
+                        }
+                        if k == "uncovered_frames" {
+                            match v.as_u64().filter(|n| *n <= 100) {
+                                Some(n) if switch => uncovered_frames = Some(n),
+                                Some(_) => problems.push(format!("{place}.budget: 'uncovered_frames' is a switch budget: it needs 'switch' true")),
+                                None => problems.push(format!("{place}.budget: 'uncovered_frames' is a whole number from 0 to 100")),
+                            }
+                            continue;
+                        }
+                        let slot = match k.as_str() {
+                            "input_ms" => &mut input_ms,
+                            "frame_ms" => &mut frame_ms,
+                            "frame_p50_ms" => &mut frame_p50_ms,
+                            other => {
+                                problems.push(format!("{place}.budget: unknown key '{other}' (input_ms, frame_ms, frame_p50_ms, uncovered_frames, {}, {})", MOTION_BUDGETS.join(", "), AUDIO_BUDGETS.join(", ")));
+                                continue;
+                            }
+                        };
+                        match v.as_f64().filter(|n| *n > 0.0 && *n <= PERF_BUDGET_MS_MAX) {
+                            Some(n) => *slot = Some(n),
+                            None => problems.push(format!("{place}.budget: '{k}' is a number of ms above 0, at most {PERF_BUDGET_MS_MAX}")),
+                        }
+                    }
+                }
+                Some(_) => problems.push(format!("{place}: 'budget' is an object (input_ms, frame_ms, frame_p50_ms)")),
+            }
+            Step::Feel { name, script, gap, input_ms, frame_ms, frame_p50_ms, step_ms, motion, motion_budget: Value::Object(motion_budget), switch, uncovered_frames, audio_budget: Value::Object(audio_budget) }
+        }
         other => {
             problems.push(format!("{place}: unknown step '{other}'"));
             bad
@@ -558,6 +813,8 @@ fn no_window_step(steps: &[Step]) -> Option<&'static str> {
     steps.iter().find_map(|s| match s {
         Step::Clip { .. } => Some("clip"),
         Step::Perf { .. } => Some("perf"),
+        Step::Feel { .. } => Some("feel"),
+        Step::Reach { .. } => Some("reach"),
         Step::Repeat { steps, .. } => no_window_step(steps),
         _ => None,
     })
@@ -619,8 +876,8 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
                 launch.ruleset = aliased_text(l, "ruleset", p);
                 if l.contains_key("save") {
                     let name = text_of(l, "save", "launch", p);
-                    if !name.is_empty() && !plain_name(&name) {
-                        p.push("launch: 'save' names a folder under scenarios/saves/: letters, digits, _ and - only".into());
+                    if !name.is_empty() && !plain_name(&name) && !Path::new(&name).is_absolute() {
+                        p.push("launch: 'save' names a folder under scenarios/saves/ (letters, digits, _ and - only) or is an absolute folder path".into());
                     }
                     launch.save = Some(name);
                 }
@@ -875,7 +1132,10 @@ pub fn free_port() -> std::io::Result<u16> {
 
 pub fn plan(s: &Scenario, size: (u32, u32), game_id: &str, exe: &Path, data: Option<&Path>, port: u16, scratch: &Path) -> Plan {
     let user = user_dir_under(scratch, game_id);
-    let mut args = vec![format!("port={port}"), format!("saves={}", scratch.join("saves").display()), format!("screen={}", s.launch.screen)];
+    // ENGINE-57 (FEEL-RELEASE1): `dev=1`: a game shows its developer surfaces in a release build too (when it has them),
+    // as the gate's dev build does, so one script takes one path in either profile; ENGINE-64: `live=0`, no live reload
+    // (nothing on disk may move a shot)
+    let mut args = vec![format!("port={port}"), format!("saves={}", scratch.join("saves").display()), format!("screen={}", s.launch.screen), "dev=1".to_string(), "live=0".to_string()];
     if let Some(e) = &s.launch.scene {
         args.push(format!("scene={e}"));
     }
@@ -930,6 +1190,31 @@ pub struct Options {
     pub record: bool,
     /// PR7-4: where `launch.save` folders lie (`<game folder>/scenarios/saves`).
     pub saves: Option<PathBuf>,
+    /// ENGINE-33: `set=<key>:<value>,...`: settings laid over every scenario's own (a value is JSON, else a string), so
+    /// one sweep runs every screen at, say, the largest text size; the driver's held settings and `mute` stay refused.
+    pub set: Map<String, Value>,
+    /// ENGINE-33: `audit=1`: after every shot, the text audit of that frame (at the run's text size) beside it as
+    /// `<shot>.audit.json` (cut, edge, overlap and spill; `text_audit::issues`), for a sweep to list what a size breaks.
+    pub audit: bool,
+}
+
+/// ENGINE-33: `set=` as settings: `key:value` pairs split on commas (a value parses as JSON, else it is a string); a
+/// held setting, `mute`, an empty key or a pair without `:` is an error.
+pub fn parse_set(list: &str) -> std::result::Result<Map<String, Value>, String> {
+    let mut out = Map::new();
+    for pair in list.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let Some((k, v)) = pair.split_once(':') else { return Err(format!("set: '{pair}' is key:value")) };
+        let k = k.trim();
+        if k.is_empty() {
+            return Err(format!("set: '{pair}' has no key"));
+        }
+        if HELD_SETTINGS.contains(&k) || k == "mute" {
+            return Err(format!("set: '{k}' belongs to the driver"));
+        }
+        let v = v.trim();
+        out.insert(k.to_string(), serde_json::from_str(v).unwrap_or_else(|_| Value::String(v.to_string())));
+    }
+    Ok(out)
 }
 
 /// One size's result.
@@ -968,6 +1253,8 @@ struct Run<'a> {
     recorded: Vec<(PathBuf, PathBuf)>,
     /// ENGINE-2: each `perf` step's numbers and verdict, for result.json.
     perf: Vec<Value>,
+    /// ENGINE-33: `Options::audit`.
+    audit: bool,
 }
 
 impl Run<'_> {
@@ -1122,6 +1409,11 @@ impl Run<'_> {
                 if reply["ok"] != json!(true) {
                     return Err(Failure { step: label.to_string(), message: format!("the shot {name}: {}", reply["error"]), gone: false });
                 }
+                if self.audit {
+                    // After the shot, so the picture is the plain one; the audit draws a frame of its own and puts it back.
+                    let audit = self.ask(label, &json!({"cmd": "text_audit"}))?;
+                    let _ = std::fs::write(self.bundle.join(format!("{name}.audit.json")), serde_json::to_string_pretty(&audit).unwrap_or_default());
+                }
                 if let Some(tol) = golden {
                     let fail = |message: String| Failure { step: label.to_string(), message, gone: false };
                     let dir = self.golden_dir.clone().ok_or_else(|| fail("a golden shot needs the game's baselines folder".into()))?;
@@ -1185,6 +1477,84 @@ impl Run<'_> {
                     return Err(fail(format!("perf {name}: {} (p50 {} ms, p95 {} ms, max {} ms over {frames} frames, canvas {}x{})", misses.join(", "), reply["stats"]["p50"], reply["stats"]["p95"], reply["stats"]["max"], reply["canvas"][0], reply["canvas"][1])));
                 }
             }
+            Step::Feel { name, script, gap, input_ms, frame_ms, frame_p50_ms, step_ms, motion, motion_budget, switch, uncovered_frames, audio_budget } => {
+                let fail = |message: String| Failure { step: label.to_string(), message, gone: false };
+                if !self.headless {
+                    return Err(fail("input times are measured in a run with no window".to_string()));
+                }
+                self.settle(label)?;
+                let per_ms = 1.0 / step_ms.unwrap_or(1000.0 / 60.0);
+                let inputs = script.as_array().map_or(0, |l| l.iter().map(|i| i["times"].as_u64().unwrap_or(1) * (gap + 1).max(i["frames"].as_u64().unwrap_or(0)).max((i["wait_ms"].as_f64().unwrap_or(0.0) * per_ms) as u64)).sum::<u64>());
+                // ENGINE-51: a switch is followed until it settles (a load and a transition: a few hundred frames)
+                let inputs = if *switch { inputs + script.as_array().map_or(0, |l| l.len() as u64) * 600 } else { inputs };
+                self.link.patience((REPLY + PERF_FRAME_WAIT * inputs as u32) * self.slow as u32);
+                let mut ask = json!({"cmd": "feel", "script": script, "gap": gap, "motion": motion, "switch": switch});
+                if let Some(ms) = step_ms {
+                    ask["step_ms"] = json!(ms);
+                }
+                let reply = self.ask(label, &ask);
+                self.link.patience(REPLY * self.slow as u32);
+                let reply = reply?;
+                if reply["ok"] != json!(true) {
+                    return Err(fail(format!("feel {name}: {}", reply["error"])));
+                }
+                let mut kept = reply.clone();
+                if let Some(o) = kept.as_object_mut() {
+                    o.remove("ok");
+                    o.insert("name".into(), json!(name));
+                    o.insert("step".into(), json!(label));
+                    o.insert("kind".into(), json!("feel"));
+                }
+                let _ = std::fs::write(self.bundle.join(format!("feel_{name}.json")), serde_json::to_string_pretty(&kept).unwrap_or_default());
+                self.perf.push(kept);
+                let mut misses = feel_misses(&reply, *input_ms, *frame_ms, *frame_p50_ms);
+                if *motion {
+                    if reply["motion"]["frames"].as_u64().unwrap_or(0) == 0 {
+                        misses.push("the top screen reports no motion".to_string());
+                    }
+                    misses.extend(motion_misses(&reply["motion"], motion_budget));
+                }
+                if audio_budget.as_object().is_some_and(|b| !b.is_empty()) {
+                    let dev = if reply["build"] == json!("dev") { FEEL_DEV_ALLOWANCE } else { 1.0 };
+                    misses.extend(audio_misses(&reply["audio"], audio_budget, dev));
+                }
+                if *switch {
+                    misses.extend(reply["switch"]["misses"].as_array().into_iter().flatten().filter_map(|m| m.as_str().map(String::from)));
+                    let uncovered = reply["switch"]["uncovered"].as_u64().unwrap_or(0);
+                    if let Some(n) = uncovered_frames.filter(|n| uncovered > *n) {
+                        misses.push(format!("{uncovered} frames over {} ms with nothing covering them, over {n}", reply["switch"]["long_frame_ms"]));
+                    }
+                }
+                if !misses.is_empty() {
+                    return Err(fail(format!("feel {name}: {}", misses.join(", "))));
+                }
+            }
+            Step::Reach { name, back, fail: must, allow } => {
+                let fail = |message: String| Failure { step: label.to_string(), message, gone: false };
+                if !self.headless {
+                    return Err(fail("the reach report is made in a run with no window".to_string()));
+                }
+                self.settle(label)?;
+                let reply = self.ask(label, &json!({"cmd": "reach", "back": back}))?;
+                if reply["ok"] != json!(true) {
+                    return Err(fail(format!("reach {name}: {}", reply["error"])));
+                }
+                let mut kept = reply.clone();
+                let ends = reach_dead_ends(&reply);
+                if let Some(o) = kept.as_object_mut() {
+                    o.remove("ok");
+                    o.insert("name".into(), json!(name));
+                    o.insert("step".into(), json!(label));
+                    o.insert("kind".into(), json!("reach"));
+                    o.insert("dead_ends".into(), json!(ends));
+                }
+                let _ = std::fs::write(self.bundle.join(format!("reach_{name}.json")), serde_json::to_string_pretty(&kept).unwrap_or_default());
+                self.perf.push(kept);
+                let left: Vec<&String> = ends.iter().filter(|e| !reach_allowed(e, allow)).collect();
+                if *must && !left.is_empty() {
+                    return Err(fail(format!("reach {name} on {}: {}", reply["screen"], left.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("; "))));
+                }
+            }
             Step::Audit { scales, fail } => {
                 self.settle(label)?;
                 for scale in scales {
@@ -1237,6 +1607,8 @@ fn kind_of(s: &Step) -> &'static str {
         Step::Shot { .. } => "shot",
         Step::Clip { .. } => "clip",
         Step::Perf { .. } => "perf",
+        Step::Feel { .. } => "feel",
+        Step::Reach { .. } => "reach",
         Step::Pause { .. } => "pause",
         Step::Audit { .. } => "audit",
         Step::Repeat { .. } => "repeat",
@@ -1353,6 +1725,9 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
         let scratch = std::env::temp_dir().join("aegis_scenario").join(format!("{}_{port}", std::process::id()));
         let _ = std::fs::remove_dir_all(&scratch);
         let mut plan = plan(s, size, &o.game_id, &o.exe, o.data.as_deref(), port, &scratch);
+        for (k, v) in &o.set {
+            plan.settings[k] = v.clone();
+        }
         if headless {
             plan.args.extend(headless_args(size, o));
             // ENGINE-17: a scenario is always on the shot clock, so two runs of a build draw the same frames (the agent
@@ -1364,10 +1739,11 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
             break;
         }
         if let Some(name) = &s.launch.save {
-            let from = o.saves.as_ref().map(|d| d.join(name));
+            // ENGINE-36 (1): an absolute path is a save folder anywhere (a kept playtest save in project files)
+            let from = if Path::new(name).is_absolute() { Some(PathBuf::from(name)) } else { o.saves.as_ref().map(|d| d.join(name)) };
             match from.filter(|f| f.is_dir()) {
                 None => {
-                    out.message = format!("launch.save '{name}': no folder scenarios/saves/{name}/");
+                    out.message = if Path::new(name).is_absolute() { format!("launch.save '{name}': no such folder") } else { format!("launch.save '{name}': no folder scenarios/saves/{name}/") };
                     let _ = std::fs::remove_dir_all(&scratch);
                     break;
                 }
@@ -1416,7 +1792,7 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
         record["capped"] = json!(px != json!([size.0, size.1]));
         let deadline = Instant::now() + s.timeout * slow as u32;
         let golden_dir = o.baselines.as_ref().map(|b| b.join(&s.id).join(format!("{}x{}", size.0, size.1)));
-        let mut run = Run { link: link.as_mut(), game: game.as_mut(), bundle: &bundle, slow, deadline, done: Vec::new(), frame: 0, headless, golden_dir, record: o.record, recorded: Vec::new(), perf: Vec::new() };
+        let mut run = Run { link: link.as_mut(), game: game.as_mut(), bundle: &bundle, slow, deadline, done: Vec::new(), frame: 0, headless, golden_dir, record: o.record, recorded: Vec::new(), perf: Vec::new(), audit: o.audit };
         let walked = s.steps.iter().enumerate().try_for_each(|(i, step)| run.step(&(i + 1).to_string(), step));
         let done = std::mem::take(&mut run.done);
         let to_record = std::mem::take(&mut run.recorded);
@@ -1645,8 +2021,8 @@ fn game_folder<G: crate::Game>(game: &G, args: &Args) -> Result<PathBuf> {
     manifest.parent().map(Path::to_path_buf).with_context(|| format!("{} has no folder", manifest.display()))
 }
 
-const RUN_USAGE: &str = "aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X] [record=1]";
-const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=<id>] [scene=<id>] [ruleset=<id>] [seed=N] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
+const RUN_USAGE: &str = "aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X] [record=1] [set=<key>:<value>,...] [audit=1]";
+const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=<id>] [scene=<id>] [ruleset=<id>] [seed=N] [save=<name|/abs/dir>] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
 
 /// `aegis scenario ...`; returns the exit code.
 pub fn command<G: crate::Game>(game: &G, args: &Args) -> Result<i32> {
@@ -1721,7 +2097,12 @@ fn options_of(folder: &Path, args: &Args, out: &str) -> Result<Options> {
         "1" => true,
         other => anyhow::bail!("record is 1 or 0, not '{other}'"),
     };
-    Ok(Options { game_id: manifest.id.clone(), exe, data: args.keys.get("data").map(PathBuf::from), out, slow, size, sized_ms: SIZED_MS, window, fps, dpr: args.keys.get("dpr").cloned(), baselines: Some(folder.join("scenarios").join("baselines")), record, saves: Some(folder.join("scenarios").join("saves")) })
+    let audit = match args.key("audit", "0").as_str() {
+        "0" => false,
+        "1" => true,
+        other => anyhow::bail!("audit is 1 or 0, not '{other}'"),
+    };
+    Ok(Options { game_id: manifest.id.clone(), exe, data: args.keys.get("data").map(PathBuf::from), out, slow, size, sized_ms: SIZED_MS, window, fps, dpr: args.keys.get("dpr").cloned(), baselines: Some(folder.join("scenarios").join("baselines")), record, saves: Some(folder.join("scenarios").join("saves")), set: args.keys.get("set").map(|l| parse_set(l)).transpose().map_err(anyhow::Error::msg)?.unwrap_or_default(), audit })
 }
 
 /// The steps of `do=`, comma separated: `key:<k>`, `click:<id>`, `hover:<id>`, `screen:<id>` (wait for it), `widget:<id>`
@@ -1775,6 +2156,11 @@ pub fn shots_scenario(name: &str, args: &Args) -> std::result::Result<Scenario, 
     if let Some(seed) = args.keys.get("seed") {
         launch["seed"] = json!(seed.parse::<u64>().map_err(|_| vec![format!("seed '{seed}' is not a whole number")])?);
     }
+    // ENGINE-36 (1): a named save (scenarios/saves/<name>) or a save folder's absolute path, so a map or hub proof shot
+    // from a save needs no scenario file (do=click:<continue>,screen:<id>,shot:<name>)
+    if let Some(save) = args.keys.get("save") {
+        launch["save"] = json!(save);
+    }
     parse(name, &json!({"id": name, "title": "Proof shots", "launch": launch, "steps": steps}))
 }
 
@@ -1824,9 +2210,46 @@ fn print_outcome(r: &Outcome) {
     }
 }
 
+/// True when any step (recursing into `Repeat`) measures wall-clock frame/input/audio timing (`Perf` or `Feel`).
+/// Timing-sensitive scenarios always run sequentially so parallel workers never skew their measurements.
+pub fn has_timing_step(steps: &[Step]) -> bool {
+    steps.iter().any(|st| match st {
+        Step::Perf { .. } | Step::Feel { .. } => true,
+        Step::Repeat { steps, .. } => has_timing_step(steps),
+        _ => false,
+    })
+}
+
+/// True when any step (recursing into `Repeat`) captures a screenshot (`Shot`).
+pub fn has_shot_step(steps: &[Step]) -> bool {
+    steps.iter().any(|st| match st {
+        Step::Shot { .. } => true,
+        Step::Repeat { steps, .. } => has_shot_step(steps),
+        _ => false,
+    })
+}
+
 fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args, launch: &LaunchCheck) -> Result<i32> {
     let options = options_of(folder, args, ".agent/scenario")?;
     let slow = options.slow;
+    let only_shots = match args.key("only_shots", "0").as_str() {
+        "0" => false,
+        "1" => true,
+        other => anyhow::bail!("only_shots is 1 or 0, not '{other}'"),
+    };
+    let default_jobs = if what == "all" && !options.window {
+        std::thread::available_parallelism().map_or(1, |n| n.get().clamp(1, 4))
+    } else {
+        1
+    };
+    let jobs: usize = match args.keys.get("jobs") {
+        Some(raw) => raw
+            .parse::<usize>()
+            .ok()
+            .filter(|&n| (1..=16).contains(&n))
+            .with_context(|| format!("jobs is a whole number from 1 to 16, not '{raw}'"))?,
+        None => default_jobs,
+    };
     let files = match what {
         "all" => files_in(scenarios),
         path if path.ends_with(".json") => vec![PathBuf::from(path)],
@@ -1850,14 +2273,58 @@ fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args, launch: &Launch
         println!("§ scenario run: nothing ran: {} file(s) have problems", files.len());
         return Ok(worst);
     }
-    let mut launcher = GameLauncher { slow: u64::from(slow) };
-    let (mut passed, mut failed) = (0, 0);
-    for s in &loaded {
+    let mut parallel_idxs = Vec::new();
+    let mut serial_idxs = Vec::new();
+    let mut skipped: Vec<(usize, String)> = Vec::new();
+    for (idx, s) in loaded.iter().enumerate() {
         if let Status::Waiting(why) = &s.status {
+            skipped.push((idx, why.clone()));
+            continue;
+        }
+        if only_shots && !has_shot_step(&s.steps) {
+            continue;
+        }
+        if jobs > 1 && !options.window && !s.window && !has_timing_step(&s.steps) {
+            parallel_idxs.push(idx);
+        } else {
+            serial_idxs.push(idx);
+        }
+    }
+    let results = std::sync::Mutex::new(Vec::<(usize, Vec<Outcome>)>::new());
+    if !parallel_idxs.is_empty() {
+        let workers = jobs.min(parallel_idxs.len());
+        let cursor = std::sync::atomic::AtomicUsize::new(0);
+        std::thread::scope(|scope| {
+            for _ in 0..workers {
+                scope.spawn(|| {
+                    let mut launcher = GameLauncher { slow: u64::from(slow) };
+                    loop {
+                        let slot = cursor.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some(&idx) = parallel_idxs.get(slot) else { break };
+                        let outcomes = run_scenario(&loaded[idx], &options, &mut launcher);
+                        results.lock().unwrap().push((idx, outcomes));
+                    }
+                });
+            }
+        });
+    }
+    if !serial_idxs.is_empty() {
+        let mut launcher = GameLauncher { slow: u64::from(slow) };
+        for idx in serial_idxs {
+            let outcomes = run_scenario(&loaded[idx], &options, &mut launcher);
+            results.lock().unwrap().push((idx, outcomes));
+        }
+    }
+    let mut by_idx: std::collections::BTreeMap<usize, Vec<Outcome>> = results.into_inner().unwrap().into_iter().collect();
+    let skip_map: std::collections::BTreeMap<usize, String> = skipped.into_iter().collect();
+    let (mut passed, mut failed) = (0, 0);
+    for (idx, s) in loaded.iter().enumerate() {
+        if let Some(why) = skip_map.get(&idx) {
             println!("§ {} SKIP: waiting: {why}", s.id);
             continue;
         }
-        for r in run_scenario(s, &options, &mut launcher) {
+        let Some(outcomes) = by_idx.remove(&idx) else { continue };
+        for r in outcomes {
             print_outcome(&r);
             if r.code == 0 {
                 passed += 1;
@@ -1869,4 +2336,37 @@ fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args, launch: &Launch
     }
     println!("§ scenario run: {passed} passed, {failed} failed");
     Ok(worst)
+}
+
+#[cfg(test)]
+mod parallel_filter_tests {
+    use super::*;
+
+    #[test]
+    fn detects_timing_and_shot_steps_through_repeat() {
+        let plain = vec![Step::Key { key: "Enter".into(), times: 1 }];
+        assert!(!has_timing_step(&plain));
+        assert!(!has_shot_step(&plain));
+
+        let nested_shot = vec![Step::Repeat {
+            times: 2,
+            until: None,
+            steps: vec![Step::Shot { name: "a".into(), max_w: 0, golden: None, t_ms: 0 }],
+        }];
+        assert!(!has_timing_step(&nested_shot));
+        assert!(has_shot_step(&nested_shot));
+
+        let nested_perf = vec![Step::Repeat {
+            times: 1,
+            until: None,
+            steps: vec![Step::Perf {
+                name: "p".into(),
+                frames: 10,
+                warm: 2,
+                budget: Budget { p50: None, p95: None, max: None },
+            }],
+        }];
+        assert!(has_timing_step(&nested_perf));
+        assert!(!has_shot_step(&nested_perf));
+    }
 }

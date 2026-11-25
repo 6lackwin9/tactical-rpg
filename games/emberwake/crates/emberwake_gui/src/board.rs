@@ -62,7 +62,8 @@ pub struct BoardPane {
 }
 
 /// PR7-37 (PT-31): board view `view` with each locked row that says only "Locked" (or nothing) saying what opens it
-/// (`board::unlock_words`), where the kit can tell.
+/// (`board::unlock_words`), where the kit can tell; PR7-76 (PT-49): else the quest's own `closed_text` (what it waits
+/// on, in the story's words).
 pub fn with_unlock_words(d: &emberwake_world::Data, gs: &emberwake_world::GameState, mut view: Dict) -> Dict {
     if let Some(Value::Array(secs)) = view.get_mut("sections") {
         for sec in secs.iter_mut() {
@@ -70,7 +71,10 @@ pub fn with_unlock_words(d: &emberwake_world::Data, gs: &emberwake_world::GameSt
             for r in rows.iter_mut().filter_map(Value::as_object_mut) {
                 let line = s(r, "line");
                 if s(r, "status") == "locked" && (line.is_empty() || line == emberwake_world::dialogue::LOCKED_TEXT) {
-                    let words = emberwake_world::board::unlock_words(d, gs, &s(r, "quest"));
+                    let mut words = emberwake_world::board::unlock_words(d, gs, &s(r, "quest"));
+                    if words.is_empty() {
+                        words = s(&emberwake_world::quest::resolved(d, gs, &s(r, "quest")), "closed_text").trim().to_string();
+                    }
                     if !words.is_empty() {
                         r.insert("line".into(), words.into());
                     }
@@ -152,7 +156,9 @@ impl BoardPane {
         let mut out = Vec::new();
         let status = s_or(det, "status", &s(row, "status"));
         let line = s(row, "line");
-        out.push((if line.is_empty() { status_text(&status).to_string() } else { format!("{}: {line}", status_text(&status)) }, SMALL, "dim"));
+        // PR7-76 (PT-49): a line that only repeats the status ("Locked") is not said twice
+        let head = status_text(&status);
+        out.push((if line.is_empty() || line == head { head.to_string() } else { format!("{head}: {line}") }, SMALL, "dim"));
         let desc = s(det, "description");
         if !desc.is_empty() {
             out.push((desc, BODY, "text"));
@@ -260,7 +266,7 @@ impl BoardPane {
         let why = accept_why(&s(&row, "status"), &s(&row, "line"));
         let accept_tip: Tip = if why.is_empty() { tip("Accept", &format!("Take {} on.", s(&row, "name"))) } else { tip("Accept", &why) };
         ui.button_full("board.accept", Rect::new(right - accept_w, bar_y, accept_w, bh), "Accept", wrap(BoardAct::Accept(self.selected.clone())), why.is_empty(), false, BODY, accept_tip);
-        ui.button_full("board.close", Rect::new(x0, bar_y, close_w, bh), "Close", wrap(BoardAct::Close), true, false, BODY, tip("Close", "Back to the conversation (Esc)."));
+        ui.button_full("board.close", Rect::new(x0, bar_y, close_w, bh), "Close", wrap(BoardAct::Close), true, false, BODY, tip("Close", &format!("Back to the conversation ({}).", crate::controls_view::hints(&cx.settings.v).hint(aegis_ui::screen::Key::Esc))));
     }
 
     /// B5, B6: the sections, each a heading and its rows (the name; the node with the deadline at the right; the
@@ -550,7 +556,12 @@ mod tests {
     const LONG: &str = "The Long Road Through the Drowned Marshes to the Old Salt Works and Back Again";
 
     fn data() -> Data {
-        let quests = json!([
+        data_with(Vec::new())
+    }
+
+    /// `data` with `extra` quests on the board too (PR7-76).
+    fn data_with(extra: Vec<Value>) -> Data {
+        let mut quests = json!([
             {"id": "m1", "name": "First Mission", "giver": "clerk", "board": "clerk_board", "track": "main", "template": "reach_and_clear",
              "description": "Raiders hold the kiln. Drive them out.",
              "steps": [{"text": "Reach the kiln", "location": "kiln"}, {"text": "Raid the kiln", "location": "kiln", "encounter": "enc_a"}]},
@@ -562,6 +573,9 @@ mod tests {
              "description": "A very long description that wraps over several lines in the detail pane, so the pane's scroll area and its wrapping are both used at the larger text sizes as well.",
              "steps": [{"text": "Walk the long road through the drowned marshes all the way to the old salt works", "encounter": "enc_m"}]}
         ]);
+        if let Value::Array(list) = &mut quests {
+            list.extend(extra);
+        }
         let worlds = json!({
             "ward": {"manifest": {"id": "ward", "name": "Ward", "start_location": "hub", "start_party": ["hero"]}, "own": {
                 "locations": with_ids("ward", json!([{"id": "hub", "name": "Hub"}, {"id": "kiln", "name": "Kiln"}, {"id": "watch", "name": "Watch"},
@@ -583,14 +597,20 @@ mod tests {
         });
         let game = json!({"quests": [
             {"id": "reach_and_clear", "objectives": [{"kind": "reach_location"}, {"kind": "win_encounter"}], "rewards": {"xp": 10, "gold": 5}},
-            {"id": "clear_site", "objectives": [{"kind": "win_encounter"}], "rewards": {"xp": 5}}
+            {"id": "clear_site", "objectives": [{"kind": "win_encounter"}], "rewards": {"xp": 5}},
+            {"id": "flag_job", "objectives": [{"kind": "flag"}], "rewards": {"xp": 5}}
         ]});
         Data::from_values(&catalog, &worlds, &game)
     }
 
     /// A debug game in `ward` at act 1 (the board open), the hub visited, on its region map.
     fn ward_cx() -> Cx {
-        let mut cx = story_cx(data());
+        ward_cx_with(data())
+    }
+
+    /// `ward_cx` on data `d`.
+    fn ward_cx_with(d: Data) -> Cx {
+        let mut cx = story_cx(d);
         let mut gs = new_game::create_for_world(&cx.data.clone(), "ward", 1).expect("a new game");
         gs.set_flag("act", json!(1));
         gs.set_flag(&explore::visited_flag("ward:hub"), json!(true));
@@ -619,6 +639,34 @@ mod tests {
     fn section(cx: &Cx, id: &str) -> Vec<String> {
         let v = emberwake_world::board::view(&cx.data, cx.gs(), "ward:clerk_board");
         rows(&v).into_iter().filter(|r| s(r, "_section") == id).map(|r| s(&r, "quest")).collect()
+    }
+
+    /// PR7-76 (PT-49): a locked quest whose missing flag nothing known sets says its own `closed_text`, and its detail
+    /// never reads "Locked: Locked"; one with a known opener says "Opens after ..."; a flag job's detail says Where (the
+    /// place where its flag is set) and its recommended level when it has one.
+    #[test]
+    fn a_locked_quest_says_what_it_waits_on_and_a_flag_job_says_where() {
+        let extra = vec![
+            json!({"id": "bell", "name": "The Bell", "board": "clerk_board", "template": "clear_site", "show_locked": true, "closed_text": "Wait for the bell.",
+                   "requires_flags": [{"key": "bell_rung", "value": true}], "steps": [{"text": "Ring it", "encounter": "enc_w"}]}),
+            json!({"id": "plain", "name": "Plain Lock", "board": "clerk_board", "template": "clear_site", "show_locked": true,
+                   "requires_flags": [{"key": "never_set", "value": true}], "steps": [{"text": "?", "encounter": "enc_w"}]}),
+            json!({"id": "fetch", "name": "Fetch Job", "board": "clerk_board", "template": "flag_job", "rec_level": 3, "steps": [{"text": "Fetch it", "flag": "fetched"}]}),
+        ];
+        let d = data_with(extra);
+        let cx = ward_cx_with(d);
+        let (d, gs) = (cx.data.clone(), cx.gs().clone());
+        let view = with_unlock_words(&d, &gs, emberwake_world::board::view(&d, &gs, "ward:clerk_board"));
+        let row = |q: &str| rows(&view).into_iter().find(|r| s(r, "quest") == q).unwrap_or_else(|| panic!("{q} is listed"));
+        assert_eq!(s(&row("ward:bell"), "line"), "Wait for the bell.", "nothing known sets its flag: its closed_text");
+        let paras = |q: &str| BoardPane::detail_paras(&cx, &emberwake_world::board::detail(&d, &gs, q), &row(q)).into_iter().map(|p| p.0).collect::<Vec<_>>();
+        assert_eq!(paras("ward:bell")[0], "Locked: Wait for the bell.");
+        assert_eq!(paras("ward:plain")[0], "Locked", "no words at all: the status once, never \"Locked: Locked\"");
+        assert!(paras("ward:m2")[0] != "Locked: Locked");
+        // the flag job: no step place of its own; with nothing setting the flag no Where, its level as rated
+        let fetch = paras("ward:fetch");
+        assert!(!fetch.iter().any(|p| p.starts_with("Where:")), "nothing sets `fetched`: {fetch:?}");
+        assert!(fetch.contains(&format!("{}.", emberwake_world::board::rec_level_text(3))), "{fetch:?}");
     }
 
     /// TU4 (B3, B5, B8, B9, B11): the keeper's board reply opens the pane in the dialogue box's place, one row per

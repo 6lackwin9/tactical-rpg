@@ -60,7 +60,26 @@ pub fn icon_errors(v: &View, item: &Dict, family: &Dict) -> Vec<String> {
     }
 }
 
-/// A3, A4 and A5 of a unit (`character` empty) or a world character on base unit `unit`.
+/// A21 (PASSIVE-ICON1, ENGINE-24): a passive's `icon` must be a kit archetype with its file `passives/<key>.png` in the
+/// game, kit or engine assets ("" passes: the archetype its effects derive, which falls back to a skill icon when its
+/// file is not there).
+pub fn passive_icon_errors(v: &View, passive: &Dict) -> Vec<String> {
+    let key = json::s(passive, "icon");
+    if key.is_empty() {
+        return Vec::new();
+    }
+    if !rpgkit_data::passive_icon::known(&key) {
+        return vec![format!("Icon '{key}' isn't a passive icon archetype ({}).", rpgkit_data::passive_icon::ARCHETYPES.join(", "))];
+    }
+    let file = rpgkit_data::passive_icon::path(&key);
+    if v.assets.roots.is_empty() || v.assets.has(&file) {
+        Vec::new()
+    } else {
+        vec![format!("Icon '{key}' has no file {file} (game, kit or engine).")]
+    }
+}
+
+/// A3, A4 and A5 of a unit (`character` empty) or a world character on base unit `unit` (A4 skipped for a painted body).
 pub fn portrait_and_palette_warnings(v: &View, character: &Dict, unit: &Dict) -> Vec<String> {
     let mut out = Vec::new();
     if v.assets.roots.is_empty() {
@@ -73,19 +92,27 @@ pub fn portrait_and_palette_warnings(v: &View, character: &Dict, unit: &Dict) ->
     let tier = art::portrait_tier(character, unit);
     let common = art::common_portrait(&body);
     let (class_id, variant) = art::split_body(&body);
+    // A5 (PAINTED-MAPS1): the unit's portrait key names a file; a key with its file stands in for the body's portrait
+    let key = art::portrait_key(character, unit);
+    let keyed = art::keyed_portrait(&key).filter(|f| v.assets.has(f));
+    if let Some(file) = art::keyed_portrait(&key).filter(|_| keyed.is_none()) {
+        out.push(format!("{name}'s portrait '{key}' has no file {file} (game, kit or engine)."));
+    }
     // A3: a unique tier without its file
     if let Some(folder) = art::tier_folder(&tier) {
         let own = format!("portraits/{folder}/{id}.png");
         if !v.assets.has(&own) {
-            out.push(format!("{name} ({tier}) has no portrait at {own}; it shows the common portrait {class_id}_{variant}."));
+            let shown = if keyed.is_some() { key.clone() } else { format!("{class_id}_{variant}") };
+            out.push(format!("{name} ({tier}) has no portrait at {own}; it shows the common portrait {shown}."));
         }
-    } else if !v.assets.has(&common) && body_state(v, &body).is_some() {
+    } else if keyed.is_none() && !v.assets.has(&common) && body_state(v, &body).is_some() {
         // A5: a body worn by a common-tier unit or character without its common portrait
         out.push(format!("Body '{body}' has no common portrait; {name} shows {class_id}_base."));
     }
-    // A4: the palette file and its slots
+    // A4: the palette file and its slots (DIORAMA1B: a painted body takes no palette swap, so its palette is not looked up)
     let palette = art::palette_of(character, unit);
-    if !palette.is_empty() {
+    let painted = matches!(body_state(v, &body), Some(Ok(c)) if c.painted);
+    if !palette.is_empty() && !painted {
         let rel = assets::body_file(&body, &format!("palettes/{palette}.json"));
         let problem = match assets::read_json(&v.assets, &rel) {
             None => format!("no file {rel}"),
@@ -221,6 +248,10 @@ const STAGE_TILE_PX: [(u32, u32); 1] = [(64, 48)];
 /// (REGIONGROUND1_SCENE 1.6: one storey, 4 cells wide), stage 64 x 24.
 const REGION_FACE_PX: [(u32, u32); 3] = [(32, 16), (32, 12), (128, 48)];
 const STAGE_FACE_PX: [(u32, u32); 1] = [(64, 24)];
+/// DIORAMA1 D4: a stage set's wall foot strip (`wall_foot/`, the top 8 logical px of a row 0 cell at 2 art px).
+const STAGE_FOOT_PX: [(u32, u32); 1] = [(64, 16)];
+/// DIORAMA3 R5: a stage set's cover prop on a blocked cell (`cover/`, a cell and its height above).
+const STAGE_COVER_PX: [(u32, u32); 1] = [(64, 72)];
 
 /// The world's `stage_set` and the `tileset` of each of its locations, as (label, set id) with empty ids left out.
 fn bound_sets(v: &View, w: &str) -> (Option<String>, Vec<(String, String)>) {
@@ -295,8 +326,37 @@ pub fn tileset_errors(v: &View, w: &str) -> Vec<String> {
                 if let Some(size) = png_size(&root.join(&rel)) {
                     let in_set = rel.strip_prefix(&format!("tilesets/{set}/")).unwrap_or(&rel);
                     let tile = in_set.strip_prefix("boundary/").and_then(|b| b.split_once('/')).map_or(in_set, |(_, rest)| rest);
-                    let face = tile.starts_with("wall_face/");
-                    let (sizes, what) = if face { (face_px, format!("{role} wall face")) } else { (tile_px, format!("{role} tile")) };
+                    // DIORAMA2 R2: a stage set's front face per terrain (`front_face/<terrain>/`) is a wall face's size;
+                    // DIORAMA4 S2: so is a terrain override folder's own (`<terrain>/front_face/`)
+                    let parts: Vec<&str> = tile.split('/').collect();
+                    let stage = role == "stage";
+                    let face = tile.starts_with("wall_face/") || (stage && (tile.starts_with("front_face/") || (parts.len() == 3 && parts[1] == "front_face")));
+                    let foot = stage && tile.starts_with("wall_foot/");
+                    // DIORAMA5 slice 0: a terrain's ground sheet (`<terrain>/sheet.png`, whole 64 x 48 cells) and a sunken
+                    // terrain's lip (`lip/<terrain>/v*`, 64 wide, at most a cell high); `<terrain>/decal/v*` is a stage tile
+                    if stage && parts.len() == 2 && parts[1] == "sheet.png" {
+                        let (cw, ch) = STAGE_TILE_PX[0];
+                        if size.0 == 0 || size.1 == 0 || size.0 % cw != 0 || size.1 % ch != 0 {
+                            out.push(format!("Ground sheet '{rel}' is {}x{} px; a stage ground sheet is a whole number of {cw}x{ch} cells.", size.0, size.1));
+                        }
+                        continue;
+                    }
+                    if stage && parts.first() == Some(&"lip") {
+                        let (cw, ch) = STAGE_TILE_PX[0];
+                        if size.0 != cw || size.1 == 0 || size.1 > ch {
+                            out.push(format!("Lip art '{rel}' is {}x{} px; a stage lip is {cw} wide and 1 to {ch} high.", size.0, size.1));
+                        }
+                        continue;
+                    }
+                    let (sizes, what) = if face {
+                        (&face_px[..], format!("{role} wall face"))
+                    } else if foot {
+                        (&STAGE_FOOT_PX[..], format!("{role} wall foot"))
+                    } else if role == "stage" && tile.starts_with("cover/") {
+                        (&STAGE_COVER_PX[..], format!("{role} cover prop"))
+                    } else {
+                        (&tile_px[..], format!("{role} tile"))
+                    };
                     if !sizes.contains(&size) {
                         let wants = sizes.iter().map(|(a, b)| format!("{a}x{b}")).collect::<Vec<_>>().join(" or ");
                         out.push(format!("Tile art '{rel}' is {}x{} px; a {what} wants {wants}.", size.0, size.1));

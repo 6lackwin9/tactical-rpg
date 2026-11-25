@@ -23,14 +23,21 @@ mod battle_view;
 mod board;
 mod board_view;
 mod bunks;
+mod character_view;
 mod controls_view;
 #[cfg(feature = "dev_tools")]
 mod dojo;
+#[cfg(feature = "dev_tools")]
+mod dojo_view;
 mod epilogue;
+mod epilogue_view;
 mod facility;
 mod facility_view;
+mod floats;
 #[cfg(feature = "dev_tools")]
 mod forge;
+#[cfg(feature = "dev_tools")]
+mod forge_view;
 mod fx;
 #[cfg(feature = "dev_tools")]
 mod gallery;
@@ -38,6 +45,7 @@ mod ground;
 mod hud;
 mod hub;
 mod intent_text;
+mod loadout_view;
 mod mapview;
 mod menus;
 mod music;
@@ -55,9 +63,12 @@ mod shop;
 mod save_view;
 mod shop_view;
 mod siege;
+mod siege_view;
 mod stage;
 mod story;
 mod talk;
+mod talk_view;
+mod title_fx;
 mod timeline_view;
 mod tokens;
 mod transitions;
@@ -66,6 +77,7 @@ mod viewkeys;
 #[cfg(target_arch = "wasm32")]
 mod web;
 mod worldmap;
+mod worldmap_view;
 
 use aegis_content::manifest;
 use aegis_ui::art;
@@ -93,6 +105,23 @@ pub(crate) const DEV_KEYS: bool = cfg!(all(debug_assertions, feature = "dev_tool
 /// surfaces a player never sees: the main menu's Tools, the test worlds on New game, the world map's Edit layout and
 /// the Settings rows for testing (the "(testing)" overlays, the Debug row). Any other build hides them.
 pub(crate) const DEV_BUILD: bool = DEV_KEYS;
+
+/// ENGINE-57 (FEEL-RELEASE1): a launch asked for the developer surfaces (`dev_asked`).
+static DEV_ASKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The developer surfaces are shown (`DEV_BUILD`): a debug build with the dev tools, or (ENGINE-57) a build with the dev
+/// tools launched with `dev=1`, as every scenario run is (the scenario driver passes it), so one script takes one path
+/// in a dev and a release build. A player's release build never shows them; the debug build's dev keys stay
+/// `DEV_KEYS`.
+pub(crate) fn dev_build() -> bool {
+    DEV_BUILD || DEV_ASKED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// ENGINE-57: whether the launch asks for the developer surfaces: `dev=1` (`asked`, read by `Start`, ENGINE-66 CLN-77),
+/// in a build with the dev tools (`tools`, `DEV_TOOLS`); a build without them never shows them.
+fn dev_asked(asked: bool, tools: bool) -> bool {
+    tools && asked
+}
 
 fn arg<'a>(args: &'a [(String, String)], k: &str) -> Option<&'a str> {
     args.iter().find(|(a, _)| a == k).map(|(_, v)| v.as_str())
@@ -136,26 +165,36 @@ struct Roots {
     engine: Option<PathBuf>,
 }
 
-/// The desktop's roots: the engine folder found upward from the working folder, else from the program's own folder;
-/// `start` is the engine folder, else the working folder.
 #[cfg(not(target_arch = "wasm32"))]
-fn native_roots() -> Result<Roots> {
-    let cwd = std::env::current_dir()?;
-    let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
-    let engine = [Some(cwd.clone()), exe_dir].into_iter().flatten().find_map(|start| {
-        let mut d = start;
+fn find_engine_dir(starts: &[PathBuf]) -> Option<PathBuf> {
+    starts.iter().find_map(|start| {
+        let mut d = start.clone();
         loop {
-            if aegis_core::vfs::is_dir(d.join("crates/aegis_ui")) {
+            if aegis_core::vfs::is_dir(d.join("crates/aegis_ui"))
+                || (d.file_name().is_some_and(|n| n == "engine") && aegis_core::vfs::is_dir(d.join("assets/fonts")))
+            {
                 return Some(d);
             }
-            if aegis_core::vfs::is_dir(d.join("engine/crates/aegis_ui")) {
+            if aegis_core::vfs::is_dir(d.join("engine/crates/aegis_ui"))
+                || aegis_core::vfs::is_dir(d.join("engine/assets/fonts"))
+            {
                 return Some(d.join("engine"));
             }
             if !d.pop() {
                 return None;
             }
         }
-    });
+    })
+}
+
+/// The desktop's roots: the engine folder found upward from the working folder, else from the program's own folder;
+/// `start` is the engine folder, else the working folder.
+#[cfg(not(target_arch = "wasm32"))]
+fn native_roots() -> Result<Roots> {
+    let cwd = std::env::current_dir()?;
+    let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
+    let starts: Vec<PathBuf> = [Some(cwd.clone()), exe_dir].into_iter().flatten().collect();
+    let engine = find_engine_dir(&starts);
     Ok(Roots { start: engine.clone().unwrap_or(cwd), engine })
 }
 
@@ -172,6 +211,7 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
     // engine's game start; the data, the tuning, the launch keys and the first screens are the game's.
     let engine = engine_dir.unwrap_or_else(|| PathBuf::from("."));
     let mut launch = aegis_ui::start::Start::new(GAME_ID, game_dir.clone(), &engine, args, headless);
+    DEV_ASKED.store(dev_asked(launch.dev, DEV_TOOLS), std::sync::atomic::Ordering::Relaxed);
     notices.append(&mut launch.notice);
     if arg(args, "saves").is_none() {
         if let Err(e) = aegis_save::adopt_shared(GAME_ID) {
@@ -198,6 +238,15 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
     let mut settings = launch.settings(default_settings());
     settings.keep_window_size(&screens::WINDOW_SIZES);
     force_shipped_views(&mut settings.v, arg(args, "screen"));
+    // CONTROLS-MIGRATE1 (PR7-71): an action a file from before the fixed keys put on one goes back to its own key
+    let moved = aegis_ui::controls::release_fixed(&mut settings.v, &controls_view::FIXED_KEYS);
+    if !moved.is_empty() {
+        let names: Vec<String> = moved.iter().map(|k| controls_view::ACTIONS.iter().find(|a| a.key == *k).map_or_else(|| aegis_ui::controls::key_label(*k), |a| a.label.to_string())).collect();
+        notices.push(format!("Controls: {} went back to {} own key (that key is fixed).", names.join(", "), if names.len() == 1 { "its" } else { "their" }));
+        if let Err(e) = settings.save() {
+            notices.push(format!("Saving the settings: {e}"));
+        }
+    }
     // Playtest recordings are never on in the web build (WEBREL1 6.1, `vfs::dev::ON`), so its data is never hashed.
     let record = aegis_core::vfs::dev::ON && settings.v["record_playtests"].as_bool().unwrap_or(cfg!(debug_assertions));
     // The data fingerprint a recording carries; hashed only while recording is on.
@@ -207,7 +256,9 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
     let audio = launch.audio();
     launch.notice = notices;
     #[allow(unused_mut)]
-    let (mut cx, options) = launch.cx(settings, art::Art::new(project), audio, playtest, game);
+    let (mut cx, mut options) = launch.cx(settings, art::Art::new(project), audio, playtest, game);
+    // ENGINE-64 (LIVE-RELOAD1): `dev=1` reloads edited files only in a build with the dev tools, never a player's
+    options.live &= DEV_TOOLS;
     #[allow(unused_mut)]
     let mut stack: Vec<Box<dyn Screen<GameCx>>> = vec![Box::new(menus::MainMenu::default())];
     match arg(args, "screen") {
@@ -215,8 +266,13 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
         Some("arena") => match ruleset {
             Some(ruleset) => {
                 emberwake_rules::ruleset::Ruleset::of(&cx.app.data.cat, ruleset).map_err(anyhow::Error::msg)?;
-                let encounter = cx.app.encounter.clone();
-                stack.push(Box::new(battle::BattleScreen::arena_with(&cx, None, &encounter, Some(ruleset.to_string()), "", false)));
+                // PR7-54: `scene=<world>:<encounter>` opens a world's encounter (the playback form), so a scenario reaches
+                // a boss fight of a world
+                let (world, encounter) = match cx.app.encounter.split_once(':') {
+                    Some((w, e)) => (Some(w.to_string()), e.to_string()),
+                    None => (None, cx.app.encounter.clone()),
+                };
+                stack.push(Box::new(battle::BattleScreen::arena_with(&cx, world, &encounter, Some(ruleset.to_string()), "", false)));
             }
             None => stack.push(Box::new(battle::BattleScreen::sandbox(&cx))),
         },
@@ -234,15 +290,51 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
 
 /// The desktop program (`src/main.rs`): the launch keys from the command line, the folders found from the working
 /// folder or the program's, a window (or none, `headless=`).
+///
+/// Offline full-map capture (for `aegis align-map`): `render_map=<id> out=<file.png> [fx=<path|none>] [layers=shell|ground|unlit|full] [map_override=<json>] [view=square|tilted]`
+/// renders the full static map at 32 px/tile with no window or HUD and exits.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run_native() -> Result<()> {
     let raw: Vec<String> = std::env::args().skip(1).collect();
     let args: Vec<(String, String)> = raw.iter().filter_map(|a| a.split_once('=').map(|(k, v)| (k.to_string(), v.to_string()))).collect();
+    if let Some(req) = aegis_ui::map_fx::RenderMapRequest::from_args(&args)? {
+        return render_map_native(&args, &req);
+    }
     let headless = Headless::from_args(&args)?;
     let ruleset = arena_ruleset(&args)?;
     let roots = native_roots()?;
     let (cx, stack, options) = launch(&args, roots, ruleset, headless)?;
     aegis_ui::shell::run(cx, stack, options)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn render_map_native(args: &[(String, String)], req: &aegis_ui::map_fx::RenderMapRequest) -> Result<()> {
+    let roots = native_roots()?;
+    let (cx, _stack, options) = launch(args, roots, None, None)?;
+    struct EmberwakeMapRenderer {
+        cx: Cx,
+        font: PathBuf,
+    }
+    impl aegis_ui::map_fx::StaticMapRenderer for EmberwakeMapRenderer {
+        fn render_static_map(&mut self, req: &aegis_ui::map_fx::RenderMapRequest) -> Result<aegis_ui::canvas::Canvas> {
+            let view = match req.view.as_str() {
+                "tilted" => mapview::View::Tilted,
+                _ => mapview::View::Square,
+            };
+            let map_override = match &req.map_override {
+                None => None,
+                Some(p) => {
+                    let text = std::fs::read_to_string(p).with_context(|| format!("reading map_override '{}'", p.display()))?;
+                    let val: serde_json::Value = serde_json::from_str(&text).with_context(|| format!("parsing map_override '{}'", p.display()))?;
+                    Some(val.as_object().cloned().context("map_override must be a JSON object")?)
+                }
+            };
+            region::render_static_map(&mut self.cx, &self.font, &req.map_id, view, &req.fx, req.layers, map_override.as_ref())
+        }
+    }
+    let mut renderer = EmberwakeMapRenderer { cx, font: options.font };
+    aegis_ui::map_fx::write_capture(&mut renderer, req)?;
+    Ok(())
 }
 
 /// UIBOT (REPLAY-CI1): where the engine's UI bot (`aegis_ui::shell::bot`) starts, by name, with the launch keys of each
@@ -277,6 +369,18 @@ pub fn bot_run(start: &str, data: &Path, scratch: &Path, bot: &aegis_ui::shell::
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// ENGINE-57 (FEEL-RELEASE1): `dev=1` shows the developer surfaces in a build with the dev tools (a release
+    /// scenario run, which then takes the dev build's path: New game opens the world picker); a shipped player build,
+    /// without the dev tools, ignores it.
+    #[test]
+    fn dev_1_shows_the_developer_surfaces_only_with_the_dev_tools() {
+        let args = |list: &[(&str, &str)]| list.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect::<Vec<_>>();
+        let dev = |list: &[(&str, &str)]| aegis_ui::start::Start::new("emberwake", None, std::path::Path::new("."), &args(list), None).dev;
+        assert!(dev_asked(dev(&[("dev", "1")]), true), "a release build with the dev tools");
+        assert!(!dev_asked(dev(&[("dev", "1")]), false), "a shipped player build ignores it");
+        assert!(!dev_asked(dev(&[("dev", "0")]), true) && !dev_asked(dev(&[]), true));
+    }
 
     #[test]
     fn a_launch_ruleset_comes_with_the_arena_only() {
@@ -313,5 +417,18 @@ mod tests {
         let mut v = json!({"battle_view": "flat", "region_view": "tilted"});
         force_shipped_views(&mut v, Some("runner"));
         assert_eq!((v["battle_view"].as_str(), v["region_view"].as_str()), (Some("flat"), Some("tilted")));
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn find_engine_dir_supports_portable_release_layout() {
+        let scratch = aegis_core::scratch::Scratch::new("portable_roots");
+        let zip_root = scratch.path().join("release_zip");
+        let other_cwd = scratch.path().join("unrelated_cwd");
+        std::fs::create_dir_all(zip_root.join("engine/assets/fonts")).unwrap();
+        std::fs::create_dir_all(&other_cwd).unwrap();
+        // Launched from an unrelated CWD with exe_dir = zip_root (no crates/ folder anywhere):
+        let found = find_engine_dir(&[other_cwd, zip_root.clone()]);
+        assert_eq!(found, Some(zip_root.join("engine")));
     }
 }

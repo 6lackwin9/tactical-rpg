@@ -363,9 +363,11 @@ impl Fonts {
     }
 }
 
-/// How many averaged frames are kept (a screen shows a few sizes), the oldest dropped first: a window drag cannot pile
-/// them up.
-const REDUCED_MAX: usize = 8;
+/// How many composed frames are kept, the oldest dropped first: a window drag cannot pile them up. ENGINE-46: every
+/// frame is composed once per size now (not only the averaged ones), and a screen like the battle shows a few dozen
+/// panels and buttons, so the list holds that many, under `NINE_CACHE_BYTES` in all.
+pub const NINE_CACHE_MAX: usize = 64;
+pub const NINE_CACHE_BYTES: usize = 64 << 20;
 
 /// What a composed frame's pixels depend on: the picture, the physical size, the physical px per art px (two views can
 /// give one physical size) and the sidecar.
@@ -395,10 +397,46 @@ fn reduced_nine(img: &Image, nine: &Nine, k: f32, pr: Rect, compose: impl FnOnce
         };
         draw(&entry.1);
         cache.push(entry);
-        if cache.len() > REDUCED_MAX {
+        while cache.len() > NINE_CACHE_MAX || (cache.len() > 1 && cache.iter().map(|e| e.1.len()).sum::<usize>() > NINE_CACHE_BYTES) {
             cache.remove(0);
         }
     });
+}
+
+/// ENGINE-46: the nine cells sampled at `pr`'s size (RGBA rows; a pixel no cell covers stays clear): stretch maps the
+/// destination span onto the whole source span (a shrunk corner is sampled down); tile repeats the source at its own size
+/// along the middle column or row.
+fn compose_sampled(img: &Image, nine: &Nine, k: f32, pr: Rect, cols: &[(i32, i32, i32, i32); 3], rows: &[(i32, i32, i32, i32); 3]) -> Vec<u8> {
+    let mut out = vec![0u8; (pr.w * pr.h * 4) as usize];
+    for (j, &(sy, src_h, dy, dst_h)) in rows.iter().enumerate() {
+        for (i, &(sx, src_w, dx, dst_w)) in cols.iter().enumerate() {
+            let (mid_col, mid_row) = (i == 1, j == 1);
+            let fill = if mid_col && mid_row { nine.center } else if mid_col || mid_row { nine.edges } else { NineFill::Stretch };
+            if fill == NineFill::None || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0 {
+                continue;
+            }
+            let tile_x = fill == NineFill::Tile && mid_col;
+            let tile_y = fill == NineFill::Tile && mid_row;
+            for y in 0..dst_h {
+                let oy = if tile_y { ((y as f32 / k) as i32).rem_euclid(src_h) } else { y * src_h / dst_h };
+                let (ty, tx0) = (dy - pr.y + y, dx - pr.x);
+                if ty < 0 || ty >= pr.h {
+                    continue;
+                }
+                for x in 0..dst_w {
+                    let tx = tx0 + x;
+                    if tx < 0 || tx >= pr.w {
+                        continue;
+                    }
+                    let ox = if tile_x { ((x as f32 / k) as i32).rem_euclid(src_w) } else { x * src_w / dst_w };
+                    let at = (((sy + oy) * img.w + sx + ox) * 4) as usize;
+                    let to = ((ty * pr.w + tx) * 4) as usize;
+                    out[to..to + 4].copy_from_slice(&img.px[at..at + 4]);
+                }
+            }
+        }
+    }
+    out
 }
 
 /// The nine cells averaged to their spans, RGBA row by row at `pr`'s size: a stretched cell to its span, a tiled one to
@@ -659,6 +697,51 @@ fn compose_straddle(img: &Image, nine: &Nine, k: f32, p: f32, pr: Rect, reach: i
     out
 }
 
+/// ENGINE-46 (FEEL-FIX1): a layer drawn once and put back while nothing it shows changed (`Painter::cached`): a board's
+/// floor under its marks and units, say. The screen that owns it keeps it (one per layer).
+#[derive(Debug, Clone, Default)]
+pub struct Snapshot {
+    key: SnapKey,
+    rect: Rect,
+    px: Vec<u8>,
+    /// ENGINE-50 (MAP-FRAME1): where a scrolled layer's origin was (physical px), and the frame `scroll_begin` opened
+    /// (its key, rect and origin) until `scroll_end` keeps it.
+    origin: (i32, i32),
+    open: Option<(SnapKey, Rect, (i32, i32))>,
+}
+
+/// A layer's caller key, the view (scale and offset bits), its canvas and the canvas size.
+type SnapKey = Option<(u64, [u32; 3], (i32, i32), (i32, i32))>;
+
+/// ENGINE-50 (MAP-FRAME1): a part of a scrolled layer still to draw (`Painter::scroll_begin`): its physical px, and the
+/// logical rect (in the view in force at `scroll_begin`) that covers them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Strip {
+    pub px: Rect,
+    pub area: Rect,
+}
+
+/// The parts of `at` outside `keep` (which lies inside it): the bands above and below, then left and right of `keep`.
+fn around(at: Rect, keep: Rect) -> Vec<Rect> {
+    let (ax1, ay1, kx1, ky1) = (at.x + at.w, at.y + at.h, keep.x + keep.w, keep.y + keep.h);
+    [
+        Rect::new(at.x, at.y, at.w, keep.y - at.y),
+        Rect::new(at.x, ky1, at.w, ay1 - ky1),
+        Rect::new(at.x, keep.y, keep.x - at.x, keep.h),
+        Rect::new(kx1, keep.y, ax1 - kx1, keep.h),
+    ]
+    .into_iter()
+    .filter(|r| r.w > 0 && r.h > 0)
+    .collect()
+}
+
+impl Snapshot {
+    /// Forgets the layer (the next `cached` draws it).
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+}
+
 pub struct Painter<'a> {
     pub c: &'a mut Canvas,
     pub v: View,
@@ -726,6 +809,87 @@ impl<'a> Painter<'a> {
     }
 
     /// Draws only inside the logical rect `r` from now on (None: everywhere).
+    /// ENGINE-46 (FEEL-FIX1): `draw` draws a layer inside logical `r` (cut to the clip in force); while `key` and the
+    /// view stay the same, the next calls put its pixels back instead of drawing it. `key` is the caller's hash of
+    /// everything the layer shows; `draw` must cover all of `r` and draw nothing outside it (set the clip to `r` first).
+    pub fn cached(&mut self, slot: &mut Snapshot, key: u64, r: Rect, draw: impl FnOnce(&mut Painter)) {
+        // ENGINE-54 (WARM-SPREAD1): a warm draw (nothing drawn) draws the layer for what it caches and keeps nothing
+        if self.c.hidden() {
+            return draw(self);
+        }
+        let want = self.snap_key(key);
+        let at = self.c.visible(self.v.rect(r));
+        if slot.key == want && slot.rect == at {
+            self.c.put_rgba(slot.rect, &slot.px);
+            return;
+        }
+        draw(self);
+        (slot.rect, slot.px) = self.c.copy_rgba(at);
+        slot.key = want;
+    }
+
+    fn snap_key(&self, key: u64) -> SnapKey {
+        let v = self.v;
+        Some((key, [v.s.to_bits(), v.ox.to_bits(), v.oy.to_bits()], v.canvas, (self.c.w, self.c.h)))
+    }
+
+    /// ENGINE-50 (MAP-FRAME1): `cached` for a layer that scrolls, such as a map under a moving camera. The layer inside
+    /// logical `r` (cut to the clip in force) shows its content with its origin at `origin` (physical px: whole px, so
+    /// the content moves rigidly). While `key` and the view stay the same, the pixels kept from the last frame are put
+    /// back moved by the origin's change, and only the parts newly in view are left to draw: the caller draws each
+    /// returned strip with the canvas clip set to its `px` (all of it, and opaque: the strip held old pixels), then calls
+    /// `scroll_end`. None returned: all was put back. A changed key or view returns all of `r` as one strip.
+    pub fn scroll_begin(&mut self, slot: &mut Snapshot, key: u64, r: Rect, origin: (i32, i32)) -> Vec<Strip> {
+        // ENGINE-54: a warm draw gets the whole layer (in the canvas) as one strip, so it asks for all its art; nothing
+        // is kept
+        if self.c.hidden() {
+            slot.open = None;
+            let px = self.v.rect(r).intersect(Rect::new(0, 0, self.c.w, self.c.h));
+            return [px].into_iter().filter(|p| p.w > 0 && p.h > 0).map(|px| Strip { px, area: self.logical_cover(px) }).collect();
+        }
+        let want = self.snap_key(key);
+        let at = self.c.visible(self.v.rect(r));
+        let mut todo = vec![at];
+        if slot.key == want && at.w > 0 && at.h > 0 && slot.px.len() == (slot.rect.w * slot.rect.h * 4) as usize {
+            let moved = Rect::new(slot.rect.x + origin.0 - slot.origin.0, slot.rect.y + origin.1 - slot.origin.1, slot.rect.w, slot.rect.h);
+            let keep = moved.intersect(at);
+            if keep.w > 0 && keep.h > 0 {
+                let (sx, sy, n) = ((keep.x - moved.x) as usize, (keep.y - moved.y) as usize, (keep.w * 4) as usize);
+                for row in 0..keep.h as usize {
+                    let from = ((sy + row) * slot.rect.w as usize + sx) * 4;
+                    let to = (((keep.y as usize + row) * self.c.w as usize) + keep.x as usize) * 4;
+                    self.c.px[to..to + n].copy_from_slice(&slot.px[from..from + n]);
+                }
+                todo = around(at, keep);
+            }
+        }
+        slot.open = (!todo.is_empty() || slot.rect != at || slot.origin != origin).then_some((want, at, origin));
+        todo.into_iter().filter(|p| p.w > 0 && p.h > 0).map(|px| Strip { px, area: self.logical_cover(px) }).collect()
+    }
+
+    /// ENGINE-50: keeps the layer `scroll_begin` opened, as drawn now (nothing when it put all back unmoved).
+    pub fn scroll_end(&mut self, slot: &mut Snapshot) {
+        let Some((key, at, origin)) = slot.open.take() else { return };
+        let mut px = std::mem::take(&mut slot.px);
+        px.clear();
+        if at.w > 0 && at.h > 0 {
+            px.reserve((at.w * at.h * 4) as usize);
+            for y in at.y..at.y + at.h {
+                let from = ((y * self.c.w + at.x) * 4) as usize;
+                px.extend_from_slice(&self.c.px[from..from + (at.w * 4) as usize]);
+            }
+        }
+        (slot.key, slot.rect, slot.px, slot.origin) = (key, at, px, origin);
+    }
+
+    /// The smallest logical rect whose physical rect covers physical `px`.
+    fn logical_cover(&self, px: Rect) -> Rect {
+        let v = self.v;
+        let (x0, y0) = (((px.x as f32 - v.ox) / v.s).floor() as i32, ((px.y as f32 - v.oy) / v.s).floor() as i32);
+        let (x1, y1) = ((((px.x + px.w) as f32 - v.ox) / v.s).ceil() as i32, (((px.y + px.h) as f32 - v.oy) / v.s).ceil() as i32);
+        Rect::new(x0, y0, x1 - x0, y1 - y0)
+    }
+
     pub fn clip(&mut self, r: Option<Rect>) {
         self.c.clip = r.map(|r| self.v.rect(r));
     }
@@ -748,6 +912,10 @@ impl<'a> Painter<'a> {
         let (cx, cy) = (pr.x as f32 + hw, pr.y as f32 + hh);
         // VISCLAR1-C: a pixel centre at least `rad` + 1.5 from every edge is all fill and no border, so the middle is
         // filled at once; only the border band needs the distance. The same pixels, in far less time
+        if self.c.hidden() {
+            self.cover(r, fill[3]);
+            return;
+        }
         let band = rad.ceil() as i32 + 1;
         let middle = Rect::new(pr.x + band, pr.y + band, pr.w - 2 * band, pr.h - 2 * band);
         let solid = middle.w > 0 && middle.h > 0;
@@ -809,6 +977,26 @@ impl<'a> Painter<'a> {
         }
     }
 
+    /// `image_alpha` with each pixel's colour multiplied by `tint` (per channel, `c * t / 255`, rounded; white draws
+    /// exactly as `image_alpha`; the tint's own alpha is ignored).
+    pub fn image_tinted(&mut self, img: &Image, r: Rect, tint: Rgba, a: u8) {
+        let pr = self.v.rect(r);
+        if pr.w <= 0 || pr.h <= 0 || a == 0 {
+            return;
+        }
+        let m = |c: u8, t: u8| ((c as u32 * t as u32 + 127) / 255) as u8;
+        let v = self.c.visible(pr);
+        for py in v.y..v.y + v.h {
+            let sy = (py - pr.y) * img.h / pr.h;
+            for px in v.x..v.x + v.w {
+                let sx = (px - pr.x) * img.w / pr.w;
+                let i = ((sy * img.w + sx) * 4) as usize;
+                let alpha = ((img.px[i + 3] as u32 * a as u32 + 127) / 255) as u8;
+                self.c.put(px, py, [m(img.px[i], tint[0]), m(img.px[i + 1], tint[1]), m(img.px[i + 2], tint[2]), alpha]);
+            }
+        }
+    }
+
     /// Anti-aliased text; (x, y) is the logical top-left of the line box. Returns the logical end x.
     pub fn text(&mut self, x: f32, y: f32, s: &str, size: f32, col: Rgba) -> f32 {
         self.text_face(Typeface::Body, x, y, s, size, col)
@@ -820,8 +1008,14 @@ impl<'a> Painter<'a> {
         let ascent = px as f32 * 0.95;
         let mut pen = self.v.ox + x * self.v.s;
         let base = self.v.oy + y * self.v.s + ascent;
+        // ENGINE-54: a warm draw rasterizes each glyph (cached) but blends none
+        let hidden = self.c.hidden();
         for ch in s.chars() {
             let (m, bitmap) = self.fonts.glyph(face, ch, px);
+            if hidden {
+                pen += m.advance_width;
+                continue;
+            }
             let gx = (pen + m.xmin as f32).round() as i32;
             let gy = (base - m.height as f32 - m.ymin as f32).round() as i32;
             for row in 0..m.height {
@@ -937,13 +1131,7 @@ impl<'a> Painter<'a> {
             let p = corner_scale(nine, k, pr);
             let reach = straddle_over(nine, k, p);
             reduced_nine(img, nine, k, pr, || compose_straddle(img, nine, k, p, pr, reach), |px| {
-                let bw = pr.w + 2 * reach;
-                for y in 0..pr.h + 2 * reach {
-                    for x in 0..bw {
-                        let i = ((y * bw + x) * 4) as usize;
-                        self.c.blend(pr.x - reach + x, pr.y - reach + y, [px[i], px[i + 1], px[i + 2], px[i + 3]]);
-                    }
-                }
+                self.c.blend_rgba(pr.x - reach, pr.y - reach, pr.w + 2 * reach, pr.h + 2 * reach, px);
             });
             if nine.center != NineFill::None {
                 self.cover(r, 255);
@@ -966,40 +1154,15 @@ impl<'a> Painter<'a> {
         let cols = [(0, sl, pr.x, dl), (sl, sw, pr.x + dl, dw), (img.w - sr, sr, pr.x + pr.w - dr, dr)];
         let rows = [(0, st, pr.y, dt), (st, sh, pr.y + dt, dh), (img.h - sb, sb, pr.y + pr.h - db, db)];
         if nine.reduce && k < 1.0 {
-            reduced_nine(img, nine, k, pr, || compose_reduced(img, nine, k, pr, &cols, &rows), |px| {
-                for y in 0..pr.h {
-                    for x in 0..pr.w {
-                        let i = ((y * pr.w + x) * 4) as usize;
-                        self.c.blend(pr.x + x, pr.y + y, [px[i], px[i + 1], px[i + 2], px[i + 3]]);
-                    }
-                }
-            });
+            reduced_nine(img, nine, k, pr, || compose_reduced(img, nine, k, pr, &cols, &rows), |px| self.c.blend_rgba(pr.x, pr.y, pr.w, pr.h, px));
             if nine.center != NineFill::None {
                 self.cover(r, 255);
             }
             return;
         }
-        for (j, &(sy, src_h, dy, dst_h)) in rows.iter().enumerate() {
-            for (i, &(sx, src_w, dx, dst_w)) in cols.iter().enumerate() {
-                let (mid_col, mid_row) = (i == 1, j == 1);
-                let fill = if mid_col && mid_row { nine.center } else if mid_col || mid_row { nine.edges } else { NineFill::Stretch };
-                if fill == NineFill::None || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0 {
-                    continue;
-                }
-                // Stretch maps the destination span onto the whole source span (a shrunk corner is sampled down);
-                // tile repeats the source at its own size along the middle column or row.
-                let tile_x = fill == NineFill::Tile && mid_col;
-                let tile_y = fill == NineFill::Tile && mid_row;
-                for y in 0..dst_h {
-                    let oy = if tile_y { ((y as f32 / k) as i32).rem_euclid(src_h) } else { y * src_h / dst_h };
-                    for x in 0..dst_w {
-                        let ox = if tile_x { ((x as f32 / k) as i32).rem_euclid(src_w) } else { x * src_w / dst_w };
-                        let at = (((sy + oy) * img.w + sx + ox) * 4) as usize;
-                        self.c.blend(dx + x, dy + y, [img.px[at], img.px[at + 1], img.px[at + 2], img.px[at + 3]]);
-                    }
-                }
-            }
-        }
+        // ENGINE-46 (FEEL-FIX1): the samples composed once per size (kept with the reduced ones; each pixel takes one
+        // sample, so blending the composed rows is the same as blending each sample), then blended a row at a time
+        reduced_nine(img, nine, k, pr, || compose_sampled(img, nine, k, pr, &cols, &rows), |px| self.c.blend_rgba(pr.x, pr.y, pr.w, pr.h, px));
         if nine.center != NineFill::None {
             self.cover(r, 255);
         }
@@ -1101,6 +1264,9 @@ impl<'a> Painter<'a> {
 
     /// A filled, anti-aliased ellipse centred on logical (`cx`, `cy`) with radii `rx` and `ry` (a unit's foot shadow).
     pub fn ellipse(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, col: Rgba) {
+        if self.c.hidden() {
+            return;
+        }
         let (x, y, prx, pry) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, (rx * self.v.s).max(0.5), (ry * self.v.s).max(0.5));
         let (x0, y0, x1, y1) = ((x - prx - 1.0).floor() as i32, (y - pry - 1.0).floor() as i32, (x + prx + 1.0).ceil() as i32, (y + pry + 1.0).ceil() as i32);
         for py in y0..=y1 {
@@ -1118,9 +1284,33 @@ impl<'a> Painter<'a> {
         }
     }
 
+    /// DIORAMA5 R3: a light pool: `col` added (`Canvas::add`) over an ellipse centred on logical (`cx`, `cy`) with radii
+    /// `rx` and `ry`, its strength `col`'s alpha at the centre falling smoothly to 0 at the edge ((1 - d^2)^2), so the
+    /// floor under it brightens instead of being painted over.
+    pub fn glow(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, col: Rgba) {
+        if self.c.hidden() {
+            return;
+        }
+        let (x, y, prx, pry) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, (rx * self.v.s).max(0.5), (ry * self.v.s).max(0.5));
+        let (x0, y0, x1, y1) = ((x - prx).floor() as i32, (y - pry).floor() as i32, (x + prx).ceil() as i32, (y + pry).ceil() as i32);
+        for py in y0..=y1 {
+            for px in x0..=x1 {
+                let (ux, uy) = ((px as f32 + 0.5 - x) / prx, (py as f32 + 0.5 - y) / pry);
+                let d2 = ux * ux + uy * uy;
+                if d2 < 1.0 {
+                    let k = (1.0 - d2) * (1.0 - d2);
+                    self.c.add(px, py, [col[0], col[1], col[2], (col[3] as f32 * k).round() as u8]);
+                }
+            }
+        }
+    }
+
     /// A 1 px (old unit) anti-aliased ellipse outline centred on logical (`cx`, `cy`) with radii `rx` and `ry`, no fill
     /// (STAGE1-E: a unit's foot ring). Only pixels within half the stroke plus half a pixel of the edge are touched.
     pub fn ellipse_ring(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, col: Rgba) {
+        if self.c.hidden() {
+            return;
+        }
         let (x, y, prx, pry) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, (rx * self.v.s).max(0.5), (ry * self.v.s).max(0.5));
         let t = self.v.old_scale().max(1.0);
         let pad = t / 2.0 + 1.0;
@@ -1141,6 +1331,9 @@ impl<'a> Painter<'a> {
     }
 
     pub fn circle(&mut self, cx: f32, cy: f32, r: f32, col: Rgba) {
+        if self.c.hidden() {
+            return;
+        }
         let (x, y, pr) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, r * self.v.s);
         let t = (self.v.old_scale() * 0.5).max(1.0);
         let (x0, y0, x1, y1) = ((x - pr - 2.0) as i32, (y - pr - 2.0) as i32, (x + pr + 2.0) as i32, (y + pr + 2.0) as i32);
@@ -1290,6 +1483,62 @@ mod tests {
     use super::*;
 
     const W: Rgba = [255, 255, 255, 255];
+
+    /// ENGINE-50 (MAP-FRAME1): a scrolled layer puts back what it kept, moved with its origin, and leaves only the
+    /// parts newly in view to draw; the result is the same pixels as drawing it all again, at any scale.
+    #[test]
+    fn a_scrolled_layer_draws_only_what_came_into_view() {
+        let font = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/OpenSans-SemiBold.ttf")).unwrap();
+        let mut fonts = Fonts::new(&font);
+        // the layer's colour at physical px (x, y) with its origin at `o`
+        let colour = |x: i32, y: i32, o: (i32, i32)| -> Rgba { [((x - o.0) * 7).rem_euclid(256) as u8, ((y - o.1) * 13).rem_euclid(256) as u8, 40, 255] };
+        // draws physical `px` of the layer, counting the pixels drawn
+        let paint = |p: &mut Painter, px: Rect, o: (i32, i32), drawn: &mut i32| {
+            for y in px.y..px.y + px.h {
+                for x in px.x..px.x + px.w {
+                    p.c.fill(Rect::new(x, y, 1, 1), colour(x, y, o));
+                    *drawn += 1;
+                }
+            }
+        };
+        for s in [1.0f32, 2.0] {
+            let view = View { s, ox: 0.0, oy: 0.0, g: 1, canvas: (40, 30) };
+            let r = Rect::new(2, 3, 30, 20);
+            let mut canvas = crate::canvas::Canvas::new((40.0 * s) as i32, (30.0 * s) as i32);
+            let mut slot = Snapshot::default();
+            let frame = |fonts: &mut Fonts, canvas: &mut crate::canvas::Canvas, slot: &mut Snapshot, key: u64, o: (i32, i32)| -> (Vec<Strip>, i32) {
+                let mut p = Painter { c: canvas, v: view, fonts };
+                p.c.clear([0, 0, 0, 255]);
+                let strips = p.scroll_begin(slot, key, r, o);
+                let mut drawn = 0;
+                for st in &strips {
+                    assert!(view.rect(st.area).x <= st.px.x && view.rect(st.area).y <= st.px.y, "the area covers the strip");
+                    paint(&mut p, st.px, o, &mut drawn);
+                }
+                p.scroll_end(slot);
+                (strips, drawn)
+            };
+            let pr = view.rect(r);
+            let whole = pr.w * pr.h;
+            let (strips, drawn) = frame(&mut fonts, &mut canvas, &mut slot, 1, (0, 0));
+            assert_eq!((strips.len(), drawn), (1, whole), "the first frame draws it all");
+            let (strips, drawn) = frame(&mut fonts, &mut canvas, &mut slot, 1, (3, -2));
+            assert_eq!(drawn, whole - (pr.w - 3) * (pr.h - 2), "{s}x: only the new columns and rows ({strips:?})");
+            let mut fresh = crate::canvas::Canvas::new(canvas.w, canvas.h);
+            {
+                let mut p = Painter { c: &mut fresh, v: view, fonts: &mut fonts };
+                p.c.clear([0, 0, 0, 255]);
+                paint(&mut p, pr, (3, -2), &mut 0);
+            }
+            assert!(canvas.px == fresh.px, "{s}x: the same pixels as a full draw");
+            let (strips, _) = frame(&mut fonts, &mut canvas, &mut slot, 1, (3, -2));
+            assert!(strips.is_empty() && canvas.px == fresh.px, "{s}x: unmoved, all is put back");
+            let (strips, drawn) = frame(&mut fonts, &mut canvas, &mut slot, 2, (3, -2));
+            assert_eq!((strips.len(), drawn), (1, whole), "{s}x: a new key draws it all");
+            let (_, drawn) = frame(&mut fonts, &mut canvas, &mut slot, 2, (500, 0));
+            assert_eq!(drawn, whole, "{s}x: a move past the layer draws it all");
+        }
+    }
 
     #[test]
     fn markup_becomes_styled_spans_and_unknown_tags_stay_text() {

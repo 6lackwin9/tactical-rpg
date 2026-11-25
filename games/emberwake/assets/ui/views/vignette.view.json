@@ -1,0 +1,95 @@
+{
+  "screen": "vignette",
+  "fields": {
+    "style": {
+      "text": "line"
+    },
+    "speaker": {
+      "text": "Clerk"
+    },
+    "text": {
+      "text": "Well?"
+    },
+    "shown": {
+      "number": 5.0
+    },
+    "backdrop": {
+      "picture": "backgrounds/story/x.png"
+    },
+    "dimmed": {
+      "flag": true
+    },
+    "camera": {
+      "text": "static"
+    },
+    "actors": {
+      "rows": [
+        {
+          "id": "hero",
+          "label": "hero",
+          "detail": "left",
+          "picture": "portraits/full_body/hero.png",
+          "enabled": true,
+          "sub": "stay"
+        },
+        {
+          "id": "clerk",
+          "label": "Clerk",
+          "detail": "right",
+          "picture": "portraits/full_body/clerk.png",
+          "enabled": true,
+          "sub": "stay",
+          "selected": true
+        }
+      ]
+    },
+    "auto": {
+      "flag": false
+    },
+    "log_open": {
+      "flag": false
+    },
+    "log": {
+      "rows": [
+        {
+          "id": "0",
+          "label": "",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "The hub."
+        },
+        {
+          "id": "1",
+          "label": "Clerk",
+          "detail": "",
+          "picture": null,
+          "enabled": true,
+          "sub": "Well?"
+        }
+      ]
+    }
+  },
+  "actions": [
+    {
+      "id": "next",
+      "label": "Next",
+      "enabled": true
+    },
+    {
+      "id": "skip",
+      "label": "Skip",
+      "enabled": true
+    },
+    {
+      "id": "auto",
+      "label": "Auto",
+      "enabled": true
+    },
+    {
+      "id": "log",
+      "label": "Log",
+      "enabled": true
+    }
+  ]
+}

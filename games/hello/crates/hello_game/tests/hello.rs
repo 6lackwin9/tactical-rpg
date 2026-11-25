@@ -123,3 +123,31 @@ fn the_sample_game_depends_on_engine_crates_only() {
         assert!(p.starts_with("../../../../engine/crates/aegis_"), "{p} is not an engine crate");
     }
 }
+
+/// ENGINE-40 (ENGINE-GUIDE2): the field's ground is one composed picture (the engine's ground composer): the same bytes
+/// every time, the dirt path a different ground from the grass, and walking still read from the walls alone.
+#[test]
+fn the_field_ground_composes_the_same_picture_with_a_path_on_it() {
+    use aegis_ui::ground;
+    use hello_game::screens::{on_path, with_field_ground};
+    let a = with_field_ground(ground::compose);
+    let b = with_field_ground(ground::compose);
+    let px = ground::CELL_PX;
+    assert_eq!((a.w, a.h), (walk::COLS as i32 * px, walk::ROWS as i32 * px), "one art cell of CELL_PX a tile");
+    assert_eq!(a.px, b.px, "the composer holds no state: the same job gives the same bytes");
+    let mean = |col: i32, row: i32| {
+        let (mut r, mut g) = (0u32, 0u32);
+        for y in row * px + 4..row * px + px - 4 {
+            for x in col * px + 4..col * px + px - 4 {
+                let i = ((y * a.w + x) * 4) as usize;
+                r += u32::from(a.px[i]);
+                g += u32::from(a.px[i + 1]);
+            }
+        }
+        (r, g)
+    };
+    assert!(on_path(4, 2) && !on_path(4, 5));
+    let (path, grass) = (mean(4, 2), mean(4, 5));
+    assert!(path.0 > path.1 && grass.1 > grass.0, "the path reads as dirt (red over green), the grass as grass");
+    assert!(!walk::blocked(4, 2) && !walk::blocked(4, 5), "both are free tiles: the ground is a picture only");
+}

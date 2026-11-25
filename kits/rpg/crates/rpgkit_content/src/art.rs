@@ -217,17 +217,57 @@ pub fn common_portrait(key: &str) -> String {
     format!("portraits/common/{class}_{variant}.png")
 }
 
+/// PAINTED-MAPS1 (PR7-73): the portrait key a unit (`character` empty) or a world character on base unit `unit` shows:
+/// the unit's own `portrait` when the body worn is the unit's (no character, or a character without its own `art`);
+/// "" otherwise.
+pub fn portrait_key(character: &Dict, unit: &Dict) -> String {
+    if !character.is_empty() && !json::s(character, "art").is_empty() {
+        return String::new();
+    }
+    json::s(unit, "portrait")
+}
+
+/// PAINTED-MAPS1: the file of portrait key `key` (a stem under portraits/common/); None for "".
+pub fn keyed_portrait(key: &str) -> Option<String> {
+    (!key.is_empty()).then(|| format!("portraits/common/{key}.png"))
+}
+
 /// The portraits to try (4.2): a unique tier's own file (`id` = the character id, else the unit id), then the common
 /// portrait of the body, then of its class's base.
 pub fn portrait_chain(tier: &str, id: &str, body: &str) -> Vec<String> {
+    portrait_chain_keyed(tier, id, body, "")
+}
+
+/// PAINTED-MAPS1: `portrait_chain` with the unit's portrait key (`portrait_key`; "" none) tried first (`FB-386` (3),
+/// PR7-75: an explicit key is the stronger statement, so it ranks above a unique tier's own file), then the unique
+/// file and the body's common portrait.
+pub fn portrait_chain_keyed(tier: &str, id: &str, body: &str, key: &str) -> Vec<String> {
     let mut out = Vec::new();
+    if let Some(own) = keyed_portrait(key) {
+        out.push(own);
+    }
     if let Some(folder) = tier_folder(tier) {
         out.push(format!("portraits/{folder}/{id}.png"));
     }
-    out.push(common_portrait(body));
+    let common = common_portrait(body);
+    if !out.contains(&common) {
+        out.push(common);
+    }
     let base = format!("portraits/common/{}_base.png", split_body(body).0);
     if !out.contains(&base) {
         out.push(base);
+    }
+    out
+}
+
+/// VNSTAGE1 (PR7-27): the full-body pictures to try for a story stage actor: the character's own
+/// (`portraits/full_body/<id>.png`), then its body's (`<body>` the body key's class); none found draws the stage's code
+/// figure.
+pub fn full_body_chain(id: &str, body: &str) -> Vec<String> {
+    let mut out = vec![format!("portraits/full_body/{id}.png")];
+    let class = split_body(body).0;
+    if !class.is_empty() && class != id {
+        out.push(format!("portraits/full_body/{class}.png"));
     }
     out
 }
@@ -245,7 +285,16 @@ pub fn faces_dir(folder: &str, id: &str) -> String {
 /// then its `neutral` frame, then `portrait_chain`; for "" or `neutral` the `neutral` frame, then `portrait_chain`; a
 /// common tier has no frames (`portrait_chain` alone).
 pub fn face_chain(tier: &str, id: &str, body: &str, expression: &str) -> Vec<String> {
+    face_chain_keyed(tier, id, body, "", expression)
+}
+
+/// PAINTED-MAPS1: `face_chain` over `portrait_chain_keyed` (the unit's portrait key `key`, "" none). PR7-75: a key
+/// ranks first, above the unique tier's frames too (they belong to the unique file it outranks).
+pub fn face_chain_keyed(tier: &str, id: &str, body: &str, key: &str, expression: &str) -> Vec<String> {
     let mut out = Vec::new();
+    if let Some(own) = keyed_portrait(key) {
+        out.push(own);
+    }
     if let Some(folder) = tier_folder(tier) {
         let dir = faces_dir(folder, id);
         if !expression.is_empty() && expression != NEUTRAL {
@@ -253,7 +302,11 @@ pub fn face_chain(tier: &str, id: &str, body: &str, expression: &str) -> Vec<Str
         }
         out.push(format!("{dir}/{NEUTRAL}.png"));
     }
-    out.extend(portrait_chain(tier, id, body));
+    for rel in portrait_chain_keyed(tier, id, body, key) {
+        if !out.contains(&rel) {
+            out.push(rel);
+        }
+    }
     out
 }
 
@@ -424,6 +477,73 @@ pub fn transition_dirs(sets: &[String], upper: &str, lower: &str) -> Vec<String>
 /// STAGE1 4.4: the folders of a battle prop's art (`props/<set>/<art>` over `BATTLE_SETS`: the tree and the stones).
 pub fn battle_prop_dirs(art: &str) -> Vec<String> {
     BATTLE_SETS.iter().map(|set| format!("props/{set}/{art}")).collect()
+}
+
+/// DECOR1 (PR7-81): what a decor art key names: the stage set's cover prop (`cover`, `cover/v<N>`) or a prop
+/// (`<prop>`, `<prop>/v<N>`); the variant None is picked by the cell.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DecorArt {
+    Cover(Option<u32>),
+    Prop(String, Option<u32>),
+}
+
+/// DECOR1: the cover kind of a decor art key (`tilesets/<stage set>/cover/v*`).
+pub const DECOR_COVER: &str = "cover";
+
+/// DECOR1: decor art key `key` parsed (`cover`, `cover/v<N>`, `<prop>` or `<prop>/v<N>`, a prop a set id); None: not
+/// that form.
+pub fn decor_art(key: &str) -> Option<DecorArt> {
+    let (name, variant) = match key.split_once('/') {
+        Some((name, v)) => {
+            let digits = v.strip_prefix('v').filter(|d| !d.is_empty() && d.len() <= 3 && d.bytes().all(|b| b.is_ascii_digit()))?;
+            (name, Some(digits.parse::<u32>().ok()?))
+        }
+        None => (key, None),
+    };
+    if !set_id_ok(name) {
+        return None;
+    }
+    Some(if name == DECOR_COVER { DecorArt::Cover(variant) } else { DecorArt::Prop(name.to_string(), variant) })
+}
+
+/// DECOR1: the folders a decor prop's art is read from: `props/<set>/<prop>` over `BATTLE_SETS` first, then every
+/// other prop set the layers hold (sorted); the first holding `v0.png` gives the prop.
+pub fn decor_prop_dirs(layers: &aegis_core::assets::Layers, prop: &str) -> Vec<String> {
+    let others = layers.dirs("props").into_iter().filter(|s| !BATTLE_SETS.contains(&s.as_str()));
+    BATTLE_SETS.iter().map(|s| s.to_string()).chain(others).map(|set| format!("props/{set}/{prop}")).collect()
+}
+
+/// DECOR1: a battle stage set's look file (`tilesets/<set>/stage.fx.json`), whose `zones.<zone>.set` names a battle
+/// zone's own stage set.
+pub fn stage_fx(set: &str) -> String {
+    format!("tilesets/{set}/stage.fx.json")
+}
+
+/// DECOR1: the stage sets a board's cover decor reads, in the stage's order: battle zone `zone`'s own set (its world
+/// set's `stage.fx.json` `zones.<zone>.set`, when another valid id) then the world's battle stage set `stage_set`;
+/// none without a world stage set (a catalog encounter's board shows no cover).
+pub fn decor_cover_sets(layers: &aegis_core::assets::Layers, stage_set: &str, zone: &str) -> Vec<String> {
+    if stage_set.is_empty() {
+        return Vec::new();
+    }
+    let zone_set = aegis_core::assets::read_json(layers, &stage_fx(stage_set)).and_then(|fx| fx["zones"][zone]["set"].as_str().map(str::to_string)).filter(|z| set_id_ok(z) && z != stage_set);
+    zone_set.into_iter().chain(std::iter::once(stage_set.to_string())).collect()
+}
+
+/// DECOR1: whether decor art key `key` names art the layers hold: a cover variant of the first of `cover_sets`
+/// (`decor_cover_sets`) holding a `cover` folder (`cover` alone: any variant), or a prop (its variant within the first
+/// folder of `decor_prop_dirs` holding it).
+pub fn decor_known(layers: &aegis_core::assets::Layers, key: &str, cover_sets: &[String]) -> bool {
+    let within = |dir: &str, v: Option<u32>| {
+        let n = layers.variants(dir);
+        n > 0 && v.is_none_or(|v| (v as usize) < n)
+    };
+    let first = |dirs: Vec<String>| dirs.into_iter().find(|d| layers.variants(d) > 0);
+    match decor_art(key) {
+        Some(DecorArt::Cover(v)) => first(cover_sets.iter().map(|s| format!("tilesets/{s}/{DECOR_COVER}")).collect()).is_some_and(|d| within(&d, v)),
+        Some(DecorArt::Prop(prop, v)) => first(decor_prop_dirs(layers, &prop)).is_some_and(|d| within(&d, v)),
+        None => false,
+    }
 }
 
 /// STAGE1 4.4: a battle zone's backdrop over the board's far edge (384 x 52).

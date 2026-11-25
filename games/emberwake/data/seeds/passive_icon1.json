@@ -1,0 +1,1071 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "sword_training",
+        "icon": "weapon_drill"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "bow_training",
+        "icon": "weapon_drill"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "hardy",
+        "icon": "might"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "keen_senses",
+        "icon": "perception"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "ruin_lore",
+        "icon": "intellect"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "steady_nerves",
+        "icon": "poise_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "second_wind",
+        "icon": "ap_gain"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "dirty_tricks",
+        "icon": "crit_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "field_medic",
+        "icon": "heal_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "arcane_study",
+        "icon": "intellect"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "riposte_drill",
+        "icon": "weapon_drill"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "wardens_eye",
+        "icon": "plan_sight"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "tl_braced_poise",
+        "icon": "poise_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "tl_anvil_posture",
+        "icon": "poise_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "tl_hawk_eye",
+        "icon": "plan_sight"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "polearm_drill",
+        "icon": "weapon_drill"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "censer_drill",
+        "icon": "weapon_drill"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "sprayer_drill",
+        "icon": "weapon_drill"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "scourge_drill",
+        "icon": "weapon_drill"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "bone_saw_drill",
+        "icon": "weapon_drill"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "braced_poise",
+        "icon": "poise_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "kinetic_leverage",
+        "icon": "ap_gain"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "unbroken_phalanx",
+        "icon": "immovable"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "castellans_penance",
+        "icon": "cover_ally"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "prowlers_cadence",
+        "icon": "agility"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "ghost_of_the_undercroft",
+        "icon": "plan_sight"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "anatomical_precision",
+        "icon": "poise_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "triage_efficiency",
+        "icon": "heal_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "pure_hippocratic_oath",
+        "icon": "heal_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "copyist_of_st_lyras",
+        "icon": "heal_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "high_ground_traverse",
+        "icon": "perception"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "cover_breaker",
+        "icon": "status_potency"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "dead_eye_discipline",
+        "icon": "ap_gain"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "crag_hawkeye",
+        "icon": "plan_sight"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "hypertrophy",
+        "icon": "might"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "anvil_posture",
+        "icon": "poise_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "unbroken_iron",
+        "icon": "last_stand"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "foundry_wired_spite",
+        "icon": "last_stand"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "combustion_formula",
+        "icon": "resist"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "catalytic_munitions",
+        "icon": "status_potency"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "volatile_reaction_catalyst",
+        "icon": "intellect"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "unyielding_authority",
+        "icon": "immovable"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "fanatical_agony",
+        "icon": "last_stand"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "heat_tempered_carapace",
+        "icon": "resist"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "calcified_frame",
+        "icon": "resist"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "traitors_discipline",
+        "icon": "poise_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "marrow_valve",
+        "icon": "resist"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "molten_slag_tempering",
+        "icon": "resist"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "vat_masters_grease",
+        "icon": "resist"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "amalgam_carapace",
+        "icon": "resist"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "marrow_infused",
+        "icon": "poise_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "anatomical_flaw",
+        "icon": "crit_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "cinder_childs_reflex",
+        "icon": "agility"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "master_alchemist",
+        "icon": "status_potency"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "mastery_poise_ward",
+        "icon": "poise_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "mastery_bleed_edge",
+        "icon": "status_potency"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "mastery_heavy_impact",
+        "icon": "might"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "mastery_agile_step",
+        "icon": "agility"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "mastery_arcane_focus",
+        "icon": "intellect"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "mastery_sacred_censer",
+        "icon": "heal_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "mastery_bulwark_stance",
+        "icon": "immovable"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "mastery_woven_ward",
+        "icon": "status_potency"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "mastery_bow",
+        "icon": "perception"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "mastery_crossbow",
+        "icon": "perception"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "mastery_fist",
+        "icon": "might"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "inoculated_test",
+        "icon": "status_potency"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "aberrant_strain",
+        "icon": "status_potency"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "calcify_1",
+        "icon": "resist"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "calcify_4",
+        "icon": "might"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "heavy_drill",
+        "icon": "armour_drill"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "medium_drill",
+        "icon": "armour_drill"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "light_drill",
+        "icon": "armour_drill"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "vanguard_poise",
+        "icon": "poise_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "iron_counter",
+        "icon": "ap_gain"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "iron_shoulders",
+        "icon": "might"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "kiln_poise",
+        "icon": "last_stand"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "keen_elevation",
+        "icon": "perception"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "patient_sight",
+        "icon": "status_potency"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "twin_light_tempo",
+        "icon": "crit_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "gutter_reflex",
+        "icon": "agility"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "triage_discipline",
+        "icon": "heal_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "surgical_precision",
+        "icon": "heal_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "reactive_reagents",
+        "icon": "resist"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "catalytic_reserve",
+        "icon": "intellect"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "calcify_2",
+        "icon": "immovable"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "calcify_3",
+        "icon": "resist"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "orig_watch_shield",
+        "icon": "poise_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "orig_crag_eye",
+        "icon": "perception"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "orig_soot_step",
+        "icon": "agility"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "orig_mortuary_calm",
+        "icon": "intellect"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "orig_slag_grip",
+        "icon": "might"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "orig_alum_nose",
+        "icon": "intellect"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "temper_steady",
+        "icon": "poise_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "temper_wary",
+        "icon": "perception"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "temper_quiet",
+        "icon": "intellect"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "temper_reckless",
+        "icon": "crit_up"
+      },
+      "fields": [
+        "icon"
+      ]
+    },
+    {
+      "op": "upsert",
+      "kind": "passives",
+      "entry": {
+        "id": "martyr_last_stand",
+        "icon": "last_stand"
+      },
+      "fields": [
+        "icon"
+      ]
+    }
+  ]
+}

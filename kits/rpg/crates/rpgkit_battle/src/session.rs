@@ -84,6 +84,12 @@ pub struct EncounterDef {
     /// unit_meters); set by its caller (the world bridge from the region and encounter `start_meter` rows); never read
     /// from the row (none by default).
     pub start_meter: Vec<rpgkit_data::StartMeter>,
+    /// DECOR1 (PR7-81): the display-only decor the stage draws (`encounter::decor_of`); the rules never read it.
+    pub decor: Vec<encounter::Decor>,
+    /// DECOR-GEN1 (PR7-86): the decor art keys a generated board draws from (`encounter::generated_decor`, at the
+    /// session start when the entry has no rows and no decor); set by its caller (the world bridge from the world's
+    /// `decor_pool`); never read from the row (none by default: no generated decor). Display-only.
+    pub decor_pool: Vec<String>,
     /// The whole entry (objective and morale fields are read from it).
     pub raw: Obj,
 }
@@ -130,6 +136,8 @@ impl EncounterDef {
             tactics: Default::default(),
             bleed_out_rounds: 0,
             start_meter: Vec::new(),
+            decor: encounter::decor_of(o),
+            decor_pool: Vec::new(),
             raw: o.clone(),
         }
     }
@@ -241,6 +249,49 @@ pub struct LogGroup {
     pub lines: Vec<String>,
 }
 
+/// BOSSUI1 BU2 (PR7-54): a phase marker of the boss bar: beaten (dimmed), the current one, or still to fight.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PhaseMark {
+    Beaten,
+    Current,
+    Coming,
+}
+
+/// BOSSUI1 BU1-BU3 (PR7-54, battle contract 9.1): the boss bar's read of the fight's phases (`Session::phase_bar`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PhaseBar {
+    /// The boss unit the bar follows (a phase that brings a new boss unit moves it there).
+    pub unit: UnitId,
+    /// One per fight phase (the first, then one per `hp_below` phase), at most `PHASE_MARKS`.
+    pub marks: Vec<PhaseMark>,
+    /// The current phase (0-based).
+    pub current: usize,
+    /// The current phase's name ("" = none). BU3b (PR7-59): the phase banner shows it, never the bar.
+    pub name: String,
+    /// BU3b (PR7-59): the current phase's `form` ("" = none: the bar shows the unit's name and title; else the unit's
+    /// name and the form).
+    pub form: String,
+    /// The current phase's HP span: it starts at `top` and ends at `floor` (the next `hp_below` threshold on the
+    /// unit; 0 for the last phase).
+    pub top: i32,
+    pub floor: i32,
+    /// The phase's threshold was reached; the next phase starts next round (PHASEBREAK1).
+    pub broken: bool,
+}
+
+impl PhaseBar {
+    /// The span's HP left and its size ("160/450").
+    pub fn span(&self, hp: i32) -> (i32, i32) {
+        ((hp - self.floor).clamp(0, (self.top - self.floor).max(0)), (self.top - self.floor).max(1))
+    }
+}
+
+/// BOSSUI1 BU2: the boss bar shows at most this many phase markers.
+pub const PHASE_MARKS: usize = 4;
+
+/// The tier whose unit takes the boss bar (contract 9.1).
+pub const BOSS_TIER: &str = "boss";
+
 /// REWARD1 2.2: how a battle left an enemy-side unit. Killed (HP 0, whoever dealt the blow), surrendered (MORALE1: a
 /// broken group withdraws in place), fled (withdrew on its own), standing (still there, or never came). PR6-9:
 /// withdrawn (a `retreat` objective's unit driven to its HP floor, or gone from the field: it left alive and the party
@@ -270,6 +321,9 @@ impl Fate {
         }
     }
 }
+
+/// PR7-41: the log line a retreat starts with (PR7-75: `end_reason` reads it).
+pub const RETREAT_LINE: &str = "[Retreat]";
 
 pub struct Session {
     pub def: EncounterDef,
@@ -334,6 +388,14 @@ pub struct Session {
     pub log_marks: Vec<(usize, i32, i32)>,
     /// ENCOUNTER2-C DT1: the talk cues the phases raised, oldest first (`talks`; no rule reads them).
     talks: Vec<TalkCue>,
+    /// PHASEBREAK1: the round's phase break ended it (the rest of its blocks do not run).
+    round_broken: bool,
+    /// PHASEBREAK1: every phase break (unit, round, block).
+    breaks: Vec<(UnitId, i32, i32)>,
+    /// PHASEBREAK1 (BU17): every vignette cue the phases raised, in fire order.
+    vignettes: Vec<encounter::VignetteCue>,
+    /// ENRAGE2 EN5: the battle log named the baseline enrage (once per battle).
+    enrage_logged: bool,
     /// ENCOUNTER2-C SR1: the encounter's scripted rounds (empty = none; played only under `round_intent`, SR8).
     pub script: crate::script::Script,
     /// SR5: the current round is scripted and locked (confirmed at its start; planning requests are refused).
@@ -364,6 +426,12 @@ pub struct Session {
     /// it. Cleared at each round start; a member leaves it on any edit of its round by hand (`hand_set`).
     drafted: IndexMap<UnitId, String>,
 }
+
+/// ENRAGE2 EN3: the status the baseline enrage grants (the phase `enrage` effect's too) and its source.
+pub const ENRAGE_STATUS: &str = "empower";
+pub const ENRAGE_SOURCE: &str = "enrage";
+/// PHASEBREAK1: the log outcome of a phase break's cell (apart from a poise break's `BREAK`).
+pub const PHASE_BREAK_OUTCOME: &str = "PHASE BREAK";
 
 impl Session {
     /// CatalogEncounter.build + CombatSession.start: spawn, deploy, begin round 1. `units` resolves roster ids.
@@ -511,7 +579,7 @@ impl Session {
             heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
         });
         let bleed_heroes: Vec<UnitId> = (0..n_allies).filter(|c| !guests.contains(c)).collect();
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, hp_floor: None, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen, sides: Default::default(), marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()), skill_uses: IndexMap::new(), weapon_attacks: IndexMap::new(), channel_actions: IndexMap::new(), dulled_lock: false, bleed_out_rounds: def.bleed_out_rounds.max(0), bleed_heroes, bleed_remaining: IndexMap::new(), dead: Vec::new() };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, hp_floor: None, phase_floors: IndexMap::new(), phase_break: None, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen, sides: Default::default(), marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()), skill_uses: IndexMap::new(), trigger_uses: Default::default(), weapon_attacks: IndexMap::new(), channel_actions: IndexMap::new(), dulled_lock: false, bleed_out_rounds: def.bleed_out_rounds.max(0), bleed_heroes, bleed_remaining: IndexMap::new(), dead: Vec::new() };
         // PK2-S5b: without the rule `durability` no unit tracks weapon wear
         crate::wear::clear_without_rule(&mut w);
         w.add_item_skills();
@@ -603,6 +671,10 @@ impl Session {
             encounter_lines: Vec::new(),
             log_marks: Vec::new(),
             talks: Vec::new(),
+            round_broken: false,
+            breaks: Vec::new(),
+            vignettes: Vec::new(),
+            enrage_logged: false,
             script,
             script_lock: false,
             script_seen: 0,
@@ -627,9 +699,25 @@ impl Session {
                 s.w.hp_floor = Some((t, encounter::floor_hp(s.w.units[t].max_hp, s.objective.hp_floor)));
             }
         }
+        s.generate_decor();
         s.begin_round(1);
         s.apply_start_ap();
         s
+    }
+
+    /// DECOR-GEN1 (PR7-86): a generated board (the entry has no rows and no decor) draws its decor from `decor_pool`
+    /// (`encounter::generated_decor`, on its own seeded stream), off the exits, the cells the units deployed on, a hold's
+    /// tiles and the stay-behind tiles. Display-only: the rules never read `def.decor`.
+    fn generate_decor(&mut self) {
+        if !self.def.rows.is_empty() || !self.def.decor.is_empty() || self.def.decor_pool.is_empty() {
+            return;
+        }
+        let mut taken: Vec<V2> = (0..self.w.units.len()).flat_map(|c| self.w.cells_of(c)).collect();
+        if self.objective.objective == "hold" {
+            taken.extend(&self.objective.tiles);
+        }
+        taken.extend(self.stay.iter().flat_map(|sb| sb.tiles.iter().copied()));
+        self.def.decor = encounter::generated_decor(&self.w.grid, &self.def.decor_pool, self.def.rng_seed, &self.def.zone, &taken);
     }
 
     /// INPUT2: the encounter's `start_ap` (above 0): every unit starts round 1 with at most that much AP (its max stays,
@@ -674,6 +762,8 @@ impl Session {
         crate::trigger::round_start(&mut self.resolver, &mut self.w);
         // PK1-S1 (3.4): the waiting `ap` sets hold their units' AP for this planning (none without one)
         crate::trigger::apply_ap_sets(&mut self.resolver, &mut self.w);
+        // ENRAGE2 EN1-EN3: from the ruleset's enrage round every enemy on the board enrages before anyone plans
+        self.baseline_enrage(round);
         if crate::trigger::on(&self.w) || crate::meter::on(&self.w) {
             self.log_triggers(round, 1);
             self.log_ground(round, 1);
@@ -1087,6 +1177,17 @@ impl Session {
             .collect()
     }
 
+    /// ACT1-FIX4 (PT-93): enemy-side unit `c` left the field alive on its own (by an exit; `Fate::Fled` in `fates`):
+    /// not one that surrendered or a retreat target driven to its HP floor.
+    pub fn foe_escaped(&self, c: UnitId) -> bool {
+        let u = &self.w.units[c];
+        !self.w.allies.contains(&c)
+            && u.is_alive()
+            && u.is_withdrawn
+            && !self.w.hp_floor.is_some_and(|(t, _)| t == c)
+            && !self.unit_keys.get(&c).is_some_and(|k| self.morale.surrendered.contains(k))
+    }
+
     /// Fires phase `id` at [round, block] (block 0 = round start): wave, status, enrage, the phase's cell, then each
     /// `kill` (ENCOUNTER2 P1); marked fired last (its group's unfired phases drop, P2).
     fn fire_phase(&mut self, id: &str, round: i32, block: i32) {
@@ -1167,6 +1268,10 @@ impl Session {
         // ENCOUNTER2-C DT1: a talk only adds its cue (no cell, no event line, no draw)
         for fx in p.effects_of(encounter::TALK_EFFECT) {
             self.talks.push(TalkCue { phase: id.to_string(), dialogue: value::string(fx, "dialogue", ""), speaker: value::string(fx, "speaker", ""), round, block });
+        }
+        // PHASEBREAK1 (BU17): a vignette only adds its cue, played after the talk
+        for fx in p.effects_of(encounter::VIGNETTE_EFFECT) {
+            self.vignettes.push(encounter::VignetteCue { phase: id.to_string(), vignette: value::string(fx, "id", ""), round, block });
         }
         self.phases.mark_fired(id, round, block);
     }
@@ -1341,9 +1446,10 @@ impl Session {
                 round_intent::set_default_intent(&mut self.w, c, &form.intent);
             }
             if crate::poise::on(&self.w) {
-                let (n, max_poise) = (self.w.ruleset.numbers.clone(), crate::poise::max_poise(&self.w, c));
+                let (n, max_poise, own) = (self.w.ruleset.numbers.clone(), crate::poise::max_poise(&self.w, c), self.w.units[c].poise_pips.max(0));
                 let st = self.w.poise.entry(c).or_default();
                 st.broken = false;
+                st.full = own;
                 crate::poise::refill(&n, st, max_poise);
             }
             if block > 0 {
@@ -1443,6 +1549,22 @@ impl Session {
         self.unit_tiers.get(&c).cloned().unwrap_or_else(|| self.w.units[c].tier.clone())
     }
 
+    /// OBJUI1: the morale leader's unit (None with morale off, no leader, or its key gone).
+    pub fn morale_leader(&self) -> Option<UnitId> {
+        if !self.morale.on || self.morale.leader.is_empty() {
+            return None;
+        }
+        self.units_by_key.get(&self.morale.leader).copied()
+    }
+
+    /// OBJUI1: the slay objective's target (None for any other objective).
+    pub fn slay_target(&self) -> Option<UnitId> {
+        if self.objective.objective != "slay" {
+            return None;
+        }
+        self.first_of_ref(&self.objective.unit_ref)
+    }
+
     /// Rule 5: boss or elite tier, a live profile that never flees, or the slay target.
     pub fn is_fearless(&self, c: UnitId) -> bool {
         let tier = self.tier_of(c);
@@ -1473,9 +1595,57 @@ impl Session {
         self.morale.form_group(&keys, size, source);
     }
 
-    /// PACE1 3.6: enraged in the planning round.
+    /// PACE1 3.6: enraged in the planning round (a phase's `enrage`, or ENRAGE2's baseline enrage).
     pub fn is_enraged(&self, c: UnitId) -> bool {
-        self.phases.enraged_refs(self.planning_round).iter().any(|r| self.units_of_ref(r).contains(&c))
+        self.baseline_enraged(c, self.planning_round) || self.phases.enraged_refs(self.planning_round).iter().any(|r| self.units_of_ref(r).contains(&c))
+    }
+
+    /// ENRAGE2 EN1, EN2: enemy `c` is under the baseline enrage in `round` (its tier has a step, the round is past the
+    /// ruleset's enrage round; heroes and allies never).
+    fn baseline_enraged(&self, c: UnitId, round: i32) -> bool {
+        self.w.enemies.contains(&c) && self.w.ruleset.numbers.enrage_power(&self.enrage_tier(c), round) > 0
+    }
+
+    /// ENRAGE2 EN2: the tier enemy `c` enrages by: `tier_of`, else (a fixed-stat unit keeps the hero tier) its
+    /// catalog row's.
+    fn enrage_tier(&self, c: UnitId) -> String {
+        let tier = self.tier_of(c);
+        if tier != rpgkit_data::DEFAULT_TIER {
+            return tier;
+        }
+        self.w.cat.units.get(&self.w.units[c].catalog_id).map_or(tier, |e| e.tier.clone())
+    }
+
+    /// ENRAGE2 EN5: the round from which the baseline enrage starts (None: the ruleset has none), for the round
+    /// counter's warning ("foes enrage next round").
+    pub fn enrage_round(&self) -> Option<i32> {
+        let n = &self.w.ruleset.numbers;
+        (n.enrage_from_round > 0 && n.enrage_step.values().any(|&v| v > 0)).then_some(n.enrage_from_round)
+    }
+
+    /// ENRAGE2 EN1-EN3, EN5: at the start of `round` every enemy on the board takes its tier's enrage power as Empowered
+    /// for the round (`empower` stacks as refresh-max: a larger phase enrage stays, the two never add); the log names it
+    /// once, the first round anyone enrages.
+    fn baseline_enrage(&mut self, round: i32) {
+        let mut raised = 0;
+        for c in self.w.enemies.clone() {
+            let power = self.w.ruleset.numbers.enrage_power(&self.enrage_tier(c), round);
+            if power <= 0 || !self.w.units[c].is_active() || !self.w.has(c) || self.is_reserved(c) {
+                continue;
+            }
+            let st = &self.w.units[c].st;
+            let now = if st.active.contains(ENRAGE_STATUS) { st.magnitudes.get(ENRAGE_STATUS).copied().unwrap_or(0) } else { 0 };
+            if now < power {
+                status::grant_now(&mut self.w.units[c], ENRAGE_STATUS, 1, power, ENRAGE_SOURCE);
+            }
+            raised += 1;
+        }
+        if raised > 0 && !self.enrage_logged {
+            self.enrage_logged = true;
+            let line = "The foes enrage: their attack power rises each round.";
+            self.append(crate::log::Entry::event(round, 0, "", false, "Enrage", "Enrage", "ENRAGE", line, ""));
+            self.events.push(format!("Enrage: {line}"));
+        }
     }
 
     /// Re-plans the round's enemy side (after the start positions changed, e.g. the sim's jitter).
@@ -1775,6 +1945,7 @@ impl Session {
             if self.on_block_start() {
                 return;
             }
+            self.refresh_phase_floors();
             self.pending = self.resolver.prepare_block(&mut self.w, self.current_block).into();
             // A chase or dash as an attack started gets its own cell.
             let (round, block) = (self.current_round, self.current_block);
@@ -1845,13 +2016,16 @@ impl Session {
             self.log_triggers(round, block);
             self.log_ground(round, block);
             self.log_spared(round, block);
+            // PHASEBREAK1: a broken phase ends the round at once (the block's other actions and the later blocks do not run)
+            self.take_phase_break(round, block);
         }
         if self.pending.is_empty() {
             let block = self.current_block;
             // HOOKS1 AH2: the arena hazards due now strike after the block's actions (rule arena_hazards; none in classic)
             self.arena_strikes(self.current_round, block);
+            self.take_phase_break(self.current_round, block);
             self.feed(|m, s| m.on_block_completed(s, block));
-            let end_of_round = self.current_block >= self.def.total_blocks;
+            let end_of_round = self.current_block >= self.def.total_blocks || self.round_broken;
             if end_of_round {
                 self.mark_log(self.current_round, LOG_ROUND_END);
                 self.resolver.apply_round_end_effects(&mut self.w);
@@ -1878,6 +2052,8 @@ impl Session {
                     self.resolver.log.push(round_intent::summary_line(self.current_round, &sum));
                 }
                 self.combat_over = over;
+                self.round_broken = false;
+                self.w.phase_break = None;
                 self.phase = Phase::Replay;
                 self.feed(|m, s| {
                     m.on_round_closed(s);
@@ -1978,6 +2154,80 @@ impl Session {
         crate::intent::arena_tells(&self.w)
     }
 
+    /// PHASEBREAK1 (PR7-56, BOSSUI1 BU15): each unit's floor is the threshold of its highest `hp_below` phase still to
+    /// come that it stands above (an unfired phase that is not due or dropped; a threshold under 1 HP sets none).
+    fn refresh_phase_floors(&mut self) {
+        let mut floors: IndexMap<UnitId, i32> = IndexMap::new();
+        for p in &self.phases.phases {
+            if value::string(&p.trigger, "kind", "") != "hp_below" || self.phases.fired.contains_key(&p.id) || self.phases.due.contains(&p.id) || self.phases.dropped.contains(&p.id) {
+                continue;
+            }
+            let Some(c) = self.first_of_ref(&value::string(&p.trigger, "unit", "")) else { continue };
+            let u = &self.w.units[c];
+            let pct = value::int(&p.trigger, "pct", 0);
+            let floor = pct * u.max_hp / 100;
+            if floor >= 1 && u.is_active() && u.hp * 100 > pct * u.max_hp {
+                let at = floors.entry(c).or_insert(floor);
+                *at = (*at).max(floor);
+            }
+        }
+        self.w.phase_floors = floors;
+    }
+
+    /// PHASEBREAK1: a hit that broke a phase ends the round: the block's other actions are dropped, the later blocks do
+    /// not run (none of their actions resolves or spends AP), the event cell names the break and the skipped blocks,
+    /// and the round-end steps run next (ticks stop at the threshold too).
+    fn take_phase_break(&mut self, round: i32, block: i32) {
+        let Some(c) = self.w.phase_break.take() else { return };
+        if self.round_broken {
+            return;
+        }
+        self.round_broken = true;
+        self.pending.clear();
+        let name = self.w.units[c].name.clone();
+        let total = self.def.total_blocks;
+        let skipped = if block >= total { String::new() } else if block + 1 == total { format!("Block {total} skipped") } else { format!("Blocks {}-{total} skipped", block + 1) };
+        let line = format!("{name}'s phase breaks: the round ends.");
+        self.append(crate::log::Entry::event(round, block, &name, false, "Phase break", "Phase", PHASE_BREAK_OUTCOME, &line, &skipped));
+        self.events.push(line);
+        self.breaks.push((c, round, block));
+    }
+
+    /// PHASEBREAK1: every phase break so far: the unit, the round and the block it broke in (the screen marks the
+    /// skipped blocks after it).
+    pub fn phase_breaks(&self) -> &[(UnitId, i32, i32)] {
+        &self.breaks
+    }
+
+    /// BOSSUI1 BU1-BU3 (PR7-54; BU3b PR7-59: the current phase's `form`): the boss bar's phase read, None without a boss on the field (an active enemy of the
+    /// `boss` tier, placed). The bar follows the boss the next `hp_below` phase names when it is on the field, else the
+    /// boss that came last (a phase's new boss unit). The phases are the first plus one per `hp_below` phase (round
+    /// and arrival phases are cues, not phases of the bar); a fired one is beaten. The span runs from the threshold of
+    /// the last fired `hp_below` phase on the unit (its max HP before one) to the next one's threshold still to come
+    /// (0 for the last phase); `broken` once that threshold is reached (the next phase is due). Read only.
+    pub fn phase_bar(&self) -> Option<PhaseBar> {
+        let w = &self.w;
+        let bosses: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| w.units[e].is_active() && w.grid.pos(e).is_some() && !self.phases.is_reserved(e) && self.tier_of(e) == BOSS_TIER).collect();
+        let hp_phases: Vec<&encounter::PhaseDef> = self.phases.phases.iter().filter(|p| value::string(&p.trigger, "kind", "") == "hp_below").collect();
+        let open = |p: &encounter::PhaseDef| !self.phases.fired.contains_key(&p.id) && !self.phases.dropped.contains(&p.id);
+        let named = hp_phases.iter().filter(|p| open(p) && !self.phases.due.contains(&p.id)).find_map(|p| self.first_of_ref(&value::string(&p.trigger, "unit", ""))).filter(|c| bosses.contains(c));
+        let unit = named.or_else(|| bosses.iter().copied().max())?;
+        let u = &w.units[unit];
+        let fired: Vec<&encounter::PhaseDef> = self.phases.fired.keys().filter_map(|id| hp_phases.iter().find(|p| &p.id == id).copied()).collect();
+        let total = (hp_phases.len() + 1).min(PHASE_MARKS);
+        let current = fired.len().min(total - 1);
+        let marks = (0..total).map(|k| if k < current { PhaseMark::Beaten } else if k == current { PhaseMark::Current } else { PhaseMark::Coming }).collect();
+        let name = fired.last().map_or_else(String::new, |p| p.name.clone());
+        let form = fired.last().map_or_else(String::new, |p| p.form.trim().to_string());
+        let threshold = |p: &encounter::PhaseDef| value::int(&p.trigger, "pct", 0) * u.max_hp / 100;
+        let on_unit = |p: &&&encounter::PhaseDef| self.first_of_ref(&value::string(&p.trigger, "unit", "")) == Some(unit);
+        let top = fired.iter().filter(on_unit).map(|p| threshold(p)).min().unwrap_or(u.max_hp).clamp(0, u.max_hp);
+        let next: Option<i32> = hp_phases.iter().filter(|p| open(p) && on_unit(p)).map(|p| threshold(p)).filter(|t| *t >= 1 && *t < top).max();
+        let floor = next.unwrap_or(0);
+        let broken = hp_phases.iter().any(|p| self.phases.due.contains(&p.id) && on_unit(&p)) || (floor > 0 && u.hp <= floor);
+        Some(PhaseBar { unit, marks, current, name, form, top, floor, broken })
+    }
+
     /// CatalogEncounter.on_block_start: a due phase fires first, then one morale break line, then the arrival (the
     /// reinforcement wave) enters; each takes the step (the block resolves on the next one).
     fn on_block_start(&mut self) -> bool {
@@ -2011,6 +2261,9 @@ impl Session {
         let label = p.effects_of("wave").next().map(|fx| value::string(fx, "label", "")).unwrap_or_default();
         self.append(crate::log::Entry::event(round, block, &p.name, false, &label, "Wave", "ARRIVED", &format!("{} join the battle.", names.join(", ")), &format!("{} more hostiles", names.len())));
         self.events.push(format!("{label}: {} join the battle.", names.join(", ")));
+        // ACT1-FIX4 (PT-92): the arrival in the combat log too (the encounter's own lines; the resolver log is untouched)
+        let said = if label.is_empty() { p.name.clone() } else { label };
+        self.encounter_lines.push((self.resolver.log.len(), format!("[Wave] {said}: {} join the battle.", names.join(", "))));
         self.phases.mark_fired(id, round, block);
     }
 
@@ -2096,6 +2349,12 @@ impl Session {
         &self.talks
     }
 
+    /// PHASEBREAK1 (BU17): every vignette cue the phases raised so far, in fire order (the screen plays each new one once,
+    /// after the phase's talk; sims, autoplay and the host never wait for one).
+    pub fn vignettes(&self) -> &[encounter::VignetteCue] {
+        &self.vignettes
+    }
+
     /// HOOKS1-H follow-up (user 2026-10-29): the verdict's wipe-outs: every hero (guests aside) down, or no enemy that
     /// is not reserved still standing (alive, not withdrawn).
     fn a_side_is_wiped(&self) -> bool {
@@ -2134,6 +2393,45 @@ impl Session {
     /// encounter's `timeout_outcome` (a retreat or a rout is a verdict, never this).
     pub fn timed_out(&self) -> bool {
         self.outcome.is_empty() && !self.final_outcome().is_empty()
+    }
+
+    /// PR7-83 (PT-73): an escape that ended with some heroes out but fewer than it needed (and none left fighting):
+    /// (heroes out alive, heroes needed); None for any other end (a retreat too), and while the battle goes on.
+    pub fn partial_escape(&self) -> Option<(i32, i32)> {
+        if self.objective.objective != "escape" || self.final_outcome() != encounter::FLED || self.timed_out() || self.resolver.log.iter().any(|l| l.starts_with(RETREAT_LINE)) {
+            return None;
+        }
+        let got = self.w.allies.iter().filter(|a| !self.guests.contains(a)).map(|&h| &self.w.units[h]).filter(|u| u.is_alive() && u.is_withdrawn).count() as i32;
+        (got > 0 && got < self.objective.count).then_some((got, self.objective.count))
+    }
+
+    /// PR7-75 (PT-40): why the battle ended, one line for the results and the log ("" while it goes on, and for a win
+    /// with nothing to add): the party's retreat, the round limit, the objective's own note (a slay target got away, a
+    /// retreat's unit withdrew), the last standing heroes leaving the field, or every hero down.
+    pub fn end_reason(&self) -> String {
+        let out = self.final_outcome();
+        if out.is_empty() {
+            return String::new();
+        }
+        if out == encounter::FLED && self.resolver.log.iter().any(|l| l.starts_with(RETREAT_LINE)) {
+            return "The party retreated from the fight.".into();
+        }
+        if self.timed_out() {
+            return format!("The round limit ran out ({} rounds).", self.def.max_rounds);
+        }
+        if !self.objective.note.is_empty() {
+            return self.objective.note.clone();
+        }
+        if let Some((got, needed)) = self.partial_escape() {
+            return format!("{got} of {needed} got out; the escape needed {needed}.");
+        }
+        let heroes: Vec<UnitId> = self.w.allies.iter().copied().filter(|a| !self.guests.contains(a)).collect();
+        let left: Vec<&str> = heroes.iter().map(|&h| &self.w.units[h]).filter(|u| u.is_alive() && u.is_withdrawn).map(|u| u.name.as_str()).collect();
+        match out.as_str() {
+            encounter::FLED if !left.is_empty() => format!("No hero was left fighting: {} left the field.", left.join(", ")),
+            encounter::LOST if heroes.iter().all(|&h| !self.w.units[h].is_alive()) => "Every hero went down.".into(),
+            _ => String::new(),
+        }
     }
 
     /// ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the combat log as a reader sees it: the resolver log from line
@@ -2220,18 +2518,23 @@ impl Session {
     }
 
     /// PR7-41 (PT-32): whether the party may retreat now: while a round is planned (nothing confirmed) in a battle that
-    /// goes on and whose round limit ends in a flight (`timeout_outcome` fled: running out of rounds is no defeat).
+    /// goes on and whose round limit ends in a flight (`timeout_outcome` fled: running out of rounds is no defeat; ENRAGE2
+    /// EN10: or the foes' escape, a random fight the player may flee at any planning step).
     pub fn can_retreat(&self) -> bool {
-        self.outcome.is_empty() && !self.combat_over && self.phase == Phase::Planning && !self.plan_confirmed && self.timeout_outcome == encounter::FLED
+        self.outcome.is_empty() && !self.combat_over && self.phase == Phase::Planning && !self.plan_confirmed && self.retreat_allowed()
+    }
+
+    fn retreat_allowed(&self) -> bool {
+        self.timeout_outcome == encounter::FLED || self.timeout_outcome == encounter::ESCAPED
     }
 
     /// PR7-41 (PT-32): the party retreats (`can_retreat`): the battle ends now as fled, nothing of the round resolved;
     /// the log says so. Refused (with the reason) when the battle does not allow it.
     pub fn retreat(&mut self) -> Result<(), String> {
         if !self.can_retreat() {
-            return Err(if self.timeout_outcome != encounter::FLED { "This fight allows no retreat." } else { "Retreat only while planning a round." }.into());
+            return Err(if !self.retreat_allowed() { "This fight allows no retreat." } else { "Retreat only while planning a round." }.into());
         }
-        self.resolver.log.push("[Retreat] The party retreats from the fight.".into());
+        self.resolver.log.push(format!("{RETREAT_LINE} The party retreats from the fight."));
         self.outcome = encounter::FLED.into();
         self.combat_over = true;
         self.phase = Phase::Replay;
@@ -2243,15 +2546,15 @@ impl Session {
         self.w.hold.as_ref().is_some_and(|g| g.holder.is_none())
     }
 
-    /// ENCOUNTER2 H1: `c` holds the hold tiles (host request `stay_pick`): once, while round 1 is planned and nothing
-    /// is confirmed, a hero on the field.
+    /// ENCOUNTER2 H1: `c` holds the hold tiles (host request `stay_pick`): a hero on the field, while round 1 is
+    /// planned and nothing is confirmed; ESCAPE-PLAN1 (3): until then a new pick replaces the old one.
     pub fn stay_pick(&mut self, c: UnitId) -> Result<(), String> {
         let Some(g) = self.w.hold.as_ref() else { return Err("This battle has no tile to hold.".into()) };
-        if let Some(h) = g.holder {
-            return Err(format!("{} already holds {}.", self.w.units[h].name, g.label));
-        }
         if self.current_round != 1 || !self.is_planning() {
-            return Err("The holder is picked before round 1 is confirmed.".into());
+            return Err(match g.holder {
+                Some(h) => format!("{} already holds {}.", self.w.units[h].name, g.label),
+                None => "The holder is picked before round 1 is confirmed.".into(),
+            });
         }
         if c >= self.w.units.len() || !g.heroes.contains(&c) || !self.w.has(c) {
             return Err(format!("Pick a hero on the field to hold {}.", g.label));
@@ -2263,24 +2566,61 @@ impl Session {
     }
 
     /// ENCOUNTER2 H1: the holder sims and autoplay pick (`pick_default`: the hero on the field with the most HP, the
-    /// first on a tie; or the first hero on the field); None when no pick is due.
+    /// first on a tie; or the first hero on the field; or, ESCAPE-PLAN1 (3), the one nearest a hold tile); None when
+    /// no pick is due.
     pub fn stay_pick_default(&mut self) -> Option<UnitId> {
         if !self.needs_stay_pick() || self.current_round != 1 || !self.is_planning() {
             return None;
         }
+        let pick = self.stay_pick_suggestion()?;
+        self.stay_pick(pick).ok()?;
+        Some(pick)
+    }
+
+    /// ENCOUNTER2 H1, ESCAPE-PLAN1 (3): the hero `pick_default` names for the hold (the battle screen marks it on the
+    /// pick); None without a hold escape or a hero on the field.
+    pub fn stay_pick_suggestion(&self) -> Option<UnitId> {
         let g = self.w.hold.as_ref()?;
         let on_field: Vec<UnitId> = g.heroes.iter().copied().filter(|&c| self.w.has(c)).collect();
-        let first = self.stay.as_ref().is_some_and(|sb| sb.pick_default == "first");
+        let mode = self.stay.as_ref().map_or(encounter::PICK_DEFAULTS[0], |sb| sb.pick_default.as_str());
         let mut pick = on_field.first().copied()?;
-        if !first {
-            for &c in &on_field {
-                if self.w.units[c].hp > self.w.units[pick].hp {
-                    pick = c;
+        match mode {
+            "first" => {}
+            "nearest" => {
+                let mut best = self.hold_route_len(pick, &g.tiles);
+                for &c in &on_field[1..] {
+                    let d = self.hold_route_len(c, &g.tiles);
+                    if d < best {
+                        (pick, best) = (c, d);
+                    }
+                }
+            }
+            _ => {
+                for &c in &on_field {
+                    if self.w.units[c].hp > self.w.units[pick].hp {
+                        pick = c;
+                    }
                 }
             }
         }
-        self.stay_pick(pick).ok()?;
         Some(pick)
+    }
+
+    /// ESCAPE-PLAN1 (3): the tiles of `c`'s shortest walk to a free hold tile around the units on the board (0 on one,
+    /// `usize::MAX` with no route).
+    fn hold_route_len(&self, c: UnitId, tiles: &[V2]) -> usize {
+        let from = self.w.pos(c);
+        if tiles.contains(&from) {
+            return 0;
+        }
+        let blocked: crate::path::Cells = self.w.allies.iter().chain(self.w.enemies.iter()).filter(|&&o| o != c && self.w.has(o)).map(|&o| self.w.pos(o)).collect();
+        let goals: crate::path::Cells = tiles.iter().copied().filter(|t| !blocked.contains(t)).collect();
+        let route = crate::path::find_path_sized(&self.w.grid, from, &goals, &blocked, false, &crate::path::Hooks::default(), self.w.size_of(c));
+        if route.is_empty() {
+            usize::MAX
+        } else {
+            route.len()
+        }
     }
 
     /// ENCOUNTER2 H3: the plan line of a hold escape while its gate is shut ("" otherwise).

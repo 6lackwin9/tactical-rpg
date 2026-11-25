@@ -145,12 +145,16 @@ impl RecipePane {
         let d = &cx.data;
         let fr = crate::shop::frame_rect(&ui.p);
         let name = json::s_or(d.resolve(&gs.world_id, "characters", npc), "name", npc);
-        ui.p.panel(fr, th().panel, th().panel_edge, 4.0);
+        // MENURAIL1 (PR7-30): the large modals take the ornate frame (main screens ornate, user 2026-11-18); the content
+        // keeps PAD inside the frame's own content rect
+        let body = ui.frame_body("ornate", fr);
         ui.push("recipe", "panel", name.clone(), fr, true, false, None, Vec::new());
         let (lb, ls) = (ui.p.line_h(BODY).ceil() as i32, ui.p.line_h(SMALL).ceil() as i32);
-        let (x0, right, inner) = (fr.x + PAD, fr.x + fr.w - PAD, fr.w - 2 * PAD);
-        ui.p.text_fit(x0 as f32, fr.y as f32 + 5.0, &name, HEAD, inner as f32, th().gold);
-        let mut y = fr.y + 5 + ui.p.line_h(HEAD).ceil() as i32 + 4;
+        let edge_x = (body.x - fr.x).max(PAD);
+        let (x0, right, inner) = (fr.x + edge_x, fr.x + fr.w - edge_x, fr.w - 2 * edge_x);
+        let top = (body.y - fr.y).max(5);
+        ui.p.text_fit(x0 as f32, (fr.y + top) as f32, &name, HEAD, inner as f32, th().gold);
+        let mut y = fr.y + top + ui.p.line_h(HEAD).ceil() as i32 + 4;
         let pick = self.pick(cx, npc);
         let view = recipe::view(d, gs, npc, &pick);
         // -- the picks: the member (member recipes), the family (a row offering several), the stash item (item recipes)
@@ -192,7 +196,7 @@ impl RecipePane {
         }
         y += bh + 4;
         // -- the recipes, each its name, its cost and why it can't run now, Do at the right
-        let bar_y = fr.y + fr.h - PAD - bh;
+        let bar_y = (fr.y + fr.h - PAD - bh).min(body.y + body.h - bh);
         let do_w = (ui.p.text_w("Do", BODY).ceil() as i32 + 16).max(44);
         for row in view.iter().map(json::dict) {
             let reason = s(row, "reason");
@@ -223,7 +227,7 @@ impl RecipePane {
             ui.push("recipe.line", "label", line.clone(), r, true, false, None, Vec::new());
         }
         let close_w = (ui.p.text_w("Close", BODY).ceil() as i32 + 16).max(44);
-        ui.button_full("recipe.close", Rect::new(x0, bar_y, close_w, bh), "Close", wrap(RecipeAct::Close), true, false, BODY, tip("Close", "Back to the conversation (Esc)."));
+        ui.button_full("recipe.close", Rect::new(x0, bar_y, close_w, bh), "Close", wrap(RecipeAct::Close), true, false, BODY, tip("Close", &format!("Back to the conversation ({}).", crate::controls_view::hints(&cx.settings.v).hint(aegis_ui::screen::Key::Esc))));
     }
 }
 

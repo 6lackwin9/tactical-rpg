@@ -20,6 +20,7 @@ use rpgkit_ui::vignette::{TextSpeed, REDUCE_MOTION, TEXT_SPEED};
 use rpgkit_ui::portrait_overlays;
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
+use emberwake_content::art as kart;
 use emberwake_world::{new_game, progression, save};
 use serde_json::{json, Value};
 
@@ -44,6 +45,8 @@ pub fn datetime(unix: i64) -> String {
 #[derive(Debug, Clone, Copy)]
 pub enum MenuAct {
     Continue,
+    /// ENGINE-62 (CRASH-SAFE1): the rescue save the last run wrote as it crashed (`aegis_save::RESCUE_KEY`).
+    Rescue,
     NewGame,
     Load,
     Settings,
@@ -112,6 +115,7 @@ fn menu_panel<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, r: Rect) {
 const MENU_DIM: u8 = 153;
 
 /// What Continue's peek shows of the newest save.
+#[derive(Clone)]
 struct Peek {
     location: String,
     when: String,
@@ -144,27 +148,79 @@ pub struct MainMenu {
     newest: Option<i64>,
     /// The mouse or the keyboard has moved since the menu opened: the opening focus on Continue does not show the peek.
     moved: bool,
+    /// TITLEFX1 (PR7-28): the title backdrop's fire layer, its spots read once; the picture the menu drew last.
+    fire: Option<crate::title_fx::TitleFx>,
+    picture: &'static str,
+    /// ENGINE-53 (SWITCH-AHEAD1), ENGINE-54 (WARM-SPREAD1): when the title first ticked this showing, whether Continue's
+    /// map has been handed to the shell to warm (`AHEAD_AFTER_MS` in, once a showing), the map until it is handed over,
+    /// and its warming's done flag.
+    shown_at: Option<Instant>,
+    ahead_started: bool,
+    rehearse: Option<crate::region::Rehearsal>,
+    warmed: Option<std::rc::Rc<std::cell::Cell<bool>>>,
 }
 
+/// ENGINE-54 (WARM-SPREAD1): how long the title shows before Continue's map is warmed.
+const AHEAD_AFTER_MS: u64 = 300;
+
+/// TITLEFX1: the fire layer's frame pacing (about 30 frames a second).
+const FIRE_FRAME_MS: u64 = 33;
+
 impl MainMenu {
+    /// The title's fire shows (its spots read, the picture drawn is theirs, Reduce motion off).
+    fn fire_on(&self, cx: &Cx) -> bool {
+        self.fire.as_ref().is_some_and(|f| f.on(self.picture, cx.settings.reduce_motion()))
+    }
+
+    /// ENGINE-53 (SWITCH-AHEAD1), ENGINE-54 (WARM-SPREAD1): `AHEAD_AFTER_MS` after the title first ticks, reads the
+    /// newest save (not entering it) and keeps the map it opens on for the shell to warm in slices (`warm_next`): its
+    /// ground composed on a thread, its art decoded on threads, nothing over a slice on the frame.
+    fn ahead_tick(&mut self, cx: &mut Cx) {
+        let shown = *self.shown_at.get_or_insert_with(Instant::now);
+        if self.ahead_started || Instant::now().saturating_duration_since(shown).as_millis() < AHEAD_AFTER_MS as u128 {
+            return;
+        }
+        self.ahead_started = true;
+        let slot = *self.newest.get_or_insert_with(|| save::newest_slot(&cx.data, &cx.save_dir));
+        if slot >= 0 {
+            if let Ok(l) = save::read(&cx.data, &cx.save_dir, slot) {
+                self.rehearse = crate::region::Rehearsal::of(cx, &l.state, slot);
+                self.warmed = self.rehearse.as_ref().map(|r| r.done_flag());
+            }
+        }
+    }
+
+    /// ENGINE-54: Continue's map still being made ahead (before it starts, or while the shell warms it).
+    fn warming(&self) -> bool {
+        !self.ahead_started || self.rehearse.is_some() || self.warmed.as_ref().is_some_and(|w| !w.get())
+    }
+
     fn act(&mut self, cx: &mut Cx, a: MenuAct) {
         match a {
             MenuAct::Continue => {
-                let slot = save::newest_slot(&cx.data, &cx.save_dir);
+                let slot = self.newest.unwrap_or_else(|| save::newest_slot(&cx.data, &cx.save_dir));
                 if slot < 0 {
                     show_errors(cx, vec!["There is no save to continue.".into()]);
                 } else {
                     load_slot(cx, slot);
+                    // ENGINE-62: the last save taken over the rescue: the rescue is not offered again
+                    if cx.has_game() {
+                        let _ = aegis_save::delete_keyed(&cx.save_dir, aegis_save::RESCUE_KEY);
+                    }
                 }
             }
+            MenuAct::Rescue => match save::read_keyed(&cx.data, &cx.save_dir, aegis_save::RESCUE_KEY) {
+                Ok(l) => {
+                    crate::screens::enter_game(cx, l.state, -1, l.warnings);
+                    let _ = aegis_save::delete_keyed(&cx.save_dir, aegis_save::RESCUE_KEY);
+                }
+                Err(errors) => show_errors(cx, errors),
+            },
             // PR7-37 (PT-01): a player's New game starts the game's one start world at once (the world picker, with the
             // test worlds, in a dev build or when the game offers more than one)
-            MenuAct::NewGame => match new_game_worlds(&cx.data).as_slice() {
-                [only] if !crate::DEV_BUILD => {
-                    let only = only.clone();
-                    start_new_game(cx, &only);
-                }
-                _ => cx.nav.push(Nav::Push(Box::new(NewGameScreen::new(cx)))),
+            MenuAct::NewGame => match at_once(&new_game_worlds(&cx.data), crate::dev_build()) {
+                Some(only) => start_new_game(cx, &only),
+                None => cx.nav.push(Nav::Push(Box::new(NewGameScreen::new(cx)))),
             },
             MenuAct::Load => cx.nav.push(Nav::Push(Box::new(Slots::new(false)))),
             MenuAct::Settings => cx.nav.push(Nav::Push(Box::new(SettingsScreen::new(cx)))),
@@ -322,11 +378,26 @@ impl Screen<GameCx> for MainMenu {
         let picture = if cx.art.has(TITLE_ART) { TITLE_ART } else { MENU_ART };
         let img = cx.art.size_of(picture).and_then(|(w, h)| cx.art.image(picture, w, h));
         panes::backdrop_pane(&mut ui, "menu.backdrop", img, picture, area, 0, MENU_VIGNETTE);
+        // TITLEFX1 (PR7-28): lantern glows and rising embers at the data-placed spots, over the picture they belong to
+        self.picture = picture;
+        if self.fire.as_ref().is_none_or(|f| f.picture != picture) {
+            self.fire = Some(crate::title_fx::TitleFx::load(cx.art.layers(), picture));
+        }
+        let fire = self.fire.as_mut().expect("loaded above");
+        if fire.on(picture, cx.settings.reduce_motion()) {
+            if let Some(size) = cx.art.size_of(picture) {
+                fire.draw(&mut ui.p, area, size);
+            }
+        }
         Self::logo(&mut ui, cx);
         let newest = *self.newest.get_or_insert_with(|| save::newest_slot(&cx.data, &cx.save_dir));
         let mut items: Vec<MenuItem<MenuAct>> = Vec::new();
         if newest >= 0 {
             items.push(MenuItem::new("continue", "Continue", None, MenuAct::Continue));
+        }
+        // ENGINE-62 (CRASH-SAFE1): after a crash, Continue offers the rescue save beside the last save
+        if save::exists_keyed(&cx.save_dir, aegis_save::RESCUE_KEY) {
+            items.push(MenuItem::new("continue_rescue", "Continue from the rescue save", None, MenuAct::Rescue));
         }
         items.extend([
             MenuItem::new("new_game", "New game", None, MenuAct::NewGame),
@@ -334,9 +405,9 @@ impl Screen<GameCx> for MainMenu {
             MenuItem::new("settings", "Settings", None, MenuAct::Settings),
         ]);
         // WEBREL1-G1: the dev tools (the Scene Runner) only in a build with them (`crate::DEV_TOOLS`)
-        // PR7-37 (PT-14): and only in a dev build (`crate::DEV_BUILD`); a player never sees it
+        // PR7-37 (PT-14): and only in a dev build (`crate::dev_build()`); a player never sees it
         #[cfg(feature = "dev_tools")]
-        if crate::DEV_BUILD {
+        if crate::dev_build() {
             items.push(MenuItem::new("tools", "Tools (Forge, Dojo, Test Arena)", None, MenuAct::Tools));
         }
         // WEBREL1 6.2 (`FB-157`): no Quit on the web, where a page cannot close its own tab
@@ -361,19 +432,53 @@ impl Screen<GameCx> for MainMenu {
         ui.p.text_right((foot.x + foot.w) as f32, version_y, "Version dev · Aegis engine", m.small, dim);
         self.w = ui.widgets;
     }
-    /// The peek's portraits breathe on the menu's clock.
-    fn tick(&mut self, _cx: &mut Cx) {
-        self.faces.tick();
+    /// ENGINE-53 (SWITCH-AHEAD1), ENGINE-54: the map Continue opens, once a showing, for the shell to warm in slices.
+    fn warm_next(&mut self, _cx: &mut Cx) -> Option<Box<dyn Screen<GameCx>>> {
+        self.rehearse.take().map(|r| Box::new(r) as Box<dyn Screen<GameCx>>)
     }
-    /// The picture, the logo and the entries stand still; only the peek's portraits move.
-    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
-        if self.peek.is_some() { FrameNeed::Full } else { FrameNeed::Idle }
+    /// The peek's portraits breathe and the title's fire moves on the menu's clock.
+    fn tick(&mut self, cx: &mut Cx) {
+        self.faces.tick();
+        if let Some(f) = self.fire.as_mut() {
+            f.tick();
+        }
+        self.ahead_tick(cx);
+    }
+    /// The picture, the logo and the entries stand still; the peek's portraits move, and the title's fire at about
+    /// 30 frames a second while it shows (TITLEFX1: never under Reduce motion).
+    fn frame_need(&self, cx: &Cx) -> FrameNeed {
+        if self.peek.is_some() {
+            FrameNeed::Full
+        } else if self.fire_on(cx) || self.warming() {
+            // ENGINE-54: frames on while Continue's map is being made ahead, so its slices run
+            FrameNeed::Within(Duration::from_millis(FIRE_FRAME_MS))
+        } else {
+            FrameNeed::Idle
+        }
+    }
+    /// The agent link's reading: the title's fire layer (on or off, its spots) and what Continue's map still needs made
+    /// ahead (ENGINE-53, ENGINE-54: `waiting`, `warming`, `ready`).
+    fn state(&self, cx: &Cx) -> Value {
+        // ENGINE-53, ENGINE-54: what Continue's map still needs made ahead ("ready" once nothing is left)
+        let ahead = if !self.ahead_started {
+            "waiting"
+        } else if self.warming() {
+            "warming"
+        } else {
+            "ready"
+        };
+        json!({"title_fx": self.fire.as_ref().map(|f| f.state(self.fire_on(cx))), "ahead": ahead})
     }
     /// Back on the menu: the newest save may have changed, and the focus opens on Continue again.
     fn resume(&mut self, _cx: &mut Cx) {
         self.peek = None;
         self.newest = None;
         self.moved = false;
+        // ENGINE-53: the newest save may have changed, so its map is made ahead again
+        self.shown_at = None;
+        self.ahead_started = false;
+        self.rehearse = None;
+        self.warmed = None;
     }
     /// The menu starts with the first entry focused (the kit's focus: arrows, Tab, Enter).
     fn auto_focus(&self) -> bool {
@@ -486,10 +591,19 @@ impl NewGameScreen {
 /// PR7-37 (PT-01): the worlds New game offers: in a dev build every playable world (the test worlds too), else the
 /// game's start worlds (`new_game::player_worlds`).
 pub fn new_game_worlds(d: &emberwake_world::Data) -> Vec<String> {
-    if crate::DEV_BUILD {
+    if crate::dev_build() {
         new_game::playable_worlds(d)
     } else {
         new_game::player_worlds(d)
+    }
+}
+
+/// PR7-37 (PT-01): the world a player's New game starts at once: the one world of `worlds`, unless the developer
+/// surfaces are shown (`dev`: the world picker with the test worlds; ENGINE-57: also in a release scenario run).
+fn at_once(worlds: &[String], dev: bool) -> Option<String> {
+    match worlds {
+        [only] if !dev => Some(only.clone()),
+        _ => None,
     }
 }
 
@@ -713,14 +827,47 @@ pub(crate) fn slot_text(cx: &Cx, slot: i64, head: &Dict) -> (String, String) {
             })
             .collect();
         let at = json::i(head, "saved_at", 0);
-        label = format!("{label} · {}, {}{}", cx.world_name(&world), cx.location_name(&world, &s(head, "location_id")), if at > 0 { format!(" · {}", datetime(at)) } else { String::new() });
+        label = format!("{label} · {}{}", slot_place(cx, head), if at > 0 { format!(" · {}", datetime(at)) } else { String::new() });
         party.join(", ")
     } else if exists {
         format!("Can't load ({})", s(head, "error"))
     } else {
         "Empty".into()
     };
+    // ENGINE-62 (CRASH-SAFE1): a damaged save is kept and named; its previous copy (the header above) loads instead
+    let damaged = s(head, "damaged");
+    let status = match (damaged.is_empty(), ok) {
+        (true, _) => status,
+        (false, true) => format!("Damaged ({damaged}); loads the previous save: {status}"),
+        (false, false) => format!("Damaged ({damaged})"),
+    };
     (label, status)
+}
+
+/// A readable save's place: the world and the location ("The Ashlands, Warden Keep"), the world alone when the save
+/// names no location (PR7-29, FB-369: never "The Ashlands, ").
+pub(crate) fn slot_place(cx: &Cx, head: &Dict) -> String {
+    let world = s(head, "world_id");
+    let mut parts = vec![cx.world_name(&world)];
+    let at = cx.location_name(&world, &s(head, "location_id"));
+    if !at.is_empty() {
+        parts.push(at);
+    }
+    parts.retain(|p| !p.is_empty());
+    parts.join(", ")
+}
+
+/// PR7-29 (SLOTCARD1, LOOK1 M2): the slot cards' grid: six 290 x 84 cards in two columns, the autosave first.
+pub const CARD_W: i32 = 290;
+pub const CARD_H: i32 = 84;
+const CARD_GAP: i32 = 8;
+const CARDS_X: i32 = (W - 2 * CARD_W - CARD_GAP) / 2;
+const CARDS_Y: i32 = 50;
+
+/// Slot `slot`'s card rect (two columns, filled row by row).
+pub fn card_rect(slot: i64) -> Rect {
+    let (col, row) = (slot as i32 % 2, slot as i32 / 2);
+    Rect::new(CARDS_X + col * (CARD_W + CARD_GAP), CARDS_Y + row * (CARD_H + CARD_GAP), CARD_W, CARD_H)
 }
 
 /// The day line of a readable save's lead (the Continue peek's), None when it does not load.
@@ -762,65 +909,92 @@ impl Screen<GameCx> for Slots {
     fn overlay(&self) -> bool {
         false
     }
+    /// PR7-70 (PANELS2, `FB-378` question 2): a main panel; it already fills the screen (not an overlay), so the game
+    /// menu never draws under it, and a panel opened over it takes its place (`drawn_screens`).
+    fn panel(&self) -> bool {
+        true
+    }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<SlotAct> = Ui::new(g, mouse, live);
         self.faces.begin();
         // PR7-36 (ART-08): a main panel over the dimmed title backdrop, as Settings sits over the menu
-        menu_panel(&mut ui, cx, Rect::new(56, 8, 528, 312));
-        title(&mut ui, if self.saving { "Save game" } else { "Load game" }, 26);
+        menu_panel(&mut ui, cx, Rect::new(CARDS_X - 12, 6, W - 2 * CARDS_X + 24, H - 12));
+        title(&mut ui, if self.saving { "Save game" } else { "Load game" }, 20);
         for slot in save::AUTOSAVE_SLOT..=save::LAST_SLOT {
-            let mut r = Rect::new(70, 54 + slot as i32 * 36, 500, 31);
+            let r = card_rect(slot);
             let head = save::peek(&cx.data, &cx.save_dir, slot);
             let exists = json::b(&head, "exists", false);
             let ok = json::b(&head, "ok", false);
             let lead = if ok {
                 let key = (slot, json::i(&head, "saved_at", 0));
                 self.leads.retain(|k, _| k.0 != slot || *k == key);
-                self.leads.entry(key).or_insert_with(|| Peek::read(cx, slot)).as_ref().map(|p| (p.when.clone(), p.party.first().cloned()))
+                self.leads.entry(key).or_insert_with(|| Peek::read(cx, slot)).clone()
             } else {
                 None
             };
-            let (mut label, status) = slot_text(cx, slot, &head);
-            // The whole row is the click (PLAYUI1 section 1); lock and delete are icons in its top-right corner.
+            let (label, status) = slot_text(cx, slot, &head);
             let locked = save::is_locked(&cx.save_dir, slot);
             let row = slot_row(self.saving, slot, exists, ok, locked, Self::no_save(cx));
-            let hover = row.action.is_some() && ui.hover(r);
-            ui.p.panel(r, if hover { th().card_hot } else { th().game("menu_row", rgba(26, 36, 58, 250)) }, if hover { th().gold } else { th().edge }, 2.0);
-            let card = r;
-            // the lead's portrait at the row's left and the day on its first line
-            if let Some((when, lead)) = &lead {
-                if let Some((_, _, who, look)) = lead {
-                    let pr = Rect::new(r.x + 2, r.y + 2, r.h - 4, r.h - 4);
-                    self.faces.draw(&mut ui.p, cx, who, look, "roster", pr);
-                    r.x += r.h;
-                    r.w -= r.h;
+            // PR7-29 (SLOTCARD1): the location's picture (else the world's title picture), the name, the place and the
+            // lead's day, the party's portraits and the time saved; one click acts as before (PLAYUI1), lock and
+            // delete in the top-right corner
+            let (thumb_r, _, _, _) = panes::slot_rects_on(&ui.m(), r, 2);
+            let scale = ui.p.v.s;
+            let (tw, tpx) = ((thumb_r.w as f32 * scale).round() as i32, (thumb_r.h as f32 * scale).round() as i32);
+            // a slot with no readable save shows a plain well (no letter), as the mock's empty card
+            let well = || {
+                let c = crate::portraits::portrait_well();
+                aegis_ui::canvas::Image { w: 1, h: 1, px: vec![c[0], c[1], c[2], 255] }
+            };
+            let thumb = if ok {
+                let world = s(&head, "world_id");
+                let files = [kart::location_background(&s(&head, "location_id")), kart::title_background(&world)];
+                files.iter().find_map(|f| cx.art.image(f, tw.max(1), tpx.max(1)).cloned())
+            } else {
+                Some(well())
+            };
+            let face = ui.icon_px(Rect::new(0, 0, panes::PORTRAIT, panes::PORTRAIT));
+            let faces: Vec<aegis_ui::canvas::Image> = lead.as_ref().map(|p| p.party.iter().filter_map(|(_, _, who, _)| cx.art.first(&who.chain(""), face, face).cloned()).collect()).unwrap_or_default();
+            let name = if slot == save::AUTOSAVE_SLOT { "Autosave".to_string() } else { format!("Slot {slot}") };
+            let lines = if ok {
+                let mut l = vec![slot_place(cx, &head)];
+                if let Some(p) = &lead {
+                    l.push(p.when.clone());
                 }
-                label = format!("{label} · {when}");
-            }
-            let text_w = (r.w - 8 - if row.delete { 40 } else { 0 }) as f32;
-            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &label, BODY, text_w, if ok { th().text } else { th().dim });
-            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 16.0, &status, BODY, text_w, th().dim);
-            let enabled = row.action.is_some();
-            ui.push(format!("slot.{slot}"), "card", format!("{label}: {status}"), card, enabled, false, row.action, tip(&label, &row.why));
-            let del = Rect::new(r.x + r.w - 4 - 16, r.y + 4, 16, 16);
-            let px = ui.icon_px(del);
+                l
+            } else {
+                vec![status.clone()]
+            };
+            let at = json::i(&head, "saved_at", 0);
+            let view = panes::SlotView { thumb: thumb.as_ref(), title: name, lines, portraits: faces.iter().collect(), stamp: if ok && at > 0 { datetime(at) } else { String::new() } };
+            let mut corner = Vec::new();
             if row.lock {
-                let lr = Rect::new(del.x - 18, del.y, 16, 16);
-                let (label, card, glyph, file) = if locked {
-                    ("Unlock", "Unlock", Glyph::Lock, "ui/lock.png")
-                } else {
-                    ("Lock", "Lock (protect from overwrite and delete)", Glyph::Unlock, "ui/unlock.png")
-                };
-                let img = cx.art.image(file, px, px).cloned();
-                ui.icon_button(&format!("slot.{slot}.lock"), lr, label, img.as_ref(), glyph, SlotAct::Lock(slot, !locked), true, locked, tip(card, ""));
+                let (label, glyph) = if locked { ("Unlock", Glyph::Lock) } else { ("Lock", Glyph::Unlock) };
+                corner.push(panes::Corner { key: "lock".into(), label: label.into(), glyph, action: SlotAct::Lock(slot, !locked), enabled: true, toggled: locked, tip: String::new() });
             }
             if row.delete {
-                let img = cx.art.image("ui/delete.png", px, px).cloned();
-                let card = if locked { tip("Delete", "Unlock the save to delete it.") } else { tip("Delete", "") };
-                ui.icon_button(&format!("slot.{slot}.delete"), del, "Delete", img.as_ref(), Glyph::Delete, SlotAct::Delete(slot), !locked, false, card);
+                corner.push(panes::Corner { key: "delete".into(), label: "Delete".into(), glyph: Glyph::Delete, action: SlotAct::Delete(slot), enabled: !locked, toggled: false, tip: if locked { "Unlock the save to delete it.".into() } else { String::new() } });
+            }
+            let id = format!("slot.{slot}");
+            panes::slot_card(&mut ui, &id, r, &view, row.action, false, &corner);
+            // the card's widget: off when a click does nothing, its text the row's two lines, its hover card what a click
+            // does (or why it does nothing), as the rows before it said
+            let full = match &lead {
+                Some(p) => format!("{label} · {}", p.when),
+                None => label.clone(),
+            };
+            if let Some(w) = ui.widgets.iter_mut().find(|w| w.id == format!("{id}.lock")) {
+                w.tip = tip(if locked { "Unlock" } else { "Lock (protect from overwrite and delete)" }, "");
+            }
+            if let Some(w) = ui.widgets.iter_mut().find(|w| w.id == id) {
+                w.enabled = row.action.is_some();
+                w.text = format!("{full}: {status}");
+                if w.tip.is_empty() {
+                    w.tip = tip(&full, &row.why);
+                }
             }
         }
-        ui.button("slots.back", Rect::new(70, 292, 70, 18), "Back", SlotAct::Back, true);
+        ui.button("slots.back", Rect::new(CARDS_X, CARDS_Y + 3 * (CARD_H + CARD_GAP), 70, 18), "Back", SlotAct::Back, true);
         self.w = ui.widgets;
     }
     /// The agent link's reading: the screen's view-model (UISPLIT1-H Stage A, `save_view`).
@@ -870,6 +1044,8 @@ pub enum SetAct {
     GuardApply,
     /// CONTROLS-UI1 (PR7-44): an action of the Controls tab's view (`controls_view`).
     View(aegis_ui::screen_layout::Act),
+    /// ENGINE-63 (PAD-TUNE1): a gamepad tunable (`aegis_ui::controls::PAD_SETTINGS`, its key) set to a value.
+    Pad(&'static str, f64),
 }
 
 /// The settings keys Display Mode and Resolution stage until Apply (DISPLAY2's `fullscreen` and `borderless`, and
@@ -898,6 +1074,7 @@ fn preview_of(key: &str) -> Option<(Bus, &'static str)> {
         "effects" => Some((Bus::Sfx, "sfx/hit.wav")),
         "interface" => Some((Bus::Ui, "sfx/ui_click.wav")),
         "ambience" => Some((Bus::Ambience, "sfx/ui_confirm.wav")),
+        crate::mapview::FOOTSTEPS_KEY => Some((Bus::Sfx, crate::mapview::MAP_STEP)),
         _ => None,
     }
 }
@@ -955,6 +1132,9 @@ enum Row {
     /// The battle overlay groups (and the debug row in a debug build).
     Overlays,
     Controls,
+    /// ENGINE-63 (PAD-TUNE1): a gamepad tunable (its place in `aegis_ui::controls::PAD_SETTINGS`) and the live stick test.
+    PadTune(usize),
+    PadTest,
     /// A section header over the rows after it (FB-308: the Battle tab's "Advanced").
     Heading(&'static str),
 }
@@ -975,6 +1155,11 @@ impl SettingsScreen {
     /// The decluttered in-game popup (the hub's Settings).
     pub fn in_game(cx: &Cx) -> Self {
         Self::open(cx, true)
+    }
+
+    /// ENGINE-46 (FEEL-FIX1): the screen open on tab `tab`, for the shell's warm list (`GameCx::warm`).
+    pub fn on_tab(cx: &Cx, popup: bool, tab: usize) -> Self {
+        Self { tab: tab.min(TABS.len() - 1), ..Self::open(cx, popup) }
     }
 
     fn open(cx: &Cx, popup: bool) -> Self {
@@ -1011,11 +1196,13 @@ impl SettingsScreen {
         })
     }
 
-    /// The confirm's timer at `now`: past its end the previous display comes back.
+    /// The confirm's timer at `now`: past its end the previous display comes back. CONTROLS-UI1B: a rebind left
+    /// waiting `controls::WAIT` with no input ends with nothing changed.
     pub fn tick_at(&mut self, cx: &mut Cx, now: Instant) {
         if self.confirm.as_ref().is_some_and(|c| now >= c.until) {
             self.act(cx, SetAct::Revert);
         }
+        self.rebind.expire(now);
     }
 
     fn save(cx: &mut Cx) {
@@ -1169,7 +1356,13 @@ impl SettingsScreen {
                 Self::commit(cx, k, if lo == 0.0 { json!(v.round() as i64) } else { json!((v * 100.0).round() / 100.0) });
                 if let Some((bus, sample)) = preview_of(k) {
                     cx.audio.set_levels(&cx.settings.v);
-                    cx.audio.preview(bus, sample);
+                    let gain = if k == crate::mapview::FOOTSTEPS_KEY { crate::mapview::footstep_gain(&cx.settings.v) } else { 1.0 };
+                    cx.audio.preview_gain(bus, sample, gain);
+                }
+            }
+            SetAct::Pad(k, v) => {
+                if aegis_ui::controls::PadTuning::set(&mut cx.settings.v, k, v) {
+                    Self::save(cx);
                 }
             }
             SetAct::Pick(k, i) => self.pick(cx, k, i),
@@ -1275,6 +1468,8 @@ impl SettingsScreen {
                 Row::Volume("master", "Master Volume", "Overall game audio output"),
                 Row::Volume("music", "Music Volume", "Orchestral and hurdy-gurdy ward score"),
                 Row::Volume("effects", "Effects Volume", "Combat steel clashes, billhooks and chains"),
+                // ENGINE-56 (AUDIO-FEEL2): the map footstep's own volume, a share of Effects
+                Row::Volume(crate::mapview::FOOTSTEPS_KEY, "Footsteps", "The party's steps on the maps, under Effects"),
                 Row::Volume("interface", "Interface Volume", "Menu chimes, card clicks and roll ticks"),
                 // PR7-34 (AMBIENCE1): the settings mock's row
                 Row::Volume("ambience", "Ward Ambience", "Canal rain, distant bells and furnace rumble"),
@@ -1294,9 +1489,17 @@ impl SettingsScreen {
                 // FB-308 (Design, READY section 4): the rows past the mock's six sit under an Advanced header
                 Row::Heading("Advanced"),
                 Row::Choice("see_through", "Units Behind", "When units hidden behind others are outlined"),
+                // DIORAMA3 R6: the board's grid lines (faint at rest, stronger while planning)
+                Row::Toggle(crate::battle::BOARD_GRID, "Show full grid", "Tile lines across the whole battle board (off: only the cells that matter are marked)"),
                 Row::Overlays,
             ],
-            _ => vec![Row::Controls],
+            // ENGINE-63 (PAD-TUNE1): the Gamepad group under the bindings
+            _ => {
+                let mut r = vec![Row::Controls, Row::Heading("Gamepad")];
+                r.extend((0..aegis_ui::controls::PAD_SETTINGS.len()).map(Row::PadTune));
+                r.push(Row::PadTest);
+                r
+            }
         }
     }
 
@@ -1317,7 +1520,7 @@ impl SettingsScreen {
             Row::Overlays => {
                 let head = ui.p.line_h(BODY + 1.0).ceil() as i32 + 4;
                 let groups = crate::battle::settings_overlay_groups().len().div_ceil(2) as i32 * OVERLAY_PITCH;
-                head + groups + if crate::DEV_BUILD { OVERLAY_PITCH + 4 } else { 0 }
+                head + groups + if crate::dev_build() { OVERLAY_PITCH + 4 } else { 0 }
             }
             // CONTROLS-UI1: the default takes its whole height (the body scrolls it); a layout file places its own
             Row::Controls => aegis_ui::screen_layout::default_height(ui, &crate::controls_view::view(&cx.settings.v, &self.rebind), w),
@@ -1418,7 +1621,7 @@ impl SettingsScreen {
                 let on = if k == "fullscreen" { WindowShow::of(&d) == WindowShow::Fullscreen } else { d[k].as_bool().unwrap_or(default) };
                 let t = match k {
                     "auto_fill" => tip("Auto-Fill Remaining Blocks", "After your picks the planner fills the round's free blocks with follow-ups (ghost blocks you can replace). Off: the free blocks Rest."),
-                    crate::battle::AUTO_CONFIRM => tip("Auto-Confirm Next Round", "Timeline battles: after a round plays, the battle goes to the next round's planning by itself; your plan still waits for your Confirm. Off: press Next round (Space) to go on. A recording you watch always waits."),
+                    crate::battle::AUTO_CONFIRM => tip("Auto-Confirm Next Round", &format!("Timeline battles: after a round plays, the battle goes to the next round's planning by itself; your plan still waits for your Confirm. Off: press Next round ({}) to go on. A recording you watch always waits.", crate::controls_view::hints(&cx.settings.v).hint(Key::Space))),
                     portrait_overlays::SETTING => tip("Portrait Effects", "The glows, growing lines, specks and haze over character portraits in talk boxes, scenes, party cards and the timeline. Off: plain portraits; blinks, breathing and expressions stay."),
                     _ => Vec::new(),
                 };
@@ -1468,8 +1671,8 @@ impl SettingsScreen {
                     }
                 }
                 // VISCLAR1 VC4, VC5: the debug-build-only row (never in a release build); PR7-37 (PT-33): a dev build's
-                // only (`crate::DEV_BUILD`)
-                if crate::DEV_BUILD {
+                // only (`crate::dev_build()`)
+                if crate::dev_build() {
                     let y = y + groups.len().div_ceil(2) as i32 * OVERLAY_PITCH + 2;
                     ui.p.text(x as f32, y as f32, "Debug", BODY + 1.0, th().gold);
                     // VIEWKEYS1: the walk's base step time (a release build uses the default), beside the heading
@@ -1486,6 +1689,23 @@ impl SettingsScreen {
             }
             // drawn by `draw` through its view (CONTROLS-UI1)
             Row::Controls => {}
+            Row::PadTune(i) => {
+                let Some(p) = aegis_ui::controls::PAD_SETTINGS.get(i) else { return };
+                let vw = if self.popup { 150 } else { 170 };
+                self.label(ui, r, p.label, p.help, vw, true);
+                let v = aegis_ui::controls::PadTuning::value(&d, p.key);
+                let x = r.x + r.w - vw - 6;
+                let id = format!("settings.gamepad.{}", p.key);
+                ui.button(&format!("{id}.down"), Rect::new(x, cy, 13, ch), "<", SetAct::Pad(p.key, v - p.step), v > p.min);
+                ui.slider(&id, Rect::new(x + 15, cy, vw - 30, ch), p.index(v), p.steps(), &p.text(v), |i| SetAct::Pad(p.key, p.at(i)), true);
+                ui.button(&format!("{id}.up"), Rect::new(x + vw - 13, cy, 13, ch), ">", SetAct::Pad(p.key, v + p.step), v < p.max);
+            }
+            Row::PadTest => {
+                // the live stick: where it is and the direction it reads under the dead zone set above
+                let line = aegis_ui::controls::PadTuning::of(&d).test_line(cx.held.stick);
+                self.label(ui, r, "Stick Test", &line, 0, true);
+                ui.push("settings.gamepad.test".to_string(), "label", &line, r, true, false, None, Vec::new());
+            }
         }
     }
 
@@ -1549,9 +1769,18 @@ impl SettingsScreen {
 }
 
 impl Screen<GameCx> for SettingsScreen {
-    /// Nothing here moves by itself but the confirm's countdown.
+    /// ENGINE-56 (AUDIO-FEEL2): a volume's `<` and `>` play the volume's own sample (`preview_of`), as its slider does.
+    fn ui_sound(&self, _cx: &Cx, id: &str, cue: aegis_ui::UiCue) -> aegis_ui::UiSound {
+        let volume = id.strip_prefix("settings.").and_then(|k| k.strip_suffix(".down").or_else(|| k.strip_suffix(".up"))).is_some_and(|k| preview_of(k).is_some());
+        if volume && cue == aegis_ui::UiCue::Confirm {
+            aegis_ui::UiSound::Silent
+        } else {
+            aegis_ui::UiSound::Rule
+        }
+    }
+    /// Nothing here moves by itself but the confirm's countdown and a waiting rebind's end.
     fn frame_need(&self, _cx: &Cx) -> FrameNeed {
-        if self.confirm.is_some() {
+        if self.confirm.is_some() || self.rebind.capturing() {
             FrameNeed::Within(Duration::from_millis(250))
         } else {
             FrameNeed::Idle
@@ -1563,6 +1792,10 @@ impl Screen<GameCx> for SettingsScreen {
     fn overlay(&self) -> bool {
         true
     }
+    /// STYLE-PASS1B (`PR7-48` (2)): a panel-shell screen; a panel opened over it takes its place until it closes.
+    fn panel(&self) -> bool {
+        true
+    }
     fn tick(&mut self, cx: &mut Cx) {
         self.tick_at(cx, Instant::now());
     }
@@ -1571,7 +1804,7 @@ impl Screen<GameCx> for SettingsScreen {
         if self.tab != TABS.len() - 1 || !self.rebind.capturing() {
             return false;
         }
-        if self.rebind.input(&crate::controls_view::ACTIONS, &mut cx.settings.v, input) == aegis_ui::controls::Outcome::Bound {
+        if self.rebind.input(&crate::controls_view::ACTIONS, &crate::controls_view::FIXED_KEYS, &mut cx.settings.v, input) == aegis_ui::controls::Outcome::Bound {
             Self::save(cx);
         }
         true
@@ -1728,15 +1961,17 @@ impl Screen<GameCx> for SettingsScreen {
                 WindowShow::Borderless => format!("Borderless · {}", size(v)),
                 WindowShow::Windowed => format!("Windowed · {}", size(v)),
             };
+            // CONTROLS-UI1B: the boxes' key hints read the key bound to Enter
+            let enter = crate::controls_view::hints(&cx.settings.v).key_hint(Key::Enter);
             if let Some(left) = self.confirm_left(Instant::now()) {
                 let lines = [(format!("Display switched to {}.", named(&d)), BODY, t.text), (format!("Reverting to the previous display in {left} s."), BODY, t.foe)];
-                Self::modal(&mut ui, "Keep Display Settings?", &lines, &[("settings.confirm.keep", "Keep changes [Enter]".into(), SetAct::Keep, true), ("settings.confirm.revert", "Revert".into(), SetAct::Revert, false)], SetAct::Revert);
+                Self::modal(&mut ui, "Keep Display Settings?", &lines, &[("settings.confirm.keep", format!("Keep changes [{enter}]"), SetAct::Keep, true), ("settings.confirm.revert", "Revert".into(), SetAct::Revert, false)], SetAct::Revert);
             } else if self.guard.is_some() {
                 let lines = [
                     (format!("You chose {} without pressing Apply.", named(&self.pending)), BODY, t.text),
                     ("All other settings apply at once. Apply or discard the display change before closing?".to_string(), HELP, t.dim),
                 ];
-                let buttons = [("settings.guard.apply", "Apply display [Enter]".to_string(), SetAct::GuardApply, true), ("settings.guard.discard", "Discard & close".to_string(), SetAct::GuardDiscard, false), ("settings.guard.stay", "Stay".to_string(), SetAct::GuardStay, false)];
+                let buttons = [("settings.guard.apply", format!("Apply display [{enter}]"), SetAct::GuardApply, true), ("settings.guard.discard", "Discard & close".to_string(), SetAct::GuardDiscard, false), ("settings.guard.stay", "Stay".to_string(), SetAct::GuardStay, false)];
                 Self::modal(&mut ui, "Unapplied Display Changes?", &lines, &buttons, SetAct::GuardStay);
             }
         }
@@ -1759,7 +1994,7 @@ const VOLUME_STEP: f64 = 5.0;
 const WALK_STEP_STEP: f64 = 10.0;
 
 fn static_key(k: &str) -> &'static str {
-    ["master", "music", "effects", "interface", "ambience"].into_iter().find(|x| *x == k).unwrap_or("master")
+    ["master", "music", "effects", crate::mapview::FOOTSTEPS_KEY, "interface", "ambience"].into_iter().find(|x| *x == k).unwrap_or("master")
 }
 
 #[cfg(test)]
@@ -1790,6 +2025,44 @@ mod tests {
         assert_eq!((row(false, 3, false, false, false).action, row(false, 3, false, false, false).why.as_str()), (None, "Empty slot."));
         let broken = row(false, 3, true, false, false);
         assert!(broken.action.is_none() && broken.lock && broken.delete, "an unreadable manual save can still be locked or deleted");
+    }
+
+    /// ENGINE-64 (LIVE-RELOAD1): the game's data reload: a good edit (an item renamed) is swapped in and the game in
+    /// play stays; a broken file keeps the old data and the error names it; the data folder is the one watched.
+    #[test]
+    fn live_reload_swaps_good_data_and_keeps_the_old_on_a_broken_file() {
+        fn copy_dir(from: &Path, to: &Path) {
+            std::fs::create_dir_all(to).unwrap();
+            for e in std::fs::read_dir(from).unwrap() {
+                let p = e.unwrap().path();
+                let dest = to.join(p.file_name().unwrap());
+                if p.is_dir() {
+                    copy_dir(&p, &dest);
+                } else {
+                    std::fs::copy(&p, &dest).unwrap();
+                }
+            }
+        }
+        use aegis_ui::screen::Context;
+        let t = aegis_core::scratch::Scratch::new("emberwake_live_data");
+        let mut cx = cx(t.path().join("saves"));
+        let data = t.path().join("data");
+        copy_dir(&cx.data_dir, &data);
+        cx.data_dir = data.clone();
+        assert_eq!(cx.app.data_dirs(), [data.clone()]);
+        let name = |cx: &Cx| cx.data.cat.items.get("wpn_claymore").map(|i| i.name.clone());
+        assert_eq!(name(&cx).as_deref(), Some("Iron Claymore"));
+        let world = cx.gs().world_id.clone();
+        let items = data.join("catalog/items.json");
+        let text = std::fs::read_to_string(&items).unwrap();
+        std::fs::write(&items, text.replacen("\"Iron Claymore\"", "\"Tempered Claymore\"", 1)).unwrap();
+        assert_eq!(GameCx::reload_data(&mut cx, &[items.clone()]), Ok(Vec::new()));
+        assert_eq!(name(&cx).as_deref(), Some("Tempered Claymore"), "the next screen reads the renamed item");
+        assert_eq!(cx.gs().world_id, world, "the game in play stays");
+        std::fs::write(&items, "{\"kind\": \"items\", \"entries\": [").unwrap();
+        let err = GameCx::reload_data(&mut cx, &[items]).expect_err("a broken file is refused");
+        assert!(err.contains("items.json"), "the error names the file: {err}");
+        assert_eq!(name(&cx).as_deref(), Some("Tempered Claymore"), "the old data stays");
     }
 
     fn cx(save_dir: PathBuf) -> Cx {
@@ -1918,6 +2191,23 @@ mod tests {
         std::fs::write(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/ui/views/slots.view.json"), serde_json::to_string_pretty(&v).unwrap() + "\n").unwrap();
     }
 
+    /// PR7-29 (FB-369): a save that names no location reads "World · time" with no comma and no empty part; one that
+    /// names a location reads "World, Location".
+    #[test]
+    fn a_save_with_no_location_drops_the_comma() {
+        let dir = aegis_core::scratch::Scratch::vacant("emberwake_slot_place");
+        let cx = cx(dir.to_path_buf());
+        let world = cx.gs().world_id.clone();
+        let name = cx.world_name(&world);
+        let head = |loc: &str| json::dict(&json!({"world_id": world, "location_id": loc})).clone();
+        assert_eq!(slot_place(&cx, &head("")), name);
+        let loc = cx.data.merged_entries(&world, "locations").first().map(|l| s(l, "id")).expect("a location");
+        assert_eq!(slot_place(&cx, &head(&loc)), format!("{name}, {}", cx.location_name(&world, &loc)));
+        let head = json::dict(&json!({"exists": true, "ok": true, "world_id": world, "location_id": "", "saved_at": 1_700_000_000, "party": []})).clone();
+        let (label, _) = slot_text(&cx, 1, &head);
+        assert!(label.starts_with(&format!("Slot 1 · {name} · ")) && !label.contains(", "), "{label}");
+    }
+
     /// PLAYUI1 section 1 acceptance over the screen's widgets (the agent link's ids): `slot.2` saves an empty slot at
     /// once and asks on a filled one; `slot.2.lock` locks it, after which `slot.2` and its delete take no click and
     /// their cards name the lock; the autosave has no lock; the load screen loads a locked save; unlock, delete.
@@ -1940,10 +2230,14 @@ mod tests {
         assert!(matches!(cx.nav.last(), Some(Nav::Push(_))), "a filled slot asks before overwriting");
         cx.nav.clear();
 
-        // The icons sit 4 px from the row's top and right edges, right to left: delete, lock.
+        // PR7-29 (SLOTCARD1): the card is slot 2's place in the two-column grid; its icons are the card's corner icons
+        // (`panes::slot_rects`), right to left: delete, lock.
         let (row, del, lock) = (get(&w, "slot.2").unwrap(), get(&w, "slot.2.delete").unwrap(), get(&w, "slot.2.lock").unwrap());
-        assert_eq!((n(del, 0) + n(del, 2), n(del, 1)), (n(row, 0) + n(row, 2) - 4, n(row, 1) + 4));
-        assert_eq!((n(del, 2), n(del, 3)), (16, 16));
+        let r = card_rect(2);
+        assert_eq!((n(row, 0), n(row, 1), n(row, 2), n(row, 3)), (r.x, r.y, CARD_W, CARD_H));
+        let (_, _, _, icons) = panes::slot_rects(r, 2);
+        assert_eq!((n(del, 0), n(del, 1), n(del, 2)), (icons[1].x, icons[1].y, icons[1].w));
+        assert_eq!((n(lock, 0), n(lock, 1)), (icons[0].x, icons[0].y));
         assert!(n(lock, 0) + n(lock, 2) <= n(del, 0), "the lock is left of delete");
 
         s.click_id(&mut cx, "slot.2.lock").unwrap();
@@ -1978,6 +2272,17 @@ mod tests {
     }
 
     // ---- LOOK1-M1: the main menu on the panes -------------------------------------------------------------------
+
+    /// ENGINE-57 (FEEL-RELEASE1): New game starts the one world at once for a player, and opens the picker while the
+    /// developer surfaces show (a dev build, or a release scenario run's `dev=1`) or when there are more worlds.
+    #[test]
+    fn new_game_starts_the_one_world_unless_the_developer_surfaces_show() {
+        let one = vec!["sunk_ward".to_string()];
+        assert_eq!(at_once(&one, false).as_deref(), Some("sunk_ward"), "a player");
+        assert_eq!(at_once(&one, true), None, "the picker, as the gate's dev build shows it");
+        assert_eq!(at_once(&[one[0].clone(), "x".into()], false), None);
+        assert!(crate::dev_build(), "a test build is a dev build");
+    }
 
     const MENU_IDS: [&str; 5] = ["menu.new_game", "menu.load", "menu.settings", "menu.tools", "menu.quit"];
 
@@ -2160,6 +2465,36 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// ENGINE-62 (CRASH-SAFE1): the rescue save a crash wrote (`Context::rescue`) is offered beside Continue and loads the
+    /// game it held, once; a damaged slot says so on its card.
+    #[test]
+    fn the_rescue_save_is_offered_beside_continue_and_a_damaged_slot_says_so() {
+        use aegis_ui::Context as _;
+        let dir = scratch("rescue");
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
+        write_fixture(&mut cx, 3);
+        cx.gs_mut().time = 42;
+        assert_eq!(cx.app.rescue(), Some(Vec::new()), "the game in play is written");
+        assert!(save::exists_keyed(&dir, aegis_save::RESCUE_KEY) && !save::exists(&dir, 1));
+        let mut m = MainMenu::default();
+        let w = menu_frame(&mut m, &mut cx, &mut g, (-1, -1));
+        assert_eq!(&buttons(&w)[..2], ["menu.continue", "menu.continue_rescue"]);
+        cx.app.game.as_mut().unwrap().clean = cx.gs().to_value();
+        cx.gs_mut().time = 1;
+        m.click_id(&mut cx, "menu.continue_rescue").unwrap();
+        assert_eq!(cx.gs().time, 42, "the rescued game");
+        assert!(!save::exists_keyed(&dir, aegis_save::RESCUE_KEY), "offered once");
+        // a slot cut short: kept, and its card names the damage and the save it loads instead
+        let slot = save::newest_slot(&cx.data, &dir);
+        assert!(save::write(&cx.data, &dir, cx.gs(), slot, 0).is_empty());
+        let path = save::path_for(&dir, slot);
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(&path, &text[..text.len() / 2]).unwrap();
+        let (_, status) = slot_text(&cx, slot, &save::peek(&cx.data, &dir, slot));
+        assert!(status.starts_with("Damaged (the file is cut short or garbled); loads the previous save"), "{status}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Continue's peek reads the fixture save (its location, day (the clock plus one) and at most four of its party, the
     /// active members first), at the brief's rect, while Continue is hovered or the keyboard moved onto it, and only then:
     /// the focus the menu opens with (or comes back with) does not show it.
@@ -2178,6 +2513,28 @@ mod tests {
         cx.gs_mut().time = 50;
         let mut m = MainMenu::default();
         assert!(get(&menu_frame(&mut m, &mut cx, &mut g, (-1, -1)), "menu.peek").is_none(), "idle: no peek");
+        // ENGINE-53, ENGINE-54: frames go on until Continue's map is made ahead (drawn unseen in slices, as the shell
+        // draws them: its art decoded and its ground composed on threads)
+        assert_ne!(m.frame_need(&cx), FrameNeed::Idle, "ENGINE-53: Continue's map is being made ahead");
+        let t0 = std::time::Instant::now();
+        let mut warming = None;
+        while m.state(&cx)["ahead"] != json!("ready") {
+            m.tick(&mut cx);
+            warming = m.warm_next(&mut cx).or(warming);
+            if let Some(s) = warming.as_mut() {
+                cx.art.warm_poll();
+                aegis_ui::ground::poll_later();
+                g.canvas.bounds = Some(aegis_ui::canvas::Rect::new(0, 0, 0, 0));
+                cx.art.defer(std::time::Duration::from_millis(4));
+                aegis_ui::ground::set_deferring(true);
+                s.draw(&mut cx, &mut g, (-1, -1), false);
+                cx.art.undefer();
+                aegis_ui::ground::set_deferring(false);
+                g.canvas.bounds = None;
+                cx.nav.clear();
+            }
+            assert!(t0.elapsed().as_secs() < 30, "Continue's map made ahead");
+        }
         assert_eq!(m.frame_need(&cx), FrameNeed::Idle, "FPSCAP1: nothing moves on the menu without a peek");
         let w = menu_frame(&mut m, &mut cx, &mut g, OVER_FIRST);
         let p = get(&w, "menu.peek").expect("hovered: the peek");
@@ -2451,7 +2808,9 @@ mod tests {
                 // The ask dialog: its own screen, drawn in old units over the menu.
                 g.view = View::fit(ww as u32, wh as u32);
                 g.fonts.audit = Some(Vec::new());
-                let v = aegis_ui::panes::AskView { ornate: true, ..aegis_ui::panes::AskView::new("Leave this place?", "Anything not saved since the last save is lost. Enter answers the default, y and n answer, Esc is No.") };
+                let keys = crate::controls_view::hints(&cx.settings.v);
+                let question = format!("Anything not saved since the last save is lost. {} answers the default, y and n answer, {} is No.", keys.key_hint(Key::Enter), keys.key_hint(Key::Esc));
+                let v = aegis_ui::panes::AskView { ornate: true, ..aegis_ui::panes::AskView::new("Leave this place?", &question) };
                 let area = Rect::new(0, 0, W, H);
                 let mut ui: Ui<MenuAct> = Ui::new(&mut g, (-1, -1), true);
                 let ask = panes::ask_dialog(&mut ui, "ask", area, &v, MenuAct::Quit, MenuAct::Quit);
@@ -3252,7 +3611,52 @@ mod settings_tests {
             s.click_id(&mut cx, "settings_controls.reset").expect("Reset");
             assert_eq!(saved(&cx, "controls"), Value::Null);
             assert_eq!(Controls::from_settings(&cx.settings.v).0, Controls::default());
+            // CONTROLS-UI1B: the confirm's and the guard's buttons name the key bound to Enter
+            let text = |w: &[Value], id: &str| w.iter().find(|x| x["id"] == id).map(|x| x["text"].as_str().unwrap_or("").to_string()).unwrap_or_default();
+            let mut c = Controls::default();
+            c.bind_key(Key::Enter, Key::Char('k'));
+            cx.settings.v["controls"] = c.to_json();
+            s.confirm = Some(Confirm { before: cx.settings.v.clone(), until: Instant::now() + Duration::from_secs(CONFIRM_SECS) });
+            let w = redraw(&mut s, &mut cx, &mut g);
+            assert_eq!(text(&w, "settings.confirm.keep"), "Keep changes [K]");
+            s.confirm = None;
+            s.guard = Some(Leave::Close);
+            let w = redraw(&mut s, &mut cx, &mut g);
+            assert_eq!(text(&w, "settings.guard.apply"), "Apply display [K]");
+            s.guard = None;
+            cx.settings.v.as_object_mut().unwrap().shift_remove("controls");
         }
+    }
+
+    /// ENGINE-63 (PAD-TUNE1): the Controls tab's Gamepad group: the dead zone, the repeat delay and rate (today's values
+    /// until set), saved at once and read back from the file, and the live stick Test line under them.
+    #[test]
+    fn the_gamepad_group_tunes_the_pad_and_tests_the_stick() {
+        use aegis_ui::controls::{PadTuning, PAD_SETTINGS, PAD_TUNING_KEY};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut s = SettingsScreen::new(&cx);
+        redraw(&mut s, &mut cx, &mut g);
+        s.click_id(&mut cx, "settings.tab.controls").expect("the tab");
+        let w = redraw(&mut s, &mut cx, &mut g);
+        let text = |w: &[Value], id: &str| w.iter().find(|x| x["id"] == id).map(|x| x["text"].as_str().unwrap_or("").to_string()).unwrap_or_else(|| panic!("no {id}"));
+        assert_eq!(text(&w, "settings.heading.gamepad"), "Gamepad");
+        assert_eq!((text(&w, "settings.gamepad.dead_zone"), text(&w, "settings.gamepad.repeat_delay_ms"), text(&w, "settings.gamepad.repeat_every_ms")), ("0.50".into(), "350 ms".into(), "110 ms".into()), "today's values");
+        assert!(text(&w, "settings.gamepad.test").contains("reads none"), "a pad at rest");
+        // the arrows step and save; the slider sets
+        s.click_id(&mut cx, "settings.gamepad.dead_zone.down").expect("<");
+        s.click_id(&mut cx, "settings.gamepad.repeat_delay_ms.up").expect(">");
+        redraw(&mut s, &mut cx, &mut g);
+        s.act(&mut cx, SetAct::Pad(PAD_SETTINGS[2].key, PAD_SETTINGS[2].at(0)));
+        assert_eq!(saved(&cx, PAD_TUNING_KEY), json!({"dead_zone": 0.45, "repeat_delay_ms": 375, "repeat_every_ms": 50}), "saved at once");
+        let back = Settings::load(cx.shot_dir.join("settings.json"), default_settings());
+        assert_eq!(PadTuning::of(&back.v), PadTuning::of(&cx.settings.v), "the file reads back the same");
+        // the live stick under the new dead zone
+        cx.held.stick = (0.47, -0.2);
+        let w = redraw(&mut s, &mut cx, &mut g);
+        assert_eq!(text(&w, "settings.gamepad.test"), "Stick x +0.47  y -0.20  reads Right  (dead zone 0.45)");
+        // the whole screen's Reset to defaults puts today's values back
+        s.act(&mut cx, SetAct::Defaults);
+        assert_eq!(PadTuning::of(&cx.settings.v), PadTuning::default());
     }
 
     /// Every tab, the confirm and the guard fit at the four text sizes, full screen and popup: no text spills out of

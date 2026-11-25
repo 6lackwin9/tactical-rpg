@@ -275,6 +275,11 @@ pub struct World {
     pub unkillable: Vec<UnitId>,
     /// PR6-9: a `retreat` objective's unit and the HP damage never takes it below (`encounter::floor_hp`; None: none).
     pub hp_floor: Option<(UnitId, i32)>,
+    /// PHASEBREAK1 (PR7-56, BOSSUI1 BU15): the HP each unit's next `hp_below` phase ends at (the session sets them at
+    /// every block start). A hit that takes the unit to or below it stops there and breaks the phase (`phase_break`).
+    pub phase_floors: IndexMap<UnitId, i32>,
+    /// PHASEBREAK1: the unit whose phase a hit just broke (the session ends the round and takes it).
+    pub phase_break: Option<UnitId>,
     /// S1: the unkillable units damage would have downed, in the order it first happened (once each; the session logs
     /// each one's cell).
     pub spared: Vec<UnitId>,
@@ -302,6 +307,9 @@ pub struct World {
     /// PK2-S1: (unit, skill catalog id) -> how many times the unit started that skill this battle (only skills with a
     /// `uses_per_battle` are counted; `mark::uses_problem`).
     pub skill_uses: IndexMap<(UnitId, String), i32>,
+    /// INTERCEPT-LIMIT1 (PR7-62): how many times each unit's trigger rows fired this round and battle, for their
+    /// `limit` (the resolver counts them; forecasts read them; no save key).
+    pub trigger_uses: crate::trigger::Uses,
     /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): unit -> the main-hand weapon families it started an attack skill with
     /// this battle, each once (only heroes built from member state, `Unit::rank_choice`): the settle's mastery use
     /// (`rpgkit_world::roster::HeroEnd::attacked`).
@@ -376,6 +384,8 @@ impl World {
             hold: None,
             unkillable: Vec::new(),
             hp_floor: None,
+            phase_floors: IndexMap::new(),
+            phase_break: None,
             spared: Vec::new(),
             ground: Default::default(),
             meters: Default::default(),
@@ -386,6 +396,7 @@ impl World {
             sides: Default::default(),
             marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()),
             skill_uses: IndexMap::new(),
+            trigger_uses: Default::default(),
             weapon_attacks: IndexMap::new(),
             channel_actions: IndexMap::new(),
             dulled_lock: false,
@@ -399,6 +410,18 @@ impl World {
     /// BIGUNIT1 BU3: deploys the units on `grid` as a battle start does (`deploy`, then each side's leftovers) and
     /// returns the indices (allies first) of the 2 x 2 units that found no square where all four cells fit.
     pub fn deploy_misfits(cat: Arc<Catalog>, grid: Grid, party: Vec<Unit>, enemies: Vec<Unit>, deployment: &str) -> Vec<UnitId> {
+        let w = Self::deployed(cat, grid, party, enemies, deployment);
+        (0..w.units.len()).filter(|&c| w.size_of(c) > 1 && !w.has(c)).collect()
+    }
+
+    /// DECOR1 (PR7-81): the cells the units stand on once deployed on `grid` as a battle start places them (`deploy`,
+    /// then each side's leftovers; every cell of a 2 x 2 unit), allies first.
+    pub fn deploy_cells(cat: Arc<Catalog>, grid: Grid, party: Vec<Unit>, enemies: Vec<Unit>, deployment: &str) -> Vec<V2> {
+        let w = Self::deployed(cat, grid, party, enemies, deployment);
+        (0..w.units.len()).flat_map(|c| w.cells_of(c)).collect()
+    }
+
+    fn deployed(cat: Arc<Catalog>, grid: Grid, party: Vec<Unit>, enemies: Vec<Unit>, deployment: &str) -> World {
         let n_allies = party.len();
         let units: Vec<Unit> = party.into_iter().chain(enemies).collect();
         let mut grid = grid;
@@ -408,7 +431,7 @@ impl World {
         w.deploy(&allies, &foes, deployment);
         w.place_leftovers(&allies, true, deployment);
         w.place_leftovers(&foes, false, deployment);
-        (0..w.units.len()).filter(|&c| w.size_of(c) > 1 && !w.has(c)).collect()
+        w
     }
 
     /// U1.2 slice 1 (`FB-04`): unit `c`'s pool `id` through the typed facade: HP and AP from the unit, poise from
@@ -483,12 +506,21 @@ impl World {
     }
 
     fn damage_as(&mut self, c: UnitId, amount: i32, mitigated: bool, past_unkillable: bool) -> i32 {
-        let was_alive = self.units[c].is_alive();
-        let dealt = self.units[c].take_damage(amount, mitigated);
+        let (was_alive, hp0) = (self.units[c].is_alive(), self.units[c].hp);
+        let mut dealt = self.units[c].take_damage(amount, mitigated);
         // PR6-9: the retreat's phase guard: damage stops at the floor (a scripted kill goes past it)
         if let Some((t, floor)) = self.hp_floor.filter(|&(t, _)| t == c && !past_unkillable) {
             if was_alive && self.units[t].hp < floor {
                 self.units[t].hp = floor.min(self.units[t].max_hp);
+            }
+        }
+        // PHASEBREAK1: a hit to or past the phase's threshold stops at it (the rest is lost, so the damage dealt is the HP
+        // it took) and breaks the phase
+        if let Some(&floor) = self.phase_floors.get(&c).filter(|_| was_alive && !past_unkillable) {
+            if self.units[c].hp <= floor {
+                self.units[c].hp = floor.clamp(1, self.units[c].max_hp.max(1));
+                dealt = (hp0 - self.units[c].hp).max(0);
+                self.phase_break = Some(c);
             }
         }
         if self.units[c].hp == 0 && !past_unkillable && self.unkillable.contains(&c) {
@@ -1031,6 +1063,11 @@ impl World {
         (0..self.units.len()).find(|&u| self.grid.positions[u].is_some_and(|a| square_covers(a, self.size_of(u), cell)) && self.units[u].is_active())
     }
 
+    /// ESCAPE-PLAN1 (2): an active unit other than `c` covering `cell` (a unit walking through a friend shares its tile).
+    pub fn occupant_other(&self, c: UnitId, cell: V2) -> Option<UnitId> {
+        (0..self.units.len()).find(|&u| u != c && self.grid.positions[u].is_some_and(|a| square_covers(a, self.size_of(u), cell)) && self.units[u].is_active())
+    }
+
     pub fn is_occupied(&self, cell: V2) -> bool {
         self.occupant(cell).is_some()
     }
@@ -1085,6 +1122,13 @@ impl World {
                 true
             }
         }
+    }
+
+    /// ESCAPE-PLAN1 (1): unit `c` may plan a hand move onto `cell` to leave by it, as Withdraw lets it: `cell` is an
+    /// exit, `c` takes one tile and does not hold a hold escape's gate (a shut gate may open in the same round, as for
+    /// Withdraw; the walk stops at it otherwise).
+    pub fn may_leave_at(&self, c: UnitId, cell: V2) -> bool {
+        self.grid.is_valid(cell) && self.grid.is_exit(cell) && self.size_of(c) == 1 && self.hold.as_ref().is_none_or(|g| g.holder != Some(c))
     }
 
     /// `move_unit`'s rule for one step of `c` by `offset` from `from` (nothing changes): the tile it enters, the exit
@@ -1237,6 +1281,13 @@ impl World {
     /// CatalogEncounter._place_leftovers (standard deployment): units off the grid take the free tile on their half
     /// nearest the centre.
     pub fn place_leftovers(&mut self, units: &[UnitId], party_side: bool, deployment: &str) {
+        self.place_leftovers_avoiding(units, party_side, deployment, &[]);
+    }
+
+    /// PR7-83 (PT-71): `place_leftovers`, passing over the `avoid` tiles (the tiles planned moves claim) while another
+    /// tile on the half is free; a unit takes an avoided tile only when nothing else is left (not yet wired to the
+    /// arrival: it moves the sim golden, FB-459).
+    pub fn place_leftovers_avoiding(&mut self, units: &[UnitId], party_side: bool, deployment: &str, avoid: &[V2]) {
         if !party_side && deployment != "standard" {
             let mut turn = 0;
             for &c in units {
@@ -1261,7 +1312,8 @@ impl World {
                     if Grid::is_party_half(cell) != party_side || !self.open_for(c, cell) {
                         continue;
                     }
-                    let score = Grid::centre_distance(cell) * 1000 + y * 20 + x;
+                    let avoided = if avoid.contains(&cell) { 1 << 20 } else { 0 };
+                    let score = avoided + Grid::centre_distance(cell) * 1000 + y * 20 + x;
                     if score < best_score {
                         best_score = score;
                         best = cell;

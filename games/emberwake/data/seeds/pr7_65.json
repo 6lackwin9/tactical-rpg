@@ -1,0 +1,213 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "founder_kaelen",
+        "art": "warrior/kaelen"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "founder_vesper",
+        "art": "rogue/vesper"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "founder_maren",
+        "art": "priest/maren"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "founder_hollis",
+        "art": "ranger/hollis"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "castellan_footman",
+        "art": "warrior/castellan_footman"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "watch_crossbowman",
+        "art": "ranger/watch_crossbowman"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "tallow_dredger",
+        "art": "rogue/tallow_dredger"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "ash_crawler",
+        "art": "crawler/ash_crawler_painted"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "mortuary_flagellant",
+        "art": "rogue/mortuary_flagellant"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "bailiff_enforcer",
+        "art": "warrior/bailiff_enforcer"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "inquisitorial_purifier",
+        "art": "mage/inquisitorial_purifier"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "calcified_husk",
+        "art": "warrior/calcified_husk"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "render_beast",
+        "art": "beast/render_beast_painted"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "captain_vane",
+        "art": "warrior/captain_vane"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "inquisitor_prelate_nemeth",
+        "art": "warrior/inquisitor_prelate_nemeth"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "proctor_quell",
+        "art": "warrior/proctor_quell"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "guild_master_orlov",
+        "art": "brawler/guild_master_orlov"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "overseer_grendel",
+        "art": "warrior/overseer_grendel"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "art"
+      ],
+      "entry": {
+        "id": "calcified_amalgam",
+        "art": "brawler/calcified_amalgam"
+      }
+    }
+  ]
+}

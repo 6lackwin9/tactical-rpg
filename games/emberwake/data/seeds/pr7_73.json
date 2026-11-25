@@ -1,0 +1,81 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "portrait"
+      ],
+      "entry": {
+        "id": "render_beast",
+        "portrait": "beast_render_beast_painted"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "portrait"
+      ],
+      "entry": {
+        "id": "ash_crawler",
+        "portrait": "crawler_ash_crawler_painted"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "portrait"
+      ],
+      "entry": {
+        "id": "tallow_dredger",
+        "portrait": "rogue_tallow_dredger"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "portrait"
+      ],
+      "entry": {
+        "id": "castellan_footman",
+        "portrait": "warrior_castellan_footman"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "portrait"
+      ],
+      "entry": {
+        "id": "mortuary_flagellant",
+        "portrait": "rogue_mortuary_flagellant"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "portrait"
+      ],
+      "entry": {
+        "id": "calcified_husk",
+        "portrait": "warrior_calcified_husk"
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "fields": [
+        "portrait"
+      ],
+      "entry": {
+        "id": "watch_crossbowman",
+        "portrait": "ranger_watch_crossbowman"
+      }
+    }
+  ]
+}

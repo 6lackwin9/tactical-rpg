@@ -24,7 +24,7 @@ pub const WINDOW_SIZES: [&str; 5] = ["1280x720", "1366x768", "1600x900", "1920x1
 /// The game's own settings keys and defaults (sound, display, text size and playtest recording are the
 /// engine's: `Settings::engine_defaults`). PLAYUI1-M: `map_names` (`hover` or `always`: the region map's marker names)
 /// and `map_legend_open` (the region map's legend, open or collapsed to its header); MAP-POLISH1: `world_map_legend`
-/// (the world map's floating Legend, `{"pos": [x, y], "locked": bool}` once moved or locked, `worldmap::LEGEND_KEY`). STAGE1: `battle_view` (`stage` or
+/// (the world map's floating Legend, `{"pos": [x, y], "locked": bool}` once moved or locked, `worldmap::LEGEND_KEY`); FLOATPANELS1: `region_legend`, `region_log` and `battle_log` (the same for the region's legend and ticker and the battle log, `floats`). STAGE1: `battle_view` (`stage` or
 /// `flat`, `stage::VIEWS`; a debug setting set in the Scene Runner since STAGE1-C). STAGE1-O: `see_through`
 /// (`selected` or `always`, `stage::SEE_THROUGH`: when covered units are outlined in battle). EXPLOREVIEW1:
 /// `region_view` (`square` or `tilted`, `mapview::VIEWS`; a debug setting set in the Scene Runner).
@@ -33,7 +33,7 @@ pub fn default_settings() -> Value {
     // `all_bars`, `test_hazards` and `test_arena`). VC5: the debug key `debug_party_foresight_off` is never a default.
     let overlays: serde_json::Map<String, Value> = crate::battle::OVERLAY_GROUPS.iter().map(|g| (g.0.to_string(), Value::Bool(g.3))).collect();
     // INPUT1 GH7: "Auto-fill the rest" on by default; PB3: the playback speed 1x; VISCLAR1-D: "Auto-confirm next round" on
-    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "auto_fill": true, crate::battle::AUTO_CONFIRM: true, "map_names": "hover", "map_zoom": 1.0, "walk_step_ms": crate::mapview::WALK_STEP_MS.2, crate::mapview::TURN_BEAT_KEY: false, crate::mapview::EQUAL_SPEED_KEY: false, crate::mapview::TURN_CORNER_KEY: crate::mapview::TURN_CORNERS[0].name(), "map_legend_open": true, crate::worldmap::LEGEND_KEY: {}, "battle_view": "stage", "region_view": "square", "see_through": "selected", "battle_overlays": overlays,
+    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "auto_fill": true, crate::battle::AUTO_CONFIRM: true, "map_names": "hover", "map_zoom": 1.0, "walk_step_ms": crate::mapview::WALK_STEP_MS.2, crate::mapview::FOOTSTEPS_KEY: 60, crate::mapview::TURN_BEAT_KEY: false, crate::mapview::EQUAL_SPEED_KEY: false, crate::mapview::TURN_CORNER_KEY: crate::mapview::TURN_CORNERS[0].name(), "map_legend_open": true, crate::worldmap::LEGEND_KEY: {}, crate::floats::REGION_LEGEND_KEY: {}, crate::floats::REGION_LOG_KEY: {}, crate::floats::BATTLE_LOG_KEY: {}, "battle_view": "stage", "region_view": "square", "see_through": "selected", crate::battle::BOARD_GRID: false, "battle_overlays": overlays,
         "playback_speed": "1x"})
 }
 
@@ -51,15 +51,18 @@ pub struct Game {
     /// TRANSITIONS1 T2 step 4: the arrival a won fight left for the hub (the region map shows it as it comes back on top;
     /// the story stage drops it when a vignette plays next).
     pub arrival: Option<crate::transitions::Arrival>,
-    /// PR7-37 (PT-31): the open road legs the player was last told about (route qids; None until first looked at,
-    /// `worldmap::note_new_roads`), so a road a story beat opens gets a notice. Not saved.
-    pub roads_seen: Option<Vec<String>>,
+    /// PR7-76 (PT-55): the outcome of the last world fight settled ("won", "lost", ...), taken by the region map (a walk
+    /// the fight broke off goes on after a win).
+    pub fought: Option<String>,
+    /// ENGINE-53 (SWITCH-AHEAD1): a fight the map started ahead on a copy of this game (`BattleScreen::world` takes it
+    /// when it is not stale).
+    pub fight_ahead: Option<crate::battle::FightAhead>,
 }
 
 impl Game {
     pub fn new(gs: GameState, slot: i64, sample: bool) -> Self {
         let clean = gs.to_value();
-        Self { gs, slot, clean, busy: false, sample, notices: Vec::new(), arrival: None, roads_seen: None }
+        Self { gs, slot, clean, busy: false, sample, notices: Vec::new(), arrival: None, fought: None, fight_ahead: None }
     }
 }
 
@@ -162,8 +165,41 @@ impl GameCx {
 impl aegis_ui::Context for GameCx {
     const MORE_COMMANDS: &'static str = "battle commands work while a battle is open";
 
+    /// ENGINE-46 (FEEL-FIX1): the Settings screen and popup on every tab (their panels, art and the Controls tab's
+    /// keycaps were a 50 ms first draw); ENGINE-51 (SWITCH-FEEL1): the Save and Load slots (their slot panels' frames
+    /// were a 50 ms first draw, a 107 ms frame opening Save).
+    fn warm(cx: &mut aegis_ui::Cx<Self>) -> Vec<Box<dyn aegis_ui::Screen<Self>>> {
+        let tabs = 0..crate::menus::TABS.len();
+        let mut screens: Vec<Box<dyn aegis_ui::Screen<Self>>> = [false, true].into_iter().flat_map(|popup| tabs.clone().map(move |t| (popup, t))).map(|(popup, t)| Box::new(crate::menus::SettingsScreen::on_tab(cx, popup, t)) as Box<dyn aegis_ui::Screen<Self>>).collect();
+        screens.extend([true, false].map(|saving| Box::new(crate::menus::Slots::new(saving)) as Box<dyn aegis_ui::Screen<Self>>));
+        screens
+    }
+
     fn note(&mut self, line: String) {
         self.log(line);
+    }
+
+    /// ENGINE-62 (CRASH-SAFE1): the game in play, written to the rescue save (a save write and nothing more).
+    fn rescue(&self) -> Option<Vec<String>> {
+        let g = self.game.as_ref()?;
+        Some(emberwake_world::save::write_keyed(&self.data, &self.save_dir, &g.gs, aegis_save::RESCUE_KEY, 0))
+    }
+
+    /// ENGINE-64 (LIVE-RELOAD1): the data folder, watched in a dev run.
+    fn data_dirs(&self) -> Vec<PathBuf> {
+        vec![self.data_dir.clone()]
+    }
+
+    /// ENGINE-64: the data read again as at a start (`Data::open`). A load problem (a file that does not parse, an entry
+    /// skipped) keeps the old data and names the first; otherwise the new data is swapped in and the game state stays.
+    fn reload_data(cx: &mut Cx, _changed: &[PathBuf]) -> Result<Vec<String>, String> {
+        let (d, problems) = emberwake_world::Data::open(&cx.data_dir).map_err(|e| format!("{e:#}"))?;
+        if let Some(first) = problems.first() {
+            let more = if problems.len() > 1 { format!(" (and {} more)", problems.len() - 1) } else { String::new() };
+            return Err(format!("{first}{more}"));
+        }
+        cx.data = Arc::new(d);
+        Ok(Vec::new())
     }
 
     fn agent_summary(&self) -> Value {
@@ -190,7 +226,7 @@ pub fn character_art(d: &Data, character: &aegis_core::json::Dict) -> (String, S
     let body = art::body_of(character, unit, class);
     let palette = art::palette_of(character, unit);
     let tier = art::portrait_tier(character, unit);
-    let portraits = art::portrait_chain(&tier, &aegis_core::json::s(character, "id"), &body);
+    let portraits = art::portrait_chain_keyed(&tier, &aegis_core::json::s(character, "id"), &body, &art::portrait_key(character, unit));
     (body, palette, portraits)
 }
 
@@ -198,10 +234,14 @@ pub fn character_art(d: &Data, character: &aegis_core::json::Dict) -> (String, S
 /// sequence runs (STORYUI1 5.4: a new game in a world with a start sequence, a save made during one).
 pub fn enter_game(cx: &mut Cx, gs: GameState, slot: i64, warnings: Vec<String>) {
     let story = emberwake_world::story::is_running(&gs);
+    // PR7-37 (PT-31), PR7-47: a game with no saved roads (new, or an older save) learns the roads open now, before its
+    // clean copy is taken (only later ones get a notice); a save's roads opened since its last look are told on the map
+    let mut gs = gs;
+    if emberwake_world::travel::roads_seen(&gs).is_none() {
+        emberwake_world::travel::note_new_roads(&cx.data.clone(), &mut gs);
+    }
     cx.game = Some(Game::new(gs, slot, false));
     cx.log.clear();
-    // PR7-37 (PT-31): the roads open as the game starts are known (only later ones get a notice)
-    crate::worldmap::note_new_roads(cx);
     if !warnings.is_empty() {
         cx.notice = warnings;
     }

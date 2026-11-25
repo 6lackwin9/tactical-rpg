@@ -27,7 +27,8 @@ impl<G: Context> Shell<G> {
         let (recs, laid) = (self.gfx.fonts.audit.take().unwrap_or_default(), self.gfx.fonts.layout.take().unwrap_or_default());
         let top = self.stack.last();
         let (screen, grid, widgets) = (top.map_or("", |s| s.id()), top.map_or(Grid::Old, |s| s.grid()), top.map(|s| s.widgets()).unwrap_or_default());
-        let mut audit = layout_audit::frame_report(self.top_view(), grid, &recs, &laid, &widgets);
+        let ignores = top.map_or(&[][..], |s| s.audit_ignores());
+        let mut audit = layout_audit::frame_report(self.top_view(), grid, &recs, &laid, &widgets, ignores);
         let out = &mut audit.report;
         out["screen"] = json!(screen);
         out["scale"] = json!(self.gfx.fonts.scale);
@@ -96,6 +97,10 @@ impl<G: Context> Shell<G> {
             "frame": self.frames, "px": [self.gfx.canvas.w, self.gfx.canvas.h],
             "music": cx.audio.wanted_music(), "ambience": cx.audio.wanted_ambience(), "focus": self.gfx.kit.focus, "focus_visible": self.gfx.kit.focus_visible, "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets(),
             "edit": self.gfx.kit.edit.as_ref().map(|e| json!({"id": e.id, "caret": e.caret, "selection": e.selection(), "selected": e.selected(), "undo": e.history().0}))});
+        // ENGINE-64 (LIVE-RELOAD1): the last live reload's line while it shows
+        if let Some((line, _)) = &self.live_line {
+            out["live"] = json!(line);
+        }
         #[cfg(not(target_arch = "wasm32"))]
         {
             out["pid"] = json!(std::process::id());
@@ -152,8 +157,11 @@ impl<G: Context> Shell<G> {
                 } else {
                     // Any other click closes an open list (a pick from it still goes through).
                     self.gfx.kit.open = None;
+                    let cue = self.press_cue(target.as_ref());
                     let cx = &mut self.cx;
-                    match self.stack.last_mut().unwrap().click_id(cx, id) {
+                    let done = self.stack.last_mut().unwrap().click_id(cx, id);
+                    self.play_cue(cue, done.is_ok());
+                    match done {
                         Ok(()) => json!({"ok": true, "clicked": id}),
                         Err(e) => json!({"ok": false, "error": e}),
                     }
@@ -358,6 +366,9 @@ impl<G: Context> Shell<G> {
                 self.cx.quit = true;
                 json!({"ok": true})
             }
+            // ENGINE-62 (CRASH-SAFE1): a forced panic in a dev build (tests of the crash path: report, rescue, next start)
+            "panic" if cfg!(debug_assertions) => panic!("{}", body["message"].as_str().unwrap_or("a forced panic (the agent link's panic command)")),
+            "panic" => json!({"ok": false, "error": "panic works in a dev build only"}),
             "_bad" => json!({"ok": false, "error": body["error"]}),
             _ => {
                 let cx = &self.cx;

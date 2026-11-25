@@ -39,6 +39,11 @@ pub fn accent() -> Rgba {
     th().focus
 }
 
+/// STYLE-PASS1B (`PR7-48`, FB-366): the ring on a click-to-walk's destination tile: the one amber (`accent`).
+pub fn walk_ring() -> Rgba {
+    accent()
+}
+
 /// PR7-36 (ART-05): the icon files to try for item `id` (its family's folder, then the type's and any base).
 pub fn item_icons(d: &emberwake_world::Data, id: &str) -> Vec<String> {
     let item = d.entry("items", id);
@@ -88,6 +93,22 @@ pub fn oxblood() -> Rgba {
 /// moss.
 pub fn moss() -> Rgba {
     hp()
+}
+
+/// STATUSVIS1 SV15 (PR7-57): a locked block's grey (the strip's tile and the full timeline view's tint, band and rim:
+/// the palette's iron) and its bar's lighter grey under the icon.
+pub fn lock_block() -> Rgba {
+    th().game("lock_block", rgb(0x4b, 0x55, 0x63))
+}
+
+/// SV15: the bar under a locked block's icon.
+pub fn lock_bar() -> Rgba {
+    th().game("lock_bar", rgb(0x9c, 0xa3, 0xaf))
+}
+
+/// SV8, SV15 (PR7-57): the crimson of the taunt badge's rim and of an enemy target's frame in the full timeline view.
+pub fn crimson() -> Rgba {
+    th().game("crimson", rgb(0xe1, 0x1d, 0x48))
 }
 
 /// The pale moss of a previewed heal on an HP bar.

@@ -47,8 +47,10 @@ Tree (section 3 of the spec; a test keeps every file on these patterns):
   copy of `art_src/title_logo_final.png`, which the menu sizes to the window: averaged down, enlarged above about 3393 px
   of window width), `ui/logo_crest.png` (963 x 963, crest
   B keyed from its ground, the typeset fallback's crest; ICON1: also the window icon, `game.json` `icon`, and the source
-  of the `.exe` icon, `tools/game_icon.py` writing `emberwake_gui/res/emberwake.ico`: rerun it when the crest changes), and for LOOK1-M2's story cards, not drawn yet,
-  `ui/banner_full.png` (1329 x 243, take 1 of `art_src/card_banner_gen1793616575_*.png` with its finials) and
+  of the `.exe` icon, `tools/game_icon.py` writing `emberwake_gui/res/emberwake.ico`: rerun it when the crest changes), and for LOOK1-M2's banner cards (`PR7-30`),
+  `ui/banner_full.png` (1436 x 243, the story and run-over banner card: crest B at each end, 190 px wide = 0.78 of the
+  height as `rpgkit_ui::banner` slices it, over the plain bar paired with its mirror as the repeating middle;
+  `art_src/style/banner_crest_ends.py`, Art/UI 2026-11-20; the finial take 1 stays in `art_src/card_banner_gen1793616575_1.png`) and
   `ui/banner_bar.png` (716 x 152, the plain middle of take 2, opaque, no finials; it tiles when every other copy is
   mirrored, its ends cut on the arches' axes).
 - `fonts/<file>.ttf` with `<Family>-OFL.txt`: the theme's faces beyond the engine's body face (OpenSans SemiBold in

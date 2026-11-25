@@ -147,6 +147,58 @@ fn card_errors(v: &View, w: &str, i: usize, raw: &Value) -> Vec<String> {
     if let Some(when) = c.get("when") {
         errors.extend(dialogue::conditions_errors(v, w, when, &format!("{label} when")));
     }
+    errors.extend(stage_errors(v, w, c, &style, &label));
+    errors
+}
+
+/// VNSTAGE1 (PR7-27): a card's stage keys: `actors` a list of at most `ACTORS_MAX` rows {who (a characters ref, once
+/// each), side, move}, none on a title card; `camera` one of `STAGE_CAMERAS`; `walk_ms` a whole number 0..WALK_MS_MAX.
+fn stage_errors(v: &View, w: &str, c: &Dict, style: &str, label: &str) -> Vec<String> {
+    use rpgkit_data::{ACTORS_MAX, ACTOR_KEYS, ACTOR_MOVES, ACTOR_SIDES, STAGE_CAMERAS, WALK_MS_MAX};
+    let mut errors = Vec::new();
+    if let Some(x) = c.get("actors") {
+        match x.as_array() {
+            None => errors.push(format!("{label}: actors must be a list of {{\"who\", \"side\", \"move\"}}.")),
+            Some(rows) => {
+                if style == "title" && !rows.is_empty() {
+                    errors.push(format!("{label}: a title card has no actors."));
+                }
+                if rows.len() > ACTORS_MAX {
+                    // one error for the list; its rows are read once it fits
+                    errors.push(format!("{label}: at most {ACTORS_MAX} actors (has {}).", rows.len()));
+                }
+                let mut seen: Vec<String> = Vec::new();
+                for (k, row) in rows.iter().enumerate().filter(|_| rows.len() <= ACTORS_MAX) {
+                    let at = format!("{label} actor {}", k + 1);
+                    let Some(a) = row.as_object() else {
+                        errors.push(format!("{at} must be an object {{\"who\", \"side\", \"move\"}}."));
+                        continue;
+                    };
+                    errors.extend(a.keys().filter(|key| !ACTOR_KEYS.contains(&key.as_str())).map(|key| format!("{at}: unknown key '{key}'.")));
+                    let who = json::s(a, "who");
+                    if who.is_empty() {
+                        errors.push(format!("{at}: who is required (a character)."));
+                    } else if seen.contains(&who) {
+                        errors.push(format!("{at}: '{who}' is on the stage twice."));
+                    } else {
+                        errors.extend(ref_errors(v, w, &format!("{at} who"), "characters", &who));
+                        seen.push(who);
+                    }
+                    for (key, allowed) in [("side", &ACTOR_SIDES[..]), ("move", &ACTOR_MOVES[..])] {
+                        if let Some(x) = a.get(key).filter(|x| !x.as_str().is_some_and(|s| allowed.contains(&s))) {
+                            errors.push(format!("{at}: {key} '{}' is not one of {}.", gstr(x), allowed.join(", ")));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if let Some(x) = c.get("camera").filter(|x| !x.as_str().is_some_and(|s| STAGE_CAMERAS.contains(&s))) {
+        errors.push(format!("{label}: camera '{}' is not one of {}.", gstr(x), STAGE_CAMERAS.join(", ")));
+    }
+    if c.get("walk_ms").is_some_and(|x| !int_in(x, 0, WALK_MS_MAX)) {
+        errors.push(format!("{label}: walk_ms must be a whole number 0..{WALK_MS_MAX}."));
+    }
     errors
 }
 

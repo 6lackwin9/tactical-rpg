@@ -4,6 +4,8 @@
 #                                3 seeds per start among them), the repro replays, the agent playtest smoke (PR7-22), every scenario of each game with no window (PR7-4; the sample game games/hello too, ENGINE-1), every scenario again with each shot byte for byte the same (ENGINE-17), a new game from the templates (ENGINE-6),
 #                                the layer check, the screen layout check, the lints, docs --all, tooltests, plannertests, assetlib
 #                                (`auto` is accepted and runs everything)
+#   tools/fc.sh prune [target=<dir>] [--dry]   keep only the newest test binary per name in target/*/deps, drop the incremental
+#                                folders (TARGET-PRUNE1); the gate runs it first when the disk has under FC_PRUNE_MB (default 6000) MB free
 #   tools/fc.sh step <name>      one gate step alone, by its name in tools/gate_steps.txt (the list both gates run, ENGINE-12)
 #   tools/fc.sh golden-bisect <golden> <switch> [--keep DIR] | list   record a golden with a test-only switch
 #                                (aegis_core::switches) off and on, list the fights or runs that move; fixtures restored (ENGINE-14);
@@ -12,11 +14,14 @@
 #                                (<scenario>__<shot>.png, index.txt); compare= lists the shots changed (pixel counts), new and gone (ENGINE-16)
 #                                and writes before | after | diff sheets into <out>/compare/ (sheets=0: none); crop= compares only that
 #                                rectangle and writes each shot's crop into <out>/crops/ (ENGINE-20)
+#   tools/fc.sh shots diff [base=<sha>] [scenarios=a,b|all] [out=<dir>]   the shots a change moves: the scenarios it can show (none
+#                                for docs only) on HEAD and on the base (default origin/develop; cached in target/shots_cache/<sha>/),
+#                                index.md and a contact sheet (sheet.png) in out (default target/shots_diff/) (SHOT-DIFF1)
 #   tools/fc.sh rename <old> <new> [<path>...] [--strings] [--comments] [--dry]   an identifier renamed across Rust and JSON;
 #                                string literals and comments left unless asked; legacy, game data and fixtures only listed (ENGINE-16)
 #   tools/fc.sh schema-field <table> <field> <json> [--after <key>] [--replace]   add a field to kits/rpg/schema.json byte for byte
 #                                (<table> content.<kind> / world.<kind>, or a bare kind when unique; ENGINE-15)
-#   tools/fc.sh seed-from <kind> <id> [<world>] [--set k=v]... [--fields a,b] [--out F [--append]]   a seed for `content apply`
+#   tools/fc.sh seed-from <kind> <id>|--ids a,b,c [<world>] [--set k=v]... [--fields a,b] [--out F [--append]]   a seed for `content apply`
 #                                from a current entry with changes (dotted keys, JSON values, `k=` removes; ENGINE-15); --fields
 #                                writes only those fields, so a re-run undoes no later seed (ENGINE-20)
 #   tools/fc.sh seeds [--all]    the seed order check (in the gate): every game's seeds replayed in commit order leave the shipped
@@ -40,9 +45,12 @@
 #                                off, and no unused dependency (tools/deps/unused_deps.py, its tests); part of the gate
 #   tools/fc.sh newgame          `aegis new game` still makes a game that builds, tests and plays its scenario (made and removed
 #                                again in games/scaffold_check, about 10 s warm); part of the gate
+#   tools/fc.sh feel [out=<dir>]   every feel and reach scenario of each game with no window in a release build with release
+#                                budgets (ENGINE-57), one table of the numbers (engine/docs/authoring/scenarios.md "Reading the feel
+#                                table"); exit 1 when a scenario failed; never in the gate
 #   tools/fc.sh bench [sizes=1280x720,1920x1080] [runs=50]   the painter's benchmarks (ENGINE-2: fill, panels, text; ms per run,
 #                                p10/p50/p95/max, a calibration before and after) in a release build; one JSON line per size; never in the gate
-#   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
+#   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest | refs <kind> <id> | rename <kind> <old> <new> [--apply] (aegis content)
 #   tools/fc.sh rules [--contract]   the ruleset tweak report (aegis rules: register metadata, fields, bundles, tested sets, locked,
 #                                the game's rows); --contract: tunable and locked, one line each
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)
@@ -54,12 +62,12 @@
 #   tools/fc.sh bot [seeds=1,2,3] [steps=40]   the seeded UI bot on every start the game names (emberwake_gui tests/ui_bot.rs;
 #                                part of the gate's tests with 3 seeds): presses valid widgets, no step may panic
 #   tools/fc.sh scenario check [<file>|all]   parse games/<id>/scenarios/*.json; no game starts (engine/docs/authoring/scenarios.md)
-#   tools/fc.sh scenario <id|all|file.json> [size=1280x720] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>]   run
+#   tools/fc.sh scenario <id|all|file.json> [size=1280x720] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] [set=<key>:<value>,...] [audit=1]   run
 #                                them with no window, or in real muted windows that do not take the focus where the file or window=1 asks
 #                                (0 pass, 1 a step failed, 2 could not start); the gate runs them all; record=1 writes golden baselines
-#   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [ruleset=<id>] [seed=<n>] [do=<a>,<b>,...] [the keys above]
+#   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [ruleset=<id>] [seed=<n>] [save=<name|/abs/dir>] [do=<a>,<b>,...] [the keys above]
 #                                proof shots of a named fight or screen, into .agent/shots/<name>/<WxH>/, no window, no script to write
-#   tools/fc.sh playtest [start] [save=<dir|file>] [out=playtests/agent] [size=WxH] [shots=each|off] [window=1] [profile=dev|release]
+#   tools/fc.sh playtest [start] [save=<dir|file>] [out=playtests/agent] [size=WxH] [shots=each|off] [keep_saves=<dir>] [window=1] [profile=dev|release]
 #                                start the game with no window for an agent to play (PR7-22); then playtest do <command ...> (one
 #                                command: a log line and a shot in the run folder), playtest run <script|->, playtest stop | status;
 #                                the commands: engine/docs/authoring/agent_playtest.md; never in the gate
@@ -100,6 +108,32 @@ if [ -z "${CARGO_TARGET_DIR:-}" ]; then
   base=$(sed -n 's/^target-dir = "\(.*\)"/\1/p' .cargo/config.toml 2>/dev/null)
   [ -n "$base" ] && export CARGO_TARGET_DIR="$base"
 fi
+# PILLAR1 (2026-11-25): reuse sccache and a fast Linux linker (mold or lld) automatically when installed.
+if [ -z "${RUSTC_WRAPPER:-}" ] && [ -z "${FC_NO_SCCACHE:-}" ] && command -v sccache >/dev/null 2>&1; then
+  export RUSTC_WRAPPER=sccache
+fi
+if [ "$(uname -s 2>/dev/null)" = "Linux" ] && [ "${OS:-}" != "Windows_NT" ] && [ -z "${FC_NO_FAST_LINKER:-}" ]; then
+  case " ${RUSTFLAGS:-} " in
+    *"-fuse-ld="*) ;;
+    *)
+      if command -v clang >/dev/null 2>&1; then
+        if command -v mold >/dev/null 2>&1; then
+          export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="${CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER:-clang}"
+          export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=-fuse-ld=mold"
+        elif command -v ld.lld >/dev/null 2>&1 || command -v lld >/dev/null 2>&1; then
+          export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="${CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER:-clang}"
+          export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=-fuse-ld=lld"
+        fi
+      fi ;;
+  esac
+fi
+
+prebuilt_bin() {  # prints the debug binary path for $1 when already built, else fails
+  local b="${CARGO_TARGET_DIR:-$PWD/target}/debug/$1"
+  if [ -x "$b" ]; then echo "$b"; return 0; fi
+  if [ -x "$b.exe" ]; then echo "$b.exe"; return 0; fi
+  return 1
+}
 
 # Windows Smart App Control sometimes blocks a freshly linked test binary (os error 4551): delete the blocked exe so the next
 # run relinks it, up to 3 tries (engine/docs/PORT_NOTES.md).
@@ -202,11 +236,12 @@ kill_tree() {  # $1 = a background job started by tooltests. Windows: taskkill /
 }
 
 tooltests() {  # the tools/tiles tests, with a time limit (FC_TOOLTESTS_LIMIT seconds); no Python with Pillow: a visible SKIP, not a failure
-  local py limit=${FC_TOOLTESTS_LIMIT:-300} log pid code start=$SECONDS run=()
+  local py limit=${FC_TOOLTESTS_LIMIT:-300} log pid code start=$SECONDS run=() gc=""
   if ! py=$(tools_python); then echo "[tooltests] SKIP: no Python with Pillow found, tools/tiles tests did not run"; return 0; fi
+  if [ "${FC_PREBUILT:-0}" = "1" ]; then gc=$(prebuilt_bin ground_compose 2>/dev/null || true); fi
   log=$(mktemp)
   [ -r "/proc/$$/winpid" ] || run=(setsid)
-  (cd tools/tiles && exec "${run[@]}" "$py" -m unittest test_tiles) > "$log" 2>&1 &
+  (cd tools/tiles && [ -n "$gc" ] && export AEGIS_GROUND_COMPOSE="$gc"; exec "${run[@]}" "$py" -m unittest test_tiles) > "$log" 2>&1 &
   pid=$!
   # shellcheck disable=SC2064  # the pid is known now
   trap "kill_tree $pid; rm -f '$log'; exit 130" INT TERM
@@ -231,14 +266,18 @@ tooltests() {  # the tools/tiles tests, with a time limit (FC_TOOLTESTS_LIMIT se
 # REPLAY-CI1: every repro recording replays to its end with every checkpoint matching (`aegis replay` exit 0); the
 # recordings live in the game's repo folder (playtests/repro/<id>.json, or <id>/<id>.json beside note images).
 repro() {
-  local dir=games/emberwake/playtests/repro f out n=0 bad=0
+  local dir=games/emberwake/playtests/repro f out n=0 bad=0 cli=""
   local files=()
   [ -d "$dir" ] && while IFS= read -r f; do files+=("$f"); done < <(find "$dir" -name '*.json' ! -name '*.tmp' | sort)
   if [ ${#files[@]} -eq 0 ]; then echo "[repro] ok: no recordings in $dir"; return; fi
-  cargo build -q -p emberwake_host || { echo "[repro] FAIL: the build"; status=1; return; }
+  if [ "${FC_PREBUILT:-0}" = "1" ]; then cli=$(prebuilt_bin aegis 2>/dev/null || true); fi
+  if [ -z "$cli" ]; then
+    cargo build -q -p emberwake_host || { echo "[repro] FAIL: the build"; status=1; return; }
+    cli=$(prebuilt_bin aegis) || { echo "[repro] FAIL: no aegis binary after build"; status=1; return; }
+  fi
   for f in "${files[@]}"; do
     n=$((n + 1))
-    if ! out=$(cargo run -q -p emberwake_host -- replay "$f" 2>&1); then
+    if ! out=$("$cli" replay "$f" 2>&1); then
       bad=$((bad + 1))
       echo "[repro] FAIL $f"
       echo "$out" | grep -E "diverge|broken|differs|load error|panicked" | head -8 | sed 's/^/    /'
@@ -274,20 +313,40 @@ plannertests() {  # the tools/planner script tests (SKILLS1-FB): plain Python, n
 }
 
 layouts() {  # PR7-38 (UISPLIT1 US5): aegis_ui's ui_layout check over every game folder's asset layers
-  cargo build -q -p aegis_ui --bin ui_layout || { status=1; return; }
-  local games=() d
+  local exe="" games=() d
+  if [ "${FC_PREBUILT:-0}" = "1" ]; then exe=$(prebuilt_bin ui_layout 2>/dev/null || true); fi
+  if [ -z "$exe" ]; then
+    cargo build -q -p aegis_ui --bin ui_layout || { status=1; return; }
+    exe=$(prebuilt_bin ui_layout) || { status=1; return; }
+  fi
   for d in games/*/; do [ -f "$d/game.json" ] && games+=("${d%/}"); done
-  "${CARGO_TARGET_DIR:-$PWD/target}/debug/ui_layout" check "${games[@]}" || status=1
+  "$exe" check "${games[@]}" || status=1
 }
 
-lints() {  # ENGINE-4 (CI-HARDEN1): the workspace deny set under clippy, then the unused-dependency check and its tests
-  local out py
-  if out=$(cargo clippy -q --workspace --all-targets -- -A clippy::all 2>&1) && ! echo "$out" | grep -q '^\(warning\|error\)'; then
-    echo "[lints] deny set clean"
+lints() {  # ENGINE-4 (CI-HARDEN1) + PILLAR1: workspace deny set (fast macro scan when all clippy denies are macro-only, else clippy) + unused deps
+  local out py rc need_clippy=0
+  py=$(python_with "import tomllib") || py=""
+  if [ "${FC_LINTS_CLIPPY:-0}" = "1" ] || [ -z "$py" ]; then
+    need_clippy=1
   else
-    echo "$out" | grep -E '^(warning|error)' -A8 | head -n 60; echo "[lints] FAIL: the deny set ([workspace.lints] in Cargo.toml)"; status=1
+    "$py" tools/deps/deny_macros.py
+    rc=$?
+    if [ $rc -eq 1 ]; then
+      status=1
+    elif [ $rc -eq 2 ]; then
+      need_clippy=1
+    elif [ $rc -ne 0 ]; then
+      status=1
+    fi
   fi
-  if ! py=$(python_with "import tomllib"); then echo "[lints] SKIP: no Python 3.11+ for tools/deps"; return 0; fi
+  if [ $need_clippy -eq 1 ]; then
+    if out=$(cargo clippy -q --workspace --all-targets -- -A clippy::all 2>&1) && ! echo "$out" | grep -q '^\(warning\|error\)'; then
+      echo "[lints] deny set clean (clippy)"
+    else
+      echo "$out" | grep -E '^(warning|error)' -A8 | head -n 60; echo "[lints] FAIL: the deny set ([workspace.lints] in Cargo.toml)"; status=1
+    fi
+  fi
+  if [ -z "$py" ]; then echo "[lints] SKIP: no Python 3.11+ for tools/deps"; return 0; fi
   "$py" tools/deps/unused_deps.py || status=1
   if out=$(cd tools/deps && "$py" -m unittest -q 2>&1); then
     echo "[lints] deps tests ok: $(echo "$out" | grep -E '^Ran [0-9]+ test')"
@@ -298,10 +357,14 @@ lints() {  # ENGINE-4 (CI-HARDEN1): the workspace deny set under clippy, then th
 
 newgame() {  # ENGINE-6 (NEW-GAME1): the new-game templates still make a game that builds with no warning, passes its tests
   # and its scenario: `aegis new game scaffold_check` into games/, built, tested, its scenario run, then removed
-  local id=scaffold_check bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" out
+  local id=scaffold_check bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" cli="" out
   [ -e "games/$id" ] && { echo "[newgame] FAIL: games/$id exists; remove it first"; status=1; return; }
-  cargo build -q -p emberwake_host || { status=1; return; }
-  "$bin/aegis" new game "$id" > /dev/null || { status=1; return; }
+  if [ "${FC_PREBUILT:-0}" = "1" ]; then cli=$(prebuilt_bin aegis 2>/dev/null || true); fi
+  if [ -z "$cli" ]; then
+    cargo build -q -p emberwake_host || { status=1; return; }
+    cli=$(prebuilt_bin aegis) || { status=1; return; }
+  fi
+  "$cli" new game "$id" > /dev/null || { status=1; return; }
   if out=$(cargo build -p "${id}_game" --all-targets 2>&1) && ! echo "$out" | grep -qE '^warning' \
     && out=$(cargo test -q -p "${id}_game" 2>&1) && out=$(cd "games/$id" && "$bin/${id}_cli" scenario run all out="$(mktemp -d)" 2>&1); then
     echo "[newgame] ok: a new game builds, passes its tests and its scenario"
@@ -329,12 +392,14 @@ assetlib() {  # PR7-35 (ASSETLIB1): the kit asset library check (tools/assetlib/
 }
 
 seeds_check() {  # ENGINE-20 (TOOLS-HELP3): the seeds replayed in commit order leave the shipped data as it is (tools/planner/seed_order.py)
-  local py g
+  local py g cli=""
   if ! py=$(python_with "pass"); then echo "[seeds] SKIP: no Python 3 found"; return 0; fi
   for g in games/*/data/seeds; do
     [ -d "$g" ] || continue
     g=${g#games/}; g=${g%%/*}
-    "$py" tools/planner/seed_order.py "$g" "$@" || status=1
+    cli=""
+    if [ "${FC_PREBUILT:-0}" = "1" ]; then cli=$(prebuilt_bin "$(game_cli "games/$g")" 2>/dev/null || true); fi
+    AEGIS_CLI="$cli" "$py" tools/planner/seed_order.py "$g" "$@" || status=1
   done
 }
 
@@ -439,11 +504,146 @@ gate_steps() {  # the step names of tools/gate_steps.txt, in order
   grep -vE '^[[:space:]]*(#|$)' tools/gate_steps.txt | awk '{ print $1 }'
 }
 
-gate() {  # every step of tools/gate_steps.txt in order (the desktop's check_project.ps1 reads the same list); the first failure stops
-  local name
-  for name in $(gate_steps); do
-    gate_step "$name"; [ $status -ne 0 ] && return
+now_ms() {  # millisecond wall clock with no fork on bash 5+ ($EPOCHREALTIME)
+  if [ -n "${EPOCHREALTIME:-}" ]; then
+    local t=$EPOCHREALTIME s ms
+    s=${t%.*}; ms=${t#*.}; ms=${ms:0:3}
+    printf '%s%03d\n' "$s" "$((10#${ms:-0}))"
+  else
+    printf '%s000\n' "$(date +%s)"
+  fi
+}
+
+fmt_ms() {
+  awk -v ms="$1" 'BEGIN { printf "%.2fs", ms / 1000.0 }'
+}
+
+print_gate_timings() {  # $1 = total_ms, remaining args = "step:ms:state" (state: ok|FAIL|skip)
+  local total_ms=$1 entry name ms st
+  shift
+  [ $# -eq 0 ] && return 0
+  echo "[gate] --- step timings (wall total $(fmt_ms "$total_ms")) ---"
+  if [ -n "${FC_TIMINGS_OUT:-}" ]; then
+    mkdir -p "$(dirname "$FC_TIMINGS_OUT")"
+    printf 'step\tms\tstatus\n' > "$FC_TIMINGS_OUT"
+  fi
+  for entry in "$@"; do
+    name=${entry%%:*}; ms=${entry#*:}; st=${ms#*:}; ms=${ms%%:*}
+    awk -v n="$name" -v m="$ms" -v t="$total_ms" -v s="$st" 'BEGIN {
+      pct = (t > 0) ? (100.0 * m / t) : 0.0;
+      printf "[gate]   %-14s %7.2fs  (%5.1f%%)  %s\n", n, m / 1000.0, pct, s
+    }'
+    if [ -n "${FC_TIMINGS_OUT:-}" ]; then
+      printf '%s\t%s\t%s\n' "$name" "$ms" "$st" >> "$FC_TIMINGS_OUT"
+    fi
   done
+}
+
+gate_parallel_group() {  # prints the parallel batch id for steps safe to run concurrently, else empty
+  case "$1" in
+    docs|layers|assetlib|plannertests) echo "pre" ;;
+    lints) [ "${FC_LINTS_CLIPPY:-0}" = "1" ] && echo "" || echo "pre" ;;
+    layouts|repro|seeds|playtest) echo "post" ;;
+    *) echo "" ;;
+  esac
+}
+
+gate_skip_in_fast() {  # steps skipped only in `tools/fc.sh gate fast` (always run in default full gate and CI)
+  case "$1" in
+    shotsexact|newgame) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+run_parallel_batch() {  # runs $@ gate steps in parallel; appends "step:ms:state" to GATE_TIMINGS and sets status=1 on any failure
+  local dir s pids=() names=() i meta dt rc st
+  dir=$(mktemp -d)
+  for s in "$@"; do
+    names+=("$s")
+    (
+      status=0
+      local t0
+      t0=$(now_ms)
+      gate_step "$s"
+      local dt=$(( $(now_ms) - t0 ))
+      printf '%s:%s\n' "$dt" "$status" > "$dir/$s.meta"
+      exit "$status"
+    ) > "$dir/$s.out" 2>&1 &
+    pids+=($!)
+  done
+  for i in "${!pids[@]}"; do
+    wait "${pids[$i]}" || true
+  done
+  for s in "${names[@]}"; do
+    [ -s "$dir/$s.out" ] && cat "$dir/$s.out"
+    meta=$(cat "$dir/$s.meta" 2>/dev/null || echo "0:1")
+    dt=${meta%%:*}; rc=${meta#*:}
+    if [ "$rc" -eq 0 ]; then st=ok; else st=FAIL; status=1; fi
+    GATE_TIMINGS+=("${s}:${dt}:${st}")
+    echo "[gate] $s: $(fmt_ms "$dt") ($st)"
+  done
+  rm -rf "$dir"
+}
+
+gate() {  # every step of tools/gate_steps.txt (fast mode skips shotsexact/newgame; default/full/auto runs every step); parallelizes safe batches
+  local mode=${1:-full} name grp next_grp gate_t0 t0 dt st batch=() steps=() i n
+  case "$mode" in
+    ""|auto|full) [ "${FC_GATE_FAST:-0}" = "1" ] && mode=fast || mode=full ;;
+    fast) ;;
+    *) echo "usage: tools/fc.sh gate [full|fast|auto]"; status=2; return ;;
+  esac
+  [ "$mode" = "fast" ] && echo "[gate] mode: fast (local dev; shotsexact and newgame run in full gate / CI)"
+  GATE_TIMINGS=()
+  gate_t0=$(now_ms)
+  mapfile -t steps < <(gate_steps)
+  n=${#steps[@]}
+  i=0
+  while [ $i -lt $n ]; do
+    name=${steps[$i]}
+    if [ "$mode" = "fast" ] && gate_skip_in_fast "$name"; then
+      GATE_TIMINGS+=("${name}:0:skip")
+      echo "[gate] $name: skipped (fast mode; runs in full gate / CI)"
+      i=$((i + 1))
+      continue
+    fi
+    grp=$(gate_parallel_group "$name")
+    if [ -n "$grp" ] && [ "${FC_GATE_SERIAL:-0}" != "1" ]; then
+      batch=("$name")
+      i=$((i + 1))
+      while [ $i -lt $n ]; do
+        next_grp=$(gate_parallel_group "${steps[$i]}")
+        if [ "$next_grp" = "$grp" ] && ! { [ "$mode" = "fast" ] && gate_skip_in_fast "${steps[$i]}"; }; then
+          batch+=("${steps[$i]}")
+          i=$((i + 1))
+        else
+          break
+        fi
+      done
+      if [ ${#batch[@]} -gt 1 ]; then
+        run_parallel_batch "${batch[@]}"
+        if [ $status -ne 0 ]; then
+          print_gate_timings "$(( $(now_ms) - gate_t0 ))" "${GATE_TIMINGS[@]}"
+          return
+        fi
+        continue
+      fi
+      name=${batch[0]}
+    else
+      i=$((i + 1))
+    fi
+    t0=$(now_ms)
+    gate_step "$name"
+    dt=$(( $(now_ms) - t0 ))
+    if [ $status -eq 0 ]; then st=ok; else st=FAIL; fi
+    GATE_TIMINGS+=("${name}:${dt}:${st}")
+    echo "[gate] $name: $(fmt_ms "$dt") ($st)"
+    if [ $status -ne 0 ]; then
+      print_gate_timings "$(( $(now_ms) - gate_t0 ))" "${GATE_TIMINGS[@]}"
+      return
+    fi
+    [ "$name" = "build" ] && export FC_PREBUILT=1
+  done
+  print_gate_timings "$(( $(now_ms) - gate_t0 ))" "${GATE_TIMINGS[@]}"
   echo "[gate] ALL CHECKS PASSED"
 }
 
@@ -485,8 +685,8 @@ scenarios_all() {  # PR7-4: every scenario of each game, no window, dev build; g
   done
 }
 
-shots_exact() {  # ENGINE-17 (SHOT-CLOCK1): every scenario run again; each shot must be byte for byte the scenarios step's
-  # (the shot clock); with no shots kept (the step run alone) the scenarios step runs first
+shots_exact() {  # ENGINE-17 (SHOT-CLOCK1) + PILLAR1: every shot-producing scenario run again; each shot must be byte for byte
+  # the scenarios step's (the shot clock); skips zero-shot feel/reach scenarios (`only_shots=1`) and runs in parallel
   local bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" keep="${CARGO_TARGET_DIR:-$PWD/target}/fc_shots" cli name out d py
   py=$(python_with "pass") || { echo "[shotsexact] SKIP: no Python 3 found"; return 0; }
   for d in games/*/; do
@@ -497,7 +697,7 @@ shots_exact() {  # ENGINE-17 (SHOT-CLOCK1): every scenario run again; each shot 
     name=$(basename "$d"); [ -f "$keep/$name/index.txt" ] || continue
     cli="$bin/$(game_cli "$d")"
     out=$(mktemp -d)
-    if ! "$cli" scenario run all out="$out/bundles" > "$out/run.txt" 2>&1; then
+    if ! "$cli" scenario run all out="$out/bundles" only_shots=1 > "$out/run.txt" 2>&1; then
       grep -vE "PASS;" "$out/run.txt" | head -n 20; echo "[shotsexact] FAIL: a scenario of $name failed on its second run (bundles under $out)"; status=1; continue
     fi
     "$py" tools/planner/shots_all.py collect "$out/bundles" "$out/shots" > /dev/null
@@ -507,6 +707,33 @@ shots_exact() {  # ENGINE-17 (SHOT-CLOCK1): every scenario run again; each shot 
       cat "$out/compare.txt"; echo "[shotsexact] FAIL: $name's shots differ between two runs of one build (a clock or a seed outside aegis_core::clock; both runs under $keep/$name and $out/shots)"; status=1
     fi
   done
+}
+
+feel() {  # ENGINE-57 (FEEL-RELEASE1): every feel and reach scenario of each game, no window, release build, release budgets;
+  # one table (tools/planner/feel_table.py; reading it: engine/docs/authoring/scenarios.md); never in the gate
+  local py out bin="${CARGO_TARGET_DIR:-$PWD/target}/release" d name cli f files all=() a
+  py=$(python_with "pass") || { echo "[feel] no Python 3 found"; status=2; return; }
+  out=""
+  for a in "$@"; do
+    case "$a" in out=*) out="${a#out=}" ;; *) echo "usage: tools/fc.sh feel [out=<dir>]"; status=2; return ;; esac
+  done
+  [ -n "$out" ] || out=$(mktemp -d)
+  mkdir -p "$out"
+  for d in games/*/; do
+    name=$(basename "$d"); [ -f "$d/game.json" ] && [ -d "$d/scenarios" ] || continue
+    mapfile -t files < <("$py" tools/planner/feel_table.py list "${d}scenarios")
+    [ ${#files[@]} -gt 0 ] || continue
+    cli=$(game_cli "$d")
+    cargo build -q --release --bin "$cli" --bin "$name" || { echo "[feel] FAIL: the release build of $name"; status=2; return; }
+    for f in "${files[@]}"; do
+      echo "[feel] $name: $(basename "$f" .json)"
+      "$bin/$cli" scenario run "$f" out="$out" > "$out/$(basename "$f" .json).txt" 2>&1 || true
+    done
+    all+=("${files[@]}")
+  done
+  echo
+  "$py" tools/planner/feel_table.py table "$out" "${all[@]}" || status=1
+  echo "[feel] bundles and logs under $out"
 }
 
 aegis() {  # the CLI, built on demand
@@ -528,7 +755,7 @@ shots_all() {  # ENGINE-16: every scenario's shots in one flat folder (tools/pla
   for a in "$@"; do
     case "$a" in out=*) out=${a#out=} ;; compare=*) cmp=${a#compare=} ;; tolerance=*|pixels=*|crop=*|sheets=*) opts+=("$a") ;; *) pass+=("$a") ;; esac
   done
-  [ -n "$out" ] || { echo "usage: tools/fc.sh scenario shots-all out=<dir> [compare=<before dir> [tolerance=8] [pixels=300] [sheets=0]] [crop=x,y,w,h] [size=WxH] [profile=dev|release] [slow=] [data=]"; status=2; return; }
+  [ -n "$out" ] || { echo "usage: tools/fc.sh scenario shots-all out=<dir> [compare=<before dir> [tolerance=8] [pixels=300] [sheets=0]] [crop=x,y,w,h] [size=WxH] [set=k:v,...] [audit=1] [profile=dev|release] [slow=] [data=]"; status=2; return; }
   py=$(python_with "pass") || { echo "[shots-all] no Python 3 found"; status=2; return; }
   [ -z "$cmp" ] || [ -d "$cmp" ] || { echo "[shots-all] no folder $cmp to compare with"; status=2; return; }
   tmp=$(mktemp -d)
@@ -538,15 +765,81 @@ shots_all() {  # ENGINE-16: every scenario's shots in one flat folder (tools/pla
   if [ $status -eq 0 ]; then rm -rf "$tmp"; else echo "[shots-all] a scenario failed: bundles kept under $tmp (the shots it took are in $out)"; fi
 }
 
+shots_diff() {  # PR7-72 (SHOT-DIFF1): the scenarios a change can show, on HEAD's working tree and on a base commit (cached per commit), compared (tools/planner/shots_diff.py)
+  local a base="origin/develop" scen="" out="" opts=() py sha ids id td cache wt tmp n=0
+  for a in "$@"; do
+    case "$a" in
+      base=*) base=${a#base=} ;; scenarios=*) scen=${a#scenarios=} ;; out=*) out=${a#out=} ;; tolerance=*|pixels=*|limit=*) opts+=("$a") ;;
+      *) echo "usage: tools/fc.sh shots diff [base=<sha>] [scenarios=a,b|all] [out=<dir>] [tolerance=0] [pixels=0] [limit=12]"; status=2; return ;;
+    esac
+  done
+  py=$(python_with "pass") || { echo "[shots diff] no Python 3 found"; status=2; return; }
+  sha=$(git rev-parse --verify -q "$base^{commit}") || { echo "[shots diff] no commit '$base'"; status=2; return; }
+  td="${CARGO_TARGET_DIR:-$PWD/target}"; out=${out:-$td/shots_diff}; cache="$td/shots_cache/$sha"
+  # the default: what the change since the base (committed or not, new files too) can show
+  [ -n "$scen" ] || scen=$({ git diff --name-only "$sha"; git ls-files --others --exclude-standard; } | "$py" tools/planner/shots_diff.py select)
+  rm -rf "$out"; mkdir -p "$out"
+  if [ "$scen" = "none" ]; then "$py" tools/planner/shots_diff.py none "$out" base="$sha" || status=1; return; fi
+  if [ "$scen" = "all" ]; then
+    ids=$(for f in games/emberwake/scenarios/*.json; do basename "$f" .json; done)
+  else
+    ids=${scen//,/ }
+  fi
+  # the base first (a scratch worktree on the same target dir: only the workspace crates build again, then are cleaned
+  # for HEAD's build); a scenario the base lacks is skipped (its shots come out new)
+  for id in $ids; do [ -f "$cache/.done/$id" ] || n=$((n + 1)); done
+  if [ $n -gt 0 ]; then
+    wt=$(mktemp -d); rmdir "$wt"
+    git worktree add -q --detach "$wt" "$sha" || { echo "[shots diff] could not check out $sha"; status=2; return; }
+    for id in $ids; do
+      [ -f "$cache/.done/$id" ] && continue
+      [ -f "$wt/games/emberwake/scenarios/$id.json" ] || { echo "[shots diff] base: no scenario $id"; continue; }
+      tmp=$(mktemp -d)
+      # PR7-77: a failed base run (a build error, a full disk) is not marked done, so the next diff runs it again
+      # instead of comparing against an empty base
+      if (cd "$wt" && CARGO_TARGET_DIR="$td" tools/fc.sh scenario "$id" out="$tmp" > "$tmp.log" 2>&1); then
+        "$py" tools/planner/shots_diff.py add "$tmp" "$cache" > /dev/null && mkdir -p "$cache/.done" && touch "$cache/.done/$id"
+      else
+        echo "[shots diff] base: $id failed (its shots so far are kept, not cached; log $tmp.log)"
+        "$py" tools/planner/shots_diff.py add "$tmp" "$cache" > /dev/null
+      fi
+      rm -rf "$tmp"
+    done
+    git worktree remove --force "$wt"
+    # cargo keys a workspace crate's build by its path relative to the workspace, so the base's builds would pass for
+    # HEAD's (HEAD's older files look built): the workspace crates are cleaned, the dependencies stay shared
+    cargo clean -q $(cargo metadata -q --no-deps --format-version 1 | "$py" -c 'import json,sys; print(" ".join("-p " + p["name"] for p in json.load(sys.stdin)["packages"]))') || true
+  fi
+  mkdir -p "$out/head_run"
+  for id in $ids; do
+    tmp=$(mktemp -d)
+    tools/fc.sh scenario "$id" out="$tmp" > "$tmp.log" 2>&1 || echo "[shots diff] HEAD: $id failed (its shots so far are kept; log $tmp.log)"
+    "$py" tools/planner/shots_diff.py add "$tmp" "$out/head_run" > /dev/null
+    rm -rf "$tmp"
+  done
+  # only the scenarios run count: the cache may hold others from an earlier diff
+  mkdir -p "$out/base"
+  for id in $ids; do cp "$cache/$id"__*.png "$out/base/" 2>/dev/null || true; done
+  "$py" tools/planner/shots_diff.py report "$out/base" "$out/head_run" "$out" base="$sha" "${opts[@]}" || status=1
+  rm -rf "$out/head_run"
+}
+
+shots() {  # PR7-72: `shots diff`
+  case "${1:-}" in
+    diff) shots_diff "${@:2}" ;;
+    *) echo "usage: tools/fc.sh shots diff [base=<sha>] [scenarios=a,b|all] [out=<dir>] [tolerance=0] [pixels=0] [limit=12]"; status=2 ;;
+  esac
+}
+
 scenario() {  # the driver lies beside the game's program, so both are built first, in one profile
   local a rest=() rel=()
   if [ "${1:-}" = "check" ]; then aegis scenario "$@" || status=$?; return; fi
   if [ "${1:-}" = "shots-all" ]; then shift; shots_all "$@"; return; fi
-  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | shots-all out=<dir> [compare=<dir>] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] | shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...]"; status=2; return; }
+  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | shots-all out=<dir> [compare=<dir>] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] | shots <name> [screen=] [scene=] [ruleset=] [seed=] [save=<name|/abs/dir>] [do=<a>,<b>,...]"; status=2; return; }
   local verb=run
   if [ "$1" = "shots" ]; then
     verb=shots; shift
-    case "${1:-}" in ""|*=*) echo "usage: tools/fc.sh scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...] [size=] [out=] [profile=] [slow=] [data=] [window=1] [fps=]"; status=2; return ;; esac
+    case "${1:-}" in ""|*=*) echo "usage: tools/fc.sh scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [save=<name|/abs/dir>] [do=<a>,<b>,...] [size=] [out=] [profile=] [slow=] [data=] [window=1] [fps=]"; status=2; return ;; esac
   fi
   for a in "$@"; do
     case "$a" in
@@ -565,7 +858,7 @@ scenario() {  # the driver lies beside the game's program, so both are built fir
 # game, through whichever CLI build is there. No verb is `start`.
 playtest() {
   local verb=${1:-start} rel=() prof=debug rest=() a cli
-  case "$verb" in start|run|do|stop|status) shift || true ;; *=*) verb=start ;; *) echo "usage: tools/fc.sh playtest [start] [save=] [out=] [size=] [shots=each|off] [window=1] [profile=dev|release] | do <command ...> | run <script|-> | stop | status"; status=2; return ;; esac
+  case "$verb" in start|run|do|stop|status) shift || true ;; *=*) verb=start ;; *) echo "usage: tools/fc.sh playtest [start] [save=] [out=] [size=] [shots=each|off] [keep_saves=] [window=1] [profile=dev|release] | do <command ...> | run <script|-> | stop | status"; status=2; return ;; esac
   for a in "$@"; do
     case "$a" in
       profile=release) rel=(--release); prof=release ;;
@@ -641,6 +934,19 @@ web() {
   echo "[web] ok: $variant build in $out (tools/fc.sh web serve)"
 }
 
+# TARGET-PRUNE1 (ENGINE-39): stale test binaries and incremental folders out of the cargo target folder.
+prune_target() {
+  local py; py=$(python_with "pass") || { echo "[prune] no Python 3 found"; status=1; return; }
+  "$py" tools/planner/prune_target.py "$@" || status=$?
+}
+prune_if_low() {
+  local dir="${CARGO_TARGET_DIR:-target}" avail
+  [ -d "$dir" ] || return 0
+  avail=$(df -Pk "$dir" 2>/dev/null | awk 'NR==2 {print int($4/1024)}')
+  [ -n "$avail" ] && [ "$avail" -lt "${FC_PRUNE_MB:-6000}" ] && { echo "[gate] ${avail} MB free: pruning the target folder first"; prune_target; }
+  return 0
+}
+
 # Low-power laptop (CPU1): cargo runs below normal priority on the desktop, so the machine stays usable; children inherit it.
 case "$1" in gate|build|test|clippy)
   [ -z "${CI:-}" ] && [ -r /proc/$$/winpid ] && powershell -NoProfile -Command "(Get-Process -Id $(cat /proc/$$/winpid)).PriorityClass='BelowNormal'" 2>/dev/null ;;
@@ -650,7 +956,9 @@ case "$1" in
   gate)  # on the desktop a full gate joins the planner's queue, one heavy run at a time (CPU1)
     heavy="tools/planner/heavy.sh"
     [ -z "${CI:-}" ] && [ -f "$heavy" ] && { source "$heavy"; heavy_start "fc.sh gate"; }
-    gate ;;
+    prune_if_low
+    gate "${2:-full}" ;;
+  prune) prune_target "${@:2}" ;;
   build) build ;;
   step) [ -n "${2:-}" ] || { echo "usage: tools/fc.sh step <name>   (a gate step of tools/gate_steps.txt: $(gate_steps | tr '\n' ' '))"; status=2; }; [ -n "${2:-}" ] && gate_step "$2" ;;
   test) cargo_test "${@:2}" ;;
@@ -674,6 +982,8 @@ case "$1" in
   repro) repro ;;
   bot) bot "${@:2}" ;;
   scenario) scenario "${@:2}" ;;
+  feel) feel "${@:2}" ;;
+  shots) shots "${@:2}" ;;
   playtest) playtest "${@:2}" ;;
   assetlib) assetlib ;;
   seeds) seeds_check "${@:2}" ;;
@@ -684,6 +994,6 @@ case "$1" in
   web) web "${@:2}" ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;
-  *) sed -n '2,27p' "$0"; status=1 ;;
+  *) sed -n '2,30p' "$0"; status=1 ;;
 esac
 exit $status

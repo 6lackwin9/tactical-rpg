@@ -1,0 +1,29 @@
+{
+  "id": "battle_report",
+  "title": "The first fight of a new game, won by the link's autoplay, ends on results that carry the kit's battle report (a row per hero, the best moment), and Level up now then the sheet's Back returns to them (PR7-32, BREPORT1-U, PT-13)",
+  "timeout_s": 300,
+  "steps": [
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
+    {"step": "click", "id": "menu.new_game"},
+    {"step": "wait", "until": {"widget": "world.sunk_ward"}},
+    {"step": "click", "id": "world.sunk_ward"},
+    {"step": "click", "id": "new_game.start"},
+    {"step": "wait", "until": {"path": "screen", "eq": "vignette"}, "timeout_ms": 20000},
+    {"step": "repeat", "times": 40, "until": {"path": "screen", "ne": "vignette"}, "steps": [{"step": "key", "key": "space"}]},
+    {"step": "wait", "until": {"path": "screen", "eq": "battle"}, "timeout_ms": 20000},
+    {"step": "wait", "until": {"path": "state.beat", "absent": true}, "timeout_ms": 10000},
+    {"step": "link", "body": {"cmd": "autoplay"}},
+    {"step": "wait", "until": {"path": "state.outcome", "ne": ""}, "timeout_ms": 60000},
+    {"step": "wait", "until": {"path": "screen", "eq": "battle_results"}, "timeout_ms": 10000},
+    {"step": "pause", "ms": 400},
+    {"step": "assert", "until": {"path": "state.report.version", "eq": 1}},
+    {"step": "assert", "until": {"path": "state.report.rows.0.name", "eq": "Kaelen"}},
+    {"step": "assert", "until": {"widget": "results.best"}},
+    {"step": "shot", "name": "report"},
+    {"step": "click", "id": "results.level_up"},
+    {"step": "wait", "until": {"path": "screen", "eq": "character"}, "timeout_ms": 5000},
+    {"step": "key", "key": "escape"},
+    {"step": "wait", "until": {"path": "screen", "eq": "battle_results"}, "timeout_ms": 5000},
+    {"step": "shot", "name": "report_after_level_up"}
+  ]
+}

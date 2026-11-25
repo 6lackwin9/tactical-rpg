@@ -64,7 +64,7 @@ impl Forge {
         Self { world_forge: true, world, ..Self::content() }
     }
 
-    fn tabs(&self) -> &'static [(&'static str, &'static str)] {
+    pub(crate) fn tabs(&self) -> &'static [(&'static str, &'static str)] {
         if self.world_forge {
             &WORLD_TABS
         } else {
@@ -72,12 +72,12 @@ impl Forge {
         }
     }
 
-    fn kind(&self) -> &'static str {
+    pub(crate) fn kind(&self) -> &'static str {
         self.tabs()[self.tab].0
     }
 
     /// (id, label, entry) rows of the open tab.
-    fn rows(&self, cx: &Cx) -> Vec<(String, String, Dict)> {
+    pub(crate) fn rows(&self, cx: &Cx) -> Vec<(String, String, Dict)> {
         let d = &cx.data;
         if !self.world_forge {
             let mut rows: Vec<(String, String, Dict)> = d.content.get(self.kind()).map(|m| m.values().map(|e| (s(e, "id"), s_or(e, "name", &s(e, "id")), e.clone())).collect()).unwrap_or_default();
@@ -108,7 +108,25 @@ impl Forge {
             .collect()
     }
 
-    fn act(&mut self, cx: &mut Cx, a: FAct) {
+    /// ENGINE-25: whether this is the World Forge, its world, and the entry shown (the selected one, else the list's
+    /// first, as the draw picks it).
+    pub(crate) fn is_world_forge(&self) -> bool {
+        self.world_forge
+    }
+
+    pub(crate) fn world_id(&self) -> &str {
+        &self.world
+    }
+
+    pub(crate) fn shown(&self, rows: &[(String, String, Dict)]) -> String {
+        if rows.iter().any(|r| r.0 == self.selected) {
+            self.selected.clone()
+        } else {
+            rows.first().map(|r| r.0.clone()).unwrap_or_default()
+        }
+    }
+
+    pub(crate) fn act(&mut self, cx: &mut Cx, a: FAct) {
         match a {
             FAct::Tab(t) => {
                 self.tab = t;
@@ -129,7 +147,7 @@ impl Forge {
     }
 
     /// The right panel: what the engine makes of the entry.
-    fn summary(&self, cx: &Cx, id: &str, e: &Dict) -> Vec<(String, aegis_ui::canvas::Rgba)> {
+    pub(crate) fn summary(&self, cx: &Cx, id: &str, e: &Dict) -> Vec<(String, aegis_ui::canvas::Rgba)> {
         let d = &cx.data;
         let cat = &d.cat;
         let mut out: Vec<(String, aegis_ui::canvas::Rgba)> = Vec::new();
@@ -260,6 +278,33 @@ impl Forge {
     }
 }
 
+/// The right panel's foot line.
+pub(crate) const FOOT: &str = "Validation: run it in Godot's Forge for now.";
+
+impl Forge {
+    /// The screen's head and the right panel's heading.
+    pub(crate) fn head(&self) -> &'static str {
+        if self.world_forge {
+            "WORLD FORGE (viewer)"
+        } else {
+            "CONTENT FORGE (viewer)"
+        }
+    }
+
+    pub(crate) fn summary_head(&self) -> &'static str {
+        if self.world_forge {
+            "WHAT IT MEANS"
+        } else {
+            "ENGINE SUMMARY"
+        }
+    }
+}
+
+/// An entry's fields as the middle panel lists them: (key, value as text), the `_` keys left out.
+pub(crate) fn field_lines(e: &Dict) -> Vec<(String, String)> {
+    e.iter().filter(|(k, _)| !k.starts_with('_')).map(|(k, v)| (k.clone(), value_text(v))).collect()
+}
+
 fn value_text(v: &Value) -> String {
     match v {
         Value::Array(a) if a.is_empty() => "(none)".into(),
@@ -272,6 +317,12 @@ fn value_text(v: &Value) -> String {
 }
 
 impl Screen<GameCx> for Forge {
+    /// PR7-70 (PANELS2, `FB-378` question 2): a main panel; it already fills the screen (not an overlay), so the game
+    /// menu never draws under it, and a panel opened over it takes its place (`drawn_screens`).
+    fn panel(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> &'static str {
         if self.world_forge {
             "world_forge"
@@ -284,7 +335,7 @@ impl Screen<GameCx> for Forge {
         self.mouse = mouse;
         let mut ui: Ui<FAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), th().tool_bg);
-        let head = if self.world_forge { "WORLD FORGE (viewer)" } else { "CONTENT FORGE (viewer)" };
+        let head = self.head();
         let mut x = ui.p.text(6.0, 4.0, head, BODY, th().gold) as i32 + 6;
         if self.world_forge {
             let ids = cx.data.world_ids();
@@ -316,9 +367,7 @@ impl Screen<GameCx> for Forge {
         for r in [list, mid, right] {
             ui.p.panel(r, th().tool_pane, th().edge, 2.0);
         }
-        if self.selected.is_empty() || !rows.iter().any(|r| r.0 == self.selected) {
-            self.selected = rows.first().map(|r| r.0.clone()).unwrap_or_default();
-        }
+        self.selected = self.shown(&rows);
         let row_h = (ui.p.line_h(BODY) + 2.5).ceil().max(12.0) as i32;
         let fit = ((list.h - 8) / (row_h + 1)) as usize;
         self.list_scroll = self.list_scroll.min(rows.len().saturating_sub(fit));
@@ -328,12 +377,7 @@ impl Screen<GameCx> for Forge {
         }
         if let Some((id, label, e)) = rows.iter().find(|r| r.0 == self.selected) {
             ui.p.text_fit(mid.x as f32 + 5.0, mid.y as f32 + 4.0, &format!("{label}  [{}]", s(e, "id")), BODY, mid.w as f32 - 10.0, th().info);
-            let mut lines: Vec<(String, String)> = Vec::new();
-            for (k, v) in e {
-                if !k.starts_with('_') {
-                    lines.push((k.clone(), value_text(v)));
-                }
-            }
+            let lines = field_lines(e);
             let key_w = lines.iter().map(|(k, _)| ui.p.text_w(k, SMALL)).fold(80.0_f32, f32::max).min(120.0).ceil();
             let value_x = 5.0 + key_w + 7.0;
             let mut wrapped: Vec<(String, String)> = Vec::new();
@@ -350,7 +394,7 @@ impl Screen<GameCx> for Forge {
                 ui.p.text_fit(mid.x as f32 + 5.0, y, k, SMALL, key_w, th().dim);
                 ui.p.text(mid.x as f32 + value_x, y, v, SMALL, if v == "(none)" { th().dim } else { th().text });
             }
-            ui.p.text(right.x as f32 + 5.0, right.y as f32 + 4.0, if self.world_forge { "WHAT IT MEANS" } else { "ENGINE SUMMARY" }, SMALL, th().info);
+            ui.p.text(right.x as f32 + 5.0, right.y as f32 + 4.0, self.summary_head(), SMALL, th().info);
             let step = ui.p.line_h(SMALL).max(8.5);
             let foot = (right.y + right.h) as f32 - 4.0 - step;
             let mut y = right.y as f32 + 4.0 + step + 3.0;
@@ -366,7 +410,7 @@ impl Screen<GameCx> for Forge {
                     y += 4.0;
                 }
             }
-            ui.p.text_fit(right.x as f32 + 5.0, foot, "Validation: run it in Godot's Forge for now.", SMALL, (right.w - 10) as f32, th().good);
+            ui.p.text_fit(right.x as f32 + 5.0, foot, FOOT, SMALL, (right.w - 10) as f32, th().good);
         }
         self.w = ui.widgets;
     }
@@ -376,8 +420,9 @@ impl Screen<GameCx> for Forge {
         *target = (*target as i64 - lines as i64 * 3).max(0) as usize;
     }
 
-    fn state(&self, _cx: &Cx) -> Value {
-        json!({"tab": self.kind(), "world": self.world, "selected": self.selected})
+    fn state(&self, cx: &Cx) -> Value {
+        // ENGINE-25 (UISPLIT1-J Stage A): the viewer's view-model
+        json!({"tab": self.kind(), "world": self.world, "selected": self.selected, "view": crate::forge_view::view(cx, self).to_json()})
     }
 
     widget_plumbing!();

@@ -1,0 +1,55 @@
+{
+	"kind": "encounters",
+	"version": 1,
+	"entries": [
+		{
+			"id": "ks_skirmish",
+			"name": "Skirmish by the Fire",
+			"description": "",
+			"zone": "stone_arena",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"decor": [
+				{
+					"art": "fire_pit",
+					"x": 6,
+					"y": 0
+				}
+			],
+			"arena_hazards": [],
+			"max_rounds": 12,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 12,
+			"start_ap": 0,
+			"rng_seed": 7,
+			"party": [
+				"ks_guard",
+				"ks_archer"
+			],
+			"enemies": [
+				"ks_raider",
+				"ks_brute"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"objective": "rout",
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": false,
+			"purse": {},
+			"guests": [],
+			"protect": []
+		}
+	]
+}

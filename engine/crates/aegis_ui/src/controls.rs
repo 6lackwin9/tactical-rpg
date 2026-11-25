@@ -226,6 +226,23 @@ impl Controls {
         }
     }
 
+    /// CONTROLS-MIGRATE1: each action a fixed key gives (a map saved before `fixed` refused it) goes back to its own key,
+    /// by `bind_key`'s swap (so the key that held that key gets its old action back), and the fixed key gives itself
+    /// again; returns those actions in the map's order.
+    pub fn release_fixed(&mut self, fixed: &[Fixed]) -> Vec<Key> {
+        let mut out = Vec::new();
+        // each pass frees one fixed key; a swap can re-take another fixed key, so the passes are bounded
+        for _ in 0..=self.keys.len() + fixed.len() {
+            let Some(&(f, t)) = self.keys.iter().find(|(f, _)| fixed.iter().any(|x| x.key == *f)) else { break };
+            self.bind_key(t, t);
+            if self.key(f) != f {
+                self.set_key(f, f);
+            }
+            out.push(t);
+        }
+        out
+    }
+
     /// Button `new` gives `action` from now on; the button that gave it takes what `new` gave.
     pub fn bind_pad(&mut self, action: Key, new: Pad) {
         let (cur, displaced) = (self.pad_for(action), self.pad(new));
@@ -249,6 +266,20 @@ impl Controls {
             Input::Pad(p) => self.pad(p),
         }
     }
+
+    /// CONTROLS-UI1B: the key that gives `action`, as an on-screen hint reads it ("P", "Enter"); "no key" when none
+    /// does. A screen's hint goes through here (or `hint`), never a fixed letter, so a rebind shows everywhere.
+    pub fn key_hint(&self, action: Key) -> String {
+        self.key_for(action).map_or_else(|| "no key".to_string(), key_label)
+    }
+
+    /// CONTROLS-UI1B: the key and, when the action has one, the pad button that give `action` ("Esc / Pad B", "P").
+    pub fn hint(&self, action: Key) -> String {
+        match self.pad_for(action) {
+            Some(p) => format!("{} / {}", self.key_hint(action), p.label()),
+            None => self.key_hint(action),
+        }
+    }
 }
 
 /// CONTROLS-UI1: a raw input, before the map: what a rebind captures.
@@ -266,6 +297,31 @@ pub struct Action {
     pub label: &'static str,
     pub key: Key,
 }
+
+/// CONTROLS-UI1B: a key a game's screens read that its table does not list (a question's yes, a number row): a rebind
+/// may not take it, and the refusal names `label` (what it does) and `screen` (where).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Fixed {
+    pub key: Key,
+    pub label: &'static str,
+    pub screen: &'static str,
+}
+
+/// CONTROLS-MIGRATE1: the settings' control map with every action on a fixed key put back on its own key
+/// (`Controls::release_fixed`), written back only when something moved; returns the actions moved (empty: the settings
+/// are untouched). A game calls it when its settings load, and saves them when it returns any.
+pub fn release_fixed(settings: &mut Value, fixed: &[Fixed]) -> Vec<Key> {
+    let mut c = Controls::from_settings(settings).0;
+    let moved = c.release_fixed(fixed);
+    if !moved.is_empty() {
+        settings[SETTINGS_KEY] = c.to_json();
+    }
+    moved
+}
+
+/// CONTROLS-UI1B: how long a rebind waits with no input before it ends with nothing changed, so a player whose every
+/// button is bindable (a pad-only player) can always leave it.
+pub const WAIT: Duration = Duration::from_secs(5);
 
 /// Where a rebind is: nothing asked, waiting for the input of action `at` (an index into the game's list), or asking
 /// whether `input` may move from action `with` to `at` (a swap).
@@ -285,8 +341,9 @@ pub enum Outcome {
     /// Taken, nothing changed (a key a rebind may not take, or a key the swap question does not answer).
     Held,
     /// Taken and refused: a pad button another listed action holds, for an action with no button to trade
-    /// (`Rebind::refused` names that action); the rebind still waits.
+    /// (`Rebind::refused` names that action), or a fixed key (`Rebind::refused_fixed`); the rebind still waits.
     Refused,
+    /// Ended with nothing changed: Esc, the input the action already has, or `WAIT` with no input (`Rebind::expire`).
     Cancelled,
     /// The input is another action's: the swap question is open.
     Asked,
@@ -295,25 +352,45 @@ pub enum Outcome {
 }
 
 /// CONTROLS-UI1: the rebinding flow over the settings key `controls`, game-agnostic: a game lists its actions (`Action`)
-/// and labels; a click starts a rebind, the next raw key or pad button binds it (Esc cancels), an input that is another
-/// action's asks first and then swaps the two; Reset drops the player's map.
+/// and labels; a click starts a rebind, the next raw key or pad button binds it (Esc, the input the action already has,
+/// or `WAIT` with no input ends it unchanged), an input that is another action's asks first and then swaps the two, a
+/// fixed key (`Fixed`) is refused; Reset drops the player's map.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Rebind {
     pub step: Step,
     /// The listed action whose pad button the last input asked for and could not take (the action waiting has no
     /// button to give it in trade); cleared by the next input, start or cancel.
     pub refused: Option<usize>,
+    /// CONTROLS-UI1B: the fixed key (an index into the game's `Fixed` list) the last input was; cleared as `refused`.
+    pub refused_fixed: Option<usize>,
+    /// CONTROLS-UI1B: when the open rebind ends by itself (`WAIT` after its start or its last input; the shot clock, so
+    /// a stepped run is frame-exact).
+    pub until: Option<Instant>,
 }
 
 impl Rebind {
     pub fn start(&mut self, at: usize) {
         self.step = Step::Waiting(at);
         self.refused = None;
+        self.refused_fixed = None;
+        self.until = Some(Instant::now() + WAIT);
     }
 
     pub fn cancel(&mut self) {
         self.step = Step::Idle;
         self.refused = None;
+        self.refused_fixed = None;
+        self.until = None;
+    }
+
+    /// CONTROLS-UI1B: the open rebind at `now` (a screen's tick): past `until` it ends with nothing changed. True: it
+    /// ended now.
+    pub fn expire(&mut self, now: Instant) -> bool {
+        if self.capturing() && self.until.is_some_and(|u| now >= u) {
+            self.cancel();
+            return true;
+        }
+        false
     }
 
     /// A rebind is open: the shell's raw input comes here first.
@@ -327,11 +404,14 @@ impl Rebind {
         actions.iter().enumerate().find(|(i, a)| *i != at && a.key == d).map(|(i, _)| i)
     }
 
-    /// A raw input while a rebind is open (see `Outcome`); `settings` is the whole settings object.
-    pub fn input(&mut self, actions: &[Action], settings: &mut Value, input: Input) -> Outcome {
+    /// A raw input while a rebind is open (see `Outcome`); `fixed` the game's fixed keys; `settings` is the whole
+    /// settings object. Any input restarts the `WAIT`.
+    pub fn input(&mut self, actions: &[Action], fixed: &[Fixed], settings: &mut Value, input: Input) -> Outcome {
         let c = Controls::from_settings(settings).0;
         if self.step != Step::Idle {
             self.refused = None;
+            self.refused_fixed = None;
+            self.until = Some(Instant::now() + WAIT);
         }
         match self.step {
             Step::Idle => Outcome::Ignored,
@@ -340,9 +420,14 @@ impl Rebind {
                 Outcome::Cancelled
             }
             Step::Waiting(_) if matches!(input, Input::Key(k) if !capturable(k)) => Outcome::Held,
-            Step::Waiting(at) if at >= actions.len() => {
+            Step::Waiting(at) if at >= actions.len() || c.gives(input) == actions[at].key => {
+                // the input the action already has: nothing to change (a pad-only player's way out)
                 self.cancel();
                 Outcome::Cancelled
+            }
+            Step::Waiting(_) if matches!(input, Input::Key(k) if fixed.iter().any(|f| f.key == k)) => {
+                self.refused_fixed = fixed.iter().position(|f| Input::Key(f.key) == input);
+                Outcome::Refused
             }
             Step::Waiting(at) => match Self::clash(&c, actions, at, input) {
                 // a swap would leave `with` with no pad button: refused, rebind `with` first
@@ -409,18 +494,24 @@ pub const REPEAT_EVERY: Duration = Duration::from_millis(110);
 pub const STICK_DEAD: f32 = 0.5;
 
 /// A held pad direction (the d-pad or the left stick) as repeated arrow keys: `press` when it starts, `poll` each frame.
+/// ENGINE-63 (PAD-TUNE1): its delay and rate are the player's (`PadTuning`, `tune`); the defaults are today's.
 #[derive(Debug, Default)]
 pub struct Repeat {
     held: Option<(Key, Instant)>,
+    tuning: PadTuning,
 }
 
 impl Repeat {
+    /// The delay and the rate from now on (a direction held already keeps the wait it has).
+    pub fn tune(&mut self, t: PadTuning) {
+        self.tuning = t;
+    }
     /// The direction changed to `k` (None: let go). Returns the key to send now.
     pub fn set(&mut self, k: Option<Key>, now: Instant) -> Option<Key> {
         if self.held.map(|(h, _)| h) == k {
             return None;
         }
-        self.held = k.map(|k| (k, now + REPEAT_FIRST));
+        self.held = k.map(|k| (k, now + self.tuning.repeat_delay));
         k
     }
     /// The key a held direction repeats now, if its time has come.
@@ -429,7 +520,7 @@ impl Repeat {
         if now < at {
             return None;
         }
-        self.held = Some((k, now + REPEAT_EVERY));
+        self.held = Some((k, now + self.tuning.repeat_every));
         Some(k)
     }
     /// The held direction, for the walk (`Held::dir`).
@@ -442,9 +533,126 @@ impl Repeat {
     }
 }
 
-/// The left stick's direction: the larger axis past the dead zone (y up is positive, as pads report it).
+/// ENGINE-63 (PAD-TUNE1): the settings key of the gamepad's tuning, apart from `controls` (the bindings):
+/// `{"gamepad": {"dead_zone": 0.5, "repeat_delay_ms": 350, "repeat_every_ms": 110}}`. A missing entry is its default; a
+/// value out of range is clamped onto its steps. The keyboard's own repeat stays the system's.
+pub const PAD_TUNING_KEY: &str = "gamepad";
+
+/// One tunable of the gamepad, for a settings screen: its key in `PAD_TUNING_KEY`, words, range, step, default and unit.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PadSetting {
+    pub key: &'static str,
+    pub label: &'static str,
+    pub help: &'static str,
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
+    pub default: f64,
+    /// "ms", or "" for a share of the stick's reach.
+    pub unit: &'static str,
+}
+
+impl PadSetting {
+    /// `v` clamped to the range and put on the nearest step.
+    pub fn snap(&self, v: f64) -> f64 {
+        let n = ((v.clamp(self.min, self.max) - self.min) / self.step).round();
+        crate::perf::round_to(self.min + n * self.step, 3)
+    }
+    /// How many steps the range has (a slider's positions).
+    pub fn steps(&self) -> usize {
+        ((self.max - self.min) / self.step).round() as usize + 1
+    }
+    /// The step `v` is on (a slider's index).
+    pub fn index(&self, v: f64) -> usize {
+        ((self.snap(v) - self.min) / self.step).round() as usize
+    }
+    /// The value at step `i`.
+    pub fn at(&self, i: usize) -> f64 {
+        self.snap(self.min + i as f64 * self.step)
+    }
+    /// `v` in the setting's words ("0.50", "350 ms").
+    pub fn text(&self, v: f64) -> String {
+        if self.unit.is_empty() {
+            format!("{v:.2}")
+        } else {
+            format!("{v:.0} {}", self.unit)
+        }
+    }
+}
+
+/// The gamepad's tunables, in the order a settings screen lists them (ranges from the PAD-TUNE1 row: the dead zone 0.15
+/// to 0.6; the repeat's delay and rate around today's 350 ms and 110 ms).
+pub const PAD_SETTINGS: [PadSetting; 3] = [
+    PadSetting { key: "dead_zone", label: "Stick Dead Zone", help: "How far the left stick goes before it counts as a direction", min: 0.15, max: 0.6, step: 0.05, default: STICK_DEAD as f64, unit: "" },
+    PadSetting { key: "repeat_delay_ms", label: "Repeat Delay", help: "How long a held d-pad or stick direction waits before it repeats", min: 150.0, max: 600.0, step: 25.0, default: REPEAT_FIRST.as_millis() as f64, unit: "ms" },
+    PadSetting { key: "repeat_every_ms", label: "Repeat Rate", help: "The time between repeats of a held d-pad or stick direction", min: 50.0, max: 250.0, step: 10.0, default: REPEAT_EVERY.as_millis() as f64, unit: "ms" },
+];
+
+/// ENGINE-63 (PAD-TUNE1): the gamepad's tuning in force: the stick's dead zone and the held direction's repeat.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PadTuning {
+    pub dead_zone: f32,
+    pub repeat_delay: Duration,
+    pub repeat_every: Duration,
+}
+
+impl Default for PadTuning {
+    fn default() -> Self {
+        PadTuning { dead_zone: STICK_DEAD, repeat_delay: REPEAT_FIRST, repeat_every: REPEAT_EVERY }
+    }
+}
+
+impl PadTuning {
+    /// The tuning `settings` (the whole object) gives: each entry clamped onto its steps, a missing one its default.
+    pub fn of(settings: &Value) -> PadTuning {
+        let v = |i: usize| PadTuning::value(settings, PAD_SETTINGS[i].key);
+        PadTuning { dead_zone: v(0) as f32, repeat_delay: Duration::from_millis(v(1) as u64), repeat_every: Duration::from_millis(v(2) as u64) }
+    }
+    /// One tunable's value in `settings` (snapped; its default when unset or no number). An unknown key is 0.
+    pub fn value(settings: &Value, key: &str) -> f64 {
+        let Some(p) = PAD_SETTINGS.iter().find(|p| p.key == key) else { return 0.0 };
+        settings.get(PAD_TUNING_KEY).and_then(|g| g.get(key)).and_then(Value::as_f64).map_or(p.default, |v| p.snap(v))
+    }
+    /// Writes one tunable into `settings` (snapped). False for a key `PAD_SETTINGS` does not name, or no change.
+    pub fn set(settings: &mut Value, key: &str, v: f64) -> bool {
+        let Some(p) = PAD_SETTINGS.iter().find(|p| p.key == key) else { return false };
+        let v = p.snap(v);
+        if settings.get(PAD_TUNING_KEY).and_then(|g| g.get(key)).and_then(Value::as_f64) == Some(v) {
+            return false;
+        }
+        if !settings.is_object() {
+            *settings = json!({});
+        }
+        if !settings[PAD_TUNING_KEY].is_object() {
+            settings[PAD_TUNING_KEY] = json!({});
+        }
+        settings[PAD_TUNING_KEY][key] = if p.unit.is_empty() { json!(v) } else { json!(v as i64) };
+        true
+    }
+    /// The left stick's direction under this dead zone (`stick_dir`).
+    pub fn stick_dir(&self, x: f32, y: f32) -> Option<Key> {
+        stick_dir_past(x, y, self.dead_zone)
+    }
+    /// The live Test line: where the stick is and the direction it reads ("none" inside the dead zone).
+    pub fn test_line(&self, stick: (f32, f32)) -> String {
+        let (x, y) = stick;
+        let dir = match self.stick_dir(x, y) {
+            Some(k) => key_label(k),
+            None => "none".to_string(),
+        };
+        format!("Stick x {x:+.2}  y {y:+.2}  reads {dir}  (dead zone {:.2})", self.dead_zone)
+    }
+}
+
+/// The left stick's direction: the larger axis past the default dead zone (y up is positive, as pads report it). The
+/// documented default (ENGINE-66, CLN-80): the shell reads the player's dead zone through `PadTuning::stick_dir`.
 pub fn stick_dir(x: f32, y: f32) -> Option<Key> {
-    if x.abs() < STICK_DEAD && y.abs() < STICK_DEAD {
+    stick_dir_past(x, y, STICK_DEAD)
+}
+
+/// The left stick's direction: the larger axis past the dead zone `dead`.
+pub fn stick_dir_past(x: f32, y: f32, dead: f32) -> Option<Key> {
+    if x.abs() < dead && y.abs() < dead {
         return None;
     }
     Some(if x.abs() > y.abs() {

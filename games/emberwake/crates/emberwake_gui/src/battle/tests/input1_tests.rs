@@ -133,8 +133,8 @@ fn first_valid_pick(b: &BattleScreen) -> usize {
     p.rows.iter().position(|r| r.valid && r.at == at && matches!(&r.act, RowAct::Pick(p) if p.iter().any(|x| x.holds_target()))).expect("a usable skill row")
 }
 
-/// IF1, IF2, IF4: a click on an enemy sets the round target and opens the skill menu at the click, titled "<hero> ->
-/// <target>", with only skills an enemy takes (no Support or Guard row); a pick appends it and the menu stays open,
+/// IF1, IF2, IF4: a click on an enemy sets the round target and opens the skill menu at the click, titled (BATTLE-UI2
+/// battle contract 7) "Block <the block the next pick starts on> vs <target>", with only skills an enemy takes (no Support or Guard row); a pick appends it and the menu stays open,
 /// re-listed: only rows that can still be picked, of the round intent.
 #[test]
 fn a_target_click_opens_the_skill_menu_and_a_pick_relists_it() {
@@ -144,7 +144,8 @@ fn a_target_click_opens_the_skill_menu_and_a_pick_relists_it() {
     b.run(&mut cx, Action::UnitClick(f));
     assert_eq!(w(&b).round_states[&h].target, Some(RoundTarget::Unit(f)), "the click sets the target at once: {}", b.message);
     let p = b.popup.as_ref().expect("the skill menu");
-    assert_eq!((p.menu, p.title.clone()), (Some((h, RoundTarget::Unit(f))), format!("{} -> {}", w(&b).units[h].name, w(&b).units[f].name)));
+    let next = rip::next_pick_block(&w(&b), &b.host.session.as_ref().unwrap().plan, h);
+    assert_eq!((p.menu, p.title.clone()), (Some((h, RoundTarget::Unit(f))), format!("Block {next} vs {}", w(&b).units[f].name)));
     let s = b.host.session.as_ref().unwrap();
     assert_eq!(p.rows.iter().filter(|r| matches!(r.act, crate::battle::input::RowAct::Pick(_))).count(), rip::menu_options(&s.w, &s.plan, h, RoundTarget::Unit(f)).len(), "one row per kit cell");
     for row in p.rows.iter().filter(|r| r.valid) {
@@ -485,7 +486,8 @@ fn clicks_select_target_and_inspect() {
     b.run(&mut cx, Action::UnitClick(h));
     assert_eq!(b.selected, Some(h), "SL5: an ally is selected");
     b.run(&mut cx, Action::Select(h));
-    assert_eq!(b.selected, None, "SL4: the selected hero's card selects nothing");
+    assert_eq!(b.selected, Some(h), "SL4, PR7-83 (PT-79): a click on the selected hero's card keeps it selected");
+    b.selected = None;
     b.run(&mut cx, Action::Select(h));
     assert_eq!(b.selected, Some(h), "SL6: a card selects");
     let state = b.state(&cx);
@@ -557,7 +559,32 @@ fn escape_steps_back_one_layer_at_a_time() {
     assert_eq!(b.selected, None, "then the selection");
     assert!(cx.nav.is_empty(), "nothing left yet");
     b.escape(&mut cx);
+    assert!(cx.nav.is_empty(), "PR7-83 (PT-79): Esc stops at the last panel: the next one with nothing to close does nothing");
+    b.escape(&mut cx);
     assert!(!cx.nav.is_empty(), "then the Arena leaves, as before");
+}
+
+/// PR7-83 (PT-79): an Esc after another key or click (no run of closing Escs) leaves at once, as before.
+#[test]
+fn a_fresh_escape_with_nothing_open_leaves_at_once() {
+    let (mut cx, _g, mut b) = planning();
+    b.selected = None;
+    b.run(&mut cx, Action::ToggleLog);
+    b.run(&mut cx, Action::ToggleLog);
+    b.escape(&mut cx);
+    assert!(!cx.nav.is_empty(), "nothing was closed by Esc just before: it leaves");
+}
+
+/// PR7-83 (PT-79): while the last round's summary shows, Enter only dismisses it; the next Enter confirms.
+#[test]
+fn enter_at_round_over_only_dismisses_the_summary() {
+    let (mut cx, _g, mut b) = planning();
+    let round = b.session().current_round;
+    b.round_note = Some((b.message.clone(), "Round over: 2 hits".into()));
+    b.key(&mut cx, crate::screens::Key::Enter);
+    assert_eq!((b.session().current_round, b.planning(), b.round_note.is_none()), (round, true, true), "dismissed, not confirmed: {}", b.message);
+    b.key(&mut cx, crate::screens::Key::Enter);
+    assert!(!b.planning() || b.session().current_round > round, "the next Enter confirms: {}", b.message);
 }
 
 /// IS1, IS2: the inspected enemy pins the intel panel ("Inspecting <name> (Esc clears)") over the hovered unit until
@@ -616,7 +643,7 @@ fn an_inspected_member_shows_its_plan_and_ap() {
     assert_eq!((b.inspected(), b.selected), (Some(m), Some(h)), "IS3: the selection stays");
     drawn(&mut cx, &mut g, &mut b);
     let s = b.host.session.as_ref().unwrap();
-    let lines: Vec<String> = inspect_tip(s, m, b.selected, &s.enemy_intents(), &s.round_intents(), &[], true).into_iter().map(|l| l.0).collect();
+    let lines: Vec<String> = inspect_tip(s, m, b.selected, &s.enemy_intents(), &s.round_intents(), &[], true, &aegis_ui::controls::Controls::default()).into_iter().map(|l| l.0).collect();
     for l in ap_lines(&rip::ap_forecast(&s.w, &s.plan, m)) {
         assert!(lines.contains(&l), "AP9 line {l:?} in {lines:?}");
     }
@@ -829,6 +856,54 @@ fn the_help_keys_name_the_input2_keys() {
     assert!(crate::controls_view::ACTIONS.iter().any(|a| a.id == "auto_fill" && a.key == aegis_ui::screen::Key::Char('f')));
 }
 
+/// CONTROLS-UI1B (PR7-49 (1)): the battle's key hints read the bound key: after a rebind (Self to K, Back to X with
+/// Pad Y, Space to G, the log to U) the bar's and hero panel's hover cards name the new keys, never the old letters.
+#[test]
+fn the_battle_hints_follow_a_rebind() {
+    use aegis_ui::controls::{Controls, Pad};
+    let (mut cx, mut g, mut b) = planning();
+    let card = |b: &BattleScreen, id: &str| b.w.iter().find(|x| x.id == id).map(|x| x.tip.iter().map(|t| t.0.as_str()).collect::<Vec<_>>().join(" | "));
+    let base = Controls::default();
+    assert!(card(&b, "hero.self").is_some_and(|t| t.contains(&format!("Self ({})", base.hint(Key::Char('s'))))), "{:?}", card(&b, "hero.self"));
+    let mut c = Controls::default();
+    c.bind_key(Key::Char('s'), Key::Char('k'));
+    c.bind_key(Key::Esc, Key::Char('x'));
+    c.bind_pad(Key::Esc, Pad::North);
+    c.bind_key(Key::Space, Key::Char('g'));
+    c.bind_key(Key::Char('l'), Key::Char('u'));
+    cx.settings.v["controls"] = c.to_json();
+    drawn(&mut cx, &mut g, &mut b);
+    let cards: Vec<(&str, String)> = [("hero.self", "Self (K)"), ("bar.log", "Full combat log (U)"), ("bar.menu", "Menu (X / Pad Y)"), ("bar.exit", "(X / Pad Y)")].into_iter().filter_map(|(id, want)| card(&b, id).map(|t| (want, t))).collect();
+    assert!(cards.iter().any(|(w, _)| w.starts_with("Self")), "the Self button is drawn: {cards:?}");
+    for (want, t) in &cards {
+        assert!(t.contains(want), "{want} in {t}");
+        assert!(!t.contains("(S)") && !t.contains("(L)") && !t.contains("(Esc"), "no old letter: {t}");
+    }
+    // a message that names a key reads the map too
+    cx.settings.v["show_tells"] = json!(true);
+    b.key(&mut cx, Key::Char('i'));
+    assert!(b.message.contains("(I shows them)"), "Stash's I is unbound here: {}", b.message);
+    c.bind_key(Key::Char('i'), Key::Char('o'));
+    cx.settings.v["controls"] = c.to_json();
+    drawn(&mut cx, &mut g, &mut b);
+    b.key(&mut cx, Key::Char('i'));
+    assert!(b.message.contains("(O hides them)"), "{}", b.message);
+    // the pinned intel's header and message name the key bound to Back
+    let foe = foes_on_field(&b)[0];
+    b.inspect_unit(foe);
+    assert!(b.message.ends_with("(X clears)."), "{}", b.message);
+    drawn(&mut cx, &mut g, &mut b);
+    if let Some(intel) = b.w.iter().find(|x| x.id == "intel.unit" && x.text.starts_with("Inspecting")) {
+        assert!(intel.text.ends_with("(X clears)") && intel.tip.first().is_some_and(|t| t.0.ends_with("(X clears)")), "{} {:?}", intel.text, intel.tip.first());
+    }
+    // the Step card (shown once the round runs) names the key bound to Space
+    b.run(&mut cx, Action::Confirm);
+    b.tick(&mut cx);
+    drawn(&mut cx, &mut g, &mut b);
+    assert!(!b.planning(), "the round runs: {}", b.message);
+    assert!(card(&b, "bar.step").is_some_and(|t| t.contains("Resolve one action (G / Pad X)")), "{:?}", card(&b, "bar.step"));
+}
+
 // ---- INPUT1-AP: the AP pip gauge (INPUT1 AP3, AP5-AP10) ---------------------------------------------------------
 
 /// The agent link's `ap_gauge` (null: hidden).
@@ -985,7 +1060,7 @@ fn above_twelve_ap_a_pip_holds_two() {
     assert_eq!(st["pips"], json!(pips_by_rule(&b, h)));
     assert!(tip_has(widget(&b, "strip.ap"), "1 pip = 2 AP"));
     let s = b.host.session.as_ref().unwrap();
-    let lines: Vec<String> = inspect_tip(s, h, b.selected, &s.enemy_intents(), &s.round_intents(), &[], true).into_iter().map(|l| l.0).collect();
+    let lines: Vec<String> = inspect_tip(s, h, b.selected, &s.enemy_intents(), &s.round_intents(), &[], true, &aegis_ui::controls::Controls::default()).into_iter().map(|l| l.0).collect();
     assert!(lines.contains(&"1 pip = 2 AP".to_string()), "IS3: {lines:?}");
     set_ap(&cx, &mut b, h, 10, Some(10));
     assert!(!ap_lines(&forecast(&b, h)).iter().any(|l| l.starts_with("1 pip")), "at most 12 AP: no pip line");

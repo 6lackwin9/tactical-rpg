@@ -73,6 +73,13 @@
 			"item_ap": 0,
 			"channel_meter": "strain",
 			"channel_rest": "feed",
+			"enrage_from_round": 6,
+			"enrage_step": {
+				"minion": 10,
+				"standard": 10,
+				"elite": 15,
+				"boss": 20
+			},
 			"item_mitigation": "on",
 			"thrown_miss_spends": "on",
 			"pouch_stacks": "on"

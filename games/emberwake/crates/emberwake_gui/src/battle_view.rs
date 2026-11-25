@@ -12,7 +12,7 @@ use emberwake_battle::intent::{self, FoeCard};
 use emberwake_battle::resolver::ScheduledAction;
 use emberwake_battle::round_intent::{self as ri, RoundIntent};
 use emberwake_battle::round_intent_plan as rip;
-use emberwake_battle::session::{Phase, Session};
+use emberwake_battle::session::{Phase, PhaseMark, Session};
 use emberwake_battle::world::{UnitId, World};
 
 /// The view's screen name (its layout and fixture files).
@@ -61,6 +61,8 @@ pub struct Tab {
     pub rounds: Option<i32>,
     pub planned: bool,
     pub name: String,
+    /// STATUSVIS1 section 3 (PR7-57): the plate priority by primitive (`status_view::plate_priority`: 1 high, 3 low).
+    pub priority: u8,
 }
 
 impl Tab {
@@ -84,6 +86,36 @@ pub struct Lands {
     pub impact: i32,
 }
 
+/// PASSIVE-ICON1 (ENGINE-24, STATUSVIS1 SV10): a slotted passive of a hero's loadout, shown under the portrait: the
+/// passive, its name and its archetype's icon file.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlatePassive {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    /// SV13 (PR7-57): what it does, its socket's hover ("" unknown).
+    pub about: String,
+}
+
+/// SV10: the loadout's passive slots shown under a plate's portrait.
+pub const PLATE_PASSIVES: usize = 2;
+
+/// SV10: hero `u`'s slotted passives (its deck's, under the rule deck; none for a guest or a foe), at most
+/// `PLATE_PASSIVES`, each with its archetype's icon (`passive_icon::of`).
+pub fn plate_passives(w: &World, u: UnitId) -> Vec<PlatePassive> {
+    let unit = &w.units[u];
+    if unit.deck_rule.is_none() {
+        return Vec::new();
+    }
+    unit.deck
+        .passive
+        .iter()
+        .filter_map(|id| w.cat.passives.get(id))
+        .take(PLATE_PASSIVES)
+        .map(|p| PlatePassive { id: p.id.clone(), name: p.name.clone(), icon: emberwake_data::passive_icon::path(&emberwake_data::passive_icon::of(p)), about: String::new() })
+        .collect()
+}
+
 /// One plate (contract 3, 4): a party member, a guest or a foe.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Plate {
@@ -92,10 +124,15 @@ pub struct Plate {
     pub name: String,
     pub hp: i32,
     pub max_hp: i32,
-    /// The HP the round's planned blows take from it (a red loss at the bar's end).
+    /// The HP the round's planned blows take from it (a red loss at the bar's end); STATUSVIS1 SV6 (PR7-57): the hits
+    /// and the round-end ticks together, one planned loss (`status_view::planned_loss`).
     pub incoming: i32,
+    /// SV6, SV7: the planned loss's hover lines (each hit and each tick, then the total) and whether a modifier moved
+    /// its hits (-1 lowered, 1 raised, 0 neither: the number's tint and arrow).
+    pub loss: Vec<NumLine>,
+    pub loss_sign: i32,
     /// Contract 6 (PR7-40 part 2): the HP the round's planned heals restore on it (a pale moss gain on the bar;
-    /// `intent::heal_on`).
+    /// `intent::heal_on`); SV6: with the round-end healing ticks (regen).
     pub heal: i32,
     pub ap: Option<ApBar>,
     /// Poise pips (lit, of) under the rule poise.
@@ -108,6 +145,46 @@ pub struct Plate {
     pub active: bool,
     pub selected: bool,
     pub lands: Option<Lands>,
+    /// SV10: the loadout's slotted passives (a party hero's; empty otherwise).
+    pub passives: Vec<PlatePassive>,
+    /// SV13 (PR7-57): the hero has a loadout's passive sockets (a party hero under the rule deck): its two sockets show,
+    /// an empty one dim.
+    pub sockets: bool,
+}
+
+/// STATUSVIS1 SV6, SV7 (PR7-57): one line of a number's frameless hover: its text and its tint (-1 lowered, 1 raised,
+/// 0 plain; 2 a heading).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NumLine {
+    pub text: String,
+    pub sign: i32,
+}
+
+impl NumLine {
+    pub fn new(text: impl Into<String>, sign: i32) -> Self {
+        NumLine { text: text.into(), sign }
+    }
+}
+
+/// SV7: a hit's hover lines: the unmodified number, then each modifier with its percent ("Weakened -25%"), then the
+/// number shown; one line "No modifiers" when none moved it.
+pub fn parts_lines(p: &emberwake_battle::status_view::HitParts) -> Vec<NumLine> {
+    if p.mods.is_empty() && p.base == p.damage {
+        return vec![NumLine::new(format!("{} HP, no modifiers", p.damage), 0)];
+    }
+    let mut out = vec![NumLine::new(format!("Base {} HP", p.base), 0)];
+    for m in &p.mods {
+        let name = emberwake_rules::status::display_name(&m.source);
+        out.push(NumLine::new(format!("{name} {}{}%", if m.pct > 0 { "+" } else { "" }, m.pct), m.pct.signum()));
+    }
+    out.push(NumLine::new(format!("Final {} HP", p.damage), p.sign()));
+    out
+}
+
+/// SV7: the sign of a sum of hits (the sum's base against its number).
+pub fn sum_sign(parts: &[&emberwake_battle::status_view::HitParts]) -> i32 {
+    let (base, dmg): (i32, i32) = parts.iter().fold((0, 0), |(b, d), p| (b + p.base, d + p.damage));
+    (dmg - base).signum()
 }
 
 /// One row of the foe panel (contract 4).
@@ -136,9 +213,14 @@ impl FoeEntry {
 pub struct TopBar {
     /// "Round 1 of 8".
     pub round: String,
+    /// XL-FIX2 (PR7-85, FB-455 a): the title at Large and Extra large text, "R 1/8"; it hovers to `round`.
+    pub round_short: String,
     /// The goal and the protect line ("" none).
     pub goal: String,
     pub protect: String,
+    /// OBJUI1 (OBJ1 rule 9, MORALE1 3): the goal's hover: the full objective line and the morale line ("" none).
+    pub objective: String,
+    pub morale: String,
     /// The selected hero's AP: now, picked, the ghost's, the cap (contract 2's AP line).
     pub ap_now: i32,
     pub ap_picked: i32,
@@ -177,6 +259,12 @@ pub struct CardRow {
     pub after_ko: bool,
     /// The party view: the foe falls in this block ("KO").
     pub ko: bool,
+    /// STATUSVIS1 SV7 (PR7-57): whether a modifier moved the number (-1 lowered, 1 raised, 0 neither) and its frameless
+    /// hover (the base and each modifier's percent).
+    pub sign: i32,
+    pub parts: Vec<NumLine>,
+    /// SV9: the hitters a riposte answers, each with the likely return on it (the "Riposte" chip; empty: none).
+    pub riposte: Vec<(UnitId, i32)>,
 }
 
 /// The docked foe card (contract 5).
@@ -191,6 +279,9 @@ pub struct CardView {
     pub hero: Option<UnitId>,
     pub read: FoeCard,
     pub rows: Vec<CardRow>,
+    /// OBJUI1 (MORALE1 3): the foe's morale state and whether it leads (None, false without morale).
+    pub morale: Option<emberwake_battle::obj_view::MoraleMark>,
+    pub leader: bool,
 }
 
 impl CardView {
@@ -215,6 +306,221 @@ impl CardView {
     }
 }
 
+/// BOSSUI1 (PR7-54, contract 9.2): a boss intent row's cell, or its total: the HP the hits take (0: "-"), the poise
+/// pips they break, the statuses they bring, whether one empties the poise bar (BREAK), and how many hits it holds.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ImpactCell {
+    pub hp: i32,
+    pub pips: i32,
+    pub statuses: Vec<String>,
+    pub breaks: bool,
+    pub hits: usize,
+}
+
+impl ImpactCell {
+    /// Adds hit `h` taking `hp` HP (a status once).
+    fn add(&mut self, h: &intent::CardHit, hp: i32) {
+        self.hp += hp;
+        self.pips += h.pips;
+        self.breaks |= h.breaks;
+        self.hits += 1;
+        for st in &h.statuses {
+            if !self.statuses.contains(st) {
+                self.statuses.push(st.clone());
+            }
+        }
+    }
+
+    /// The HP cell's text: "-1250", "-12K"; "-" where the row does not hit (contract 9.2 numbers).
+    pub fn hp_text(&self) -> String {
+        if self.hits == 0 || self.hp <= 0 { "-".to_string() } else { format!("-{}", impact_num(self.hp)) }
+    }
+}
+
+/// Contract 9.2 numbers: whole up to 9999, K from 10K ("12K", "120K"), M from 1M (both rounded down).
+pub fn impact_num(n: i32) -> String {
+    let a = n.unsigned_abs();
+    let sign = if n < 0 { "-" } else { "" };
+    if a >= 1_000_000 {
+        format!("{sign}{}M", a / 1_000_000)
+    } else if a >= 10_000 {
+        format!("{sign}{}K", a / 1000)
+    } else {
+        format!("{sign}{a}")
+    }
+}
+
+/// BOSSUI1 (contract 9.2): one boss intent row: the selected hero, "Others", one member, or "Party"; a cell per block
+/// and the total of what lands.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ImpactRow {
+    pub unit: Option<UnitId>,
+    pub name: String,
+    pub cells: Vec<ImpactCell>,
+    pub total: ImpactCell,
+}
+
+/// BOSSUI1 BU11, BU16 (contract 9.2): the boss intent rows while planning: the selected hero's row, "Others" (the rest
+/// of the party summed, never the hero again), the hover's member rows and "Party" line; the block a phase break
+/// lands (`ends`, with the next phase's number) and the block the poise breaks.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct BossRows {
+    pub blocks: i32,
+    pub hero: Option<ImpactRow>,
+    pub others: ImpactRow,
+    pub members: Vec<ImpactRow>,
+    pub party: ImpactRow,
+    pub ends: Option<i32>,
+    pub next_phase: usize,
+    pub break_block: Option<i32>,
+}
+
+impl BossRows {
+    /// Block `b`'s header: "Block N", "Block N: ends" where the phase breaks, "Ph. 2 next round" on the first block it
+    /// cancels (contract 9.2).
+    pub fn header(&self, b: i32) -> String {
+        match self.ends {
+            Some(e) if e == b => format!("Block {b}: ends"),
+            Some(e) if b == e + 1 => format!("Ph. {} next round", self.next_phase),
+            _ => format!("Block {b}"),
+        }
+    }
+
+    /// Block `b` does not run (after the phase break): greyed, its numbers struck.
+    pub fn struck(&self, b: i32) -> bool {
+        self.ends.is_some_and(|e| b > e)
+    }
+}
+
+/// BOSSUI1 (contract 9.1, row 3): the boss's own next blow: its skill (icon) and name, its target, the block it lands
+/// and its damage.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BossBlow {
+    pub skill: String,
+    pub name: String,
+    pub target: Option<UnitId>,
+    pub impact: i32,
+    pub damage: i32,
+}
+
+/// BOSSUI1 BU7, BU10 (contract 9.1, row 3): the boss's poise: pips lit, of (its own `poise_pips`), the pips the plan
+/// breaks, the bar's pip threshold, BREAK planned.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct BossPoise {
+    pub lit: i32,
+    pub of: i32,
+    pub planned: i32,
+    pub threshold: i32,
+    pub breaks: bool,
+}
+
+impl BossPoise {
+    /// "6/10".
+    pub fn text(&self) -> String {
+        format!("{}/{}", self.lit, self.of)
+    }
+}
+
+/// BOSSUI1 BU10: the most pips a boss bar draws.
+pub const BOSS_PIPS_MAX: i32 = 10;
+
+/// BOSSUI1 (PR7-54, contract 9.1): the boss bar across the board's top (in place of the boss's plate and its card).
+#[derive(Debug, Clone, PartialEq)]
+pub struct BossBar {
+    pub unit: UnitId,
+    /// The title (the unit's full name; BU3b, PR7-59: "<name>, <form>" when the phase sets a `form`) and the
+    /// character's title ("" none, or under a form).
+    pub name: String,
+    pub title: String,
+    pub marks: Vec<PhaseMark>,
+    pub current: usize,
+    /// The current phase's span: HP left of it and its size ("160/450"), and the HP the plan takes of it.
+    pub span_left: i32,
+    pub span: i32,
+    /// PR7-75 (PT-40): the boss's whole HP and max (the span is the phase's share; the hover says both).
+    pub whole: (i32, i32),
+    /// PR7-83 (PT-75): HP carried above the phase's span from a phase that ended unfinished (a time phase): still owed,
+    /// so the read-out shows it ("346/346 +138") and the hover names it.
+    pub carried: i32,
+    pub planned: i32,
+    pub poise: Option<BossPoise>,
+    /// The boss passives: (display name, description) for the tags (BU4).
+    pub passives: Vec<(String, String)>,
+    pub tabs: Vec<Tab>,
+    pub blow: Option<BossBlow>,
+    /// The intent rows: only while planning, when a hero targets the boss or it is pinned (contract 9.2).
+    pub rows: Option<BossRows>,
+}
+
+impl BossBar {
+    /// "160/450".
+    pub fn span_text(&self) -> String {
+        if self.carried > 0 {
+            format!("{}/{} +{}", self.span_left, self.span, self.carried)
+        } else {
+            format!("{}/{}", self.span_left, self.span)
+        }
+    }
+
+    /// PR7-75 (PT-40): the HP read-out's hover: the phase's share and the whole ("This phase: 142/304", "In all:
+    /// 142/608"); one line when they are the same.
+    pub fn hp_tip(&self) -> Vec<String> {
+        let all = format!("In all: {}/{}", self.whole.0, self.whole.1);
+        let mut out = if self.span == self.whole.1 { vec![all] } else { vec![format!("This phase: {}/{}", self.span_left, self.span), all] };
+        if self.carried > 0 {
+            out.push(format!("Carried over: {} HP from an earlier phase that ended by time, still to take.", self.carried));
+        }
+        out
+    }
+}
+
+/// BOSSUI1 (contract 9.2): the boss intent rows over the boss's card read `read` (the kit's `foe_card` over the live
+/// plan), cut where the plan breaks the phase (`intent::phase_cut` on the span's `floor`): the hits after the
+/// breaking one do not land (the same block's are dropped, a later block's are shown struck); totals count what
+/// lands. `hero` the selected hero, `allies` the members in plate order, `next_phase` the next phase's number.
+pub fn boss_rows(read: &FoeCard, floor: i32, blocks: i32, hero: Option<UnitId>, allies: &[(UnitId, String)], next_phase: usize) -> BossRows {
+    let blocks = blocks.max(1);
+    let cut = intent::phase_cut(read, floor);
+    let row = |unit: Option<UnitId>, name: &str| ImpactRow { unit, name: name.to_string(), cells: vec![ImpactCell::default(); blocks as usize], total: ImpactCell::default() };
+    let mut out = BossRows { blocks, hero: hero.map(|h| row(Some(h), &allies.iter().find(|a| a.0 == h).map_or_else(String::new, |a| a.1.clone()))), others: row(None, "Others"), members: allies.iter().map(|a| row(Some(a.0), &a.1)).collect(), party: row(None, "Party"), ends: cut.map(|c| c.block), next_phase, break_block: None };
+    for (k, h) in read.hits.iter().enumerate() {
+        let (hp, lands) = match cut {
+            Some(c) if k == c.hit => (c.landed, true),
+            Some(c) if k > c.hit && h.impact == c.block => continue,
+            Some(c) if k > c.hit => (h.damage, false),
+            _ => (h.damage, true),
+        };
+        let b = (h.impact.clamp(1, blocks) - 1) as usize;
+        if lands && h.breaks && out.break_block.is_none() {
+            out.break_block = Some(h.impact);
+        }
+        let mine = Some(h.unit) == hero;
+        let put = |r: &mut ImpactRow| {
+            r.cells[b].add(h, hp);
+            if lands {
+                r.total.add(h, hp);
+            }
+        };
+        match out.hero.as_mut() {
+            Some(r) if mine => put(r),
+            _ => put(&mut out.others),
+        }
+        if let Some(r) = out.members.iter_mut().find(|r| r.unit == Some(h.unit)) {
+            put(r);
+        }
+        put(&mut out.party);
+    }
+    out
+}
+
+/// The boss's first live blow this round (`lands_of` with its skill and damage).
+fn boss_blow(w: &World, sched: &[ScheduledAction], boss: UnitId) -> Option<BossBlow> {
+    let l = lands_of(w, sched, boss)?;
+    let a = intent::actions_of(boss, sched).into_iter().find(|a| a.impact == l.impact)?;
+    let hit = l.target.and_then(|t| intent::hits_on(w, sched, boss, t).into_iter().find(|h| h.block == l.impact));
+    Some(BossBlow { skill: a.command.skill.clone(), name: hit.as_ref().map_or_else(|| w.cat.skill(&a.command.skill).map_or_else(String::new, |s| s.name.clone()), |h| h.skill.clone()), target: l.target, impact: l.impact, damage: hit.map_or(0, |h| h.damage) })
+}
+
 /// The whole view-model.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct BattleModel {
@@ -226,6 +532,8 @@ pub struct BattleModel {
     pub hostiles: String,
     pub reinforce: String,
     pub card: Option<CardView>,
+    /// BOSSUI1 (PR7-54, contract 9): the boss bar (None: no boss on the field); the boss then has no plate and no card.
+    pub boss: Option<BossBar>,
 }
 
 /// The round as it will run: while planning the plan booked after the enemies' actions (`planned_schedule`), else
@@ -238,27 +546,29 @@ pub fn round_schedule(s: &Session) -> Vec<ScheduledAction> {
     }
 }
 
-/// Contract 6 order: the soonest to run out first, ties to the one applied first; queued ones after; `planned` ones
-/// (statuses a planned move adds) last.
+/// Contract 6 order, STATUSVIS1 section 3 (PR7-57): by plate priority (`status_view::plate_priority`; a `rule_flag`
+/// first inside priority 1, contract 6's steadfast); inside a priority the soonest to run out first, ties to the one
+/// applied first, queued ones after the active, `planned` ones (statuses a planned move adds) last.
 pub fn tabs_of(w: &World, u: UnitId, planned: &[String]) -> Vec<Tab> {
     use emberwake_rules::status;
     let st = &w.units[u].st;
-    let tab = |id: &str, rounds: Option<i32>, planned: bool, magnitude: i32| Tab { status: id.to_string(), icon: emberwake_content::art::status_icon(id), buff: status::is_buff(id), rounds, planned, name: status::label_with_magnitude(id, magnitude) };
-    let mut now: Vec<(usize, Tab)> = st
+    let tab = |id: &str, rounds: Option<i32>, planned: bool, magnitude: i32| Tab { status: id.to_string(), icon: emberwake_content::art::status_icon(id), buff: status::is_buff(id), rounds, planned, name: status::label_with_magnitude(id, magnitude), priority: emberwake_battle::status_view::plate_priority(id) };
+    // (group: 0 active, 1 queued, 2 planned; the order applied) beside each tab
+    let mut all: Vec<(u8, usize, Tab)> = st
         .active
         .iter()
         .enumerate()
-        .map(|(k, id)| (k, tab(id, st.rounds_left.get(id).copied().filter(|r| *r > 0), false, st.magnitudes.get(id).copied().unwrap_or(0))))
+        .map(|(k, id)| (0, k, tab(id, st.rounds_left.get(id).copied().filter(|r| *r > 0 && !emberwake_battle::trigger::lasts_battle(*r)), false, st.magnitudes.get(id).copied().unwrap_or(0))))
         .collect();
-    now.sort_by_key(|(k, t)| (t.rounds.unwrap_or(i32::MAX), *k));
-    let mut out: Vec<Tab> = now.into_iter().map(|x| x.1).collect();
-    out.extend(st.pending.iter().filter(|id| !st.active.contains(*id)).map(|id| tab(id, st.pending_rounds.get(id).copied().filter(|r| *r > 0), false, st.pending_magnitudes.get(id).copied().unwrap_or(0))));
-    for id in planned {
-        if !out.iter().any(|t| &t.status == id) {
-            out.push(tab(id, None, true, 0));
+    all.extend(st.pending.iter().filter(|id| !st.active.contains(*id)).enumerate().map(|(k, id)| (1, k, tab(id, st.pending_rounds.get(id).copied().filter(|r| *r > 0 && !emberwake_battle::trigger::lasts_battle(*r)), false, st.pending_magnitudes.get(id).copied().unwrap_or(0)))));
+    for (k, id) in planned.iter().enumerate() {
+        if !all.iter().any(|t| &t.2.status == id) {
+            all.push((2, k, tab(id, None, true, 0)));
         }
     }
-    out
+    let flag = |id: &str| status::row_of(id).is_some_and(|r| r.has_primitive(status::Primitive::RuleFlag));
+    all.sort_by_key(|(g, k, t)| (t.priority, !flag(&t.status), *g, if *g == 0 { t.rounds.unwrap_or(i32::MAX) } else { 0 }, *k));
+    all.into_iter().map(|x| x.2).collect()
 }
 
 /// A foe's first live blow this round (the "when it lands" row): the kind of its first Attack or Area, its target and
@@ -281,10 +591,11 @@ fn poise_of(w: &World, u: UnitId) -> Option<(i32, i32)> {
     use emberwake_battle::poise;
     let st = poise::state(w, u).filter(|st| st.max > 0)?;
     let n = &w.ruleset.numbers;
+    let full = poise::full_pips(n, st);
     if st.broken {
-        return Some((0, n.poise_pips.max(1)));
+        return Some((0, full));
     }
-    Some(if poise::pips_mode(n) { (poise::pips_now(n, st).min(n.poise_pips.max(1)), n.poise_pips.max(1)) } else { (poise::bar_pips(n, st), n.poise_pips.max(1)) })
+    Some(if poise::pips_mode(n) { (poise::pips_now(n, st).min(full), full) } else { (poise::bar_pips(n, st), full) })
 }
 
 /// What the model reads beside the session: the selected hero, the pinned or hovered foe, the round-start AP of each
@@ -298,6 +609,9 @@ pub struct Inputs<'a> {
     pub intent_of: &'a dyn Fn(UnitId) -> Option<RoundIntent>,
     /// Contract 4: the groups the player opened (their catalog units).
     pub open_groups: &'a [String],
+    /// BOSSUI1 (contract 9.2): the inspected (pinned) unit, and a passive's description by id (the boss tags' hover).
+    pub pinned: Option<UnitId>,
+    pub passive_about: &'a dyn Fn(&str) -> String,
 }
 
 /// BATTLE-UI2: the view-model of session `s` (contract 2-6).
@@ -309,8 +623,11 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
     let mut m = BattleModel::default();
     let name_of = |r: &str| s.units_of_ref(r).first().map(|&c| w.units[c].name.clone()).unwrap_or_else(|| r.to_string());
     m.top.round = format!("Round {} of {}", s.current_round.max(1), s.def.max_rounds);
+    m.top.round_short = format!("R {}/{}", s.current_round.max(1), s.def.max_rounds);
     m.top.goal = emberwake_battle::encounter::Objectives::goal_of(&s.def.raw, name_of);
     m.top.protect = emberwake_battle::encounter::Objectives::protect_of(&s.def.raw, name_of);
+    m.top.objective = emberwake_battle::encounter::Objectives::text_of(&s.def.raw, name_of);
+    m.top.morale = emberwake_battle::obj_view::header_line(s);
     // the hits the enemies' blows land on each ally this round
     let incoming = |u: UnitId| -> Vec<intent::HitOn> { w.enemies.iter().flat_map(|&e| intent::hits_on(w, &sched, e, u)).collect() };
     if let Some(h) = inp.sel.filter(|h| w.allies.contains(h)) {
@@ -343,14 +660,17 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
             ApBar { start, planned: planned.min(start), cap: unit.max_ap }
         });
         let planned_statuses: Vec<String> = cards.iter().find(|c| c.0 == u).map(|c| c.1.hits.iter().flat_map(|h| h.statuses.clone()).collect()).unwrap_or_default();
-        let incoming_hp = if ally { incoming(u).iter().map(|x| x.damage).sum() } else { cards.iter().find(|c| c.0 == u).map_or(0, |c| c.1.total(None)) };
+        // STATUSVIS1 SV6, SV7 (PR7-57): one planned loss, the hits and the round-end ticks, with its hover lines
+        let (incoming_hp, loss, loss_sign, gain) = planned_loss_view(w, &sched, u);
         Plate {
             unit: u,
             name: (inp.plate_name)(u),
             hp: unit.hp,
             max_hp: unit.max_hp,
-            incoming: incoming_hp.min(unit.hp.max(0)),
-            heal: if planning { intent::heal_on(w, &sched, u) } else { 0 },
+            incoming: incoming_hp,
+            loss,
+            loss_sign,
+            heal: if planning { (intent::heal_on(w, &sched, u) + gain).min((unit.max_hp - unit.hp).max(0)) } else { 0 },
             ap,
             poise: poise_of(w, u),
             tabs: tabs_of(w, u, &planned_statuses),
@@ -361,6 +681,8 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
             active: unit.is_active(),
             selected: inp.sel == Some(u),
             lands: if ally { None } else { lands_of(w, &sched, u) },
+            passives: if ally && !guest { plate_passives(w, u).into_iter().map(|p| PlatePassive { about: (inp.passive_about)(&p.id), ..p }).collect() } else { Vec::new() },
+            sockets: ally && !guest && unit.deck_rule.is_some(),
         }
     };
     for &a in &w.allies {
@@ -369,10 +691,18 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
         if guest { m.guests.push(p) } else { m.party.push(p) }
     }
     // the foes on the field (reinforcements not placed yet are left out)
-    let shown: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| w.grid.pos(e).is_some() || !w.units[e].is_alive() || w.units[e].is_withdrawn).collect();
-    let active = shown.iter().filter(|e| w.units[**e].is_active()).count();
+    // BOSSUI1 (contract 9.1): a boss on the bar leaves the foe panel
+    let phase_bar = s.phase_bar();
+    let boss = phase_bar.as_ref().map(|p| p.unit);
+    // ACT1-FIX4 (PT-93): a foe that escaped by an exit leaves the list (a surrendered one stays)
+    let shown: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| Some(e) != boss && !s.foe_escaped(e) && (w.grid.pos(e).is_some() || !w.units[e].is_alive() || w.units[e].is_withdrawn)).collect();
+    // PR7-75 (PT-40): the count takes in the boss on the bar while it stands (its plate stays above)
+    let active = shown.iter().chain(boss.as_ref()).filter(|e| w.units[**e].is_active()).count();
     m.hostiles = format!("Hostiles {active}");
     m.reinforce = s.phases.next_reinforcement().map_or_else(String::new, |(n, r)| format!("+{n} round {r}"));
+    if boss.is_some() && m.reinforce.is_empty() {
+        m.reinforce = BOSS_ABOVE.to_string();
+    }
     let keep_full = card_foe.or_else(|| inp.sel.and_then(target_of));
     if shown.len() >= GROUP_FROM {
         let mut groups: Vec<(String, Vec<Plate>)> = Vec::new();
@@ -410,23 +740,135 @@ pub fn model(s: &Session, inp: &Inputs) -> BattleModel {
     m.card = card_foe.and_then(|f| {
         let read = cards.iter().find(|c| c.0 == f)?.1.clone();
         let hero = inp.sel.filter(|h| w.allies.contains(h) && w.units[*h].is_active());
+        // SV7, SV9 (PR7-57): each hit's breakdown and the counter it draws, one for one with the card's hits
+        let reads = emberwake_battle::status_view::loss_reads(w, &sched, f);
+        let read_of = |k: usize| reads.get(k).filter(|_| reads.len() == read.hits.len());
         let rows = match hero {
-            Some(h) => read.hits.iter().filter(|x| x.unit == h).map(|x| CardRow { skill: x.skill.clone(), name: x.name.clone(), start: x.start, impact: x.impact, units: vec![h], damage: x.damage, pips: vec![(x.pips, x.breaks, x.on_broken)], statuses: x.statuses.clone(), after_ko: x.after_ko, ko: false }).collect(),
-            None => read
-                .by_block()
-                .into_iter()
-                .map(|(b, hs)| {
-                    let mut units: Vec<UnitId> = hs.iter().map(|x| x.unit).collect();
-                    units.dedup();
-                    CardRow { skill: String::new(), name: format!("Block {b}"), start: b, impact: b, units, damage: hs.iter().map(|x| x.damage).sum(), pips: hs.iter().map(|x| (x.pips, x.breaks, x.on_broken)).collect(), statuses: hs.iter().flat_map(|x| x.statuses.clone()).collect(), after_ko: hs.iter().all(|x| x.after_ko), ko: read.ko_block == Some(b) }
+            Some(h) => read
+                .hits
+                .iter()
+                .enumerate()
+                .filter(|(_, x)| x.unit == h)
+                .map(|(k, x)| {
+                    let r = read_of(k);
+                    // HITCALC1 (PR7-45): a hit that fails at its impact says how after its name
+                    let name = x.fails.map_or_else(|| x.name.clone(), |f| format!("{} ({})", x.name, crate::intent_text::fail_words(Some(w), f)));
+                    CardRow { skill: x.skill.clone(), name, start: x.start, impact: x.impact, units: vec![h], damage: x.damage, pips: vec![(x.pips, x.breaks, x.on_broken)], statuses: x.statuses.clone(), after_ko: x.after_ko, ko: false, sign: r.map_or(0, |r| r.parts.sign()), parts: r.map(|r| parts_lines(&r.parts)).unwrap_or_default(), riposte: r.and_then(|r| r.counter).map(|n| vec![(h, n)]).unwrap_or_default() }
                 })
                 .collect(),
+            None => {
+                let mut k0 = 0;
+                read.by_block()
+                    .into_iter()
+                    .map(|(b, hs)| {
+                        let mut units: Vec<UnitId> = hs.iter().map(|x| x.unit).collect();
+                        units.dedup();
+                        let rs: Vec<&emberwake_battle::status_view::HitRead> = (k0..k0 + hs.len()).filter_map(read_of).collect();
+                        k0 += hs.len();
+                        let parts: Vec<&emberwake_battle::status_view::HitParts> = rs.iter().map(|r| &r.parts).collect();
+                        let mut lines: Vec<NumLine> = Vec::new();
+                        for (x, r) in hs.iter().zip(&rs) {
+                            let sign = r.parts.sign();
+                            lines.push(NumLine::new(format!("{}: -{} (base {})", x.name, r.parts.damage, r.parts.base), sign));
+                            lines.extend(r.parts.mods.iter().map(|m| NumLine::new(format!("  {} {}{}%", emberwake_rules::status::display_name(&m.source), if m.pct > 0 { "+" } else { "" }, m.pct), m.pct.signum())));
+                        }
+                        let mut riposte: Vec<(UnitId, i32)> = Vec::new();
+                        for (x, r) in hs.iter().zip(&rs) {
+                            if let Some(n) = r.counter.filter(|_| !riposte.iter().any(|q| q.0 == x.unit)) {
+                                riposte.push((x.unit, n));
+                            }
+                        }
+                        CardRow { skill: String::new(), name: format!("Block {b}"), start: b, impact: b, units, damage: hs.iter().map(|x| x.damage).sum(), pips: hs.iter().map(|x| (x.pips, x.breaks, x.on_broken)).collect(), statuses: hs.iter().flat_map(|x| x.statuses.clone()).collect(), after_ko: hs.iter().all(|x| x.after_ko), ko: read.ko_block == Some(b), sign: sum_sign(&parts), parts: lines, riposte }
+                    })
+                    .collect()
+            }
         };
         let (name, title) = (inp.full_name)(f);
-        Some(CardView { foe: f, name, title, boss: w.units[f].tier == "boss", hero, read, rows })
+        Some(CardView { foe: f, name, title, boss: w.units[f].tier == "boss", hero, read, rows, morale: emberwake_battle::obj_view::morale_mark(s, f), leader: emberwake_battle::obj_view::is_leader(s, f) })
     });
+    // BOSSUI1 (contract 9): the boss bar; the boss's card folds into it
+    if let Some(pb) = phase_bar {
+        let b = pb.unit;
+        if m.card.as_ref().is_some_and(|c| c.foe == b) {
+            m.card = None;
+        }
+        let unit = &w.units[b];
+        let read = cards.iter().find(|c| c.0 == b).map_or_else(|| intent::foe_card(w, &sched, b), |c| c.1.clone());
+        let (span_left, span) = pb.span(unit.hp);
+        let hero = inp.sel.filter(|h| w.allies.contains(h) && w.units[*h].is_active());
+        let allies: Vec<(UnitId, String)> = w.allies.iter().copied().filter(|&a| w.units[a].is_active()).map(|a| (a, (inp.plate_name)(a))).collect();
+        let rows = boss_rows(&read, pb.floor, s.def.total_blocks, hero, &allies, pb.current + 2);
+        let show_rows = planning && (hero.and_then(target_of) == Some(b) || inp.pinned == Some(b));
+        let poise = poise_of(w, b).map(|(lit, of)| {
+            let st = emberwake_battle::poise::state(w, b).copied().unwrap_or_default();
+            BossPoise { lit, of, planned: rows.party.total.pips.min(lit), threshold: emberwake_battle::poise::pip_threshold(&w.ruleset.numbers, &st), breaks: rows.break_block.is_some() }
+        });
+        let (full, title) = (inp.full_name)(b);
+        let mut passives: Vec<(String, String)> = Vec::new();
+        let ids = w.cat.units.get(&unit.catalog_id).map(|d| d.passives.clone()).unwrap_or_default();
+        for id in ids.iter().chain(unit.passives.iter()) {
+            if let Some(p) = w.cat.passives.get(id).filter(|p| !passives.iter().any(|x| x.0 == p.name)) {
+                passives.push((p.name.clone(), (inp.passive_about)(id)));
+            }
+        }
+        let planned_statuses: Vec<String> = rows.party.total.statuses.clone();
+        m.boss = Some(BossBar {
+            unit: b,
+            // BU3b (PR7-59): the unit's name and title, never the phase's name (the phase banner shows it); a phase's
+            // `form` takes the title's place ("<name>, <form>")
+            name: if pb.form.is_empty() { full } else { format!("{full}, {}", pb.form) },
+            title: if pb.form.is_empty() { title } else { String::new() },
+            marks: pb.marks.clone(),
+            current: pb.current,
+            span_left,
+            span,
+            whole: (unit.hp, unit.max_hp),
+            carried: (unit.hp - pb.top).max(0),
+            planned: if planning { rows.party.total.hp.min(span_left) } else { 0 },
+            poise,
+            passives,
+            tabs: tabs_of(w, b, if planning { &planned_statuses } else { &[] }),
+            blow: boss_blow(w, &sched, b),
+            rows: show_rows.then_some(rows),
+        });
+    }
     m
 }
+
+/// STATUSVIS1 SV6, SV7 (PR7-57): unit `u`'s one planned loss over `sched` (`status_view::planned_loss`): the HP (hits
+/// and damage ticks within its HP), the hover lines (each hit with its block and skill, each tick, then the total), the
+/// hits' tint (`sum_sign`) and the healing ticks' gain.
+pub fn planned_loss_view(w: &World, sched: &[ScheduledAction], u: UnitId) -> (i32, Vec<NumLine>, i32, i32) {
+    use emberwake_battle::status_view as sv;
+    let pl = sv::planned_loss(w, sched, u);
+    let reads = sv::loss_reads(w, sched, u);
+    let parts: Vec<&sv::HitParts> = reads.iter().map(|r| &r.parts).collect();
+    let mut lines: Vec<NumLine> = Vec::new();
+    for (k, (_, h)) in pl.hits.iter().enumerate() {
+        let sign = parts.get(k).map_or(0, |p| p.sign());
+        // HITCALC1 (PR7-45): a hit that fails at its impact says how
+        let amount = match h.fails {
+            None => format!("-{}", h.damage),
+            Some(f @ emberwake_battle::intent::HitFail::Intercepted { pct, .. }) if pct < 100 => format!("-{} ({})", h.damage, crate::intent_text::fail_words(Some(w), f)),
+            Some(f) => crate::intent_text::fail_words(Some(w), f),
+        };
+        lines.push(NumLine::new(format!("B{} {}: {amount}", h.block, h.skill), sign));
+    }
+    for t in &pl.ticks {
+        let name = emberwake_rules::status::display_name(&t.status);
+        lines.push(NumLine::new(if t.hp < 0 { format!("Round end, {name}: -{}", -t.hp) } else { format!("Round end, {name}: +{}", t.hp) }, 0));
+    }
+    if pl.loss > 0 {
+        // the loss stops at the HP left: the total says so when the hits and ticks come to more
+        let raw = pl.hit_hp() + pl.ticks.iter().filter(|t| t.hp < 0).map(|t| -t.hp).sum::<i32>();
+        let capped = if raw > pl.loss { " (capped at HP)" } else { "" };
+        lines.push(NumLine::new(format!("Total -{}{capped}", pl.loss), 2));
+    }
+    (pl.loss, lines, sum_sign(&parts), pl.gain)
+}
+
+/// BOSSUI1 (take 31): the foe panel's note while the boss is on the bar.
+pub const BOSS_ABOVE: &str = "Boss above";
 
 /// "180/242".
 fn hp_text(p: &Plate) -> String {
@@ -445,6 +887,8 @@ pub fn view(m: &BattleModel) -> View {
         .iter()
         .map(|f| match f {
             FoeEntry::Full(p) | FoeEntry::Compact(p) => plate_row(p),
+            // PR7-40 part 3 (FB-358): an open group is its header alone; its members are the compact rows after it
+            FoeEntry::Group { key, name, open: true, .. } => RowView { id: key.clone(), label: name.clone(), ..RowView::default() },
             FoeEntry::Group { name, plates, .. } => RowView { id: plates.iter().map(|p| p.unit.to_string()).collect::<Vec<_>>().join(","), label: name.clone(), detail: plates.iter().map(hp_text).collect::<Vec<_>>().join(" "), ..RowView::default() },
         })
         .collect();
@@ -509,7 +953,7 @@ mod tests {
         let top = TopBar { ap_now: 10, ap_picked: 6, ap_ghost: 2, ap_cap: 12, ..TopBar::default() };
         assert_eq!((top.ap_text(), top.ghost_text()), ("AP 10/12 -6".to_string(), "(-2)".to_string()));
         assert_eq!(ApBar { start: 10, planned: 6, cap: 12 }.left(), 4);
-        let mut c = CardView { foe: 1, name: String::new(), title: String::new(), boss: false, hero: None, read: FoeCard { ko_block: Some(5), break_block: Some(4), ..FoeCard::default() }, rows: Vec::new() };
+        let mut c = CardView { foe: 1, name: String::new(), title: String::new(), boss: false, hero: None, read: FoeCard { ko_block: Some(5), break_block: Some(4), ..FoeCard::default() }, rows: Vec::new(), morale: None, leader: false };
         assert_eq!((c.ko_text(), c.break_text()), ("KO in block 5".to_string(), "BREAK in block 4".to_string()));
         c.read.crit_star = Some(3);
         assert_eq!(c.ko_text(), "KO in block 5 (star 3)");

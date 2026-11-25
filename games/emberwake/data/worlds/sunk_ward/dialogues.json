@@ -155,7 +155,7 @@
 				{
 					"id": "n0",
 					"speaker": "dunstan",
-					"text": "My father's bones went down that chute. I will smash it before I die.",
+					"text": "Dunstan grinds his wired jaw and hammers the slag-ladle against the chute rail, twice, hard.",
 					"end": true
 				}
 			],
@@ -736,6 +736,16 @@
 					"text": "A hunchbacked figure mutters over a bench of calcified shards, forging a seal onto a strip of bone. \"Mind the dust. It bites.\"",
 					"choices": [
 						{
+							"text": "What do you sell?",
+							"to": "no_trade",
+							"unless": [
+								{
+									"key": "sunk_ward.skerrit_open",
+									"value": true
+								}
+							]
+						},
+						{
 							"text": "What do you make?",
 							"to": "make"
 						},
@@ -756,6 +766,11 @@
 							]
 						}
 					]
+				},
+				{
+					"id": "no_trade",
+					"text": "\"Sell? I make, and not for strangers. Somebody I trust vouches for you first.\"",
+					"next": "n0"
 				},
 				{
 					"id": "make",
@@ -1475,6 +1490,10 @@
 					"text": "A lodging-keeper counts coins into a tin without looking at them. \"Beds by the night, none by the week. Nobody who sleeps here is here in the morning.\"",
 					"choices": [
 						{
+							"text": "What do you sell?",
+							"to": "no_trade"
+						},
+						{
 							"text": "Ask for more.",
 							"to": "more"
 						},
@@ -1483,6 +1502,11 @@
 							"to": ""
 						}
 					]
+				},
+				{
+					"id": "no_trade",
+					"text": "\"Beds, not wares. And the beds are full, for faces like yours.\"",
+					"next": "n0"
 				},
 				{
 					"id": "more",
@@ -1549,6 +1573,10 @@
 					"text": "The pawnbroker weighs a tin spoon on a brass scale. \"Spoons, shoes, a good tooth. Nothing from the cages; that's the Proctor's trade, not mine.\"",
 					"choices": [
 						{
+							"text": "What do you sell?",
+							"to": "no_trade"
+						},
+						{
 							"text": "Ask for more.",
 							"to": "more"
 						},
@@ -1557,6 +1585,11 @@
 							"to": ""
 						}
 					]
+				},
+				{
+					"id": "no_trade",
+					"text": "\"I lend, I don't sell. Every spoon on that shelf has an owner still coming back for it.\"",
+					"next": "n0"
 				},
 				{
 					"id": "more",
@@ -2244,6 +2277,29 @@
 			"tags": [
 				"talk",
 				"bunk"
+			]
+		},
+		{
+			"id": "dlg_bunk_tpl_temper_grim",
+			"name": "Bunks: seen worse",
+			"speaker": "",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "{b} is sitting on the edge of the bunk, rubbing tallow into a chipped edge without looking up.",
+					"next": "n1"
+				},
+				{
+					"id": "n1",
+					"text": "{a} asks if the noise down the sluice got to them. {b} shrugs: they have walked out of worse rooms than this.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk",
+				"provisional"
 			]
 		}
 	]

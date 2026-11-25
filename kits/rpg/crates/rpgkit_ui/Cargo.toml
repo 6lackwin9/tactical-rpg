@@ -11,6 +11,10 @@ aegis_ui = { path = "../../../../engine/crates/aegis_ui" }
 aegis_core = { path = "../../../../engine/crates/aegis_core" }
 aegis_layout = { path = "../../../../engine/crates/aegis_layout" }
 rpgkit_world = { path = "../rpgkit_world" }
+rpgkit_battle = { path = "../rpgkit_battle" }
+rpgkit_content = { path = "../rpgkit_content" }
+rpgkit_data = { path = "../rpgkit_data" }
+indexmap = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]

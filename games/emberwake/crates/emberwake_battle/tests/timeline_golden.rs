@@ -76,6 +76,9 @@ fn label(id: &str, seed: i64) -> String {
 
 /// Every fight of the golden, in order: (label, record).
 fn golden_fights(raw: &Value) -> Vec<(String, Value)> {
+    // ESCAPE-PLAN1 (`PR7-60`): the golden predates the row's moves (walking through friends, a hero's Withdraw within its
+    // AP); they stay off here until the user approves the re-record (`FB-403`)
+    emberwake_battle::plan::set_escape_plan1(false);
     let cat = Arc::new(Catalog::from_value(raw));
     let ruleset = Ruleset::of(&cat, TIMELINE).expect("the frozen catalog's timeline row");
     let rows = json::aget(json::dict(raw), "encounters");

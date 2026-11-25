@@ -1,0 +1,44 @@
+{
+  "screen": "character",
+  "fields": {
+    "title": {
+      "text": "Character"
+    },
+    "member": {
+      "text": "Bryn Hale  Lv 5  +8"
+    },
+    "tabs": {
+      "tabs": {
+        "labels": [
+          "Stats",
+          "Level up (8)",
+          "Skills",
+          "Gear"
+        ],
+        "open": 0
+      }
+    }
+  },
+  "actions": [
+    {
+      "id": "member_prev",
+      "label": "Previous member",
+      "enabled": false
+    },
+    {
+      "id": "member_next",
+      "label": "Next member",
+      "enabled": false
+    },
+    {
+      "id": "tab",
+      "label": "Tab",
+      "enabled": true
+    },
+    {
+      "id": "close",
+      "label": "Close",
+      "enabled": true
+    }
+  ]
+}

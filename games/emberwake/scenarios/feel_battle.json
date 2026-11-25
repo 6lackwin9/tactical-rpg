@@ -1,0 +1,143 @@
+{
+  "id": "feel_battle",
+  "title": "ENGINE-46 (FEEL-FIX1): input and frame budgets in The Crossroads Cages from saves/cages_start: the planning picks and menus, then a round resolving; the strip block pick within 50 ms (ENGINE-47)",
+  "launch": {
+    "save": "cages_start"
+  },
+  "timeout_s": 300,
+  "steps": [
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "main_menu"
+      }
+    },
+    {
+      "step": "click",
+      "id": "menu.continue"
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "region_map"
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "step": "repeat",
+      "times": 4,
+      "until": {
+        "path": "screen",
+        "eq": "battle"
+      },
+      "steps": [
+        {
+          "step": "click",
+          "id": "here.cages"
+        },
+        {
+          "step": "pause",
+          "ms": 1500
+        }
+      ]
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "screen",
+        "eq": "battle"
+      },
+      "timeout_ms": 40000
+    },
+    {
+      "step": "wait",
+      "until": {
+        "path": "state.beat",
+        "absent": true
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "step": "click",
+      "id": "dialogue.continue"
+    },
+    {
+      "step": "pause",
+      "ms": 800
+    },
+    {
+      "step": "feel",
+      "name": "battle_plan",
+      "gap": 3,
+      "script": [
+        {
+          "click": "party.0"
+        },
+        {
+          "key": "tab"
+        },
+        {
+          "key": "esc"
+        },
+        {
+          "click": "party.1"
+        },
+        {
+          "key": "tab"
+        },
+        {
+          "key": "esc"
+        },
+        {
+          "click": "party.0"
+        },
+        {
+          "click": "hero.self"
+        },
+        {
+          "key": "esc"
+        }
+      ],
+      "budget": {
+        "input_ms": 100,
+        "frame_ms": 33
+      }
+    },
+    {
+      "step": "feel",
+      "name": "battle_block",
+      "gap": 3,
+      "script": [
+        {
+          "click": "strip.block1"
+        },
+        {
+          "key": "esc"
+        }
+      ],
+      "budget": {
+        "input_ms": 35,
+        "frame_ms": 33
+      }
+    },
+    {
+      "step": "feel",
+      "name": "battle_resolve",
+      "gap": 3,
+      "script": [
+        {
+          "click": "strip.confirm"
+        },
+        {
+          "frames": 120
+        }
+      ],
+      "budget": {
+        "input_ms": 100,
+        "frame_ms": 33
+      }
+    }
+  ]
+}

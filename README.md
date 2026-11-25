@@ -11,6 +11,7 @@ build it replaced is frozen in `legacy/` as an archive (no build or test reads i
 | :--- | :--- |
 | `engine/` | The Aegis engine: Rust workspace (rules, battle, world, data loader and writer, command API, CLI, GUI), engine docs. Start at [engine/README.md](engine/README.md). |
 | `games/hello/` | The engine's sample game (ENGINE-1): a menu, a walking sprite, a save and sounds on the engine crates only |
+| `games/kit_sample/` | The RPG kit's sample game (ENGINE-42): a 2v2 battle on the kit's battle stage from its own catalog, on the kit and engine crates only (guide `engine/docs/authoring/kit_game.md`) |
 | `games/emberwake/data/` | The game content: catalog (classes, units, skills, items, item families, passives, encounters, terrain), worlds, region maps, quests, dialogue services, XP curve, asset manifest. Edited only through `aegis content` (below). |
 | `games/emberwake/assets/` | The game's asset layer: bodies, portraits, icons, tiles, backgrounds, UI files and audio (ASSETORG2; the engine reads them over the game, kit and engine layers; `games/emberwake/assets/README.md`). |
 | `docs/` | Game design: brief, roadmap, decisions, specs, audits, balance reports, preferences, workflow. |

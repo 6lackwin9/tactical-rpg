@@ -1,0 +1,65 @@
+{
+	"kind": "skills",
+	"version": 2,
+	"entries": [
+		{
+			"id": "strike",
+			"name": "Strike",
+			"kind": "ATTACK",
+			"level": 1,
+			"blocks": 1,
+			"description": "",
+			"basic": true
+		},
+		{
+			"id": "guard",
+			"name": "Guard",
+			"kind": "DEFEND",
+			"level": 1,
+			"blocks": 1,
+			"description": "",
+			"basic": true,
+			"mitigation": 0.3
+		},
+		{
+			"id": "move",
+			"name": "Move",
+			"kind": "MOVE",
+			"level": 1,
+			"blocks": 1,
+			"description": "",
+			"system": true,
+			"basic": true
+		},
+		{
+			"id": "rest",
+			"name": "Rest",
+			"kind": "REST",
+			"level": 1,
+			"blocks": 1,
+			"description": "",
+			"system": true,
+			"basic": true
+		},
+		{
+			"id": "switch_target",
+			"name": "Switch Target",
+			"kind": "TARGET",
+			"level": 1,
+			"blocks": 1,
+			"description": "",
+			"system": true,
+			"basic": true
+		},
+		{
+			"id": "offhand_jab",
+			"name": "Off-hand Jab",
+			"kind": "ATTACK",
+			"level": 1,
+			"blocks": 1,
+			"description": "",
+			"system": true,
+			"power_mult": 0.4
+		}
+	]
+}

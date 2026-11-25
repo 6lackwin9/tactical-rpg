@@ -1,0 +1,16 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "routes",
+      "world": "sunk_ward",
+      "fields": [
+        "from"
+      ],
+      "entry": {
+        "id": "high_gorge",
+        "from": "sluice_undercroft"
+      }
+    }
+  ]
+}

@@ -25,14 +25,15 @@ use std::path::Path;
 use std::rc::Rc;
 
 /// Art px per cell: a ground art px is then 1 logical px, always a whole number of physical px at a whole window scale,
-/// and never finer than the units on it. The cap's limit is 32 (the sprites' own density).
+/// and never finer than the units on it. The cap's limit is `CELL_MAX`.
 pub const CELL_PX: i32 = 16;
 /// A texture covers this many cells each way, so it is 64 x 64 square and 64 x 48 tilted.
 pub const TEX_CELLS: i32 = 4;
 /// The tilted form's art px per cell.
 pub const TILTED_CELL: (i32, i32) = (16, 12);
-/// The most art px per cell `compose` takes (the sprites' own density): past it a job composes nothing.
-pub const CELL_MAX: i32 = 32;
+/// The most art px per cell `compose` takes: past it a job composes nothing. 64 since DIORAMA5 R1 (PR7-77): a tilted
+/// battle board composes at its stage art's own density (64 x 48 a cell, two art px a logical px).
+pub const CELL_MAX: i32 = 64;
 /// The most art px a job composes (64 MB of RGBA; the largest shipped map is 368,640): past it a job composes nothing.
 pub const ART_PX_MAX: i64 = 16_000_000;
 /// The most layers a job holds (a rank is a byte): past it a job composes nothing.
@@ -278,21 +279,107 @@ fn add_noise(out: &mut [f32], w: i32, h: i32, seed: u64, ch: u64, step: (i32, i3
         }
     }
     let (wx, wy) = (catmull_rom(sx), catmull_rom(sy));
-    let mut col = vec![0.0f32; nx];
-    for ay in 0..h {
+    // ENGINE-52 (COMPOSE-PAR1): a row reads the lattice and writes only itself, so the rows run in bands (`by_rows`)
+    let mut none: Vec<u8> = vec![0; h.max(0) as usize];
+    by_rows(h.max(0) as usize, &mut out[..(w.max(0) * h.max(0)) as usize], w.max(0) as usize, &mut none, 1, |ay, row, _| {
+        let ay = ay as i32;
         let base = (ay / sy) as usize * nx;
         let k = wy[(ay % sy) as usize];
-        for (c, v) in col.iter_mut().enumerate() {
-            *v = k[0] * lat[base + c] + k[1] * lat[base + nx + c] + k[2] * lat[base + 2 * nx + c] + k[3] * lat[base + 3 * nx + c];
-        }
-        let row = &mut out[(ay * w) as usize..((ay + 1) * w) as usize];
+        let col: Vec<f32> = (0..nx).map(|c| k[0] * lat[base + c] + k[1] * lat[base + nx + c] + k[2] * lat[base + 2 * nx + c] + k[3] * lat[base + 3 * nx + c]).collect();
         for (ax, o) in row.iter_mut().enumerate() {
             let lx = ax / sx as usize;
             let t = wx[ax % sx as usize];
             let v = t[0] * col[lx] + t[1] * col[lx + 1] + t[2] * col[lx + 2] + t[3] * col[lx + 3];
             *o += weight * v.clamp(0.0, 1.0);
         }
+    });
+}
+
+/// One `add_noise` pass: its channel, lattice step and weight.
+type Pass = (u64, (i32, i32), f32);
+
+/// ENGINE-51 (SWITCH-FEEL1): the `w` x `h` noise fields of `specs`, each its `add_noise` passes in order over zeros (no
+/// passes: an empty field); ENGINE-52: one after another, each pass's rows in bands on threads (`add_noise`).
+fn noise_fields<const N: usize>(w: i32, h: i32, seed: u64, specs: [Vec<Pass>; N]) -> [Vec<f32>; N] {
+    let make = move |passes: &[Pass]| {
+        if passes.is_empty() {
+            return Vec::new();
+        }
+        let mut f = vec![0.0f32; w.max(0) as usize * h.max(0) as usize];
+        for (ch, step, weight) in passes {
+            add_noise(&mut f, w, h, seed, *ch, *step, *weight);
+        }
+        f
+    };
+    specs.map(|s| make(&s))
+}
+
+/// ENGINE-52 (COMPOSE-PAR1): the threads `by_rows` uses at most.
+pub const COMPOSE_THREADS: usize = 4;
+
+thread_local! {
+    /// ENGINE-52: this thread's cap on `compose_threads` (tests compare one thread with many).
+    static THREAD_CAP: Cell<usize> = const { Cell::new(COMPOSE_THREADS) };
+}
+
+/// ENGINE-52: runs `f` with the composer on at most `n` threads (1: one pass on this thread), then restores the cap.
+pub fn with_compose_threads<R>(n: usize, f: impl FnOnce() -> R) -> R {
+    let was = THREAD_CAP.with(|c| c.replace(n.max(1)));
+    let r = f();
+    THREAD_CAP.with(|c| c.set(was));
+    r
+}
+
+/// The threads the composer uses for `work` items: up to the machine's and this thread's cap, one on the web, one for
+/// a small job (`PAR_MIN_PX` pixels a thread at least, where spawning costs more than it saves).
+fn compose_threads(work: usize) -> usize {
+    if cfg!(target_arch = "wasm32") {
+        return 1;
     }
+    let cap = THREAD_CAP.with(|c| c.get()).min(std::thread::available_parallelism().map_or(1, |n| n.get()));
+    cap.min(work / PAR_MIN_PX).max(1)
+}
+
+/// Pixels a composer thread takes at least.
+const PAR_MIN_PX: usize = 16 * 1024;
+
+/// ENGINE-52 (COMPOSE-PAR1): `f(y, a_row, b_row)` for each of `rows` rows, `a` cut in rows of `a_stride` and `b` of
+/// `b_stride`, in bands of whole rows on `compose_threads` threads; each row is written by one call only, so the result
+/// is the one pass's.
+fn by_rows<A: Send, B: Send>(rows: usize, a: &mut [A], a_stride: usize, b: &mut [B], b_stride: usize, f: impl Fn(usize, &mut [A], &mut [B]) + Sync) {
+    let band_rows = |n: usize| rows.div_ceil(n.max(1)).max(1);
+    let run = |y0: usize, a: &mut [A], b: &mut [B]| {
+        for (k, (ar, br)) in a.chunks_mut(a_stride.max(1)).zip(b.chunks_mut(b_stride.max(1))).enumerate() {
+            f(y0 + k, ar, br);
+        }
+    };
+    let n = compose_threads(rows * a_stride.max(b_stride));
+    if n <= 1 || rows < 2 || a_stride == 0 || b_stride == 0 {
+        run(0, a, b);
+        return;
+    }
+    let band = band_rows(n);
+    std::thread::scope(|s| {
+        for (k, (ab, bb)) in a.chunks_mut(band * a_stride).zip(b.chunks_mut(band * b_stride)).enumerate() {
+            let run = &run;
+            s.spawn(move || run(k * band, ab, bb));
+        }
+    });
+}
+
+/// ENGINE-53 (SWITCH-AHEAD1): `f(0..n)` in order, the items side by side on up to `compose_threads` threads (each item
+/// about `px` pixels of work); each item's value is the one call's.
+fn par_map<T: Send>(n: usize, px: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    let threads = compose_threads(px.saturating_mul(n)).min(n);
+    if threads <= 1 {
+        return (0..n).map(f).collect();
+    }
+    let per = n.div_ceil(threads);
+    let f = &f;
+    std::thread::scope(|s| {
+        let parts: Vec<_> = (0..threads).map(|k| s.spawn(move || (k * per..((k + 1) * per).min(n)).map(f).collect::<Vec<T>>())).collect();
+        parts.into_iter().flat_map(|p| p.join().expect("a composer thread")).collect()
+    })
 }
 
 /// One centred box pass of width `2 r + 1` over `src`, a running sum in integers; only `r..len - r` is written.
@@ -532,7 +619,8 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
     let ranks = by_rank.len();
     let at = |rank: u8, x: i32, y: i32| cell_rank[(y * job.cols + x) as usize] >= rank;
 
-    let fields: Vec<Option<Field>> = (0..ranks).map(|k| if k == 0 { None } else { Field::blur(|x, y| at(k as u8, x, y), job.cols, job.rows, cell, w, h) }).collect();
+    // ENGINE-53 (SWITCH-AHEAD1): one rank's field a thread (`par_map`)
+    let fields: Vec<Option<Field>> = par_map(ranks, (w * h).max(0) as usize, |k| if k == 0 { None } else { Field::blur(|x, y| at(k as u8, x, y), job.cols, job.rows, cell, w, h) });
     let paints: Vec<Paint> = by_rank.iter().map(|i| Paint::new(&job.layers[*i], *i, seed, w, h)).collect();
     let wears: Vec<f32> = by_rank.iter().map(|i| job.layers[*i].wear).collect();
     let strays: Vec<bool> = by_rank.iter().map(|i| job.layers[*i].strays).collect();
@@ -542,26 +630,15 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
     let any_strays = fields.iter().zip(&strays).any(|(f, s)| f.is_some() && *s);
     let any_tone = by_rank.iter().any(|i| job.layers[*i].tone != 0.0);
     let field = || vec![0.0f32; uw * uh];
-    let mut edge = Vec::new();
-    let mut bite = Vec::new();
-    if any_upper {
-        edge = field();
-        add_noise(&mut edge, w, h, seed, 1, steps(10, cell), 0.6);
-        add_noise(&mut edge, w, h, seed, 2, steps(4, cell), 0.4);
-        bite = field();
-        add_noise(&mut bite, w, h, seed, 4, steps(3, cell), 1.0);
-    }
-    let mut stray_noise = Vec::new();
-    if any_strays {
-        stray_noise = field();
-        add_noise(&mut stray_noise, w, h, seed, 3, steps(3, cell), 1.0);
-    }
-    let mut tone = Vec::new();
-    if any_tone {
-        tone = field();
-        add_noise(&mut tone, w, h, seed, 7, steps(48, cell), 0.7);
-        add_noise(&mut tone, w, h, seed, 8, steps(20, cell), 0.3);
-    }
+    // ENGINE-51 (SWITCH-FEEL1): the four fields made side by side (`noise_fields`)
+    let pick = |on: bool, passes: Vec<Pass>| if on { passes } else { Vec::new() };
+    let specs = [
+        pick(any_upper, vec![(1, steps(10, cell), 0.6), (2, steps(4, cell), 0.4)]),
+        pick(any_upper, vec![(4, steps(3, cell), 1.0)]),
+        pick(any_strays, vec![(3, steps(3, cell), 1.0)]),
+        pick(any_tone, vec![(7, steps(48, cell), 0.7), (8, steps(20, cell), 0.3)]),
+    ];
+    let [edge, bite, stray_noise, tone] = noise_fields(w, h, seed, specs);
 
     // A rank's mask holds every rank above it (a lower ground runs under the upper ones), so where two grounds meet a
     // middle one's mask reads the same though none of its cells is near. Its worn band, strays and bites read its own
@@ -630,9 +707,11 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
         }
     }
 
+    // ENGINE-52 (COMPOSE-PAR1): each pixel reads the shared fields and writes only its own, so the rows run in bands
+    // on threads (`by_rows`); the same pixels as one pass
     let mut px = vec![0u8; uw * uh * 4];
     let mut top = vec![0u8; uw * uh];
-    for ay in 0..h {
+    let pixel_row = |ay: i32, px: &mut [u8], top: &mut [u8]| {
         let row = ay as usize * uw;
         let cy = (ay / ch) as usize;
         for ax in 0..w {
@@ -669,7 +748,7 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
                     (g, vg) = (own_rank, 1.0);
                 }
             }
-            top[i] = g as u8;
+            top[ax as usize] = g as u8;
             let (ux, uy) = (ax as usize, ay as usize);
             let mut c = times(paints[g].at(ux, uy, t), 1.0 - wear);
             if stray.is_none() {
@@ -708,9 +787,10 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
                     c = times(uc, 0.95);
                 }
             }
-            put(&mut px, i, c);
+            put(px, ax as usize, c);
         }
-    }
+    };
+    by_rows(uh, &mut px, uw * 4, &mut top, uw, |ay, px, top| pixel_row(ay as i32, px, top));
 
     // The sunken rims & stone land-water rims: when `stone_rim` is on, water edges bordering unblocked non-sunken
     // land take a pale stone lip on the water side and a subtle dark line on the land side; legacy `sunken` layers
@@ -719,7 +799,9 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
     let stone_rim: Vec<bool> = by_rank.iter().map(|i| job.layers[*i].stone_rim).collect();
     if sunken.iter().zip(&stone_rim).any(|(s, r)| *s && !*r) {
         let other = |ax: i32, ay: i32, g: u8| ax >= 0 && ay >= 0 && ax < w && ay < h && top[(ay * w + ax) as usize] != g;
-        for ay in 0..h {
+        // ENGINE-53: a row reads `top` and writes only itself (`by_rows`)
+        by_rows(uh, &mut px, uw * 4, &mut vec![(); uh], 1, |ay, row, _| {
+            let ay = ay as i32;
             for ax in 0..w {
                 let i = (ay * w + ax) as usize;
                 let g = top[i];
@@ -734,9 +816,9 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
                     continue;
                 };
                 let t = if any_tone { tone[i] - 0.5 } else { 0.0 };
-                put(&mut px, i, times(paints[g as usize].at(ax as usize, ay as usize, t), k));
+                put(row, ax as usize, times(paints[g as usize].at(ax as usize, ay as usize, t), k));
             }
-        }
+        });
     }
     if stone_rim.iter().any(|r| *r) {
         let lx = (cw / 8).max(2).min(cw);
@@ -794,7 +876,9 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
             let n = top[(ay * w + ax) as usize];
             n < g && !sunken[n as usize] && (contact[g as usize] || contact[n as usize])
         };
-        for ay in 0..h {
+        // ENGINE-53: a row reads `top` and writes only itself (`by_rows`)
+        by_rows(uh, &mut px, uw * 4, &mut vec![(); uh], 1, |ay, row, _| {
+            let ay = ay as i32;
             for ax in 0..w {
                 let i = (ay * w + ax) as usize;
                 let g = top[i];
@@ -802,10 +886,10 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
                     continue;
                 }
                 if lower(g, ax - 1, ay) || lower(g, ax + 1, ay) || lower(g, ax, ay - 1) || lower(g, ax, ay + 1) {
-                    dim(&mut px, i, CONTACT_DIM);
+                    dim(row, ax as usize, CONTACT_DIM);
                 }
             }
-        }
+        });
     }
     Base { w, h, px, top, by_rank, cell_rank }
 }
@@ -829,20 +913,19 @@ fn patch_noise(job: &GroundJob, w: i32, h: i32) -> Vec<f32> {
 
 /// `o_g` of each rank `wanted` says: the blurred mask of cells that are not that ground or are blocked. None also means no
 /// such cell, so 0 everywhere.
-fn other_fields(job: &GroundJob, b: &Base, wanted: impl Fn(usize) -> bool) -> Vec<Option<Field>> {
+fn other_fields(job: &GroundJob, b: &Base, wanted: impl Fn(usize) -> bool + Sync) -> Vec<Option<Field>> {
     let (w, h, cols) = (b.w, b.h, job.cols);
-    (0..b.by_rank.len())
-        .map(|g| {
-            if !wanted(g) {
-                return None;
-            }
-            let other = |x: i32, y: i32| {
-                let i = (y * cols + x) as usize;
-                b.cell_rank[i] as usize != g || job.blocked[i]
-            };
-            Field::blur(other, cols, job.rows, job.cell, w, h)
-        })
-        .collect()
+    // ENGINE-53: one rank's field a thread (`par_map`)
+    par_map(b.by_rank.len(), (w * h).max(0) as usize, |g| {
+        if !wanted(g) {
+            return None;
+        }
+        let other = |x: i32, y: i32| {
+            let i = (y * cols + x) as usize;
+            b.cell_rank[i] as usize != g || job.blocked[i]
+        };
+        Field::blur(other, cols, job.rows, job.cell, w, h)
+    })
 }
 
 #[inline]
@@ -1125,6 +1208,12 @@ thread_local! {
     static ART: RefCell<Vec<(GroundKey, Rc<Image>)>> = const { RefCell::new(Vec::new()) };
     static COPY: RefCell<Option<Physical>> = const { RefCell::new(None) };
     static COMPOSES: Cell<u64> = const { Cell::new(0) };
+    /// ENGINE-54 (WARM-SPREAD1): a warm draw is under way (`set_deferring`): a ground not cached is composed on a thread
+    /// (`compose_later`) or left, never on the frame; `LATER` counts what it left.
+    static DEFERRING: Cell<bool> = const { Cell::new(false) };
+    static LATER: Cell<u64> = const { Cell::new(0) };
+    /// ENGINE-54: grounds composing on a thread, by key, until done (`poll_later`) or drawn.
+    static COMPOSING: RefCell<Vec<(GroundKey, std::thread::JoinHandle<Image>)>> = const { RefCell::new(Vec::new()) };
     static EXPANDS: Cell<u64> = const { Cell::new(0) };
 }
 
@@ -1216,6 +1305,80 @@ fn blit_scaled(c: &mut Canvas, pr: Rect, art: &Image) {
     }
 }
 
+/// ENGINE-54 (WARM-SPREAD1): starts or ends a warm draw on this thread (the shell's slices). While it lasts `draw`
+/// composes nothing on the frame: a ground a caller can hand over (`compose_later`) composes on a thread, any other is
+/// left (counted); a ground composing is waited for only outside it.
+pub fn set_deferring(on: bool) {
+    DEFERRING.with(|d| d.set(on));
+    LATER.with(|n| n.set(0));
+}
+
+/// ENGINE-54: a warm draw is under way (a caller with an owned job hands it to `compose_later`).
+pub fn deferring() -> bool {
+    DEFERRING.with(|d| d.get())
+}
+
+/// ENGINE-54: the grounds the warm draw under way left for later (0: every ground it drew was ready).
+pub fn left_later() -> u64 {
+    LATER.with(|n| n.get())
+}
+
+/// ENGINE-54: composes `key`'s art image on a thread (`job`, owning what it reads), unless it is held or composing
+/// already; `poll_later` keeps it when done, and `draw` waits for it outside a warm draw. On the web (no threads) the
+/// ground is left for its draw.
+pub fn compose_later(key: GroundKey, job: impl FnOnce() -> Image + Send + 'static) {
+    LATER.with(|n| n.set(n.get() + 1));
+    if cfg!(target_arch = "wasm32") || held(&key) || COMPOSING.with(|c| c.borrow().iter().any(|e| e.0 == key)) {
+        return;
+    }
+    let bg_threads = std::thread::available_parallelism().map_or(1, |n| n.get().saturating_sub(1).max(1));
+    COMPOSING.with(|c| {
+        c.borrow_mut().push((key, std::thread::spawn(move || with_compose_threads(bg_threads, job))));
+    });
+}
+
+/// ENGINE-54: keeps the grounds done composing on threads (`keep`); cheap, each frame while `composing`.
+pub fn poll_later() {
+    let done: Vec<(GroundKey, std::thread::JoinHandle<Image>)> = COMPOSING.with(|c| {
+        let mut c = c.borrow_mut();
+        let (done, going): (Vec<_>, Vec<_>) = c.drain(..).partition(|e| e.1.is_finished());
+        *c = going;
+        done
+    });
+    for (key, job) in done {
+        if let Ok(img) = job.join() {
+            keep(key, img);
+        }
+    }
+}
+
+/// ENGINE-54: grounds are composing on threads.
+pub fn composing() -> bool {
+    COMPOSING.with(|c| !c.borrow().is_empty())
+}
+
+/// ENGINE-53 (SWITCH-AHEAD1): puts an art image composed ahead (on a thread, while another screen shows) in this
+/// thread's cache under `key`, as `draw` keeps one it composed on a miss; a key already held is left as it is. So the
+/// screen that draws it next finds it and composes nothing. A stale image (its job changed since) is never drawn: its key
+/// no longer matches, and it is dropped among the oldest.
+pub fn keep(key: GroundKey, img: Image) {
+    ART.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if cache.iter().any(|e| e.0 == key) {
+            return;
+        }
+        cache.push((key, Rc::new(img)));
+        if cache.len() > ART_MAX {
+            cache.remove(0);
+        }
+    });
+}
+
+/// ENGINE-53: whether this thread's cache holds `key`'s art image (`draw` would compose nothing).
+pub fn held(key: &GroundKey) -> bool {
+    ART.with(|cache| cache.borrow().iter().any(|e| &e.0 == key))
+}
+
 /// The ground on `r`: the art image of `key` from the cache (`job` composes it on a miss), its physical copy from the
 /// cache (made on a miss, the old one freed first), the copy's rows blitted inside the clip. So a frame, a step or a
 /// pan costs a copy of what shows; a resize one new copy; another map one compose unless it is among the last 4. A
@@ -1241,8 +1404,23 @@ pub fn draw(p: &mut Painter, key: GroundKey, r: Rect, job: impl FnOnce() -> Imag
         cache.push(entry);
         Some(img)
     });
+    // ENGINE-54: a ground composing on a thread: a warm draw leaves it, any other waits for what is left of it
+    let held = held.or_else(|| {
+        let job = COMPOSING.with(|c| {
+            let mut c = c.borrow_mut();
+            let at = c.iter().position(|e| e.0 == key)?;
+            (!deferring() || c[at].1.is_finished()).then(|| c.remove(at).1)
+        })?;
+        let img = job.join().ok()?;
+        keep(key.clone(), img);
+        ART.with(|cache| cache.borrow().iter().find(|e| e.0 == key).map(|e| e.1.clone()))
+    });
     let art = match held {
         Some(img) => img,
+        None if deferring() => {
+            LATER.with(|n| n.set(n.get() + 1));
+            return;
+        }
         None => {
             COMPOSES.with(|n| n.set(n.get() + 1));
             let img = Rc::new(job());

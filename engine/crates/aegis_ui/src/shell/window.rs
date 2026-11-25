@@ -139,6 +139,39 @@ impl<G: Context> App<G> {
     }
 }
 
+impl<G: Context> HasShell<G> for App<G> {
+    fn shell_mut(&mut self) -> Option<&mut Shell<G>> {
+        self.shell.as_mut()
+    }
+}
+
+impl<G: Context> App<G> {
+    /// ENGINE-64 (LIVE-RELOAD1): reloads what changed (`Shell::live_poll`); returns when the loop must wake next (None:
+    /// live reload is off).
+    fn poll_live(&mut self) -> Option<Instant> {
+        let s = self.shell.as_mut()?;
+        s.live.as_ref()?;
+        if s.live_poll() {
+            self.pacer.touch(Instant::now());
+        }
+        Some(Instant::now() + crate::live::POLL)
+    }
+
+    /// INPUT-MAP1: reads a connected pad; returns when the loop must wake for it next (None: no pad).
+    #[cfg(windows)]
+    fn poll_pad(&mut self) -> Option<Instant> {
+        let (Some(g), Some(s)) = (self.gamepad.as_mut(), self.shell.as_mut()) else { return None };
+        let at = s.feel_now();
+        if g.poll(s) {
+            // ENGINE-45: a pad event counts from the poll that read it
+            s.feel.input("pad", at);
+            s.feel_state();
+            self.pacer.touch(Instant::now());
+        }
+        g.connected().then(|| g.due().unwrap_or_else(Instant::now).min(Instant::now() + Duration::from_millis(16)))
+    }
+}
+
 impl<G: Context> ApplicationHandler<Wake> for App<G> {
     fn resumed(&mut self, el: &ActiveEventLoop) {
         if self.window.is_some() {
@@ -236,19 +269,18 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
     /// FPSCAP1: asked after every wake. A flood of events only asks again: the cap's deadline counts from the last frame.
     /// Unlimited draws as fast as presenting allows (vsync waits for the screen); the redraw itself wakes the loop.
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-        // INPUT-MAP1: a connected pad is read here; the loop wakes for it at least every 16 ms (gilrs does not wake it)
+        // INPUT-MAP1: a connected pad is read here; the loop wakes for it at least every 16 ms (gilrs does not wake it).
+        // ENGINE-63 (PAD-TUNE1): inside the frame's catch, as the window's events are
         #[cfg(windows)]
-        let pad_wake = match (self.gamepad.as_mut(), self.shell.as_mut()) {
-            (Some(g), Some(s)) => {
-                if g.poll(s) {
-                    self.pacer.touch(Instant::now());
-                }
-                g.connected().then(|| g.due().unwrap_or_else(Instant::now).min(Instant::now() + Duration::from_millis(16)))
-            }
-            _ => None,
-        };
+        let pad_wake = super::guard(self, |a| a.poll_pad());
         #[cfg(not(windows))]
         let pad_wake: Option<Instant> = None;
+        // ENGINE-64 (LIVE-RELOAD1): with live reload on, the loop wakes every half second to reload what changed
+        let live_wake = super::guard(self, |a| a.poll_live());
+        let pad_wake = match (pad_wake, live_wake) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
         match self.pacer.decide(Instant::now(), self.frame_every) {
             Pace::Redraw => {
                 el.set_control_flow(match pad_wake {
@@ -263,7 +295,36 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
         }
     }
 
+    /// ENGINE-45 (FEEL-PROBE1): a press, a click or a wheel turn is noted on arrival and once handled (`crate::feel`).
     fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, ev: WindowEvent) {
+        let kind = feel_kind(&ev);
+        if let (Some(k), Some(s)) = (kind.as_deref(), self.shell.as_mut()) {
+            s.feel_input(k);
+        }
+        // ENGINE-62 (CRASH-SAFE1): a panic in an event or a frame gets the rescue save and the report, then goes on
+        super::guard(self, |a| a.on_window_event(el, ev));
+        if let (Some(_), Some(s)) = (kind, self.shell.as_mut()) {
+            s.feel_state();
+        }
+    }
+}
+
+/// ENGINE-45: what the feel probe calls an input event (None: not one it times; a release or a move is not).
+fn feel_kind(ev: &WindowEvent) -> Option<String> {
+    match ev {
+        WindowEvent::KeyboardInput { event: KeyEvent { logical_key, state: ElementState::Pressed, repeat: false, .. }, .. } => Some(match logical_key {
+            WKey::Named(n) => format!("key {n:?}"),
+            WKey::Character(c) => format!("key {c}"),
+            _ => "key".to_string(),
+        }),
+        WindowEvent::MouseInput { state: ElementState::Pressed, button, .. } => Some(format!("mouse {button:?}")),
+        WindowEvent::MouseWheel { .. } => Some("wheel".to_string()),
+        _ => None,
+    }
+}
+
+impl<G: Context> App<G> {
+    fn on_window_event(&mut self, el: &ActiveEventLoop, ev: WindowEvent) {
         if !matches!(ev, WindowEvent::RedrawRequested) {
             self.pacer.touch(Instant::now());
         }
@@ -310,7 +371,7 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
                 self.alt = m.state().alt_key();
                 if let Some(s) = self.shell.as_mut() {
                     s.shift = self.shift;
-                    s.cx.held = Held { shift: self.shift, ctrl: self.ctrl, alt: self.alt, dir: s.cx.held.dir };
+                    s.cx.held = Held { shift: self.shift, ctrl: self.ctrl, alt: self.alt, ..s.cx.held };
                 }
             }
             WindowEvent::Focused(false) => {
