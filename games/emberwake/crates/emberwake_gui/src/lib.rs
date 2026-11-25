@@ -285,8 +285,8 @@ fn launch(args: &[(String, String)], roots: Roots, ruleset: Option<&str>, headle
 pub fn run_native() -> Result<()> {
     let raw: Vec<String> = std::env::args().skip(1).collect();
     let args: Vec<(String, String)> = raw.iter().filter_map(|a| a.split_once('=').map(|(k, v)| (k.to_string(), v.to_string()))).collect();
-    if let Some(map_id) = arg(&args, "render_map") {
-        return render_map_native(&args, map_id);
+    if let Some(req) = aegis_ui::map_fx::RenderMapRequest::from_args(&args)? {
+        return render_map_native(&args, &req);
     }
     let headless = Headless::from_args(&args)?;
     let ruleset = arena_ruleset(&args)?;
@@ -296,44 +296,32 @@ pub fn run_native() -> Result<()> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn render_map_native(args: &[(String, String)], map_id: &str) -> Result<()> {
-    let out = arg(args, "out").context("render_map requires out=<path.png>")?;
+fn render_map_native(args: &[(String, String)], req: &aegis_ui::map_fx::RenderMapRequest) -> Result<()> {
     let roots = native_roots()?;
-    let (mut cx, _stack, options) = launch(args, roots, None, None)?;
-    let view = match arg(args, "view").unwrap_or("square") {
-        "tilted" => mapview::View::Tilted,
-        _ => mapview::View::Square,
-    };
-    let fx_mode = match arg(args, "fx") {
-        None => region::StaticFx::Layered,
-        Some("none") | Some("off") => region::StaticFx::Disabled,
-        Some(p) => {
-            let fx = aegis_ui::map_fx::MapFx::load_file(Path::new(p)).with_context(|| format!("reading MapFx '{p}'"))?;
-            region::StaticFx::Override(fx)
-        }
-    };
-    let layers = match arg(args, "layers").unwrap_or("full") {
-        "shell" => region::StaticLayers::Shell,
-        "ground" => region::StaticLayers::Ground,
-        "unlit" => region::StaticLayers::Unlit,
-        "full" => region::StaticLayers::Full,
-        other => anyhow::bail!("render_map: unknown layers '{other}' (expected shell, ground, unlit, full)"),
-    };
-    let map_override = match arg(args, "map_override") {
-        None => None,
-        Some(p) => {
-            let text = std::fs::read_to_string(p).with_context(|| format!("reading map_override '{p}'"))?;
-            let val: serde_json::Value = serde_json::from_str(&text).with_context(|| format!("parsing map_override '{p}'"))?;
-            Some(val.as_object().cloned().context("map_override must be a JSON object")?)
-        }
-    };
-    let canvas = region::render_static_map(&mut cx, &options.font, map_id, view, fx_mode, layers, map_override.as_ref())?;
-    let out_path = Path::new(out);
-    if let Some(parent) = out_path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent)?;
+    let (cx, _stack, options) = launch(args, roots, None, None)?;
+    struct EmberwakeMapRenderer {
+        cx: Cx,
+        font: PathBuf,
     }
-    aegis_ui::shell::save_png(&canvas, out_path, canvas.w)?;
-    println!("rendered {map_id} ({}x{}) -> {}", canvas.w, canvas.h, out_path.display());
+    impl aegis_ui::map_fx::StaticMapRenderer for EmberwakeMapRenderer {
+        fn render_static_map(&mut self, req: &aegis_ui::map_fx::RenderMapRequest) -> Result<aegis_ui::canvas::Canvas> {
+            let view = match req.view.as_str() {
+                "tilted" => mapview::View::Tilted,
+                _ => mapview::View::Square,
+            };
+            let map_override = match &req.map_override {
+                None => None,
+                Some(p) => {
+                    let text = std::fs::read_to_string(p).with_context(|| format!("reading map_override '{}'", p.display()))?;
+                    let val: serde_json::Value = serde_json::from_str(&text).with_context(|| format!("parsing map_override '{}'", p.display()))?;
+                    Some(val.as_object().cloned().context("map_override must be a JSON object")?)
+                }
+            };
+            region::render_static_map(&mut self.cx, &self.font, &req.map_id, view, &req.fx, req.layers, map_override.as_ref())
+        }
+    }
+    let mut renderer = EmberwakeMapRenderer { cx, font: options.font };
+    aegis_ui::map_fx::write_capture(&mut renderer, req)?;
     Ok(())
 }
 

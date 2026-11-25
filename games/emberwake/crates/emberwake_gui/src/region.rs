@@ -230,7 +230,7 @@ pub struct RegionMap {
     /// ENGINE-54: the thread starting a fight ahead, and whether its warm draw follows.
     ahead_job: Option<(crate::battle::FightAheadJob, bool)>,
     /// Presentation-only per-map zone grading and light overrides (`map_fx/<map_id>.fx.json`), keyed by art generation.
-    map_fx_cache: Option<(String, u64, Option<aegis_ui::map_fx::MapFx>)>,
+    map_fx_cache: aegis_ui::map_fx::MapFxCache,
 }
 
 /// ENGINE-54 (WARM-SPREAD1): how long the party stands still (no walk, no step showing) before the nearest fight is
@@ -654,7 +654,7 @@ impl RegionMap {
             rehearsed: Vec::new(),
             ahead_walk: None,
             ahead_job: None,
-            map_fx_cache: None,
+            map_fx_cache: aegis_ui::map_fx::MapFxCache::new(),
         }
     }
 
@@ -1665,7 +1665,7 @@ impl Screen<GameCx> for RegionMap {
             ui.p.c.clip = kept_clip;
             ui.p.scroll_end(&mut self.floor);
             ui.p.v = map_view;
-            let map_fx = load_map_fx(cx, &s(t, "id"), &mut self.map_fx_cache);
+            let map_fx = self.map_fx_cache.get_cloned(&cx.art, &s(t, "id"));
             if let Some(fx) = map_fx.as_ref().filter(|f| !f.zones.is_empty()) {
                 apply_map_zone_grades(&mut ui, t, &geo, map_rect, (mw_i, mh_i), &is_wall, fx);
             }
@@ -3256,20 +3256,6 @@ fn into_wall_tone(c: &aegis_ui::canvas::Canvas, dest: Rect, img: &aegis_ui::canv
     out
 }
 
-/// Loads `map_fx/<map_id>.fx.json` across the asset layers, cached per `cx.art.generation()` so `LIVE-RELOAD1`
-/// automatically picks up edits on the next frame.
-fn load_map_fx(cx: &Cx, map_id: &str, cache: &mut Option<(String, u64, Option<aegis_ui::map_fx::MapFx>)>) -> Option<aegis_ui::map_fx::MapFx> {
-    let gen = cx.art.generation();
-    if let Some((cached_id, cached_gen, fx)) = cache.as_ref() {
-        if cached_id == map_id && *cached_gen == gen {
-            return fx.clone();
-        }
-    }
-    let loaded = aegis_ui::map_fx::MapFx::load_layered(cx.art.layers(), map_id);
-    *cache = Some((map_id.to_string(), gen, loaded.clone()));
-    loaded
-}
-
 /// Applies per-zone floor and wall presentation grading from `fx` across `map_rect`.
 fn apply_map_zone_grades(
     ui: &mut Ui<RAct>,
@@ -3280,36 +3266,6 @@ fn apply_map_zone_grades(
     is_wall: &impl Fn(i32, i32) -> bool,
     fx: &aegis_ui::map_fx::MapFx,
 ) {
-    if mw <= 0 || mh <= 0 || fx.zones.is_empty() {
-        return;
-    }
-    let n = (mw * mh) as usize;
-    let mut cell_grades = Vec::with_capacity(n);
-    let mut cell_is_wall = Vec::with_capacity(n);
-    for y in 0..mh {
-        for x in 0..mw {
-            let wall = is_wall(x, y);
-            cell_is_wall.push(wall);
-            let zone_id = if !wall {
-                explore::zone_at(t, x as i64, y as i64)
-            } else {
-                // South-facing wall cells belong visually to the room they face, then own zone, then neighbours.
-                let mut picked = String::new();
-                for (nx, ny) in [(x, y + 1), (x, y), (x, y - 1), (x - 1, y), (x + 1, y)] {
-                    if nx >= 0 && ny >= 0 && nx < mw && ny < mh && (!is_wall(nx, ny) || (nx == x && ny == y)) {
-                        let z = explore::zone_at(t, nx as i64, ny as i64);
-                        if !z.is_empty() {
-                            picked = z;
-                            break;
-                        }
-                    }
-                }
-                picked
-            };
-            let grade = fx.zones.get(&zone_id).filter(|g| !g.is_identity()).map(|g| g.for_cell(wall));
-            cell_grades.push(grade);
-        }
-    }
     let (cw, ch) = geo.cell_size();
     let grid = aegis_ui::map_fx::GradeGrid {
         ox: ui.p.v.x(geo.ox as f32) as f32,
@@ -3320,7 +3276,7 @@ fn apply_map_zone_grades(
         rows: mh,
     };
     let area = ui.p.v.rect(map_rect);
-    aegis_ui::map_fx::apply_zone_grades(ui.p.c, area, grid, &cell_grades, &cell_is_wall);
+    aegis_ui::map_fx::apply_zone_grades_with(ui.p.c, area, grid, fx, is_wall, |x, y| explore::zone_at(t, x as i64, y as i64));
 }
 
 /// REGIONVIEW2: opt-in evening ambience darkened over `map_area` and warmed cleanly by per-art light pools.
@@ -3336,21 +3292,8 @@ fn apply_dim_ambience(
     wall_face_tiles: i32,
     fx: Option<&aegis_ui::map_fx::MapFx>,
 ) {
-    let Some(area) = canvas_visible_rect(ui.p.c, Rect::new(0, 0, ui.p.c.w, ui.p.c.h)) else { return };
-    struct Light {
-        lx: f32,
-        ly: f32,
-        inv_rx2: f32,
-        inv_ry2: f32,
-        bx0: i32,
-        by0: i32,
-        bx1: i32,
-        by1: i32,
-        col: [f32; 3],
-        strength: f32,
-    }
     let (cw, ch) = geo.cell_size();
-    let mut lights = Vec::new();
+    let mut pools = Vec::new();
     for p in props {
         if p.roof.is_some() {
             continue;
@@ -3375,75 +3318,12 @@ fn apply_dim_ambience(
         let ly = ui.p.v.y((dr.y + dr.h) as f32 - 14.0 * ch as f32 / ART_TILE as f32) as f32;
         let rx = (rad * cw as f32 / ART_TILE as f32) * ui.p.v.s;
         let ry = (rad * ch as f32 / ART_TILE as f32) * ui.p.v.s;
-        if rx < 1.0 || ry < 1.0 {
-            continue;
-        }
-        let bx0 = (lx - rx).floor().max(area.x as f32) as i32;
-        let by0 = (ly - ry).floor().max(area.y as f32) as i32;
-        let bx1 = (lx + rx).ceil().min((area.x + area.w) as f32) as i32;
-        let by1 = (ly + ry).ceil().min((area.y + area.h) as f32) as i32;
-        if bx1 > bx0 && by1 > by0 {
-            lights.push(Light {
-                lx,
-                ly,
-                inv_rx2: 1.0 / (rx * rx),
-                inv_ry2: 1.0 / (ry * ry),
-                bx0,
-                by0,
-                bx1,
-                by1,
-                col: [col[0] as f32, col[1] as f32, col[2] as f32],
-                strength,
-            });
+        if rx >= 1.0 && ry >= 1.0 {
+            pools.push(aegis_ui::map_fx::LightPool { x: lx, y: ly, rx, ry, color: col, strength });
         }
     }
-    let dark_max = fx.and_then(|f| f.ambience_dark).unwrap_or(aegis_ui::map_fx::DEFAULT_DARK) * 255.0;
-    let amb = fx.and_then(|f| f.ambience_rgb).unwrap_or(aegis_ui::map_fx::DEFAULT_AMBIENCE_RGB);
-    let (ar, ag, ab) = (amb[0] as f32, amb[1] as f32, amb[2] as f32);
-    let w = ui.p.c.w;
-    for py in area.y..(area.y + area.h) {
-        let fy = py as f32 + 0.5;
-        let row = (py * w) as usize;
-        for px in area.x..(area.x + area.w) {
-            let fx_px = px as f32 + 0.5;
-            let mut min_dark = dark_max;
-            let (mut gr, mut gg, mut gb, mut gw) = (0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32);
-            for l in &lights {
-                if px < l.bx0 || px >= l.bx1 || py < l.by0 || py >= l.by1 {
-                    continue;
-                }
-                let dx = fx_px - l.lx;
-                let dy = fy - l.ly;
-                let d2 = dx * dx * l.inv_rx2 + dy * dy * l.inv_ry2;
-                if d2 < 1.0 {
-                    let d = d2.sqrt();
-                    min_dark = min_dark.min(dark_max * d.powf(1.6));
-                    let wt = (1.0 - d).powf(1.3) * l.strength;
-                    gr += l.col[0] * wt;
-                    gg += l.col[1] * wt;
-                    gb += l.col[2] * wt;
-                    gw += wt;
-                }
-            }
-            let i = (row + px as usize) * 4;
-            let da = min_dark / 255.0;
-            let inv = 1.0 - da;
-            let mut r = ui.p.c.px[i] as f32 * inv + ar * da;
-            let mut g = ui.p.c.px[i + 1] as f32 * inv + ag * da;
-            let mut b = ui.p.c.px[i + 2] as f32 * inv + ab * da;
-            if gw > 0.0 {
-                let cap = if fx.is_some() { 0.45 } else { 0.32 };
-                let ga = gw.min(cap);
-                let ig = 1.0 - ga;
-                r = r * ig + (gr / gw) * ga;
-                g = g * ig + (gg / gw) * ga;
-                b = b * ig + (gb / gw) * ga;
-            }
-            ui.p.c.px[i] = r.round().clamp(0.0, 255.0) as u8;
-            ui.p.c.px[i + 1] = g.round().clamp(0.0, 255.0) as u8;
-            ui.p.c.px[i + 2] = b.round().clamp(0.0, 255.0) as u8;
-        }
-    }
+    let full = Rect::new(0, 0, ui.p.c.w, ui.p.c.h);
+    aegis_ui::map_fx::apply_ambience_and_lights(ui.p.c, full, aegis_ui::map_fx::AmbienceConfig::from_fx(fx), &pools);
 }
 
 /// A prop, cut at the map's rect (REGIONVIEW1: only boundary art past the map). The clip is physical px under the
@@ -3947,31 +3827,6 @@ pub fn party_keys(c: &Controls) -> String {
     format!("{}: party   {}: journal   {}: stash", k('p'), k('j'), k('i'))
 }
 
-/// How `render_static_map` selects its `MapFx` sidecar.
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) enum StaticFx {
-    /// Load `map_fx/<map_id>.fx.json` across the layered asset roots if present.
-    Layered,
-    /// Disable `map_fx` (baseline render without per-map presentation grading).
-    Disabled,
-    /// Use an explicit `MapFx` (e.g., candidate generated by `aegis align-map`).
-    Override(aegis_ui::map_fx::MapFx),
-}
-
-/// Which render passes `render_static_map` includes (used for layer-wise alignment & validation).
-#[cfg(not(target_arch = "wasm32"))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum StaticLayers {
-    /// Base tiles, walls, borders, and depth shadows only (no composed ground overlay, no props, no lighting/FX).
-    Shell,
-    /// Composed ground overlay + walls, borders, and depth shadows (no props, no lighting/FX).
-    Ground,
-    /// Ground + walls + all props (no `MapFx` zone grading and no dim ambience/light pools).
-    Unlit,
-    /// Full composite: ground + walls + props + `MapFx` + dim ambience/light pools.
-    Full,
-}
-
 /// Deterministic headless full-map renderer for offline alignment and visual diffs (`emberwake render_map=<id>`).
 ///
 /// Renders the entire map at 32 px per tile (`q = 8`, `scale = 1.0`) using the live `RegionMap` pipeline (composed
@@ -3983,8 +3838,8 @@ pub(crate) fn render_static_map(
     font_path: &std::path::Path,
     map_id: &str,
     view: mapview::View,
-    fx_mode: StaticFx,
-    layers: StaticLayers,
+    fx_mode: &aegis_ui::map_fx::StaticFx,
+    layers: aegis_ui::map_fx::StaticLayers,
     map_override: Option<&Dict>,
 ) -> anyhow::Result<aegis_ui::canvas::Canvas> {
     let d = cx.data.clone();
@@ -4028,9 +3883,9 @@ pub(crate) fn render_static_map(
         fonts: aegis_ui::painter::Fonts::new(&font_bytes),
         kit: aegis_ui::ui::Kit::default(),
     };
-    let draw_ground_overlay = layers != StaticLayers::Shell;
-    let draw_props = matches!(layers, StaticLayers::Unlit | StaticLayers::Full);
-    let draw_lighting = layers == StaticLayers::Full;
+    let draw_ground_overlay = layers.includes_ground();
+    let draw_props = layers.includes_props();
+    let draw_lighting = layers.includes_lighting();
 
     let mut ground = MapGround::default();
     if draw_ground_overlay {
@@ -4144,6 +3999,10 @@ pub(crate) fn render_static_map(
                 draw_prop(&mut ui, cx, p, None, false, map_rect, q);
             }
         }
+        let map_fx = if draw_lighting { fx_mode.resolve(cx.art.layers(), map_id) } else { None };
+        if let Some(fx) = map_fx.as_ref().filter(|f| !f.zones.is_empty()) {
+            apply_map_zone_grades(&mut ui, &t, &geo, map_rect, (mw_i, mh_i), &is_wall, fx);
+        }
         let mut blocks: Vec<Block> = Vec::new();
         if tilted {
             for y in 0..mh_i {
@@ -4181,14 +4040,6 @@ pub(crate) fn render_static_map(
             }
         }
         if draw_lighting {
-            let map_fx = match fx_mode {
-                StaticFx::Layered => aegis_ui::map_fx::MapFx::load_layered(cx.art.layers(), map_id),
-                StaticFx::Disabled => None,
-                StaticFx::Override(fx) => Some(fx),
-            };
-            if let Some(fx) = map_fx.as_ref().filter(|f| !f.zones.is_empty()) {
-                apply_map_zone_grades(&mut ui, &t, &geo, map_rect, (mw_i, mh_i), &is_wall, fx);
-            }
             let effective_dim = map_fx.as_ref().and_then(|f| f.dim_ambience).unwrap_or(dim_ambience);
             if effective_dim {
                 apply_dim_ambience(&mut ui, &geo, &props, &prop_arts, &[], &is_wall, wall_face_tiles, map_fx.as_ref());
