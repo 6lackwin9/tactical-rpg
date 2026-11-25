@@ -271,6 +271,7 @@ fn fight_ask_of(ends: &[Value]) -> Option<String> {
 }
 
 /// W3: the line for a fight that cannot be refused (a road or a roaming fight) when an outcome would end the run.
+#[cfg(test)]
 pub fn fight_warning(cx: &Cx, encounter: &str) -> Option<String> {
     fight_ask(cx, encounter).map(|q| q.trim_end_matches(" Fight anyway?").to_string())
 }
