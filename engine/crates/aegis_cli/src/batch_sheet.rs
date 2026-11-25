@@ -10,7 +10,7 @@ use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
-/// Preferred visual preview images in priority order for each alignment run directory.
+/// Preferred visual preview images in priority order for each alignment or sprite run directory.
 const PREVIEW_CANDIDATES: &[&str] = &[
     "before_after_ref.png",
     "layer_sheet.png",
@@ -22,6 +22,10 @@ const PREVIEW_CANDIDATES: &[&str] = &[
     "render_before.png",
     "after/pass3_top_crops.png",
     "pass3_top_crops.png",
+    "sheet.png",
+    "preview.png",
+    "sliced.png",
+    "keyed.png",
 ];
 
 /// Summary of one asset/map run directory included in a batch review sheet.
@@ -39,12 +43,17 @@ pub struct BatchItem {
 
 /// CLI entrypoint: `aegis align-map batch-sheet (dirs=a,b,c | root=<dir>) [out=<batch_review.html>] [title=<text>] [embed=0|1]`.
 pub fn cmd_batch_sheet(args: &Args) -> Result<()> {
+    cmd_batch_sheet_with_defaults(args, "out/align/batch_review.html", "Batch Asset Review Sheet")
+}
+
+/// Shared CLI entrypoint with caller-supplied default output path and sheet title.
+pub fn cmd_batch_sheet_with_defaults(args: &Args, default_out: &str, default_title: &str) -> Result<()> {
     let dirs = collect_dirs(args)?;
     if dirs.is_empty() {
-        bail!("batch-sheet: no alignment run directories found (pass dirs=a,b or root=<parent_dir>)");
+        bail!("batch-sheet: no run directories found (pass dirs=a,b or root=<parent_dir>)");
     }
-    let out_html = PathBuf::from(args.key("out", "out/align/batch_review.html"));
-    let title = args.key("title", "Batch Asset Review Sheet");
+    let out_html = PathBuf::from(args.key("out", default_out));
+    let title = args.key("title", default_title);
     let embed = args.key("embed", "0") == "1";
 
     let items = build_batch_items(&dirs);
@@ -89,8 +98,8 @@ fn collect_dirs(args: &Args) -> Result<Vec<PathBuf>> {
     Ok(dirs)
 }
 
-fn is_run_dir(dir: &Path) -> bool {
-    ["ref_audit.json", "run_summary.json", "report.json", "layers_report.json"]
+pub(crate) fn is_run_dir(dir: &Path) -> bool {
+    ["ref_audit.json", "run_summary.json", "report.json", "layers_report.json", "sprite_check.json"]
         .iter()
         .any(|f| dir.join(f).is_file())
         || PREVIEW_CANDIDATES.iter().any(|f| dir.join(f).is_file())
@@ -114,19 +123,32 @@ fn inspect_run_dir(index: usize, dir: &Path) -> BatchItem {
     let run_summary = read_json(&dir.join("run_summary.json"));
     let score_report = read_json(&dir.join("report.json"));
     let layers_report = read_json(&dir.join("layers_report.json"));
+    let sprite_check = read_json(&dir.join("sprite_check.json"));
 
     let fallback_id = dir
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("item")
         .to_string();
-    let id = [ref_audit.as_ref(), run_summary.as_ref(), score_report.as_ref(), layers_report.as_ref()]
-        .into_iter()
-        .flatten()
-        .find_map(|v| v.get("map_id").or_else(|| v.get("map")).and_then(Value::as_str))
-        .filter(|s| !s.is_empty())
-        .map(ToString::to_string)
-        .unwrap_or(fallback_id);
+    let id = [
+        ref_audit.as_ref(),
+        run_summary.as_ref(),
+        score_report.as_ref(),
+        layers_report.as_ref(),
+        sprite_check.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
+    .find_map(|v| {
+        v.get("map_id")
+            .or_else(|| v.get("map"))
+            .or_else(|| v.get("sprite_id"))
+            .or_else(|| v.get("id"))
+            .and_then(Value::as_str)
+    })
+    .filter(|s| !s.is_empty())
+    .map(ToString::to_string)
+    .unwrap_or(fallback_id);
 
     let mut rank = 0u8; // 0 = INFO, 1 = PASS, 2 = WARN, 3 = FAIL
     let bump = |rank: &mut u8, st: &str| {
@@ -213,6 +235,42 @@ fn inspect_run_dir(index: usize, dir: &Path) -> BatchItem {
             }
             if !layer_bits.is_empty() {
                 badges.push(layer_bits.join(" "));
+            }
+        }
+    }
+
+    if let Some(ref sc) = sprite_check {
+        if stage.is_none() {
+            stage = Some("sprite".to_string());
+        }
+        if let Some(st) = sc.get("status").and_then(Value::as_str) {
+            bump(&mut rank, st);
+        }
+        if let Some(m) = sc.get("metrics").and_then(Value::as_object) {
+            if let (Some(ne), Some(tot)) = (
+                m.get("frames_non_empty").and_then(Value::as_u64),
+                m.get("frames_total").and_then(Value::as_u64),
+            ) {
+                badges.push(format!("frames {ne}/{tot}"));
+            }
+            if let Some(drift) = m.get("max_foot_drift").and_then(Value::as_u64) {
+                badges.push(format!("foot_drift {drift}px"));
+            }
+            if let Some(chroma) = m.get("max_chroma_pct").and_then(Value::as_f64) {
+                badges.push(format!("chroma {chroma:.2}%"));
+            }
+        }
+        if let Some(arr) = sc.get("issues").and_then(Value::as_array) {
+            for iss in arr {
+                if let Some(s) = iss.as_str() {
+                    issues.push(s.to_string());
+                } else if let Some(obj) = iss.as_object() {
+                    let sev = obj.get("severity").and_then(Value::as_str).unwrap_or("INFO");
+                    let msg = obj.get("message").and_then(Value::as_str).unwrap_or("");
+                    if !msg.is_empty() {
+                        issues.push(format!("{sev} {msg}"));
+                    }
+                }
             }
         }
     }

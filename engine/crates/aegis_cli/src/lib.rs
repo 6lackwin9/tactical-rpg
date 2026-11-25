@@ -16,6 +16,7 @@ pub mod bundle;
 pub mod golden;
 pub mod new_game;
 pub mod scenario;
+pub mod sprite;
 
 use aegis_content::file::stringify;
 use aegis_content::manifest::Manifest;
@@ -94,6 +95,7 @@ aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out
 aegis playtest start [save=] [out=] [size=] [shots=each|off] [keep_saves=<dir>] [window=1] | do <command ...> | run <script | -> | stop | status   (an agent plays the real game, logged and screenshot per command)
 aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)
 aegis align-map refspec | check-ref | enqueue | score | patch | run   (reference diorama validation, Drive queue bridge, and closed-loop map alignment)
+aegis sprite chroma | key | slice | check | batch-sheet   (headless sprite chroma keying, slicing, drift QA, and batch review)
 aegis new game <id> [title=<title>] [root=<workspace>]   (a new game folder games/<id>/ on the engine alone: menu, play screen, host, test, scenario)";
 
 /// Runs the command line of the process: the game's commands first, then the shell's.
@@ -110,6 +112,7 @@ pub fn run<G: Game>(game: &G) -> Result<()> {
         (Some("record"), Some(_)) => record(game, &args),
         (Some("content"), Some(_)) => content(game, &args),
         (Some("align-map"), _) => align::command(game, &args),
+        (Some("sprite"), _) => sprite::command(&args),
         (Some("bundle"), Some(manifest)) => bundle::command(manifest, &args.key("out", ".")),
         (Some("new"), Some("game")) => new_game::command(&args),
         (Some("playtest"), _) => {
