@@ -63,11 +63,11 @@ jobs:
 
       - name: Smoke-test unpacked portable zip from unrelated CWD
         run: |
-          rm -rf "$RUNNER_TEMP/portable_smoke"
+          rm -rf "$RUNNER_TEMP/portable_smoke" "$RUNNER_TEMP/other_cwd"
           mkdir -p "$RUNNER_TEMP/portable_smoke" "$RUNNER_TEMP/other_cwd"
-          python3 -c "import zipfile; zipfile.ZipFile('out/release/emberwake-windows-x64-${VARIANT}.zip').extractall('$RUNNER_TEMP/portable_smoke')"
-          (cd "$RUNNER_TEMP/other_cwd" && "$RUNNER_TEMP/portable_smoke/emberwake.exe" render_map=sunk_ward_runoff_grate layers=shell fx=none out="$RUNNER_TEMP/portable_smoke/smoke.png")
-          test -s "$RUNNER_TEMP/portable_smoke/smoke.png"
+          python3 -m zipfile -e "out/release/emberwake-windows-x64-${VARIANT}.zip" "$RUNNER_TEMP/portable_smoke"
+          (cd "$RUNNER_TEMP/other_cwd" && "$RUNNER_TEMP/portable_smoke/emberwake.exe" render_map=sunk_ward_runoff_grate layers=shell fx=none out=smoke.png)
+          test -s "$RUNNER_TEMP/other_cwd/smoke.png"
           echo "Portable Windows smoke render passed." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Windows portable artifact
