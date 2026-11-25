@@ -35,7 +35,8 @@ const ALIGN_USAGE: &str = "usage:
   aegis align-map layers    map=<id> (ref=<img.png|jpg> | ref_l1=<clean.png> [ref_l2=<propped.png>] [ref_l3=<lit.png>]) [out=<dir>] [view=square|tilted] [fx=<path|none>] [exe=<game exe>]
   aegis align-map score     (ref=<img.png|jpg> | ref_l3=<lit.png>) [ref_l2=<propped.png>] render=<map.png> map=<id> [pass=1|2|all] [out=<dir>]
   aegis align-map patch     map=<id> ref=<img.png|jpg> [render=<map.png>] [mode=ground|props|both] [zone=<id>] [rows=y0..y1] [only_from=<g>] [only_to=<g>] [out=<seed.json>] [apply=0|1]
-  aegis align-map run       (ref=<img.png|jpg> | ref_l3=<lit.png>) [ref_l2=<propped.png>] map=<id> [out=<dir>] [apply_fx=0|1] [view=square|tilted] [exe=<game exe>]";
+  aegis align-map run       (ref=<img.png|jpg> | ref_l3=<lit.png>) [ref_l2=<propped.png>] map=<id> [out=<dir>] [apply_fx=0|1] [view=square|tilted] [exe=<game exe>]
+  aegis align-map batch-sheet (dirs=<d1,d2> | root=<parent_dir>) [out=<batch_review.html>] [title=<text>] [embed=0|1]";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RefStage {
@@ -76,6 +77,7 @@ pub fn command<G: Game>(game: &G, args: &Args) -> Result<()> {
         Some("score") => cmd_score(game, args),
         Some("patch") => cmd_patch(game, args),
         Some("run") => cmd_run(game, args),
+        Some("batch-sheet") => crate::batch_sheet::cmd_batch_sheet(args),
         _ => {
             println!("{ALIGN_USAGE}");
             Ok(())

@@ -11,6 +11,7 @@
 
 pub mod agentplay;
 pub mod align;
+pub mod batch_sheet;
 pub mod bundle;
 pub mod golden;
 pub mod new_game;
