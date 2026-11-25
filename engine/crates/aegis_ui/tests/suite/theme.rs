@@ -332,6 +332,7 @@ fn a_bad_theme_keeps_the_theme_in_force_and_shows_a_notice() {
         Some(Nav::Push(s)) => assert_eq!(s.id(), "notice"),
         _ => panic!("the problems are shown as a notice"),
     }
+    theme::install(aegis_ui::theme::Theme::default());
 }
 
 // ---- (4) nine-slice frames -----------------------------------------------------------------------------------------

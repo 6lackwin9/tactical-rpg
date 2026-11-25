@@ -36,6 +36,7 @@ fn a_game_table_sets_its_keys_over_the_engine_and_a_missing_key_falls_back() {
     strings::install(fr);
     assert_eq!(strings::tr("quit"), "Partir");
     assert_eq!(strings::tr_with("hp", &[("n", "3")]), "3 PV");
+    strings::install(Strings::default());
 }
 
 #[test]

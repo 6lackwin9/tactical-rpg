@@ -560,8 +560,8 @@ fn a_see_through_backdrop_is_drawn_live() {
     }
 }
 
-/// Frame times of the backdrop at window sizes, live against the blit: `cargo test -p aegis_ui --release --test panes
-/// backdrop_frame_times -- --ignored --nocapture`.
+/// Frame times of the backdrop at window sizes, live against the blit: `cargo test -p aegis_ui --release --test
+/// integration panes::backdrop_frame_times -- --ignored --nocapture`.
 #[test]
 #[ignore]
 fn backdrop_frame_times() {
