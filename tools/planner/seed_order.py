@@ -39,16 +39,40 @@ def order(paths, when=committed_at):
     return sorted(paths, key=lambda p: ((when(p) if when(p) is not None else big), Path(p).name))
 
 
+_REMOVED = object()
+
+
+def _step_writes(entry, fields):
+    """{field: value_or__REMOVED} for every field an upsert writes (or explicitly removes via `fields`)."""
+    if fields is None:
+        return {f: v for f, v in entry.items() if f != "id"}
+    if not isinstance(fields, list):
+        return {}
+    out = {}
+    for f in fields:
+        if isinstance(f, str) and f != "id":
+            out[f] = entry[f] if f in entry else _REMOVED
+    return out
+
+
 def writes(seeds):
     """{(kind, world, id): [(seed name, entry, fields or None), ...]} for every upsert, in seed order."""
     out = {}
     for path in seeds:
         try:
-            steps = json.loads(Path(path).read_text(encoding="utf-8")).get("steps", [])
+            raw = json.loads(Path(path).read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:
             raise ValueError("%s: %s" % (Path(path).name, e))
+        if isinstance(raw, list):
+            steps = raw
+        elif isinstance(raw, dict):
+            steps = raw.get("steps", [])
+            if not isinstance(steps, list):
+                raise ValueError("%s: 'steps' must be a list" % Path(path).name)
+        else:
+            raise ValueError("%s: seed must be {\"steps\": [...]} or a list of steps" % Path(path).name)
         for st in steps:
-            if st.get("op", "upsert") != "upsert" or not isinstance(st.get("entry"), dict) or "kind" not in st:
+            if not isinstance(st, dict) or st.get("op", "upsert") != "upsert" or not isinstance(st.get("entry"), dict) or "kind" not in st:
                 continue
             key = (st["kind"], st.get("world") or "", st["entry"].get("id", ""))
             out.setdefault(key, []).append((Path(path).name, st["entry"], st.get("fields")))
@@ -66,14 +90,27 @@ def findings(written, stored):
         if ship is None:
             continue
         last, entry, fields = ws[-1]
-        names = [f for f in entry if f != "id" and (fields is None or f in fields)]
-        off = [f for f in names if f in ship and entry[f] != ship[f]]
+        last_w = _step_writes(entry, fields)
+        off = []
+        for f, val in last_w.items():
+            ship_val = ship[f] if f in ship else _REMOVED
+            if val is _REMOVED:
+                if ship_val is not _REMOVED:
+                    off.append(f)
+            elif ship_val is _REMOVED or val != ship_val:
+                off.append(f)
         by = {}
         for f in off:
+            ship_val = ship[f] if f in ship else _REMOVED
             for name, e, fl in reversed(ws[:-1]):
-                if name != last and f in e and (fl is None or f in fl) and e[f] == ship[f]:
-                    by.setdefault(name, []).append(f)
-                    break
+                if name == last:
+                    continue
+                prev_w = _step_writes(e, fl)
+                if f in prev_w:
+                    prev_val = prev_w[f]
+                    if (ship_val is _REMOVED and prev_val is _REMOVED) or (ship_val is not _REMOVED and prev_val is not _REMOVED and prev_val == ship_val):
+                        by.setdefault(name, []).append(f)
+                        break
         for earlier, fs in by.items():
             out.append((last, earlier, kind, world, eid, fs))
     return out

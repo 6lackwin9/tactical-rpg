@@ -1268,6 +1268,53 @@ pub fn build_pass1_patch(
     Ok(PatchOutcome { seed, ground_cells_changed, props_shifted, details })
 }
 
+/// Loads the stored map entry via `store::get` (respecting `Hooks::file_of`), falling back to
+/// `<data_dir>/maps/maps.json` only if the store lookup yields nothing.
+fn load_map_entry(hooks: &dyn Hooks, data_dir: &Path, map_id: &str) -> Result<Value> {
+    if let Some(stored) = aegis_content::store::get(hooks, data_dir, None, "maps", map_id) {
+        return Ok(Value::Object(aegis_core::json::normalize_dict(&stored)));
+    }
+    let fallback = data_dir.join("maps").join("maps.json");
+    if fallback.is_file() {
+        let maps_val: Value = serde_json::from_str(&std::fs::read_to_string(&fallback)?)?;
+        if let Some(found) = maps_val["entries"]
+            .as_array()
+            .and_then(|arr| arr.iter().find(|e| e["id"].as_str() == Some(map_id)))
+            .cloned()
+        {
+            return Ok(found);
+        }
+    }
+    bail!("map '{map_id}' not found in {}", hooks.file_of(data_dir, None, "maps").display())
+}
+
+/// ENGINE-20: pre-validates every `fields`-scoped step in an emitted patch seed via `store::merge_fields`
+/// without writing to disk, so `align-map patch` never writes an invalid seed even when `apply=0`.
+fn validate_patch_seed(hooks: &dyn Hooks, data_dir: &Path, seed: &Value) -> Result<()> {
+    let Some(steps) = seed.get("steps").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    for (i, step) in steps.iter().enumerate() {
+        let Some(obj) = step.as_object() else {
+            bail!("patch seed step {}: expected a JSON object", i + 1);
+        };
+        let Some(fields_val) = obj.get("fields") else {
+            continue;
+        };
+        let kind = obj.get("kind").and_then(Value::as_str).with_context(|| format!("patch seed step {}: missing kind", i + 1))?;
+        let world = obj.get("world").and_then(Value::as_str);
+        let entry = obj.get("entry").and_then(Value::as_object).with_context(|| format!("patch seed step {}: missing entry object", i + 1))?;
+        let arr = fields_val.as_array().with_context(|| format!("patch seed step {}: 'fields' must be a list of strings", i + 1))?;
+        if !arr.iter().all(Value::is_string) {
+            bail!("patch seed step {}: 'fields' must be a list of strings", i + 1);
+        }
+        let field_names: Vec<String> = arr.iter().filter_map(Value::as_str).map(String::from).collect();
+        aegis_content::store::merge_fields(hooks, data_dir, world, kind, entry, &field_names)
+            .map_err(|errs| anyhow::anyhow!("patch seed step {} failed validation: {}", i + 1, errs.join("; ")))?;
+    }
+    Ok(())
+}
+
 fn cmd_patch<G: Game>(game: &G, args: &Args) -> Result<()> {
     let map_id = args.keys.get("map").context("patch requires map=<id>")?;
     let ref_path = PathBuf::from(args.keys.get("ref").context("patch requires ref=<img.png|jpg>")?);
@@ -1280,12 +1327,8 @@ fn cmd_patch<G: Game>(game: &G, args: &Args) -> Result<()> {
     let out_path = PathBuf::from(args.key("out", &format!("out/align/{map_id}/{map_id}_pass1_seed.json")));
 
     let data_dir = game.data_dir(args)?;
-    let maps_path = data_dir.join("maps").join("maps.json");
-    let maps_val: Value = serde_json::from_str(&std::fs::read_to_string(&maps_path)?)?;
-    let raw_entry = maps_val["entries"]
-        .as_array()
-        .and_then(|arr| arr.iter().find(|e| e["id"].as_str() == Some(map_id)))
-        .with_context(|| format!("map '{map_id}' not found in {}", maps_path.display()))?;
+    let hooks = game.content();
+    let raw_entry = load_map_entry(&hooks, &data_dir, map_id)?;
 
     let model = MapModel::load(&data_dir, map_id, None)?;
     let row_range = parse_row_range(args.keys.get("rows").map(String::as_str), model.rows)?;
@@ -1309,7 +1352,8 @@ fn cmd_patch<G: Game>(game: &G, args: &Args) -> Result<()> {
         }
     };
 
-    let outcome = build_pass1_patch(&ref_img, &render_img, &model, raw_entry, &mode, zone_filter, row_range, only_from, only_to, min_gain)?;
+    let outcome = build_pass1_patch(&ref_img, &render_img, &model, &raw_entry, &mode, zone_filter, row_range, only_from, only_to, min_gain)?;
+    validate_patch_seed(&hooks, &data_dir, &outcome.seed)?;
     if let Some(p) = out_path.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(p)?;
     }
@@ -1325,7 +1369,6 @@ fn cmd_patch<G: Game>(game: &G, args: &Args) -> Result<()> {
     }
 
     if apply && (outcome.ground_cells_changed > 0 || outcome.props_shifted > 0) {
-        let hooks = game.content();
         if let Some(steps) = outcome.seed["steps"].as_array() {
             for step in steps {
                 match content_step(&hooks, &data_dir, step) {
@@ -5502,5 +5545,75 @@ mod tests {
         assert_eq!(pulled.len(), 1);
         assert_eq!(pulled[0].name, "demo_vault_ref_cleanplate_01.png");
         assert_eq!(std::fs::read(&pulled[0].local_path).unwrap(), b"png1");
+    }
+
+    #[test]
+    fn patch_uses_store_get_file_of_and_prevalidates_fields_seed() {
+        struct CustomMapHooks;
+        impl Hooks for CustomMapHooks {
+            fn kinds(&self, _world: Option<&str>) -> &'static [&'static str] {
+                &["maps"]
+            }
+            fn file_of(&self, data_dir: &Path, _world: Option<&str>, kind: &str) -> PathBuf {
+                data_dir.join("custom_store").join(format!("{kind}.json"))
+            }
+            fn validate(&self, _world: Option<&str>, _kind: &str, entry: &aegis_core::json::Dict) -> std::result::Result<aegis_core::json::Dict, Vec<String>> {
+                Ok(entry.clone())
+            }
+            fn file_text(&self, _data_dir: &Path, _world: Option<&str>, kind: &str, entries: &[aegis_core::json::Dict]) -> std::result::Result<String, String> {
+                Ok(aegis_content::file::document(kind, 1, entries.iter().cloned().map(Value::Object).collect()))
+            }
+            fn check(&self, _data_dir: &Path) -> Vec<String> {
+                Vec::new()
+            }
+            fn known_fields(&self, _world: Option<&str>, kind: &str) -> Option<Vec<String>> {
+                (kind == "maps").then(|| vec!["id".into(), "name".into(), "ground".into(), "props".into()])
+            }
+        }
+
+        let scratch = aegis_core::scratch::Scratch::new("align_patch_store_get");
+        let custom_dir = scratch.path().join("custom_store");
+        std::fs::create_dir_all(&custom_dir).unwrap();
+        let map_file = custom_dir.join("maps.json");
+        let doc = aegis_content::file::document(
+            "map_templates",
+            1,
+            vec![json!({
+                "id": "demo_court",
+                "name": "Demo Court",
+                "ground": ["ffff", "ffff"],
+                "props": [{"id": "crate_1", "x": 2, "y": 1}]
+            })],
+        );
+        std::fs::write(&map_file, &doc).unwrap();
+
+        // Loads from Hooks::file_of (custom_store/maps.json), not hardcoded maps/maps.json, with whole ints preserved.
+        let loaded = load_map_entry(&CustomMapHooks, scratch.path(), "demo_court").unwrap();
+        assert_eq!(loaded["id"], "demo_court");
+        assert!(loaded["props"][0]["x"].is_i64(), "expected normalized integer prop coordinate, got {:?}", loaded["props"][0]["x"]);
+
+        // Valid fields-scoped patch seed passes pre-validation without modifying the stored file.
+        let valid_seed = json!({
+            "steps": [{
+                "op": "upsert",
+                "kind": "maps",
+                "fields": ["ground"],
+                "entry": {"id": "demo_court", "ground": ["ffww", "ffff"]}
+            }]
+        });
+        validate_patch_seed(&CustomMapHooks, scratch.path(), &valid_seed).unwrap();
+        assert_eq!(std::fs::read_to_string(&map_file).unwrap(), doc, "pre-validation must not mutate disk");
+
+        // Invalid fields-scoped patch seed (unknown field name) fails pre-validation before any seed is written.
+        let bad_seed = json!({
+            "steps": [{
+                "op": "upsert",
+                "kind": "maps",
+                "fields": ["ground_typo"],
+                "entry": {"id": "demo_court", "ground_typo": ["ffww"]}
+            }]
+        });
+        let err = validate_patch_seed(&CustomMapHooks, scratch.path(), &bad_seed).unwrap_err().to_string();
+        assert!(err.contains("unknown maps field 'ground_typo'"), "{err}");
     }
 }

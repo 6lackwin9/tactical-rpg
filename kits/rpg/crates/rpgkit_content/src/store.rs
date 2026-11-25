@@ -596,6 +596,34 @@ impl Hooks for RpgContent {
         let w = crate::world_map::write(&view.worlds, &view.assets, name, edits)?;
         Ok(format!("{} {} ({} edit(s))", if w.changed { "wrote" } else { "unchanged" }, w.path.display(), w.edits))
     }
+
+    /// ENGINE-20: known top-level stored field names for schema-backed kinds (plus `ranks` on ranked skills) and
+    /// game-data kinds (`GAME_KINDS`), so `fields`-scoped seeds fail immediately on typos.
+    fn known_fields(&self, world: Option<&str>, kind: &str) -> Option<Vec<String>> {
+        if world.is_some() {
+            let names = aegis_content::schema::field_names(source::schema(), "world", kind);
+            return (!names.is_empty()).then_some(names);
+        }
+        if let Some((_, _, _, cols)) = game_kind(kind) {
+            return Some(cols.iter().map(|s| (*s).to_string()).collect());
+        }
+        let mut names = aegis_content::schema::field_names(source::schema(), "content", kind);
+        if kind == "skills" && !names.iter().any(|k| k == "ranks") {
+            names.push("ranks".to_string());
+        }
+        (!names.is_empty()).then_some(names)
+    }
+
+    /// ENGINE-20: pre-normalization JSON type checks (`schema::type_errors`) for schema-backed catalog and world kinds.
+    fn check_types(&self, world: Option<&str>, kind: &str, entry: &Dict) -> Vec<String> {
+        if world.is_some() {
+            return aegis_content::schema::type_errors(fields("world", kind), entry);
+        }
+        if game_kind(kind).is_some() {
+            return Vec::new();
+        }
+        aegis_content::schema::type_errors(fields("content", kind), entry)
+    }
 }
 
 /// E2.2-S2 (FB-110): merges `patch` into the game manifest at `path` (`aegis content manifest`): the engine keys and the
