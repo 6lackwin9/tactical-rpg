@@ -3,11 +3,12 @@
 //! Subcommands:
 //!   aegis align-map refspec   map=<id> [stage=full|cleanplate|propped|lit] [draft=<art_draft.json>] [out=<dir>]
 //!   aegis align-map check-ref ref=<img.png|jpg> spec=<refspec.json> [stage=full|cleanplate|propped|lit] [prev_ref=<img.png|jpg>] [map=<id>] [out=<dir>]
-//!   aegis align-map enqueue   map=<id> [stage=full|cleanplate|propped|lit] [prev_ref=<img.png|jpg>] [session_ref=<req_name>] [name=<stem>] [draft=<draft.json>] [style_ref=<img.png|jpg>] [audit=<ref_audit.json>] [aspect=16:9|4:3|1:1] [n=1] [pipeline=<dir>] [out=<dir>] [dry_run=1]
+//!   aegis align-map enqueue   map=<id> [stage=full|cleanplate|propped|lit] [prev_ref=<img.png|jpg>] [session_ref=<req_name>] [name=<stem>] [draft=<draft.json>] [style_ref=<img.png|jpg>] [audit=<ref_audit.json>] [aspect=16:9|4:3|1:1] [n=1] [backend=local|gdrive] [pipeline=<dir|gdrive>] [drive_folder=<name>] [drive_root_id=<id>] [out=<dir>] [dry_run=1]
+//!   aegis align-map ingest    [map=<id>] [stem=<prefix>] [backend=local|gdrive] [pipeline=<dir|gdrive>] [drive_folder=<name>] [drive_root_id=<id>] [out=<dir>] [dry_run=1]
 //!   aegis align-map layers    map=<id> (ref=<img.png|jpg> | ref_l1=<clean.png> [ref_l2=<propped.png>] [ref_l3=<lit.png>]) [out=<dir>] [view=square|tilted] [fx=<path|none>] [exe=<game exe>]
-//!   aegis align-map score     ref=<img.png|jpg> render=<map.png> map=<id> [pass=1|2|all] [out=<dir>]
+//!   aegis align-map score     (ref=<img.png|jpg> | ref_l3=<lit.png>) [ref_l2=<propped.png>] render=<map.png> map=<id> [pass=1|2|all] [out=<dir>]
 //!   aegis align-map patch     map=<id> ref=<img.png|jpg> [render=<map.png>] [mode=ground|props|both] [zone=<id>] [rows=y0..y1] [only_from=<g>] [only_to=<g>] [out=<seed.json>] [apply=0|1]
-//!   aegis align-map run       ref=<img.png|jpg> map=<id> [out=<dir>] [apply_fx=0|1] [view=square|tilted] [exe=<game exe>]
+//!   aegis align-map run       (ref=<img.png|jpg> | ref_l3=<lit.png>) [ref_l2=<propped.png>] map=<id> [out=<dir>] [apply_fx=0|1] [view=square|tilted] [exe=<game exe>]
 //!
 //! Pure engine tool: reads standard `maps.json` (`map_templates`), optional world `locations.json`, and
 //! `catalog/grounds.json`, and invokes the game binary's `render_map=<id>` offline hook for closed-loop Pass 2
@@ -29,11 +30,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const ALIGN_USAGE: &str = "usage:
   aegis align-map refspec   map=<id> [stage=full|cleanplate|propped|lit] [draft=<draft.json>] [out=<dir>]
   aegis align-map check-ref ref=<img.png|jpg> spec=<refspec.json> [stage=full|cleanplate|propped|lit] [prev_ref=<img.png|jpg>] [map=<id>] [out=<dir>]
-  aegis align-map enqueue   map=<id> [stage=full|cleanplate|propped|lit] [prev_ref=<img.png|jpg>] [session_ref=<req_name>] [name=<stem>] [draft=<draft.json>] [style_ref=<img.png|jpg>] [audit=<ref_audit.json>] [aspect=16:9|4:3|1:1] [n=1] [pipeline=<dir>] [out=<dir>] [dry_run=1]
+  aegis align-map enqueue   map=<id> [stage=full|cleanplate|propped|lit] [prev_ref=<img.png|jpg>] [session_ref=<req_name>] [name=<stem>] [draft=<draft.json>] [style_ref=<img.png|jpg>] [audit=<ref_audit.json>] [aspect=16:9|4:3|1:1] [n=1] [backend=local|gdrive] [pipeline=<dir|gdrive>] [drive_folder=<name>] [drive_root_id=<id>] [out=<dir>] [dry_run=1]
+  aegis align-map ingest    [map=<id>] [stem=<prefix>] [backend=local|gdrive] [pipeline=<dir|gdrive>] [drive_folder=<name>] [drive_root_id=<id>] [out=<dir>] [dry_run=1]
   aegis align-map layers    map=<id> (ref=<img.png|jpg> | ref_l1=<clean.png> [ref_l2=<propped.png>] [ref_l3=<lit.png>]) [out=<dir>] [view=square|tilted] [fx=<path|none>] [exe=<game exe>]
-  aegis align-map score     ref=<img.png|jpg> render=<map.png> map=<id> [pass=1|2|all] [out=<dir>]
+  aegis align-map score     (ref=<img.png|jpg> | ref_l3=<lit.png>) [ref_l2=<propped.png>] render=<map.png> map=<id> [pass=1|2|all] [out=<dir>]
   aegis align-map patch     map=<id> ref=<img.png|jpg> [render=<map.png>] [mode=ground|props|both] [zone=<id>] [rows=y0..y1] [only_from=<g>] [only_to=<g>] [out=<seed.json>] [apply=0|1]
-  aegis align-map run       ref=<img.png|jpg> map=<id> [out=<dir>] [apply_fx=0|1] [view=square|tilted] [exe=<game exe>]";
+  aegis align-map run       (ref=<img.png|jpg> | ref_l3=<lit.png>) [ref_l2=<propped.png>] map=<id> [out=<dir>] [apply_fx=0|1] [view=square|tilted] [exe=<game exe>]";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RefStage {
@@ -69,6 +71,7 @@ pub fn command<G: Game>(game: &G, args: &Args) -> Result<()> {
         Some("refspec") => cmd_refspec(game, args),
         Some("check-ref") => cmd_check_ref(game, args),
         Some("enqueue") => cmd_enqueue(game, args),
+        Some("ingest") => cmd_ingest(game, args),
         Some("layers") => cmd_layers(game, args),
         Some("score") => cmd_score(game, args),
         Some("patch") => cmd_patch(game, args),
@@ -435,23 +438,75 @@ fn cmd_enqueue<G: Game>(game: &G, args: &Args) -> Result<()> {
         &aspect,
         n,
     );
-    let pipe = resolve_pipeline_dir(args.keys.get("pipeline").map(String::as_str))?;
+    let backend = resolve_pipeline_backend(args);
+    let drive_folder = args.key("drive_folder", "image_pipeline");
+    let drive_root_id = args.keys.get("drive_root_id").cloned().or_else(|| {
+        args.keys.get("pipeline").and_then(|p| p.strip_prefix("gdrive:").filter(|s| !s.is_empty()).map(String::from))
+    });
 
     if dry_run {
         let preview = out_dir.join(format!("{stem}.dry_run_request.json"));
         std::fs::write(&preview, serde_json::to_string_pretty(&req)? + "\n")?;
+        let target_desc = if backend == "gdrive" {
+            match &drive_root_id {
+                Some(id) => format!("gdrive:{id} ({drive_folder})"),
+                None => format!("gdrive://{drive_folder}"),
+            }
+        } else {
+            resolve_pipeline_dir(args.keys.get("pipeline").map(String::as_str))?.display().to_string()
+        };
         println!(
-            "enqueue dry-run ({map_id}, stage={}):\n  target pipeline: {}\n  request preview: {}\n  aspect={aspect}, n={n}, refs={}",
+            "enqueue dry-run ({map_id}, stage={}):\n  target pipeline: {target_desc}\n  request preview: {}\n  aspect={aspect}, n={n}, refs={}",
             stage.as_str(),
-            pipe.display(),
             preview.display(),
             req["references"].as_array().map_or(0, Vec::len)
         );
         return Ok(());
     }
 
+    if backend == "gdrive" {
+        let mut ref_files: Vec<PathBuf> = Vec::new();
+        if let Some(pr) = &prev_ref {
+            ref_files.push(pr.clone());
+        }
+        if stage != RefStage::Lit {
+            ref_files.push(blockout_path.clone());
+        }
+        if let Some(sr) = &style_ref {
+            ref_files.push(sr.clone());
+        }
+        let gdrive = GdriveCli::default();
+        let res = enqueue_via_drive_backend(
+            &gdrive,
+            &drive_folder,
+            drive_root_id.as_deref(),
+            &stem,
+            &mut req,
+            &ref_files,
+        )?;
+        println!(
+            "queued {} [stage={}] -> gdrive://{}/queue/{}.json (id={})",
+            res.request_name,
+            stage.as_str(),
+            drive_folder,
+            res.request_name,
+            res.request_file_id
+        );
+        if !res.active_refs.is_empty() {
+            println!("  synced gdrive refs/active/: {}", res.active_refs.join(", "));
+        }
+        if !res.trashed_stale_refs.is_empty() {
+            println!("  pruned stale gdrive refs/active/: {}", res.trashed_stale_refs.join(", "));
+        }
+        if let Some(sref) = session_ref {
+            println!("  session_ref: {sref} (chains directly from previous in-session output)");
+        }
+        return Ok(());
+    }
+
+    let pipe = resolve_pipeline_dir(args.keys.get("pipeline").map(String::as_str))?;
     if !pipe.is_dir() {
-        bail!("enqueue: pipeline folder {} does not exist (is Drive mounted? or pass dry_run=1 / pipeline=<dir>)", pipe.display());
+        bail!("enqueue: pipeline folder {} does not exist (is Drive mounted? or pass backend=gdrive / dry_run=1 / pipeline=<dir>)", pipe.display());
     }
     for f in QUEUE_FOLDERS {
         std::fs::create_dir_all(pipe.join(f))?;
@@ -483,7 +538,414 @@ fn cmd_enqueue<G: Game>(game: &G, args: &Args) -> Result<()> {
     if let Some(sref) = session_ref {
         println!("  session_ref: {sref} (chains directly from previous in-session output)");
     }
-    println!("  next: in Gemini Task mode, attach all files from refs/active/ via Upload files and run 'process image queue using image-pipeline-executor'");
+    println!("  next: in Gemini Task mode, run 'process image queue using image-pipeline-executor' (refs/active/ synced)");
+    Ok(())
+}
+
+// ---- Cloud Google Drive backend (`gdrive` CLI) for `enqueue` & `ingest` --------------------------------------------
+
+const DRIVE_FOLDER_MIME: &str = "application/vnd.google-apps.folder";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DriveEntry {
+    pub id: String,
+    pub name: String,
+    pub mime_type: String,
+}
+
+impl DriveEntry {
+    pub fn is_folder(&self) -> bool {
+        self.mime_type == DRIVE_FOLDER_MIME
+    }
+}
+
+pub trait DriveBackend {
+    fn find_folder(&self, name: &str, parent_id: Option<&str>) -> Result<Option<String>>;
+    fn ensure_folder(&self, name: &str, parent_id: &str) -> Result<String>;
+    fn list_children(&self, folder_id: &str) -> Result<Vec<DriveEntry>>;
+    fn upload_or_update(&self, parent_id: &str, local_path: &Path, remote_name: &str) -> Result<String>;
+    fn download(&self, file_id: &str, dest_path: &Path) -> Result<()>;
+    fn trash(&self, file_id: &str) -> Result<()>;
+}
+
+#[derive(Debug, Clone)]
+pub struct GdriveCli {
+    pub bin: String,
+}
+
+impl Default for GdriveCli {
+    fn default() -> Self {
+        Self { bin: "gdrive".to_string() }
+    }
+}
+
+impl GdriveCli {
+    fn run_json(&self, args: &[&str]) -> Result<Value> {
+        let out = Command::new(&self.bin)
+            .args(args)
+            .output()
+            .with_context(|| format!("spawning '{}' (is gdrive CLI installed and on PATH?)", self.bin))?;
+        if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            bail!(
+                "gdrive {} failed (exit {:?}): {}",
+                args.join(" "),
+                out.status.code(),
+                if stderr.trim().is_empty() { stdout.trim() } else { stderr.trim() }
+            );
+        }
+        let text = String::from_utf8_lossy(&out.stdout);
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return Ok(Value::Null);
+        }
+        serde_json::from_str(trimmed).with_context(|| format!("parsing gdrive JSON output for '{}'", args.join(" ")))
+    }
+
+    fn parse_entries(val: &Value) -> Vec<DriveEntry> {
+        let Some(arr) = val.as_array() else { return Vec::new() };
+        arr.iter()
+            .filter_map(|item| {
+                Some(DriveEntry {
+                    id: item.get("id")?.as_str()?.to_string(),
+                    name: item.get("name")?.as_str()?.to_string(),
+                    mime_type: item.get("mimeType").and_then(Value::as_str).unwrap_or("").to_string(),
+                })
+            })
+            .collect()
+    }
+}
+
+impl DriveBackend for GdriveCli {
+    fn find_folder(&self, name: &str, parent_id: Option<&str>) -> Result<Option<String>> {
+        if let Some(pid) = parent_id {
+            let kids = self.list_children(pid)?;
+            return Ok(kids.into_iter().find(|e| e.is_folder() && e.name == name).map(|e| e.id));
+        }
+        let val = self.run_json(&["readonly", "search", "--name-exact", name, "--type", "folder", "--json"])?;
+        Ok(Self::parse_entries(&val).into_iter().find(|e| e.name == name).map(|e| e.id))
+    }
+
+    fn ensure_folder(&self, name: &str, parent_id: &str) -> Result<String> {
+        if let Some(id) = self.find_folder(name, Some(parent_id))? {
+            return Ok(id);
+        }
+        let val = self.run_json(&["mutate", "mkdir", name, "--parent", parent_id, "--json"])?;
+        if let Some(id) = val.get("id").and_then(Value::as_str) {
+            return Ok(id.to_string());
+        }
+        self.find_folder(name, Some(parent_id))?
+            .with_context(|| format!("gdrive mkdir '{name}' succeeded but folder id could not be resolved"))
+    }
+
+    fn list_children(&self, folder_id: &str) -> Result<Vec<DriveEntry>> {
+        let val = self.run_json(&["readonly", "ls", folder_id, "--json"])?;
+        Ok(Self::parse_entries(&val))
+    }
+
+    fn upload_or_update(&self, parent_id: &str, local_path: &Path, remote_name: &str) -> Result<String> {
+        let existing = self.list_children(parent_id)?.into_iter().find(|e| !e.is_folder() && e.name == remote_name);
+        if let Some(entry) = existing {
+            let path_s = local_path.to_string_lossy().to_string();
+            let _ = self.run_json(&["mutate", "update", &entry.id, &path_s, "--json"])?;
+            return Ok(entry.id);
+        }
+        let needs_rename = local_path.file_name().and_then(|n| n.to_str()) != Some(remote_name);
+        let _tmp_guard;
+        let upload_path = if needs_rename {
+            let scratch = aegis_core::scratch::Scratch::new("gdrive_up");
+            let staged = scratch.path().join(remote_name);
+            std::fs::copy(local_path, &staged)?;
+            _tmp_guard = Some(scratch);
+            staged
+        } else {
+            _tmp_guard = None;
+            local_path.to_path_buf()
+        };
+        let path_s = upload_path.to_string_lossy().to_string();
+        let val = self.run_json(&["mutate", "upload", &path_s, "--parent", parent_id, "--json"])?;
+        if let Some(id) = val.get("id").and_then(Value::as_str) {
+            return Ok(id.to_string());
+        }
+        self.list_children(parent_id)?
+            .into_iter()
+            .find(|e| !e.is_folder() && e.name == remote_name)
+            .map(|e| e.id)
+            .with_context(|| format!("gdrive upload '{remote_name}' succeeded but file id could not be resolved"))
+    }
+
+    fn download(&self, file_id: &str, dest_path: &Path) -> Result<()> {
+        if let Some(parent) = dest_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let dest_s = dest_path.to_string_lossy().to_string();
+        let out = Command::new(&self.bin)
+            .args(["readonly", "download", file_id, "--out", &dest_s])
+            .output()
+            .with_context(|| format!("spawning '{}' for download", self.bin))?;
+        if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            bail!("gdrive download {file_id} failed: {}", stderr.trim());
+        }
+        Ok(())
+    }
+
+    fn trash(&self, file_id: &str) -> Result<()> {
+        let out = Command::new(&self.bin)
+            .args(["mutate", "trash", file_id])
+            .output()
+            .with_context(|| format!("spawning '{}' for trash", self.bin))?;
+        if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            bail!("gdrive trash {file_id} failed: {}", stderr.trim());
+        }
+        Ok(())
+    }
+}
+
+fn resolve_pipeline_backend(args: &Args) -> String {
+    if let Some(b) = args.keys.get("backend") {
+        return b.to_ascii_lowercase();
+    }
+    if let Some(p) = args.keys.get("pipeline") {
+        if p == "gdrive" || p.starts_with("gdrive:") {
+            return "gdrive".to_string();
+        }
+    }
+    "local".to_string()
+}
+
+#[derive(Debug, Clone)]
+pub struct DriveEnqueueResult {
+    pub request_name: String,
+    pub request_file_id: String,
+    pub stored_refs: Vec<String>,
+    pub active_refs: Vec<String>,
+    pub trashed_stale_refs: Vec<String>,
+}
+
+/// Uploads references + request JSON to a Google Drive `image_pipeline` folder and mirrors only pending
+/// `queue/*.json` references into `refs/active/`, trashing stale entries in `refs/active/`.
+pub fn enqueue_via_drive_backend(
+    drive: &dyn DriveBackend,
+    folder_name: &str,
+    root_id_override: Option<&str>,
+    stem: &str,
+    req: &mut Value,
+    ref_files: &[PathBuf],
+) -> Result<DriveEnqueueResult> {
+    let root_id = match root_id_override {
+        Some(id) => id.to_string(),
+        None => drive
+            .find_folder(folder_name, None)?
+            .with_context(|| format!("gdrive: folder '{folder_name}' not found (pass drive_root_id=<id>)"))?,
+    };
+    let queue_id = drive.ensure_folder("queue", &root_id)?;
+    let refs_id = drive.ensure_folder("refs", &root_id)?;
+    let active_id = drive.ensure_folder("active", &refs_id)?;
+    let _output_id = drive.ensure_folder("output", &root_id)?;
+
+    let existing_queue = drive.list_children(&queue_id)?;
+    let ts = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let mut req_name = format!("{stem}_q{ts}");
+    let mut suffix = 1u32;
+    while existing_queue.iter().any(|e| e.name == format!("{req_name}.json")) {
+        req_name = format!("{stem}_q{ts}_{suffix}");
+        suffix += 1;
+    }
+
+    let mut stored_refs = Vec::new();
+    let mut local_ref_map: BTreeMap<String, PathBuf> = BTreeMap::new();
+    for src in ref_files {
+        let base = src.file_name().and_then(|n| n.to_str()).context("reference file has no name")?.to_string();
+        drive.upload_or_update(&refs_id, src, &base)?;
+        stored_refs.push(format!("refs/{base}"));
+        local_ref_map.insert(base, src.clone());
+    }
+    req["references"] = json!(stored_refs);
+
+    let scratch = aegis_core::scratch::Scratch::new("gdrive_enq");
+    let req_local = scratch.path().join(format!("{req_name}.json"));
+    std::fs::write(&req_local, serde_json::to_string_pretty(&req)? + "\n")?;
+    let request_file_id = drive.upload_or_update(&queue_id, &req_local, &format!("{req_name}.json"))?;
+
+    // Sync refs/active/ to mirror ONLY pending queue/*.json references.
+    let mut wanted: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for entry in drive.list_children(&queue_id)? {
+        if entry.is_folder() || !entry.name.ends_with(".json") {
+            continue;
+        }
+        let tmp_q = scratch.path().join("q").join(&entry.name);
+        if drive.download(&entry.id, &tmp_q).is_err() {
+            continue;
+        }
+        let Ok(txt) = std::fs::read_to_string(&tmp_q) else { continue };
+        let Ok(val) = serde_json::from_str::<Value>(&txt) else { continue };
+        if let Some(arr) = val.get("references").and_then(Value::as_array) {
+            for r in arr {
+                if let Some(rs) = r.as_str() {
+                    if let Some(base) = Path::new(rs).file_name().and_then(|n| n.to_str()) {
+                        wanted.insert(base.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    let current_active = drive.list_children(&active_id)?;
+    let mut trashed_stale_refs = Vec::new();
+    for entry in &current_active {
+        if !entry.is_folder() && !wanted.contains(&entry.name) {
+            drive.trash(&entry.id)?;
+            trashed_stale_refs.push(entry.name.clone());
+        }
+    }
+    let refs_entries = drive.list_children(&refs_id)?;
+    let mut active_refs = Vec::new();
+    for base in &wanted {
+        let already = current_active.iter().any(|e| !e.is_folder() && e.name == *base);
+        if let Some(local_src) = local_ref_map.get(base) {
+            drive.upload_or_update(&active_id, local_src, base)?;
+            active_refs.push(base.clone());
+        } else if already {
+            active_refs.push(base.clone());
+        } else if let Some(ref_entry) = refs_entries.iter().find(|e| !e.is_folder() && e.name == *base) {
+            let dl = scratch.path().join("r").join(base);
+            drive.download(&ref_entry.id, &dl)?;
+            drive.upload_or_update(&active_id, &dl, base)?;
+            active_refs.push(base.clone());
+        }
+    }
+
+    Ok(DriveEnqueueResult { request_name: req_name, request_file_id, stored_refs, active_refs, trashed_stale_refs })
+}
+
+#[derive(Debug, Clone)]
+pub struct IngestItem {
+    pub name: String,
+    pub remote_id: Option<String>,
+    pub local_path: PathBuf,
+}
+
+fn is_image_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".webp")
+}
+
+/// Pulls matching rendered images from Drive `image_pipeline/output/` into `out_dir` (read-only on Drive).
+pub fn ingest_via_drive_backend(
+    drive: &dyn DriveBackend,
+    folder_name: &str,
+    root_id_override: Option<&str>,
+    prefix_filter: Option<&str>,
+    out_dir: &Path,
+    dry_run: bool,
+) -> Result<Vec<IngestItem>> {
+    let root_id = match root_id_override {
+        Some(id) => id.to_string(),
+        None => drive
+            .find_folder(folder_name, None)?
+            .with_context(|| format!("gdrive: folder '{folder_name}' not found (pass drive_root_id=<id>)"))?,
+    };
+    let output_id = drive
+        .find_folder("output", Some(&root_id))?
+        .with_context(|| format!("gdrive: 'output' subfolder not found inside '{folder_name}'"))?;
+    let mut entries: Vec<DriveEntry> = drive
+        .list_children(&output_id)?
+        .into_iter()
+        .filter(|e| !e.is_folder() && is_image_name(&e.name))
+        .filter(|e| prefix_filter.map_or(true, |pf| e.name.starts_with(pf)))
+        .collect();
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    if !dry_run {
+        std::fs::create_dir_all(out_dir)?;
+    }
+    let mut items = Vec::new();
+    for entry in entries {
+        let dest = out_dir.join(&entry.name);
+        if !dry_run {
+            drive.download(&entry.id, &dest)?;
+        }
+        items.push(IngestItem { name: entry.name, remote_id: Some(entry.id), local_path: dest });
+    }
+    Ok(items)
+}
+
+fn cmd_ingest<G: Game>(_game: &G, args: &Args) -> Result<()> {
+    let map_id = args.keys.get("map").map(String::as_str);
+    let prefix = args.keys.get("stem").map(String::as_str).or(map_id);
+    let backend = resolve_pipeline_backend(args);
+    let dry_run = args.key("dry_run", "0") == "1" || args.flag("--dry-run");
+    let default_out = match map_id {
+        Some(m) => format!("out/align/{m}/ingested"),
+        None => "out/align/ingested".to_string(),
+    };
+    let out_dir = PathBuf::from(args.key("out", &default_out));
+
+    let items = if backend == "gdrive" {
+        let drive_folder = args.key("drive_folder", "image_pipeline");
+        let drive_root_id = args.keys.get("drive_root_id").cloned().or_else(|| {
+            args.keys.get("pipeline").and_then(|p| p.strip_prefix("gdrive:").filter(|s| !s.is_empty()).map(String::from))
+        });
+        let gdrive = GdriveCli::default();
+        ingest_via_drive_backend(&gdrive, &drive_folder, drive_root_id.as_deref(), prefix, &out_dir, dry_run)?
+    } else {
+        let pipe = resolve_pipeline_dir(args.keys.get("pipeline").map(String::as_str))?;
+        let out_src = pipe.join("output");
+        if !out_src.is_dir() {
+            bail!("ingest: pipeline output folder {} does not exist (pass backend=gdrive or pipeline=<dir>)", out_src.display());
+        }
+        let mut files: Vec<PathBuf> = std::fs::read_dir(&out_src)?
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_file() && p.file_name().and_then(|n| n.to_str()).is_some_and(is_image_name))
+            .filter(|p| {
+                prefix.map_or(true, |pf| {
+                    p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(pf))
+                })
+            })
+            .collect();
+        files.sort();
+        if !dry_run {
+            std::fs::create_dir_all(&out_dir)?;
+        }
+        let mut res = Vec::new();
+        for src in files {
+            let name = src.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+            let dest = out_dir.join(&name);
+            if !dry_run {
+                std::fs::copy(&src, &dest)?;
+            }
+            res.push(IngestItem { name, remote_id: None, local_path: dest });
+        }
+        res
+    };
+
+    if dry_run {
+        println!("ingest dry-run (backend={backend}, filter={}): {} matching file(s)", prefix.unwrap_or("*"), items.len());
+        for it in &items {
+            println!("  {}", it.name);
+        }
+        return Ok(());
+    }
+
+    let manifest = json!({
+        "backend": backend,
+        "filter": prefix,
+        "count": items.len(),
+        "files": items.iter().map(|it| json!({
+            "name": it.name,
+            "remote_id": it.remote_id,
+            "path": it.local_path.display().to_string(),
+        })).collect::<Vec<_>>(),
+    });
+    let manifest_path = out_dir.join("ingest_manifest.json");
+    std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest)? + "\n")?;
+    println!("ingested {} file(s) (backend={backend}) -> {}", items.len(), out_dir.display());
+    for it in &items {
+        println!("  {}", it.local_path.display());
+    }
     Ok(())
 }
 
@@ -882,7 +1344,13 @@ fn cmd_patch<G: Game>(game: &G, args: &Args) -> Result<()> {
 }
 
 fn cmd_score<G: Game>(game: &G, args: &Args) -> Result<()> {
-    let ref_path = PathBuf::from(args.keys.get("ref").context("score requires ref=<img.png|jpg>")?);
+    let ref_path = PathBuf::from(
+        args.keys
+            .get("ref")
+            .or_else(|| args.keys.get("ref_l3"))
+            .context("score requires ref=<img.png|jpg> (or ref_l3=<lit.png>)")?,
+    );
+    let ref_l2_path = args.keys.get("ref_l2").map(PathBuf::from);
     let render_path = PathBuf::from(args.keys.get("render").context("score requires render=<map.png>")?);
     let map_id = args.keys.get("map").context("score requires map=<id>")?;
     let pass_mode = args.key("pass", "all");
@@ -892,8 +1360,9 @@ fn cmd_score<G: Game>(game: &G, args: &Args) -> Result<()> {
     let data_dir = game.data_dir(args)?;
     let model = MapModel::load(&data_dir, map_id, None)?;
     let ref_img = load_image(&ref_path)?;
+    let ref_l2_img = ref_l2_path.as_deref().map(load_image).transpose()?;
     let render_img = load_image(&render_path)?;
-    let report = score_alignment(&ref_img, &render_img, &model, &pass_mode, &out_dir)?;
+    let report = score_alignment_staged(&ref_img, ref_l2_img.as_ref(), &render_img, &model, &pass_mode, &out_dir)?;
 
     let report_path = out_dir.join("report.json");
     std::fs::write(&report_path, serde_json::to_string_pretty(&report.json)? + "\n")?;
@@ -907,7 +1376,13 @@ fn cmd_score<G: Game>(game: &G, args: &Args) -> Result<()> {
 }
 
 fn cmd_run<G: Game>(game: &G, args: &Args) -> Result<()> {
-    let ref_path = PathBuf::from(args.keys.get("ref").context("run requires ref=<img.png|jpg>")?);
+    let ref_path = PathBuf::from(
+        args.keys
+            .get("ref")
+            .or_else(|| args.keys.get("ref_l3"))
+            .context("run requires ref=<img.png|jpg> (or ref_l3=<lit.png>)")?,
+    );
+    let ref_l2_path = args.keys.get("ref_l2").map(PathBuf::from);
     let map_id = args.keys.get("map").context("run requires map=<id>")?;
     let view = args.key("view", "square");
     let apply_fx = args.key("apply_fx", "0") == "1";
@@ -928,6 +1403,7 @@ fn cmd_run<G: Game>(game: &G, args: &Args) -> Result<()> {
 
     let model = MapModel::load(&data_dir, map_id, None)?;
     let ref_img = load_image(&ref_path)?;
+    let ref_l2_img = ref_l2_path.as_deref().map(load_image).transpose()?;
 
     // Step 1: Baseline render (no MapFx)
     let before_png = out_dir.join("render_before.png");
@@ -935,7 +1411,7 @@ fn cmd_run<G: Game>(game: &G, args: &Args) -> Result<()> {
     let before_img = load_image(&before_png)?;
     let before_dir = out_dir.join("before");
     std::fs::create_dir_all(&before_dir)?;
-    let before_rep = score_alignment(&ref_img, &before_img, &model, "all", &before_dir)?;
+    let before_rep = score_alignment_staged(&ref_img, ref_l2_img.as_ref(), &before_img, &model, "all", &before_dir)?;
     std::fs::write(before_dir.join("report.json"), serde_json::to_string_pretty(&before_rep.json)? + "\n")?;
 
     let fx_val = before_rep.map_fx.clone().unwrap_or_else(|| json!({}));
@@ -949,7 +1425,7 @@ fn cmd_run<G: Game>(game: &G, args: &Args) -> Result<()> {
     let after_img = load_image(&after_png)?;
     let after_dir = out_dir.join("after");
     std::fs::create_dir_all(&after_dir)?;
-    let after_rep = score_alignment(&ref_img, &after_img, &model, "all", &after_dir)?;
+    let after_rep = score_alignment_staged(&ref_img, ref_l2_img.as_ref(), &after_img, &model, "all", &after_dir)?;
     std::fs::write(after_dir.join("report.json"), serde_json::to_string_pretty(&after_rep.json)? + "\n")?;
 
     // Step 3: 3-panel visual comparison (Reference | Baseline | Pass 2)
@@ -969,6 +1445,8 @@ fn cmd_run<G: Game>(game: &G, args: &Args) -> Result<()> {
     let summary = json!({
         "map_id": map_id,
         "view": view,
+        "lighting_source": before_rep.json["pass2"]["lighting_source"],
+        "l3_l2_peaks": before_rep.json["pass2"]["l3_l2_peaks"],
         "before": {
             "mean_zone_delta_l": round2(bl),
             "mean_zone_delta_rgb": round2(br),
@@ -995,6 +1473,11 @@ fn cmd_run<G: Game>(game: &G, args: &Args) -> Result<()> {
     println!("  Pass 1: ground_agreement={p1_g:.1}%, mean_prop_iou={p1_iou:.3}");
     println!("  Pass 2: mean_zone_delta_L   {bl:.2} -> {al:.2} ({:+.1}%)", if bl > 1e-3 { (al - bl) / bl * 100.0 } else { 0.0 });
     println!("  Pass 2: mean_zone_delta_RGB {br:.2} -> {ar:.2} ({:+.1}%)", if br > 1e-3 { (ar - br) / br * 100.0 } else { 0.0 });
+    if let Some(peaks) = before_rep.json["pass2"]["l3_l2_peaks"].as_array() {
+        if !peaks.is_empty() {
+            println!("  Pass 2 L3/L2 peaks: {} detected (source={})", peaks.len(), before_rep.json["pass2"]["lighting_source"].as_str().unwrap_or(""));
+        }
+    }
     println!("  triptych:    {}", triptych_path.display());
     println!("  pass3 crops: {}", after_dir.join("pass3_top_crops.png").display());
     println!("  solved fx:   {}", fx_path.display());
@@ -3034,6 +3517,16 @@ pub fn check_reference_staged(
         }));
     }
 
+    // Stage 1 (CleanPlate) & Full: L0 water-vs-land tile consistency check (catches water-basin drift before Stages 2-3)
+    if matches!(stage, RefStage::CleanPlate | RefStage::Full) {
+        if let Some((check, overlay)) = evaluate_l0_water_land(ref_img, &reg, &stats, model) {
+            let ov_path = out_dir.join("l0_water_land_check.png");
+            save_png(&overlay, &ov_path)?;
+            stage_artifacts.insert("l0_water_land_check".into(), json!(ov_path.display().to_string()));
+            det_checks.push(check);
+        }
+    }
+
     // Zone luma ordering applies to Lit and Full stages (CleanPlate/Propped are flat-lit)
     if matches!(stage, RefStage::Full | RefStage::Lit) {
         if let Some(pairs) = spec["style_checks"]["expected_zone_luma_pairs"].as_array() {
@@ -3358,7 +3851,442 @@ fn anchors_stay_connected(model: &MapModel, blocked_extra: &[(usize, usize)]) ->
     open_anchors.iter().all(|&(ax, ay)| vis[ay * model.cols + ax])
 }
 
+fn is_water_cell(model: &MapModel, x: usize, y: usize) -> bool {
+    model.tile(x, y) == '~' || model.ground(x, y).contains("water")
+}
+
+/// Evaluates L0 water-vs-land tile consistency on a registered reference image.
+/// Returns `None` when the map does not contain both water and land tiles (at least 4 of each).
+pub fn evaluate_l0_water_land(
+    ref_img: &RgbaImg,
+    reg: &GridRegistration,
+    stats: &[CellStats],
+    model: &MapModel,
+) -> Option<(Value, RgbaImg)> {
+    let mut water_cells: Vec<(usize, usize, &CellStats)> = Vec::new();
+    let mut land_cells: Vec<(usize, usize, &CellStats)> = Vec::new();
+    for y in 0..model.rows {
+        for x in 0..model.cols {
+            let t = model.tile(x, y);
+            if t == '#' {
+                continue;
+            }
+            let st = &stats[y * model.cols + x];
+            if is_water_cell(model, x, y) {
+                water_cells.push((x, y, st));
+            } else if t == '.' {
+                land_cells.push((x, y, st));
+            }
+        }
+    }
+    if water_cells.len() < 4 || land_cells.len() < 4 {
+        return None;
+    }
+
+    let centroid = |cells: &[(usize, usize, &CellStats)]| -> [f32; 3] {
+        let mut by_edge: Vec<&CellStats> = cells.iter().map(|c| c.2).collect();
+        by_edge.sort_by(|a, b| a.edge.total_cmp(&b.edge));
+        let keep = ((by_edge.len() as f32 * 0.70).ceil() as usize).max(1).min(by_edge.len());
+        let mut out = [0.0f32; 3];
+        for c in 0..3 {
+            let mut vals: Vec<f32> = by_edge[..keep].iter().map(|s| s.rgb[c]).collect();
+            vals.sort_by(|a, b| a.total_cmp(b));
+            out[c] = vals[vals.len() / 2];
+        }
+        out
+    };
+    let water_c = centroid(&water_cells);
+    let land_c = centroid(&land_cells);
+    let sep = rgb_dist2(water_c, land_c).sqrt() as f64;
+    let water_cool_delta = ((water_c[2] - water_c[0]) - (land_c[2] - land_c[0])) as f64;
+
+    let mut overlay = ref_img.clone();
+    let mut water_ok = 0usize;
+    let mut land_ok = 0usize;
+    let mut water_as_land = Vec::new();
+    let mut land_as_water = Vec::new();
+
+    for &(x, y, st) in &water_cells {
+        let dw = rgb_dist2(st.rgb, water_c);
+        let dl = rgb_dist2(st.rgb, land_c);
+        let (x0, y0, x1, y1) = reg.cell_rect(x, y);
+        let (rw, rh) = (x1.saturating_sub(x0), y1.saturating_sub(y0));
+        if dw <= dl && sep >= 7.0 {
+            water_ok += 1;
+            overlay.fill_rect(x0, y0, rw, rh, [50, 150, 235, 70]);
+        } else {
+            water_as_land.push(json!([x, y]));
+            overlay.fill_rect(x0, y0, rw, rh, [235, 60, 60, 120]);
+        }
+    }
+    for &(x, y, st) in &land_cells {
+        let dw = rgb_dist2(st.rgb, water_c);
+        let dl = rgb_dist2(st.rgb, land_c);
+        let (x0, y0, x1, y1) = reg.cell_rect(x, y);
+        let (rw, rh) = (x1.saturating_sub(x0), y1.saturating_sub(y0));
+        if dl <= dw && sep >= 7.0 {
+            land_ok += 1;
+            overlay.fill_rect(x0, y0, rw, rh, [55, 195, 90, 50]);
+        } else {
+            land_as_water.push(json!([x, y]));
+            overlay.fill_rect(x0, y0, rw, rh, [245, 200, 45, 110]);
+        }
+    }
+    let total = water_cells.len() + land_cells.len();
+    let agreement_pct = (water_ok + land_ok) as f64 * 100.0 / total.max(1) as f64;
+    let water_recall_pct = water_ok as f64 * 100.0 / water_cells.len().max(1) as f64;
+    let land_recall_pct = land_ok as f64 * 100.0 / land_cells.len().max(1) as f64;
+    let status = if sep >= 12.0 && agreement_pct >= 72.0 && water_recall_pct >= 65.0 {
+        "PASS"
+    } else if sep >= 7.0 && agreement_pct >= 58.0 && water_recall_pct >= 45.0 {
+        "WARN"
+    } else {
+        "FAIL"
+    };
+    water_as_land.truncate(24);
+    land_as_water.truncate(24);
+    let check = json!({
+        "id": "l0_water_land_consistency",
+        "status": status,
+        "water_cells": water_cells.len(),
+        "land_cells": land_cells.len(),
+        "separation_rgb": round2(sep),
+        "agreement_pct": round2(agreement_pct),
+        "water_recall_pct": round2(water_recall_pct),
+        "land_recall_pct": round2(land_recall_pct),
+        "water_cool_delta": round2(water_cool_delta),
+        "water_centroid_rgb": [round1(water_c[0] as f64), round1(water_c[1] as f64), round1(water_c[2] as f64)],
+        "land_centroid_rgb": [round1(land_c[0] as f64), round1(land_c[1] as f64), round1(land_c[2] as f64)],
+        "water_as_land_sample": water_as_land,
+        "land_as_water_sample": land_as_water,
+    });
+    Some((check, overlay))
+}
+
+/// Direct `L3 / L2` light pool peak extracted from staged Lit vs Propped references.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SolvedLightPeak {
+    pub cell_x: f32,
+    pub cell_y: f32,
+    pub radius_px: f32,
+    pub color: [u8; 3],
+    pub strength: f32,
+    pub peak_ratio: f32,
+    pub matched_prop: Option<String>,
+}
+
+/// Physical lighting separation derived from exact `L3 / L2` pixel ratios on the registered map grid.
+#[derive(Debug, Clone)]
+pub struct StagedLighting {
+    pub ambience_dark: f32,
+    pub ambience_rgb: [u8; 3],
+    pub ratio_map: RgbaImg,
+    pub peak_mask: Vec<bool>,
+    pub peaks: Vec<SolvedLightPeak>,
+}
+
+/// Extracts exact `L3 / L2` ambient darkening, shadow tint, light-pool mask, and localized `LightSpec` peaks
+/// (sub-cell center, half-max falloff radius, chromatic peak RGB, strength, and matched prop).
+pub fn extract_l3_l2_lighting(ref_l3: &RgbaImg, ref_l2: &RgbaImg, model: &MapModel) -> StagedLighting {
+    let reg_l3 = register_reference(ref_l3, model);
+    let reg_l2 = register_reference(ref_l2, model);
+    let l3_grid = resample_registered(ref_l3, &reg_l3, model.cols, model.rows, 32);
+    let l2_grid = resample_registered(ref_l2, &reg_l2, model.cols, model.rows, 32);
+    let u = uniform_registration(l3_grid.w, l3_grid.h, model.cols, model.rows);
+    let s3 = extract_grid_stats(&l3_grid, &u, model.cols, model.rows);
+    let s2 = extract_grid_stats(&l2_grid, &u, model.cols, model.rows);
+    let ratio_map = compute_lighting_ratio_image(&l3_grid, &l2_grid);
+
+    let n = model.cols * model.rows;
+    let mut cell_ratio_l = vec![1.0f32; n];
+    let mut cell_ratio_rgb = vec![[1.0f32; 3]; n];
+    let mut open_ratios: Vec<f32> = Vec::new();
+    let mut zone_ratios: BTreeMap<String, Vec<f32>> = BTreeMap::new();
+
+    for y in 0..model.rows {
+        for x in 0..model.cols {
+            let i = y * model.cols + x;
+            if model.tile(x, y) == '#' {
+                continue;
+            }
+            let l2 = s2[i].luma.max(10.0);
+            let rl = (s3[i].luma / l2).clamp(0.10, 4.0);
+            let rr = [
+                (s3[i].rgb[0] / s2[i].rgb[0].max(10.0)).clamp(0.10, 4.0),
+                (s3[i].rgb[1] / s2[i].rgb[1].max(10.0)).clamp(0.10, 4.0),
+                (s3[i].rgb[2] / s2[i].rgb[2].max(10.0)).clamp(0.10, 4.0),
+            ];
+            cell_ratio_l[i] = rl;
+            cell_ratio_rgb[i] = rr;
+            open_ratios.push(rl);
+            let zid = model.zone(x, y);
+            if !zid.is_empty() {
+                zone_ratios.entry(zid.to_string()).or_default().push(rl);
+            }
+        }
+    }
+
+    // Ambient darkening from lower quartile (25th percentile) of open-floor L3/L2 ratio
+    open_ratios.sort_by(|a, b| a.total_cmp(b));
+    let q25 = if open_ratios.is_empty() {
+        1.0
+    } else {
+        open_ratios[(open_ratios.len() / 4).min(open_ratios.len() - 1)]
+    };
+    let ambience_dark = if q25 < 0.94 { (1.0 - q25).clamp(0.0, 0.72) } else { 0.0 };
+
+    // Shadow tint RGB from darkest 20% shadowed floor cells (subtle cool/warm shift)
+    let mut dark_samples: Vec<(f32, [f32; 3])> = Vec::new();
+    for y in 0..model.rows {
+        for x in 0..model.cols {
+            let i = y * model.cols + x;
+            if model.tile(x, y) != '#' && cell_ratio_l[i] <= q25 + 0.04 {
+                dark_samples.push((cell_ratio_l[i], s3[i].rgb));
+            }
+        }
+    }
+    let ambience_rgb = if dark_samples.len() >= 4 {
+        let mut mean = [0.0f32; 3];
+        for (_, rgb) in &dark_samples {
+            for c in 0..3 {
+                mean[c] += rgb[c];
+            }
+        }
+        let nf = dark_samples.len() as f32;
+        for ch in &mut mean {
+            *ch /= nf;
+        }
+        let m_max = mean[0].max(mean[1]).max(mean[2]).max(1.0);
+        // Scale shadow tint to low-value ambient shadow colour (~6..22 range) preserving shadow hue
+        [
+            ((mean[0] / m_max) * 16.0).round().clamp(4.0, 24.0) as u8,
+            ((mean[1] / m_max) * 16.0).round().clamp(4.0, 24.0) as u8,
+            ((mean[2] / m_max) * 18.0).round().clamp(6.0, 28.0) as u8,
+        ]
+    } else {
+        [6, 8, 14]
+    };
+
+    // Per-zone baseline luma ratio (median of open cells in each zone)
+    let mut zone_base_l: BTreeMap<String, f32> = BTreeMap::new();
+    let global_med = if open_ratios.is_empty() { 1.0 } else { open_ratios[open_ratios.len() / 2] };
+    for (zid, mut vals) in zone_ratios {
+        vals.sort_by(|a, b| a.total_cmp(b));
+        zone_base_l.insert(zid, vals[vals.len() / 2].clamp(0.25, 1.25));
+    }
+
+    // Excess lighting field relative to local zone ambient baseline
+    let mut excess = vec![0.0f32; n];
+    let mut peak_mask = vec![false; n];
+    for y in 0..model.rows {
+        for x in 0..model.cols {
+            let i = y * model.cols + x;
+            if model.tile(x, y) == '#' {
+                continue;
+            }
+            let base = zone_base_l.get(model.zone(x, y)).copied().unwrap_or(global_med);
+            let ex = (cell_ratio_l[i] - base).max(0.0);
+            excess[i] = ex;
+            if cell_ratio_l[i] > base * 1.18 && ex >= 0.14 {
+                peak_mask[i] = true;
+            }
+        }
+    }
+
+    // Local-maxima candidate detection (3x3 window, excess >= 0.22)
+    let mut candidates: Vec<(usize, usize, f32)> = Vec::new();
+    for y in 0..model.rows {
+        for x in 0..model.cols {
+            let i = y * model.cols + x;
+            let ex = excess[i];
+            if model.tile(x, y) == '#' || ex < 0.22 {
+                continue;
+            }
+            let mut is_max = true;
+            'nbr: for dy in -1isize..=1 {
+                for dx in -1isize..=1 {
+                    if dx == 0 && dy == 0 {
+                        continue;
+                    }
+                    let nx = x as isize + dx;
+                    let ny = y as isize + dy;
+                    if nx >= 0 && ny >= 0 && nx < model.cols as isize && ny < model.rows as isize {
+                        let ni = ny as usize * model.cols + nx as usize;
+                        if excess[ni] > ex + 1e-4 {
+                            is_max = false;
+                            break 'nbr;
+                        }
+                    }
+                }
+            }
+            if is_max {
+                candidates.push((x, y, ex));
+            }
+        }
+    }
+    candidates.sort_by(|a, b| b.2.total_cmp(&a.2));
+
+    // Non-maximum suppression (minimum 3-cell spacing between distinct light peaks)
+    let mut accepted: Vec<(usize, usize, f32)> = Vec::new();
+    for (x, y, ex) in candidates {
+        let too_close = accepted.iter().any(|&(ax, ay, _)| {
+            let dx = x as f32 - ax as f32;
+            let dy = y as f32 - ay as f32;
+            dx * dx + dy * dy < 9.0
+        });
+        if !too_close {
+            accepted.push((x, y, ex));
+        }
+    }
+
+    let mut used_props: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut peaks = Vec::new();
+    for (px, py, peak_ex) in accepted {
+        let idx = py * model.cols + px;
+        let base = zone_base_l.get(model.zone(px, py)).copied().unwrap_or(global_med);
+
+        // Sub-cell intensity-weighted centroid over 3x3 neighborhood
+        let (mut wx, mut wy, mut wsum) = (0.0f32, 0.0f32, 0.0f32);
+        for dy in -1isize..=1 {
+            for dx in -1isize..=1 {
+                let nx = px as isize + dx;
+                let ny = py as isize + dy;
+                if nx >= 0 && ny >= 0 && nx < model.cols as isize && ny < model.rows as isize {
+                    let ni = ny as usize * model.cols + nx as usize;
+                    let w = excess[ni].max(0.0);
+                    wx += (nx as f32 + 0.5) * w;
+                    wy += (ny as f32 + 0.5) * w;
+                    wsum += w;
+                }
+            }
+        }
+        let (cell_x, cell_y) = if wsum > 1e-4 { (wx / wsum, wy / wsum) } else { (px as f32 + 0.5, py as f32 + 0.5) };
+
+        // Radial half-maximum falloff measurement over concentric rings d = 1..=6 cells
+        let half_target = peak_ex * 0.45;
+        let mut radius_cells = 1.5f32;
+        for ring in 1..=6isize {
+            let (mut sum, mut cnt) = (0.0f32, 0usize);
+            for dy in -ring..=ring {
+                for dx in -ring..=ring {
+                    let dist = ((dx * dx + dy * dy) as f32).sqrt();
+                    if dist < ring as f32 - 0.5 || dist >= ring as f32 + 0.5 {
+                        continue;
+                    }
+                    let nx = px as isize + dx;
+                    let ny = py as isize + dy;
+                    if nx >= 0 && ny >= 0 && nx < model.cols as isize && ny < model.rows as isize {
+                        let ni = ny as usize * model.cols + nx as usize;
+                        if model.tile(nx as usize, ny as usize) != '#' {
+                            sum += excess[ni];
+                            cnt += 1;
+                        }
+                    }
+                }
+            }
+            if cnt == 0 {
+                break;
+            }
+            let ring_mean = sum / cnt as f32;
+            if ring_mean >= half_target {
+                radius_cells = ring as f32 + 0.5;
+            } else {
+                // Linear interpolation into the falling ring
+                let frac = (ring_mean / half_target.max(1e-4)).clamp(0.0, 1.0);
+                radius_cells = (ring as f32 - 0.5 + frac).max(1.25);
+                break;
+            }
+        }
+        let radius_px = (radius_cells * 32.0 * 1.65).clamp(48.0, 224.0);
+
+        // Peak light RGB directly from additive illumination residual `max(L3 - L2 * base, 0)` over 3x3 peak core
+        let mut add_rgb = [0.0f32; 3];
+        let mut core_n = 0.0f32;
+        for dy in -1isize..=1 {
+            for dx in -1isize..=1 {
+                let nx = px as isize + dx;
+                let ny = py as isize + dy;
+                if nx >= 0 && ny >= 0 && nx < model.cols as isize && ny < model.rows as isize {
+                    let ni = ny as usize * model.cols + nx as usize;
+                    let w = (excess[ni] / peak_ex.max(1e-4)).clamp(0.0, 1.0);
+                    if w > 0.25 {
+                        for c in 0..3 {
+                            add_rgb[c] += (s3[ni].rgb[c] - s2[ni].rgb[c] * base).max(0.0) * w;
+                        }
+                        core_n += w;
+                    }
+                }
+            }
+        }
+        let color = if core_n > 1e-4 && add_rgb[0].max(add_rgb[1]).max(add_rgb[2]) > 2.0 {
+            let max_c = add_rgb[0].max(add_rgb[1]).max(add_rgb[2]).max(1.0);
+            [
+                ((add_rgb[0] / max_c) * 255.0).round().clamp(40.0, 255.0) as u8,
+                ((add_rgb[1] / max_c) * 255.0).round().clamp(40.0, 255.0) as u8,
+                ((add_rgb[2] / max_c) * 255.0).round().clamp(40.0, 255.0) as u8,
+            ]
+        } else {
+            let rr = cell_ratio_rgb[idx];
+            let max_r = rr[0].max(rr[1]).max(rr[2]).max(1e-3);
+            [
+                ((rr[0] / max_r) * 255.0).round().clamp(60.0, 255.0) as u8,
+                ((rr[1] / max_r) * 255.0).round().clamp(60.0, 255.0) as u8,
+                ((rr[2] / max_r) * 255.0).round().clamp(60.0, 255.0) as u8,
+            ]
+        };
+
+        let strength = (peak_ex / (base + 0.75)).clamp(0.14, 0.72);
+
+        // Snap to nearest unused light prop within 2.8 cells, else nearest static prop within 1.6 cells
+        let mut best_prop: Option<(f32, String)> = None;
+        for p in &model.props {
+            if used_props.contains(&p.id) {
+                continue;
+            }
+            let pcx = p.x as f32 + p.w as f32 * 0.5;
+            let pcy = p.y as f32 + p.h as f32 * 0.5;
+            let dist = ((pcx - cell_x).powi(2) + (pcy - cell_y).powi(2)).sqrt();
+            let light_p = is_light_prop(&p.art);
+            let max_d = if light_p { 2.8 } else { 1.6 };
+            if dist <= max_d {
+                // Strongly prefer light-emitting props over generic furniture at similar distance
+                let score = if light_p { dist } else { dist + 10.0 };
+                if best_prop.as_ref().map_or(true, |(bs, _)| score < *bs) {
+                    best_prop = Some((score, p.id.clone()));
+                }
+            }
+        }
+        let matched_prop = best_prop.map(|(_, id)| {
+            used_props.insert(id.clone());
+            id
+        });
+
+        peaks.push(SolvedLightPeak {
+            cell_x,
+            cell_y,
+            radius_px,
+            color,
+            strength,
+            peak_ratio: cell_ratio_l[idx],
+            matched_prop,
+        });
+    }
+
+    StagedLighting { ambience_dark, ambience_rgb, ratio_map, peak_mask, peaks }
+}
+
 pub fn score_alignment(ref_img: &RgbaImg, render_img: &RgbaImg, model: &MapModel, pass_mode: &str, out_dir: &Path) -> Result<AlignmentReport> {
+    score_alignment_staged(ref_img, None, render_img, model, pass_mode, out_dir)
+}
+
+pub fn score_alignment_staged(
+    ref_img: &RgbaImg,
+    ref_l2: Option<&RgbaImg>,
+    render_img: &RgbaImg,
+    model: &MapModel,
+    pass_mode: &str,
+    out_dir: &Path,
+) -> Result<AlignmentReport> {
     let reg_ref = register_reference(ref_img, model);
     let reg_ren = uniform_registration(render_img.w, render_img.h, model.cols, model.rows);
 
@@ -3560,26 +4488,76 @@ pub fn score_alignment(ref_img: &RgbaImg, render_img: &RgbaImg, model: &MapModel
         save_png(&sil, &out_dir.join("pass1_silhouettes.png"))?;
     }
 
-    // Detect localized warm/cool light pools around light-emitting props in reference first so zone grades can
-    // compensate for `ambience_dark` when light pools are enabled.
-    let mut fx_lights = Map::new();
-    for p in &model.props {
-        if !is_light_prop(&p.art) {
-            continue;
-        }
-        if let Some((rad, col, strength)) = estimate_prop_light(&ref_stats, model, p) {
-            fx_lights.insert(
-                p.id.clone(),
-                json!({
-                    "radius": round1(rad as f64),
-                    "color": col,
-                    "strength": round3(strength as f64),
-                }),
-            );
+    // Detect localized light pools and ambient darkening:
+    // When staged L2 (propped unlit) is supplied, extract exact L3/L2 ratio peaks, radius, RGB, and ambience_dark;
+    // otherwise fall back to composite heuristic around light-emitting props.
+    let staged_lighting = ref_l2.map(|l2| extract_l3_l2_lighting(ref_img, l2, model));
+    if let Some(sl) = &staged_lighting {
+        if run_p2 {
+            save_png(&sl.ratio_map, &out_dir.join("l3_l2_ratio_map.png"))?;
         }
     }
-    let amb_dark = if !fx_lights.is_empty() { 0.14f32 } else { 0.0f32 };
+    let mut fx_lights = Map::new();
+    let mut peaks_json = Vec::new();
+    let (amb_dark, amb_rgb, lighting_source): (f32, [u8; 3], &str) = if let Some(sl) = &staged_lighting {
+        for pk in &sl.peaks {
+            peaks_json.push(json!({
+                "cell_center": [round2(pk.cell_x as f64), round2(pk.cell_y as f64)],
+                "radius": round1(pk.radius_px as f64),
+                "color": pk.color,
+                "strength": round3(pk.strength as f64),
+                "peak_ratio": round3(pk.peak_ratio as f64),
+                "matched_prop": pk.matched_prop,
+            }));
+            if let Some(prop_id) = &pk.matched_prop {
+                fx_lights.insert(
+                    prop_id.clone(),
+                    json!({
+                        "radius": round1(pk.radius_px as f64),
+                        "color": pk.color,
+                        "strength": round3(pk.strength as f64),
+                    }),
+                );
+            }
+        }
+        let dark = if sl.ambience_dark > 0.02 {
+            sl.ambience_dark
+        } else if !fx_lights.is_empty() {
+            0.14
+        } else {
+            0.0
+        };
+        (dark, sl.ambience_rgb, "exact_L3_div_L2")
+    } else {
+        for p in &model.props {
+            if !is_light_prop(&p.art) {
+                continue;
+            }
+            if let Some((rad, col, strength)) = estimate_prop_light(&ref_stats, model, p) {
+                fx_lights.insert(
+                    p.id.clone(),
+                    json!({
+                        "radius": round1(rad as f64),
+                        "color": col,
+                        "strength": round3(strength as f64),
+                    }),
+                );
+            }
+        }
+        let dark = if !fx_lights.is_empty() { 0.14f32 } else { 0.0f32 };
+        (dark, [6, 8, 14], "composite_heuristic")
+    };
     let amb_comp = 1.0 / (1.0 - amb_dark);
+    // Exclude bright L3/L2 light-pool cells from ambient zone floor means so localized lamps do not inflate zone grades.
+    let fg_ref_for_zone: Vec<f32> = if let Some(sl) = &staged_lighting {
+        fg_ref
+            .iter()
+            .enumerate()
+            .map(|(i, &v)| if sl.peak_mask[i] { v.max(0.85) } else { v })
+            .collect()
+    } else {
+        fg_ref.clone()
+    };
 
     // ---- PASS 2: Per-Zone Value, Palette & Atmosphere Solver ----
     let mut zone_reports = Vec::new();
@@ -3587,7 +4565,7 @@ pub fn score_alignment(ref_img: &RgbaImg, render_img: &RgbaImg, model: &MapModel
     let (mut dl_sum, mut drgb_sum, mut z_cnt) = (0.0f64, 0.0f64, 0usize);
 
     for zi in model.zone_defs.values() {
-        let (ref_floor, ref_wall) = zone_floor_wall_means(&ref_stats, &fg_ref, model, zi);
+        let (ref_floor, ref_wall) = zone_floor_wall_means(&ref_stats, &fg_ref_for_zone, model, zi);
         let (ren_floor, ren_wall) = zone_floor_wall_means(&ren_stats, &fg_ren, model, zi);
 
         let ref_fl = luma709(ref_floor[0], ref_floor[1], ref_floor[2]);
@@ -3645,12 +4623,13 @@ pub fn score_alignment(ref_img: &RgbaImg, render_img: &RgbaImg, model: &MapModel
         }));
     }
 
+    let dim_on = amb_dark > 0.02 || !fx_lights.is_empty();
     let map_fx = if run_p2 {
         let mut root = Map::new();
-        root.insert("dim_ambience".into(), json!(!fx_lights.is_empty()));
-        if !fx_lights.is_empty() {
+        root.insert("dim_ambience".into(), json!(dim_on));
+        if dim_on {
             root.insert("ambience_dark".into(), json!(round3(amb_dark as f64)));
-            root.insert("ambience_rgb".into(), json!([6, 8, 14]));
+            root.insert("ambience_rgb".into(), json!(amb_rgb));
         }
         root.insert("zones".into(), Value::Object(fx_zones));
         if !fx_lights.is_empty() {
@@ -3777,6 +4756,9 @@ pub fn score_alignment(ref_img: &RgbaImg, render_img: &RgbaImg, model: &MapModel
             "props": prop_reports,
         },
         "pass2": {
+            "lighting_source": lighting_source,
+            "ambience_dark": round3(amb_dark as f64),
+            "l3_l2_peaks": peaks_json,
             "mean_zone_delta_l": round2(mean_zone_dl),
             "mean_zone_delta_rgb": round2(mean_zone_drgb),
             "zones": zone_reports,
@@ -4274,5 +5256,251 @@ mod tests {
         assert_eq!(rep["layers"]["L3_lighting"]["source"], "exact_L3_div_L2_ratio");
         assert_eq!(rep["layers"]["L3_lighting"]["status"], "PASS");
         assert!(scratch.path().join("layer_sheet.png").is_file());
+    }
+
+    #[test]
+    fn l3_l2_lighting_solver_extracts_exact_peak_center_radius_color_and_ambient_dark() {
+        let m = sample_model();
+        let (w, h) = (m.cols * 16, m.rows * 16);
+        let mut l2 = RgbaImg::new(w, h, [20, 20, 22, 255]);
+        for y in 0..m.rows {
+            for x in 0..m.cols {
+                if m.tile(x, y) != '#' {
+                    l2.fill_rect(x * 16, y * 16, 16, 16, [92, 92, 96, 255]);
+                }
+            }
+        }
+        // L3 lit: ambient darkened to 0.72x overall, plus a warm amber light pool centered on brazier_1 at (8, 2)
+        // and a cool cyan light pool centered at (2, 2)
+        let mut l3 = l2.clone();
+        for py in 0..h {
+            for px in 0..w {
+                let cx = px as f32 / 16.0;
+                let cy = py as f32 / 16.0;
+                let g = l2.get(px, py);
+                if g[0] <= 24 {
+                    continue;
+                }
+                let mut r = g[0] as f32 * 0.72;
+                let mut gr = g[1] as f32 * 0.72;
+                let mut b = g[2] as f32 * 0.72;
+                let d_warm = ((cx - 8.5).powi(2) + (cy - 2.5).powi(2)).sqrt();
+                if d_warm < 3.0 {
+                    let t = (1.0 - d_warm / 3.0).powi(2);
+                    r += 145.0 * t;
+                    gr += 92.0 * t;
+                    b += 35.0 * t;
+                }
+                let d_cool = ((cx - 2.5).powi(2) + (cy - 2.5).powi(2)).sqrt();
+                if d_cool < 2.5 {
+                    let t = (1.0 - d_cool / 2.5).powi(2);
+                    r += 35.0 * t;
+                    gr += 110.0 * t;
+                    b += 155.0 * t;
+                }
+                l3.set(px, py, [r.min(255.0) as u8, gr.min(255.0) as u8, b.min(255.0) as u8, 255]);
+            }
+        }
+        let sl = extract_l3_l2_lighting(&l3, &l2, &m);
+        assert!(sl.ambience_dark > 0.15 && sl.ambience_dark < 0.45, "expected ~0.28 ambient dark, got {}", sl.ambience_dark);
+        assert!(sl.peaks.len() >= 2, "expected both warm and cool peaks, got {:?}", sl.peaks);
+        let warm = sl.peaks.iter().find(|p| p.matched_prop.as_deref() == Some("brazier_1")).expect("brazier_1 matched");
+        assert!((warm.cell_x - 8.5).abs() < 0.75 && (warm.cell_y - 2.5).abs() < 0.75, "warm center off: ({}, {})", warm.cell_x, warm.cell_y);
+        assert!(warm.color[0] > warm.color[2] + 60, "warm peak RGB should be amber, got {:?}", warm.color);
+        let cool = sl.peaks.iter().find(|p| p.cell_x < 4.5).expect("cool peak detected");
+        assert!(cool.color[2] > cool.color[0] + 60, "cool peak RGB should be cyan/blue, got {:?}", cool.color);
+
+        let scratch = aegis_core::scratch::Scratch::new("align_l3_l2_solver");
+        let rep = score_alignment_staged(&l3, Some(&l2), &l2, &m, "all", scratch.path()).unwrap();
+        assert_eq!(rep.json["pass2"]["lighting_source"], "exact_L3_div_L2");
+        assert!(scratch.path().join("l3_l2_ratio_map.png").is_file());
+        let fx = rep.map_fx.expect("solved map_fx");
+        assert_eq!(fx["dim_ambience"], true);
+        let br = &fx["lights"]["brazier_1"];
+        assert!(br["radius"].as_f64().unwrap() >= 48.0);
+        assert!(br["color"][0].as_u64().unwrap() > br["color"][2].as_u64().unwrap() + 60);
+    }
+
+    #[test]
+    fn cleanplate_check_ref_catches_l0_water_basin_drift() {
+        let entry = json!({
+            "id": "basin_demo",
+            "name": "Basin Demo",
+            "rows": [
+                "############",
+                "#....~~....#",
+                "#....~~....#",
+                "#....~~....#",
+                "#....~~....#",
+                "############"
+            ],
+            "zones": [
+                "------------",
+                "-aaaawwbbbb-",
+                "-aaaawwbbbb-",
+                "-aaaawwbbbb-",
+                "-aaaawwbbbb-",
+                "------------"
+            ],
+            "zone_legend": {
+                "a": {"id": "west_quay", "kind": "safe", "indoor": false},
+                "w": {"id": "water_channel", "kind": "safe", "indoor": false},
+                "b": {"id": "east_quay", "kind": "safe", "indoor": false}
+            },
+            "ground": [
+                "ffffffffffff",
+                "fffffwwfffff",
+                "fffffwwfffff",
+                "fffffwwfffff",
+                "fffffwwfffff",
+                "ffffffffffff"
+            ],
+            "ground_legend": { "f": "flagstone", "w": "water" },
+            "anchors": [{"id": "spawn", "x": 2, "y": 2}],
+            "props": []
+        });
+        let mut gcol = IndexMap::new();
+        gcol.insert("flagstone".into(), [108, 102, 92]);
+        gcol.insert("water".into(), [28, 56, 78]);
+        let m = MapModel::from_json(&entry, None, gcol, &BTreeMap::new()).unwrap();
+        let spec = build_refspec(&m);
+        let (w, h) = (m.cols * 16, m.rows * 16);
+
+        // Clean water basin: cool dark water on '~', warm tan flagstone on '.'
+        let mut good = RgbaImg::new(w, h, [18, 18, 20, 255]);
+        // Drifted cleanplate: water basin vanished (painted same warm stone everywhere)
+        let mut bad = RgbaImg::new(w, h, [18, 18, 20, 255]);
+        for y in 0..m.rows {
+            for x in 0..m.cols {
+                if m.tile(x, y) == '#' {
+                    continue;
+                }
+                let gc = if m.tile(x, y) == '~' { [30, 62, 88, 255] } else { [116, 108, 94, 255] };
+                good.fill_rect(x * 16, y * 16, 16, 16, gc);
+                bad.fill_rect(x * 16, y * 16, 16, 16, [116, 108, 94, 255]);
+            }
+        }
+        let scratch = aegis_core::scratch::Scratch::new("align_l0_water");
+        let a_good = check_reference_staged(&good, &m, &spec, &scratch.path().join("good"), RefStage::CleanPlate, None).unwrap();
+        let chk_good = a_good["deterministic_checks"].as_array().unwrap().iter().find(|c| c["id"] == "l0_water_land_consistency").expect("water check present");
+        assert_eq!(chk_good["status"], "PASS");
+        assert!(scratch.path().join("good").join("l0_water_land_check.png").is_file());
+
+        let a_bad = check_reference_staged(&bad, &m, &spec, &scratch.path().join("bad"), RefStage::CleanPlate, None).unwrap();
+        let chk_bad = a_bad["deterministic_checks"].as_array().unwrap().iter().find(|c| c["id"] == "l0_water_land_consistency").expect("water check present");
+        assert_eq!(chk_bad["status"], "FAIL");
+        assert_eq!(a_bad["deterministic_summary"]["gate_ready_for_vision"], false);
+    }
+
+    #[test]
+    fn gdrive_backend_enqueue_syncs_active_refs_and_ingest_pulls_outputs() {
+        use std::cell::RefCell;
+
+        struct MockDrive {
+            next_id: RefCell<u32>,
+            folders: RefCell<BTreeMap<String, (Option<String>, String)>>, // id -> (parent, name)
+            files: RefCell<BTreeMap<String, (String, String, Vec<u8>)>>,  // id -> (parent, name, bytes)
+            trashed: RefCell<Vec<String>>,
+        }
+        impl MockDrive {
+            fn new() -> Self {
+                let mut folders = BTreeMap::new();
+                folders.insert("root_pipe".into(), (None, "image_pipeline".into()));
+                Self {
+                    next_id: RefCell::new(1),
+                    folders: RefCell::new(folders),
+                    files: RefCell::new(BTreeMap::new()),
+                    trashed: RefCell::new(Vec::new()),
+                }
+            }
+            fn alloc(&self, prefix: &str) -> String {
+                let mut n = self.next_id.borrow_mut();
+                let id = format!("{prefix}_{}", *n);
+                *n += 1;
+                id
+            }
+        }
+        impl DriveBackend for MockDrive {
+            fn find_folder(&self, name: &str, parent_id: Option<&str>) -> Result<Option<String>> {
+                Ok(self
+                    .folders
+                    .borrow()
+                    .iter()
+                    .find(|(_, (p, n))| n == name && p.as_deref() == parent_id)
+                    .map(|(id, _)| id.clone()))
+            }
+            fn ensure_folder(&self, name: &str, parent_id: &str) -> Result<String> {
+                if let Some(id) = self.find_folder(name, Some(parent_id))? {
+                    return Ok(id);
+                }
+                let id = self.alloc("fld");
+                self.folders.borrow_mut().insert(id.clone(), (Some(parent_id.to_string()), name.to_string()));
+                Ok(id)
+            }
+            fn list_children(&self, folder_id: &str) -> Result<Vec<DriveEntry>> {
+                let mut out = Vec::new();
+                for (id, (p, n)) in self.folders.borrow().iter() {
+                    if p.as_deref() == Some(folder_id) {
+                        out.push(DriveEntry { id: id.clone(), name: n.clone(), mime_type: DRIVE_FOLDER_MIME.into() });
+                    }
+                }
+                for (id, (p, n, _)) in self.files.borrow().iter() {
+                    if p == folder_id {
+                        out.push(DriveEntry { id: id.clone(), name: n.clone(), mime_type: "application/octet-stream".into() });
+                    }
+                }
+                Ok(out)
+            }
+            fn upload_or_update(&self, parent_id: &str, local_path: &Path, remote_name: &str) -> Result<String> {
+                let bytes = std::fs::read(local_path)?;
+                let mut files = self.files.borrow_mut();
+                if let Some((id, (_, _, data))) = files.iter_mut().find(|(_, (p, n, _))| p == parent_id && n == remote_name) {
+                    *data = bytes;
+                    return Ok(id.clone());
+                }
+                let id = self.alloc("file");
+                files.insert(id.clone(), (parent_id.to_string(), remote_name.to_string(), bytes));
+                Ok(id)
+            }
+            fn download(&self, file_id: &str, dest_path: &Path) -> Result<()> {
+                if let Some(p) = dest_path.parent() {
+                    std::fs::create_dir_all(p)?;
+                }
+                let files = self.files.borrow();
+                let (_, _, data) = files.get(file_id).context("mock file not found")?;
+                std::fs::write(dest_path, data)?;
+                Ok(())
+            }
+            fn trash(&self, file_id: &str) -> Result<()> {
+                self.files.borrow_mut().remove(file_id);
+                self.trashed.borrow_mut().push(file_id.to_string());
+                Ok(())
+            }
+        }
+
+        let drive = MockDrive::new();
+        let refs_id = drive.ensure_folder("refs", "root_pipe").unwrap();
+        let active_id = drive.ensure_folder("active", &refs_id).unwrap();
+        let output_id = drive.ensure_folder("output", "root_pipe").unwrap();
+        // Seed a stale active ref that should be trashed on enqueue, plus two outputs for ingest
+        drive.files.borrow_mut().insert("stale_1".into(), (active_id.clone(), "stale_old.png".into(), b"stale".to_vec()));
+        drive.files.borrow_mut().insert("out_1".into(), (output_id.clone(), "demo_vault_ref_cleanplate_01.png".into(), b"png1".to_vec()));
+        drive.files.borrow_mut().insert("out_2".into(), (output_id.clone(), "other_map_01.png".into(), b"png2".to_vec()));
+
+        let scratch = aegis_core::scratch::Scratch::new("align_gdrive_mock");
+        let block = scratch.path().join("demo_vault.cleanplate.blockout.png");
+        std::fs::write(&block, b"fake_png_bytes").unwrap();
+        let mut req = json!({"prompt": "test", "references": []});
+
+        let res = enqueue_via_drive_backend(&drive, "image_pipeline", None, "demo_vault_ref_cleanplate", &mut req, &[block]).unwrap();
+        assert_eq!(res.stored_refs, vec!["refs/demo_vault.cleanplate.blockout.png"]);
+        assert_eq!(res.active_refs, vec!["demo_vault.cleanplate.blockout.png"]);
+        assert_eq!(res.trashed_stale_refs, vec!["stale_old.png"]);
+        assert_eq!(drive.trashed.borrow().as_slice(), &["stale_1".to_string()]);
+
+        let pulled = ingest_via_drive_backend(&drive, "image_pipeline", None, Some("demo_vault"), &scratch.path().join("ingested"), false).unwrap();
+        assert_eq!(pulled.len(), 1);
+        assert_eq!(pulled[0].name, "demo_vault_ref_cleanplate_01.png");
+        assert_eq!(std::fs::read(&pulled[0].local_path).unwrap(), b"png1");
     }
 }
