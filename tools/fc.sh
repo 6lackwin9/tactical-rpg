@@ -108,6 +108,32 @@ if [ -z "${CARGO_TARGET_DIR:-}" ]; then
   base=$(sed -n 's/^target-dir = "\(.*\)"/\1/p' .cargo/config.toml 2>/dev/null)
   [ -n "$base" ] && export CARGO_TARGET_DIR="$base"
 fi
+# PILLAR1 (2026-11-25): reuse sccache and a fast Linux linker (mold or lld) automatically when installed.
+if [ -z "${RUSTC_WRAPPER:-}" ] && [ -z "${FC_NO_SCCACHE:-}" ] && command -v sccache >/dev/null 2>&1; then
+  export RUSTC_WRAPPER=sccache
+fi
+if [ "$(uname -s 2>/dev/null)" = "Linux" ] && [ "${OS:-}" != "Windows_NT" ] && [ -z "${FC_NO_FAST_LINKER:-}" ]; then
+  case " ${RUSTFLAGS:-} " in
+    *"-fuse-ld="*) ;;
+    *)
+      if command -v clang >/dev/null 2>&1; then
+        if command -v mold >/dev/null 2>&1; then
+          export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="${CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER:-clang}"
+          export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=-fuse-ld=mold"
+        elif command -v ld.lld >/dev/null 2>&1 || command -v lld >/dev/null 2>&1; then
+          export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="${CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER:-clang}"
+          export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=-fuse-ld=lld"
+        fi
+      fi ;;
+  esac
+fi
+
+prebuilt_bin() {  # prints the debug binary path for $1 when already built, else fails
+  local b="${CARGO_TARGET_DIR:-$PWD/target}/debug/$1"
+  if [ -x "$b" ]; then echo "$b"; return 0; fi
+  if [ -x "$b.exe" ]; then echo "$b.exe"; return 0; fi
+  return 1
+}
 
 # Windows Smart App Control sometimes blocks a freshly linked test binary (os error 4551): delete the blocked exe so the next
 # run relinks it, up to 3 tries (engine/docs/PORT_NOTES.md).
@@ -210,11 +236,12 @@ kill_tree() {  # $1 = a background job started by tooltests. Windows: taskkill /
 }
 
 tooltests() {  # the tools/tiles tests, with a time limit (FC_TOOLTESTS_LIMIT seconds); no Python with Pillow: a visible SKIP, not a failure
-  local py limit=${FC_TOOLTESTS_LIMIT:-300} log pid code start=$SECONDS run=()
+  local py limit=${FC_TOOLTESTS_LIMIT:-300} log pid code start=$SECONDS run=() gc=""
   if ! py=$(tools_python); then echo "[tooltests] SKIP: no Python with Pillow found, tools/tiles tests did not run"; return 0; fi
+  if [ "${FC_PREBUILT:-0}" = "1" ]; then gc=$(prebuilt_bin ground_compose 2>/dev/null || true); fi
   log=$(mktemp)
   [ -r "/proc/$$/winpid" ] || run=(setsid)
-  (cd tools/tiles && exec "${run[@]}" "$py" -m unittest test_tiles) > "$log" 2>&1 &
+  (cd tools/tiles && [ -n "$gc" ] && export AEGIS_GROUND_COMPOSE="$gc"; exec "${run[@]}" "$py" -m unittest test_tiles) > "$log" 2>&1 &
   pid=$!
   # shellcheck disable=SC2064  # the pid is known now
   trap "kill_tree $pid; rm -f '$log'; exit 130" INT TERM
@@ -239,14 +266,18 @@ tooltests() {  # the tools/tiles tests, with a time limit (FC_TOOLTESTS_LIMIT se
 # REPLAY-CI1: every repro recording replays to its end with every checkpoint matching (`aegis replay` exit 0); the
 # recordings live in the game's repo folder (playtests/repro/<id>.json, or <id>/<id>.json beside note images).
 repro() {
-  local dir=games/emberwake/playtests/repro f out n=0 bad=0
+  local dir=games/emberwake/playtests/repro f out n=0 bad=0 cli=""
   local files=()
   [ -d "$dir" ] && while IFS= read -r f; do files+=("$f"); done < <(find "$dir" -name '*.json' ! -name '*.tmp' | sort)
   if [ ${#files[@]} -eq 0 ]; then echo "[repro] ok: no recordings in $dir"; return; fi
-  cargo build -q -p emberwake_host || { echo "[repro] FAIL: the build"; status=1; return; }
+  if [ "${FC_PREBUILT:-0}" = "1" ]; then cli=$(prebuilt_bin aegis 2>/dev/null || true); fi
+  if [ -z "$cli" ]; then
+    cargo build -q -p emberwake_host || { echo "[repro] FAIL: the build"; status=1; return; }
+    cli=$(prebuilt_bin aegis) || { echo "[repro] FAIL: no aegis binary after build"; status=1; return; }
+  fi
   for f in "${files[@]}"; do
     n=$((n + 1))
-    if ! out=$(cargo run -q -p emberwake_host -- replay "$f" 2>&1); then
+    if ! out=$("$cli" replay "$f" 2>&1); then
       bad=$((bad + 1))
       echo "[repro] FAIL $f"
       echo "$out" | grep -E "diverge|broken|differs|load error|panicked" | head -8 | sed 's/^/    /'
@@ -282,20 +313,40 @@ plannertests() {  # the tools/planner script tests (SKILLS1-FB): plain Python, n
 }
 
 layouts() {  # PR7-38 (UISPLIT1 US5): aegis_ui's ui_layout check over every game folder's asset layers
-  cargo build -q -p aegis_ui --bin ui_layout || { status=1; return; }
-  local games=() d
+  local exe="" games=() d
+  if [ "${FC_PREBUILT:-0}" = "1" ]; then exe=$(prebuilt_bin ui_layout 2>/dev/null || true); fi
+  if [ -z "$exe" ]; then
+    cargo build -q -p aegis_ui --bin ui_layout || { status=1; return; }
+    exe=$(prebuilt_bin ui_layout) || { status=1; return; }
+  fi
   for d in games/*/; do [ -f "$d/game.json" ] && games+=("${d%/}"); done
-  "${CARGO_TARGET_DIR:-$PWD/target}/debug/ui_layout" check "${games[@]}" || status=1
+  "$exe" check "${games[@]}" || status=1
 }
 
-lints() {  # ENGINE-4 (CI-HARDEN1): the workspace deny set under clippy, then the unused-dependency check and its tests
-  local out py
-  if out=$(cargo clippy -q --workspace --all-targets -- -A clippy::all 2>&1) && ! echo "$out" | grep -q '^\(warning\|error\)'; then
-    echo "[lints] deny set clean"
+lints() {  # ENGINE-4 (CI-HARDEN1) + PILLAR1: workspace deny set (fast macro scan when all clippy denies are macro-only, else clippy) + unused deps
+  local out py rc need_clippy=0
+  py=$(python_with "import tomllib") || py=""
+  if [ "${FC_LINTS_CLIPPY:-0}" = "1" ] || [ -z "$py" ]; then
+    need_clippy=1
   else
-    echo "$out" | grep -E '^(warning|error)' -A8 | head -n 60; echo "[lints] FAIL: the deny set ([workspace.lints] in Cargo.toml)"; status=1
+    "$py" tools/deps/deny_macros.py
+    rc=$?
+    if [ $rc -eq 1 ]; then
+      status=1
+    elif [ $rc -eq 2 ]; then
+      need_clippy=1
+    elif [ $rc -ne 0 ]; then
+      status=1
+    fi
   fi
-  if ! py=$(python_with "import tomllib"); then echo "[lints] SKIP: no Python 3.11+ for tools/deps"; return 0; fi
+  if [ $need_clippy -eq 1 ]; then
+    if out=$(cargo clippy -q --workspace --all-targets -- -A clippy::all 2>&1) && ! echo "$out" | grep -q '^\(warning\|error\)'; then
+      echo "[lints] deny set clean (clippy)"
+    else
+      echo "$out" | grep -E '^(warning|error)' -A8 | head -n 60; echo "[lints] FAIL: the deny set ([workspace.lints] in Cargo.toml)"; status=1
+    fi
+  fi
+  if [ -z "$py" ]; then echo "[lints] SKIP: no Python 3.11+ for tools/deps"; return 0; fi
   "$py" tools/deps/unused_deps.py || status=1
   if out=$(cd tools/deps && "$py" -m unittest -q 2>&1); then
     echo "[lints] deps tests ok: $(echo "$out" | grep -E '^Ran [0-9]+ test')"
@@ -306,10 +357,14 @@ lints() {  # ENGINE-4 (CI-HARDEN1): the workspace deny set under clippy, then th
 
 newgame() {  # ENGINE-6 (NEW-GAME1): the new-game templates still make a game that builds with no warning, passes its tests
   # and its scenario: `aegis new game scaffold_check` into games/, built, tested, its scenario run, then removed
-  local id=scaffold_check bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" out
+  local id=scaffold_check bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" cli="" out
   [ -e "games/$id" ] && { echo "[newgame] FAIL: games/$id exists; remove it first"; status=1; return; }
-  cargo build -q -p emberwake_host || { status=1; return; }
-  "$bin/aegis" new game "$id" > /dev/null || { status=1; return; }
+  if [ "${FC_PREBUILT:-0}" = "1" ]; then cli=$(prebuilt_bin aegis 2>/dev/null || true); fi
+  if [ -z "$cli" ]; then
+    cargo build -q -p emberwake_host || { status=1; return; }
+    cli=$(prebuilt_bin aegis) || { status=1; return; }
+  fi
+  "$cli" new game "$id" > /dev/null || { status=1; return; }
   if out=$(cargo build -p "${id}_game" --all-targets 2>&1) && ! echo "$out" | grep -qE '^warning' \
     && out=$(cargo test -q -p "${id}_game" 2>&1) && out=$(cd "games/$id" && "$bin/${id}_cli" scenario run all out="$(mktemp -d)" 2>&1); then
     echo "[newgame] ok: a new game builds, passes its tests and its scenario"
@@ -337,12 +392,14 @@ assetlib() {  # PR7-35 (ASSETLIB1): the kit asset library check (tools/assetlib/
 }
 
 seeds_check() {  # ENGINE-20 (TOOLS-HELP3): the seeds replayed in commit order leave the shipped data as it is (tools/planner/seed_order.py)
-  local py g
+  local py g cli=""
   if ! py=$(python_with "pass"); then echo "[seeds] SKIP: no Python 3 found"; return 0; fi
   for g in games/*/data/seeds; do
     [ -d "$g" ] || continue
     g=${g#games/}; g=${g%%/*}
-    "$py" tools/planner/seed_order.py "$g" "$@" || status=1
+    cli=""
+    if [ "${FC_PREBUILT:-0}" = "1" ]; then cli=$(prebuilt_bin "$(game_cli "games/$g")" 2>/dev/null || true); fi
+    AEGIS_CLI="$cli" "$py" tools/planner/seed_order.py "$g" "$@" || status=1
   done
 }
 
@@ -447,11 +504,146 @@ gate_steps() {  # the step names of tools/gate_steps.txt, in order
   grep -vE '^[[:space:]]*(#|$)' tools/gate_steps.txt | awk '{ print $1 }'
 }
 
-gate() {  # every step of tools/gate_steps.txt in order (the desktop's check_project.ps1 reads the same list); the first failure stops
-  local name
-  for name in $(gate_steps); do
-    gate_step "$name"; [ $status -ne 0 ] && return
+now_ms() {  # millisecond wall clock with no fork on bash 5+ ($EPOCHREALTIME)
+  if [ -n "${EPOCHREALTIME:-}" ]; then
+    local t=$EPOCHREALTIME s ms
+    s=${t%.*}; ms=${t#*.}; ms=${ms:0:3}
+    printf '%s%03d\n' "$s" "$((10#${ms:-0}))"
+  else
+    printf '%s000\n' "$(date +%s)"
+  fi
+}
+
+fmt_ms() {
+  awk -v ms="$1" 'BEGIN { printf "%.2fs", ms / 1000.0 }'
+}
+
+print_gate_timings() {  # $1 = total_ms, remaining args = "step:ms:state" (state: ok|FAIL|skip)
+  local total_ms=$1 entry name ms st
+  shift
+  [ $# -eq 0 ] && return 0
+  echo "[gate] --- step timings (wall total $(fmt_ms "$total_ms")) ---"
+  if [ -n "${FC_TIMINGS_OUT:-}" ]; then
+    mkdir -p "$(dirname "$FC_TIMINGS_OUT")"
+    printf 'step\tms\tstatus\n' > "$FC_TIMINGS_OUT"
+  fi
+  for entry in "$@"; do
+    name=${entry%%:*}; ms=${entry#*:}; st=${ms#*:}; ms=${ms%%:*}
+    awk -v n="$name" -v m="$ms" -v t="$total_ms" -v s="$st" 'BEGIN {
+      pct = (t > 0) ? (100.0 * m / t) : 0.0;
+      printf "[gate]   %-14s %7.2fs  (%5.1f%%)  %s\n", n, m / 1000.0, pct, s
+    }'
+    if [ -n "${FC_TIMINGS_OUT:-}" ]; then
+      printf '%s\t%s\t%s\n' "$name" "$ms" "$st" >> "$FC_TIMINGS_OUT"
+    fi
   done
+}
+
+gate_parallel_group() {  # prints the parallel batch id for steps safe to run concurrently, else empty
+  case "$1" in
+    docs|layers|assetlib|plannertests) echo "pre" ;;
+    lints) [ "${FC_LINTS_CLIPPY:-0}" = "1" ] && echo "" || echo "pre" ;;
+    layouts|repro|seeds|playtest) echo "post" ;;
+    *) echo "" ;;
+  esac
+}
+
+gate_skip_in_fast() {  # steps skipped only in `tools/fc.sh gate fast` (always run in default full gate and CI)
+  case "$1" in
+    shotsexact|newgame) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+run_parallel_batch() {  # runs $@ gate steps in parallel; appends "step:ms:state" to GATE_TIMINGS and sets status=1 on any failure
+  local dir s pids=() names=() i meta dt rc st
+  dir=$(mktemp -d)
+  for s in "$@"; do
+    names+=("$s")
+    (
+      status=0
+      local t0
+      t0=$(now_ms)
+      gate_step "$s"
+      local dt=$(( $(now_ms) - t0 ))
+      printf '%s:%s\n' "$dt" "$status" > "$dir/$s.meta"
+      exit "$status"
+    ) > "$dir/$s.out" 2>&1 &
+    pids+=($!)
+  done
+  for i in "${!pids[@]}"; do
+    wait "${pids[$i]}" || true
+  done
+  for s in "${names[@]}"; do
+    [ -s "$dir/$s.out" ] && cat "$dir/$s.out"
+    meta=$(cat "$dir/$s.meta" 2>/dev/null || echo "0:1")
+    dt=${meta%%:*}; rc=${meta#*:}
+    if [ "$rc" -eq 0 ]; then st=ok; else st=FAIL; status=1; fi
+    GATE_TIMINGS+=("${s}:${dt}:${st}")
+    echo "[gate] $s: $(fmt_ms "$dt") ($st)"
+  done
+  rm -rf "$dir"
+}
+
+gate() {  # every step of tools/gate_steps.txt (fast mode skips shotsexact/newgame; default/full/auto runs every step); parallelizes safe batches
+  local mode=${1:-full} name grp next_grp gate_t0 t0 dt st batch=() steps=() i n
+  case "$mode" in
+    ""|auto|full) [ "${FC_GATE_FAST:-0}" = "1" ] && mode=fast || mode=full ;;
+    fast) ;;
+    *) echo "usage: tools/fc.sh gate [full|fast|auto]"; status=2; return ;;
+  esac
+  [ "$mode" = "fast" ] && echo "[gate] mode: fast (local dev; shotsexact and newgame run in full gate / CI)"
+  GATE_TIMINGS=()
+  gate_t0=$(now_ms)
+  mapfile -t steps < <(gate_steps)
+  n=${#steps[@]}
+  i=0
+  while [ $i -lt $n ]; do
+    name=${steps[$i]}
+    if [ "$mode" = "fast" ] && gate_skip_in_fast "$name"; then
+      GATE_TIMINGS+=("${name}:0:skip")
+      echo "[gate] $name: skipped (fast mode; runs in full gate / CI)"
+      i=$((i + 1))
+      continue
+    fi
+    grp=$(gate_parallel_group "$name")
+    if [ -n "$grp" ] && [ "${FC_GATE_SERIAL:-0}" != "1" ]; then
+      batch=("$name")
+      i=$((i + 1))
+      while [ $i -lt $n ]; do
+        next_grp=$(gate_parallel_group "${steps[$i]}")
+        if [ "$next_grp" = "$grp" ] && ! { [ "$mode" = "fast" ] && gate_skip_in_fast "${steps[$i]}"; }; then
+          batch+=("${steps[$i]}")
+          i=$((i + 1))
+        else
+          break
+        fi
+      done
+      if [ ${#batch[@]} -gt 1 ]; then
+        run_parallel_batch "${batch[@]}"
+        if [ $status -ne 0 ]; then
+          print_gate_timings "$(( $(now_ms) - gate_t0 ))" "${GATE_TIMINGS[@]}"
+          return
+        fi
+        continue
+      fi
+      name=${batch[0]}
+    else
+      i=$((i + 1))
+    fi
+    t0=$(now_ms)
+    gate_step "$name"
+    dt=$(( $(now_ms) - t0 ))
+    if [ $status -eq 0 ]; then st=ok; else st=FAIL; fi
+    GATE_TIMINGS+=("${name}:${dt}:${st}")
+    echo "[gate] $name: $(fmt_ms "$dt") ($st)"
+    if [ $status -ne 0 ]; then
+      print_gate_timings "$(( $(now_ms) - gate_t0 ))" "${GATE_TIMINGS[@]}"
+      return
+    fi
+    [ "$name" = "build" ] && export FC_PREBUILT=1
+  done
+  print_gate_timings "$(( $(now_ms) - gate_t0 ))" "${GATE_TIMINGS[@]}"
   echo "[gate] ALL CHECKS PASSED"
 }
 
@@ -493,8 +685,8 @@ scenarios_all() {  # PR7-4: every scenario of each game, no window, dev build; g
   done
 }
 
-shots_exact() {  # ENGINE-17 (SHOT-CLOCK1): every scenario run again; each shot must be byte for byte the scenarios step's
-  # (the shot clock); with no shots kept (the step run alone) the scenarios step runs first
+shots_exact() {  # ENGINE-17 (SHOT-CLOCK1) + PILLAR1: every shot-producing scenario run again; each shot must be byte for byte
+  # the scenarios step's (the shot clock); skips zero-shot feel/reach scenarios (`only_shots=1`) and runs in parallel
   local bin="${CARGO_TARGET_DIR:-$PWD/target}/debug" keep="${CARGO_TARGET_DIR:-$PWD/target}/fc_shots" cli name out d py
   py=$(python_with "pass") || { echo "[shotsexact] SKIP: no Python 3 found"; return 0; }
   for d in games/*/; do
@@ -505,7 +697,7 @@ shots_exact() {  # ENGINE-17 (SHOT-CLOCK1): every scenario run again; each shot 
     name=$(basename "$d"); [ -f "$keep/$name/index.txt" ] || continue
     cli="$bin/$(game_cli "$d")"
     out=$(mktemp -d)
-    if ! "$cli" scenario run all out="$out/bundles" > "$out/run.txt" 2>&1; then
+    if ! "$cli" scenario run all out="$out/bundles" only_shots=1 > "$out/run.txt" 2>&1; then
       grep -vE "PASS;" "$out/run.txt" | head -n 20; echo "[shotsexact] FAIL: a scenario of $name failed on its second run (bundles under $out)"; status=1; continue
     fi
     "$py" tools/planner/shots_all.py collect "$out/bundles" "$out/shots" > /dev/null
@@ -765,7 +957,7 @@ case "$1" in
     heavy="tools/planner/heavy.sh"
     [ -z "${CI:-}" ] && [ -f "$heavy" ] && { source "$heavy"; heavy_start "fc.sh gate"; }
     prune_if_low
-    gate ;;
+    gate "${2:-full}" ;;
   prune) prune_target "${@:2}" ;;
   build) build ;;
   step) [ -n "${2:-}" ] || { echo "usage: tools/fc.sh step <name>   (a gate step of tools/gate_steps.txt: $(gate_steps | tr '\n' ' '))"; status=2; }; [ -n "${2:-}" ] && gate_step "$2" ;;

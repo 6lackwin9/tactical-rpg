@@ -61,6 +61,19 @@ class PruneTest(unittest.TestCase):
     def test_a_missing_target_is_nothing_to_do(self):
         self.assertEqual(pt.prune(self.t / "none"), (0, 0))
 
+    def test_prunes_build_dir_layout(self):
+        with tempfile.TemporaryDirectory() as d:
+            t = Path(d)
+            now = time.time()
+            touch(t / "debug" / "build" / "aegis_ui" / "aaaa" / "out" / "ui_test-0123456789abcdef", now - 200, exe=True)
+            touch(t / "debug" / "build" / "aegis_ui" / "bbbb" / "out" / "ui_test-fedcba9876543210", now - 10, exe=True)
+            touch(t / "debug" / "build" / "aegis_ui" / "aaaa" / "out" / "libaegis_ui-1111111111111111.rlib", now - 200)
+            names = [str(p.relative_to(t)) for p, _ in pt.stale(t)]
+            self.assertEqual(names, ["debug/build/aegis_ui/aaaa/out/ui_test-0123456789abcdef"])
+            self.assertEqual(pt.prune(t), (1, 10))
+            self.assertTrue((t / "debug" / "build" / "aegis_ui" / "bbbb" / "out" / "ui_test-fedcba9876543210").is_file())
+            self.assertTrue((t / "debug" / "build" / "aegis_ui" / "aaaa" / "out" / "libaegis_ui-1111111111111111.rlib").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

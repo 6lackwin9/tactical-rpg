@@ -96,7 +96,11 @@ def cli_stored(game, keys):
     with tempfile.TemporaryDirectory() as tmp:
         lst = Path(tmp) / "keys.json"
         lst.write_text(json.dumps(wanted), encoding="utf-8")
-        cmd = ["cargo", "run", "-q", "-p", "%s_host" % game, "--", "content", "get", "@%s" % lst]
+        prebuilt = os.environ.get("AEGIS_CLI")
+        if prebuilt and os.path.isfile(prebuilt):
+            cmd = [prebuilt, "content", "get", "@%s" % lst]
+        else:
+            cmd = ["cargo", "run", "-q", "-p", "%s_host" % game, "--", "content", "get", "@%s" % lst]
         r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env={**os.environ, "RUST_BACKTRACE": "0"})
     if r.returncode != 0:
         raise ValueError("content get: %s" % (r.stderr or r.stdout).strip()[:400])

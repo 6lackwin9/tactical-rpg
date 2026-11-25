@@ -260,10 +260,14 @@ def run_tool(args, what, env=None):
 
 
 def composer():
-    """The path of `ground_compose` (EN 6), the one implementation of the edge. cargo decides whether it needs building, once
-    a run: a board runs it once per picture, and `cargo run` per pair would cost a second each."""
+    """The path of `ground_compose` (EN 6), the one implementation of the edge. Reuses AEGIS_GROUND_COMPOSE when the
+    gate already built the workspace; otherwise cargo decides whether it needs building, once a run."""
     global _composer
     if _composer is None:
+        prebuilt = os.environ.get("AEGIS_GROUND_COMPOSE")
+        if prebuilt and os.path.isfile(prebuilt):
+            _composer = prebuilt
+            return _composer
         out = run_tool(["cargo", "build", "-q", "-p", "aegis_ui", "--bin", "ground_compose", "--message-format=json-render-diagnostics"],
                        "building ground_compose", cargo_env())
         found = [m.get("executable") for m in map(json.loads, out.splitlines())

@@ -1331,7 +1331,10 @@ pub fn compose_later(key: GroundKey, job: impl FnOnce() -> Image + Send + 'stati
     if cfg!(target_arch = "wasm32") || held(&key) || COMPOSING.with(|c| c.borrow().iter().any(|e| e.0 == key)) {
         return;
     }
-    COMPOSING.with(|c| c.borrow_mut().push((key, std::thread::spawn(job))));
+    let bg_threads = std::thread::available_parallelism().map_or(1, |n| n.get().saturating_sub(1).max(1));
+    COMPOSING.with(|c| {
+        c.borrow_mut().push((key, std::thread::spawn(move || with_compose_threads(bg_threads, job))));
+    });
 }
 
 /// ENGINE-54: keeps the grounds done composing on threads (`keep`); cheap, each frame while `composing`.

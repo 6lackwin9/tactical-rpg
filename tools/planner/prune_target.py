@@ -24,6 +24,25 @@ def size_of(p):
     return p.stat().st_size
 
 
+def _collect_hashed_exes(dirs):
+    groups = {}
+    for d in dirs:
+        if not d.is_dir():
+            continue
+        for f in d.iterdir():
+            if not f.is_file() or f.suffix in KEEP_EXT:
+                continue
+            m = HASHED.match(f.name)
+            if not m or not (f.suffix == ".exe" or os.access(f, os.X_OK)):
+                continue
+            groups.setdefault(m.group("name"), []).append(f)
+    out = []
+    for name in sorted(groups):
+        files = sorted(groups[name], key=lambda f: (f.stat().st_mtime, f.name), reverse=True)
+        out.extend((f, f.stat().st_size) for f in files[1:])
+    return out
+
+
 def stale(target):
     """(path, bytes) of every file and folder `prune` removes under `target`, in a stable order."""
     out = []
@@ -32,17 +51,12 @@ def stale(target):
     for profile in sorted(p for p in target.iterdir() if p.is_dir()):
         deps = profile / "deps"
         if deps.is_dir():
-            groups = {}
-            for f in deps.iterdir():
-                if not f.is_file() or f.suffix in KEEP_EXT:
-                    continue
-                m = HASHED.match(f.name)
-                if not m or not (f.suffix == ".exe" or os.access(f, os.X_OK)):
-                    continue
-                groups.setdefault(m.group("name"), []).append(f)
-            for name in sorted(groups):
-                files = sorted(groups[name], key=lambda f: (f.stat().st_mtime, f.name), reverse=True)
-                out.extend((f, f.stat().st_size) for f in files[1:])
+            out.extend(_collect_hashed_exes([deps]))
+        build = profile / "build"
+        if build.is_dir():
+            for crate_dir in sorted(c for c in build.iterdir() if c.is_dir()):
+                out_dirs = [h / "out" for h in sorted(crate_dir.iterdir()) if (h / "out").is_dir()]
+                out.extend(_collect_hashed_exes(out_dirs))
         inc = profile / "incremental"
         if inc.is_dir():
             out.append((inc, size_of(inc)))

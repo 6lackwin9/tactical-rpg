@@ -58,6 +58,18 @@ class GateSteps(unittest.TestCase):
         for s in listed():
             self.assertIn(s, r.stdout)
 
+    def test_prebuild_checks_run_before_build(self):
+        steps = listed()
+        build_idx = steps.index("build")
+        for cheap in ("docs", "layers", "assetlib", "plannertests", "lints"):
+            self.assertLess(steps.index(cheap), build_idx, f"{cheap} should fail-fast before build")
+
+    @unittest.skipUnless(BASH, "needs bash")
+    def test_unknown_gate_mode_is_refused(self):
+        r = subprocess.run([BASH, str(FC), "gate", "bogus"], cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("usage: tools/fc.sh gate", r.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

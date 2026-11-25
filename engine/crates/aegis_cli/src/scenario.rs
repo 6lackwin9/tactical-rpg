@@ -2210,9 +2210,46 @@ fn print_outcome(r: &Outcome) {
     }
 }
 
+/// True when any step (recursing into `Repeat`) measures wall-clock frame/input/audio timing (`Perf` or `Feel`).
+/// Timing-sensitive scenarios always run sequentially so parallel workers never skew their measurements.
+pub fn has_timing_step(steps: &[Step]) -> bool {
+    steps.iter().any(|st| match st {
+        Step::Perf { .. } | Step::Feel { .. } => true,
+        Step::Repeat { steps, .. } => has_timing_step(steps),
+        _ => false,
+    })
+}
+
+/// True when any step (recursing into `Repeat`) captures a screenshot (`Shot`).
+pub fn has_shot_step(steps: &[Step]) -> bool {
+    steps.iter().any(|st| match st {
+        Step::Shot { .. } => true,
+        Step::Repeat { steps, .. } => has_shot_step(steps),
+        _ => false,
+    })
+}
+
 fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args, launch: &LaunchCheck) -> Result<i32> {
     let options = options_of(folder, args, ".agent/scenario")?;
     let slow = options.slow;
+    let only_shots = match args.key("only_shots", "0").as_str() {
+        "0" => false,
+        "1" => true,
+        other => anyhow::bail!("only_shots is 1 or 0, not '{other}'"),
+    };
+    let default_jobs = if what == "all" && !options.window {
+        std::thread::available_parallelism().map_or(1, |n| n.get().clamp(1, 4))
+    } else {
+        1
+    };
+    let jobs: usize = match args.keys.get("jobs") {
+        Some(raw) => raw
+            .parse::<usize>()
+            .ok()
+            .filter(|&n| (1..=16).contains(&n))
+            .with_context(|| format!("jobs is a whole number from 1 to 16, not '{raw}'"))?,
+        None => default_jobs,
+    };
     let files = match what {
         "all" => files_in(scenarios),
         path if path.ends_with(".json") => vec![PathBuf::from(path)],
@@ -2236,14 +2273,58 @@ fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args, launch: &Launch
         println!("§ scenario run: nothing ran: {} file(s) have problems", files.len());
         return Ok(worst);
     }
-    let mut launcher = GameLauncher { slow: u64::from(slow) };
-    let (mut passed, mut failed) = (0, 0);
-    for s in &loaded {
+    let mut parallel_idxs = Vec::new();
+    let mut serial_idxs = Vec::new();
+    let mut skipped: Vec<(usize, String)> = Vec::new();
+    for (idx, s) in loaded.iter().enumerate() {
         if let Status::Waiting(why) = &s.status {
+            skipped.push((idx, why.clone()));
+            continue;
+        }
+        if only_shots && !has_shot_step(&s.steps) {
+            continue;
+        }
+        if jobs > 1 && !options.window && !s.window && !has_timing_step(&s.steps) {
+            parallel_idxs.push(idx);
+        } else {
+            serial_idxs.push(idx);
+        }
+    }
+    let results = std::sync::Mutex::new(Vec::<(usize, Vec<Outcome>)>::new());
+    if !parallel_idxs.is_empty() {
+        let workers = jobs.min(parallel_idxs.len());
+        let cursor = std::sync::atomic::AtomicUsize::new(0);
+        std::thread::scope(|scope| {
+            for _ in 0..workers {
+                scope.spawn(|| {
+                    let mut launcher = GameLauncher { slow: u64::from(slow) };
+                    loop {
+                        let slot = cursor.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some(&idx) = parallel_idxs.get(slot) else { break };
+                        let outcomes = run_scenario(&loaded[idx], &options, &mut launcher);
+                        results.lock().unwrap().push((idx, outcomes));
+                    }
+                });
+            }
+        });
+    }
+    if !serial_idxs.is_empty() {
+        let mut launcher = GameLauncher { slow: u64::from(slow) };
+        for idx in serial_idxs {
+            let outcomes = run_scenario(&loaded[idx], &options, &mut launcher);
+            results.lock().unwrap().push((idx, outcomes));
+        }
+    }
+    let mut by_idx: std::collections::BTreeMap<usize, Vec<Outcome>> = results.into_inner().unwrap().into_iter().collect();
+    let skip_map: std::collections::BTreeMap<usize, String> = skipped.into_iter().collect();
+    let (mut passed, mut failed) = (0, 0);
+    for (idx, s) in loaded.iter().enumerate() {
+        if let Some(why) = skip_map.get(&idx) {
             println!("§ {} SKIP: waiting: {why}", s.id);
             continue;
         }
-        for r in run_scenario(s, &options, &mut launcher) {
+        let Some(outcomes) = by_idx.remove(&idx) else { continue };
+        for r in outcomes {
             print_outcome(&r);
             if r.code == 0 {
                 passed += 1;
@@ -2255,4 +2336,37 @@ fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args, launch: &Launch
     }
     println!("§ scenario run: {passed} passed, {failed} failed");
     Ok(worst)
+}
+
+#[cfg(test)]
+mod parallel_filter_tests {
+    use super::*;
+
+    #[test]
+    fn detects_timing_and_shot_steps_through_repeat() {
+        let plain = vec![Step::Key { key: "Enter".into(), times: 1 }];
+        assert!(!has_timing_step(&plain));
+        assert!(!has_shot_step(&plain));
+
+        let nested_shot = vec![Step::Repeat {
+            times: 2,
+            until: None,
+            steps: vec![Step::Shot { name: "a".into(), max_w: 0, golden: None, t_ms: 0 }],
+        }];
+        assert!(!has_timing_step(&nested_shot));
+        assert!(has_shot_step(&nested_shot));
+
+        let nested_perf = vec![Step::Repeat {
+            times: 1,
+            until: None,
+            steps: vec![Step::Perf {
+                name: "p".into(),
+                frames: 10,
+                warm: 2,
+                budget: Budget { p50: None, p95: None, max: None },
+            }],
+        }];
+        assert!(has_timing_step(&nested_perf));
+        assert!(!has_shot_step(&nested_perf));
+    }
 }
