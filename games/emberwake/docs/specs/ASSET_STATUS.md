@@ -9,19 +9,19 @@ game and kit layers, plus the assets canon or a spec needs that have no file yet
 | --- | --- | --- | --- | --- |
 | background | 17 | 0 | 23 | 0 |
 | face sheet | 0 | 0 | 76 | 0 |
-| item icon | 49 | 1 | 54 | 0 |
+| item icon | 50 | 0 | 54 | 0 |
 | map | 19 | 0 | 0 | 0 |
 | music | 14 | 0 | 8 | 0 |
 | passives | 16 | 0 | 0 | 0 |
 | portrait | 0 | 0 | 106 | 0 |
 | prop | 200 | 0 | 0 | 0 |
 | sfx | 21 | 0 | 0 | 0 |
-| skill icon | 97 | 12 | 89 | 0 |
+| skill icon | 109 | 0 | 89 | 0 |
 | sprite sheet | 0 | 0 | 59 | 0 |
 | status icon | 18 | 0 | 0 | 0 |
 | tile | 421 | 0 | 0 | 0 |
 | ui | 92 | 0 | 0 | 0 |
-| **all** | **964** | **13** | **415** | **0** |
+| **all** | **977** | **0** | **415** | **0** |
 
 Every row, final files included: [ASSET_STATUS.csv](ASSET_STATUS.csv) (path, category, state, act, why, last
 commit). Below: what still needs work, rework and placeholders grouped by folder and reason.
@@ -31,14 +31,10 @@ commit). Below: what still needs work, rework and placeholders grouped by folder
 | Path | Category | Act | Why |
 | --- | --- | --- | --- |
 
-## Rework (13)
+## Rework (0)
 
 | Folder | Category | Files | Why |
 | --- | --- | --- | --- |
-| `game:items/braces/` | item icon | 1 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
-| `game:skills/` | skill icon | 3 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
-| `kit:skills/kinds/` | skill icon | 6 | I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4) |
-| `kit:skills/kinds/` | skill icon | 3 | I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4) |
 
 ## Placeholder (415)
 

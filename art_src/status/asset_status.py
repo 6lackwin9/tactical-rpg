@@ -88,7 +88,18 @@ def red_tile(f):
     return sum(1 for p in pts if p[3] > 200 and p[0] > p[2] + 25 and p[0] > p[1] + 15) >= 3
 
 
-def last_commits(paths):
+def has_slate_tile(f):
+    """True when the icon sits on the rounded I2 slate tile (transparent corner, opaque cool-slate border)."""
+    from PIL import Image
+    im = Image.open(f).convert("RGBA")
+    w, h = im.size
+    if im.getpixel((0, 0))[3] > 32:
+        return False
+    pts = [im.getpixel((x, y)) for x, y in ((w // 10, h // 2), (w // 2, h // 10), (w - 1 - w // 10, h // 2), (w // 2, h - 1 - h // 10))]
+    return sum(1 for p in pts if p[3] > 200 and p[2] >= p[0] - 8 and p[0] < 120) >= 3
+
+
+def last_commits(paths, existing_csv=None):
     """path -> short sha of the last commit that changed it (one git log for the whole tree)."""
     out = subprocess.run(["git", "log", "--format=@%h", "--name-only", "--", "games/emberwake/assets", "kits/rpg/assets"],
                          cwd=ROOT, capture_output=True, text=True, check=True).stdout
@@ -98,6 +109,33 @@ def last_commits(paths):
             sha = line[1:8]
         elif line and line not in seen:
             seen[line] = sha
+    # In shallow clones, files last touched before the shallow boundary all resolve to the boundary commit.
+    # Preserve their prior recorded commit SHA from ASSET_STATUS.csv unless locally modified.
+    is_shallow = subprocess.run(["git", "rev-parse", "--is-shallow-repository"],
+                                cwd=ROOT, capture_output=True, text=True).stdout.strip() == "true"
+    if is_shallow and existing_csv and existing_csv.exists():
+        import csv
+        roots = {
+            r[:7] for r in subprocess.run(["git", "rev-list", "--max-parents=0", "HEAD"],
+                                          cwd=ROOT, capture_output=True, text=True).stdout.splitlines() if r.strip()
+        }
+        dirty = {
+            line[3:].strip() for line in subprocess.run(["git", "status", "--porcelain", "--", "games/emberwake/assets", "kits/rpg/assets"],
+                                                        cwd=ROOT, capture_output=True, text=True).stdout.splitlines() if len(line) > 3
+        }
+        prior = {}
+        with existing_csv.open(encoding="utf-8", newline="") as fh:
+            for row in csv.DictReader(fh):
+                p = row.get("path", "")
+                if p.startswith("game:"):
+                    prior["games/emberwake/assets/" + p[5:]] = row.get("last_commit", "")
+                elif p.startswith("kit:"):
+                    prior["kits/rpg/assets/" + p[4:]] = row.get("last_commit", "")
+        for _, _, f in paths:
+            repo_rel = f.relative_to(ROOT).as_posix()
+            cur = seen.get(repo_rel, "")
+            if repo_rel not in dirty and (not cur or cur in roots) and prior.get(repo_rel):
+                seen[repo_rel] = prior[repo_rel]
     return seen
 
 
@@ -111,13 +149,13 @@ def synth_placeholders():
     return out
 
 
-def rows(check_file=None):
+def rows(check_file=None, existing_csv=None):
     files = []
     for layer, root in LAYERS.items():
         for f in sorted(root.rglob("*")):
             if f.suffix in EXT and f.is_file():
                 files.append((layer, f.relative_to(root).as_posix(), f))
-    commits = last_commits(files)
+    commits = last_commits(files, existing_csv=existing_csv)
     digest = collections.defaultdict(list)
     for layer, rel, f in files:
         digest[hashlib.sha1(f.read_bytes()).hexdigest()].append(f"{layer}:{rel}")
@@ -136,7 +174,7 @@ def rows(check_file=None):
             state, why = "rework", REWORK[rel]
         elif category(rel) in ("skill icon", "item icon") and red_tile(f):
             state, why = "rework", "I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)"
-        elif rel.startswith("skills/kinds/"):
+        elif rel.startswith("skills/kinds/") and not has_slate_tile(f):
             state, why = "rework", "I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4)"
         elif sha in PLACEHOLDER_COMMITS:
             state, why = "placeholder", PLACEHOLDER_COMMITS[sha]
@@ -205,7 +243,7 @@ if __name__ == "__main__":
     ap.add_argument("--check")
     ap.add_argument("--json")
     a = ap.parse_args()
-    table = rows(a.check)
+    table = rows(a.check, existing_csv=pathlib.Path(a.out).with_suffix(".csv"))
     print(dict(write(table, a.out)))
     if a.json:
         pathlib.Path(a.json).write_text(json.dumps(table, indent=1), encoding="utf-8")

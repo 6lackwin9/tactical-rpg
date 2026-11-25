@@ -75,7 +75,7 @@ game:items/accessory/keepsake_tpl_warrior.png,item icon,placeholder,all,Wave 2 p
 game:items/accessory/keepsake_vesper.png,item icon,final,all,,08501d3
 game:items/ammo/base.png,item icon,final,all,,ac96ee3
 game:items/bone_saw/base.png,item icon,final,all,,08501d3
-game:items/braces/base.png,item icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",ac96ee3
+game:items/braces/base.png,item icon,final,all,,2db8d8f
 game:items/buckler/base.png,item icon,final,all,,ac96ee3
 game:items/censer/base.png,item icon,final,all,,08501d3
 game:items/cloak/base.png,item icon,final,all,,ac96ee3
@@ -135,15 +135,15 @@ game:items/polearm/base.png,item icon,final,all,,08501d3
 game:items/scourge/base.png,item icon,final,all,,557b8b0
 game:items/sprayer/base.png,item icon,final,all,,557b8b0
 game:items/staff/runed_staff.png,item icon,final,all,,17cc42c
-game:map/landmarks/alleyway_junction_7.png,map,final,all,,
-game:map/landmarks/ash_crawl_crossroads.png,map,final,all,,
-game:map/landmarks/corvos_gate.png,map,final,all,,
-game:map/landmarks/crucible_watchpost.png,map,final,all,,
-game:map/landmarks/drowned_runoff_grate.png,map,final,all,,
-game:map/landmarks/fourth_kiln.png,map,final,all,,
-game:map/landmarks/slag_gate.png,map,final,all,,
-game:map/landmarks/sluice_undercroft.png,map,final,Act 1,,
-game:map/landmarks/tallow_vats.png,map,final,Act 1,,
+game:map/landmarks/alleyway_junction_7.png,map,final,all,,2db8d8f
+game:map/landmarks/ash_crawl_crossroads.png,map,final,all,,2db8d8f
+game:map/landmarks/corvos_gate.png,map,final,all,,2db8d8f
+game:map/landmarks/crucible_watchpost.png,map,final,all,,2db8d8f
+game:map/landmarks/drowned_runoff_grate.png,map,final,all,,2db8d8f
+game:map/landmarks/fourth_kiln.png,map,final,all,,2db8d8f
+game:map/landmarks/slag_gate.png,map,final,all,,2db8d8f
+game:map/landmarks/sluice_undercroft.png,map,final,Act 1,,2db8d8f
+game:map/landmarks/tallow_vats.png,map,final,Act 1,,2db8d8f
 game:portraits/bosses/arch_prelate_othemar.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",b6c8e94
 game:portraits/bosses/calcified_amalgam.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",7e185b0
 game:portraits/bosses/cantor_ysolde.png,portrait,placeholder,all,"Flow character pending: final portrait, sprites, animations and CGs come from Flow (STYLE_BIBLE 2)",b6c8e94
@@ -543,7 +543,7 @@ game:skills/hammer_shatter.png,skill icon,placeholder,all,Phase 4 U2 placeholder
 game:skills/hamstring.png,skill icon,final,all,,4161399
 game:skills/hamstring_cut.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
 game:skills/hamstring_sever.png,skill icon,final,all,,4bd93cf
-game:skills/haymaker.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",4161399
+game:skills/haymaker.png,skill icon,final,all,,2db8d8f
 game:skills/heavy_bill_thrust.png,skill icon,final,all,,4bd93cf
 game:skills/heavy_winch_sunder.png,skill icon,final,all,,4bd93cf
 game:skills/hex.png,skill icon,final,all,,4161399
@@ -555,7 +555,7 @@ game:skills/inferno.png,skill icon,final,all,,4161399
 game:skills/inquisitorial_parry.png,skill icon,final,all,,4bd93cf
 game:skills/intercept_guard.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
 game:skills/intercepting_hook.png,skill icon,final,all,,4bd93cf
-game:skills/intimidate.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",4161399
+game:skills/intimidate.png,skill icon,final,all,,2db8d8f
 game:skills/iron_shackle_drag.png,skill icon,final,all,,4bd93cf
 game:skills/judgement.png,skill icon,final,all,,4161399
 game:skills/knife_sever.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
@@ -653,7 +653,7 @@ game:skills/throat_carver.png,skill icon,final,all,,4bd93cf
 game:skills/throat_clamp_pounce.png,skill icon,final,all,,4bd93cf
 game:skills/tourniquet_tonic.png,skill icon,final,all,,4bd93cf
 game:skills/traitors_parry.png,skill icon,final,all,,4bd93cf
-game:skills/transfusion_pulse.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",4bd93cf
+game:skills/transfusion_pulse.png,skill icon,final,all,,2db8d8f
 game:skills/tripwire_snare.png,skill icon,final,all,,4bd93cf
 game:skills/vivisect.png,skill icon,placeholder,all,Phase 4 U2 placeholder icons (AI-14),53ae75c
 game:skills/volley.png,skill icon,final,all,,4161399
@@ -1291,15 +1291,15 @@ kit:props/sample_camp_tan/scorch_mark/v0.png,prop,final,all,,204dfd5
 kit:props/sample_camp_tan/scorch_mark/v1.png,prop,final,all,,204dfd5
 kit:props/sample_camp_tan/toll_arch/v0.png,prop,final,all,,204dfd5
 kit:props/sample_camp_tan/war_tent/v0.png,prop,final,all,,204dfd5
-kit:skills/kinds/attack.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",a6ae779
-kit:skills/kinds/defend.png,skill icon,rework,all,"I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4)",a6ae779
-kit:skills/kinds/disengage.png,skill icon,rework,all,"I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4)",a6ae779
-kit:skills/kinds/focus.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",a6ae779
-kit:skills/kinds/move.png,skill icon,rework,all,"I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4)",a6ae779
-kit:skills/kinds/rest.png,skill icon,rework,all,"I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4)",a6ae779
-kit:skills/kinds/status.png,skill icon,rework,all,"I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4)",a6ae779
-kit:skills/kinds/support.png,skill icon,rework,all,"I2 lock: flat glyph, move to the slate tile (STYLE_BIBLE 4)",a6ae779
-kit:skills/kinds/target.png,skill icon,rework,all,"I2 lock: painted-on-red tile, move the glyph to the slate tile (STYLE_BIBLE 4)",a6ae779
+kit:skills/kinds/attack.png,skill icon,final,all,,2db8d8f
+kit:skills/kinds/defend.png,skill icon,final,all,,2db8d8f
+kit:skills/kinds/disengage.png,skill icon,final,all,,2db8d8f
+kit:skills/kinds/focus.png,skill icon,final,all,,2db8d8f
+kit:skills/kinds/move.png,skill icon,final,all,,2db8d8f
+kit:skills/kinds/rest.png,skill icon,final,all,,2db8d8f
+kit:skills/kinds/status.png,skill icon,final,all,,2db8d8f
+kit:skills/kinds/support.png,skill icon,final,all,,2db8d8f
+kit:skills/kinds/target.png,skill icon,final,all,,2db8d8f
 kit:statuses/bleed.png,status icon,final,all,,a6ae779
 kit:statuses/burn.png,status icon,final,all,,a6ae779
 kit:statuses/empower.png,status icon,final,all,,945c454
