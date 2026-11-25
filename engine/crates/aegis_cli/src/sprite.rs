@@ -4,6 +4,7 @@
 //!   aegis sprite slice <in.png> out=<out.png> [cols=4] [rows=1] [frame=112x96] [foot=93] [key=1] [inset=2] [nearest=0|1] [clips=<clips.json>] [clip=<name>] [fps=8] [json]
 //!   aegis sprite check <sheet.png> [ref=<anchor.png>] [frame=112x96] [foot=93] [max_foot_drift=2] [max_chroma_pct=1.0] [out=<sprite_check.json>] [json]
 //!   aegis sprite batch-sheet (dirs=a,b | root=<dir>) [out=<batch_review.html>] [title=<text>] [embed=0|1]
+//!   aegis sprite import-set <set_dir> units=<units_dir> [class=<class>] [name=<variant>] [check=1] [force=0|1] [dry_run=0|1] [json]
 
 use crate::align::{load_image, save_png, RgbaImg};
 use crate::batch_sheet;
@@ -17,7 +18,8 @@ const USAGE: &str = "aegis sprite chroma [palette=<palette.json>] [colors=#rrggb
 aegis sprite key <in.png> out=<out.png> [cols=1] [rows=1] [json]
 aegis sprite slice <in.png> out=<out.png> [cols=4] [rows=1] [frame=112x96] [foot=93] [key=1] [inset=2] [nearest=0|1] [clips=<clips.json>] [clip=<name>] [fps=8] [json]
 aegis sprite check <sheet.png> [ref=<anchor.png>] [frame=112x96] [foot=93] [max_foot_drift=2] [max_chroma_pct=1.0] [out=<sprite_check.json>] [json]
-aegis sprite batch-sheet (dirs=a,b | root=<dir>) [out=<batch_review.html>] [title=<text>] [embed=0|1]";
+aegis sprite batch-sheet (dirs=a,b | root=<dir>) [out=<batch_review.html>] [title=<text>] [embed=0|1]
+aegis sprite import-set <set_dir> units=<units_dir> [class=<class>] [name=<variant>] [check=1] [force=0|1] [dry_run=0|1] [json]";
 
 /// CLI entrypoint for `aegis sprite ...`.
 pub fn command(args: &Args) -> Result<()> {
@@ -31,6 +33,7 @@ pub fn command(args: &Args) -> Result<()> {
             "out/sprite/batch_review.html",
             "Sprite Batch Review Sheet",
         ),
+        Some("import-set") => cmd_import_set(args),
         _ => {
             println!("{USAGE}");
             Ok(())
@@ -1473,6 +1476,438 @@ fn cmd_check(args: &Args) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// 5. Character Sprite Set Importer (`aegis sprite import-set`)
+// ---------------------------------------------------------------------------
+
+/// Options for `import_sprite_set`.
+#[derive(Debug, Clone)]
+pub struct ImportSetOpts {
+    pub set_dir: PathBuf,
+    pub units_dir: PathBuf,
+    pub class_override: Option<String>,
+    pub name: String,
+    pub check: bool,
+    pub force: bool,
+    pub dry_run: bool,
+    pub max_foot_drift: usize,
+    pub max_chroma_pct: f64,
+}
+
+#[derive(Debug, Clone)]
+struct SetVariantSource {
+    look: String,
+    sheet_path: PathBuf,
+    clips_path: PathBuf,
+}
+
+fn non_empty_str<'a>(v: &'a Value, keys: &[&str]) -> Option<&'a str> {
+    for &k in keys {
+        if let Some(s) = v.get(k).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()) {
+            return Some(s);
+        }
+    }
+    None
+}
+
+fn resolve_variant_rel(set_dir: &Path, look: &str, explicit: Option<&str>, file_name: &str) -> PathBuf {
+    if let Some(rel) = explicit {
+        return set_dir.join(rel);
+    }
+    let nested = set_dir.join(look).join(file_name);
+    if nested.is_file() || look != "base" {
+        return nested;
+    }
+    set_dir.join(file_name)
+}
+
+fn discover_set_variants(
+    set_dir: &Path,
+) -> Result<(Option<String>, Option<String>, Option<PathBuf>, Vec<SetVariantSource>)> {
+    if !set_dir.is_dir() {
+        bail!("set directory does not exist: {}", set_dir.display());
+    }
+
+    let manifest_path = set_dir.join("manifest.json");
+    let mut manifest_class: Option<String> = None;
+    let mut manifest_slug: Option<String> = None;
+    let mut manifest_palette: Option<String> = None;
+    let mut variants: Vec<SetVariantSource> = Vec::new();
+
+    if manifest_path.is_file() {
+        let text = std::fs::read_to_string(&manifest_path)
+            .with_context(|| format!("reading {}", manifest_path.display()))?;
+        let val: Value = serde_json::from_str(&text)
+            .with_context(|| format!("parsing {}", manifest_path.display()))?;
+
+        manifest_class = non_empty_str(&val, &["unitClass", "class"]).map(str::to_string);
+        manifest_slug = non_empty_str(&val, &["slug", "unit"]).map(str::to_string);
+        manifest_palette = non_empty_str(&val, &["palette"]).map(str::to_string);
+
+        match val.get("variants") {
+            Some(Value::Array(arr)) => {
+                for item in arr {
+                    let look = non_empty_str(item, &["aegisLookKey", "look", "id"])
+                        .context("manifest variant missing aegisLookKey/look/id")?
+                        .to_string();
+                    let sheet_path = resolve_variant_rel(
+                        set_dir,
+                        &look,
+                        non_empty_str(item, &["sheetPath", "sheet"]),
+                        "sheet.png",
+                    );
+                    let clips_path = resolve_variant_rel(
+                        set_dir,
+                        &look,
+                        non_empty_str(item, &["clipsPath", "clips"]),
+                        "clips.json",
+                    );
+                    variants.push(SetVariantSource {
+                        look,
+                        sheet_path,
+                        clips_path,
+                    });
+                }
+            }
+            Some(Value::Object(map)) => {
+                let mut keys: Vec<&String> = map.keys().collect();
+                keys.sort_by(|a, b| match (a.as_str() == "base", b.as_str() == "base") {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => a.cmp(b),
+                });
+                for k in keys {
+                    let item = &map[k];
+                    let look = non_empty_str(item, &["aegisLookKey", "look", "id"])
+                        .unwrap_or(k.as_str())
+                        .to_string();
+                    let sheet_path = resolve_variant_rel(
+                        set_dir,
+                        k,
+                        non_empty_str(item, &["sheetPath", "sheet"]),
+                        "sheet.png",
+                    );
+                    let clips_path = resolve_variant_rel(
+                        set_dir,
+                        k,
+                        non_empty_str(item, &["clipsPath", "clips"]),
+                        "clips.json",
+                    );
+                    variants.push(SetVariantSource {
+                        look,
+                        sheet_path,
+                        clips_path,
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Fallback: scan root and immediate subdirectories for sheet.png + clips.json.
+    if variants.is_empty() {
+        let root_sheet = set_dir.join("sheet.png");
+        let root_clips = set_dir.join("clips.json");
+        if root_sheet.is_file() && root_clips.is_file() {
+            variants.push(SetVariantSource {
+                look: "base".to_string(),
+                sheet_path: root_sheet,
+                clips_path: root_clips,
+            });
+        }
+        let mut subdirs: Vec<(String, PathBuf)> = Vec::new();
+        for entry in std::fs::read_dir(set_dir)
+            .with_context(|| format!("scanning {}", set_dir.display()))?
+        {
+            let entry = entry?;
+            let p = entry.path();
+            if p.is_dir() {
+                if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
+                    if p.join("sheet.png").is_file() && p.join("clips.json").is_file() {
+                        subdirs.push((name.to_string(), p));
+                    }
+                }
+            }
+        }
+        subdirs.sort_by(|a, b| match (a.0.as_str() == "base", b.0.as_str() == "base") {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.0.cmp(&b.0),
+        });
+        for (look, p) in subdirs {
+            if !variants.iter().any(|v| v.look == look) {
+                variants.push(SetVariantSource {
+                    look,
+                    sheet_path: p.join("sheet.png"),
+                    clips_path: p.join("clips.json"),
+                });
+            }
+        }
+    }
+
+    if variants.is_empty() {
+        bail!(
+            "no sprite variants found in {} (expected manifest.json or */sheet.png + */clips.json)",
+            set_dir.display()
+        );
+    }
+
+    let palette_rel = manifest_palette.as_deref().unwrap_or("palette.json");
+    let palette_candidate = set_dir.join(palette_rel);
+    let palette_path = palette_candidate.is_file().then_some(palette_candidate);
+
+    Ok((manifest_class, manifest_slug, palette_path, variants))
+}
+
+/// Imports a Character Sprite Set folder (manifest.json or subdirectory layout) into `<units_dir>/<class>/...`,
+/// running `check_sprite_sheet` QA on each variant when `opts.check` is true.
+pub fn import_sprite_set(opts: &ImportSetOpts) -> Result<Value> {
+    let (manifest_class, manifest_slug, palette_src, variants) =
+        discover_set_variants(&opts.set_dir)?;
+
+    let unit_class = opts
+        .class_override
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| manifest_class.as_deref())
+        .filter(|s| !s.is_empty())
+        .context("missing unit class: pass class=<class> or include unitClass in manifest.json")?
+        .to_string();
+
+    let trimmed_name = opts.name.trim();
+    let is_class_base = trimmed_name.is_empty() || trimmed_name == "base";
+    let target_base = if is_class_base {
+        opts.units_dir.join(&unit_class).join("base")
+    } else {
+        opts.units_dir.join(&unit_class).join(trimmed_name)
+    };
+
+    struct PlannedVariant {
+        src: SetVariantSource,
+        target_dir: PathBuf,
+        frame_w: usize,
+        frame_h: usize,
+        foot: usize,
+        qa_status: String,
+        qa_issues: usize,
+        qa_summary: Option<String>,
+    }
+
+    let mut planned: Vec<PlannedVariant> = Vec::with_capacity(variants.len());
+    let mut failed_msgs: Vec<String> = Vec::new();
+
+    for src in variants {
+        if !src.sheet_path.is_file() {
+            bail!("missing sheet.png for variant '{}': {}", src.look, src.sheet_path.display());
+        }
+        if !src.clips_path.is_file() {
+            bail!("missing clips.json for variant '{}': {}", src.look, src.clips_path.display());
+        }
+
+        let clips_text = std::fs::read_to_string(&src.clips_path)
+            .with_context(|| format!("reading clips {}", src.clips_path.display()))?;
+        let clips_val: Value = serde_json::from_str(&clips_text)
+            .with_context(|| format!("parsing clips JSON {}", src.clips_path.display()))?;
+        let parsed_clips = aegis_core::assets::Clips::parse(&clips_val)
+            .map_err(|e| anyhow::anyhow!("invalid clips.json {}: {}", src.clips_path.display(), e.join("; ")))?;
+        let frame_w = parsed_clips.frame.0 as usize;
+        let frame_h = parsed_clips.frame.1 as usize;
+        let foot = parsed_clips
+            .foot
+            .map(|f| f as usize)
+            .unwrap_or_else(|| frame_h.saturating_sub(3));
+
+        let target_dir = if src.look == "base" {
+            target_base.clone()
+        } else if is_class_base {
+            opts.units_dir.join(&unit_class).join(&src.look)
+        } else {
+            opts.units_dir
+                .join(&unit_class)
+                .join(format!("{trimmed_name}__{}", src.look))
+        };
+
+        let (qa_status, qa_issues, qa_summary) = if opts.check {
+            let sheet = load_image(&src.sheet_path)?;
+            let check_opts = CheckOpts {
+                frame_w,
+                frame_h,
+                foot,
+                max_foot_drift: opts.max_foot_drift,
+                max_chroma_pct: opts.max_chroma_pct,
+            };
+            let label = src.sheet_path.to_string_lossy().to_string();
+            let report = check_sprite_sheet(&sheet, &label, &src.look, None, &check_opts);
+            let status = report["status"].as_str().unwrap_or("FAIL").to_string();
+            let issues_arr = report["issues"].as_array();
+            let count = issues_arr.map(Vec::len).unwrap_or(0);
+            let first_msg = issues_arr
+                .and_then(|arr| arr.iter().find(|i| i["severity"] == "FAIL").or_else(|| arr.first()))
+                .and_then(|i| i["message"].as_str())
+                .map(str::to_string);
+            if status == "FAIL" {
+                failed_msgs.push(format!(
+                    "{}: {}",
+                    src.look,
+                    first_msg.as_deref().unwrap_or("QA check failed")
+                ));
+            }
+            (status, count, first_msg)
+        } else {
+            ("SKIP".to_string(), 0, None)
+        };
+
+        planned.push(PlannedVariant {
+            src,
+            target_dir,
+            frame_w,
+            frame_h,
+            foot,
+            qa_status,
+            qa_issues,
+            qa_summary,
+        });
+    }
+
+    if !failed_msgs.is_empty() && !opts.force {
+        bail!(
+            "import-set aborted: {} variant(s) failed QA (pass force=1 to override): {}",
+            failed_msgs.len(),
+            failed_msgs.join("; ")
+        );
+    }
+
+    let palette_dst = palette_src.as_ref().map(|_| {
+        let pal_name = if !is_class_base {
+            trimmed_name.to_string()
+        } else if let Some(slug) = manifest_slug.as_deref().filter(|s| !s.is_empty()) {
+            slug.to_string()
+        } else {
+            "base".to_string()
+        };
+        target_base.join("palettes").join(format!("{pal_name}.json"))
+    });
+
+    if !opts.dry_run {
+        for item in &planned {
+            std::fs::create_dir_all(&item.target_dir)
+                .with_context(|| format!("creating {}", item.target_dir.display()))?;
+            let dst_sheet = item.target_dir.join("sheet.png");
+            let dst_clips = item.target_dir.join("clips.json");
+            std::fs::copy(&item.src.sheet_path, &dst_sheet).with_context(|| {
+                format!(
+                    "copying {} -> {}",
+                    item.src.sheet_path.display(),
+                    dst_sheet.display()
+                )
+            })?;
+            std::fs::copy(&item.src.clips_path, &dst_clips).with_context(|| {
+                format!(
+                    "copying {} -> {}",
+                    item.src.clips_path.display(),
+                    dst_clips.display()
+                )
+            })?;
+        }
+        if let (Some(src), Some(dst)) = (&palette_src, &palette_dst) {
+            if let Some(parent) = dst.parent() {
+                std::fs::create_dir_all(parent)
+                    .with_context(|| format!("creating {}", parent.display()))?;
+            }
+            std::fs::copy(src, dst)
+                .with_context(|| format!("copying {} -> {}", src.display(), dst.display()))?;
+        }
+    }
+
+    let variants_json: Vec<Value> = planned
+        .iter()
+        .map(|item| {
+            json!({
+                "look": item.src.look,
+                "sheet_src": item.src.sheet_path.to_string_lossy(),
+                "clips_src": item.src.clips_path.to_string_lossy(),
+                "target_dir": item.target_dir.to_string_lossy(),
+                "frame": [item.frame_w, item.frame_h],
+                "foot": item.foot,
+                "qa_status": item.qa_status,
+                "qa_issues": item.qa_issues,
+                "qa_summary": item.qa_summary,
+            })
+        })
+        .collect();
+
+    let palette_json = match (&palette_src, &palette_dst) {
+        (Some(src), Some(dst)) => json!({
+            "src": src.to_string_lossy(),
+            "dst": dst.to_string_lossy(),
+        }),
+        _ => Value::Null,
+    };
+
+    Ok(json!({
+        "set_dir": opts.set_dir.to_string_lossy(),
+        "units_dir": opts.units_dir.to_string_lossy(),
+        "class": unit_class,
+        "name": if is_class_base { "base" } else { trimmed_name },
+        "dry_run": opts.dry_run,
+        "check": opts.check,
+        "force": opts.force,
+        "imported_count": planned.len(),
+        "palette": palette_json,
+        "variants": variants_json,
+    }))
+}
+
+fn cmd_import_set(args: &Args) -> Result<()> {
+    let set_dir_s = args.pos(2).context(
+        "usage: aegis sprite import-set <set_dir> units=<units_dir> [class=<class>] [name=<variant>] [check=1] [force=0|1] [dry_run=0|1] [json]",
+    )?;
+    let units_dir_s = args.keys.get("units").context(
+        "missing units=<units_dir> (usage: aegis sprite import-set <set_dir> units=<units_dir> [class=<class>] [name=<variant>] [check=1] [force=0|1] [dry_run=0|1] [json])",
+    )?;
+
+    let opts = ImportSetOpts {
+        set_dir: PathBuf::from(set_dir_s),
+        units_dir: PathBuf::from(units_dir_s),
+        class_override: args.keys.get("class").cloned(),
+        name: args.key("name", ""),
+        check: args.key("check", "1") != "0",
+        force: args.key("force", "0") == "1" || args.flag("force"),
+        dry_run: args.key("dry_run", "0") == "1" || args.flag("dry_run"),
+        max_foot_drift: args.key("max_foot_drift", "2").parse().context("max_foot_drift")?,
+        max_chroma_pct: args.key("max_chroma_pct", "1.0").parse().context("max_chroma_pct")?,
+    };
+
+    let report = import_sprite_set(&opts)?;
+    if args.flag("json") {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        let mode = if opts.dry_run { "dry-run" } else { "imported" };
+        println!(
+            "sprite import-set [{}]: class={} name={} variants={}",
+            mode,
+            report["class"].as_str().unwrap_or(""),
+            report["name"].as_str().unwrap_or("base"),
+            report["imported_count"],
+        );
+        if let Some(arr) = report["variants"].as_array() {
+            for v in arr {
+                println!(
+                    "  [{}] {} -> {}",
+                    v["qa_status"].as_str().unwrap_or("SKIP"),
+                    v["look"].as_str().unwrap_or(""),
+                    v["target_dir"].as_str().unwrap_or(""),
+                );
+            }
+        }
+        if let Some(dst) = report["palette"]["dst"].as_str() {
+            println!("  palette -> {dst}");
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Unit tests (100% game-agnostic)
 // ---------------------------------------------------------------------------
 
@@ -1747,5 +2182,192 @@ mod tests {
         assert_eq!(summary["counts"]["total"], 1);
         assert_eq!(summary["counts"]["warn"], 1);
         assert!(out_html.is_file());
+    }
+
+    fn make_clean_sheet(foot: usize) -> RgbaImg {
+        let mut sheet = RgbaImg::new(112 * 2, 96, [0, 0, 0, 0]);
+        for c in 0..2 {
+            let y_top = foot.saturating_sub(59);
+            fill_rect(&mut sheet, c * 112 + 34, y_top, 44, 60, [140, 100, 80, 255]);
+        }
+        sheet
+    }
+
+    fn write_variant_files(dir: &Path, foot: usize, bad_foot: bool) {
+        std::fs::create_dir_all(dir).unwrap();
+        let sheet_foot = if bad_foot { foot.saturating_sub(14) } else { foot };
+        save_png(&make_clean_sheet(sheet_foot), &dir.join("sheet.png")).unwrap();
+        let clips = build_clips_json(112, 96, foot, 2, 1, "idle", 8.0);
+        std::fs::write(
+            dir.join("clips.json"),
+            serde_json::to_string_pretty(&clips).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn import_set_class_base_and_named_character_layouts() {
+        let scratch = aegis_core::scratch::Scratch::new("sprite_import_set_layouts");
+        let set_dir = scratch.path().join("export_set");
+        let units_dir = scratch.path().join("units");
+
+        write_variant_files(&set_dir.join("base"), 93, false);
+        write_variant_files(&set_dir.join("2h_blade"), 93, false);
+        std::fs::write(
+            set_dir.join("palette.json"),
+            serde_json::to_string_pretty(&json!({"primary": "#804020"})).unwrap(),
+        )
+        .unwrap();
+
+        // 1. Object-form manifest (SpriteForge format) -> class-base layout (name="")
+        let manifest_obj = json!({
+            "unitClass": "class_a",
+            "unit": "class_a_default",
+            "palette": "palette.json",
+            "variants": {
+                "base": { "aegisLookKey": "base", "sheet": "base/sheet.png", "clips": "base/clips.json" },
+                "2h_blade": { "aegisLookKey": "2h_blade", "sheet": "2h_blade/sheet.png", "clips": "2h_blade/clips.json" }
+            }
+        });
+        std::fs::write(
+            set_dir.join("manifest.json"),
+            serde_json::to_string_pretty(&manifest_obj).unwrap(),
+        )
+        .unwrap();
+
+        let rep_base = import_sprite_set(&ImportSetOpts {
+            set_dir: set_dir.clone(),
+            units_dir: units_dir.clone(),
+            class_override: None,
+            name: String::new(),
+            check: true,
+            force: false,
+            dry_run: false,
+            max_foot_drift: 2,
+            max_chroma_pct: 1.0,
+        })
+        .unwrap();
+        assert_eq!(rep_base["class"], "class_a");
+        assert_eq!(rep_base["name"], "base");
+        assert_eq!(rep_base["imported_count"], 2);
+        assert!(units_dir.join("class_a/base/sheet.png").is_file());
+        assert!(units_dir.join("class_a/base/clips.json").is_file());
+        assert!(units_dir.join("class_a/2h_blade/sheet.png").is_file());
+        assert!(units_dir.join("class_a/2h_blade/clips.json").is_file());
+        assert!(units_dir.join("class_a/base/palettes/class_a_default.json").is_file());
+
+        // 2. Array-form manifest -> named character layout (name="hero_a" -> hero_a & hero_a__<look>)
+        let manifest_arr = json!({
+            "unitClass": "class_a",
+            "slug": "hero_a",
+            "variants": [
+                { "aegisLookKey": "base", "sheetPath": "base/sheet.png", "clipsPath": "base/clips.json" },
+                { "aegisLookKey": "2h_blade", "sheetPath": "2h_blade/sheet.png", "clipsPath": "2h_blade/clips.json" }
+            ]
+        });
+        std::fs::write(
+            set_dir.join("manifest.json"),
+            serde_json::to_string_pretty(&manifest_arr).unwrap(),
+        )
+        .unwrap();
+
+        let rep_named = import_sprite_set(&ImportSetOpts {
+            set_dir: set_dir.clone(),
+            units_dir: units_dir.clone(),
+            class_override: None,
+            name: "hero_a".to_string(),
+            check: true,
+            force: false,
+            dry_run: false,
+            max_foot_drift: 2,
+            max_chroma_pct: 1.0,
+        })
+        .unwrap();
+        assert_eq!(rep_named["name"], "hero_a");
+        assert_eq!(rep_named["imported_count"], 2);
+        assert!(units_dir.join("class_a/hero_a/sheet.png").is_file());
+        assert!(units_dir.join("class_a/hero_a/clips.json").is_file());
+        assert!(units_dir.join("class_a/hero_a__2h_blade/sheet.png").is_file());
+        assert!(units_dir.join("class_a/hero_a__2h_blade/clips.json").is_file());
+        assert!(units_dir.join("class_a/hero_a/palettes/hero_a.json").is_file());
+
+        // 3. Directory-scan fallback (no manifest.json)
+        std::fs::remove_file(set_dir.join("manifest.json")).unwrap();
+        let units_fallback = scratch.path().join("units_fallback");
+        let rep_scan = import_sprite_set(&ImportSetOpts {
+            set_dir: set_dir.clone(),
+            units_dir: units_fallback.clone(),
+            class_override: Some("class_b".to_string()),
+            name: "hero_b".to_string(),
+            check: true,
+            force: false,
+            dry_run: false,
+            max_foot_drift: 2,
+            max_chroma_pct: 1.0,
+        })
+        .unwrap();
+        assert_eq!(rep_scan["imported_count"], 2);
+        assert!(units_fallback.join("class_b/hero_b/sheet.png").is_file());
+        assert!(units_fallback.join("class_b/hero_b__2h_blade/sheet.png").is_file());
+    }
+
+    #[test]
+    fn import_set_dry_run_and_fail_rejection() {
+        let scratch = aegis_core::scratch::Scratch::new("sprite_import_set_qa");
+        let set_dir = scratch.path().join("qa_set");
+        let units_dir = scratch.path().join("units");
+
+        write_variant_files(&set_dir.join("base"), 93, false);
+        write_variant_files(&set_dir.join("1h_buckler"), 93, true); // foot drifts 14px -> FAIL
+
+        // 1. FAIL rejection when check=1 and force=0 (no files copied)
+        let err = import_sprite_set(&ImportSetOpts {
+            set_dir: set_dir.clone(),
+            units_dir: units_dir.clone(),
+            class_override: Some("class_a".to_string()),
+            name: "hero_a".to_string(),
+            check: true,
+            force: false,
+            dry_run: false,
+            max_foot_drift: 2,
+            max_chroma_pct: 1.0,
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains("failed QA"), "unexpected error: {err}");
+        assert!(!units_dir.exists(), "no files should be copied when QA fails");
+
+        // 2. dry_run=1 with force=1 succeeds without creating any files on disk
+        let dry = import_sprite_set(&ImportSetOpts {
+            set_dir: set_dir.clone(),
+            units_dir: units_dir.clone(),
+            class_override: Some("class_a".to_string()),
+            name: "hero_a".to_string(),
+            check: true,
+            force: true,
+            dry_run: true,
+            max_foot_drift: 2,
+            max_chroma_pct: 1.0,
+        })
+        .unwrap();
+        assert_eq!(dry["dry_run"], true);
+        assert_eq!(dry["imported_count"], 2);
+        assert!(!units_dir.exists(), "dry_run=1 must not write any files");
+
+        // 3. force=1 without dry_run writes files even with QA FAIL
+        let forced = import_sprite_set(&ImportSetOpts {
+            set_dir,
+            units_dir: units_dir.clone(),
+            class_override: Some("class_a".to_string()),
+            name: "hero_a".to_string(),
+            check: true,
+            force: true,
+            dry_run: false,
+            max_foot_drift: 2,
+            max_chroma_pct: 1.0,
+        })
+        .unwrap();
+        assert_eq!(forced["imported_count"], 2);
+        assert!(units_dir.join("class_a/hero_a/sheet.png").is_file());
+        assert!(units_dir.join("class_a/hero_a__1h_buckler/sheet.png").is_file());
     }
 }

@@ -63,14 +63,57 @@ fn a_light_shield_gives_the_buckler_look() {
     assert_eq!(Grip::of(Some(&w1), Some(&buckler())).off_hand, OffHand::Buckler);
     let heavier = item("SHIELD", "shield", false, BUCKLER_MAX_BURDEN + 1);
     assert_eq!(Grip::of(Some(&w1), Some(&heavier)).off_hand, OffHand::Shield, "one point of burden over the buckler is a shield");
-    assert_eq!(chain("warrior/brask_toller", Some(&w1), Some(&buckler())), art::body_chain("warrior/brask_toller"), "named bodies keep their art");
+    assert_eq!(
+        chain("warrior/brask_toller", Some(&w1), Some(&buckler())),
+        [format!("warrior/brask_toller__{BUCKLER_LOOK}"), "warrior/brask_toller".into(), "warrior".into()],
+        "named bodies try __<look> before falling back to their own art"
+    );
 }
 
 #[test]
-fn named_and_variant_bodies_keep_their_own_art() {
+fn named_and_variant_bodies_try_prefixed_looks_before_fallback() {
     let w2 = weapon("sword", true);
-    assert_eq!(chain("warrior/grakka_ashmaw", Some(&w2), None), art::body_chain("warrior/grakka_ashmaw"));
-    assert_eq!(chain("brawler/goblin", Some(&weapon("axe", false)), None), ["brawler/goblin", "brawler"]);
+    assert_eq!(
+        chain("warrior/grakka_ashmaw", Some(&w2), None),
+        ["warrior/grakka_ashmaw__2h_sword", "warrior/grakka_ashmaw", "warrior"]
+    );
+    assert_eq!(
+        chain("brawler/goblin", Some(&weapon("axe", false)), None),
+        [
+            "brawler/goblin__2h_axe",
+            "brawler/goblin__1h_axe",
+            "brawler/goblin__axe",
+            "brawler/goblin__2h_sword",
+            "brawler/goblin",
+            "brawler",
+        ]
+    );
+    assert_eq!(
+        chain("warrior/grakka_ashmaw", Some(&weapon("sword", false)), Some(&shield())),
+        ["warrior/grakka_ashmaw", "warrior"],
+        "1H sword + shield has no extra look suffix"
+    );
+
+    // Resolution against Layers: picks __<look> when present, falls back to named body when absent.
+    let scratch = aegis_core::scratch::Scratch::new("emberwake_named_gear_look");
+    let units = scratch.path().join("units");
+    for dir in ["warrior/base", "warrior/hero_a", "warrior/hero_a__2h_sword"] {
+        let d = units.join(dir);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("sheet.png"), b"").unwrap();
+        std::fs::write(d.join("clips.json"), b"{}").unwrap();
+    }
+    let layers = Layers::of(vec![scratch.path().to_path_buf()]);
+    assert_eq!(
+        resolved(&layers, chain("warrior/hero_a", Some(&w2), None)).as_deref(),
+        Some("warrior/hero_a__2h_sword"),
+        "resolves to __2h_sword when present on disk"
+    );
+    assert_eq!(
+        resolved(&layers, chain("warrior/hero_a", Some(&weapon("axe", false)), Some(&buckler()))).as_deref(),
+        Some("warrior/hero_a"),
+        "falls back to warrior/hero_a when __1h_buckler is absent"
+    );
 }
 
 #[test]

@@ -110,59 +110,81 @@ impl Grip {
 /// The 1H + buckler look's variant.
 pub const BUCKLER_LOOK: &str = "1h_buckler";
 
+/// The ordered look suffixes for `grip` (without class or variant prefix):
+/// - 2H weapons: `2h_<family>`, `2h_sword`;
+/// - bucklers: `1h_buckler`;
+/// - heavier shields: `1h_<family>` (for non-empty, non-fallback main weapons);
+/// - 1H / empty with empty or other off-hand (dual weapon, orb, braces): `2h_<family>`, `1h_<family>`, `<family>`,
+///   plus `orb` and `braces` when `OffHand::Other`, then `2h_sword` (for non-empty main weapons).
+pub fn grip_looks(grip: &Grip) -> Vec<String> {
+    let fam = grip.main_family.as_str();
+    let mut out = Vec::new();
+    let mut push = |look: String| {
+        if !out.contains(&look) {
+            out.push(look);
+        }
+    };
+    if grip.two_handed && !fam.is_empty() {
+        push(format!("2h_{fam}"));
+        push(format!("2h_{LOOK_FALLBACK_FAMILY}"));
+    } else {
+        match grip.off_hand {
+            OffHand::Buckler => {
+                push(BUCKLER_LOOK.to_string());
+            }
+            OffHand::Shield => {
+                if !fam.is_empty() && fam != LOOK_FALLBACK_FAMILY {
+                    push(format!("1h_{fam}"));
+                }
+            }
+            OffHand::Empty | OffHand::Other => {
+                if !fam.is_empty() {
+                    push(format!("2h_{fam}"));
+                    push(format!("1h_{fam}"));
+                    push(fam.to_string());
+                }
+                if grip.off_hand == OffHand::Other {
+                    push("orb".to_string());
+                    push("braces".to_string());
+                }
+                if !fam.is_empty() {
+                    push(format!("2h_{LOOK_FALLBACK_FAMILY}"));
+                }
+            }
+        }
+    }
+    out
+}
+
 /// The bodies to try for a unit wearing body `key` with gear `grip` (WAR2H1, RIG-GEAR1; the game's battle token calls
-/// this, then `Art::first_body`): a class base (`<class>`) tries its grip candidates in order before falling back to
-/// `<class>`:
-/// - 2H weapons: `<class>/2h_<family>`, `<class>/2h_sword`, `<class>`;
-/// - bucklers: `<class>/1h_buckler`, `<class>`;
-/// - heavier shields: `<class>/1h_<family>` (for non-empty, non-fallback main weapons), `<class>`;
-/// - 1H / empty with empty or other off-hand (dual weapon, orb, braces): `<class>/2h_<family>`, `<class>/1h_<family>`,
-///   `<class>/<family>`, plus `<class>/orb` and `<class>/braces` when `OffHand::Other`, then `<class>/2h_sword` before
-///   `<class>` so classes with 2H empty-offhand looks drop shields while 1H-only/off-hand looks resolve their sheets.
-/// Named or variant bodies keep their own art key: `body_chain(key)`. The looks share the base's palette slots and
-/// palette files (DIR4 L3), so the unit's palette applies unchanged.
+/// this, then `Art::first_body`):
+/// - A class base (`<class>` or `<class>/base`) tries `<class>/<look>` for each look in `grip_looks(grip)`, then
+///   falls back to `<class>`.
+/// - A named or variant body (`<class>/<variant>`, `variant != "base"`) tries `<class>/<variant>__<look>` for each
+///   look in `grip_looks(grip)`, then falls back to `body_chain(key)` (`<class>/<variant>`, `<class>`).
+/// The looks share the base's palette slots and palette files (DIR4 L3), so the unit's palette applies unchanged.
 pub fn gear_body_chain(key: &str, grip: &Grip) -> Vec<String> {
     let (class, variant) = split_body(key);
-    if variant != "base" {
-        return body_chain(key);
-    }
-    let fam = grip.main_family.as_str();
+    let looks = grip_looks(grip);
     let mut out = Vec::new();
     let mut push = |candidate: String| {
         if !out.contains(&candidate) {
             out.push(candidate);
         }
     };
-    if grip.two_handed && !fam.is_empty() {
-        push(format!("{class}/2h_{fam}"));
-        push(format!("{class}/2h_{LOOK_FALLBACK_FAMILY}"));
+    if variant == "base" {
+        for look in looks {
+            push(format!("{class}/{look}"));
+        }
+        push(class.to_string());
     } else {
-        match grip.off_hand {
-            OffHand::Buckler => {
-                push(format!("{class}/{BUCKLER_LOOK}"));
-            }
-            OffHand::Shield => {
-                if !fam.is_empty() && fam != LOOK_FALLBACK_FAMILY {
-                    push(format!("{class}/1h_{fam}"));
-                }
-            }
-            OffHand::Empty | OffHand::Other => {
-                if !fam.is_empty() {
-                    push(format!("{class}/2h_{fam}"));
-                    push(format!("{class}/1h_{fam}"));
-                    push(format!("{class}/{fam}"));
-                }
-                if grip.off_hand == OffHand::Other {
-                    push(format!("{class}/orb"));
-                    push(format!("{class}/braces"));
-                }
-                if !fam.is_empty() {
-                    push(format!("{class}/2h_{LOOK_FALLBACK_FAMILY}"));
-                }
-            }
+        for look in looks {
+            push(format!("{class}/{variant}__{look}"));
+        }
+        for base in body_chain(key) {
+            push(base);
         }
     }
-    push(class.to_string());
     out
 }
 
@@ -691,6 +713,10 @@ mod tests {
             two_handed,
             off_hand,
         };
+        assert_eq!(grip_looks(&g("polearm", false, OffHand::Shield)), ["1h_polearm"]);
+        assert_eq!(grip_looks(&g("sword", false, OffHand::Shield)), Vec::<String>::new());
+        assert_eq!(grip_looks(&g("hammer", true, OffHand::Other)), ["2h_hammer", "2h_sword"]);
+        assert_eq!(grip_looks(&g("axe", false, OffHand::Buckler)), ["1h_buckler"]);
         assert_eq!(gear_body_chain("bruiser", &g("polearm", false, OffHand::Shield)), ["bruiser/1h_polearm", "bruiser"]);
         assert_eq!(gear_body_chain("bruiser", &g("sword", false, OffHand::Shield)), ["bruiser"]);
         assert_eq!(gear_body_chain("bruiser", &g("", false, OffHand::Shield)), ["bruiser"]);
@@ -701,7 +727,37 @@ mod tests {
                    ["bruiser/2h_fist", "bruiser/1h_fist", "bruiser/fist", "bruiser/orb", "bruiser/braces", "bruiser/2h_sword", "bruiser"]);
         assert_eq!(gear_body_chain("bruiser", &g("hammer", true, OffHand::Other)),
                    ["bruiser/2h_hammer", "bruiser/2h_sword", "bruiser"]);
+        // Named/variant bodies try <class>/<variant>__<look> first, then <class>/<variant>, then <class>.
         assert_eq!(gear_body_chain("bruiser/goblin", &g("polearm", false, OffHand::Shield)),
-                   ["bruiser/goblin", "bruiser"]);
+                   ["bruiser/goblin__1h_polearm", "bruiser/goblin", "bruiser"]);
+        assert_eq!(gear_body_chain("bruiser/hero_a", &g("hammer", true, OffHand::Empty)),
+                   ["bruiser/hero_a__2h_hammer", "bruiser/hero_a__2h_sword", "bruiser/hero_a", "bruiser"]);
+        assert_eq!(gear_body_chain("bruiser/hero_a", &g("sword", false, OffHand::Shield)),
+                   ["bruiser/hero_a", "bruiser"]);
+        assert_eq!(gear_body_chain("bruiser/hero_a", &g("axe", false, OffHand::Buckler)),
+                   ["bruiser/hero_a__1h_buckler", "bruiser/hero_a", "bruiser"]);
+
+        // Verify Layers resolution picks __<look> when present and falls back to <class>/<variant> when absent.
+        let scratch = aegis_core::scratch::Scratch::new("named_gear_look_fallback");
+        let units = scratch.path().join("units");
+        for dir in ["bruiser/base", "bruiser/hero_a", "bruiser/hero_a__2h_hammer"] {
+            let d = units.join(dir);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join("sheet.png"), b"").unwrap();
+            std::fs::write(d.join("clips.json"), b"{}").unwrap();
+        }
+        let layers = aegis_core::assets::Layers::of(vec![scratch.path().to_path_buf()]);
+        let bodies = layers.bodies();
+        let resolve = |chain: Vec<String>| chain.into_iter().find(|k| bodies.contains(k));
+        assert_eq!(
+            resolve(gear_body_chain("bruiser/hero_a", &g("hammer", true, OffHand::Empty))).as_deref(),
+            Some("bruiser/hero_a__2h_hammer"),
+            "picks named __<look> folder when present on disk"
+        );
+        assert_eq!(
+            resolve(gear_body_chain("bruiser/hero_a", &g("axe", false, OffHand::Buckler))).as_deref(),
+            Some("bruiser/hero_a"),
+            "falls back cleanly to named body when __<look> folder is absent"
+        );
     }
 }
