@@ -12,7 +12,7 @@ use aegis_core::json::{self, int, Dict};
 use aegis_save::{Format, Peek};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub use aegis_save::{delete, exists, is_locked, path_for};
 
@@ -25,12 +25,6 @@ const KEYS: [&str; 19] = [
     "reward_paid", "campaign", "story", "facilities", "siege",
 ];
 const SAVES: Format = Format { tag: FORMAT, version: VERSION, first_slot: AUTOSAVE_SLOT, last_slot: LAST_SLOT, keys: &KEYS };
-
-/// The Godot user save folder on this machine (user://saves of the project).
-pub fn default_dir() -> PathBuf {
-    let base = std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("."));
-    base.join("Godot").join("app_userdata").join("Tactical RPG").join("saves")
-}
 
 /// Problem strings; empty = written. `saved_at` > 0 keeps a given save time. Refused while the run is over
 /// (CAMPAIGN1 F3), so no slot ever holds a run-over state.

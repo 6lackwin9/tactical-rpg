@@ -27,6 +27,7 @@ mod character_view;
 mod controls_view;
 #[cfg(feature = "dev_tools")]
 mod dojo;
+#[cfg(feature = "dev_tools")]
 mod dojo_view;
 mod epilogue;
 mod epilogue_view;
@@ -35,6 +36,7 @@ mod facility_view;
 mod floats;
 #[cfg(feature = "dev_tools")]
 mod forge;
+#[cfg(feature = "dev_tools")]
 mod forge_view;
 mod fx;
 #[cfg(feature = "dev_tools")]
@@ -163,26 +165,36 @@ struct Roots {
     engine: Option<PathBuf>,
 }
 
-/// The desktop's roots: the engine folder found upward from the working folder, else from the program's own folder;
-/// `start` is the engine folder, else the working folder.
 #[cfg(not(target_arch = "wasm32"))]
-fn native_roots() -> Result<Roots> {
-    let cwd = std::env::current_dir()?;
-    let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
-    let engine = [Some(cwd.clone()), exe_dir].into_iter().flatten().find_map(|start| {
-        let mut d = start;
+fn find_engine_dir(starts: &[PathBuf]) -> Option<PathBuf> {
+    starts.iter().find_map(|start| {
+        let mut d = start.clone();
         loop {
-            if aegis_core::vfs::is_dir(d.join("crates/aegis_ui")) {
+            if aegis_core::vfs::is_dir(d.join("crates/aegis_ui"))
+                || (d.file_name().is_some_and(|n| n == "engine") && aegis_core::vfs::is_dir(d.join("assets/fonts")))
+            {
                 return Some(d);
             }
-            if aegis_core::vfs::is_dir(d.join("engine/crates/aegis_ui")) {
+            if aegis_core::vfs::is_dir(d.join("engine/crates/aegis_ui"))
+                || aegis_core::vfs::is_dir(d.join("engine/assets/fonts"))
+            {
                 return Some(d.join("engine"));
             }
             if !d.pop() {
                 return None;
             }
         }
-    });
+    })
+}
+
+/// The desktop's roots: the engine folder found upward from the working folder, else from the program's own folder;
+/// `start` is the engine folder, else the working folder.
+#[cfg(not(target_arch = "wasm32"))]
+fn native_roots() -> Result<Roots> {
+    let cwd = std::env::current_dir()?;
+    let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
+    let starts: Vec<PathBuf> = [Some(cwd.clone()), exe_dir].into_iter().flatten().collect();
+    let engine = find_engine_dir(&starts);
     Ok(Roots { start: engine.clone().unwrap_or(cwd), engine })
 }
 
@@ -405,5 +417,18 @@ mod tests {
         let mut v = json!({"battle_view": "flat", "region_view": "tilted"});
         force_shipped_views(&mut v, Some("runner"));
         assert_eq!((v["battle_view"].as_str(), v["region_view"].as_str()), (Some("flat"), Some("tilted")));
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn find_engine_dir_supports_portable_release_layout() {
+        let scratch = aegis_core::scratch::Scratch::new("portable_roots");
+        let zip_root = scratch.path().join("release_zip");
+        let other_cwd = scratch.path().join("unrelated_cwd");
+        std::fs::create_dir_all(zip_root.join("engine/assets/fonts")).unwrap();
+        std::fs::create_dir_all(&other_cwd).unwrap();
+        // Launched from an unrelated CWD with exe_dir = zip_root (no crates/ folder anywhere):
+        let found = find_engine_dir(&[other_cwd, zip_root.clone()]);
+        assert_eq!(found, Some(zip_root.join("engine")));
     }
 }

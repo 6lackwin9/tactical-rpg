@@ -176,10 +176,10 @@ impl<G: Context> Shell<G> {
                 log("live reload on: the asset layers and the data are watched");
             }
         }
-        crate::crashlog::set_top(shell.stack.last().map_or("", |s| s.id()));
-        // ENGINE-62 (CRASH-SAFE1): panics are noted for `on_panic`; a crash the last run caught shows its line once
         #[cfg(not(target_arch = "wasm32"))]
         {
+            crate::crashlog::set_top(shell.stack.last().map_or("", |s| s.id()));
+            // ENGINE-62 (CRASH-SAFE1): panics are noted for `on_panic`; a crash the last run caught shows its line once
             crate::crashlog::arm();
             if let Some((report, rescue)) = crate::crashlog::take_crashed(&shell.logs_dir()) {
                 shell.stack.push(Box::new(crate::screen::CrashNote::new(report, rescue)));
@@ -190,6 +190,7 @@ impl<G: Context> Shell<G> {
     }
 
     /// ENGINE-62: the folder of the run's log and crash reports, beside the player's settings.
+    #[cfg(not(target_arch = "wasm32"))]
     fn logs_dir(&self) -> PathBuf {
         crate::crashlog::dir().unwrap_or_else(|| self.cx.settings.path().parent().map_or_else(|| PathBuf::from("logs"), |d| d.join("logs")))
     }
@@ -209,7 +210,15 @@ impl<G: Context> Shell<G> {
                 false
             }
         };
-        crate::crashlog::crashed(&self.logs_dir(), &self.title, rescue)
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            crate::crashlog::crashed(&self.logs_dir(), &self.title, rescue)
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = rescue;
+            None
+        }
     }
 
     /// ENGINE-46 (FEEL-FIX1): draws the game's warm list (`Context::warm`) once, unseen, before the first frame, so the
@@ -329,6 +338,7 @@ impl<G: Context> Shell<G> {
     }
 
     /// ENGINE-58: every screen finishes the work it spreads over the frames after an input (`Screen::settle`).
+    #[cfg(not(target_arch = "wasm32"))]
     fn settle_screens(&mut self) {
         for s in self.stack.iter_mut() {
             s.settle(&mut self.cx);
@@ -401,6 +411,7 @@ impl<G: Context> Shell<G> {
                 self.stack.push(Box::new(Notice::new(lines)));
             }
         }
+        #[cfg(not(target_arch = "wasm32"))]
         if guard > 0 {
             // ENGINE-62: a crash report names the screen on top
             crate::crashlog::set_top(self.stack.last().map_or("", |s| s.id()));

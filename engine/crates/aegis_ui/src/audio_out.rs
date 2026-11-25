@@ -19,7 +19,9 @@ use rodio::cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rodio::cpal::{self, FromSample, SizedSample};
 use rodio::dynamic_mixer::{self, DynamicMixer, DynamicMixerController};
 use rodio::{Sample, Sink, Source};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// The frames (one sample per channel) a callback fills where the device lets the engine choose: 512 at 48 kHz is
@@ -158,6 +160,8 @@ enum Hold {
 pub struct Output {
     mixer: Arc<DynamicMixerController<f32>>,
     stats: Arc<Stats>,
+    /// Kept alive for its Drop implementation (stops the audio output stream when dropped).
+    #[allow(dead_code)]
     hold: Hold,
 }
 

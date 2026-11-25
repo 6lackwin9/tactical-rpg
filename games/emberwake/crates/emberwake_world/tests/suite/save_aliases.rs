@@ -24,3 +24,26 @@ fn an_older_save_with_the_marrow_deck_key_loads_as_channeled() {
     assert!(refused.iter().any(|e| e.contains("unknown key 'marrow'")), "{refused:?}");
     assert_eq!(save::DECK_KEY_ALIASES, &[("marrow", "channeled")]);
 }
+
+#[test]
+fn milestone1_v13_act1_end_fixture_loads_and_round_trips() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let d = Data::open(&Data::find_data_dir(manifest_dir).expect("data folder")).unwrap().0;
+    let fixture = manifest_dir.join("tests/fixtures/save_v13_act1_end.json");
+    let raw = std::fs::read_to_string(&fixture).expect("v13 Act 1 end fixture");
+    let loaded = save::decode(&d, &raw).expect("v13 Act 1 end fixture must decode cleanly");
+    assert_eq!(save::VERSION, 13);
+    assert_eq!(loaded.state.world_id, "sunk_ward");
+    assert_eq!(loaded.state.location_id, "sunk_ward:sluice_undercroft");
+    assert_eq!(loaded.state.campaign.as_ref().map(|c| c.act), Some(2));
+    assert_eq!(loaded.state.flag("sunk_ward.m5_done"), Some(&json!(true)));
+    assert_eq!(loaded.state.flag("pk2.slab_open"), Some(&json!(true)));
+    assert_eq!(loaded.state.flag("pk2.hearth_open"), Some(&json!(true)));
+    assert_eq!(emberwake_world::campaign::save_refusal(&loaded.state), "");
+
+    let scratch = aegis_core::scratch::Scratch::new("v13_act1_end");
+    let errs = save::write(&d, scratch.path(), &loaded.state, 1, 1_700_000_000);
+    assert!(errs.is_empty(), "{errs:?}");
+    let again = save::read(&d, scratch.path(), 1).expect("round-trip read");
+    assert_eq!(again.state.to_value(), loaded.state.to_value());
+}

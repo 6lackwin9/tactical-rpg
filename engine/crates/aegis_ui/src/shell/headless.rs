@@ -15,13 +15,14 @@
 //! none of which the web build has. `Headless` and its argument parsing stay on every target; on the web `run` refuses.
 
 use super::Options;
-use crate::screen::{Context, Cx, Key, Screen};
+use crate::screen::{Context, Cx, Screen};
 use aegis_core::clock::Duration;
 use anyhow::{bail, Context as _, Result};
 #[cfg(not(target_arch = "wasm32"))]
 use {
     super::{blank_reason, save_png, settings::text_scale_of, Shell},
     crate::bridge,
+    crate::screen::Key,
     crate::pacing::{Pace, Pacer},
     crate::screen::window_size_of,
     aegis_core::clock::Instant,
@@ -761,6 +762,7 @@ impl ClipPlan {
 /// ENGINE-60 (PLAN-START2): a sound report's underruns (`underrun_ms`, ms from the replay's start) split into those heard
 /// during a stalled frame or within two output buffers after it, and the rest. `offset`: the replay's start in probe
 /// ms (the stalls' clock).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn stalled_underruns(audio: &Value, stalls: &[crate::feel::Stall], offset: f64) -> (Vec<f64>, Vec<f64>) {
     let reach = 2.0 * audio["buffer_ms"].as_f64().unwrap_or(0.0);
     audio["underrun_ms"].as_array().into_iter().flatten().filter_map(Value::as_f64).partition(|u| {
