@@ -1665,6 +1665,10 @@ impl Screen<GameCx> for RegionMap {
             ui.p.c.clip = kept_clip;
             ui.p.scroll_end(&mut self.floor);
             ui.p.v = map_view;
+            let map_fx = load_map_fx(cx, &s(t, "id"), &mut self.map_fx_cache);
+            if let Some(fx) = map_fx.as_ref().filter(|f| !f.zones.is_empty()) {
+                apply_map_zone_grades(&mut ui, t, &geo, map_rect, (mw_i, mh_i), &is_wall, fx);
+            }
             // BUNKS1 BK3, BK4, BK8: each bunk's click area (its drawn art; under the markers and the party), its hover
             // name and condition, and whether a talk waits on its member (a candle, drawn over the scene below)
             let waiting = if self.hub.on() { emberwake_world::talks::waiting(&d, &gs) } else { Vec::new() };
@@ -1977,10 +1981,6 @@ impl Screen<GameCx> for RegionMap {
                 if alpha > crate::props::ROOF_HIDES_FROM {
                     opaque_roofs.push(p.rect);
                 }
-            }
-            let map_fx = load_map_fx(cx, &s(t, "id"), &mut self.map_fx_cache);
-            if let Some(fx) = map_fx.as_ref().filter(|f| !f.zones.is_empty()) {
-                apply_map_zone_grades(&mut ui, t, &geo, map_rect, (mw_i, mh_i), &is_wall, fx);
             }
             let effective_dim = map_fx.as_ref().and_then(|f| f.dim_ambience).unwrap_or(dim_ambience);
             if effective_dim {
