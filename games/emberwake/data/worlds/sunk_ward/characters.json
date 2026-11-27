@@ -741,7 +741,7 @@
 			"title": "Tenement Bone-Wright",
 			"role": "npc",
 			"base_unit": "priest",
-			"art": "",
+			"art": "priest/skerrit_bone_wright",
 			"palette": "",
 			"portrait_tier": "",
 			"background": "A hunchbacked tenement bone-wright and seal-forger who turns Calcified Bone Shards into armour-shredding quarrels and barbed cestuses.",
