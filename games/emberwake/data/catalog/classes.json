@@ -139,14 +139,14 @@
 					"role": "minor"
 				},
 				"medium": {
-					"level": 3,
-					"scaling": 1.5,
-					"role": "main"
-				},
-				"heavy": {
 					"level": 1,
 					"scaling": 1.25,
 					"role": "minor"
+				},
+				"heavy": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
 				}
 			},
 			"skill_path": {
@@ -224,14 +224,14 @@
 					"role": "minor"
 				},
 				"heavy": {
-					"level": 3,
-					"scaling": 1.5,
-					"role": "main"
-				},
-				"light": {
 					"level": 1,
 					"scaling": 1.25,
 					"role": "minor"
+				},
+				"light": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
 				}
 			},
 			"skill_path": {
@@ -482,14 +482,14 @@
 					"role": "minor"
 				},
 				"light": {
-					"level": 3,
-					"scaling": 1.5,
-					"role": "main"
-				},
-				"medium": {
 					"level": 1,
 					"scaling": 1.25,
 					"role": "minor"
+				},
+				"medium": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
 				}
 			},
 			"skill_path": {

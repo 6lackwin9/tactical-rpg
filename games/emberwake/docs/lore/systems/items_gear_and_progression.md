@@ -11,7 +11,7 @@ Engine facts (`ITEM1`, `C1-L`, `ITEMUSE1`, `REWARD1`, `WEAPONROSTER1`): items li
 | `MAIN` | `MAIN_HAND` | Primary weapon (`15` families across `2H Solo`, `2H + Rig`, `1H Heavy`, `1H Light`); sole earner of weapon Mastery XP (`Prof >= 2`) |
 | `OFF` | `OFF_HAND` | `7` dedicated `off_only` families (`shield`, `buckler`, `braces`, `ammo`, `cloak`, `orb`, `tome`) or `1H Light` weapon (`dagger`, `knife`, `fist`); drives the Combat UI **Off-Hand skill button** (`Switch Weapon` retired; empty on `2H Solo`, `ammo`/`cloak` pair with `crossbow`/`bow`) |
 | `HEAD` | `HEAD` | Heavy kettle helms, medium hoods/cowls, light masks/veils (`heavy`, `medium`, `light` proficiency shared with `BODY`) |
-| `BODY` | `BODY` | `heavy`, `medium`, or `light` armor (`6` unique `[3]/[1]` class permutations; replaces `plate`/`leather`/`cloth`) |
+| `BODY` | `BODY` | `heavy`, `medium`, or `light` armor (`[3]` main / `[1]` sub per class; replaces `plate`/`leather`/`cloth`) |
 | `ACC1`, `ACC2` | `ACCESSORY_1`, `ACCESSORY_2` | Proficiency-free relics, winch ratchets, Crucible `keepsake_<id>` (`ALLOW_DUPLICATE_ACCESSORY = false`; optional `required_stats` hard lock) |
 | **Pouch** | `UnitState.pouch` (`POUCH_MAX = 3`) | Tactile Soot-Gothic consumables (`con_heal_potion`/`con_focus_elixir`/`con_fire_bomb` are `ashlands`-only) |
 | **Slab Implants** | `4` Act 2+ `body` slots (`PK2`) | `Forearms`, `Thoracic`, `Visceral` (retort-refined ossuary bone-pins) + `Cranial` (class ritual) |
@@ -23,11 +23,11 @@ Strict proficiency & burden (`U3_GEAR_REWORK.md` — archived in `docs/archive/s
 | Class & Founder | `main (3)` / `secondary (2)` / `third (2)` / `minor (1)` Weapons | Off-Hands (`Main [3] / Sub [1]`) | Armor (`Main [3] / Sub [1]`) & Founder Signature Gear |
 | --- | --- | --- | --- |
 | **Vanguard** (`Kaelen`) | `polearm` *(1H Phalanx Spear/Short-Bill, `1-2`)* / `greatsword` (`2H`) / `sword` (`1H`) / `hammer` (`2H`) | `shield (3)` / `buckler (1)` | `heavy (3)` / `medium (1)` — `notched_billhook` (`1H`) + shield, `castellan_breastplate` (`heavy`) |
-| **Slag-Brute** (`Dunstan`) | `gauntlet` *(1H Piston/Shackles)* / `fist` (`1H Light`) / `hammer` (`2H`) / `greatsword` (`2H`) | `braces (3)` / `shield (1)` *(+ `fist`)* | `heavy (3)` / `light (1)` — `penal_shackles` (`gauntlet`), `penal_foundry_apron` (`heavy`) |
-| **Arbalestier** (`Hollis`) | `crossbow` (`2H+Rig`, `2-5`) / `bow` (`2H+Rig`, `2-4`) / `knife` (`1H Light`) / `sword` (`1H`) | `ammo (3)` / `cloak (1)` *(+ `knife`)* | `medium (3)` / `heavy (1)` — `winch_arbalest`, `poachers_brigandine` (`medium`) |
+| **Slag-Brute** (`Dunstan`) | `gauntlet` *(1H Piston/Shackles)* / `fist` (`1H Light`) / `hammer` (`2H`) / `greatsword` (`2H`) | `braces (3)` / `shield (1)` *(+ `fist`)* | `light (3)` / `heavy (1)` — `penal_shackles` (`gauntlet`), `penal_foundry_apron` (`light`) |
+| **Arbalestier** (`Hollis`) | `crossbow` (`2H+Rig`, `2-5`) / `bow` (`2H+Rig`, `2-4`) / `knife` (`1H Light`) / `sword` (`1H`) | `ammo (3)` / `cloak (1)` *(+ `knife`)* | `heavy (3)` / `medium (1)` — `winch_arbalest`, `poachers_brigandine` (`heavy`) |
 | **Gutter-Stalker** (`Vesper`) | `dagger` (`1H Light`) / `knife` (`1H Light`, `2-3` w/ `ammo`) / `bow` (`2H+Rig`) / `fist` (`1H Light`) | `cloak (3)` / `braces (1)` *(+ `1H Light`)* | `medium (3)` / `light (1)` — `curfew_bodkin`, `soot_leathers` (`medium`) |
 | **Heretic Acolyte** (`Maren`) | `censer` (`1H`) / `bone_saw` (`1H`) / `scourge` (`1H`, `1-2`) / `staff` (`2H`) | `tome (3)` / `orb (1)` *(`INT` hybrid)* | `light (3)` / `heavy (1)` — `bronze_censer` + `copied_psalter` (`tome`), `embalmers_habit` (`light`) |
-| **Ichor Alchemist** (`Elyse`) | `sprayer` *(1H Nozzle, `2-4`)* / `staff` (`2H`) / `bone_saw` (`1H`) / `scourge` (`1H`) | `orb (3)` / `ammo (1)` | `light (3)` / `medium (1)` — `brass_vitriol_sprayer` (`1H`), `tanners_rubbered_coat` (`light`) |
+| **Ichor Alchemist** (`Elyse`) | `sprayer` *(1H Nozzle, `2-4`)* / `staff` (`2H`) / `bone_saw` (`1H`) / `scourge` (`1H`) | `orb (3)` / `ammo (1)` | `medium (3)` / `light (1)` — `brass_vitriol_sprayer` (`1H`), `tanners_rubbered_coat` (`medium`) |
 
 ## 3. Tactile Soot-Gothic Pouch Consumables (`POUCH_MAX = 3`, `[LOCKED]`, `PR5-35`)
 

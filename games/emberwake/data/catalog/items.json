@@ -1207,7 +1207,7 @@
 		{
 			"id": "poachers_brigandine",
 			"name": "Poacher's Coat",
-			"family": "medium",
+			"family": "heavy",
 			"rarity": "COMMON",
 			"weight": 3.0,
 			"value": 40,
@@ -1268,7 +1268,7 @@
 		{
 			"id": "penal_foundry_apron",
 			"name": "Foundry Apron",
-			"family": "heavy",
+			"family": "light",
 			"rarity": "COMMON",
 			"weight": 4.0,
 			"value": 35,
@@ -1332,7 +1332,7 @@
 		{
 			"id": "tanners_rubbered_coat",
 			"name": "Rubbered Coat",
-			"family": "light",
+			"family": "medium",
 			"rarity": "COMMON",
 			"weight": 1.5,
 			"value": 30,
