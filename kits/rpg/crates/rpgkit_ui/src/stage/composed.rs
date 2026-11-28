@@ -216,6 +216,31 @@ fn seed_of(terrain: &[String], set: &str, look: &ZoneLook) -> u64 {
     h
 }
 
+/// Remaps the uniform-row composed ground image (`GRID_H * ART_CELL.1` tall) into the Stage's proportional perspective
+/// row heights (`row_layout`), so every composed terrain edge aligns pixel-for-pixel with `stage_cell`.
+fn perspective_warp(src: Image) -> Image {
+    let layout = super::row_layout();
+    let expected_h = GRID_H * ART_CELL.1;
+    if src.w <= 0 || src.h != expected_h {
+        return src;
+    }
+    let mut px = vec![0u8; src.px.len()];
+    let stride = (src.w * 4) as usize;
+    for r in 0..GRID_H as usize {
+        let dst_y0 = (layout.ys[r] - super::BOARD_Y) * SET_ART_PX;
+        let dst_y1 = (layout.ys[r + 1] - super::BOARD_Y) * SET_ART_PX;
+        let dst_h = (dst_y1 - dst_y0).max(1);
+        let src_y0 = r as i32 * ART_CELL.1;
+        for dy in dst_y0..dst_y1 {
+            let sy = (src_y0 + (dy - dst_y0) * ART_CELL.1 / dst_h).clamp(0, src.h - 1);
+            let s0 = sy as usize * stride;
+            let d0 = dy as usize * stride;
+            px[d0..d0 + stride].copy_from_slice(&src.px[s0..s0 + stride]);
+        }
+    }
+    Image { w: src.w, h: src.h, px }
+}
+
 /// R1: draws the composed ground over the board and returns true, or false when no ground on it has a sheet.
 pub fn draw(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, look: &ZoneLook) -> bool {
     let terrain: Vec<String> = (0..GRID_H).flat_map(|y| (0..GRID_W).map(move |x| V2::new(x, y))).map(|c| grid.terrain_id(c).to_string()).collect();
@@ -233,7 +258,7 @@ pub fn draw(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, look: &ZoneL
             }
             let j = pic.map(|pic| {
                 let layers = pic.ground_layers();
-                let key = GroundKey::of("battle_stage", &pic.job(&layers));
+                let key = GroundKey::of("battle_stage_persp", &pic.job(&layers));
                 drop(layers);
                 Rc::new((pic, key))
             });
@@ -246,10 +271,10 @@ pub fn draw(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, look: &ZoneL
     // ENGINE-54 (WARM-SPREAD1): a warm draw composes the board's ground on a thread
     if composer::deferring() && !composer::held(key) {
         let pic = pic.clone();
-        composer::compose_later(key.clone(), move || composer::compose(&pic.job(&pic.ground_layers())));
+        composer::compose_later(key.clone(), move || perspective_warp(composer::compose(&pic.job(&pic.ground_layers()))));
         return true;
     }
-    composer::draw(p, key.clone(), BOARD, || composer::compose(&pic.job(&pic.ground_layers())));
+    composer::draw(p, key.clone(), BOARD, || perspective_warp(composer::compose(&pic.job(&pic.ground_layers()))));
     true
 }
 
@@ -259,7 +284,7 @@ pub fn compose_board(art: &mut Art, grid: &Grid, set: &str, look: &ZoneLook) -> 
     let terrain: Vec<String> = (0..GRID_H).flat_map(|y| (0..GRID_W).map(move |x| V2::new(x, y))).map(|c| grid.terrain_id(c).to_string()).collect();
     let pic = picture(art, grid, set, look, seed_of(&terrain, set, look))?;
     let layers = pic.ground_layers();
-    Some(composer::compose(&pic.job(&layers)))
+    Some(perspective_warp(composer::compose(&pic.job(&layers))))
 }
 
 /// R1: whether a cell beside `c` (eight around) holds a block, a cover prop or a prop, where wear gathers.

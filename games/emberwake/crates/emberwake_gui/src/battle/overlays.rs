@@ -387,17 +387,22 @@ pub(super) fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
     for c in &o.front {
         plate(p, plate_of(*c), rgba(240, 100, 92, 46), rgba(240, 100, 92, 110));
     }
-    // a ground ellipse's radii in the view (the Stage squashes it like the foot rings)
-    let (rx, ry) = match geo.view {
-        View::Stage => (0.36 * geo.token_px as f32, 4.2),
+    // a ground ellipse's radii in the view (the Stage squashes and scales it proportionally by row depth)
+    let radii = |c: V2| match geo.view {
+        View::Stage => {
+            let s = stage::row_depth_scale(c.y as f32);
+            (0.36 * geo.token_px as f32 * s, 4.2 * s)
+        }
         View::Flat => (13.0, 5.0),
     };
     for c in &o.valid {
         let (x, y) = ground_pt(geo, *c);
+        let (rx, ry) = radii(*c);
         p.ellipse_ring(x, y, rx + 1.0, ry + 0.8, rgba(255, 255, 255, 150));
     }
     for (c, hidden) in &o.veils {
         let (x, y) = ground_pt(geo, *c);
+        let (rx, ry) = radii(*c);
         p.ellipse(x, y, rx, ry, rgba(186, 170, 255, if *hidden { 90 } else { 40 }));
         p.ellipse_ring(x, y, rx, ry, rgba(186, 170, 255, if *hidden { 230 } else { 150 }));
     }
@@ -428,6 +433,7 @@ pub(super) fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
     }
     for c in o.target.iter().chain(&o.target_more) {
         let (x, y) = ground_pt(geo, *c);
+        let (rx, ry) = radii(*c);
         p.ellipse_ring(x, y, rx + 2.5, ry + 1.6, th().gold);
         p.ellipse_ring(x, y, rx + 3.5, ry + 2.2, with_alpha(th().gold, 150));
     }
@@ -435,6 +441,7 @@ pub(super) fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
     let squash = if geo.view == View::Stage { 0.6 } else { 1.0 };
     for (c, f) in &o.facings {
         let (x, y) = ground_pt(geo, *c);
+        let (rx, _) = radii(*c);
         let len = ((f.x * f.x + f.y * f.y) as f32).sqrt().max(1.0);
         let (dx, dy) = (f.x as f32 / len, f.y as f32 / len * squash);
         let (tip, base) = (rx + 8.0, rx + 3.0);

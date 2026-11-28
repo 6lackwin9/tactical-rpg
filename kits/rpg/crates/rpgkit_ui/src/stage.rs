@@ -14,7 +14,6 @@
 use aegis_ui::art::Art;
 use aegis_ui::autotile::corner_mask;
 use aegis_ui::canvas::{rgb, rgba, Image, Rect, Rgba};
-use aegis_ui::depth::DepthList;
 use aegis_ui::painter::Painter;
 use rpgkit_battle::grid::{data_zone, Grid, V2, GRID_H, GRID_W};
 use indexmap::IndexMap;
@@ -80,6 +79,138 @@ pub const FLAT_CELL: i32 = 32;
 pub const ARROW_Y: f32 = 0.75;
 pub const ARROW_START: f32 = 10.0;
 pub const ARROW_END: f32 = 12.0;
+
+/// Proportional perspective row depth scale strength (80 %): back row ~0.86x -> foreground row ~1.14x, mean = 1.000x.
+pub const DEPTH_SCALE: f32 = 0.80;
+/// Behind-camera distance-attenuation light strength (70 %): foreground dusk-lit, back rows fall off into moody shadow.
+pub const DEPTH_LIGHT: f32 = 0.70;
+/// Soft feathered horizontal row seam strength (35 %).
+pub const ROW_SEAM_STRENGTH: f32 = 0.35;
+/// Wet iron-slate dressed-stone base tone (`#2e3541`).
+pub const FLOOR_SLATE: Rgba = rgb(46, 53, 65);
+
+/// Proportional perspective scale factor for a row (`0.0` back wall -> `GRID_H - 1` foreground, mean = `1.000`).
+pub fn row_depth_scale(row: f32) -> f32 {
+    let denom = (GRID_H - 1).max(1) as f32;
+    let t = (row / denom).clamp(-0.35, 1.15);
+    1.0 + DEPTH_SCALE * (-0.18 + 0.36 * t)
+}
+
+/// Behind-camera distance-attenuation brightness multiplier for actors and props at `row`:
+/// foreground stays dusk-lit (`0.92x`, or `0.98x` for emissive fire/lantern sources), smoothly dimming with depth.
+pub fn row_depth_brightness(row: f32, emissive: bool) -> f32 {
+    let base_ambient = if emissive { 0.98 } else { 0.92 };
+    if DEPTH_LIGHT <= 0.01 {
+        return base_ambient;
+    }
+    let denom = (GRID_H - 1).max(1) as f32;
+    let dist = 1.0 - (row / denom).clamp(0.0, 1.0);
+    let max_atten = if emissive { 0.24 } else { 0.48 };
+    base_ambient * (1.0 - dist * max_atten * DEPTH_LIGHT)
+}
+
+/// Multiplicative depth brightness tint for an actor or prop at `row`, combined with an optional base tint.
+pub fn depth_tint(row: f32, emissive: bool, base: Option<Rgba>) -> Rgba {
+    let k = row_depth_brightness(row, emissive).clamp(0.0, 1.0);
+    let v = (k * 255.0).round() as u8;
+    match base {
+        Some(t) => tinted([v, v, v, 255], Some(t)),
+        None => [v, v, v, 255],
+    }
+}
+
+/// Proportional perspective row layout for the Stage view: `ys` holds `GRID_H + 1` row boundaries from `BOARD_Y` to
+/// `BOARD_Y + GRID_H * CELL_H` and `hs` holds the `GRID_H` row heights summing to exactly `GRID_H * CELL_H`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RowLayout {
+    pub ys: [i32; (GRID_H + 1) as usize],
+    pub hs: [i32; GRID_H as usize],
+}
+
+/// Computes the deterministic perspective row layout for the Stage view (normalized mean = `1.0`, total height = `BOARD.h`).
+pub fn row_layout() -> RowLayout {
+    let mut ys = [0i32; (GRID_H + 1) as usize];
+    let mut hs = [0i32; GRID_H as usize];
+    ys[0] = BOARD_Y;
+    let mut acc = 0.0f32;
+    for r in 0..GRID_H as usize {
+        acc += CELL_H as f32 * row_depth_scale(r as f32);
+        let next = if r + 1 == GRID_H as usize {
+            BOARD_Y + GRID_H * CELL_H
+        } else {
+            BOARD_Y + acc.round() as i32
+        };
+        ys[r + 1] = next;
+        hs[r] = next - ys[r];
+    }
+    RowLayout { ys, hs }
+}
+
+/// Top y (logical px) of row boundary `y` (`0..=GRID_H`; extrapolated cleanly outside the grid).
+pub fn row_y(y: i32) -> i32 {
+    let l = row_layout();
+    if y < 0 {
+        l.ys[0] + y * l.hs[0]
+    } else if y <= GRID_H {
+        l.ys[y as usize]
+    } else {
+        l.ys[GRID_H as usize] + (y - GRID_H) * l.hs[(GRID_H - 1) as usize]
+    }
+}
+
+/// Height (logical px) of Stage row `y` (clamped to valid row range).
+pub fn row_h(y: i32) -> i32 {
+    row_layout().hs[y.clamp(0, GRID_H - 1) as usize]
+}
+
+/// Stage row containing logical `my`, or None outside `BOARD_Y..BOARD_Y + GRID_H * CELL_H`.
+pub fn row_at_y(my: i32) -> Option<i32> {
+    let l = row_layout();
+    if my < l.ys[0] || my >= l.ys[GRID_H as usize] {
+        return None;
+    }
+    for r in 0..GRID_H as usize {
+        if my >= l.ys[r] && my < l.ys[r + 1] {
+            return Some(r as i32);
+        }
+    }
+    None
+}
+
+/// Continuous Stage row (`0.0..=(GRID_H - 1) as f32`) corresponding to logical `py`.
+pub fn row_of_y(py: f32) -> f32 {
+    let l = row_layout();
+    if py <= l.ys[0] as f32 {
+        return 0.0;
+    }
+    if py >= l.ys[GRID_H as usize] as f32 {
+        return (GRID_H - 1) as f32;
+    }
+    for r in 0..GRID_H as usize {
+        let (y0, y1) = (l.ys[r] as f32, l.ys[r + 1] as f32);
+        if py >= y0 && py < y1 {
+            let f = (py - y0) / (y1 - y0).max(1.0);
+            return (r as f32 + f - 0.5).clamp(0.0, (GRID_H - 1) as f32);
+        }
+    }
+    (GRID_H - 1) as f32
+}
+
+/// Proportional lift height for a wall block on Stage row `row`.
+pub fn block_lift(row: i32) -> i32 {
+    (BLOCK_LIFT as f32 * row_depth_scale(row as f32)).round().max(1.0) as i32
+}
+
+/// Proportional face height for a wall block on Stage row `row`.
+pub fn block_face_h(row: i32) -> i32 {
+    (FACE_H as f32 * row_depth_scale(row as f32)).round().max(1.0) as i32
+}
+
+/// Proportional size of a standing prop or cover piece on Stage row `row`.
+pub fn scaled_prop_size(size: (i32, i32), row: i32) -> (i32, i32) {
+    let s = row_depth_scale(row as f32);
+    ((size.0 as f32 * s).round().max(1.0) as i32, (size.1 as f32 * s).round().max(1.0) as i32)
+}
 
 const NIGHT: Rgba = rgb(10, 14, 24);
 
@@ -150,37 +281,58 @@ impl Geom {
         Geom { view, token_px: if view == View::Stage { t.token_px() } else { t.flat_token_px() }, foot_inset: t.foot_inset_px() }
     }
 
-    /// Cell (x, y)'s rect: 32 x 24 on the board (Stage), 32 x 32 from the panel's top (Flat).
+    /// Cell (x, y)'s rect: 32 wide by perspective row height on the board (Stage), 32 x 32 from the panel's top (Flat).
     pub fn cell_rect(&self, c: V2) -> Rect {
         match self.view {
-            View::Stage => Rect::new(BOARD_X + c.x * CELL_W, BOARD_Y + c.y * CELL_H, CELL_W, CELL_H),
+            View::Stage => stage_cell(c),
             View::Flat => Rect::new(BOARD_X + c.x * FLAT_CELL, FLAT_Y + c.y * FLAT_CELL, FLAT_CELL, FLAT_CELL),
         }
     }
 
     /// BIGUNIT1 BU14: the rect of the `n` x `n` square anchored at `c` (`cell_rect` for one cell).
     pub fn square_rect(&self, c: V2, n: i32) -> Rect {
-        let (a, n) = (self.cell_rect(c), n.max(1));
-        Rect::new(a.x, a.y, a.w * n, a.h * n)
+        let n = n.max(1);
+        let a = self.cell_rect(c);
+        match self.view {
+            View::Stage => {
+                let b = self.cell_rect(V2::new(c.x, c.y + n - 1));
+                Rect::new(a.x, a.y, a.w * n, b.y + b.h - a.y)
+            }
+            View::Flat => Rect::new(a.x, a.y, a.w * n, a.h * n),
+        }
     }
 
-    /// BIGUNIT1 BU14: `foot` of a unit filling the `n` x `n` square at `c`: centred on the square across, `foot_inset`
-    /// above its bottom edge (Stage); the square's centre (Flat).
+    /// BIGUNIT1 BU14: `foot` of a unit filling the `n` x `n` square at `c`: centred on the square across, perspective-scaled
+    /// `foot_inset` above its bottom edge (Stage); the square's centre (Flat).
     pub fn foot_n(&self, c: V2, n: i32) -> (i32, i32) {
+        let n = n.max(1);
         let r = self.square_rect(c, n);
         match self.view {
-            View::Stage => (r.x + r.w / 2, r.y + r.h - self.foot_inset),
+            View::Stage => {
+                let inset = (self.foot_inset as f32 * row_depth_scale((c.y + n - 1) as f32)).round() as i32;
+                (r.x + r.w / 2, r.y + r.h - inset)
+            }
             View::Flat => (r.x + r.w / 2, r.y + r.h / 2),
         }
     }
 
-    /// BIGUNIT1 BU14: `token_rect` of a unit filling the `n` x `n` square at `c`: its sprite scaled `n` times (the
-    /// existing sheet until a 2 x 2 sheet lands), on the square's foot point (Stage) or centred on it (Flat).
+    /// Perspective-scaled token sprite square at continuous row `row` for an `n` x `n` footprint (Stage); fixed `token_px * n` Flat.
+    pub fn token_px_at(&self, row: f32, n: i32) -> i32 {
+        let base = self.token_px * n.max(1);
+        match self.view {
+            View::Stage => (base as f32 * row_depth_scale(row)).round().max(1.0) as i32,
+            View::Flat => base,
+        }
+    }
+
+    /// BIGUNIT1 BU14: `token_rect` of a unit filling the `n` x `n` square at `c`: its sprite scaled `n` times and by row
+    /// depth on the Stage, on the square's foot point (Stage) or centred on it (Flat).
     pub fn token_rect_n(&self, c: V2, n: i32, dx: i32, dy: i32) -> Rect {
+        let n = n.max(1);
         if n <= 1 {
             return self.token_rect(c, dx, dy);
         }
-        let tp = self.token_px * n;
+        let tp = self.token_px_at((c.y + n - 1) as f32, n);
         let (fx, fy) = self.foot_n(c, n);
         match self.view {
             View::Stage => Rect::new(fx - tp / 2 + dx, fy + 1 - tp + dy, tp, tp),
@@ -188,12 +340,8 @@ impl Geom {
         }
     }
 
-    /// DIORAMA1B (D5, contract 8.1): the sprite square of a unit filling the `n` x `n` square whose body has `frame`
-    /// and a `foot` row, and how far its bottom edge drops under the foot point's row. On the Stage a body with a
-    /// `foot` row is scaled so its frame from the top to the foot row stands `PAINTED_CELLS` cells (`CELL_W`) tall per
-    /// footprint cell (`fit_square` keeps the scale: the square's side is the frame's longer side), the drop being the
-    /// frame rows under the foot row; any other body (and every body Flat) keeps the token square (`token_px` x `n`,
-    /// no drop), as before.
+    /// DIORAMA1B (D5, contract 8.1): the base (1.0x mid-row) sprite square of a unit filling the `n` x `n` square whose
+    /// body has `frame` and a `foot` row, and how far its bottom edge drops under the foot point's row.
     pub fn sprite_px(&self, n: i32, frame: (u32, u32), foot: Option<u32>) -> (i32, i32) {
         let n = n.max(1);
         match self.view {
@@ -202,13 +350,24 @@ impl Geom {
         }
     }
 
-    /// DIORAMA1B: `token_rect_n` for a sprite square of side `sp` dropping `drop` px (`sprite_px`): centred on the
-    /// square's foot point across, its bottom edge `1 + drop` px under it (Stage); centred on the square (Flat). With
-    /// the token square and no drop it is `token_rect_n`.
-    pub fn sprite_rect_n(&self, c: V2, n: i32, (sp, drop): (i32, i32), dx: i32, dy: i32) -> Rect {
-        if sp == self.token_px * n.max(1) && drop == 0 {
-            return self.token_rect_n(c, n, dx, dy);
+    /// Perspective-scaled `sprite_px` at continuous Stage row `row` (Flat ignores `row`).
+    pub fn sprite_px_at(&self, row: f32, n: i32, frame: (u32, u32), foot: Option<u32>) -> (i32, i32) {
+        let n = n.max(1);
+        match self.view {
+            View::Stage => {
+                let s = row_depth_scale(row);
+                match painted_px(CELL_W, n, frame, foot) {
+                    Some((sp, drop)) => ((sp as f32 * s).round().max(1.0) as i32, (drop as f32 * s).round() as i32),
+                    None => (self.token_px_at(row, n), 0),
+                }
+            }
+            View::Flat => (self.token_px * n, 0),
         }
+    }
+
+    /// DIORAMA1B: `token_rect_n` for a sprite square of side `sp` dropping `drop` px (`sprite_px` / `sprite_px_at`):
+    /// centred on the square's foot point across, its bottom edge `1 + drop` px under it (Stage); centred on the square (Flat).
+    pub fn sprite_rect_n(&self, c: V2, n: i32, (sp, drop): (i32, i32), dx: i32, dy: i32) -> Rect {
         let (fx, fy) = self.foot_n(c, n);
         match self.view {
             View::Stage => Rect::new(fx - sp / 2 + dx, fy + 1 + drop - sp + dy, sp, sp),
@@ -218,41 +377,46 @@ impl Geom {
 
     /// The cell under logical (mx, my) (None: off the board; the backdrop and the front face hold no cell).
     pub fn cell_at(&self, mx: i32, my: i32) -> Option<V2> {
-        let (ch, top) = match self.view {
-            View::Stage => (CELL_H, BOARD_Y),
-            View::Flat => (FLAT_CELL, FLAT_Y),
-        };
-        let (dx, dy) = (mx - BOARD_X, my - top);
-        if dx < 0 || dy < 0 {
+        let dx = mx - BOARD_X;
+        if dx < 0 {
             return None;
         }
-        let c = V2::new(dx / CELL_W, dy / ch);
-        (c.x < GRID_W && c.y < GRID_H).then_some(c)
-    }
-
-    /// Where a unit on `c` stands: centred across, `foot_inset` above the cell's bottom edge (Stage); the cell's
-    /// centre (Flat).
-    pub fn foot(&self, c: V2) -> (i32, i32) {
-        let r = self.cell_rect(c);
+        let x = dx / CELL_W;
+        if x >= GRID_W {
+            return None;
+        }
         match self.view {
-            View::Stage => (r.x + r.w / 2, r.y + r.h - self.foot_inset),
-            View::Flat => (r.x + r.w / 2, r.y + r.h / 2),
+            View::Stage => row_at_y(my).map(|y| V2::new(x, y)),
+            View::Flat => {
+                let dy = my - FLAT_Y;
+                if dy < 0 {
+                    return None;
+                }
+                let y = dy / FLAT_CELL;
+                (y < GRID_H).then_some(V2::new(x, y))
+            }
         }
     }
 
-    /// The foot point raised a third of the sprite (where floats and effects start; FX1's anchor).
+    /// Where a unit on `c` stands: centred across, perspective-scaled `foot_inset` above the cell's bottom edge (Stage);
+    /// the cell's centre (Flat).
+    pub fn foot(&self, c: V2) -> (i32, i32) {
+        self.foot_n(c, 1)
+    }
+
+    /// The foot point raised a third of the perspective-scaled sprite (where floats and effects start; FX1's anchor).
     pub fn chest(&self, c: V2) -> (i32, i32) {
         let (x, y) = self.foot(c);
         match self.view {
-            View::Stage => (x, y - self.token_px / 3),
+            View::Stage => (x, y - self.token_px_at(c.y as f32, 1) / 3),
             View::Flat => (x, y),
         }
     }
 
     /// The sprite square of a unit on `c` moved by (dx, dy): its bottom edge one px under the foot point, centred on it
-    /// (Stage); centred in the cell (Flat, as before).
+    /// and scaled by row depth (Stage); centred in the cell (Flat, as before).
     pub fn token_rect(&self, c: V2, dx: i32, dy: i32) -> Rect {
-        let tp = self.token_px;
+        let tp = self.token_px_at(c.y as f32, 1);
         match self.view {
             View::Stage => {
                 let (fx, fy) = self.foot(c);
@@ -265,11 +429,11 @@ impl Geom {
         }
     }
 
-    /// The offset of a unit sliding from `from` to `to` with `left` (1 to 0) of the slide to go: a cell's width and
-    /// height per step.
+    /// The offset of a unit sliding from `from` to `to` with `left` (1 to 0) of the slide to go: smoothly interpolates
+    /// between the exact foot points of `from` and `to`.
     pub fn slide(&self, from: V2, to: V2, left: f32) -> (i32, i32) {
-        let ch = if self.view == View::Stage { CELL_H } else { FLAT_CELL };
-        (((from.x - to.x) as f32 * CELL_W as f32 * left).round() as i32, ((from.y - to.y) as f32 * ch as f32 * left).round() as i32)
+        let (a, b) = (self.foot(from), self.foot(to));
+        (((a.0 - b.0) as f32 * left).round() as i32, ((a.1 - b.1) as f32 * left).round() as i32)
     }
 }
 
@@ -356,10 +520,11 @@ pub fn block_face(grid: &Grid, c: V2) -> bool {
     !is_block(grid, V2::new(c.x, c.y + 1))
 }
 
-/// 3.3: a block's drawn rect: the cap lifted `BLOCK_LIFT` over its cell, and its face when it has one.
+/// 3.3: a block's drawn rect: the cap lifted proportionally over its cell, and its face when it has one.
 pub fn block_rect(grid: &Grid, c: V2) -> Rect {
-    let r = Geom { view: View::Stage, token_px: 0, foot_inset: 0 }.cell_rect(c);
-    Rect::new(r.x, r.y - BLOCK_LIFT, r.w, r.h + if block_face(grid, c) { BLOCK_LIFT } else { 0 })
+    let r = stage_cell(c);
+    let lift = block_lift(c.y);
+    Rect::new(r.x, r.y - lift, r.w, r.h + if block_face(grid, c) { lift } else { 0 })
 }
 
 /// 3.5: a prop of `size` px (its PNG, 1:1 at 32 px of art per cell) stands bottom-centred on the cell rect `cell`.
@@ -616,8 +781,9 @@ fn standing_art(art: &mut Art, grid: &Grid, c: V2) -> Option<(String, (i32, i32)
     prop_art(art, row.prop?, c.x, c.y)
 }
 
-fn stage_cell(c: V2) -> Rect {
-    Rect::new(BOARD_X + c.x * CELL_W, BOARD_Y + c.y * CELL_H, CELL_W, CELL_H)
+/// Perspective cell rect on the Stage (`CELL_W` wide by `row_h(c.y)` tall).
+pub fn stage_cell(c: V2) -> Rect {
+    Rect::new(BOARD_X + c.x * CELL_W, row_y(c.y), CELL_W, row_h(c.y))
 }
 
 /// A stage file for a `w` x `h` logical rect: a file of the world's set at its art resolution (LOOK1 5.1, so a large
@@ -653,8 +819,130 @@ fn lerp(a: Rgba, b: Rgba, t: f32) -> Rgba {
     [m(0), m(1), m(2), 255]
 }
 
+fn lerp_rgba(a: Rgba, b: Rgba, t: f32) -> Rgba {
+    let m = |i: usize| (a[i] as f32 + (b[i] as f32 - a[i] as f32) * t).round().clamp(0.0, 255.0) as u8;
+    [m(0), m(1), m(2), m(3)]
+}
+
+fn sample_stops(stops: &[(f32, Rgba)], t: f32) -> Rgba {
+    let t = t.clamp(0.0, 1.0);
+    if stops.is_empty() {
+        return [0, 0, 0, 0];
+    }
+    if t <= stops[0].0 {
+        return stops[0].1;
+    }
+    for w in stops.windows(2) {
+        let ((t0, c0), (t1, c1)) = (w[0], w[1]);
+        if t <= t1 {
+            let f = if (t1 - t0).abs() < 1e-6 { 0.0 } else { (t - t0) / (t1 - t0) };
+            return lerp_rgba(c0, c1, f);
+        }
+    }
+    stops[stops.len() - 1].1
+}
+
+/// Smooth vertical multi-stop gradient at physical pixel resolution (respects clip and shift).
+fn fill_v_grad_f(p: &mut Painter, x0: f32, y0: f32, w: f32, h: f32, stops: &[(f32, Rgba)]) {
+    if p.c.hidden() || w <= 0.0 || h <= 0.0 {
+        return;
+    }
+    let (px0, py0) = (p.v.x(x0), p.v.y(y0));
+    let (px1, py1) = (p.v.x(x0 + w), p.v.y(y0 + h));
+    let (pw, ph) = (px1 - px0, py1 - py0);
+    if pw <= 0 || ph <= 0 {
+        return;
+    }
+    for py in py0..py1 {
+        let t = ((py - py0) as f32 + 0.5) / ph as f32;
+        let col = sample_stops(stops, t);
+        if col[3] > 0 {
+            p.c.fill(Rect::new(px0, py, pw, 1), col);
+        }
+    }
+}
+
+/// Smooth horizontal multi-stop gradient at physical pixel resolution (respects clip and shift).
+fn fill_h_grad_f(p: &mut Painter, x0: f32, y0: f32, w: f32, h: f32, stops: &[(f32, Rgba)]) {
+    if p.c.hidden() || w <= 0.0 || h <= 0.0 {
+        return;
+    }
+    let (px0, py0) = (p.v.x(x0), p.v.y(y0));
+    let (px1, py1) = (p.v.x(x0 + w), p.v.y(y0 + h));
+    let (pw, ph) = (px1 - px0, py1 - py0);
+    if pw <= 0 || ph <= 0 {
+        return;
+    }
+    for px in px0..px1 {
+        let t = ((px - px0) as f32 + 0.5) / pw as f32;
+        let col = sample_stops(stops, t);
+        if col[3] > 0 {
+            p.c.fill(Rect::new(px, py0, 1, ph), col);
+        }
+    }
+}
+
+/// Subtle grimdark outer radial vignette framing the stage (0 inside `r_inner`, smoothly ramping to `edge_col` at `r_outer`).
+fn fill_radial_vignette(p: &mut Painter, r: Rect, cx: f32, cy: f32, r_inner: f32, r_outer: f32, edge_col: Rgba) {
+    if p.c.hidden() || edge_col[3] == 0 {
+        return;
+    }
+    let pr = p.v.rect(r);
+    let (mut x0, mut y0, mut x1, mut y1) = (pr.x.max(0), pr.y.max(0), (pr.x + pr.w).min(p.c.w), (pr.y + pr.h).min(p.c.h));
+    for lim in [p.c.clip, p.c.bounds].into_iter().flatten() {
+        x0 = x0.max(lim.x);
+        y0 = y0.max(lim.y);
+        x1 = x1.min(lim.x + lim.w);
+        y1 = y1.min(lim.y + lim.h);
+    }
+    if x0 >= x1 || y0 >= y1 {
+        return;
+    }
+    let (pcx, pcy) = (p.v.ox + cx * p.v.s, p.v.oy + cy * p.v.s);
+    let (pri, pro) = (r_inner * p.v.s, r_outer * p.v.s);
+    let span = (pro - pri).max(1.0);
+    for py in y0..y1 {
+        let dy = py as f32 + 0.5 - pcy;
+        let dy2 = dy * dy;
+        for px in x0..x1 {
+            let dx = px as f32 + 0.5 - pcx;
+            let d = (dx * dx + dy2).sqrt();
+            if d > pri {
+                let t = ((d - pri) / span).clamp(0.0, 1.0);
+                let a = (edge_col[3] as f32 * t).round() as u8;
+                if a > 0 {
+                    p.c.blend(px, py, [edge_col[0], edge_col[1], edge_col[2], a]);
+                }
+            }
+        }
+    }
+}
+
 fn scaled(c: Rgba, k: f32) -> Rgba {
     [(c[0] as f32 * k).round() as u8, (c[1] as f32 * k).round() as u8, (c[2] as f32 * k).round() as u8, c[3]]
+}
+
+fn hash_unit(x: i32, y: i32, stream: u64) -> f32 {
+    (aegis_ui::art::cell_hash(x, y, stream) & 0x00ff_ffff) as f32 / 16_777_216.0
+}
+
+/// Vertical dusk wall shading + soft baseboard contact AO anchoring the fixed-1.0x back wall cleanly to Row 0.
+fn draw_backdrop_shade(p: &mut Painter, r: Rect) {
+    let a84 = ((0.28 + 0.16 * DEPTH_LIGHT) * 255.0).round() as u8;
+    let a100 = ((0.34 + 0.30 * DEPTH_LIGHT) * 255.0).round() as u8;
+    fill_v_grad_f(
+        p,
+        r.x as f32,
+        r.y as f32,
+        r.w as f32,
+        r.h as f32,
+        &[
+            (0.00, rgba(10, 13, 20, 36)),
+            (0.55, rgba(6, 9, 15, 56)),
+            (0.84, rgba(5, 7, 12, a84)),
+            (1.00, rgba(3, 5, 9, a100)),
+        ],
+    );
 }
 
 /// 3.4, HOOKS1 ZN3: what the backdrop pass draws for zone `zone`: its file (None: the gradient) and the gradient's
@@ -667,12 +955,13 @@ pub fn backdrop_source<'a>(art: &mut Art, grid: &'a Grid, zone: &str, zones: &'a
     }
 }
 
-/// Pass 1: the zone's backdrop, else a gradient from the night sky to the far ground's colour at 40 % (a data zone
-/// row in `zones`: its backdrop key and `ground`, `backdrop_source`).
+/// Pass 1: the zone's backdrop (fixed 1.0x, unaffected by floor Depth Scale), else a gradient from the night sky to the
+/// far ground's colour at 40 %, finished with dusk wall reflection & soft baseboard contact AO anchoring it to Row 0.
 pub fn draw_backdrop(p: &mut Painter, art: &mut Art, grid: &Grid, zone: &str, zones: &IndexMap<String, ZoneDef>) {
     let (file, ground) = backdrop_source(art, grid, zone, zones);
     if let Some(img) = file.and_then(|rel| art.image(&rel, BACKDROP.w, BACKDROP.h)) {
         p.image(img, BACKDROP);
+        draw_backdrop_shade(p, BACKDROP);
         return;
     }
     let bottom = lerp(NIGHT, terrain_color(grid, ground), 0.4);
@@ -680,6 +969,7 @@ pub fn draw_backdrop(p: &mut Painter, art: &mut Art, grid: &Grid, zone: &str, zo
         let t = k as f32 / (BACKDROP.h - 1) as f32;
         p.fill(Rect::new(BACKDROP.x, BACKDROP.y + k, BACKDROP.w, 1), lerp(NIGHT, bottom, t));
     }
+    draw_backdrop_shade(p, BACKDROP);
 }
 
 /// The ground a cell's tile shows in the ground pass: a standing cell with prop art the ground under it, else its own.
@@ -727,9 +1017,10 @@ pub fn stage_pieces(art: &mut Art, grid: &Grid, set: &str) -> Vec<(i32, i32, Str
     out
 }
 
-/// LOOK1 5.3: a transition piece's rect, one cell centred on corner (`cx`, `cy`).
+/// LOOK1 5.3: a transition piece's rect, one cell centred on perspective corner (`cx`, `cy`).
 pub fn piece_rect(cx: i32, cy: i32) -> Rect {
-    Rect::new(BOARD_X + cx * CELL_W - CELL_W / 2, BOARD_Y + cy * CELL_H - CELL_H / 2, CELL_W, CELL_H)
+    let h = row_h(cy.clamp(0, GRID_H - 1));
+    Rect::new(BOARD_X + cx * CELL_W - CELL_W / 2, row_y(cy) - h / 2, CELL_W, h)
 }
 
 /// The pieces of `stage_pieces`, clipped to the board (which a camera shake moves) inside the clip already set.
@@ -752,7 +1043,8 @@ fn draw_pieces(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, look: &Zo
 }
 
 /// Pass 2: every cell's ground tile (a standing cell with prop art the ground under it, without art the flat tile),
-/// the stage set's transition pieces, the lips of sunken cells, the ground props and the grid lines at `grid_alpha`.
+/// the stage set's transition pieces, the lips of sunken cells, the ground props and (when `grid_alpha > 0`) soft
+/// feathered dividers.
 /// DIORAMA5 R1: with a ground sheet on the board the ground is composed (`composed::draw`), else the tiles as before;
 /// then the accent decals. R2: a lip from art (`lip_art`) before the flat fill.
 pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), grid_alpha: u8) {
@@ -796,19 +1088,189 @@ pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&s
             if let (Kind::Ground, Some(prop)) = (row.kind, row.prop) {
                 if let Some((rel, size)) = prop_art(art, prop, x, y) {
                     if let Some(img) = art.image(&rel, size.0, size.1) {
-                        p.image(img, prop_rect(r, size));
+                        let s = scaled_prop_size(size, y);
+                        p.image(img, prop_rect(r, s));
                     }
                 }
             }
         }
     }
-    let line = rgba(0, 0, 0, grid_alpha);
-    for k in 0..=GRID_H {
-        p.fill(Rect::new(BOARD_X, BOARD_Y + k * CELL_H, GRID_W * CELL_W, 1), line);
+    if grid_alpha > 0 {
+        draw_dividers(p, grid_alpha);
     }
-    for k in 0..=GRID_W {
-        p.fill(Rect::new(BOARD_X + k * CELL_W, BOARD_Y, 1, GRID_H * CELL_H), line);
+}
+
+/// Dressed-stone horizontal course sheen, subtle stone-dressing threads, random partial horizontal paving lines
+/// (`28%–62%` tile width with feathered ends, zero vertical tile-splitting cuts), subtle weathered scuffs/grit and
+/// recessed course grooves drawn over `Kind::Ground` cells (skipping sunken water/lava/bog and wall blocks) UNDER
+/// `draw_light` so distance attenuation darkens all rows smoothly without zebra striping.
+pub fn draw_floor_courses(p: &mut Painter, grid: &Grid) {
+    if p.c.hidden() {
+        return;
     }
+    let outer = p.c.clip;
+    let board = p.v.rect(BOARD);
+    p.c.clip = Some(outer.map_or(board, |o| o.intersect(board)));
+    let layout = row_layout();
+    for r in 0..GRID_H {
+        let y0 = layout.ys[r as usize] as f32;
+        let rh = layout.hs[r as usize] as f32;
+        for col in 0..GRID_W {
+            let c = V2::new(col, r);
+            if stage_of(grid, shown_ground(grid, c)).kind != Kind::Ground {
+                continue;
+            }
+            let x0 = (BOARD_X + col * CELL_W) as f32;
+            let cw = CELL_W as f32;
+
+            // 1. Cohesive horizontal stone-course runner sheen (identical across all rows at 0% depth light!)
+            fill_v_grad_f(
+                p,
+                x0,
+                y0,
+                cw,
+                rh,
+                &[
+                    (0.00, rgba(8, 11, 16, 41)),
+                    (0.18, rgba(116, 132, 156, 8)),
+                    (0.50, rgba(124, 140, 166, 12)),
+                    (0.84, rgba(108, 122, 146, 5)),
+                    (1.00, rgba(7, 10, 15, 43)),
+                ],
+            );
+
+            // 2. Subtle continuous horizontal stone-dressing grain threads running the full course
+            let runner_y1 = y0 + (rh * 0.22).round();
+            let runner_y2 = y0 + (rh * 0.76).round();
+            fill_v_grad_f(p, x0, runner_y1, cw, 1.0, &[(0.0, rgba(130, 146, 172, 11)), (1.0, rgba(130, 146, 172, 11))]);
+            fill_v_grad_f(p, x0, runner_y2, cw, 0.8, &[(0.0, rgba(8, 11, 16, 24)), (1.0, rgba(8, 11, 16, 24))]);
+
+            // 3. 1-2 deterministic random PARTIAL horizontal paving lines (28%..62% tile width, feathered ends, ZERO vertical cuts!)
+            let line_count = if hash_unit(col, r, 101) < 0.62 { 2 } else { 1 };
+            for li in 0..line_count {
+                let s0 = 110 + li as u64 * 10;
+                let frac_y = if li == 0 {
+                    0.30 + hash_unit(col, r, s0) * 0.20
+                } else {
+                    0.62 + hash_unit(col, r, s0) * 0.20
+                };
+                let ly = y0 + (rh * frac_y).round();
+                let seg_w = (cw * (0.28 + hash_unit(col, r, s0 + 1) * 0.34)).round();
+                let lx = x0 + 2.5 + hash_unit(col, r, s0 + 2) * (cw - seg_w - 5.0).max(1.0);
+                fill_h_grad_f(
+                    p,
+                    lx,
+                    ly,
+                    seg_w,
+                    0.8,
+                    &[
+                        (0.00, rgba(14, 18, 25, 0)),
+                        (0.16, rgba(14, 18, 25, 88)),
+                        (0.84, rgba(14, 18, 25, 88)),
+                        (1.00, rgba(14, 18, 25, 0)),
+                    ],
+                );
+                fill_h_grad_f(
+                    p,
+                    lx,
+                    ly + 0.8,
+                    seg_w,
+                    0.5,
+                    &[
+                        (0.00, rgba(140, 160, 188, 0)),
+                        (0.20, rgba(140, 160, 188, 30)),
+                        (0.80, rgba(140, 160, 188, 30)),
+                        (1.00, rgba(140, 160, 188, 0)),
+                    ],
+                );
+            }
+
+            // 4. Occasional subtle worn horizontal stone scuff / hairline crack (~32% of cells)
+            if hash_unit(col, r, 140) < 0.32 {
+                let sx = x0 + 4.0 + hash_unit(col, r, 141) * (cw - 11.0).max(1.0);
+                let sy = y0 + 3.5 + hash_unit(col, r, 142) * (rh - 7.0).max(1.0);
+                let len = 4.0 + hash_unit(col, r, 143) * 5.5;
+                let dy = (hash_unit(col, r, 144) - 0.5) * 1.8;
+                p.line(sx, sy, sx + len, sy + dy, rgba(15, 19, 26, 72), 0.0);
+            }
+
+            // 5. Subtle creeping damp moss tucked softly along top row edge (~22% of ground cells)
+            if hash_unit(col, r, 150) < 0.22 {
+                let mx = x0 + 5.0 + hash_unit(col, r, 151) * (cw - 10.0);
+                let my = y0 + 1.0 + hash_unit(col, r, 152) * 2.0;
+                let rx = 3.0 + hash_unit(col, r, 153) * 3.5;
+                let ry = 1.0 + hash_unit(col, r, 154) * 0.75;
+                p.ellipse(mx, my, rx, ry, rgba(38, 62, 42, 54));
+            }
+
+            // 6. Subtle horizontal weathered stone grit flecks (no vertical stripes)
+            for gi in 0..3 {
+                let gs = 160 + gi as u64 * 5;
+                let gx = x0 + hash_unit(col, r, gs) * (cw - 2.0);
+                let gy = y0 + hash_unit(col, r, gs + 1) * (rh - 1.0);
+                let gw = 1.0 + (hash_unit(col, r, gs + 2) * 1.5);
+                let col_g = if hash_unit(col, r, gs + 3) < 0.45 {
+                    rgba(124, 140, 164, 24)
+                } else {
+                    rgba(14, 17, 22, 32)
+                };
+                fill_h_grad_f(p, gx, gy, gw, 0.6, &[(0.0, col_g), (1.0, col_g)]);
+            }
+        }
+    }
+    p.c.clip = outer;
+}
+
+/// Soft feathered recessed horizontal row seams (`ROW_SEAM_STRENGTH` ~35%, boosted gently when `grid_alpha > 0`)
+/// paired with soft feathered vertical column dividers (`6` physical px fade at 2x), replacing crisp 1px wireframes.
+pub fn draw_dividers(p: &mut Painter, grid_alpha: u8) {
+    if p.c.hidden() {
+        return;
+    }
+    let outer = p.c.clip;
+    let board = p.v.rect(BOARD);
+    p.c.clip = Some(outer.map_or(board, |o| o.intersect(board)));
+    let row_alpha = (ROW_SEAM_STRENGTH + (grid_alpha as f32 / 255.0) * 0.40).clamp(0.0, 0.85);
+    let layout = row_layout();
+    for (idx, &y_i) in layout.ys[1..GRID_H as usize].iter().enumerate() {
+        let r = idx + 1;
+        let y = y_i as f32;
+        let depth_factor = 0.65 + (r as f32 / GRID_H as f32) * 0.45;
+        let a_dark = ((row_alpha * 0.85 * depth_factor).min(0.72) * 255.0).round() as u8;
+        let a_lit = ((row_alpha * 0.30 * depth_factor).min(0.32) * 255.0).round() as u8;
+        fill_v_grad_f(
+            p,
+            BOARD_X as f32,
+            y - 2.0,
+            (GRID_W * CELL_W) as f32,
+            4.5,
+            &[
+                (0.00, rgba(6, 9, 14, 0)),
+                (0.38, rgba(6, 9, 14, a_dark)),
+                (0.58, rgba(148, 166, 192, a_lit)),
+                (1.00, rgba(148, 166, 192, 0)),
+            ],
+        );
+    }
+    let c_dark = ((row_alpha * 0.38).max(0.06) * 255.0).round() as u8;
+    let c_lit = ((row_alpha * 0.12).max(0.03) * 255.0).round() as u8;
+    for col in 1..GRID_W {
+        let x = (BOARD_X + col * CELL_W) as f32;
+        fill_h_grad_f(
+            p,
+            x - 1.5,
+            BOARD_Y as f32,
+            3.0,
+            BOARD.h as f32,
+            &[
+                (0.00, rgba(7, 10, 16, 0)),
+                (0.42, rgba(7, 10, 16, c_dark)),
+                (0.60, rgba(136, 154, 180, c_lit)),
+                (1.00, rgba(136, 154, 180, 0)),
+            ],
+        );
+    }
+    p.c.clip = outer;
 }
 
 /// DIORAMA5 R2: the folders of sunken terrain `id`'s lip art: its override folder's (`<set>/<name>` reads
@@ -840,14 +1302,15 @@ pub fn lip_art(art: &mut Art, id: &str, set: &str, look: &ZoneLook, x: i32, y: i
     Some(img.crop(0, 0, img.w, (band * SET_ART_PX).clamp(1, img.h.max(1))))
 }
 
-/// Pass 5 (props): the contact shadow under each standing prop that has art.
+/// Pass 5 (props): the contact shadow under each standing prop that has art, scaled proportionally by row depth.
 pub fn draw_prop_shadows(p: &mut Painter, art: &mut Art, grid: &Grid) {
     for y in 0..GRID_H {
+        let s = row_depth_scale(y as f32);
         for x in 0..GRID_W {
             let c = V2::new(x, y);
             if standing_art(art, grid, c).is_some() {
                 let r = stage_cell(c);
-                p.ellipse((r.x + r.w / 2 + 2) as f32, (r.y + r.h - 5) as f32, 10.0, 2.7, rgba(10, 16, 6, 95));
+                p.ellipse((r.x + r.w / 2) as f32 + 2.0 * s, (r.y + r.h) as f32 - 5.0 * s, 10.0 * s, 2.7 * s, rgba(10, 16, 6, 95));
             }
         }
     }
@@ -1040,20 +1503,25 @@ fn replaces_cover(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), d:
         && decor_art(art, &d.art, (set, look), d.at).is_some()
 }
 
-/// DECOR1: the cell rect decor piece `d` stands on: lifted `BLOCK_LIFT` onto a block it stands on top of, else its
+/// Whether an art file is listed in `look.lights` (emissive fire/lantern sources attenuate more gently with row depth).
+pub fn is_emissive(rel: &str, look: &ZoneLook) -> bool {
+    !look.lights.is_empty() && light_keys(rel).iter().any(|k| look.lights.iter().any(|l| l.key == *k))
+}
+
+/// DECOR1: the cell rect decor piece `d` stands on: lifted proportionally onto a block it stands on top of, else its
 /// cell.
 fn decor_cell(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), d: &Decor) -> Rect {
     let r = stage_cell(d.at);
     if is_block(grid, d.at) && !replaces_cover(art, grid, (set, look), d) {
-        Rect::new(r.x, r.y - BLOCK_LIFT, r.w, r.h)
+        Rect::new(r.x, r.y - block_lift(d.at.y), r.w, r.h)
     } else {
         r
     }
 }
 
-/// DECOR1: the decor pieces (with art, on the grid) in the feet pass, by index into `decor`: foot y its cell's bottom
-/// edge (a lifted piece's too, so it draws after the block it stands on), x its left edge; pushed after the board's
-/// pieces they sort after a block at equal feet and before units (a unit on the same cell draws over its decor).
+/// DECOR1: the decor pieces (with art, on the grid) in the feet pass, by index into `decor`: row `d.at.y`, sub-layer
+/// `SUBLAYER_PROP` (foreground of their row so units on walkable cover tiles tuck behind them), pushed after blocks so
+/// a piece standing on a wall cap sorts after its block.
 pub fn decor_items(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), decor: &[Decor]) -> Vec<Placed> {
     let mut out = Vec::new();
     for (i, d) in decor.iter().enumerate() {
@@ -1063,7 +1531,15 @@ pub fn decor_items(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), d
         let Some((_, size)) = decor_art(art, &d.art, (set, look), d.at) else { continue };
         let r = decor_cell(art, grid, (set, look), d);
         let cell = stage_cell(d.at);
-        out.push(Placed { item: Item::Decor(i), foot_y: cell.y + cell.h, x: cell.x, rect: prop_rect(r, size) });
+        let scaled_sz = scaled_prop_size(size, d.at.y);
+        out.push(Placed {
+            item: Item::Decor(i),
+            row: d.at.y,
+            sub_layer: SUBLAYER_PROP,
+            foot_y: cell.y + cell.h,
+            x: cell.x,
+            rect: prop_rect(r, scaled_sz),
+        });
     }
     out
 }
@@ -1073,20 +1549,24 @@ pub fn block_shown(art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), d
     !decor.iter().any(|d| d.at == c && replaces_cover(art, grid, (set, look), d))
 }
 
-/// The feet pass: decor piece `d` (cover art at the set's art px with its cell's tint as a block's, a prop at its PNG
-/// size), with the cover's dark line below it where it stands in place of a block's cover.
+/// The feet pass: decor piece `d` scaled proportionally by row depth and lit by behind-camera depth brightness,
+/// with the cover's dark line below it where it stands in place of a block's cover.
 pub fn draw_decor(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), d: &Decor) {
     let Some((rel, size)) = decor_art(art, &d.art, (set, look), d.at) else { return };
     let r = decor_cell(art, grid, (set, look), d);
-    let rect = prop_rect(r, size);
+    let scaled_sz = scaled_prop_size(size, d.at.y);
+    let rect = prop_rect(r, scaled_sz);
     let cover = matches!(rpgkit_content::art::decor_art(&d.art), Some(DecorArt::Cover(_)));
     let tint = look.tint_of(grid.terrain_id(d.at));
+    let emissive = is_emissive(&rel, look);
+    let draw_tint = Some(depth_tint(d.at.y as f32, emissive, if cover { tint } else { None }));
     let img = if cover { stage_image(art, &rel, (set, look), size.0, size.1) } else { art.image(&rel, size.0, size.1) };
     if let Some(img) = img {
-        put(p, img, rect, if cover { tint } else { None });
+        put(p, img, rect, draw_tint);
     }
     if replaces_cover(art, grid, (set, look), d) && d.at.y + 1 < GRID_H {
-        p.fill(Rect::new(r.x, r.y + r.h, r.w, 3), rgba(0, 0, 0, 70));
+        let sh = (3.0 * row_depth_scale(d.at.y as f32)).round().max(1.0) as i32;
+        p.fill(Rect::new(r.x, r.y + r.h, r.w, sh), rgba(0, 0, 0, 70));
     }
 }
 
@@ -1142,37 +1622,66 @@ pub const POOL: Rgba = rgb(255, 170, 80);
 /// The pool's half sizes on the floor (logical px).
 pub const POOL_RX: f32 = 46.0;
 pub const POOL_RY: f32 = 18.0;
-/// DIORAMA5 R3: a pool's strength at its centre, added to the floor (about twice the old rings' 75, which blended over
-/// it), and the board's mild darkening while any light shows, so the pools read.
+/// DIORAMA5 R3: a pool's strength at its centre, added to the floor (under the global distance-attenuation falloff).
 pub const POOL_PEAK: u8 = 150;
 pub const LAMP_PEAK: u8 = 130;
 pub const DARKEN: Rgba = rgba(8, 10, 22, 34);
 
-/// DIORAMA3 R3, DIORAMA5 R3: the light pass after the ground: with any light, the board darkened a little; a warm
-/// additive pool on the floor below each lantern spot (centred on its `u`, on row 0 and into row 1) and on each lamp's
-/// cell and neighbours (`lamps`); then a soft vignette at the stage's edges. Static (no flicker), so it stays on under
-/// Reduce motion.
+/// Grimdark behind-camera lighting pass after the ground:
+/// 1. Separate prop & wall-lantern glow layer (clipped cleanly to `BOARD`, proportionally scaled by row depth), drawn
+///    UNDER the distance-attenuation falloff so farther glows weaken naturally.
+/// 2. Global smooth distance-attenuation falloff (`DEPTH_LIGHT` ~70%): foreground row stays dusk-lit (`0%` darkening),
+///    farther rows smoothly fall off into deep moody shadow (`0.88 * DEPTH_LIGHT` at Row 0).
+/// 3. Subtle grimdark outer edge radial vignette framing the stage.
 pub fn draw_light(p: &mut Painter, spots: &[(f32, f32)], lamps: &[Lamp]) {
-    if !spots.is_empty() || !lamps.is_empty() {
-        p.fill(BOARD, DARKEN);
-    }
+    // 1. Separate Prop & Wall-Lantern Glow Layer (UNDER distance attenuation!)
+    let outer = p.c.clip;
+    let board = p.v.rect(BOARD);
+    p.c.clip = Some(outer.map_or(board, |o| o.intersect(board)));
+    let s0 = row_depth_scale(0.0);
     for &(u, _) in spots {
         let cx = BACKDROP.x as f32 + u * BACKDROP.w as f32;
-        let cy = BOARD_Y as f32 + CELL_H as f32 * 0.7;
-        p.glow(cx, cy, POOL_RX, POOL_RY, rgba(POOL[0], POOL[1], POOL[2], POOL_PEAK));
+        let cy = row_y(0) as f32 + row_h(0) as f32 * 0.7;
+        p.glow(cx, cy, POOL_RX * s0, POOL_RY * s0, rgba(POOL[0], POOL[1], POOL[2], POOL_PEAK));
     }
     for l in lamps {
-        p.glow(l.x, l.y, l.radius * CELL_W as f32, l.radius * CELL_H as f32, rgba(l.color[0], l.color[1], l.color[2], LAMP_PEAK));
+        let s = row_depth_scale(row_of_y(l.y));
+        p.glow(l.x, l.y, l.radius * CELL_W as f32 * s, l.radius * CELL_H as f32 * s, rgba(l.color[0], l.color[1], l.color[2], LAMP_PEAK));
     }
-    let clip = STAGE_CLIP;
-    for k in 0..VIGNETTE_PX {
-        let a = ((1.0 - k as f32 / VIGNETTE_PX as f32).powf(2.0) * VIGNETTE_ALPHA as f32).round() as u8;
-        let col = rgba(0, 0, 0, a);
-        p.fill(Rect::new(clip.x, BOARD_Y + k, clip.w, 1), col);
-        p.fill(Rect::new(clip.x, FRONT_FACE.y - 1 - k, clip.w, 1), col);
-        p.fill(Rect::new(INTERIOR.x + k, BOARD_Y, 1, FRONT_FACE.y - BOARD_Y), col);
-        p.fill(Rect::new(INTERIOR.x + INTERIOR.w - 1 - k, BOARD_Y, 1, FRONT_FACE.y - BOARD_Y), col);
+    p.c.clip = outer;
+
+    // 2. Global Behind-Camera Distance-Attenuation Falloff (attenuates BOTH floor base luminosity AND prop glows!)
+    if DEPTH_LIGHT > 0.01 {
+        let a0 = (0.88 * DEPTH_LIGHT * 255.0).round() as u8;
+        let a25 = (0.65 * DEPTH_LIGHT * 255.0).round() as u8;
+        let a50 = (0.42 * DEPTH_LIGHT * 255.0).round() as u8;
+        let a75 = (0.20 * DEPTH_LIGHT * 255.0).round() as u8;
+        fill_v_grad_f(
+            p,
+            STAGE_CLIP.x as f32,
+            BOARD_Y as f32,
+            STAGE_CLIP.w as f32,
+            BOARD.h as f32,
+            &[
+                (0.00, rgba(3, 5, 9, a0)),
+                (0.25, rgba(3, 5, 9, a25)),
+                (0.50, rgba(4, 6, 11, a50)),
+                (0.75, rgba(4, 6, 11, a75)),
+                (1.00, rgba(4, 6, 11, 0)),
+            ],
+        );
     }
+
+    // 3. Subtle grimdark outer edge vignette framing the stage atmospherically
+    fill_radial_vignette(
+        p,
+        Rect::new(STAGE_CLIP.x, BOARD_Y, STAGE_CLIP.w, FRONT_FACE.y - BOARD_Y),
+        BOARD_X as f32 + BOARD.w as f32 * 0.5,
+        BOARD_Y as f32 + BOARD.h as f32 * 0.56,
+        BOARD.w as f32 * 0.34,
+        BOARD.w as f32 * 0.64,
+        rgba(3, 5, 9, 82),
+    );
 }
 
 // ---- DIORAMA5 R4: the exit marker -----------------------------------------------------------------------------------
@@ -1354,6 +1863,8 @@ pub fn draw_wings(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&st
             }
         }
     }
+    draw_backdrop_shade(p, Rect::new(STAGE_CLIP.x, BACKDROP.y, WING, BACKDROP.h));
+    draw_backdrop_shade(p, Rect::new(INTERIOR.x + INTERIOR.w, BACKDROP.y, WING, BACKDROP.h));
     for (x, src) in [(-1, 0), (GRID_W, GRID_W - 1)] {
         for y in 0..GRID_H {
             let edge = V2::new(src, y);
@@ -1383,8 +1894,9 @@ pub fn draw_wings(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&st
     }
 }
 
-/// The feet pass: block `c` (3.3): its cap (the stage tile lifted `BLOCK_LIFT`), its face (the wall face art, else the
-/// cap's top rows at 75 %) with its top line and the shade on the cell south, the cap's highlight and side lines.
+/// The feet pass: block `c` (3.3): its cap (the stage tile lifted proportionally), its face (the wall face art, else
+/// the cap's top rows at 75 %) with its top line and the shade on the cell south, the cap's highlight and side lines,
+/// all lit smoothly by behind-camera depth brightness.
 pub fn draw_block(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str, &ZoneLook), c: V2) {
     // DIORAMA4 S1: a row-0 block keeps off the backdrop band (its cap and cover clipped at the board's top edge)
     let outer = p.c.clip;
@@ -1400,48 +1912,66 @@ fn draw_block_in(p: &mut Painter, art: &mut Art, grid: &Grid, (set, look): (&str
     let r = stage_cell(c);
     let t = grid.terrain_id(c);
     let tint = look.tint_of(t);
-    // DIORAMA3 R5: a block inside the arena stands as the stage set's cover prop (display only), feet on its bottom edge
-    if let Some(img) = shown_cover(art, grid, (set, look), c).and_then(|rel| stage_image(art, &rel, (set, look), CELL_W, COVER_H)) {
-        put(p, img, Rect::new(r.x, r.y + r.h - COVER_H, CELL_W, COVER_H), tint);
-        if c.y + 1 < GRID_H {
-            p.fill(Rect::new(r.x, r.y + r.h, r.w, 3), rgba(0, 0, 0, 70));
+    // DIORAMA3 R5: a block inside the arena stands as the stage set's cover prop, scaled proportionally by row depth
+    if let Some(rel) = shown_cover(art, grid, (set, look), c) {
+        if let Some(img) = stage_image(art, &rel, (set, look), CELL_W, COVER_H) {
+            let sz = scaled_prop_size((CELL_W, COVER_H), c.y);
+            let emissive = is_emissive(&rel, look);
+            put(p, img, prop_rect(r, sz), Some(depth_tint(c.y as f32, emissive, tint)));
+            if c.y + 1 < GRID_H {
+                let sh = (3.0 * row_depth_scale(c.y as f32)).round().max(1.0) as i32;
+                p.fill(Rect::new(r.x, r.y + r.h, r.w, sh), rgba(0, 0, 0, 70));
+            }
+            return;
         }
-        return;
     }
-    let cap = Rect::new(r.x, r.y - BLOCK_LIFT, CELL_W, CELL_H);
+    let lift = block_lift(c.y);
+    let face_h = block_face_h(c.y);
+    let cap = Rect::new(r.x, r.y - lift, CELL_W, r.h);
+    let btint = Some(depth_tint(c.y as f32, false, tint));
     // PR7-80 (WALLMASS1): a run of blocks shares one cap: the terrain's ground sheet sampled at the cell's place on the
     // board when it has one, else one tile variant for the whole run (picked at its root), so no seam changes art
     // between neighbours; a run along the board's back edge takes the back rows' darker tone
     let root = run_root(grid, c);
     match sheet_cap(art, t, (set, look), c) {
-        Some(img) => put(p, &img, cap, tint),
-        None => draw_tile(p, art, grid, t, (set, look), root, cap),
+        Some(img) => put(p, &img, cap, btint),
+        None => {
+            let mut look_d = look.clone();
+            look_d.tint = btint;
+            look_d.terrain.iter_mut().for_each(|(id, _, tt)| {
+                if id == t {
+                    *tt = btint;
+                }
+            });
+            draw_tile(p, art, grid, t, (set, &look_d), root, cap);
+        }
     }
     if root.y == 0 {
         p.fill(cap, OUTER_CAP_SHADE);
     }
     if block_face(grid, c) {
-        let face = Rect::new(r.x, r.y + CELL_H - FACE_H, CELL_W, FACE_H);
+        let face = Rect::new(r.x, r.y + r.h - face_h, CELL_W, face_h);
         let drawn = match look.pick(art, set, "wall_face", c.x, c.y).or_else(|| face_art(art, set, c.x, c.y)).and_then(|rel| stage_image(art, &rel, (set, look), CELL_W, FACE_H)) {
             Some(img) => {
-                put(p, img, face, tint);
+                put(p, img, face, btint);
                 true
             }
             None => false,
         };
         if !drawn {
             match darkened_cap(art, t, (set, look), c) {
-                Some(img) => put(p, &img, face, tint),
-                None => p.fill(face, tinted(scaled(terrain_color(grid, t), 0.75), tint)),
+                Some(img) => put(p, &img, face, btint),
+                None => p.fill(face, tinted(scaled(terrain_color(grid, t), 0.75), btint)),
             }
         }
         p.fill(Rect::new(face.x, face.y, face.w, 1), rgb(24, 24, 30));
         if c.y + 1 < GRID_H {
-            p.fill(Rect::new(r.x, r.y + r.h, r.w, 3), rgba(0, 0, 0, 70));
+            let sh = (3.0 * row_depth_scale(c.y as f32)).round().max(1.0) as i32;
+            p.fill(Rect::new(r.x, r.y + r.h, r.w, sh), rgba(0, 0, 0, 70));
         }
     }
     if !is_block(grid, V2::new(c.x, c.y - 1)) {
-        p.fill(Rect::new(cap.x, cap.y, cap.w, 1), lip_colour(art, set));
+        p.fill(Rect::new(cap.x, cap.y, cap.w, 1), tinted(lip_colour(art, set), Some(depth_tint(c.y as f32, false, None))));
     }
     let side = rgb(30, 30, 38);
     let h = block_rect(grid, c).h;
@@ -1508,17 +2038,25 @@ fn darkened_cap(art: &mut Art, t: &str, (set, look): (&str, &ZoneLook), c: V2) -
     Some(top)
 }
 
-/// The feet pass: standing prop `c`'s art at its PNG size, bottom-centred on the cell (mirrored never; varied by
-/// position).
+/// The feet pass: standing prop `c`'s art scaled proportionally by row depth and lit by behind-camera depth brightness,
+/// bottom-centred on the cell (mirrored never; varied by position).
 pub fn draw_prop(p: &mut Painter, art: &mut Art, grid: &Grid, c: V2) {
     if let Some((rel, size)) = standing_art(art, grid, c) {
         if let Some(img) = art.image(&rel, size.0, size.1) {
-            p.image(img, prop_rect(stage_cell(c), size));
+            let sz = scaled_prop_size(size, c.y);
+            p.image_tinted(img, prop_rect(stage_cell(c), sz), depth_tint(c.y as f32, false, None), 255);
         }
     }
 }
 
 // ---- The feet pass and the outlines through (3.7 passes 7 and 8) ------------------------------------------------
+
+/// Deterministic per-row sub-layer order:
+/// `Fallen bodies (0) < Standing units (1) < Props/Cover/Blocks (2) < Strike/Combat FX (3)`.
+pub const SUBLAYER_FALLEN: u8 = 0;
+pub const SUBLAYER_UNIT: u8 = 1;
+pub const SUBLAYER_PROP: u8 = 2;
+pub const SUBLAYER_FX: u8 = 3;
 
 /// What the feet pass draws.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1529,22 +2067,33 @@ pub enum Item {
     Decor(usize),
     /// A unit by its battle index.
     Unit(usize),
+    /// A strike or combat FX registered on a row (draws over props & units on its row).
+    Fx(usize),
 }
 
-/// One thing in the feet pass: its sort keys and drawn rect (a unit's body rect, 3.8).
+/// One thing in the feet pass: its deterministic `(row, sub_layer)` depth keys, tie-breaking `foot_y` and `x`, and drawn rect.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Placed {
     pub item: Item,
+    pub row: i32,
+    pub sub_layer: u8,
     pub foot_y: i32,
     pub x: i32,
     pub rect: Rect,
 }
 
-/// Blocks and standing props sort before units at equal feet.
-const GROUP_BOARD: u8 = 0;
-const GROUP_UNIT: u8 = 1;
+/// Maps a foot y coordinate (including a cell's exact bottom boundary) to its Stage row index.
+fn row_of_foot(foot_y: i32) -> i32 {
+    if foot_y <= BOARD_Y {
+        return 0;
+    }
+    if foot_y >= BOARD_Y + GRID_H * CELL_H {
+        return GRID_H - 1;
+    }
+    row_at_y(foot_y - 1).unwrap_or(GRID_H - 1)
+}
 
-/// The board's blocks and standing props (with art) in the feet pass: foot y the cell's bottom edge, x its left edge.
+/// The board's blocks and standing props (with art) in the feet pass: row `c.y`, sub-layer `SUBLAYER_PROP`.
 pub fn board_items(art: &mut Art, grid: &Grid) -> Vec<Placed> {
     let mut out = Vec::new();
     for y in 0..GRID_H {
@@ -1552,10 +2101,11 @@ pub fn board_items(art: &mut Art, grid: &Grid) -> Vec<Placed> {
             let c = V2::new(x, y);
             let r = stage_cell(c);
             match stage_of(grid, grid.terrain_id(c)).kind {
-                Kind::Block => out.push(Placed { item: Item::Block(c), foot_y: r.y + r.h, x: r.x, rect: block_rect(grid, c) }),
+                Kind::Block => out.push(Placed { item: Item::Block(c), row: y, sub_layer: SUBLAYER_PROP, foot_y: r.y + r.h, x: r.x, rect: block_rect(grid, c) }),
                 Kind::Standing => {
                     if let Some((_, size)) = standing_art(art, grid, c) {
-                        out.push(Placed { item: Item::Prop(c), foot_y: r.y + r.h, x: r.x, rect: prop_rect(r, size) });
+                        let sz = scaled_prop_size(size, y);
+                        out.push(Placed { item: Item::Prop(c), row: y, sub_layer: SUBLAYER_PROP, foot_y: r.y + r.h, x: r.x, rect: prop_rect(r, sz) });
                     }
                 }
                 _ => {}
@@ -1565,9 +2115,24 @@ pub fn board_items(art: &mut Art, grid: &Grid) -> Vec<Placed> {
     out
 }
 
-/// A unit in the feet pass: its foot point (with the slide) and body rect.
+/// A standing unit in the feet pass: its foot point (with the slide) and body rect, deriving its row from `foot.1`.
 pub fn unit_item(i: usize, foot: (i32, i32), body: Rect) -> Placed {
-    Placed { item: Item::Unit(i), foot_y: foot.1, x: foot.0, rect: body }
+    unit_item_on_row(i, row_of_foot(foot.1), foot, body)
+}
+
+/// A standing unit in the feet pass registered explicitly on `row` (`SUBLAYER_UNIT`).
+pub fn unit_item_on_row(i: usize, row: i32, foot: (i32, i32), body: Rect) -> Placed {
+    Placed { item: Item::Unit(i), row, sub_layer: SUBLAYER_UNIT, foot_y: foot.1, x: foot.0, rect: body }
+}
+
+/// A fallen unit in the feet pass registered on `row` (`SUBLAYER_FALLEN`, strictly under standing units & props on `row`).
+pub fn fallen_unit_item_on_row(i: usize, row: i32, foot: (i32, i32), body: Rect) -> Placed {
+    Placed { item: Item::Unit(i), row, sub_layer: SUBLAYER_FALLEN, foot_y: foot.1, x: foot.0, rect: body }
+}
+
+/// A strike/combat FX registered on `row` (`SUBLAYER_FX`, strictly over props & units on `row`).
+pub fn fx_item(id: usize, row: i32, foot: (i32, i32), rect: Rect) -> Placed {
+    Placed { item: Item::Fx(id), row, sub_layer: SUBLAYER_FX, foot_y: foot.1, x: foot.0, rect }
 }
 
 fn overlap(a: Rect, b: Rect) -> bool {
@@ -1579,7 +2144,7 @@ fn overlap(a: Rect, b: Rect) -> bool {
 /// None when that leaves under `BAND_MIN` px.
 pub fn boss_band(grid: &Grid, occupied: &[V2], top: i32) -> Option<Rect> {
     let open = (0..GRID_H).find(|y| (0..GRID_W).any(|x| grid.is_walkable(V2::new(x, *y)) || occupied.contains(&V2::new(x, *y))))?;
-    let bottom = BOARD_Y + open * CELL_H;
+    let bottom = row_y(open);
     let top = top.max(BACKDROP.y);
     (bottom - top >= BAND_MIN).then(|| Rect::new(STAGE_CLIP.x, top, STAGE_CLIP.w, bottom - top))
 }
@@ -1589,7 +2154,7 @@ pub const BAND_MIN: i32 = 8;
 
 /// DIORAMA4 S1: whether block `c` lies wholly inside band `b` (its wall is left out there).
 pub fn under_band(c: V2, b: Rect) -> bool {
-    BOARD_Y + (c.y + 1) * CELL_H <= b.y + b.h
+    row_y(c.y + 1) <= b.y + b.h
 }
 
 /// DIORAMA4 S1: the zone's backdrop (and its copies beside it) bottom-aligned in band `b`, clipped to it, with a dark
@@ -1606,6 +2171,7 @@ pub fn draw_band(p: &mut Painter, art: &mut Art, grid: &Grid, zone: &str, zones:
             for dx in [-BACKDROP.w, 0, BACKDROP.w] {
                 p.image(img, Rect::new(BACKDROP.x + dx, BACKDROP.y, BACKDROP.w, BACKDROP.h));
             }
+            draw_backdrop_shade(p, Rect::new(STAGE_CLIP.x, BACKDROP.y, STAGE_CLIP.w, BACKDROP.h));
         }
         None => {
             p.fill(Rect::new(STAGE_CLIP.x, BACKDROP.y, STAGE_CLIP.w, BACKDROP.h), NIGHT);
@@ -1639,14 +2205,13 @@ pub fn occluders(items: &[Placed], focus: &[usize]) -> Vec<usize> {
     out
 }
 
-/// Back to front by feet, then group (board pieces before units), then x, then push order (`DepthList`).
+/// Deterministic back-to-front draw order strictly by `(row, sub_layer, foot_y, x)` (stable sort preserves push order
+/// so lifted decor on top of a wall block draws right after its block):
+/// `Fallen (0) < Standing Unit (1) < Prop/Cover/Block/Decor (2) < Strike/Combat FX (3)` on each row.
 pub fn feet_order(items: &[Placed]) -> Vec<Placed> {
-    let mut list = DepthList::new();
-    for p in items {
-        let group = if matches!(p.item, Item::Unit(_)) { GROUP_UNIT } else { GROUP_BOARD };
-        list.push(p.foot_y as f32, group, p.x as f32, *p);
-    }
-    list.into_sorted()
+    let mut out = items.to_vec();
+    out.sort_by_key(|p| (p.row, p.sub_layer, p.foot_y, p.x));
+    out
 }
 
 fn meets(a: Rect, b: Rect) -> bool {
@@ -1852,24 +2417,29 @@ pub(crate) mod tests {
     #[test]
     fn the_stage_geometry_maps_cells_feet_and_points() {
         let g = stage();
+        let lay = row_layout();
         assert_eq!(g.foot_inset, 5, "the default foot inset");
         assert_eq!(g.token_px, 40, "the default token size");
-        assert_eq!(g.cell_rect(V2::new(0, 0)), Rect::new(128, 82, 32, 24));
-        assert_eq!(g.cell_rect(V2::new(11, 8)), Rect::new(480, 274, 32, 24));
-        assert_eq!(g.foot(V2::new(5, 4)), (304, 197));
+        assert_eq!(g.cell_rect(V2::new(0, 0)), Rect::new(128, lay.ys[0], 32, lay.hs[0]));
+        assert_eq!(g.cell_rect(V2::new(11, 8)), Rect::new(480, lay.ys[8], 32, lay.hs[8]));
+        let mid_r = g.cell_rect(V2::new(5, 4));
+        assert_eq!(g.foot(V2::new(5, 4)), (mid_r.x + 16, mid_r.y + mid_r.h - 5));
         let tr = g.token_rect(V2::new(3, 0), 0, 0);
-        assert_eq!(tr.y, 62, "a row-0 token starts at y 62");
-        assert!(INTERIOR.contains(tr.x, tr.y) && tr.y + tr.h <= INTERIOR.y + INTERIOR.h, "inside the interior");
-        assert_eq!(g.chest(V2::new(5, 4)), (304, 197 - 40 / 3));
+        assert!(INTERIOR.contains(tr.x, tr.y) && tr.y + tr.h <= INTERIOR.y + INTERIOR.h, "inside the interior: {tr:?}");
+        let (fx, fy) = g.foot(V2::new(5, 4));
+        assert_eq!(g.chest(V2::new(5, 4)), (fx, fy - g.token_px_at(4.0, 1) / 3));
         for y in 0..GRID_H {
             for x in 0..GRID_W {
                 let r = g.cell_rect(V2::new(x, y));
                 assert_eq!(g.cell_at(r.x + r.w / 2, r.y + r.h / 2), Some(V2::new(x, y)));
+                assert_eq!(g.cell_at(r.x, r.y), Some(V2::new(x, y)));
+                assert_eq!(g.cell_at(r.x + r.w - 1, r.y + r.h - 1), Some(V2::new(x, y)));
             }
         }
         assert_eq!(g.cell_at(300, 50), None, "the backdrop holds no cell");
         assert_eq!(g.cell_at(300, 305), None, "the front face holds no cell");
-        assert_eq!(g.slide(V2::new(4, 3), V2::new(5, 4), 0.5), (-16, -12), "half a step back: half a cell each way");
+        let (f3, f4) = (g.foot(V2::new(4, 3)), g.foot(V2::new(5, 4)));
+        assert_eq!(g.slide(V2::new(4, 3), V2::new(5, 4), 0.5), (((f3.0 - f4.0) as f32 * 0.5).round() as i32, ((f3.1 - f4.1) as f32 * 0.5).round() as i32), "half a step back along perspective foot delta");
         assert_eq!(FRONT_FACE, Rect::new(128, 298, 384, 12));
         assert_eq!(DROP_SHADOW.y + DROP_SHADOW.h, INTERIOR.y + INTERIOR.h, "the drop shadow ends at the interior's edge");
     }
@@ -1964,8 +2534,10 @@ pub(crate) mod tests {
         assert!(!block_face(&cavern, V2::new(0, 0)), "a wall with a wall south");
         assert!(block_face(&cavern, V2::new(0, 8)), "a row-8 wall");
         assert!(block_face(&cavern, V2::new(1, 0)), "a wall over lava");
-        assert_eq!(block_rect(&cavern, V2::new(0, 0)), Rect::new(128, 70, 32, 24), "the cap only, lifted 12 into the backdrop");
-        assert_eq!(block_rect(&cavern, V2::new(1, 0)), Rect::new(160, 70, 32, 36), "cap and face");
+        let r0 = stage_cell(V2::new(0, 0));
+        let lift0 = block_lift(0);
+        assert_eq!(block_rect(&cavern, V2::new(0, 0)), Rect::new(128, r0.y - lift0, 32, r0.h), "the cap only, lifted into the backdrop");
+        assert_eq!(block_rect(&cavern, V2::new(1, 0)), Rect::new(160, r0.y - lift0, 32, r0.h + block_face_h(0)), "cap and face");
     }
 
     /// One PNG of `w` x `h` (opaque grey) at `root/rel`.
@@ -2011,7 +2583,9 @@ pub(crate) mod tests {
         assert_eq!(prop_art(&mut art, "tree", 2, 3), Some(("props/common/tree/v0.png".into(), (40, 52))));
         let items = board_items(&mut art, &forest);
         let tree = items.iter().find(|p| p.item == Item::Prop(V2::new(10, 2))).expect("the tree at (10, 2) stands");
-        assert_eq!(tree.rect, Rect::new(128 + 320 - 4, 82 + 72 - 52, 40, 52), "bottom-centred on its cell");
+        let cell = stage_cell(V2::new(10, 2));
+        let (pw, ph) = scaled_prop_size((40, 52), 2);
+        assert_eq!(tree.rect, prop_rect(cell, (pw, ph)), "bottom-centred on its perspective cell");
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&full);
     }
@@ -2119,7 +2693,7 @@ pub(crate) mod tests {
             match it.item {
                 Item::Block(c) => draw_block(&mut p, art, grid, (set, look), c),
                 Item::Prop(c) => draw_prop(&mut p, art, grid, c),
-                Item::Decor(_) | Item::Unit(_) => {}
+                Item::Decor(_) | Item::Unit(_) | Item::Fx(_) => {}
             }
         }
         g
@@ -2131,8 +2705,9 @@ pub(crate) mod tests {
     /// before); re-recorded for DIORAMA5 R1 (PR7-77), the one intended change: the fixture's two grass variants are
     /// picked by the cell's hash instead of the (7x + 13y) mod n lattice (0x2a5309c84d603849 before); re-recorded for
     /// WALLMASS1 (PR7-80), the one intended change: a wall run's caps take one variant (picked at the run's root) and a
-    /// run on the back row takes the back shade (0xffa27f50b69d7596 before).
-    const TODAYS_FRAME: u64 = 0x7898f381e249352d;
+    /// run on the back row takes the back shade (0xffa27f50b69d7596 before); re-recorded for perspective row depth,
+    /// behind-camera depth attenuation, and soft feathered dividers (0x7898f381e249352d before).
+    const TODAYS_FRAME: u64 = 0x9ee1e4cb9b4a8443;
 
     /// An empty `stage_set` draws today's frame; so does a set no layer holds, and a `stage_set` draws its own.
     #[test]
@@ -2297,18 +2872,20 @@ pub(crate) mod tests {
         assert_eq!(light_spots(&mut art, "", "alley"), []);
         let mut g = gfx();
         g.canvas = aegis_ui::canvas::Canvas::new(640, 360);
+        g.canvas.px.chunks_exact_mut(4).for_each(|p| p.copy_from_slice(&[46, 53, 65, 255]));
         g.view = aegis_ui::painter::View::fit(640, 360);
         let blank = g.canvas.px.clone();
         let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
         p.clip(Some(STAGE_CLIP));
         draw_light(&mut p, &[(0.25, 0.3)], &[]);
         let at = |px: &[u8], x: i32, y: i32| px[((y * 640 + x) * 4) as usize..((y * 640 + x) * 4 + 3) as usize].to_vec();
-        let (cx, cy) = (BACKDROP.x + BACKDROP.w / 4, BOARD_Y + CELL_H * 7 / 10);
+        let (cx, cy) = (BACKDROP.x + BACKDROP.w / 4, row_y(0) + row_h(0) * 7 / 10);
         let lit = at(&g.canvas.px, cx, cy);
         assert!(lit[0] > lit[2] && lit != at(&blank, cx, cy), "amber under the lantern: {lit:?}");
         let far = BACKDROP.x + BACKDROP.w * 3 / 4;
-        // DIORAMA5 R3: far from it only the board's mild darkening (black stays all but black)
-        assert!(at(&g.canvas.px, far, cy + 40).iter().zip(at(&blank, far, cy + 40)).all(|(a, b)| *a <= b.saturating_add(3)), "no light far from it (inside the vignette's margin)");
+        // Far from the lantern: distance-attenuation darkens the slate floor without warming it
+        let far_px = at(&g.canvas.px, far, cy + 40);
+        assert!(far_px[0] <= far_px[2] && far_px[0] < 46 && far_px[2] < 65, "darkened cool shadow far from lantern: {far_px:?}");
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -2377,7 +2954,10 @@ pub(crate) mod tests {
         let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         let lava = V2::new(4, 5);
         let grid = filled("stone", "lava", &[lava]);
-        let probe = |c: V2| (BOARD_X + c.x * CELL_W + CELL_W / 2, BOARD_Y + c.y * CELL_H + CELL_H / 2);
+        let probe = |c: V2| {
+            let r = stage_cell(c);
+            (r.x + r.w / 2, r.y + r.h / 2)
+        };
         let stone = V2::new(8, 5);
         let world = paint_look(&mut art, &grid, ("zz_world", &ZoneLook::default()), 0, 1, (0, 0));
         assert_eq!(px_at(&world, probe(stone).0, probe(stone).1), [200, 40, 40], "the world's set");
@@ -2395,8 +2975,12 @@ pub(crate) mod tests {
         assert_eq!(look.pick(&mut art, "zz_world", "stone", 0, 0).as_deref(), Some("tilesets/zz_zone/stone/v0.png"));
         let wall = V2::new(6, 5);
         let walled = paint_look(&mut art, &filled("stone", "wall", &[wall]), ("zz_world", &look), 0, 1, (0, 0));
-        let face_y = BOARD_Y + wall.y * CELL_H + CELL_H - FACE_H / 2;
-        assert_eq!(px_at(&walled, probe(wall).0, face_y), [45, 90, 80], "the world's wall face under the zone's tint");
+        let wr = stage_cell(wall);
+        let face_y = wr.y + wr.h - block_face_h(wall.y) / 2;
+        let want_tint = depth_tint(wall.y as f32, false, look.tint);
+        let expect = |v: u8, t: u8| ((v as u16 * t as u16 + 127) / 255) as u8;
+        let got = px_at(&walled, probe(wall).0, face_y);
+        assert!((got[0] as i32 - expect(90, want_tint[0]) as i32).abs() <= 1 && (got[1] as i32 - expect(90, want_tint[1]) as i32).abs() <= 1 && (got[2] as i32 - expect(160, want_tint[2]) as i32).abs() <= 1, "the world's wall face under zone + depth tint: {got:?}");
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -2423,10 +3007,10 @@ pub(crate) mod tests {
         let walls: Vec<V2> = (0..GRID_W).flat_map(|x| [V2::new(x, 0), V2::new(x, 1)]).collect();
         let grid = filled("stone", "wall", &walls);
         let b = boss_band(&grid, &[], 73).unwrap();
-        assert_eq!((b.y, b.y + b.h), (73, BOARD_Y + 2 * CELL_H), "down to row 2's top");
+        assert_eq!((b.y, b.y + b.h), (73, row_y(2)), "down to row 2's top");
         assert!(under_band(V2::new(3, 1), b) && under_band(V2::new(3, 0), b) && !under_band(V2::new(3, 2), b));
         let b1 = boss_band(&grid, &[V2::new(5, 1)], 73).unwrap();
-        assert_eq!(b1.y + b1.h, BOARD_Y + CELL_H, "a unit on row 1 stops it at row 1");
+        assert_eq!(b1.y + b1.h, row_y(1), "a unit on row 1 stops it at row 1");
         assert_eq!(boss_band(&grid, &[V2::new(5, 0)], 76), None, "a unit on row 0: under 8 px");
         assert_eq!(boss_band(&grid, &[], 20).unwrap().y, BACKDROP.y, "never above the backdrop");
     }
@@ -2436,7 +3020,7 @@ pub(crate) mod tests {
     #[test]
     fn a_unit_in_front_of_the_focus_unit_fades() {
         let body = |x: i32, foot: i32| Rect::new(x, foot - 28, 16, 28);
-        let items = vec![unit_item(0, (100, 150), body(100, 150)), unit_item(1, (104, 170), body(104, 170)), unit_item(2, (102, 130), body(102, 130)), unit_item(3, (160, 170), body(160, 170)), Placed { item: Item::Block(V2::new(0, 0)), foot_y: 180, x: 100, rect: body(100, 180) }];
+        let items = vec![unit_item(0, (100, 150), body(100, 150)), unit_item(1, (104, 170), body(104, 170)), unit_item(2, (102, 130), body(102, 130)), unit_item(3, (160, 170), body(160, 170)), Placed { item: Item::Block(V2::new(0, 0)), row: row_at_y(180).unwrap_or(0), sub_layer: SUBLAYER_PROP, foot_y: 180, x: 100, rect: body(100, 180) }];
         assert_eq!(occluders(&items, &[0]), [1], "in front: faded; behind (2), beside (3) and a block: not");
         assert_eq!(occluders(&items, &[0, 1]), Vec::<usize>::new(), "a focus unit never fades");
         assert_eq!(occluders(&items, &[2]), [0], "0 overlaps 2 from in front; 1 stands clear below it");
@@ -2512,7 +3096,7 @@ pub(crate) mod tests {
         let cell = stage_cell(V2::new(x, y));
         for (cx, cy, bit) in corners {
             let r = piece_rect(cx, cy);
-            assert_eq!((r.x + r.w / 2, r.y + r.h / 2), (BOARD_X + cx * CELL_W, BOARD_Y + cy * CELL_H), "centred on the corner");
+            assert_eq!((r.x + r.w / 2, r.y + r.h / 2), (BOARD_X + cx * CELL_W, row_y(cy)), "centred on the perspective corner");
             for (b, qx, qy) in [(1u8, 8, 6), (2, 24, 6), (4, 8, 18), (8, 24, 18)] {
                 let want = if b == bit { PIECE_LOWER } else { PIECE_UPPER };
                 assert_eq!(at_px(&g, r.x + qx, r.y + qy), want, "corner ({cx}, {cy}) quarter {b}");
@@ -2521,7 +3105,10 @@ pub(crate) mod tests {
         assert_eq!(at_px(&g, cell.x - 40, cell.y + 12), UPPER, "a cell away keeps its tile");
         assert_eq!(at_px(&g, cell.x + 8, cell.y), [118, 116, 62], "the lip draws over the pieces");
         let lined = paint(&mut art, &grid, "zz_set", 255, 1, (0, 0));
-        assert_eq!(at_px(&lined, cell.x + 8, cell.y), [0, 0, 0], "the grid draws over the lip");
+        assert_ne!(at_px(&lined, cell.x + 8, cell.y), at_px(&g, cell.x + 8, cell.y), "the soft divider draws over the lip");
+        let above_before = at_px(&g, cell.x + 8, cell.y - 1);
+        let above_after = at_px(&lined, cell.x + 8, cell.y - 1);
+        assert!(above_after[0] < above_before[0], "recessed seam groove darkens just above the row seam: {above_after:?} vs {above_before:?}");
         // the set named without pieces, and no set: the water's own tile
         let plain = scratch("lone_plain");
         flat_png(&plain, "tilesets/zz_set/floor/v0.png", 64, 48, |_, _| UPPER);
@@ -2607,7 +3194,10 @@ pub(crate) mod tests {
         assert_eq!(face_art(&mut art, "zz_set", 2, 3), Some("tilesets/zz_set/wall_face/v0.png".into()), "the set's own face");
         let walled = board_of(&[(3, 3, "wall")]);
         let g = paint(&mut art, &walled, "zz_set", 0, 1, (0, 0));
-        assert_eq!(at_px(&g, c.x + 8, c.y + CELL_H - 4), [77, 7, 7], "the block draws the set's face");
+        let dt = depth_tint(3.0, false, None);
+        let expect = |v: u8| ((v as u16 * dt[0] as u16 + 127) / 255) as u8;
+        let got = at_px(&g, c.x + 8, c.y + c.h - 4);
+        assert!((got[0] as i32 - expect(77) as i32).abs() <= 1 && (got[1] as i32 - expect(7) as i32).abs() <= 1, "the block draws the set's face (depth-lit): {got:?}");
         let stone = board_of(&[(3, 3, "stone")]);
         let big = paint(&mut art, &stone, "zz_set", 0, 2, (0, 0));
         let (px, py) = ((c.x + 8) * 2, (c.y + 8) * 2);
@@ -2690,8 +3280,9 @@ pub(crate) mod tests {
         let g = stage();
         let c = V2::new(2, 5);
         for n in [1, 2] {
-            let sprite = g.sprite_px(n, (48, 48), None);
-            assert_eq!(sprite, (g.token_px * n, 0));
+            let row = (c.y + n - 1) as f32;
+            let sprite = g.sprite_px_at(row, n, (48, 48), None);
+            assert_eq!(sprite, (g.token_px_at(row, n), 0));
             assert_eq!(g.sprite_rect_n(c, n, sprite, 3, -2), g.token_rect_n(c, n, 3, -2), "the old sheet's rect, n = {n}");
         }
         let flat = Geom::new(View::Flat, &SIZES);
@@ -2876,16 +3467,23 @@ pub(crate) mod tests {
         let (post, wall) = (V2::new(2, 6), V2::new(6, 4));
         let decor = vec![Decor { art: "zz_post".into(), at: post }, Decor { art: "cover/v1".into(), at: wall }, Decor { art: "zz_none".into(), at: V2::new(1, 1) }, Decor { art: "zz_post".into(), at: V2::new(GRID_W, 0) }];
         assert!(shown_cover(&mut art, &grid, zset, wall).is_some_and(|r| r.ends_with("cover/v0.png")), "the wall's own cover is v0");
-        // the feet pass: the two with art and on the grid; the unit on the post's cell after it
+        // the feet pass: the two with art and on the grid; standing unit draws behind props/decor on the same row so
+        // units on walkable cover tiles tuck behind props (deterministic (row, subLayer) ordering).
         let items = decor_items(&mut art, &grid, zset, &decor);
         let pr = stage_cell(post);
-        assert_eq!(items, [Placed { item: Item::Decor(0), foot_y: pr.y + pr.h, x: pr.x, rect: prop_rect(pr, (32, 48)) }, Placed { item: Item::Decor(1), foot_y: stage_cell(wall).y + CELL_H, x: stage_cell(wall).x, rect: prop_rect(stage_cell(wall), (CELL_W, COVER_H)) }]);
+        let wr = stage_cell(wall);
+        let post_sz = scaled_prop_size((32, 48), post.y);
+        let wall_sz = scaled_prop_size((CELL_W, COVER_H), wall.y);
+        assert_eq!(items, [
+            Placed { item: Item::Decor(0), row: post.y, sub_layer: SUBLAYER_PROP, foot_y: pr.y + pr.h, x: pr.x, rect: prop_rect(pr, post_sz) },
+            Placed { item: Item::Decor(1), row: wall.y, sub_layer: SUBLAYER_PROP, foot_y: wr.y + wr.h, x: wr.x, rect: prop_rect(wr, wall_sz) },
+        ]);
         let mut all = items.clone();
-        all.push(unit_item(0, (pr.x + 16, pr.y + pr.h), Rect::new(pr.x + 8, pr.y - 20, 16, 40)));
+        all.push(unit_item_on_row(0, post.y, (pr.x + 16, pr.y + pr.h), Rect::new(pr.x + 8, pr.y - 20, 16, 40)));
         let order: Vec<Item> = feet_order(&all).iter().map(|p| p.item).collect();
-        assert!(order.iter().position(|i| *i == Item::Decor(0)) < order.iter().position(|i| *i == Item::Unit(0)), "the unit draws over its cell's decor: {order:?}");
+        assert!(order.iter().position(|i| *i == Item::Unit(0)) < order.iter().position(|i| *i == Item::Decor(0)), "unit tucks behind same-row prop/decor: {order:?}");
         assert!(!block_shown(&mut art, &grid, zset, &decor, wall) && block_shown(&mut art, &grid, zset, &[], wall), "the cover decor stands in place of the wall's cover");
-        // drawn: the prop's colour on the post's cell, the v1 cover's on the wall's
+        // drawn: the prop's colour on the post's cell, the v1 cover's on the wall's (tinted by depth brightness)
         let mut g = paint_look(&mut art, &grid, zset, 0, 1, (0, 0));
         {
             let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
@@ -2893,11 +3491,15 @@ pub(crate) mod tests {
                 draw_decor(&mut p, &mut art, &grid, zset, d);
             }
         }
-        assert_eq!(at_px(&g, pr.x + 16, pr.y + pr.h - 10), [220, 40, 200], "the prop decor");
-        let wr = stage_cell(wall);
-        assert_eq!(at_px(&g, wr.x + 16, wr.y + wr.h - 10), [30, 200, 60], "the cover decor");
+        let post_px = at_px(&g, pr.x + 16, pr.y + pr.h - 10);
+        assert!(post_px[0] > 140 && post_px[2] > 120 && post_px[1] < 50, "the prop decor (depth-lit magenta): {post_px:?}");
+        let wall_px = at_px(&g, wr.x + 16, wr.y + wr.h - 10);
+        assert!(wall_px[1] > 100 && wall_px[1] > wall_px[0] * 3, "the cover decor (depth-lit green): {wall_px:?}");
         // the lights: the post's pool on its cell; the wall's v0 cover pool gone with it
-        let centre = |c: V2| (stage_cell(c).x as f32 + 16.0, stage_cell(c).y as f32 + 12.0);
+        let centre = |c: V2| {
+            let r = stage_cell(c);
+            (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0)
+        };
         assert_eq!(lamps(&mut art, &grid, zset).iter().map(|l| (l.x, l.y)).collect::<Vec<_>>(), [centre(wall)], "without decor the v0 cover lights");
         let lit = lamps_with(&mut art, &grid, zset, &decor);
         assert_eq!(lit, [Lamp { x: centre(post).0, y: centre(post).1, color: rgb(96, 176, 255), radius: 1.0 }]);
@@ -2906,9 +3508,9 @@ pub(crate) mod tests {
         let on_top = [Decor { art: "zz_post".into(), at: wall }];
         assert!(block_shown(&mut art, &grid, zset, &on_top, wall), "a prop does not replace the cover");
         assert!(lamps_with(&mut art, &grid, zset, &on_top).iter().any(|l| (l.x, l.y) == centre(wall) && l.color == rgb(255, 176, 96)), "the cover still lights");
-        // cover decor on a walkable cell draws there, a cell wide and COVER_H tall
+        // cover decor on a walkable cell draws there, proportionally scaled by row depth
         let floor_cover = decor_items(&mut art, &grid, zset, &[Decor { art: "cover/v1".into(), at: post }]);
-        assert_eq!(floor_cover.iter().map(|p| p.rect).collect::<Vec<_>>(), [prop_rect(pr, (CELL_W, COVER_H))]);
+        assert_eq!(floor_cover.iter().map(|p| p.rect).collect::<Vec<_>>(), [prop_rect(pr, scaled_prop_size((CELL_W, COVER_H), post.y))]);
         // an outer wall block: the decor stands on its cap, lifted, and sorts after the block at the block's feet
         let edge = V2::new(0, 5);
         let outer = board_of(&[(0, 5, "wall")]);
@@ -2918,7 +3520,14 @@ pub(crate) mod tests {
         let mut all = board_items(&mut art, &outer);
         let block = *all.iter().find(|p| p.item == Item::Block(edge)).expect("the wall block");
         let placed = decor_items(&mut art, &outer, zset, &capped);
-        assert_eq!(placed, [Placed { item: Item::Decor(0), foot_y: block.foot_y, x: er.x, rect: prop_rect(Rect::new(er.x, er.y - BLOCK_LIFT, er.w, er.h), (32, 48)) }]);
+        assert_eq!(placed, [Placed {
+            item: Item::Decor(0),
+            row: edge.y,
+            sub_layer: SUBLAYER_PROP,
+            foot_y: block.foot_y,
+            x: er.x,
+            rect: prop_rect(Rect::new(er.x, er.y - block_lift(edge.y), er.w, er.h), scaled_prop_size((32, 48), edge.y)),
+        }]);
         all.extend(placed);
         let order: Vec<Item> = feet_order(&all).iter().map(|p| p.item).collect();
         assert!(order.iter().position(|i| *i == Item::Block(edge)) < order.iter().position(|i| *i == Item::Decor(0)), "the cap draws first: {order:?}");
@@ -3057,5 +3666,110 @@ pub(crate) mod tests {
             }
         }
         assert!((0..20u64).any(|s| !composed::blobs(&cells, &blocked, &sunken, s * 977).is_empty()), "boards do get blobs");
+    }
+
+    #[test]
+    fn perspective_row_layout_sums_to_board_height_and_roundtrips_every_pixel() {
+        let lay = row_layout();
+        assert_eq!(lay.ys[0], BOARD_Y);
+        assert_eq!(lay.ys[GRID_H as usize], BOARD_Y + GRID_H * CELL_H);
+        assert_eq!(lay.hs.iter().sum::<i32>(), GRID_H * CELL_H);
+        assert!(lay.hs[0] < lay.hs[GRID_H as usize - 1], "far rows shorter than foreground rows: {:?}", lay.hs);
+        assert!(lay.hs.windows(2).all(|w| w[0] <= w[1]), "monotonically non-decreasing back-to-front: {:?}", lay.hs);
+        let mean_scale: f32 = (0..GRID_H).map(|r| row_depth_scale(r as f32)).sum::<f32>() / GRID_H as f32;
+        assert!((mean_scale - 1.0).abs() < 1e-5, "mean depth scale normalized to 1.0: {mean_scale}");
+        let g = stage();
+        for py in BOARD_Y..BOARD_Y + GRID_H * CELL_H {
+            for px in BOARD_X..BOARD_X + GRID_W * CELL_W {
+                let c = g.cell_at(px, py).expect("every board pixel maps to a cell");
+                assert!(g.cell_rect(c).contains(px, py), "cell_rect({c:?}) must contain ({px}, {py})");
+            }
+        }
+    }
+
+    #[test]
+    fn floor_courses_match_luminance_across_rows_without_zebra_striping() {
+        let grid = board_of(&[]);
+        let mut g = gfx();
+        g.canvas = aegis_ui::canvas::Canvas::new(640, 360);
+        g.canvas.px.chunks_exact_mut(4).for_each(|p| p.copy_from_slice(&[46, 53, 65, 255]));
+        g.view = aegis_ui::painter::View::fit(640, 360);
+        {
+            let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+            p.clip(Some(BOARD));
+            draw_floor_courses(&mut p, &grid);
+        }
+        let row_mean = |r: i32| -> f32 {
+            let y0 = row_y(r);
+            let h = row_h(r);
+            let mut sum = 0.0f32;
+            let mut n = 0;
+            for y in y0 + 2..y0 + h - 2 {
+                for x in BOARD_X..BOARD_X + GRID_W * CELL_W {
+                    let px = at_px(&g, x, y);
+                    sum += 0.299 * px[0] as f32 + 0.587 * px[1] as f32 + 0.114 * px[2] as f32;
+                    n += 1;
+                }
+            }
+            sum / n as f32
+        };
+        let means: Vec<f32> = (0..GRID_H).map(row_mean).collect();
+        let lo = means.iter().copied().fold(f32::INFINITY, f32::min);
+        let hi = means.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        assert!(hi - lo < 2.5, "cohesive row luminance with zero zebra striping: {means:?}");
+    }
+
+    #[test]
+    fn behind_camera_lighting_attenuates_far_rows_and_far_glows() {
+        // Depth brightness strictly increases back-to-front and foreground stays ~0.92x dusk-lit
+        assert!((row_depth_brightness((GRID_H - 1) as f32, false) - 0.92).abs() < 0.01);
+        assert!(row_depth_brightness(0.0, false) < row_depth_brightness(4.0, false));
+        assert!(row_depth_brightness(4.0, false) < row_depth_brightness(8.0, false));
+        assert!(row_depth_brightness(0.0, true) > row_depth_brightness(0.0, false), "emissive props attenuate less");
+
+        // Equal lamps on row 0 vs row 8: distance-attenuation pass sits OVER glows so row 0 is dimmer than row 8
+        let mut g = gfx();
+        g.canvas = aegis_ui::canvas::Canvas::new(640, 360);
+        g.canvas.px.chunks_exact_mut(4).for_each(|p| p.copy_from_slice(&[46, 53, 65, 255]));
+        g.view = aegis_ui::painter::View::fit(640, 360);
+        let (r0, r8) = (stage_cell(V2::new(6, 0)), stage_cell(V2::new(6, 8)));
+        let lamps = [
+            Lamp { x: (r0.x + 16) as f32, y: (r0.y + r0.h / 2) as f32, color: rgb(255, 176, 96), radius: 1.5 },
+            Lamp { x: (r8.x + 16) as f32, y: (r8.y + r8.h / 2) as f32, color: rgb(255, 176, 96), radius: 1.5 },
+        ];
+        {
+            let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+            p.clip(Some(STAGE_CLIP));
+            draw_light(&mut p, &[], &lamps);
+        }
+        let back_glow = at_px(&g, r0.x + 16, r0.y + r0.h / 2);
+        let front_glow = at_px(&g, r8.x + 16, r8.y + r8.h / 2);
+        assert!(back_glow[0] < front_glow[0], "back-row glow weakened by distance attenuation: {back_glow:?} vs {front_glow:?}");
+        let back_floor = at_px(&g, BOARD_X + 64, r0.y + 8);
+        let front_floor = at_px(&g, BOARD_X + 64, r8.y + r8.h - 4);
+        assert!(back_floor[2] < front_floor[2], "back row darker than foreground row: {back_floor:?} vs {front_floor:?}");
+    }
+
+    #[test]
+    fn feet_order_enforces_deterministic_row_sublayer_order() {
+        let r = stage_cell(V2::new(4, 4));
+        let fy = r.y + r.h;
+        let items = vec![
+            fx_item(0, 4, (r.x + 16, fy), r),
+            Placed { item: Item::Prop(V2::new(4, 4)), row: 4, sub_layer: SUBLAYER_PROP, foot_y: fy, x: r.x, rect: r },
+            unit_item_on_row(1, 4, (r.x + 16, fy), r),
+            fallen_unit_item_on_row(2, 4, (r.x + 16, fy), r),
+            unit_item_on_row(3, 3, (r.x + 16, stage_cell(V2::new(4, 3)).y + 20), stage_cell(V2::new(4, 3))),
+            fallen_unit_item_on_row(4, 5, (r.x + 16, stage_cell(V2::new(4, 5)).y + 20), stage_cell(V2::new(4, 5))),
+        ];
+        let order: Vec<Item> = feet_order(&items).into_iter().map(|p| p.item).collect();
+        assert_eq!(order, [
+            Item::Unit(3),           // row 3 standing
+            Item::Unit(2),           // row 4 fallen (sub_layer 0)
+            Item::Unit(1),           // row 4 standing (sub_layer 1)
+            Item::Prop(V2::new(4, 4)), // row 4 prop/cover (sub_layer 2)
+            Item::Fx(0),             // row 4 combat FX (sub_layer 3)
+            Item::Unit(4),           // row 5 fallen
+        ]);
     }
 }

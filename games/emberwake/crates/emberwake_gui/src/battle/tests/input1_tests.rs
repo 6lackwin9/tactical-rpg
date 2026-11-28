@@ -56,7 +56,7 @@ fn the_stage_draws_the_set_of_the_battles_world() {
     let mut roots = vec![root.to_path_buf()];
     roots.extend(aegis_core::assets::Layers::for_game(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).roots);
     cx.art = Art::layered(aegis_core::assets::Layers::of(roots));
-    let marked = |g: &Gfx| g.canvas.px.chunks_exact(4).filter(|c| c[..3] == MARK).count();
+    let marked = |g: &Gfx| g.canvas.px.chunks_exact(4).filter(|c| c[0] > 180 && c[1] < 40 && c[2] > 180).count();
     b.draw(&mut cx, &mut g, (-500, -500), true);
     assert_eq!(marked(&g), 0, "no set: today's tiles");
     b.arena_world = Some(world);

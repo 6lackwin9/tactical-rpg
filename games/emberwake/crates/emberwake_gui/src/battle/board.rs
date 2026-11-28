@@ -535,6 +535,10 @@ struct StageUnit {
     pos: V2,
     /// BIGUNIT1 BU14: the side of the square it fills (1, or 2 for a 2 x 2 unit).
     n: i32,
+    /// Continuous Stage row of its feet (smoothly interpolated during slides).
+    row_f: f32,
+    /// Proportional perspective depth scale at `row_f`.
+    d_scale: f32,
     ally: bool,
     /// FX1-L1 rule I: the life and HP the board shows (`Tokens::shown`).
     alive: bool,
@@ -550,7 +554,7 @@ struct StageUnit {
     foot: (i32, i32),
     /// The drawn sprite square (slide and hit shake).
     tr: Rect,
-    /// DIORAMA1B: the sprite square's side (`Geom::sprite_px`: the token square, or a painted frame's scale).
+    /// DIORAMA1B: the sprite square's side (`Geom::sprite_px_at`: perspective-scaled token or painted frame).
     sp: i32,
     /// The body's solid rect at its place (slide, no shake): the feet pass's rect and half of its widget rect.
     body_rect: Rect,
@@ -626,19 +630,23 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
         let a = tokens.anims.get(i).unwrap_or(&still);
         let facing = if tokens.anims.get(i).is_some() { a.faces(anim_now, if instant { 0 } else { tuning.walk_ms }) } else { Facing::side(!ally) };
         let standing = alive || still_dying(&mut cx.art, a, body.as_deref(), anim_now, instant, tuning.death_hold_ms);
+        // BIGUNIT1 BU14: a 2 x 2 unit stands on its square's foot point, its sprite scaled to the square and row depth
+        let n = w.size_of(i);
         let (mut dx, mut dy) = (0, 0);
+        let mut row_f = (pos.y + n - 1) as f32;
         if let Some((from, t0)) = a.slide {
             let (t, ms) = (anim_now.saturating_sub(t0), a.slide_ms(tuning.walk_ms));
             if t < ms && !instant {
-                (dx, dy) = geo.slide(from, pos, 1.0 - t as f32 / ms.max(1) as f32);
+                let left = 1.0 - t as f32 / ms.max(1) as f32;
+                (dx, dy) = geo.slide(from, pos, left);
+                row_f = (pos.y + n - 1) as f32 + (from.y - pos.y) as f32 * left;
             }
         }
+        let d_scale = stage::row_depth_scale(row_f);
         let (flash, shake) = flash_of(flashes, i, now, tuning, reduce || instant);
-        // BIGUNIT1 BU14: a 2 x 2 unit stands on its square's foot point, its sprite scaled to the square
-        let n = w.size_of(i);
         let (fx, fy) = geo.foot_n(pos, n);
-        // DIORAMA1B (D5): a body with a `foot` row stands PAINTED_CELLS cells tall per footprint cell on its foot point
-        let sprite = body.as_deref().and_then(|k| cx.art.clips(k)).map_or((tp * n, 0), |c| geo.sprite_px(n, c.frame, c.foot));
+        // DIORAMA1B (D5): a body with a `foot` row stands PAINTED_CELLS cells tall per footprint cell, scaled by row depth
+        let sprite = body.as_deref().and_then(|k| cx.art.clips(k)).map_or((geo.token_px_at(row_f, n), 0), |c| geo.sprite_px_at(row_f, n, c.frame, c.foot));
         let rest = geo.sprite_rect_n(pos, n, sprite, dx, dy);
         // 3.8: the body's solid bounds of its idle frame 0 (animation frames do not move it); DIR4-HB: in the facing's
         // view (the front or back idle while it faces down or up, else the side idle with its left/right); no body:
@@ -650,16 +658,23 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
         // FX1-L2: a miss's target steps aside and back (its sprite only; its foot keeps its place in the draw order)
         let (sx, sy) = fx::sidestep_of(sidesteps, i, anim_now);
         let looks = status_draws(tokens, i, alive, wall, anim_now, tuning);
-        units.push(StageUnit { i, pos, n, ally, alive, hp, standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.sprite_rect_n(pos, n, sprite, dx + shake + sx, dy + sy), sp: sprite.0, body_rect, looks });
+        units.push(StageUnit { i, pos, n, row_f, d_scale, ally, alive, hp, standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.sprite_rect_n(pos, n, sprite, dx + shake + sx, dy + sy), sp: sprite.0, body_rect, looks });
     }
     let status: Vec<StatusOn> = units.iter().filter(|t| t.alive).map(|t| StatusOn { unit: t.i, foot: (t.foot.0 as f32, t.foot.1 as f32), left: t.facing.left, looks: t.looks.clone() }).collect();
-    // 3.7 pass 7: blocks, standing props, decor (DECOR1) and units sorted by their feet.
+    // 3.7 pass 7: deterministic (row, subLayer) ordering: Fallen < Standing Unit < Props/Cover/Blocks < Strike FX.
     // DIORAMA4 S1, S2: the zone's own stage set, tint and terrain overrides (the world set's `stage.fx.json`)
     let look = stage::zone_look(&mut cx.art, set, &s.def.zone);
     let zset = (set, &look);
     let mut items = stage::board_items(&mut cx.art, &w.grid);
     items.extend(stage::decor_items(&mut cx.art, &w.grid, zset, &s.def.decor));
-    items.extend(units.iter().filter(|t| t.standing).map(|t| stage::unit_item(t.i, t.foot, t.body_rect)));
+    items.extend(units.iter().filter(|t| t.standing).map(|t| {
+        let row = t.row_f.round() as i32;
+        if t.alive {
+            stage::unit_item_on_row(t.i, row, t.foot, t.body_rect)
+        } else {
+            stage::fallen_unit_item_on_row(t.i, row, t.foot, t.body_rect)
+        }
+    }));
     let order = stage::feet_order(&items);
     let unit_of = |i: usize| units.iter().find(|t| t.i == i);
     // 3.8: a standing unit's widget rect; the front-most under the mouse is the one a click reaches.
@@ -722,13 +737,16 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
             stage::draw_wings(p, &mut cx.art, &w.grid, zset, &s.def.zone, &w.cat.zones, wing);
             // HOOKS1 ZN3: a data zone row keys its own backdrop and gradient ground (a code zone ignores any row)
             stage::draw_backdrop(p, &mut cx.art, &w.grid, &s.def.zone, &w.cat.zones);
-            stage::draw_ground(p, &mut cx.art, &w.grid, zset, grid_alpha);
-            // DIORAMA3 R3: the lanterns' pools and the vignette, under the marks and the units
+            stage::draw_ground(p, &mut cx.art, &w.grid, zset, 0);
+            stage::draw_floor_courses(p, &w.grid);
+            // DIORAMA3 R3: prop/lantern glows sit UNDER behind-camera distance-attenuation falloff + outer vignette
             let spots = stage::light_spots(&mut cx.art, set, &s.def.zone);
             // DIORAMA5 R3: and the lamps among the cover and props (`stage.fx.json` `lights`)
             // DECOR1: and the lamps among the encounter's decor
             let lamps = stage::lamps_with(&mut cx.art, &w.grid, zset, &s.def.decor);
             stage::draw_light(p, &spots, &lamps);
+            // Soft feathered row seams & column dividers drawn cleanly after distance attenuation
+            stage::draw_dividers(p, grid_alpha);
             // DIORAMA5 R4: a plain exit's gate beyond the board's edge
             if gates {
                 stage::draw_exit_gates(p, &mut cx.art, &w.grid.exits);
@@ -835,20 +853,24 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
             }
             Pass::Shadows => {
                 stage::draw_prop_shadows(&mut ui.p, &mut cx.art, &w.grid);
-                for t in units.iter().filter(|t| t.alive) {
+                for t in units.iter().filter(|t| t.standing) {
                     let (fx, fy) = (t.foot.0 as f32, t.foot.1 as f32);
-                    // BIGUNIT1 BU14: one shadow and one ring centred on a 2 x 2 unit's square, scaled with it
-                    let (tp, k) = (tp * t.n, t.n as f32);
-                    ui.p.ellipse(fx + 1.0, fy, 0.2 * tp as f32, 2.4 * k, rgba(8, 10, 6, tuning.shadow_alpha));
+                    // BIGUNIT1 BU14: one shadow and one ring centred on a 2 x 2 unit's square, scaled proportionally by row depth
+                    let (tp_s, k) = (tp as f32 * t.n as f32 * t.d_scale, t.n as f32 * t.d_scale);
+                    if !t.alive {
+                        ui.p.ellipse(fx + 1.0, fy, 0.34 * tp_s, 3.0 * k, rgba(8, 10, 6, tuning.shadow_alpha));
+                        continue;
+                    }
+                    ui.p.ellipse(fx + 1.0, fy, 0.2 * tp_s, 2.4 * k, rgba(8, 10, 6, tuning.shadow_alpha));
                     // VISCLAR1-D (mock `intent_ring`): the ring in its intent's colour, heavier than the side ring it
                     // replaces (`ring_intent`: the side's stays where no intent shows)
                     match ring_intent(rounds, t.i, t.ally, layers.glyphs, show_tells) {
                         Some(intent) => {
                             let col = intent_ring_color(intent);
-                            ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2 * k, col);
-                            ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32 - 0.5, 2.7 * k, col);
+                            ui.p.ellipse_ring(fx, fy, 0.25 * tp_s, 3.2 * k, col);
+                            ui.p.ellipse_ring(fx, fy, 0.25 * tp_s - 0.5, 2.7 * k, col);
                         }
-                        None => ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2 * k, with_alpha(if t.ally { crate::tokens::ally() } else { th().foe }, tuning.foot_ring_alpha)),
+                        None => ui.p.ellipse_ring(fx, fy, 0.25 * tp_s, 3.2 * k, with_alpha(if t.ally { crate::tokens::ally() } else { th().foe }, tuning.foot_ring_alpha)),
                     }
                 }
             }
@@ -867,10 +889,11 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                         Item::Prop(c) => stage::draw_prop(&mut ui.p, &mut cx.art, &w.grid, c),
                         Item::Decor(k) if band.is_some_and(|b| stage::under_band(s.def.decor[k].at, b)) => {}
                         Item::Decor(k) => stage::draw_decor(&mut ui.p, &mut cx.art, &w.grid, zset, &s.def.decor[k]),
+                        Item::Fx(_) => {}
                         Item::Unit(i) => {
                             let Some(t) = unit_of(i) else { continue };
                             // BIGUNIT1 BU14: a 2 x 2 unit's sprite is its sheet scaled to the square; DIORAMA1B: a
-                            // painted frame at its own scale (`Geom::sprite_px`)
+                            // painted frame at its own scale (`Geom::sprite_px_at`)
                             let tp = t.sp;
                             let a = tokens.anims.get(i).unwrap_or(&still);
                             let ring = if t.ally { crate::tokens::ally() } else { th().foe };
@@ -878,8 +901,9 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                             // STATUSFX1: a stealthed token (sprite and outline) at 55 % alpha
                             let alpha = fx::token_alpha(&t.looks, tuning);
                             let alpha = if faded.contains(&i) { scaled(alpha, stage::OCCLUDER_ALPHA) } else { alpha };
+                            let tint = stage::depth_tint(t.row_f, false, None);
                             let frame = t.body.as_deref().and_then(|b| token_frame(&mut cx.art, b, &t.palette, &a.player, anim_now, tp, t.facing).map(|(f, img)| {
-                                ui.p.image_alpha(img, t.tr, alpha);
+                                ui.p.image_tinted(img, t.tr, tint, alpha);
                                 f
                             }));
                             match (frame, t.body.as_deref()) {
@@ -903,7 +927,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                                 }
                                 _ => {
                                     let ring = if channel.contains(&i) { CHANNEL_TINT } else { ring };
-                                    let ring = with_alpha(ring, scaled(ring[3], alpha));
+                                    let ring = stage::tinted(with_alpha(ring, scaled(ring[3], alpha)), Some(tint));
                                     ui.p.panel(t.tr.inset(4), ring, outline.unwrap_or(ring), 6.0);
                                     let letter = w.units[i].name.chars().next().unwrap_or('?').to_string();
                                     ui.p.text_center(t.tr.x as f32 + tp as f32 / 2.0, (t.tr.y + tp / 2) as f32 - 5.0, &letter, BODY, th().bg);
@@ -947,7 +971,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     } else if t.alive && bars_shown(overlay.is_some(), &layers, alt, &focus, t.i) {
                         // VISCLAR1 VC2, VC3: under the round intent the focus set's bars (Alt or `all_bars`: all)
                         // BIGUNIT1 BU14: one bar centred on a 2 x 2 unit's square, as wide as the square allows
-                        let half = 12 * t.n;
+                        let half = (12.0 * t.n as f32 * t.d_scale).round().max(6.0) as i32;
                         hp_bar(&mut ui.p, Rect::new(fx - half, fy + 3, 2 * half, 2), t.hp, u.max_hp, if t.ally { crate::tokens::hp() } else { th().foe });
                         // RULESET1-U slice 5: the poise bar under the HP bar (rule poise)
                         if let Some(st) = poise_shown(w, t.i, &layers) {
@@ -959,7 +983,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                 if show_tells && overlay.is_none() {
                     for r in tells {
                         let Some(t) = units.iter().find(|t| t.i == r.unit) else { continue };
-                        let chip = Rect::new(t.foot.0 - 15, (t.foot.1 as f32 - 0.95 * (tp * t.n) as f32 - 2.0).round() as i32, 10, 10);
+                        let head = 0.95 * (tp as f32 * t.n as f32 * t.d_scale);
+                        let chip = Rect::new(t.foot.0 - 15, (t.foot.1 as f32 - head - 2.0).round() as i32, 10, 10);
                         intent_chip(ui, cx, r.line.kind, chip);
                     }
                 }
@@ -970,12 +995,14 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     if w.enemies.contains(&r.unit) && !show_tells {
                         continue;
                     }
-                    intent_glyph(&mut ui.p, &w.cat, i, Rect::new(t.foot.0 + 5, (t.foot.1 as f32 - 0.95 * (tp * t.n) as f32 - 2.0).round() as i32, 10, 10));
+                    let head = 0.95 * (tp as f32 * t.n as f32 * t.d_scale);
+                    intent_glyph(&mut ui.p, &w.cat, i, Rect::new(t.foot.0 + 5, (t.foot.1 as f32 - head - 2.0).round() as i32, 10, 10));
                 }
                 // RULESET1-U slice 5 (P7): a BREAK plate over each unit broken this round, above its chips
                 for i in broken_units(w, &layers) {
                     let Some(t) = units.iter().find(|t| t.i == i && t.alive) else { continue };
-                    break_plate(&mut ui.p, t.foot.0 as f32, t.foot.1 as f32 - 0.95 * (tp * t.n) as f32 - 13.0);
+                    let head = 0.95 * (tp as f32 * t.n as f32 * t.d_scale);
+                    break_plate(&mut ui.p, t.foot.0 as f32, t.foot.1 as f32 - head - 13.0);
                 }
                 for c in w.grid.exits.iter().filter(|c| w.grid.is_valid(**c)) {
                     let r = geo.cell_rect(*c);

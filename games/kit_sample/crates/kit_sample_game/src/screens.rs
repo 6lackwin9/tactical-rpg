@@ -139,9 +139,11 @@ pub fn draw_stage(ui: &mut Ui<BoardAct>, art: &mut aegis_ui::art::Art, f: &Fight
             Pass::Backdrop => stage::draw_backdrop(&mut ui.p, art, &w.grid, &s.def.zone, &no_zones),
             Pass::Ground => {
                 stage::draw_ground(&mut ui.p, art, &w.grid, zset, 0);
+                stage::draw_floor_courses(&mut ui.p, &w.grid);
                 let spots = stage::light_spots(art, STAGE_SET, &s.def.zone);
                 let lamps = stage::lamps_with(art, &w.grid, zset, &s.def.decor);
                 stage::draw_light(&mut ui.p, &spots, &lamps);
+                stage::draw_dividers(&mut ui.p, 0);
                 stage::draw_exit_gates(&mut ui.p, art, &w.grid.exits);
             }
             Pass::Face => stage::draw_face(&mut ui.p, art, &w.grid, zset),
@@ -152,12 +154,13 @@ pub fn draw_stage(ui: &mut Ui<BoardAct>, art: &mut aegis_ui::art::Art, f: &Fight
                         Item::Prop(c) => stage::draw_prop(&mut ui.p, art, &w.grid, c),
                         Item::Decor(k) => stage::draw_decor(&mut ui.p, art, &w.grid, zset, &s.def.decor[k]),
                         Item::Unit(i) => {
-                            let Some(&(_, _, r)) = bodies.iter().find(|b| b.0 == i) else { continue };
+                            let Some(&(_, c, r)) = bodies.iter().find(|b| b.0 == i) else { continue };
                             let foe = w.enemies.contains(&i);
                             if let Some(img) = art.body_clip_flipped(&f.art[i], "", "idle", 0, r.w, foe) {
-                                ui.p.image(img, r);
+                                ui.p.image_tinted(img, r, stage::depth_tint(c.y as f32, false, None), 255);
                             }
                         }
+                        Item::Fx(_) => {}
                     }
                 }
             }

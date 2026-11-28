@@ -662,7 +662,7 @@ fn the_battle_view_setting_picks_the_stage_or_the_flat_board() {
             let p = s.w.grid.pos(h).unwrap();
             assert_eq!(rect_of(&b, &format!("unit.{h}")), Rect::new(128 + p.x * 32, 30 + p.y * 32, 32, 32), "a unit's widget is its cell");
         } else {
-            assert_eq!((cell, last), (Rect::new(128, 82, 32, 24), Rect::new(480, 274, 32, 24)), "{view}");
+            assert_eq!((cell, last), (rpgkit_ui::stage::stage_cell(V2::new(0, 0)), rpgkit_ui::stage::stage_cell(V2::new(11, 8))), "{view}");
         }
         assert_eq!(b.w.iter().filter(|w| w.id.starts_with("tile.")).count(), 12 * 9, "every cell keeps its widget");
     }

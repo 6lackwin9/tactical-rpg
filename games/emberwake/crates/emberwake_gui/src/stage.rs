@@ -72,9 +72,10 @@ pub(crate) mod tests {
         Art::new(Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")))
     }
 
-    /// A body rect of a 40 px token on `c` from a real body's solid bounds.
+    /// A body rect of a row-scaled token on `c` from a real body's solid bounds.
     fn body_on(art: &mut Art, g: &Geom, key: &str, c: V2) -> Rect {
-        let b = art.body_bounds(key, "", g.token_px, false).expect("the body loads");
+        let tp = g.token_px_at(c.y as f32, 1);
+        let b = art.body_bounds(key, "", tp, false).expect("the body loads");
         let tr = g.token_rect(c, 0, 0);
         Rect::new(tr.x + b.x, tr.y + b.y, b.w, b.h)
     }
@@ -149,11 +150,13 @@ pub(crate) mod tests {
         assert!(pos(Item::Unit(0)) < pos(Item::Prop(V2::new(10, 2))) && pos(Item::Prop(V2::new(10, 2))) < pos(Item::Unit(1)));
         assert_eq!(through(&order, pos(Item::Unit(0)), false, false, Reveal::Always), Some(Through::Side), "behind the canopy");
         assert_eq!(through(&order, pos(Item::Unit(1)), false, false, Reveal::Always), None, "in front of the tree");
-        // a block and a unit at equal feet: the block first
+        // deterministic (row, subLayer) rule: standing unit tucks behind prop/block on the same row
         let cell = g.cell_rect(V2::new(3, 3));
-        let block = Placed { item: Item::Block(V2::new(3, 3)), foot_y: cell.y + cell.h, x: cell.x, rect: cell };
-        let unit = unit_item(2, (cell.x + 16, cell.y + cell.h), cell);
-        assert_eq!(feet_order(&[unit, block]).iter().map(|p| p.item).collect::<Vec<_>>(), vec![block.item, unit.item]);
+        let block = Placed { item: Item::Block(V2::new(3, 3)), row: 3, sub_layer: SUBLAYER_PROP, foot_y: cell.y + cell.h, x: cell.x, rect: cell };
+        let unit = unit_item_on_row(2, 3, (cell.x + 16, cell.y + cell.h), cell);
+        let fallen = fallen_unit_item_on_row(3, 3, (cell.x + 16, cell.y + cell.h), cell);
+        let fx = fx_item(0, 3, (cell.x + 16, cell.y + cell.h), cell);
+        assert_eq!(feet_order(&[fx, block, unit, fallen]).iter().map(|p| p.item).collect::<Vec<_>>(), vec![fallen.item, unit.item, block.item, fx.item]);
         // two units in one column: the southern last; the northern selected is outlined gold, else not at all
         let open = zone("stone_arena");
         let (a, b) = (V2::new(5, 3), V2::new(5, 4));
